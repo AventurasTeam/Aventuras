@@ -94,7 +94,11 @@ export function MultiSelect({
       onSelectAll={handleSelectAll}
       onClearAll={handleClearAll}
       onToggle={handleToggle}
-      isPhone={usesSheet}
+      // Not `false`: the trigger blocks OPENING while disabled, but an overlay already
+      // open when the prop flips would keep its rows and bulk actions live.
+      disabled={disabled === true}
+      insideSheet={usesSheet}
+      scroll={usesSheet ? 'sheet' : 'bounded'}
     />
   )
 
@@ -174,6 +178,83 @@ export function MultiSelect({
   )
 }
 
+export type MultiSelectListProps = {
+  options: readonly MultiSelectOption[]
+  selected: ReadonlySet<string> | readonly string[]
+  onChange: (next: string[]) => void
+  disabled?: boolean
+  /**
+   * True when this list is rendered inside a bottom sheet. Selects the scroll host:
+   * a plain ScrollView's touches fight the sheet's drag gesture.
+   */
+  insideSheet?: boolean
+  /** Override the scroll host. `'none'` when an ancestor already scrolls. */
+  scroll?: 'bounded' | 'none'
+  className?: string
+}
+
+/**
+ * The selection list on its own, with no trigger and no overlay around it.
+ *
+ * Exists because every pick-from-a-list primitive here presents as a Sheet on phone,
+ * and a Sheet may not open over a Sheet
+ * (docs/ui/foundations/mobile/layout.md → Stacking). A form that is itself presented
+ * in a Sheet therefore cannot host `MultiSelect`; it renders this inline instead.
+ */
+export function MultiSelectList({
+  options,
+  selected,
+  onChange,
+  disabled,
+  insideSheet = false,
+  scroll,
+  className,
+}: MultiSelectListProps) {
+  const normalized = useMemo(() => normalizeSelection(selected, options), [selected, options])
+  const state = useMemo(() => computeSelectionState(normalized, options), [normalized, options])
+
+  const handleSelectAll = useCallback(() => {
+    emitSelection(selectAll(options), options, onChange)
+  }, [options, onChange])
+  const handleClearAll = useCallback(() => {
+    emitSelection(clearAll(), options, onChange)
+  }, [options, onChange])
+  const handleToggle = useCallback(
+    (value: string) => {
+      emitSelection(toggleValue(normalized, value), options, onChange)
+    },
+    [normalized, options, onChange],
+  )
+
+  // Bulk actions are gated with the rows: clearing mid-save leaves the form showing a
+  // failure over a selection that no longer matches what was submitted. Gated on the
+  // controls rather than by swapping the handlers for no-ops — an inert control that
+  // still takes focus and announces itself as enabled is a trap for keyboard and
+  // screen-reader users, who get no feedback that the press did nothing.
+  const inert = disabled === true
+  return (
+    <View
+      className={cn(
+        'overflow-hidden rounded-md border border-border',
+        inert && 'opacity-50',
+        className,
+      )}
+    >
+      <Overlay
+        options={options}
+        selected={normalized}
+        state={state}
+        onSelectAll={handleSelectAll}
+        onClearAll={handleClearAll}
+        onToggle={handleToggle}
+        disabled={inert}
+        insideSheet={insideSheet}
+        scroll={scroll ?? (insideSheet ? 'none' : 'bounded')}
+      />
+    </View>
+  )
+}
+
 type OverlayProps = {
   options: readonly MultiSelectOption[]
   selected: ReadonlySet<string>
@@ -181,7 +262,12 @@ type OverlayProps = {
   onSelectAll: () => void
   onClearAll: () => void
   onToggle: (value: string) => void
-  isPhone: boolean
+  /** Whole-list disable — gates the bulk actions and every row. */
+  disabled: boolean
+  /** Inside a gorhom bottom sheet — drives the touch row height. */
+  insideSheet: boolean
+  /** Which scroll host wraps the rows. `'none'` when an ancestor already scrolls. */
+  scroll: 'sheet' | 'bounded' | 'none'
 }
 
 const SCROLL_MAX_HEIGHT: ViewStyle = { maxHeight: 320 }
@@ -193,14 +279,16 @@ function Overlay({
   onSelectAll,
   onClearAll,
   onToggle,
-  isPhone,
+  disabled,
+  insideSheet,
+  scroll,
 }: OverlayProps) {
   const header = (
     <View className="flex-row items-center gap-3 border-b border-border px-row-x-md py-row-y-sm">
       <Pressable
         accessibilityRole="button"
         onPress={onSelectAll}
-        disabled={state.kind === 'all'}
+        disabled={disabled || state.kind === 'all'}
         className={cn('h-control-xs justify-center px-2', state.kind === 'all' && 'opacity-50')}
       >
         <Text size="xs" className="text-fg-primary">
@@ -210,7 +298,7 @@ function Overlay({
       <Pressable
         accessibilityRole="button"
         onPress={onClearAll}
-        disabled={state.kind === 'none'}
+        disabled={disabled || state.kind === 'none'}
         className={cn('h-control-xs justify-center px-2', state.kind === 'none' && 'opacity-50')}
       >
         <Text size="xs" className="text-fg-primary">
@@ -226,11 +314,12 @@ function Overlay({
       option={option}
       checked={selected.has(option.value)}
       onPress={onToggle}
-      isPhone={isPhone}
+      disabled={disabled || option.disabled === true}
+      insideSheet={insideSheet}
     />
   ))
 
-  if (isPhone) {
+  if (scroll === 'sheet') {
     // BottomSheetScrollView registers with gorhom's sheet gesture system;
     // a plain ScrollView's touches conflict with the sheet drag and its
     // scroll region doesn't claim available space inside the sheet.
@@ -239,6 +328,17 @@ function Overlay({
       <View className="flex-1">
         {header}
         <BottomSheetScrollView>{rows}</BottomSheetScrollView>
+      </View>
+    )
+  }
+
+  // An ancestor already owns the scroll. Nesting another scrollable here would
+  // fight it for the gesture and collapse to zero height inside a flex parent.
+  if (scroll === 'none') {
+    return (
+      <View>
+        {header}
+        {rows}
       </View>
     )
   }
@@ -261,7 +361,9 @@ type OptionRowProps = {
   option: MultiSelectOption
   checked: boolean
   onPress: (value: string) => void
-  isPhone: boolean
+  /** The option's own gate already folded in with the whole list's. */
+  disabled: boolean
+  insideSheet: boolean
 }
 
 // Native popover width has no CSS-var equivalent to web's
@@ -278,24 +380,25 @@ function NativeWidthSync({ children }: { children: React.ReactNode }) {
   return <View style={style}>{children}</View>
 }
 
-function OptionRow({ option, checked, onPress, isPhone }: OptionRowProps) {
+function OptionRow({ option, checked, onPress, disabled, insideSheet }: OptionRowProps) {
   const handlePress = useCallback(() => onPress(option.value), [onPress, option.value])
 
   return (
     <Pressable
       accessibilityRole="checkbox"
-      accessibilityState={{ checked, disabled: !!option.disabled }}
+      accessibilityState={{ checked, disabled }}
       onPress={handlePress}
-      disabled={option.disabled}
+      disabled={disabled}
       className={cn(
         'flex-row items-center gap-3 px-row-x-md py-row-y-md',
-        isPhone && 'min-h-control-lg',
+        insideSheet && 'min-h-control-lg',
         Platform.select({ web: 'hover:bg-bg-raised' }),
         'active:bg-bg-raised',
+        // The whole-list dim lives on the wrapper; only the per-option gate dims a row.
         option.disabled && 'opacity-50',
       )}
     >
-      <Checkbox checked={checked} onCheckedChange={handlePress} disabled={option.disabled} />
+      <Checkbox checked={checked} onCheckedChange={handlePress} disabled={disabled} />
       <Text size="sm" className="flex-1 text-fg-primary">
         {option.label ?? option.value}
       </Text>

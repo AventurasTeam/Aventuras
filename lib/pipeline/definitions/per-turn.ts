@@ -7,10 +7,13 @@ import { redactUrl } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import {
   buildPiggybackActions,
+  buildStateReport,
   parseStateBlock,
   parseSuggestionsBlock,
+  type ParseFieldFailure,
   resolveSuggestionEmission,
   resolveSuggestionItems,
+  stripTrailingBlocks,
   substitutePiggybackIds,
 } from '@/lib/piggyback'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
@@ -185,7 +188,26 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     parsedState.block,
     idMap,
   )
-  const parseFailures = [...parsedState.failures, ...substitutionFailures]
+  // An omitted block is a failed attempt, not silence. parseStateBlock cannot tell the
+  // difference on its own (piggyback-off turns legitimately carry no block), so the
+  // failure is synthesised here, where the gate is known — without it the fallback's
+  // recovered report is identical to a story running with piggyback switched off.
+  const missingBlockFailure: ParseFieldFailure[] =
+    piggybackShouldFire && !parsedState.blockFound
+      ? [{ field: 'state', detail: 'no <state> block in the reply' }]
+      : []
+  const parseFailures = [...parsedState.failures, ...substitutionFailures, ...missingBlockFailure]
+
+  // The column stores prose only (docs/memory/piggyback.md → Persistence and
+  // stripping); everything the block carried is persisted structurally instead.
+  const { prose, stateRaw, outOfPosition } = stripTrailingBlocks(content)
+  if (outOfPosition) ctx.log.warn('classifier.state_block_out_of_position', { entryId })
+  // A reply that is nothing but a block strips to nothing. Persist the raw text
+  // instead of committing a blank row: the reader strips it again at display, so
+  // the entry reads the same either way, but the text stays recoverable.
+  const proseEmpty = prose === '' && content.trim() !== ''
+  if (proseEmpty) ctx.log.warn('classifier.reply_had_no_prose', { entryId })
+  const persistedContent = proseEmpty ? content : prose
 
   const piggybackParseSucceeded = parsedState.blockFound && parseFailures.length === 0
   if (piggybackShouldFire && !piggybackParseSucceeded) {
@@ -208,6 +230,20 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
       source: 'piggyback_tagged_block',
     })
   }
+
+  // Gated on the phase having actually applied the block: a model piggyback was not
+  // enabled for can still emit a <state>, and a report badged with this layer would
+  // name an agent that supplied nothing. The fallback writes its own report instead.
+  const stateReport =
+    piggybackApplied !== undefined
+      ? buildStateReport({
+          layer: 'piggyback_tagged_block',
+          block: resolvedBlock,
+          failures: parseFailures,
+          applied: piggybackApplied.applied,
+          ...(stateRaw !== undefined ? { raw: stateRaw } : {}),
+        })
+      : undefined
 
   ctx.intermediates.piggybackOutcome = {
     attempted: piggybackShouldFire,
@@ -256,6 +292,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     generationTimingMs: Date.now() - startedAt,
     ...(reasoningText ? { reasoning: reasoningText } : {}),
     ...(piggybackApplied?.metadata ?? inherited),
+    ...(stateReport !== undefined ? { stateReport } : {}),
     ...(suggestionsCaptured
       ? { nextTurnSuggestions: { items: suggestionItems, source: 'piggyback' as const } }
       : {}),
@@ -278,7 +315,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
           branchId,
           position: next?.next ?? 1,
           kind: 'ai_reply',
-          content,
+          content: persistedContent,
           chapterId: null,
           metadata,
           createdAt: Date.now(),

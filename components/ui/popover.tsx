@@ -131,7 +131,17 @@ function PopoverContent({
   return (
     <PopoverPrimitive.Portal hostName={portalHost}>
       <FullWindowOverlay>
-        <PopoverPrimitive.Overlay style={Platform.select({ native: StyleSheet.absoluteFill })}>
+        {/* RN-Web Views are position:relative with z-index:0, so each is a stacking
+            context that caps its popper below Dialog's z-50 whatever the content sets
+            — lifting the overlay is the only thing that raises it
+            (lessons-learned/rnweb-view-stacking-context.md). */}
+        <PopoverPrimitive.Overlay
+          style={
+            Platform.OS === 'web'
+              ? ({ zIndex: 100 } as ViewStyle)
+              : (StyleSheet.absoluteFill as ViewStyle)
+          }
+        >
           <NativeOnlyAnimatedView entering={FadeIn.duration(200)} exiting={FadeOut}>
             <TextClassContext.Provider value="text-fg-primary">
               <NativeAwareContent

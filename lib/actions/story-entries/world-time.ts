@@ -22,13 +22,19 @@ function inFlight(): StoryEntryRejection {
 }
 
 /**
- * Keyed on this action rather than on `updateStoryEntryMetadata`: what needs
- * serializing is the read-then-decide below, which only this function performs.
- * That leaves it unserialized against the pipeline's own dispatches of that
- * kind — safe only because every one of them runs under a `hard-gate` pipeline,
- * which `isUserEditBlocked` rejects. Do not close that gap by sharing the key
- * with `applyDeltaAction`: `withKeyLock` is not reentrant, so the inner call
- * would await the outer's own promise and deadlock.
+ * Serializes the read-then-decide of every ungated entry-metadata writer. Per ROW, not
+ * per action: same-row writers under different action names are the pair that must not
+ * interleave. Never hold this key around a call into one of them — `withKeyLock` is not
+ * reentrant, so the inner call would await the outer's own promise and deadlock.
+ */
+export function entryMetadataLockKey(branchId: string, id: string): string {
+  return `entryMetadata:${branchId}:${id}`
+}
+
+/**
+ * Ungated writer vs. ungated writer only: pipeline dispatches are held apart by
+ * `hard-gate`, and their stale `tail` snapshot is answered by the handler's partial
+ * merge (register.ts), not by this lock.
  */
 export async function updateEntryWorldTime(
   branchId: string,
@@ -36,7 +42,7 @@ export async function updateEntryWorldTime(
   worldTime: number,
   ctx: DbCtx,
 ): Promise<UpdateWorldTimeResult> {
-  return withKeyLock(`updateEntryWorldTime:${branchId}:${id}`, () =>
+  return withKeyLock(entryMetadataLockKey(branchId, id), () =>
     updateEntryWorldTimeLocked(branchId, id, worldTime, ctx),
   )
 }
@@ -72,7 +78,7 @@ async function updateEntryWorldTimeLocked(
   // A no-op delta would clear the global (cross-branch) redo stack for nothing.
   if (current.metadata.worldTime === worldTime) return { status: 'ok' }
   // Re-checked after the awaited read: the gate above is a TOCTOU window, and a
-  // hard-gate run starting inside it would race this whole-column replace.
+  // hard-gate run starting inside it would race this write.
   if (generationStore.isUserEditBlocked()) return inFlight()
 
   const result = await applyDeltaAction(
@@ -80,8 +86,7 @@ async function updateEntryWorldTimeLocked(
       action: {
         kind: 'updateStoryEntryMetadata',
         source: 'user_edit',
-        // Whole-column replace: a partial would drop the sibling fields.
-        payload: { branchId, id, metadata: { ...current.metadata, worldTime } },
+        payload: { branchId, id, metadata: { worldTime } },
       },
       actionId: generateId('act'),
       branchId,

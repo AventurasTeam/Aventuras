@@ -9,6 +9,7 @@ import { View } from 'react-native'
 import { EntryCard, type EntryCardProps } from '@/components/compounds/entry-card'
 import { Heading } from '@/components/ui/heading'
 import { Text } from '@/components/ui/text'
+import { useTier } from '@/hooks/use-tier'
 import { DensityProvider } from '@/lib/density'
 import { ThemeProvider, useTheme } from '@/lib/themes'
 
@@ -54,6 +55,9 @@ function Samples() {
   }
   const updateDraft = (id: string, next: string) => setDrafts((d) => ({ ...d, [id]: next }))
 
+  // Resolved once here, as the reader does: the gallery must preview the real tier forks.
+  const tier = useTier()
+
   const editProps = (id: string, originalContent: string): Partial<EntryCardProps> =>
     editing === id
       ? {
@@ -85,6 +89,7 @@ function Samples() {
         ) : null}
         <View className="flex-col gap-3">
           <EntryCard
+            tier={tier}
             kind="opening"
             content={opening}
             worldTimeLabel="Day 1 · 06:00"
@@ -94,6 +99,7 @@ function Samples() {
             {...editProps('opening', opening)}
           />
           <EntryCard
+            tier={tier}
             kind="user_action"
             content={userTurn}
             worldTimeLabel="Day 1 · 09:14"
@@ -102,6 +108,7 @@ function Samples() {
             {...editProps('user', userTurn)}
           />
           <EntryCard
+            tier={tier}
             kind="ai_reply"
             content={aiTurn}
             worldTimeLabel="Day 1 · 09:14"
@@ -114,6 +121,7 @@ function Samples() {
             {...editProps('ai', aiTurn)}
           />
           <EntryCard
+            tier={tier}
             kind="streaming"
             streamingPhase="reasoning"
             content="Considering whether the warden answers in words or violence…"
@@ -128,6 +136,7 @@ function Samples() {
           footer.
         </Text>
         <EntryCard
+          tier={tier}
           kind="system"
           content="Generation failed: provider returned 503."
           detail="The model service is temporarily unavailable."
@@ -142,6 +151,7 @@ function Samples() {
           All actions disabled with the host&apos;s reason. Hover an action on web for the tooltip.
         </Text>
         <EntryCard
+          tier={tier}
           kind="ai_reply"
           content={aiTurn}
           worldTimeLabel="Day 1 · 09:14"

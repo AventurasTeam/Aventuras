@@ -1,5 +1,5 @@
-import { useMemo, useReducer, useRef, useState } from 'react'
-import { Platform, View } from 'react-native'
+import { useMemo, useReducer, useRef, useState, type ReactNode } from 'react'
+import { Platform, ScrollView, View, type ViewProps } from 'react-native'
 
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
@@ -89,7 +89,7 @@ export function CollisionResolveDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl" scrollable={false}>
         <DialogHeader>
           <DialogTitle>{`⚠ Two ${entityA.kind}s named "${entityA.name}"`}</DialogTitle>
           <DialogDescription>
@@ -138,6 +138,21 @@ export function CollisionResolveDialog({
         )}
       </DialogContent>
     </Dialog>
+  )
+}
+
+/**
+ * Mode body: the content scrolls, the actions stay put. See
+ * [overlays.md](../../docs/ui/patterns/overlays.md) — Dialog height and scroll.
+ */
+function ModeBody({ children, actions }: { children: ViewProps['children']; actions: ReactNode }) {
+  return (
+    <View className="shrink gap-4">
+      <ScrollView className="shrink" contentContainerClassName="gap-4">
+        {children}
+      </ScrollView>
+      <DialogFooter>{actions}</DialogFooter>
+    </View>
   )
 }
 
@@ -206,7 +221,18 @@ function MergeBody({
   }
 
   return (
-    <View className="gap-4">
+    <ModeBody
+      actions={
+        <>
+          <Button variant="secondary" onPress={onCancel} disabled={submitting}>
+            <Text>Cancel</Text>
+          </Button>
+          <Button variant="primary" onPress={handleConfirm} loading={submitting}>
+            <Text>{`Merge into ${canonical.name}`}</Text>
+          </Button>
+        </>
+      }
+    >
       <View className="gap-2">
         <Text size="sm" variant="muted">
           Canonical (this row survives)
@@ -285,16 +311,7 @@ function MergeBody({
           {error}
         </Text>
       )}
-
-      <DialogFooter>
-        <Button variant="secondary" onPress={onCancel} disabled={submitting}>
-          <Text>Cancel</Text>
-        </Button>
-        <Button variant="primary" onPress={handleConfirm} loading={submitting}>
-          <Text>{`Merge into ${canonical.name}`}</Text>
-        </Button>
-      </DialogFooter>
-    </View>
+    </ModeBody>
   )
 }
 
@@ -389,7 +406,18 @@ function RenameBody({ entityA, entityB, onSubmit, onCancel, submitting, error }:
   }
 
   return (
-    <View className="gap-4">
+    <ModeBody
+      actions={
+        <>
+          <Button variant="secondary" onPress={onCancel} disabled={submitting}>
+            <Text>Cancel</Text>
+          </Button>
+          <Button variant="primary" onPress={handleConfirm} loading={submitting} disabled={!dirty}>
+            <Text>Save renames</Text>
+          </Button>
+        </>
+      }
+    >
       <View className="gap-1">
         <Text size="sm" variant="muted">
           {`Older · ${formatAgo(entityA.createdAt)}`}
@@ -411,16 +439,7 @@ function RenameBody({ entityA, entityB, onSubmit, onCancel, submitting, error }:
           {error}
         </Text>
       )}
-
-      <DialogFooter>
-        <Button variant="secondary" onPress={onCancel} disabled={submitting}>
-          <Text>Cancel</Text>
-        </Button>
-        <Button variant="primary" onPress={handleConfirm} loading={submitting} disabled={!dirty}>
-          <Text>Save renames</Text>
-        </Button>
-      </DialogFooter>
-    </View>
+    </ModeBody>
   )
 }
 
@@ -437,7 +456,18 @@ function KeepBody({ name, onSubmit, onCancel, submitting, error }: KeepBodyProps
     onSubmit({ mode: 'keep' })
   }
   return (
-    <View className="gap-4">
+    <ModeBody
+      actions={
+        <>
+          <Button variant="secondary" onPress={onCancel} disabled={submitting}>
+            <Text>Cancel</Text>
+          </Button>
+          <Button variant="primary" onPress={handleConfirm} loading={submitting}>
+            <Text>Keep as distinct</Text>
+          </Button>
+        </>
+      }
+    >
       <Text size="sm" variant="muted">
         {`Both "${name}" entities will continue to exist with the same name. Retrieval treats them by id, but storyteller responses may conflate them in prose. Polymorphic naming is a documented v1 limitation — the schema doesn't enforce unique names. The flag clears; no other writes.`}
       </Text>
@@ -447,16 +477,7 @@ function KeepBody({ name, onSubmit, onCancel, submitting, error }: KeepBodyProps
           {error}
         </Text>
       )}
-
-      <DialogFooter>
-        <Button variant="secondary" onPress={onCancel} disabled={submitting}>
-          <Text>Cancel</Text>
-        </Button>
-        <Button variant="primary" onPress={handleConfirm} loading={submitting}>
-          <Text>Keep as distinct</Text>
-        </Button>
-      </DialogFooter>
-    </View>
+    </ModeBody>
   )
 }
 

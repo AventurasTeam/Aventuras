@@ -10,6 +10,9 @@ import { themes } from '@/lib/themes'
 import { EntryCard, type EntryCardProps } from './entry-card'
 
 const baseProps = {
+  // Host-resolved in the reader; stories state it outright. The two phone-fork stories
+  // override it alongside the viewport global they also set.
+  tier: 'desktop' as const,
   worldTimeLabel: 'Day 12 · 14:33',
   onEdit: fn(),
   onDelete: fn(),
@@ -300,6 +303,7 @@ export const SystemRetryFires: StoryT = {
   ...wrap,
   args: {
     kind: 'system',
+    tier: 'desktop',
     content: 'Generation failed.',
     onRetry: fn(),
     onDismiss: fn(),
@@ -316,6 +320,7 @@ export const KindMatrix: StoryT = {
   render: () => (
     <View className="flex-col gap-4" style={{ maxWidth: 700 }}>
       <EntryCard
+        tier="desktop"
         kind="opening"
         content="The road from Ironshore is empty for a hundred miles."
         worldTimeLabel="Day 1 · 06:00"
@@ -325,6 +330,7 @@ export const KindMatrix: StoryT = {
         onFlipEra={fn()}
       />
       <EntryCard
+        tier="desktop"
         kind="user_action"
         content="I keep riding."
         worldTimeLabel="Day 1 · 06:05"
@@ -333,6 +339,7 @@ export const KindMatrix: StoryT = {
         onFlipEra={fn()}
       />
       <EntryCard
+        tier="desktop"
         kind="ai_reply"
         content="At the next bend, a figure in dust-grey waits."
         worldTimeLabel="Day 1 · 09:14"
@@ -345,12 +352,14 @@ export const KindMatrix: StoryT = {
         onFlipEra={fn()}
       />
       <EntryCard
+        tier="desktop"
         kind="streaming"
         streamingPhase="reasoning"
         content=""
         reasoning="Working out the warden's first words…"
       />
       <EntryCard
+        tier="desktop"
         kind="system"
         content="Provider returned 503."
         detail="Model service temporarily unavailable."
@@ -379,6 +388,7 @@ export const ThemeMatrix: StoryT = {
           </View>
           <View className="flex-col gap-3">
             <EntryCard
+              tier="desktop"
               kind="user_action"
               content="I keep riding."
               worldTimeLabel="Day 1 · 06:05"
@@ -386,6 +396,7 @@ export const ThemeMatrix: StoryT = {
               onDelete={fn()}
             />
             <EntryCard
+              tier="desktop"
               kind="ai_reply"
               content="At the next bend, a figure in dust-grey waits."
               worldTimeLabel="Day 1 · 09:14"
@@ -513,6 +524,7 @@ export const WorldTimeEditRequestsHostOverlayOnPhone: StoryT = {
   globals: { viewport: { value: 'mobile1' } },
   args: {
     ...baseProps,
+    tier: 'phone',
     ...aiEntry,
     ...editableTimeProps,
     onEditTime: fn(async () => true),
@@ -538,6 +550,7 @@ export const WorldTimeInlineEditorOnPhone: StoryT = {
   globals: { viewport: { value: 'mobile1' } },
   args: {
     ...baseProps,
+    tier: 'phone',
     ...aiEntry,
     ...editableTimeProps,
     onEditTime: fn(async () => true),
@@ -819,5 +832,352 @@ export const WorldTimeEditDoesNotResurrectAfterGeneration: StoryT = {
     setStoryBlocked?.(false)
     await waitFor(() => expect(screen.getByRole('button', { name: 'Edit time' })).toBeVisible())
     expect(screen.queryByRole('dialog', { name: 'Edit time' })).not.toBeInTheDocument()
+  },
+}
+
+// --- World-state panel -------------------------------------------------------
+
+const CHAR_A = 'char_00000000-0000-4000-8000-0000000000a1'
+const CHAR_B = 'char_00000000-0000-4000-8000-0000000000b2'
+const ITEM_A = 'item_00000000-0000-4000-8000-0000000000c3'
+const LOC_A = 'loc_00000000-0000-4000-8000-0000000000d4'
+const LOC_B = 'loc_00000000-0000-4000-8000-0000000000e5'
+const GONE = 'char_00000000-0000-4000-8000-0000000000f6'
+
+// The resolution pool covers every id the panel may mention — a transfer's
+// counterparty and a rejected location sit outside the scene.
+const entityNames = [
+  { id: CHAR_A, name: 'Aria' },
+  { id: CHAR_B, name: 'Corin' },
+  { id: ITEM_A, name: 'Sword of Dawn' },
+  { id: LOC_A, name: 'Ashfen Marshes' },
+  { id: LOC_B, name: 'Eldrin Keep' },
+]
+
+const sceneOptions = {
+  characters: [
+    { id: CHAR_A, name: 'Aria' },
+    { id: CHAR_B, name: 'Corin' },
+  ],
+  items: [{ id: ITEM_A, name: 'Sword of Dawn' }],
+  locations: [
+    { id: LOC_A, name: 'Ashfen Marshes' },
+    { id: LOC_B, name: 'Eldrin Keep' },
+  ],
+}
+
+const reportedProps = {
+  sceneEntities: [CHAR_A, CHAR_B],
+  currentLocationId: LOC_A,
+  entityNames,
+  summary: 'Aria pushed into the marshes and met an exiled noble.',
+  stateReport: {
+    layer: 'piggyback_tagged_block' as const,
+    sceneEntities: [CHAR_A, CHAR_B],
+    currentLocation: LOC_A,
+    worldTimeDelta: 120,
+    visualChanges: [
+      { id: CHAR_B, type: 'attire' as const, text: 'cloak now muddied to the waist' },
+    ],
+    transfers: {
+      items: [{ id: ITEM_A, slot: 'inventory' as const, to: CHAR_A, from: CHAR_B }],
+      stackables: [{ key: 'gold', amount: 50, to: CHAR_A, from: CHAR_B }],
+    },
+  },
+} satisfies Partial<EntryCardProps>
+
+async function openPanel() {
+  await userEvent.click(screen.getByRole('button', { name: 'Show state' }))
+  await waitFor(() => expect(screen.getByText('World state block')).toBeVisible())
+}
+
+export const WorldStateReported: StoryT = {
+  ...wrap,
+  args: { ...baseProps, ...aiEntry, ...reportedProps },
+  play: async () => {
+    await openPanel()
+    expect(screen.getByText('piggyback')).toBeVisible()
+    expect(screen.getByText('Ashfen Marshes')).toBeVisible()
+    expect(screen.getByText('cloak now muddied to the waist')).toBeVisible()
+    expect(screen.getByText('120s')).toBeVisible()
+  },
+}
+
+export const WorldStateFallbackRecovered: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    sceneEntities: [CHAR_A],
+    currentLocationId: LOC_A,
+    entityNames,
+    stateReport: {
+      layer: 'per_turn_classifier',
+      sceneEntities: [CHAR_A],
+      failedFields: [{ field: 'transfers', detail: 'content present but no entries' }],
+      raw: '<state>\n  <transfers>\n    <item id="i1"',
+    },
+  },
+  play: async () => {
+    await openPanel()
+    // The whole of the invisible-fallback fix: before the badge, a fallback turn
+    // wrote metadata and deltas but touched no content, so it was unobservable.
+    expect(screen.getByText('classifier fallback')).toBeVisible()
+    expect(screen.getByText('State not fully recorded: transfers.')).toBeVisible()
+  },
+}
+
+export const WorldStateRejectedLocation: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    sceneEntities: [CHAR_A],
+    currentLocationId: LOC_A,
+    entityNames,
+    // apply.ts refused the emitted id (an item, not a location) and inherited the
+    // previous location. The flag is what the panel keys on — an emitted id merely
+    // unequal to currentLocationId is a user scene edit, not a rejection.
+    stateReport: {
+      layer: 'piggyback_tagged_block',
+      currentLocation: ITEM_A,
+      currentLocationRejected: true,
+    },
+  },
+  play: async () => {
+    await openPanel()
+    expect(screen.getByText(/emitted id was not a location/)).toBeVisible()
+  },
+}
+
+// The report is immutable provenance while currentLocationId is user-editable, so an
+// emitted id unequal to the applied one is the ordinary post-edit state. Labelling it a
+// rejection accuses the model of an error the user made deliberately.
+export const WorldStateEditedLocation: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    sceneEntities: [CHAR_A],
+    // The user moved the scene here after the turn landed on LOC_A.
+    currentLocationId: LOC_B,
+    entityNames,
+    stateReport: { layer: 'piggyback_tagged_block', currentLocation: LOC_A },
+  },
+  play: async () => {
+    await openPanel()
+    expect(screen.getByText('Eldrin Keep')).toBeVisible()
+    expect(screen.queryByText(/emitted id was not a location/)).not.toBeInTheDocument()
+  },
+}
+
+// A positive delta that apply.ts still truncated: the case `worldTimeDelta < 0` could
+// never detect, since nothing about the emitted value alone reveals the headroom bound.
+export const WorldStateHeadroomClampedDelta: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    sceneEntities: [CHAR_A],
+    currentLocationId: LOC_A,
+    entityNames,
+    stateReport: {
+      layer: 'piggyback_tagged_block',
+      worldTimeDelta: 9_000_000,
+      worldTimeDeltaApplied: 120,
+    },
+  },
+  play: async () => {
+    await openPanel()
+    expect(screen.getByText(/clamped to 120s/)).toBeVisible()
+  },
+}
+
+export const WorldStateClampedDelta: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    sceneEntities: [CHAR_A],
+    currentLocationId: LOC_A,
+    entityNames,
+    stateReport: {
+      layer: 'piggyback_tagged_block',
+      worldTimeDelta: -600,
+      worldTimeDeltaApplied: 0,
+    },
+  },
+  play: async () => {
+    await openPanel()
+    expect(screen.getByText('-600s')).toBeVisible()
+    expect(screen.getByText(/clamped to 0s/)).toBeVisible()
+  },
+}
+
+export const WorldStateUnknownEntity: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    // stateReport is immutable while entities stay deletable, so a dangling id is
+    // permanent. Never a crash, never a bare UUID.
+    sceneEntities: [CHAR_A, GONE],
+    currentLocationId: null,
+    entityNames: [{ id: CHAR_A, name: 'Aria' }],
+    stateReport: { layer: 'piggyback_tagged_block', sceneEntities: [CHAR_A, GONE] },
+  },
+  play: async () => {
+    await openPanel()
+    expect(screen.getByText('Unknown entity')).toBeVisible()
+    expect(screen.queryByText(GONE)).not.toBeInTheDocument()
+  },
+}
+
+export const WorldStateLegacyRow: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    kind: 'ai_reply',
+    meta: aiMeta,
+    // Written before the write-path strip: markup still in content, no stateReport.
+    content:
+      'The blade rasps free of its sheath.\n<state><scene_entities>c1</scene_entities></state>',
+    sceneEntities: [CHAR_A],
+    currentLocationId: null,
+    entityNames,
+  },
+  play: async () => {
+    await openPanel()
+    expect(screen.getByText(/<scene_entities>c1<\/scene_entities>/)).toBeVisible()
+    // Prose is still stripped for display even though the row was never migrated.
+    expect(screen.getByText('The blade rasps free of its sheath.')).toBeVisible()
+  },
+}
+
+export const WorldStateTailEditable: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...reportedProps,
+    sceneOptions,
+    onEditScene: fn(async () => ({ ok: true }) as const),
+  },
+  play: async () => {
+    await openPanel()
+    const trigger = screen.getByRole('button', { name: 'Edit scene' })
+    await userEvent.click(trigger)
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Edit scene' })).toBeVisible())
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    // Closing must hand the keyboard back to the control that opened it.
+    expect(document.activeElement).toBe(trigger)
+  },
+}
+
+// A terminal refusal must say why. The generic "try again" sends the user round a loop
+// the action layer will refuse identically every time.
+export const WorldStateSaveRefused: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...reportedProps,
+    sceneOptions,
+    onEditScene: fn(async () => ({ ok: false, code: 'not-tail-entry' }) as const),
+  },
+  play: async () => {
+    await openPanel()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit scene' }))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Edit scene' })).toBeVisible())
+    // An unchanged Save takes the form's cancel route and never reaches onEditScene.
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Corin' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(screen.getByText("Only the newest entry's scene can be edited.")).toBeVisible(),
+    )
+    expect(screen.queryByText('Could not save the scene. Try again.')).not.toBeInTheDocument()
+    // The overlay stays open on failure, so the edit is not silently discarded.
+    expect(screen.getByRole('dialog', { name: 'Edit scene' })).toBeVisible()
+  },
+}
+
+// A retryable failure keeps the generic copy, which is accurate for that one case.
+export const WorldStateSaveFailed: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...reportedProps,
+    sceneOptions,
+    onEditScene: fn(async () => ({ ok: false, code: 'delta-failed' }) as const),
+  },
+  play: async () => {
+    await openPanel()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit scene' }))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Edit scene' })).toBeVisible())
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Corin' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(screen.getByText('Could not save the scene. Try again.')).toBeVisible(),
+    )
+  },
+}
+
+/**
+ * The scene dialog's open flag lives in EntryCard's own body, not in a subtree that
+ * unmounts with it, so a `disabled` round-trip is exactly where it can outlive the
+ * dialog and bring it back unprompted.
+ */
+export const WorldStateEditDoesNotResurrectAfterGeneration: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...reportedProps,
+    sceneOptions,
+    onEditScene: fn(async () => ({ ok: true }) as const),
+  },
+  render: (args) => <ResurrectHarness {...args} />,
+  play: async () => {
+    await openPanel()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit scene' }))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Edit scene' })).toBeVisible())
+
+    setStoryBlocked?.(true)
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Edit scene' })).not.toBeInTheDocument(),
+    )
+
+    setStoryBlocked?.(false)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Edit scene' })).toBeVisible())
+    expect(screen.queryByRole('dialog', { name: 'Edit scene' })).not.toBeInTheDocument()
+  },
+}
+
+export const WorldStateNonTail: StoryT = {
+  ...wrap,
+  args: { ...baseProps, ...aiEntry, ...reportedProps },
+  play: async () => {
+    await openPanel()
+    // Absent, not disabled: a control present everywhere but effective only at the
+    // tail repeats the failure mode the panel exists to remove.
+    expect(screen.queryByRole('button', { name: 'Edit scene' })).not.toBeInTheDocument()
+  },
+}
+
+export const WorldStateAbsentOnUserAction: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    kind: 'user_action',
+    content: 'I step into the marshes.',
+    sceneEntities: [CHAR_A],
+    entityNames,
+  },
+  play: async () => {
+    // A user_action's scene metadata is inherited and identical to the entry above
+    // it, so a panel there would render the same facts twice.
+    expect(screen.queryByRole('button', { name: 'Show state' })).not.toBeInTheDocument()
   },
 }

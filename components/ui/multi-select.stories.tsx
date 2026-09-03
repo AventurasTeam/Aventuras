@@ -1,16 +1,18 @@
-// MultiSelect stories — Basic · Partial · None · Disabled · PerOptionDisabled
-// · NarrowContainer · ThemeMatrix (partial). ThemeMatrix is partial per the
+// MultiSelect stories — Basic · Partial · None · Disabled · DisabledWhileOpen
+// · PerOptionDisabled · NarrowContainer · ThemeMatrix (partial) · ListDisabled.
+// ThemeMatrix is partial per the
 // portal-skip rule in docs/ui/components.md → Storybook story conventions:
 // the open overlay portals to document.body, escaping per-row dataSet
 // scoping. Theme verification for the open branch uses the toolbar global
 // theme switcher (web) or <ThemePicker /> on the dev page (native).
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { View } from 'react-native'
+import { expect, screen, userEvent, waitFor } from 'storybook/test'
 
 import { themes } from '@/lib/themes'
 
-import { MultiSelect } from './multi-select'
+import { MultiSelect, MultiSelectList } from './multi-select'
 import { type MultiSelectOption } from './multi-select-state'
 import { Text } from './text'
 
@@ -90,6 +92,43 @@ export const Disabled: Story = {
   ),
 }
 
+// The trigger refuses to OPEN while disabled, so the only way to reach an open overlay
+// under a live `disabled` is to flip the prop after opening — a save starting under an
+// already-open filter. Driven through a harness because the setter must be called from
+// outside the modal, which aria-hides every control around it.
+let setStoryDisabled: ((next: boolean) => void) | null = null
+
+function DisableAfterOpen() {
+  const [disabled, setDisabled] = useState(false)
+  useEffect(() => {
+    setStoryDisabled = setDisabled
+    return () => {
+      setStoryDisabled = null
+    }
+  }, [])
+  return <Stateful initial={['classifier']} disabled={disabled} />
+}
+
+export const DisabledWhileOpen: Story = {
+  render: () => (
+    <View className="w-72 p-4">
+      <DisableAfterOpen />
+    </View>
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: /^Subsystem:/ }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Select all' })).toBeVisible())
+
+    setStoryDisabled?.(true)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Select all' })).toBeDisabled())
+    expect(screen.getByRole('button', { name: 'Clear all' })).toBeDisabled()
+    // RN-Web renders the row as a div, which jest-dom never reports as disabled.
+    const row = screen.getByRole('checkbox', { name: 'retrieval' })
+    expect(row).toHaveAttribute('aria-disabled', 'true')
+    expect(row).toHaveAttribute('tabindex', '-1')
+  },
+}
+
 export const PerOptionDisabled: Story = {
   render: () => (
     <View className="w-72 p-4">
@@ -140,4 +179,43 @@ export const ThemeMatrix: Story = {
       ))}
     </View>
   ),
+}
+
+function StatefulList({ disabled }: { disabled?: boolean }) {
+  const [selected, setSelected] = useState<string[]>(['classifier'])
+  return (
+    <>
+      <Text>{`selected:${selected.length}`}</Text>
+      <MultiSelectList
+        options={OPTIONS}
+        selected={selected}
+        onChange={setSelected}
+        disabled={disabled}
+      />
+    </>
+  )
+}
+
+// The bulk actions sit outside the row list, so gating only onToggle left Select all and
+// Clear all live while a save was in flight — enough to submit one scene and show the
+// failure over another. Asserted as disabled rather than as clicks that change nothing:
+// a control announced as enabled is still a trap for keyboard and screen-reader users
+// even when its handler is inert, and user-event refuses to click a truly gated one.
+export const ListDisabled: Story = {
+  render: () => (
+    <View className="w-72 p-4">
+      <StatefulList disabled />
+    </View>
+  ),
+  play: async () => {
+    expect(screen.getByText('selected:1')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Select all' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Clear all' })).toBeDisabled()
+    // The rows stay gated too, which was already true and must remain so. Asserted on
+    // the ARIA attributes rather than toBeDisabled: RN-Web renders the row as a div,
+    // which jest-dom never reports as disabled however it is marked up.
+    const row = screen.getByRole('checkbox', { name: 'retrieval' })
+    expect(row).toHaveAttribute('aria-disabled', 'true')
+    expect(row).toHaveAttribute('tabindex', '-1')
+  },
 }

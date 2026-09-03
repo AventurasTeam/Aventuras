@@ -10,7 +10,15 @@ import {
   Trash2,
   X,
 } from 'lucide-react-native'
-import { useEffect, useMemo, useState, type ReactElement, type ReactNode } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+  type RefObject,
+} from 'react'
 import { Platform, Pressable, View } from 'react-native'
 import Animated, {
   useAnimatedStyle,
@@ -32,7 +40,7 @@ import { IconAction } from '@/components/ui/icon-action'
 import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
-import { useTier } from '@/hooks/use-tier'
+import type { Tier } from '@/hooks/use-tier'
 import type { CalendarFrame } from '@/lib/calendar'
 import type { EntryMetadata, StoryEntry } from '@/lib/db'
 import { t } from '@/lib/i18n'
@@ -41,6 +49,7 @@ import { stripTrailingBlocks } from '@/lib/piggyback'
 import { cn } from '@/lib/utils'
 
 import { RichEntryContent } from './rich-entry-content'
+import { SceneEditForm, sceneSaveErrorKey, type SceneSaveResult } from './scene-edit-form'
 import { WorldTimeEditForm, type MonotonicityBreak } from './world-time-edit-form'
 
 type EntryKind = StoryEntry['kind'] | 'streaming'
@@ -49,6 +58,16 @@ type EntryKind = StoryEntry['kind'] | 'streaming'
 // than a bespoke copy, so the two can't drift; only completion + reasoning are
 // displayed (prompt is carried but unused here).
 type EntryMeta = Pick<EntryMetadata, 'tokens'>
+
+/** An id the host tried to resolve; `name` absent means the row is gone. */
+type ResolvedEntity = { id: string; name?: string }
+type SceneEdit = { sceneEntities: string[]; currentLocationId: string | null }
+type EntityOption = { id: string; name: string }
+type SceneOptions = {
+  characters: EntityOption[]
+  items: EntityOption[]
+  locations: EntityOption[]
+}
 
 type EntryCardProps = {
   kind: EntryKind
@@ -74,6 +93,31 @@ type EntryCardProps = {
   /** Not provided for `opening` (block-delete) or `system`/`streaming`. */
   onDelete?: () => void
 
+  // world-state panel (ai / opening) — see docs/ui/patterns/entry-card.md.
+  /** This entry's scene, in order. Ids, not names — resolved through `entityNames`. */
+  sceneEntities?: readonly string[]
+  currentLocationId?: string | null
+  /**
+   * Resolution pool for EVERY id the panel mentions, not just the scene: a transfer's
+   * counterparty and a rejected location routinely sit outside it. A missing `name`
+   * renders the unknown-entity chip.
+   */
+  entityNames?: readonly ResolvedEntity[]
+  /** What this turn reported. Absent means the entry reported nothing. */
+  stateReport?: EntryMetadata['stateReport']
+  summary?: string
+  /**
+   * Desktop/tablet: fired by the in-card Dialog's Save. Resolve `{ ok: false }` to
+   * report a failed write, carrying the action layer's rejection code where there is
+   * one. Presence also gates the edit control, so the host supplies it on the tail
+   * entry alone — a non-tail card renders no control at all.
+   */
+  onEditScene?: (next: SceneEdit) => Promise<SceneSaveResult>
+  /** Phone: the compound requests; the host presents the native Sheet. */
+  onRequestEditScene?: () => void
+  /** Candidate pool for the editor's selects; required alongside either handler. */
+  sceneOptions?: SceneOptions
+
   // ai / opening:
   meta?: EntryMeta
   reasoning?: string
@@ -93,6 +137,10 @@ type EntryCardProps = {
   fixAction?: { label: string; onPress: () => void }
   onRetry?: () => void
   onDismiss?: () => void
+
+  /** Resolved by the host, not by a hook here: one window subscription for the whole
+   *  list instead of one per card, so a resize re-renders rows only across a boundary. */
+  tier: Tier
 
   // edit-restrictions (uniform):
   disabled?: boolean
@@ -207,9 +255,96 @@ function WorldTimeEditDialog({
   )
 }
 
+function SceneEditDialog({
+  open,
+  onOpenChange,
+  sceneEntities,
+  currentLocationId,
+  options,
+  onEditScene,
+  returnFocusTo,
+}: {
+  open: boolean
+  onOpenChange: (next: boolean) => void
+  sceneEntities: readonly string[]
+  currentLocationId: string | null
+  options: SceneOptions
+  onEditScene?: (next: SceneEdit) => Promise<SceneSaveResult>
+  returnFocusTo: RefObject<View | null>
+}) {
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | undefined>()
+
+  async function save(next: SceneEdit) {
+    if (saving) return
+    setSaving(true)
+    setSaveError(undefined)
+    try {
+      const result = await onEditScene?.(next)
+      if (result?.ok) {
+        onOpenChange(false)
+      } else {
+        setSaveError(t(sceneSaveErrorKey(result?.code)))
+      }
+    } catch {
+      setSaveError(t('reader:sceneEdit.failed'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function handleOpenChange(next: boolean) {
+    if (!next && saving) return
+    if (next) setSaveError(undefined)
+    onOpenChange(next)
+  }
+
+  return (
+    // Centred modal for the same reason the world-time overlay is one: the entry
+    // list scrolls under it, so an anchored popover drifts off its own trigger.
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent
+        className="max-w-xl"
+        hideCloseButton={saving}
+        scrollable={false}
+        // Radix returns focus to whatever DialogTrigger registered, and this Dialog is
+        // controlled from the card rather than triggered, so it would drop the keyboard
+        // on <body> instead of the pencil that opened it.
+        onCloseAutoFocus={(event) => {
+          const trigger = returnFocusTo.current as { focus?: () => void } | null
+          if (typeof trigger?.focus !== 'function') return
+          event.preventDefault()
+          trigger.focus()
+        }}
+        onOpenAutoFocus={(event) => {
+          event.preventDefault()
+          ;(event.currentTarget as HTMLElement | null)?.focus()
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>{t('reader:sceneEdit.title')}</DialogTitle>
+        </DialogHeader>
+        {/* Keyed so an external scene change (undo, classifier write) reseeds the
+            form, which only reads its props on mount. */}
+        <SceneEditForm
+          key={`${sceneEntities.join(',')}|${currentLocationId ?? ''}`}
+          sceneEntities={sceneEntities}
+          currentLocationId={currentLocationId}
+          options={options}
+          saving={saving}
+          saveError={saveError}
+          onSave={(next) => void save(next)}
+          onCancel={() => onOpenChange(false)}
+        />
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function WorldTimeFooter({
   label,
   edit,
+  tier,
   monotonicityBreak,
   onEditTime,
   onRequestEditTime,
@@ -217,12 +352,11 @@ function WorldTimeFooter({
   label: string
   /** Null leaves the footer inert — in-flight, content editing, or no host handler. */
   edit: WorldTimeEditTarget | null
+  tier: Tier
   monotonicityBreak?: MonotonicityBreak
   onEditTime?: (nextWorldTime: number) => Promise<boolean>
   onRequestEditTime?: () => void
 }) {
-  const tier = useTier()
-
   const breakText =
     monotonicityBreak != null
       ? t('reader:worldTimeEdit.monotonicityBreak', {
@@ -284,6 +418,248 @@ function WorldTimeFooter({
 
 // Tailwind's animate-pulse doesn't run on native, so the "model is thinking"
 // indication loops opacity through Reanimated instead.
+// --- World-state panel -------------------------------------------------------
+// docs/ui/patterns/entry-card.md → World-state panel. Absolute scene fields come
+// from the entry's metadata; `stateReport` adds what THIS turn reported.
+
+function StateGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <View className="mb-2 last:mb-0">
+      <Text size="xs" variant="muted" className="mb-0.5 uppercase tracking-wide">
+        {label}
+      </Text>
+      {children}
+    </View>
+  )
+}
+
+// stateReport is immutable while entities stay deletable and rollback-able, so an id
+// that no longer resolves is a permanent state rather than a transient one. The raw
+// id rides the accessibility label so it is recoverable without ever being rendered
+// as a bare UUID.
+function EntityChip({ entity }: { entity: ResolvedEntity }) {
+  const known = entity.name != null
+  return (
+    <View
+      className={cn(
+        'rounded-full border px-2 py-0.5',
+        known ? 'border-border bg-bg-base' : 'border-dashed border-border',
+      )}
+      accessibilityLabel={known ? undefined : entity.id}
+    >
+      <Text size="xs" className={known ? undefined : 'text-fg-muted'}>
+        {known ? entity.name : t('reader:entryCard.stateUnknownEntity')}
+      </Text>
+    </View>
+  )
+}
+
+function resolveName(id: string, pool: readonly ResolvedEntity[]): string {
+  return pool.find((e) => e.id === id)?.name ?? t('reader:entryCard.stateUnknownEntity')
+}
+
+function resolveCounterparty(id: string | undefined, pool: readonly ResolvedEntity[]): string {
+  return id != null ? resolveName(id, pool) : t('reader:entryCard.stateNone')
+}
+
+function StateLine({ children }: { children: ReactNode }) {
+  return <Text size="xs">{children}</Text>
+}
+
+function WorldStatePanel({
+  sceneEntities,
+  currentLocationId,
+  entityNames,
+  stateReport,
+  summary,
+  legacyStateRaw,
+  onOpenSceneEdit,
+  editTriggerRef,
+}: {
+  sceneEntities: readonly string[]
+  currentLocationId: string | null
+  entityNames: readonly ResolvedEntity[]
+  stateReport?: EntryMetadata['stateReport']
+  summary?: string
+  legacyStateRaw?: string
+  onOpenSceneEdit?: () => void
+  editTriggerRef: RefObject<View | null>
+}) {
+  const visualChanges = stateReport?.visualChanges ?? []
+  const items = stateReport?.transfers?.items ?? []
+  const stackables = stateReport?.transfers?.stackables ?? []
+  const hasChanges = visualChanges.length + items.length + stackables.length > 0
+
+  const emittedLocation = stateReport?.currentLocation
+  // Read as a recorded fact, not inferred from `emitted !== current`: that inequality
+  // also goes true when the user edits the location, which is a correct outcome rather
+  // than a model error (docs/data-model.md → Entry metadata shape).
+  // Holds the id rather than a flag: a rejection always names one, and the strikethrough
+  // needs it — keeping the value is what narrows it for the render below.
+  const rejectedLocation =
+    stateReport?.currentLocationRejected === true ? emittedLocation : undefined
+  const emittedDelta = stateReport?.worldTimeDelta
+  const appliedDelta = stateReport?.worldTimeDeltaApplied
+  // Holds the applied value rather than a flag so the copy can name it, and so all three
+  // clamp causes surface — `< 0` caught only the negative one.
+  const clampedTo = appliedDelta != null && appliedDelta !== emittedDelta ? appliedDelta : null
+  const failedFields = stateReport?.failedFields ?? []
+
+  return (
+    <View className="mb-3 rounded border border-border bg-bg-sunken p-2.5">
+      <View className="mb-2 flex-row items-center gap-2 border-b border-border pb-1.5">
+        <Text size="xs" variant="muted" className="font-medium">
+          {t('reader:entryCard.stateBlock')}
+        </Text>
+        {stateReport != null ? (
+          <View className="rounded-full border border-border px-1.5">
+            <Text size="xs" variant="muted">
+              {t(
+                stateReport.layer === 'piggyback_tagged_block'
+                  ? 'reader:entryCard.stateLayerPiggyback'
+                  : 'reader:entryCard.stateLayerFallback',
+              )}
+            </Text>
+          </View>
+        ) : null}
+        {/* Absent, never disabled, on a non-tail entry: the host supplies no handler
+            except on the tail, so the control simply does not exist there. */}
+        {onOpenSceneEdit != null ? (
+          <View className="ml-auto">
+            <IconAction
+              icon={Pencil}
+              label={t('reader:entryCard.stateEditScene')}
+              size="sm"
+              onPress={onOpenSceneEdit}
+              ref={editTriggerRef}
+            />
+          </View>
+        ) : null}
+      </View>
+
+      <StateGroup label={t('reader:entryCard.stateInScene')}>
+        {sceneEntities.length > 0 ? (
+          <View className="flex-row flex-wrap gap-1">
+            {sceneEntities.map((id) => (
+              <EntityChip key={id} entity={entityNames.find((e) => e.id === id) ?? { id }} />
+            ))}
+          </View>
+        ) : (
+          <StateLine>{t('reader:entryCard.stateNobody')}</StateLine>
+        )}
+      </StateGroup>
+
+      <StateGroup label={t('reader:entryCard.stateLocation')}>
+        <StateLine>
+          {rejectedLocation != null ? (
+            <Text size="xs" className="text-fg-muted line-through">
+              {`${resolveName(rejectedLocation, entityNames)} `}
+            </Text>
+          ) : null}
+          {currentLocationId != null
+            ? resolveName(currentLocationId, entityNames)
+            : t('reader:entryCard.stateNone')}
+          {rejectedLocation != null ? (
+            <Text size="xs" variant="muted">
+              {` ${t('reader:entryCard.stateLocationRejected')}`}
+            </Text>
+          ) : null}
+        </StateLine>
+      </StateGroup>
+
+      {hasChanges ? (
+        <StateGroup label={t('reader:entryCard.stateChanges')}>
+          {visualChanges.map((c, i) => (
+            <StateLine key={`v${i}`}>
+              <Text size="xs" variant="muted">
+                {`${t('reader:entryCard.stateVisualChange', {
+                  name: resolveName(c.id, entityNames),
+                  category: c.type,
+                })} — `}
+              </Text>
+              {c.text}
+            </StateLine>
+          ))}
+          {items.map((it, i) => (
+            <StateLine key={`i${i}`}>
+              {it.from != null
+                ? t('reader:entryCard.stateItemTransferFrom', {
+                    item: resolveName(it.id, entityNames),
+                    to: resolveCounterparty(it.to, entityNames),
+                    from: resolveName(it.from, entityNames),
+                  })
+                : t('reader:entryCard.stateItemTransfer', {
+                    item: resolveName(it.id, entityNames),
+                    to: resolveCounterparty(it.to, entityNames),
+                  })}
+            </StateLine>
+          ))}
+          {stackables.map((st, i) => (
+            <StateLine key={`s${i}`}>
+              {st.from != null
+                ? t('reader:entryCard.stateStackableFrom', {
+                    key: st.key,
+                    amount: st.amount,
+                    to: resolveCounterparty(st.to, entityNames),
+                    from: resolveName(st.from, entityNames),
+                  })
+                : t('reader:entryCard.stateStackable', {
+                    key: st.key,
+                    amount: st.amount,
+                    to: resolveCounterparty(st.to, entityNames),
+                  })}
+            </StateLine>
+          ))}
+        </StateGroup>
+      ) : null}
+
+      {/* Raw seconds, exactly as emitted: no duration formatter exists, and raw is the
+          honest rendering for a provenance field. */}
+      {stateReport?.worldTimeDelta != null ? (
+        <StateGroup label={t('reader:entryCard.stateDelta')}>
+          <StateLine>
+            {t('reader:entryCard.stateDeltaSeconds', { n: stateReport.worldTimeDelta })}
+            {clampedTo != null ? (
+              <Text size="xs" variant="muted">
+                {` ${t('reader:entryCard.stateDeltaClamped', { n: clampedTo })}`}
+              </Text>
+            ) : null}
+          </StateLine>
+        </StateGroup>
+      ) : null}
+
+      {summary != null ? (
+        <StateGroup label={t('reader:entryCard.stateSummary')}>
+          <StateLine>{summary}</StateLine>
+        </StateGroup>
+      ) : null}
+
+      {failedFields.length > 0 ? (
+        <View className="mt-2 rounded border border-warning p-1.5">
+          <Text size="xs" className="text-warning">
+            {t('reader:entryCard.stateParseFailed', {
+              fields: failedFields.map((f) => f.field).join(', '),
+            })}
+          </Text>
+          {stateReport?.raw != null ? (
+            <Text size="xs" className="mt-1 font-mono text-fg-muted">
+              {stateReport.raw}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
+
+      {/* Tolerant reader: rows written before the write-path strip keep their markup
+          and render it verbatim rather than being migrated. */}
+      {stateReport == null && legacyStateRaw != null ? (
+        <Text size="xs" className="font-mono text-fg-muted">
+          {legacyStateRaw}
+        </Text>
+      ) : null}
+    </View>
+  )
+}
+
 function Pulsing({ children }: { children: ReactNode }) {
   const opacity = useSharedValue(1)
   useEffect(() => {
@@ -328,6 +704,7 @@ function NarrativeContent({
 export function EntryCard({
   kind,
   content,
+  tier,
   worldTimeLabel,
   worldTimeRaw,
   onEditTime,
@@ -336,6 +713,14 @@ export function EntryCard({
   worldTimeFrame,
   onEdit,
   onDelete,
+  sceneEntities,
+  currentLocationId,
+  entityNames,
+  stateReport,
+  summary,
+  onEditScene,
+  onRequestEditScene,
+  sceneOptions,
   meta,
   reasoning,
   onRegen,
@@ -356,6 +741,7 @@ export function EntryCard({
 }: EntryCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [stateExpanded, setStateExpanded] = useState(false)
+  const [sceneEditOpen, setSceneEditOpen] = useState(false)
   const hasReasoning = reasoning != null && reasoning.length > 0
 
   // Carries the narrowed values rather than a bare boolean so the footer can
@@ -369,8 +755,33 @@ export function EntryCard({
       ? { worldTimeRaw, frame: worldTimeFrame }
       : null
 
+  // Prose still comes from the strip: rows written before the write-path strip keep
+  // their markup in `content`, so the reader stays a tolerant reader.
   const { prose, stateRaw } = useMemo(() => stripTrailingBlocks(content), [content])
-  const hasState = stateRaw != null && stateRaw.length > 0
+  const sceneTriggerRef = useRef<View | null>(null)
+  // Deliberately NOT gated on `stateReport`. The editable fields are the absolute
+  // scene triple, which every entry carries; gating on the report would make the
+  // scene editor reachable only when a parse happened to succeed — an affordance
+  // whose availability depends on something the user cannot see.
+  const hasState = kind === 'ai_reply' || kind === 'opening'
+  // Same tier split as the world-time footer: `onEditScene == null` also routes to
+  // the request fork, since a Dialog whose Save has nowhere to report would discard
+  // the edit silently.
+  const useSceneRequest = onRequestEditScene != null && (tier === 'phone' || onEditScene == null)
+  const sceneEditable = !editing && disabled !== true && sceneOptions != null
+  const sceneEdit =
+    sceneEditable && (onEditScene != null || onRequestEditScene != null)
+      ? { open: () => (useSceneRequest ? onRequestEditScene?.() : setSceneEditOpen(true)) }
+      : null
+
+  // The dialog only exists while the panel below is rendered, and the gate closes on
+  // props the user does not control — a run starting, the row ceasing to be the tail.
+  // Left set, the flag outlives the unmount and remounts the dialog already open.
+  const sceneDialogMounted =
+    hasState && stateExpanded && !editing && sceneEdit != null && !useSceneRequest
+  useEffect(() => {
+    if (!sceneDialogMounted) setSceneEditOpen(false)
+  }, [sceneDialogMounted])
 
   const showActions = !editing && kind !== 'system' && kind !== 'streaming'
   // Holds the label rather than a boolean so the footer receives it narrowed.
@@ -470,14 +881,29 @@ export function EntryCard({
       ) : null}
 
       {hasState && stateExpanded && !editing ? (
-        <View className="mb-3 rounded border border-border bg-bg-sunken p-2.5">
-          <Text size="xs" variant="muted" className="mb-1 font-medium">
-            {t('reader:entryCard.stateBlock')}
-          </Text>
-          <Text size="xs" className="font-mono text-fg-muted">
-            {stateRaw}
-          </Text>
-        </View>
+        <>
+          <WorldStatePanel
+            sceneEntities={sceneEntities ?? []}
+            currentLocationId={currentLocationId ?? null}
+            entityNames={entityNames ?? []}
+            stateReport={stateReport}
+            summary={summary}
+            legacyStateRaw={stateRaw}
+            onOpenSceneEdit={sceneEdit?.open}
+            editTriggerRef={sceneTriggerRef}
+          />
+          {sceneDialogMounted && sceneOptions != null ? (
+            <SceneEditDialog
+              open={sceneEditOpen}
+              onOpenChange={setSceneEditOpen}
+              sceneEntities={sceneEntities ?? []}
+              currentLocationId={currentLocationId ?? null}
+              options={sceneOptions}
+              onEditScene={onEditScene}
+              returnFocusTo={sceneTriggerRef}
+            />
+          ) : null}
+        </>
       ) : null}
 
       {editing ? (
@@ -603,6 +1029,7 @@ export function EntryCard({
         <WorldTimeFooter
           label={worldTimeFooterLabel}
           edit={timeEdit}
+          tier={tier}
           monotonicityBreak={worldTimeMonotonicityBreak}
           onEditTime={onEditTime}
           onRequestEditTime={onRequestEditTime}

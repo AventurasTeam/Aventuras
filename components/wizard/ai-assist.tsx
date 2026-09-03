@@ -558,19 +558,25 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     if (props.result !== 'chips' || assist.kind !== 'result') return null
     const chips = props.getChips(assist.value)
     return (
-      <View className="gap-3">
-        <View className="flex-row flex-wrap gap-2">
-          {chips.map((chip) => (
-            <Tag
-              key={chip}
-              onPress={() => {
-                props.onPickChip(chip, assist.value)
-                closeOverlay()
-              }}
-            >
-              {chip}
-            </Tag>
-          ))}
+      <View className={cn('gap-3', isPhone && 'flex-1')}>
+        {/* Bounded like the prose result: the chip count is model-supplied, and an
+            unbounded wrap pushes the actions out of the height-capped dialog. */}
+        <View className={isPhone ? 'flex-1' : 'max-h-96'}>
+          <Scroller>
+            <View className="flex-row flex-wrap gap-2">
+              {chips.map((chip) => (
+                <Tag
+                  key={chip}
+                  onPress={() => {
+                    props.onPickChip(chip, assist.value)
+                    closeOverlay()
+                  }}
+                >
+                  {chip}
+                </Tag>
+              ))}
+            </View>
+          </Scroller>
         </View>
         <View className="flex-row justify-end gap-2">
           <Button variant="ghost" onPress={closeOverlay}>
@@ -863,7 +869,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
               swaps per state and the loading line is wider than the guidance
               label, so a content-sized dialog visibly resizes mid-flow. 32rem
               matches DialogContent's own sm:max-w-lg cap. */}
-          <DialogContent className="w-[32rem]" hideCloseButton>
+          <DialogContent className="w-[32rem]" hideCloseButton scrollable={false}>
             <DialogHeader hasCloseButton={false}>
               <DialogTitle>{title}</DialogTitle>
               {/* Radix warns without a description, and rn-primitives' web Content

@@ -136,10 +136,38 @@ describe('parseStateBlock', () => {
     expect(result.block.worldTimeDelta).toBe(30)
   })
 
-  it('an empty <state></state> block parses with every field absent', () => {
+  // An empty block must not read as a clean parse: that sets piggybackParseSucceeded,
+  // which suppresses the fallback classifier and strands the turn with no state.
+  it('records a block-level failure for an empty <state></state>', () => {
     const result = parseStateBlock('<state></state>')
     expect(result.blockFound).toBe(true)
     expect(result.block).toEqual({})
+    expect(result.failures).toEqual([
+      { field: 'state', detail: 'block was empty or truncated at the open tag' },
+    ])
+  })
+
+  it('records a block-level failure when the stream truncates at the open tag', () => {
+    const result = parseStateBlock('Some prose.<state>')
+    expect(result.blockFound).toBe(true)
+    expect(result.failures).toEqual([
+      { field: 'state', detail: 'block was empty or truncated at the open tag' },
+    ])
+  })
+
+  it('records a block-level failure when every inner tag is unrecognised', () => {
+    const result = parseStateBlock('<state><scene>c1, c2</scene></state>')
+    expect(result.block).toEqual({})
+    expect(result.failures).toEqual([
+      { field: 'state', detail: 'block content matched no known field tag' },
+    ])
+  })
+
+  // Guards the other direction: one parsed field is a real report, however sparse,
+  // and must not be reclassified as a failure.
+  it('leaves a block that parsed a single field alone', () => {
+    const result = parseStateBlock('<state><summary>Kael left.</summary></state>')
+    expect(result.block).toEqual({ summary: 'Kael left.' })
     expect(result.failures).toEqual([])
   })
 })
@@ -279,7 +307,7 @@ describe('stripTrailingBlocks', () => {
     expect(stateRaw).toBe('<state>\n<scene_entities>c1</scene_entities>\n</state>')
   })
 
-  it('cuts prose at the earliest trailing block and returns both raws', () => {
+  it('excises each block and returns both raws', () => {
     const raw =
       'The rain falls.\n<state><summary>x</summary></state>\n<suggestions><item category="cat1">go</item></suggestions>'
     const { prose, stateRaw, suggestionsRaw } = stripTrailingBlocks(raw)
@@ -306,6 +334,41 @@ describe('stripTrailingBlocks', () => {
     )
     expect(stateRaw).toBeUndefined()
     expect(suggestionsRaw).toContain('cat1')
+  })
+
+  // The cut is keyed on the close tag, not on position: prose that mentions the
+  // tag in passing carries no closer, and truncating there is unrecoverable.
+  it('leaves prose that merely mentions the tag intact', () => {
+    const raw = 'The city declared a <state> of emergency that morning.'
+    expect(stripTrailingBlocks(raw)).toEqual({ prose: raw })
+  })
+
+  it('excises the real block when prose also mentions the tag', () => {
+    const raw = 'The city declared a <state> of emergency.<state><summary>x</summary></state>'
+    const { prose, stateRaw } = stripTrailingBlocks(raw)
+    expect(prose).toBe('The city declared a <state> of emergency.')
+    expect(stateRaw).toBe('<state><summary>x</summary></state>')
+  })
+
+  // Truncating at a misplaced block would drop every word after it. Excising the
+  // span keeps both halves and flags the ordering the prompt forbids.
+  it('keeps prose on both sides of an out-of-position block', () => {
+    const raw = 'Before.<state><summary>x</summary></state>After.'
+    const { prose, stateRaw, outOfPosition } = stripTrailingBlocks(raw)
+    expect(prose).toBe('Before.After.')
+    expect(stateRaw).toBe('<state><summary>x</summary></state>')
+    expect(outOfPosition).toBe(true)
+  })
+
+  it('does not flag a block that sits after the prose', () => {
+    const raw = 'Prose.\n<state><summary>x</summary></state>'
+    expect(stripTrailingBlocks(raw).outOfPosition).toBeUndefined()
+  })
+
+  it('cuts an opener the stream truncated before its content', () => {
+    const { prose, stateRaw } = stripTrailingBlocks('The knight rides on.<state>')
+    expect(prose).toBe('The knight rides on.')
+    expect(stateRaw).toBe('<state>')
   })
 
   it('assigns each raw to its own block when suggestions precede state', () => {

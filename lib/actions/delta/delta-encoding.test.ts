@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
+import { entryMetadataSchema } from '@/lib/db'
+
 import { applyUndoPayload, computeUndoPayload } from './delta-encoding'
 
 // Fixture covers every node type the engines discriminate:
@@ -97,5 +99,62 @@ describe('computeUndoPayload + applyUndoPayload', () => {
   it('no-change column produces empty undo payload', () => {
     const cur = { name: 'k', loc: 'x', stack: { g: 1 } }
     expect(computeUndoPayload(fixture, cur, { ...cur })).toEqual({})
+  })
+})
+
+// The real entry-metadata schema rather than a fixture: stateReport is the first
+// nested optional object on a delta-logged column, and the scene editor's write
+// depends on it staying out of a payload it never touched.
+describe('stateReport round-trip through entryMetadataSchema', () => {
+  const base = { sceneEntities: ['char_a'], currentLocationId: 'loc_a', worldTime: 100 }
+
+  it('restores an absent report on undo', () => {
+    const current = { ...base }
+    const next = { ...base, stateReport: { layer: 'piggyback_tagged_block' as const } }
+    const undo = computeUndoPayload(entryMetadataSchema, current, next)
+    expect(applyUndoPayload(entryMetadataSchema, next, undo)).toEqual(current)
+  })
+
+  it('restores a prior report field-wise', () => {
+    const current = {
+      ...base,
+      stateReport: { layer: 'piggyback_tagged_block' as const, worldTimeDelta: 120 },
+    }
+    const next = {
+      ...base,
+      stateReport: { layer: 'per_turn_classifier' as const, worldTimeDelta: 60 },
+    }
+    const undo = computeUndoPayload(entryMetadataSchema, current, next)
+    expect(applyUndoPayload(entryMetadataSchema, next, undo)).toEqual(current)
+  })
+
+  // The scene edit is the only mutation touching the absolute triple while leaving
+  // the report alone — an untouched report must not appear in the undo payload.
+  it('leaves the report out of the payload when only the scene changed', () => {
+    const report = { layer: 'piggyback_tagged_block' as const, worldTimeDelta: 120 }
+    const current = { ...base, stateReport: report }
+    const next = { ...base, sceneEntities: ['char_a', 'char_b'], stateReport: report }
+    const undo = computeUndoPayload(entryMetadataSchema, current, next)
+    expect(undo).not.toHaveProperty('stateReport')
+    expect(applyUndoPayload(entryMetadataSchema, next, undo)).toEqual(current)
+  })
+
+  it('restores a nested report array whole', () => {
+    const current = {
+      ...base,
+      stateReport: {
+        layer: 'piggyback_tagged_block' as const,
+        visualChanges: [{ id: 'char_a', type: 'attire' as const, text: 'clean cloak' }],
+      },
+    }
+    const next = {
+      ...base,
+      stateReport: {
+        layer: 'piggyback_tagged_block' as const,
+        visualChanges: [{ id: 'char_a', type: 'attire' as const, text: 'muddied cloak' }],
+      },
+    }
+    const undo = computeUndoPayload(entryMetadataSchema, current, next)
+    expect(applyUndoPayload(entryMetadataSchema, next, undo)).toEqual(current)
   })
 })

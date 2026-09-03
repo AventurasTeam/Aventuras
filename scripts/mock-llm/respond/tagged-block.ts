@@ -121,8 +121,8 @@ export function renderSuggestionsBlock(items: SuggestionRef[]): string {
   return `<${SUGGESTIONS_ROOT_TAG}>\n${rows.join('\n')}\n</${SUGGESTIONS_ROOT_TAG}>`
 }
 
-// stripTrailingBlocks cuts prose at the EARLIEST trailing root tag, so a root
-// tag inside the prose would silently truncate the rendered reply.
+// A fixture whose prose opens a root tag and the block then closes it would have the
+// span between them excised from the rendered reply.
 function safeProse(prose: string): string {
   return TRAILING_ROOT_TAGS.reduce((acc, t) => acc.split(`<${t}>`).join(`&lt;${t}&gt;`), prose)
 }

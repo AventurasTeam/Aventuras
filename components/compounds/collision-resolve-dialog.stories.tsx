@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
 import { View } from 'react-native'
-import { screen, userEvent } from 'storybook/test'
+import { expect, screen, userEvent } from 'storybook/test'
 
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
@@ -236,4 +236,44 @@ export const ThemeMatrix: Story = {
       ))}
     </View>
   ),
+}
+
+// Tags are user data, so the merge body is the one collision mode whose height
+// scales without limit. The actions must not ride the scroll region away.
+export const MergeManyTags: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={baseEntity({ tags: Array.from({ length: 60 }, (_, i) => `tag-a-${i}`) })}
+      entityB={baseEntity({
+        id: 'ent_kael_2',
+        tags: Array.from({ length: 60 }, (_, i) => `tag-b-${i}`),
+      })}
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    const confirm = await screen.findByRole('button', { name: /^Merge into/ })
+    const panel = confirm.closest('[role="dialog"]') as HTMLElement
+
+    expect(panel.getBoundingClientRect().height).toBeLessThanOrEqual(window.innerHeight * 0.9 + 1)
+
+    let scroller: HTMLElement | null = null
+    for (const candidate of Array.from(panel.querySelectorAll<HTMLElement>('div'))) {
+      const overflowY = getComputedStyle(candidate).overflowY
+      if (
+        (overflowY === 'auto' || overflowY === 'scroll') &&
+        candidate.scrollHeight > candidate.clientHeight
+      ) {
+        scroller = candidate
+        break
+      }
+    }
+    expect(scroller).not.toBeNull()
+    expect(scroller!.contains(confirm)).toBe(false)
+
+    const before = confirm.getBoundingClientRect().top
+    scroller!.scrollTop = scroller!.scrollHeight
+    expect(confirm.getBoundingClientRect().top).toBeCloseTo(before, 0)
+    expect(confirm.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight + 1)
+  },
 }

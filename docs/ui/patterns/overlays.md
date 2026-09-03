@@ -248,6 +248,9 @@ Sheet primitive does not ship a built-in scrollable wrapper —
 consumers already make per-consumer list-shape choices
 (virtualized vs not, search-bar position, sticky-footer) and a
 primitive-owned scrollable wrapper would conflict with those.
+Dialog takes the opposite default, for a reason the detent gives
+Sheet for free: see
+[Dialog — height and scroll](#dialog--height-and-scroll).
 
 **Drag × keyboard interaction.** While a keyboard is showing or
 shown, body-drag is suspended; the drag handle remains the explicit
@@ -363,6 +366,55 @@ directly or a heading marked `tabIndex={-1}`.
 (rn-primitives Dialog default — Tab cycles within content).
 Distinct from Popover (does not trap); see
 [Popover — ARIA contract](#popover--aria-contract).
+
+## Dialog — height and scroll
+
+A Dialog is centred inside a `position: fixed` overlay that never
+scrolls. An uncapped panel taller than the viewport therefore grows
+past both edges at once — header above the top, actions below the
+bottom — and neither is reachable, because nothing in the chain
+scrolls to bring them back.
+
+`DialogContent` caps itself at 90% of the window height and scrolls
+its own children. The cap is measured from `useWindowDimensions()`
+rather than a `vh` unit, which native has no equivalent for. The
+corner close button sits outside the scroll region and stays
+pinned.
+
+`scrollable={false}` opts a host out of the primitive-owned scroll
+region. It does not opt out of the cap, which always applies. Use
+it when the dialog already owns a bounded scroll region with chrome
+around it — the import dialog's payload details, the embedder
+download's log pane, the wizard's AI-assist list. Two nested
+scrollables fight for the gesture on Android, and the host's own
+region is the one that should win.
+
+Opting out binds the host for **every** state it renders, not the
+one that motivated the opt-out. A multi-state dialog whose bodies
+swap per state must bound each body that can grow without a
+ceiling — a model-supplied file list, a model-supplied chip
+collection. The cap still applies to those states, so an unbounded
+one is clipped rather than scrolled, and the actions row goes with
+it.
+
+**Pinned actions.** The primitive scrolls everything it is handed,
+the actions row included, and it cannot pin that row on the host's
+behalf: no consumer renders `DialogFooter` as a direct child of
+`DialogContent`. The actions live inside a stateful body component —
+the scene editor's form, each collision-resolve mode, the world-time
+footer — so the primitive never sees them among its own children and
+has nothing to partition. A host that wants pinned actions takes
+`scrollable={false}` and adopts the shape a Sheet already uses: a
+body that scrolls and shrinks, with the actions row outside it. The
+scene editor does this, which is why it reads identically on both
+tiers.
+
+This is the opposite default from
+[Sheet](#sheet--api-surface), which ships no scroll wrapper at all.
+The asymmetry is deliberate. A Sheet is bounded by its detent, so a
+consumer that adds no scroll region still gets a panel that is on
+screen and dismissable, merely clipped. A Dialog has no such floor:
+without the cap its content leaves the viewport entirely.
 
 ## Popover — API surface
 

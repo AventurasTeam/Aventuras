@@ -320,3 +320,106 @@ describe('updateEntryWorldTime', () => {
     expect((await branchDeltas(db)).length).toBe(0)
   })
 })
+
+// The metadata payload is a PARTIAL merged inside the handler, not a whole-column
+// replace. This matters because a pipeline phase reads the tail once at the top and
+// dispatches its write after an LLM call — a long window in which the blob it holds
+// goes stale. The lock cannot help there (pipeline writers do not take it); only the
+// partial contract keeps a stale sibling field from riding along.
+describe('updateStoryEntryMetadata partial merge', () => {
+  it('does not let a stale writer revert a field it never touched', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+
+    // A pipeline phase's early read of the tail.
+    const staleSnapshot = await storedMetadata(db, 'e2')
+    expect(staleSnapshot?.worldTime).toBe(120)
+
+    // Meanwhile the user edits world time.
+    expect((await updateEntryWorldTime('b1', 'e2', 45, ctx)).status).toBe('ok')
+
+    // The phase now writes the one field it computed. Under a whole-column contract
+    // it would have sent { ...staleSnapshot, summary } and dragged worldTime back.
+    const result = await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateStoryEntryMetadata',
+          source: 'per_turn_classifier',
+          payload: { branchId: 'b1', id: 'e2', metadata: { summary: 'recomputed' } },
+        },
+        actionId: 'act_stale',
+        branchId: 'b1',
+        entryId: 'e2',
+      },
+      ctx,
+    )
+    expect(result.status).toBe('ok')
+
+    const after = await storedMetadata(db, 'e2')
+    expect(after?.summary).toBe('recomputed')
+    expect(after?.worldTime).toBe(45)
+    expect(after?.sceneEntities).toEqual(['ent1'])
+  })
+
+  // The column is nullable, so a partial writer needs a floor under it or the row ends up
+  // missing the three non-optional scene fields entirely.
+  it('completes a NULL metadata column rather than persisting only the partial', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    await db
+      .update(storyEntries)
+      .set({ metadata: null })
+      .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'e2')))
+
+    const result = await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateStoryEntryMetadata',
+          source: 'per_turn_classifier',
+          payload: { branchId: 'b1', id: 'e2', metadata: { summary: 'first' } },
+        },
+        actionId: 'act_floor',
+        branchId: 'b1',
+        entryId: 'e2',
+      },
+      ctx,
+    )
+    expect(result.status).toBe('ok')
+
+    expect(await storedMetadata(db, 'e2')).toEqual({
+      sceneEntities: [],
+      currentLocationId: null,
+      worldTime: 0,
+      summary: 'first',
+    })
+  })
+
+  it('reverses a partial merge back to the pre-write value', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateStoryEntryMetadata',
+          source: 'per_turn_classifier',
+          payload: { branchId: 'b1', id: 'e2', metadata: { summary: 'recomputed' } },
+        },
+        actionId: 'act_partial',
+        branchId: 'b1',
+        entryId: 'e2',
+      },
+      ctx,
+    )
+    const rows = await branchDeltas(db)
+    expect(rows[0].undoPayload).toEqual({ metadata: { summary: 's' } })
+
+    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+    const restored = await storedMetadata(db, 'e2')
+    expect(restored?.summary).toBe('s')
+    expect(restored?.worldTime).toBe(120)
+  })
+})

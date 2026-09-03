@@ -62,3 +62,73 @@ describe('entryMetadataSchema', () => {
     ).toBe(false)
   })
 })
+
+describe('stateReport', () => {
+  const base = { sceneEntities: [], currentLocationId: null, worldTime: 0 }
+
+  it('accepts a full report', () => {
+    const parsed = entryMetadataSchema.parse({
+      ...base,
+      stateReport: {
+        layer: 'piggyback_tagged_block',
+        sceneEntities: ['char_a'],
+        currentLocation: 'loc_a',
+        worldTimeDelta: 120,
+        visualChanges: [{ id: 'char_a', type: 'attire', text: 'muddied cloak' }],
+        transfers: {
+          items: [{ id: 'item_a', slot: 'inventory', to: 'char_a', from: 'char_b' }],
+          stackables: [{ key: 'gold', amount: 50, to: 'char_a' }],
+        },
+      },
+    })
+    expect(parsed.stateReport?.layer).toBe('piggyback_tagged_block')
+    expect(parsed.stateReport?.transfers?.stackables[0]?.amount).toBe(50)
+  })
+
+  it('accepts a failure-only report and keeps the raw text', () => {
+    const parsed = entryMetadataSchema.parse({
+      ...base,
+      stateReport: {
+        layer: 'per_turn_classifier',
+        failedFields: [{ field: 'transfers', detail: 'content present but no entries' }],
+        raw: '<state>\n  <transfers>\n    <item id="i1"',
+      },
+    })
+    expect(parsed.stateReport?.failedFields).toHaveLength(1)
+    expect(parsed.stateReport?.raw).toContain('<item id="i1"')
+  })
+
+  it('is absent when not supplied — the report is never inherited', () => {
+    expect(entryMetadataSchema.parse(base).stateReport).toBeUndefined()
+  })
+
+  it('rejects an unknown layer', () => {
+    expect(() =>
+      entryMetadataSchema.parse({ ...base, stateReport: { layer: 'periodic_classifier' } }),
+    ).toThrow()
+  })
+
+  // Guards the delta-encoding invariant: a leaf may not stack optional over
+  // nullable, so currentLocation is optional-only. A null would be a schema bug,
+  // not a legitimate "model said no location".
+  it('rejects a null currentLocation', () => {
+    expect(() =>
+      entryMetadataSchema.parse({
+        ...base,
+        stateReport: { layer: 'piggyback_tagged_block', currentLocation: null },
+      }),
+    ).toThrow()
+  })
+
+  it('rejects a visual change targeting a category that is not a visual key', () => {
+    expect(() =>
+      entryMetadataSchema.parse({
+        ...base,
+        stateReport: {
+          layer: 'piggyback_tagged_block',
+          visualChanges: [{ id: 'char_a', type: 'traits', text: 'brave' }],
+        },
+      }),
+    ).toThrow()
+  })
+})

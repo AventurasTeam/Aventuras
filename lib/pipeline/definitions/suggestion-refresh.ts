@@ -1,7 +1,6 @@
 import { z } from 'zod'
 
 import { generateStructured, type ResolveModelConfig } from '@/lib/ai'
-import { inheritedEntryMetadata, type EntryMetadata } from '@/lib/db'
 import {
   findSuggestionAnchor,
   resolveSuggestionEmission,
@@ -187,10 +186,6 @@ async function* suggestionEmissionPhase(
     ctx.log.warn('classifier.suggestions_refresh_target_reversed', { targetEntryId: target.id })
     return { status: 'completed' }
   }
-  // The empty-state ⟳ Generate fires on entries that carry no metadata at all —
-  // the column is nullable, so that is a live shape rather than an old one. The
-  // scene floor keeps the substituted default schema-valid.
-  const base: EntryMetadata = current.metadata ?? inheritedEntryMetadata(null)
 
   yield {
     type: 'delta_emitted',
@@ -204,7 +199,6 @@ async function* suggestionEmissionPhase(
         branchId: ctx.branchId,
         id: target.id,
         metadata: {
-          ...base,
           nextTurnSuggestions: {
             items,
             source: 'refresh' as const,

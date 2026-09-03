@@ -1716,6 +1716,20 @@ story_entries.metadata: {
   // Narrative digest — piggyback/classifier-authored, one sentence
   summary?: string                  // enrichment for the NEXT turn's Q2 structural digest (memory/retrieval.md#q2-structural-digest); absent on parse failure or restart is fine
 
+  // What THIS turn's generation reported — authored, never inherited. Absent means this entry reported nothing.
+  stateReport?: {
+    layer: 'piggyback_tagged_block' | 'per_turn_classifier'  // which agent ultimately supplied the fields above; last writer wins
+    sceneEntities?: string[]         // as emitted, post-substitution
+    currentLocation?: string         // as emitted; NOT nullable — the model cannot emit null, and a leaf may not stack optional over nullable, see [Entry mutability & rollback](#entry-mutability--rollback)
+    worldTimeDelta?: number          // seconds, as emitted before clamping
+    worldTimeDeltaApplied?: number   // what apply.ts actually added to worldTime; absent when nothing was applied
+    currentLocationRejected?: true   // apply.ts refused the emitted id; absent otherwise, never false
+    visualChanges?: { id: string; type: VisualChangeType; text: string }[]
+    transfers?: { items: ItemTransfer[]; stackables: StackableTransfer[] }
+    failedFields?: { field: string; detail: string }[]  // the failed NARRATIVE attempt, retained even once a fallback supplied the fields
+    raw?: string                     // the unparseable block text; present only alongside failedFields
+  }
+
   // Next-turn suggestions — emission output for the chip strip displayed below this entry
   nextTurnSuggestions?: {
     items: { categoryId: string; text: string }[]  // 1..suggestionCount; categoryId references stories.settings.suggestionCategories[].id (orphans render with neutral fallback per reader-composer.md)
@@ -1751,6 +1765,67 @@ narrative content).
 and items — the things that come and go. `currentLocationId` is the
 singleton "we are here" pointer. Factions are not scene-tagged; a
 faction isn't in a scene the way a person is.
+
+**The split axis is inherited vs. authored, not absolute vs. change.**
+`sceneEntities`, `currentLocationId` and `worldTime` are carried
+forward mechanically onto every entry by `inheritedEntryMetadata`,
+including `user_action` rows that generated nothing. `stateReport` is
+authored by exactly one generation call and is never inherited. The
+namespace boundary sits precisely where inheritance stops, which is
+what makes `stateReport != null` a usable "this turn reported state"
+signal where the presence of the three scene fields is not. It also
+keeps the inheritance merge honest: "don't inherit the report" is a
+key the spread simply omits, rather than an exclusion list that would
+drift each time a report field is added.
+
+**The report is immutable provenance; edits land on the absolute
+triple.** A user correcting a scene writes `sceneEntities` /
+`currentLocationId`, never `stateReport`. Rewriting the report would
+make `layer` untrustworthy and `raw` meaningless — the two fields that
+exist specifically to say what happened. Divergence between report and
+absolute after an edit is the correct outcome and is rendered as such
+(see [EntryCard → World-state panel](./ui/patterns/entry-card.md#world-state-panel)).
+
+**The report records what was emitted and what `apply.ts` did with
+it.** Two fields can differ from the absolute state beside them:
+
+- `currentLocation` is rejected when the id does not resolve to a
+  `kind='location'` entity, and the previous location is inherited
+  instead. `currentLocationRejected` records that decision.
+- `worldTimeDelta` is clamped to `0` when negative or non-finite, and
+  to the remaining headroom when it would push `worldTime` past the
+  ceiling. `worldTimeDeltaApplied` records what landed.
+
+The decision is recorded rather than re-derived, because the
+difference alone does not identify its cause. An emitted location
+unequal to `currentLocationId` also describes a user scene edit, which
+is a correct outcome rather than a model error; and the reader holds
+this entry's `worldTime` but not the previous entry's, so it cannot
+recover the applied delta by subtraction. Both decisions are known
+inside `apply.ts`, which raises the
+`classifier.current_location_rejected` and `classifier.delta_clamped`
+logs at the same points.
+
+**One report, two possible writers.** On a failed narrative parse the
+per-turn fallback classifier writes the same entry's metadata, so the
+two roles inside `stateReport` are deliberately separated: `layer`
+names whoever ultimately supplied the fields (last writer wins), while
+`failedFields` and `raw` describe the failed _narrative_ attempt and
+survive the fallback's write. Four legible states result — clean
+piggyback; recovered (`per_turn_classifier` plus the narrative's
+`failedFields`); `piggybackMode='off'` (`per_turn_classifier`, no
+failure); and both failed, which appends a `classifier` entry to
+`failedFields` so it stays distinct from a recovered turn. The
+fallback must therefore write `stateReport` explicitly, including when
+its own call fails: returning silently leaves a row that reported
+nothing, which is not distinguishable from a turn where nothing
+changed. Inheriting the report through a `{ ...tail.metadata }` spread
+would instead leave a `layer` that lies.
+
+**`content` stores prose only.** The model's trailing `<state>` and
+`<suggestions>` blocks are parsed and stripped at write time; the raw
+markup never reaches the column. See
+[`memory/piggyback.md → Persistence and stripping`](./memory/piggyback.md#persistence-and-stripping).
 
 **`summary` transport is store-scoped, not run-scoped.** It's a
 field on the persisted `story_entries.metadata` blob like every other

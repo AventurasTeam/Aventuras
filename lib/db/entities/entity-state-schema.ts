@@ -16,6 +16,19 @@ const lastSeenAtSchema = z.object({
   worldTime: z.number(),
 })
 
+// The categories a full-replace visual change can target — visualSchema's own keys.
+// lib/piggyback duplicates this as VISUAL_CHANGE_TYPES behind a compile-time guard
+// rather than importing it: lib/db is the lowest layer, and a value import in the other
+// direction would drag the db barrel into scripts/mock-llm's plain-Node run.
+export const VISUAL_CATEGORIES = [
+  'physique',
+  'face',
+  'hair',
+  'eyes',
+  'attire',
+  'distinguishing',
+] as const
+
 const visualSchema = z.object({
   physique: z.string().max(500).optional(),
   face: z.string().max(500).optional(),
@@ -24,6 +37,19 @@ const visualSchema = z.object({
   attire: z.string().max(500).optional(),
   distinguishing: z.string().max(500).optional(),
 })
+
+// Drift guard, both directions. Kept a literal tuple rather than derived from the shape:
+// z.enum needs one, and Object.keys widens to string[]. A category present in only one
+// would either be unwritable or pass z.enum and then fail the state schema.
+type _VisualKeysMatch = [(typeof VISUAL_CATEGORIES)[number]] extends [
+  keyof z.infer<typeof visualSchema>,
+]
+  ? [keyof z.infer<typeof visualSchema>] extends [(typeof VISUAL_CATEGORIES)[number]]
+    ? true
+    : never
+  : never
+const _visualKeyChecks: [_VisualKeysMatch] = [true]
+void _visualKeyChecks
 
 export const characterStateSchema = z.object({
   visual: visualSchema,

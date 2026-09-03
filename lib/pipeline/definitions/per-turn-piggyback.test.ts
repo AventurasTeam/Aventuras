@@ -288,7 +288,7 @@ describe('per-turn-piggyback', () => {
       expect(generateStructuredMock).not.toHaveBeenCalled()
     })
 
-    it('handles generateStructured failure gracefully', async () => {
+    it('records a failure report when the classifier call fails', async () => {
       currentStoryStore.set({
         storyId: 's1',
         branchId: 'b1',
@@ -320,9 +320,14 @@ describe('per-turn-piggyback', () => {
       }
 
       const gen = piggybackFallbackClassifierPhase(ctx)
-      const res = await gen.next()
+      const events = []
+      let next = await gen.next()
+      while (!next.done) {
+        events.push(next.value)
+        next = await gen.next()
+      }
 
-      expect(res).toEqual({ done: true, value: { status: 'completed' } })
+      expect(next.value).toEqual({ status: 'completed' })
       expect(generateStructuredMock).toHaveBeenCalledWith(
         'classifier',
         expect.stringContaining('The hero enters the dark forest.'),
@@ -330,6 +335,137 @@ describe('per-turn-piggyback', () => {
         expect.anything(),
         ctx.abortSignal,
       )
+
+      // With the narrative fold having written no report, this phase is the only writer:
+      // returning completed without one leaves the row saying nothing happened.
+      const written = events.find(
+        (e) => e.type === 'delta_emitted' && e.action.kind === 'updateStoryEntryMetadata',
+      )
+      if (
+        !written ||
+        written.type !== 'delta_emitted' ||
+        written.action.kind !== 'updateStoryEntryMetadata'
+      )
+        throw new Error('expected a metadata delta recording the failure')
+      const report = written.action.payload.metadata.stateReport
+      expect(report?.layer).toBe('per_turn_classifier')
+      expect(report?.failedFields).toEqual([
+        { field: 'classifier', detail: 'classifier call failed' },
+      ])
+    })
+
+    // The fold applied its visual changes and transfers before its own parse failed, so
+    // those entity rows exist. A report rebuilt from an empty block would deny them, and
+    // a per_turn_classifier badge would credit fields to a call that never returned.
+    it('amends the fold report rather than replacing it when the classifier call fails', async () => {
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition,
+        settings: baseSettings({ models: {} }),
+      })
+      hydrateEntries(phaseDb, 'b1', [
+        {
+          id: 'entry-1',
+          branchId: 'b1',
+          position: 1,
+          content: 'The hero enters the dark forest.',
+          metadata: {
+            sceneEntities: [],
+            currentLocationId: null,
+            worldTime: 100,
+            stateReport: {
+              layer: 'piggyback_tagged_block',
+              visualChanges: [{ id: 'char_a', type: 'attire', text: 'muddied cloak' }],
+              failedFields: [{ field: 'transfers', detail: 'no well-formed entries' }],
+              raw: '<state><transfers><item id="i1"',
+            },
+          },
+        } as never,
+      ])
+      entitiesStore.hydrate('b1', [])
+
+      generateStructuredMock.mockResolvedValueOnce({ status: 'failed', detail: 'LLM error' })
+
+      const gen = piggybackFallbackClassifierPhase({
+        actionId: 'act_1',
+        abortSignal: new AbortController().signal,
+        intermediates: { idMap: new IdBiMap() },
+        log: makeLogger('act_1'),
+        db: phaseDb.db,
+        runInTransaction: async () => undefined,
+        storyId: 's1',
+        branchId: 'b1',
+      })
+      const events = []
+      let next = await gen.next()
+      while (!next.done) {
+        events.push(next.value)
+        next = await gen.next()
+      }
+
+      const written = events.find(
+        (e) => e.type === 'delta_emitted' && e.action.kind === 'updateStoryEntryMetadata',
+      )
+      if (
+        !written ||
+        written.type !== 'delta_emitted' ||
+        written.action.kind !== 'updateStoryEntryMetadata'
+      )
+        throw new Error('expected a metadata delta recording the failure')
+      const report = written.action.payload.metadata.stateReport
+      expect(report?.layer).toBe('piggyback_tagged_block')
+      expect(report?.visualChanges).toEqual([
+        { id: 'char_a', type: 'attire', text: 'muddied cloak' },
+      ])
+      expect(report?.raw).toBe('<state><transfers><item id="i1"')
+      expect(report?.failedFields).toEqual([
+        { field: 'transfers', detail: 'no well-formed entries' },
+        { field: 'classifier', detail: 'classifier call failed' },
+      ])
+    })
+
+    // Cancelling mid-call is not a classifier failure: the run discards its writes, and
+    // a durable failure report would outlive the turn the user threw away.
+    it('discards the write when the classifier call is aborted', async () => {
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition,
+        settings: baseSettings({ models: {} }),
+      })
+      hydrateEntries(phaseDb, 'b1', [
+        {
+          id: 'entry-1',
+          branchId: 'b1',
+          position: 1,
+          content: 'The hero enters the dark forest.',
+          metadata: { sceneEntities: [], currentLocationId: null, worldTime: 100 },
+        } as never,
+      ])
+      entitiesStore.hydrate('b1', [])
+
+      generateStructuredMock.mockResolvedValueOnce({ status: 'aborted' })
+
+      const gen = piggybackFallbackClassifierPhase({
+        actionId: 'act_1',
+        abortSignal: new AbortController().signal,
+        intermediates: { idMap: new IdBiMap() },
+        log: makeLogger('act_1'),
+        db: phaseDb.db,
+        runInTransaction: async () => undefined,
+        storyId: 's1',
+        branchId: 'b1',
+      })
+      const events = []
+      let next = await gen.next()
+      while (!next.done) {
+        events.push(next.value)
+        next = await gen.next()
+      }
+
+      expect(next.value).toEqual({ status: 'aborted' })
+      expect(events).toEqual([])
     })
 
     // The pair is a pipeline contract, not a share of the prompt budget: the
@@ -984,6 +1120,232 @@ describe('per-turn-piggyback', () => {
       expect(created.action.payload.metadata.nextTurnSuggestions).toBeUndefined()
     })
 
+    it('names itself as the layer while retaining the failed narrative attempt', async () => {
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition,
+        settings: baseSettings({ models: {} }),
+      })
+      hydrateEntries(phaseDb, 'b1', [
+        {
+          id: 'entry-1',
+          branchId: 'b1',
+          position: 1,
+          content: 'Hero steps into the clearing',
+          metadata: {
+            sceneEntities: [],
+            currentLocationId: null,
+            worldTime: 100,
+            // What the narrative fold left behind when its block failed to parse.
+            stateReport: {
+              layer: 'piggyback_tagged_block',
+              failedFields: [{ field: 'transfers', detail: 'truncated' }],
+              raw: '<state><transfers><item id="i1"',
+            },
+          },
+        } as never,
+      ])
+      entitiesStore.hydrate('b1', [])
+
+      generateStructuredMock.mockResolvedValueOnce({
+        status: 'ok',
+        value: {
+          sceneEntities: [],
+          currentLocation: undefined,
+          worldTimeDelta: 60,
+          visualChanges: [],
+          transfers: { items: [], stackables: [] },
+        },
+      })
+
+      const ctx = {
+        actionId: 'act_1',
+        abortSignal: new AbortController().signal,
+        intermediates: {
+          idMap: new IdBiMap(),
+          piggybackOutcome: { attempted: true, succeeded: false } satisfies PiggybackOutcome,
+        },
+        log: makeLogger('act_1'),
+        db: phaseDb.db,
+        runInTransaction: async () => undefined,
+        storyId: 's1',
+        branchId: 'b1',
+      }
+
+      const gen = piggybackFallbackClassifierPhase(ctx)
+      const events = []
+      let result = await gen.next()
+      while (!result.done) {
+        events.push(result.value)
+        result = await gen.next()
+      }
+
+      const written = events[0]
+      if (
+        !written ||
+        written.type !== 'delta_emitted' ||
+        written.action.kind !== 'updateStoryEntryMetadata'
+      )
+        throw new Error('expected an updateStoryEntryMetadata delta')
+      const report = written.action.payload.metadata.stateReport
+      // The badge must name whoever actually supplied the fields.
+      expect(report?.layer).toBe('per_turn_classifier')
+      // …while the narrative fold's failure stays inspectable rather than being
+      // overwritten along with the layer.
+      expect(report?.failedFields).toEqual([{ field: 'transfers', detail: 'truncated' }])
+      expect(report?.raw).toBe('<state><transfers><item id="i1"')
+      expect(report?.worldTimeDelta).toBe(60)
+    })
+
+    it('keeps changes the narrative fold already applied when the classifier reports none', async () => {
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition,
+        settings: baseSettings({ models: {} }),
+      })
+      hydrateEntries(phaseDb, 'b1', [
+        {
+          id: 'entry-1',
+          branchId: 'b1',
+          position: 1,
+          content: 'Hero steps into the clearing',
+          metadata: {
+            sceneEntities: [],
+            currentLocationId: null,
+            worldTime: 100,
+            // The fold parsed these and buildPiggybackActions wrote them to entity rows;
+            // only sceneEntities failed, which is why the fallback is running at all.
+            stateReport: {
+              layer: 'piggyback_tagged_block',
+              visualChanges: [{ id: 'char_1', type: 'attire', text: 'torn cloak' }],
+              transfers: { items: [], stackables: [{ key: 'gold', amount: 5 }] },
+              failedFields: [{ field: 'sceneEntities', detail: 'unresolvable placeholder' }],
+            },
+          },
+        } as never,
+      ])
+      entitiesStore.hydrate('b1', [])
+
+      // The classifier omits both fields, which the schema now leaves undefined rather
+      // than defaulting to empty.
+      generateStructuredMock.mockResolvedValueOnce({
+        status: 'ok',
+        value: { sceneEntities: [], currentLocation: undefined, worldTimeDelta: 60 },
+      })
+
+      const ctx = {
+        actionId: 'act_1',
+        abortSignal: new AbortController().signal,
+        intermediates: {
+          idMap: new IdBiMap(),
+          piggybackOutcome: { attempted: true, succeeded: false } satisfies PiggybackOutcome,
+        },
+        log: makeLogger('act_1'),
+        db: phaseDb.db,
+        runInTransaction: async () => undefined,
+        storyId: 's1',
+        branchId: 'b1',
+      }
+
+      const gen = piggybackFallbackClassifierPhase(ctx)
+      const events = []
+      let result = await gen.next()
+      while (!result.done) {
+        events.push(result.value)
+        result = await gen.next()
+      }
+
+      const written = events[0]
+      if (
+        !written ||
+        written.type !== 'delta_emitted' ||
+        written.action.kind !== 'updateStoryEntryMetadata'
+      )
+        throw new Error('expected an updateStoryEntryMetadata delta')
+      const report = written.action.payload.metadata.stateReport
+      // An empty report here would tell the reader nothing changed this turn, while the
+      // character's attire had in fact already been rewritten in the entity row.
+      expect(report?.visualChanges).toEqual([{ id: 'char_1', type: 'attire', text: 'torn cloak' }])
+      expect(report?.transfers).toEqual({ items: [], stackables: [{ key: 'gold', amount: 5 }] })
+    })
+
+    it("lets the classifier's own changes win over the fold's", async () => {
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition,
+        settings: baseSettings({ models: {} }),
+      })
+      const charUuid = 'char_00000000-0000-4000-8000-0000000000a1'
+      hydrateEntries(phaseDb, 'b1', [
+        {
+          id: 'entry-1',
+          branchId: 'b1',
+          position: 1,
+          content: 'Hero steps into the clearing',
+          metadata: {
+            sceneEntities: [],
+            currentLocationId: null,
+            worldTime: 100,
+            stateReport: {
+              layer: 'piggyback_tagged_block',
+              visualChanges: [{ id: charUuid, type: 'attire', text: 'torn cloak' }],
+            },
+          },
+        } as never,
+      ])
+      entitiesStore.hydrate('b1', [])
+
+      // Resolvable, so substitution keeps the field and the merge must leave it alone.
+      const idMap = new IdBiMap()
+      const placeholder = idMap.allocate(charUuid)
+
+      generateStructuredMock.mockResolvedValueOnce({
+        status: 'ok',
+        value: {
+          sceneEntities: [],
+          currentLocation: undefined,
+          worldTimeDelta: 60,
+          visualChanges: [{ id: placeholder, type: 'hair', text: 'shorn short' }],
+        },
+      })
+
+      const ctx = {
+        actionId: 'act_1',
+        abortSignal: new AbortController().signal,
+        intermediates: {
+          idMap,
+          piggybackOutcome: { attempted: true, succeeded: false } satisfies PiggybackOutcome,
+        },
+        log: makeLogger('act_1'),
+        db: phaseDb.db,
+        runInTransaction: async () => undefined,
+        storyId: 's1',
+        branchId: 'b1',
+      }
+
+      const gen = piggybackFallbackClassifierPhase(ctx)
+      const events = []
+      let result = await gen.next()
+      while (!result.done) {
+        events.push(result.value)
+        result = await gen.next()
+      }
+
+      const written = events[0]
+      if (
+        !written ||
+        written.type !== 'delta_emitted' ||
+        written.action.kind !== 'updateStoryEntryMetadata'
+      )
+        throw new Error('expected an updateStoryEntryMetadata delta')
+      expect(written.action.payload.metadata.stateReport?.visualChanges).toEqual([
+        { id: charUuid, type: 'hair', text: 'shorn short' },
+      ])
+    })
+
     it('preserves narrative-fold chips already on the tail entry on a state-only refire (row 3 clobber guard)', async () => {
       currentStoryStore.set({
         storyId: 's1',
@@ -1058,11 +1420,14 @@ describe('per-turn-piggyback', () => {
       )
         throw new Error('expected an updateStoryEntryMetadata delta')
       // This phase re-rolls state alone (row 3: <state> failed, <suggestions>
-      // already in hand) — it must not fire a second suggestion call and must
-      // not drop the chips the narrative fold already wrote, since the fold
-      // spreads ...tail.metadata first and never re-derives nextTurnSuggestions
-      // when it isn't re-asking.
-      expect(created.action.payload.metadata.nextTurnSuggestions).toEqual(existingChips)
+      // already in hand) — it must not fire a second suggestion call and must not
+      // drop the chips the narrative fold already wrote. The payload claims only
+      // what this phase computed, so omitting the key IS the guarantee: the
+      // handler merges onto the stored row and leaves the chips standing.
+      expect(created.action.payload.metadata).not.toHaveProperty('nextTurnSuggestions')
+      // Folded from an absent previous entry (this row is itself the tail), so the
+      // emitted delta of 5 lands on a base of 0.
+      expect(created.action.payload.metadata.worldTime).toBe(5)
     })
 
     it('does not fire the phase at all when state succeeded, regardless of suggestionsCaptured (purely state-driven)', async () => {

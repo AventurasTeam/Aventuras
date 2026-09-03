@@ -2,6 +2,7 @@ import type { DeltaSource, PipelineAction } from '@/lib/actions'
 import type { CharacterState, Entity } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 
+import { dedupeSceneEntities, scenePromotionActions, sceneTrackingActions } from './scene-tracking'
 import type { ParsedStateBlock } from './types'
 import { resolvePiggybackWorldTimeDelta } from './world-time'
 
@@ -33,16 +34,18 @@ type BuildResult = {
     summary?: string
   }
   actions: PipelineAction[]
+  /** What validation did to the emitted values, for stateReport — so the reader renders
+   *  the emitted-vs-applied divergence as fact instead of inferring a cause from it. */
+  applied: { worldTimeDelta: number; currentLocationRejected: boolean }
 }
 
 export function buildPiggybackActions(args: BuildArgs): BuildResult {
   const { entryId, block, entities, previousMetadata, branchId, source } = args
 
-  const sceneEntities = block.sceneEntities ?? previousMetadata.sceneEntities
+  const sceneEntities = dedupeSceneEntities(block.sceneEntities ?? previousMetadata.sceneEntities)
   const rawDelta = block.worldTimeDelta ?? 0
-  const worldTime =
-    previousMetadata.worldTime +
-    resolvePiggybackWorldTimeDelta(rawDelta, entryId, previousMetadata.worldTime)
+  const appliedDelta = resolvePiggybackWorldTimeDelta(rawDelta, entryId, previousMetadata.worldTime)
+  const worldTime = previousMetadata.worldTime + appliedDelta
 
   const actions: PipelineAction[] = []
   const byId = new Map(entities.map((e) => [e.id, e]))
@@ -58,7 +61,8 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   // or a legitimate id the prompt just offered would be refused here.
   const named = block.currentLocation
   const namedIsLocation = named !== undefined && byId.get(named)?.kind === 'location'
-  if (named !== undefined && !namedIsLocation) {
+  const currentLocationRejected = named !== undefined && !namedIsLocation
+  if (currentLocationRejected) {
     logger.warn('classifier.current_location_rejected', {
       entryId,
       currentLocation: named,
@@ -75,48 +79,24 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   // parses the merged result against the target's own kind-specific schema).
   const isCharacter = (id: string): boolean => byId.get(id)?.kind === 'character'
 
-  // Auto-promote staged entities named in sceneEntities
-  for (const id of sceneEntities) {
-    const entity = byId.get(id)
-    if (entity?.status === 'staged') {
-      actions.push({
-        kind: 'promoteStagedEntity',
-        source,
-        payload: { branchId, id },
-      })
-    }
-  }
+  actions.push(...scenePromotionActions({ branchId, source, entities, sceneEntities }))
 
-  // Computed bookkeeping
-  const wasInScene = new Set(previousMetadata.sceneEntities)
-  const nowInScene = new Set(sceneEntities)
-  for (const character of entities.filter((e) => e.kind === 'character')) {
-    if (nowInScene.has(character.id) && currentLocationId !== null) {
-      actions.push({
-        kind: 'updateEntityLocationTracking',
-        source,
-        payload: { branchId, id: character.id, currentLocationId },
-      })
-    } else if (wasInScene.has(character.id) && !nowInScene.has(character.id)) {
-      // Only emit lastSeenAt when we actually know where the character was;
-      // a null locationId would produce a silently rejected delta (piggyback creates no rows).
-      if (previousMetadata.currentLocationId !== null) {
-        actions.push({
-          kind: 'updateEntityLocationTracking',
-          source,
-          payload: {
-            branchId,
-            id: character.id,
-            lastSeenAt: {
-              entryId: previousMetadata.entryId ?? entryId,
-              locationId: previousMetadata.currentLocationId,
-              worldTime: previousMetadata.worldTime,
-            },
-          },
-        })
-      }
-    }
-  }
+  // Computed bookkeeping. Shared with the scene editor, which passes a distinct
+  // `before` — here this entry's scene IS the previous entry's until the block
+  // changes it, so the two-way fold falls out of the three-way shape.
+  actions.push(
+    ...sceneTrackingActions({
+      branchId,
+      source,
+      entities,
+      previous: { ...previousMetadata, entryId: previousMetadata.entryId ?? entryId },
+      before: {
+        sceneEntities: previousMetadata.sceneEntities,
+        currentLocationId: previousMetadata.currentLocationId,
+      },
+      after: { sceneEntities, currentLocationId },
+    }),
+  )
 
   // Visual changes
   for (const note of block.visualChanges ?? []) {
@@ -204,5 +184,5 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
     }
   }
 
-  return { metadata, actions }
+  return { metadata, actions, applied: { worldTimeDelta: appliedDelta, currentLocationRejected } }
 }

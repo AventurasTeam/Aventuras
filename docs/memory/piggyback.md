@@ -12,6 +12,7 @@ fast-mutating subset of state mutations.
 | `story_entries.metadata.currentLocationId`                   | LLM-emitted  | The singleton location entity that IS the current scene. Only ever an _existing_ entity's id — a location introduced this turn that doesn't exist yet as an entity leaves this field unchanged (stale/null) until the periodic classifier creates it. **The staleness does not stay in this field:** `apply.ts` inherits the previous location, and the computed bookkeeping then writes it as `state.current_location_id` on every in-scene character, so entity rows carry an affirmatively wrong location rather than merely a missing one, and the next turn's `wasInScene` comparison builds on it. Retrieval for the new location is degraded for a few turns, same accepted tolerance as [new-character introduction](../parked.md#early-classifier-trigger-on-new-entity-introduction-introducednewrelevantentity). |
 | `story_entries.metadata.worldTime`                           | LLM-emitted  | Seconds delta added to previous entry's `worldTime`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `story_entries.metadata.summary`                             | LLM-emitted  | Optional one-sentence enrichment for the next turn's Q2 structural digest; absent on parse failure or restart is fine.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `story_entries.metadata.stateReport`                         | **Computed** | The full parsed block as emitted, plus the producing layer and any parse failure. Written on every generating turn — the record of what this turn reported, distinct from the inherited absolute fields above. See [Persistence and stripping](#persistence-and-stripping).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `entities.state.visual.*`                                    | LLM-emitted  | One full-replace value per visual category (`physique` / `face` / `hair` / `eyes` / `attire` / `distinguishing`) — never a partial edit of the category's existing text.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `entities.state.equipped_items` / `inventory` / `stackables` | LLM-emitted  | Structured item / stackable transfers between holders — see the tagged format below, not free text.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `entities.state.current_location_id` (per-character)         | **Computed** | If character ∈ `sceneEntities`, set to scene's `currentLocationId`. Otherwise preserve `lastSeenAt.locationId`. No LLM extraction needed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
@@ -108,6 +109,53 @@ piggyback's fields (disjoint write-set, see
 never have recovered them — a parse failure needs the per-turn
 classifier, not the periodic one, exactly like a `piggybackMode='off'`
 turn does.
+
+## Persistence and stripping
+
+**`story_entries.content` stores prose only.** Both trailing blocks
+are cut from the model's reply at write time; the raw markup never
+reaches the column. What the block carried is persisted structurally
+instead — the scene fields fold into `metadata`'s absolute triple, and
+the full parsed block lands on
+[`metadata.stateReport`](../data-model.md#entry-metadata-shape),
+including the `visual_changes` and `transfers` that otherwise survive
+only as deltas.
+
+**The cut excises each block's own span** rather than truncating the
+reply at it, and it is keyed on the closing tag, not on position. So a
+block the model emitted before the prose loses no narrative — the text
+on both sides is kept, and the misordering is logged — and prose that
+merely mentions `<state>` carries no closer, so it is never mistaken
+for markup and never truncated. A reply that strips to nothing is
+persisted raw rather than committed blank.
+
+Three consequences:
+
+- **`promptProse` becomes a no-op for new rows but stays.** Four
+  prompt-side consumers strip on read — the per-turn template's
+  story-so-far loop, Q3's prose extract, Layer-A same-name suppression,
+  and the periodic classifier's turn window. All four read a prose-only
+  column for rows written after the strip, so the call costs nothing
+  there. It is **not** retired: the tolerant-reader decision below keeps
+  pre-strip rows in the corpus, and those rows would otherwise feed
+  their own markup back to the model as narrative. The mitigation
+  narrows from "every row" to "legacy rows only"; it does not go away.
+- **Prior turns' blocks stop being echoed into the next prompt.** That
+  removes a correctness problem (their placeholders came from a
+  different turn's `IdBiMap`) and, incidentally, the only worked
+  example of the emission grammar the model ever sees. Emission
+  compliance is worth watching when this lands.
+- **Legacy rows keep their inline block.** Rows written before the
+  strip retain their markup in `content`; the reader stays a tolerant
+  reader (`stripTrailingBlocks` as a display-time fallback) rather
+  than being migrated.
+
+**A failed parse keeps its raw text.** On the happy path the parsed
+result in `stateReport` makes the raw block redundant, but a failed
+parse would otherwise leave neither structured fields nor a prose
+remnant to inspect — so `stateReport.raw` retains the unparseable
+text. `reasoning` is the precedent for a large optional string on
+metadata.
 
 ## Auto-promote on staged-ID emission
 

@@ -65,7 +65,16 @@ export {
   type UndoResult,
 } from './story-entries/undo'
 export { clearSystemEntry, writeSystemEntry } from './story-entries/system-entry'
-export { updateEntryWorldTime, type UpdateWorldTimeResult } from './story-entries/world-time'
+export {
+  updateEntrySceneFields,
+  type SceneFieldsEdit,
+  type UpdateSceneFieldsResult,
+} from './story-entries/scene-fields'
+export {
+  entryMetadataLockKey,
+  updateEntryWorldTime,
+  type UpdateWorldTimeResult,
+} from './story-entries/world-time'
 export { refreshSuggestions } from './suggestions/refresh-suggestions'
 export {
   regenerateTurn,

@@ -1,7 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
+import { expect, screen, userEvent } from 'storybook/test'
 
 import { Button } from './button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './dialog'
 import { Heading } from './heading'
 import { Popover, PopoverContent, PopoverTrigger } from './popover'
 import { Text } from './text'
@@ -172,3 +174,45 @@ export const Accessibility: Story = {
 // (one theme at a time), or visit the native dev page at /dev/popover
 // where the ThemePicker drives data-theme globally and portals
 // inherit correctly.
+
+// layout.md → Stacking: "Popover over anything — they fire over a Sheet or Modal
+// when their trigger is visible." At the Dialog's own z-50 a popover ties with the
+// modal it was opened from and loses on paint order, which is how the scene editor's
+// multi-select ended up rendering behind its own dialog.
+export const OverAModal: Story = {
+  render: () => (
+    <Dialog open>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Host modal</DialogTitle>
+        </DialogHeader>
+        <Popover ariaLabel="Nested popover">
+          <PopoverTrigger asChild>
+            <Button>
+              <Text>Open popover</Text>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent>
+            <Text>Above the modal</Text>
+          </PopoverContent>
+        </Popover>
+      </DialogContent>
+    </Dialog>
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Open popover' }))
+    const content = await screen.findByText('Above the modal')
+
+    // Occlusion, not z-index values: the popover was once trapped in a stacking
+    // context whose own z-index capped it below the dialog, so every element in the
+    // subtree still reported a winning z-index while painting underneath. Hit-testing
+    // the rendered pixel is the only assertion that catches that.
+    const box = content.getBoundingClientRect()
+    const topMost = document.elementFromPoint(
+      Math.floor(box.left + box.width / 2),
+      Math.floor(box.top + box.height / 2),
+    )
+    expect(topMost).not.toBeNull()
+    expect(content.contains(topMost) || content === topMost).toBe(true)
+  },
+}

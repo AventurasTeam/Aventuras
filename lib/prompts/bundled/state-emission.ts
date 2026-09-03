@@ -3,7 +3,7 @@ export const STATE_EMISSION = `After your narrative prose, append exactly one <s
 <state>
   <scene_entities>comma-separated IDs of every character/item present in this scene</scene_entities>
   <current_location>the ID of the current scene's location, if any</current_location>
-  <world_time_delta>seconds elapsed since the previous entry (0 for a flashback or memory; never negative)</world_time_delta>
+  <world_time_delta>{% if worldTimeDeltaBasis == 'sinceUserAction' %}seconds elapsed since the end of the user's action{% else %}seconds elapsed since the previous entry, including any time the user's action itself took{% endif %} (0 for a flashback or memory; never negative)</world_time_delta>
   <visual_changes>
     <entity id="ID" type="physique | face | hair | eyes | attire | distinguishing">the FULL new value for that category — this replaces whatever was there before, not a partial edit</entity>
   </visual_changes>

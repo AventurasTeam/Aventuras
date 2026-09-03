@@ -41,6 +41,14 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       required: true,
     },
     {
+      name: 'worldTimeDeltaBasis',
+      type: "'sinceUserAction' | 'sinceLastAiReply'",
+      category: 'Entities',
+      description:
+        "Which end `<world_time_delta>` is measured from. `sinceLastAiReply` when the tail user action inherited the AI entry's worldTime unchanged, so the delta must include the time the action itself took; `sinceUserAction` when the user advanced time on the action, so the delta measures from its end.",
+      required: true,
+    },
+    {
       name: 'entities',
       type: 'Entity[]',
       category: 'Entities',
@@ -348,6 +356,7 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'sceneMetadata',
     'sceneEntities',
     'currentLocationId',
+    'worldTimeDeltaBasis',
     'leadEntityId',
     'cast',
   ],

@@ -552,11 +552,9 @@ describe('suggestion-refresh emission phase', () => {
         payload: {
           branchId: 'b1',
           id: 'entry-1',
+          // Claims only the chips: the handler merges onto the stored row, so every
+          // sibling field is preserved by not being mentioned at all.
           metadata: {
-            sceneEntities: [],
-            currentLocationId: null,
-            worldTime: 120,
-            model: 'model-1',
             nextTurnSuggestions: {
               items: [
                 { categoryId: 'cat_action', text: 'Draw the blade.' },
@@ -570,10 +568,10 @@ describe('suggestion-refresh emission phase', () => {
     })
   })
 
-  it('builds a metadata floor for a legacy target entry that carries none', async () => {
+  it('claims only its own field on a legacy target entry that carries no metadata', async () => {
     openStory()
-    // Legacy, not system: system targets are refused outright above, so the
-    // floor exists for rows written before the metadata column carried a scene.
+    // Legacy, not system: system targets are refused outright above. The scene floor for
+    // a NULL column is the update handler's job, so the payload must not restate it.
     hydrate([{ ...TARGET_ENTRY, metadata: null }])
     wireAppSettings()
     generateStructuredMock.mockResolvedValue(okChips([{ categoryRef: 'cat1', text: 'Draw.' }]))
@@ -588,9 +586,6 @@ describe('suggestion-refresh emission phase', () => {
     )
       throw new Error('expected an updateStoryEntryMetadata delta')
     expect(event.action.payload.metadata).toEqual({
-      sceneEntities: [],
-      currentLocationId: null,
-      worldTime: 0,
       nextTurnSuggestions: {
         items: [{ categoryId: 'cat_action', text: 'Draw.' }],
         source: 'refresh',
@@ -677,7 +672,7 @@ describe('suggestion-refresh emission phase', () => {
     expect(events).toEqual([])
   })
 
-  it('writes over the row as it stands after the call, not the pre-call snapshot', async () => {
+  it('cannot clobber a field that changed while the model call was in flight', async () => {
     openStory()
     hydrate()
     wireAppSettings()
@@ -699,7 +694,11 @@ describe('suggestion-refresh emission phase', () => {
       event.action.kind !== 'updateStoryEntryMetadata'
     )
       throw new Error('expected an updateStoryEntryMetadata delta')
-    expect(event.action.payload.metadata.worldTime).toBe(999)
+    // The row moved under the phase mid-call. It never carried worldTime in its
+    // payload to begin with, so there is nothing to write back stale — the guarantee
+    // is structural rather than a matter of when the phase re-read.
+    expect(event.action.payload.metadata).not.toHaveProperty('worldTime')
+    expect(event.action.payload.metadata.nextTurnSuggestions?.items).toHaveLength(1)
   })
 
   it('discards the result when a cancel lands while the model call is in flight', async () => {

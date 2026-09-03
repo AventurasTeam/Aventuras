@@ -66,13 +66,14 @@ const CHIP_ACT_1 = 'E2E-CHIP-ACT-1 I press deeper into the Hollow, listening.'
 const CHIP_SPEAK_1 = 'E2E-CHIP-SPEAK-1 I ask Mira what she saw in the market.'
 const CHIP_ACT_2 = 'E2E-CHIP-ACT-2 I draw the blade and wait for footsteps.'
 
-// Prose, then an (empty but well-formed) <state> block, then <suggestions> —
-// an empty <state> still makes parseStateBlock report blockFound with no
-// failures, so the piggyback fold succeeds outright and the per-turn fallback
-// classifier never fires. Without it, a missing/failed <state> would trigger
-// that fallback as an extra async structured call racing the steps below.
+// Prose, then a minimal but genuinely-parsing <state> block, then <suggestions>.
+// The <state> fields are load-bearing even though nothing here asserts on them: an
+// empty or missing block counts as a failed parse, which fires the per-turn fallback
+// classifier as an extra async structured call racing the steps below.
 const NARRATIVE_WITH_TAGS = `${NARRATIVE_REPLY}
 <state>
+  <scene_entities></scene_entities>
+  <world_time_delta>0</world_time_delta>
 </state>
 <suggestions>
   <item category="cat1">${CHIP_ACT_1}</item>

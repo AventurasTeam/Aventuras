@@ -5,10 +5,12 @@ import type { GenerateStructuredResult, ModelCapabilities, ResolveModelConfig } 
 import { inheritedEntryMetadata } from '@/lib/db'
 import {
   buildPiggybackActions,
+  buildStateReport,
   resolveSuggestionEmission,
   resolveSuggestionItems,
   substitutePiggybackIds,
   suggestionRefSchema,
+  type ParsedStateBlock,
   VISUAL_CHANGE_TYPES,
 } from '@/lib/piggyback'
 import type {
@@ -54,7 +56,7 @@ export const fallbackClassifierSchema = z.object({
         text: z.string(),
       }),
     )
-    .default([]),
+    .optional(),
   transfers: z
     .object({
       items: z
@@ -78,7 +80,7 @@ export const fallbackClassifierSchema = z.object({
         )
         .default([]),
     })
-    .default({ items: [], stackables: [] }),
+    .optional(),
   summary: z.string().optional(),
 })
 
@@ -184,12 +186,54 @@ export async function* piggybackFallbackClassifierPhase(
         classifierConfig,
         ctx.abortSignal,
       )
+
+  // A cancelled run discards its writes rather than recording them as a classifier
+  // failure. The signal as well as the status: generateClassifierState returns the
+  // first (ok) result when it is the re-roll that got cancelled.
+  if (ctx.abortSignal.aborted || result.status === 'aborted') return { status: 'aborted' }
+
+  // `layer` names whoever supplied the fields the report carries. The prior report, when
+  // there is one, is the narrative fold's FAILED attempt: its failedFields and raw
+  // survive so the parse failure stays inspectable, and its layer survives only where
+  // this phase produced no fields of its own to replace them with
+  // (docs/data-model.md → Entry metadata shape).
+  const priorReport = tail.metadata?.stateReport
+
   if (result.status !== 'ok') {
     ctx.log.warn('classifier.piggyback_fallback_failed', {
       status: result.status,
       ...('kind' in result ? { errorKind: result.kind } : {}),
       ...('detail' in result ? { errorDetail: result.detail } : {}),
     })
+    const classifierFailure = {
+      field: 'classifier',
+      detail:
+        'kind' in result
+          ? `classifier call ${result.status}: ${result.kind}`
+          : `classifier call ${result.status}`,
+    }
+    // Amended rather than rebuilt. The call returned nothing, so every field the report
+    // carries is still the fold's — including the visual changes and transfers apply.ts
+    // already wrote as entity rows, which an empty-block rebuild would drop and leave
+    // the record contradicting world state. Where the fold produced no report at all
+    // (piggyback off, or a block that parsed nothing), this phase is the only writer:
+    // returning silently leaves a row the panel cannot tell from one where nothing
+    // changed, and the warn above is a no-op unless diagnostics is on.
+    const failedReport = priorReport
+      ? { ...priorReport, failedFields: [...(priorReport.failedFields ?? []), classifierFailure] }
+      : { layer: 'per_turn_classifier' as const, failedFields: [classifierFailure] }
+    yield {
+      type: 'delta_emitted',
+      action: {
+        kind: 'updateStoryEntryMetadata',
+        source: 'per_turn_classifier',
+        payload: {
+          branchId: ctx.branchId,
+          id: tail.id,
+          metadata: { stateReport: failedReport },
+        },
+      },
+    }
     return { status: 'completed' }
   }
 
@@ -201,7 +245,11 @@ export async function* piggybackFallbackClassifierPhase(
     })
   }
 
-  const { metadata: scenePatch, actions } = buildPiggybackActions({
+  const {
+    metadata: scenePatch,
+    actions,
+    applied,
+  } = buildPiggybackActions({
     entryId: tail.id,
     block: resolvedBlock,
     entities,
@@ -211,6 +259,29 @@ export async function* piggybackFallbackClassifierPhase(
     },
     branchId: ctx.branchId,
     source: 'per_turn_classifier',
+  })
+
+  // The narrative fold applies visual/transfer changes whenever it fires, parse failure
+  // or not, so those rows are already written. A fallback that reports neither must not
+  // blank them out of the record — same reason failedFields and raw survive its write.
+  const reportedBlock: ParsedStateBlock = {
+    ...resolvedBlock,
+    ...(resolvedBlock.visualChanges === undefined && priorReport?.visualChanges !== undefined
+      ? { visualChanges: priorReport.visualChanges }
+      : {}),
+    ...(resolvedBlock.transfers === undefined && priorReport?.transfers !== undefined
+      ? { transfers: priorReport.transfers }
+      : {}),
+  }
+  const stateReport = buildStateReport({
+    layer: 'per_turn_classifier',
+    block: reportedBlock,
+    failures: [
+      ...(priorReport?.failedFields ?? []),
+      ...failures.map((f) => ({ field: f.field, detail: f.detail })),
+    ],
+    applied,
+    ...(priorReport?.raw !== undefined ? { raw: priorReport.raw } : {}),
   })
 
   const rawSuggestions =
@@ -249,9 +320,12 @@ export async function* piggybackFallbackClassifierPhase(
       payload: {
         branchId: ctx.branchId,
         id: tail.id,
+        // Only what this phase computed: the handler merges onto the row it reads,
+        // so spreading `tail.metadata` here would re-assert a snapshot taken before
+        // the classifier call.
         metadata: {
-          ...tail.metadata,
           ...scenePatch,
+          ...(stateReport !== undefined ? { stateReport } : {}),
           ...(suggestionItems.length > 0
             ? { nextTurnSuggestions: { items: suggestionItems, source: 'classifier' as const } }
             : {}),

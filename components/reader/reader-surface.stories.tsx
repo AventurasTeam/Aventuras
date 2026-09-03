@@ -66,7 +66,15 @@ const ROWS: StoryEntry[] = [
   }),
 ]
 
+const sceneWiring = {
+  entityNames: [],
+  sceneOptions: { characters: [], items: [], locations: [] },
+  tailEntryId: null,
+}
+
 const noopHandlers = {
+  onEditScene: async () => ({ ok: true }),
+  onRequestEditScene: () => {},
   onNearTop: async () => {},
   onCommitEdit: async () => ({ ok: true }),
   onRequestRollback: async () => {},
@@ -100,6 +108,7 @@ const meta = {
     editBlocked: false,
     jumpButtonEnabled: true,
     ...noopHandlers,
+    ...sceneWiring,
   },
 } satisfies Meta<typeof ReaderSurface>
 
@@ -133,6 +142,25 @@ export const WorldTimeEditFailureKeepsOverlayOpen: Story = {
 
     expect(screen.getByRole('dialog', { name: 'Edit time' })).toBeVisible()
     expect(screen.getByRole('textbox', { name: 'Second' })).toHaveValue('45')
+  },
+}
+
+/**
+ * The surface resolves the tier for the whole list, so this is the only layer where the
+ * viewport → `useTier` → request-fork wiring is still exercised end to end; the compound
+ * now takes the resolved value as a prop and states it outright.
+ */
+export const PhoneRequestsHostOverlay: Story = {
+  globals: { viewport: { value: 'mobile1' } },
+  args: {
+    worldTimeDecorations: { e3: { label: 'Day 12 · 14:33', raw: 90 } },
+    worldTimeFrame: { calendar: EARTH_GREGORIAN, origin: WORLD_TIME_ORIGIN },
+    onRequestEditWorldTime: fn(async () => {}),
+  },
+  play: async ({ args }) => {
+    await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
+    await waitFor(() => expect(args.onRequestEditWorldTime).toHaveBeenCalledWith('e3'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   },
 }
 

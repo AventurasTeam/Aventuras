@@ -1,7 +1,9 @@
 import { z } from 'zod'
 
+import type { VISUAL_CATEGORIES } from '@/lib/db'
+
 // Mirrors CharacterState['visual']'s keys (lib/db/entities/entity-state-schema.ts →
-// visualSchema) — the only categories a full-replace visual change can target.
+// VISUAL_CATEGORIES) — the only categories a full-replace visual change can target.
 export const VISUAL_CHANGE_TYPES = [
   'physique',
   'face',
@@ -11,6 +13,19 @@ export const VISUAL_CHANGE_TYPES = [
   'distinguishing',
 ] as const
 export type VisualChangeType = (typeof VISUAL_CHANGE_TYPES)[number]
+
+// Drift guard, both directions: the two lists must stay identical, since the parser
+// validates against this one and entryMetadataSchema validates against lib/db's. A
+// divergence would let a parsed block fail schema validation at write time.
+// Type-only on purpose — scripts/mock-llm reaches this module under plain Node, and a
+// value import would drag the whole db barrel in behind it.
+type _VisualCategoriesMatch = [VisualChangeType] extends [(typeof VISUAL_CATEGORIES)[number]]
+  ? [(typeof VISUAL_CATEGORIES)[number]] extends [VisualChangeType]
+    ? true
+    : never
+  : never
+const _visualChecks: [_VisualCategoriesMatch] = [true]
+void _visualChecks
 
 export type VisualChangeNote = { id: string; type: VisualChangeType; text: string }
 export type ItemTransfer = {
@@ -31,7 +46,8 @@ export type ParsedStateBlock = {
   summary?: string
 }
 
-export type ParseFieldFailure = { field: keyof ParsedStateBlock; detail: string }
+// `'state'` is the block-level failure: a <state> that parsed into no field at all.
+export type ParseFieldFailure = { field: keyof ParsedStateBlock | 'state'; detail: string }
 
 export type ParseStateBlockResult = {
   block: ParsedStateBlock

@@ -1,11 +1,12 @@
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { branches, deltas, stories, storyEntries } from '@/lib/db'
+import { branches, deltas, entities, stories, storyEntries, type NewEntity } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { generationStore, resetAllStores, undoRedoStore } from '@/lib/stores'
 
-import { applyDeltaAction } from './apply-delta-action'
+import type { PipelineAction } from '../types'
+import { applyDeltaAction, applyDeltaActionGroup } from './apply-delta-action'
 
 async function seed(db: Awaited<ReturnType<typeof createTestDb>>['db']) {
   await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
@@ -222,5 +223,160 @@ describe('applyDeltaAction', () => {
       code: 'reversal-in-progress',
       reason: 'prose reversal in progress',
     })
+  })
+})
+
+describe('applyDeltaActionGroup', () => {
+  beforeEach(() => resetAllStores())
+  afterEach(() => resetAllStores())
+
+  const createEntry = (id: string, position: number): PipelineAction => ({
+    kind: 'createStoryEntry',
+    source: 'user_edit',
+    payload: {
+      entry: { id, branchId: 'b1', position, kind: 'ai_reply', content: id, createdAt: 1 },
+    },
+  })
+
+  const setMetadata = (id: string, worldTime: number): PipelineAction => ({
+    kind: 'updateStoryEntryMetadata',
+    source: 'user_edit',
+    payload: { branchId: 'b1', id, metadata: { worldTime } },
+  })
+
+  it('commits every action under one actionId with sequential log positions', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await seed(db)
+
+    const res = await applyDeltaActionGroup(
+      [createEntry('entry_1', 1), createEntry('entry_2', 2)],
+      { actionId: 'act_1', branchId: 'b1' },
+      { db, runInTransaction },
+    )
+
+    expect(res).toEqual({ status: 'ok' })
+    const rows = await db.select().from(deltas).where(eq(deltas.actionId, 'act_1'))
+    // MAX+1 is a subquery per statement, so batching must not collapse the positions.
+    expect(rows.map((r) => r.logPosition).sort()).toEqual([1, 2])
+    expect((await db.select().from(storyEntries)).length).toBe(2)
+  })
+
+  it('commits nothing when a later action rejects', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await seed(db)
+
+    const res = await applyDeltaActionGroup(
+      [createEntry('entry_1', 1), setMetadata('entry_missing', 5)],
+      { actionId: 'act_1', branchId: 'b1' },
+      { db, runInTransaction },
+    )
+
+    expect(res.status).toBe('rejected')
+    // The first action's row must not survive the second's refusal.
+    expect((await db.select().from(storyEntries)).length).toBe(0)
+    expect((await db.select().from(deltas)).length).toBe(0)
+  })
+
+  it('refuses a group whose actions write one row column twice', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    await applyDeltaActionGroup(
+      [createEntry('entry_1', 1)],
+      { actionId: 'act_0', branchId: 'b1' },
+      ctx,
+    )
+
+    // Both handlers read pre-group state, so committing both would silently drop the
+    // first writer's value rather than merge onto it.
+    const res = await applyDeltaActionGroup(
+      [setMetadata('entry_1', 10), setMetadata('entry_1', 20)],
+      { actionId: 'act_1', branchId: 'b1' },
+      ctx,
+    )
+
+    expect(res.status).toBe('rejected')
+    const [entry] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'entry_1'))
+    expect(entry.metadata).toBeNull()
+  })
+
+  function staged(id: string): NewEntity {
+    return {
+      id,
+      branchId: 'b1',
+      kind: 'character',
+      name: id,
+      description: '',
+      status: 'staged',
+      injectionMode: 'auto',
+      state: {
+        visual: {},
+        traits: [],
+        drives: [],
+        current_location_id: null,
+        equipped_items: [],
+        inventory: [],
+        faction_id: null,
+        lastSeenAt: null,
+      },
+      createdAt: 1,
+      updatedAt: 1,
+    }
+  }
+
+  const promote = (id: string): PipelineAction => ({
+    kind: 'promoteStagedEntity',
+    source: 'user_edit',
+    payload: { branchId: 'b1', id },
+  })
+
+  // The group takes each promote key the single-action path takes, and takes them in
+  // sorted order. Two groups naming the same pair in opposite orders would otherwise
+  // each hold what the other waits on, and withKeyLock is not reentrant.
+  it('does not deadlock when two groups claim the same keys in opposite orders', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    await db.insert(entities).values(staged('char_a'))
+    await db.insert(entities).values(staged('char_b'))
+
+    const [first, second] = await Promise.all([
+      applyDeltaActionGroup(
+        [promote('char_a'), promote('char_b')],
+        { actionId: 'act_1', branchId: 'b1' },
+        ctx,
+      ),
+      applyDeltaActionGroup(
+        [promote('char_b'), promote('char_a')],
+        { actionId: 'act_2', branchId: 'b1' },
+        ctx,
+      ),
+    ])
+
+    expect(first).toEqual({ status: 'ok' })
+    expect(second).toEqual({ status: 'ok' })
+
+    // Whichever group ran second saw both rows already active and no-opped, so exactly
+    // one promotion is logged per entity rather than two.
+    const rows = await db.select().from(deltas)
+    expect(rows).toHaveLength(2)
+    expect(rows.map((r) => r.targetId).sort()).toEqual(['char_a', 'char_b'])
+  })
+
+  // Every handler runs before the transaction opens, so an action cannot depend on a row
+  // an earlier action in the same group creates. Callers compose groups over rows that
+  // already exist.
+  it('cannot update a row created by an earlier action in the same group', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await seed(db)
+
+    const res = await applyDeltaActionGroup(
+      [createEntry('entry_1', 1), setMetadata('entry_1', 7)],
+      { actionId: 'act_1', branchId: 'b1' },
+      { db, runInTransaction },
+    )
+
+    expect(res.status).toBe('rejected')
+    expect((await db.select().from(storyEntries)).length).toBe(0)
   })
 })

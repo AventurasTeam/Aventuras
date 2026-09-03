@@ -90,6 +90,33 @@ describe('buildPiggybackActions', () => {
     ])
   })
 
+  // parseIdList takes the model's list verbatim, so a repeated id reaches this fold.
+  // Two promotes for one entity claim entities.status twice, which applyDeltaActionGroup
+  // rejects outright, and the repeat would otherwise persist into metadata and feed the
+  // next turn's fold as well as the scene editor's sameMembers compare.
+  it('collapses a repeated id in the block to one promote and one scene slot', () => {
+    const stagedChar = mockEntity({ id: 'char_staged', status: 'staged' })
+
+    const result = buildPiggybackActions({
+      source: 'ai_classifier',
+      entryId: 'entry_1',
+      block: { sceneEntities: ['char_staged', 'char_1', 'char_staged'] },
+      entities: [stagedChar, mockEntity({ id: 'char_1' })],
+      previousMetadata,
+      branchId: 'main',
+    })
+
+    expect(result.actions.filter((a) => a.kind === 'promoteStagedEntity')).toEqual([
+      {
+        kind: 'promoteStagedEntity',
+        source: 'ai_classifier',
+        payload: { branchId: 'main', id: 'char_staged' },
+      },
+    ])
+    // First-occurrence order, not sorted: the state panel renders emission order.
+    expect(result.metadata.sceneEntities).toEqual(['char_staged', 'char_1'])
+  })
+
   it('updates location tracking for characters entering scene', () => {
     const char1 = mockEntity({ id: 'char_1', kind: 'character' })
     const char2 = mockEntity({ id: 'char_2', kind: 'character' })
@@ -150,6 +177,8 @@ describe('buildPiggybackActions', () => {
       payload: {
         branchId: 'main',
         id: 'char_1',
+        // The scene moved to loc_2 without them; they stay where the anchor puts them.
+        currentLocationId: 'loc_1',
         lastSeenAt: {
           entryId: 'entry_2',
           locationId: 'loc_1',
@@ -595,5 +624,65 @@ describe('buildPiggybackActions', () => {
         payload: { branchId: 'main', id: 'char_kael', stackables: {} },
       },
     ])
+  })
+
+  // These two decisions were previously visible only in classifier.* warn logs, which
+  // are a no-op unless diagnostics is on. Returning them is what lets the report record
+  // the cause instead of leaving the reader to guess it from a difference.
+  describe('applied outcomes', () => {
+    it('reports the clamped delta while metadata carries the clamped total', () => {
+      const result = buildPiggybackActions({
+        source: 'ai_classifier',
+        entryId: 'entry_1',
+        block: { worldTimeDelta: -600 },
+        entities: [],
+        previousMetadata,
+        branchId: 'main',
+      })
+      expect(result.applied.worldTimeDelta).toBe(0)
+      expect(result.metadata.worldTime).toBe(previousMetadata.worldTime)
+    })
+
+    it('passes an unclamped delta through unchanged', () => {
+      const result = buildPiggybackActions({
+        source: 'ai_classifier',
+        entryId: 'entry_1',
+        block: { worldTimeDelta: 30 },
+        entities: [],
+        previousMetadata,
+        branchId: 'main',
+      })
+      expect(result.applied.worldTimeDelta).toBe(30)
+      expect(result.applied.currentLocationRejected).toBe(false)
+    })
+
+    it('flags a location the model named that is not a location', () => {
+      const sword = mockEntity({ id: 'item_sword', kind: 'item', name: 'Sword' })
+      const result = buildPiggybackActions({
+        source: 'ai_classifier',
+        entryId: 'entry_1',
+        block: { currentLocation: 'item_sword' },
+        entities: [sword],
+        previousMetadata,
+        branchId: 'main',
+      })
+      expect(result.applied.currentLocationRejected).toBe(true)
+      // The rejection is why the previous location was kept, so both must agree.
+      expect(result.metadata.currentLocationId).toBe(previousMetadata.currentLocationId)
+    })
+
+    it('does not flag a location the model named correctly', () => {
+      const keep = mockEntity({ id: 'loc_keep', kind: 'location', name: 'The Keep' })
+      const result = buildPiggybackActions({
+        source: 'ai_classifier',
+        entryId: 'entry_1',
+        block: { currentLocation: 'loc_keep' },
+        entities: [keep],
+        previousMetadata,
+        branchId: 'main',
+      })
+      expect(result.applied.currentLocationRejected).toBe(false)
+      expect(result.metadata.currentLocationId).toBe('loc_keep')
+    })
   })
 })
