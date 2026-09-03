@@ -40,7 +40,7 @@ import { IconAction } from '@/components/ui/icon-action'
 import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
-import { useTier } from '@/hooks/use-tier'
+import type { Tier } from '@/hooks/use-tier'
 import type { CalendarFrame } from '@/lib/calendar'
 import type { EntryMetadata, StoryEntry } from '@/lib/db'
 import { t } from '@/lib/i18n'
@@ -137,6 +137,10 @@ type EntryCardProps = {
   fixAction?: { label: string; onPress: () => void }
   onRetry?: () => void
   onDismiss?: () => void
+
+  /** Resolved by the host, not by a hook here: one window subscription for the whole
+   *  list instead of one per card, so a resize re-renders rows only across a boundary. */
+  tier: Tier
 
   // edit-restrictions (uniform):
   disabled?: boolean
@@ -340,6 +344,7 @@ function SceneEditDialog({
 function WorldTimeFooter({
   label,
   edit,
+  tier,
   monotonicityBreak,
   onEditTime,
   onRequestEditTime,
@@ -347,12 +352,11 @@ function WorldTimeFooter({
   label: string
   /** Null leaves the footer inert — in-flight, content editing, or no host handler. */
   edit: WorldTimeEditTarget | null
+  tier: Tier
   monotonicityBreak?: MonotonicityBreak
   onEditTime?: (nextWorldTime: number) => Promise<boolean>
   onRequestEditTime?: () => void
 }) {
-  const tier = useTier()
-
   const breakText =
     monotonicityBreak != null
       ? t('reader:worldTimeEdit.monotonicityBreak', {
@@ -700,6 +704,7 @@ function NarrativeContent({
 export function EntryCard({
   kind,
   content,
+  tier,
   worldTimeLabel,
   worldTimeRaw,
   onEditTime,
@@ -762,7 +767,6 @@ export function EntryCard({
   // Same tier split as the world-time footer: `onEditScene == null` also routes to
   // the request fork, since a Dialog whose Save has nowhere to report would discard
   // the edit silently.
-  const tier = useTier()
   const useSceneRequest = onRequestEditScene != null && (tier === 'phone' || onEditScene == null)
   const sceneEditable = !editing && disabled !== true && sceneOptions != null
   const sceneEdit =
@@ -1025,6 +1029,7 @@ export function EntryCard({
         <WorldTimeFooter
           label={worldTimeFooterLabel}
           edit={timeEdit}
+          tier={tier}
           monotonicityBreak={worldTimeMonotonicityBreak}
           onEditTime={onEditTime}
           onRequestEditTime={onRequestEditTime}

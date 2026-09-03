@@ -10,6 +10,9 @@ import { themes } from '@/lib/themes'
 import { EntryCard, type EntryCardProps } from './entry-card'
 
 const baseProps = {
+  // Host-resolved in the reader; stories state it outright. The two phone-fork stories
+  // override it alongside the viewport global they also set.
+  tier: 'desktop' as const,
   worldTimeLabel: 'Day 12 · 14:33',
   onEdit: fn(),
   onDelete: fn(),
@@ -300,6 +303,7 @@ export const SystemRetryFires: StoryT = {
   ...wrap,
   args: {
     kind: 'system',
+    tier: 'desktop',
     content: 'Generation failed.',
     onRetry: fn(),
     onDismiss: fn(),
@@ -316,6 +320,7 @@ export const KindMatrix: StoryT = {
   render: () => (
     <View className="flex-col gap-4" style={{ maxWidth: 700 }}>
       <EntryCard
+        tier="desktop"
         kind="opening"
         content="The road from Ironshore is empty for a hundred miles."
         worldTimeLabel="Day 1 · 06:00"
@@ -325,6 +330,7 @@ export const KindMatrix: StoryT = {
         onFlipEra={fn()}
       />
       <EntryCard
+        tier="desktop"
         kind="user_action"
         content="I keep riding."
         worldTimeLabel="Day 1 · 06:05"
@@ -333,6 +339,7 @@ export const KindMatrix: StoryT = {
         onFlipEra={fn()}
       />
       <EntryCard
+        tier="desktop"
         kind="ai_reply"
         content="At the next bend, a figure in dust-grey waits."
         worldTimeLabel="Day 1 · 09:14"
@@ -345,12 +352,14 @@ export const KindMatrix: StoryT = {
         onFlipEra={fn()}
       />
       <EntryCard
+        tier="desktop"
         kind="streaming"
         streamingPhase="reasoning"
         content=""
         reasoning="Working out the warden's first words…"
       />
       <EntryCard
+        tier="desktop"
         kind="system"
         content="Provider returned 503."
         detail="Model service temporarily unavailable."
@@ -379,6 +388,7 @@ export const ThemeMatrix: StoryT = {
           </View>
           <View className="flex-col gap-3">
             <EntryCard
+              tier="desktop"
               kind="user_action"
               content="I keep riding."
               worldTimeLabel="Day 1 · 06:05"
@@ -386,6 +396,7 @@ export const ThemeMatrix: StoryT = {
               onDelete={fn()}
             />
             <EntryCard
+              tier="desktop"
               kind="ai_reply"
               content="At the next bend, a figure in dust-grey waits."
               worldTimeLabel="Day 1 · 09:14"
@@ -513,6 +524,7 @@ export const WorldTimeEditRequestsHostOverlayOnPhone: StoryT = {
   globals: { viewport: { value: 'mobile1' } },
   args: {
     ...baseProps,
+    tier: 'phone',
     ...aiEntry,
     ...editableTimeProps,
     onEditTime: fn(async () => true),
@@ -538,6 +550,7 @@ export const WorldTimeInlineEditorOnPhone: StoryT = {
   globals: { viewport: { value: 'mobile1' } },
   args: {
     ...baseProps,
+    tier: 'phone',
     ...aiEntry,
     ...editableTimeProps,
     onEditTime: fn(async () => true),

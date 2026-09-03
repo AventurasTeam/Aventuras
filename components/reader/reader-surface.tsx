@@ -18,6 +18,8 @@ import { EntryCard } from '@/components/compounds/entry-card'
 import type { SceneEdit, SceneOptions } from '@/components/compounds/scene-edit-form'
 import { JumpButtons } from '@/components/reader/jump-buttons'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useTier } from '@/hooks/use-tier'
+import type { Tier } from '@/hooks/use-tier'
 import type { CalendarFrame } from '@/lib/calendar'
 import type { StoryEntry } from '@/lib/db'
 import { computeScrollMetrics, createAutoscrollMachine } from '@/lib/reader-scroll'
@@ -39,6 +41,7 @@ const ROW_FRAME_CLASS = 'mx-auto w-full max-w-[860px] px-7 py-2'
 
 type ReaderRowProps = {
   row: StoryEntry
+  tier: Tier
   editing: boolean
   editContent: string | null
   editBlocked: boolean
@@ -75,6 +78,7 @@ type ReaderRowProps = {
 // and the live streaming card re-render.
 const ReaderRow = memo(function ReaderRow({
   row,
+  tier,
   editing,
   editContent,
   editBlocked,
@@ -113,6 +117,7 @@ const ReaderRow = memo(function ReaderRow({
   return (
     <EntryCard
       kind={row.kind}
+      tier={tier}
       content={editing ? (editContent ?? '') : row.content}
       meta={row.metadata ?? undefined}
       reasoning={row.metadata?.reasoning}
@@ -180,6 +185,10 @@ export function ReaderSurface({
   onFixSystemEntry,
   ref,
 }: ReaderSurfaceProps & { ref?: Ref<ReaderSurfaceHandle> }) {
+  // One window subscription for the whole list. Resolved per card, every row would
+  // re-render on every resize frame; here a resize only reaches them across a boundary,
+  // where ReaderRow's memo compare stops it.
+  const tier = useTier()
   const scrollRef = useRef<HTMLDivElement>(null)
   const autoscrollRef = useRef(createAutoscrollMachine())
   const lastDistanceRef = useRef(0)
@@ -469,6 +478,7 @@ export function ReaderSurface({
             <div key={row.id} data-entry-row={row.id} className={ROW_FRAME_CLASS}>
               <ReaderRow
                 row={row}
+                tier={tier}
                 editing={editingId === row.id}
                 editContent={editingId === row.id ? editDraft : null}
                 editBlocked={editBlocked}
@@ -501,6 +511,7 @@ export function ReaderSurface({
           <div className={ROW_FRAME_CLASS}>
             <EntryCard
               kind="streaming"
+              tier={tier}
               content={streaming.content}
               reasoning={streaming.reasoning.length > 0 ? streaming.reasoning : undefined}
               streamingPhase={
