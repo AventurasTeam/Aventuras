@@ -90,6 +90,33 @@ describe('buildPiggybackActions', () => {
     ])
   })
 
+  // parseIdList takes the model's list verbatim, so a repeated id reaches this fold.
+  // Two promotes for one entity claim entities.status twice, which applyDeltaActionGroup
+  // rejects outright, and the repeat would otherwise persist into metadata and feed the
+  // next turn's fold as well as the scene editor's sameMembers compare.
+  it('collapses a repeated id in the block to one promote and one scene slot', () => {
+    const stagedChar = mockEntity({ id: 'char_staged', status: 'staged' })
+
+    const result = buildPiggybackActions({
+      source: 'ai_classifier',
+      entryId: 'entry_1',
+      block: { sceneEntities: ['char_staged', 'char_1', 'char_staged'] },
+      entities: [stagedChar, mockEntity({ id: 'char_1' })],
+      previousMetadata,
+      branchId: 'main',
+    })
+
+    expect(result.actions.filter((a) => a.kind === 'promoteStagedEntity')).toEqual([
+      {
+        kind: 'promoteStagedEntity',
+        source: 'ai_classifier',
+        payload: { branchId: 'main', id: 'char_staged' },
+      },
+    ])
+    // First-occurrence order, not sorted: the state panel renders emission order.
+    expect(result.metadata.sceneEntities).toEqual(['char_staged', 'char_1'])
+  })
+
   it('updates location tracking for characters entering scene', () => {
     const char1 = mockEntity({ id: 'char_1', kind: 'character' })
     const char2 = mockEntity({ id: 'char_2', kind: 'character' })

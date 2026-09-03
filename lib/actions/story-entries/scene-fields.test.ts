@@ -259,6 +259,54 @@ describe('updateEntrySceneFields', () => {
     expect(await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))).toHaveLength(0)
   })
 
+  // The list is a set, but the action takes an array and the stored value can already
+  // hold a repeat emitted by the model. Left in, two promotes for one entity claim
+  // entities.status twice and applyDeltaActionGroup rejects the whole edit.
+  it('collapses a repeated id instead of letting the group reject it', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+
+    const staged = { ...character('char_staged', null), status: 'staged' as const }
+    await db.insert(entities).values(staged)
+    entitiesStore.hydrate('b1', [
+      character('char_a', LOC_A),
+      character('char_b', LOC_A),
+      staged,
+      location(LOC_A),
+      location(LOC_B),
+    ] as never)
+
+    const result = await updateEntrySceneFields(
+      'b1',
+      'e2',
+      { sceneEntities: ['char_a', 'char_staged', 'char_staged'], currentLocationId: LOC_A },
+      ctx,
+    )
+
+    expect(result.status).toBe('ok')
+    expect((await storedMetadata(db, 'e2'))?.sceneEntities).toEqual(['char_a', 'char_staged'])
+    const [promoted] = await db.select().from(entities).where(eq(entities.id, 'char_staged'))
+    expect(promoted.status).toBe('active')
+  })
+
+  // sameMembers compares length first, so an unnormalised repeat of the stored scene
+  // reads as a change and burns a delta — clearing the redo stack for nothing.
+  it('treats a repeat of the current scene as a no-op', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+
+    const result = await updateEntrySceneFields(
+      'b1',
+      'e2',
+      { sceneEntities: ['char_a', 'char_b', 'char_a'], currentLocationId: LOC_A },
+      ctx,
+    )
+    expect(result.status).toBe('ok')
+    expect(await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))).toHaveLength(0)
+  })
+
   it('reverses cleanly, restoring both the scene and the derived state', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }

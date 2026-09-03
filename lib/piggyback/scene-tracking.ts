@@ -21,6 +21,17 @@ type Args = {
 }
 
 /**
+ * The scene is a set; both writers hand it over as an array. A repeat is not merely a
+ * wasted slot — two `promoteStagedEntity` actions for one entity claim `entities.status`
+ * twice, which applyDeltaActionGroup rejects outright, and `sameMembers` reads
+ * ['a','b'] and ['a','a'] as equal, dropping a real edit as a no-op. First-occurrence
+ * order survives: the state panel renders the list in the order it was emitted.
+ */
+export function dedupeSceneEntities(ids: readonly string[]): string[] {
+  return [...new Set(ids)]
+}
+
+/**
  * Auto-promote on scene membership: naming a staged entity in the scene is a strong
  * signal of intentional introduction (docs/memory/piggyback.md → Auto-promote on
  * staged-ID emission). Shared by the generation fold and the scene editor so a user

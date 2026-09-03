@@ -2,7 +2,7 @@ import type { DeltaSource, PipelineAction } from '@/lib/actions'
 import type { CharacterState, Entity } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 
-import { scenePromotionActions, sceneTrackingActions } from './scene-tracking'
+import { dedupeSceneEntities, scenePromotionActions, sceneTrackingActions } from './scene-tracking'
 import type { ParsedStateBlock } from './types'
 import { resolvePiggybackWorldTimeDelta } from './world-time'
 
@@ -42,7 +42,7 @@ type BuildResult = {
 export function buildPiggybackActions(args: BuildArgs): BuildResult {
   const { entryId, block, entities, previousMetadata, branchId, source } = args
 
-  const sceneEntities = block.sceneEntities ?? previousMetadata.sceneEntities
+  const sceneEntities = dedupeSceneEntities(block.sceneEntities ?? previousMetadata.sceneEntities)
   const rawDelta = block.worldTimeDelta ?? 0
   const appliedDelta = resolvePiggybackWorldTimeDelta(rawDelta, entryId, previousMetadata.worldTime)
   const worldTime = previousMetadata.worldTime + appliedDelta

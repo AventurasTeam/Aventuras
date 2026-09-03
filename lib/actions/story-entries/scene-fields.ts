@@ -3,7 +3,7 @@ import { desc, eq } from 'drizzle-orm'
 import { storyEntries } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
-import { scenePromotionActions, sceneTrackingActions } from '@/lib/piggyback'
+import { dedupeSceneEntities, scenePromotionActions, sceneTrackingActions } from '@/lib/piggyback'
 import { entitiesStore, generationStore } from '@/lib/stores'
 
 import { applyDeltaActionGroup } from '../delta/apply-delta-action'
@@ -80,7 +80,7 @@ async function updateEntrySceneFieldsLocked(
     currentLocationId: tail.metadata.currentLocationId,
   }
   const after = {
-    sceneEntities: edit.sceneEntities,
+    sceneEntities: dedupeSceneEntities(edit.sceneEntities),
     currentLocationId:
       edit.currentLocationId === undefined ? before.currentLocationId : edit.currentLocationId,
   }
