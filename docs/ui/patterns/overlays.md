@@ -389,6 +389,14 @@ download's log pane, the wizard's AI-assist list. Two nested
 scrollables fight for the gesture on Android, and the host's own
 region is the one that should win.
 
+Opting out binds the host for **every** state it renders, not the
+one that motivated the opt-out. A multi-state dialog whose bodies
+swap per state must bound each body that can grow without a
+ceiling — a model-supplied file list, a model-supplied chip
+collection. The cap still applies to those states, so an unbounded
+one is clipped rather than scrolled, and the actions row goes with
+it.
+
 **Pinned actions.** The primitive scrolls everything it is handed,
 the actions row included, and it cannot pin that row on the host's
 behalf: no consumer renders `DialogFooter` as a direct child of

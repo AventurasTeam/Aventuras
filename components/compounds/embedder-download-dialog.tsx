@@ -465,7 +465,7 @@ function ImportConfirmBody({
   availableEps: readonly ExecutionProvider[]
 }) {
   return (
-    <View className="gap-3">
+    <ScrollView className="shrink" contentContainerClassName="gap-3">
       <Text variant="secondary" size="sm">
         {t('embedder:import.notice')}
       </Text>
@@ -487,7 +487,7 @@ function ImportConfirmBody({
         ))}
       </View>
       <EpSelectRow pickedEp={pickedEp} onPick={onPick} availableEps={availableEps} />
-    </View>
+    </ScrollView>
   )
 }
 
@@ -506,8 +506,10 @@ function DownloadingBody({
     if (p.kind === 'done') return acc + (p.bytesTotal ?? 0)
     return acc
   }, 0)
+  // The catalog's file count is provider-supplied, so the list has no ceiling and must
+  // scroll inside the capped panel rather than push the footer out of it.
   return (
-    <View className="gap-3">
+    <ScrollView className="shrink" contentContainerClassName="gap-3">
       {entries.map(([file, progress]) => (
         <View key={file} className="gap-1">
           <View className="flex-row justify-between">
@@ -532,7 +534,7 @@ function DownloadingBody({
           total: (totalBytes / 1_000_000).toFixed(1),
         })}
       </Text>
-    </View>
+    </ScrollView>
   )
 }
 
@@ -570,7 +572,7 @@ function VerifyingBody({
 }) {
   const entries = Object.entries(verifyByFile)
   return (
-    <View className="gap-2">
+    <ScrollView className="shrink" contentContainerClassName="gap-2">
       {entries.map(([file, status]) => (
         <View key={file} className="flex-row items-center gap-2">
           <Text>
@@ -586,7 +588,7 @@ function VerifyingBody({
           </Text>
         </View>
       ))}
-    </View>
+    </ScrollView>
   )
 }
 
