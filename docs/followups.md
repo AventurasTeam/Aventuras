@@ -204,12 +204,13 @@ for the placement rule.
 
 - **The Dialog scroll region is unverified on native RN.** The cap and
   its scroll host were verified on web (desktop Electron, measured) and
-  inside the reader's WebView at tablet tier — both RN-Web. No
-  scrollable Dialog is reachable at phone tier, because every phone
-  overlay is either a Sheet or opts out via `scrollable={false}`, so
-  the native React Native path was never exercised on a device. Its
-  only consumers are `CollisionResolveDialog` and the wizard session
-  seam at tablet tier. The specific unknown is whether a
+  inside the reader's WebView at tablet tier — both RN-Web. The native
+  React Native path was never exercised on a device. Its consumers are
+  `CollisionResolveDialog` and the wizard session seam at tablet tier,
+  plus `ImportDialog`, which opts in at phone tier only
+  (`scrollable={isPhone}`) because its issue list expands inline there
+  — that one has no production consumer yet, so it is reachable in
+  Storybook and nowhere else. The specific unknown is whether a
   `flexShrink` scroll view clamps against the parent's `maxHeight` the
-  way it does under RN-Web. Worth one Android tablet pass when either
-  surface is next touched. Raised 2026-09-02.
+  way it does under RN-Web. Worth one Android pass when either surface
+  is next touched. Raised 2026-09-02.

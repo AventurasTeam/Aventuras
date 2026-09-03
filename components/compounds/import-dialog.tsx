@@ -182,7 +182,9 @@ export function ImportDialog<TPayload>({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent scrollable={false}>
+      {/* Phone expands the issue list inline, so the dialog itself has to be the scroll
+          host there; every other tier bounds the list and needs no second scrollable. */}
+      <DialogContent scrollable={isPhone}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
@@ -354,8 +356,8 @@ function PayloadIssueList({
     </View>
   )
   if (isPhone) {
-    // Phone: expand inline; the whole Dialog body becomes scrollable (the
-    // Dialog primitive's content area is the scroll surface, no nested scroll).
+    // Phone: expand inline. The host passes scrollable to DialogContent so the dialog
+    // body is the scroll surface — a bounded region this narrow would show two issues.
     return list
   }
   // Desktop / tablet: bounded internal scroll keeps the dialog body compact.
