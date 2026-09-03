@@ -415,6 +415,21 @@ render the footer as a direct child. The divergence is in what each
 primitive can see among its own children, not in what the two
 surfaces want.
 
+**Verified on native.** Both paths were measured on an Android
+emulator at 1080x2400 (`app/dev/dialog.tsx`, 2026-09-04). The panel
+settles at exactly 2160px under either. On the default host the
+scroller clamps at the panel edge and the actions row scrolls into
+reach at the end, as the pinning note above describes; under
+`scrollable={false}` the host's own scroller clamps above the actions,
+which stay put without scrolling. A `flexShrink` scroll view does
+clamp against a parent's `maxHeight` on native, as it does under
+RN-Web. Scroll initiation was probed separately, since the responder
+claim this primitive clears
+([lessons-learned](../../implementation/lessons-learned/dialog-content-responder-claim.md))
+fails intermittently rather than outright: a fresh first touch started
+the scroll in 6 of 6 trials on the default host and 4 of 4 on the
+nested one.
+
 This is the opposite default from
 [Sheet](#sheet--api-surface), which ships no scroll wrapper at all.
 The asymmetry is deliberate. A Sheet is bounded by its detent, so a

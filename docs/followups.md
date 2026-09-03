@@ -155,32 +155,3 @@ for the placement rule.
   alone tunes one Medium signal inside a scoring model that is being
   replaced. Surfaced 2026-08-06 reviewing
   [Slice 3.4](./implementation/milestones/03-memory-floor/slices/04-retrieval.md).
-
-- **The Dialog scroll region is unverified on native RN.** The cap and
-  its scroll host were verified on web (desktop Electron, measured) and
-  inside the reader's WebView at tablet tier — both RN-Web. The native
-  React Native path was never exercised on a device. The surface is
-  narrower than it reads: six files render `DialogContent`, and four
-  bound their own body and opt out — the collision resolver, the
-  embedder download, the wizard's AI-assist panel and the scene editor.
-  That leaves the wizard session seam on the default host, plus
-  `ImportDialog`, which keeps it at phone tier only
-  (`scrollable={isPhone}`) and still has no production consumer.
-
-  The substrate half is now answered. `AlertDialogContent`, which caps
-  and scrolls by the same mechanism, was measured on an Android
-  emulator (1080x2400, 2026-09-03): the panel settled at exactly
-  2160px, the body scroller clamped at the panel edge, the last row was
-  reachable, and both action buttons held identical bounds across a
-  full scroll. A `flexShrink` scroll view does clamp against a parent's
-  `maxHeight` on native, as it does under RN-Web.
-
-  What does not transfer is the gesture half, which is Dialog-specific:
-  its `Content` claims the touch responder and therefore carries the
-  `onStartShouldSetResponder={undefined}` workaround
-  ([lessons-learned](./implementation/lessons-learned/dialog-content-responder-claim.md)),
-  while AlertDialog's `Content` is a plain View that makes no such
-  claim — so the Android scroll gesture was never exercised against the
-  claim. Worth one pass over the wizard session seam when it is next
-  touched. Raised 2026-09-02; consumer list corrected and the layout
-  half closed 2026-09-03.

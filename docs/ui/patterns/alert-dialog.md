@@ -71,6 +71,8 @@ Calendar swap-warning's W1 / W2 / W3 sub-warning blocks compose the same way —
 
 The consumer that forced the cap is the [crash recovery modal](../../generation-pipeline.md#recovery-modal): one sentence per orphaned pipeline run across every story, uncapped, in a gate whose only exit is its own OK button.
 
+**Verified on native.** Measured on an Android emulator at 1080x2400 (`app/dev/alert-dialog.tsx`, 2026-09-03): the panel settled at exactly 2160px, the body scroller clamped at the panel edge, the last row was reachable, and both action buttons held identical bounds across a full scroll.
+
 ## Destructive CTA via Button composition
 
 The destructive variant lives on Button, not AlertDialog. Use the radix `asChild` pattern to swap a Button into the action slot:
