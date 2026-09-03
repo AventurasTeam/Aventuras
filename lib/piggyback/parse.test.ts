@@ -307,7 +307,7 @@ describe('stripTrailingBlocks', () => {
     expect(stateRaw).toBe('<state>\n<scene_entities>c1</scene_entities>\n</state>')
   })
 
-  it('cuts prose at the earliest trailing block and returns both raws', () => {
+  it('excises each block and returns both raws', () => {
     const raw =
       'The rain falls.\n<state><summary>x</summary></state>\n<suggestions><item category="cat1">go</item></suggestions>'
     const { prose, stateRaw, suggestionsRaw } = stripTrailingBlocks(raw)
@@ -334,6 +334,41 @@ describe('stripTrailingBlocks', () => {
     )
     expect(stateRaw).toBeUndefined()
     expect(suggestionsRaw).toContain('cat1')
+  })
+
+  // The cut is keyed on the close tag, not on position: prose that mentions the
+  // tag in passing carries no closer, and truncating there is unrecoverable.
+  it('leaves prose that merely mentions the tag intact', () => {
+    const raw = 'The city declared a <state> of emergency that morning.'
+    expect(stripTrailingBlocks(raw)).toEqual({ prose: raw })
+  })
+
+  it('excises the real block when prose also mentions the tag', () => {
+    const raw = 'The city declared a <state> of emergency.<state><summary>x</summary></state>'
+    const { prose, stateRaw } = stripTrailingBlocks(raw)
+    expect(prose).toBe('The city declared a <state> of emergency.')
+    expect(stateRaw).toBe('<state><summary>x</summary></state>')
+  })
+
+  // Truncating at a misplaced block would drop every word after it. Excising the
+  // span keeps both halves and flags the ordering the prompt forbids.
+  it('keeps prose on both sides of an out-of-position block', () => {
+    const raw = 'Before.<state><summary>x</summary></state>After.'
+    const { prose, stateRaw, outOfPosition } = stripTrailingBlocks(raw)
+    expect(prose).toBe('Before.After.')
+    expect(stateRaw).toBe('<state><summary>x</summary></state>')
+    expect(outOfPosition).toBe(true)
+  })
+
+  it('does not flag a block that sits after the prose', () => {
+    const raw = 'Prose.\n<state><summary>x</summary></state>'
+    expect(stripTrailingBlocks(raw).outOfPosition).toBeUndefined()
+  })
+
+  it('cuts an opener the stream truncated before its content', () => {
+    const { prose, stateRaw } = stripTrailingBlocks('The knight rides on.<state>')
+    expect(prose).toBe('The knight rides on.')
+    expect(stateRaw).toBe('<state>')
   })
 
   it('assigns each raw to its own block when suggestions precede state', () => {

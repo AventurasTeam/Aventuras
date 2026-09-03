@@ -252,35 +252,62 @@ export function parseSuggestionsBlock(raw: string): ParseSuggestionsBlockResult 
   }
 }
 
-// Separates narrative prose from every trailing block the model appended.
-// Cuts at the EARLIEST block so a reordered emission can't leak the other
-// block's markup into the rendered prose. TRAILING_ROOT_TAGS drives the cut
-// generically, but the returned raws are named per tag — a third block needs
-// an edit here too.
+// Separates narrative prose from every block the model appended. Each block's own
+// span is EXCISED rather than the string being truncated at it, so prose on both
+// sides survives a model that emitted the block out of position.
+//
+// Keyed on the close tag, not position: prose that mentions `<state>` in passing
+// carries no `</state>`, so it is never mistaken for markup. An unclosed opener is
+// still cut when nothing but markup follows it — that is a truncated stream, not prose.
+type BlockSpan = { tag: string; start: number; end: number }
+
+function findBlockSpan(raw: string, tag: string): BlockSpan | undefined {
+  const close = `</${tag}>`
+  const closeIdx = raw.lastIndexOf(close)
+  if (closeIdx !== -1) {
+    const start = raw.lastIndexOf(`<${tag}>`, closeIdx)
+    return start === -1 ? undefined : { tag, start, end: closeIdx + close.length }
+  }
+  const start = raw.lastIndexOf(`<${tag}>`)
+  if (start === -1) return undefined
+  const rest = raw.slice(start + tag.length + 2).trimStart()
+  if (rest !== '' && !rest.startsWith('<')) return undefined
+  return { tag, start, end: boundedEnd(raw, start + 1, tag) }
+}
+
 export function stripTrailingBlocks(raw: string): {
   prose: string
   stateRaw?: string
   suggestionsRaw?: string
+  /** A block sat before prose rather than after it — the prompt forbids it, and
+   *  emission compliance is a watch item (docs/memory/piggyback.md). */
+  outOfPosition?: true
 } {
-  const indices = TRAILING_ROOT_TAGS.map((tag) => raw.indexOf(`<${tag}>`)).filter((i) => i !== -1)
-  if (indices.length === 0) return { prose: raw }
-  const cut = Math.min(...indices)
+  const spans = TRAILING_ROOT_TAGS.map((tag) => findBlockSpan(raw, tag))
+    .filter((s): s is BlockSpan => s !== undefined)
+    .sort((a, b) => a.start - b.start)
+  if (spans.length === 0) return { prose: raw }
 
-  const sliceBlock = (tag: string): string | undefined => {
-    const open = raw.indexOf(`<${tag}>`)
-    if (open === -1) return undefined
-    const close = raw.indexOf(`</${tag}>`, open)
-    const end = close === -1 ? boundedEnd(raw, open + 1, tag) : close + tag.length + 3
-    return raw.slice(open, end).trim()
+  const kept: string[] = []
+  let cursor = 0
+  for (const span of spans) {
+    kept.push(raw.slice(cursor, span.start))
+    cursor = span.end
   }
+  kept.push(raw.slice(cursor))
 
-  const stateRaw = sliceBlock(STATE_ROOT_TAG)
-  const suggestionsRaw = sliceBlock(SUGGESTIONS_ROOT_TAG)
+  const blockRaw = (tag: string): string | undefined => {
+    const span = spans.find((s) => s.tag === tag)
+    return span === undefined ? undefined : raw.slice(span.start, span.end).trim()
+  }
+  const stateRaw = blockRaw(STATE_ROOT_TAG)
+  const suggestionsRaw = blockRaw(SUGGESTIONS_ROOT_TAG)
 
   return {
-    prose: raw.slice(0, cut).trimEnd(),
+    prose: kept.join('').trim(),
     ...(stateRaw !== undefined ? { stateRaw } : {}),
     ...(suggestionsRaw !== undefined ? { suggestionsRaw } : {}),
+    ...(kept.slice(1).some((segment) => segment.trim() !== '') ? { outOfPosition: true } : {}),
   }
 }
 
@@ -293,9 +320,8 @@ export const NARRATIVE_KINDS = new Set<StoryEntry['kind']>(['ai_reply', 'opening
  * trailing blocks, and feeding those back would hand a model its own markup as
  * narrative.
  *
- * Gated on kind because the cut is by tag position anywhere in the string: a
- * `user_action` that types `<state>` is prose, not markup, and must keep its
- * tail.
+ * Gated on kind because a closed pair anywhere in the string is excised: a
+ * `user_action` quoting a whole `<state>…</state>` is prose, not markup.
  */
 export function promptProse(entry: { kind: StoryEntry['kind']; content: string }): string {
   return NARRATIVE_KINDS.has(entry.kind) ? stripTrailingBlocks(entry.content).prose : entry.content

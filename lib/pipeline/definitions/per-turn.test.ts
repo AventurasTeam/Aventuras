@@ -490,6 +490,78 @@ describe('per-turn pipeline declaration', () => {
     expect(metadata?.stateReport?.worldTimeDelta).toBe(30)
   })
 
+  // Stripping a block-only reply leaves nothing. A blank row is unrecoverable, so the
+  // raw text is persisted instead; the reader strips it again at display.
+  it('persists the raw reply when stripping the block would leave no prose', async () => {
+    currentStoryStore.set({
+      storyId: 's1',
+      branchId: 'b1',
+      definition,
+      settings: baseSettings({ partialChapterBuffer: 3, piggybackMode: 'on' }),
+    })
+    hydrateEntries(phaseDb, 'b1', [])
+    entitiesStore.hydrate('b1', [])
+    vi.spyOn(appSettingsStore, 'getAppSettings').mockReturnValue({
+      ...APP_SETTINGS_DEFAULTS,
+      providers: [
+        {
+          ...provider,
+          cachedModels: [{ id: 'model-1', capabilities: { taggedBlockReliable: true } }],
+        },
+      ],
+      profiles: [
+        {
+          id: 'prof-narrative',
+          kind: 'narrative',
+          name: 'Narrative',
+          modelRef: { providerId: provider.id, modelId: 'model-1' },
+        },
+      ],
+      defaultProviderId: provider.id,
+    })
+
+    const raw = '<state><world_time_delta>30</world_time_delta></state>'
+    streamTextMock.mockReturnValue({
+      ok: true,
+      modelId: 'model-1',
+      providerId: 'prov-1',
+      stream: {
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: raw }
+        })(),
+      },
+    })
+
+    const intermediates: Record<string, unknown> = {}
+    ensurePerTurnPipelineRegistered()
+    const phase = getPipeline(PER_TURN_KIND).phases[2]
+    if (!phase || !('run' in phase)) throw new Error('expected narrative phase')
+
+    const gen = phase.run({
+      actionId: 'act_1',
+      abortSignal: new AbortController().signal,
+      intermediates,
+      log: makeLogger('act_1'),
+      runInTransaction: async () => undefined,
+      db: phaseDb.db,
+      storyId: 's1',
+      branchId: 'b1',
+    })
+    const events = []
+    let next = await gen.next()
+    while (!next.done) {
+      events.push(next.value)
+      next = await gen.next()
+    }
+
+    const created = events.find(
+      (e) => e.type === 'delta_emitted' && e.action.kind === 'createStoryEntry',
+    )
+    if (!created || created.type !== 'delta_emitted' || created.action.kind !== 'createStoryEntry')
+      throw new Error('expected a createStoryEntry delta')
+    expect(created.action.payload.entry.content).toBe(raw)
+  })
+
   it('drops sceneEntities and falls back to the classifier when the model emits an unresolvable placeholder', async () => {
     currentStoryStore.set({
       storyId: 's1',
