@@ -101,7 +101,9 @@ async function updateEntrySceneFieldsLocked(
   const previousMetadata = previousEntry?.metadata
   const actionId = generateId('act')
 
-  const branchEntities = [...entitiesStore.getEntities().values()]
+  const branchEntities = [...entitiesStore.getEntities().values()].filter(
+    (e) => e.branchId === branchId,
+  )
   const group: PipelineAction[] = [
     {
       kind: 'updateStoryEntryMetadata',
