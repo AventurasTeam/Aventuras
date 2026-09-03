@@ -38,6 +38,19 @@ const visualSchema = z.object({
   distinguishing: z.string().max(500).optional(),
 })
 
+// Drift guard, both directions. Kept a literal tuple rather than derived from the shape:
+// z.enum needs one, and Object.keys widens to string[]. A category present in only one
+// would either be unwritable or pass z.enum and then fail the state schema.
+type _VisualKeysMatch = [(typeof VISUAL_CATEGORIES)[number]] extends [
+  keyof z.infer<typeof visualSchema>,
+]
+  ? [keyof z.infer<typeof visualSchema>] extends [(typeof VISUAL_CATEGORIES)[number]]
+    ? true
+    : never
+  : never
+const _visualKeyChecks: [_VisualKeysMatch] = [true]
+void _visualKeyChecks
+
 export const characterStateSchema = z.object({
   visual: visualSchema,
   traits: z.array(z.string()).max(50),
