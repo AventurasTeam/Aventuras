@@ -1111,6 +1111,37 @@ export const WorldStateSaveFailed: StoryT = {
   },
 }
 
+/**
+ * The scene dialog's open flag lives in EntryCard's own body, not in a subtree that
+ * unmounts with it, so a `disabled` round-trip is exactly where it can outlive the
+ * dialog and bring it back unprompted.
+ */
+export const WorldStateEditDoesNotResurrectAfterGeneration: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...reportedProps,
+    sceneOptions,
+    onEditScene: fn(async () => ({ ok: true }) as const),
+  },
+  render: (args) => <ResurrectHarness {...args} />,
+  play: async () => {
+    await openPanel()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit scene' }))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Edit scene' })).toBeVisible())
+
+    setStoryBlocked?.(true)
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Edit scene' })).not.toBeInTheDocument(),
+    )
+
+    setStoryBlocked?.(false)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Edit scene' })).toBeVisible())
+    expect(screen.queryByRole('dialog', { name: 'Edit scene' })).not.toBeInTheDocument()
+  },
+}
+
 export const WorldStateNonTail: StoryT = {
   ...wrap,
   args: { ...baseProps, ...aiEntry, ...reportedProps },

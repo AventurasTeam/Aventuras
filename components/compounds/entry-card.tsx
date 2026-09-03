@@ -770,6 +770,15 @@ export function EntryCard({
       ? { open: () => (useSceneRequest ? onRequestEditScene?.() : setSceneEditOpen(true)) }
       : null
 
+  // The dialog only exists while the panel below is rendered, and the gate closes on
+  // props the user does not control — a run starting, the row ceasing to be the tail.
+  // Left set, the flag outlives the unmount and remounts the dialog already open.
+  const sceneDialogMounted =
+    hasState && stateExpanded && !editing && sceneEdit != null && !useSceneRequest
+  useEffect(() => {
+    if (!sceneDialogMounted) setSceneEditOpen(false)
+  }, [sceneDialogMounted])
+
   const showActions = !editing && kind !== 'system' && kind !== 'streaming'
   // Holds the label rather than a boolean so the footer receives it narrowed.
   const worldTimeFooterLabel =
@@ -879,7 +888,7 @@ export function EntryCard({
             onOpenSceneEdit={sceneEdit?.open}
             editTriggerRef={sceneTriggerRef}
           />
-          {sceneEdit != null && !useSceneRequest && sceneOptions != null ? (
+          {sceneDialogMounted && sceneOptions != null ? (
             <SceneEditDialog
               open={sceneEditOpen}
               onOpenChange={setSceneEditOpen}
