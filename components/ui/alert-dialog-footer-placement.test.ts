@@ -1,70 +1,115 @@
 import { readFileSync } from 'node:fs'
 
 import fg from 'fast-glob'
+import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 
-// AlertDialogContent scrolls its body and pins the actions row, but it can only pin a
-// footer it can see among its own children. A footer returned from a body component
-// renders inside the scroll region instead and silently scrolls away with the content
-// — the exact failure the pin exists to prevent, and nothing types or throws.
-const CONTENT_OPEN = /<AlertDialogContent\b/g
-const CONTENT_CLOSE = '</AlertDialogContent>'
-const FOOTER_OPEN = /<AlertDialogFooter\b/g
+// AlertDialogContent scrolls its body and pins the actions row, but it pins by identity
+// over its own direct children (`child.type === AlertDialogFooter`). A footer one level
+// deeper — returned from a body component, or wrapped in a View or a fragment — is
+// invisible to that partition, renders inside the scroll region and silently scrolls
+// away with the content: the exact failure the pin exists to prevent, and nothing types
+// or throws. Nesting depth is the whole question, so this reads JSX ancestry rather than
+// source positions.
+const CONTENT_TAG = 'AlertDialogContent'
+const FOOTER_TAG = 'AlertDialogFooter'
 
-function contentSpans(src: string): { start: number; end: number }[] {
-  const spans: { start: number; end: number }[] = []
-  for (const open of src.matchAll(CONTENT_OPEN)) {
-    const end = src.indexOf(CONTENT_CLOSE, open.index)
-    if (end !== -1) spans.push({ start: open.index, end })
+type JsxNode = ts.JsxElement | ts.JsxSelfClosingElement | ts.JsxFragment
+
+function isJsxNode(node: ts.Node): node is JsxNode {
+  return ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node) || ts.isJsxFragment(node)
+}
+
+function tagNameOf(node: JsxNode): string | null {
+  if (ts.isJsxFragment(node)) return null
+  const tag = ts.isJsxElement(node) ? node.openingElement.tagName : node.tagName
+  return tag.getText(node.getSourceFile())
+}
+
+/**
+ * Expression containers are transparent here on purpose: `{cond ? <Footer/> : null}` and
+ * `{rows.map(...)}` still reach the partition as direct children, because React resolves
+ * the expression and `Children.toArray` flattens arrays. Only a JSX node in between — an
+ * element or a fragment — actually buries the footer.
+ */
+function nearestJsxAncestor(node: ts.Node): JsxNode | null {
+  for (let parent = node.parent; parent != null; parent = parent.parent) {
+    if (isJsxNode(parent)) return parent
   }
-  return spans
+  return null
 }
 
 export function findFootersOutsideContent(files: { path: string; src: string }[]): string[] {
   const offenders: string[] = []
   for (const { path, src } of files) {
-    const spans = contentSpans(src)
-    let index = 0
-    for (const footer of src.matchAll(FOOTER_OPEN)) {
-      index += 1
-      const inside = spans.some((s) => footer.index > s.start && footer.index < s.end)
-      if (!inside) offenders.push(`${path}: footer #${index}`)
+    if (!src.includes(FOOTER_TAG)) continue
+    const source = ts.createSourceFile(path, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+    const visit = (node: ts.Node) => {
+      if (isJsxNode(node) && tagNameOf(node) === FOOTER_TAG) {
+        const host = nearestJsxAncestor(node)
+        if (host == null || tagNameOf(host) !== CONTENT_TAG) {
+          const { line } = source.getLineAndCharacterOfPosition(node.getStart(source))
+          offenders.push(`${path}:${line + 1}`)
+        }
+      }
+      ts.forEachChild(node, visit)
     }
+    visit(source)
   }
   return offenders
 }
 
 const INLINE = `
-  <AlertDialogContent>
-    <AlertDialogHeader />
+<AlertDialogContent>
+  <AlertDialogHeader />
+  <AlertDialogFooter><AlertDialogCancel /></AlertDialogFooter>
+</AlertDialogContent>
+`
+// A conditional footer still arrives as a direct child — the detector must not read the
+// expression container as nesting, or every staged dialog becomes a false positive.
+const CONDITIONAL = `
+<AlertDialogContent>
+  {stage === 'options' ? (
     <AlertDialogFooter><AlertDialogCancel /></AlertDialogFooter>
-  </AlertDialogContent>
+  ) : null}
+</AlertDialogContent>
 `
 // The shape the embedder swap dialog shipped with: a stage pane returning header,
 // body and footer together, with only the pane as the content's child.
 const IN_A_PANE = `
-  <AlertDialogContent>
-    <Pane />
-  </AlertDialogContent>
-  function Pane() {
-    return (
-      <>
-        <AlertDialogHeader />
-        <AlertDialogFooter><AlertDialogCancel /></AlertDialogFooter>
-      </>
-    )
-  }
+<AlertDialogContent>
+  <Pane />
+</AlertDialogContent>
+function Pane() {
+  return (
+    <>
+      <AlertDialogHeader />
+      <AlertDialogFooter><AlertDialogCancel /></AlertDialogFooter>
+    </>
+  )
+}
+`
+// Textually inside the content, structurally one element down: the layout wrapper is
+// enough to hide the footer from the partition.
+const WRAPPED = `
+<AlertDialogContent>
+  <AlertDialogHeader />
+  <View className="gap-2">
+    <AlertDialogFooter><AlertDialogCancel /></AlertDialogFooter>
+  </View>
+</AlertDialogContent>
 `
 
 describe('every AlertDialogFooter renders where the primitive can pin it', () => {
-  it('tells a nested footer from a direct one (detector is not vacuous)', () => {
+  it('reads nesting, not position (detector is not vacuous)', () => {
     expect(
       findFootersOutsideContent([
-        { path: 'components/a.tsx', src: INLINE },
-        { path: 'components/b.tsx', src: IN_A_PANE },
-        { path: 'components/c.tsx', src: INLINE + IN_A_PANE },
+        { path: 'ok-inline.tsx', src: INLINE },
+        { path: 'ok-conditional.tsx', src: CONDITIONAL },
+        { path: 'bad-pane.tsx', src: IN_A_PANE },
+        { path: 'bad-wrapped.tsx', src: WRAPPED },
       ]),
-    ).toEqual(['components/b.tsx: footer #1', 'components/c.tsx: footer #2'])
+    ).toEqual(['bad-pane.tsx:9', 'bad-wrapped.tsx:5'])
   })
 
   it('no shipped footer sits outside its content', async () => {
@@ -75,7 +120,7 @@ describe('every AlertDialogFooter renders where the primitive can pin it', () =>
     const files = paths.map((path) => ({ path, src: readFileSync(path, 'utf8') }))
     expect(
       findFootersOutsideContent(files),
-      'render AlertDialogFooter as a direct child of AlertDialogContent — a footer inside a body component scrolls with the body instead of staying pinned',
+      'render AlertDialogFooter as a direct child of AlertDialogContent — a footer nested in a body component, a View or a fragment scrolls with the body instead of staying pinned',
     ).toEqual([])
   })
 })
