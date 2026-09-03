@@ -94,7 +94,9 @@ export function MultiSelect({
       onSelectAll={handleSelectAll}
       onClearAll={handleClearAll}
       onToggle={handleToggle}
-      disabled={false}
+      // Not `false`: the trigger blocks OPENING while disabled, but an overlay already
+      // open when the prop flips would keep its rows and bulk actions live.
+      disabled={disabled === true}
       insideSheet={usesSheet}
       scroll={usesSheet ? 'sheet' : 'bounded'}
     />
