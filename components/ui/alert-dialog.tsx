@@ -1,6 +1,13 @@
 import * as AlertDialogPrimitive from '@rn-primitives/alert-dialog'
-import { Fragment, type ComponentProps, type ReactNode } from 'react'
-import { Platform, View, type ViewProps } from 'react-native'
+import { Children, Fragment, isValidElement, type ComponentProps, type ReactNode } from 'react'
+import {
+  Platform,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+  type ViewProps,
+} from 'react-native'
 import { FadeIn, FadeOut } from 'react-native-reanimated'
 import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 
@@ -44,9 +51,33 @@ function AlertDialogOverlay({
   )
 }
 
+// The overlay is `position: fixed` and never scrolls, so a panel taller than the
+// viewport escapes past both edges — title above it, actions below it, neither
+// reachable. Cap the panel and scroll its body instead.
+const MAX_HEIGHT_RATIO = 0.9
+
+/**
+ * Splits the actions row out of the scrolling body. A consent gate is answered by
+ * its actions, so they stay pinned however long the body runs. Unlike Dialog, this
+ * primitive can partition on its consumers' behalf: every one renders the footer as
+ * a direct child (docs/ui/patterns/alert-dialog.md → Rich content via composition). A
+ * footer returned from inside a body component is invisible here and scrolls with it.
+ */
+function partitionActions(children: ReactNode): { body: ReactNode[]; actions: ReactNode[] } {
+  const body: ReactNode[] = []
+  const actions: ReactNode[] = []
+  for (const child of Children.toArray(children)) {
+    if (isValidElement(child) && child.type === AlertDialogFooter) actions.push(child)
+    else body.push(child)
+  }
+  return { body, actions }
+}
+
 function AlertDialogContent({
   className,
   portalHost,
+  style,
+  children,
   ...props
 }: ComponentProps<typeof AlertDialogPrimitive.Content> & {
   portalHost?: string
@@ -56,6 +87,8 @@ function AlertDialogContent({
   // stays mounted with the consumer for the life of the surface.
   const { open } = AlertDialogPrimitive.useRootContext()
   useRegisteredOverlay(open)
+  const { height } = useWindowDimensions()
+  const { body, actions } = partitionActions(children)
   return (
     <AlertDialogPortal hostName={portalHost}>
       <AlertDialogOverlay>
@@ -65,8 +98,17 @@ function AlertDialogContent({
             Platform.select({ web: 'animate-fade-in' }),
             className,
           )}
+          // Flattened, not an array: Radix's AlertDialogContent slots its children
+          // through an extra Slottable layer that spreads style, turning an array into
+          // indexed keys the DOM rejects. Dialog's content has no such layer.
+          style={StyleSheet.flatten([{ maxHeight: height * MAX_HEIGHT_RATIO }, style])}
           {...props}
-        />
+        >
+          <ScrollView className="shrink" contentContainerClassName="gap-4">
+            {body}
+          </ScrollView>
+          {actions}
+        </AlertDialogPrimitive.Content>
       </AlertDialogOverlay>
     </AlertDialogPortal>
   )

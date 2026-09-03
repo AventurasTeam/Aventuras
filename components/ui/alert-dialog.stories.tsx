@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
+import { expect, screen } from 'storybook/test'
 
 import { themes } from '@/lib/themes'
 
@@ -198,4 +199,89 @@ export const ThemeMatrix: Story = {
       ))}
     </View>
   ),
+}
+
+// Crash recovery is the shape that forced the cap: one sentence per orphaned
+// pipeline run, with nothing bounding the count.
+const RECOVERY_SENTENCES = Array.from(
+  { length: 12 },
+  (_, i) =>
+    `An interrupted background memory update in Story ${i + 1} could not be undone. ` +
+    'Memory updates for this story are paused so nothing is duplicated — your story ' +
+    'content is intact, and restarting the app retries automatically.',
+)
+
+function scrollersBetween(from: HTMLElement, stop: HTMLElement): HTMLElement[] {
+  const found: HTMLElement[] = []
+  for (let el = from.parentElement; el != null && el !== stop; el = el.parentElement) {
+    const overflowY = getComputedStyle(el).overflowY
+    if (overflowY === 'auto' || overflowY === 'scroll') found.push(el)
+  }
+  return found
+}
+
+export const TallContent: Story = {
+  render: () => (
+    <AlertDialog open>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Recovery incomplete</AlertDialogTitle>
+          <AlertDialogDescription>{RECOVERY_SENTENCES.join(' ')}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel asChild>
+            <Button variant="secondary">
+              <Text>Cancel</Text>
+            </Button>
+          </AlertDialogCancel>
+          <AlertDialogAction asChild>
+            <Button variant="primary">
+              <Text>Continue</Text>
+            </Button>
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  ),
+  play: async () => {
+    const panel = (await screen.findByText('Recovery incomplete')).closest(
+      '[role="alertdialog"]',
+    ) as HTMLElement
+    const rect = panel.getBoundingClientRect()
+
+    expect(rect.height).toBeLessThanOrEqual(window.innerHeight * 0.9 + 1)
+    expect(rect.top).toBeGreaterThanOrEqual(0)
+    expect(rect.bottom).toBeLessThanOrEqual(window.innerHeight + 1)
+
+    const body = screen.getByText(RECOVERY_SENTENCES.join(' '))
+    const bodyScrollers = scrollersBetween(body, panel)
+    expect(bodyScrollers).toHaveLength(1)
+    const scroller = bodyScrollers[0]
+    expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight)
+
+    // The actions row is the whole point of a consent gate, so it is partitioned
+    // out of the scroll region rather than scrolled to.
+    const actions = ['Cancel', 'Continue'].map((name) => screen.getByRole('button', { name }))
+    for (const action of actions) {
+      expect(scrollersBetween(action, panel)).toHaveLength(0)
+      expect(scroller.contains(action)).toBe(false)
+    }
+
+    const before = actions.map((a) => a.getBoundingClientRect())
+    for (const [i, action] of actions.entries()) {
+      expect(before[i].bottom).toBeLessThanOrEqual(window.innerHeight + 1)
+      const topMost = document.elementFromPoint(
+        Math.floor(before[i].left + before[i].width / 2),
+        Math.floor(before[i].top + before[i].height / 2),
+      )
+      expect(action.contains(topMost) || action === topMost).toBe(true)
+    }
+
+    scroller.scrollTop = scroller.scrollHeight
+    for (const [i, action] of actions.entries()) {
+      const after = action.getBoundingClientRect()
+      expect(after.top).toBeCloseTo(before[i].top, 0)
+      expect(after.bottom).toBeCloseTo(before[i].bottom, 0)
+    }
+  },
 }

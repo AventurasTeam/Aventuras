@@ -409,6 +409,12 @@ body that scrolls and shrinks, with the actions row outside it. The
 scene editor does this, which is why it reads identically on both
 tiers.
 
+[AlertDialog](./alert-dialog.md#rich-content-via-composition) pins
+its actions in the primitive instead, because its consumers do
+render the footer as a direct child. The divergence is in what each
+primitive can see among its own children, not in what the two
+surfaces want.
+
 This is the opposite default from
 [Sheet](#sheet--api-surface), which ships no scroll wrapper at all.
 The asymmetry is deliberate. A Sheet is bounded by its detent, so a

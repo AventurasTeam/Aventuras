@@ -86,6 +86,11 @@ slice plans when relevant.
   — the portal delivers `value` one commit late and RN's sync
   effect rewrites native text; route fields through
   `Input` / `Textarea`, never raw controlled TextInput in overlays.
+- [A Radix Slottable layer spreads a style array](./radix-slottable-style-array.md)
+  — `AlertDialogContent` merges through an extra slot, so a style
+  array becomes indexed keys the DOM rejects; pass
+  `StyleSheet.flatten`, and never assume the sibling primitive's
+  shape carries over.
 - [Dialog claims the touch responder](./dialog-content-responder-claim.md)
   — native `Content` blocks ScrollView scroll interception on
   Android; scrolling is flaky to start, fine once moving.
