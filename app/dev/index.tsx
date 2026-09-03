@@ -44,6 +44,7 @@ const ROUTES = [
   { href: '/dev/chip-tag', label: 'Chip + Tag' },
   { href: '/dev/accordion', label: 'Accordion' },
   { href: '/dev/alert-dialog', label: 'AlertDialog' },
+  { href: '/dev/dialog', label: 'Dialog' },
   { href: '/dev/toast', label: 'Toast' },
 ] as const
 

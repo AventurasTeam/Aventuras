@@ -65,8 +65,13 @@ Calendar swap-warning's W1 / W2 / W3 sub-warning blocks compose the same way —
 
 **Width.** `max-w-lg` (512px) accommodates both v1 consumers (rollback ~440px, calendar ~480px). Single max-width.
 
-**Scroll on overflow.** Not handled in v1. Both v1 consumers have bounded content. If a future site needs unbounded content, see
-[`parked.md → AlertDialog scroll-on-overflow`](../../parked.md#alertdialog-scroll-on-overflow).
+**Scroll on overflow.** `AlertDialogContent` caps itself at 90% of the window height and scrolls its body. The cap is measured from `useWindowDimensions()` rather than a `vh` unit, which native has no equivalent for. Without it a panel taller than the viewport grows past both edges of an overlay that never scrolls, and neither the title above nor the actions below are reachable.
+
+**The actions row never scrolls.** `AlertDialogFooter` is partitioned out of the scroll region and pinned under it, so a consent gate can be answered however long its body runs. This is where AlertDialog diverges from [Dialog](./overlays.md#dialog--height-and-scroll), which scrolls everything it is handed: the partition is possible only because every consumer renders the footer as a **direct child** of `AlertDialogContent`. A footer returned from inside a body component is invisible to the primitive and scrolls with the body. The embedder swap dialog was the one consumer in that shape and no longer is: its stage panes render body only, and the single footer is the content's own child, switching its buttons per stage. `alert-dialog-footer-placement.test.ts` holds the contract mechanically, since nothing types or throws when a footer drifts back inside a pane.
+
+The consumer that forced the cap is the [crash recovery modal](../../generation-pipeline.md#recovery-modal): one sentence per orphaned pipeline run across every story, uncapped, in a gate whose only exit is its own OK button.
+
+**Verified on native.** Measured on an Android emulator at 1080x2400 (`app/dev/alert-dialog.tsx`, 2026-09-03): the panel settled at exactly 2160px, the body scroller clamped at the panel edge, the last row was reachable, and both action buttons held identical bounds across a full scroll.
 
 ## Destructive CTA via Button composition
 
@@ -96,4 +101,4 @@ No `tone` / `severity` prop on AlertDialog itself — the variant axis would dup
 
 ## Storybook
 
-`Primitives/AlertDialog` — basic two-button, destructive (rollback shape with impact list), structured sub-warnings (calendar swap-warning shape), long-content informational, ThemeMatrix.
+`Primitives/AlertDialog` — basic two-button, destructive (rollback shape with impact list), structured sub-warnings (calendar swap-warning shape), long-content informational, ThemeMatrix, and `TallContent`, which asserts the cap and that the actions row sits outside the scroll region and does not move when the body is scrolled to its end.

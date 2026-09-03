@@ -173,9 +173,14 @@ plus the chosen advance in the same transaction. No structural
 exception is required; the next AI reply's "delta added to previous
 `worldTime`" rule picks the advanced base up naturally.
 
-Deferred 2026-07-23 while settling the world-state-block edit surface
-(see [`followups.md`](./followups.md)); the edit hook stays in place so
-this lands as an addition rather than a re-derivation.
+Deferred 2026-07-23 while the world-state-block edit surface was still
+being settled; that pass shipped 2026-09-03 and kept the edit hook, so
+this still lands as an addition rather than a re-derivation. It also
+resolved the emitted delta's basis at prompt-build time, branching on
+whether the tail user action advanced time — so the reply-side half of
+the paragraph above is already built, and the composer control is what
+stays unbuilt. The original deferral reason is spent; the entry is
+parked on scope alone.
 
 #### Prompt-pack editor (desktop spec + mobile retrofit)
 
@@ -2126,19 +2131,6 @@ chosen to be readable without pause. If error toasts (7s) prove
 too short in practice — e.g., users report missing the message
 while skimming — implement as a per-toast `Date.now()` pause /
 resume on the timer.
-
-#### AlertDialog scroll-on-overflow
-
-[`ui/patterns/alert-dialog.md`](./ui/patterns/alert-dialog.md)
-ships v1 without scroll handling on the dialog body. v1 consumers
-(rollback confirm, calendar swap-warning, branch / entity delete
-confirms) all carry bounded content. If a future call-site needs
-unbounded content (e.g. very long impact lists, large preview
-blocks), add `max-h` + `overflow-auto` to the dialog body region
-between header and footer.
-
-Surface again when a use case forces it; until then the centered
-modal stays bounded by content.
 
 #### Filter chip pill→square wireframe consolidation
 

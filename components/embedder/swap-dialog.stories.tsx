@@ -202,3 +202,49 @@ export const ReopenResetsPickPane: Story = {
     expect(screen.getByRole('button', { name: t('storySettings:swap.next') })).toBeDisabled()
   },
 }
+
+// The candidate list is whatever is installed on disk, not the download catalog —
+// `getCatalogEntry(...)?.displayName ?? model.id` in memory-panel.tsx exists precisely
+// because a sideloaded model has no catalog row. Nothing bounds its length.
+const manyCandidates: SwapCandidate[] = Array.from({ length: 14 }, (_, i) => ({
+  target: { modelId: `model-${i}`, backend: 'local' as const },
+  label: `Embedding model ${i + 1}`,
+  sourceLabel: LOCAL_SOURCE,
+  isCurrent: i === 0,
+}))
+
+export const ManyCandidatesKeepActionsPinned: Story = {
+  args: { open: true, candidates: manyCandidates, ...handlers },
+  play: async () => {
+    const panel = screen.getByRole('alertdialog')
+    expect(panel.getBoundingClientRect().height).toBeLessThanOrEqual(window.innerHeight * 0.9 + 1)
+
+    const next = screen.getByRole('button', { name: t('storySettings:swap.next') })
+    const cancel = screen.getByRole('button', { name: t('storySettings:swap.cancel') })
+
+    let scroller: HTMLElement | null = null
+    for (
+      let el = screen.getByTestId('swap-candidate-local:model-0').parentElement;
+      el != null && el !== panel;
+      el = el.parentElement
+    ) {
+      const overflowY = getComputedStyle(el).overflowY
+      if (overflowY === 'auto' || overflowY === 'scroll') {
+        scroller = el
+        break
+      }
+    }
+    expect(scroller).not.toBeNull()
+    expect(scroller!.scrollHeight).toBeGreaterThan(scroller!.clientHeight)
+
+    // The stage panes render body only; the footer is the content's own child.
+    expect(scroller!.contains(next)).toBe(false)
+    expect(scroller!.contains(cancel)).toBe(false)
+
+    const before = [next, cancel].map((el) => el.getBoundingClientRect().top)
+    scroller!.scrollTop = scroller!.scrollHeight
+    const after = [next, cancel].map((el) => el.getBoundingClientRect().top)
+    expect(after[0]).toBeCloseTo(before[0], 0)
+    expect(after[1]).toBeCloseTo(before[1], 0)
+  },
+}

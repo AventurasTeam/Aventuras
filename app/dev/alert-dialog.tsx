@@ -93,6 +93,46 @@ export default function AlertDialogDevRoute() {
         </View>
 
         <View>
+          <Heading level={3}>Overflowing body — cap, scroll, pinned actions</Heading>
+          <View className="mt-3">
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="secondary">
+                  <Text>Open overflowing dialog</Text>
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Recovery incomplete</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    One line per orphaned run, with nothing bounding the count.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <View className="gap-1">
+                  {Array.from({ length: 40 }, (_, i) => (
+                    <Text key={i} size="sm">
+                      {`An interrupted background update in Story ${i + 1} could not be undone.`}
+                    </Text>
+                  ))}
+                </View>
+                <AlertDialogFooter>
+                  <AlertDialogCancel asChild>
+                    <Button variant="secondary">
+                      <Text>Cancel</Text>
+                    </Button>
+                  </AlertDialogCancel>
+                  <AlertDialogAction asChild>
+                    <Button variant="primary">
+                      <Text>Acknowledge</Text>
+                    </Button>
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </View>
+        </View>
+
+        <View>
           <Heading level={3}>Calendar swap — structured sub-warnings</Heading>
           <View className="mt-3">
             <AlertDialog>
