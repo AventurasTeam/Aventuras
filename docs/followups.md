@@ -13,52 +13,16 @@ for the placement rule.
 
 ## UX
 
-- **World-state block: implement the specced panel, editor and strip.**
-  Design settled 2026-09-02; the pass is specced and ready to build,
-  outside the slice-shaped workflow. Canonical spec:
-  [`ui/patterns/entry-card.md → World-state panel`](./ui/patterns/entry-card.md#world-state-panel)
-  for the render, emitted-vs-applied rules and scene editor;
-  [`data-model.md → Entry metadata shape`](./data-model.md#entry-metadata-shape)
-  for `stateReport`; and
-  [`memory/piggyback.md → Persistence and stripping`](./memory/piggyback.md#persistence-and-stripping)
-  for the write-path strip and what happens to the four `promptProse`
-  consumers. Two things stay open and must be settled inside the
-  implementation, not before it:
-  - **`world_time_delta` needs a computed prompt variable, not static
-    text.** The current wording ("seconds elapsed since the previous
-    entry") is ambiguous about time consumed by the user's action.
-    Resolve it at prompt-build time by comparing the user entry's
-    `worldTime` against the preceding AI entry's: equal means the action
-    carries no time of its own and the delta must include it; unequal
-    means the action already advanced time and the delta measures from
-    its end. Deterministic, and forward-compatible with both regenerate
-    and the parked submit-with-time affordance. Untouched by the design
-    pass — it is a prompt-side concern, not a render or storage one.
-  - **Serialize the entry-metadata writers before this pass adds a
-    second ungated one.** Routed here from the Slice 3.12 split
-    (2026-08-19): `updateStoryEntryMetadata`'s handler is a
-    whole-column replace, `updateEntryWorldTime` reads
-    `current.metadata` outside the transaction, and its `withKeyLock`
-    key is per-action — the interleave is unreachable today only
-    because both pipeline writers run `hard-gate` (verified at both
-    gate checks, 2026-08-19). The scene editor is the first ungated
-    second writer, so it inherits the fix and should design it with
-    both writers in hand: field-merge inside the handler plus a shared
-    per-row lock key (sharing a key with the current outer lock
-    deadlocks — `withKeyLock` is not reentrant), or the payload built
-    inside the transaction, which needs a callback-shaped bridge
-    transaction and is much larger. Raised 2026-08-16 by the Slice 3.8
-    review. **Prerequisite**, not a parallel task.
-
 - **"Save and regen" on content edits.** Editing a `user_action` after
   its reply exists diverges the story silently — the reply answers text
   that no longer exists — and that divergence is legitimate user
   freedom, not a bug to detect. A second button beside Save makes it
-  self-documenting and hints that a regen may be wanted. Re-filed here
-  2026-09-02 from the world-state-block item, where it had been recorded
-  as part of that edit surface: it belongs to **content** editing, and
-  on the scene editor it is self-defeating, since regenerating re-runs
-  piggyback and overwrites the scene edit just saved.
+  self-documenting and hints that a regen may be wanted. Scoped to
+  **content** editing alone: on the
+  [scene editor](./ui/patterns/entry-card.md#scene-editor) the same button
+  defeats itself, since regenerating re-runs piggyback and overwrites the
+  scene edit just saved. Split out 2026-09-02 from the world-state-block
+  pass, which shipped without it.
 
 - **Happening involvements drift when scene membership is edited after
   the fact.** Involvements record who was present at an entry, so a later
@@ -74,8 +38,10 @@ for the placement rule.
   parks the manual-edit-vs-overwrite policy as its own question). Raised
   as an open question on
   [Slice 3.3](./implementation/milestones/03-memory-floor/slices/03-classifier.md);
-  it outlived the slice because the trigger is the world-state-block edit
-  surface above, not the classifier itself.
+  it outlived the slice because the trigger is the edit surface, not the
+  classifier itself — and that surface shipped 2026-09-03 as the
+  [scene editor](./ui/patterns/entry-card.md#scene-editor), so the drift is
+  reachable today rather than anticipated.
 
 - **Entry content edits are irreversible, and that may read as a bug
   from the user's side.** `story_entries.content` is the delta log's
@@ -93,15 +59,16 @@ for the placement rule.
   nothing to the backward one, so it is pure loss where every other
   action trades redo for undo. Narrowing it is therefore a canon
   change, not a blast-radius fix, and cannot be split off from the
-  question below (re-verified 2026-08-24). Meanwhile the metadata
-  edits landing on the same card are fully delta-logged and
-  reversible, so one entry will carry two adjacent edit affordances
-  with opposite reversibility and no visible reason for the
-  difference. The exemption is a
+  question below (re-verified 2026-08-24). The metadata edits on the
+  same card are fully delta-logged and reversible, so an entry now
+  carries two adjacent edit affordances with opposite reversibility and
+  no visible reason for the difference — the world-time footer and the
+  scene editor both reverse, the content edit does not. The exemption is a
   deliberate storage-economy decision, not an oversight — the open
   question is whether the UX is defensible as-is, wants an editor-local
-  undo stack, or wants the redo-clear narrowed. Not scoped to the
-  world-state-block work; surfaced alongside it 2026-07-23.
+  undo stack, or wants the redo-clear narrowed. Surfaced 2026-07-23
+  alongside the world-state-block design but never scoped into it; that
+  pass shipped 2026-09-03 and left this untouched.
 
 - **Q3 needs an overhaul and a re-spec, not signal-by-signal patches.**
   [`retrieval.md → Q3`](./memory/retrieval.md#q3-heuristic-prose-extract)
@@ -205,12 +172,14 @@ for the placement rule.
 - **The Dialog scroll region is unverified on native RN.** The cap and
   its scroll host were verified on web (desktop Electron, measured) and
   inside the reader's WebView at tablet tier — both RN-Web. The native
-  React Native path was never exercised on a device. Its consumers are
-  `CollisionResolveDialog` and the wizard session seam at tablet tier,
-  plus `ImportDialog`, which opts in at phone tier only
-  (`scrollable={isPhone}`) because its issue list expands inline there
-  — that one has no production consumer yet, so it is reachable in
-  Storybook and nowhere else. The specific unknown is whether a
-  `flexShrink` scroll view clamps against the parent's `maxHeight` the
-  way it does under RN-Web. Worth one Android pass when either surface
-  is next touched. Raised 2026-09-02.
+  React Native path was never exercised on a device. The surface is
+  narrower than it reads: six files render `DialogContent`, and four
+  bound their own body and opt out — the collision resolver, the
+  embedder download, the wizard's AI-assist panel and the scene editor.
+  That leaves the wizard session seam on the default host, plus
+  `ImportDialog`, which keeps it at phone tier only
+  (`scrollable={isPhone}`) and still has no production consumer. The
+  specific unknown is whether a `flexShrink` scroll view clamps against
+  the parent's `maxHeight` the way it does under RN-Web. Worth one
+  Android pass when either surface is next touched. Raised 2026-09-02;
+  consumer list corrected 2026-09-03.
