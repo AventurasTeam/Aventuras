@@ -61,13 +61,15 @@ export function sceneTrackingActions(args: Args): PipelineAction[] {
   const nowInScene = new Set(after.sceneEntities)
 
   for (const character of entities.filter((e) => e.kind === 'character')) {
-    if (nowInScene.has(character.id) && after.currentLocationId !== null) {
+    if (nowInScene.has(character.id)) {
+      // Null included: an edit that clears the scene's location must clear it on the
+      // members too, or their rows keep naming a location the entry no longer claims.
       actions.push({
         kind: 'updateEntityLocationTracking',
         source,
         payload: { branchId, id: character.id, currentLocationId: after.currentLocationId },
       })
-    } else if (wasInScene.has(character.id) && !nowInScene.has(character.id)) {
+    } else if (wasInScene.has(character.id)) {
       // A lastSeenAt anchored at an unknown location records nothing useful.
       if (previous.currentLocationId !== null) {
         actions.push({
@@ -76,6 +78,10 @@ export function sceneTrackingActions(args: Args): PipelineAction[] {
           payload: {
             branchId,
             id: character.id,
+            // Out of scene, current_location_id tracks the lastSeenAt anchor. Written
+            // rather than left alone because the fold may already have moved them with
+            // a scene this edit says they were never in.
+            currentLocationId: previous.currentLocationId,
             lastSeenAt: {
               entryId: previous.entryId,
               locationId: previous.currentLocationId,

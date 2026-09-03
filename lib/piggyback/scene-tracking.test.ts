@@ -14,7 +14,9 @@ const entities = [
 function payloadsFor(actions: ReturnType<typeof sceneTrackingActions>, id: string) {
   return actions
     .filter((a) => a.kind === 'updateEntityLocationTracking')
-    .map((a) => a.payload as { id: string; currentLocationId?: string; lastSeenAt?: unknown })
+    .map(
+      (a) => a.payload as { id: string; currentLocationId?: string | null; lastSeenAt?: unknown },
+    )
     .filter((p) => p.id === id)
 }
 
@@ -57,6 +59,33 @@ describe('sceneTrackingActions', () => {
     })
   })
 
+  // The fold had already moved char_b to loc_b with the scene. Closing them out with
+  // lastSeenAt alone leaves current_location_id naming a scene the edit says they were
+  // never in, so retrieval keeps placing them there.
+  it('restores the tracked location of a character the edit removed', () => {
+    const actions = sceneTrackingActions({
+      branchId,
+      source: 'user_edit',
+      entities,
+      previous: {
+        entryId: 'ent_0',
+        sceneEntities: ['char_a', 'char_b'],
+        currentLocationId: 'loc_a',
+        worldTime: 100,
+      },
+      before: { sceneEntities: ['char_a', 'char_b'], currentLocationId: 'loc_b' },
+      after: { sceneEntities: ['char_a'], currentLocationId: 'loc_b' },
+    })
+    expect(payloadsFor(actions, 'char_b')).toEqual([
+      {
+        branchId,
+        id: 'char_b',
+        currentLocationId: 'loc_a',
+        lastSeenAt: { entryId: 'ent_0', locationId: 'loc_a', worldTime: 100 },
+      },
+    ])
+  })
+
   // Promotion is a semantic event; no demote action exists and retiring an entity
   // over a scene-list typo is the worse failure. Asserted as what IS written rather
   // than as the absence of a kind the function has no branch for.
@@ -76,11 +105,12 @@ describe('sceneTrackingActions', () => {
       after,
     })
 
-    // Visited, and only their lastSeenAt anchor is written.
+    // Visited, and closed out at the previous entry's location.
     expect(payloadsFor(actions, 'char_a')).toEqual([
       {
         branchId,
         id: 'char_a',
+        currentLocationId: 'loc_a',
         lastSeenAt: { entryId: 'ent_0', locationId: 'loc_a', worldTime: 40 },
       },
     ])
@@ -93,6 +123,27 @@ describe('sceneTrackingActions', () => {
         sceneEntities: after.sceneEntities,
       }),
     ).toEqual([])
+  })
+
+  // "No location" in the editor is a value, not an absence: leaving the members pointed
+  // at the old location makes the entry and the entity rows disagree.
+  it('clears the tracked location of in-scene characters when the scene location is cleared', () => {
+    const actions = sceneTrackingActions({
+      branchId,
+      source: 'user_edit',
+      entities,
+      previous: {
+        entryId: 'ent_0',
+        sceneEntities: ['char_a'],
+        currentLocationId: 'loc_a',
+        worldTime: 100,
+      },
+      before: { sceneEntities: ['char_a'], currentLocationId: 'loc_a' },
+      after: { sceneEntities: ['char_a'], currentLocationId: null },
+    })
+    expect(payloadsFor(actions, 'char_a')).toEqual([
+      { branchId, id: 'char_a', currentLocationId: null },
+    ])
   })
 
   it('re-points every in-scene character when the location alone changed', () => {

@@ -150,6 +150,8 @@ describe('buildPiggybackActions', () => {
       payload: {
         branchId: 'main',
         id: 'char_1',
+        // The scene moved to loc_2 without them; they stay where the anchor puts them.
+        currentLocationId: 'loc_1',
         lastSeenAt: {
           entryId: 'entry_2',
           locationId: 'loc_1',
