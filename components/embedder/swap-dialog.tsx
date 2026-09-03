@@ -79,13 +79,17 @@ export function SwapDialog({
     if (candidate != null) onTargetSelected?.(candidate.target)
   }
 
+  const showOptions = stage === 'options' && selected != null
+
+  // Body and actions are siblings, never wrapped together: AlertDialogContent pins
+  // the footer only among its own direct children, and a stage pane returning both
+  // would hide it (alert-dialog.md -> Rich content via composition).
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange}>
       <AlertDialogContent>
-        {stage === 'options' && selected != null ? (
+        {showOptions && selected != null ? (
           <OptionsPane
             target={selected}
-            onBack={() => setStage('pick')}
             onReindex={() => onReindex(selected.target)}
             onKeep={onKeep}
             onRelabel={() => onRelabel(selected.target)}
@@ -97,11 +101,32 @@ export function SwapDialog({
             candidates={candidates}
             selectedKey={selectedKey}
             onSelect={selectTarget}
-            onNext={() => setStage('options')}
             disabled={disabled}
             disabledReason={disabledReason}
           />
         )}
+        <AlertDialogFooter>
+          {showOptions ? (
+            <Button variant="ghost" onPress={() => setStage('pick')}>
+              <Text>{t('storySettings:swap.back')}</Text>
+            </Button>
+          ) : null}
+          <AlertDialogCancel asChild>
+            <Button variant="secondary">
+              <Text>{t('storySettings:swap.cancel')}</Text>
+            </Button>
+          </AlertDialogCancel>
+          {showOptions ? null : (
+            <Button
+              variant="primary"
+              onPress={() => setStage('options')}
+              disabled={disabled || selectedKey == null}
+              disabledReason={disabled ? disabledReason : undefined}
+            >
+              <Text>{t('storySettings:swap.next')}</Text>
+            </Button>
+          )}
+        </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
   )
@@ -111,19 +136,11 @@ type PickPaneProps = {
   candidates: readonly SwapCandidate[]
   selectedKey: string | null
   onSelect: (key: string) => void
-  onNext: () => void
   disabled: boolean
   disabledReason?: string
 }
 
-function PickPane({
-  candidates,
-  selectedKey,
-  onSelect,
-  onNext,
-  disabled,
-  disabledReason,
-}: PickPaneProps) {
+function PickPane({ candidates, selectedKey, onSelect, disabled, disabledReason }: PickPaneProps) {
   return (
     <>
       <AlertDialogHeader>
@@ -146,22 +163,6 @@ function PickPane({
           )
         })}
       </View>
-
-      <AlertDialogFooter>
-        <AlertDialogCancel asChild>
-          <Button variant="secondary">
-            <Text>{t('storySettings:swap.cancel')}</Text>
-          </Button>
-        </AlertDialogCancel>
-        <Button
-          variant="primary"
-          onPress={onNext}
-          disabled={disabled || selectedKey == null}
-          disabledReason={disabled ? disabledReason : undefined}
-        >
-          <Text>{t('storySettings:swap.next')}</Text>
-        </Button>
-      </AlertDialogFooter>
     </>
   )
 }
@@ -236,7 +237,6 @@ function CandidateRow({
 
 type OptionsPaneProps = {
   target: SwapCandidate
-  onBack: () => void
   onReindex: () => void
   onKeep: () => void
   onRelabel: () => void
@@ -246,7 +246,6 @@ type OptionsPaneProps = {
 
 function OptionsPane({
   target,
-  onBack,
   onReindex,
   onKeep,
   onRelabel,
@@ -307,17 +306,6 @@ function OptionsPane({
           </Text>
         </View>
       </View>
-
-      <AlertDialogFooter>
-        <Button variant="ghost" onPress={onBack}>
-          <Text>{t('storySettings:swap.back')}</Text>
-        </Button>
-        <AlertDialogCancel asChild>
-          <Button variant="secondary">
-            <Text>{t('storySettings:swap.cancel')}</Text>
-          </Button>
-        </AlertDialogCancel>
-      </AlertDialogFooter>
     </>
   )
 }
