@@ -14,23 +14,20 @@ export const entryMetadataSchema = z.object({
   sceneEntities: z.array(z.string()),
   currentLocationId: z.string().nullable(),
   worldTime: z.number().min(0),
-  // What THIS turn's generation reported — authored, never inherited (docs/data-model.md
-  // → Entry metadata shape). `layer` names whoever ultimately supplied the absolute scene
-  // fields above; failedFields / raw describe the failed NARRATIVE attempt and survive a
-  // fallback's write, so the four report states stay distinguishable.
+  // What THIS turn reported — authored, never inherited (docs/data-model.md → Entry
+  // metadata shape). failedFields / raw survive a fallback's write, so the four report
+  // states stay distinguishable.
   stateReport: z
     .object({
       layer: z.enum(['piggyback_tagged_block', 'per_turn_classifier']),
       sceneEntities: z.array(z.string()).optional(),
-      // Optional, never nullable: a leaf must not stack optional over nullable or the null
-      // sentinel becomes ambiguous (data-model.md → Entry mutability & rollback). The model
-      // cannot emit null, so nothing is lost.
+      // Never nullable: optional-over-nullable makes the null sentinel ambiguous
+      // (data-model.md → Entry mutability & rollback), and the model cannot emit null.
       currentLocation: z.string().optional(),
       // As emitted, before apply.ts clamps it — the divergence is what the reader shows.
       worldTimeDelta: z.number().optional(),
-      // What apply.ts actually added to worldTime. Recorded rather than re-derived: the
-      // reader has this entry's worldTime but not the previous one, so it cannot
-      // subtract, and `< 0` catches only one of the three clamp causes.
+      // Recorded, not re-derived: the reader lacks the previous worldTime to subtract,
+      // and `< 0` catches only one of the three clamp causes.
       worldTimeDeltaApplied: z.number().optional(),
       // Literal true so absence is the only other state: a rejection is a fact apply.ts
       // knows, while `emitted !== current` also goes true on any later user edit.

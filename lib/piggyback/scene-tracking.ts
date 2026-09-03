@@ -43,15 +43,10 @@ export function scenePromotionActions(args: {
 }
 
 /**
- * The computed bookkeeping behind a scene change: per-character
- * `current_location_id` and `lastSeenAt` (docs/memory/piggyback.md → What piggyback
- * writes).
- *
- * Three-way rather than two-way. The generation path passes `before === previous` and
- * folds one step; an edit passes this entry's ORIGINAL scene as `before`, so a
- * character the edit removed is still visited and gets their tracking closed. Folding
- * from `previous` alone would skip anyone who was in the original scene but in neither
- * the previous entry's nor the edited one, stranding the location the first fold wrote.
+ * Per-character `current_location_id` and `lastSeenAt` behind a scene change
+ * (docs/memory/piggyback.md → What piggyback writes). Three-way so an edit can pass this
+ * entry's ORIGINAL scene as `before`: folding from `previous` alone would skip a
+ * character in neither the previous nor the edited scene, stranding what the fold wrote.
  */
 export function sceneTrackingActions(args: Args): PipelineAction[] {
   const { branchId, source, entities, previous, before, after } = args

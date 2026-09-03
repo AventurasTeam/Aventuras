@@ -18,12 +18,10 @@ type BuildReportArgs = {
 }
 
 /**
- * The turn's report as persisted: what the model EMITTED, plus what `apply.ts` did with
- * it. Both are recorded because several causes collapse onto the same emitted-vs-current
- * difference (docs/ui/patterns/entry-card.md → Emitted vs. applied).
- *
- * `summary` is deliberately not copied: it has a top-level home on EntryMetadata, and
- * a second copy here would give the reader two sources for one sentence.
+ * What the model EMITTED plus what `apply.ts` did with it — several causes collapse onto
+ * the same emitted-vs-current difference (docs/ui/patterns/entry-card.md → Emitted vs.
+ * applied). `summary` is not copied: it has a top-level home on EntryMetadata, and a
+ * second copy would give the reader two sources for one sentence.
  */
 export function buildStateReport(args: BuildReportArgs): EntryMetadata['stateReport'] {
   const { layer, block, failures, raw, applied } = args

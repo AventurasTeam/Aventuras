@@ -22,26 +22,19 @@ function inFlight(): StoryEntryRejection {
 }
 
 /**
- * Shared by every ungated entry-metadata writer, so their read-then-decide
- * sections serialize against each other. Keyed per ROW rather than per action:
- * two writers with different action names but the same target row are exactly
- * the pair that must not interleave.
- *
- * Must not be reused as the key of any lock held around a call into one of
- * these functions — `withKeyLock` is not reentrant, so the inner call would
- * await the outer's own promise and deadlock. `applyDeltaAction` locks under a
- * `promoteStagedEntity:` prefix for that reason.
+ * Serializes the read-then-decide of every ungated entry-metadata writer. Per ROW, not
+ * per action: same-row writers under different action names are the pair that must not
+ * interleave. Never hold this key around a call into one of them — `withKeyLock` is not
+ * reentrant, so the inner call would await the outer's own promise and deadlock.
  */
 export function entryMetadataLockKey(branchId: string, id: string): string {
   return `entryMetadata:${branchId}:${id}`
 }
 
 /**
- * The lock covers ungated writer vs. ungated writer. Pipeline dispatches of
- * `updateStoryEntryMetadata` do not take it — they are kept apart from these by
- * `hard-gate`, which `isUserEditBlocked` rejects against. What protects a
- * pipeline writer's own stale `tail` snapshot is not the lock but the handler's
- * partial merge (register.ts), since its read happens before the transaction.
+ * Ungated writer vs. ungated writer only: pipeline dispatches are held apart by
+ * `hard-gate`, and their stale `tail` snapshot is answered by the handler's partial
+ * merge (register.ts), not by this lock.
  */
 export async function updateEntryWorldTime(
   branchId: string,

@@ -33,17 +33,10 @@ function sameMembers(a: readonly string[], b: readonly string[]): boolean {
 
 /**
  * Applies a scene correction to the entry AND to world state
- * (docs/ui/patterns/entry-card.md → Scene editor).
- *
- * Restricted to the branch's last story entry: `sceneEntities` and
- * `currentLocationId` drive materialized derived state — per-character
- * `current_location_id`, `lastSeenAt`, staged promotion — which is a fold over
- * entries, so only the tail can be re-folded with nothing downstream to invalidate.
- *
- * Forward-diff rather than reverse-then-reapply. Reversing the turn's delta group
- * would also reverse the `visualChanges` and `transfers` this edit never touched, and
- * "tail story entry" is not "tail of the delta log" — classifier writes lag, which is
- * why the survival anchor exists.
+ * (docs/ui/patterns/entry-card.md → Scene editor). Tail-only because the fields drive a
+ * fold over entries, so only the last one re-folds with nothing downstream to
+ * invalidate. Forward-diff, not reverse-then-reapply: reversing the turn's group would
+ * also undo the `visualChanges` and `transfers` this edit never touched.
  */
 export async function updateEntrySceneFields(
   branchId: string,
