@@ -114,19 +114,20 @@ turn does.
 
 **`story_entries.content` stores prose only.** Both trailing blocks
 are cut from the model's reply at write time; the raw markup never
-reaches the column. The cut **excises each block's own span** rather
-than truncating the reply at it, and it is keyed on the closing tag,
-not on position. Two consequences follow: a block the model emitted
-before the prose loses no narrative (the text on both sides is kept,
-and the misordering is logged), and prose that merely mentions
-`<state>` carries no closer, so it is never mistaken for markup and
-never truncated. A reply that strips to nothing is persisted raw
-instead of committing a blank row. What the block carried is persisted structurally
+reaches the column. What the block carried is persisted structurally
 instead — the scene fields fold into `metadata`'s absolute triple, and
 the full parsed block lands on
 [`metadata.stateReport`](../data-model.md#entry-metadata-shape),
 including the `visual_changes` and `transfers` that otherwise survive
 only as deltas.
+
+**The cut excises each block's own span** rather than truncating the
+reply at it, and it is keyed on the closing tag, not on position. So a
+block the model emitted before the prose loses no narrative — the text
+on both sides is kept, and the misordering is logged — and prose that
+merely mentions `<state>` carries no closer, so it is never mistaken
+for markup and never truncated. A reply that strips to nothing is
+persisted raw rather than committed blank.
 
 Three consequences:
 
