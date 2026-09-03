@@ -7,7 +7,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
 import { View } from 'react-native'
-import { expect, screen, userEvent } from 'storybook/test'
+import { expect, screen } from 'storybook/test'
 
 import { themes } from '@/lib/themes'
 
@@ -160,7 +160,9 @@ function StatefulList({ disabled }: { disabled?: boolean }) {
 
 // The bulk actions sit outside the row list, so gating only onToggle left Select all and
 // Clear all live while a save was in flight — enough to submit one scene and show the
-// failure over another.
+// failure over another. Asserted as disabled rather than as clicks that change nothing:
+// a control announced as enabled is still a trap for keyboard and screen-reader users
+// even when its handler is inert, and user-event refuses to click a truly gated one.
 export const ListDisabled: Story = {
   render: () => (
     <View className="w-72 p-4">
@@ -169,12 +171,13 @@ export const ListDisabled: Story = {
   ),
   play: async () => {
     expect(screen.getByText('selected:1')).toBeVisible()
-    await userEvent.click(screen.getByRole('button', { name: 'Select all' }))
-    expect(screen.getByText('selected:1')).toBeVisible()
-    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
-    expect(screen.getByText('selected:1')).toBeVisible()
-    // The rows stay gated too, which was already true and must remain so.
-    await userEvent.click(screen.getByRole('checkbox', { name: 'retrieval' }))
-    expect(screen.getByText('selected:1')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Select all' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Clear all' })).toBeDisabled()
+    // The rows stay gated too, which was already true and must remain so. Asserted on
+    // the ARIA attributes rather than toBeDisabled: RN-Web renders the row as a div,
+    // which jest-dom never reports as disabled however it is marked up.
+    const row = screen.getByRole('checkbox', { name: 'retrieval' })
+    expect(row).toHaveAttribute('aria-disabled', 'true')
+    expect(row).toHaveAttribute('tabindex', '-1')
   },
 }

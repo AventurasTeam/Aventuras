@@ -44,9 +44,6 @@ type MultiSelectProps = {
   triggerClassName?: string
 }
 
-// Module-level so the memoised Overlay's handler props stay identical across renders.
-function noop(): void {}
-
 function emitSelection(
   next: ReadonlySet<string>,
   options: readonly MultiSelectOption[],
@@ -97,6 +94,7 @@ export function MultiSelect({
       onSelectAll={handleSelectAll}
       onClearAll={handleClearAll}
       onToggle={handleToggle}
+      disabled={false}
       insideSheet={usesSheet}
       scroll={usesSheet ? 'sheet' : 'bounded'}
     />
@@ -227,7 +225,10 @@ export function MultiSelectList({
   )
 
   // Bulk actions are gated with the rows: clearing mid-save leaves the form showing a
-  // failure over a selection that no longer matches what was submitted.
+  // failure over a selection that no longer matches what was submitted. Gated on the
+  // controls rather than by swapping the handlers for no-ops — an inert control that
+  // still takes focus and announces itself as enabled is a trap for keyboard and
+  // screen-reader users, who get no feedback that the press did nothing.
   const inert = disabled === true
   return (
     <View
@@ -241,9 +242,10 @@ export function MultiSelectList({
         options={options}
         selected={normalized}
         state={state}
-        onSelectAll={inert ? noop : handleSelectAll}
-        onClearAll={inert ? noop : handleClearAll}
-        onToggle={inert ? noop : handleToggle}
+        onSelectAll={handleSelectAll}
+        onClearAll={handleClearAll}
+        onToggle={handleToggle}
+        disabled={inert}
         insideSheet={insideSheet}
         scroll={scroll ?? (insideSheet ? 'none' : 'bounded')}
       />
@@ -258,6 +260,8 @@ type OverlayProps = {
   onSelectAll: () => void
   onClearAll: () => void
   onToggle: (value: string) => void
+  /** Whole-list disable — gates the bulk actions and every row. */
+  disabled: boolean
   /** Inside a gorhom bottom sheet — drives the touch row height. */
   insideSheet: boolean
   /** Which scroll host wraps the rows. `'none'` when an ancestor already scrolls. */
@@ -273,6 +277,7 @@ function Overlay({
   onSelectAll,
   onClearAll,
   onToggle,
+  disabled,
   insideSheet,
   scroll,
 }: OverlayProps) {
@@ -281,7 +286,7 @@ function Overlay({
       <Pressable
         accessibilityRole="button"
         onPress={onSelectAll}
-        disabled={state.kind === 'all'}
+        disabled={disabled || state.kind === 'all'}
         className={cn('h-control-xs justify-center px-2', state.kind === 'all' && 'opacity-50')}
       >
         <Text size="xs" className="text-fg-primary">
@@ -291,7 +296,7 @@ function Overlay({
       <Pressable
         accessibilityRole="button"
         onPress={onClearAll}
-        disabled={state.kind === 'none'}
+        disabled={disabled || state.kind === 'none'}
         className={cn('h-control-xs justify-center px-2', state.kind === 'none' && 'opacity-50')}
       >
         <Text size="xs" className="text-fg-primary">
@@ -307,6 +312,7 @@ function Overlay({
       option={option}
       checked={selected.has(option.value)}
       onPress={onToggle}
+      disabled={disabled || option.disabled === true}
       insideSheet={insideSheet}
     />
   ))
@@ -353,6 +359,8 @@ type OptionRowProps = {
   option: MultiSelectOption
   checked: boolean
   onPress: (value: string) => void
+  /** The option's own gate already folded in with the whole list's. */
+  disabled: boolean
   insideSheet: boolean
 }
 
@@ -370,24 +378,25 @@ function NativeWidthSync({ children }: { children: React.ReactNode }) {
   return <View style={style}>{children}</View>
 }
 
-function OptionRow({ option, checked, onPress, insideSheet }: OptionRowProps) {
+function OptionRow({ option, checked, onPress, disabled, insideSheet }: OptionRowProps) {
   const handlePress = useCallback(() => onPress(option.value), [onPress, option.value])
 
   return (
     <Pressable
       accessibilityRole="checkbox"
-      accessibilityState={{ checked, disabled: !!option.disabled }}
+      accessibilityState={{ checked, disabled }}
       onPress={handlePress}
-      disabled={option.disabled}
+      disabled={disabled}
       className={cn(
         'flex-row items-center gap-3 px-row-x-md py-row-y-md',
         insideSheet && 'min-h-control-lg',
         Platform.select({ web: 'hover:bg-bg-raised' }),
         'active:bg-bg-raised',
+        // The whole-list dim lives on the wrapper; only the per-option gate dims a row.
         option.disabled && 'opacity-50',
       )}
     >
-      <Checkbox checked={checked} onCheckedChange={handlePress} disabled={option.disabled} />
+      <Checkbox checked={checked} onCheckedChange={handlePress} disabled={disabled} />
       <Text size="sm" className="flex-1 text-fg-primary">
         {option.label ?? option.value}
       </Text>
