@@ -28,7 +28,10 @@ type BuildReportArgs = {
 export function buildStateReport(args: BuildReportArgs): EntryMetadata['stateReport'] {
   const { layer, block, failures, raw, applied } = args
   const { summary: _summary, ...reported } = block
-  if (Object.keys(reported).length === 0 && failures.length === 0) return undefined
+  // Emptiness is judged on the block as emitted, summary included: a block carrying only
+  // a summary reported state, and suppressing its report would badge the turn as one
+  // where piggyback never ran.
+  if (Object.keys(block).length === 0 && failures.length === 0) return undefined
 
   return {
     layer,

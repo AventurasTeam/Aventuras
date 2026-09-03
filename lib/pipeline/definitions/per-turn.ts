@@ -10,6 +10,7 @@ import {
   buildStateReport,
   parseStateBlock,
   parseSuggestionsBlock,
+  type ParseFieldFailure,
   resolveSuggestionEmission,
   resolveSuggestionItems,
   stripTrailingBlocks,
@@ -187,7 +188,15 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     parsedState.block,
     idMap,
   )
-  const parseFailures = [...parsedState.failures, ...substitutionFailures]
+  // An omitted block is a failed attempt, not silence. parseStateBlock cannot tell the
+  // difference on its own (piggyback-off turns legitimately carry no block), so the
+  // failure is synthesised here, where the gate is known — without it the fallback's
+  // recovered report is identical to a story running with piggyback switched off.
+  const missingBlockFailure: ParseFieldFailure[] =
+    piggybackShouldFire && !parsedState.blockFound
+      ? [{ field: 'state', detail: 'no <state> block in the reply' }]
+      : []
+  const parseFailures = [...parsedState.failures, ...substitutionFailures, ...missingBlockFailure]
 
   // The column stores prose only (docs/memory/piggyback.md → Persistence and
   // stripping); everything the block carried is persisted structurally instead.

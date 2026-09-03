@@ -895,6 +895,86 @@ describe('per-turn pipeline declaration', () => {
     // content no longer carries the markup, so the report is the only remaining copy.
     expect(metadata?.stateReport?.raw).toBe('<state></state>')
   })
+
+  // Omitting the block entirely is the one failure parseStateBlock cannot name on its
+  // own — blockFound: false is also what a piggyback-off turn looks like. Unrecorded,
+  // the fallback's recovery is indistinguishable from a story that never asked.
+  it('records a block-level failure when a capable model emits no <state> at all', async () => {
+    currentStoryStore.set({
+      storyId: 's1',
+      branchId: 'b1',
+      definition,
+      settings: baseSettings({ partialChapterBuffer: 3, piggybackMode: 'on' }),
+    })
+    hydrateEntries(phaseDb, 'b1', [])
+    entitiesStore.hydrate('b1', [])
+    vi.spyOn(appSettingsStore, 'getAppSettings').mockReturnValue({
+      ...APP_SETTINGS_DEFAULTS,
+      providers: [
+        {
+          ...provider,
+          cachedModels: [{ id: 'model-1', capabilities: { taggedBlockReliable: true } }],
+        },
+      ],
+      profiles: [
+        {
+          id: 'prof-narrative',
+          kind: 'narrative',
+          name: 'Narrative',
+          modelRef: { providerId: provider.id, modelId: 'model-1' },
+        },
+      ],
+      defaultProviderId: provider.id,
+    })
+
+    streamTextMock.mockReturnValue({
+      ok: true,
+      modelId: 'model-1',
+      providerId: 'prov-1',
+      stream: {
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'Narrative text and nothing else.' }
+        })(),
+      },
+    })
+
+    ensurePerTurnPipelineRegistered()
+    const narrativeNode = getPipeline(PER_TURN_KIND).phases[2]
+    if (!narrativeNode || !('run' in narrativeNode)) throw new Error('expected narrative phase')
+
+    const intermediates: Record<string, unknown> = {}
+    const gen = narrativeNode.run({
+      actionId: 'act_1',
+      abortSignal: new AbortController().signal,
+      intermediates,
+      log: makeLogger('act_1'),
+      runInTransaction: async () => undefined,
+      db: phaseDb.db,
+      storyId: 's1',
+      branchId: 'b1',
+    })
+    const events = []
+    let next = await gen.next()
+    while (!next.done) {
+      events.push(next.value)
+      next = await gen.next()
+    }
+
+    expect(intermediates.piggybackOutcome).toEqual({ attempted: true, succeeded: false })
+
+    const created = events.find(
+      (e) => e.type === 'delta_emitted' && e.action.kind === 'createStoryEntry',
+    )
+    if (!created || created.type !== 'delta_emitted' || created.action.kind !== 'createStoryEntry')
+      throw new Error('expected a createStoryEntry delta')
+    const { metadata } = created.action.payload.entry
+    expect(metadata?.stateReport?.layer).toBe('piggyback_tagged_block')
+    expect(metadata?.stateReport?.failedFields).toEqual([
+      { field: 'state', detail: 'no <state> block in the reply' },
+    ])
+    // No block, so nothing was stripped and there is no raw remnant to keep.
+    expect(metadata?.stateReport?.raw).toBeUndefined()
+  })
 })
 
 const SUGGESTION_CATEGORIES = [

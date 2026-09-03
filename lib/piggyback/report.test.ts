@@ -105,6 +105,18 @@ describe('buildStateReport', () => {
     expect(report?.raw).toBeUndefined()
   })
 
+  // The layer badge is the point: a summary-only block still reported state, and with no
+  // report at all the entry is indistinguishable from a story with piggyback switched off.
+  it('keeps a layer-only report for a block that carried nothing but a summary', () => {
+    const report = buildStateReport({
+      layer: 'piggyback_tagged_block',
+      block: { summary: 'A sentence.' },
+      failures: [],
+      applied: { worldTimeDelta: 0, currentLocationRejected: false },
+    })
+    expect(report).toEqual({ layer: 'piggyback_tagged_block' })
+  })
+
   it('returns undefined when no block was found and nothing failed', () => {
     expect(
       buildStateReport({ layer: 'piggyback_tagged_block', block: {}, failures: [] }),
