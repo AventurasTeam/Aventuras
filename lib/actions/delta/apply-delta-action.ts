@@ -17,6 +17,12 @@ import { resolveByActionKind, resolveByTable, type HandlerOutcome } from './regi
 
 type Args = { action: PipelineAction; actionId: string; branchId: string; entryId?: string | null }
 
+// Single and group commits must derive this identically or they stop serializing
+// against each other.
+function promoteStagedEntityLockKey(branchId: string, id: string): string {
+  return `promoteStagedEntity:${branchId}:${id}`
+}
+
 // MAX+1-within-branch as a subquery so the assignment is atomic inside the INSERT.
 function nextLogPosition(branchId: string) {
   return sql<number>`(SELECT COALESCE(MAX(${deltas.logPosition}), 0) + 1 FROM ${deltas} WHERE ${deltas.branchId} = ${branchId})`
@@ -68,7 +74,7 @@ export async function applyDeltaAction(args: Args, ctx: DbCtx): Promise<Mutation
   // (loadCurrent, then branch on status) lives inside its handler. An action
   // whose read happens before dispatch must take the lock itself.
   if (action.kind === 'promoteStagedEntity') {
-    return withKeyLock(`promoteStagedEntity:${action.payload.branchId}:${action.payload.id}`, () =>
+    return withKeyLock(promoteStagedEntityLockKey(action.payload.branchId, action.payload.id), () =>
       applyDeltaActionUnlocked(args, ctx),
     )
   }
@@ -126,7 +132,7 @@ type GroupArgs = { actionId: string; branchId: string; entryId?: string | null }
 function promoteLockKeys(actions: readonly PipelineAction[]): string[] {
   const keys = actions.flatMap((a) =>
     a.kind === 'promoteStagedEntity'
-      ? [`promoteStagedEntity:${a.payload.branchId}:${a.payload.id}`]
+      ? [promoteStagedEntityLockKey(a.payload.branchId, a.payload.id)]
       : [],
   )
   // Sorted so two groups sharing a subset of keys acquire them in the same order.
