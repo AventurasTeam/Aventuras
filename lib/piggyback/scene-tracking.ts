@@ -57,13 +57,17 @@ export function sceneTrackingActions(args: Args): PipelineAction[] {
 
   for (const character of entities.filter((e) => e.kind === 'character')) {
     if (nowInScene.has(character.id)) {
-      // Null included: an edit that clears the scene's location must clear it on the
-      // members too, or their rows keep naming a location the entry no longer claims.
-      actions.push({
-        kind: 'updateEntityLocationTracking',
-        source,
-        payload: { branchId, id: character.id, currentLocationId: after.currentLocationId },
-      })
+      // Null propagates only as a genuine CLEAR — the scene had a location and the
+      // change removed it. A null on both sides is "never known" (the generation path
+      // inherits it turn after turn), and writing that through would wipe a location
+      // the character still legitimately holds from an earlier scene or a manual edit.
+      if (after.currentLocationId !== null || before.currentLocationId !== null) {
+        actions.push({
+          kind: 'updateEntityLocationTracking',
+          source,
+          payload: { branchId, id: character.id, currentLocationId: after.currentLocationId },
+        })
+      }
     } else if (wasInScene.has(character.id)) {
       // A lastSeenAt anchored at an unknown location records nothing useful.
       if (previous.currentLocationId !== null) {

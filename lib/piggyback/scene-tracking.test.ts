@@ -146,6 +146,27 @@ describe('sceneTrackingActions', () => {
     ])
   })
 
+  // The generation path inherits a null location turn after turn. Treating that as a
+  // clear would wipe current_location_id on every locationless turn for every in-scene
+  // character, stranding a location seeded on the entity or set by an earlier scene.
+  it('leaves tracked locations alone when the scene never had a location', () => {
+    const actions = sceneTrackingActions({
+      branchId,
+      source: 'ai_classifier',
+      entities,
+      previous: {
+        entryId: 'ent_0',
+        sceneEntities: ['char_a'],
+        currentLocationId: null,
+        worldTime: 0,
+      },
+      before: { sceneEntities: ['char_a'], currentLocationId: null },
+      after: { sceneEntities: ['char_a', 'char_b'], currentLocationId: null },
+    })
+    expect(payloadsFor(actions, 'char_a')).toEqual([])
+    expect(payloadsFor(actions, 'char_b')).toEqual([])
+  })
+
   it('re-points every in-scene character when the location alone changed', () => {
     const actions = sceneTrackingActions({
       branchId,
