@@ -99,7 +99,10 @@
     "regenerate": "Regenerate",
     "branchFromHere": "Branch from here",
     "flipEra": "Flip era",
-    "deleteEntry": "Delete entry"
+    "deleteEntry": "Delete entry",
+    "editNoticeSceneHere": "This doesn't change the scene details recorded for this entry. Update them separately if the rewrite changes who was present.",
+    "editNoticeFrozen": "Only the newest entry's scene details can be updated. Rewording is safe — but if this changes who was present or what happened, the recorded world state won't follow. Branch from here, or roll back (which deletes this entry and everything after).",
+    "editNoticeFrozenNoBranch": "Only the newest entry's scene details can be updated. Rewording is safe — but if this changes who was present or what happened, the recorded world state won't follow. Rolling back is the only remedy, and it deletes this entry and everything after."
   },
   "worldTimeEdit": {
     "title": "Edit time",
@@ -154,6 +157,7 @@
     "failedInFlight": "Generation is running. Try again once it finishes.",
     "failedNotTail": "Only the newest entry's scene can be edited.",
     "failedNoMetadata": "This entry has no world state to edit.",
-    "failedNotFound": "This entry no longer exists."
+    "failedNotFound": "This entry no longer exists.",
+    "proseNote": "This doesn't change the entry's text. If the prose still names someone you removed, edit it too."
   }
 }

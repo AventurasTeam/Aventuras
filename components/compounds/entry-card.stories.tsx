@@ -192,6 +192,60 @@ export const EditModeWithRegen: StoryT = {
   },
 }
 
+/** Frozen scene on an earlier `user_action`: rollback is named, branching is not. */
+export const EditModeNoticeFrozenNoBranch: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    kind: 'user_action',
+    content: 'I draw my sword and step toward the figure in the doorway.',
+    editing: true,
+    contentEditNotice: 'scene-frozen',
+    onContentChange: fn(),
+    onCommitEdit: fn(),
+    onCancelEdit: fn(),
+  },
+  play: async () => {
+    await expect(screen.getByText(/Rolling back is the only remedy/)).toBeVisible()
+    expect(screen.queryByText(/Branch from here/)).not.toBeInTheDocument()
+  },
+}
+
+/** The same frozen scene on a reply, whose action cluster does carry a branch. */
+export const EditModeNoticeFrozen: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    editing: true,
+    contentEditNotice: 'scene-frozen',
+    onContentChange: fn(),
+    onCommitEdit: fn(),
+    onCancelEdit: fn(),
+  },
+  play: async () => {
+    await expect(screen.getByText(/Branch from here/)).toBeVisible()
+  },
+}
+
+/** Scene still reachable from this row: a nudge, with no structural remedy named. */
+export const EditModeNoticeSceneHere: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    editing: true,
+    contentEditNotice: 'scene-here',
+    onContentChange: fn(),
+    onCommitEdit: fn(),
+    onCancelEdit: fn(),
+  },
+  play: async () => {
+    await expect(screen.getByText(/Update them separately/)).toBeVisible()
+    expect(screen.queryByText(/roll back/)).not.toBeInTheDocument()
+  },
+}
+
 /**
  * The gate is held: the row's controls refuse, the prose does not change
  * shade. Reading is never gated (principles.md → What's not gated), and the
