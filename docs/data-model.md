@@ -2209,6 +2209,26 @@ delta. Consequences:
   text (edited or not). The edit propagates through the fork, which is
   the intended behaviour — text edits are user intent, not narrative
   state that needs reversing.
+- **Memory is not a side-channel, though.** Prose is the classifier's only
+  input, so an edit invalidates every fact it took from the replaced text.
+  The edit reverses the deltas anchored to that entry under
+  `source='periodic_classifier'` and clamps `processedThrough` below it,
+  in the same transaction as the text write. Both halves are required: the
+  clamp alone re-derives beside the stale facts rather than replacing them,
+  and chapter-close dedup will not merge the pair, because its cast-overlap
+  threshold is sized for re-deriving the _same_ fact, not a contradicting
+  one. Scoped by source, not by table — `per_turn_classifier` and
+  `piggyback_tagged_block` write the scene metadata a user may have just
+  corrected by hand, and nothing here may undo that. The suffix sweep stays
+  out: the entry and everything after it survive, since nothing downstream
+  is structurally invalid.
+- **A cross-turn fact re-derives thinner.** A fact synthesised across turns
+  is attributed to the latest contributing turn, and the schema carries one
+  `sourceTurn` per fact, so the earliest contributor is not recoverable and
+  cannot be clamped to. Re-derivation therefore sees the edited entry
+  onward and not the earlier prose that helped produce it. Accepted over
+  clamping a full window back, which would re-derive facts for unedited
+  turns beside their surviving originals.
 
 **Wizard creation is exempt from the delta log.** The wizard's commit
 transaction writes the `stories` row, the initial `branches` row, the

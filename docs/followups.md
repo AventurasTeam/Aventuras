@@ -28,8 +28,7 @@ for the placement rule.
   is the only action that clears the forward path while contributing
   nothing to the backward one, so it is pure loss where every other
   action trades redo for undo. Narrowing it is therefore a canon
-  change, not a blast-radius fix, and cannot be split off from the
-  question below (re-verified 2026-08-24). The metadata edits on the
+  change, not a blast-radius fix (re-verified 2026-08-24). The metadata edits on the
   same card are fully delta-logged and reversible, so an entry now
   carries two adjacent edit affordances with opposite reversibility and
   no visible reason for the difference — the world-time footer and the
@@ -45,60 +44,23 @@ for the placement rule.
   design but never scoped into it; that pass shipped 2026-09-03 and left
   this untouched.
 
-  **A second consequence of writing no delta, found 2026-09-04:** a
-  content edit does not clamp the classifier watermark either, so it is
-  invisible to memory as well as to undo. `classifierWatermarkClampOps`
-  (`lib/actions/story-entries/prose-reversal.ts`) runs inside
-  `bracketProseReversal`, which only prose **reversals** enter;
-  `updateStoryEntryContent` is not one. With `processedThrough` already
-  past the edited entry, the periodic classifier never re-reads the
-  rewritten prose, and the happenings, awareness links and status flips
-  it derived from the text that is now gone simply stand.
+  **The memory half of this is closed** (2026-09-04). A content edit used
+  to leave the classifier's facts standing on prose that was gone, because
+  it clamped no watermark; it now reverses the facts anchored to that entry
+  and clamps below it in the same transaction as the text write, resolved
+  at
+  [`data-model.md → Entry mutability & rollback`](./data-model.md#entry-mutability--rollback).
+  That closes the `Save & regenerate` gap with it: the content clamp lands
+  below the edited `user_action`, and the regenerate sweep's own clamp only
+  lowers, so the next pass reads the edited action rather than skipping it.
+  The user-facing half shipped alongside as
+  [entry-card.md → Divergence notices](./ui/patterns/entry-card.md#divergence-notices).
 
-  **The third taxonomy row, settled 2026-09-04.** The edit lands in a
-  category the
-  [reversal taxonomy](./explorations/2026-06-02-classifier-reversal-quiesce.md)
-  does not have: its discriminator is whether prose **appeared or
-  vanished**, and a content edit does neither — prose changed in place.
-  The row it needs is **watermark clamp plus anchored fact reversal, no
-  positional suffix sweep**. Clamping alone is not enough: it makes the
-  classifier re-read the rewritten prose and derive new facts, but leaves
-  the old prose's facts standing beside them. "Only semantically stale"
-  understates that — stale facts do not heal on re-read, and chapter-close
-  dedup does not catch them, because its ≥50% involvement-overlap
-  threshold is sized for re-deriving the _same_ fact, not a contradicting
-  one. The suffix sweep still stays out: nothing downstream is
-  structurally invalid, and the entry and everything after it survive.
-
-  **The reversal set is queryable today.** Every classifier write carries
-  an entry anchor and a source tag — `PlannedWrite = { action, entryId }`
-  (`lib/classifier/plan.ts`) and `SOURCE = 'periodic_classifier'` — both
-  stamped onto the delta row, so the set is `deltas WHERE branch_id AND
-entry_id AND source = 'periodic_classifier'`, unwound newest-first
-  through the `reverseAndPruneDeltaRows` that `rollbackToEntry` already
-  uses. Both halves ride one transaction, which `resolveSweep` establishes
-  as mandatory (the clamp must not land without the reversal), inside
-  `bracketProseReversal` so no in-flight pass reads pre-sweep prose.
-
-  **Cross-turn synthesis is a known, accepted loss.** The classifier
-  attributes a fact synthesised across turns to the LATEST contributing
-  turn, and the schema carries one `sourceTurn` per fact, so nothing can
-  recover the earliest contributor — clamping to it is not available and
-  reopening that is a schema and prompt change. So a fact anchored to the
-  edited entry re-derives from that entry onward, without the earlier
-  prose that helped produce it, and may come back thinner or not at all.
-  Accepted (2026-09-04) over clamping a full window back, which would
-  re-derive facts for unedited turns beside their surviving originals —
-  trading thinning for duplicates across the window, or widening the
-  reversal to turns the user never touched. It is the same class of
-  bounded imprecision canon already takes on reversal paths.
-
-  **Delta-logging `content` is separable and stays open.** The clamp and
-  the reversal need the edit to enter `bracketProseReversal` and splice
-  ops into its transaction; neither needs `content` itself to write a
-  delta. The edit stays irreversible either way, so one-way fact reversal
-  beside it introduces no new asymmetry. The reversibility question above
-  is therefore its own decision, not a prerequisite.
+  What stays open is reversibility alone. Delta-logging `content` is
+  separable from the fix above — the clamp and the reversal needed the edit
+  to enter `bracketProseReversal` and splice ops into its transaction,
+  neither needed `content` itself to write a delta — so nothing about the
+  memory fix settles or blocks it.
 
   **The machinery is mostly already there** (verified 2026-09-04), which
   argues the hard part is the canon decision, not the implementation.
@@ -111,25 +73,7 @@ entry_id AND source = 'periodic_classifier'`, unwound newest-first
   the shape is seeded as though it exists. What is missing is an action
   kind that writes one: `story_entries` registers only
   `updateStoryEntryMetadata` for updates, and `updateStoryEntryContent`
-  bypasses the action layer entirely.
-
-  **No path closes it today**, including
-  [`Save & regenerate`](./ui/patterns/entry-card.md#save-and-regenerate).
-  Its sweep does clamp, but the clamp is keyed to the entry it removes:
-  `resolveSweep` passes the reply's position, so `processedThrough` lands
-  on `position(reply) - 1` — which is the edited `user_action`'s own
-  position. The next pass reads the new reply (positions strictly above
-  the watermark) and still skips the action whose prose changed. Verified
-  2026-09-04 against `classifierWatermarkClampOps` and the classifier's
-  window query; a content edit is uncovered at every depth, head turn
-  included.
-
-  **The user-facing half shipped separately**, and repairs nothing on its
-  own: the editor now states that a content edit does not update the state
-  recorded from it, in copy that varies by how reachable the branch's live
-  scene is from that row
-  ([entry-card.md → Divergence notices](./ui/patterns/entry-card.md#divergence-notices)).
-  Until the clamp and the reversal land, that notice is the whole remedy.
+  writes `content` outside the action layer.
 
 - **Q3 needs an overhaul and a re-spec, not signal-by-signal patches.**
   [`retrieval.md → Q3`](./memory/retrieval.md#q3-heuristic-prose-extract)
