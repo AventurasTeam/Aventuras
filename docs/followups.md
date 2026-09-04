@@ -13,25 +13,6 @@ for the placement rule.
 
 ## UX
 
-- **Happening involvements drift when scene membership is edited after
-  the fact.** Involvements record who was present at an entry, so a later
-  edit to that entry's `sceneEntities` can contradict them. Rolling back
-  and re-running the classifier pass is disproportionate: it
-  over-reverses (facts anchored to surviving entries must be spared per
-  the survival anchor), costs a full LLM pass for a small correction, and
-  can silently rewrite happenings the user never touched. Prefer flagging
-  affected involvements for review over recomputing, which also matches
-  the established posture that user edits stick only until the classifier
-  reads contradicting prose
-  ([`data-model.md → Authorship contract`](./data-model.md#authorship-contract)
-  parks the manual-edit-vs-overwrite policy as its own question). Raised
-  as an open question on
-  [Slice 3.3](./implementation/milestones/03-memory-floor/slices/03-classifier.md);
-  it outlived the slice because the trigger is the edit surface, not the
-  classifier itself — and that surface shipped 2026-09-03 as the
-  [scene editor](./ui/patterns/entry-card.md#scene-editor), so the drift is
-  reachable today rather than anticipated.
-
 - **Entry content edits are irreversible, and that may read as a bug
   from the user's side.** `story_entries.content` is the delta log's
   single per-column side-channel exemption
@@ -72,21 +53,52 @@ for the placement rule.
   `updateStoryEntryContent` is not one. With `processedThrough` already
   past the edited entry, the periodic classifier never re-reads the
   rewritten prose, and the happenings, awareness links and status flips
-  it derived from the text that is now gone simply stand. Distinct from
-  the involvements-drift item above — that one is about `sceneEntities`
-  contradicting recorded presence; this is the prose itself going stale
-  under facts derived from it.
+  it derived from the text that is now gone simply stand.
 
-  The two halves share a fix. Delta-logging `content` makes the edit a
-  reversal-shaped operation, and the clamp is the natural companion to
-  that record. But it lands the edit in a category the
+  **The third taxonomy row, settled 2026-09-04.** The edit lands in a
+  category the
   [reversal taxonomy](./explorations/2026-06-02-classifier-reversal-quiesce.md)
   does not have: its discriminator is whether prose **appeared or
   vanished**, and a content edit does neither — prose changed in place.
-  It wants the watermark clamp (the classifier must re-read the turn) but
-  not the positional suffix sweep (nothing downstream is structurally
-  invalid, only semantically stale), which is neither of the two rows the
-  table offers. Scoping this followup has to settle that third row.
+  The row it needs is **watermark clamp plus anchored fact reversal, no
+  positional suffix sweep**. Clamping alone is not enough: it makes the
+  classifier re-read the rewritten prose and derive new facts, but leaves
+  the old prose's facts standing beside them. "Only semantically stale"
+  understates that — stale facts do not heal on re-read, and chapter-close
+  dedup does not catch them, because its ≥50% involvement-overlap
+  threshold is sized for re-deriving the _same_ fact, not a contradicting
+  one. The suffix sweep still stays out: nothing downstream is
+  structurally invalid, and the entry and everything after it survive.
+
+  **The reversal set is queryable today.** Every classifier write carries
+  an entry anchor and a source tag — `PlannedWrite = { action, entryId }`
+  (`lib/classifier/plan.ts`) and `SOURCE = 'periodic_classifier'` — both
+  stamped onto the delta row, so the set is `deltas WHERE branch_id AND
+entry_id AND source = 'periodic_classifier'`, unwound newest-first
+  through the `reverseAndPruneDeltaRows` that `rollbackToEntry` already
+  uses. Both halves ride one transaction, which `resolveSweep` establishes
+  as mandatory (the clamp must not land without the reversal), inside
+  `bracketProseReversal` so no in-flight pass reads pre-sweep prose.
+
+  **Cross-turn synthesis is a known, accepted loss.** The classifier
+  attributes a fact synthesised across turns to the LATEST contributing
+  turn, and the schema carries one `sourceTurn` per fact, so nothing can
+  recover the earliest contributor — clamping to it is not available and
+  reopening that is a schema and prompt change. So a fact anchored to the
+  edited entry re-derives from that entry onward, without the earlier
+  prose that helped produce it, and may come back thinner or not at all.
+  Accepted (2026-09-04) over clamping a full window back, which would
+  re-derive facts for unedited turns beside their surviving originals —
+  trading thinning for duplicates across the window, or widening the
+  reversal to turns the user never touched. It is the same class of
+  bounded imprecision canon already takes on reversal paths.
+
+  **Delta-logging `content` is separable and stays open.** The clamp and
+  the reversal need the edit to enter `bracketProseReversal` and splice
+  ops into its transaction; neither needs `content` itself to write a
+  delta. The edit stays irreversible either way, so one-way fact reversal
+  beside it introduces no new asymmetry. The reversibility question above
+  is therefore its own decision, not a prerequisite.
 
   **The machinery is mostly already there** (verified 2026-09-04), which
   argues the hard part is the canon decision, not the implementation.
@@ -111,6 +123,13 @@ for the placement rule.
   2026-09-04 against `classifierWatermarkClampOps` and the classifier's
   window query; a content edit is uncovered at every depth, head turn
   included.
+
+  **The user-facing half shipped separately**, and repairs nothing on its
+  own: the editor now states that a content edit does not update the state
+  recorded from it, in copy that varies by how reachable the branch's live
+  scene is from that row
+  ([entry-card.md → Divergence notices](./ui/patterns/entry-card.md#divergence-notices)).
+  Until the clamp and the reversal land, that notice is the whole remedy.
 
 - **Q3 needs an overhaul and a re-spec, not signal-by-signal patches.**
   [`retrieval.md → Q3`](./memory/retrieval.md#q3-heuristic-prose-extract)

@@ -318,6 +318,33 @@ The affordance belongs to content editing on a `user_action`, where
 the reply genuinely answers text that no longer exists — see
 [Save and regenerate](#save-and-regenerate).
 
+**The prose is not touched.** A scene correction rewrites the absolute
+triple and nothing else, so an entry whose text still narrates the
+character just removed now says one thing and records another. The
+overlay says so, and the tail is the one row where both halves are
+editable, so the remedy is one control away:
+
+> This doesn't change the entry's text. If the prose still names
+> someone you removed, edit it too.
+
+Its mirror on the content editor is specced under
+[Divergence notices](#divergence-notices).
+
+**Unconditional, not matched against the prose.** The line renders
+whenever the overlay does. Firing it only when a removed entity's name
+still appears in the entry text would reuse `matchTerms`
+([`name-index.ts`](../../../lib/retrieval/name-index.ts)) rather than add
+a matcher, but that predicate tests whether the name is present, not
+whether the text contradicts the removal. Mentioned-but-absent is a legal
+scene — "Kael wondered where Mira had gone" names Mira, and removing her
+is the correct edit — so it fires on edits that are already right. It
+also misses most in-scene references, which are pronouns and epithets
+rather than names, and never fires at all for CJK, whose lack of word
+delimiters defeats the boundary lookarounds by design. Wrong in both
+directions is worse than always on: the standing line is always true and
+claims nothing about the particular edit, and its repetition cost is a
+placement and styling problem — a quiet inline line, not a banner.
+
 Failure handling matches the world-time overlay: a rejected or failed
 write keeps the overlay open with the edit intact and reports inline;
 the controls disable and Save shows its loading indicator while
@@ -370,6 +397,74 @@ on Save / Cancel only dismisses the soft keyboard and the user
 needs a second tap to fire the button — RN's default
 `"never"` consumes the dismissal tap. The compound can't fix this
 on its own; the behavior is owned by the parent ScrollView.
+
+### Divergence notices
+
+Editing `content` never updates the state recorded from it. The
+classifier reads prose only — its window carries `promptProse(entry)`
+and no metadata — so a rewrite leaves happenings, involvements and
+awareness standing on text that is gone. Nothing detects that, and on
+an earlier entry nothing can be done about it either, because the
+[scene editor](#scene-editor) refuses every row but the tail. So the
+editor states it, and what it states depends on where the row sits.
+
+**On the tail** both halves are editable, so the notice is a nudge:
+
+> This doesn't change the scene details recorded for this entry.
+> Update them separately if the rewrite changes who was present.
+
+**The `user_action` whose reply is the tail takes the same nudge**, even
+though the row is not itself the tail. Its scene fields are inherited
+rather than authored — `inheritedEntryMetadata` carries `sceneEntities`,
+`currentLocationId` and `worldTime` forward onto every row, including
+`user_action`s that generated nothing
+([data-model → Entry metadata shape](../../data-model.md#entry-metadata-shape))
+— so there is nothing entry-specific to correct on it, and the
+authoritative scene for the current moment is the tail reply's, which the
+scene editor does edit. [Save and regenerate](#save-and-regenerate) is
+offered on this row for the reply half. A structural warning naming
+rollback while both of those sat beside it would be wrong twice over.
+
+**On any earlier entry** the scene is frozen and the only remedies are
+structural. The notice says so rather than implying the edit is
+equivalent:
+
+> Only the newest entry's scene details can be updated. Rewording is
+> safe — but if this changes who was present or what happened, the
+> recorded world state won't follow. Branch from here, or roll back
+> (which deletes this entry and everything after).
+
+**An earlier `user_action` drops the branch clause.** That kind carries
+no branch action ([Per-kind structure](#per-kind-structure)) and
+branching from a user action is not planned, so rollback is the only
+honest answer there — the heavier one, named as such:
+
+> Only the newest entry's scene details can be updated. Rewording is
+> safe — but if this changes who was present or what happened, the
+> recorded world state won't follow. Rolling back is the only remedy,
+> and it deletes this entry and everything after.
+
+Naming rollback's blast radius in the notice is deliberate even though
+the [rollback confirm](../screens/reader-composer/rollback-confirm/rollback-confirm.md)
+already carries the cascade counts and the cannot-be-undone line. A
+notice that recommended rollback without saying what it destroys would
+send the user into that modal unprepared, which is the failure the
+notice exists to prevent — as is naming a control the card does not
+have.
+
+**Placement is edit mode, not the card.** The notice renders inside the
+editor when the textarea opens, never as standing chrome on a non-tail
+card. Most of a branch is non-tail; a permanent banner there is
+wallpaper by the third entry.
+
+**This does not extend to the reply divergence.**
+[Save and regenerate](#save-and-regenerate) deliberately does not warn
+that an edited `user_action` diverges from the reply below it. That
+divergence is legitimate, visible in the prose itself, and has a remedy
+on the same row. State divergence is none of the three: invisible on a
+`user_action`, which renders no world-state panel at all
+([Per-kind structure](#per-kind-structure)); expandable but easy to
+miss elsewhere; and on an earlier row, unreachable short of rollback.
 
 ### Save and regenerate
 
