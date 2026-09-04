@@ -150,6 +150,9 @@ type EntryCardProps = {
   editing?: boolean
   onContentChange?: (next: string) => void
   onCommitEdit?: () => void
+  /** Commit, then re-answer this entry. Presence gates the button — only the head
+   *  turn's `user_action` has a reply a regenerate can replace without cascading. */
+  onCommitEditAndRegen?: () => void
   onCancelEdit?: () => void
 
   className?: string
@@ -736,6 +739,7 @@ export function EntryCard({
   editing,
   onContentChange,
   onCommitEdit,
+  onCommitEditAndRegen,
   onCancelEdit,
   className,
 }: EntryCardProps) {
@@ -918,10 +922,21 @@ export function EntryCard({
               if (e.nativeEvent.key === 'Escape') onCancelEdit?.()
             }}
           />
-          <View className="flex-row justify-end gap-2">
+          <View className="flex-row flex-wrap justify-end gap-2">
             <Button variant="ghost" size="sm" onPress={onCancelEdit} disabled={disabled}>
               <Text>{t('cancel')}</Text>
             </Button>
+            {onCommitEditAndRegen != null ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                onPress={onCommitEditAndRegen}
+                disabled={disabled}
+              >
+                <Icon as={RefreshCw} size="sm" />
+                <Text>{t('reader:entryCard.saveAndRegenerate')}</Text>
+              </Button>
+            ) : null}
             <Button variant="primary" size="sm" onPress={onCommitEdit} disabled={disabled}>
               <Text>{t('save')}</Text>
             </Button>

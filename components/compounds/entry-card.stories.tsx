@@ -177,6 +177,21 @@ export const EditMode: StoryT = {
   },
 }
 
+/** The head turn's action: the reply below it answers text that is being rewritten. */
+export const EditModeWithRegen: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    kind: 'user_action',
+    content: 'I draw my sword and step toward the figure in the doorway.',
+    editing: true,
+    onContentChange: fn(),
+    onCommitEdit: fn(),
+    onCommitEditAndRegen: fn(),
+    onCancelEdit: fn(),
+  },
+}
+
 /**
  * The gate is held: the row's controls refuse, the prose does not change
  * shade. Reading is never gated (principles.md → What's not gated), and the

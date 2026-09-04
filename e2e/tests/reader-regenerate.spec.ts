@@ -24,6 +24,8 @@ import { reader } from '../locators/reader'
 const REPLY_1 = 'E2E-REGEN-R1 the courier reads the letter twice.'
 const REPLY_2 = 'E2E-REGEN-R2 the courier burns the letter unread.'
 const REPLY_3 = 'E2E-REGEN-R3 the courier hides the letter in a boot.'
+const REPLY_4 = 'E2E-REGEN-R4 the letter names a city that no longer exists.'
+const EDITED_ACTION = 'E2E-REGEN-U3 I open the satchel and read the letter aloud.'
 
 test.describe('reader — regenerate a reply', () => {
   test.describe.configure({ mode: 'serial' })
@@ -180,5 +182,40 @@ test.describe('reader — regenerate a reply', () => {
     await pollEntryGone(branch, 'E2E-REGEN-U2')
     await pollEntryGone(branch, 'E2E-REGEN-R3')
     expect(await entryIdByContent(branch, 'E2E-REGEN-U1')).toBe(userActionId)
+  })
+
+  // `Save & regenerate` on the head turn's action. The claim no cheaper layer
+  // can make: the run reads its prompt from the branch tail, so the commit has
+  // to land first for the new take to answer the edited text rather than the
+  // text it replaced.
+  test('save and regenerate re-answers the edited action', async () => {
+    const branch = await branchId()
+    const userActionId = await pollEntryId(branch, 'E2E-REGEN-U1')
+    await pollEntryId(branch, 'E2E-REGEN-R1')
+
+    mock.setNarrative(REPLY_4)
+    const before = mock.requests.length
+    await reader.row(app.window, userActionId).scrollIntoViewIfNeeded()
+    await reader.editEntry(app.window, userActionId).click()
+    await reader.editTextarea(app.window).fill(EDITED_ACTION)
+    await reader.saveAndRegenEdit(app.window).click()
+
+    await expect(app.window.getByText('E2E-REGEN-R4', { exact: false })).toBeVisible({
+      timeout: 30_000,
+    })
+
+    // The edit rewrote the standing row rather than creating one, and the take
+    // it diverged from is gone.
+    expect(await entryIdByContent(branch, 'E2E-REGEN-U3')).toBe(userActionId)
+    await pollEntryGone(branch, 'E2E-REGEN-R1')
+    await pollEntryId(branch, 'E2E-REGEN-R4')
+
+    // One generation, and it saw the edit. A commit ordered after the dispatch
+    // would still satisfy every assertion above.
+    const streamed = mock.requests.slice(before).filter((r) => r.streamed)
+    expect(streamed.length, 'narrative calls').toBe(1)
+    const prompt = JSON.stringify(streamed[0].body)
+    expect(prompt).toContain('E2E-REGEN-U3')
+    expect(prompt).not.toContain('E2E-REGEN-U1')
   })
 })

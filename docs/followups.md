@@ -13,17 +13,6 @@ for the placement rule.
 
 ## UX
 
-- **"Save and regen" on content edits.** Editing a `user_action` after
-  its reply exists diverges the story silently — the reply answers text
-  that no longer exists — and that divergence is legitimate user
-  freedom, not a bug to detect. A second button beside Save makes it
-  self-documenting and hints that a regen may be wanted. Scoped to
-  **content** editing alone: on the
-  [scene editor](./ui/patterns/entry-card.md#scene-editor) the same button
-  defeats itself, since regenerating re-runs piggyback and overwrites the
-  scene edit just saved. Split out 2026-09-02 from the world-state-block
-  pass, which shipped without it.
-
 - **Happening involvements drift when scene membership is edited after
   the fact.** Involvements record who was present at an entry, so a later
   edit to that entry's `sceneEntities` can contradict them. Rolling back
@@ -66,9 +55,62 @@ for the placement rule.
   scene editor both reverse, the content edit does not. The exemption is a
   deliberate storage-economy decision, not an oversight — the open
   question is whether the UX is defensible as-is, wants an editor-local
-  undo stack, or wants the redo-clear narrowed. Surfaced 2026-07-23
-  alongside the world-state-block design but never scoped into it; that
-  pass shipped 2026-09-03 and left this untouched.
+  undo stack, wants the redo-clear narrowed, or wants the exemption
+  dropped outright and `content` delta-logged like every other column.
+  Delta-logging is the direction to argue first (developer, 2026-09-04);
+  it subsumes the other three, and the storage argument it has to beat is
+  weaker than it looks at the entry scale but wants pricing before it is
+  assumed away. Surfaced 2026-07-23 alongside the world-state-block
+  design but never scoped into it; that pass shipped 2026-09-03 and left
+  this untouched.
+
+  **A second consequence of writing no delta, found 2026-09-04:** a
+  content edit does not clamp the classifier watermark either, so it is
+  invisible to memory as well as to undo. `classifierWatermarkClampOps`
+  (`lib/actions/story-entries/prose-reversal.ts`) runs inside
+  `bracketProseReversal`, which only prose **reversals** enter;
+  `updateStoryEntryContent` is not one. With `processedThrough` already
+  past the edited entry, the periodic classifier never re-reads the
+  rewritten prose, and the happenings, awareness links and status flips
+  it derived from the text that is now gone simply stand. Distinct from
+  the involvements-drift item above — that one is about `sceneEntities`
+  contradicting recorded presence; this is the prose itself going stale
+  under facts derived from it.
+
+  The two halves share a fix. Delta-logging `content` makes the edit a
+  reversal-shaped operation, and the clamp is the natural companion to
+  that record. But it lands the edit in a category the
+  [reversal taxonomy](./explorations/2026-06-02-classifier-reversal-quiesce.md)
+  does not have: its discriminator is whether prose **appeared or
+  vanished**, and a content edit does neither — prose changed in place.
+  It wants the watermark clamp (the classifier must re-read the turn) but
+  not the positional suffix sweep (nothing downstream is structurally
+  invalid, only semantically stale), which is neither of the two rows the
+  table offers. Scoping this followup has to settle that third row.
+
+  **The machinery is mostly already there** (verified 2026-09-04), which
+  argues the hard part is the canon decision, not the implementation.
+  `reverse-replay.ts` restores a column-keyed `undoPayload` generically:
+  `content` carries no entry in `story_entries`' `columnSchemas` (only
+  `metadata` does), so it takes the plain whole-value restore path with
+  no new code. The dev seed dataset already carries exactly the delta a
+  content edit would write — `op: 'update'`, `source: 'user_edit'`,
+  `undoPayload: { content: … }` (`lib/db/devtools/seed-dataset.ts`) — so
+  the shape is seeded as though it exists. What is missing is an action
+  kind that writes one: `story_entries` registers only
+  `updateStoryEntryMetadata` for updates, and `updateStoryEntryContent`
+  bypasses the action layer entirely.
+
+  **No path closes it today**, including
+  [`Save & regenerate`](./ui/patterns/entry-card.md#save-and-regenerate).
+  Its sweep does clamp, but the clamp is keyed to the entry it removes:
+  `resolveSweep` passes the reply's position, so `processedThrough` lands
+  on `position(reply) - 1` — which is the edited `user_action`'s own
+  position. The next pass reads the new reply (positions strictly above
+  the watermark) and still skips the action whose prose changed. Verified
+  2026-09-04 against `classifierWatermarkClampOps` and the classifier's
+  window query; a content edit is uncovered at every depth, head turn
+  included.
 
 - **Q3 needs an overhaul and a re-spec, not signal-by-signal patches.**
   [`retrieval.md → Q3`](./memory/retrieval.md#q3-heuristic-prose-extract)

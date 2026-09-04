@@ -86,6 +86,7 @@ type EntryCardProps = {
   editing?: boolean
   onContentChange?: (next: string) => void
   onCommitEdit?: () => void
+  onCommitEditAndRegen?: () => void // presence renders the third button; host passes it on the head turn's user_action only
   onCancelEdit?: () => void
 
   className?: string
@@ -314,8 +315,8 @@ the scroll region the lists need.
 re-runs piggyback, which emits a fresh `<state>` and overwrites the
 scene edit that was just saved, so the pairing is self-defeating here.
 The affordance belongs to content editing on a `user_action`, where
-the reply genuinely answers text that no longer exists; it is tracked
-separately in [`followups.md`](../../followups.md#ux).
+the reply genuinely answers text that no longer exists — see
+[Save and regenerate](#save-and-regenerate).
 
 Failure handling matches the world-time overlay: a rejected or failed
 write keeps the overlay open with the edit intact and reports inline;
@@ -369,6 +370,34 @@ on Save / Cancel only dismisses the soft keyboard and the user
 needs a second tap to fire the button — RN's default
 `"never"` consumes the dismissal tap. The compound can't fix this
 on its own; the behavior is owned by the parent ScrollView.
+
+### Save and regenerate
+
+Editing a `user_action` whose reply already exists diverges the story
+silently: the reply answers text that no longer exists. That divergence is
+legitimate — a user may want exactly it — so it is not detected or warned
+about. A third button beside Save makes the alternative self-documenting:
+`Cancel / Save & regenerate / Save`, with Save still primary.
+
+**The head turn only.** The host passes `onCommitEditAndRegen` when the row
+is the `user_action` whose reply is the branch tail, and on no other row.
+Regenerating any earlier reply destroys every entry after it; a button
+labelled as a save must not carry that, and the action cluster's `↻` already
+owns the deliberate destructive path behind its
+[cascade confirm](../screens/reader-composer/reader-composer.md#regenerate-confirmation).
+So the button is absent on an `ai_reply` (regenerating it discards the edit
+just saved), on the opening, on any earlier turn, and whenever the tail is a
+standing `user_action` or a system entry — in each case there is no reply
+the edit can be re-answered into.
+
+**Commit, then run.** The two halves are sequential, not atomic: the
+pipeline re-reads its prompt from the branch tail rather than from anything
+threaded into the call, so the edit must be committed before the run starts
+to be the text it reads. A refused write stops there — the draft stays open
+and reports as it does for a plain Save, and no generation is spent on prose
+the branch never took. Once the write lands the editor closes and the
+regenerate goes through the same host path the `↻` takes, confirm gates
+included.
 
 ## World-time footer
 
@@ -514,7 +543,8 @@ compatible.
 Live demos for: user kind, ai kind (with reasoning expanded /
 collapsed), opening kind (no delete action), system kind (with
 detail expanded), streaming kind (reasoning-phase, reply-phase),
-edit mode (textarea), disabled state, world-time footer
+edit mode (textarea, with and without `Save & regenerate`),
+disabled state, world-time footer
 shown/hidden by kind, world-state panel (reported, fallback-layer
 badge, rejected location, clamped delta, parse failure with raw
 block, legacy row, unknown-entity chip), scene editor (tail entry

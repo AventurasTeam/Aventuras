@@ -95,6 +95,7 @@
     "tokensWithReasoning": "{{n}} tokens (+{{reasoning}} reasoning)",
     "editEntry": "Edit entry",
     "editContent": "Edit entry content",
+    "saveAndRegenerate": "Save & regenerate",
     "regenerate": "Regenerate",
     "branchFromHere": "Branch from here",
     "flipEra": "Flip era",

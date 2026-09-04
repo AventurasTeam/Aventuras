@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { EARTH_GREGORIAN } from '@/lib/calendar'
 import type { StoryEntry } from '@/lib/db'
@@ -86,6 +86,27 @@ const noopHandlers = {
   onFixSystemEntry: async () => {},
 }
 
+const HEAD_TURN_ROWS = ROWS.slice(0, 3)
+const EDITED_ACTION = 'I step through the frame of the second painting.'
+
+function entryRow(id: string): HTMLElement {
+  const row = document.querySelector(`[data-entry-row="${id}"]`)
+  if (!(row instanceof HTMLElement)) throw new Error(`no row for ${id}`)
+  return row
+}
+
+async function startEditingHeadAction() {
+  await userEvent.click(
+    within(entryRow('e2')).getByRole('button', { name: t('reader:entryCard.editEntry') }),
+  )
+  const textarea = await waitFor(() =>
+    screen.getByRole('textbox', { name: t('reader:entryCard.editContent') }),
+  )
+  await userEvent.clear(textarea)
+  await userEvent.type(textarea, EDITED_ACTION)
+  await waitFor(() => expect(textarea).toHaveValue(EDITED_ACTION))
+}
+
 const meta = {
   title: 'Compounds/Reader/ReaderSurface',
   component: ReaderSurface,
@@ -161,6 +182,79 @@ export const PhoneRequestsHostOverlay: Story = {
     await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
     await waitFor(() => expect(args.onRequestEditWorldTime).toHaveBeenCalledWith('e3'))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  },
+}
+
+/**
+ * `Save & regenerate` is a compose seam the compound layer cannot reach: the
+ * commit must land before the run starts, because the pipeline re-reads its
+ * prompt from the branch tail rather than from anything threaded in.
+ */
+export const SaveAndRegenerateHeadTurn: Story = {
+  args: {
+    rows: HEAD_TURN_ROWS,
+    tailEntryId: 'e3',
+    onCommitEdit: fn(async () => ({ ok: true })),
+    onRegenerate: fn(async () => {}),
+  },
+  play: async ({ args }) => {
+    const order: string[] = []
+    ;(args.onCommitEdit as ReturnType<typeof fn>).mockImplementation(async () => {
+      order.push('commit')
+      return { ok: true }
+    })
+    ;(args.onRegenerate as ReturnType<typeof fn>).mockImplementation(async () => {
+      order.push('regenerate')
+    })
+
+    await startEditingHeadAction()
+    await userEvent.click(
+      screen.getByRole('button', { name: t('reader:entryCard.saveAndRegenerate') }),
+    )
+
+    await waitFor(() => expect(args.onRegenerate).toHaveBeenCalledWith('e3'))
+    expect(args.onCommitEdit).toHaveBeenCalledWith('e2', EDITED_ACTION)
+    expect(order).toEqual(['commit', 'regenerate'])
+  },
+}
+
+/** A refused write must not spend a generation on prose the branch never took. */
+export const SaveAndRegenerateHeldByFailedWrite: Story = {
+  args: {
+    rows: HEAD_TURN_ROWS,
+    tailEntryId: 'e3',
+    onCommitEdit: fn(async () => ({ ok: false })),
+    onRegenerate: fn(async () => {}),
+  },
+  play: async ({ args }) => {
+    await startEditingHeadAction()
+    await userEvent.click(
+      screen.getByRole('button', { name: t('reader:entryCard.saveAndRegenerate') }),
+    )
+
+    await waitFor(() => expect(args.onCommitEdit).toHaveBeenCalledWith('e2', EDITED_ACTION))
+    expect(args.onRegenerate).not.toHaveBeenCalled()
+    expect(screen.getByRole('textbox', { name: t('reader:entryCard.editContent') })).toHaveValue(
+      EDITED_ACTION,
+    )
+  },
+}
+
+/** Only the head turn's action gets the third button; every other row keeps Save / Cancel. */
+export const SaveAndRegenerateAbsentOffHead: Story = {
+  args: { rows: HEAD_TURN_ROWS, tailEntryId: 'e3' },
+  play: async () => {
+    await userEvent.click(
+      within(entryRow('e1')).getByRole('button', { name: t('reader:entryCard.editEntry') }),
+    )
+    await waitFor(() =>
+      expect(
+        screen.getByRole('textbox', { name: t('reader:entryCard.editContent') }),
+      ).toBeVisible(),
+    )
+    expect(
+      screen.queryByRole('button', { name: t('reader:entryCard.saveAndRegenerate') }),
+    ).not.toBeInTheDocument()
   },
 }
 

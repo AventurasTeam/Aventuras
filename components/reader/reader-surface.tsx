@@ -7,6 +7,7 @@ import {
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type Ref,
@@ -25,6 +26,7 @@ import type { StoryEntry } from '@/lib/db'
 import { computeScrollMetrics, createAutoscrollMachine } from '@/lib/reader-scroll'
 
 import type { EditResult, ReaderSurfaceHandle, ReaderSurfaceProps } from './reader-document-types'
+import { resolveSaveAndRegenTurn } from './save-and-regen'
 import type { ResolvedEntity } from './scene-editing'
 
 const NEAR_BOTTOM_THRESHOLD_PX = 20
@@ -64,6 +66,9 @@ type ReaderRowProps = {
   onStartEdit: (row: StoryEntry) => void
   onContentChange: (text: string) => void
   onCommitEdit: () => void | Promise<void>
+  /** The reply this row produced, when this row is the head turn's action — null on every other row. */
+  regenTargetId: string | null
+  onCommitEditAndRegen: (replyId: string) => void | Promise<void>
   onCancelEdit: () => void
   onRequestRollback: (entryId: string) => Promise<void>
   onRegenerate: (entryId: string) => Promise<void>
@@ -97,6 +102,8 @@ const ReaderRow = memo(function ReaderRow({
   onStartEdit,
   onContentChange,
   onCommitEdit,
+  regenTargetId,
+  onCommitEditAndRegen,
   onCancelEdit,
   onRequestRollback,
   onRegenerate,
@@ -127,6 +134,9 @@ const ReaderRow = memo(function ReaderRow({
       onRegen={row.kind === 'ai_reply' ? () => void onRegenerate(row.id) : undefined}
       onContentChange={onContentChange}
       onCommitEdit={() => void onCommitEdit()}
+      onCommitEditAndRegen={
+        regenTargetId != null ? () => void onCommitEditAndRegen(regenTargetId) : undefined
+      }
       onCancelEdit={onCancelEdit}
       onDelete={
         isSystem || row.kind === 'opening' ? undefined : () => void onRequestRollback(row.id)
@@ -435,21 +445,35 @@ export function ReaderSurface({
     setEditingId(row.id)
     setEditDraft(row.content)
   }, [])
-  const commitEdit = useCallback(async () => {
+  // Shared by both commit buttons so the refusal policy has one home: a
+  // rejected commit keeps the draft open so typing isn't silently lost, and
+  // the host owns the error toast.
+  const commitDraft = useCallback(async (): Promise<boolean> => {
     const id = editingIdRef.current
-    if (id == null) return
-    // A rejected commit keeps the draft open so typing isn't silently lost;
-    // the host owns the error toast.
+    if (id == null) return false
     const result = await onCommitEdit(id, editDraftRef.current)
-    if (result?.ok) {
-      setEditingId(null)
-      setEditDraft('')
-    }
+    if (!result?.ok) return false
+    setEditingId(null)
+    setEditDraft('')
+    return true
   }, [onCommitEdit])
+  const commitEdit = useCallback(async () => {
+    await commitDraft()
+  }, [commitDraft])
+  const commitEditAndRegen = useCallback(
+    async (replyId: string) => {
+      if (!(await commitDraft())) return
+      // Regenerate second: the pipeline re-reads its prompt from the branch tail,
+      // so the edit has to be committed before the run starts to be the one it reads.
+      await onRegenerate(replyId)
+    },
+    [commitDraft, onRegenerate],
+  )
   const cancelEdit = useCallback(() => {
     setEditingId(null)
     setEditDraft('')
   }, [])
+  const headTurn = useMemo(() => resolveSaveAndRegenTurn(rows, tailEntryId), [rows, tailEntryId])
 
   return (
     <div className="relative h-full">
@@ -497,6 +521,8 @@ export function ReaderSurface({
                 onStartEdit={startEdit}
                 onContentChange={setEditDraft}
                 onCommitEdit={commitEdit}
+                regenTargetId={row.id === headTurn?.originId ? headTurn.replyId : null}
+                onCommitEditAndRegen={commitEditAndRegen}
                 onCancelEdit={cancelEdit}
                 onRequestRollback={onRequestRollback}
                 onRegenerate={onRegenerate}
