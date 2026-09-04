@@ -101,11 +101,16 @@ for the placement rule.
   `updateStoryEntryMetadata` for updates, and `updateStoryEntryContent`
   bypasses the action layer entirely.
 
-  Reachable today on one path only:
-  [`Save & regenerate`](./ui/patterns/entry-card.md#save-and-regenerate)
-  routes through `regenerateTurn`, whose sweep clamps the watermark, so
-  the head turn's re-run does read the edited text. Every other content
-  edit — plain Save, at any depth — does not.
+  **No path closes it today**, including
+  [`Save & regenerate`](./ui/patterns/entry-card.md#save-and-regenerate).
+  Its sweep does clamp, but the clamp is keyed to the entry it removes:
+  `resolveSweep` passes the reply's position, so `processedThrough` lands
+  on `position(reply) - 1` — which is the edited `user_action`'s own
+  position. The next pass reads the new reply (positions strictly above
+  the watermark) and still skips the action whose prose changed. Verified
+  2026-09-04 against `classifierWatermarkClampOps` and the classifier's
+  window query; a content edit is uncovered at every depth, head turn
+  included.
 
 - **Q3 needs an overhaul and a re-spec, not signal-by-signal patches.**
   [`retrieval.md → Q3`](./memory/retrieval.md#q3-heuristic-prose-extract)
