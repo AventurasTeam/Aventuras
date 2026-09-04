@@ -224,7 +224,7 @@ export const EditModeNoticeFrozen: StoryT = {
     onCancelEdit: fn(),
   },
   play: async () => {
-    await expect(screen.getByText(/Branch from here/)).toBeVisible()
+    await expect(screen.getByText(/Branch from here, or roll back/)).toBeVisible()
   },
 }
 
@@ -243,6 +243,19 @@ export const EditModeNoticeSceneHere: StoryT = {
   play: async () => {
     await expect(screen.getByText(/Update them separately/)).toBeVisible()
     expect(screen.queryByText(/roll back/)).not.toBeInTheDocument()
+  },
+}
+
+/** The control the frozen notice names, on the row that actually carries it: the
+    editor hides the action cluster, so no notice story can prove it exists. */
+export const BranchActionOnAiReply: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+  },
+  play: async () => {
+    await expect(screen.getByRole('button', { name: 'Branch from here' })).toBeVisible()
   },
 }
 
