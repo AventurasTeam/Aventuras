@@ -14,7 +14,7 @@ describe('resolveSaveAndRegenTurn', () => {
     expect(resolveSaveAndRegenTurn(rows, 'e3')).toEqual({ originId: 'e2', replyId: 'e3' })
   })
 
-  it('offers nothing for an earlier turn whose reply is not the tail', () => {
+  it('pairs the tail reply with its own predecessor, not the first action', () => {
     const rows = [
       entry('e1', 'user_action'),
       entry('e2', 'ai_reply'),

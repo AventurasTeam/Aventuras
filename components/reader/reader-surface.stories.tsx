@@ -240,7 +240,7 @@ export const SaveAndRegenerateHeldByFailedWrite: Story = {
   },
 }
 
-/** Every earlier turn keeps Save / Cancel: regenerating there destroys the entries after it. */
+/** Only the head turn's action gets the third button; every other row keeps Save / Cancel. */
 export const SaveAndRegenerateAbsentOffHead: Story = {
   args: { rows: HEAD_TURN_ROWS, tailEntryId: 'e3' },
   play: async () => {

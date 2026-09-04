@@ -445,30 +445,29 @@ export function ReaderSurface({
     setEditingId(row.id)
     setEditDraft(row.content)
   }, [])
-  const commitEdit = useCallback(async () => {
+  // Shared by both commit buttons so the refusal policy has one home: a
+  // rejected commit keeps the draft open so typing isn't silently lost, and
+  // the host owns the error toast.
+  const commitDraft = useCallback(async (): Promise<boolean> => {
     const id = editingIdRef.current
-    if (id == null) return
-    // A rejected commit keeps the draft open so typing isn't silently lost;
-    // the host owns the error toast.
+    if (id == null) return false
     const result = await onCommitEdit(id, editDraftRef.current)
-    if (result?.ok) {
-      setEditingId(null)
-      setEditDraft('')
-    }
+    if (!result?.ok) return false
+    setEditingId(null)
+    setEditDraft('')
+    return true
   }, [onCommitEdit])
+  const commitEdit = useCallback(async () => {
+    await commitDraft()
+  }, [commitDraft])
   const commitEditAndRegen = useCallback(
     async (replyId: string) => {
-      const id = editingIdRef.current
-      if (id == null) return
-      const result = await onCommitEdit(id, editDraftRef.current)
-      if (!result?.ok) return
-      setEditingId(null)
-      setEditDraft('')
+      if (!(await commitDraft())) return
       // Regenerate second: the pipeline re-reads its prompt from the branch tail,
       // so the edit has to be committed before the run starts to be the one it reads.
       await onRegenerate(replyId)
     },
-    [onCommitEdit, onRegenerate],
+    [commitDraft, onRegenerate],
   )
   const cancelEdit = useCallback(() => {
     setEditingId(null)
