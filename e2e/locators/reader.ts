@@ -47,10 +47,14 @@ export const reader = {
     page.getByRole('textbox', { name: t('reader:entryCard.editContent') }),
   // Scoped to the entry rows, not the page: since 3.8 the reader hosts a second
   // Save button in the world-time overlay, which portals outside
-  // `[data-entry-row]`. The two overlays cannot both be open today, so an
-  // unscoped query still resolves — it is one strict-mode violation away.
+  // `[data-entry-row]`. exact:true is the other half — "Save & regenerate"
+  // renders beside this one on the head turn's user action.
   saveEdit: (page: Page): Locator =>
-    page.locator('[data-entry-row]').getByRole('button', { name: t('save') }),
+    page.locator('[data-entry-row]').getByRole('button', { name: t('save'), exact: true }),
+  saveAndRegenEdit: (page: Page): Locator =>
+    page
+      .locator('[data-entry-row]')
+      .getByRole('button', { name: t('reader:entryCard.saveAndRegenerate') }),
 
   // Per-entry world-time footer. Desktop tier hosts the edit form in a centred
   // Dialog; the phone tier bridges out to a native Sheet, which desktop-only

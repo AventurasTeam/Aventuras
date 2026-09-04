@@ -243,6 +243,15 @@ rare enough that the confirm never turns routine. It reuses the
 cross-chapter copy, reframed as re-run rather than re-open: the
 chapter returns to in-progress and regenerates.
 
+### Save and regenerate on a content edit
+
+Editing the head turn's user entry offers a third button in the inline
+editor — `Cancel / Save & regenerate / Save` — that commits the edit and
+then regenerates the reply it produced, through this same confirmation
+path. Offered on that one entry only; the full rule and its rationale live
+in
+[EntryCard → Save and regenerate](../../patterns/entry-card.md#save-and-regenerate).
+
 ## Era flip
 
 Era flips are user-triggered narrative events writing one row to

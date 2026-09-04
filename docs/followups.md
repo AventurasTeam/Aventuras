@@ -13,17 +13,6 @@ for the placement rule.
 
 ## UX
 
-- **"Save and regen" on content edits.** Editing a `user_action` after
-  its reply exists diverges the story silently — the reply answers text
-  that no longer exists — and that divergence is legitimate user
-  freedom, not a bug to detect. A second button beside Save makes it
-  self-documenting and hints that a regen may be wanted. Scoped to
-  **content** editing alone: on the
-  [scene editor](./ui/patterns/entry-card.md#scene-editor) the same button
-  defeats itself, since regenerating re-runs piggyback and overwrites the
-  scene edit just saved. Split out 2026-09-02 from the world-state-block
-  pass, which shipped without it.
-
 - **Happening involvements drift when scene membership is edited after
   the fact.** Involvements record who was present at an entry, so a later
   edit to that entry's `sceneEntities` can contradict them. Rolling back
