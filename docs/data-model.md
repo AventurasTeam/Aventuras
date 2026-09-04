@@ -2495,8 +2495,13 @@ is split into two layers with clean responsibilities:
   knowable fact." Covers scene events during play, pre-story history,
   ongoing states, and scheduled/future happenings. Two link tables
   connect outward:
-  - `happening_involvements` — which entities are the subject matter
-    (character, location, item, faction; optional free-form `role` label).
+  - `happening_involvements` — which entities took part in it
+    (character, location, item, faction; optional free-form `role`
+    label — actor / target / site). Participation, not aboutness: an
+    entity the prose merely mentions is not involved. Nor is
+    participation presence — an absent target, a faction, or the place
+    it happened all take part without appearing in `sceneEntities`,
+    which carries only characters and items.
   - `happening_awareness` — which characters know about it, with
     `learned_at_entry_id`, `decay_resistance` (per-character pin signal,
     set by classifier severity at extraction; tunable by user toggle
