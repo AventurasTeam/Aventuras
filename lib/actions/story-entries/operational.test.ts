@@ -2,15 +2,35 @@ import { and, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { applyDeltaAction, type DbCtx } from '@/lib/actions'
-import { branches, deltas, stories, storyEntries } from '@/lib/db'
+import {
+  branches,
+  deltas,
+  happeningAwareness,
+  happeningInvolvements,
+  happenings,
+  stories,
+  storyEntries,
+  type ClassifierStatus,
+  type Delta,
+} from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
+import {
+  entriesStore,
+  generationStore,
+  happeningAwarenessStore,
+  happeningInvolvementsStore,
+  happeningsStore,
+  undoRedoStore,
+} from '@/lib/stores'
 
 import { getRollbackCounts, rollbackToEntry, updateStoryEntryContent } from './operational'
 
 afterEach(() => {
   entriesStore.__reset()
   generationStore.__reset()
+  happeningAwarenessStore.__reset()
+  happeningInvolvementsStore.__reset()
+  happeningsStore.__reset()
   undoRedoStore.clear()
 })
 
@@ -330,5 +350,205 @@ describe('rollbackToEntry', () => {
     const result = await rollbackToEntry('b1', 't2', ctx)
     expect(result.status).toBe('ok')
     expect(undoRedoStore.hasRedo()).toBe(false)
+  })
+})
+
+// A branch whose classifier has already covered the tail: entry e2 carries a
+// happening with an involvement and an awareness row, all anchored to it.
+const classifierStatus = (processedThrough: number): ClassifierStatus => ({
+  state: 'idle',
+  lastSuccessAt: null,
+  lastError: null,
+  retryCount: 0,
+  processedThrough,
+})
+
+const classifierDelta = (
+  id: string,
+  logPosition: number,
+  targetTable: string,
+  targetId: string,
+  entryId: string,
+): Delta => ({
+  id,
+  branchId: 'b1',
+  actionId: 'act_classifier',
+  op: 'create',
+  targetTable,
+  targetId,
+  entryId,
+  source: 'periodic_classifier',
+  undoPayload: null,
+  logPosition,
+  encodingVersion: 1,
+  createdAt: logPosition,
+})
+
+async function seedClassifiedTail(db: Awaited<ReturnType<typeof createTestDb>>['db']) {
+  await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+  await db.insert(branches).values({
+    id: 'b1',
+    storyId: 's1',
+    name: 'm',
+    createdAt: 1,
+    classifierStatus: classifierStatus(2),
+  })
+  const entries = [
+    {
+      id: 'e1',
+      branchId: 'b1',
+      position: 1,
+      kind: 'ai_reply' as const,
+      content: 'a',
+      createdAt: 1,
+    },
+    {
+      id: 'e2',
+      branchId: 'b1',
+      position: 2,
+      kind: 'ai_reply' as const,
+      content: 'old',
+      createdAt: 2,
+    },
+  ]
+  await db.insert(storyEntries).values(entries)
+  entriesStore.hydrate(
+    'b1',
+    entries.map((e) => ({ ...e, chapterId: null, metadata: null })),
+  )
+  await db.insert(happenings).values([
+    {
+      id: 'hap_2',
+      branchId: 'b1',
+      title: 'derived from e2',
+      occurredAtEntryId: 'e2',
+      createdAt: 2,
+      updatedAt: 2,
+    },
+    {
+      id: 'hap_1',
+      branchId: 'b1',
+      title: 'derived from e1',
+      occurredAtEntryId: 'e1',
+      createdAt: 1,
+      updatedAt: 1,
+    },
+  ])
+  await db
+    .insert(happeningInvolvements)
+    .values({ id: 'hinv_2', branchId: 'b1', happeningId: 'hap_2', entityId: 'char_k', role: null })
+  await db.insert(happeningAwareness).values({
+    id: 'haw_2',
+    branchId: 'b1',
+    happeningId: 'hap_2',
+    characterId: 'char_k',
+    learnedAtEntryId: 'e2',
+    decayResistance: null,
+    retrievalCount: 0,
+    source: 'witnessed firsthand',
+  })
+  await db.insert(deltas).values([
+    classifierDelta('d_hap1', 1, 'happenings', 'hap_1', 'e1'),
+    classifierDelta('d_hap2', 2, 'happenings', 'hap_2', 'e2'),
+    classifierDelta('d_hinv2', 3, 'happening_involvements', 'hinv_2', 'e2'),
+    classifierDelta('d_haw2', 4, 'happening_awareness', 'haw_2', 'e2'),
+    {
+      ...classifierDelta('d_meta2', 5, 'story_entries', 'e2', 'e2'),
+      id: 'd_meta2',
+      source: 'piggyback_tagged_block',
+      op: 'update',
+      undoPayload: { metadata: null },
+    },
+  ])
+}
+
+describe('updateStoryEntryContent classifier invalidation', () => {
+  it('reverses the classifier facts anchored to the edited entry and prunes their deltas', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedClassifiedTail(db)
+
+    expect((await updateStoryEntryContent('b1', 'e2', 'new', ctx)).status).toBe('ok')
+
+    const haps = await db.select().from(happenings).where(eq(happenings.branchId, 'b1'))
+    expect(haps.map((h) => h.id)).toEqual(['hap_1'])
+    expect(await db.select().from(happeningInvolvements)).toEqual([])
+    expect(await db.select().from(happeningAwareness)).toEqual([])
+
+    const remaining = await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))
+    expect(remaining.map((d) => d.id).sort()).toEqual(['d_hap1', 'd_meta2'])
+  })
+
+  it('clamps the classifier watermark to the position before the edited entry', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedClassifiedTail(db)
+
+    await updateStoryEntryContent('b1', 'e2', 'new', ctx)
+
+    const [row] = await db
+      .select({ status: branches.classifierStatus })
+      .from(branches)
+      .where(eq(branches.id, 'b1'))
+    expect(row.status?.processedThrough).toBe(1)
+  })
+
+  it('mirrors the reversal into the happening stores', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedClassifiedTail(db)
+    happeningsStore.hydrate('b1', [
+      {
+        id: 'hap_2',
+        branchId: 'b1',
+        title: 'derived from e2',
+        description: null,
+        category: null,
+        icon: null,
+        temporal: null,
+        occurredAtEntryId: 'e2',
+        commonKnowledge: 0,
+        embeddingStale: 0,
+        createdAt: 2,
+        updatedAt: 2,
+      },
+    ])
+
+    await updateStoryEntryContent('b1', 'e2', 'new', ctx)
+
+    expect(happeningsStore.getHappenings().has('hap_2')).toBe(false)
+  })
+
+  it('leaves the watermark alone when it already sits behind the edited entry', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedClassifiedTail(db)
+    await db
+      .update(branches)
+      .set({ classifierStatus: classifierStatus(0) })
+      .where(eq(branches.id, 'b1'))
+
+    await updateStoryEntryContent('b1', 'e2', 'new', ctx)
+
+    const [row] = await db
+      .select({ status: branches.classifierStatus })
+      .from(branches)
+      .where(eq(branches.id, 'b1'))
+    expect(row.status?.processedThrough).toBe(0)
+  })
+
+  it('commits the content edit in the same transaction as the reversal', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedClassifiedTail(db)
+
+    await updateStoryEntryContent('b1', 'e2', 'new', ctx)
+
+    const [row] = await db
+      .select()
+      .from(storyEntries)
+      .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'e2')))
+    expect(row.content).toBe('new')
+    expect(entriesStore.getById('e2')?.content).toBe('new')
   })
 })
