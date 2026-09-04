@@ -2231,6 +2231,17 @@ delta. Consequences:
   happening and leave its awareness rows pointing at nothing. A suffix
   rollback never meets this, because it reverses a whole tail; an
   entry-scoped reversal has to close the set by hand.
+- **A first-introduction entity survives the edit that removed its prose.**
+  It is not a fact about that turn but a row the rest of the branch now
+  references — `sceneEntities` arrays, later happenings' involvements,
+  relationships — and none of those sit in the edited entry's anchor set.
+  Rollback may delete an entity because it takes every reference down with
+  it; an entry-scoped reversal would leave them dangling, and a dangling id
+  is a permanent state rather than a transient one
+  ([`entry-card.md → World-state panel`](./ui/patterns/entry-card.md#world-state-panel)).
+  The carve-out is `create` on `entities` only: status flips and
+  relationships are still reversed, being updates and standalone rows that
+  dangle nothing.
 - **A cross-turn fact re-derives thinner.** A fact synthesised across turns
   is attributed to the latest contributing turn, and the schema carries one
   `sourceTurn` per fact, so the earliest contributor is not recoverable and

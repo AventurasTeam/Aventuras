@@ -5,6 +5,7 @@ import { applyDeltaAction, type DbCtx } from '@/lib/actions'
 import {
   branches,
   deltas,
+  entities,
   happeningAwareness,
   happeningInvolvements,
   happenings,
@@ -497,6 +498,41 @@ describe('updateStoryEntryContent classifier invalidation', () => {
     expect(await db.select().from(happeningAwareness)).toEqual([])
     const remaining = await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))
     expect(remaining.map((d) => d.id).sort()).toEqual(['d_hap1', 'd_meta2'])
+  })
+
+  it('spares an entity the pass introduced, whose references sit outside the anchor set', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedClassifiedTail(db)
+    await db.insert(entities).values({
+      id: 'char_new',
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      status: 'active',
+      injectionMode: 'auto',
+      createdAt: 2,
+      updatedAt: 2,
+    })
+    await db.insert(deltas).values([
+      classifierDelta('d_ent_create', 6, 'entities', 'char_new', 'e2'),
+      // A status flip on the same entity is an update: undoing it restores a prior
+      // value and dangles nothing, so it must still go.
+      {
+        ...classifierDelta('d_ent_flip', 7, 'entities', 'char_new', 'e2'),
+        id: 'd_ent_flip',
+        op: 'update' as const,
+        undoPayload: { status: 'staged' },
+      },
+    ])
+
+    await updateStoryEntryContent('b1', 'e2', 'new', ctx)
+
+    const rows = await db.select().from(entities).where(eq(entities.branchId, 'b1'))
+    expect(rows.map((e) => e.id)).toEqual(['char_new'])
+    expect(rows[0].status).toBe('staged')
+    const remaining = await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))
+    expect(remaining.map((d) => d.id).sort()).toEqual(['d_ent_create', 'd_hap1', 'd_meta2'])
   })
 
   it('leaves link rows belonging to a happening it is not removing', async () => {

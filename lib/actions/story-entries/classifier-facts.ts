@@ -7,6 +7,21 @@ import type { DbCtx } from '../types'
 const CHILD_TABLES = ['happening_involvements', 'happening_awareness'] as const
 
 /**
+ * A first-introduction entity stays, even though the prose that introduced it is gone.
+ * It is not a fact about that turn but a row the rest of the branch now references --
+ * `sceneEntities` arrays, later happenings' involvements, relationships -- and none of
+ * those sit in this entry's anchor set. A suffix rollback may delete an entity because
+ * it takes every reference down with it; an entry-scoped reversal would leave them
+ * dangling, and canon treats a dangling id as permanent rather than transient
+ * (entry-card.md -> Unresolvable ids). Everything else the pass wrote is reversed,
+ * status flips and relationships included: those are updates and standalone rows, so
+ * undoing them dangles nothing.
+ */
+function isReversible(delta: Delta): boolean {
+  return !(delta.targetTable === 'entities' && delta.op === 'create')
+}
+
+/**
  * Every delta a content edit must reverse: the classifier facts anchored to the
  * edited entry, closed under the happening -> link-row relation.
  *
@@ -27,16 +42,18 @@ export async function resolveClassifierFactDeltas(
   entryId: string,
   ctx: DbCtx,
 ): Promise<Delta[]> {
-  const anchored = (await ctx.db
-    .select()
-    .from(deltas)
-    .where(
-      and(
-        eq(deltas.branchId, branchId),
-        eq(deltas.entryId, entryId),
-        eq(deltas.source, 'periodic_classifier'),
-      ),
-    )) as Delta[]
+  const anchored = (
+    (await ctx.db
+      .select()
+      .from(deltas)
+      .where(
+        and(
+          eq(deltas.branchId, branchId),
+          eq(deltas.entryId, entryId),
+          eq(deltas.source, 'periodic_classifier'),
+        ),
+      )) as Delta[]
+  ).filter(isReversible)
 
   const removedHappenings = anchored
     .filter((d) => d.targetTable === 'happenings' && d.op === 'create')
