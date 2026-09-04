@@ -185,6 +185,13 @@ export function SceneEditForm({
         <Text size="xs" variant="muted">
           {t('reader:sceneEdit.applyNote')}
         </Text>
+
+        {/* Unconditional: a name match would test whether the prose names the entity, not
+          whether it contradicts the removal, and mentioned-but-absent is a legal scene
+          (entry-card.md → Scene editor). */}
+        <Text size="xs" variant="muted">
+          {t('reader:sceneEdit.proseNote')}
+        </Text>
       </Body>
 
       {saveError != null ? (

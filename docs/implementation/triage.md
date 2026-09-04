@@ -19,6 +19,19 @@ slice-planning gate forces its resolution before that slice is planned.
 
 ## Inbox
 
+- **`cascadeDeleteOps` never fires when reverse-replay undoes a
+  `create`.** The registry hook (`lib/actions/delta/registry.ts`) is read
+  in exactly two places — the explicit `deleteHappening` handler and
+  `redo.ts` re-applying a `delete` — while `reverse-replay`'s create arm is
+  a bare row delete. So a registered cascade silently does not cover the
+  undo path, and `happenings` is registered as though it does. Nothing had
+  hit it because a suffix rollback takes every reference down with its
+  target; the content-edit reversal is the first entry-scoped caller and
+  closes the set by hand in `classifier-facts.ts`. Either the registry
+  should consult the hook on create-undo, or the hook wants documenting as
+  delete-op-only so the next caller does not assume coverage it lacks.
+  Unowned: it is a delta-layer contract, not any one surface's work.
+
 - **Story isolation leaks across files under
   `--fileParallelism=false`.** Serializing puts every story file in one
   page, and some app-level DOM state survives the file that set it.

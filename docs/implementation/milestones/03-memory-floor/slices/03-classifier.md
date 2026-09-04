@@ -195,9 +195,16 @@ head]` with the placeholder universe;
 Resolved during slice planning; the resolutions are recorded in
 [Implementation notes](#implementation-notes) below. The one question
 the slice did not settle — involvement drift when scene membership is
-edited after the fact — outlived the slice and moved to
-[`followups.md`](../../../../followups.md), since it is triggered by the
-world-state-block edit surface rather than by this pipeline.
+edited after the fact — outlived the slice and was **retired 2026-09-04**
+without work. Involvement does not imply presence: an entity can be the
+subject of a happening while absent from the scene that produced it, and
+locations and factions are involved without ever being scene-tagged. So a
+`sceneEntities` edit contradicts nothing, and no predicate identifies an
+"affected" involvement. The reachable problem is a content edit leaving
+classifier facts standing on prose that is gone, tracked at
+[`followups.md`](../../../../followups.md); the edit surfaces warn about
+the divergence per
+[entry-card.md → Divergence notices](../../../../ui/patterns/entry-card.md#divergence-notices).
 
 ## Implementation notes
 

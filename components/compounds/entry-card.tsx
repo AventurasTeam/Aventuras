@@ -27,6 +27,10 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated'
 
+import {
+  contentEditNoticeKey,
+  type ContentEditNotice,
+} from '@/components/reader/content-edit-notice'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -148,6 +152,8 @@ type EntryCardProps = {
 
   // edit mode (host-controlled):
   editing?: boolean
+  /** Which divergence notice the editor carries; omitted renders none. */
+  contentEditNotice?: ContentEditNotice
   onContentChange?: (next: string) => void
   onCommitEdit?: () => void
   /** Commit, then re-answer this entry. Presence gates the button — only the head
@@ -737,6 +743,7 @@ export function EntryCard({
   disabled,
   disabledReason,
   editing,
+  contentEditNotice,
   onContentChange,
   onCommitEdit,
   onCommitEditAndRegen,
@@ -912,6 +919,14 @@ export function EntryCard({
 
       {editing ? (
         <View className="gap-2">
+          {/* A quiet line inside the editor, never standing chrome on the card: most of a
+              branch is non-tail, and a permanent banner there is wallpaper. The branch
+              clause drops on a `user_action`, which carries no branch action. */}
+          {contentEditNotice != null ? (
+            <Text size="xs" variant="muted">
+              {t(contentEditNoticeKey(contentEditNotice, kind))}
+            </Text>
+          ) : null}
           <Textarea
             value={content}
             onChangeText={onContentChange}

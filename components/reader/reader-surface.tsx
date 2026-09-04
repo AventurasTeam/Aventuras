@@ -17,6 +17,7 @@ import {
 
 import { EntryCard } from '@/components/compounds/entry-card'
 import type { SceneEdit, SceneOptions } from '@/components/compounds/scene-edit-form'
+import { resolveContentEditNotice } from '@/components/reader/content-edit-notice'
 import { JumpButtons } from '@/components/reader/jump-buttons'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useTier } from '@/hooks/use-tier'
@@ -117,6 +118,11 @@ const ReaderRow = memo(function ReaderRow({
   // it and useSceneEditing will not open the sheet, so offering the control would leave
   // the phone tier's button doing nothing at all.
   const sceneEditable = isTail && row.metadata != null
+  const contentEditNotice = resolveContentEditNotice({
+    hasMetadata: row.metadata != null,
+    sceneEditable,
+    hasSaveAndRegen: regenTargetId != null,
+  })
   // EntryCard's canonical prop is an object; building it here keeps the walk
   // primitive-valued so ReaderRow's memo compare still holds.
   const monotonicityBreak =
@@ -130,6 +136,7 @@ const ReaderRow = memo(function ReaderRow({
       reasoning={row.metadata?.reasoning}
       disabled={editBlocked}
       editing={editing}
+      contentEditNotice={contentEditNotice ?? undefined}
       onEdit={isSystem ? undefined : () => onStartEdit(row)}
       onRegen={row.kind === 'ai_reply' ? () => void onRegenerate(row.id) : undefined}
       onContentChange={onContentChange}

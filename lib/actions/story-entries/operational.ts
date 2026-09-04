@@ -6,6 +6,7 @@ import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
 import { reverseAndPruneDeltaRows } from '../delta/reverse-replay'
 import type { DbCtx } from '../types'
+import { resolveClassifierFactDeltas } from './classifier-facts'
 import { bracketProseReversal, classifierWatermarkClampOps } from './prose-reversal'
 import { STORY_ENTRY_REJECTION, type StoryEntryRejectionCode } from './register'
 
@@ -29,6 +30,33 @@ export async function updateStoryEntryContent(
       reason: 'generation in flight',
       code: STORY_ENTRY_REJECTION.inFlight,
     }
+  // No re-check inside the bracket, matching rollbackToEntry: the gate above and
+  // bracketProseReversal's own flag set are one synchronous block, and the flag
+  // itself reads as blocked, so a re-check would reject every call.
+  return bracketProseReversal(branchId, () =>
+    updateStoryEntryContentBracketed(branchId, id, content, ctx),
+  )
+}
+
+/**
+ * The classifier derives its facts from prose alone, so a rewrite leaves the ones
+ * it took from the old text standing on nothing. Clamping the watermark on its own
+ * only adds the new reading beside the stale one -- chapter-close dedup merges on
+ * cast overlap, which a contradicting fact does not have -- so the two run together:
+ * reverse what this entry produced, then let the next pass re-read it
+ * (followups.md -> Entry content edits are irreversible).
+ *
+ * Scoped by source, not by table: `per_turn_classifier` and `piggyback_tagged_block`
+ * write the scene metadata a user may have just corrected by hand, and nothing here
+ * may undo that. `resolveClassifierFactDeltas` owns closing that set over the
+ * happening -> link-row relation.
+ */
+async function updateStoryEntryContentBracketed(
+  branchId: string,
+  id: string,
+  content: string,
+  ctx: DbCtx,
+): Promise<{ status: 'ok' } | StoryEntryRejection> {
   const [current] = await ctx.db
     .select()
     .from(storyEntries)
@@ -39,13 +67,22 @@ export async function updateStoryEntryContent(
       reason: `story_entries ${branchId}:${id} not found`,
       code: STORY_ENTRY_REJECTION.notFound,
     }
-  await ctx.runInTransaction([
+
+  const derived = await resolveClassifierFactDeltas(branchId, id, ctx)
+
+  // Clamped unconditionally: a pass that read this entry and extracted nothing still
+  // advanced the watermark past it, and the op no-ops when the watermark is behind.
+  // One transaction, because a clamp without the reversal re-derives beside the stale
+  // facts and a reversal without the clamp deletes them with nothing to replace them.
+  await reverseAndPruneDeltaRows(derived, ctx, [
     ctx.db
       .update(storyEntries)
       .set({ content })
       .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, id)))
       .toSQL(),
+    ...classifierWatermarkClampOps(branchId, current.position),
   ])
+
   entriesStore.patch(branchId, { op: 'update', id, columns: { content } })
   // A second unrelated action clears the redo stack (data-model.md).
   undoRedoStore.clear()

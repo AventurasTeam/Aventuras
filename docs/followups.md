@@ -13,25 +13,6 @@ for the placement rule.
 
 ## UX
 
-- **Happening involvements drift when scene membership is edited after
-  the fact.** Involvements record who was present at an entry, so a later
-  edit to that entry's `sceneEntities` can contradict them. Rolling back
-  and re-running the classifier pass is disproportionate: it
-  over-reverses (facts anchored to surviving entries must be spared per
-  the survival anchor), costs a full LLM pass for a small correction, and
-  can silently rewrite happenings the user never touched. Prefer flagging
-  affected involvements for review over recomputing, which also matches
-  the established posture that user edits stick only until the classifier
-  reads contradicting prose
-  ([`data-model.md → Authorship contract`](./data-model.md#authorship-contract)
-  parks the manual-edit-vs-overwrite policy as its own question). Raised
-  as an open question on
-  [Slice 3.3](./implementation/milestones/03-memory-floor/slices/03-classifier.md);
-  it outlived the slice because the trigger is the edit surface, not the
-  classifier itself — and that surface shipped 2026-09-03 as the
-  [scene editor](./ui/patterns/entry-card.md#scene-editor), so the drift is
-  reachable today rather than anticipated.
-
 - **Entry content edits are irreversible, and that may read as a bug
   from the user's side.** `story_entries.content` is the delta log's
   single per-column side-channel exemption
@@ -47,8 +28,7 @@ for the placement rule.
   is the only action that clears the forward path while contributing
   nothing to the backward one, so it is pure loss where every other
   action trades redo for undo. Narrowing it is therefore a canon
-  change, not a blast-radius fix, and cannot be split off from the
-  question below (re-verified 2026-08-24). The metadata edits on the
+  change, not a blast-radius fix (re-verified 2026-08-24). The metadata edits on the
   same card are fully delta-logged and reversible, so an entry now
   carries two adjacent edit affordances with opposite reversibility and
   no visible reason for the difference — the world-time footer and the
@@ -64,29 +44,23 @@ for the placement rule.
   design but never scoped into it; that pass shipped 2026-09-03 and left
   this untouched.
 
-  **A second consequence of writing no delta, found 2026-09-04:** a
-  content edit does not clamp the classifier watermark either, so it is
-  invisible to memory as well as to undo. `classifierWatermarkClampOps`
-  (`lib/actions/story-entries/prose-reversal.ts`) runs inside
-  `bracketProseReversal`, which only prose **reversals** enter;
-  `updateStoryEntryContent` is not one. With `processedThrough` already
-  past the edited entry, the periodic classifier never re-reads the
-  rewritten prose, and the happenings, awareness links and status flips
-  it derived from the text that is now gone simply stand. Distinct from
-  the involvements-drift item above — that one is about `sceneEntities`
-  contradicting recorded presence; this is the prose itself going stale
-  under facts derived from it.
+  **The memory half of this is closed** (2026-09-04). A content edit used
+  to leave the classifier's facts standing on prose that was gone, because
+  it clamped no watermark; it now reverses the facts anchored to that entry
+  and clamps below it in the same transaction as the text write, resolved
+  at
+  [`data-model.md → Entry mutability & rollback`](./data-model.md#entry-mutability--rollback).
+  That closes the `Save & regenerate` gap with it: the content clamp lands
+  below the edited `user_action`, and the regenerate sweep's own clamp only
+  lowers, so the next pass reads the edited action rather than skipping it.
+  The user-facing half shipped alongside as
+  [entry-card.md → Divergence notices](./ui/patterns/entry-card.md#divergence-notices).
 
-  The two halves share a fix. Delta-logging `content` makes the edit a
-  reversal-shaped operation, and the clamp is the natural companion to
-  that record. But it lands the edit in a category the
-  [reversal taxonomy](./explorations/2026-06-02-classifier-reversal-quiesce.md)
-  does not have: its discriminator is whether prose **appeared or
-  vanished**, and a content edit does neither — prose changed in place.
-  It wants the watermark clamp (the classifier must re-read the turn) but
-  not the positional suffix sweep (nothing downstream is structurally
-  invalid, only semantically stale), which is neither of the two rows the
-  table offers. Scoping this followup has to settle that third row.
+  What stays open is reversibility alone. Delta-logging `content` is
+  separable from the fix above — the clamp and the reversal needed the edit
+  to enter `bracketProseReversal` and splice ops into its transaction,
+  neither needed `content` itself to write a delta — so nothing about the
+  memory fix settles or blocks it.
 
   **The machinery is mostly already there** (verified 2026-09-04), which
   argues the hard part is the canon decision, not the implementation.
@@ -99,18 +73,7 @@ for the placement rule.
   the shape is seeded as though it exists. What is missing is an action
   kind that writes one: `story_entries` registers only
   `updateStoryEntryMetadata` for updates, and `updateStoryEntryContent`
-  bypasses the action layer entirely.
-
-  **No path closes it today**, including
-  [`Save & regenerate`](./ui/patterns/entry-card.md#save-and-regenerate).
-  Its sweep does clamp, but the clamp is keyed to the entry it removes:
-  `resolveSweep` passes the reply's position, so `processedThrough` lands
-  on `position(reply) - 1` — which is the edited `user_action`'s own
-  position. The next pass reads the new reply (positions strictly above
-  the watermark) and still skips the action whose prose changed. Verified
-  2026-09-04 against `classifierWatermarkClampOps` and the classifier's
-  window query; a content edit is uncovered at every depth, head turn
-  included.
+  writes `content` outside the action layer.
 
 - **Q3 needs an overhaul and a re-spec, not signal-by-signal patches.**
   [`retrieval.md → Q3`](./memory/retrieval.md#q3-heuristic-prose-extract)

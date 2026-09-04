@@ -2209,6 +2209,46 @@ delta. Consequences:
   text (edited or not). The edit propagates through the fork, which is
   the intended behaviour — text edits are user intent, not narrative
   state that needs reversing.
+- **Memory is not a side-channel, though.** Prose is the classifier's only
+  input, so an edit invalidates every fact it took from the replaced text.
+  The edit reverses the deltas anchored to that entry under
+  `source='periodic_classifier'` and clamps `processedThrough` below it,
+  in the same transaction as the text write. Both halves are required: the
+  clamp alone re-derives beside the stale facts rather than replacing them,
+  and chapter-close dedup will not merge the pair, because its cast-overlap
+  threshold is sized for re-deriving the _same_ fact, not a contradicting
+  one. Scoped by source, not by table — `per_turn_classifier` and
+  `piggyback_tagged_block` write the scene metadata a user may have just
+  corrected by hand, and nothing here may undo that. The suffix sweep stays
+  out: the entry and everything after it survive, since nothing downstream
+  is structurally invalid.
+- **The reversal set closes over the happening → link-row relation**, not
+  over the anchor alone. Undoing a `create` is a plain row delete with no
+  cascade — only the explicit `deleteHappening` action carries one — and a
+  link row does not share its happening's anchor: awareness anchors to the
+  turn that narrated the learning, which can sit either side of the
+  happening's own provenance entry. Reversing by anchor alone would delete a
+  happening and leave its awareness rows pointing at nothing. A suffix
+  rollback never meets this, because it reverses a whole tail; an
+  entry-scoped reversal has to close the set by hand.
+- **A first-introduction entity survives the edit that removed its prose.**
+  It is not a fact about that turn but a row the rest of the branch now
+  references — `sceneEntities` arrays, later happenings' involvements,
+  relationships — and none of those sit in the edited entry's anchor set.
+  Rollback may delete an entity because it takes every reference down with
+  it; an entry-scoped reversal would leave them dangling, and a dangling id
+  is a permanent state rather than a transient one
+  ([`entry-card.md → World-state panel`](./ui/patterns/entry-card.md#world-state-panel)).
+  The carve-out is `create` on `entities` only: status flips and
+  relationships are still reversed, being updates and standalone rows that
+  dangle nothing.
+- **A cross-turn fact re-derives thinner.** A fact synthesised across turns
+  is attributed to the latest contributing turn, and the schema carries one
+  `sourceTurn` per fact, so the earliest contributor is not recoverable and
+  cannot be clamped to. Re-derivation therefore sees the edited entry
+  onward and not the earlier prose that helped produce it. Accepted over
+  clamping a full window back, which would re-derive facts for unedited
+  turns beside their surviving originals.
 
 **Wizard creation is exempt from the delta log.** The wizard's commit
 transaction writes the `stories` row, the initial `branches` row, the
@@ -2495,8 +2535,13 @@ is split into two layers with clean responsibilities:
   knowable fact." Covers scene events during play, pre-story history,
   ongoing states, and scheduled/future happenings. Two link tables
   connect outward:
-  - `happening_involvements` — which entities are the subject matter
-    (character, location, item, faction; optional free-form `role` label).
+  - `happening_involvements` — which entities took part in it
+    (character, location, item, faction; optional free-form `role`
+    label — actor / target / site). Participation, not aboutness: an
+    entity the prose merely mentions is not involved. Nor is
+    participation presence — an absent target, a faction, or the place
+    it happened all take part without appearing in `sceneEntities`,
+    which carries only characters and items.
   - `happening_awareness` — which characters know about it, with
     `learned_at_entry_id`, `decay_resistance` (per-character pin signal,
     set by classifier severity at extraction; tunable by user toggle
