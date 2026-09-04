@@ -463,6 +463,69 @@ async function seedClassifiedTail(db: Awaited<ReturnType<typeof createTestDb>>['
 }
 
 describe('updateStoryEntryContent classifier invalidation', () => {
+  it('takes link rows anchored to a different entry down with their happening', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedClassifiedTail(db)
+    // A character learning of hap_2 on a later turn anchors to that turn, not to the
+    // happening's own provenance entry — so anchor-scoped reversal alone would delete
+    // hap_2 and leave this row pointing at nothing.
+    await db.insert(storyEntries).values({
+      id: 'e3',
+      branchId: 'b1',
+      position: 3,
+      kind: 'ai_reply',
+      content: 'c',
+      createdAt: 3,
+    })
+    await db.insert(happeningAwareness).values({
+      id: 'haw_late',
+      branchId: 'b1',
+      happeningId: 'hap_2',
+      characterId: 'char_m',
+      learnedAtEntryId: 'e3',
+      decayResistance: null,
+      retrievalCount: 0,
+      source: 'told by Jorin',
+    })
+    await db
+      .insert(deltas)
+      .values([classifierDelta('d_haw_late', 6, 'happening_awareness', 'haw_late', 'e3')])
+
+    expect((await updateStoryEntryContent('b1', 'e2', 'new', ctx)).status).toBe('ok')
+
+    expect(await db.select().from(happeningAwareness)).toEqual([])
+    const remaining = await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))
+    expect(remaining.map((d) => d.id).sort()).toEqual(['d_hap1', 'd_meta2'])
+  })
+
+  it('leaves link rows belonging to a happening it is not removing', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedClassifiedTail(db)
+    await db.insert(happeningAwareness).values({
+      id: 'haw_other',
+      branchId: 'b1',
+      happeningId: 'hap_1',
+      characterId: 'char_m',
+      learnedAtEntryId: 'e1',
+      decayResistance: null,
+      retrievalCount: 0,
+      source: 'witnessed firsthand',
+    })
+    await db
+      .insert(deltas)
+      .values([classifierDelta('d_haw_other', 6, 'happening_awareness', 'haw_other', 'e1')])
+
+    await updateStoryEntryContent('b1', 'e2', 'new', ctx)
+
+    // hap_1 survives (anchored to e1), so the closure must not reach its link rows —
+    // this delta is reversible and sits outside the edited entry's anchor set.
+    expect((await db.select().from(happeningAwareness)).map((r) => r.id)).toEqual(['haw_other'])
+    const kept = await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))
+    expect(kept.map((d) => d.id)).toContain('d_haw_other')
+  })
+
   it('reverses the classifier facts anchored to the edited entry and prunes their deltas', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }

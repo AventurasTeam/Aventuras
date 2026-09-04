@@ -2222,6 +2222,15 @@ delta. Consequences:
   corrected by hand, and nothing here may undo that. The suffix sweep stays
   out: the entry and everything after it survive, since nothing downstream
   is structurally invalid.
+- **The reversal set closes over the happening → link-row relation**, not
+  over the anchor alone. Undoing a `create` is a plain row delete with no
+  cascade — only the explicit `deleteHappening` action carries one — and a
+  link row does not share its happening's anchor: awareness anchors to the
+  turn that narrated the learning, which can sit either side of the
+  happening's own provenance entry. Reversing by anchor alone would delete a
+  happening and leave its awareness rows pointing at nothing. A suffix
+  rollback never meets this, because it reverses a whole tail; an
+  entry-scoped reversal has to close the set by hand.
 - **A cross-turn fact re-derives thinner.** A fact synthesised across turns
   is attributed to the latest contributing turn, and the schema carries one
   `sourceTurn` per fact, so the earliest contributor is not recoverable and

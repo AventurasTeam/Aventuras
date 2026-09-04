@@ -6,6 +6,7 @@ import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
 import { reverseAndPruneDeltaRows } from '../delta/reverse-replay'
 import type { DbCtx } from '../types'
+import { resolveClassifierFactDeltas } from './classifier-facts'
 import { bracketProseReversal, classifierWatermarkClampOps } from './prose-reversal'
 import { STORY_ENTRY_REJECTION, type StoryEntryRejectionCode } from './register'
 
@@ -47,7 +48,8 @@ export async function updateStoryEntryContent(
  *
  * Scoped by source, not by table: `per_turn_classifier` and `piggyback_tagged_block`
  * write the scene metadata a user may have just corrected by hand, and nothing here
- * may undo that.
+ * may undo that. `resolveClassifierFactDeltas` owns closing that set over the
+ * happening -> link-row relation.
  */
 async function updateStoryEntryContentBracketed(
   branchId: string,
@@ -66,17 +68,7 @@ async function updateStoryEntryContentBracketed(
       code: STORY_ENTRY_REJECTION.notFound,
     }
 
-  const derived = (await ctx.db
-    .select()
-    .from(deltas)
-    .where(
-      and(
-        eq(deltas.branchId, branchId),
-        eq(deltas.entryId, id),
-        eq(deltas.source, 'periodic_classifier'),
-      ),
-    )
-    .orderBy(desc(deltas.logPosition))) as Delta[]
+  const derived = await resolveClassifierFactDeltas(branchId, id, ctx)
 
   // Clamped unconditionally: a pass that read this entry and extracted nothing still
   // advanced the watermark past it, and the op no-ops when the watermark is behind.
