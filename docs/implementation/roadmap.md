@@ -174,6 +174,24 @@ chapter-management is M5.
   Entity search scope across `state` JSON via `json_extract` /
   `json_each` per
   [`patterns/entity.md → Search scope`](../ui/patterns/entity.md#search-scope).
+  **Entity delete needs the cascade merge already specifies.** The
+  overflow menu carries `Delete entity` per
+  [`world.md → Detail head`](../ui/screens/world/world.md), and
+  `deleteEntity` (`lib/actions/entities/register.ts`) deletes the
+  `entities` row and nothing else — `happening_involvements.entity_id`,
+  `happening_awareness.character_id` and `character_relationships.a_id` /
+  `b_id` are all FK-less by necessity (composite PK), so SQLite enforces
+  nothing and the rows dangle silently. The write set is already canon for
+  the merge path
+  ([`world.md → Merge writes`](../ui/screens/world/world.md)) — link rows,
+  inverse `state` refs on other entities, translations — and delete wants
+  the same list minus the rewrite-to-canonical half. Open where merge is
+  silent: `metadata.sceneEntities`. Historical entries keep the id and
+  render it as an Unknown-entity chip
+  ([`entry-card.md → World-state panel`](../ui/patterns/entry-card.md#world-state-panel)),
+  but the tail's copy is live — it drives retrieval's
+  `sceneEntities ∩ characters` union and prompt injection — so the tail
+  wants the id dropped the way the scene editor drops it.
 - M4.3 — Plot panel shell + threads tab + happenings tab; happenings
   list with awareness tab on detail per
   [`docs/ui/screens/plot/plot.md`](../ui/screens/plot/plot.md).
