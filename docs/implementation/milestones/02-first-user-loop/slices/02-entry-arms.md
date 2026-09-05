@@ -96,7 +96,9 @@ so M3.3 / M3.9 refine rather than rewrite.
   and the store patch reappears it — covered by vitest.
 - Content-update: editing content mutates the row and **zero**
   rows land in `deltas` — asserted by test; rollback past the
-  edited entry still hard-deletes it.
+  edited entry still hard-deletes it. (Superseded 2026-09 — the
+  edit now writes an anchored `op=update` delta; see
+  [`data-model.md → Entry mutability & rollback`](../../../../data-model.md#entry-mutability--rollback).)
 - Opening invariants: creating an opening at position ≠ 1,
   moving it, or deleting it are each rejected with a typed
   action-layer error; rollback targeting entry 1 leaves exactly

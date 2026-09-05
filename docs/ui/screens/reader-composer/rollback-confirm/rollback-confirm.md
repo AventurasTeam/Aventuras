@@ -78,11 +78,11 @@ the modal carries the consequence in numeric form, not visual:
 
 Three buckets, in commit order:
 
-| Count                     | Source                                                                                  |
-| ------------------------- | --------------------------------------------------------------------------------------- |
-| **N entries**             | `op=create` deltas on `story_entries` in range                                          |
-| **M chapters re-opened**  | `op=create` deltas on `chapters` in range (line omitted when `M = 0`)                   |
-| **K world-state changes** | All other narrative deltas in range (entities, lore, threads, happenings, entry_assets) |
+| Count                     | Source                                                                                                                                                                                                                                                            |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **N entries**             | `op=create` deltas on `story_entries` in range                                                                                                                                                                                                                    |
+| **M chapters re-opened**  | `op=create` deltas on `chapters` in range (line omitted when `M = 0`)                                                                                                                                                                                             |
+| **K world-state changes** | All other narrative deltas in range (entities, lore, threads, happenings, entry_assets). Entry-scoped deltas are excluded, not just entry creates: an edit reaching the window belongs to an entry the sweep is deleting, which the entries line already reports. |
 
 Buckets are coarse-grained on purpose. Per-table breakdown reads as
 pedantic in a consent modal; "world-state changes" is the

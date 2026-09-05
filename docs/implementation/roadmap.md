@@ -580,9 +580,9 @@ verified against the code first. Resolve with the slice each names.
   the new branch deletes the entry the edit sits on anyway, so this is a
   history-fidelity gap against step 2's own claim that the fork "carries
   the complete history up to the fork point." Reachable today in spec
-  terms via `metadata` edits (`updateStoryEntryMetadata`), and it widens
-  if `story_entries.content` is ever delta-logged
-  ([`followups.md`](../followups.md)). **Settle which predicate is
+  terms via `metadata` edits (`updateStoryEntryMetadata`), and wider since
+  `story_entries.content` became delta-logged — a content edit on a kept
+  entry falls through the same crack. **Settle which predicate is
   authoritative when M6.1 writes the partition** — most likely step 2
   widening to any delta anchored to a kept entry, since step 3's
   exclusion is already source-blind. Surfaced reviewing the content-edit

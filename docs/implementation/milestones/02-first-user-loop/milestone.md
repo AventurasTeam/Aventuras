@@ -340,7 +340,9 @@ either side.
   with OAI-compat scenarios passes) and a `turnCapture` per turn.
 - **Delta-log exemptions hold.** Wizard creation writes zero
   deltas; entry content edits write zero deltas; both verified by
-  test.
+  test. (Superseded 2026-09 — `content` is delta-logged and wizard
+  creation is the only remaining exemption; see
+  [`data-model.md → Entry mutability & rollback`](../../../data-model.md#entry-mutability--rollback).)
 - **Bundled-pack invariant.** The structural-floor
   `active+in-scene` injection test passes against the bundled
   per-turn template.
