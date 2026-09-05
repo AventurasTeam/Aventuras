@@ -516,6 +516,18 @@ just saved), on the opening, on any earlier turn, and whenever the tail is a
 standing `user_action` or a system entry — in each case there is no reply
 the edit can be re-answered into.
 
+**Both commit buttons gate on a dirty draft.** An untouched draft has nothing
+to save, and saving it anyway is not free: on the head turn the write reverses
+the entry's classifier facts and spends a pass rebuilding them identically, and
+on any row it clears the global redo stack for nothing. `Save & regenerate`
+disables alongside `Save` rather than degrading into a bare regenerate — that
+path is the reply's own `↻`, behind its
+[cascade confirm](../screens/reader-composer/reader-composer.md#regenerate-confirmation),
+and a button that saved nothing must not route around it. `Cancel` stays live,
+since backing out of an untouched draft has to stay reachable. The action layer
+carries the same compare as a backstop for any other caller, returning `ok`
+without writing.
+
 **Commit, then run.** The two halves are sequential, not atomic: the
 pipeline re-reads its prompt from the branch tail rather than from anything
 threaded into the call, so the edit must be committed before the run starts

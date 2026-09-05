@@ -75,6 +75,12 @@ async function updateStoryEntryContentBracketed(
       code: STORY_ENTRY_REJECTION.notFound,
     }
 
+  // The editor gates its commit buttons on the same compare, so this is the backstop for
+  // any other caller: on the head turn a no-op write would reverse the entry's facts and
+  // spend a classifier pass rebuilding them identically, and it clears the redo stack for
+  // nothing on every row.
+  if (current.content === content) return { status: 'ok' }
+
   const scope = await resolveInvalidationScope(branchId, id, ctx)
   const derived = scope ? await resolveClassifierFactDeltas(branchId, scope, ctx) : []
 

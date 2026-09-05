@@ -716,6 +716,27 @@ describe('updateStoryEntryContent invalidation scope', () => {
     expect(branch.status?.processedThrough).toBe(2)
   })
 
+  it('no-ops an unchanged save rather than reversing and re-deriving identical facts', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedClassifiedTail(db)
+    undoRedoStore.pushRedoGroup([])
+
+    // e2 is the tail, so without the guard this would take the full in-scope path.
+    expect((await updateStoryEntryContent('b1', 'e2', 'old', ctx)).status).toBe('ok')
+
+    const haps = await db.select().from(happenings).where(eq(happenings.branchId, 'b1'))
+    expect(haps.map((h) => h.id).sort()).toEqual(['hap_1', 'hap_2'])
+    const remaining = await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))
+    expect(remaining).toHaveLength(5)
+    const [branch] = await db
+      .select({ status: branches.classifierStatus })
+      .from(branches)
+      .where(eq(branches.id, 'b1'))
+    expect(branch.status?.processedThrough).toBe(2)
+    expect(undoRedoStore.hasRedo()).toBe(true)
+  })
+
   it('covers the tail reply too when the head turn origin is edited', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
