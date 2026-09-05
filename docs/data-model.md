@@ -2263,7 +2263,10 @@ arbitrary editing.
   prose that no longer exists, with no clamp to make anything re-read them.
   Every tail rule reads past it: this scope, the editable-entry gate on the
   [scene editor](./ui/patterns/entry-card.md#scene-editor), and
-  [Save and regenerate](./ui/patterns/entry-card.md#save-and-regenerate).
+  [Save and regenerate](./ui/patterns/entry-card.md#save-and-regenerate). All
+  four resolve it through one function rather than restating it, so the
+  action layer's invalidation scope and the reader's affordances cannot
+  disagree about where the head turn is.
 - **The scope is recorded on the delta, not re-derived at reversal time.**
   The forward edit resolves the scope above and writes it onto its own delta
   under the reserved key `$invalidationScope`; the undo and redo arms replay

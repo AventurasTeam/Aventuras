@@ -1,11 +1,9 @@
-import { and, desc, eq, ne } from 'drizzle-orm'
-
-import { storyEntries } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { dedupeSceneEntities, scenePromotionActions, sceneTrackingActions } from '@/lib/piggyback'
 import { entitiesStore, generationStore } from '@/lib/stores'
 
+import { loadHeadTurn } from './head-turn'
 import { applyDeltaActionGroup } from '../delta/apply-delta-action'
 import { withKeyLock } from '../delta/key-lock'
 import type { DbCtx, PipelineAction } from '../types'
@@ -58,18 +56,9 @@ async function updateEntrySceneFieldsLocked(
   if (generationStore.isUserEditBlocked())
     return rejected(STORY_ENTRY_REJECTION.inFlight, 'generation in flight')
 
-  // Narrative tail, not row tail: a `system` entry would both refuse an edit on the real
-  // tail and accept one on itself, logging a delta against a row `clearSystemEntry`
-  // hard-deletes without one.
-  const rows = await ctx.db
-    .select()
-    .from(storyEntries)
-    .where(and(eq(storyEntries.branchId, branchId), ne(storyEntries.kind, 'system')))
-    .orderBy(desc(storyEntries.position))
-    .limit(2)
-
-  const tail = rows[0]
-  if (!tail) return rejected(STORY_ENTRY_REJECTION.notFound, `branch ${branchId} has no entries`)
+  const head = await loadHeadTurn(branchId, ctx)
+  if (!head) return rejected(STORY_ENTRY_REJECTION.notFound, `branch ${branchId} has no entries`)
+  const tail = head.tail
   if (tail.id !== id)
     return rejected(
       STORY_ENTRY_REJECTION.notTailEntry,
@@ -100,7 +89,7 @@ async function updateEntrySceneFieldsLocked(
   if (generationStore.isUserEditBlocked())
     return rejected(STORY_ENTRY_REJECTION.inFlight, 'generation in flight')
 
-  const previousEntry = rows[1]
+  const previousEntry = head.previous
   const previousMetadata = previousEntry?.metadata
   const actionId = generateId('act')
 

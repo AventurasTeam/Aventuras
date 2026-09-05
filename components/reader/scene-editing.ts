@@ -5,6 +5,7 @@ import type { EditResult } from '@/components/reader/reader-document-types'
 import { updateEntrySceneFields, type DbCtx } from '@/lib/actions'
 import type { Entity, StoryEntry } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
+import { resolveHeadTurn } from '@/lib/head-turn'
 
 /** An id the panel may mention, resolved to a display name where the row survives. */
 export type ResolvedEntity = { id: string; name?: string }
@@ -59,14 +60,9 @@ export function useSceneEditing(
     [entities],
   )
 
-  // The tail rule lives here, not in the card: only this entry gets edit handlers, so
-  // every other card renders no control at all rather than a disabled one. `system` is
-  // skipped for the reason the action layer's gate skips it (scene-fields.ts): a failure
-  // banner must not take the tail off the real last entry.
-  const tailEntryId = useMemo(
-    () => entries.findLast((e) => e.kind !== 'system')?.id ?? null,
-    [entries],
-  )
+  // Resolved here, not in the card: only this entry gets edit handlers, so every other
+  // card renders no control at all rather than a disabled one.
+  const tailEntryId = useMemo(() => resolveHeadTurn(entries)?.tail.id ?? null, [entries])
 
   const [sceneEditId, setSceneEditId] = useState<string | null>(null)
 

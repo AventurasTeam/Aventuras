@@ -1,16 +1,10 @@
-import { and, desc, eq, inArray, ne } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 
-import {
-  deltas,
-  happeningAwareness,
-  happeningInvolvements,
-  storyEntries,
-  type Delta,
-  type SqlOp,
-} from '@/lib/db'
+import { deltas, happeningAwareness, happeningInvolvements, type Delta, type SqlOp } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 
+import { loadHeadTurn } from './head-turn'
 import { PAYLOAD_META_PREFIX } from '../delta/delta-encoding'
 import type { DbCtx } from '../types'
 import { classifierWatermarkClampOps } from './prose-reversal'
@@ -33,29 +27,22 @@ export const INVALIDATION_SCOPE_KEY = `${PAYLOAD_META_PREFIX}invalidationScope`
  *
  * The clamp reopens every entry above it, so the reversal has to cover that whole
  * window or the next pass re-derives beside facts that survived — which is what bounds
- * both to the head turn (data-model.md -> Entry mutability & rollback). The same pair
- * `resolveSaveAndRegenTurn` derives the editor's notice from; they must agree.
+ * both to the head turn (data-model.md -> Entry mutability & rollback). The pair comes
+ * from `resolveHeadTurn`, which is also what the editor derives its notice from.
  */
 async function resolveInvalidationScope(
   branchId: string,
   editedId: string,
   ctx: DbCtx,
 ): Promise<InvalidationScope | null> {
-  // Narrative tail, not row tail: a `system` entry carries no delta of its own
-  // (data-model.md -> Entry mutability & rollback), so counting it would push the real
-  // head turn out of scope and downgrade a head-turn edit to a bare text write.
-  const [tail, previous] = await ctx.db
-    .select({ id: storyEntries.id, kind: storyEntries.kind, position: storyEntries.position })
-    .from(storyEntries)
-    .where(and(eq(storyEntries.branchId, branchId), ne(storyEntries.kind, 'system')))
-    .orderBy(desc(storyEntries.position))
-    .limit(2)
-  if (!tail) return null
-  if (tail.id === editedId) return { entryIds: [tail.id], editedPosition: tail.position }
-  // Clamping below the head turn's origin reopens the reply too, so the reply's facts
-  // go with it or they re-derive twice.
-  if (previous?.id === editedId && previous.kind === 'user_action' && tail.kind === 'ai_reply')
-    return { entryIds: [previous.id, tail.id], editedPosition: previous.position }
+  const head = await loadHeadTurn(branchId, ctx)
+  if (!head) return null
+  if (head.tail.id === editedId)
+    return { entryIds: [head.tail.id], editedPosition: head.tail.position }
+  // Clamping below the origin reopens the reply too, so the reply's facts go with it or
+  // they re-derive twice.
+  if (head.origin?.id === editedId)
+    return { entryIds: [head.origin.id, head.tail.id], editedPosition: head.origin.position }
   return null
 }
 

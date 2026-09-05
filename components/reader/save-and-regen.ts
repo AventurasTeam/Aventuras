@@ -1,4 +1,5 @@
 import type { StoryEntry } from '@/lib/db'
+import { resolveHeadTurn } from '@/lib/head-turn'
 
 export type SaveAndRegenTurn = { originId: string; replyId: string }
 
@@ -12,13 +13,9 @@ export function resolveSaveAndRegenTurn(
   rows: readonly StoryEntry[],
   tailEntryId: string | null,
 ): SaveAndRegenTurn | null {
-  if (tailEntryId == null) return null
-  const replyIndex = rows.findIndex((row) => row.id === tailEntryId)
-  const reply = rows[replyIndex]
-  if (reply == null || reply.kind !== 'ai_reply') return null
-  // regenerateTurn re-reads the prompt from the surviving tail, so the origin
-  // must be the reply's positional predecessor for the edit to be what it reads.
-  const origin = rows[replyIndex - 1]
-  if (origin == null || origin.kind !== 'user_action') return null
-  return { originId: origin.id, replyId: reply.id }
+  const head = resolveHeadTurn(rows)
+  // regenerateTurn re-reads the prompt from the surviving tail, so a window whose head
+  // turn is not the one the host named describes a different turn.
+  if (head == null || head.origin == null || head.tail.id !== tailEntryId) return null
+  return { originId: head.origin.id, replyId: head.tail.id }
 }
