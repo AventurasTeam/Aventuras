@@ -49,6 +49,18 @@ function deepEqual(a: unknown, b: unknown): boolean {
 const ABSENT = Symbol('absent')
 const NOCHANGE = Symbol('nochange')
 
+/**
+ * Reserved key prefix for payload metadata: facts the reversal needs that are not a
+ * prior column value. Reverse-replay skips these keys instead of writing them, so a
+ * `$`-prefixed key can never collide with a column (drizzle column keys are
+ * identifiers) and can never reach a `SET` clause.
+ */
+export const PAYLOAD_META_PREFIX = '$'
+
+export function isPayloadMetaKey(key: string): boolean {
+  return key.startsWith(PAYLOAD_META_PREFIX)
+}
+
 // FORWARD: produce the nested-partial of changed paths carrying pre-change values.
 export function computeUndoPayload(
   schema: ZodType,

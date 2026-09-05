@@ -8,7 +8,7 @@ import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 import { deltaRowOp } from '../delta/delta-row'
 import { reverseAndPruneDeltaRows } from '../delta/reverse-replay'
 import type { DbCtx } from '../types'
-import { resolveContentEditInvalidation } from './classifier-facts'
+import { contentEditUndoPayload, resolveContentEditInvalidation } from './classifier-facts'
 import { bracketProseReversal, classifierWatermarkClampOps } from './prose-reversal'
 import { STORY_ENTRY_REJECTION, type StoryEntryRejectionCode } from './register'
 
@@ -109,7 +109,7 @@ async function updateStoryEntryContentBracketed(
         targetTable: 'story_entries',
         targetId: id,
         op: 'update',
-        undoPayload: { content: current.content },
+        undoPayload: contentEditUndoPayload(current.content, invalidation.scope),
       },
     }),
     ...invalidation.clampOps,

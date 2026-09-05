@@ -4,7 +4,7 @@ import type { Delta, SqlOp } from '@/lib/db'
 import { deltas, embeddedFieldsForTable, isEmbeddedSourceTable } from '@/lib/db'
 
 import type { DbCtx } from '../types'
-import { applyUndoPayload } from './delta-encoding'
+import { applyUndoPayload, isPayloadMetaKey } from './delta-encoding'
 import { resolveByTable, whereForDelta, type StorePatch } from './registry'
 
 export class DeltaReplayError extends Error {
@@ -85,8 +85,8 @@ async function buildUndoOps(
         : { children: [], cascadeKeys: [] }
 
       const rowData = { ...full }
-      for (const key of cascadeKeys) {
-        delete rowData[key]
+      for (const key of Object.keys(rowData)) {
+        if (cascadeKeys.includes(key) || isPayloadMetaKey(key)) delete rowData[key]
       }
       // The payload's flag was accurate at delete time, but an embedder swap since
       // then re-embeds only LIVE rows, so the vector can be gone while it reads clean.
@@ -133,8 +133,10 @@ async function buildUndoOps(
       working.set(key, row)
     }
     const payload = (delta.undoPayload ?? {}) as Record<string, unknown>
+    const columns = Object.keys(payload).filter((key) => !isPayloadMetaKey(key))
     const restored: Record<string, unknown> = {}
-    for (const [col, partial] of Object.entries(payload)) {
+    for (const col of columns) {
+      const partial = payload[col]
       const schema = entry.columnSchemas[col]
       // A null partial on a schema-backed column means the column itself was
       // null pre-change — no field-wise overlay can express that. Falls through
@@ -152,7 +154,7 @@ async function buildUndoOps(
     }
     // Revalidation (app-deps.ts) only ever CLEARS this flag, so nothing outside a writer
     // like this one sets it back to 1 — erring dirty is the self-correcting direction.
-    if (undoDirtiesVector(delta.targetTable, Object.keys(payload))) {
+    if (undoDirtiesVector(delta.targetTable, columns)) {
       restored.embeddingStale = 1
       row.embeddingStale = 1
     }

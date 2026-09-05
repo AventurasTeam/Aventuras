@@ -7,8 +7,8 @@ import { selectUndoTarget } from '@/lib/undo'
 
 import {
   isContentEditDelta,
-  resolveContentEditInvalidation,
   resolveGroupInvalidation,
+  resolveRecordedInvalidation,
   sortForReplay,
 } from './classifier-facts'
 import { resolveSweep } from './operational'
@@ -151,7 +151,7 @@ async function resolveRedoInvalidation(
   const extraOps: SqlOp[] = []
   for (const { delta, rowBeforeUndo } of snapshot) {
     if (rowBeforeUndo == null || !isContentEditDelta(delta)) continue
-    const one = await resolveContentEditInvalidation(branchId, delta.targetId, ctx)
+    const one = await resolveRecordedInvalidation(branchId, delta, ctx)
     rows.push(...one.rows)
     extraOps.push(...one.clampOps)
   }

@@ -2263,6 +2263,25 @@ anchored with `entry_id` to the edited entry. Consequences:
   Every tail rule reads past it: this scope, the editable-entry gate on the
   [scene editor](./ui/patterns/entry-card.md#scene-editor), and
   [Save and regenerate](./ui/patterns/entry-card.md#save-and-regenerate).
+- **The scope is recorded on the delta, not re-derived at reversal time.**
+  The forward edit resolves the scope above and writes it onto its own delta
+  under the reserved key `$invalidationScope`; the undo and redo arms replay
+  that recorded set instead of asking the question again. They have to,
+  because the tail can move without this delta moving with it: a rollback
+  prunes the deltas above this one while the
+  [survival anchor](#survival-anchor) spares it, which can leave an edit made
+  _below_ the head turn sitting at the log head on what is now the tail.
+  Re-deriving there answers a different question than the forward edit
+  answered — it reverses facts derived from the very prose the undo is
+  restoring, then clamps the watermark to buy an LLM re-read of a turn whose
+  text never changed. A content delta carrying no recorded scope reverses
+  nothing, which is exactly what an edit below the head turn writes.
+- **Keys prefixed `$` in `undo_payload` are payload metadata, never
+  columns.** Reverse-replay walks the payload's top-level keys as column
+  names, so anything the reversal needs that is not a prior column value must
+  be namespaced out of that walk or it reaches a `SET` clause and the store
+  patch beside it. The prefix cannot collide with a column, because column
+  keys are identifiers. `$invalidationScope` is the first such key.
 - **The reversal set closes over the happening → link-row relation**, not
   over the anchor alone. Undoing a `create` is a plain row delete with no
   cascade — only the explicit `deleteHappening` action carries one — and a

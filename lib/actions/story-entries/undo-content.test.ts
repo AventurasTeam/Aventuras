@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   branches,
@@ -10,10 +10,11 @@ import {
   type ClassifierStatus,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { logger } from '@/lib/diagnostics'
 import { entriesStore, generationStore, happeningsStore, undoRedoStore } from '@/lib/stores'
 
 import { isContentEditDelta } from './classifier-facts'
-import { updateStoryEntryContent } from './operational'
+import { rollbackToEntry, updateStoryEntryContent } from './operational'
 import { writeSystemEntry } from './system-entry'
 import { redoLastAction, undoLastAction } from './undo'
 
@@ -116,6 +117,59 @@ describe('a content edit under a system entry', () => {
     // them because the watermark was never clamped.
     expect(await db.select().from(happenings).where(eq(happenings.branchId, 'b1'))).toEqual([])
     expect(await processedThrough(db)).toBe(1)
+  })
+})
+
+describe('the recorded invalidation scope', () => {
+  it('keeps the recorded scope out of the row a reversal writes', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedTurn(db)
+
+    await updateStoryEntryContent('b1', 'e_reply', 'the courier turned back', ctx)
+    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+
+    // Payload metadata is not a column. The working-set store spreads a patch's
+    // `columns` onto the row unfiltered, so a leaked key would stick to it.
+    const patched = Object.keys(entriesStore.getById('e_reply') ?? {})
+    expect(patched.filter((k) => k.startsWith('$'))).toEqual([])
+  })
+
+  it('reports an unreadable recorded scope instead of absorbing it', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedTurn(db)
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+
+    await updateStoryEntryContent('b1', 'e_reply', 'the courier turned back', ctx)
+    await db
+      .update(deltas)
+      .set({ undoPayload: { content: 'x', $invalidationScope: { entryIds: 'e_reply' } } })
+      .where(eq(deltas.source, 'user_edit'))
+
+    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+
+    // Reversing prose while silently invalidating nothing is the failure the recorded
+    // scope exists to prevent, so an unreadable one must not pass quietly.
+    expect(warn).toHaveBeenCalledWith(
+      'action_layer.invalidation_scope_malformed',
+      expect.objectContaining({ deltaId: expect.any(String) }),
+    )
+    warn.mockRestore()
+  })
+
+  it('records the scope it resolved on its own delta', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedTurn(db)
+
+    await updateStoryEntryContent('b1', 'e_reply', 'the courier turned back', ctx)
+
+    const [edit] = await db.select().from(deltas).where(eq(deltas.source, 'user_edit'))
+    expect(edit.undoPayload).toEqual({
+      content: 'the courier rode north',
+      $invalidationScope: { entryIds: ['e_reply'], editedPosition: 2 },
+    })
   })
 })
 
@@ -248,6 +302,30 @@ describe('undo of a content edit', () => {
     expect(await db.select().from(happenings).where(eq(happenings.branchId, 'b1'))).toEqual([])
     const remaining = await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))
     expect(remaining.map((d) => d.id).sort()).toEqual(['d_turn', edit.id].sort())
+  })
+
+  it('reverses the scope the edit recorded, not the one its position later implies', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedTurn(db)
+    await seedFactFrom(db, 'e_open', 2)
+
+    // Below the head turn while e_reply is the tail, so canon makes this a bare text
+    // write and it invalidates nothing.
+    await updateStoryEntryContent('b1', 'e_open', 'once, on a colder morning', ctx)
+    // The rollback prunes the turn's delta but the survival anchor spares this edit, so
+    // it is left at the log head on what is now the tail — the edit's position says
+    // "head turn" even though it was made below one.
+    expect((await rollbackToEntry('b1', 'e_reply', ctx)).status).toBe('ok')
+
+    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+
+    // The undo restores the exact prose those facts were derived from, so reversing them
+    // would delete a fact that is correct again and spend a pass rebuilding it.
+    const rows = await db.select().from(happenings).where(eq(happenings.branchId, 'b1'))
+    expect(rows.map((r) => r.id)).toEqual(['hap_derived'])
+    // The rollback's own clamp, not a second one from the undo.
+    expect(await processedThrough(db)).toBe(1)
   })
 
   it('a redo that restores nothing reverses no facts', async () => {

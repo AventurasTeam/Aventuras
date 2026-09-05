@@ -1,4 +1,5 @@
 import { and, desc, eq, inArray, ne } from 'drizzle-orm'
+import { z } from 'zod'
 
 import {
   deltas,
@@ -8,6 +9,7 @@ import {
   type Delta,
   type SqlOp,
 } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 
 import type { DbCtx } from '../types'
 import { classifierWatermarkClampOps } from './prose-reversal'
@@ -15,6 +17,23 @@ import { classifierWatermarkClampOps } from './prose-reversal'
 const CHILD_TABLES = ['happening_involvements', 'happening_awareness'] as const
 
 export type InvalidationScope = { entryIds: string[]; editedPosition: number }
+
+const invalidationScopeSchema = z.object({
+  entryIds: z.array(z.string()).min(1),
+  editedPosition: z.number().int(),
+})
+
+/**
+ * Where a content edit's invalidation scope rides on its own delta — payload metadata,
+ * never a column (delta-encoding.ts -> PAYLOAD_META_PREFIX).
+ *
+ * Recorded at write time because the tail can move between the edit and its reversal
+ * without the edit's delta moving with it: a rollback prunes the deltas above this one
+ * and can leave an edit that was made below the head turn sitting at the log head, on
+ * what is now the tail. Re-deriving the scope there answers a different question than
+ * the forward edit answered, and the two arms must reverse the same set.
+ */
+export const INVALIDATION_SCOPE_KEY = '$invalidationScope'
 
 /**
  * The entries a content edit invalidates, or null when it invalidates none.
@@ -60,16 +79,13 @@ export function isContentEditDelta(
   )
 }
 
-/**
- * Both halves of a prose change's invalidation, resolved together so the forward, undo
- * and redo arms cannot disagree about how far it reaches. Empty off the head turn.
- */
-export async function resolveContentEditInvalidation(
+export type ContentEditInvalidation = { rows: Delta[]; clampOps: SqlOp[] }
+
+async function invalidationForScope(
   branchId: string,
-  entryId: string,
+  scope: InvalidationScope | null,
   ctx: DbCtx,
-): Promise<{ rows: Delta[]; clampOps: SqlOp[] }> {
-  const scope = await resolveInvalidationScope(branchId, entryId, ctx)
+): Promise<ContentEditInvalidation> {
   if (!scope) return { rows: [], clampOps: [] }
   return {
     rows: await resolveClassifierFactDeltas(branchId, scope.entryIds, ctx),
@@ -78,24 +94,79 @@ export async function resolveContentEditInvalidation(
 }
 
 /**
+ * Both halves of a prose change's invalidation for the FORWARD edit, plus the scope
+ * they were resolved from — the caller records that on the delta so the undo and redo
+ * arms replay this same set instead of re-deriving it. Empty off the head turn.
+ */
+export async function resolveContentEditInvalidation(
+  branchId: string,
+  entryId: string,
+  ctx: DbCtx,
+): Promise<ContentEditInvalidation & { scope: InvalidationScope | null }> {
+  const scope = await resolveInvalidationScope(branchId, entryId, ctx)
+  return { ...(await invalidationForScope(branchId, scope, ctx)), scope }
+}
+
+/** The content delta's payload: prior prose, and the scope its invalidation covered. */
+export function contentEditUndoPayload(
+  previousContent: string,
+  scope: InvalidationScope | null,
+): Record<string, unknown> {
+  return scope
+    ? { content: previousContent, [INVALIDATION_SCOPE_KEY]: scope }
+    : { content: previousContent }
+}
+
+/**
+ * The scope the forward edit recorded, or null when it recorded none. An edit below the
+ * head turn writes none, and both readings mean the same thing: putting this prose back
+ * invalidates nothing.
+ */
+export function recordedInvalidationScope(
+  delta: Pick<Delta, 'id' | 'undoPayload'>,
+): InvalidationScope | null {
+  const raw = delta.undoPayload?.[INVALIDATION_SCOPE_KEY]
+  if (raw == null) return null
+  const parsed = invalidationScopeSchema.safeParse(raw)
+  if (parsed.success) return parsed.data
+  // Reversing prose while silently invalidating nothing is the failure the scope
+  // exists to prevent, so a malformed one is reported rather than absorbed.
+  logger.warn('action_layer.invalidation_scope_malformed', {
+    deltaId: delta.id,
+    error: parsed.error.message,
+  })
+  return null
+}
+
+/** {@link resolveContentEditInvalidation} for the scope a delta already carries. */
+export function resolveRecordedInvalidation(
+  branchId: string,
+  delta: Pick<Delta, 'id' | 'undoPayload'>,
+  ctx: DbCtx,
+): Promise<ContentEditInvalidation> {
+  return invalidationForScope(branchId, recordedInvalidationScope(delta), ctx)
+}
+
+/**
  * What reversing a delta group invalidates. A group carrying a content delta puts prose
  * back, and prose is the classifier's only input, so undoing it reaches the same facts
  * the forward edit did. Every other group shape reaches none — which is why the arm
  * could hardcode an empty clamp until content became delta-logged.
  *
- * An entry the group no longer has (deleted since) falls out of the head turn, so
- * `resolveInvalidationScope` returns null for it and there is nothing to reopen.
+ * An entry the recorded scope names may have been swept since (a rollback above the
+ * edited entry spares the edit but not the reply beside it); its facts went with it, so
+ * `resolveClassifierFactDeltas` simply finds nothing anchored to it.
  */
 export async function resolveGroupInvalidation(
   branchId: string,
   group: readonly Delta[],
   ctx: DbCtx,
-): Promise<{ rows: Delta[]; clampOps: SqlOp[] }> {
+): Promise<ContentEditInvalidation> {
   const rows: Delta[] = []
   const clampOps: SqlOp[] = []
   for (const delta of group) {
     if (!isContentEditDelta(delta)) continue
-    const one = await resolveContentEditInvalidation(branchId, delta.targetId, ctx)
+    const one = await resolveRecordedInvalidation(branchId, delta, ctx)
     rows.push(...one.rows)
     clampOps.push(...one.clampOps)
   }
