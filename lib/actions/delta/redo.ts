@@ -96,14 +96,13 @@ export async function applyRedo(
   // later CTRL-Z reaches it before anything written in the gap. Ascending because the
   // subquery increments per row while snapshots arrive newest-first
   // (data-model.md -> Entry mutability & rollback).
-  const deltaOps = [...restoredDeltas]
-    .sort((a, b) => a.logPosition - b.logPosition)
-    .map((delta) =>
-      ctx.db
-        .insert(deltas)
-        .values({ ...delta, logPosition: nextLogPosition(delta.branchId) })
-        .toSQL(),
-    )
+  restoredDeltas.sort((a, b) => a.logPosition - b.logPosition)
+  const deltaOps = restoredDeltas.map((delta) =>
+    ctx.db
+      .insert(deltas)
+      .values({ ...delta, logPosition: nextLogPosition(delta.branchId) })
+      .toSQL(),
+  )
   // Reversal after the redo's own ops: a restore writes the whole row, so a targeted
   // reversal of the same row would be clobbered the other way round. Ordered explicitly
   // rather than left to chance -- the classifier targets no story_entries row today.

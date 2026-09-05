@@ -36,7 +36,7 @@ export const INVALIDATION_SCOPE_KEY = `${PAYLOAD_META_PREFIX}invalidationScope`
  * both to the head turn (data-model.md -> Entry mutability & rollback). The same pair
  * `resolveSaveAndRegenTurn` derives the editor's notice from; they must agree.
  */
-export async function resolveInvalidationScope(
+async function resolveInvalidationScope(
   branchId: string,
   editedId: string,
   ctx: DbCtx,
@@ -113,31 +113,6 @@ export function contentEditUndoPayload(
 }
 
 /**
- * Absent and unreadable are kept apart on purpose. An edit below the head turn records
- * no scope, and reversing it invalidates nothing — that is a fact about the forward
- * edit. An unreadable one is the absence of any fact about it, and reversing prose on
- * that basis is the failure the recorded scope exists to prevent.
- */
-type RecordedScope =
-  | { kind: 'none' }
-  | { kind: 'scope'; scope: InvalidationScope }
-  | { kind: 'unreadable' }
-
-function recordedInvalidationScope(delta: Pick<Delta, 'id' | 'undoPayload'>): RecordedScope {
-  const payload = delta.undoPayload
-  // Key presence, not a null check: `contentEditUndoPayload` omits the key entirely when
-  // there is no scope, so an explicit null can only be corruption.
-  if (payload == null || !(INVALIDATION_SCOPE_KEY in payload)) return { kind: 'none' }
-  const parsed = invalidationScopeSchema.safeParse(payload[INVALIDATION_SCOPE_KEY])
-  if (parsed.success) return { kind: 'scope', scope: parsed.data }
-  logger.error('action_layer.invalidation_scope_malformed', {
-    deltaId: delta.id,
-    error: parsed.error.message,
-  })
-  return { kind: 'unreadable' }
-}
-
-/**
  * An invalidation, or the delta that refused to describe one. Callers reject on
  * `unreadable` rather than reversing with an empty set (undo.ts -> UndoRejectionCode).
  */
@@ -145,44 +120,61 @@ export type InvalidationOutcome =
   | ({ status: 'ok' } & ContentEditInvalidation)
   | { status: 'unreadable'; deltaId: string }
 
-/** {@link resolveContentEditInvalidation} for the scope a delta already carries. */
-export async function resolveRecordedInvalidation(
+/**
+ * {@link resolveContentEditInvalidation} for the scope a delta already carries.
+ *
+ * Absent and unreadable are kept apart on purpose. An edit below the head turn records
+ * no scope, and reversing it invalidates nothing — that is a fact about the forward
+ * edit. An unreadable one is the absence of any fact about it, and reversing prose on
+ * that basis is the failure the recorded scope exists to prevent.
+ */
+async function resolveRecordedInvalidation(
   branchId: string,
   delta: Pick<Delta, 'id' | 'undoPayload'>,
   ctx: DbCtx,
 ): Promise<InvalidationOutcome> {
-  const recorded = recordedInvalidationScope(delta)
-  if (recorded.kind === 'unreadable') return { status: 'unreadable', deltaId: delta.id }
-  const scope = recorded.kind === 'scope' ? recorded.scope : null
-  return { status: 'ok', ...(await invalidationForScope(branchId, scope, ctx)) }
+  const payload = delta.undoPayload
+  // Key presence, not a null check: `contentEditUndoPayload` omits the key entirely when
+  // there is no scope, so an explicit null can only be corruption.
+  if (payload == null || !(INVALIDATION_SCOPE_KEY in payload))
+    return { status: 'ok', rows: [], clampOps: [] }
+  const parsed = invalidationScopeSchema.safeParse(payload[INVALIDATION_SCOPE_KEY])
+  if (!parsed.success) {
+    logger.error('action_layer.invalidation_scope_malformed', {
+      deltaId: delta.id,
+      error: parsed.error.message,
+    })
+    return { status: 'unreadable', deltaId: delta.id }
+  }
+  return { status: 'ok', ...(await invalidationForScope(branchId, parsed.data, ctx)) }
 }
 
 /**
- * What reversing a delta group invalidates. A group carrying a content delta puts prose
- * back, and prose is the classifier's only input, so undoing it reaches the same facts
- * the forward edit did. Every other group shape reaches none.
+ * What reversing these deltas invalidates. A content delta puts prose back, and prose is
+ * the classifier's only input, so reversing one reaches the same facts the forward edit
+ * did. Every other delta shape reaches none.
  *
  * An entry the recorded scope names may have been swept since (a rollback above the
  * edited entry spares the edit but not the reply beside it); its facts went with it, so
  * `resolveClassifierFactDeltas` simply finds nothing anchored to it.
  */
-export async function resolveGroupInvalidation(
+export async function resolveInvalidationForDeltas(
   branchId: string,
-  group: readonly Delta[],
+  candidates: readonly Delta[],
   ctx: DbCtx,
 ): Promise<InvalidationOutcome> {
   const rows: Delta[] = []
   const clampOps: SqlOp[] = []
-  for (const delta of group) {
+  for (const delta of candidates) {
     if (!isContentEditDelta(delta)) continue
     const one = await resolveRecordedInvalidation(branchId, delta, ctx)
     if (one.status === 'unreadable') return one
     rows.push(...one.rows)
     clampOps.push(...one.clampOps)
   }
-  // Sorted here so every `ContentEditInvalidation` is replay-ordered by construction:
-  // the per-delta results are each sorted, but concatenating them is not.
-  return { status: 'ok', rows: sortForReplay(rows), clampOps }
+  // Each per-delta result is sorted and unique; concatenating them is neither, and two
+  // recorded scopes can name the same entry.
+  return { status: 'ok', rows: sortForReplay(dedupeById(rows)), clampOps }
 }
 
 /**
@@ -283,4 +275,8 @@ export async function resolveClassifierFactDeltas(
 // of log order.
 export function sortForReplay(rows: Delta[]): Delta[] {
   return [...rows].sort((a, b) => b.logPosition - a.logPosition)
+}
+
+export function dedupeById(rows: readonly Delta[]): Delta[] {
+  return [...new Map(rows.map((r) => [r.id, r])).values()]
 }

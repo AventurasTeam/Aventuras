@@ -6,14 +6,14 @@ import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 import { selectUndoTarget } from '@/lib/undo'
 
 import {
-  isContentEditDelta,
-  resolveGroupInvalidation,
-  resolveRecordedInvalidation,
+  dedupeById,
+  resolveInvalidationForDeltas,
   sortForReplay,
+  type InvalidationOutcome,
 } from './classifier-facts'
 import { resolveSweep } from './operational'
 import { bracketProseReversal } from './prose-reversal'
-import { applyRedo, snapshotForRedo, type RedoInvalidation, type RedoSnapshot } from '../delta/redo'
+import { applyRedo, snapshotForRedo, type RedoSnapshot } from '../delta/redo'
 import { DeltaReplayError, reverseAndPruneDeltaRows } from '../delta/reverse-replay'
 import type { DbCtx } from '../types'
 
@@ -28,11 +28,12 @@ export type UndoResult =
   | { status: 'ok' }
   | { status: 'rejected'; code: UndoRejectionCode; reason: string }
 
-// Disjoint today by target table, not by source — the child-delta closure pulls rows in
-// whatever their source, but a group carrying a content delta is that delta alone.
-// Deduping keeps a future overlap from reversing and pruning a row twice.
-function dedupeById(rows: readonly Delta[]): Delta[] {
-  return [...new Map(rows.map((r) => [r.id, r])).values()]
+function unreadableScopeRejection(deltaId: string): UndoResult {
+  return {
+    status: 'rejected',
+    code: 'integrity',
+    reason: `delta ${deltaId} carries an unreadable invalidation scope`,
+  }
 }
 
 async function recentDeltaRows(branchId: string, ctx: DbCtx): Promise<Delta[]> {
@@ -61,7 +62,7 @@ export async function undoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
     if (!target) return { status: 'rejected', code: 'nothing-to-apply', reason: 'nothing to undo' }
 
     let rows: Delta[]
-    // What redo replays. Diverges from `rows` on a content edit: see `snapshotRows`.
+    // What redo replays; diverges from `rows` on a content edit.
     let snapshotRows: Delta[]
     let clampOps: SqlOp[] = []
     if (target.kind === 'turn') {
@@ -74,19 +75,18 @@ export async function undoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
       clampOps = swept.clampOps
     } else {
       const group = recent.filter((r) => r.actionId === target.actionId)
-      const invalidation = await resolveGroupInvalidation(branchId, group, ctx)
+      const invalidation = await resolveInvalidationForDeltas(branchId, group, ctx)
       if (invalidation.status === 'unreadable')
-        return {
-          status: 'rejected',
-          code: 'integrity',
-          reason: `delta ${invalidation.deltaId} carries an unreadable invalidation scope`,
-        }
+        return unreadableScopeRejection(invalidation.deltaId)
       clampOps = invalidation.clampOps
       // The added reversals are a consequence of the prose moving, not part of the
       // action being undone — so redo replays the group alone. Replaying them too
       // would re-insert rows the redo arm's own invalidation is deleting, and the
       // watermark stays clamped either way, so the next pass re-derives them.
       snapshotRows = group
+      // Disjoint today by target table, not by source — the child-delta closure pulls
+      // rows in whatever their source, but a group carrying a content delta is that
+      // delta alone. Deduping keeps a future overlap from reversing a row twice.
       rows = sortForReplay(dedupeById([...group, ...invalidation.rows]))
     }
 
@@ -126,14 +126,9 @@ export async function redoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
   // pass the way every other reversal does.
   return bracketProseReversal(branchId, async () => {
     const invalidation = await resolveRedoInvalidation(branchId, snapshot, ctx)
-    if ('status' in invalidation)
-      return {
-        status: 'rejected',
-        code: 'integrity',
-        reason: `delta ${invalidation.deltaId} carries an unreadable invalidation scope`,
-      }
+    if (invalidation.status === 'unreadable') return unreadableScopeRejection(invalidation.deltaId)
     try {
-      await applyRedo(snapshot, ctx, invalidation)
+      await applyRedo(snapshot, ctx, { rows: invalidation.rows, extraOps: invalidation.clampOps })
     } catch (e) {
       // Committed means the redo's DB write landed; only the post-commit store
       // sync failed. Pop the snapshot regardless — retrying it would re-insert
@@ -160,15 +155,7 @@ async function resolveRedoInvalidation(
   branchId: string,
   snapshot: readonly RedoSnapshot[],
   ctx: DbCtx,
-): Promise<RedoInvalidation | { status: 'unreadable'; deltaId: string }> {
-  const rows: Delta[] = []
-  const extraOps: SqlOp[] = []
-  for (const { delta, rowBeforeUndo } of snapshot) {
-    if (rowBeforeUndo == null || !isContentEditDelta(delta)) continue
-    const one = await resolveRecordedInvalidation(branchId, delta, ctx)
-    if (one.status === 'unreadable') return one
-    rows.push(...one.rows)
-    extraOps.push(...one.clampOps)
-  }
-  return { rows: sortForReplay(dedupeById(rows)), extraOps }
+): Promise<InvalidationOutcome> {
+  const restorable = snapshot.filter((s) => s.rowBeforeUndo != null).map((s) => s.delta)
+  return resolveInvalidationForDeltas(branchId, restorable, ctx)
 }

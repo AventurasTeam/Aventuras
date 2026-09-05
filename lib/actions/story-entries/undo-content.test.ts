@@ -9,6 +9,7 @@ import {
   stories,
   storyEntries,
   type ClassifierStatus,
+  type NewStoryEntry,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { logger } from '@/lib/diagnostics'
@@ -26,6 +27,10 @@ afterEach(() => {
   undoRedoStore.clear()
 })
 
+type TestDb = Awaited<ReturnType<typeof createTestDb>>['db']
+
+type SeedEntry = Pick<NewStoryEntry, 'id' | 'position' | 'kind' | 'content'>
+
 const status = (processedThrough: number): ClassifierStatus => ({
   state: 'idle',
   lastSuccessAt: null,
@@ -34,17 +39,18 @@ const status = (processedThrough: number): ClassifierStatus => ({
   processedThrough,
 })
 
-// An opening plus one committed turn, so the log carries a create delta the undo arm
-// would target if the content edit failed to become the head.
-async function seedTurn(db: Awaited<ReturnType<typeof createTestDb>>['db']) {
+// The committed turn's create delta is always seeded, so the log carries the row the
+// undo arm would target if the content edit failed to become the head group.
+async function seedBranch(db: TestDb, entries: SeedEntry[], processed: number) {
   await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
-  await db
-    .insert(branches)
-    .values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1, classifierStatus: status(2) })
-  const rows = [
-    { id: 'e_open', position: 1, kind: 'opening' as const, content: 'once upon a time' },
-    { id: 'e_reply', position: 2, kind: 'ai_reply' as const, content: 'the courier rode north' },
-  ].map((r) => ({ ...r, branchId: 'b1', createdAt: r.position }))
+  await db.insert(branches).values({
+    id: 'b1',
+    storyId: 's1',
+    name: 'm',
+    createdAt: 1,
+    classifierStatus: status(processed),
+  })
+  const rows = entries.map((e) => ({ ...e, branchId: 'b1', createdAt: e.position }))
   await db.insert(storyEntries).values(rows)
   entriesStore.hydrate(
     'b1',
@@ -66,11 +72,19 @@ async function seedTurn(db: Awaited<ReturnType<typeof createTestDb>>['db']) {
   })
 }
 
-async function seedFactFrom(
-  db: Awaited<ReturnType<typeof createTestDb>>['db'],
-  entryId: string,
-  logPosition: number,
-) {
+// An opening plus one committed turn: the tail is the only entry a content edit reaches.
+async function seedTurn(db: TestDb) {
+  await seedBranch(
+    db,
+    [
+      { id: 'e_open', position: 1, kind: 'opening', content: 'once upon a time' },
+      { id: 'e_reply', position: 2, kind: 'ai_reply', content: 'the courier rode north' },
+    ],
+    2,
+  )
+}
+
+async function seedFactFrom(db: TestDb, entryId: string, logPosition: number) {
   await db.insert(happenings).values({
     id: 'hap_derived',
     branchId: 'b1',
@@ -95,7 +109,7 @@ async function seedFactFrom(
   })
 }
 
-async function processedThrough(db: Awaited<ReturnType<typeof createTestDb>>['db']) {
+async function processedThrough(db: TestDb) {
   const [row] = await db
     .select({ s: branches.classifierStatus })
     .from(branches)
@@ -475,35 +489,16 @@ describe('undo of a content edit', () => {
 
 // A head turn proper: an ai_reply tail over its user_action origin, so editing the
 // origin resolves the two-entry scope the tail-only cases never reach.
-async function seedHeadTurnPair(db: Awaited<ReturnType<typeof createTestDb>>['db']) {
-  await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
-  await db
-    .insert(branches)
-    .values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1, classifierStatus: status(3) })
-  const rows = [
-    { id: 'e_open', position: 1, kind: 'opening' as const, content: 'once' },
-    { id: 'e_act', position: 2, kind: 'user_action' as const, content: 'i ride north' },
-    { id: 'e_reply', position: 3, kind: 'ai_reply' as const, content: 'the courier rode north' },
-  ].map((r) => ({ ...r, branchId: 'b1', createdAt: r.position }))
-  await db.insert(storyEntries).values(rows)
-  entriesStore.hydrate(
-    'b1',
-    rows.map((r) => ({ ...r, chapterId: null, metadata: null })),
+async function seedHeadTurnPair(db: TestDb) {
+  await seedBranch(
+    db,
+    [
+      { id: 'e_open', position: 1, kind: 'opening', content: 'once' },
+      { id: 'e_act', position: 2, kind: 'user_action', content: 'i ride north' },
+      { id: 'e_reply', position: 3, kind: 'ai_reply', content: 'the courier rode north' },
+    ],
+    3,
   )
-  await db.insert(deltas).values({
-    id: 'd_turn',
-    branchId: 'b1',
-    actionId: 'act_turn',
-    op: 'create',
-    targetTable: 'story_entries',
-    targetId: 'e_reply',
-    entryId: null,
-    source: 'ai_classifier',
-    undoPayload: null,
-    logPosition: 1,
-    encodingVersion: 1,
-    createdAt: 2,
-  })
   await db.insert(happenings).values(
     (['e_act', 'e_reply'] as const).map((entryId, i) => ({
       id: `hap_${entryId}`,
