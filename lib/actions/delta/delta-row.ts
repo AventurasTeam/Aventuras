@@ -7,7 +7,7 @@ import type { DbCtx, DeltaSource } from '../types'
 import type { DeltaOp } from './registry'
 
 // MAX+1-within-branch as a subquery so the assignment is atomic inside the INSERT.
-function nextLogPosition(branchId: string) {
+export function nextLogPosition(branchId: string) {
   return sql<number>`(SELECT COALESCE(MAX(${deltas.logPosition}), 0) + 1 FROM ${deltas} WHERE ${deltas.branchId} = ${branchId})`
 }
 

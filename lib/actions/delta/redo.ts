@@ -2,6 +2,7 @@ import type { Delta, SqlOp } from '@/lib/db'
 import { deltas, isEmbeddedSourceTable } from '@/lib/db'
 
 import type { DbCtx } from '../types'
+import { nextLogPosition } from './delta-row'
 import { resolveByTable, whereForDelta } from './registry'
 import { buildReverseAndPrunePlan, DeltaReplayError, emitPatches } from './reverse-replay'
 
@@ -53,6 +54,7 @@ export async function applyRedo(
   invalidation: RedoInvalidation = NO_INVALIDATION,
 ): Promise<void> {
   const ops = []
+  const restoredDeltas: Delta[] = []
   const cascadeInfo: Map<string, Record<string, Record<string, unknown>[]>> = new Map()
 
   for (const { delta, rowBeforeUndo } of snapshots) {
@@ -87,18 +89,37 @@ export async function applyRedo(
     }
     // Inside the guards, not after: a snapshot that wrote nothing would log a restore
     // that never happened, leaving a later CTRL-Z to reverse a row redo never touched.
-    if (restored) ops.push(ctx.db.insert(deltas).values(delta).toSQL())
+    if (restored) restoredDeltas.push(delta)
   }
+  // Fresh MAX+1, not the slot the undo freed: a pass may hold it, and (branch_id,
+  // log_position) is unique. Re-assigning also lands the restore at the log head, so a
+  // later CTRL-Z reaches it before anything written in the gap. Ascending because the
+  // subquery increments per row while snapshots arrive newest-first
+  // (data-model.md -> Entry mutability & rollback).
+  const deltaOps = [...restoredDeltas]
+    .sort((a, b) => a.logPosition - b.logPosition)
+    .map((delta) =>
+      ctx.db
+        .insert(deltas)
+        .values({ ...delta, logPosition: nextLogPosition(delta.branchId) })
+        .toSQL(),
+    )
   // Reversal after the redo's own ops: a restore writes the whole row, so a targeted
-  // reversal of the same row would be clobbered the other way round. Defensive only —
-  // the classifier emits no action targeting story_entries — but not silently so.
+  // reversal of the same row would be clobbered the other way round. Ordered explicitly
+  // rather than left to chance -- the classifier targets no story_entries row today.
   const plan =
     invalidation.rows.length > 0
       ? await buildReverseAndPrunePlan(invalidation.rows, ctx)
       : { ops: [], pruneOps: [], patches: [] }
-  // Prunes ahead of the delta re-inserts: the undo freed this snapshot's log
-  // positions, and a pass since then may hold one — (branch_id, log_position) is unique.
-  await ctx.runInTransaction([...plan.pruneOps, ...ops, ...plan.ops, ...invalidation.extraOps])
+  // Prunes ahead of the re-inserts so the restored deltas take positions above what
+  // survives the reversal rather than above rows this transaction is deleting.
+  await ctx.runInTransaction([
+    ...plan.pruneOps,
+    ...ops,
+    ...deltaOps,
+    ...plan.ops,
+    ...invalidation.extraOps,
+  ])
   // Past this point the redo is committed; a patcher throw is a store-sync
   // failure, not a redo failure. Flag committed so redoLastAction still pops
   // the (now-applied) snapshot instead of leaving it for a doomed retry.
