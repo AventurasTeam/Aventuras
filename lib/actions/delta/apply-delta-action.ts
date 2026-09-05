@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 
 import type { SqlOp } from '@/lib/db'
 import { deltas } from '@/lib/db'
@@ -12,6 +12,7 @@ import {
   type MutationResult,
   type PipelineAction,
 } from '../types'
+import { deltaRowOp } from './delta-row'
 import { withKeyLock } from './key-lock'
 import { resolveByActionKind, resolveByTable, type HandlerOutcome } from './registry'
 
@@ -21,43 +22,6 @@ type Args = { action: PipelineAction; actionId: string; branchId: string; entryI
 // against each other.
 function promoteStagedEntityLockKey(branchId: string, id: string): string {
   return `promoteStagedEntity:${branchId}:${id}`
-}
-
-// MAX+1-within-branch as a subquery so the assignment is atomic inside the INSERT.
-function nextLogPosition(branchId: string) {
-  return sql<number>`(SELECT COALESCE(MAX(${deltas.logPosition}), 0) + 1 FROM ${deltas} WHERE ${deltas.branchId} = ${branchId})`
-}
-
-type DeltaRowArgs = {
-  deltaId: string
-  branchId: string
-  entryId: string | null
-  actionId: string
-  source: PipelineAction['source']
-  outcome: Extract<HandlerOutcome, { status: 'ok' }>
-}
-
-function deltaRowOp(
-  ctx: DbCtx,
-  { deltaId, branchId, entryId, actionId, source, outcome }: DeltaRowArgs,
-): SqlOp {
-  return ctx.db
-    .insert(deltas)
-    .values({
-      id: deltaId,
-      branchId,
-      entryId,
-      actionId,
-      logPosition: nextLogPosition(branchId),
-      source,
-      targetTable: outcome.targetTable,
-      targetId: outcome.targetId,
-      op: outcome.op,
-      undoPayload: outcome.undoPayload,
-      encodingVersion: 1,
-      createdAt: Date.now(),
-    })
-    .toSQL()
 }
 
 export async function applyDeltaAction(args: Args, ctx: DbCtx): Promise<MutationResult> {
@@ -93,7 +57,14 @@ async function applyDeltaActionUnlocked(args: Args, ctx: DbCtx): Promise<Mutatio
 
   const deltaId = generateId('delta')
   const ops: SqlOp[] = [
-    deltaRowOp(ctx, { deltaId, branchId, entryId, actionId, source: action.source, outcome }),
+    deltaRowOp(ctx, {
+      deltaId,
+      branchId,
+      entryId,
+      actionId,
+      source: action.source,
+      target: outcome,
+    }),
     ...outcome.ops,
   ]
 
@@ -221,7 +192,7 @@ async function applyDeltaActionGroupUnlocked(
   if (prepared.length === 0) return { status: 'ok' }
 
   const ops: SqlOp[] = prepared.flatMap(({ deltaId, source, outcome }) => [
-    deltaRowOp(ctx, { deltaId, branchId, entryId, actionId, source, outcome }),
+    deltaRowOp(ctx, { deltaId, branchId, entryId, actionId, source, target: outcome }),
     ...outcome.ops,
   ])
 
