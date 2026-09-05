@@ -75,6 +75,31 @@ export async function resolveContentEditInvalidation(
 }
 
 /**
+ * What reversing a delta group invalidates. A group carrying a content delta puts prose
+ * back, and prose is the classifier's only input, so undoing it reaches the same facts
+ * the forward edit did. Every other group shape reaches none — which is why the arm
+ * could hardcode an empty clamp until content became delta-logged.
+ *
+ * An entry the group no longer has (deleted since) falls out of the head turn, so
+ * `resolveInvalidationScope` returns null for it and there is nothing to reopen.
+ */
+export async function resolveGroupInvalidation(
+  branchId: string,
+  group: readonly Delta[],
+  ctx: DbCtx,
+): Promise<{ rows: Delta[]; clampOps: SqlOp[] }> {
+  const rows: Delta[] = []
+  const clampOps: SqlOp[] = []
+  for (const delta of group) {
+    if (!isContentEditDelta(delta)) continue
+    const one = await resolveContentEditInvalidation(branchId, delta.targetId, ctx)
+    rows.push(...one.rows)
+    clampOps.push(...one.clampOps)
+  }
+  return { rows, clampOps }
+}
+
+/**
  * A first-introduction entity stays, even though the prose that introduced it is gone.
  * It is not a fact about that turn but a row the rest of the branch now references --
  * `sceneEntities` arrays, later happenings' involvements, relationships -- and none of

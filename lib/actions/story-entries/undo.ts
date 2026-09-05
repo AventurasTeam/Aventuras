@@ -5,6 +5,7 @@ import { deltas } from '@/lib/db'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 import { selectUndoTarget } from '@/lib/undo'
 
+import { resolveGroupInvalidation, sortForReplay } from './classifier-facts'
 import { resolveSweep } from './operational'
 import { bracketProseReversal } from './prose-reversal'
 import { applyRedo, snapshotForRedo } from '../delta/redo'
@@ -21,6 +22,12 @@ export type UndoRejectionCode = 'gated' | 'branch-not-loaded' | 'nothing-to-appl
 export type UndoResult =
   | { status: 'ok' }
   | { status: 'rejected'; code: UndoRejectionCode; reason: string }
+
+// The two sets are disjoint by source today; deduping keeps a future overlap from
+// reversing a row twice rather than relying on that.
+function dedupeById(rows: readonly Delta[]): Delta[] {
+  return [...new Map(rows.map((r) => [r.id, r])).values()]
+}
 
 async function recentDeltaRows(branchId: string, ctx: DbCtx): Promise<Delta[]> {
   return (await ctx.db
@@ -48,7 +55,8 @@ export async function undoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
     if (!target) return { status: 'rejected', code: 'nothing-to-apply', reason: 'nothing to undo' }
 
     let rows: Delta[]
-    // An action group removes no entry, so there is no watermark to clamp.
+    // What redo replays. It diverges from `rows` on a content edit — see below.
+    let snapshotRows: Delta[]
     let clampOps: SqlOp[] = []
     if (target.kind === 'turn') {
       const swept = await resolveSweep(branchId, target.entryId, ctx)
@@ -56,12 +64,21 @@ export async function undoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
       // log cannot describe what it is being asked to reverse.
       if ('status' in swept) return { status: 'rejected', code: 'integrity', reason: swept.reason }
       rows = swept.rows
+      snapshotRows = rows
       clampOps = swept.clampOps
     } else {
-      rows = recent.filter((r) => r.actionId === target.actionId)
+      const group = recent.filter((r) => r.actionId === target.actionId)
+      const invalidation = await resolveGroupInvalidation(branchId, group, ctx)
+      clampOps = invalidation.clampOps
+      // The added reversals are a consequence of the prose moving, not part of the
+      // action being undone — so redo replays the group alone. Replaying them too
+      // would re-insert rows the redo arm's own invalidation is deleting, and the
+      // watermark stays clamped either way, so the next pass re-derives them.
+      snapshotRows = group
+      rows = sortForReplay(dedupeById([...group, ...invalidation.rows]))
     }
 
-    const snapshot = await snapshotForRedo(rows, ctx)
+    const snapshot = await snapshotForRedo(snapshotRows, ctx)
     try {
       await reverseAndPruneDeltaRows(rows, ctx, clampOps)
     } catch (e) {
