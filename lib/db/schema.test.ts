@@ -4,6 +4,19 @@ import { describe, expect, it } from 'vitest'
 import { appSettings, branches, dbSchema, pipelineRuns, stories, storyEntries } from './schema'
 
 describe('schema', () => {
+  it('keeps every column key clear of the payload-metadata prefix', () => {
+    // `$`-prefixed keys in a delta's undo_payload are metadata, and reverse-replay
+    // filters them out of the row it rebuilds (delta-encoding.ts -> PAYLOAD_META_PREFIX).
+    // A column named that way would be filtered out of its own restore.
+    const offenders = Object.entries(dbSchema).flatMap(([name, table]) =>
+      getTableConfig(table)
+        .columns.map((c) => c.name)
+        .filter((c) => c.startsWith('$'))
+        .map((c) => `${name}.${c}`),
+    )
+    expect(offenders).toEqual([])
+  })
+
   it('exposes every relational table in dbSchema', () => {
     expect(Object.keys(dbSchema).sort()).toEqual(
       [

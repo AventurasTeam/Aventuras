@@ -49,6 +49,17 @@ function deepEqual(a: unknown, b: unknown): boolean {
 const ABSENT = Symbol('absent')
 const NOCHANGE = Symbol('nochange')
 
+// Reserved prefix for payload metadata -- facts the reversal needs that are not a prior
+// column value (data-model.md -> Entry mutability & rollback). Reverse-replay filters
+// these out before building a row: drizzle drops an unknown key from a SET clause
+// silently, so the exposure is the store patch built beside it, which spreads columns
+// onto the row unfiltered. No column key starts with `$` today; nothing enforces that.
+export const PAYLOAD_META_PREFIX = '$'
+
+export function isPayloadMetaKey(key: string): boolean {
+  return key.startsWith(PAYLOAD_META_PREFIX)
+}
+
 // FORWARD: produce the nested-partial of changed paths carrying pre-change values.
 export function computeUndoPayload(
   schema: ZodType,

@@ -1,50 +1,173 @@
-import { and, desc, eq, inArray, ne } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
+import { z } from 'zod'
 
-import {
-  deltas,
-  happeningAwareness,
-  happeningInvolvements,
-  storyEntries,
-  type Delta,
-} from '@/lib/db'
+import { deltas, happeningAwareness, happeningInvolvements, type Delta, type SqlOp } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 
+import { loadHeadTurn } from './head-turn'
+import { PAYLOAD_META_PREFIX } from '../delta/delta-encoding'
 import type { DbCtx } from '../types'
+import { classifierWatermarkClampOps } from './prose-reversal'
 
 const CHILD_TABLES = ['happening_involvements', 'happening_awareness'] as const
+
+export type InvalidationScope = { entryIds: string[]; editedPosition: number }
+
+const invalidationScopeSchema = z.object({
+  entryIds: z.array(z.string()).min(1),
+  editedPosition: z.number().int(),
+})
+
+// Recorded at write time rather than re-derived at reversal time, because the tail can
+// move without this delta moving with it (data-model.md -> Entry mutability & rollback).
+export const INVALIDATION_SCOPE_KEY = `${PAYLOAD_META_PREFIX}invalidationScope`
 
 /**
  * The entries a content edit invalidates, or null when it invalidates none.
  *
  * The clamp reopens every entry above it, so the reversal has to cover that whole
  * window or the next pass re-derives beside facts that survived — which is what bounds
- * both to the head turn (data-model.md -> Entry mutability & rollback). The same pair
- * `resolveSaveAndRegenTurn` derives the editor's notice from; they must agree.
+ * both to the head turn (data-model.md -> Entry mutability & rollback). The pair comes
+ * from `resolveHeadTurn`, which is also what the editor derives its notice from.
  *
  * A `system` row is transparent here because it is transparent to the classifier:
- * `readLastTurns` skips the kind, so the reply beneath a failure entry is still the head
- * turn the next pass re-reads. A failed turn reverses its own `user_action` and parks the
- * singleton above the branch's real tail, so letting it close the scope would freeze that
- * tail for as long as the error card stands, and an edit there would leave facts derived
- * from replaced prose with nothing to re-read them.
+ * `readLastTurns` skips the kind, so the reply beneath a failure banner is still the
+ * head turn the next pass re-reads. A failed turn reverses its own `user_action` and
+ * parks the banner above the branch’s real tail, so letting it close the scope would
+ * freeze that tail for as long as the error card stands.
  */
-export async function resolveInvalidationScope(
+async function resolveInvalidationScope(
   branchId: string,
   editedId: string,
   ctx: DbCtx,
-): Promise<string[] | null> {
-  const [tail, previous] = await ctx.db
-    .select({ id: storyEntries.id, kind: storyEntries.kind })
-    .from(storyEntries)
-    .where(and(eq(storyEntries.branchId, branchId), ne(storyEntries.kind, 'system')))
-    .orderBy(desc(storyEntries.position))
-    .limit(2)
-  if (!tail) return null
-  if (tail.id === editedId) return [tail.id]
-  // Clamping below the head turn's origin reopens the reply too, so the reply's facts
-  // go with it or they re-derive twice.
-  if (previous?.id === editedId && previous.kind === 'user_action' && tail.kind === 'ai_reply')
-    return [previous.id, tail.id]
+): Promise<InvalidationScope | null> {
+  const head = await loadHeadTurn(branchId, ctx)
+  if (!head) return null
+  if (head.tail.id === editedId)
+    return { entryIds: [head.tail.id], editedPosition: head.tail.position }
+  // Clamping below the origin reopens the reply too, so the reply's facts go with it or
+  // they re-derive twice.
+  if (head.origin?.id === editedId)
+    return { entryIds: [head.origin.id, head.tail.id], editedPosition: head.origin.position }
   return null
+}
+
+// The arms meet a delta, not an edit call, so they identify one by payload shape. Sound
+// because of the converse: no other story_entries update delta carries a `content` key --
+// updateStoryEntryMetadata writes `{ metadata }`, and the delete handler's whole-row
+// payload does carry one but is excluded by the op.
+export function isContentEditDelta(
+  delta: Pick<Delta, 'targetTable' | 'op' | 'undoPayload'>,
+): boolean {
+  return (
+    delta.targetTable === 'story_entries' &&
+    delta.op === 'update' &&
+    delta.undoPayload != null &&
+    'content' in delta.undoPayload
+  )
+}
+
+export type ContentEditInvalidation = { rows: Delta[]; clampOps: SqlOp[] }
+
+async function invalidationForScope(
+  branchId: string,
+  scope: InvalidationScope | null,
+  ctx: DbCtx,
+): Promise<ContentEditInvalidation> {
+  if (!scope) return { rows: [], clampOps: [] }
+  return {
+    rows: await resolveClassifierFactDeltas(branchId, scope.entryIds, ctx),
+    clampOps: classifierWatermarkClampOps(branchId, scope.editedPosition),
+  }
+}
+
+/**
+ * Both halves of a prose change's invalidation for the FORWARD edit, plus the scope
+ * they were resolved from — the caller records that on the delta so the undo and redo
+ * arms replay this same set instead of re-deriving it. Empty off the head turn.
+ */
+export async function resolveContentEditInvalidation(
+  branchId: string,
+  entryId: string,
+  ctx: DbCtx,
+): Promise<ContentEditInvalidation & { scope: InvalidationScope | null }> {
+  const scope = await resolveInvalidationScope(branchId, entryId, ctx)
+  return { ...(await invalidationForScope(branchId, scope, ctx)), scope }
+}
+
+/** The content delta's payload: prior prose, and the scope its invalidation covered. */
+export function contentEditUndoPayload(
+  previousContent: string,
+  scope: InvalidationScope | null,
+): Record<string, unknown> {
+  return scope
+    ? { content: previousContent, [INVALIDATION_SCOPE_KEY]: scope }
+    : { content: previousContent }
+}
+
+/**
+ * An invalidation, or the delta that refused to describe one. Callers reject on
+ * `unreadable` rather than reversing with an empty set (undo.ts -> UndoRejectionCode).
+ */
+export type InvalidationOutcome =
+  | ({ status: 'ok' } & ContentEditInvalidation)
+  | { status: 'unreadable'; deltaId: string }
+
+/**
+ * {@link resolveContentEditInvalidation} for the scope a delta already carries.
+ *
+ * Absent and unreadable are kept apart on purpose. An edit below the head turn records
+ * no scope, and reversing it invalidates nothing — that is a fact about the forward
+ * edit. An unreadable one is the absence of any fact about it, and reversing prose on
+ * that basis is the failure the recorded scope exists to prevent.
+ */
+async function resolveRecordedInvalidation(
+  branchId: string,
+  delta: Pick<Delta, 'id' | 'undoPayload'>,
+  ctx: DbCtx,
+): Promise<InvalidationOutcome> {
+  const payload = delta.undoPayload
+  // Key presence, not a null check: `contentEditUndoPayload` omits the key entirely when
+  // there is no scope, so an explicit null can only be corruption.
+  if (payload == null || !(INVALIDATION_SCOPE_KEY in payload))
+    return { status: 'ok', rows: [], clampOps: [] }
+  const parsed = invalidationScopeSchema.safeParse(payload[INVALIDATION_SCOPE_KEY])
+  if (!parsed.success) {
+    logger.error('action_layer.invalidation_scope_malformed', {
+      deltaId: delta.id,
+      error: parsed.error.message,
+    })
+    return { status: 'unreadable', deltaId: delta.id }
+  }
+  return { status: 'ok', ...(await invalidationForScope(branchId, parsed.data, ctx)) }
+}
+
+/**
+ * What reversing these deltas invalidates. A content delta puts prose back, and prose is
+ * the classifier's only input, so reversing one reaches the same facts the forward edit
+ * did. Every other delta shape reaches none.
+ *
+ * An entry the recorded scope names may have been swept since (a rollback above the
+ * edited entry spares the edit but not the reply beside it); its facts went with it, so
+ * `resolveClassifierFactDeltas` simply finds nothing anchored to it.
+ */
+export async function resolveInvalidationForDeltas(
+  branchId: string,
+  candidates: readonly Delta[],
+  ctx: DbCtx,
+): Promise<InvalidationOutcome> {
+  const rows: Delta[] = []
+  const clampOps: SqlOp[] = []
+  for (const delta of candidates) {
+    if (!isContentEditDelta(delta)) continue
+    const one = await resolveRecordedInvalidation(branchId, delta, ctx)
+    if (one.status === 'unreadable') return one
+    rows.push(...one.rows)
+    clampOps.push(...one.clampOps)
+  }
+  // Each per-delta result is sorted and unique; concatenating them is neither, and two
+  // recorded scopes can name the same entry.
+  return { status: 'ok', rows: sortForReplay(dedupeById(rows)), clampOps }
 }
 
 /**
@@ -143,6 +266,10 @@ export async function resolveClassifierFactDeltas(
 
 // reverse-replay unwinds newest-first, and the two queries above are unioned out
 // of log order.
-function sortForReplay(rows: Delta[]): Delta[] {
+export function sortForReplay(rows: Delta[]): Delta[] {
   return [...rows].sort((a, b) => b.logPosition - a.logPosition)
+}
+
+export function dedupeById(rows: readonly Delta[]): Delta[] {
+  return [...new Map(rows.map((r) => [r.id, r])).values()]
 }

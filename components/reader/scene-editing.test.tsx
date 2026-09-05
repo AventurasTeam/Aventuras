@@ -93,6 +93,20 @@ describe('useSceneEditing → tail rule', () => {
     expect(result.current.tailEntryId).toBeNull()
   })
 
+  it('reads past a system entry to the narrative tail', () => {
+    const failure = { ...entry('e_sys', 3, []), kind: 'system' } as StoryEntry
+    const { result } = render([...ENTRIES, failure])
+    // A failure banner is a diagnostic singleton, not narrative state: it must not
+    // take the scene editor off the entry the branch actually ends on.
+    expect(result.current.tailEntryId).toBe('e2')
+  })
+
+  it('has no tail on a branch holding nothing but a system entry', () => {
+    const failure = { ...entry('e_sys', 1, []), kind: 'system' } as StoryEntry
+    const { result } = render([failure])
+    expect(result.current.tailEntryId).toBeNull()
+  })
+
   it('has no tail when the window stops short of the live edge', () => {
     // The action layer resolves the head turn off the DB tail, so a window that no
     // longer reaches it must offer nothing rather than name its own last row.

@@ -5,6 +5,7 @@ import type { EditResult } from '@/components/reader/reader-document-types'
 import { updateEntrySceneFields, type DbCtx } from '@/lib/actions'
 import type { Entity, StoryEntry } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
+import { resolveHeadTurn } from '@/lib/head-turn'
 
 /** An id the panel may mention, resolved to a display name where the row survives. */
 export type ResolvedEntity = { id: string; name?: string }
@@ -62,14 +63,16 @@ export function useSceneEditing(
     [entities],
   )
 
-  // The tail rule lives here, not in the card: only this entry gets edit handlers, so
-  // every other card renders no control at all rather than a disabled one. Gated on the
-  // window reaching the live edge because the action layer resolves the same head turn
-  // off the DB tail (resolveInvalidationScope): a window that stopped short would offer
-  // scene editing, Save & regenerate and the self-heals notice on a mid-window row
-  // whose edit the action layer treats as frozen, which is silent drift under
-  // reassuring copy.
-  const tailEntryId = holdsLiveEdge ? (entries.at(-1)?.id ?? null) : null
+  // Resolved here, not in the card: only this entry gets edit handlers, so every other
+  // card renders no control at all rather than a disabled one. Gated on the window
+  // reaching the live edge because the action layer resolves the same head turn off the
+  // DB tail: a window that stopped short would offer scene editing, Save & regenerate
+  // and the self-heals notice on a mid-window row whose edit the action layer treats as
+  // frozen, which is silent drift under reassuring copy.
+  const tailEntryId = useMemo(
+    () => (holdsLiveEdge ? (resolveHeadTurn(entries)?.tail.id ?? null) : null),
+    [entries, holdsLiveEdge],
+  )
 
   const [sceneEditId, setSceneEditId] = useState<string | null>(null)
 

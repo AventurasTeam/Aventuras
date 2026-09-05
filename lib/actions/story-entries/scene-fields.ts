@@ -1,11 +1,9 @@
-import { desc, eq } from 'drizzle-orm'
-
-import { storyEntries } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { dedupeSceneEntities, scenePromotionActions, sceneTrackingActions } from '@/lib/piggyback'
 import { entitiesStore, generationStore } from '@/lib/stores'
 
+import { loadHeadTurn } from './head-turn'
 import { applyDeltaActionGroup } from '../delta/apply-delta-action'
 import { withKeyLock } from '../delta/key-lock'
 import type { DbCtx, PipelineAction } from '../types'
@@ -58,15 +56,9 @@ async function updateEntrySceneFieldsLocked(
   if (generationStore.isUserEditBlocked())
     return rejected(STORY_ENTRY_REJECTION.inFlight, 'generation in flight')
 
-  const rows = await ctx.db
-    .select()
-    .from(storyEntries)
-    .where(eq(storyEntries.branchId, branchId))
-    .orderBy(desc(storyEntries.position))
-    .limit(2)
-
-  const tail = rows[0]
-  if (!tail) return rejected(STORY_ENTRY_REJECTION.notFound, `branch ${branchId} has no entries`)
+  const head = await loadHeadTurn(branchId, ctx)
+  if (!head) return rejected(STORY_ENTRY_REJECTION.notFound, `branch ${branchId} has no entries`)
+  const tail = head.tail
   if (tail.id !== id)
     return rejected(
       STORY_ENTRY_REJECTION.notTailEntry,
@@ -97,7 +89,7 @@ async function updateEntrySceneFieldsLocked(
   if (generationStore.isUserEditBlocked())
     return rejected(STORY_ENTRY_REJECTION.inFlight, 'generation in flight')
 
-  const previousEntry = rows[1]
+  const previousEntry = head.previous
   const previousMetadata = previousEntry?.metadata
   const actionId = generateId('act')
 

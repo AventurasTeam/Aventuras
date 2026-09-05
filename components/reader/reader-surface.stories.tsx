@@ -240,6 +240,42 @@ export const SaveAndRegenerateHeldByFailedWrite: Story = {
   },
 }
 
+/** A pristine editor spends nothing: Save-and-regenerate would still cost a generation. */
+export const EditorPristineGatesBothCommits: Story = {
+  args: {
+    rows: HEAD_TURN_ROWS,
+    tailEntryId: 'e3',
+    onCommitEdit: fn(async () => ({ ok: true })),
+    onRegenerate: fn(async () => {}),
+  },
+  play: async ({ args }) => {
+    await userEvent.click(
+      within(entryRow('e2')).getByRole('button', { name: t('reader:entryCard.editEntry') }),
+    )
+    await waitFor(() => screen.getByRole('textbox', { name: t('reader:entryCard.editContent') }))
+
+    expect(screen.getByRole('button', { name: t('save') })).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: t('reader:entryCard.saveAndRegenerate') }),
+    ).toBeDisabled()
+    expect(screen.getByRole('button', { name: t('cancel') })).not.toBeDisabled()
+
+    // Typing the draft away from the stored prose is what releases them.
+    await userEvent.type(
+      screen.getByRole('textbox', { name: t('reader:entryCard.editContent') }),
+      '!',
+    )
+    await waitFor(() => expect(screen.getByRole('button', { name: t('save') })).not.toBeDisabled())
+    // Both, not just Save: the gate is what this story is about, so it asserts the
+    // release directly rather than leaning on the sibling stories that click through it.
+    expect(
+      screen.getByRole('button', { name: t('reader:entryCard.saveAndRegenerate') }),
+    ).not.toBeDisabled()
+    expect(args.onCommitEdit).not.toHaveBeenCalled()
+    expect(args.onRegenerate).not.toHaveBeenCalled()
+  },
+}
+
 /** Only the head turn's action gets the third button; every other row keeps Save / Cancel. */
 export const SaveAndRegenerateAbsentOffHead: Story = {
   args: { rows: HEAD_TURN_ROWS, tailEntryId: 'e3' },

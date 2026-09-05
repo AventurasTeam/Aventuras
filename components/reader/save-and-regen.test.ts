@@ -29,9 +29,16 @@ describe('resolveSaveAndRegenTurn', () => {
     expect(resolveSaveAndRegenTurn(rows, 'e2')).toBeNull()
   })
 
-  it('offers nothing when a system entry holds the tail over a standing action', () => {
+  it('offers nothing when handed a system entry as the tail', () => {
     const rows = [entry('e1', 'ai_reply'), entry('e2', 'user_action'), entry('e3', 'system')]
     expect(resolveSaveAndRegenTurn(rows, 'e3')).toBeNull()
+  })
+
+  it('pairs the head turn a system entry trails', () => {
+    const rows = [entry('e1', 'user_action'), entry('e2', 'ai_reply'), entry('e3', 'system')]
+    // The host's tail rule reads past the failure singleton (scene-editing.ts), so the
+    // third button stays on the turn beneath it — entry-card.md -> Save and regenerate.
+    expect(resolveSaveAndRegenTurn(rows, 'e2')).toEqual({ originId: 'e1', replyId: 'e2' })
   })
 
   it('offers nothing when the tail reply follows the opening rather than an action', () => {

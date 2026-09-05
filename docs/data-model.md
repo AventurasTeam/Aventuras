@@ -1834,9 +1834,9 @@ between runs. This means it survives an app restart between turns (a
 restart between turn N's write and turn N+1's read still sees turn
 N's `summary`), and it's delta-logged like any other metadata edit.
 
-**Metadata edits are delta-logged.** Unlike `content` (the single
-per-column side-channel exemption, see "Entry mutability & rollback"),
-metadata mutations write a delta. Consequence: a user correcting
+**Metadata edits are delta-logged**, like `content` beside them (see
+"Entry mutability & rollback") — an entry's two edit affordances are
+symmetric in reversibility. Consequence: a user correcting
 `worldTime` on an entry after the classifier over-advanced during a
 flashback produces a reversible delta, reachable via CTRL-Z or
 rollback. Same for `sceneEntities` / `currentLocationId` user-edits.
@@ -1917,7 +1917,7 @@ in
   entry to a different position.
 - **Block-delete.** `op=delete` on `kind='opening'` is rejected at
   the action layer. Use cases for "redo the opening" are addressed
-  by text-edit (the existing side-channel exemption — see "Entry
+  by text-edit (delta-logged like any other entry mutation — see "Entry
   mutability & rollback") or by a wizard-driven regenerate pass
   (parked in
   [`parked.md → Regenerate-opening affordance — post-commit from reader chrome`](./parked.md#regenerate-opening-affordance--post-commit-from-reader-chrome)).
@@ -2195,16 +2195,23 @@ explicitly re-classifies, which appends new deltas at the log head rather
 than rewriting history. This keeps the log linear and append-only under
 arbitrary editing.
 
-**Text edits are a side-channel, not in the delta log.** Editing
-`story_entries.content` mutates the row directly without producing a
-delta. Consequences:
+**Text edits are delta-logged.** Editing `story_entries.content` writes an
+`op=update` delta whose `undo_payload` carries `{ content: <previous text> }`
+(plus `$invalidationScope` when there is one — see below), anchored with
+`entry_id` to the edited entry. Consequences:
 
-- Rollback to entry M still works — entries past M are hard-deleted
-  regardless of whether their text was user-edited.
-- There is no log-based "undo my text edit" — the original AI output
-  isn't preserved. If the user wants editor-local undo for typo-level
-  tweaks, that's the editor's responsibility (a transient in-editor
-  undo stack), not rollback's.
+- Rollback to entry M still works, and entries past M are still
+  hard-deleted — now because the survival anchor sweeps an edit with the
+  entry it belongs to, rather than because no delta existed to sweep.
+  An edit on a **surviving** entry is spared by the same predicate; the
+  anchor is what stops a rollback above it from restoring stale prose
+  onto a row that lives.
+- CTRL-Z reverses the edit itself. Its group carries no `story_entries`
+  create, so it is a `group`-kind undo unit and never sweeps the turn
+  beneath it — the pre-edit prose is the payload. Reversing it re-runs the
+  same invalidation the forward edit ran (below), and so does redoing it.
+- Keystroke-level undo inside the open editor is still the editor's job,
+  not the log's: a delta is written per save, not per character.
 - When branching from entry N, the new branch copies entry N's _current_
   text (edited or not). The edit propagates through the fork, which is
   the intended behaviour — text edits are user intent, not narrative
@@ -2216,7 +2223,7 @@ delta. Consequences:
   `processedThrough = min(parent.processedThrough, position(N))` marks entry N
   processed, so nothing re-reads it. The notice's "branch from here" means
   branch, then rewrite.
-- **Memory is not a side-channel, though — inside the head turn.** Prose is
+- **The payload restores the text, not the state derived from it.** Prose is
   the classifier's only input, so an edit invalidates every fact it took from
   the replaced text. An edit inside the head turn reverses the deltas anchored
   to the invalidated entries under `source='periodic_classifier'` and clamps
@@ -2249,16 +2256,42 @@ delta. Consequences:
   clamping below it re-reads the reply too. The second case is also what keeps
   [Save and regenerate](./ui/patterns/entry-card.md#save-and-regenerate)
   reading the edited action rather than skipping past it.
-- **"Tail" there is the last non-`system` entry, not the last row.** A
-  failed turn reverses its own `user_action` and parks the failure
-  singleton above what is left, so the row beneath it is the `ai_reply`
-  the head turn already covers — and the classifier's own turn window
-  skips the kind, so that reply is still what the next pass re-reads.
-  Letting the failure entry close the head turn would freeze the branch's
-  real tail for as long as the error card stands, turning an edit there
-  into a bare write whose stale facts nothing re-reads. The frozen notice
-  compounds it, naming branch and rollback when dismissing the `system`
-  entry is what restores the edit.
+- **The tail here is the narrative tail.** A `kind='system'` entry sits at
+  `MAX(position) + 1` but is a diagnostic artifact carrying no delta (below),
+  so counting it would push the real head turn out of scope and silently
+  downgrade a head-turn edit to a bare text write — facts left standing on
+  prose that no longer exists, with no clamp to make anything re-read them.
+  Every tail rule reads past it: this scope, the editable-entry gate on the
+  [scene editor](./ui/patterns/entry-card.md#scene-editor), and
+  [Save and regenerate](./ui/patterns/entry-card.md#save-and-regenerate). All
+  four resolve it through one function rather than restating it, so the
+  action layer's invalidation scope and the reader's affordances cannot
+  disagree about where the head turn is. The failure case is what makes this
+  load-bearing: a failed turn reverses its own `user_action` and parks the
+  banner above what is left, and the classifier's own turn window skips the
+  kind, so the reply beneath the banner is still what the next pass re-reads.
+  Letting the banner close the head turn would freeze the branch's real tail
+  for as long as the error card stands, turning an edit there into a bare
+  write whose stale facts nothing re-reads.
+- **The scope is recorded on the delta, not re-derived at reversal time.**
+  The forward edit resolves the scope above and writes it onto its own delta
+  under the reserved key `$invalidationScope`; the undo and redo arms replay
+  that recorded set instead of asking the question again. They have to,
+  because the tail can move without this delta moving with it: a rollback
+  prunes the deltas above this one while the
+  [survival anchor](#survival-anchor) spares it, which can leave an edit made
+  _below_ the head turn sitting at the log head on what is now the tail.
+  Re-deriving there answers a different question than the forward edit
+  answered — it reverses facts derived from the very prose the undo is
+  restoring, then clamps the watermark to buy an LLM re-read of a turn whose
+  text never changed. A content delta carrying no recorded scope reverses
+  nothing, which is exactly what an edit below the head turn writes.
+- **Keys prefixed `$` in `undo_payload` are payload metadata, never
+  columns.** Reverse-replay walks the payload's top-level keys as column
+  names, so anything the reversal needs that is not a prior column value must
+  be namespaced out of that walk or it reaches a `SET` clause and the store
+  patch beside it. The prefix cannot collide with a column, because column
+  keys are identifiers. `$invalidationScope` is the first such key.
 - **The reversal set closes over the happening → link-row relation**, not
   over the anchor alone. Undoing a `create` is a plain row delete with no
   cascade — only the explicit `deleteHappening` action carries one — and a
@@ -2310,9 +2343,8 @@ Subsequent edits to wizard-created rows (text edits on the opening,
 field edits on initial entities, body edits on initial lore) follow
 **normal delta semantics** — only the wizard's _creation_ is exempt;
 update / delete operations on those rows produce deltas as usual.
-This is the second delta-scope exemption alongside the
-`story_entries.content` text-edit side-channel above; together they
-are the only narrative-state mutations that bypass the log.
+Wizard creation is now the **only** narrative-state mutation that
+bypasses the log; `story_entries.content` no longer sits beside it.
 
 **System entries are not delta-logged.** A `kind='system'` entry — a
 pre-flight or runtime config-failure surfaced in the reader per
@@ -2334,6 +2366,16 @@ makes this race-free at the action layer. SQLite has no per-branch
 autoincrement primitive (`AUTOINCREMENT` is table-global, not
 partitioned), so the assignment lives in the delta-creating
 mutator, not as a column default.
+
+This holds for a **redo's** re-insert too: the restored delta takes a
+fresh `MAX+1` rather than the slot it held before the undo. The undo
+freed that slot, and a classifier pass firing between the undo and the
+redo can have taken it — replaying the old value would collide on the
+uniqueness backstop below and wedge the redo stack, since the snapshot
+is only popped on a post-commit failure. Re-assigning also keeps the
+restored delta at the log head, so a following CTRL-Z reaches it rather
+than whatever ran in the gap. A group re-inserts in ascending original
+order, which preserves its internal ordering.
 
 Invariant: monotonically increasing within branch. Gaps are fine
 (rollback, fork copy, delete deltas — so gaps occur naturally; the
@@ -2433,18 +2475,25 @@ must disclose it where a field holds prose the user would have to
 retype — Story Settings does so in the Generation tab's warn-box (see
 [`story-settings.md → Story-shaping content`](./ui/screens/story-settings/story-settings.md#generation-tab--definitional-fields--authoring-aids)).
 
-**Exception on `story_entries.content`.** The text content of an entry
-is the one narrative field deliberately exempted from the delta log
-(per the side-channel decision above). Row-level changes to
-`story_entries` (creates when an AI reply or user action is added,
-`chapter_id` assignment at chapter close, row deletes when a user
-manually removes an entry) ARE logged. In-place text edits are NOT.
-This is the only per-column exemption inside a delta-scoped table.
+**No per-column exemptions inside a delta-scoped table.** Every
+`story_entries` mutation is logged: creates when an AI reply or user
+action is added, `chapter_id` assignment at chapter close, row deletes,
+metadata edits, and in-place text edits.
 
 **Audit/debug reconstruction** (of "what did delta N do?") comes from
 forward-replay against earliest state or comparison to the current live
 row. The on-disk delta is lean at the cost of one layer of indirection
 for audit tooling. Acceptable trade.
+
+**Content payloads are the largest update class, and bounded by the entry.**
+`content` is a scalar TEXT column with no Zod schema, so the nested-partial
+rule does not apply — a content edit's `undo_payload` is the whole pre-edit
+prose, and _N_ rewordings of one entry cost _N_ copies of it. At the
+projection above (~500 tokens/turn) that is ~1-3 KB per edit, so even a story
+whose every reply is edited once adds low single-digit MB. Sized against the
+~5 MB ceiling below it does not move the decision, and it is bounded by entry
+length rather than story length, which is why it does not compound the way
+`op=delete`'s full-row JSON would if deletes were routine.
 
 **Log compaction and payload compression** are deferred. Compaction
 (collapsing old update chains into coarser snapshots) would trade
@@ -2547,11 +2596,10 @@ whose subject is a specific entry — `metadata.worldTime`,
 `sceneEntities`, `currentLocationId`, per
 [Entry metadata shape](#entry-metadata-shape) — stamps that entry, so
 correcting an old entry from the reader and then rolling back a later
-turn keeps the correction on the entry that survives. `null` is for
-deltas with no entry subject at all: chapter close, and direct edits to
-entities / lore / threads / happenings. `story_entries.content` never
-appears here — in-place text edits are exempt from the log entirely (see
-the exception above).
+turn keeps the correction on the entry that survives. A content edit anchors the same way, on the same rule: its subject is
+the entry whose prose changed. `null` is for deltas with no entry subject
+at all: chapter close, and direct edits to entities / lore / threads /
+happenings.
 
 The same `B` clamps the per-branch classifier watermark —
 `processedThrough ← min(processedThrough, position(B) − 1)`, in the sweep

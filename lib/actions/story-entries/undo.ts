@@ -5,9 +5,15 @@ import { deltas } from '@/lib/db'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 import { selectUndoTarget } from '@/lib/undo'
 
+import {
+  dedupeById,
+  resolveInvalidationForDeltas,
+  sortForReplay,
+  type InvalidationOutcome,
+} from './classifier-facts'
 import { resolveSweep } from './operational'
 import { bracketProseReversal } from './prose-reversal'
-import { applyRedo, snapshotForRedo } from '../delta/redo'
+import { applyRedo, snapshotForRedo, type RedoSnapshot } from '../delta/redo'
 import { DeltaReplayError, reverseAndPruneDeltaRows } from '../delta/reverse-replay'
 import type { DbCtx } from '../types'
 
@@ -21,6 +27,14 @@ export type UndoRejectionCode = 'gated' | 'branch-not-loaded' | 'nothing-to-appl
 export type UndoResult =
   | { status: 'ok' }
   | { status: 'rejected'; code: UndoRejectionCode; reason: string }
+
+function unreadableScopeRejection(deltaId: string): UndoResult {
+  return {
+    status: 'rejected',
+    code: 'integrity',
+    reason: `delta ${deltaId} carries an unreadable invalidation scope`,
+  }
+}
 
 async function recentDeltaRows(branchId: string, ctx: DbCtx): Promise<Delta[]> {
   return (await ctx.db
@@ -48,7 +62,8 @@ export async function undoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
     if (!target) return { status: 'rejected', code: 'nothing-to-apply', reason: 'nothing to undo' }
 
     let rows: Delta[]
-    // An action group removes no entry, so there is no watermark to clamp.
+    // What redo replays; diverges from `rows` on a content edit.
+    let snapshotRows: Delta[]
     let clampOps: SqlOp[] = []
     if (target.kind === 'turn') {
       const swept = await resolveSweep(branchId, target.entryId, ctx)
@@ -56,12 +71,26 @@ export async function undoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
       // log cannot describe what it is being asked to reverse.
       if ('status' in swept) return { status: 'rejected', code: 'integrity', reason: swept.reason }
       rows = swept.rows
+      snapshotRows = rows
       clampOps = swept.clampOps
     } else {
-      rows = recent.filter((r) => r.actionId === target.actionId)
+      const group = recent.filter((r) => r.actionId === target.actionId)
+      const invalidation = await resolveInvalidationForDeltas(branchId, group, ctx)
+      if (invalidation.status === 'unreadable')
+        return unreadableScopeRejection(invalidation.deltaId)
+      clampOps = invalidation.clampOps
+      // The added reversals are a consequence of the prose moving, not part of the
+      // action being undone — so redo replays the group alone. Replaying them too
+      // would re-insert rows the redo arm's own invalidation is deleting, and the
+      // watermark stays clamped either way, so the next pass re-derives them.
+      snapshotRows = group
+      // Disjoint today by target table, not by source — the child-delta closure pulls
+      // rows in whatever their source, but a group carrying a content delta is that
+      // delta alone. Deduping keeps a future overlap from reversing a row twice.
+      rows = sortForReplay(dedupeById([...group, ...invalidation.rows]))
     }
 
-    const snapshot = await snapshotForRedo(rows, ctx)
+    const snapshot = await snapshotForRedo(snapshotRows, ctx)
     try {
       await reverseAndPruneDeltaRows(rows, ctx, clampOps)
     } catch (e) {
@@ -93,18 +122,40 @@ export async function redoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
       reason: 'redo stack does not belong to this branch',
     }
 
-  generationStore.setReversalInProgress(true)
-  try {
-    await applyRedo(snapshot, ctx)
-  } catch (e) {
-    // Committed means the redo's DB write landed; only the post-commit store
-    // sync failed. Pop the snapshot regardless — retrying it would re-insert
-    // an already-inserted delta row and collide on its primary key.
-    if (e instanceof DeltaReplayError && e.committed) undoRedoStore.popRedoGroup()
-    throw e
-  } finally {
-    generationStore.setReversalInProgress(false)
-  }
-  undoRedoStore.popRedoGroup()
-  return { status: 'ok' }
+  // A redo restores prose and reverses classifier output, so it drains an in-flight
+  // pass the way every other reversal does.
+  return bracketProseReversal(branchId, async () => {
+    const invalidation = await resolveRedoInvalidation(branchId, snapshot, ctx)
+    if (invalidation.status === 'unreadable') return unreadableScopeRejection(invalidation.deltaId)
+    try {
+      await applyRedo(snapshot, ctx, { rows: invalidation.rows, extraOps: invalidation.clampOps })
+    } catch (e) {
+      // Committed means the redo's DB write landed; only the post-commit store
+      // sync failed. Pop the snapshot regardless — retrying it would re-insert
+      // an already-inserted delta row and collide on its primary key.
+      if (e instanceof DeltaReplayError && e.committed) undoRedoStore.popRedoGroup()
+      throw e
+    }
+    undoRedoStore.popRedoGroup()
+    return { status: 'ok' }
+  })
+}
+
+/**
+ * Restoring prose re-opens the same question the forward edit answered: the facts a
+ * pass derived from the text being replaced now describe text that is gone. Reachable
+ * only through a retry timer firing between the undo and the redo, but the failure it
+ * leaves is the one the clamp exists to prevent.
+ *
+ * Skips a snapshot carrying no row because `isContentEditDelta` pins `op = 'update'`,
+ * and `applyRedo` writes nothing for an update it has no row to restore. A delete
+ * redoes regardless of the snapshot, so widening the predicate would lose the clamp.
+ */
+async function resolveRedoInvalidation(
+  branchId: string,
+  snapshot: readonly RedoSnapshot[],
+  ctx: DbCtx,
+): Promise<InvalidationOutcome> {
+  const restorable = snapshot.filter((s) => s.rowBeforeUndo != null).map((s) => s.delta)
+  return resolveInvalidationForDeltas(branchId, restorable, ctx)
 }

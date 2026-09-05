@@ -2,11 +2,13 @@ import { and, desc, eq, sql, type SQL } from 'drizzle-orm'
 
 import type { Delta, SqlOp } from '@/lib/db'
 import { deltas, storyEntries } from '@/lib/db'
+import { generateId } from '@/lib/ids'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
+import { deltaRowOp } from '../delta/delta-row'
 import { reverseAndPruneDeltaRows } from '../delta/reverse-replay'
 import type { DbCtx } from '../types'
-import { resolveClassifierFactDeltas, resolveInvalidationScope } from './classifier-facts'
+import { contentEditUndoPayload, resolveContentEditInvalidation } from './classifier-facts'
 import { bracketProseReversal, classifierWatermarkClampOps } from './prose-reversal'
 import { STORY_ENTRY_REJECTION, type StoryEntryRejectionCode } from './register'
 
@@ -16,8 +18,6 @@ export type StoryEntryRejection = {
   code: StoryEntryRejectionCode
 }
 
-// story_entries.content is the one narrative field exempt from the delta log
-// (data-model.md -> Entry mutability & rollback). Direct row update, no delta.
 export async function updateStoryEntryContent(
   branchId: string,
   id: string,
@@ -30,33 +30,27 @@ export async function updateStoryEntryContent(
       reason: 'generation in flight',
       code: STORY_ENTRY_REJECTION.inFlight,
     }
+  // Ahead of the bracket, which cancels the in-flight classifier before its body runs:
+  // an unchanged save must not cost a pass. Safe outside the barrier because no other
+  // writer touches this column, unlike the tail read the scope needs.
+  const [existing] = await ctx.db
+    .select({ content: storyEntries.content })
+    .from(storyEntries)
+    .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, id)))
+  if (existing?.content === content) return { status: 'ok' }
   // No re-check inside the bracket, matching rollbackToEntry: the gate above and
   // bracketProseReversal's own flag set are one synchronous block, and the flag
   // itself reads as blocked, so a re-check would reject every call.
-  //
-  // Held even for an edit that reverses nothing: resolving the scope needs a read,
-  // and taking it outside the barrier would race the tail it is classifying.
   return bracketProseReversal(branchId, () =>
     updateStoryEntryContentBracketed(branchId, id, content, ctx),
   )
 }
 
 /**
- * The classifier derives its facts from prose alone, so a rewrite leaves the ones
- * it took from the old text standing on nothing. Clamping the watermark on its own
- * only adds the new reading beside the stale one -- chapter-close dedup merges on
- * cast overlap, which a contradicting fact does not have -- so the two run together:
- * reverse what the edit invalidated, then let the next pass re-read it
+ * Prose is the classifier's only input, so a rewrite leaves the facts it took from the
+ * old text standing on nothing. Reversal and clamp ride one scope and neither runs
+ * without the other; off the head turn the edit is a bare text write
  * (data-model.md -> Entry mutability & rollback).
- *
- * Both halves ride one scope and neither runs without it: the clamp reopens exactly
- * the window the reversal covers, so a narrower set would re-derive beside surviving
- * facts. Off the head turn the edit is a bare text write.
- *
- * Scoped by source, not by table: `per_turn_classifier` and `piggyback_tagged_block`
- * write the scene metadata a user may have just corrected by hand, and nothing here
- * may undo that. `resolveClassifierFactDeltas` owns closing that set over the
- * happening -> link-row relation.
  */
 async function updateStoryEntryContentBracketed(
   branchId: string,
@@ -74,28 +68,48 @@ async function updateStoryEntryContentBracketed(
       reason: `story_entries ${branchId}:${id} not found`,
       code: STORY_ENTRY_REJECTION.notFound,
     }
+  // `clearSystemEntry` hard-deletes without a delta, which would strand this one: the
+  // survival anchor's subquery yields NULL for a missing entry, so the orphan is spared
+  // by every rollback window and a CTRL-Z reaching it updates nothing while reporting ok.
+  if (current.kind === 'system')
+    return {
+      status: 'rejected',
+      reason: `system entries are not editable; ${id} is one`,
+      code: STORY_ENTRY_REJECTION.notTailEntry,
+    }
 
-  // The editor gates its commit buttons on the same compare, so this is the backstop for
-  // any other caller: on the head turn a no-op write would reverse the entry's facts and
-  // spend a classifier pass rebuilding them identically, and it clears the redo stack for
-  // nothing on every row.
-  if (current.content === content) return { status: 'ok' }
-
-  const scope = await resolveInvalidationScope(branchId, id, ctx)
-  const derived = scope ? await resolveClassifierFactDeltas(branchId, scope, ctx) : []
+  const invalidation = await resolveContentEditInvalidation(branchId, id, ctx)
 
   // In scope the clamp is unconditional: a pass that read the entry and extracted
   // nothing still advanced the watermark past it, and the op no-ops when the watermark
   // is already behind. One transaction, because a clamp without the reversal re-derives
   // beside the stale facts and a reversal without the clamp deletes them with nothing
   // to replace them.
-  await reverseAndPruneDeltaRows(derived, ctx, [
+  await reverseAndPruneDeltaRows(invalidation.rows, ctx, [
     ctx.db
       .update(storyEntries)
       .set({ content })
       .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, id)))
       .toSQL(),
-    ...(scope ? classifierWatermarkClampOps(branchId, current.position) : []),
+    // Spliced rather than dispatched: applyDeltaAction commits its own transaction, so
+    // it could not be atomic with the reversal, and its barrier rejects a user_edit
+    // action while `reversalInProgress` is set -- which the bracket above sets.
+    deltaRowOp(ctx, {
+      deltaId: generateId('delta'),
+      branchId,
+      // Survival anchor: without it a rollback above this entry would sweep the delta
+      // and restore stale prose onto a row that survives (data-model.md).
+      entryId: id,
+      actionId: generateId('act'),
+      source: 'user_edit',
+      target: {
+        targetTable: 'story_entries',
+        targetId: id,
+        op: 'update',
+        undoPayload: contentEditUndoPayload(current.content, invalidation.scope),
+      },
+    }),
+    ...invalidation.clampOps,
   ])
 
   entriesStore.patch(branchId, { op: 'update', id, columns: { content } })
@@ -151,9 +165,10 @@ async function resolveRollbackWindow(
       code: STORY_ENTRY_REJECTION.rollbackFloor,
     }
 
-  // Survival-anchor predicate (data-model.md -> Survival anchor). In M2 every
-  // foreground delta carries entry_id = NULL so this reduces to the bare suffix;
-  // the position-correlated branch is correct-by-construction and first exercised in M3.3.
+  // Survival-anchor predicate (data-model.md -> Survival anchor). A delta that AMENDS an
+  // existing entry stamps it -- metadata, scene fields, content -- so the
+  // position-correlated branch spares it when a later turn is swept. The create that
+  // introduces an entry deliberately does not, leaving the suffix rule to sweep it.
   return {
     where: and(
       eq(deltas.branchId, branchId),
@@ -188,14 +203,21 @@ export async function resolveSweep(
   return { rows, clampOps: classifierWatermarkClampOps(branchId, win.earliestRemovedPosition) }
 }
 
+// Buckets per rollback-confirm.md, whose world-state row is scoped to the other
+// narrative tables. An entry-scoped delta is spared by the survival anchor unless its
+// entry is being deleted, so counting one here would charge the user twice for a loss
+// the entries line already reports.
 function countBuckets(rows: Pick<Delta, 'op' | 'targetTable'>[]): RollbackCounts {
   let entries = 0
   let chapters = 0
+  let worldStateChanges = 0
   for (const r of rows) {
-    if (r.op === 'create' && r.targetTable === 'story_entries') entries++
-    else if (r.op === 'create' && r.targetTable === 'chapters') chapters++
+    if (r.targetTable === 'story_entries') {
+      if (r.op === 'create') entries++
+    } else if (r.op === 'create' && r.targetTable === 'chapters') chapters++
+    else worldStateChanges++
   }
-  return { entries, chapters, worldStateChanges: rows.length - entries - chapters }
+  return { entries, chapters, worldStateChanges }
 }
 
 export async function getRollbackCounts(

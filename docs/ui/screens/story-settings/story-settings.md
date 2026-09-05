@@ -629,12 +629,10 @@ user's typed target text is stored as the `translations` row.
 Failure of this phase is fatal to the turn (per
 [`architecture.md → Translation as a pipeline concern`](../../../architecture.md)).
 
-**Modified entries — translation refresh.** Per the data-model
-side-channel exemption (see
-[`data-model.md → Story settings shape`](../../../data-model.md#story-settings-shape)),
-`story_entries.content` edits mutate the row directly without
-emitting per-column deltas, so there is no per-range edit history to
-interrogate. On user edit of an already-translated entry, the
+**Modified entries — translation refresh.** A `story_entries.content`
+edit writes one whole-value delta, not a per-range diff (see
+[`data-model.md → Entry mutability & rollback`](../../../data-model.md#entry-mutability--rollback)),
+so there is still no sub-entry edit history to interrogate. On user edit of an already-translated entry, the
 existing `translations` row is invalidated; the entry lazy-translates
 on next render (or eagerly if the entry is currently visible).
 Steady-state translations stay; edits trigger a single full-entry

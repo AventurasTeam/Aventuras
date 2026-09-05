@@ -87,6 +87,42 @@ describe('selectUndoTarget', () => {
     })
   })
 
+  it('classifies a content edit as a group, not the turn beneath it', () => {
+    // A content edit is its own group: with no delta the head resolves to the turn
+    // beneath it, and CTRL-Z deletes the entry instead of reversing the text.
+    const rows = [
+      delta({
+        actionId: 'act_edit',
+        source: 'user_edit',
+        targetTable: 'story_entries',
+        op: 'update',
+        targetId: 'entry_5',
+      }),
+      delta({
+        actionId: 'act_turn',
+        source: 'ai_classifier',
+        targetTable: 'story_entries',
+        op: 'create',
+        targetId: 'entry_5',
+      }),
+    ]
+    expect(selectUndoTarget(rows)).toEqual({ actionId: 'act_edit', kind: 'group' })
+  })
+
+  it('steps over classifier facts sitting on top of a content edit', () => {
+    const rows = [
+      delta({ actionId: 'act_c', source: 'periodic_classifier', targetTable: 'happenings' }),
+      delta({
+        actionId: 'act_edit',
+        source: 'user_edit',
+        targetTable: 'story_entries',
+        op: 'update',
+        targetId: 'entry_5',
+      }),
+    ]
+    expect(selectUndoTarget(rows)).toEqual({ actionId: 'act_edit', kind: 'group' })
+  })
+
   it('classifies a non-turn group (no story_entries create) as a plain group', () => {
     const rows = [
       delta({
