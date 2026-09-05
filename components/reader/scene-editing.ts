@@ -14,7 +14,8 @@ export type SceneEditing = {
    *  counterparties, and a rejected location alike. */
   entityNames: ResolvedEntity[]
   sceneOptions: SceneOptions
-  /** The only entry whose scene fields are editable; null when the branch is empty. */
+  /** The only entry whose scene fields are editable; null when the branch is empty or
+   *  the loaded window stops short of the live edge. */
   tailEntryId: string | null
   /** The entry whose host Sheet is open, with the scene it was opened on. */
   sceneEdit: {
@@ -33,11 +34,13 @@ export type SceneEditing = {
  * document, the candidate pool for the editor's selects, the tail rule, and the
  * phone tier's bridged-out Sheet.
  *
- * `entries` MUST be in ascending position order — the tail is read off the end.
+ * `entries` MUST be in ascending position order — the tail is read off the end — and
+ * `holdsLiveEdge` MUST be false whenever that end is not the branch's own tail.
  */
 export function useSceneEditing(
   branchId: string,
   entries: StoryEntry[],
+  holdsLiveEdge: boolean,
   entities: readonly Entity[],
   ctx: DbCtx,
 ): SceneEditing {
@@ -60,8 +63,13 @@ export function useSceneEditing(
   )
 
   // The tail rule lives here, not in the card: only this entry gets edit handlers, so
-  // every other card renders no control at all rather than a disabled one.
-  const tailEntryId = entries.at(-1)?.id ?? null
+  // every other card renders no control at all rather than a disabled one. Gated on the
+  // window reaching the live edge because the action layer resolves the same head turn
+  // off the DB tail (resolveInvalidationScope): a window that stopped short would offer
+  // scene editing, Save & regenerate and the self-heals notice on a mid-window row
+  // whose edit the action layer treats as frozen, which is silent drift under
+  // reassuring copy.
+  const tailEntryId = holdsLiveEdge ? (entries.at(-1)?.id ?? null) : null
 
   const [sceneEditId, setSceneEditId] = useState<string | null>(null)
 

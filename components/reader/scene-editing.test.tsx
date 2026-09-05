@@ -49,9 +49,13 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function render(entries: StoryEntry[], entities: readonly Entity[] = ENTITIES) {
+function render(
+  entries: StoryEntry[],
+  entities: readonly Entity[] = ENTITIES,
+  holdsLiveEdge = true,
+) {
   return renderHook(
-    ({ rows }: { rows: StoryEntry[] }) => useSceneEditing('b1', rows, entities, CTX),
+    ({ rows }: { rows: StoryEntry[] }) => useSceneEditing('b1', rows, holdsLiveEdge, entities, CTX),
     { initialProps: { rows: entries } },
   )
 }
@@ -86,6 +90,13 @@ describe('useSceneEditing → tail rule', () => {
 
   it('has no tail on an empty branch', () => {
     const { result } = render([])
+    expect(result.current.tailEntryId).toBeNull()
+  })
+
+  it('has no tail when the window stops short of the live edge', () => {
+    // The action layer resolves the head turn off the DB tail, so a window that no
+    // longer reaches it must offer nothing rather than name its own last row.
+    const { result } = render(ENTRIES, ENTITIES, false)
     expect(result.current.tailEntryId).toBeNull()
   })
 })

@@ -6,6 +6,7 @@ export type ContentEditNoticeKey =
   | 'reader:entryCard.editNoticeSceneHere'
   | 'reader:entryCard.editNoticeFrozen'
   | 'reader:entryCard.editNoticeFrozenNoBranch'
+  | 'reader:entryCard.editNoticeFrozenNoRollback'
 
 /**
  * Which divergence notice a row's content editor carries, or null when it carries
@@ -27,15 +28,17 @@ export function resolveContentEditNotice(args: {
 }
 
 /**
- * A `user_action` drops the branch clause: that kind carries no branch action, and
- * naming a control the card does not have is the failure the notice exists to prevent.
+ * Each kind is offered only the remedies its own action cluster carries: naming a
+ * control the card does not have is the failure the notice exists to prevent. A
+ * `user_action` drops the branch clause, and the opening drops the rollback clause --
+ * it is the rollback floor, so that half can never become true for it.
  */
 export function contentEditNoticeKey(
   notice: ContentEditNotice,
   kind: EntryKind,
 ): ContentEditNoticeKey {
   if (notice === 'scene-here') return 'reader:entryCard.editNoticeSceneHere'
-  return kind === 'user_action'
-    ? 'reader:entryCard.editNoticeFrozenNoBranch'
-    : 'reader:entryCard.editNoticeFrozen'
+  if (kind === 'user_action') return 'reader:entryCard.editNoticeFrozenNoBranch'
+  if (kind === 'opening') return 'reader:entryCard.editNoticeFrozenNoRollback'
+  return 'reader:entryCard.editNoticeFrozen'
 }

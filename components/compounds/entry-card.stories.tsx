@@ -192,6 +192,29 @@ export const EditModeWithRegen: StoryT = {
   },
 }
 
+/** Untouched draft: neither commit button has anything to save, and a regenerate that
+    saved nothing belongs to the reply's own control behind its cascade confirm. */
+export const EditModePristine: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    kind: 'user_action',
+    content: 'I draw my sword and step toward the figure in the doorway.',
+    editing: true,
+    editDirty: false,
+    onContentChange: fn(),
+    onCommitEdit: fn(),
+    onCommitEditAndRegen: fn(),
+    onCancelEdit: fn(),
+  },
+  play: async () => {
+    await expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Save & regenerate/ })).toBeDisabled()
+    // Backing out of an untouched draft has to stay reachable.
+    expect(screen.getByRole('button', { name: 'Cancel' })).not.toBeDisabled()
+  },
+}
+
 /** Frozen scene on an earlier `user_action`: rollback is named, branching is not. */
 export const EditModeNoticeFrozenNoBranch: StoryT = {
   ...wrap,

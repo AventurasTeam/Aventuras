@@ -550,9 +550,9 @@ reads work; M6.6 follows M6.1.
 M6.1 owns it and M6.6 sequences after, or authoring extracts the
 core as a pinned contract and M6.6 parallelizes too.
 
-Carried deferrals, routed out of [`triage.md`](./triage.md)
-2026-08-18, verified against the code first. Resolve with the slice
-each names.
+Carried deferrals — the first batch routed out of
+[`triage.md`](./triage.md) 2026-08-18, later ones filed straight here —
+verified against the code first. Resolve with the slice each names.
 
 - **M6.1 — The fork-exclusion guard is structural and goes stale the moment
   fork lands.** Branch fork is unimplemented (M6.1), so Slice 3.5 could
@@ -569,6 +569,24 @@ each names.
   branch fork, replace the structural scan with the both-sides
   behavioral test** the slice AC originally described. Surfaced by the
   Slice 3.5 Task 14 review (2026-08-09).
+- **M6.1 — steps 2 and 3 of the fork partition use different predicates,
+  so a foreground edit about a kept entry falls between them.** Step 2
+  copies deltas below `L` plus, above `L`, only `periodic_classifier`
+  deltas anchored to a kept entry; step 3 reverse-applies everything above
+  `L` except `entry_id IS NULL OR position(entry_id) >= position(N+1)` —
+  by anchor, whatever the source. A `user_edit` delta anchored at or below
+  `N` therefore matches neither: not copied, not rewound, just dropped.
+  State stays correct, since step 1 copies current rows and a rollback on
+  the new branch deletes the entry the edit sits on anyway, so this is a
+  history-fidelity gap against step 2's own claim that the fork "carries
+  the complete history up to the fork point." Reachable today in spec
+  terms via `metadata` edits (`updateStoryEntryMetadata`), and it widens
+  if `story_entries.content` is ever delta-logged
+  ([`followups.md`](../followups.md)). **Settle which predicate is
+  authoritative when M6.1 writes the partition** — most likely step 2
+  widening to any delta anchored to a kept entry, since step 3's
+  exclusion is already source-blind. Surfaced reviewing the content-edit
+  invalidation scope (2026-09-05).
 
 **Gates.** M5 (chapter-close writes that branches must respect
 need to exist first).

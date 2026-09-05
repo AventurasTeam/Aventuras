@@ -291,6 +291,8 @@ export default function ReaderComposerRoute() {
     () => [...entityRows.values()].filter((e) => e.branchId === branchId),
     [entityRows, branchId],
   )
+  // Entries only ever prepend and nothing trims the far end yet, so it is still the tail.
+  const holdsLiveEdge = true
   const {
     entityNames,
     sceneOptions,
@@ -299,7 +301,7 @@ export default function ReaderComposerRoute() {
     editScene,
     requestEditScene,
     closeSceneEdit,
-  } = useSceneEditing(branchId, entries, branchEntities, ctx)
+  } = useSceneEditing(branchId, entries, holdsLiveEdge, branchEntities, ctx)
 
   const [stripCollapsed, setStripCollapsed] = useState(false)
   const [stripError, setStripError] = useState<PipelineError | null>(null)
