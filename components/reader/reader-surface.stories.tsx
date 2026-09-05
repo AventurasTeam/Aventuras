@@ -266,6 +266,11 @@ export const EditorPristineGatesBothCommits: Story = {
       '!',
     )
     await waitFor(() => expect(screen.getByRole('button', { name: t('save') })).not.toBeDisabled())
+    // Both, not just Save: the gate is what this story is about, so it asserts the
+    // release directly rather than leaning on the sibling stories that click through it.
+    expect(
+      screen.getByRole('button', { name: t('reader:entryCard.saveAndRegenerate') }),
+    ).not.toBeDisabled()
     expect(args.onCommitEdit).not.toHaveBeenCalled()
     expect(args.onRegenerate).not.toHaveBeenCalled()
   },
