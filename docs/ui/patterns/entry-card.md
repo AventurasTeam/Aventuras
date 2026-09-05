@@ -400,13 +400,26 @@ on its own; the behavior is owned by the parent ScrollView.
 
 ### Divergence notices
 
-Editing `content` never updates the state recorded from it. The
+Editing `content` never updates the scene metadata recorded from it. The
 classifier reads prose only — its window carries `promptProse(entry)`
-and no metadata — so a rewrite leaves happenings, involvements and
-awareness standing on text that is gone. Nothing detects that, and on
-an earlier entry nothing can be done about it either, because the
-[scene editor](#scene-editor) refuses every row but the tail. So the
-editor states it, and what it states depends on where the row sits.
+and no metadata — so a rewrite leaves the scene triple standing on text
+that is gone, and on an earlier entry nothing can be done about it
+either, because the [scene editor](#scene-editor) refuses every row but
+the tail. So the editor states it, and what it states depends on where
+the row sits.
+
+**The happening layer splits on the same axis.** Inside the head turn a
+content edit reverses the happenings, involvements and awareness derived
+from the entries it invalidates, and clamps the classifier watermark so
+the next pass rebuilds them from the new text — the two notices below are
+therefore not symmetric about what survives. Below the head turn none of
+that runs: the clamp would force a re-read of every entry above it, whose
+facts survive, and the duplicates would land in already-closed chapters
+that chapter-close dedup never revisits
+([`data-model.md → Entry mutability & rollback`](../../data-model.md#entry-mutability--rollback)).
+So on a frozen row the recorded state genuinely does not follow, in either
+direction, and the notice is the only thing standing between the user and
+silent drift.
 
 **On the tail** both halves are editable, so the notice is a nudge:
 
@@ -433,6 +446,24 @@ equivalent:
 > safe — but if this changes who was present or what happened, the
 > recorded world state won't follow. Branch from here, or roll back
 > (which deletes this entry and everything after).
+
+**"Branch from here" means branch, then rewrite.** Entry N is the new
+branch's tail, so the rewrite lands on the head turn there and invalidates
+normally. Done the other way round the fork copies the new text alongside
+the facts derived from the old, and its
+`processedThrough = min(parent.processedThrough, position(N))` marks the
+entry processed, so nothing re-reads it
+([data-model → Branch model](../../data-model.md#branch-model)). The
+notice does not spell the order out — it is offered mid-edit, where
+"branch" reads as "not here" — but the fork surface owns making the tail
+obvious when it lands.
+
+**The two branches of this notice are the behavioural boundary, not
+commentary on it.** `resolveContentEditNotice` derives them from
+`sceneEditable || hasSaveAndRegen`, which is exactly the head-turn
+membership the action layer gates invalidation on. The two must move
+together: a row that shows the nudge is a row whose edit self-heals, and a
+row that shows the frozen copy is a row whose edit does not.
 
 **An earlier `user_action` drops the branch clause.** That kind carries
 no branch action ([Per-kind structure](#per-kind-structure)) and

@@ -44,17 +44,25 @@ for the placement rule.
   design but never scoped into it; that pass shipped 2026-09-03 and left
   this untouched.
 
-  **The memory half of this is closed** (2026-09-04). A content edit used
-  to leave the classifier's facts standing on prose that was gone, because
-  it clamped no watermark; it now reverses the facts anchored to that entry
-  and clamps below it in the same transaction as the text write, resolved
-  at
+  **The memory half of this is closed** (2026-09-04, rescoped 2026-09-05). A
+  content edit used to leave the classifier's facts standing on prose that was
+  gone, because it clamped no watermark; inside the head turn it now reverses
+  the facts anchored to the entries it invalidates and clamps below the edited
+  entry in the same transaction as the text write, resolved at
   [`data-model.md → Entry mutability & rollback`](./data-model.md#entry-mutability--rollback).
   That closes the `Save & regenerate` gap with it: the content clamp lands
   below the edited `user_action`, and the regenerate sweep's own clamp only
   lowers, so the next pass reads the edited action rather than skipping it.
   The user-facing half shipped alongside as
   [entry-card.md → Divergence notices](./ui/patterns/entry-card.md#divergence-notices).
+
+  The first cut clamped unconditionally, which made an edit to entry 5 of a
+  5000-entry story re-read the whole suffix while reversing only entry 5 —
+  duplicating every surviving fact above it, permanently, since chapter-close
+  dedup only clusters inside the range it is closing. Bounded to the head turn
+  2026-09-05: below it a content edit reverses nothing and clamps nothing, and
+  the frozen-scene notice owns the drift. The remedy it names is real but
+  order-sensitive — branch first, rewrite on the new tail.
 
   What stays open is reversibility alone. Delta-logging `content` is
   separable from the fix above — the clamp and the reversal needed the edit
@@ -74,6 +82,20 @@ for the placement rule.
   kind that writes one: `story_entries` registers only
   `updateStoryEntryMetadata` for updates, and `updateStoryEntryContent`
   writes `content` outside the action layer.
+
+  **Two seams it does have to pay for** (verified 2026-09-05). Reversing a
+  content delta restores prose, which is classifier input, so the undo path
+  needs the same invalidation the forward path just gained — and `undo.ts`
+  hardcodes an empty clamp for group reversals, correct only while no group
+  action touches prose. `applyRedo` has no per-table hook at all. The
+  head-turn bound keeps this small: below it there is nothing to invalidate,
+  and a content delta stops being the undo target as soon as a turn lands on
+  top of it, so the hook is needed only for a delta still sitting on the head
+  turn. Second, the delta row has to be inserted in the same transaction as
+  the reversal, and there is no exported way to do that — `deltaRowOp` is
+  private and `applyDeltaAction` owns its own transaction. Also mandatory,
+  not optional: the delta must stamp `entry_id`, or a rollback above the
+  edited entry would sweep it and restore stale prose onto a surviving row.
 
 - **Q3 needs an overhaul and a re-spec, not signal-by-signal patches.**
   [`retrieval.md → Q3`](./memory/retrieval.md#q3-heuristic-prose-extract)

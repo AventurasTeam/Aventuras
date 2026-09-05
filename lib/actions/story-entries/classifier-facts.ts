@@ -1,10 +1,44 @@
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, desc, eq, inArray } from 'drizzle-orm'
 
-import { deltas, happeningAwareness, happeningInvolvements, type Delta } from '@/lib/db'
+import {
+  deltas,
+  happeningAwareness,
+  happeningInvolvements,
+  storyEntries,
+  type Delta,
+} from '@/lib/db'
 
 import type { DbCtx } from '../types'
 
 const CHILD_TABLES = ['happening_involvements', 'happening_awareness'] as const
+
+/**
+ * The entries a content edit invalidates, or null when it invalidates none.
+ *
+ * The clamp reopens every entry above it, so the reversal has to cover that whole
+ * window or the next pass re-derives beside facts that survived — which is what bounds
+ * both to the head turn (data-model.md -> Entry mutability & rollback). The same pair
+ * `resolveSaveAndRegenTurn` derives the editor's notice from; they must agree.
+ */
+export async function resolveInvalidationScope(
+  branchId: string,
+  editedId: string,
+  ctx: DbCtx,
+): Promise<string[] | null> {
+  const [tail, previous] = await ctx.db
+    .select({ id: storyEntries.id, kind: storyEntries.kind })
+    .from(storyEntries)
+    .where(eq(storyEntries.branchId, branchId))
+    .orderBy(desc(storyEntries.position))
+    .limit(2)
+  if (!tail) return null
+  if (tail.id === editedId) return [tail.id]
+  // Clamping below the head turn's origin reopens the reply too, so the reply's facts
+  // go with it or they re-derive twice.
+  if (previous?.id === editedId && previous.kind === 'user_action' && tail.kind === 'ai_reply')
+    return [previous.id, tail.id]
+  return null
+}
 
 /**
  * A first-introduction entity stays, even though the prose that introduced it is gone.
@@ -23,7 +57,7 @@ function isReversible(delta: Delta): boolean {
 
 /**
  * Every delta a content edit must reverse: the classifier facts anchored to the
- * edited entry, closed under the happening -> link-row relation.
+ * entries in its invalidation scope, closed under the happening -> link-row relation.
  *
  * The closure is load-bearing. Undoing a `create` is a plain row delete with no
  * cascade -- only the explicit `deleteHappening` action carries one -- and a link
@@ -39,9 +73,10 @@ function isReversible(delta: Delta): boolean {
  */
 export async function resolveClassifierFactDeltas(
   branchId: string,
-  entryId: string,
+  entryIds: readonly string[],
   ctx: DbCtx,
 ): Promise<Delta[]> {
+  if (entryIds.length === 0) return []
   const anchored = (
     (await ctx.db
       .select()
@@ -49,7 +84,7 @@ export async function resolveClassifierFactDeltas(
       .where(
         and(
           eq(deltas.branchId, branchId),
-          eq(deltas.entryId, entryId),
+          inArray(deltas.entryId, [...entryIds]),
           eq(deltas.source, 'periodic_classifier'),
         ),
       )) as Delta[]

@@ -463,35 +463,67 @@ async function seedClassifiedTail(db: Awaited<ReturnType<typeof createTestDb>>['
   ])
 }
 
+// A head turn proper: an ai_reply tail over its user_action origin, each with one
+// classifier-derived happening, plus an earlier entry whose facts must never move.
+async function seedHeadTurn(db: Awaited<ReturnType<typeof createTestDb>>['db']) {
+  await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+  await db.insert(branches).values({
+    id: 'b1',
+    storyId: 's1',
+    name: 'm',
+    createdAt: 1,
+    classifierStatus: classifierStatus(3),
+  })
+  const entries = [
+    { id: 'e1', position: 1, kind: 'ai_reply' as const, content: 'a' },
+    { id: 'e2', position: 2, kind: 'user_action' as const, content: 'act' },
+    { id: 'e3', position: 3, kind: 'ai_reply' as const, content: 'reply' },
+  ].map((e) => ({ ...e, branchId: 'b1', createdAt: e.position }))
+  await db.insert(storyEntries).values(entries)
+  entriesStore.hydrate(
+    'b1',
+    entries.map((e) => ({ ...e, chapterId: null, metadata: null })),
+  )
+  await db.insert(happenings).values(
+    (['e1', 'e2', 'e3'] as const).map((entryId, i) => ({
+      id: `hap_${i + 1}`,
+      branchId: 'b1',
+      title: `derived from ${entryId}`,
+      occurredAtEntryId: entryId,
+      createdAt: i + 1,
+      updatedAt: i + 1,
+    })),
+  )
+  await db
+    .insert(deltas)
+    .values(
+      (['e1', 'e2', 'e3'] as const).map((entryId, i) =>
+        classifierDelta(`d_hap${i + 1}`, i + 1, 'happenings', `hap_${i + 1}`, entryId),
+      ),
+    )
+}
+
 describe('updateStoryEntryContent classifier invalidation', () => {
   it('takes link rows anchored to a different entry down with their happening', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seedClassifiedTail(db)
-    // A character learning of hap_2 on a later turn anchors to that turn, not to the
-    // happening's own provenance entry — so anchor-scoped reversal alone would delete
-    // hap_2 and leave this row pointing at nothing.
-    await db.insert(storyEntries).values({
-      id: 'e3',
-      branchId: 'b1',
-      position: 3,
-      kind: 'ai_reply',
-      content: 'c',
-      createdAt: 3,
-    })
+    // Awareness anchors to the turn that narrated the learning, which can sit either
+    // side of the happening's own provenance entry — so anchor-scoped reversal alone
+    // would delete hap_2 and leave this row pointing at nothing.
     await db.insert(happeningAwareness).values({
-      id: 'haw_late',
+      id: 'haw_early',
       branchId: 'b1',
       happeningId: 'hap_2',
       characterId: 'char_m',
-      learnedAtEntryId: 'e3',
+      learnedAtEntryId: 'e1',
       decayResistance: null,
       retrievalCount: 0,
       source: 'told by Jorin',
     })
     await db
       .insert(deltas)
-      .values([classifierDelta('d_haw_late', 6, 'happening_awareness', 'haw_late', 'e3')])
+      .values([classifierDelta('d_haw_early', 6, 'happening_awareness', 'haw_early', 'e1')])
 
     expect((await updateStoryEntryContent('b1', 'e2', 'new', ctx)).status).toBe('ok')
 
@@ -649,5 +681,73 @@ describe('updateStoryEntryContent classifier invalidation', () => {
       .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'e2')))
     expect(row.content).toBe('new')
     expect(entriesStore.getById('e2')?.content).toBe('new')
+  })
+})
+
+describe('updateStoryEntryContent invalidation scope', () => {
+  it('reverses and clamps nothing below the head turn', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedClassifiedTail(db)
+
+    // e1 sits under the tail, so the clamp would reopen e2 while e2's facts survive.
+    expect((await updateStoryEntryContent('b1', 'e1', 'reworded', ctx)).status).toBe('ok')
+
+    const [row] = await db
+      .select()
+      .from(storyEntries)
+      .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'e1')))
+    expect(row.content).toBe('reworded')
+    expect(entriesStore.getById('e1')?.content).toBe('reworded')
+    const haps = await db.select().from(happenings).where(eq(happenings.branchId, 'b1'))
+    expect(haps.map((h) => h.id).sort()).toEqual(['hap_1', 'hap_2'])
+    const remaining = await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))
+    expect(remaining.map((d) => d.id).sort()).toEqual([
+      'd_hap1',
+      'd_hap2',
+      'd_haw2',
+      'd_hinv2',
+      'd_meta2',
+    ])
+    const [branch] = await db
+      .select({ status: branches.classifierStatus })
+      .from(branches)
+      .where(eq(branches.id, 'b1'))
+    expect(branch.status?.processedThrough).toBe(2)
+  })
+
+  it('covers the tail reply too when the head turn origin is edited', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedHeadTurn(db)
+
+    // Clamping below e2 reopens e3, so e3's facts have to go with e2's.
+    expect((await updateStoryEntryContent('b1', 'e2', 'rewritten action', ctx)).status).toBe('ok')
+
+    const haps = await db.select().from(happenings).where(eq(happenings.branchId, 'b1'))
+    expect(haps.map((h) => h.id)).toEqual(['hap_1'])
+    const [branch] = await db
+      .select({ status: branches.classifierStatus })
+      .from(branches)
+      .where(eq(branches.id, 'b1'))
+    expect(branch.status?.processedThrough).toBe(1)
+  })
+
+  it('spares the head turn origin when the tail is edited', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedHeadTurn(db)
+
+    // The clamp lands at e3's position - 1, so the window is e3 alone and e2's facts
+    // must survive — reversing them would delete what nothing re-derives.
+    expect((await updateStoryEntryContent('b1', 'e3', 'rewritten reply', ctx)).status).toBe('ok')
+
+    const haps = await db.select().from(happenings).where(eq(happenings.branchId, 'b1'))
+    expect(haps.map((h) => h.id).sort()).toEqual(['hap_1', 'hap_2'])
+    const [branch] = await db
+      .select({ status: branches.classifierStatus })
+      .from(branches)
+      .where(eq(branches.id, 'b1'))
+    expect(branch.status?.processedThrough).toBe(2)
   })
 })
