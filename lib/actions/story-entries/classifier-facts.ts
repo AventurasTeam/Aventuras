@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from 'drizzle-orm'
+import { and, desc, eq, inArray, ne } from 'drizzle-orm'
 
 import {
   deltas,
@@ -19,6 +19,13 @@ const CHILD_TABLES = ['happening_involvements', 'happening_awareness'] as const
  * window or the next pass re-derives beside facts that survived — which is what bounds
  * both to the head turn (data-model.md -> Entry mutability & rollback). The same pair
  * `resolveSaveAndRegenTurn` derives the editor's notice from; they must agree.
+ *
+ * A `system` row is transparent here because it is transparent to the classifier:
+ * `readLastTurns` skips the kind, so the reply beneath a failure entry is still the head
+ * turn the next pass re-reads. A failed turn reverses its own `user_action` and parks the
+ * singleton above the branch's real tail, so letting it close the scope would freeze that
+ * tail for as long as the error card stands, and an edit there would leave facts derived
+ * from replaced prose with nothing to re-read them.
  */
 export async function resolveInvalidationScope(
   branchId: string,
@@ -28,7 +35,7 @@ export async function resolveInvalidationScope(
   const [tail, previous] = await ctx.db
     .select({ id: storyEntries.id, kind: storyEntries.kind })
     .from(storyEntries)
-    .where(eq(storyEntries.branchId, branchId))
+    .where(and(eq(storyEntries.branchId, branchId), ne(storyEntries.kind, 'system')))
     .orderBy(desc(storyEntries.position))
     .limit(2)
   if (!tail) return null

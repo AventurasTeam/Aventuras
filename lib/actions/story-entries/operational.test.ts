@@ -503,6 +503,46 @@ async function seedHeadTurn(db: Awaited<ReturnType<typeof createTestDb>>['db']) 
     )
 }
 
+// The same head turn under a failed follow-up: the turn reversed its own user_action
+// and left the failure singleton above the reply, which is still the branch's real tail.
+async function seedHeadTurnUnderFailure(db: Awaited<ReturnType<typeof createTestDb>>['db']) {
+  await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+  await db.insert(branches).values({
+    id: 'b1',
+    storyId: 's1',
+    name: 'm',
+    createdAt: 1,
+    classifierStatus: classifierStatus(2),
+  })
+  const entries = [
+    { id: 'e1', position: 1, kind: 'user_action' as const, content: 'act' },
+    { id: 'e2', position: 2, kind: 'ai_reply' as const, content: 'reply' },
+    { id: 'e3', position: 3, kind: 'system' as const, content: 'generation failed' },
+  ].map((e) => ({ ...e, branchId: 'b1', createdAt: e.position }))
+  await db.insert(storyEntries).values(entries)
+  entriesStore.hydrate(
+    'b1',
+    entries.map((e) => ({ ...e, chapterId: null, metadata: null })),
+  )
+  await db.insert(happenings).values(
+    (['e1', 'e2'] as const).map((entryId, i) => ({
+      id: `hap_${i + 1}`,
+      branchId: 'b1',
+      title: `derived from ${entryId}`,
+      occurredAtEntryId: entryId,
+      createdAt: i + 1,
+      updatedAt: i + 1,
+    })),
+  )
+  await db
+    .insert(deltas)
+    .values(
+      (['e1', 'e2'] as const).map((entryId, i) =>
+        classifierDelta(`d_hap${i + 1}`, i + 1, 'happenings', `hap_${i + 1}`, entryId),
+      ),
+    )
+}
+
 describe('updateStoryEntryContent classifier invalidation', () => {
   it('takes link rows anchored to a different entry down with their happening', async () => {
     const { db, runInTransaction } = await createTestDb()
@@ -770,5 +810,40 @@ describe('updateStoryEntryContent invalidation scope', () => {
       .from(branches)
       .where(eq(branches.id, 'b1'))
     expect(branch.status?.processedThrough).toBe(2)
+  })
+
+  it('reads the head turn past a system tail rather than freezing under it', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedHeadTurnUnderFailure(db)
+
+    // e2 is the last row the classifier reads, so the failure entry above it must not
+    // turn this into a bare write whose stale facts nothing re-reads.
+    expect((await updateStoryEntryContent('b1', 'e2', 'rewritten reply', ctx)).status).toBe('ok')
+
+    const haps = await db.select().from(happenings).where(eq(happenings.branchId, 'b1'))
+    expect(haps.map((h) => h.id)).toEqual(['hap_1'])
+    const [branch] = await db
+      .select({ status: branches.classifierStatus })
+      .from(branches)
+      .where(eq(branches.id, 'b1'))
+    expect(branch.status?.processedThrough).toBe(1)
+  })
+
+  it('still covers the origin and its reply when a system entry sits above them', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedHeadTurnUnderFailure(db)
+
+    // Same two-entry arm as without the failure entry: clamping below e1 reopens e2.
+    expect((await updateStoryEntryContent('b1', 'e1', 'rewritten action', ctx)).status).toBe('ok')
+
+    const haps = await db.select().from(happenings).where(eq(happenings.branchId, 'b1'))
+    expect(haps).toHaveLength(0)
+    const [branch] = await db
+      .select({ status: branches.classifierStatus })
+      .from(branches)
+      .where(eq(branches.id, 'b1'))
+    expect(branch.status?.processedThrough).toBe(0)
   })
 })

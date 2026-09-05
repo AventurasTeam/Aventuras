@@ -2249,6 +2249,16 @@ delta. Consequences:
   clamping below it re-reads the reply too. The second case is also what keeps
   [Save and regenerate](./ui/patterns/entry-card.md#save-and-regenerate)
   reading the edited action rather than skipping past it.
+- **"Tail" there is the last non-`system` entry, not the last row.** A
+  failed turn reverses its own `user_action` and parks the failure
+  singleton above what is left, so the row beneath it is the `ai_reply`
+  the head turn already covers — and the classifier's own turn window
+  skips the kind, so that reply is still what the next pass re-reads.
+  Letting the failure entry close the head turn would freeze the branch's
+  real tail for as long as the error card stands, turning an edit there
+  into a bare write whose stale facts nothing re-reads. The frozen notice
+  compounds it, naming branch and rollback when dismissing the `system`
+  entry is what restores the edit.
 - **The reversal set closes over the happening → link-row relation**, not
   over the anchor alone. Undoing a `create` is a plain row delete with no
   cascade — only the explicit `deleteHappening` action carries one — and a
