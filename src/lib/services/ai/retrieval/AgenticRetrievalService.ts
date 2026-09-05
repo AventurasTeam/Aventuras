@@ -28,6 +28,8 @@ import {
 } from '../sdk/tools'
 import { ContextBuilder } from '$lib/services/context'
 import { debug } from '$lib/stores/debug.svelte'
+import { activity } from '$lib/stores/activity.svelte'
+import { retrievalStep, retrievalStepStatus } from './retrievalSteps'
 import { recentContent, AS_PROSE } from '$lib/utils/recentContent'
 import {
   formatRetrievalHistory,
@@ -109,6 +111,8 @@ export interface RetrievalContext {
   getChapterEntries?: (chapter: Chapter) => StoryEntry[]
   /** Optional callback for the entries after the last chapter, also searched by grep_chapters */
   getUnchapterizedEntries?: () => StoryEntry[]
+  /** Step this run's own steps nest under in the activity record. */
+  activityParentId?: string
 }
 
 /**
@@ -162,9 +166,26 @@ export class AgenticRetrievalService extends BaseAIService {
 
     // Single append-only record of the run. Selections, queried chapters and the query
     // history are all derived from it rather than tracked separately.
+    // Set once the agent step is open; tool calls before then nest under the phase's step.
+    let agentStepId = ''
+
     const events: RetrievalEvent[] = []
     const record = (event: RetrievalEventInput) => {
-      events.push({ ...event, at: events.length } as RetrievalEvent)
+      const stamped = { ...event, at: events.length } as RetrievalEvent
+      events.push(stamped)
+      reportStep(stamped)
+    }
+
+    // The agent's steps are reported as they happen, under the step the phase opened. Each
+    // tool call is already over by the time it is recorded, so it is a closed step rather
+    // than one opened and closed around the work.
+    const reportStep = (event: RetrievalEvent) => {
+      const { label, options } = retrievalStep(event)
+      activity.recordStep(label, {
+        ...options,
+        parentId: agentStepId || context.activityParentId,
+        status: retrievalStepStatus(event),
+      })
     }
     /**
      * Chapter answers this run paid for, salvaged if the agent never reaches its summary.
@@ -301,6 +322,11 @@ export class AgenticRetrievalService extends BaseAIService {
       this.maxIterations,
     ) as PrepareStepFunction<typeof tools>
 
+    agentStepId = activity.startStep('Agent', {
+      parentId: context.activityParentId,
+      detail: `0/${this.maxIterations} steps`,
+    })
+
     // Create the agent
     const agent = createAgentFromPreset(
       {
@@ -332,6 +358,12 @@ export class AgenticRetrievalService extends BaseAIService {
       failure = error instanceof Error ? error.message : String(error)
       log('Agent run failed -- salvaging what it gathered', { failure, steps: stepsTaken })
     }
+
+    activity.endStep(
+      agentStepId,
+      failure ? 'failed' : 'done',
+      `${stepsTaken}/${this.maxIterations} steps`,
+    )
 
     const metrics = retrievalMetrics(events)
     const transcript = formatRetrievalHistory(events)

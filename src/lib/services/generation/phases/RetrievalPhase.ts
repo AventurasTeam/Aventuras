@@ -28,9 +28,12 @@ import {
   type ContextEntity,
 } from '$lib/services/ai/retrieval/alreadyInContext'
 import { joinPromptBlocks } from '$lib/utils/promptBlocks'
+import { NO_ACTIVITY, type ActivityReporter } from '$lib/services/activity'
 
 /** Dependencies injected from AIService - phase calls these methods rather than duplicating logic */
 export interface RetrievalDependencies {
+  /** Absent in tests and anywhere reporting is not wired; see NO_ACTIVITY. */
+  activity?: ActivityReporter
   shouldUseAgenticRetrieval: () => boolean
   runAgenticRetrieval: (options: {
     userInput: string
@@ -42,11 +45,13 @@ export interface RetrievalDependencies {
     currentStoryTime?: GenerationContext['story']['timeTracker']
     alreadyInContext?: string
     signal?: AbortSignal
+    activityParentId?: string
   }) => Promise<AgenticRetrievalResult>
   runTimelineFill: (
     visibleEntries: GenerationContext['visibleEntries'],
     chapters: GenerationContext['worldState']['chapters'],
     alreadyInContext?: string,
+    activityParentId?: string,
   ) => Promise<TimelineFillResult>
   answerChapterQuestion: (
     chapterNumber: number,
@@ -72,6 +77,8 @@ export interface RetrievalInput {
   dependencies: RetrievalDependencies
   memoryRetrievalEnabled: boolean
   activationTracker?: ActivationTracker
+  /** Step this phase nests under. */
+  activityParentId?: string | null
 }
 
 export class RetrievalPhase {
@@ -81,6 +88,8 @@ export class RetrievalPhase {
     const { context, dependencies, memoryRetrievalEnabled, activationTracker } = input
     const { worldState, visibleEntries, userAction, abortSignal, story } = context
     const { chapters, lorebookEntries, memoryConfig } = worldState
+    const activity = dependencies.activity ?? NO_ACTIVITY
+    const retrievalStepId = activity.startStep('Retrieval', { parentId: input.activityParentId })
 
     let chapterContext: string | null = null
     let lorebookContext: string | null = null
@@ -118,6 +127,8 @@ export class RetrievalPhase {
 
     const stageA: Promise<void>[] = []
 
+    const worldStateStepId = activity.startStep('World state', { parentId: retrievalStepId })
+
     stageA.push(
       dependencies
         .buildWorldStateContext(worldState, userAction.content, visibleEntries, {
@@ -126,17 +137,25 @@ export class RetrievalPhase {
           activationTracker,
           userActionEntryId: userAction.entryId,
           onSceneEntities: releaseSceneEntities,
+          activityParentId: worldStateStepId,
         })
         .then((result) => {
           worldStateResult = result
           worldStateBlock = result.contextBlock
           worldStateEntities = result.all.map((e) => ({ type: e.type, name: e.name }))
         })
-        .catch((err) => {
-          contextInventoryComplete = false
-          if (err instanceof Error && err.name === 'AbortError') return
-          console.warn('[RetrievalPhase] World state injection failed (non-fatal):', err)
-        })
+        .then(
+          () => activity.endStep(worldStateStepId),
+          (err) => {
+            contextInventoryComplete = false
+            activity.endStep(
+              worldStateStepId,
+              err instanceof Error && err.name === 'AbortError' ? 'skipped' : 'failed',
+            )
+            if (err instanceof Error && err.name === 'AbortError') return
+            console.warn('[RetrievalPhase] World state injection failed (non-fatal):', err)
+          },
+        )
         // Unblocks the lorebook pass when the world state never got as far as handing over.
         .finally(() => releaseSceneEntities([])),
     )
@@ -147,6 +166,9 @@ export class RetrievalPhase {
     // selects (`select_entry` is gone); it only reads lore while reasoning about chapters.
     // Entry selection has one owner again, so there is no skip and nothing to fall back to.
     const hasLoreContent = lorebookEntries.length > 0
+    const lorebookStepId = hasLoreContent
+      ? activity.startStep('Lorebook', { parentId: retrievalStepId })
+      : ''
     if (hasLoreContent) {
       stageA.push(
         sceneEntities
@@ -164,6 +186,7 @@ export class RetrievalPhase {
                 signal: abortSignal,
                 userActionEntryId: userAction.entryId,
                 sceneEntities: scene,
+                activityParentId: lorebookStepId,
               },
             ),
           )
@@ -175,17 +198,25 @@ export class RetrievalPhase {
               name: r.entry.name,
             }))
           })
-          .catch((err) => {
-            contextInventoryComplete = false
-            if (err instanceof Error && err.name === 'AbortError') return
-            console.warn('[RetrievalPhase] Lorebook retrieval failed (non-fatal):', err)
-          }),
+          .then(
+            () => activity.endStep(lorebookStepId),
+            (err) => {
+              contextInventoryComplete = false
+              activity.endStep(
+                lorebookStepId,
+                err instanceof Error && err.name === 'AbortError' ? 'skipped' : 'failed',
+              )
+              if (err instanceof Error && err.name === 'AbortError') return
+              console.warn('[RetrievalPhase] Lorebook retrieval failed (non-fatal):', err)
+            },
+          ),
       )
     }
 
     await Promise.all(stageA)
 
     if (abortSignal?.aborted) {
+      activity.endStep(retrievalStepId, 'skipped')
       yield { type: 'aborted', phase: 'retrieval' } satisfies AbortedEvent
       return {
         worldStateBlock: null,
@@ -220,18 +251,39 @@ export class RetrievalPhase {
         )
       }
 
+      const memoryStepId = activity.startStep(
+        useAgenticRetrieval ? 'Memory retrieval' : 'Timeline fill',
+        { parentId: retrievalStepId },
+      )
       try {
-        const result = await this.runMemoryRetrieval(input, useAgenticRetrieval, alreadyInContext)
+        const result = await this.runMemoryRetrieval(
+          input,
+          useAgenticRetrieval,
+          alreadyInContext,
+          memoryStepId,
+        )
         chapterContext = result.chapterContext
         timelineFillResult = result.timelineFillResult
+        activity.endStep(memoryStepId)
       } catch (err) {
-        if (!(err instanceof Error && err.name === 'AbortError')) {
+        const aborted = err instanceof Error && err.name === 'AbortError'
+        activity.endStep(memoryStepId, aborted ? 'skipped' : 'failed')
+        if (!aborted) {
           console.warn('[RetrievalPhase] Memory retrieval failed (non-fatal):', err)
         }
       }
+    } else {
+      // Reported rather than omitted, so a turn that did less is distinguishable from one
+      // whose reporting is incomplete.
+      activity.recordStep('Memory retrieval', {
+        parentId: retrievalStepId,
+        status: 'skipped',
+        detail: chapters.length === 0 ? 'no chapters' : 'disabled',
+      })
     }
 
     if (abortSignal?.aborted) {
+      activity.endStep(retrievalStepId, 'skipped')
       yield { type: 'aborted', phase: 'retrieval' } satisfies AbortedEvent
       return {
         worldStateBlock: null,
@@ -257,6 +309,8 @@ export class RetrievalPhase {
       combinedContext,
     }
 
+    activity.endStep(retrievalStepId)
+
     yield { type: 'phase_complete', phase: 'retrieval', result } satisfies PhaseCompleteEvent
     return result
   }
@@ -265,6 +319,7 @@ export class RetrievalPhase {
     input: RetrievalInput,
     useAgenticRetrieval: boolean,
     alreadyInContext: string,
+    activityParentId: string,
   ): Promise<{
     chapterContext: string | null
     timelineFillResult: TimelineFillResult | null
@@ -284,6 +339,7 @@ export class RetrievalPhase {
         currentStoryTime: story.timeTracker,
         alreadyInContext,
         signal: abortSignal,
+        activityParentId,
       })
       return { chapterContext: result.context || null, timelineFillResult: null }
     }
@@ -294,6 +350,7 @@ export class RetrievalPhase {
         visibleEntries,
         chapters,
         alreadyInContext,
+        activityParentId,
       ),
     }
   }

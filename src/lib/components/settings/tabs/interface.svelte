@@ -15,6 +15,7 @@
   import { ScrollArea } from '$lib/components/ui/scroll-area'
   import ColorPicker from '$lib/components/shared/ColorPicker.svelte'
   import { Separator } from '$lib/components/ui/separator'
+  import { cn } from '$lib/utils/cn'
   import { getSupportedLanguages } from '$lib/services/ai/utils/TranslationService'
   import { updaterService, UpdateError } from '$lib/services/updater'
   import { updateNotifier } from '$lib/stores/updateNotifier.svelte'
@@ -177,6 +178,18 @@
     { value: 'xlarge', label: 'X-Large' },
     { value: 'xxlarge', label: 'XX-Large' },
   ] as const
+
+  const ACTIVITY_REPORTING_OPTIONS = [
+    { key: 'off', label: 'Off', hint: 'Show the usual waiting animation' },
+    { key: 'line', label: 'Status line', hint: 'Name the step running now, expandable' },
+    { key: 'tree', label: 'Full timeline', hint: 'Open the whole turn timeline by default' },
+  ] as const
+
+  const activitySegment =
+    'flex flex-col items-center justify-center gap-1 rounded-md border px-1.5 py-2 transition-colors'
+  const activitySegmentOn = 'border-primary/60 bg-primary/10 text-foreground font-semibold'
+  const activitySegmentOff =
+    'border-border/40 bg-background/60 text-muted-foreground hover:bg-accent/40'
 </script>
 
 <div class="space-y-4">
@@ -424,6 +437,35 @@
       checked={settings.uiSettings.showReasoning}
       onCheckedChange={(v) => settings.setShowReasoning(v)}
     />
+  </div>
+
+  <!-- Generation Activity -->
+  <div class="space-y-2">
+    <div>
+      <Label>Generation Activity</Label>
+      <p class="text-muted-foreground text-xs">
+        Report what a turn is doing while it generates, and how long each step took. Separate from
+        Debug Mode.
+      </p>
+    </div>
+    <div class="grid grid-cols-3 gap-1.5">
+      {#each ACTIVITY_REPORTING_OPTIONS as option (option.key)}
+        <button
+          type="button"
+          class={cn(
+            activitySegment,
+            settings.uiSettings.activityReporting === option.key
+              ? activitySegmentOn
+              : activitySegmentOff,
+          )}
+          aria-pressed={settings.uiSettings.activityReporting === option.key}
+          title={option.hint}
+          onclick={() => settings.setActivityReporting(option.key)}
+        >
+          <span class="text-xs">{option.label}</span>
+        </button>
+      {/each}
+    </div>
   </div>
 
   <!-- Auto Scroll Toggle -->

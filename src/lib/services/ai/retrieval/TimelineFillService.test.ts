@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { Chapter, StoryEntry } from '$lib/types'
 
+vi.mock('$lib/stores/activity.svelte', () => ({
+  activity: {
+    startStep: vi.fn(() => ''),
+    endStep: vi.fn(),
+    recordStep: vi.fn(() => ''),
+  },
+}))
+
 vi.mock('$lib/stores/debug.svelte', () => ({
   debug: {
     addDebugRequest: vi.fn(),

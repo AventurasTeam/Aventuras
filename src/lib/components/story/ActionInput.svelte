@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte'
   import { ui, type RetrievalCacheKey } from '$lib/stores/ui.svelte'
+  import { activity } from '$lib/stores/activity.svelte'
   import { toRetrievalSnapshot } from '$lib/services/ai/retrieval'
   import { buildTimelineFillBlock } from '$lib/services/ai/generation'
   import { joinPromptBlocks } from '$lib/utils/promptBlocks'
@@ -236,6 +237,7 @@
    */
   function buildPipelineDependencies(storyId: string): PipelineDependencies {
     return {
+      activity,
       shouldUseAgenticRetrieval: () =>
         aiService.shouldUseAgenticRetrieval(settings.systemServicesSettings.timelineFill),
       runAgenticRetrieval: (options) =>
@@ -248,7 +250,7 @@
       // The chapter-read budget is derived from this story's own chapterization threshold, so
       // it is bound here with the rest of the store rather than read from settings: a chapter
       // is about `tokenThreshold` tokens by construction. See `story.chapterReadBudget`.
-      runTimelineFill: (visibleEntries, chapters, alreadyInContext) =>
+      runTimelineFill: (visibleEntries, chapters, alreadyInContext, activityParentId) =>
         aiService.runTimelineFill(
           storyId,
           visibleEntries,
@@ -256,6 +258,7 @@
           story.getChapterEntries.bind(story),
           alreadyInContext,
           story.chapterReadBudget,
+          activityParentId,
         ),
       answerChapterQuestion: (chapterNumber, question, chapters) =>
         aiService.answerChapterQuestion(
@@ -480,6 +483,7 @@
     }
 
     ui.setGenerating(true)
+    activity.startTurn(narrationEntryId)
     ui.clearGenerationError()
     ui.clearActionChoices(story.currentStory.id)
     ui.startStreaming(visualProseMode, streamingEntryId)
@@ -826,6 +830,8 @@
       ui.endStreaming()
       ui.setGenerating(false)
       ui.setGenerationStatus('')
+      // Closes the turn even when a step was left running, so the record is bounded.
+      activity.endTurn()
       activeAbortController = null
 
       // Android: always stop the foreground service when generation ends

@@ -19,6 +19,7 @@
     Volume2,
     Image as ImageIcon,
     Copy,
+    Clock,
     MoreVertical,
   } from '@lucide/svelte'
   import { aiService } from '$lib/services/ai'
@@ -52,6 +53,9 @@
   import { database } from '$lib/services/database'
   import { onMount } from 'svelte'
   import ReasoningBlock from './ReasoningBlock.svelte'
+  import ActivityStatus from './ActivityStatus.svelte'
+  import { activity } from '$lib/stores/activity.svelte'
+  import { formatDuration, turnDuration } from '$lib/services/activity'
   import { countTokens } from '$lib/services/tokenizer'
   import { errMessage } from '$lib/utils/error'
   import { Button } from '$lib/components/ui/button'
@@ -115,6 +119,15 @@
 
   // Generation info shown in the "info" popover (model/profile/effort/timestamp)
   const showInfo = $derived(entry.type === 'narration')
+
+  // Only while this turn's record is still retained; an evicted one offers nothing rather
+  // than an empty panel. See RETAINED_TURNS.
+  const activityRecord = $derived(
+    settings.uiSettings.activityReporting !== 'off' && entry.type === 'narration'
+      ? activity.recordFor(entry.id)
+      : null,
+  )
+  let showActivityRecord = $state(false)
 
   function formatStoryTime(time: TimeTracker | null | undefined): string {
     if (!time) return ''
@@ -1356,6 +1369,20 @@
       <span class="text-muted-foreground ml-0.5">tokens</span>
     </span>
 
+    <!-- How long the turn took, opening its timeline. Hidden on narrow screens for the same
+         reason as the token badge above; the overflow menu carries it there instead. -->
+    {#if activityRecord}
+      <button
+        type="button"
+        class="bg-muted text-muted-foreground hover:text-foreground hidden rounded px-1.5 py-0.5 text-[11px] tabular-nums transition-colors sm:inline"
+        aria-expanded={showActivityRecord}
+        title="What this turn spent its time on"
+        onclick={() => (showActivityRecord = !showActivityRecord)}
+      >
+        {formatDuration(turnDuration(activityRecord, activityRecord.endedAt ?? Date.now()))}
+      </button>
+    {/if}
+
     <!-- Spacer to push buttons to the right -->
     <div class="flex-1"></div>
 
@@ -1629,6 +1656,12 @@
                 {storyImagesLabel}
               </DropdownMenu.Item>
             {/if}
+            {#if activityRecord}
+              <DropdownMenu.Item onclick={() => (showActivityRecord = !showActivityRecord)}>
+                <Clock class="h-4 w-4" />
+                {showActivityRecord ? 'Hide' : 'Show'} generation activity
+              </DropdownMenu.Item>
+            {/if}
             <!-- Rendered inline rather than behind an item: selecting an item closes the
                  menu, which would unmount any popover anchored to it. -->
             {#if showInfo}
@@ -1774,6 +1807,16 @@
           showToggleOnly={false}
         />
       {/if}
+
+      <!-- The report is a bystander to the entry: a fault rendering it must not
+         take the narration with it. -->
+      <svelte:boundary>
+        {#if activityRecord && showActivityRecord}
+          <div class="mb-2">
+            <ActivityStatus turn={activityRecord} />
+          </div>
+        {/if}
+      </svelte:boundary>
 
       <div
         bind:this={storyTextContainer}

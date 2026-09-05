@@ -23,6 +23,8 @@ import { buildChapterRead, type ChapterForRead } from './chapterContentBudget'
 import { countTokens } from '$lib/services/tokenizer'
 import { chapterReadBudget } from '../core/defaults'
 
+import { activity } from '$lib/stores/activity.svelte'
+
 const log = createLogger('TimelineFill')
 
 /**
@@ -358,6 +360,8 @@ export class TimelineFillService extends BaseAIService {
     getChapterEntries?: (chapter: Chapter) => StoryEntry[],
     alreadyInContext?: string,
     maxChapterTokens: number = chapterReadBudget(undefined),
+    /** Step this fill's own work nests under in the activity record. */
+    activityParentId?: string,
   ): Promise<TimelineFillResult> {
     log('runTimelineFill called', {
       visibleEntriesCount: visibleEntries.length,
@@ -370,7 +374,12 @@ export class TimelineFillService extends BaseAIService {
       return { queries: [], responses: [] }
     }
 
+    const planStepId = activity.startStep('Planning questions', {
+      parentId: activityParentId,
+      isLLM: true,
+    })
     const queries = await this.generateQueries(storyId, visibleEntries, chapters, alreadyInContext)
+    activity.endStep(planStepId, 'done', `${queries.length} questions`)
     if (queries.length === 0) {
       return { queries: [], responses: [] }
     }
@@ -419,6 +428,10 @@ export class TimelineFillService extends BaseAIService {
 
         const content = this.buildContentFrom(targetChapters, maxChapterTokens)
 
+        const readStepId = activity.startStep(`Reading ch.${group.chapterNumbers.join(',')}`, {
+          parentId: activityParentId,
+          isLLM: true,
+        })
         const { answers, llmCalls } =
           group.items.length === 1
             ? {
@@ -432,6 +445,8 @@ export class TimelineFillService extends BaseAIService {
                 group.items.map((i) => i.query),
                 content,
               )
+
+        activity.endStep(readStepId, 'done', `${group.items.length} answered`)
 
         group.items.forEach((item, i) => {
           // `confidence: 0` is what every give-up path sets. None of it is retrieved
