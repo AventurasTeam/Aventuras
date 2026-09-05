@@ -1,9 +1,9 @@
-import type { Delta } from '@/lib/db'
+import type { Delta, SqlOp } from '@/lib/db'
 import { deltas, isEmbeddedSourceTable } from '@/lib/db'
 
 import type { DbCtx } from '../types'
 import { resolveByTable, whereForDelta } from './registry'
-import { DeltaReplayError } from './reverse-replay'
+import { buildReverseAndPrunePlan, DeltaReplayError, emitPatches } from './reverse-replay'
 
 export type RedoSnapshot = {
   delta: Delta
@@ -38,8 +38,20 @@ function redoRow(
   return { ...rowBeforeUndo, embeddingStale: 1 }
 }
 
+/**
+ * Deltas to reverse in the redo's own transaction, plus ops to settle with it. Stays
+ * table-agnostic here: the caller decides what a restored row invalidates.
+ */
+export type RedoInvalidation = { rows: Delta[]; extraOps: readonly SqlOp[] }
+
+const NO_INVALIDATION: RedoInvalidation = { rows: [], extraOps: [] }
+
 // Re-inserts the original delta row so a subsequent CTRL-Z can undo the redo again.
-export async function applyRedo(snapshots: readonly RedoSnapshot[], ctx: DbCtx): Promise<void> {
+export async function applyRedo(
+  snapshots: readonly RedoSnapshot[],
+  ctx: DbCtx,
+  invalidation: RedoInvalidation = NO_INVALIDATION,
+): Promise<void> {
   const ops = []
   const cascadeInfo: Map<string, Record<string, Record<string, unknown>[]>> = new Map()
 
@@ -77,7 +89,14 @@ export async function applyRedo(snapshots: readonly RedoSnapshot[], ctx: DbCtx):
     // that never happened, leaving a later CTRL-Z to reverse a row redo never touched.
     if (restored) ops.push(ctx.db.insert(deltas).values(delta).toSQL())
   }
-  await ctx.runInTransaction(ops)
+  // Reversal after the redo's own ops: a restore writes the whole row, so a targeted
+  // reversal of the same row would be clobbered the other way round. Defensive only —
+  // the classifier emits no action targeting story_entries — but not silently so.
+  const plan =
+    invalidation.rows.length > 0
+      ? await buildReverseAndPrunePlan(invalidation.rows, ctx)
+      : { ops: [], pruneOps: [], patches: [] }
+  await ctx.runInTransaction([...ops, ...plan.ops, ...plan.pruneOps, ...invalidation.extraOps])
   // Past this point the redo is committed; a patcher throw is a store-sync
   // failure, not a redo failure. Flag committed so redoLastAction still pops
   // the (now-applied) snapshot instead of leaving it for a doomed retry.
@@ -107,6 +126,9 @@ export async function applyRedo(snapshots: readonly RedoSnapshot[], ctx: DbCtx):
       // create/update with no rowBeforeUndo wrote nothing to the DB above; skip
       // the patcher too so the store never gains a phantom row.
     }
+    // Last, mirroring the transaction: the reversal ran after the restore, so its
+    // patches have to win in the store the same way.
+    emitPatches(plan.patches)
   } catch (e) {
     throw new DeltaReplayError('Post-commit redo patch sync failed', {
       cause: e,

@@ -14,7 +14,7 @@ import { entriesStore, generationStore, happeningsStore, undoRedoStore } from '@
 
 import { isContentEditDelta } from './classifier-facts'
 import { updateStoryEntryContent } from './operational'
-import { undoLastAction } from './undo'
+import { redoLastAction, undoLastAction } from './undo'
 
 afterEach(() => {
   entriesStore.__reset()
@@ -156,6 +156,80 @@ describe('undo of a content edit', () => {
     const snapshot = undoRedoStore.peekRedoGroup()
     expect(snapshot).toHaveLength(1)
     expect(isContentEditDelta(snapshot![0].delta)).toBe(true)
+  })
+
+  it('redo restores the edited prose and re-inserts the delta', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedTurn(db)
+
+    await updateStoryEntryContent('b1', 'e_reply', 'the courier turned back', ctx)
+    await undoLastAction('b1', ctx)
+    expect((await redoLastAction('b1', ctx)).status).toBe('ok')
+
+    const [row] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'e_reply'))
+    expect(row.content).toBe('the courier turned back')
+    expect(entriesStore.getById('e_reply')?.content).toBe('the courier turned back')
+    const remaining = await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))
+    expect(remaining.filter(isContentEditDelta)).toHaveLength(1)
+  })
+
+  it('redo reverses the facts derived from the prose it replaces, and re-clamps', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedTurn(db)
+
+    await updateStoryEntryContent('b1', 'e_reply', 'the courier turned back', ctx)
+    await undoLastAction('b1', ctx)
+    // A retry timer firing between the undo and the redo: this pass read the restored
+    // original, so its facts describe prose the redo is about to replace.
+    await seedFactFrom(db, 'e_reply', 5)
+    await db
+      .update(branches)
+      .set({ classifierStatus: status(2) })
+      .where(eq(branches.id, 'b1'))
+
+    expect((await redoLastAction('b1', ctx)).status).toBe('ok')
+
+    expect(await db.select().from(happenings).where(eq(happenings.branchId, 'b1'))).toEqual([])
+    expect(happeningsStore.getHappenings().has('hap_derived')).toBe(false)
+    const [branch] = await db
+      .select({ s: branches.classifierStatus })
+      .from(branches)
+      .where(eq(branches.id, 'b1'))
+    expect(branch.s?.processedThrough).toBe(1)
+  })
+
+  it('a redo that restores nothing reverses no facts', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedTurn(db)
+    await seedFactFrom(db, 'e_reply', 5)
+
+    // applyRedo writes nothing for a snapshot carrying no row, so reversing facts for
+    // it would be pure loss.
+    undoRedoStore.pushRedoGroup([
+      {
+        delta: {
+          id: 'd_phantom',
+          branchId: 'b1',
+          actionId: 'act_phantom',
+          op: 'update',
+          targetTable: 'story_entries',
+          targetId: 'e_reply',
+          entryId: 'e_reply',
+          source: 'user_edit',
+          undoPayload: { content: 'gone' },
+          logPosition: 9,
+          encodingVersion: 1,
+          createdAt: 9,
+        },
+        rowBeforeUndo: null,
+      },
+    ])
+
+    expect((await redoLastAction('b1', ctx)).status).toBe('ok')
+    expect(await db.select().from(happenings).where(eq(happenings.branchId, 'b1'))).toHaveLength(1)
   })
 
   it('reverses nothing and clamps nothing below the head turn', async () => {

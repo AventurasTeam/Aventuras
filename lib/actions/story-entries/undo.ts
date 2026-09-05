@@ -5,10 +5,15 @@ import { deltas } from '@/lib/db'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 import { selectUndoTarget } from '@/lib/undo'
 
-import { resolveGroupInvalidation, sortForReplay } from './classifier-facts'
+import {
+  isContentEditDelta,
+  resolveContentEditInvalidation,
+  resolveGroupInvalidation,
+  sortForReplay,
+} from './classifier-facts'
 import { resolveSweep } from './operational'
 import { bracketProseReversal } from './prose-reversal'
-import { applyRedo, snapshotForRedo } from '../delta/redo'
+import { applyRedo, snapshotForRedo, type RedoInvalidation, type RedoSnapshot } from '../delta/redo'
 import { DeltaReplayError, reverseAndPruneDeltaRows } from '../delta/reverse-replay'
 import type { DbCtx } from '../types'
 
@@ -110,18 +115,45 @@ export async function redoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
       reason: 'redo stack does not belong to this branch',
     }
 
-  generationStore.setReversalInProgress(true)
-  try {
-    await applyRedo(snapshot, ctx)
-  } catch (e) {
-    // Committed means the redo's DB write landed; only the post-commit store
-    // sync failed. Pop the snapshot regardless — retrying it would re-insert
-    // an already-inserted delta row and collide on its primary key.
-    if (e instanceof DeltaReplayError && e.committed) undoRedoStore.popRedoGroup()
-    throw e
-  } finally {
-    generationStore.setReversalInProgress(false)
+  // The bracket, not a bare flag: a redo restores prose and reverses classifier output,
+  // so it has to drain an in-flight pass the way every other reversal does.
+  return bracketProseReversal(branchId, async () => {
+    const invalidation = await resolveRedoInvalidation(branchId, snapshot, ctx)
+    try {
+      await applyRedo(snapshot, ctx, invalidation)
+    } catch (e) {
+      // Committed means the redo's DB write landed; only the post-commit store
+      // sync failed. Pop the snapshot regardless — retrying it would re-insert
+      // an already-inserted delta row and collide on its primary key.
+      if (e instanceof DeltaReplayError && e.committed) undoRedoStore.popRedoGroup()
+      throw e
+    }
+    undoRedoStore.popRedoGroup()
+    return { status: 'ok' }
+  })
+}
+
+/**
+ * Restoring prose re-opens the same question the forward edit answered: the facts a
+ * pass derived from the text being replaced now describe text that is gone. Reachable
+ * only through a retry timer firing between the undo and the redo, but the failure it
+ * leaves is the one the clamp exists to prevent.
+ *
+ * Gated on `rowBeforeUndo`: `applyRedo` writes nothing for a snapshot that restores
+ * nothing, and reversing facts for a redo that never happened would be pure loss.
+ */
+async function resolveRedoInvalidation(
+  branchId: string,
+  snapshot: readonly RedoSnapshot[],
+  ctx: DbCtx,
+): Promise<RedoInvalidation> {
+  const rows: Delta[] = []
+  const extraOps: SqlOp[] = []
+  for (const { delta, rowBeforeUndo } of snapshot) {
+    if (rowBeforeUndo == null || !isContentEditDelta(delta)) continue
+    const one = await resolveContentEditInvalidation(branchId, delta.targetId, ctx)
+    rows.push(...one.rows)
+    extraOps.push(...one.clampOps)
   }
-  undoRedoStore.popRedoGroup()
-  return { status: 'ok' }
+  return { rows: sortForReplay(dedupeById(rows)), extraOps }
 }

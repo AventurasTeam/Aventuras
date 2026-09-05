@@ -168,9 +168,9 @@ async function resolveRollbackWindow(
       code: STORY_ENTRY_REJECTION.rollbackFloor,
     }
 
-  // Survival-anchor predicate (data-model.md -> Survival anchor). In M2 every
-  // foreground delta carries entry_id = NULL so this reduces to the bare suffix;
-  // the position-correlated branch is correct-by-construction and first exercised in M3.3.
+  // Survival-anchor predicate (data-model.md -> Survival anchor). Foreground deltas
+  // whose subject is a specific entry stamp it -- metadata, scene fields, content --
+  // so the position-correlated branch spares them when a later turn is swept.
   return {
     where: and(
       eq(deltas.branchId, branchId),

@@ -20,7 +20,27 @@ export class DeltaReplayError extends Error {
   }
 }
 
-type PatchEmission = { table: string; branchId: string; patch: StorePatch }
+export type PatchEmission = { table: string; branchId: string; patch: StorePatch }
+
+export type ReversePlan = { ops: SqlOp[]; pruneOps: SqlOp[]; patches: PatchEmission[] }
+
+/**
+ * The reversal of a delta set, unexecuted — so a caller that owns a transaction of its
+ * own can commit it alongside its own work rather than in a second one. Ops and prunes
+ * stay separate because their order relative to the caller's ops is the caller's call.
+ */
+export async function buildReverseAndPrunePlan(rows: Delta[], ctx: DbCtx): Promise<ReversePlan> {
+  const built = await buildUndoOps(rows, ctx)
+  return {
+    ops: built.ops,
+    pruneOps: rows.map((r) => ctx.db.delete(deltas).where(eq(deltas.id, r.id)).toSQL()),
+    patches: built.patches,
+  }
+}
+
+export function emitPatches(patches: readonly PatchEmission[]): void {
+  for (const p of patches) resolveByTable(p.table)?.patcher?.(p.branchId, p.patch)
+}
 
 // Membership only, never a value compare: an undo restores a prior value by
 // construction, and a degenerate value-equal undo costs one revalidation hash.
@@ -159,10 +179,9 @@ export async function reverseAndPruneDeltaRows(
   const actionId = rows[0]?.actionId ?? 'rollback'
   let patches: PatchEmission[]
   try {
-    const built = await buildUndoOps(rows, ctx)
-    patches = built.patches
-    const pruneOps = rows.map((r) => ctx.db.delete(deltas).where(eq(deltas.id, r.id)).toSQL())
-    await ctx.runInTransaction([...built.ops, ...pruneOps, ...extraOps])
+    const plan = await buildReverseAndPrunePlan(rows, ctx)
+    patches = plan.patches
+    await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...extraOps])
   } catch (e) {
     if (e instanceof DeltaReplayError) throw e
     throw new DeltaReplayError('Reverse-and-prune failed', { cause: e, actionId })
@@ -170,7 +189,7 @@ export async function reverseAndPruneDeltaRows(
   // Past the transaction the reversal + prune are committed; a patcher throw is a
   // store-sync failure, not a rollback failure. Flag committed so callers don't retry.
   try {
-    for (const p of patches) resolveByTable(p.table)?.patcher?.(p.branchId, p.patch)
+    emitPatches(patches)
   } catch (e) {
     throw new DeltaReplayError('Post-commit patch sync failed', {
       cause: e,
