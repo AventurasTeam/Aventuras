@@ -55,3 +55,6 @@ export {
   type TimelineFillResult,
   type TimelineQueryResult,
 } from './TimelineFillService'
+
+// How the agent's own event record reads in the activity timeline.
+export { retrievalStep, retrievalStepStatus, type RetrievalStep } from './retrievalSteps'

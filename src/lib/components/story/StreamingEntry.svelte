@@ -6,6 +6,8 @@
   import ReasoningBlock from './ReasoningBlock.svelte'
   import { settings } from '$lib/stores/settings.svelte'
   import { replacePicTagsWithPlaceholders } from '$lib/utils/inlineImageParser'
+  import { activity } from '$lib/stores/activity.svelte'
+  import ActivityStatus from './ActivityStatus.svelte'
 
   // Reactive binding to streaming content
   let content = $derived(ui.streamingContent)
@@ -43,6 +45,12 @@
   // Phase 2: content is actively streaming (has content)
   let isReasoningPhase = $derived(ui.isStreaming && reasoning.length > 0 && content.length === 0)
   let isContentPhase = $derived(ui.isStreaming && content.length > 0)
+
+  // Reported in place of the ellipsis while waiting, and kept reachable once the narration
+  // starts arriving -- below the text, so it never displaces what is being written.
+  let reportingEnabled = $derived(settings.uiSettings.activityReporting !== 'off')
+  let activeTurn = $derived(activity.activeTurn)
+  let showActivity = $derived(reportingEnabled && activeTurn !== null)
 </script>
 
 <!-- Streaming content container -->
@@ -103,6 +111,17 @@
     </div>
   </div>
 
+  <!-- Activity report. Above the content on purpose: it keeps one place on screen while the
+       narration grows underneath it, rather than being pushed off the bottom.
+       A bystander to the entry -- a fault rendering it must not take the narration with it. -->
+  <svelte:boundary>
+    {#if showActivity}
+      <div class="mb-2">
+        <ActivityStatus turn={activeTurn} />
+      </div>
+    {/if}
+  </svelte:boundary>
+
   <!-- Main Content -->
   <div class="min-w-0">
     <!-- Reasoning content panel -->
@@ -125,11 +144,13 @@
       </div>
     {:else if isReasoningPhase || isThinking}
       <!-- Pending Content Indicator (while reasoning or thinking) -->
-      <div class="story-text prose-content animate-fade-in text-muted-foreground mt-1">
-        <span class="typing-indicator">
-          <span>.</span><span>.</span><span>.</span>
-        </span>
-      </div>
+      {#if !showActivity}
+        <div class="story-text prose-content animate-fade-in text-muted-foreground mt-1">
+          <span class="typing-indicator">
+            <span>.</span><span>.</span><span>.</span>
+          </span>
+        </div>
+      {/if}
     {/if}
   </div>
 </div>

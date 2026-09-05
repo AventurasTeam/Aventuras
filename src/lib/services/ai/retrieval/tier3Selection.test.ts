@@ -5,6 +5,14 @@ import type { StoryEntry } from '$lib/types'
 // and fails to import under `environment: 'node'`. Mocked rather than worked around: the LLM
 // call is not what these tests are about, and stubbing it is what makes the failure path
 // reachable at all.
+vi.mock('$lib/stores/activity.svelte', () => ({
+  activity: {
+    startStep: vi.fn(() => ''),
+    endStep: vi.fn(),
+    recordStep: vi.fn(() => ''),
+  },
+}))
+
 vi.mock('$lib/stores/debug.svelte', () => ({
   debug: { addDebugRequest: vi.fn(), addDebugResponse: vi.fn() },
 }))
@@ -39,6 +47,7 @@ import {
   type Tier3SelectionResult,
 } from './tier3Selection'
 import { TIER3_SELECTION_CACHE_POSITIONS } from '../core/defaults'
+import { activity } from '$lib/stores/activity.svelte'
 
 /** A candidate list in the order the prompt was built from. */
 const candidates = [
@@ -437,5 +446,69 @@ describe('runTier3Selection caching', () => {
     await runTier3Selection({ ...cachedRequest, currentPosition: 100 })
 
     expect(generateStructured).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('runTier3Selection activity reporting', () => {
+  const request = {
+    storyId: 'story-1',
+    candidates: [
+      { id: 'a-uuid', type: 'character', name: 'Aria', description: 'A swordswoman.' },
+      { id: 'b-uuid', type: 'location', name: 'The Tower', description: null },
+    ],
+    userInput: 'She climbs the tower.',
+    recentEntries: [{ type: 'narration', content: 'The tower loomed.' } as StoryEntry],
+    recentEntriesCount: 5,
+    presetId: 'entryRetrieval',
+    serviceLabel: 'tier3-activity-selection',
+    activityParentId: 'parent-step',
+  }
+
+  beforeEach(() => {
+    vi.mocked(activity.startStep).mockClear()
+    vi.mocked(activity.endStep).mockClear()
+    vi.mocked(activity.recordStep).mockClear()
+  })
+
+  it('records nothing when there are no candidates to select from', async () => {
+    await runTier3Selection({ ...request, candidates: [] })
+
+    expect(activity.startStep).not.toHaveBeenCalled()
+    expect(activity.recordStep).not.toHaveBeenCalled()
+  })
+
+  it('records the selection as an LLM step nested under its caller', async () => {
+    generateStructured.mockResolvedValue({ selectedIndices: ['1'] })
+
+    await runTier3Selection(request)
+
+    expect(activity.startStep).toHaveBeenCalledWith('Tier 3 selection', {
+      parentId: 'parent-step',
+      isLLM: true,
+      detail: '2 candidates',
+    })
+    expect(activity.endStep).toHaveBeenCalledWith('', 'done', '1 of 2')
+  })
+
+  it('records a failed selection as failed', async () => {
+    generateStructured.mockRejectedValue(new Error('boom'))
+
+    await runTier3Selection(request)
+
+    expect(activity.endStep).toHaveBeenCalledWith('', 'failed')
+  })
+
+  it('records a cache hit as a finished step that cost no model call', async () => {
+    generateStructured.mockResolvedValue({ selectedIndices: ['0'] })
+    await runTier3Selection({ ...request, currentPosition: 100 })
+    vi.mocked(activity.recordStep).mockClear()
+
+    await runTier3Selection({ ...request, currentPosition: 100 })
+
+    expect(generateStructured).toHaveBeenCalledTimes(1)
+    expect(activity.recordStep).toHaveBeenCalledWith('Tier 3 selection', {
+      parentId: 'parent-step',
+      detail: 'cached · 1 of 2',
+    })
   })
 })

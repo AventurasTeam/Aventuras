@@ -42,8 +42,10 @@ import { MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH } from '$lib/constants/layout'
 import { SvelteSet, SvelteMap } from 'svelte/reactivity'
 import { dedupeTextModels } from '$lib/utils/dedupeTextModels'
 import { applyIncognitoKeyboard } from '$lib/utils/platform'
+import type { ActivityReporting } from '$lib/services/activity'
 import type { ImageGenerationServiceSettings, TimelineFillSettings } from '$lib/services/ai'
 import { debug } from './debug.svelte'
+import { activity } from './activity.svelte'
 import { modelHealth } from './modelHealth.svelte'
 import {
   isPingEligible,
@@ -1203,6 +1205,7 @@ export function getDefaultUISettings(): UISettings {
     highlightDialogue: false,
     dialogueColor: '',
     incognitoKeyboard: false,
+    activityReporting: 'off',
   }
 }
 
@@ -1593,6 +1596,16 @@ class SettingsStore {
 
       const debugMode = await database.getSetting('debug_mode')
       if (debugMode !== null) debug.isActive = this.uiSettings.debugMode = debugMode === 'true'
+
+      const activityReporting = await database.getSetting('activity_reporting')
+      if (
+        activityReporting === 'off' ||
+        activityReporting === 'line' ||
+        activityReporting === 'tree'
+      ) {
+        this.uiSettings.activityReporting = activityReporting
+      }
+      activity.setReporting(this.uiSettings.activityReporting)
 
       const sidebarWidth = await database.getSetting('sidebar_width')
       if (sidebarWidth) this.uiSettings.sidebarWidth = parseInt(sidebarWidth, 10)
@@ -2732,6 +2745,12 @@ class SettingsStore {
     await database.setSetting('debug_mode', enabled.toString())
   }
 
+  async setActivityReporting(reporting: ActivityReporting) {
+    this.uiSettings.activityReporting = reporting
+    activity.setReporting(reporting)
+    await database.setSetting('activity_reporting', reporting)
+  }
+
   async setAdvancedManualMode(enabled: boolean) {
     this.advancedRequestSettings.manualMode = enabled
     await database.setSetting('advanced_manual_mode', enabled.toString())
@@ -3107,6 +3126,9 @@ class SettingsStore {
     // Reset UI settings
     this.uiSettings = getDefaultUISettings()
     await this.setNavPanelWidth(this.uiSettings.navPanelWidth)
+    // Through the setter: the defaults object alone leaves the live recorder on its old mode
+    // and never writes the key, so the previous mode came back on the next start.
+    await this.setActivityReporting(this.uiSettings.activityReporting)
     await ui.setNavPanelOpen(false)
 
     // Reset font to default

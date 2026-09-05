@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { Chapter, StoryEntry } from '$lib/types'
 
+vi.mock('$lib/stores/activity.svelte', () => ({
+  activity: {
+    startStep: vi.fn(() => ''),
+    endStep: vi.fn(),
+    recordStep: vi.fn(() => ''),
+  },
+}))
+
 vi.mock('$lib/stores/debug.svelte', () => ({
   debug: {
     addDebugRequest: vi.fn(),
@@ -31,6 +39,8 @@ vi.mock('../sdk/generate', () => ({
 // ContextBuilder reaches the pack store and the database; the prompt text is not what these
 // tests are about, but `chapterContent` is — so it is captured on the way through.
 const rendered: Record<string, string>[] = []
+/** Set by the test covering a prompt that cannot be rendered. */
+let renderError: Error | null = null
 vi.mock('$lib/services/context', () => ({
   ContextBuilder: class ContextBuilderMock {
     static async forPack() {
@@ -42,12 +52,14 @@ vi.mock('$lib/services/context', () => ({
       rendered.push(vars)
     }
     async render() {
+      if (renderError) throw renderError
       return { system: 'system', user: 'user' }
     }
   },
 }))
 
 import { TimelineFillService } from './TimelineFillService'
+import { activity } from '$lib/stores/activity.svelte'
 
 const mockEntries: StoryEntry[] = [
   { id: 'se-1', content: 'She looked up at the fortress.', type: 'narration' } as StoryEntry,
@@ -72,6 +84,9 @@ beforeEach(() => {
   generateStructured.mockReset()
   generatePlainText.mockReset()
   rendered.length = 0
+  renderError = null
+  vi.mocked(activity.startStep).mockClear().mockReturnValue('step-1')
+  vi.mocked(activity.endStep).mockClear()
 })
 
 describe('TimelineFillService', () => {
@@ -288,5 +303,54 @@ describe('runTimelineFill - subset grouping', () => {
     // Neither is a subset of the other, so they stay separate rather than both paying for
     // a widened three-chapter render.
     expect(rendered.filter((v) => 'chapterContent' in v)).toHaveLength(2)
+  })
+})
+
+describe('runTimelineFill activity reporting', () => {
+  const chapters = [chapter(1)]
+
+  it('closes the planning step as failed when the prompt cannot be rendered', async () => {
+    // `generateQueries` guards the model call but not the render before it, so this rejects
+    // straight past the success-only close.
+    renderError = new Error('no such template')
+
+    await expect(
+      new TimelineFillService('timelineFill', 3).runTimelineFill(
+        's1',
+        mockEntries,
+        chapters,
+        () => [],
+        '',
+        10_000,
+        'parent-step',
+      ),
+    ).rejects.toThrow('no such template')
+
+    expect(activity.startStep).toHaveBeenCalledWith('Planning questions', {
+      parentId: 'parent-step',
+      isLLM: true,
+    })
+    // Not left running for the turn to sweep up as 'interrupted': it failed.
+    expect(activity.endStep).toHaveBeenCalledWith('step-1', 'failed')
+  })
+
+  it('closes the planning step as skipped when the turn was aborted', async () => {
+    const aborted = new Error('aborted')
+    aborted.name = 'AbortError'
+    renderError = aborted
+
+    await expect(
+      new TimelineFillService('timelineFill', 3).runTimelineFill(
+        's1',
+        mockEntries,
+        chapters,
+        () => [],
+        '',
+        10_000,
+        'parent-step',
+      ),
+    ).rejects.toThrow('aborted')
+
+    expect(activity.endStep).toHaveBeenCalledWith('step-1', 'skipped')
   })
 })

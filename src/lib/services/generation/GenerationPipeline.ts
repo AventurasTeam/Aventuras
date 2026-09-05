@@ -42,6 +42,7 @@ import {
   type BackgroundImageSettings,
 } from './phases/BackgroundImagePhase'
 import { mergeGenerators } from '$lib/utils/async'
+import { NO_ACTIVITY, trackPhase, type ActivityReporter } from '$lib/services/activity'
 import { sameEntityName } from '$lib/utils/text'
 
 export interface PipelineDependencies
@@ -94,6 +95,18 @@ export class GenerationPipeline {
   private imagePhase: ImagePhase
   private postPhase: PostGenerationPhase
 
+  /** Absent wherever reporting is not wired; see NO_ACTIVITY. */
+  private get activity(): ActivityReporter {
+    return this.deps.activity ?? NO_ACTIVITY
+  }
+
+  private tracked<R>(
+    label: string,
+    phase: AsyncGenerator<GenerationEvent, R>,
+  ): AsyncGenerator<GenerationEvent, R> {
+    return trackPhase(this.activity, label, phase)
+  }
+
   constructor(private deps: PipelineDependencies) {
     this.narrativePhase = new NarrativePhase(deps)
     this.backgroundPhase = new BackgroundImagePhase(deps)
@@ -125,12 +138,17 @@ export class GenerationPipeline {
         rawInput: cfg.rawInput,
         actionType: cfg.actionType,
         wasRawActionChoice: cfg.wasRawActionChoice,
+        activity: this.activity,
       })
       if (ctx.abortSignal?.aborted) return { ...r, aborted: true }
 
       let retrieval: RetrievalResult
       if (cfg.cachedRetrievalResult) {
         log('Using cached retrieval result (regenerate)')
+        this.activity.recordStep('Retrieval', {
+          status: 'skipped',
+          detail: 'reused from last turn',
+        })
         yield { type: 'phase_start', phase: 'retrieval' } as GenerationEvent
         retrieval = cfg.cachedRetrievalResult
         yield { type: 'phase_complete', phase: 'retrieval', result: retrieval } as GenerationEvent
@@ -166,26 +184,32 @@ export class GenerationPipeline {
           r.preGeneration?.visualProseMode ?? false,
         ),
         // Independent phases
-        background: this.backgroundPhase.execute({
-          storyId: ctx.story.id,
-          storyEntries: ctx.visibleEntries,
-          imageSettings: cfg.imageSettings,
-          abortSignal: ctx.abortSignal,
-        }),
-        postGeneration: this.postPhase.execute({
-          isCreativeMode: cfg.storyMode === 'creative-writing',
-          disableSuggestions: cfg.disableSuggestions,
-          storyId: ctx.story.id,
-          entries: ctx.visibleEntries,
-          activeThreads: cfg.activeThreads,
-          lorebookEntries: ctx.worldState.lorebookEntries,
-          promptContext: cfg.promptContext,
-          worldState: ctx.worldState,
-          narrativeResponse: r.narrative.content,
-          pov: cfg.pov,
-          translationSettings: cfg.translationSettings,
-          abortSignal: ctx.abortSignal,
-        }),
+        background: this.tracked(
+          'Background image',
+          this.backgroundPhase.execute({
+            storyId: ctx.story.id,
+            storyEntries: ctx.visibleEntries,
+            imageSettings: cfg.imageSettings,
+            abortSignal: ctx.abortSignal,
+          }),
+        ),
+        postGeneration: this.tracked(
+          cfg.storyMode === 'creative-writing' ? 'Suggestions' : 'Action choices',
+          this.postPhase.execute({
+            isCreativeMode: cfg.storyMode === 'creative-writing',
+            disableSuggestions: cfg.disableSuggestions,
+            storyId: ctx.story.id,
+            entries: ctx.visibleEntries,
+            activeThreads: cfg.activeThreads,
+            lorebookEntries: ctx.worldState.lorebookEntries,
+            promptContext: cfg.promptContext,
+            worldState: ctx.worldState,
+            narrativeResponse: r.narrative.content,
+            pov: cfg.pov,
+            translationSettings: cfg.translationSettings,
+            abortSignal: ctx.abortSignal,
+          }),
+        ),
       })
 
       r.classification = allPhases.imagePipeline.classification
@@ -222,23 +246,29 @@ export class GenerationPipeline {
     }
   > {
     const imageDeps = yield* mergeGenerators({
-      classification: this.classificationPhase.execute({
-        narrativeContent,
-        narrativeEntryId: ctx.userAction.entryId,
-        userActionContent: ctx.userAction.content,
-        worldState: ctx.worldState,
-        story: ctx.story,
-        visibleEntries: ctx.visibleEntries,
-        abortSignal: ctx.abortSignal,
-      }),
-      translation: this.translationPhase.execute({
-        storyId: ctx.story.id,
-        narrativeContent,
-        narrativeEntryId: ctx.userAction.entryId,
-        isVisualProse,
-        translationSettings: cfg.translationSettings,
-        abortSignal: ctx.abortSignal,
-      }),
+      classification: this.tracked(
+        'Classification',
+        this.classificationPhase.execute({
+          narrativeContent,
+          narrativeEntryId: ctx.userAction.entryId,
+          userActionContent: ctx.userAction.content,
+          worldState: ctx.worldState,
+          story: ctx.story,
+          visibleEntries: ctx.visibleEntries,
+          abortSignal: ctx.abortSignal,
+        }),
+      ),
+      translation: this.tracked(
+        'Translation',
+        this.translationPhase.execute({
+          storyId: ctx.story.id,
+          narrativeContent,
+          narrativeEntryId: ctx.userAction.entryId,
+          isVisualProse,
+          translationSettings: cfg.translationSettings,
+          abortSignal: ctx.abortSignal,
+        }),
+      ),
     })
 
     if (ctx.abortSignal?.aborted) {
@@ -256,7 +286,7 @@ export class GenerationPipeline {
       imageDeps.classification,
       imageDeps.translation,
     )
-    const image = yield* this.imagePhase.execute(imageInput)
+    const image = yield* this.tracked('Images', this.imagePhase.execute(imageInput))
 
     return {
       classification: imageDeps.classification,

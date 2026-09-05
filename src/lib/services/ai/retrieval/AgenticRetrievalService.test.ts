@@ -2,6 +2,14 @@ import { finishOnlyOnLastStep } from '$lib/services/ai/sdk/agents'
 import { describe, it, expect, vi } from 'vitest'
 import type { Entry, Chapter } from '$lib/types'
 
+vi.mock('$lib/stores/activity.svelte', () => ({
+  activity: {
+    startStep: vi.fn(() => ''),
+    endStep: vi.fn(),
+    recordStep: vi.fn(() => ''),
+  },
+}))
+
 vi.mock('$lib/stores/debug.svelte', () => ({
   debug: {
     addDebugRequest: vi.fn(),

@@ -113,6 +113,8 @@ export interface WorldStateInjectorOptions {
    * lorebook pass start from what is in the scene without waiting on an LLM call.
    */
   onSceneEntities?: (entities: SceneEntity[]) => void
+  /** Step the Tier 3 selection nests under in the activity record, when reporting is on. */
+  activityParentId?: string
 }
 
 export const DEFAULT_WORLD_STATE_INJECTOR_CONFIG: WorldStateInjectorConfig = {
@@ -272,6 +274,7 @@ export class WorldStateInjector extends BaseAIService {
         currentPosition,
         signal,
         userActionEntryId,
+        options.activityParentId,
       )
       log('Tier 3 entries:', tier3.length)
     } else {
@@ -719,6 +722,7 @@ export class WorldStateInjector extends BaseAIService {
     currentPosition: number,
     signal?: AbortSignal,
     userActionEntryId?: string,
+    activityParentId?: string,
   ): Promise<WorldStateContextEntry[]> {
     const result = await runTier3Selection({
       storyId,
@@ -729,6 +733,7 @@ export class WorldStateInjector extends BaseAIService {
       presetId: this.presetId,
       serviceLabel: 'tier3-world-state-selection',
       userActionEntryId,
+      activityParentId,
       currentPosition,
       signal,
     })
