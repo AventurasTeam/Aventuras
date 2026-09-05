@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq, ne } from 'drizzle-orm'
 
 import { storyEntries } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
@@ -58,10 +58,13 @@ async function updateEntrySceneFieldsLocked(
   if (generationStore.isUserEditBlocked())
     return rejected(STORY_ENTRY_REJECTION.inFlight, 'generation in flight')
 
+  // Narrative tail, not row tail: a `system` entry would both refuse an edit on the real
+  // tail and accept one on itself, logging a delta against a row `clearSystemEntry`
+  // hard-deletes without one.
   const rows = await ctx.db
     .select()
     .from(storyEntries)
-    .where(eq(storyEntries.branchId, branchId))
+    .where(and(eq(storyEntries.branchId, branchId), ne(storyEntries.kind, 'system')))
     .orderBy(desc(storyEntries.position))
     .limit(2)
 

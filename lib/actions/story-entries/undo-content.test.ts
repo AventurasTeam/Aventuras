@@ -14,6 +14,7 @@ import { entriesStore, generationStore, happeningsStore, undoRedoStore } from '@
 
 import { isContentEditDelta } from './classifier-facts'
 import { updateStoryEntryContent } from './operational'
+import { writeSystemEntry } from './system-entry'
 import { redoLastAction, undoLastAction } from './undo'
 
 afterEach(() => {
@@ -91,6 +92,32 @@ async function seedFactFrom(
     createdAt: 3,
   })
 }
+
+async function processedThrough(db: Awaited<ReturnType<typeof createTestDb>>['db']) {
+  const [row] = await db
+    .select({ s: branches.classifierStatus })
+    .from(branches)
+    .where(eq(branches.id, 'b1'))
+  return row.s?.processedThrough
+}
+
+describe('a content edit under a system entry', () => {
+  it('still invalidates the head turn the failure banner sits on', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedTurn(db)
+    await seedFactFrom(db, 'e_reply', 2)
+    await writeSystemEntry({ branchId: 'b1', content: 'the provider refused' }, ctx)
+
+    await updateStoryEntryContent('b1', 'e_reply', 'the courier turned back', ctx)
+
+    // A diagnostic singleton at MAX(position) + 1 must not read as the tail: counting it
+    // would leave facts standing on prose that no longer exists, with nothing to re-read
+    // them because the watermark was never clamped.
+    expect(await db.select().from(happenings).where(eq(happenings.branchId, 'b1'))).toEqual([])
+    expect(await processedThrough(db)).toBe(1)
+  })
+})
 
 describe('undo of a content edit', () => {
   it('restores the prose and leaves the turn standing', async () => {

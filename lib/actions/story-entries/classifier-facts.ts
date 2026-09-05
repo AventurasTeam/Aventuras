@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from 'drizzle-orm'
+import { and, desc, eq, inArray, ne } from 'drizzle-orm'
 
 import {
   deltas,
@@ -29,10 +29,13 @@ export async function resolveInvalidationScope(
   editedId: string,
   ctx: DbCtx,
 ): Promise<InvalidationScope | null> {
+  // Narrative tail, not row tail: a `system` entry carries no delta of its own
+  // (data-model.md -> Entry mutability & rollback), so counting it would push the real
+  // head turn out of scope and downgrade a head-turn edit to a bare text write.
   const [tail, previous] = await ctx.db
     .select({ id: storyEntries.id, kind: storyEntries.kind, position: storyEntries.position })
     .from(storyEntries)
-    .where(eq(storyEntries.branchId, branchId))
+    .where(and(eq(storyEntries.branchId, branchId), ne(storyEntries.kind, 'system')))
     .orderBy(desc(storyEntries.position))
     .limit(2)
   if (!tail) return null

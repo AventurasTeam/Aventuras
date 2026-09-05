@@ -60,8 +60,13 @@ export function useSceneEditing(
   )
 
   // The tail rule lives here, not in the card: only this entry gets edit handlers, so
-  // every other card renders no control at all rather than a disabled one.
-  const tailEntryId = entries.at(-1)?.id ?? null
+  // every other card renders no control at all rather than a disabled one. `system` is
+  // skipped for the reason the action layer's gate skips it (scene-fields.ts): a failure
+  // banner must not take the tail off the real last entry.
+  const tailEntryId = useMemo(
+    () => entries.findLast((e) => e.kind !== 'system')?.id ?? null,
+    [entries],
+  )
 
   const [sceneEditId, setSceneEditId] = useState<string | null>(null)
 

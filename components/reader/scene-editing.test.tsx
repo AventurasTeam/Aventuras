@@ -88,6 +88,20 @@ describe('useSceneEditing → tail rule', () => {
     const { result } = render([])
     expect(result.current.tailEntryId).toBeNull()
   })
+
+  it('reads past a system entry to the narrative tail', () => {
+    const failure = { ...entry('e_sys', 3, []), kind: 'system' } as StoryEntry
+    const { result } = render([...ENTRIES, failure])
+    // A failure banner is a diagnostic singleton, not narrative state: it must not
+    // take the scene editor off the entry the branch actually ends on.
+    expect(result.current.tailEntryId).toBe('e2')
+  })
+
+  it('has no tail on a branch holding nothing but a system entry', () => {
+    const failure = { ...entry('e_sys', 1, []), kind: 'system' } as StoryEntry
+    const { result } = render([failure])
+    expect(result.current.tailEntryId).toBeNull()
+  })
 })
 
 describe('useSceneEditing → stale edit target', () => {

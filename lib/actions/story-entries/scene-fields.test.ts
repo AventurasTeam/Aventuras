@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { undoLastAction, updateEntrySceneFields } from '@/lib/actions'
+import { undoLastAction, updateEntrySceneFields, writeSystemEntry } from '@/lib/actions'
 import {
   branches,
   deltas,
@@ -146,6 +146,20 @@ describe('updateEntrySceneFields', () => {
     // stays trustworthy and `raw` stays meaningful.
     expect(meta?.stateReport?.sceneEntities).toEqual(['char_a', 'char_b'])
     expect(meta?.stateReport?.layer).toBe('piggyback_tagged_block')
+  })
+
+  it('accepts the narrative tail while a system entry sits above it', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    await writeSystemEntry({ branchId: 'b1', content: 'the provider refused' }, ctx)
+
+    // The gate is "last entry", and a failure banner is not one: refusing here would
+    // make the scene editor go dead for as long as the banner shows.
+    const result = await updateEntrySceneFields('b1', 'e2', { sceneEntities: ['char_a'] }, ctx)
+
+    expect(result).toEqual({ status: 'ok' })
+    expect((await storedMetadata(db, 'e2'))?.sceneEntities).toEqual(['char_a'])
   })
 
   it('applies the edit to world state via forward-diff', async () => {

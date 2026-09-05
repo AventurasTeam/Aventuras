@@ -513,8 +513,19 @@ owns the deliberate destructive path behind its
 [cascade confirm](../screens/reader-composer/reader-composer.md#regenerate-confirmation).
 So the button is absent on an `ai_reply` (regenerating it discards the edit
 just saved), on the opening, on any earlier turn, and whenever the tail is a
-standing `user_action` or a system entry — in each case there is no reply
-the edit can be re-answered into.
+standing `user_action` — there is no reply the edit can be re-answered into.
+
+**A system entry does not move the tail.** The failure singleton
+([`data-model.md → Entry mutability & rollback`](../../data-model.md#entry-mutability--rollback))
+is a diagnostic artifact, not narrative state, and every tail rule reads
+past it: the head turn beneath it is still the head turn, so the third
+button stays on its `user_action` while the banner shows. Nothing extra is
+owed for it — the singleton carries no create delta, so the
+[cascade count](../screens/reader-composer/reader-composer.md#regenerate-confirmation)
+does not see it, and the regenerate dispatch clears it before the run so
+`MAX(position)` resolves to real prose. The same exemption governs the
+[scene editor](#scene-editor) and the classifier invalidation a content
+edit triggers.
 
 **Both commit buttons gate on a dirty draft.** An untouched draft has nothing
 to save, and saving it anyway is not free: on the head turn the write reverses

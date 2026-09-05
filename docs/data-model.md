@@ -2255,6 +2255,14 @@ anchored with `entry_id` to the edited entry. Consequences:
   clamping below it re-reads the reply too. The second case is also what keeps
   [Save and regenerate](./ui/patterns/entry-card.md#save-and-regenerate)
   reading the edited action rather than skipping past it.
+- **The tail here is the narrative tail.** A `kind='system'` entry sits at
+  `MAX(position) + 1` but is a diagnostic artifact carrying no delta (below),
+  so counting it would push the real head turn out of scope and silently
+  downgrade a head-turn edit to a bare text write — facts left standing on
+  prose that no longer exists, with no clamp to make anything re-read them.
+  Every tail rule reads past it: this scope, the editable-entry gate on the
+  [scene editor](./ui/patterns/entry-card.md#scene-editor), and
+  [Save and regenerate](./ui/patterns/entry-card.md#save-and-regenerate).
 - **The reversal set closes over the happening → link-row relation**, not
   over the anchor alone. Undoing a `create` is a plain row delete with no
   cascade — only the explicit `deleteHappening` action carries one — and a
