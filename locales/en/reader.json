@@ -102,7 +102,8 @@
     "deleteEntry": "Delete entry",
     "editNoticeSceneHere": "This doesn't change the scene details recorded for this entry. Update them separately if the rewrite changes who was present.",
     "editNoticeFrozen": "Only the newest entry's scene details can be updated. Rewording is safe — but if this changes who was present or what happened, the recorded world state won't follow. Branch from here, or roll back (which deletes this entry and everything after).",
-    "editNoticeFrozenNoBranch": "Only the newest entry's scene details can be updated. Rewording is safe — but if this changes who was present or what happened, the recorded world state won't follow. Rolling back is the only remedy, and it deletes this entry and everything after."
+    "editNoticeFrozenNoBranch": "Only the newest entry's scene details can be updated. Rewording is safe — but if this changes who was present or what happened, the recorded world state won't follow. Rolling back is the only remedy, and it deletes this entry and everything after.",
+    "editNoticeFrozenNoRollback": "Only the newest entry's scene details can be updated. Rewording is safe — but if this changes who was present or what happened, the recorded world state won't follow. Branching from here is the only remedy — the opening can't be rolled back."
   },
   "worldTimeEdit": {
     "title": "Edit time",

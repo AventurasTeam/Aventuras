@@ -2208,12 +2208,20 @@ delta. Consequences:
 - When branching from entry N, the new branch copies entry N's _current_
   text (edited or not). The edit propagates through the fork, which is
   the intended behaviour — text edits are user intent, not narrative
-  state that needs reversing.
-- **Memory is not a side-channel, though.** Prose is the classifier's only
-  input, so an edit invalidates every fact it took from the replaced text.
-  The edit reverses the deltas anchored to that entry under
-  `source='periodic_classifier'` and clamps `processedThrough` below it,
-  in the same transaction as the text write. Both halves are required: the
+  state that needs reversing. **Order matters for the frozen-scene remedy.**
+  Entry N is the new branch's tail, so branching first and editing there puts
+  the edit back on the head turn, where the invalidation below does run.
+  Editing first and branching after carries both the new text and the facts
+  derived from the old text into the fork, and the fork's
+  `processedThrough = min(parent.processedThrough, position(N))` marks entry N
+  processed, so nothing re-reads it. The notice's "branch from here" means
+  branch, then rewrite.
+- **Memory is not a side-channel, though — inside the head turn.** Prose is
+  the classifier's only input, so an edit invalidates every fact it took from
+  the replaced text. An edit inside the head turn reverses the deltas anchored
+  to the invalidated entries under `source='periodic_classifier'` and clamps
+  `processedThrough` below the edited entry, in the same transaction as the
+  text write. Both halves are required: the
   clamp alone re-derives beside the stale facts rather than replacing them,
   and chapter-close dedup will not merge the pair, because its cast-overlap
   threshold is sized for re-deriving the _same_ fact, not a contradicting
@@ -2222,6 +2230,35 @@ delta. Consequences:
   corrected by hand, and nothing here may undo that. The suffix sweep stays
   out: the entry and everything after it survive, since nothing downstream
   is structurally invalid.
+- **The head turn is the ceiling, and the invalidation set runs from the
+  edited entry to the tail.** The clamp makes the classifier re-read every
+  entry above it, so the reversal has to cover every one of them or the pass
+  re-derives beside facts that survived. That is what bounds where the pair
+  may run at all: below the head turn the re-read suffix is unbounded, and the
+  duplicates it produces land in chapters that are already closed — which
+  chapter-close dedup never revisits, since sub-job 3e only clusters within
+  the range it is closing
+  ([`chapter-close.md → 3e`](./memory/chapter-close.md#3e--happenings-consolidation)).
+  Those duplicates would be permanent, and they would be paid on every
+  reworded typo, so an edit below the head turn reverses nothing and clamps
+  nothing. It is a bare text write, and the frozen-scene notice
+  ([`entry-card.md → Divergence notices`](./ui/patterns/entry-card.md#divergence-notices))
+  owns telling the user the recorded state will not follow. Inside the head
+  turn the set degenerates correctly: editing the tail covers the tail alone,
+  and editing the `user_action` whose reply is the tail covers both, because
+  clamping below it re-reads the reply too. The second case is also what keeps
+  [Save and regenerate](./ui/patterns/entry-card.md#save-and-regenerate)
+  reading the edited action rather than skipping past it.
+- **"Tail" there is the last non-`system` entry, not the last row.** A
+  failed turn reverses its own `user_action` and parks the failure
+  singleton above what is left, so the row beneath it is the `ai_reply`
+  the head turn already covers — and the classifier's own turn window
+  skips the kind, so that reply is still what the next pass re-reads.
+  Letting the failure entry close the head turn would freeze the branch's
+  real tail for as long as the error card stands, turning an edit there
+  into a bare write whose stale facts nothing re-reads. The frozen notice
+  compounds it, naming branch and rollback when dismissing the `system`
+  entry is what restores the edit.
 - **The reversal set closes over the happening → link-row relation**, not
   over the anchor alone. Undoing a `create` is a plain row delete with no
   cascade — only the explicit `deleteHappening` action carries one — and a
@@ -2248,7 +2285,9 @@ delta. Consequences:
   cannot be clamped to. Re-derivation therefore sees the edited entry
   onward and not the earlier prose that helped produce it. Accepted over
   clamping a full window back, which would re-derive facts for unedited
-  turns beside their surviving originals.
+  turns beside their surviving originals. Below the head turn the question
+  does not arise: nothing is reversed, so the fact keeps whatever it was
+  synthesised from.
 
 **Wizard creation is exempt from the delta log.** The wizard's commit
 transaction writes the `stories` row, the initial `branches` row, the

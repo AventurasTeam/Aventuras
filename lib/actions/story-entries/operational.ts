@@ -6,7 +6,7 @@ import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
 import { reverseAndPruneDeltaRows } from '../delta/reverse-replay'
 import type { DbCtx } from '../types'
-import { resolveClassifierFactDeltas } from './classifier-facts'
+import { resolveClassifierFactDeltas, resolveInvalidationScope } from './classifier-facts'
 import { bracketProseReversal, classifierWatermarkClampOps } from './prose-reversal'
 import { STORY_ENTRY_REJECTION, type StoryEntryRejectionCode } from './register'
 
@@ -33,6 +33,9 @@ export async function updateStoryEntryContent(
   // No re-check inside the bracket, matching rollbackToEntry: the gate above and
   // bracketProseReversal's own flag set are one synchronous block, and the flag
   // itself reads as blocked, so a re-check would reject every call.
+  //
+  // Held even for an edit that reverses nothing: resolving the scope needs a read,
+  // and taking it outside the barrier would race the tail it is classifying.
   return bracketProseReversal(branchId, () =>
     updateStoryEntryContentBracketed(branchId, id, content, ctx),
   )
@@ -43,8 +46,12 @@ export async function updateStoryEntryContent(
  * it took from the old text standing on nothing. Clamping the watermark on its own
  * only adds the new reading beside the stale one -- chapter-close dedup merges on
  * cast overlap, which a contradicting fact does not have -- so the two run together:
- * reverse what this entry produced, then let the next pass re-read it
- * (followups.md -> Entry content edits are irreversible).
+ * reverse what the edit invalidated, then let the next pass re-read it
+ * (data-model.md -> Entry mutability & rollback).
+ *
+ * Both halves ride one scope and neither runs without it: the clamp reopens exactly
+ * the window the reversal covers, so a narrower set would re-derive beside surviving
+ * facts. Off the head turn the edit is a bare text write.
  *
  * Scoped by source, not by table: `per_turn_classifier` and `piggyback_tagged_block`
  * write the scene metadata a user may have just corrected by hand, and nothing here
@@ -68,19 +75,27 @@ async function updateStoryEntryContentBracketed(
       code: STORY_ENTRY_REJECTION.notFound,
     }
 
-  const derived = await resolveClassifierFactDeltas(branchId, id, ctx)
+  // The editor gates its commit buttons on the same compare, so this is the backstop for
+  // any other caller: on the head turn a no-op write would reverse the entry's facts and
+  // spend a classifier pass rebuilding them identically, and it clears the redo stack for
+  // nothing on every row.
+  if (current.content === content) return { status: 'ok' }
 
-  // Clamped unconditionally: a pass that read this entry and extracted nothing still
-  // advanced the watermark past it, and the op no-ops when the watermark is behind.
-  // One transaction, because a clamp without the reversal re-derives beside the stale
-  // facts and a reversal without the clamp deletes them with nothing to replace them.
+  const scope = await resolveInvalidationScope(branchId, id, ctx)
+  const derived = scope ? await resolveClassifierFactDeltas(branchId, scope, ctx) : []
+
+  // In scope the clamp is unconditional: a pass that read the entry and extracted
+  // nothing still advanced the watermark past it, and the op no-ops when the watermark
+  // is already behind. One transaction, because a clamp without the reversal re-derives
+  // beside the stale facts and a reversal without the clamp deletes them with nothing
+  // to replace them.
   await reverseAndPruneDeltaRows(derived, ctx, [
     ctx.db
       .update(storyEntries)
       .set({ content })
       .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, id)))
       .toSQL(),
-    ...classifierWatermarkClampOps(branchId, current.position),
+    ...(scope ? classifierWatermarkClampOps(branchId, current.position) : []),
   ])
 
   entriesStore.patch(branchId, { op: 'update', id, columns: { content } })

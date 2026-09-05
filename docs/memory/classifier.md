@@ -267,7 +267,13 @@ chapter-close phase 0. A successful pass over `(processedThrough, E]` sets
 it — `processedThrough ← min(processedThrough, position(B) − 1)` for `B`
 the earliest removed entry (see
 [`data-model.md → Entry mutability & rollback → Survival anchor`](../data-model.md#survival-anchor))
-— so changed turns are re-processed without re-deriving spared facts. At
+— so changed turns are re-processed without re-deriving spared facts. A
+content edit removes no entry and clamps only inside the head turn, where
+`B` is the edited entry and the reversal covers everything the clamp
+re-reads; below it the edit leaves the watermark alone rather than force a
+re-read of an unbounded suffix whose facts survive
+([`data-model.md → Entry mutability & rollback`](../data-model.md#entry-mutability--rollback)).
+At
 fork from entry `N`, the new branch sets
 `processedThrough = min(parent.processedThrough, position(N))` and resets
 the rest of the status to idle.

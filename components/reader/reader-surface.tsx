@@ -137,6 +137,7 @@ const ReaderRow = memo(function ReaderRow({
       disabled={editBlocked}
       editing={editing}
       contentEditNotice={contentEditNotice ?? undefined}
+      editDirty={editing && editContent !== row.content}
       onEdit={isSystem ? undefined : () => onStartEdit(row)}
       onRegen={row.kind === 'ai_reply' ? () => void onRegenerate(row.id) : undefined}
       onContentChange={onContentChange}

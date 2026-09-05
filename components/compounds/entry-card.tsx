@@ -154,6 +154,10 @@ type EntryCardProps = {
   editing?: boolean
   /** Which divergence notice the editor carries; omitted renders none. */
   contentEditNotice?: ContentEditNotice
+  /** Whether the draft differs from the stored prose. Both commit buttons gate on it —
+   *  neither has anything to save otherwise. Defaults to dirty for hosts that pass no
+   *  draft of their own. */
+  editDirty?: boolean
   onContentChange?: (next: string) => void
   onCommitEdit?: () => void
   /** Commit, then re-answer this entry. Presence gates the button — only the head
@@ -744,6 +748,7 @@ export function EntryCard({
   disabledReason,
   editing,
   contentEditNotice,
+  editDirty = true,
   onContentChange,
   onCommitEdit,
   onCommitEditAndRegen,
@@ -946,13 +951,18 @@ export function EntryCard({
                 variant="secondary"
                 size="sm"
                 onPress={onCommitEditAndRegen}
-                disabled={disabled}
+                disabled={disabled || !editDirty}
               >
                 <Icon as={RefreshCw} size="sm" />
                 <Text>{t('reader:entryCard.saveAndRegenerate')}</Text>
               </Button>
             ) : null}
-            <Button variant="primary" size="sm" onPress={onCommitEdit} disabled={disabled}>
+            <Button
+              variant="primary"
+              size="sm"
+              onPress={onCommitEdit}
+              disabled={disabled || !editDirty}
+            >
               <Text>{t('save')}</Text>
             </Button>
           </View>
