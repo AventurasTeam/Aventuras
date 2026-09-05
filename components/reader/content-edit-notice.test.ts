@@ -35,12 +35,15 @@ describe('contentEditNoticeKey', () => {
     )
   })
 
-  it('keeps the branch clause on kinds whose action cluster carries one', () => {
+  it('keeps both clauses on an ai_reply, whose cluster carries branch and delete', () => {
     expect(contentEditNoticeKey('scene-frozen', 'ai_reply')).toBe(
       'reader:entryCard.editNoticeFrozen',
     )
+  })
+
+  it('drops the rollback clause on the opening, which is the rollback floor', () => {
     expect(contentEditNoticeKey('scene-frozen', 'opening')).toBe(
-      'reader:entryCard.editNoticeFrozen',
+      'reader:entryCard.editNoticeFrozenNoRollback',
     )
   })
 
