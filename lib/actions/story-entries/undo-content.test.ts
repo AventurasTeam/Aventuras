@@ -200,6 +200,29 @@ describe('undo of a content edit', () => {
     expect(branch.s?.processedThrough).toBe(1)
   })
 
+  it('redoes over a fact delta holding the log position the undo freed', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedTurn(db)
+
+    await updateStoryEntryContent('b1', 'e_reply', 'the courier turned back', ctx)
+    const [edit] = await db.select().from(deltas).where(eq(deltas.source, 'user_edit'))
+    await undoLastAction('b1', ctx)
+    // What a real pass does: MAX+1 lands on the position the prune just freed, so the
+    // redo's re-insert and the reversal of this row contend for one unique key.
+    await seedFactFrom(db, 'e_reply', edit.logPosition)
+    await db
+      .update(branches)
+      .set({ classifierStatus: status(2) })
+      .where(eq(branches.id, 'b1'))
+
+    expect((await redoLastAction('b1', ctx)).status).toBe('ok')
+
+    expect(await db.select().from(happenings).where(eq(happenings.branchId, 'b1'))).toEqual([])
+    const remaining = await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))
+    expect(remaining.map((d) => d.id).sort()).toEqual(['d_turn', edit.id].sort())
+  })
+
   it('a redo that restores nothing reverses no facts', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }

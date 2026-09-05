@@ -96,7 +96,9 @@ export async function applyRedo(
     invalidation.rows.length > 0
       ? await buildReverseAndPrunePlan(invalidation.rows, ctx)
       : { ops: [], pruneOps: [], patches: [] }
-  await ctx.runInTransaction([...ops, ...plan.ops, ...plan.pruneOps, ...invalidation.extraOps])
+  // Prunes ahead of the delta re-inserts: the undo freed this snapshot's log
+  // positions, and a pass since then may hold one — (branch_id, log_position) is unique.
+  await ctx.runInTransaction([...plan.pruneOps, ...ops, ...plan.ops, ...invalidation.extraOps])
   // Past this point the redo is committed; a patcher throw is a store-sync
   // failure, not a redo failure. Flag committed so redoLastAction still pops
   // the (now-applied) snapshot instead of leaving it for a doomed retry.
