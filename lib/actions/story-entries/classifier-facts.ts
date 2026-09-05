@@ -11,6 +11,7 @@ import {
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 
+import { PAYLOAD_META_PREFIX } from '../delta/delta-encoding'
 import type { DbCtx } from '../types'
 import { classifierWatermarkClampOps } from './prose-reversal'
 
@@ -23,17 +24,9 @@ const invalidationScopeSchema = z.object({
   editedPosition: z.number().int(),
 })
 
-/**
- * Where a content edit's invalidation scope rides on its own delta — payload metadata,
- * never a column (delta-encoding.ts -> PAYLOAD_META_PREFIX).
- *
- * Recorded at write time because the tail can move between the edit and its reversal
- * without the edit's delta moving with it: a rollback prunes the deltas above this one
- * and can leave an edit that was made below the head turn sitting at the log head, on
- * what is now the tail. Re-deriving the scope there answers a different question than
- * the forward edit answered, and the two arms must reverse the same set.
- */
-export const INVALIDATION_SCOPE_KEY = '$invalidationScope'
+// Recorded at write time rather than re-derived at reversal time, because the tail can
+// move without this delta moving with it (data-model.md -> Entry mutability & rollback).
+export const INVALIDATION_SCOPE_KEY = `${PAYLOAD_META_PREFIX}invalidationScope`
 
 /**
  * The entries a content edit invalidates, or null when it invalidates none.
@@ -66,8 +59,10 @@ export async function resolveInvalidationScope(
   return null
 }
 
-// The undo and redo arms meet a content delta, not an edit call, so they identify one
-// by payload shape. `content` is the only column this delta ever carries.
+// The arms meet a delta, not an edit call, so they identify one by payload shape. Sound
+// because of the converse: no other story_entries update delta carries a `content` key --
+// updateStoryEntryMetadata writes `{ metadata }`, and the delete handler's whole-row
+// payload does carry one but is excluded by the op.
 export function isContentEditDelta(
   delta: Pick<Delta, 'targetTable' | 'op' | 'undoPayload'>,
 ): boolean {
@@ -118,40 +113,54 @@ export function contentEditUndoPayload(
 }
 
 /**
- * The scope the forward edit recorded, or null when it recorded none. An edit below the
- * head turn writes none, and both readings mean the same thing: putting this prose back
- * invalidates nothing.
+ * Absent and unreadable are kept apart on purpose. An edit below the head turn records
+ * no scope, and reversing it invalidates nothing — that is a fact about the forward
+ * edit. An unreadable one is the absence of any fact about it, and reversing prose on
+ * that basis is the failure the recorded scope exists to prevent.
  */
-export function recordedInvalidationScope(
-  delta: Pick<Delta, 'id' | 'undoPayload'>,
-): InvalidationScope | null {
-  const raw = delta.undoPayload?.[INVALIDATION_SCOPE_KEY]
-  if (raw == null) return null
-  const parsed = invalidationScopeSchema.safeParse(raw)
-  if (parsed.success) return parsed.data
-  // Reversing prose while silently invalidating nothing is the failure the scope
-  // exists to prevent, so a malformed one is reported rather than absorbed.
-  logger.warn('action_layer.invalidation_scope_malformed', {
+type RecordedScope =
+  | { kind: 'none' }
+  | { kind: 'scope'; scope: InvalidationScope }
+  | { kind: 'unreadable' }
+
+function recordedInvalidationScope(delta: Pick<Delta, 'id' | 'undoPayload'>): RecordedScope {
+  const payload = delta.undoPayload
+  // Key presence, not a null check: `contentEditUndoPayload` omits the key entirely when
+  // there is no scope, so an explicit null can only be corruption.
+  if (payload == null || !(INVALIDATION_SCOPE_KEY in payload)) return { kind: 'none' }
+  const parsed = invalidationScopeSchema.safeParse(payload[INVALIDATION_SCOPE_KEY])
+  if (parsed.success) return { kind: 'scope', scope: parsed.data }
+  logger.error('action_layer.invalidation_scope_malformed', {
     deltaId: delta.id,
     error: parsed.error.message,
   })
-  return null
+  return { kind: 'unreadable' }
 }
 
+/**
+ * An invalidation, or the delta that refused to describe one. Callers reject on
+ * `unreadable` rather than reversing with an empty set (undo.ts -> UndoRejectionCode).
+ */
+export type InvalidationOutcome =
+  | ({ status: 'ok' } & ContentEditInvalidation)
+  | { status: 'unreadable'; deltaId: string }
+
 /** {@link resolveContentEditInvalidation} for the scope a delta already carries. */
-export function resolveRecordedInvalidation(
+export async function resolveRecordedInvalidation(
   branchId: string,
   delta: Pick<Delta, 'id' | 'undoPayload'>,
   ctx: DbCtx,
-): Promise<ContentEditInvalidation> {
-  return invalidationForScope(branchId, recordedInvalidationScope(delta), ctx)
+): Promise<InvalidationOutcome> {
+  const recorded = recordedInvalidationScope(delta)
+  if (recorded.kind === 'unreadable') return { status: 'unreadable', deltaId: delta.id }
+  const scope = recorded.kind === 'scope' ? recorded.scope : null
+  return { status: 'ok', ...(await invalidationForScope(branchId, scope, ctx)) }
 }
 
 /**
  * What reversing a delta group invalidates. A group carrying a content delta puts prose
  * back, and prose is the classifier's only input, so undoing it reaches the same facts
- * the forward edit did. Every other group shape reaches none — which is why the arm
- * could hardcode an empty clamp until content became delta-logged.
+ * the forward edit did. Every other group shape reaches none.
  *
  * An entry the recorded scope names may have been swept since (a rollback above the
  * edited entry spares the edit but not the reply beside it); its facts went with it, so
@@ -161,16 +170,19 @@ export async function resolveGroupInvalidation(
   branchId: string,
   group: readonly Delta[],
   ctx: DbCtx,
-): Promise<ContentEditInvalidation> {
+): Promise<InvalidationOutcome> {
   const rows: Delta[] = []
   const clampOps: SqlOp[] = []
   for (const delta of group) {
     if (!isContentEditDelta(delta)) continue
     const one = await resolveRecordedInvalidation(branchId, delta, ctx)
+    if (one.status === 'unreadable') return one
     rows.push(...one.rows)
     clampOps.push(...one.clampOps)
   }
-  return { rows, clampOps }
+  // Sorted here so every `ContentEditInvalidation` is replay-ordered by construction:
+  // the per-delta results are each sorted, but concatenating them is not.
+  return { status: 'ok', rows: sortForReplay(rows), clampOps }
 }
 
 /**

@@ -28,8 +28,9 @@ export type UndoResult =
   | { status: 'ok' }
   | { status: 'rejected'; code: UndoRejectionCode; reason: string }
 
-// The two sets are disjoint by source today; deduping keeps a future overlap from
-// reversing a row twice rather than relying on that.
+// Disjoint today by target table, not by source — the child-delta closure pulls rows in
+// whatever their source, but a group carrying a content delta is that delta alone.
+// Deduping keeps a future overlap from reversing and pruning a row twice.
 function dedupeById(rows: readonly Delta[]): Delta[] {
   return [...new Map(rows.map((r) => [r.id, r])).values()]
 }
@@ -60,7 +61,7 @@ export async function undoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
     if (!target) return { status: 'rejected', code: 'nothing-to-apply', reason: 'nothing to undo' }
 
     let rows: Delta[]
-    // What redo replays. It diverges from `rows` on a content edit — see below.
+    // What redo replays. Diverges from `rows` on a content edit: see `snapshotRows`.
     let snapshotRows: Delta[]
     let clampOps: SqlOp[] = []
     if (target.kind === 'turn') {
@@ -74,6 +75,12 @@ export async function undoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
     } else {
       const group = recent.filter((r) => r.actionId === target.actionId)
       const invalidation = await resolveGroupInvalidation(branchId, group, ctx)
+      if (invalidation.status === 'unreadable')
+        return {
+          status: 'rejected',
+          code: 'integrity',
+          reason: `delta ${invalidation.deltaId} carries an unreadable invalidation scope`,
+        }
       clampOps = invalidation.clampOps
       // The added reversals are a consequence of the prose moving, not part of the
       // action being undone — so redo replays the group alone. Replaying them too
@@ -115,10 +122,16 @@ export async function redoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
       reason: 'redo stack does not belong to this branch',
     }
 
-  // The bracket, not a bare flag: a redo restores prose and reverses classifier output,
-  // so it has to drain an in-flight pass the way every other reversal does.
+  // A redo restores prose and reverses classifier output, so it drains an in-flight
+  // pass the way every other reversal does.
   return bracketProseReversal(branchId, async () => {
     const invalidation = await resolveRedoInvalidation(branchId, snapshot, ctx)
+    if ('status' in invalidation)
+      return {
+        status: 'rejected',
+        code: 'integrity',
+        reason: `delta ${invalidation.deltaId} carries an unreadable invalidation scope`,
+      }
     try {
       await applyRedo(snapshot, ctx, invalidation)
     } catch (e) {
@@ -139,19 +152,21 @@ export async function redoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
  * only through a retry timer firing between the undo and the redo, but the failure it
  * leaves is the one the clamp exists to prevent.
  *
- * Gated on `rowBeforeUndo`: `applyRedo` writes nothing for a snapshot that restores
- * nothing, and reversing facts for a redo that never happened would be pure loss.
+ * Skips a snapshot carrying no row because `isContentEditDelta` pins `op = 'update'`,
+ * and `applyRedo` writes nothing for an update it has no row to restore. A delete
+ * redoes regardless of the snapshot, so widening the predicate would lose the clamp.
  */
 async function resolveRedoInvalidation(
   branchId: string,
   snapshot: readonly RedoSnapshot[],
   ctx: DbCtx,
-): Promise<RedoInvalidation> {
+): Promise<RedoInvalidation | { status: 'unreadable'; deltaId: string }> {
   const rows: Delta[] = []
   const extraOps: SqlOp[] = []
   for (const { delta, rowBeforeUndo } of snapshot) {
     if (rowBeforeUndo == null || !isContentEditDelta(delta)) continue
     const one = await resolveRecordedInvalidation(branchId, delta, ctx)
+    if (one.status === 'unreadable') return one
     rows.push(...one.rows)
     extraOps.push(...one.clampOps)
   }

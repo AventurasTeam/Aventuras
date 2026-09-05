@@ -30,33 +30,27 @@ export async function updateStoryEntryContent(
       reason: 'generation in flight',
       code: STORY_ENTRY_REJECTION.inFlight,
     }
+  // Ahead of the bracket, which cancels the in-flight classifier before its body runs:
+  // an unchanged save must not cost a pass. Safe outside the barrier because no other
+  // writer touches this column, unlike the tail read the scope needs.
+  const [existing] = await ctx.db
+    .select({ content: storyEntries.content })
+    .from(storyEntries)
+    .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, id)))
+  if (existing?.content === content) return { status: 'ok' }
   // No re-check inside the bracket, matching rollbackToEntry: the gate above and
   // bracketProseReversal's own flag set are one synchronous block, and the flag
   // itself reads as blocked, so a re-check would reject every call.
-  //
-  // Held even for an edit that reverses nothing: resolving the scope needs a read,
-  // and taking it outside the barrier would race the tail it is classifying.
   return bracketProseReversal(branchId, () =>
     updateStoryEntryContentBracketed(branchId, id, content, ctx),
   )
 }
 
 /**
- * The classifier derives its facts from prose alone, so a rewrite leaves the ones
- * it took from the old text standing on nothing. Clamping the watermark on its own
- * only adds the new reading beside the stale one -- chapter-close dedup merges on
- * cast overlap, which a contradicting fact does not have -- so the two run together:
- * reverse what the edit invalidated, then let the next pass re-read it
+ * Prose is the classifier's only input, so a rewrite leaves the facts it took from the
+ * old text standing on nothing. Reversal and clamp ride one scope and neither runs
+ * without the other; off the head turn the edit is a bare text write
  * (data-model.md -> Entry mutability & rollback).
- *
- * Both halves ride one scope and neither runs without it: the clamp reopens exactly
- * the window the reversal covers, so a narrower set would re-derive beside surviving
- * facts. Off the head turn the edit is a bare text write.
- *
- * Scoped by source, not by table: `per_turn_classifier` and `piggyback_tagged_block`
- * write the scene metadata a user may have just corrected by hand, and nothing here
- * may undo that. `resolveClassifierFactDeltas` owns closing that set over the
- * happening -> link-row relation.
  */
 async function updateStoryEntryContentBracketed(
   branchId: string,
@@ -74,12 +68,15 @@ async function updateStoryEntryContentBracketed(
       reason: `story_entries ${branchId}:${id} not found`,
       code: STORY_ENTRY_REJECTION.notFound,
     }
-
-  // The editor gates its commit buttons on the same compare, so this is the backstop for
-  // any other caller: on the head turn a no-op write would reverse the entry's facts and
-  // spend a classifier pass rebuilding them identically, and it clears the redo stack for
-  // nothing on every row.
-  if (current.content === content) return { status: 'ok' }
+  // `clearSystemEntry` hard-deletes without a delta, which would strand this one: the
+  // survival anchor's subquery yields NULL for a missing entry, so the orphan is spared
+  // by every rollback window and a CTRL-Z reaching it updates nothing while reporting ok.
+  if (current.kind === 'system')
+    return {
+      status: 'rejected',
+      reason: `system entries are not editable; ${id} is one`,
+      code: STORY_ENTRY_REJECTION.notTailEntry,
+    }
 
   const invalidation = await resolveContentEditInvalidation(branchId, id, ctx)
 
@@ -168,9 +165,10 @@ async function resolveRollbackWindow(
       code: STORY_ENTRY_REJECTION.rollbackFloor,
     }
 
-  // Survival-anchor predicate (data-model.md -> Survival anchor). Foreground deltas
-  // whose subject is a specific entry stamp it -- metadata, scene fields, content --
-  // so the position-correlated branch spares them when a later turn is swept.
+  // Survival-anchor predicate (data-model.md -> Survival anchor). A delta that AMENDS an
+  // existing entry stamps it -- metadata, scene fields, content -- so the
+  // position-correlated branch spares it when a later turn is swept. The create that
+  // introduces an entry deliberately does not, leaving the suffix rule to sweep it.
   return {
     where: and(
       eq(deltas.branchId, branchId),
