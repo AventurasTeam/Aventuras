@@ -2,11 +2,13 @@ import { and, desc, eq, sql, type SQL } from 'drizzle-orm'
 
 import type { Delta, SqlOp } from '@/lib/db'
 import { deltas, storyEntries } from '@/lib/db'
+import { generateId } from '@/lib/ids'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
+import { deltaRowOp } from '../delta/delta-row'
 import { reverseAndPruneDeltaRows } from '../delta/reverse-replay'
 import type { DbCtx } from '../types'
-import { resolveClassifierFactDeltas, resolveInvalidationScope } from './classifier-facts'
+import { resolveContentEditInvalidation } from './classifier-facts'
 import { bracketProseReversal, classifierWatermarkClampOps } from './prose-reversal'
 import { STORY_ENTRY_REJECTION, type StoryEntryRejectionCode } from './register'
 
@@ -16,8 +18,6 @@ export type StoryEntryRejection = {
   code: StoryEntryRejectionCode
 }
 
-// story_entries.content is the one narrative field exempt from the delta log
-// (data-model.md -> Entry mutability & rollback). Direct row update, no delta.
 export async function updateStoryEntryContent(
   branchId: string,
   id: string,
@@ -81,21 +81,38 @@ async function updateStoryEntryContentBracketed(
   // nothing on every row.
   if (current.content === content) return { status: 'ok' }
 
-  const scope = await resolveInvalidationScope(branchId, id, ctx)
-  const derived = scope ? await resolveClassifierFactDeltas(branchId, scope, ctx) : []
+  const invalidation = await resolveContentEditInvalidation(branchId, id, ctx)
 
   // In scope the clamp is unconditional: a pass that read the entry and extracted
   // nothing still advanced the watermark past it, and the op no-ops when the watermark
   // is already behind. One transaction, because a clamp without the reversal re-derives
   // beside the stale facts and a reversal without the clamp deletes them with nothing
   // to replace them.
-  await reverseAndPruneDeltaRows(derived, ctx, [
+  await reverseAndPruneDeltaRows(invalidation.rows, ctx, [
     ctx.db
       .update(storyEntries)
       .set({ content })
       .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, id)))
       .toSQL(),
-    ...(scope ? classifierWatermarkClampOps(branchId, current.position) : []),
+    // Spliced rather than dispatched: applyDeltaAction commits its own transaction, so
+    // it could not be atomic with the reversal, and its barrier rejects a user_edit
+    // action while `reversalInProgress` is set -- which the bracket above sets.
+    deltaRowOp(ctx, {
+      deltaId: generateId('delta'),
+      branchId,
+      // Survival anchor: without it a rollback above this entry would sweep the delta
+      // and restore stale prose onto a row that survives (data-model.md).
+      entryId: id,
+      actionId: generateId('act'),
+      source: 'user_edit',
+      target: {
+        targetTable: 'story_entries',
+        targetId: id,
+        op: 'update',
+        undoPayload: { content: current.content },
+      },
+    }),
+    ...invalidation.clampOps,
   ])
 
   entriesStore.patch(branchId, { op: 'update', id, columns: { content } })
@@ -188,14 +205,21 @@ export async function resolveSweep(
   return { rows, clampOps: classifierWatermarkClampOps(branchId, win.earliestRemovedPosition) }
 }
 
+// Buckets per rollback-confirm.md, whose world-state row is scoped to the other
+// narrative tables. An entry-scoped delta is spared by the survival anchor unless its
+// entry is being deleted, so counting one here would charge the user twice for a loss
+// the entries line already reports.
 function countBuckets(rows: Pick<Delta, 'op' | 'targetTable'>[]): RollbackCounts {
   let entries = 0
   let chapters = 0
+  let worldStateChanges = 0
   for (const r of rows) {
-    if (r.op === 'create' && r.targetTable === 'story_entries') entries++
-    else if (r.op === 'create' && r.targetTable === 'chapters') chapters++
+    if (r.targetTable === 'story_entries') {
+      if (r.op === 'create') entries++
+    } else if (r.op === 'create' && r.targetTable === 'chapters') chapters++
+    else worldStateChanges++
   }
-  return { entries, chapters, worldStateChanges: rows.length - entries - chapters }
+  return { entries, chapters, worldStateChanges }
 }
 
 export async function getRollbackCounts(

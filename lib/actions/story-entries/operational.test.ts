@@ -24,6 +24,7 @@ import {
   undoRedoStore,
 } from '@/lib/stores'
 
+import { isContentEditDelta } from './classifier-facts'
 import { getRollbackCounts, rollbackToEntry, updateStoryEntryContent } from './operational'
 
 afterEach(() => {
@@ -48,8 +49,21 @@ async function seed(db: Awaited<ReturnType<typeof createTestDb>>['db']) {
   })
 }
 
+// A content edit's delta id is generated, so the seeded-id lists below partition it
+// out rather than trying to name it.
+function seededDeltaIds(rows: Delta[]): string[] {
+  return rows
+    .filter((d) => !isContentEditDelta(d))
+    .map((d) => d.id)
+    .sort()
+}
+
+function contentDeltas(rows: Delta[]): Delta[] {
+  return rows.filter(isContentEditDelta)
+}
+
 describe('updateStoryEntryContent', () => {
-  it('mutates content, writes zero deltas, mirrors the store', async () => {
+  it('mutates content, logs one anchored user_edit delta, mirrors the store', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seed(db)
@@ -74,8 +88,49 @@ describe('updateStoryEntryContent', () => {
       .from(storyEntries)
       .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'e1')))
     expect(row.content).toBe('new text')
-    expect((await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))).length).toBe(0)
     expect(entriesStore.getById('e1')?.content).toBe('new text')
+
+    const logged = await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))
+    expect(logged).toHaveLength(1)
+    expect(logged[0]).toMatchObject({
+      source: 'user_edit',
+      targetTable: 'story_entries',
+      targetId: 'e1',
+      // Survival anchor: a rollback above this entry must spare the delta.
+      entryId: 'e1',
+      op: 'update',
+      undoPayload: { content: 'old' },
+      encodingVersion: 1,
+    })
+  })
+
+  it('assigns the content delta a log position above every survivor', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedClassifiedTail(db)
+
+    await updateStoryEntryContent('b1', 'e2', 'new', ctx)
+
+    const rows = (await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))) as Delta[]
+    const [added] = contentDeltas(rows)
+    const survivors = rows.filter((d) => !isContentEditDelta(d)).map((d) => d.logPosition)
+    // selectUndoTarget walks from the head, so an edit that did not land there would
+    // leave CTRL-Z reaching past it to the turn beneath.
+    expect(added.logPosition).toBeGreaterThan(Math.max(...survivors))
+  })
+
+  it('computes the content delta log position against the post-prune log', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedHeadTurn(db)
+
+    // Editing the head turn's origin prunes the facts at positions 2 and 3, leaving
+    // position 1. MAX+1 therefore reuses 2; ordering the insert before the prune
+    // would yield 4.
+    await updateStoryEntryContent('b1', 'e2', 'rewritten action', ctx)
+
+    const rows = (await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))) as Delta[]
+    expect(contentDeltas(rows)[0].logPosition).toBe(2)
   })
 
   it('clears the redo stack on success (an edit is a new unrelated action)', async () => {
@@ -258,7 +313,9 @@ describe('rollbackToEntry', () => {
     const edit = await updateStoryEntryContent('b1', 't3', 'user-edited prose', ctx)
     expect(edit.status).toBe('ok')
     const deltaCountAfter = (await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))).length
-    expect(deltaCountAfter).toBe(deltaCountBefore)
+    // Nothing is reversed here: this fixture's world-state deltas are ai_classifier
+    // with a null anchor, so they are never in the invalidation set.
+    expect(deltaCountAfter).toBe(deltaCountBefore + 1)
 
     const result = await rollbackToEntry('b1', 't2', ctx)
     expect(result.status).toBe('ok')
@@ -266,6 +323,38 @@ describe('rollbackToEntry', () => {
       .map((r) => r.id)
       .sort()
     expect(remaining).toEqual(['op', 't1'])
+  })
+
+  it('spares a content edit on an entry the rollback keeps', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    entriesStore.hydrate('b1', [])
+
+    // t1 survives a rollback to t3, so its edit must survive with it — the delta sits
+    // at the log head, so only its entry_id anchor keeps the sweep off it.
+    await updateStoryEntryContent('b1', 't1', 'kept edit', ctx)
+    expect((await rollbackToEntry('b1', 't3', ctx)).status).toBe('ok')
+
+    const [row] = await db
+      .select()
+      .from(storyEntries)
+      .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 't1')))
+    expect(row.content).toBe('kept edit')
+  })
+
+  it('leaves a content edit out of the world-state count', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    entriesStore.hydrate('b1', [])
+
+    await updateStoryEntryContent('b1', 't3', 'edited prose', ctx)
+
+    // t3 is inside the window, so its delta is swept — but the entries line already
+    // reports that loss (rollback-confirm.md).
+    const counts = await getRollbackCounts('b1', 't2', ctx)
+    expect(counts).toEqual({ entries: 2, chapters: 0, worldStateChanges: 2 })
   })
 
   it('brackets the sweep with reversalInProgress (set then cleared)', async () => {
@@ -528,8 +617,9 @@ describe('updateStoryEntryContent classifier invalidation', () => {
     expect((await updateStoryEntryContent('b1', 'e2', 'new', ctx)).status).toBe('ok')
 
     expect(await db.select().from(happeningAwareness)).toEqual([])
-    const remaining = await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))
-    expect(remaining.map((d) => d.id).sort()).toEqual(['d_hap1', 'd_meta2'])
+    const remaining = (await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))) as Delta[]
+    expect(seededDeltaIds(remaining)).toEqual(['d_hap1', 'd_meta2'])
+    expect(contentDeltas(remaining)).toHaveLength(1)
   })
 
   it('spares an entity the pass introduced, whose references sit outside the anchor set', async () => {
@@ -563,8 +653,9 @@ describe('updateStoryEntryContent classifier invalidation', () => {
     const rows = await db.select().from(entities).where(eq(entities.branchId, 'b1'))
     expect(rows.map((e) => e.id)).toEqual(['char_new'])
     expect(rows[0].status).toBe('staged')
-    const remaining = await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))
-    expect(remaining.map((d) => d.id).sort()).toEqual(['d_ent_create', 'd_hap1', 'd_meta2'])
+    const remaining = (await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))) as Delta[]
+    expect(seededDeltaIds(remaining)).toEqual(['d_ent_create', 'd_hap1', 'd_meta2'])
+    expect(contentDeltas(remaining)).toHaveLength(1)
   })
 
   it('leaves link rows belonging to a happening it is not removing', async () => {
@@ -606,8 +697,9 @@ describe('updateStoryEntryContent classifier invalidation', () => {
     expect(await db.select().from(happeningInvolvements)).toEqual([])
     expect(await db.select().from(happeningAwareness)).toEqual([])
 
-    const remaining = await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))
-    expect(remaining.map((d) => d.id).sort()).toEqual(['d_hap1', 'd_meta2'])
+    const remaining = (await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))) as Delta[]
+    expect(seededDeltaIds(remaining)).toEqual(['d_hap1', 'd_meta2'])
+    expect(contentDeltas(remaining)).toHaveLength(1)
   })
 
   it('clamps the classifier watermark to the position before the edited entry', async () => {
@@ -701,14 +793,9 @@ describe('updateStoryEntryContent invalidation scope', () => {
     expect(entriesStore.getById('e1')?.content).toBe('reworded')
     const haps = await db.select().from(happenings).where(eq(happenings.branchId, 'b1'))
     expect(haps.map((h) => h.id).sort()).toEqual(['hap_1', 'hap_2'])
-    const remaining = await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))
-    expect(remaining.map((d) => d.id).sort()).toEqual([
-      'd_hap1',
-      'd_hap2',
-      'd_haw2',
-      'd_hinv2',
-      'd_meta2',
-    ])
+    const remaining = (await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))) as Delta[]
+    expect(seededDeltaIds(remaining)).toEqual(['d_hap1', 'd_hap2', 'd_haw2', 'd_hinv2', 'd_meta2'])
+    expect(contentDeltas(remaining)).toHaveLength(1)
     const [branch] = await db
       .select({ status: branches.classifierStatus })
       .from(branches)

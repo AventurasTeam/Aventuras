@@ -6,11 +6,15 @@ import {
   happeningInvolvements,
   storyEntries,
   type Delta,
+  type SqlOp,
 } from '@/lib/db'
 
 import type { DbCtx } from '../types'
+import { classifierWatermarkClampOps } from './prose-reversal'
 
 const CHILD_TABLES = ['happening_involvements', 'happening_awareness'] as const
+
+export type InvalidationScope = { entryIds: string[]; editedPosition: number }
 
 /**
  * The entries a content edit invalidates, or null when it invalidates none.
@@ -24,20 +28,50 @@ export async function resolveInvalidationScope(
   branchId: string,
   editedId: string,
   ctx: DbCtx,
-): Promise<string[] | null> {
+): Promise<InvalidationScope | null> {
   const [tail, previous] = await ctx.db
-    .select({ id: storyEntries.id, kind: storyEntries.kind })
+    .select({ id: storyEntries.id, kind: storyEntries.kind, position: storyEntries.position })
     .from(storyEntries)
     .where(eq(storyEntries.branchId, branchId))
     .orderBy(desc(storyEntries.position))
     .limit(2)
   if (!tail) return null
-  if (tail.id === editedId) return [tail.id]
+  if (tail.id === editedId) return { entryIds: [tail.id], editedPosition: tail.position }
   // Clamping below the head turn's origin reopens the reply too, so the reply's facts
   // go with it or they re-derive twice.
   if (previous?.id === editedId && previous.kind === 'user_action' && tail.kind === 'ai_reply')
-    return [previous.id, tail.id]
+    return { entryIds: [previous.id, tail.id], editedPosition: previous.position }
   return null
+}
+
+// The undo and redo arms meet a content delta, not an edit call, so they identify one
+// by payload shape. `content` is the only column this delta ever carries.
+export function isContentEditDelta(
+  delta: Pick<Delta, 'targetTable' | 'op' | 'undoPayload'>,
+): boolean {
+  return (
+    delta.targetTable === 'story_entries' &&
+    delta.op === 'update' &&
+    delta.undoPayload != null &&
+    'content' in delta.undoPayload
+  )
+}
+
+/**
+ * Both halves of a prose change's invalidation, resolved together so the forward, undo
+ * and redo arms cannot disagree about how far it reaches. Empty off the head turn.
+ */
+export async function resolveContentEditInvalidation(
+  branchId: string,
+  entryId: string,
+  ctx: DbCtx,
+): Promise<{ rows: Delta[]; clampOps: SqlOp[] }> {
+  const scope = await resolveInvalidationScope(branchId, entryId, ctx)
+  if (!scope) return { rows: [], clampOps: [] }
+  return {
+    rows: await resolveClassifierFactDeltas(branchId, scope.entryIds, ctx),
+    clampOps: classifierWatermarkClampOps(branchId, scope.editedPosition),
+  }
 }
 
 /**
@@ -136,6 +170,6 @@ export async function resolveClassifierFactDeltas(
 
 // reverse-replay unwinds newest-first, and the two queries above are unioned out
 // of log order.
-function sortForReplay(rows: Delta[]): Delta[] {
+export function sortForReplay(rows: Delta[]): Delta[] {
   return [...rows].sort((a, b) => b.logPosition - a.logPosition)
 }
