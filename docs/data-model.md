@@ -2196,8 +2196,9 @@ than rewriting history. This keeps the log linear and append-only under
 arbitrary editing.
 
 **Text edits are delta-logged.** Editing `story_entries.content` writes an
-`op=update` delta whose `undo_payload` is `{ content: <previous text> }`,
-anchored with `entry_id` to the edited entry. Consequences:
+`op=update` delta whose `undo_payload` carries `{ content: <previous text> }`
+(plus `$invalidationScope` when there is one — see below), anchored with
+`entry_id` to the edited entry. Consequences:
 
 - Rollback to entry M still works, and entries past M are still
   hard-deleted — now because the survival anchor sweeps an edit with the
@@ -2356,6 +2357,16 @@ makes this race-free at the action layer. SQLite has no per-branch
 autoincrement primitive (`AUTOINCREMENT` is table-global, not
 partitioned), so the assignment lives in the delta-creating
 mutator, not as a column default.
+
+This holds for a **redo's** re-insert too: the restored delta takes a
+fresh `MAX+1` rather than the slot it held before the undo. The undo
+freed that slot, and a classifier pass firing between the undo and the
+redo can have taken it — replaying the old value would collide on the
+uniqueness backstop below and wedge the redo stack, since the snapshot
+is only popped on a post-commit failure. Re-assigning also keeps the
+restored delta at the log head, so a following CTRL-Z reaches it rather
+than whatever ran in the gap. A group re-inserts in ascending original
+order, which preserves its internal ordering.
 
 Invariant: monotonically increasing within branch. Gaps are fine
 (rollback, fork copy, delete deltas — so gaps occur naturally; the

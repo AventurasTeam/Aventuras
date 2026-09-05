@@ -12,7 +12,8 @@
 
 Complete the `story_entries` Tier-1 surface: the **delete arm**
 (full-row `undo_payload` capture), the **content-update
-side-channel** (deliberately delta-exempt), the **opening-entry
+side-channel** (delta-exempt as of this slice; superseded 2026-09
+— see Acceptance criteria), the **opening-entry
 position invariants** the generic CRUD doesn't encode, and the
 **rollback-to-entry action** (suffix selection, bucket counts for
 the confirm modal, execution via reverse-replay).
@@ -38,7 +39,7 @@ so M3.3 / M3.9 refine rather than rewrite.
 - [`data-model.md → Entry mutability & rollback`](../../../../data-model.md#entry-mutability--rollback)
   — the content side-channel, delete semantics, `op=delete`
   full-row payload, the CTRL-Z algorithm this slice's primitives
-  feed.
+  feed. (Superseded 2026-09 — content edits are delta-logged; see [`data-model.md → Entry mutability & rollback`](../../../../data-model.md#entry-mutability--rollback).)
 - [`data-model.md → Survival anchor`](../../../../data-model.md#survival-anchor)
   — the predicate shape; in M2 `entry_id IS NULL` holds for all
   foreground deltas so the naive sweep is equivalent.
@@ -116,6 +117,7 @@ so M3.3 / M3.9 refine rather than rewrite.
 - Vitest on the arm round-trips (create → delete → reverse),
   the side-channel non-delta assertion, each opening-invariant
   rejection, and the rollback bucket counts + execution fixture.
+  (Superseded 2026-09 — content edits are delta-logged; see [`data-model.md → Entry mutability & rollback`](../../../../data-model.md#entry-mutability--rollback).)
 - No Storybook surface (action-layer slice).
 
 ## Open questions

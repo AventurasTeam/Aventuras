@@ -73,7 +73,7 @@ chapter management (M5), branch picker (M6).
 - [`data-model.md → Entry mutability & rollback`](../../../../data-model.md#entry-mutability--rollback)
   — the CTRL-Z algorithm (M2: naive suffix, no
   `periodic_classifier` deltas exist), redo stack semantics,
-  content side-channel.
+  content side-channel. (Superseded 2026-09 — content edits are delta-logged; see [`data-model.md → Entry mutability & rollback`](../../../../data-model.md#entry-mutability--rollback).)
 - [`ui/patterns/entry-card.md`](../../../../ui/patterns/entry-card.md)
   — the shipped compound's host contract (action cluster,
   world-time footer label in, reasoning expansion).
@@ -124,7 +124,7 @@ chapter management (M5), branch picker (M6).
   buffer-until-tag-boundary port feeding EntryCard's streaming
   body.
 - **Edit / delete:** in-place edit through EntryCard committing
-  via the content side-channel; per-entry `×` →
+  via the content side-channel (Superseded 2026-09 — content edits are delta-logged; see [`data-model.md → Entry mutability & rollback`](../../../../data-model.md#entry-mutability--rollback).); per-entry `×` →
   **rollback-confirm modal compound** (new compound: AlertDialog
   body with the three count buckets from
   [Slice 2.2](./02-entry-arms.md), desktop hover-preview accent,
@@ -175,7 +175,7 @@ chapter management (M5), branch picker (M6).
   hard-deletes and the window re-renders; Esc / outside-click
   cancel.
 - Edit: in-place edit persists via the side-channel (no delta),
-  survives reopen.
+  survives reopen. (Superseded 2026-09 — content edits are delta-logged; see [`data-model.md → Entry mutability & rollback`](../../../../data-model.md#entry-mutability--rollback).)
 - CTRL-Z after a stub turn removes the turn (entry + deltas);
   redo restores it; a second unrelated action clears the redo
   stack.
