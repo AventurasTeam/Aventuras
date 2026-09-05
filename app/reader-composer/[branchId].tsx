@@ -291,6 +291,12 @@ export default function ReaderComposerRoute() {
     () => [...entityRows.values()].filter((e) => e.branchId === branchId),
     [entityRows, branchId],
   )
+  // The far end of the window is the live edge: entries only ever prepend, and nothing
+  // trims the other end yet. Every tail-derived affordance rides on that, because the
+  // action layer resolves the same head turn off the DB tail — so the forward load and
+  // the far-end trim cap (reader-composer.md -> Loaded-set model) have to drive this
+  // when they land, or those affordances start lying on a mid-window row.
+  const holdsLiveEdge = true
   const {
     entityNames,
     sceneOptions,
@@ -299,7 +305,7 @@ export default function ReaderComposerRoute() {
     editScene,
     requestEditScene,
     closeSceneEdit,
-  } = useSceneEditing(branchId, entries, branchEntities, ctx)
+  } = useSceneEditing(branchId, entries, holdsLiveEdge, branchEntities, ctx)
 
   const [stripCollapsed, setStripCollapsed] = useState(false)
   const [stripError, setStripError] = useState<PipelineError | null>(null)
