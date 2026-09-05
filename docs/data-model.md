@@ -2266,7 +2266,13 @@ arbitrary editing.
   [Save and regenerate](./ui/patterns/entry-card.md#save-and-regenerate). All
   four resolve it through one function rather than restating it, so the
   action layer's invalidation scope and the reader's affordances cannot
-  disagree about where the head turn is.
+  disagree about where the head turn is. The failure case is what makes this
+  load-bearing: a failed turn reverses its own `user_action` and parks the
+  banner above what is left, and the classifier's own turn window skips the
+  kind, so the reply beneath the banner is still what the next pass re-reads.
+  Letting the banner close the head turn would freeze the branch's real tail
+  for as long as the error card stands, turning an edit there into a bare
+  write whose stale facts nothing re-reads.
 - **The scope is recorded on the delta, not re-derived at reversal time.**
   The forward edit resolves the scope above and writes it onto its own delta
   under the reserved key `$invalidationScope`; the undo and redo arms replay

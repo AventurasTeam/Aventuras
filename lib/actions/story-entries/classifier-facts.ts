@@ -29,6 +29,12 @@ export const INVALIDATION_SCOPE_KEY = `${PAYLOAD_META_PREFIX}invalidationScope`
  * window or the next pass re-derives beside facts that survived — which is what bounds
  * both to the head turn (data-model.md -> Entry mutability & rollback). The pair comes
  * from `resolveHeadTurn`, which is also what the editor derives its notice from.
+ *
+ * A `system` row is transparent here because it is transparent to the classifier:
+ * `readLastTurns` skips the kind, so the reply beneath a failure banner is still the
+ * head turn the next pass re-reads. A failed turn reverses its own `user_action` and
+ * parks the banner above the branch’s real tail, so letting it close the scope would
+ * freeze that tail for as long as the error card stands.
  */
 async function resolveInvalidationScope(
   branchId: string,

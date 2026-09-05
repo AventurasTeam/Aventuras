@@ -483,6 +483,18 @@ send the user into that modal unprepared, which is the failure the
 notice exists to prevent — as is naming a control the card does not
 have.
 
+**The opening drops the rollback clause.** It is the rollback floor —
+the action layer rejects a rollback that targets it, and the card
+renders no delete ([Per-kind structure](#per-kind-structure)) — so that
+half of the remedy can never become true for it, unlike the branch
+clause, which the fork surface will make good. Branching is the only
+honest answer there:
+
+> Only the newest entry's scene details can be updated. Rewording is
+> safe — but if this changes who was present or what happened, the
+> recorded world state won't follow. Branching from here is the only
+> remedy — the opening can't be rolled back.
+
 **Placement is edit mode, not the card.** The notice renders inside the
 editor when the textarea opens, never as standing chrome on a non-tail
 card. Most of a branch is non-tail; a permanent banner there is
