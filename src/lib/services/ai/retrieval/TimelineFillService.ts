@@ -27,6 +27,11 @@ import { activity } from '$lib/stores/activity.svelte'
 
 const log = createLogger('TimelineFill')
 
+/** How a step that threw is closed: an abort was not a failure of the work itself. */
+function abortedStatus(error: unknown): 'skipped' | 'failed' {
+  return error instanceof Error && error.name === 'AbortError' ? 'skipped' : 'failed'
+}
+
 /**
  * Text `answerQuestion` returns when the call failed, so `runTimelineFill` can drop it.
  *
@@ -378,7 +383,15 @@ export class TimelineFillService extends BaseAIService {
       parentId: activityParentId,
       isLLM: true,
     })
-    const queries = await this.generateQueries(storyId, visibleEntries, chapters, alreadyInContext)
+    let queries: TimelineQuery[]
+    try {
+      queries = await this.generateQueries(storyId, visibleEntries, chapters, alreadyInContext)
+    } catch (error) {
+      // `generateQueries` swallows a failed model call, but renders its prompt outside that
+      // guard -- a template lookup rejects straight past the close below.
+      activity.endStep(planStepId, abortedStatus(error))
+      throw error
+    }
     activity.endStep(planStepId, 'done', `${queries.length} questions`)
     if (queries.length === 0) {
       return { queries: [], responses: [] }
@@ -432,19 +445,26 @@ export class TimelineFillService extends BaseAIService {
           parentId: activityParentId,
           isLLM: true,
         })
-        const { answers, llmCalls } =
-          group.items.length === 1
-            ? {
-                answers: [
-                  await this.answerQuestionWithContent(storyId, group.items[0].query, content),
-                ],
-                llmCalls: 1,
-              }
-            : await this.answerQuestionsWithContent(
-                storyId,
-                group.items.map((i) => i.query),
-                content,
-              )
+        let answers: Awaited<ReturnType<typeof this.answerQuestionWithContent>>[]
+        let llmCalls: number
+        try {
+          ;({ answers, llmCalls } =
+            group.items.length === 1
+              ? {
+                  answers: [
+                    await this.answerQuestionWithContent(storyId, group.items[0].query, content),
+                  ],
+                  llmCalls: 1,
+                }
+              : await this.answerQuestionsWithContent(
+                  storyId,
+                  group.items.map((i) => i.query),
+                  content,
+                ))
+        } catch (error) {
+          activity.endStep(readStepId, abortedStatus(error))
+          throw error
+        }
 
         activity.endStep(readStepId, 'done', `${group.items.length} answered`)
 
