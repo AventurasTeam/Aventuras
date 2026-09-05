@@ -88,8 +88,8 @@ describe('selectUndoTarget', () => {
   })
 
   it('classifies a content edit as a group, not the turn beneath it', () => {
-    // The reported defect: with no delta of its own the edit was invisible here and
-    // the head became the turn, so CTRL-Z deleted it.
+    // A content edit is its own group: with no delta the head resolves to the turn
+    // beneath it, and CTRL-Z deletes the entry instead of reversing the text.
     const rows = [
       delta({
         actionId: 'act_edit',
