@@ -5,9 +5,8 @@ import { promptProse } from '@/lib/piggyback'
 
 import { warnOnDuplicatePositions } from './buffer'
 
-// Hardening against settings that never went through storySettingsSchema, the
-// same threat readPromptBuffer's toCount covers: a fractional or NaN limit
-// reaches SQLite raw. One trailing entry is the floor the surface is defined on.
+// Hardens against settings that skipped storySettingsSchema, as readPromptBuffer's
+// toCount does: a fractional or NaN limit reaches SQLite raw. Floor of one entry.
 function toTake(value: number): number {
   return Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 1
 }
@@ -20,11 +19,9 @@ export type ScanSurfaceInput = {
 }
 
 /**
- * The haystack the keyword pathway matches against, deliberately independent of
- * the query stack so the lexical complement does not inherit the dense
- * pathway's inputs (docs/memory/retrieval.md → Keyword scan surface).
- *
+ * The keyword pathway's haystack — independent of the query stack, and built from
  * `promptProse` so a keyword matches what the model was actually shown.
+ * docs/memory/retrieval.md → Keyword scan surface.
  */
 export function buildScanText(input: ScanSurfaceInput): string {
   return [input.userAction.trim(), ...input.trailing.map((e) => promptProse(e))]
@@ -35,11 +32,8 @@ export function buildScanText(input: ScanSurfaceInput): string {
 /**
  * The last `take` entries standing before this turn's action, oldest first.
  *
- * Its own read rather than a slice of `readPromptBuffer`: the scan surface is
- * defined independently of the prompt window, whose depth `protectedBuffer` and
- * `partialChapterBuffer` govern — with `protectedBuffer` at 0 that window can be
- * shorter than `scanEntries`, which would scan less than configured and report
- * nothing.
+ * Its own read, not a slice of `readPromptBuffer`: with `protectedBuffer` at 0 the
+ * prompt window can be shorter than `scanEntries` and silently scan less than asked.
  */
 export async function readScanEntries(
   db: DbCtx['db'],

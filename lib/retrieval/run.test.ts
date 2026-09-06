@@ -1584,9 +1584,8 @@ describe('runRetrieval — keyword boost', () => {
     expect(boost('lore_miss')).toBe(0)
   })
 
-  // The digest is assembled from entity names, the location and thread titles —
-  // synthetic text, not something the prose said. Matching it manufactured a hit
-  // on every turn the named row was on stage.
+  // The digest is synthetic text (entity names, location, thread titles), not
+  // something the prose said — matching it manufactures a hit every turn.
   it('does not boost on a term reaching only the structural digest', async () => {
     const out = await runRetrieval(
       deps({ queryAll: twoLoreRows() }),
@@ -1597,8 +1596,7 @@ describe('runRetrieval — keyword boost', () => {
     expect(expectOk(out).bundles.lore.traces.find((t) => t.id === 'lore_hit')?.kwBoostValue).toBe(0)
   })
 
-  // Q3 selects top-K sentences, so a proper noun in a sentence the extract
-  // skipped could never fire while the haystack came from the query stack.
+  // Q3 selects top-K sentences: a proper noun in a sentence it skipped must still fire.
   it('boosts on prose Q3 left out of its extract', async () => {
     const out = await runRetrieval(
       deps({ queryAll: twoLoreRows() }),
@@ -1685,9 +1683,8 @@ describe('runRetrieval — keyword boost', () => {
     expect(await boostFor(['the innkeeper'])).toBe(0)
   })
 
-  // entities.priority orders keyword-inject overflow and nothing else. lore.priority
-  // feeding pin_signal is lore's own second effect — the branch two cases down in
-  // run.ts does exactly the thing this branch must not.
+  // entities.priority orders keyword-inject overflow and nothing else — feeding
+  // pin_signal is lore's own second effect, done by the next branch down in run.ts.
   it('leaves an entity pin_signal at zero however high its priority', async () => {
     const out = await runRetrieval(
       deps({
@@ -1745,9 +1742,8 @@ describe('runRetrieval — keyword injection', () => {
   })
 
   it('charges the seat against the type budget the ranked rows then compete for', async () => {
-    // Real prose, never a repeated character: tiktoken's byte-pair loop treats
-    // 'x'.repeat(n) as one word and costs ~620 ms (lessons-learned →
-    // Token-counting fixtures must be prose).
+    // Real prose, never 'x'.repeat(n): tiktoken's byte-pair loop treats it as one word
+    // and costs ~620 ms (lessons-learned → Token-counting fixtures must be prose).
     const seatBody = 'The engine drowned under the tide and has hummed there since.'
     const rankedBody = `${seatBody} Its keepers left no ledger, no name, and no way back up.`
     // Budget priced off the fixture rather than guessed: the seat must fit in

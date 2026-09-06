@@ -109,8 +109,7 @@ const capturePayload = (): ProbeCapturePayload => ({
     chapters: emptyFunnel(200),
   },
   structural_floor: [{ target_kind: 'chapter', target_id: 'chap_1', tokens: 120 }],
-  // Populated, not empty: the round-trip has to prove the field survives gzip,
-  // and an empty array would pass whether or not it was written.
+  // Populated, not empty: an empty array round-trips identically whether or not it's written.
   keyword_injections: [
     {
       target_kind: 'lore',

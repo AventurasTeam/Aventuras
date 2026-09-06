@@ -503,9 +503,8 @@ describe('buildCapturePayload', () => {
   })
 
   it('carries the scan surface the keyword pathway matched against', () => {
-    // The queries are the wrong place to look for it: the scan surface is
-    // defined independently of them, so a kw_boost_value has no readable cause
-    // anywhere else in the capture.
+    // The scan surface is defined independently of the queries, so without it a
+    // kw_boost_value has no readable cause anywhere in the capture.
     const payload = buildCapturePayload({
       ...identity,
       scanText: 'I draw the blade.\nThe Veilstone hummed.',

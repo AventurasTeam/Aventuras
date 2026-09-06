@@ -33,10 +33,8 @@ export type PlanDeps = {
 const SOURCE = 'periodic_classifier' as const
 
 /**
- * retrieval.md → Keywords schema: appends de-duplicate under the normalization
- * matchTerms uses, and never remove — a user's authored aliases have to survive
- * every later pass. null when nothing is new, so a character the prose names
- * again costs no delta row.
+ * retrieval.md → Keywords schema: append-only, de-duped under matchTerms' normalization — authored
+ * aliases must survive every pass. null when nothing is new, so a repeated name writes no delta.
  */
 function appendKeywords(current: readonly string[], incoming: readonly string[]): string[] | null {
   const seen = new Set(current.map(normalizeTerm))
@@ -125,9 +123,8 @@ export function buildClassifierActions(
       })
       continue
     }
-    // A known character emits a write only when the prose named it by something it
-    // does not already hold: keywords are not frozen after first introduction, but a
-    // recurring name must not cost a delta row per pass.
+    // A known character writes only when the prose named it by something new: keywords aren't
+    // frozen after introduction, but a recurring name must not cost a delta row per pass.
     if (decision.kind === 'known') {
       handleMap.set(candidate.handle, decision.entityId)
       const known = index.get(decision.entityId)

@@ -107,12 +107,9 @@ export function replayType(
     }
   })
 
-  // The seats are not simulated — probe.md files them as non-simulatable — but
-  // the budget they spent is not optional context: replaying without it seats
-  // ranked rows into budget the real pass had already spent, and nothing errors.
-  // `renderedText` is empty because keyword_injections stores the cost, not the
-  // text, and nothing here re-costs a seat or renders one. Only entities and lore
-  // can appear, so the other three types match nothing and reserve nothing.
+  // Seats aren't simulated (probe.md), but their spent budget is not optional: without
+  // it, ranked rows silently fill budget the real pass already spent. `renderedText` is
+  // empty; nothing re-costs or renders a seat. Only entities and lore carry injections.
   const injectedKind = type === 'entities' ? 'entity' : type === 'lore' ? 'lore' : null
   const keywordInjected: KeywordInjection[] = payload.keyword_injections
     .filter((i) => i.target_kind === injectedKind)

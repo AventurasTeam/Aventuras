@@ -23,8 +23,7 @@ describe('STORY_SETTINGS_DEFAULTS', () => {
   it('is a complete, parseable StorySettings', () => {
     expect(() => storySettingsSchema.parse(STORY_SETTINGS_DEFAULTS)).not.toThrow()
   })
-  // 'boost' is the shipped behaviour, so a story migrating in behaves exactly as
-  // it did. The rest are inert until keyword injection lands.
+  // 'boost' is the shipped behaviour, so a migrating story is unchanged; the rest are inert.
   it('starts the keyword pathway on boost with a one-entry scan', () => {
     expect(STORY_SETTINGS_DEFAULTS.keywordRetrieval).toEqual({
       mode: 'boost',

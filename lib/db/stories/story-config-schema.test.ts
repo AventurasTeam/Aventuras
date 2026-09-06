@@ -234,9 +234,8 @@ describe('storySettingsSchema keywordRetrieval', () => {
     keywordRetrieval: { ...VALID_SETTINGS.keywordRetrieval, ...over },
   })
 
-  // Required, not defaulted: settings writes are key-scoped json_set, so a
-  // default here would never reach an existing story's blob. Migration 0011
-  // backfills it instead, and this assertion is what keeps the two in step.
+  // Required, not defaulted: key-scoped json_set writes never reach an existing story's blob, so
+  // migration 0011 backfills it — this assertion keeps schema and migration in step.
   it('requires the key', () => {
     const { keywordRetrieval: _omitted, ...without } = VALID_SETTINGS
     expect(storySettingsSchema.safeParse(without).success).toBe(false)
@@ -255,8 +254,7 @@ describe('storySettingsSchema keywordRetrieval', () => {
     expect(storySettingsSchema.safeParse(withKeyword({ budgetShare: -0.1 })).success).toBe(false)
   })
 
-  // The user action is always scanned, so this counts the trailing entries
-  // beside it and one is the floor rather than zero.
+  // Counts the trailing entries beside the always-scanned user action, so the floor is one.
   it('floors scanEntries at one whole entry', () => {
     expect(storySettingsSchema.safeParse(withKeyword({ scanEntries: 1 })).success).toBe(true)
     expect(storySettingsSchema.safeParse(withKeyword({ scanEntries: 0 })).success).toBe(false)

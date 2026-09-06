@@ -217,9 +217,8 @@ function MergeBody({
     return [...diff.keywords.both, ...diff.keywords.onlyInA, ...diff.keywords.onlyInB].sort()
   }, [diff.keywords, entityA.keywords])
 
-  // Deselects first (chips are what the user acted on), then the normalization
-  // collapse: collision-resolve.md requires that a case variant of the same alias
-  // not survive as a second entry, and the two sides spell them independently.
+  // Deselects first (what the user acted on), then the normalization collapse —
+  // collision-resolve.md: a case variant must not survive as a second entry.
   const finalKeywords = useMemo(() => {
     const seen = new Set<string>()
     return allKeywords

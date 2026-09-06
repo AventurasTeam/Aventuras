@@ -50,11 +50,9 @@ type CaptureCandidate = {
 }
 
 /**
- * One row a keyword hit matched (probe.md → Keyword injections). Deliberately
- * NOT a CaptureCandidate: these rows never reached the ranker, so they have no
- * sim_blend, final_score or kw_boost_value, and filing them as candidates would
- * invent scores that never existed. `seated` false means the budget cap cut it;
- * `priority` is recorded so the overflow order stays inspectable.
+ * One row a keyword hit matched (probe.md → Keyword injections). Not a
+ * CaptureCandidate: these never reached the ranker, so scoring them would invent
+ * numbers. `seated` false = cut by the budget cap; `priority` = overflow order.
  */
 type CaptureKeywordInjection = {
   target_kind: VecTargetKind
@@ -104,9 +102,8 @@ type CaptureParamsSnapshot = {
 type CaptureTokenizer = { encoding: string; version: string }
 
 /**
- * Bumped when a captured field's shape or meaning changes, so a decode can
- * warn instead of silently misreading an older payload as the current type.
- * 5: keyword_injections.
+ * Bumped when a captured field's shape or meaning changes, so a decode warns
+ * rather than misreading an older payload. 5 added keyword_injections.
  */
 export const CAPTURE_VERSION = 5 as const
 
@@ -122,19 +119,16 @@ export type ProbeCapturePayload = {
   params: CaptureParamsSnapshot
   queries: [CaptureQuery, CaptureQuery, CaptureQuery]
   /**
-   * The narrative text kw_boost_value was matched against — separate from
-   * `queries` because the scan surface is defined independently of them and is
-   * never embedded (probe.md → Keyword scan surface). Captured in both modes;
-   * without it a non-zero kw_boost_value has no readable cause in the capture.
+   * The narrative text kw_boost_value matched against, never embedded and defined
+   * independently of `queries` (probe.md → Keyword scan surface). Both modes.
    */
   scan_text: string
   pools: Record<RetrievalType, CaptureCandidate[]>
   funnels: Record<RetrievalType, PoolFunnelSummary>
   structural_floor: StructuralFloorRow[]
   /**
-   * Present only while `keywordRetrieval.mode` is `inject`, empty otherwise.
-   * Without it the probe under-reports what reached the prompt: a seated row
-   * consumed budget the ranked pools then competed for and appears in no pool.
+   * Present only while `keywordRetrieval.mode` is `inject`, empty otherwise. A
+   * seated row consumed budget and appears in no pool, so it is reported here.
    */
   keyword_injections: CaptureKeywordInjection[]
   /**

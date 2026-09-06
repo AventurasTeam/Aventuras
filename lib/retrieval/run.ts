@@ -88,16 +88,13 @@ export type RetrievalParams = {
   /** Un-classified buffer prose, for Layer-A suppression. */
   recentProse: string
   /**
-   * The keyword haystack: this turn's action plus the trailing entries
-   * (retrieval.md → Keyword scan surface). Independent of `query` by design —
-   * see buildScanText.
+   * The keyword haystack (retrieval.md → Keyword scan surface). Independent of
+   * `query` by design — see buildScanText.
    */
   scanText: string
   /**
-   * The second axis beside `injection_mode` (retrieval.md → Keyword injection).
-   * The whole block rather than just `mode`: the cap, the cascade depth and the
-   * mode are read together in one pre-pass, and splitting them across params
-   * invites a caller passing a mode without its budget.
+   * retrieval.md → Keyword injection. The whole block, not just `mode`: cap,
+   * depth and mode are read together, so splitting invites a mode with no budget.
    */
   keywordRetrieval: KeywordRetrievalSettings
 }
@@ -122,12 +119,8 @@ export type RetrievalTimings = {
    */
   knnMs: number
   /**
-   * The keyword-injection pre-pass, then scoring and the sort over the whole
-   * pool, then MMR and the token estimate over the rows that survive the
-   * pre-filter — one span, because tokenization runs inside the same kept-row
-   * map that feeds MMR and splitting it would break the disjoint-sub-span
-   * contract above. The pre-pass tokenizes too, hence its place here rather than
-   * in the unattributed remainder.
+   * Keyword pre-pass, scoring, sort, MMR and token estimate — one span:
+   * tokenization runs inside MMR's kept-row map (disjoint sub-spans above).
    */
   rankMs: number
 }
@@ -161,9 +154,8 @@ export type RetrievalPartial = {
   floor: StructuralFloor | null
   bundles: Partial<Record<RetrievalType, RankedType>>
   /**
-   * Every keyword match this pass made, seated or cut — the probe's
-   * `keyword_injections` (probe.md → Keyword injections). Empty under
-   * `mode='boost'`, and on a pass that failed before ranking started.
+   * Every keyword match, seated or cut (probe.md → Keyword injections). Empty
+   * under `mode='boost'`, and on a pass that failed before ranking started.
    */
   keywordInjections: readonly KeywordInjection[]
 }
@@ -175,9 +167,8 @@ export type RetrievalOutcome =
       bundles: Record<RetrievalType, RankedType>
       queries: QueryStack
       /**
-       * Every keyword match this pass made, seated or cut — the probe's
-       * `keyword_injections` (probe.md → Keyword injections). Empty under
-       * `keywordRetrieval.mode='boost'`.
+       * Every keyword match, seated or cut (probe.md → Keyword injections).
+       * Empty under `keywordRetrieval.mode='boost'`.
        */
       keywordInjections: readonly KeywordInjection[]
       /**
@@ -381,10 +372,8 @@ async function runRetrievalPass(
   }
 
   let rankStartedAt = performance.now()
-  // Ahead of every rankPerType call and inside the rank span: it prices rows with
-  // the same tokenizer the ranker uses, so outside it that cost would vanish into
-  // the unattributed remainder. It needs no vectors, only source rows and the
-  // floor — which is why a keyword hit can seat a row the KNN never returned.
+  // Ahead of every rankPerType call, inside the rank span (see RetrievalTimings).
+  // Needs no vectors — which is why a keyword hit can seat a row the KNN missed.
   const injections = buildKeywordInjections({
     settings: params.keywordRetrieval,
     entities: sourceRows.entities,
@@ -697,10 +686,8 @@ function assembleCandidates(
     sim(vector, queryVectors[2]),
   ]
 
-  // kw = keyword_boost(c, scan_text) (retrieval.md → Pseudocode) runs the
-  // candidate's own keyword surface against the scan text, NOT `queries`. The
-  // other direction — a candidate against the name index — is degenerate, since
-  // every row's own terms are in that index by construction.
+  // kw = keyword_boost(c, scan_text) (retrieval.md → Pseudocode): candidate surface
+  // vs scan text, NOT `queries` — the reverse matches every row's own indexed terms.
   const kwHits = (surface: readonly string[]): string[] =>
     matchTerms(ctx.scanText, surface.map(normalizeTerm))
 

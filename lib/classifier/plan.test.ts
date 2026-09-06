@@ -642,8 +642,7 @@ describe('entity keywords', () => {
 
   const decide = (decision: ReconcileDecision) => new Map([['new:k', decision]])
 
-  // classifier.md → Entity keywords: the brand-new-entity object carries the
-  // epithets prose used for the character alongside its name.
+  // classifier.md → Entity keywords.
   it('seeds keywords on a created character', () => {
     const { planned } = buildClassifierActions(candidate(['the grey wolf']), {
       ...base,
@@ -654,8 +653,7 @@ describe('entity keywords', () => {
     ])
   })
 
-  // "Writes are strictly append-and-deduplicate and never remove, so user-authored
-  // aliases survive every subsequent pass."
+  // Append-and-dedupe, never remove — authored aliases survive every pass.
   it('appends to a known entity without dropping its authored aliases', () => {
     const { planned } = buildClassifierActions(candidate(['the grey wolf']), {
       ...base,

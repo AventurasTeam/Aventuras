@@ -10,10 +10,9 @@ import {
 } from './types'
 
 /**
- * What runRetrieval reads off `stories.settings.keywordRetrieval`. Declared here
- * rather than imported from lib/db, the way BufferSettings is, so retrieval does
- * not follow whatever else the story-settings blob grows. `scanEntries` is
- * absent because the phase spends it before the pass starts.
+ * What runRetrieval reads off `stories.settings.keywordRetrieval`. Declared here, not
+ * imported from lib/db, so retrieval does not follow whatever else that blob grows.
+ * `scanEntries` is absent — the phase spends it before the pass starts.
  */
 export type KeywordRetrievalSettings = {
   mode: 'boost' | 'inject'
@@ -60,16 +59,13 @@ const empty = (): KeywordInjections => ({
   chapters: [],
 })
 
-// Hardening against settings that never went through storySettingsSchema, the
-// same threat readPromptBuffer's toCount and readScanEntries' toTake cover. Out
-// of range, budgetShare silently starves or floods one partition.
+// Hardening against settings that never went through storySettingsSchema: out of
+// range, budgetShare silently starves or floods one partition.
 const toShare = (value: number): number =>
   Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0
 
-// A non-finite budget makes `used + cost > cap` false for every row, so the cap
-// would not cap at all — exactly the unbounded seating budgetShare exists to
-// prevent. replayType guards the same field for the mirror-image reason; every
-// other reader of a bad budget seats nothing, and this matches that direction.
+// A non-finite budget makes `used + cost > cap` false for every row, so the cap would
+// not cap at all; 0 matches every other reader's seat-nothing direction.
 const toCap = (budget: number, share: number): number =>
   Number.isFinite(budget) ? Math.max(0, budget) * share : 0
 
@@ -78,10 +74,8 @@ const toDepth = (settings: KeywordRetrievalSettings): number =>
     ? Math.max(1, Math.floor(settings.cascadeMaxDepth))
     : 1
 
-// Code units over a normalized name, never localeCompare: the host locale would
-// make which rows seat device-dependent, and `sensitivity: 'base'` is not even a
-// total order — two rows differing only in case would tie and fall through to
-// SQLite's unordered read. The id fallback closes that.
+// Code units, never localeCompare: the host locale would make which rows seat
+// device-dependent, and case-only ties fall to SQLite's read order — hence the id key.
 const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
 
 const byOverflowOrder = (a: KeywordInjection, b: KeywordInjection): number =>
@@ -92,11 +86,8 @@ const byOverflowOrder = (a: KeywordInjection, b: KeywordInjection): number =>
 type Matchable = { row: InjectedRow; priority: number; terms: readonly string[] }
 
 function matchable(input: KeywordInjectionInput): Record<Injectable, Matchable[]> {
-  // The same filters the ranker pools run, so `disabled`, retired, floor-seated
-  // and Layer-A-suppressed rows are excluded identically (retrieval.md → Keyword
-  // injection: "the same status and pool-exclusion rules as ranked candidates").
-  // `embedding_stale` is deliberately NOT among them — it gates vector validity,
-  // and this path reads no vector.
+  // The same filters the ranker pools run (retrieval.md → Keyword injection).
+  // Not `embedding_stale`: it gates vector validity, and this path reads no vector.
   const entities = filterEntityPool(input.entities, {
     floorIds: input.floorIds,
     recentProse: input.recentProse,
@@ -112,11 +103,8 @@ function matchable(input: KeywordInjectionInput): Record<Injectable, Matchable[]
         renderedText: entityRenderedText(r),
       },
       priority: r.priority,
-      // Canon: "Keyword on `name` and `entities.keywords`". The name is implicit
-      // and carries no column of its own, hence prepended here rather than
-      // expected in `keywords`. De-duplicated post-normalization: an author who
-      // also listed the name as a keyword would otherwise get it twice in the
-      // probe's `terms`, reading as two hits where the prose had one.
+      // Canon: "Keyword on `name` and `entities.keywords`" — the name has no column,
+      // hence prepended. De-duped so a name also listed as a keyword is not two hits.
       terms: [...new Set([r.name, ...r.keywords].map(normalizeTerm))],
     })),
     lore: lore.map((r) => ({
@@ -135,13 +123,10 @@ function matchable(input: KeywordInjectionInput): Record<Injectable, Matchable[]
 }
 
 /**
- * retrieval.md → Keyword injection. Matches the scan surface against lore and
- * entity keyword sets and returns the rows a hit seats, capped per type at
- * `budgetShare` of that type's allocation. Cut rows are returned too, so the
- * probe can show the overflow order and the ranker can leave them in its pool.
- *
- * Returns everything empty under `mode='boost'` without touching the tokenizer:
- * that is the default, and every pass runs through here.
+ * retrieval.md → Keyword injection. Matches the scan surface against entity and lore
+ * keyword sets and returns the rows a hit seats, capped per type at `budgetShare` of
+ * that type's allocation. Cut rows are returned too, carrying `seated: false`. Empty
+ * under `mode='boost'` — the default — without touching the tokenizer.
  */
 export function buildKeywordInjections(input: KeywordInjectionInput): KeywordInjections {
   const out = empty()
@@ -184,9 +169,8 @@ export function buildKeywordInjections(input: KeywordInjectionInput): KeywordInj
       hits.sort(byOverflowOrder)
 
       for (const hit of hits) {
-        // Marked whether or not it seats: a cut row re-offered at a deeper depth
-        // would take a second probe entry and, on a cycle, could be re-tried
-        // until the allowance ran out.
+        // Marked whether or not it seats: a cut row re-offered deeper would take a
+        // second probe entry and, on a cycle, be re-tried until the allowance ran out.
         visited.add(hit.row.id)
         // `continue`, not `break` — canon's budget fill tries smaller rows
         // rather than stopping at the first that does not fit.

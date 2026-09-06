@@ -698,10 +698,8 @@ describe('rankPerType — keyword injection', () => {
   })
 
   it('charges the seated cost against the type budget', () => {
-    // The seat leaves one token less than the ranked row costs, so that row is
-    // dropped for budget rather than for score. Derived from LORE_COST, not
-    // written out: an expectation computed from the constant under test would
-    // pass at every overhead value including 0.
+    // Seat spend leaves the ranked row one token short, so it drops for budget, not
+    // score. Derived from LORE_COST: a hardcoded number would pass even at overhead 0.
     const spent = 100 - LORE_COST + 1
     const r = rankPerType(
       [candidate({ id: 'ranked', kind: 'lore', sims: [0.9, 0.9, 0.9] })],

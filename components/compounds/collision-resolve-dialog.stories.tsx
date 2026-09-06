@@ -42,8 +42,7 @@ const entityB = baseEntity({
   description: 'A city guardsman posted at the eastern gate.',
   status: 'staged',
   tags: ['guard', 'sword'],
-  // 'The Swordsman' is A's 'the swordsman' spelled differently — the two sides
-  // authored their aliases independently, and only one may survive the merge.
+  // 'The Swordsman' is A's 'the swordsman' recased — only one survives the merge.
   keywords: ['the gate guard', 'The Swordsman'],
   state: { hp: 90, post: 'east-gate' },
   relationCounts: {
@@ -192,7 +191,6 @@ export const MergeKeywordUnion: Story = {
   play: async () => {
     lastResolution = null
     // ControlledDialog opens by default; the Open button sits behind the overlay.
-    // Both sides' keywords are offered, deduplicated and sorted.
     await userEvent.click(await screen.findByRole('button', { name: 'the wanderer' }))
     await userEvent.click(await screen.findByRole('button', { name: /^Merge into / }))
 

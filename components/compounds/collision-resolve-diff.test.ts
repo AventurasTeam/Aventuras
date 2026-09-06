@@ -184,8 +184,7 @@ describe('computeDivergence', () => {
 })
 
 describe('keywords', () => {
-  // Keywords are retrieval-targeted, not decorative: taking the canonical side's
-  // set alone silently narrows what the merged entity can be matched by.
+  // Keywords are retrieval-targeted: canonical-only silently narrows what the merge can match.
   it('partitions keywords the way it partitions tags', () => {
     const diff = computeDivergence(
       baseEntity({ keywords: ['the grey wolf', 'shared'] }),
@@ -206,8 +205,7 @@ describe('keywords', () => {
     expect(diff.keywords).toBeNull()
   })
 
-  // The two channels are independent: diverging tags must not manufacture a
-  // keyword row, which is what a single shared partition call would do.
+  // Independent channels: a shared partition call would let diverging tags invent a keyword row.
   it('keeps the tag and keyword channels independent', () => {
     const diff = computeDivergence(
       baseEntity({ keywords: ['a'], tags: ['x'] }),

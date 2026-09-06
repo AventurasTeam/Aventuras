@@ -143,8 +143,7 @@ describe('buildKeywordInjections — precedence and pool exclusions', () => {
   })
 
   it('honours Layer-A suppression over the keyword hit', () => {
-    // The same prose is the suppression trigger and the fire condition;
-    // edge-cases.md → Layer A says suppression wins.
+    // Same prose triggers suppression and the keyword fire; edge-cases.md → Layer A.
     const out = buildKeywordInjections(
       input({
         entities: [entity({ status: 'staged' })],
@@ -208,9 +207,8 @@ describe('buildKeywordInjections — the budget cap', () => {
     expect(out.lore.filter((i) => i.seated).map((i) => i.row.id)).toEqual(['bb'])
   })
 
-  // The cap is a `>` comparison, so a NaN budget makes it false for every row and
-  // seats the whole match set unbounded — the opposite direction from every other
-  // reader of a bad budget, which seats nothing.
+  // The cap is a `>` comparison: a NaN budget makes it false for every row and
+  // seats the whole match set — the opposite direction from other bad-budget readers.
   it.each([Number.NaN, Number.POSITIVE_INFINITY, -100])(
     'seats nothing when the type budget is %p',
     (loreBudget) => {
@@ -226,8 +224,7 @@ describe('buildKeywordInjections — the budget cap', () => {
     },
   )
 
-  // Sorts are stable in V8, so without the id fallback these keep source order —
-  // which is SQLite's, and unordered.
+  // Sorts are stable in V8: without the id fallback these keep SQLite's read order.
   it('breaks a full tie on the id, not on the source read order', () => {
     const out = buildKeywordInjections(
       input({
@@ -322,9 +319,8 @@ describe('buildKeywordInjections — cascade', () => {
   })
 
   it('spends the allowance on depth-1 rows before any depth-2 row', () => {
-    // 'deep' carries the higher priority and still loses: it is only reachable at
-    // depth 2, by which point depth 1 has spent the allowance. sized('one') costs
-    // 45 and sized('deep') 43 against a cap of 100 * 0.5.
+    // 'deep' has the higher priority and still loses: reachable only at depth 2, by
+    // which point depth 1 spent the allowance. Costs 45 and 43 against a cap of 100 * 0.5.
     const out = buildKeywordInjections(
       input({
         settings: cascading({ budgetShare: 0.5 }),
@@ -342,9 +338,8 @@ describe('buildKeywordInjections — cascade', () => {
   })
 
   it('does not rescan a row the cap cut — it is not in the prompt', () => {
-    // 'two' matches at depth 1 and the cap cuts it. Its body names 'the ghost';
-    // a frontier built from matched rather than seated rows would reach it.
-    // Costs: one 43, two 11, cap 50 — so 'one' seats and 'two' overflows.
+    // 'two' matches at depth 1 and the cap cuts it; its body names 'the ghost', which
+    // a matched-rather-than-seated frontier would reach. Costs: one 43, two 11, cap 50.
     const out = buildKeywordInjections(
       input({
         settings: cascading({ budgetShare: 0.5 }),

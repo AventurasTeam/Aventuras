@@ -27,10 +27,8 @@ export type RankTypeInput = {
    */
   capturedTokens?: ReadonlyMap<string, number>
   /**
-   * This type's keyword matches (retrieval.md → Keyword injection budget).
-   * Empty under `keywordRetrieval.mode='boost'`, which is every pass until a
-   * story turns the mode on. Cut rows may be present and are ignored here —
-   * they stay in the pool and compete on score like any other candidate.
+   * This type's keyword matches (retrieval.md → Keyword injection budget). Empty
+   * under `mode='boost'`; cut rows are ignored here and compete on score instead.
    */
   keywordInjected?: readonly KeywordInjection[]
 }
@@ -126,8 +124,7 @@ type Costed = Scored & { tokensEstimated: number }
 
 /**
  * retrieval.md → Token estimation. Exported so the keyword pre-pass prices a
- * seat with the same formula: the same row seated down either path has to cost
- * the same, or the budget the probe reports is not the budget that was spent.
+ * seat identically — else the probe's reported budget isn't the budget spent.
  */
 export function tokenCost(
   text: string,
@@ -197,11 +194,8 @@ export function rankPerType(
 ): RankedType {
   const seats = (input.keywordInjected ?? []).filter((i) => i.seated)
   const seatedIds = new Set(seats.map((i) => i.row.id))
-  // A seated row is skipped when it later appears as a ranked candidate rather
-  // than seated or charged twice (retrieval.md → Keyword injection). Dropped
-  // from the pool rather than during the fill so the probe stays honest: these
-  // rows never reached the ranker, so they file as keyword injections and get no
-  // candidate record. A CUT row is deliberately left in to compete on score.
+  // Seated rows leave the pool (retrieval.md → Keyword injection): never charged
+  // twice, and filed as injections with no candidate record. CUT rows stay in.
   const pool = seatedIds.size === 0 ? wholePool : wholePool.filter((c) => !seatedIds.has(c.id))
 
   const boostedEntryIds = boostedEntryIdsFor(input)
@@ -213,10 +207,8 @@ export function rankPerType(
 
   const selected: SeatedRow[] = seats.map((i) => i.row)
   const traces: CandidateTrace[] = []
-  // Unclamped: budgetShare caps the seats at or below the budget, so a negative
-  // here means a caller supplied seats the cap could not have produced. Every
-  // ranked row is then correctly refused, and funnel.tokensUsed reports over
-  // budget rather than hiding it.
+  // Unclamped: budgetShare caps seats at budget, so a negative means a caller
+  // broke the cap — rows are then refused and tokensUsed reports over budget.
   let remaining = budget - seats.reduce((sum, i) => sum + i.tokensEstimated, 0)
   let belowFloor = false
 
@@ -264,9 +256,8 @@ export function rankPerType(
 }
 
 /**
- * Module-level rather than a closure so the `chapters` default parameter can
- * reach it. Mirrors canon's `injected_by_type.get(type, ())`: chapters and
- * happenings stay on `boost` unconditionally, so theirs is always empty.
+ * Module-level so the `chapters` default parameter can reach it. Mirrors canon's
+ * `injected_by_type.get(type, ())` — chapters and happenings stay on `boost`.
  */
 const forType = (input: RankAllInput, type: RetrievalType): RankTypeInput => ({
   ...input,

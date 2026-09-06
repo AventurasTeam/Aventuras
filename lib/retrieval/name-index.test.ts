@@ -125,8 +125,7 @@ describe('matchTerms', () => {
   })
 })
 
-// docs/memory/retrieval.md → Keyword scan surface: the match rule follows the
-// script of the keyword, per keyword.
+// docs/memory/retrieval.md → Keyword scan surface.
 describe('matchTerms — per-term script rule', () => {
   it('matches an unspaced Han term by substring', () => {
     // Japanese prose supplies no inter-word space to anchor a boundary against,
@@ -156,8 +155,7 @@ describe('matchTerms — per-term script rule', () => {
   })
 
   // An internal space means the author supplied a delimiter, so the term keeps
-  // boundary mode — which in CJK prose means it matches only where real
-  // punctuation or spacing brackets it, never mid-run.
+  // boundary mode — in CJK prose it then matches only at a bracket, never mid-run.
   it('denies substring mode to a term the author already delimited', () => {
     expect(matchTerms('月光 剣。', [normalizeTerm('月光 剣')])).toEqual(['月光 剣'])
     expect(matchTerms('その月光 剣士', [normalizeTerm('月光 剣')])).toEqual([])
@@ -174,9 +172,8 @@ describe('matchTerms — per-term script rule', () => {
     expect(matchTerms('彼は𠮷を見た。', [normalizeTerm('\u{20BB7}')])).toEqual([])
   })
 
-  // The positive half of the same rule: iterating UTF-16 units instead of code
-  // points leaves every char a lone surrogate, which is neither Han nor a
-  // letter, so an astral term would fall out of substring mode entirely.
+  // Iterating UTF-16 units instead of code points leaves every char a lone surrogate
+  // — neither Han nor letter — so an astral term would lose substring mode entirely.
   it('matches an astral ideograph pair by substring', () => {
     const term = '\u{20BB7}\u{20BB7}'
     expect(matchTerms(`彼は${term}を見た。`, [normalizeTerm(term)])).toEqual([term])
@@ -187,8 +184,7 @@ describe('matchTerms — per-term script rule', () => {
     expect(matchTerms('その月光\u3000剣士', [normalizeTerm('月光\u3000剣')])).toEqual([])
   })
 
-  // Metacharacters only reach escape() on the boundary branch, so the term has
-  // to be one that stays there — a substring-mode term never sees it.
+  // escape() only runs on the boundary branch, so the term has to be one that stays there.
   it('escapes regex metacharacters in a term the script rule sends to boundaries', () => {
     expect(matchTerms('the vex*月 hummed', [normalizeTerm('vex*月')])).toEqual(['vex*月'])
     expect(matchTerms('the vexX月 hummed', [normalizeTerm('vex*月')])).toEqual([])
