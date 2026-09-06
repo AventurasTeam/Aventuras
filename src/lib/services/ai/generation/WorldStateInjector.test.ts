@@ -5,6 +5,7 @@ import type { Character, Location, Item, StoryBeat, StoryEntry } from '$lib/type
 vi.mock('$lib/stores/activity.svelte', () => ({
   activity: {
     startStep: vi.fn(() => ''),
+    updateStep: vi.fn(),
     endStep: vi.fn(),
     recordStep: vi.fn(() => ''),
   },

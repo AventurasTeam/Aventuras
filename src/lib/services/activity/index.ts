@@ -9,12 +9,12 @@ export type { ActivityStep, ActivityTurn, ActivityNode, ActivityStatus } from '.
 
 export { buildTree, deepestRunningStep } from './tree'
 
-export { stepDuration, turnDuration, formatDuration } from './duration'
+export { stepDuration, turnDuration, formatDuration, formatStepDuration } from './duration'
 
 export { retainTurns, findTurnByEntryId, RETAINED_TURNS } from './retention'
 
 export { ActivityRecorder, type ActivityReporting, type StartStepOptions } from './recorder'
 
-export { NO_ACTIVITY, type ActivityReporter } from './reporter'
+export { NO_ACTIVITY, trackStep, type ActivityReporter } from './reporter'
 
 export { trackPhase } from './trackPhase'

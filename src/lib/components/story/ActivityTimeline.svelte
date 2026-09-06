@@ -1,11 +1,6 @@
 <script lang="ts">
   import { activity } from '$lib/stores/activity.svelte'
-  import {
-    formatDuration,
-    stepDuration,
-    type ActivityNode,
-    type ActivityTurn,
-  } from '$lib/services/activity'
+  import { formatStepDuration, type ActivityNode, type ActivityTurn } from '$lib/services/activity'
   import { Sparkles } from '@lucide/svelte'
 
   let { turn, now, depth = 0 }: { turn: ActivityTurn; now: number; depth?: number } = $props()
@@ -19,12 +14,13 @@
     class="flex items-baseline gap-1.5 py-0.5 text-[11px] leading-tight"
     style="padding-left: {level * 0.75}rem"
   >
+    <!-- Fixed width: the column stays a column when a step has no measured duration. -->
     <span
-      class="shrink-0 tabular-nums"
+      class="w-11 shrink-0 text-right tabular-nums"
       class:text-muted-foreground={step.status !== 'running'}
       class:text-primary={step.status === 'running'}
     >
-      {formatDuration(stepDuration(step, now))}
+      {formatStepDuration(step, now) ?? ''}
     </span>
 
     {#if step.isLLM}

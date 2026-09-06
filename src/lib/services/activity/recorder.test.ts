@@ -176,6 +176,61 @@ describe('recording', () => {
     expect(recorder.snapshot()[0].steps[0]).toMatchObject({ status: 'failed', detail: 'boom' })
   })
 
+  it('revises a running step detail, for a counter that moves while it is open', () => {
+    const { recorder } = recorderAt()
+    recorder.setReporting('line')
+    recorder.startTurn('entry-1')
+    const id = recorder.startStep('Agent', { detail: '0/10 steps' })
+
+    recorder.updateStep(id, '3/10 steps')
+
+    expect(recorder.snapshot()[0].steps[0].detail).toBe('3/10 steps')
+  })
+
+  it('does not revise a step that has already closed', () => {
+    const { recorder } = recorderAt()
+    recorder.setReporting('line')
+    recorder.startTurn('entry-1')
+    const id = recorder.startStep('Agent', { detail: '0/10 steps' })
+    recorder.endStep(id, 'done', '8/10 steps')
+
+    recorder.updateStep(id, '9/10 steps')
+
+    expect(recorder.snapshot()[0].steps[0].detail).toBe('8/10 steps')
+  })
+
+  it('does not notify when the detail is unchanged', () => {
+    const { recorder, onChange } = recorderAt()
+    recorder.setReporting('line')
+    recorder.startTurn('entry-1')
+    const id = recorder.startStep('Agent', { detail: '3/10 steps' })
+    onChange.mockClear()
+
+    recorder.updateStep(id, '3/10 steps')
+
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('backdates the turn to work that ran before it opened', () => {
+    // Input translation is a model call on the same critical path, but it runs before the
+    // generation path is entered.
+    const { recorder } = recorderAt([5_000])
+    recorder.setReporting('line')
+
+    recorder.startTurn('entry-1', 1_000)
+
+    expect(recorder.snapshot()[0].startedAt).toBe(1_000)
+  })
+
+  it('uses the clock when nothing preceded the turn', () => {
+    const { recorder } = recorderAt([5_000])
+    recorder.setReporting('line')
+
+    recorder.startTurn('entry-1')
+
+    expect(recorder.snapshot()[0].startedAt).toBe(5_000)
+  })
+
   it('discards the oldest turns beyond the retention bound', () => {
     const recorder = new ActivityRecorder(
       () => {},

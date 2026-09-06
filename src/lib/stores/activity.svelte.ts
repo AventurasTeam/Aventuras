@@ -51,8 +51,8 @@ class ActivityStore {
     }
   }
 
-  startTurn(entryId: string) {
-    this.guard(() => this.recorder.startTurn(entryId), undefined)
+  startTurn(entryId: string, startedAt?: number) {
+    this.guard(() => this.recorder.startTurn(entryId, startedAt), undefined)
   }
 
   endTurn() {
@@ -61,6 +61,10 @@ class ActivityStore {
 
   startStep(label: string, options?: StartStepOptions): string {
     return this.guard(() => this.recorder.startStep(label, options), '')
+  }
+
+  updateStep(id: string, detail: string) {
+    this.guard(() => this.recorder.updateStep(id, detail), undefined)
   }
 
   endStep(id: string, status?: Exclude<ActivityStatus, 'running'>, detail?: string) {

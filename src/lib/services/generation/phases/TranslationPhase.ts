@@ -22,6 +22,8 @@ import type { TranslationResult } from '$lib/services/ai/utils/TranslationServic
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
 
 /** Dependencies for translation phase - injected to avoid tight coupling */
+import { NO_ACTIVITY, type ActivityReporter } from '$lib/services/activity'
+
 export interface TranslationDependencies {
   translateNarration: (
     content: string,
@@ -40,6 +42,9 @@ export interface TranslationInput {
   isVisualProse: boolean
   translationSettings: TranslationSettings
   abortSignal?: AbortSignal
+  activity?: ActivityReporter
+  /** Step this phase's own reporting nests under. */
+  activityParentId?: string | null
 }
 
 /** Result from translation phase */
@@ -91,6 +96,12 @@ export class TranslationPhase {
 
     const targetLanguage = translationSettings.targetLanguage
 
+    const activity = input.activity ?? NO_ACTIVITY
+    const callId = activity.startStep(`Translating to ${targetLanguage}`, {
+      parentId: input.activityParentId,
+      isLLM: true,
+    })
+
     try {
       const translationResult = await this.deps.translateNarration(
         narrativeContent,
@@ -98,6 +109,7 @@ export class TranslationPhase {
         isVisualProse,
         storyId,
       )
+      activity.endStep(callId)
 
       if (abortSignal?.aborted) {
         yield { type: 'aborted', phase: 'translation' } satisfies AbortedEvent
@@ -122,6 +134,10 @@ export class TranslationPhase {
 
       return result
     } catch (error) {
+      activity.endStep(
+        callId,
+        error instanceof Error && error.name === 'AbortError' ? 'skipped' : 'failed',
+      )
       if (error instanceof Error && error.name === 'AbortError') {
         yield { type: 'aborted', phase: 'translation' } satisfies AbortedEvent
         return {

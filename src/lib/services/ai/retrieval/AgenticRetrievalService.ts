@@ -168,6 +168,9 @@ export class AgenticRetrievalService extends BaseAIService {
     // history are all derived from it rather than tracked separately.
     // Set once the agent step is open; tool calls before then nest under the phase's step.
     let agentStepId = ''
+    // The iteration in flight. Tool calls nest under it, so the model call that chose them
+    // and the calls themselves read as one step of the run.
+    let iterationStepId = ''
 
     const events: RetrievalEvent[] = []
     const record = (event: RetrievalEventInput) => {
@@ -183,7 +186,7 @@ export class AgenticRetrievalService extends BaseAIService {
       const { label, options } = retrievalStep(event)
       activity.recordStep(label, {
         ...options,
-        parentId: agentStepId || context.activityParentId,
+        parentId: iterationStepId || agentStepId || context.activityParentId,
         status: retrievalStepStatus(event),
       })
     }
@@ -272,6 +275,7 @@ export class AgenticRetrievalService extends BaseAIService {
     const terminalStop = stopOnTerminalTool<typeof tools>('finish_retrieval', this.maxIterations)
     const stopWhen: typeof terminalStop = (input) => {
       stepsTaken = Math.max(stepsTaken, input.steps.length)
+      activity.updateStep(agentStepId, `${stepsTaken}/${this.maxIterations} steps`)
       return terminalStop(input)
     }
 
@@ -317,10 +321,19 @@ export class AgenticRetrievalService extends BaseAIService {
     })
     const { system: systemPrompt, user: userPrompt } = await ctx.render('agentic-retrieval')
 
-    const prepareStep = finishOnlyOnLastStep(
-      'finish_retrieval',
-      this.maxIterations,
-    ) as PrepareStepFunction<typeof tools>
+    const lastStepOnly = finishOnlyOnLastStep('finish_retrieval', this.maxIterations)
+
+    // Wrapped to open an activity step per iteration. Without it the run reports only its
+    // tool calls, which are in-memory and effectively instant -- so a two-minute retrieval
+    // showed two minutes of nothing, when nearly all of it is these model calls.
+    const prepareStep = ((input: { stepNumber: number }) => {
+      activity.endStep(iterationStepId)
+      iterationStepId = activity.startStep(`Model call ${input.stepNumber + 1}`, {
+        parentId: agentStepId,
+        isLLM: true,
+      })
+      return lastStepOnly(input)
+    }) as PrepareStepFunction<typeof tools>
 
     agentStepId = activity.startStep('Agent', {
       parentId: context.activityParentId,
@@ -359,6 +372,7 @@ export class AgenticRetrievalService extends BaseAIService {
       log('Agent run failed -- salvaging what it gathered', { failure, steps: stepsTaken })
     }
 
+    activity.endStep(iterationStepId, failure ? 'failed' : 'done')
     activity.endStep(
       agentStepId,
       failure ? 'failed' : 'done',

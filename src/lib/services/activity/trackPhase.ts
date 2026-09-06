@@ -8,20 +8,22 @@
  */
 
 import type { ActivityReporter } from './reporter'
-import type { StartStepOptions } from './recorder'
 
 /** The only thing this needs of a phase event. */
 interface PhaseEvent {
   type: string
 }
 
+/**
+ * `stepId` is opened by the caller rather than here, so the same id can be handed to the
+ * phase as the parent for whatever it reports itself.
+ */
 export async function* trackPhase<E extends PhaseEvent, R>(
   activity: ActivityReporter,
-  label: string,
+  stepId: string,
   phase: AsyncGenerator<E, R>,
-  options: StartStepOptions = {},
 ): AsyncGenerator<E, R> {
-  const id = activity.startStep(label, options)
+  const id = stepId
   let status: 'done' | 'failed' | 'skipped' = 'done'
   try {
     let next = await phase.next()

@@ -53,12 +53,16 @@ export class ActivityRecorder {
     }
   }
 
-  startTurn(entryId: string): void {
+  /**
+   * `startedAt` backdates the turn to work that ran before this call -- input translation
+   * happens before the generation path is entered, and is on the same critical path.
+   */
+  startTurn(entryId: string, startedAt?: number): void {
     if (!this.enabled) return
     this.current = {
       id: `turn-${++this.counter}`,
       entryId,
-      startedAt: this.now(),
+      startedAt: startedAt ?? this.now(),
       steps: [],
     }
     this.turns = retainTurns([...this.turns, this.current], this.bound)
@@ -97,6 +101,15 @@ export class ActivityRecorder {
     this.current.steps.push(step)
     this.onChange()
     return step.id
+  }
+
+  /** Revise a running step's detail, for a counter that moves while the step is open. */
+  updateStep(id: string, detail: string): void {
+    if (!id || !this.current) return
+    const step = this.current.steps.find((s) => s.id === id)
+    if (!step || step.status !== 'running' || step.detail === detail) return
+    step.detail = detail
+    this.onChange()
   }
 
   endStep(id: string, status: Exclude<ActivityStatus, 'running'> = 'done', detail?: string): void {

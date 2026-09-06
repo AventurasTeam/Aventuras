@@ -28,3 +28,29 @@ export const NO_ACTIVITY: ActivityReporter = {
   endStep: () => {},
   recordStep: () => '',
 }
+
+/**
+ * Run `work` as one step, closing it as failed if it throws.
+ *
+ * The throw is re-raised: whether a failure is fatal is the caller's decision, and reporting
+ * must not change it.
+ */
+export async function trackStep<T>(
+  activity: ActivityReporter,
+  label: string,
+  options: StartStepOptions,
+  work: () => Promise<T>,
+): Promise<T> {
+  const id = activity.startStep(label, options)
+  try {
+    const result = await work()
+    activity.endStep(id)
+    return result
+  } catch (error) {
+    activity.endStep(
+      id,
+      error instanceof Error && error.name === 'AbortError' ? 'skipped' : 'failed',
+    )
+    throw error
+  }
+}

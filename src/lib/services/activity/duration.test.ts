@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatDuration, stepDuration, turnDuration } from './duration'
+import { formatDuration, formatStepDuration, stepDuration, turnDuration } from './duration'
 import type { ActivityStep, ActivityTurn } from './types'
 
 const base: ActivityStep = {
@@ -44,10 +44,15 @@ describe('formatDuration', () => {
     expect(formatDuration(999)).toBe('999ms')
   })
 
-  it('reports seconds with one decimal', () => {
-    expect(formatDuration(1_000)).toBe('1.0s')
-    expect(formatDuration(6_240)).toBe('6.2s')
-    expect(formatDuration(59_900)).toBe('59.9s')
+  it('reports whole seconds, so a dozen rows do not tick a decimal each', () => {
+    expect(formatDuration(1_000)).toBe('1s')
+    expect(formatDuration(6_240)).toBe('6s')
+    expect(formatDuration(59_900)).toBe('59s')
+  })
+
+  it('truncates rather than rounding, so it never reports time that has not passed', () => {
+    expect(formatDuration(1_999)).toBe('1s')
+    expect(formatDuration(119_800)).toBe('1m 59s')
   })
 
   it('reports minutes and seconds beyond a minute', () => {
@@ -55,8 +60,19 @@ describe('formatDuration', () => {
     expect(formatDuration(95_000)).toBe('1m 35s')
     expect(formatDuration(600_000)).toBe('10m 0s')
   })
+})
 
-  it('carries a rounded 60 seconds into the next minute', () => {
-    expect(formatDuration(119_800)).toBe('2m 0s')
+describe('formatStepDuration', () => {
+  it('shows nothing for a finished step that was never timed', () => {
+    // Most retrieval tool calls carry no duration; a column of "0ms" is all this avoids.
+    expect(formatStepDuration({ ...base, endedAt: base.startedAt }, 9_999)).toBeNull()
+  })
+
+  it('shows a finished step that took measurable time', () => {
+    expect(formatStepDuration({ ...base, endedAt: base.startedAt + 6_240 }, 9_999)).toBe('6s')
+  })
+
+  it('shows a running step from its first tick, including at zero', () => {
+    expect(formatStepDuration({ ...base, status: 'running' }, base.startedAt)).toBe('0ms')
   })
 })

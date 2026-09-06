@@ -39,7 +39,11 @@ describe('trackPhase', () => {
     const { activity, started, closed } = reporter()
 
     const { events, result } = await drain(
-      trackPhase(activity, 'Classification', phaseOf([{ type: 'phase_start' }])),
+      trackPhase(
+        activity,
+        activity.startStep('Classification'),
+        phaseOf([{ type: 'phase_start' }]),
+      ),
     )
 
     expect(started).toEqual(['Classification'])
@@ -55,7 +59,7 @@ describe('trackPhase', () => {
     const { result } = await drain(
       trackPhase(
         activity,
-        'Classification',
+        activity.startStep('Classification'),
         phaseOf([{ type: 'phase_start' }, { type: 'error' }], null),
       ),
     )
@@ -67,7 +71,9 @@ describe('trackPhase', () => {
   it('records an aborted phase as skipped', async () => {
     const { activity, closed } = reporter()
 
-    await drain(trackPhase(activity, 'Images', phaseOf([{ type: 'aborted' }], null)))
+    await drain(
+      trackPhase(activity, activity.startStep('Images'), phaseOf([{ type: 'aborted' }], null)),
+    )
 
     expect(closed).toEqual([{ id: 's1', status: 'skipped' }])
   })
@@ -79,7 +85,9 @@ describe('trackPhase', () => {
       throw new Error('boom')
     })()
 
-    await expect(drain(trackPhase(activity, 'Narrative', phase))).rejects.toThrow('boom')
+    await expect(
+      drain(trackPhase(activity, activity.startStep('Narrative'), phase)),
+    ).rejects.toThrow('boom')
     expect(closed).toEqual([{ id: 's1', status: 'failed' }])
   })
 
@@ -95,7 +103,7 @@ describe('trackPhase', () => {
       }
     })()
 
-    const wrapped = trackPhase(activity, 'Translation', phase)
+    const wrapped = trackPhase(activity, activity.startStep('Translation'), phase)
     await wrapped.next()
     await wrapped.return(undefined as never)
 
@@ -109,7 +117,7 @@ describe('trackPhase', () => {
     await drain(
       trackPhase(
         activity,
-        'Images',
+        activity.startStep('Images'),
         phaseOf([{ type: 'error' }, { type: 'phase_complete' }], null),
       ),
     )

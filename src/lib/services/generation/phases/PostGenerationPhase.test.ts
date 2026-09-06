@@ -239,3 +239,93 @@ describe('PostGenerationPhase', () => {
     expect(events.map((e) => e.type)).toEqual(['phase_start', 'aborted'])
   })
 })
+
+describe('PostGenerationPhase activity reporting', () => {
+  /** Records the label and LLM marker of every step opened. */
+  function recordingReporter() {
+    const steps: { label: string; isLLM: boolean; parentId?: string | null; status?: string }[] = []
+    return {
+      steps,
+      reporter: {
+        startStep: (label: string, options: any = {}) => {
+          steps.push({ label, isLLM: !!options.isLLM, parentId: options.parentId })
+          return `s${steps.length}`
+        },
+        endStep: (id: string, status = 'done') => {
+          const step = steps[Number(id.slice(1)) - 1]
+          if (step && !step.status) step.status = status
+        },
+        recordStep: () => '',
+        updateStep: () => {},
+      },
+    }
+  }
+
+  it('marks the action-choice call as an LLM step under the phase', async () => {
+    const { steps, reporter } = recordingReporter()
+    const generateActionChoices = vi.fn().mockResolvedValue({ choices })
+
+    await drain(
+      new PostGenerationPhase(makeDeps({ generateActionChoices })).execute(
+        makeInput({ activity: reporter, activityParentId: 'phase-step' }),
+      ),
+    )
+
+    expect(steps).toEqual([
+      { label: 'Generating action choices', isLLM: true, parentId: 'phase-step', status: 'done' },
+    ])
+  })
+
+  it('marks the follow-up translation as its own LLM step', async () => {
+    const { steps, reporter } = recordingReporter()
+    const generateActionChoices = vi.fn().mockResolvedValue({ choices })
+    const translateActionChoices = vi.fn().mockResolvedValue(choices)
+
+    await drain(
+      new PostGenerationPhase(makeDeps({ generateActionChoices, translateActionChoices })).execute(
+        makeInput({
+          activity: reporter,
+          activityParentId: 'phase-step',
+          translationSettings: italian,
+        }),
+      ),
+    )
+
+    expect(steps.map((s) => s.label)).toEqual([
+      'Generating action choices',
+      'Translating action choices',
+    ])
+    expect(steps.every((s) => s.isLLM)).toBe(true)
+  })
+
+  it('records a failed translation as failed, and still returns the untranslated choices', async () => {
+    const { steps, reporter } = recordingReporter()
+    const generateActionChoices = vi.fn().mockResolvedValue({ choices })
+    const translateActionChoices = vi.fn().mockRejectedValue(new Error('boom'))
+
+    const { result } = await drain(
+      new PostGenerationPhase(makeDeps({ generateActionChoices, translateActionChoices })).execute(
+        makeInput({
+          activity: reporter,
+          activityParentId: 'phase-step',
+          translationSettings: italian,
+        }),
+      ),
+    )
+
+    expect(steps.find((s) => s.label === 'Translating action choices')?.status).toBe('failed')
+    expect(result.actionChoices).toEqual(choices)
+  })
+
+  it('reports nothing when suggestions are disabled, so no model call is implied', async () => {
+    const { steps, reporter } = recordingReporter()
+
+    await drain(
+      new PostGenerationPhase(makeDeps({})).execute(
+        makeInput({ activity: reporter, activityParentId: 'phase-step', disableSuggestions: true }),
+      ),
+    )
+
+    expect(steps).toEqual([])
+  })
+})

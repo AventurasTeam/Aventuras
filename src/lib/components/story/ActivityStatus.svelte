@@ -21,7 +21,8 @@
   let now = $state(Date.now())
   $effect(() => {
     if (!turn || turn.endedAt) return
-    const handle = setInterval(() => (now = Date.now()), 100)
+    // Once a second, matching the resolution `formatDuration` shows.
+    const handle = setInterval(() => (now = Date.now()), 1000)
     return () => clearInterval(handle)
   })
 
