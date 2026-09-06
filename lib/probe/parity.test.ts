@@ -567,6 +567,40 @@ describe('replay recomputes rather than echoing', () => {
 })
 
 describe('replayType', () => {
+  const seat = (seated: boolean) => ({
+    target_kind: 'lore' as const,
+    target_id: 'lo_seat',
+    display_name: 'Seat',
+    terms: ['seat'],
+    // The whole type budget, so the reservation is unmissable: with it nothing
+    // ranked can fit; without it every row seats exactly as it does above.
+    tokens_estimated: STATES['pin-boosted'].budget,
+    seated,
+    priority: 0,
+  })
+
+  it('reserves the budget the keyword seats spent', async () => {
+    const state = STATES['pin-boosted']
+    const payload = await storedPayload(state, rankProd(state))
+
+    expect(replayType(payload, 'lore').selected.length).toBeGreaterThan(0)
+
+    const replayed = replayType({ ...payload, keyword_injections: [seat(true)] }, 'lore')
+
+    expect(replayed.selected.map((c) => c.id)).toEqual(['lo_seat'])
+    expect(replayed.traces.every((t) => t.dropReason === 'over_budget')).toBe(true)
+  })
+
+  it('ignores a cut seat, which spent nothing', async () => {
+    const state = STATES['pin-boosted']
+    const payload = await storedPayload(state, rankProd(state))
+    const cut = { ...payload, keyword_injections: [seat(false)] }
+
+    expect(replayType(cut, 'lore').selected.map((c) => c.id)).toEqual(
+      replayType(payload, 'lore').selected.map((c) => c.id),
+    )
+  })
+
   it('refuses a failed capture even though its pools would rank', async () => {
     const state = STATES.normal
     const payload = await storedPayload(state, rankProd(state))

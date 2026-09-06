@@ -968,6 +968,31 @@ describe('retrieval phase — RetrievalParams assembly', () => {
     expect(runRetrievalMock.mock.calls.at(-1)?.[0]).not.toHaveProperty('branchIds')
   })
 
+  // Every value differs from STORY_SETTINGS_DEFAULTS, so reading the constant fails here.
+  it('passes the story keywordRetrieval block through to the pass', async () => {
+    seedOpenStory({
+      settings: {
+        keywordRetrieval: {
+          mode: 'inject',
+          budgetShare: 0.25,
+          scanEntries: 3,
+          cascade: true,
+          cascadeMaxDepth: 4,
+        },
+      },
+    })
+
+    await runRetrievalPhase()
+
+    // scanEntries absent on purpose: readScanEntries spent it; lib/retrieval omits it.
+    expect(lastParams().keywordRetrieval).toEqual({
+      mode: 'inject',
+      budgetShare: 0.25,
+      cascade: true,
+      cascadeMaxDepth: 4,
+    })
+  })
+
   it("takes the budgets from the story's settings, not the code defaults", async () => {
     seedOpenStory({
       settings: {
@@ -1213,9 +1238,8 @@ describe('retrieval phase — RetrievalParams assembly', () => {
     expect(lastParams().scanText.split('I draw the blade.')).toHaveLength(2)
   })
 
-  // The whole reason the surface has its own read: protectedBuffer 0 with a
-  // one-entry partial window would otherwise hand it less prose than the story
-  // asked for, and say nothing about it.
+  // Why the surface has its own read: protectedBuffer 0 with a one-entry partial
+  // window would silently hand it less prose than the story asked for.
   it('reaches scanEntries deep regardless of the prompt-buffer knobs', async () => {
     seedOpenStory({
       settings: {
@@ -1243,8 +1267,7 @@ describe('retrieval phase — RetrievalParams assembly', () => {
     expect(scanText).toContain('older-prose')
     expect(scanText).toContain('recent-prose')
     expect(scanText).toContain('newest-prose')
-    // Positive control: the prompt buffer really is narrower here, so the
-    // assertions above are about the dedicated read and not a wide window.
+    // Positive control: the buffer is narrower here, so the above pins the dedicated read.
     expect(recentProse).not.toContain('older-prose')
   })
 

@@ -109,6 +109,18 @@ const capturePayload = (): ProbeCapturePayload => ({
     chapters: emptyFunnel(200),
   },
   structural_floor: [{ target_kind: 'chapter', target_id: 'chap_1', tokens: 120 }],
+  // Populated, not empty: an empty array round-trips identically whether or not it's written.
+  keyword_injections: [
+    {
+      target_kind: 'lore',
+      target_id: 'lore_1',
+      display_name: 'The drowned archive',
+      terms: ['tide'],
+      tokens_estimated: 42,
+      seated: true,
+      priority: 30,
+    },
+  ],
   prompt_buffer_tokens: 1840,
   stale_counts: { entities: 0, lore: 0, happenings: 0, threads: 0, chapters: 0 },
   failure_reason: null,

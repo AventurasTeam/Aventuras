@@ -225,8 +225,7 @@ describe('keyword deselection', () => {
     expect(after.deselectedKeywords).toEqual(['the grey wolf'])
   })
 
-  // The two deselect sets must not share storage: toggling one would otherwise
-  // strike the other's chip in the dialog.
+  // The two deselect sets must not share storage — toggling one would strike the other's chip.
   it('keeps the tag and keyword deselect sets apart', () => {
     const after = mergeReducer(start(), { type: 'toggle-keyword', keyword: 'the grey wolf' })
     expect(after.deselectedTags).toEqual([])

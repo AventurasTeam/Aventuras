@@ -24,8 +24,7 @@ function applyMigration(sqlite: DatabaseSync, tag: string): void {
   }
 }
 
-// The pre-slice shape: no keywordRetrieval key at all, plus enough sibling keys
-// to prove the migration writes one subtree rather than the settings blob.
+// No keywordRetrieval key, plus enough siblings to prove the migration writes one subtree.
 const LEGACY_SETTINGS = {
   chapterTokenThreshold: 24000,
   classifierCadence: 5,
@@ -60,10 +59,9 @@ describe(TAG, () => {
     }
   })
 
-  // Applying by filename would stay green against a migration the app never
-  // runs. keywordRetrieval is required by storySettingsSchema, so an unjournalled
-  // 0011 makes every upgraded story fail to parse its own settings — and a fresh
-  // DB never needs the migration, so E2E cannot catch it either.
+  // Applying by filename stays green against a migration the app never runs; an
+  // unjournalled 0011 fails storySettingsSchema on every upgraded story. A fresh DB
+  // never needs the migration, so E2E cannot catch it either.
   it('is wired into the upgrade path, not just present on disk', () => {
     expect(migrationTags()).toContain(TAG)
     const runtime = readFileSync(`${MIGRATIONS_DIR}/migrations.js`, 'utf8')
@@ -90,8 +88,7 @@ describe(TAG, () => {
     })
   })
 
-  // The guard that separates this from 0007: a user-chosen mode must survive a
-  // re-run, so the statement is idempotent rather than a blind overwrite.
+  // A user-chosen mode must survive a re-run, so the statement is idempotent, unlike 0007.
   it('leaves a story that already carries the key alone', () => {
     const chosen = { ...STORY_SETTINGS_DEFAULTS.keywordRetrieval, mode: 'inject', scanEntries: 4 }
     insertStory(db, 's1', { ...LEGACY_SETTINGS, keywordRetrieval: chosen })
@@ -102,9 +99,8 @@ describe(TAG, () => {
     expect(settingsOf(db, 's1')?.keywordRetrieval).toEqual(chosen)
   })
 
-  // json_set raises on non-JSON text, which aborts the whole UPDATE: without the
-  // guard one unparseable blob leaves every other story unmigrated and the app
-  // unable to boot past migrate(), rather than badging that one story.
+  // json_set raises on non-JSON text and aborts the whole UPDATE: without the guard one
+  // unparseable blob leaves every other story unmigrated and the app unable to boot.
   it.each([
     ['unparseable text', '{not json'],
     ['an empty string', ''],
@@ -127,10 +123,8 @@ describe(TAG, () => {
     expect(bad.settings).toBe(raw)
   })
 
-  // json_valid alone would admit these: json_set then writes the column back
-  // re-serialized, silently normalizing a row the migration has no business
-  // touching. The spacing is the assertion — it survives only if the row is
-  // never written.
+  // json_valid alone admits these, and json_set then rewrites the column re-serialized,
+  // normalizing a row the migration must not touch. The spacing is the assertion.
   it.each([
     ['a spaced top-level array', '[1, 2]'],
     ['a quoted scalar', '"already gone"'],

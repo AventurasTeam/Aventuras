@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { EmbeddedFieldRow } from '@/lib/db'
 import { EmbedderCallError, EmbedderCancelledError, EmbedderInitError } from '@/lib/embedder'
 
-import { KNN_K } from './constants'
+import { KNN_K, RANKER_DEFAULTS } from './constants'
 import {
   runRetrieval,
   type RetrievalDeps,
@@ -11,6 +11,7 @@ import {
   type RetrievalParams,
   type RetrievalSuccess,
 } from './run'
+import { countTokens } from './tokens'
 import { isHappeningCandidate, type QueryAll } from './types'
 
 const DIM = 2
@@ -214,6 +215,7 @@ const BASE: RetrievalParams = {
   currentLocationId: null,
   recentProse: '',
   scanText: 'I ask about the amulet.\nKara Vex drew the blade.',
+  keywordRetrieval: { mode: 'boost', budgetShare: 0.5, cascade: false, cascadeMaxDepth: 2 },
 }
 
 const params = (
@@ -349,7 +351,7 @@ describe('runRetrieval — sync ordering', () => {
   it('carries no partial state when the sync stage fails', async () => {
     const { partial } = await withSyncFailure()
 
-    expect(partial).toEqual({ queries: null, floor: null, bundles: {} })
+    expect(partial).toEqual({ queries: null, floor: null, bundles: {}, keywordInjections: [] })
   })
 
   it('reads the source rows AFTER the sync commits, not before', async () => {
@@ -1235,7 +1237,9 @@ describe('runRetrieval — pools', () => {
         }),
         params(),
       )
-      return expectOk(out).bundles.happenings.selected.find((c) => c.id === 'hap_1')?.pinSignal
+      return expectOk(out)
+        .bundles.happenings.selected.filter(isHappeningCandidate)
+        .find((c) => c.id === 'hap_1')?.pinSignal
     }
 
     // Nothing in the schema stops a common-knowledge row from carrying awareness
@@ -1343,7 +1347,9 @@ describe('runRetrieval — pools', () => {
       { id: 'haw_a', retrievalCount: 0 },
       { id: 'haw_b', retrievalCount: 0 },
     ])
-    const selected = ok.bundles.happenings.selected.find((c) => c.id === 'hap_1')
+    const selected = ok.bundles.happenings.selected
+      .filter(isHappeningCandidate)
+      .find((c) => c.id === 'hap_1')
     // Max over the holders, not min or first-wins: the most pinned holder is
     // what keeps the row alive against decay.
     expect(selected?.pinSignal).toBe(0.7)
@@ -1578,9 +1584,8 @@ describe('runRetrieval — keyword boost', () => {
     expect(boost('lore_miss')).toBe(0)
   })
 
-  // The digest is assembled from entity names, the location and thread titles —
-  // synthetic text, not something the prose said. Matching it manufactured a hit
-  // on every turn the named row was on stage.
+  // The digest is synthetic text (entity names, location, thread titles), not
+  // something the prose said — matching it manufactures a hit every turn.
   it('does not boost on a term reaching only the structural digest', async () => {
     const out = await runRetrieval(
       deps({ queryAll: twoLoreRows() }),
@@ -1591,8 +1596,7 @@ describe('runRetrieval — keyword boost', () => {
     expect(expectOk(out).bundles.lore.traces.find((t) => t.id === 'lore_hit')?.kwBoostValue).toBe(0)
   })
 
-  // Q3 selects top-K sentences, so a proper noun in a sentence the extract
-  // skipped could never fire while the haystack came from the query stack.
+  // Q3 selects top-K sentences: a proper noun in a sentence it skipped must still fire.
   it('boosts on prose Q3 left out of its extract', async () => {
     const out = await runRetrieval(
       deps({ queryAll: twoLoreRows() }),
@@ -1679,9 +1683,8 @@ describe('runRetrieval — keyword boost', () => {
     expect(await boostFor(['the innkeeper'])).toBe(0)
   })
 
-  // entities.priority orders keyword-inject overflow and nothing else. lore.priority
-  // feeding pin_signal is lore's own second effect — the branch two cases down in
-  // run.ts does exactly the thing this branch must not.
+  // entities.priority orders keyword-inject overflow and nothing else — feeding
+  // pin_signal is lore's own second effect, done by the next branch down in run.ts.
   it('leaves an entity pin_signal at zero however high its priority', async () => {
     const out = await runRetrieval(
       deps({
@@ -1693,5 +1696,117 @@ describe('runRetrieval — keyword boost', () => {
       params({ sceneEntityIds: [], sceneCharacterIds: [] }),
     )
     expect(expectOk(out).bundles.entities.traces.find((t) => t.id === 'char_a')?.pinSignal).toBe(0)
+  })
+})
+
+describe('runRetrieval — keyword injection', () => {
+  const injecting = {
+    mode: 'inject' as const,
+    budgetShare: 0.5,
+    cascade: false,
+    cascadeMaxDepth: 2,
+  }
+
+  it('seats a lore row the KNN never returned', async () => {
+    const queryAll = makeQueryAll({
+      lore: [loreRow('lore_far', 'The Aetherium', { keywords: ['aetherium'] })],
+      knn: [],
+    })
+
+    const out = expectOk(
+      await runRetrieval(
+        deps({ queryAll }),
+        params({ keywordRetrieval: injecting, scanText: 'The aetherium hums below.' }),
+      ),
+    )
+
+    expect(out.bundles.lore.selected.map((c) => c.id)).toEqual(['lore_far'])
+    // It never reached the ranker, so it files as a keyword injection and NOT as
+    // a candidate — no invented sim_blend or final_score.
+    expect(out.bundles.lore.traces).toEqual([])
+    expect(out.keywordInjections.map((i) => i.row.id)).toEqual(['lore_far'])
+  })
+
+  it('seats nothing under the default boost mode', async () => {
+    const queryAll = makeQueryAll({
+      lore: [loreRow('lore_far', 'The Aetherium', { keywords: ['aetherium'] })],
+      knn: [],
+    })
+
+    const out = expectOk(
+      await runRetrieval(deps({ queryAll }), params({ scanText: 'The aetherium hums below.' })),
+    )
+
+    expect(out.bundles.lore.selected).toEqual([])
+    expect(out.keywordInjections).toEqual([])
+  })
+
+  it('charges the seat against the type budget the ranked rows then compete for', async () => {
+    // Real prose, never 'x'.repeat(n): tiktoken's byte-pair loop treats it as one word
+    // and costs ~620 ms (lessons-learned → Token-counting fixtures must be prose).
+    const seatBody = 'The engine drowned under the tide and has hummed there since.'
+    const rankedBody = `${seatBody} Its keepers left no ledger, no name, and no way back up.`
+    // Budget priced off the fixture rather than guessed: the seat must fit in
+    // budgetShare (half), and the larger ranked row must not fit in what is left.
+    const loreBudget = 2 * (countTokens(`Seat\n${seatBody}`) + RANKER_DEFAULTS.typeOverhead.lore)
+    const queryAll = makeQueryAll({
+      lore: [
+        loreRow('lore_seat', 'Seat', { keywords: ['aetherium'], body: seatBody }),
+        loreRow('lore_ranked', 'Ranked', { body: rankedBody }),
+      ],
+      knn: [hit('lore_ranked')],
+    })
+
+    const out = expectOk(
+      await runRetrieval(
+        deps({ queryAll }),
+        params({
+          keywordRetrieval: injecting,
+          budgets: { ...BASE.budgets, lore: loreBudget },
+          scanText: 'The aetherium hums below.',
+        }),
+      ),
+    )
+
+    expect(out.bundles.lore.selected.map((c) => c.id)).toEqual(['lore_seat'])
+    expect(out.bundles.lore.traces[0].dropReason).toBe('over_budget')
+  })
+
+  it('does not seat an entity the structural floor already holds', async () => {
+    const queryAll = makeQueryAll({
+      entities: [entityRow('char_a', 'Kael', { keywords: ['the ferryman'] })],
+      knn: [],
+    })
+
+    const out = expectOk(
+      await runRetrieval(
+        deps({ queryAll }),
+        params({ keywordRetrieval: injecting, scanText: 'You pay the ferryman.' }),
+      ),
+    )
+
+    // char_a is BASE.sceneEntityIds, so the floor seated it before the pre-pass.
+    expect(out.keywordInjections).toEqual([])
+  })
+
+  it('reports an injected location through selectedLocationIds', async () => {
+    const queryAll = makeQueryAll({
+      entities: [entityRow('loc_1', 'The Hollow', { kind: 'location' })],
+      knn: [],
+    })
+
+    const out = expectOk(
+      await runRetrieval(
+        deps({ queryAll }),
+        params({
+          keywordRetrieval: injecting,
+          sceneEntityIds: [],
+          sceneCharacterIds: [],
+          scanText: 'Rain over The Hollow.',
+        }),
+      ),
+    )
+
+    expect(out.selectedLocationIds).toEqual(['loc_1'])
   })
 })

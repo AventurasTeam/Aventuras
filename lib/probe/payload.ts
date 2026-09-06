@@ -1,15 +1,18 @@
 import {
   CAPTURE_VERSION,
   type CaptureCandidate,
+  type CaptureKeywordInjection,
   type ProbeCapturePayload,
   type VecTargetKind,
 } from '@/lib/db'
 import {
   countTokens,
   ENTITY_FRAMING,
+  lines,
   TOKENIZER_IDENTITY,
   type CandidateTrace,
   type EntityRow,
+  type KeywordInjection,
   type LoreRow,
   type QuerySpec,
   type QueryStack,
@@ -73,6 +76,16 @@ const candidateOf = (
   ...(mode === 'deep' && vector ? { vector: [...vector] } : {}),
 })
 
+const injectionOf = (i: KeywordInjection): CaptureKeywordInjection => ({
+  target_kind: i.row.kind,
+  target_id: i.row.id,
+  display_name: i.row.displayName,
+  terms: [...i.terms],
+  tokens_estimated: i.tokensEstimated,
+  seated: i.seated,
+  priority: i.priority,
+})
+
 const poolOf = (
   bundle: RankedType | undefined,
   mode: 'light' | 'deep',
@@ -117,11 +130,6 @@ const queriesOf = (stack: QueryStack | null): ProbeCapturePayload['queries'] => 
   }
   return [queryOf(stack.q1), queryOf(stack.q2), queryOf(stack.q3)]
 }
-
-// run.ts's lines() isn't exported from lib/retrieval; reimplemented here so a
-// blank field doesn't leave its join separator behind.
-const lines = (...parts: (string | null)[]): string =>
-  parts.filter((p) => p !== null && p !== '').join('\n')
 
 const nameWithDescription = (name: string, description: string | null): string =>
   description ? `${name}: ${description}` : name
@@ -175,7 +183,12 @@ const floorRowsOf = (floor: StructuralFloor | null): ProbeCapturePayload['struct
 
 export function buildCapturePayload(input: CapturePayloadInput): ProbeCapturePayload {
   const { outcome, mode } = input
-  const { queries: stack, floor, bundles } = outcome.ok ? outcome : outcome.partial
+  const {
+    queries: stack,
+    floor,
+    bundles,
+    keywordInjections,
+  } = outcome.ok ? outcome : outcome.partial
 
   return {
     branch_id: input.branchId,
@@ -208,6 +221,7 @@ export function buildCapturePayload(input: CapturePayloadInput): ProbeCapturePay
       chapters: funnelOf(bundles.chapters),
     },
     structural_floor: floorRowsOf(floor),
+    keyword_injections: keywordInjections.map(injectionOf),
     prompt_buffer_tokens: input.promptBufferTokens,
     // outcome.failure.staleCount (a failure's dirty-row count) is one scalar;
     // there is no per-type split to spread it across, so this stays zero

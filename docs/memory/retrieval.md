@@ -1859,9 +1859,15 @@ copy of this table.
 
 ```python
 def rank_per_type(candidates, queries, scan_text, type_budget, λ_type, type_overhead, *, matched_chapters=None, keyword_injected=()):
-    # 1. Compute raw score per candidate
+    # 1. Compute raw score per candidate. A keyword-injected row is dropped from
+    #    the pool outright rather than skipped during the fill: it is seated
+    #    already, and never reaching the ranker is what keeps it out of the
+    #    candidate records entirely (→ Keyword injection).
+    seated_ids = {c.id for c in keyword_injected}
     scored = []
     for c in candidates:
+        if c.id in seated_ids:
+            continue
         sim = blend_similarity(c, queries)
         # Keyword hits match the scan surface — the user action plus the
         # trailing entries — NOT `queries`. See → Keyword scan surface.

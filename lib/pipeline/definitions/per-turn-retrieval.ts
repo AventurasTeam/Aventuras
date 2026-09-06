@@ -79,9 +79,8 @@ export async function* retrievalPhase(
     .map((e) => promptProse(e))
     .join('\n')
 
-  // Its own read, not a slice of the buffer above: the keyword scan surface is
-  // defined independently of the prompt window (retrieval.md → Keyword scan
-  // surface), which protectedBuffer can make narrower than scanEntries.
+  // Its own read, not a slice of the buffer above — protectedBuffer can make the prompt window
+  // narrower than scanEntries (retrieval.md → Keyword scan surface).
   const scanEntries = await readScanEntries(
     ctx.db,
     branchId,
@@ -148,6 +147,14 @@ export async function* retrievalPhase(
         // User-tunable knobs).
         recentProse: promptBuffer,
         scanText,
+        // Destructured rather than spread: `scanEntries` is already spent above, and lib/retrieval
+        // owns its settings shape (BufferSettings' precedent), not stories.settings' growth.
+        keywordRetrieval: {
+          mode: open.settings.keywordRetrieval.mode,
+          budgetShare: open.settings.keywordRetrieval.budgetShare,
+          cascade: open.settings.keywordRetrieval.cascade,
+          cascadeMaxDepth: open.settings.keywordRetrieval.cascadeMaxDepth,
+        },
       },
     )
   } finally {

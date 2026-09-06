@@ -11,6 +11,7 @@ import { EmbedderCancelledError, type EmbedderErrorKind } from '@/lib/embedder'
 
 import { loadAwarenessForScene, type AwarenessRow } from './awareness'
 import { KNN_K, RANKER_DEFAULTS } from './constants'
+import { buildKeywordInjections, type KeywordRetrievalSettings } from './injection'
 import {
   matchTerms,
   nameKeywordIndexFrom,
@@ -23,7 +24,6 @@ import {
   filterLorePool,
   filterThreadPool,
   poolIdsFromKnn,
-  type EntityRow,
   type KnnHit,
   type StructuralFloor,
 } from './pools'
@@ -34,6 +34,7 @@ import {
   type QueryStackInput,
 } from './queries'
 import { rankAll, rankPerType } from './ranker'
+import { entityRenderedText, lines, loreRenderedText } from './rendered-text'
 import {
   countStaleHappenings,
   loadChapterRanges,
@@ -48,8 +49,10 @@ import { classifyEmbedderFailure, runSyncStage, type SyncStageDeps } from './syn
 import { countTokens } from './tokens'
 import {
   isHappeningCandidate,
+  RETRIEVAL_TYPES,
   TYPE_OF_KIND,
   type Candidate,
+  type KeywordInjection,
   type QueryAll,
   type RankedType,
   type RetrievalType,
@@ -85,11 +88,15 @@ export type RetrievalParams = {
   /** Un-classified buffer prose, for Layer-A suppression. */
   recentProse: string
   /**
-   * The keyword haystack: this turn's action plus the trailing entries
-   * (retrieval.md → Keyword scan surface). Independent of `query` by design —
-   * see buildScanText.
+   * The keyword haystack (retrieval.md → Keyword scan surface). Independent of
+   * `query` by design — see buildScanText.
    */
   scanText: string
+  /**
+   * retrieval.md → Keyword injection. The whole block, not just `mode`: cap,
+   * depth and mode are read together, so splitting invites a mode with no budget.
+   */
+  keywordRetrieval: KeywordRetrievalSettings
 }
 
 /**
@@ -112,10 +119,8 @@ export type RetrievalTimings = {
    */
   knnMs: number
   /**
-   * Scoring and the sort over the whole pool, then MMR and the token estimate
-   * over the rows that survive the pre-filter — one span, because tokenization
-   * runs inside the same kept-row map that feeds MMR and splitting it would
-   * break the disjoint-sub-span contract above.
+   * Keyword pre-pass, scoring, sort, MMR and token estimate — one span:
+   * tokenization runs inside MMR's kept-row map (disjoint sub-spans above).
    */
   rankMs: number
 }
@@ -148,6 +153,11 @@ export type RetrievalPartial = {
   queries: QueryStack | null
   floor: StructuralFloor | null
   bundles: Partial<Record<RetrievalType, RankedType>>
+  /**
+   * Every keyword match, seated or cut (probe.md → Keyword injections). Empty
+   * under `mode='boost'`, and on a pass that failed before ranking started.
+   */
+  keywordInjections: readonly KeywordInjection[]
 }
 
 export type RetrievalOutcome =
@@ -156,6 +166,11 @@ export type RetrievalOutcome =
       floor: StructuralFloor
       bundles: Record<RetrievalType, RankedType>
       queries: QueryStack
+      /**
+       * Every keyword match, seated or cut (probe.md → Keyword injections).
+       * Empty under `keywordRetrieval.mode='boost'`.
+       */
+      keywordInjections: readonly KeywordInjection[]
       /**
        * A tripwire, not a report. The sync stage is blocking and clears the flag
        * on every row it embeds, so each count here is structurally 0 — a
@@ -216,7 +231,12 @@ export async function runRetrieval(
 ): Promise<RetrievalOutcome> {
   // Threaded rather than returned: the catch below reports progress from a throw at
   // any depth of the pass, which no return value can reach.
-  const partial: RetrievalPartial = { queries: null, floor: null, bundles: {} }
+  const partial: RetrievalPartial = {
+    queries: null,
+    floor: null,
+    bundles: {},
+    keywordInjections: [],
+  }
   try {
     return await runRetrievalPass(deps, params, partial)
   } catch (error) {
@@ -352,7 +372,24 @@ async function runRetrievalPass(
   }
 
   let rankStartedAt = performance.now()
-  const chapters = rankPerType(pools.chapters, 'chapters', params.budgets.chapters, rankTypeInput)
+  // Ahead of every rankPerType call, inside the rank span (see RetrievalTimings).
+  // Needs no vectors — which is why a keyword hit can seat a row the KNN missed.
+  const injections = buildKeywordInjections({
+    settings: params.keywordRetrieval,
+    entities: sourceRows.entities,
+    lore: sourceRows.lore,
+    floorIds: floor.seatedIds,
+    recentProse: params.recentProse,
+    scanText: params.scanText,
+    budgets: params.budgets,
+    params: RANKER_DEFAULTS,
+    countTokens,
+  })
+  partial.keywordInjections = RETRIEVAL_TYPES.flatMap((type) => injections[type])
+  const chapters = rankPerType(pools.chapters, 'chapters', params.budgets.chapters, {
+    ...rankTypeInput,
+    keywordInjected: injections.chapters,
+  })
   let rankMs = performance.now() - rankStartedAt
   partial.bundles.chapters = chapters
 
@@ -381,6 +418,7 @@ async function runRetrievalPass(
     {
       pools,
       budgets: params.budgets,
+      keywordInjected: injections,
       ...rankTypeInput,
     },
     chapters,
@@ -400,6 +438,7 @@ async function runRetrievalPass(
     floor,
     bundles,
     queries,
+    keywordInjections: partial.keywordInjections,
     staleCounts: staleCountsOf(sourceRows, happeningsStale),
     injectedAwareness: bundles.happenings.selected
       .filter(isHappeningCandidate)
@@ -629,24 +668,6 @@ function decodeVector(blob: unknown): Float32Array {
 
 const fresh = <T extends Stale>(rows: readonly T[]): T[] => rows.filter((r) => !r.embeddingStale)
 
-/**
- * Canon frames two of the three sub-pools (retrieval.md → Three-sub-pool entity
- * model), so the model reads an active pool row as elsewhere rather than present
- * and a staged one as introducible rather than as cast. Retired has no framing,
- * hence Partial. The memory-blocks macro repeats these words for pinned rows,
- * which never reach the ranker; memory-blocks.test.ts pins the two together.
- */
-export const ENTITY_FRAMING: Partial<Record<EntityRow['status'], string>> = {
-  active: 'currently elsewhere',
-  staged: 'available to introduce',
-}
-
-// A blank field must not leave its separator behind: a null description renders
-// "Mira: " to the model, which reads as a truncated line rather than an absent
-// one, and the ranker charges the budget for it either way.
-const lines = (...parts: (string | null)[]): string =>
-  parts.filter((p) => p !== null && p !== '').join('\n')
-
 /** The one place KNN ids, vectors, source rows and pool predicates meet. */
 function assembleCandidates(
   ctx: PoolCtx,
@@ -665,10 +686,8 @@ function assembleCandidates(
     sim(vector, queryVectors[2]),
   ]
 
-  // kw = keyword_boost(c, scan_text) (retrieval.md → Pseudocode) runs the
-  // candidate's own keyword surface against the scan text, NOT `queries`. The
-  // other direction — a candidate against the name index — is degenerate, since
-  // every row's own terms are in that index by construction.
+  // kw = keyword_boost(c, scan_text) (retrieval.md → Pseudocode): candidate surface
+  // vs scan text, NOT `queries` — the reverse matches every row's own indexed terms.
   const kwHits = (surface: readonly string[]): string[] =>
     matchTerms(ctx.scanText, surface.map(normalizeTerm))
 
@@ -703,14 +722,12 @@ function assembleCandidates(
       })
       return inPool(pool).map((r) => {
         const vector = vectorFor(r.id)
-        const framing = ENTITY_FRAMING[r.status]
-        const head = framing === undefined ? r.name : `${r.name} (${framing})`
         return {
           ...shared(),
           kind: 'entity' as const,
           id: r.id,
           displayName: r.name,
-          renderedText: r.description ? `${head}: ${r.description}` : head,
+          renderedText: entityRenderedText(r),
           sims: simsFor(vector),
           vector,
           pinSignal: 0,
@@ -728,7 +745,7 @@ function assembleCandidates(
           kind: 'lore' as const,
           id: r.id,
           displayName: r.title,
-          renderedText: lines(r.title, r.body),
+          renderedText: loreRenderedText(r),
           sims: simsFor(vector),
           vector,
           pinSignal: r.priority / 100,

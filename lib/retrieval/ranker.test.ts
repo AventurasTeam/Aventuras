@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 import { RANKER_DEFAULTS } from './constants'
 import { rankAll, rankPerType } from './ranker'
-import type { Candidate, RetrievalType } from './types'
+import type { Candidate, InjectedRow, KeywordInjection, RetrievalType } from './types'
 
 const v = (...xs: number[]): Float32Array => {
   const n = Math.hypot(...xs)
@@ -33,6 +33,26 @@ function candidate(over: Partial<Candidate> & Pick<Candidate, 'id'>): Candidate 
   } as Candidate
 }
 
+const seatRow = (id: string): InjectedRow => ({
+  kind: 'lore',
+  id,
+  displayName: id,
+  renderedText: `text ${id}`,
+})
+
+const injection = (
+  over: Partial<KeywordInjection> & Pick<KeywordInjection, 'row'>,
+): KeywordInjection => ({
+  terms: ['t'],
+  priority: 0,
+  tokensEstimated: 10,
+  seated: true,
+  ...over,
+})
+
+const loreSeat = (id: string, over: Partial<KeywordInjection> = {}): KeywordInjection =>
+  injection({ row: seatRow(id), ...over })
+
 const emptyPools = (): Record<RetrievalType, Candidate[]> => ({
   entities: [],
   lore: [],
@@ -46,6 +66,7 @@ const emptyPools = (): Record<RetrievalType, Candidate[]> => ({
 // budget-fill semantics instead of re-encoding whatever the memory-blocks macro
 // happens to cost this month.
 const HAPPENING_COST = 10 + RANKER_DEFAULTS.typeOverhead.happenings
+const LORE_COST = 10 + RANKER_DEFAULTS.typeOverhead.lore
 
 const base = {
   params: RANKER_DEFAULTS,
@@ -663,5 +684,69 @@ describe('replay-facing trace fields', () => {
     expect(kept[0].renderedText).toBe('The bridge fell during the third night of the siege.')
     expect(dropped[0].renderedText).toBeNull()
     expect(out.pool.map((c) => c.id)).toEqual(['hap_b', 'hap_a'])
+  })
+})
+
+describe('rankPerType — keyword injection', () => {
+  it('seats injected rows ahead of every ranked one', () => {
+    const r = rankPerType([candidate({ id: 'ranked', sims: [0.9, 0.9, 0.9] })], 'lore', 1000, {
+      ...base,
+      keywordInjected: [loreSeat('seated')],
+    })
+
+    expect(r.selected.map((c) => c.id)).toEqual(['seated', 'ranked'])
+  })
+
+  it('charges the seated cost against the type budget', () => {
+    // Seat spend leaves the ranked row one token short, so it drops for budget, not
+    // score. Derived from LORE_COST: a hardcoded number would pass even at overhead 0.
+    const spent = 100 - LORE_COST + 1
+    const r = rankPerType(
+      [candidate({ id: 'ranked', kind: 'lore', sims: [0.9, 0.9, 0.9] })],
+      'lore',
+      100,
+      { ...base, keywordInjected: [injection({ row: seatRow('seat'), tokensEstimated: spent })] },
+    )
+
+    expect(r.selected.map((c) => c.id)).toEqual(['seat'])
+    expect(r.traces[0].dropReason).toBe('over_budget')
+    expect(r.funnel.tokensUsed).toBe(spent)
+  })
+
+  it('drops a seated row from the pool so it is never seated or charged twice', () => {
+    const r = rankPerType([candidate({ id: 'dup', sims: [0.9, 0.9, 0.9] })], 'lore', 1000, {
+      ...base,
+      keywordInjected: [loreSeat('dup')],
+    })
+
+    expect(r.selected.map((c) => c.id)).toEqual(['dup'])
+    expect(r.traces).toHaveLength(0)
+    expect(r.funnel.poolSize).toBe(0)
+  })
+
+  it('leaves an overflow-cut row in the pool to compete on score', () => {
+    const r = rankPerType([candidate({ id: 'cut', sims: [0.9, 0.9, 0.9] })], 'lore', 1000, {
+      ...base,
+      keywordInjected: [loreSeat('cut', { seated: false })],
+    })
+
+    expect(r.selected.map((c) => c.id)).toEqual(['cut'])
+    expect(r.funnel.poolSize).toBe(1)
+    expect(r.traces[0].dropReason).toBe('not_dropped')
+  })
+})
+
+describe('rankAll — keyword injection routing', () => {
+  it('hands each type only its own seats', () => {
+    const out = rankAll({
+      pools: emptyPools(),
+      budgets: { entities: 1000, lore: 1000, happenings: 1000, threads: 1000, chapters: 1000 },
+      ...base,
+      keywordInjected: { lore: [loreSeat('l1')], entities: [] },
+    })
+
+    expect(out.lore.selected.map((c) => c.id)).toEqual(['l1'])
+    for (const type of ['entities', 'happenings', 'threads', 'chapters'] as const)
+      expect(out[type].selected).toEqual([])
   })
 })

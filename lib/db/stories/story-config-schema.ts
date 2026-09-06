@@ -73,18 +73,14 @@ const retrievalBudgetsSchema = z.object({
   chapters: tokenBudget,
 })
 
-// A second axis beside injection_mode, which answers whether a row injects at
-// all; this answers what a keyword HIT does (docs/memory/retrieval.md → Keyword
-// injection). Only scanEntries is live while mode is 'boost' — it sizes the
-// keyword haystack in both modes.
+// What a keyword HIT does, beside injection_mode's whether-it-injects-at-all (retrieval.md →
+// Keyword injection). Only scanEntries is live under 'boost'; it sizes the haystack in both modes.
 const keywordRetrievalSchema = z.object({
   mode: z.enum(['boost', 'inject']),
-  // A share of each per-type budget, bounded here for the reason tokenBudget is:
-  // out of range it silently starves or floods one partition, and the trace
-  // blames the candidates.
+  // A share of each per-type budget, bounded here for tokenBudget's reason: out of range it
+  // silently starves or floods a partition while the trace blames the candidates.
   budgetShare: z.number().min(0).max(1),
-  // Counts the trailing entries BESIDE the user action, which is always scanned —
-  // so one is the floor, not zero.
+  // Counts trailing entries BESIDE the always-scanned user action, so the floor is one, not zero.
   scanEntries: z.number().int().min(1),
   cascade: z.boolean(),
   cascadeMaxDepth: z.number().int().min(1),

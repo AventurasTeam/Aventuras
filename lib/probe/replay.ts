@@ -1,5 +1,11 @@
 import type { ProbeCapturePayload } from '@/lib/db'
-import { rankPerType, type Candidate, type RankedType, type RetrievalType } from '@/lib/retrieval'
+import {
+  rankPerType,
+  type Candidate,
+  type KeywordInjection,
+  type RankedType,
+  type RetrievalType,
+} from '@/lib/retrieval'
 
 import { assertRankerParams, RankerParamsError } from './validate'
 
@@ -101,7 +107,27 @@ export function replayType(
     }
   })
 
+  // Seats aren't simulated (probe.md), but their spent budget is not optional: without
+  // it, ranked rows silently fill budget the real pass already spent. `renderedText` is
+  // empty; nothing re-costs or renders a seat. Only entities and lore carry injections.
+  const injectedKind = type === 'entities' ? 'entity' : type === 'lore' ? 'lore' : null
+  const keywordInjected: KeywordInjection[] = payload.keyword_injections
+    .filter((i) => i.target_kind === injectedKind)
+    .map((i) => ({
+      row: {
+        kind: i.target_kind as 'entity' | 'lore',
+        id: i.target_id,
+        displayName: i.display_name,
+        renderedText: '',
+      },
+      terms: i.terms,
+      priority: i.priority,
+      tokensEstimated: i.tokens_estimated,
+      seated: i.seated,
+    }))
+
   return rankPerType(pool, type, budget, {
+    keywordInjected,
     params: payload.params.ranker,
     chapterRanges,
     matchedChapterIds: new Set([REPLAY_CHAPTER]),

@@ -69,14 +69,12 @@ describe('buildScanText', () => {
     expect(buildScanText({ userAction: 'I wait', trailing: [] })).toBe('I wait')
   })
 
-  // An empty haystack matches nothing, which is the honest answer for a turn
-  // with no prose — not a surface that reads present and scores zero.
+  // An empty haystack matches nothing — the honest answer for a turn with no prose.
   it('is empty when there is no action and no trailing prose', () => {
     expect(buildScanText({ userAction: '   ', trailing: [row('')] })).toBe('')
   })
 
-  // promptProse, not raw content: a keyword has to match what the model read,
-  // and a tagged trailing block is not part of that.
+  // promptProse, not raw content: a keyword must match what the model actually read.
   it('strips the piggyback block from a narrative entry', () => {
     const text = buildScanText({
       userAction: '',
@@ -113,8 +111,7 @@ describe('readScanEntries', () => {
     expect(await readScanEntries(db, 'br_1', 3)).toEqual([])
   })
 
-  // A failure notice carries no narrative prose, and scanning it would let a
-  // system message decide what lore gets seated.
+  // Scanning a system notice would let a failure message decide what lore gets seated.
   it('excludes system entries', async () => {
     const db = await seed([entry(1), entry(2, 'system'), entry(3, 'user_action')])
     expect(ids(await readScanEntries(db, 'br_1', 2))).toEqual(['e1'])
@@ -135,9 +132,8 @@ describe('readScanEntries', () => {
     expect(ids(await readScanEntries(db, 'br_1', 5))).toEqual(['e1'])
   })
 
-  // storySettingsSchema declares .int().min(1), so these harden against a blob
-  // that never went through it rather than pinning reachable values — the same
-  // hardening readPromptBuffer's toCount carries.
+  // storySettingsSchema declares .int().min(1): these harden against a blob that
+  // skipped it, not reachable values — as readPromptBuffer's toCount does.
   it.each([0, -3, 1.7, Number.NaN, undefined])(
     'floors an unvalidated scanEntries of %s at one trailing entry',
     async (take) => {

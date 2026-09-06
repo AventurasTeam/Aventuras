@@ -379,9 +379,11 @@ export function passInputs(
     sceneEntityIds: sceneCharacterIds,
     currentLocationId: 'char_000000',
     recentProse: prose(rand, 200),
-    // The default one-entry surface, so the matchTerms cost measured here is the
-    // one a turn actually pays.
+    // The default one-entry surface: the matchTerms cost measured is what a turn actually pays.
     scanText: `${userAction}\n${lastNarrativeContent}`,
+    // Shipped default: the pre-pass short-circuits, so the ranker cost measured
+    // here is the one every story pays until a user turns injection on.
+    keywordRetrieval: STORY_SETTINGS_DEFAULTS.keywordRetrieval,
   }
   return { deps, params }
 }

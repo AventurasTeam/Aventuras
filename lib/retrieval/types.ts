@@ -70,7 +70,39 @@ export type SimpleCandidate = CandidateBase & { kind: Exclude<CandidateKind, 'ha
 /** One row that reached a type's ranker pool. */
 export type Candidate = HappeningCandidate | SimpleCandidate
 
-export const isHappeningCandidate = (c: Candidate): c is HappeningCandidate =>
+/**
+ * A row a keyword hit seated directly (retrieval.md → Keyword injection). No vector,
+ * sims or score — a peer of Candidate in `selected`, not a Candidate with holes.
+ * `kind` excludes the boost-only types, keeping a `kind === 'happening'` narrow provable.
+ */
+export type InjectedRow = {
+  kind: 'entity' | 'lore'
+  id: string
+  displayName: string
+  renderedText: string
+}
+
+/** Anything a type's budget paid for this turn, however it earned the seat. */
+export type SeatedRow = Candidate | InjectedRow
+
+/**
+ * One keyword match, seated or cut. camelCase here; lib/probe maps it to the
+ * snake_case CaptureKeywordInjection. Cut rows travel too, so the probe can show the
+ * overflow order and the ranker filters on `seated` itself.
+ */
+export type KeywordInjection = {
+  row: InjectedRow
+  /** The normalized terms that fired, for the probe. */
+  terms: readonly string[]
+  /** Overflow ordering key: entities.priority / lore.priority. */
+  priority: number
+  /** Same formula the ranker costs a candidate with (retrieval.md → Token estimation). */
+  tokensEstimated: number
+  /** False when the row matched but the budget cap cut it. */
+  seated: boolean
+}
+
+export const isHappeningCandidate = (c: SeatedRow): c is HappeningCandidate =>
   c.kind === 'happening'
 
 export type { DropReason }
@@ -126,7 +158,12 @@ export type PoolFunnel = {
 }
 
 export type RankedType = {
-  selected: readonly Candidate[]
+  /**
+   * Injected rows first, then the ranked fill (retrieval.md → Budget-fill
+   * termination). Widened past Candidate rather than split in two: a consumer that
+   * forgot to merge would drop a row that already spent the budget.
+   */
+  selected: readonly SeatedRow[]
   traces: readonly CandidateTrace[]
   funnel: PoolFunnel
   /**
@@ -170,4 +207,10 @@ export type RankAllInput = {
   chapterRanges: ReadonlyMap<string, ReadonlySet<string>>
   /** Injected so the ranker stays pure — tokens.ts is the production impl. */
   countTokens: (text: string) => number
+  /**
+   * Per-type seat lists (retrieval.md → `rank_all`'s `injected_by_type`). Shares
+   * RankTypeInput's field name on purpose: the two are mutually unassignable, so
+   * rankAll cannot pass `input` straight through to rankPerType.
+   */
+  keywordInjected?: Partial<Record<RetrievalType, readonly KeywordInjection[]>>
 }
