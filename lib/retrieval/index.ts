@@ -23,6 +23,8 @@ export type {
   RetrievalSuccess,
   RetrievalTimings,
 } from './run'
+export { buildScanText, readScanEntries } from './scan-surface'
+export type { ScanSurfaceInput } from './scan-surface'
 export { runSyncStage } from './sync'
 export type { SyncStageDeps, SyncStageResult } from './sync'
 export { countEntryTokens, countTokens, TOKENIZER_IDENTITY } from './tokens'
