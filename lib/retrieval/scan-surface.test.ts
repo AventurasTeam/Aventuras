@@ -135,6 +135,17 @@ describe('readScanEntries', () => {
     expect(ids(await readScanEntries(db, 'br_1', 5))).toEqual(['e1'])
   })
 
+  // storySettingsSchema declares .int().min(1), so these harden against a blob
+  // that never went through it rather than pinning reachable values — the same
+  // hardening readPromptBuffer's toCount carries.
+  it.each([0, -3, 1.7, Number.NaN, undefined])(
+    'floors an unvalidated scanEntries of %s at one trailing entry',
+    async (take) => {
+      const db = await seed([entry(1), entry(2), entry(3, 'user_action')])
+      expect(ids(await readScanEntries(db, 'br_1', take as number))).toEqual(['e2'])
+    },
+  )
+
   it('warns when two entries share a position', async () => {
     const db = await seed([entry(1), { ...entry(2), position: 1 }, entry(3, 'user_action')])
     await readScanEntries(db, 'br_1', 2)

@@ -5,6 +5,13 @@ import { promptProse } from '@/lib/piggyback'
 
 import { warnOnDuplicatePositions } from './buffer'
 
+// Hardening against settings that never went through storySettingsSchema, the
+// same threat readPromptBuffer's toCount covers: a fractional or NaN limit
+// reaches SQLite raw. One trailing entry is the floor the surface is defined on.
+function toTake(value: number): number {
+  return Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 1
+}
+
 export type ScanSurfaceInput = {
   /** This turn's action, already committed ahead of the run. */
   userAction: string
@@ -26,7 +33,7 @@ export function buildScanText(input: ScanSurfaceInput): string {
 }
 
 /**
- * The last `take` entries standing before this turn's action, oldest-last.
+ * The last `take` entries standing before this turn's action, oldest first.
  *
  * Its own read rather than a slice of `readPromptBuffer`: the scan surface is
  * defined independently of the prompt window, whose depth `protectedBuffer` and
@@ -44,10 +51,10 @@ export async function readScanEntries(
     .from(storyEntries)
     .where(and(eq(storyEntries.branchId, branchId), ne(storyEntries.kind, 'system')))
     .orderBy(desc(storyEntries.position), desc(storyEntries.createdAt))
-    .limit(take + 1)
+    .limit(toTake(take) + 1)
   warnOnDuplicatePositions(rows, branchId)
   // The action reaches the surface through `userAction`; leaving it here too
   // would weight this turn's own words twice against every keyword.
   const trailing = rows[0]?.kind === 'user_action' ? rows.slice(1) : rows
-  return trailing.slice(0, take).reverse()
+  return trailing.slice(0, toTake(take)).reverse()
 }
