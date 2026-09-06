@@ -23,7 +23,6 @@ import {
   filterLorePool,
   filterThreadPool,
   poolIdsFromKnn,
-  type EntityRow,
   type KnnHit,
   type StructuralFloor,
 } from './pools'
@@ -34,6 +33,7 @@ import {
   type QueryStackInput,
 } from './queries'
 import { rankAll, rankPerType } from './ranker'
+import { entityRenderedText, lines, loreRenderedText } from './rendered-text'
 import {
   countStaleHappenings,
   loadChapterRanges,
@@ -629,24 +629,6 @@ function decodeVector(blob: unknown): Float32Array {
 
 const fresh = <T extends Stale>(rows: readonly T[]): T[] => rows.filter((r) => !r.embeddingStale)
 
-/**
- * Canon frames two of the three sub-pools (retrieval.md → Three-sub-pool entity
- * model), so the model reads an active pool row as elsewhere rather than present
- * and a staged one as introducible rather than as cast. Retired has no framing,
- * hence Partial. The memory-blocks macro repeats these words for pinned rows,
- * which never reach the ranker; memory-blocks.test.ts pins the two together.
- */
-export const ENTITY_FRAMING: Partial<Record<EntityRow['status'], string>> = {
-  active: 'currently elsewhere',
-  staged: 'available to introduce',
-}
-
-// A blank field must not leave its separator behind: a null description renders
-// "Mira: " to the model, which reads as a truncated line rather than an absent
-// one, and the ranker charges the budget for it either way.
-const lines = (...parts: (string | null)[]): string =>
-  parts.filter((p) => p !== null && p !== '').join('\n')
-
 /** The one place KNN ids, vectors, source rows and pool predicates meet. */
 function assembleCandidates(
   ctx: PoolCtx,
@@ -703,14 +685,12 @@ function assembleCandidates(
       })
       return inPool(pool).map((r) => {
         const vector = vectorFor(r.id)
-        const framing = ENTITY_FRAMING[r.status]
-        const head = framing === undefined ? r.name : `${r.name} (${framing})`
         return {
           ...shared(),
           kind: 'entity' as const,
           id: r.id,
           displayName: r.name,
-          renderedText: r.description ? `${head}: ${r.description}` : head,
+          renderedText: entityRenderedText(r),
           sims: simsFor(vector),
           vector,
           pinSignal: 0,
@@ -728,7 +708,7 @@ function assembleCandidates(
           kind: 'lore' as const,
           id: r.id,
           displayName: r.title,
-          renderedText: lines(r.title, r.body),
+          renderedText: loreRenderedText(r),
           sims: simsFor(vector),
           vector,
           pinSignal: r.priority / 100,

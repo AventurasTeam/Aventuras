@@ -12,7 +12,8 @@ export { buildQueryStack, distributeQueryVectors } from './queries'
 export type { QuerySpec, QueryStack, QueryStackInput } from './queries'
 export { rankAll, rankPerType } from './ranker'
 export type { RankTypeInput } from './ranker'
-export { ENTITY_FRAMING, runRetrieval } from './run'
+export { ENTITY_FRAMING, entityRenderedText, lines, loreRenderedText } from './rendered-text'
+export { runRetrieval } from './run'
 export type {
   InjectedAwareness,
   RetrievalDeps,

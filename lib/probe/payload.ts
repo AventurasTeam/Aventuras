@@ -7,6 +7,7 @@ import {
 import {
   countTokens,
   ENTITY_FRAMING,
+  lines,
   TOKENIZER_IDENTITY,
   type CandidateTrace,
   type EntityRow,
@@ -117,11 +118,6 @@ const queriesOf = (stack: QueryStack | null): ProbeCapturePayload['queries'] => 
   }
   return [queryOf(stack.q1), queryOf(stack.q2), queryOf(stack.q3)]
 }
-
-// run.ts's lines() isn't exported from lib/retrieval; reimplemented here so a
-// blank field doesn't leave its join separator behind.
-const lines = (...parts: (string | null)[]): string =>
-  parts.filter((p) => p !== null && p !== '').join('\n')
 
 const nameWithDescription = (name: string, description: string | null): string =>
   description ? `${name}: ${description}` : name
