@@ -32,6 +32,11 @@ export const entities = sqliteTable(
       .$type<string[]>()
       .notNull()
       .default(sql`'[]'`),
+    keywords: text('keywords', { mode: 'json' })
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'`),
+    priority: integer('priority').notNull().default(0),
     embeddingStale: integer('embedding_stale').notNull().default(1).$type<0 | 1>(),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),

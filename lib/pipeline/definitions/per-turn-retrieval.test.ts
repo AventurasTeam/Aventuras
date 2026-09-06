@@ -156,6 +156,8 @@ function entity(id: string, kind: Entity['kind'], name: string): Entity {
     description: null,
     status: 'active',
     retiredReason: null,
+    keywords: [],
+    priority: 0,
     injectionMode: 'auto',
     nameCollisionFlag: 0,
     state: null,
