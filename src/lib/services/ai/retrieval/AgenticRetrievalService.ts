@@ -267,15 +267,22 @@ export class AgenticRetrievalService extends BaseAIService {
     // Wrapped so the real step count reaches describeProgress. Runs after each step, so
     // inside a tool call it reports steps finished, not the one in flight.
     //
-    // Writing from inside a stop predicate is only safe because the SDK evaluates the
-    // conditions exactly once per loop iteration (`isStopConditionMet`, called at the foot
-    // of the generate loop). It is not contractual, so the count is kept monotonic: were a
-    // future version to re-evaluate with a stale array, progress could read as going
-    // backwards, which is worse than being one step behind.
+    // `N steps (limit M)`, not `N/M`: the budget is a ceiling the run may never approach, and
+    // a fraction reads as progress towards planned work.
+    const stepBudget = (count: number) =>
+      `${count} step${count === 1 ? '' : 's'} (limit ${this.maxIterations})`
+
+    // Monotonic, and fed from both hooks: `stopWhen` is documented as the condition
+    // "for stopping the generation when there are tool results in the last step", so it does
+    // not see an iteration that called no tool. `prepareStep` opens every one.
+    const noteSteps = (count: number) => {
+      stepsTaken = Math.max(stepsTaken, count)
+      activity.updateStep(agentStepId, stepBudget(stepsTaken))
+    }
+
     const terminalStop = stopOnTerminalTool<typeof tools>('finish_retrieval', this.maxIterations)
     const stopWhen: typeof terminalStop = (input) => {
-      stepsTaken = Math.max(stepsTaken, input.steps.length)
-      activity.updateStep(agentStepId, `${stepsTaken}/${this.maxIterations} steps`)
+      noteSteps(input.steps.length)
       return terminalStop(input)
     }
 
@@ -323,10 +330,16 @@ export class AgenticRetrievalService extends BaseAIService {
 
     const lastStepOnly = finishOnlyOnLastStep('finish_retrieval', this.maxIterations)
 
-    // Wrapped to open an activity step per iteration. The run's time is in these model
-    // calls; its tool calls are in-memory and effectively instant, so reporting only those
-    // leaves the time unattributed.
+    agentStepId = activity.startStep('Agent', {
+      parentId: context.activityParentId,
+      detail: stepBudget(0),
+    })
+
+    // Wrapped to open an activity step per iteration, and to count them. The run's time is in
+    // these model calls; its tool calls are in-memory and effectively instant, so reporting
+    // only those leaves the time unattributed.
     const prepareStep = ((input: { stepNumber: number }) => {
+      noteSteps(input.stepNumber + 1)
       activity.endStep(iterationStepId)
       iterationStepId = activity.startStep(`Model call ${input.stepNumber + 1}`, {
         parentId: agentStepId,
@@ -334,11 +347,6 @@ export class AgenticRetrievalService extends BaseAIService {
       })
       return lastStepOnly(input)
     }) as PrepareStepFunction<typeof tools>
-
-    agentStepId = activity.startStep('Agent', {
-      parentId: context.activityParentId,
-      detail: `0/${this.maxIterations} steps`,
-    })
 
     // Create the agent
     const agent = createAgentFromPreset(
@@ -361,7 +369,7 @@ export class AgenticRetrievalService extends BaseAIService {
     let failure: string | null = null
     try {
       const result = await agent.generate({ prompt: userPrompt })
-      stepsTaken = result.steps.length
+      stepsTaken = Math.max(stepsTaken, result.steps.length)
       terminalResult = extractTerminalToolResult<FinishRetrievalResult>(
         result.steps as any,
         'finish_retrieval',
@@ -370,7 +378,7 @@ export class AgenticRetrievalService extends BaseAIService {
       if (signal?.aborted) {
         // Rethrown past the closes below, so they happen here instead.
         activity.endStep(iterationStepId, 'skipped')
-        activity.endStep(agentStepId, 'skipped', `${stepsTaken}/${this.maxIterations} steps`)
+        activity.endStep(agentStepId, 'skipped', stepBudget(stepsTaken))
         throw error
       }
       failure = error instanceof Error ? error.message : String(error)
@@ -378,11 +386,7 @@ export class AgenticRetrievalService extends BaseAIService {
     }
 
     activity.endStep(iterationStepId, failure ? 'failed' : 'done')
-    activity.endStep(
-      agentStepId,
-      failure ? 'failed' : 'done',
-      `${stepsTaken}/${this.maxIterations} steps`,
-    )
+    activity.endStep(agentStepId, failure ? 'failed' : 'done', stepBudget(stepsTaken))
 
     const metrics = retrievalMetrics(events)
     const transcript = formatRetrievalHistory(events)
