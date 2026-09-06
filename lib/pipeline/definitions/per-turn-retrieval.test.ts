@@ -1090,6 +1090,36 @@ describe('retrieval phase — RetrievalParams assembly', () => {
     expect(lastParams().query.userAction).toBe('')
   })
 
+  // Cold start (retrieval.md → Cold start): turn 1 has no ai_reply, and the
+  // opening entry the wizard always commits is what Q3 reads its summary from.
+  // Selecting ai_reply alone passes null and silently drops Q3 on the first
+  // turn of every story.
+  it('takes the piggyback summary from the opening entry on turn 1', async () => {
+    seedOpenStory({
+      entries: [
+        entry(
+          1,
+          'opening',
+          'The keep stands against the ash.',
+          meta({ summary: 'The keep endures.' }),
+        ),
+        entry(2, 'user_action', 'I draw the blade.', meta()),
+      ],
+    })
+
+    await runRetrievalPhase()
+
+    expect(lastParams().query.piggybackSummary).toBe('The keep endures.')
+  })
+
+  it('leaves the piggyback summary null when the branch carries no narrative entry', async () => {
+    seedOpenStory({ entries: [entry(1, 'user_action', 'I draw the blade.', meta())] })
+
+    await runRetrievalPhase()
+
+    expect(lastParams().query.piggybackSummary).toBeNull()
+  })
+
   it("carries the last narrative entry's piggyback summary through to Q3", async () => {
     seedOpenStory({
       entries: [
