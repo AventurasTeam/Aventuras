@@ -39,7 +39,8 @@ Used by:
   (Select primitive on the list-pane category dropdown and as the
   detail-pane tab navigation when the desktop tab strip overflows
   on narrow tiers; Input + Textarea for entity edits; TagInput
-  pattern on entity + lore tags fields)
+  pattern on entity and lore tags fields, and on the entity and lore
+  keywords fields)
 - [Diagnostics Hub · Delta log tab](../screens/diagnostics/diagnostics.md#filters-delta-log)
   (Select primitive: 2-segment "Branch scope" pick `[This branch |
 All branches]` as a semantic two-option pick; dropdown-mode

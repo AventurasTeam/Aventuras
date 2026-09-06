@@ -41,6 +41,17 @@ lets the collision resolve on the same turn. Suppression stays the
 default for ordinary staged entities, where no user has asked for the
 row specifically; `always` is the opt-out.
 
+**Keyword injection does not widen that exemption.** With
+`keywordRetrieval.mode='inject'`
+([`retrieval.md → Keyword injection`](./retrieval.md#keyword-injection))
+a staged entity's name or alias appearing in recent prose is precisely
+this suppression's trigger _and_ would be that mode's fire condition —
+the same signal driving opposite actions. Suppression wins. Exempting
+keyword hits would resurrect every suppressed staged entity for any
+story running that mode, which is Layer A switched off; and the
+exemption's justification is per-row user intent, which a story-wide
+mode is not.
+
 **Layer A's window is an approximation.** The scan reads the prompt
 buffer rather than the genuinely un-classified set, so it
 over-suppresses while `classifierCadence` is under

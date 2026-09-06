@@ -885,6 +885,45 @@
           <div><input class="input-text" value="600" style="width: 90px;"> <span style="font-size: 10px; color: var(--ink-faint);">tokens</span></div>
         </div>
 
+        <!-- KEYWORD RETRIEVAL — stories.settings.keywordRetrieval. Mode select always
+             visible; the three tuning fields disclose only under Inject. -->
+        <div class="tab-section">
+          <div class="tab-section-title">Keyword retrieval <span style="font-size: 10px; color: var(--ink-faint); font-weight: 400;">&middot; what a keyword match does &middot; lore + entities only</span></div>
+        </div>
+        <div class="field-row">
+          <div class="field-label">mode</div>
+          <div>
+            <div class="input-select" id="kw-mode" title="What a keyword match does" style="cursor: pointer;">
+              <span id="kw-mode-value">boost <span style="color: var(--ink-faint); font-size: 11px;">(default)</span></span>
+              <span style="color: var(--ink-faint);">&#9662;</span>
+            </div>
+            <div style="font-size: 10px; color: var(--ink-muted); margin-top: 4px; line-height: 1.5;">
+              <b>boost</b>: a match raises the row's score, ranker still decides &middot; <b>inject</b>: a match seats the row directly, within a budget. <a href="#" id="kw-mode-toggle" style="color: var(--ink-faint);">toggle preview</a>
+            </div>
+          </div>
+        </div>
+        <div id="kw-inject-fields" style="display: none;">
+          <div class="field-row">
+            <div class="field-label">budget share</div>
+            <div><input class="input-text" value="0.5" style="width: 90px;"> <span style="font-size: 10px; color: var(--ink-faint);">of each per-type budget, max</span></div>
+          </div>
+          <div class="field-row">
+            <div class="field-label">scan depth</div>
+            <div><input class="input-text" value="1" style="width: 90px;"> <span style="font-size: 10px; color: var(--ink-faint);">trailing entries, plus the user action</span></div>
+          </div>
+          <div class="switch-row">
+            <div class="switch-row-label">cascade <span style="font-size: 10px; color: var(--ink-faint);">&middot; rescan injected rows for further matches</span></div>
+            <div class="switch off"><span class="knob"></span></div>
+          </div>
+          <div class="field-row">
+            <div class="field-label">max depth</div>
+            <div><input class="input-text" value="2" style="width: 90px;" disabled> <span style="font-size: 10px; color: var(--ink-faint);">enabled with cascade</span></div>
+          </div>
+          <div style="font-size: 10px; color: var(--ink-muted); margin: 4px 0 0 0; line-height: 1.5; padding: 6px 10px; background: var(--bg); border-left: 2px solid var(--line-soft);">
+            A row set to <code>disabled</code> stays excluded &mdash; inject never overrides it. Per-row keywords are authored on the World panel, not here.
+          </div>
+        </div>
+
         <div class="tab-section">
           <div class="tab-section-title">Embedding status <span style="font-size: 10px; color: var(--ink-faint); font-weight: 400;">&middot; only renders when there's staleness &middot; <a href="#" id="staleness-toggle" style="color: var(--ink-faint);">show preview</a></span></div>
         </div>
@@ -1351,6 +1390,20 @@
       });
     });
   });
+
+  const kwModeToggle = document.getElementById('kw-mode-toggle');
+  const kwInjectFields = document.getElementById('kw-inject-fields');
+  const kwModeValue = document.getElementById('kw-mode-value');
+  if (kwModeToggle && kwInjectFields && kwModeValue) {
+    kwModeToggle.addEventListener('click', function (e) {
+      e.preventDefault();
+      const on = kwInjectFields.style.display === 'none';
+      kwInjectFields.style.display = on ? 'block' : 'none';
+      kwModeValue.innerHTML = on
+        ? 'inject'
+        : 'boost <span style="color: var(--ink-faint); font-size: 11px;">(default)</span>';
+    });
+  }
 
   const stalenessToggle = document.getElementById('staleness-toggle');
   const stalenessPreview = document.getElementById('staleness-preview');

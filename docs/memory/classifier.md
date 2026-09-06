@@ -28,6 +28,16 @@ declaration values.
   authorship contract in
   [`data-model.md → World-state storage`](../data-model.md#world-state-storage)
   remains intact).
+- **Entity keywords** — the same brand-new-entity object carries
+  `keywords`: the titles, epithets and relational references the prose
+  used for the character alongside its name ("the Grey Wolf", "the
+  innkeeper"). These feed the keyword retrieval pathway, which matches
+  an entity on its name plus this list — see
+  [`retrieval.md → Keywords schema`](./retrieval.md#keywords-schema).
+  Unlike `description`, keywords are **not** frozen after first
+  introduction: later passes may append newly-observed references.
+  Writes are strictly append-and-deduplicate and never remove, so
+  user-authored aliases survive every subsequent pass.
 
 ## Provenance attribution
 

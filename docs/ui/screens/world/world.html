@@ -170,6 +170,11 @@
   body[data-kind="lore"] .tab-panel[data-panel="involvements"] { display: none !important; }
   body:not([data-kind="lore"]) .tab[data-tab="body"],
   body:not([data-kind="lore"]) .tab-panel[data-panel="body"] { display: none !important; }
+  /* Settings panel is shared across kinds, but status / retired_reason are
+     entity-only and priority means different things on entity vs lore
+     (lore's feeds pin_signal, the entity's orders keyword overflow only). */
+  body[data-kind="lore"] .kind-entity-only { display: none !important; }
+  body:not([data-kind="lore"]) .kind-lore-only { display: none !important; }
   /* lore Body tab — minimal content layout */
   .lore-body-pane .lore-category { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; padding: 8px 10px; background: var(--bg); border: 1px solid var(--line-soft); border-radius: 4px; }
   .lore-body-pane .lore-category .label { font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; }
@@ -1017,13 +1022,13 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
 
     </div>
 
-    <!-- SETTINGS — entity-management chrome (status, injection_mode, retired_reason, tags).
+    <!-- SETTINGS — entity-management chrome (status, injection_mode, retired_reason, keywords, priority, tags).
          Same fields for every kind. Lives separate from Identity so identity content stays clean. -->
     <div class="tab-panel" data-panel="settings">
       <div style="font-size: 11px; color: var(--ink-muted); margin-bottom: 14px; padding: 8px 12px; background: #fffbe6; border-left: 3px solid #e3d8c0; border-radius: 2px;">
-        Operational configuration of this entity record. Same four fields for every kind &mdash; status, injection rule, retired-reason (conditional), tags.
+        Operational configuration of this entity record. Same six fields for every kind &mdash; status, injection rule, retired-reason (conditional), keywords, priority, tags.
       </div>
-      <div class="field-row">
+      <div class="field-row kind-entity-only">
         <div class="field-label">status
           <span class="type-hint">enum &middot; entities.status</span>
         </div>
@@ -1046,12 +1051,53 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
           </div>
         </div>
       </div>
-      <div class="field-row">
+      <div class="field-row kind-entity-only">
         <div class="field-label">retired_reason
           <span class="type-hint">text &middot; only when status=retired</span>
         </div>
         <div class="input-select conditional-disabled">
           <span class="placeholder-text">(disabled &mdash; status is "active")</span>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field-label">keywords
+          <span class="type-hint">string[] &middot; entities.keywords / lore.keywords</span>
+        </div>
+        <div>
+          <div class="chip-row">
+            <span class="chip-small">the Grey Wolf <span class="x">&times;</span></span>
+            <span class="chip-small">the bounty hunter <span class="x">&times;</span></span>
+            <span class="add-chip">+ add keyword</span>
+          </div>
+          <div style="font-size: 10px; color: var(--ink-muted); margin-top: 4px; line-height: 1.5;">
+            Extra names prose calls this entity by, matched alongside <code>name</code> for retrieval. Distinct from tags &mdash; tags label, keywords retrieve. The classifier appends here too, and never removes.
+          </div>
+        </div>
+      </div>
+      <div class="field-row kind-entity-only">
+        <div class="field-label">priority
+          <span class="type-hint">integer 0..100 &middot; entities.priority</span>
+        </div>
+        <div>
+          <div class="input-select" style="max-width: 90px;" title="Keyword-injection overflow order">
+            <span>0</span>
+          </div>
+          <div style="font-size: 10px; color: var(--ink-muted); margin-top: 4px; line-height: 1.5;">
+            Orders which keyword matches seat first when more match than the budget admits. <b>Does not affect ranking</b> &mdash; entities carry no pin signal. Inert unless keyword injection is on and overfull.
+          </div>
+        </div>
+      </div>
+      <div class="field-row kind-lore-only">
+        <div class="field-label">priority
+          <span class="type-hint">integer 0..100 &middot; lore.priority</span>
+        </div>
+        <div>
+          <div class="input-select" style="max-width: 90px;" title="Ranking weight, and keyword-injection overflow order">
+            <span>0</span>
+          </div>
+          <div style="font-size: 10px; color: var(--ink-muted); margin-top: 4px; line-height: 1.5;">
+            Higher priority makes this lore more likely to be picked when it's relevant &mdash; it feeds <code>pin_signal</code> as <code>priority/100</code>. It won't surface lore the scene isn't about; use Always for that. Also orders keyword-injection overflow.
+          </div>
         </div>
       </div>
       <div class="field-row">
@@ -1344,6 +1390,8 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
   <span class="k">"status"</span><span class="p">:</span> <span class="s">"active"</span><span class="p">,</span>
   <span class="k">"retired_reason"</span><span class="p">:</span> <span class="n">null</span><span class="p">,</span>
   <span class="k">"injection_mode"</span><span class="p">:</span> <span class="s">"auto"</span><span class="p">,</span>
+  <span class="k">"keywords"</span><span class="p">:</span> <span class="p">[</span><span class="s">"the Grey Wolf"</span><span class="p">,</span> <span class="s">"the bounty hunter"</span><span class="p">],</span>
+  <span class="k">"priority"</span><span class="p">:</span> <span class="n">0</span><span class="p">,</span>
   <span class="k">"state"</span><span class="p">:</span> <span class="p">{</span>
     <span class="k">"visual"</span><span class="p">:</span> <span class="p">{</span>
       <span class="k">"physique"</span><span class="p">:</span> <span class="s">"tall, lean"</span><span class="p">,</span>

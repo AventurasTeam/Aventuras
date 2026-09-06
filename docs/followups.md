@@ -13,7 +13,7 @@ for the placement rule.
 
 ## UX
 
-- **Q3 needs an overhaul and a re-spec, not signal-by-signal patches.**
+- **Q3 is removed; its replacement needs a design.**
   [`retrieval.md → Q3`](./memory/retrieval.md#q3-heuristic-prose-extract)
   specifies five per-sentence signals; three of them, plus the
   tokenizer underneath, assume a lexical, Latin-script, past-tense
@@ -21,10 +21,11 @@ for the placement rule.
   failed. The two High signals (entity-name, lore-keyword) are the
   exception and are sound — `matchTerms` uses `\p{L}\p{N}` lookarounds
   specifically so accented and Cyrillic names match, and they reuse an
-  index the hybrid pathway already builds. That layer is worth keeping;
-  what sits around it is what wants redesigning.
+  index the hybrid pathway already builds. That shared index is worth
+  keeping and outlives Q3 — the keyword pathway uses it directly; the
+  per-sentence scorer built on top of it is what goes.
 
-  Two structural findings drive the re-spec, ahead of any individual
+  Two structural findings drive the removal, ahead of any individual
   signal:
   - **Q3 can never report itself absent, so a degenerate extract still
     spends its full `w_prose` share.** `buildQueryStack`
@@ -81,22 +82,41 @@ for the placement rule.
     splitting, so this reads as an oversight rather than a deferral.
     Whatever replaces the scorer has to own this first.
 
-  One redesign direction worth arguing: drop the hardcoded verb list
-  for a term set derived from the branch's own happening titles, which
-  the classifier writes in the story's language — self-localizing, no
-  linguistics, reuses an index the pass already builds. The
-  circularity is sharper than it first reads, and settling it is part
-  of the re-spec: happening titles summarize what the memory layer has
-  already absorbed, so scoring sentences by resemblance to them biases
-  Q3 toward recorded material and away from the novel prose a
-  retrieval pass most needs to surface.
+  **Direction settled 2026-09-06: remove, do not re-spec.** The
+  per-turn classifier already runs on every turn and writes in the
+  story's own language and register, so it supplies retrieval queries
+  directly instead of a heuristic reconstructing them from prose
+  statistics. Q2's piggyback summary line splits out of the structural
+  digest into a query of its own, so a natural-language sentence stops
+  being averaged into a single vector with a comma-separated
+  proper-noun list. That deletes the signal table, the scorer and the
+  sentence tokenizer outright rather than repairing them, and the
+  presence problem dissolves with them: a classifier that emits nothing
+  yields no query, which the blend already re-normalizes around.
 
-  Scope is the canon signal table, the sentence tokenizer, the
-  presence contract and the scorer — a spec change before it is a code
-  change. The dialogue-span regex was previously carved out here as
-  separately shippable; folded back in 2026-08-24, because landing it
-  alone tunes one Medium signal inside a scoring model that is being
-  replaced. Surfaced 2026-08-06 reviewing
+  What the replacement design still owes:
+  - **The blend weights.** `w_action` / `w_digest` / `w_prose` assume
+    exactly three queries. A variable-length query set needs a
+    weighting scheme, and the split summary needs a share of its own.
+  - **Cold start regresses without an answer.**
+    [`retrieval.md → Cold start`](./memory/retrieval.md#cold-start)
+    has turn 1 lean on "Q3: heuristic prose extract from the opening
+    entry, which the wizard always commits." Delete Q3 and turn 1 is
+    left with the user's first action and a thin digest — no
+    classifier has run yet — so the opening entry, the only world
+    content a fresh story has, reaches retrieval through nothing. The
+    replacement has to seat it another way.
+  - **The classifier cannot yet answer what retrieval is missing.** As
+    prompted it receives only the entity roster and the raw turns, not
+    the memory blocks the narrative call was given, so it has no view
+    of what was already in context. It needs that context threaded in.
+  - **Probe capture.** `CaptureQuery.source: 'prose_extract'` and the
+    per-sentence `sentenceScores` capture go with Q3;
+    [`probe.md`](./memory/probe.md) needs the replacement's shape.
+
+  The keyword pathway is already decoupled from this: the scan surface
+  no longer derives from the query stack, so Q3's removal cannot
+  disturb keyword matching. Surfaced 2026-08-06 reviewing
   [Slice 3.4](./implementation/milestones/03-memory-floor/slices/04-retrieval.md).
 
 - **M4.4 — "Upgrade to current default" story-open prompt deferred from 3.1b.**

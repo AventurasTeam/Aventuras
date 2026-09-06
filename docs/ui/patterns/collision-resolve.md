@@ -79,7 +79,9 @@ type EntitySummary = {
   status: EntityStatus
   retiredReason?: string
   injectionMode: InjectionMode
+  priority: number
   tags: string[]
+  keywords: string[]
   state: Record<string, unknown> // whole-side; no per-field diff in v1
   relationCounts: {
     awarenessRows: number
@@ -112,6 +114,7 @@ type Resolution =
       canonicalId: string
       fieldChoices: Record<ScalarField, 'A' | 'B'>
       finalTags: string[]
+      finalKeywords: string[]
     }
   | {
       mode: 'rename'
@@ -124,7 +127,10 @@ type ScalarField = 'name' | 'description' | 'status' | 'retiredReason' | 'inject
 
 `fieldChoices` only carries entries for fields that diverge.
 Identical-on-both-sides fields stay implicit (caller writes
-canonical's value unconditionally). `finalTags` is the union after
+canonical's value unconditionally). `finalKeywords` is the union of
+both sides' keywords, deduplicated under the normalization
+`matchTerms` uses so a case variant does not survive as a second
+entry. `finalTags` is the union after
 the user's deselects are applied — empty array is allowed (entity
 becomes untagged).
 
@@ -140,6 +146,7 @@ is present.
 type DiffPayload = {
   divergentScalars: ScalarField[]
   tags: { onlyInA: string[]; onlyInB: string[]; both: string[] } | null
+  keywords: { onlyInA: string[]; onlyInB: string[]; both: string[] } | null
   stateDivergent: boolean
 }
 ```
@@ -148,6 +155,12 @@ type DiffPayload = {
   whitespace-normalized. The right way to converge cosmetic
   whitespace differences is to edit one side in the detail pane,
   not paper over divergence at the dialog level.
+- **Keywords** — partitioned identically to tags, and unioned by the
+  same rule. They are retrieval-targeted rather than decorative, so
+  taking the canonical side's set alone would silently narrow what the
+  merged entity can be matched by — the losing side's aliases are
+  exactly the references prose already used for this character. See
+  [`retrieval.md → Keywords schema`](../../memory/retrieval.md#keywords-schema).
 - **Tags** — partitioned into `onlyInA` / `onlyInB` / `both`.
   `null` when both sides have identical tag sets (order-independent).
 - **State** — structural deep-equal: sort keys, compare leaves.
@@ -163,6 +176,7 @@ type MergeState = {
   canonicalId: string
   fieldChoices: Record<ScalarField, 'A' | 'B'>
   deselectedTags: string[]
+  deselectedKeywords: string[]
 }
 
 type MergeAction =
@@ -181,6 +195,8 @@ Transition rules:
   consistent.
 - **`pick-field`** — overrides a single scalar without touching the
   canonical or other choices.
+- **`toggle-keyword`** — same shape as `toggle-tag`, against
+  `deselectedKeywords`.
 - **`toggle-tag`** — adds or removes a tag from `deselectedTags`.
   `finalTags` is derived in the view as `union - deselectedTags`
   (sorted).
@@ -215,18 +231,21 @@ sets each field to whichever side matches the canonical, and
    Each row: field label · radio for A's value · radio for B's
    value. Identical fields are omitted entirely. Empty when no
    scalars diverge.
-3. **Tag union** (when `diff.tags != null`) — single row labeled
+3. **Keyword union** (when `diff.keywords != null`) — single row
+   labeled "Keywords", identical in shape to the tag row below it and
+   rendered directly above it.
+4. **Tag union** (when `diff.tags != null`) — single row labeled
    "Tags". Renders all tags from the union as chips; each chip has
    an inline `×` to deselect. Deselected chips render in a
    strikethrough / dimmed variant and can be re-selected.
-4. **State JSON note** (when `stateDivergent` is true) — inline
+5. **State JSON note** (when `stateDivergent` is true) — inline
    muted text: "`state` will follow the canonical row · edit on
    detail pane after merge."
-5. **Relations summary** — read-only block showing non-canonical's
+6. **Relations summary** — read-only block showing non-canonical's
    counts: "Awareness rows: N · Involvements: N · Inverse refs: N ·
    Embeddings: N · Translation rows: N." Counts re-derive when
    canonical flips.
-6. **Footer** — `[ Cancel ]` · `[ Merge into <canonical-name> ]`.
+7. **Footer** — `[ Cancel ]` · `[ Merge into <canonical-name> ]`.
    The primary button echoes the canonical pick so the destructive
    direction is obvious.
 

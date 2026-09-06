@@ -345,16 +345,16 @@ substituted to the Select primitive on narrower tiers per
 Overview | Identity | Carrying | Connections | Settings | Assets | Involvements | History
 ```
 
-| Tab              | Purpose                                                                                                       |
-| ---------------- | ------------------------------------------------------------------------------------------------------------- |
-| **Overview**     | Glance summary card. Read-mostly. Click any region routes to the relevant edit tab. Doubles as the peek body. |
-| **Identity**     | Editable body of "who the entity is": description + kind-specific identity slots. Pure identity content.      |
-| **Carrying**     | Holder-shaped contents (stackables + equipped + inventory). **Character-only** — hidden on other kinds.       |
-| **Connections**  | Positional + compositional + affiliation links to other entities. Per-kind sub-labels.                        |
-| **Settings**     | Entity-management chrome: status, injection_mode, retired_reason, tags. Same fields for all kinds.            |
-| **Assets**       | Attached images / audio / files via `entry_assets`.                                                           |
-| **Involvements** | `happening_involvements` table for this entity.                                                               |
-| **History**      | Delta log filtered to this entity.                                                                            |
+| Tab              | Purpose                                                                                                                |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **Overview**     | Glance summary card. Read-mostly. Click any region routes to the relevant edit tab. Doubles as the peek body.          |
+| **Identity**     | Editable body of "who the entity is": description + kind-specific identity slots. Pure identity content.               |
+| **Carrying**     | Holder-shaped contents (stackables + equipped + inventory). **Character-only** — hidden on other kinds.                |
+| **Connections**  | Positional + compositional + affiliation links to other entities. Per-kind sub-labels.                                 |
+| **Settings**     | Entity-management chrome: status, injection_mode, retired_reason, keywords, priority, tags. Same fields for all kinds. |
+| **Assets**       | Attached images / audio / files via `entry_assets`.                                                                    |
+| **Involvements** | `happening_involvements` table for this entity.                                                                        |
+| **History**      | Delta log filtered to this entity.                                                                                     |
 
 The tab name **Connections** is the umbrella for both structural
 links (positional, affiliation) and social bonds (friend / enemy /
@@ -370,8 +370,8 @@ Inter-faction relationships remain deferred (see
 
 #### Why Settings is a separate tab
 
-`status`, `injection_mode`, `retired_reason`, and `tags` are
-entity-management chrome — operational configuration of the entity
+`status`, `injection_mode`, `retired_reason`, `keywords`, `priority`
+and `tags` are entity-management chrome — operational configuration of the entity
 record, not "who they are." Earlier drafts placed them as a
 Lifecycle sub-section at the bottom of Identity; review found that
 mixing them with description / visual / personality diluted the
@@ -415,7 +415,8 @@ For the character kind:
   (classifier-only per the
   [authorship contract](../../data-model.md#authorship-contract)).
 - **Settings** edits `status`, `injection_mode`, `retired_reason`
-  (conditional on status), `tags`. Same shape on every kind.
+  (conditional on status), `keywords`, `priority`, `tags`. Same shape
+  on every kind.
 
 Per-kind Identity / Connections compositions for location, item,
 faction live in

@@ -178,6 +178,20 @@ Per capture:
   turn — whether piggyback fires is decided after retrieval, so a
   capture cannot know it. On those turns the floor's cost reads as a
   lower bound.
+- **Keyword injections.** `keyword_injections` — one entry per row
+  seated by
+  [keyword injection](./retrieval.md#keyword-injection), present only
+  while `keywordRetrieval.mode` is `inject` and empty otherwise. Each
+  carries `target_kind`, `target_id`, `display_name`, the matched
+  `terms`, `tokens_estimated`, and `seated` (false when the row
+  matched but the
+  [budget cap](./retrieval.md#keyword-injection-budget) cut it, with
+  its `priority` recorded so the overflow order is inspectable).
+  Deliberately not a candidate record: these rows never reach the
+  ranker, so they have no `sim_blend`, `final_score` or
+  `kw_boost_value`, and a capture that filed them as candidates would
+  invent scores that never existed. Without this list the probe
+  under-reports what actually reached the prompt.
 - **Prompt buffer cost.** `prompt_buffer_tokens` — the buffer window
   (mode-dependent rule plus protected-buffer spillover) priced as one
   scalar, not as floor rows: buffered entries carry no retrieval
@@ -425,6 +439,11 @@ Even in deep mode, the simulator can't re-derive the candidate pool
 itself, nor the cut that decides which of it reaches MMR:
 
 - The structural floor (computed from current scene at capture).
+- Keyword injections. Lexical and deterministic — there is no score
+  to re-derive, and the rows they seated consumed budget the ranked
+  pools then competed for. `keyword_injections` is read-only context
+  for the funnel, not a tunable; changing `budgetShare` or the mode
+  changes which rows exist and needs fresh turns.
 - Pool exclusions (common-knowledge happenings,
   pending / resolved / failed thread mode, same-name suppression
   per [edge-cases](./edge-cases.md#name-collision-and-disambiguation)).

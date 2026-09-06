@@ -79,7 +79,9 @@ erDiagram
         text description
         text status "staged | active | retired"
         text retired_reason "free-form; only meaningful when status=retired. Hard-finality only — e.g. 'killed by Kael', 'temple destroyed in quake', 'faction disbanded after coup', 'exiled to the southern wastes'. Off-screen-but-alive characters stay status=active with stale lastSeenAt; see docs/memory/edge-cases.md → Retirement"
+        json keywords "string[]; aliases / epithets / relational references beyond the canonical name. User-authored, OR periodic-classifier-emitted at entity creation (append-only, never removes). Matched alongside name in the keyword pathway. See docs/memory/retrieval.md → Keywords schema"
         text injection_mode "always | auto | disabled; short-circuited by active+in-scene invariant"
+        integer priority "0..100; orders keyword-inject overflow ONLY — unlike lore.priority it does not feed the ranker pin_signal, which stays 0 for entities. See docs/memory/retrieval.md → Keyword injection budget"
         integer name_collision_flag "0 | 1; 1 = same-name collision detected at classifier extraction; surfaces in World panel for review. See docs/memory/edge-cases.md → Name collision"
         json state "typed per kind"
         json tags
@@ -1199,6 +1201,13 @@ stories.settings: {
     threads: number
     chapters: number                 // chapter summaries pool
   }
+  keywordRetrieval: {                // keyword pathway behaviour; see docs/memory/retrieval.md → Keyword injection
+    mode: 'boost' | 'inject'         // default 'boost' (current shipped behaviour). 'inject' seats keyword-matched lore + entities directly, budgeted
+    budgetShare: number              // default 0.5; max share of each per-type budget keyword-injected rows may fill before ranked candidates take the remainder. Starting guess, wants calibration
+    scanEntries: number              // default 1; trailing entries scanned for keyword hits in addition to the current user action
+    cascade: boolean                 // default false; whether an injected row's own text is rescanned for further hits
+    cascadeMaxDepth: number          // default 2; ignored while cascade is false
+  }
   effectiveDim?: number              // Matryoshka effective dim — null = use model native dim, <N> = truncate stored vectors and queries to N. Set at story creation, locked thereafter same as embedding_model_id. Provider-only (local model is small enough that truncation isn't worth the quality tail). See docs/memory/retrieval.md → Matryoshka effective dim
   probe_mode_active: boolean        // per-story activation of the memory probe. No-op while app_settings.diagnostics.enabled is off. Default false. See docs/memory/probe.md and docs/observability.md → Gating model
 
@@ -2147,6 +2156,23 @@ swap UX warns about this case.
     [docs/memory/retrieval.md → Hybrid retrieval per type](./memory/retrieval.md#hybrid-retrieval-per-type).
 - `disabled` — never include automatically; only surfaces if
   explicitly referenced.
+
+**Keyword behaviour is a second, orthogonal axis — not a fourth enum
+value.** `injection_mode` answers "does this row inject." What a
+keyword hit _does_ is a separate question, and folding them together
+would produce `always | auto | auto_plus_keyword | disabled`, whose
+third value is a hybrid of two unrelated decisions. So the enum is
+unchanged and a per-story `keywordRetrieval.mode` setting carries the
+second axis: `boost` (a hit adds `kw_boost` to the ranked score — the
+default, and current behaviour) or `inject` (a hit seats the row
+directly, budgeted). It applies to `lore` and `entities` only. See
+[docs/memory/retrieval.md → Keyword injection](./memory/retrieval.md#keyword-injection).
+
+**Precedence: `injection_mode='disabled'` beats
+`keywordRetrieval.mode='inject'`.** `disabled` is a standing per-row
+exclusion the user set deliberately; a story-wide mode must not
+resurrect it. `always` combined with either value is a no-op, since
+the structural floor has already seated the row.
 
 **Naming history.** `lore.injection_mode` was originally
 `always | keyword | manual`; a renaming pass changed it to

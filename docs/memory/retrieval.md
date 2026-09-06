@@ -751,6 +751,14 @@ fragile at narrative-generation temperatures.
 
 ### Q3: Heuristic prose extract
 
+> **Slated for removal.** Direction settled 2026-09-06: Q3 is deleted
+> rather than re-specced, with the per-turn classifier supplying
+> queries directly and Q2's summary line splitting into a query of its
+> own. What follows describes the shipped behaviour until the
+> replacement lands; the open items that replacement owes — the blend
+> weights, cold start, and probe capture — are tracked on
+> [`followups.md`](../followups.md).
+
 Sentence-level signal-density extraction from the last narrative
 entry. Avoids embedding 400-1000 tokens of filler-heavy prose;
 isolates the high-signal slices.
@@ -809,6 +817,13 @@ against. Fall back to:
 
 When a component is missing, weights re-normalize across the remaining
 queries. No special cold-start logic beyond that.
+
+**This is the load-bearing dependency on Q3.** Turn 1 has no prior
+classifier run, so once Q3 is removed the opening entry — the only
+world content a fresh story has — reaches retrieval through nothing
+unless the replacement seats it another way. Tracked on
+[`followups.md`](../followups.md); the removal cannot land without an
+answer here.
 
 **Q2 is thin-to-absent on turn 1, by construction.** Its four
 structural fields do not all have producers at wizard-commit time, and
@@ -925,7 +940,7 @@ Different types benefit from different signal blends.
 | Type                  | Primary                         | Complement                                                                               |
 | --------------------- | ------------------------------- | ---------------------------------------------------------------------------------------- |
 | **Lore**              | Embedding (title + body)        | Keyword on `lore.keywords` — proper nouns, in-world terminology                          |
-| **Entities**          | Embedding (name + description)  | Keyword on `name` — direct prose reference                                               |
+| **Entities**          | Embedding (name + description)  | Keyword on `name` and `entities.keywords` — direct prose reference, aliases included     |
 | **Happenings**        | Embedding (title + description) | Keyword on `awareness.source` strings — verbatim names / places in awareness descriptors |
 | **Threads**           | Embedding (title + description) | None                                                                                     |
 | **Chapter summaries** | Embedding (summary + theme)     | Keyword on `chapters.keywords` — chapter-level browse keywords (Phase 2 output)          |
@@ -937,17 +952,76 @@ exact lexical hits that embeddings miss; embeddings catch thematic /
 conceptual matches that keyword can't (synonym, paraphrase). Together
 they cover.
 
+### Keyword scan surface
+
+The keyword pathway matches against **narrative text**: the current
+user action plus the last `keywordRetrieval.scanEntries` entries in
+full, default 1 (the previous `ai_reply`). The depth is per-story
+configurable; the user action and one trailing entry are the floor.
+
+**The surface is defined here, independently of the query stack.** It
+is deliberately _not_ the assembled embed texts. Deriving it from the
+queries makes the lexical pathway inherit the dense pathway's inputs,
+which defeats the point of having a complement — and it made keyword
+matching conditional on Q3's top-K selection, so a proper noun in a
+sentence the extract skipped could never fire. With Q3 slated for
+removal, an independent surface is also what keeps that removal from
+disturbing this pathway.
+
+Entries inside `protectedBuffer` are scanned even though they are
+already in context verbatim: the mention is in context, but the lore
+_about_ the mention is not, which is exactly what the pathway exists
+to seat.
+
+**Match rule follows the script of the keyword, per keyword.** Terms
+composed of CJK ideographs, kana or hangul with no internal spaces
+match by substring; every other term keeps `matchTerms`' existing
+`\p{L}\p{N}` word-boundary lookarounds. Chinese and Japanese do not
+delimit words with spaces, and Korean attaches particles directly to
+nouns, so word-boundary anchoring silently misses in all three;
+correct segmentation would need a dictionary or morphological
+analyzer, which is a dependency this does not take on. Substring
+matching is safe for these scripts specifically because their
+characters are morphemes — the `art`-inside-`start` risk that
+boundaries exist to prevent is far lower. Terms shorter than two
+characters do not qualify for substring mode. Regex-metacharacter
+escaping is unchanged; keywords are user-authored and may contain
+them.
+
 ### Keywords schema
 
-| Type         | Keyword surface                   | Source                                                                  |
-| ------------ | --------------------------------- | ----------------------------------------------------------------------- |
-| `lore`       | `keywords TEXT` (JSON `string[]`) | User-authored at create time, OR lore-mgmt agent emits at chapter close |
-| `entities`   | `name` field                      | Implicit                                                                |
-| `happenings` | `awareness.source` strings        | Implicit (per-row, not per-happening)                                   |
-| `threads`    | (none)                            | —                                                                       |
+| Type         | Keyword surface                            | Source                                                                                 |
+| ------------ | ------------------------------------------ | -------------------------------------------------------------------------------------- |
+| `lore`       | `keywords TEXT` (JSON `string[]`)          | User-authored at create time, OR lore-mgmt agent emits at chapter close                |
+| `entities`   | `name` + `keywords TEXT` (JSON `string[]`) | Name implicit; keywords user-authored, OR periodic classifier emits at entity creation |
+| `happenings` | `awareness.source` strings                 | Implicit (per-row, not per-happening)                                                  |
+| `threads`    | (none)                                     | —                                                                                      |
 
 Lore's `keywords` field is added; `lore.tags` stays separate (tags are
-user-meaningful labels; keywords are retrieval-targeted strings).
+user-meaningful labels; keywords are retrieval-targeted strings). The
+same split applies to `entities.keywords` against `entities.tags`.
+
+**`entities.keywords` carries what the canonical name misses** —
+titles, epithets and relational references ("the Grey Wolf", "your
+brother", "the innkeeper"), which is how characters are named in prose
+a good share of the time. Matching an entity on its `name` alone drops
+every one of them.
+
+Its producers mirror lore's, with the job falling to a different
+agent: the user authors keywords directly, and the periodic classifier
+emits them when it creates an entity — it already emits a brand-new
+entity as a full object with no `id` field
+([`classifier.md → What the classifier writes`](./classifier.md#what-the-classifier-writes)),
+so keywords join that object, drawn from the prose that introduced the
+character. Entity creation is the periodic classifier's job rather
+than the lore-mgmt agent's, which is the only reason the producer
+differs.
+
+**Classifier writes to `keywords` append and never remove.** A user's
+authored aliases have to survive every later classifier pass; a
+full-replace write would silently discard them. Appends de-duplicate
+against the existing set under the normalization `matchTerms` uses, so
+a re-observed epithet does not accumulate.
 
 ### `auto` injection mode
 
@@ -961,6 +1035,65 @@ user-facing semantics.
 
 Schema migration: rename enum value across data-model and any code
 references; UI copy updates accordingly.
+
+### Keyword injection
+
+`injection_mode` answers whether a row injects. What a keyword hit
+_does_ is a separate question, carried on its own axis by the
+per-story `keywordRetrieval.mode` setting:
+
+| Value    | Behaviour                                                                                                     |
+| -------- | ------------------------------------------------------------------------------------------------------------- |
+| `boost`  | A hit adds `kw_boost` to the ranked score. Default, and the behaviour described above.                        |
+| `inject` | A hit seats the row directly, subject to the budget in [Keyword injection budget](#keyword-injection-budget). |
+
+Two axes rather than a fourth enum value: folding this into
+`injection_mode` would produce `always | auto | auto_plus_keyword |
+disabled`, whose third value mixes two unrelated decisions.
+
+**`injection_mode='disabled'` beats `mode='inject'`.** Disabled is a
+standing per-row exclusion; a story-wide mode must not resurrect it.
+`always` with either value is a no-op — the
+[structural floor](#structural-floor--always-inject) already seated
+the row.
+
+**`inject` applies to lore and entities only.** It needs both a
+user-curated keyword set and an ordering key for overflow, and only
+those two types have both. Happenings and chapters stay on `boost`
+unconditionally, which is their current behaviour, so nothing
+regresses.
+
+- **Happenings** carry no keyword column. Their hits are derived from
+  the entity names appearing verbatim inside freeform awareness
+  `source` descriptors — no authored list to curate, and no `priority`
+  to order by. Decisively, direct seating would bypass
+  [POV-awareness scope](#pov-awareness-scope), which admits happenings
+  only through `character_id IN (sceneEntities ∩ characters)`; a
+  keyword path assembling its own candidates would seat happenings no
+  in-scene character is aware of. That is an information leak, not a
+  tuning preference.
+- **Chapters** do have `keywords`, so their exclusion is a deliberate
+  narrowing rather than an oversight: the keywords are lore-agent
+  output rather than user curation, there is no `priority` to order
+  overflow with, and a whole chapter summary is a large seat to spend
+  on a browse keyword. Admitting chapters later means giving them an
+  ordering key first.
+
+**Keyword injection does not exempt a row from same-name
+suppression.** See
+[`edge-cases.md → Layer A`](./edge-cases.md#layer-a--retrieval-time-same-name-suppression);
+`injection_mode='always'` remains the only opt-out, because the
+exemption is justified by per-row user intent and a story-wide mode is
+not that. Keyword-injected rows otherwise respect the same status and
+[pool-exclusion](#pool-exclusions) rules as ranked candidates, and a
+row seated by keyword is skipped when it later appears as a ranked
+candidate rather than seated or charged twice.
+
+**Cascade** is off by default. Enabled, an injected row's own text is
+rescanned for further hits to `keywordRetrieval.cascadeMaxDepth`
+(default 2). Cascaded rows draw on the same keyword allowance, and
+depth-1 rows seat before depth-2 rows so a dense keyword graph cannot
+spend the whole allowance on second-order matches.
 
 ---
 
@@ -1097,6 +1230,67 @@ inject"**, not "of full window." Cast-heavy scenes shrink the
 available pool dramatically; misleading the user about the relative
 cost would let them paint into a corner.
 
+### Keyword injection budget
+
+Applies while `keywordRetrieval.mode` is `inject`; under `boost` a
+keyword hit only adjusts a ranked score and this section is inert.
+
+`injection_mode='always'` rows need no rule here — they are
+[structural floor](#structural-floor--always-inject) members, so
+[the floor seats them before per-type budgets exist](#structural-floor-takes-budget-first).
+The asymmetry between the two is deliberate: `always` is a per-row
+explicit intent on a small set of rows, so unbounded seating is what
+the user asked for, whereas `inject` is a story-wide policy that can
+match arbitrarily many rows in one turn. Unbounded seating there is
+the classic lorebook failure, where a single scene naming ten
+keyworded rows consumes the window.
+
+So keyword-injected rows fill each type's existing budget first, up to
+`keywordRetrieval.budgetShare` of that type's allocation; ranked
+candidates take the remainder. The cap is per-type, matching the
+[hard partitions](#hard-partitions-in-v1) already in force — an unused
+keyword allowance in one type does not migrate to another. The cap is
+also what makes badly-authored keywords a bounded problem rather than
+an unbounded one.
+
+`budgetShare` defaults to `0.5`, splitting each type's allocation
+evenly between lexical and ranked evidence. It is a starting guess in
+the same sense as the blend weights and per-type decay rates, and
+wants calibration against real stories rather than defending as a
+derived value.
+
+**Overflow ordering.** When keyword matches exceed the cap, `priority`
+orders them, ties broken alphabetically by display name.
+`lore.priority` already exists; `entities` gains a matching
+`priority INTEGER NOT NULL DEFAULT 0`.
+
+Ordering by similarity was rejected: keyword-direct rows do not all
+carry a similarity score, since the match is lexical and sits outside
+the embedder pools, so it would mean either pulling matches through a
+retrieval pool they had no reason to enter, or leaving part of the set
+unordered. `priority` is also the user-facing answer, which matters
+for a mechanism users will debug by adjusting it.
+
+**`entities.priority` orders overflow only and does not feed
+`pin_signal`**, which stays `0` for entities per the
+[scoring function](#scoring-function). `lore.priority` does feed it,
+so on lore the column carries a second effect — raising it to win
+keyword overflow also raises `pin_boost`. The two never apply to the
+same row on the same turn, since a keyword-matched row is seated
+without reaching the ranker and a non-matched row never consults
+overflow ordering; and both readings run the same direction, meaning
+"this row matters more than its raw similarity earns."
+
+**This does not contradict the argument for a graded pin.** The
+[scoring function](#scoring-function) makes `priority` multiplicative
+precisely so a high-priority but irrelevant lore row still falls under
+`min_score_threshold`, reserving unconditional injection for
+`injection_mode='always'`. That holds unchanged in the ranked path. In
+the keyword path the hit is itself the relevance gate — the row
+qualified because its term actually appeared — and `priority` only
+orders what already qualified, so it never becomes an unconditional
+injector on its own.
+
 ### POV-awareness scope
 
 Retrieval queries the awareness graph as the **union of all in-scene
@@ -1157,15 +1351,22 @@ Where:
   [query stack](#query-construction--three-vector-stack).
 - **`pin_signal(c)`** — `decay_resistance` for awareness rows,
   `priority/100` for lore, `0` for entities and threads (no
-  continuous pin signal in v1).
+  continuous pin signal in v1). `entities.priority` exists but is
+  deliberately outside this function: it orders keyword-inject
+  overflow only, per
+  [Keyword injection budget](#keyword-injection-budget).
 - **`λ_type`** — type-specific decay rate (table below).
 - **`chapters_old(c)`** — chapters since `c` became relevant
   (`learned_at_entry_id` for awareness, `created_at` mapped to chapter
   for happenings without awareness, `updated_at` for entities and
   threads, effectively zero for lore since lore is timeless).
 - **`kw_boost(c)`** — additive bonus when the keyword index hits
-  (lore keywords, entity name, awareness `source` string). Default
-  magnitude `0.10`. Zero if no keyword pathway exists for the type.
+  (lore keywords, entity name and `entities.keywords`, awareness
+  `source` string), matched over the
+  [keyword scan surface](#keyword-scan-surface). Default magnitude
+  `0.10`. Zero if no keyword pathway exists for the type, and zero
+  for a row seated by keyword injection, which never reaches this
+  function.
 
 The multiplicative pin-into-recency integration is the key shape:
 
@@ -1442,11 +1643,16 @@ selections.
 
 ### Budget-fill termination
 
-Greedy fill within the per-type budget after MMR ranking:
+Greedy fill within the per-type budget after MMR ranking. Under
+`keywordRetrieval.mode='inject'` the keyword-injected rows for the type
+are seated first and their cost deducted, capped at
+`budgetShare × type_budget` per
+[Keyword injection budget](#keyword-injection-budget); under `boost`
+the reservation is zero and the fill starts at the full budget:
 
 ```python
-selected = []
-remaining = type_budget
+selected = list(keyword_injected)          # empty under mode='boost'
+remaining = type_budget - cost_of(selected)
 
 for c, mmr_score in mmr_ranked_candidates:
     if mmr_score < min_score_threshold:
@@ -1652,12 +1858,14 @@ copy of this table.
 ### Pseudocode
 
 ```python
-def rank_per_type(candidates, queries, type_budget, λ_type, type_overhead, *, matched_chapters=None):
+def rank_per_type(candidates, queries, scan_text, type_budget, λ_type, type_overhead, *, matched_chapters=None):
     # 1. Compute raw score per candidate
     scored = []
     for c in candidates:
         sim = blend_similarity(c, queries)
-        kw  = keyword_boost(c, queries)
+        # Keyword hits match the scan surface — the user action plus the
+        # trailing entries — NOT `queries`. See → Keyword scan surface.
+        kw  = keyword_boost(c, scan_text)
         if c.kind == 'happening' and c.common_knowledge:
             score = sim + kw
         else:
@@ -1686,9 +1894,10 @@ def rank_per_type(candidates, queries, type_budget, λ_type, type_overhead, *, m
     # 3. MMR-rank
     mmr_ranked = mmr(scored, λ_div=0.75)
 
-    # 4. Greedy budget fill
-    selected = []
-    remaining = type_budget
+    # 4. Greedy budget fill — keyword-injected rows seat first and are
+    #    capped at budget_share * type_budget (empty under mode='boost')
+    selected = list(keyword_injected)
+    remaining = type_budget - cost_of(selected)
     for c, mmr_score in mmr_ranked:
         if mmr_score < 0.15:
             break

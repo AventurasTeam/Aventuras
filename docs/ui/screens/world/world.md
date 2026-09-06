@@ -114,7 +114,8 @@ Overview | Identity | Carrying | Connections | Settings | Assets | Involvements 
 
 `Carrying` is **character-only** — hidden on location, item,
 faction (no carry semantics). `Settings` applies to every kind
-(every entity has status / injection_mode / retired_reason / tags).
+(every entity has status / injection_mode / retired_reason / keywords /
+priority / tags).
 Other tabs render for every kind with kind-specific content.
 
 ### Overview — glance summary, read-mostly
@@ -228,7 +229,8 @@ Faction's Identity is the closest in shape to character's, since
 `standing` + `agenda` parallel `voice` + `drives`. Location and
 Item are sparser (one dynamic field).
 
-`status`, `injection_mode`, `retired_reason`, `tags`, and
+`status`, `injection_mode`, `retired_reason`, `keywords`, `priority`,
+`tags`, and
 `portrait` deliberately do not live here — see
 [Settings](#settings--entity-management-chrome) and the Overview
 portrait slot.
@@ -342,6 +344,20 @@ Same fields for every kind:
   in-line explanation about scene-presence override.
 - `retired_reason` (text, conditional): only enabled when
   `status === 'retired'`.
+- `keywords` (chip row with `+ add`): aliases, titles and relational
+  references the entity is called by in prose beyond its canonical
+  name — "the Grey Wolf", "your brother", "the innkeeper". Matched
+  alongside `name` by the keyword retrieval pathway. Same TagInput
+  shape as `tags`, but distinct in purpose: tags are user-meaningful
+  labels, keywords are retrieval-targeted strings. The periodic
+  classifier also appends here when it observes a new reference; it
+  never removes, so user-authored entries survive.
+- `priority` (integer input, narrow; range `0..100`). Default `0`.
+  Orders which keyword-matched rows seat first when more match than
+  the keyword budget admits. **Unlike lore's `priority`, it does not
+  affect ranking** — entities carry no pin signal, so at any value
+  this is inert until keyword injection is on and overfull. See
+  [`memory/retrieval.md → Keyword injection budget`](../../../memory/retrieval.md#keyword-injection-budget).
 - `tags` (chip row with `+ add`): edit destination for the tags
   surfaced read-only on Overview.
 
@@ -502,7 +518,7 @@ and pair with entity tags for cross-kind parity.
 
 ### Settings tab — lore
 
-Three fields, top-down:
+Four fields, top-down:
 
 - **`injection_mode`** (enum select with explanation): `always` /
   `auto` (default) / `disabled`. Same select primitive entities
@@ -524,6 +540,15 @@ Three fields, top-down:
   default `0`, and multiplicative, so it re-orders relevant lore rather
   than injecting irrelevant lore. See
   [`docs/memory/retrieval.md → Scoring function`](../../../memory/retrieval.md#scoring-function).
+- **`keywords`** (chip row with `+ add`): the proper nouns and
+  in-world terminology this lore should be retrieved by — "Vael",
+  "the Aetherium", "blood-bound". This is the field the
+  [load-bearing keyword pathway](../../../memory/retrieval.md#hybrid-retrieval-per-type)
+  matches on: embedding models have no semantic prior for invented
+  terms, so lore that is never keyworded is reachable only by
+  thematic similarity. User-authored here; the lore-mgmt agent also
+  emits keywords at chapter close. Distinct from `tags` — tags label,
+  keywords retrieve.
 - **`tags`** (chip row with `+ add`): edit destination for tags
   surfaced read-only on glance / search. Same shape as entity tags.
 
@@ -683,6 +708,7 @@ that diverge between the two:
 | ------------ | ----------------------------------------------------------- | --------------------------- |
 | description  | (•) wandering swordsman…                                    | ( ) guardsman at city gate… |
 | status       | (•) active                                                  | ( ) active                  |
+| `keywords[]` | union (default) — deselect per conflicting keyword          |                             |
 | `tags[]`     | union (default) — deselect per conflicting tag              |                             |
 | `state` JSON | follows the canonical row · edit on detail pane after merge |                             |
 
@@ -692,8 +718,13 @@ Field-level rules:
   don't render — there's no decision to make. The table lists
   only fields where side A and side B differ.
 - **Top-level scalars** (`name`, `description`, `status`,
-  `retired_reason`, `injection_mode`) — radio per row when
-  divergent.
+  `retired_reason`, `injection_mode`, `priority`) — radio per row
+  when divergent.
+- **`keywords[]`** — union by default with a per-keyword deselect,
+  same shape as tags. Renders only when the two keyword sets
+  differ. Union rather than canonical-side because keywords drive
+  retrieval matching, so dropping the losing side's aliases would
+  narrow what the merged entity can be found by.
 - **`tags[]`** — union by default with a per-tag deselect.
   Renders only when the two tag sets differ.
 - **`state` JSON** — taken whole-side from canonical. Per-field

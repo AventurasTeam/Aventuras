@@ -373,7 +373,8 @@ enabled categories, mid-story toggle) live in
 
 The Memory tab gathers chapter-close knobs, prompt-context buffer,
 classifier cadence + status, embedder selection, retrieval budgets,
-and any active embedding-staleness state for this story. Sub-
+keyword-retrieval behaviour, and any active embedding-staleness state
+for this story. Sub-
 sections within the tab match the schema groupings in
 [`stories.settings`](../../../data-model.md#story-settings-shape).
 
@@ -528,6 +529,35 @@ creation. Hard partitions in v1 — no cross-type spillover. See
 for the design and
 [`parked.md → Spillover policy`](../../../parked.md#spillover-policy-on-per-type-budgets)
 for the post-v1 spillover question.
+
+### Keyword retrieval
+
+How keyword matches behave (`stories.settings.keywordRetrieval`). One
+select plus four controls, the latter disclosed only while the mode is
+`Inject`:
+
+- **Mode** (enum select with explanation): `Boost` (default) /
+  `Inject`.
+  - `Boost` — a keyword match raises the row's retrieval score, and
+    the ranker still decides. Current behaviour.
+  - `Inject` — a keyword match seats the lore or entity directly,
+    within a budget. The deterministic "I wrote the name, the entry
+    appeared" behaviour, and the one users arriving from other tools
+    of this kind expect. Applies to lore and entities only.
+- **Budget share** (number input, `0..1`; default `0.5`): the largest share
+  of each per-type budget keyword-injected rows may fill before ranked
+  candidates take the remainder. The control that keeps a scene naming
+  many keyworded rows from consuming the whole window.
+- **Scan depth** (integer input; default `1`): trailing entries
+  scanned for matches in addition to the current user action.
+- **Cascade** (SwitchRow, default off) with a **max depth** integer
+  (default `2`) enabled beneath it: whether an injected row's own text
+  is rescanned for further matches.
+
+`injection_mode='disabled'` on a row still wins over `Inject` — a
+row the user switched off stays off. Per-row keyword authoring lives
+on the World panel's entity and lore Settings tabs, not here. See
+[`memory/retrieval.md → Keyword injection`](../../../memory/retrieval.md#keyword-injection).
 
 ### Embedding status
 
