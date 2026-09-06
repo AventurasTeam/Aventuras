@@ -163,7 +163,34 @@ describe('matchTerms — per-term script rule', () => {
     expect(matchTerms('その月光 剣士', [normalizeTerm('月光 剣')])).toEqual([])
   })
 
-  it('still escapes regex metacharacters in a mixed-script term', () => {
-    expect(matchTerms('the 月光*剣 hummed', [normalizeTerm('月光*剣')])).toEqual(['月光*剣'])
+  // A single CJK character must not drag a mostly-Latin term into substring
+  // mode — the failure the per-term rule exists to prevent.
+  it('denies substring mode to a term carrying a letter from another script', () => {
+    expect(matchTerms('a veilstone月stone', [normalizeTerm('veilstone月')])).toEqual([])
+  })
+
+  it('counts characters, not UTF-16 units, at the two-character floor', () => {
+    // U+20BB7 is one ideograph and two code units; length >= 2 would admit it.
+    expect(matchTerms('彼は𠮷を見た。', [normalizeTerm('\u{20BB7}')])).toEqual([])
+  })
+
+  // The positive half of the same rule: iterating UTF-16 units instead of code
+  // points leaves every char a lone surrogate, which is neither Han nor a
+  // letter, so an astral term would fall out of substring mode entirely.
+  it('matches an astral ideograph pair by substring', () => {
+    const term = '\u{20BB7}\u{20BB7}'
+    expect(matchTerms(`彼は${term}を見た。`, [normalizeTerm(term)])).toEqual([term])
+  })
+
+  it('treats the ideographic space as an author-supplied delimiter', () => {
+    // U+3000 is the space a CJK author actually types; ' ' alone misses it.
+    expect(matchTerms('その月光\u3000剣士', [normalizeTerm('月光\u3000剣')])).toEqual([])
+  })
+
+  // Metacharacters only reach escape() on the boundary branch, so the term has
+  // to be one that stays there — a substring-mode term never sees it.
+  it('escapes regex metacharacters in a term the script rule sends to boundaries', () => {
+    expect(matchTerms('the vex*月 hummed', [normalizeTerm('vex*月')])).toEqual(['vex*月'])
+    expect(matchTerms('the vexX月 hummed', [normalizeTerm('vex*月')])).toEqual([])
   })
 })

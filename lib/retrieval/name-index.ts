@@ -65,12 +65,25 @@ function boundaryPattern(term: string): RegExp {
 // morphemes — the "art" inside "start" risk boundaries exist to prevent is far
 // lower. docs/memory/retrieval.md → Keyword scan surface.
 const UNSPACED_SCRIPT = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u
+const LETTER = /\p{L}/u
+// \s, not ' ': U+3000 IDEOGRAPHIC SPACE is the delimiter a CJK author actually
+// types, so the ASCII space alone covers the wrong half of the set.
+const ANY_SPACE = /\s/u
 
-// Per term, not per haystack: a story mixing scripts must not put its Latin
-// keywords into substring mode. An internal space is an author-supplied
-// delimiter, and one character appears inside too much to carry signal.
+// Composed of those scripts, not merely containing one — a mostly-Latin term
+// with a single CJK character must keep boundary anchoring. Iterated by code
+// point so an astral ideograph counts as the one character it is rather than as
+// two UTF-16 units. An internal space is an author-supplied delimiter, and one
+// character appears inside too much to carry signal.
 function usesSubstringMatch(term: string): boolean {
-  return term.length >= 2 && !term.includes(' ') && UNSPACED_SCRIPT.test(term)
+  const chars = [...term]
+  if (chars.length < 2 || ANY_SPACE.test(term)) return false
+  let sawUnspacedScript = false
+  for (const char of chars) {
+    if (UNSPACED_SCRIPT.test(char)) sawUnspacedScript = true
+    else if (LETTER.test(char)) return false
+  }
+  return sawUnspacedScript
 }
 
 export function matchTerms(text: string, terms: Iterable<string>): string[] {
