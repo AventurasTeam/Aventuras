@@ -48,7 +48,7 @@ type CandidateBase = {
   chaptersOld: number
   /** decay_resistance for awareness, priority/100 for lore, 0 for the rest. */
   pinSignal: number
-  /** Keyword-index terms this row matched; empty means no boost. */
+  /** This row's own keyword terms found in the scan text; empty means no boost. */
   keywordHits: readonly string[]
   /** Flag at pool-build time. Stale rows never enter a pool, so this is false today. */
   embeddingStale: boolean
