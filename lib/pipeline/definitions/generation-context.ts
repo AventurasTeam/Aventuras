@@ -5,10 +5,10 @@ import { buildSuggestionSlots, NARRATIVE_KINDS, promptProse } from '@/lib/piggyb
 import { templateReads, type TemplateId } from '@/lib/prompts'
 import {
   readPromptBuffer,
-  type Candidate,
   type EntityRow,
   type LoreRow,
   type RetrievalSuccess,
+  type SeatedRow,
   type ThreadRow,
 } from '@/lib/retrieval'
 import { currentStoryStore, entitiesStore } from '@/lib/stores'
@@ -90,7 +90,7 @@ function promptEntity(entity: Entity): Pick<Entity, (typeof PROMPT_ENTITY_FIELDS
 // Only the fields a prompt renders: `renderedText` is the exact string the
 // ranker measured the type budget against, and the Float32Array vector beside
 // it would be walked into a numeric-keyed object by substituteIds.
-function promptRows(selected: readonly Candidate[] | undefined): RetrievedRow[] {
+function promptRows(selected: readonly SeatedRow[] | undefined): RetrievedRow[] {
   return (selected ?? []).map((c) => ({
     id: c.id,
     displayName: c.displayName,

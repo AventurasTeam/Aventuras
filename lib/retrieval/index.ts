@@ -10,7 +10,7 @@ export type { EntityRow, LoreRow, StructuralFloor, ThreadRow } from './pools'
 export { extractProse, splitSentences } from './prose-extract'
 export { buildQueryStack, distributeQueryVectors } from './queries'
 export type { QuerySpec, QueryStack, QueryStackInput } from './queries'
-export { rankAll, rankPerType } from './ranker'
+export { rankAll, rankPerType, tokenCost } from './ranker'
 export type { RankTypeInput } from './ranker'
 export { ENTITY_FRAMING, entityRenderedText, lines, loreRenderedText } from './rendered-text'
 export { runRetrieval } from './run'
@@ -35,6 +35,8 @@ export type {
   CandidateKind,
   CandidateTrace,
   DropReason,
+  InjectedRow,
+  KeywordInjection,
   PoolFunnel,
   QueryAll,
   QueryTextPresence,
@@ -43,5 +45,6 @@ export type {
   RankedType,
   RankerParams,
   RetrievalType,
+  SeatedRow,
 } from './types'
 export { cosine } from './vector'

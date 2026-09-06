@@ -3,11 +3,13 @@ import type {
   Candidate,
   CandidateTrace,
   DropReason,
+  KeywordInjection,
   QueryWeights,
   RankAllInput,
   RankedType,
   RankerParams,
   RetrievalType,
+  SeatedRow,
 } from './types'
 
 export type RankTypeInput = {
@@ -24,6 +26,13 @@ export type RankTypeInput = {
    * from the map falls back to computing it.
    */
   capturedTokens?: ReadonlyMap<string, number>
+  /**
+   * This type's keyword matches (retrieval.md → Keyword injection budget).
+   * Empty under `keywordRetrieval.mode='boost'`, which is every pass until a
+   * story turns the mode on. Cut rows may be present and are ignored here —
+   * they stay in the pool and compete on score like any other candidate.
+   */
+  keywordInjected?: readonly KeywordInjection[]
 }
 
 type Scored = {
@@ -115,15 +124,24 @@ function score(
 
 type Costed = Scored & { tokensEstimated: number }
 
+/**
+ * retrieval.md → Token estimation. Exported so the keyword pre-pass prices a
+ * seat with the same formula: the same row seated down either path has to cost
+ * the same, or the budget the probe reports is not the budget that was spent.
+ */
+export function tokenCost(
+  text: string,
+  type: RetrievalType,
+  input: Pick<RankTypeInput, 'params' | 'countTokens'>,
+): number {
+  return input.countTokens(text) + input.params.typeOverhead[type]
+}
+
 // Deferred past the pre-filter: a pre-filtered row can never be seated, so its
 // count is never read (retrieval.md → Token estimation).
 function costTokens(s: Scored, type: RetrievalType, input: RankTypeInput): Costed {
   const captured = input.capturedTokens?.get(s.id)
-  return {
-    ...s,
-    tokensEstimated:
-      captured ?? input.countTokens(s.candidate.renderedText) + input.params.typeOverhead[type],
-  }
+  return { ...s, tokensEstimated: captured ?? tokenCost(s.candidate.renderedText, type, input) }
 }
 
 function trace(
@@ -172,11 +190,20 @@ function boostedEntryIdsFor(input: RankTypeInput): ReadonlySet<string> {
 }
 
 export function rankPerType(
-  pool: readonly Candidate[],
+  wholePool: readonly Candidate[],
   type: RetrievalType,
   budget: number,
   input: RankTypeInput,
 ): RankedType {
+  const seats = (input.keywordInjected ?? []).filter((i) => i.seated)
+  const seatedIds = new Set(seats.map((i) => i.row.id))
+  // A seated row is skipped when it later appears as a ranked candidate rather
+  // than seated or charged twice (retrieval.md → Keyword injection). Dropped
+  // from the pool rather than during the fill so the probe stays honest: these
+  // rows never reached the ranker, so they file as keyword injections and get no
+  // candidate record. A CUT row is deliberately left in to compete on score.
+  const pool = seatedIds.size === 0 ? wholePool : wholePool.filter((c) => !seatedIds.has(c.id))
+
   const boostedEntryIds = boostedEntryIdsFor(input)
   const scored = pool.map((c) => score(c, type, input, boostedEntryIds))
   scored.sort((a, b) => b.score - a.score)
@@ -184,9 +211,13 @@ export function rankPerType(
   const kept = scored.slice(0, input.params.preFilterTopN).map((s) => costTokens(s, type, input))
   const ranked = mmrRank(kept, input.params.lambdaDiv)
 
-  const selected: Candidate[] = []
+  const selected: SeatedRow[] = seats.map((i) => i.row)
   const traces: CandidateTrace[] = []
-  let remaining = budget
+  // Unclamped: budgetShare caps the seats at or below the budget, so a negative
+  // here means a caller supplied seats the cap could not have produced. Every
+  // ranked row is then correctly refused, and funnel.tokensUsed reports over
+  // budget rather than hiding it.
+  let remaining = budget - seats.reduce((sum, i) => sum + i.tokensEstimated, 0)
   let belowFloor = false
 
   for (let i = 0; i < ranked.length; i++) {
@@ -233,6 +264,16 @@ export function rankPerType(
 }
 
 /**
+ * Module-level rather than a closure so the `chapters` default parameter can
+ * reach it. Mirrors canon's `injected_by_type.get(type, ())`: chapters and
+ * happenings stay on `boost` unconditionally, so theirs is always empty.
+ */
+const forType = (input: RankAllInput, type: RetrievalType): RankTypeInput => ({
+  ...input,
+  keywordInjected: input.keywordInjected?.[type] ?? [],
+})
+
+/**
  * Chapters rank first, because only the chapters that win budget feed the
  * happenings boost. `runRetrieval` needs that set *before* it can build the
  * happenings pool — chapter membership decides admission, not just score — so
@@ -245,18 +286,28 @@ export function rankAll(
     input.pools.chapters,
     'chapters',
     input.budgets.chapters,
-    input,
+    forType(input, 'chapters'),
   ),
 ): Record<RetrievalType, RankedType> {
   const happenings = rankPerType(input.pools.happenings, 'happenings', input.budgets.happenings, {
-    ...input,
+    ...forType(input, 'happenings'),
     matchedChapterIds: new Set(chapters.selected.map((c) => c.id)),
   })
 
   return {
-    entities: rankPerType(input.pools.entities, 'entities', input.budgets.entities, input),
-    lore: rankPerType(input.pools.lore, 'lore', input.budgets.lore, input),
-    threads: rankPerType(input.pools.threads, 'threads', input.budgets.threads, input),
+    entities: rankPerType(
+      input.pools.entities,
+      'entities',
+      input.budgets.entities,
+      forType(input, 'entities'),
+    ),
+    lore: rankPerType(input.pools.lore, 'lore', input.budgets.lore, forType(input, 'lore')),
+    threads: rankPerType(
+      input.pools.threads,
+      'threads',
+      input.budgets.threads,
+      forType(input, 'threads'),
+    ),
     happenings,
     chapters,
   }

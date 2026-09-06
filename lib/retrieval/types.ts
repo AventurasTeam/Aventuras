@@ -70,7 +70,42 @@ export type SimpleCandidate = CandidateBase & { kind: Exclude<CandidateKind, 'ha
 /** One row that reached a type's ranker pool. */
 export type Candidate = HappeningCandidate | SimpleCandidate
 
-export const isHappeningCandidate = (c: Candidate): c is HappeningCandidate =>
+/**
+ * A row a keyword hit seated directly (retrieval.md → Keyword injection). It
+ * never reached the ranker, so it carries no vector, no sims and no score —
+ * hence a peer of Candidate in `selected` rather than a Candidate with holes.
+ * `kind` excludes the three types canon keeps on `boost` unconditionally, which
+ * is what keeps a `kind === 'happening'` narrow over the union provable.
+ */
+export type InjectedRow = {
+  kind: 'entity' | 'lore'
+  id: string
+  displayName: string
+  renderedText: string
+}
+
+/** Anything a type's budget paid for this turn, however it earned the seat. */
+export type SeatedRow = Candidate | InjectedRow
+
+/**
+ * One keyword match, seated or cut. camelCase here; lib/probe maps it to the
+ * snake_case CaptureKeywordInjection. Cut rows travel too — the probe records
+ * them so the overflow order stays inspectable, and the ranker reads `seated`
+ * rather than being handed a pre-filtered list, so one list serves both.
+ */
+export type KeywordInjection = {
+  row: InjectedRow
+  /** The normalized terms that fired, for the probe. */
+  terms: readonly string[]
+  /** Overflow ordering key: entities.priority / lore.priority. */
+  priority: number
+  /** Same formula the ranker costs a candidate with (retrieval.md → Token estimation). */
+  tokensEstimated: number
+  /** False when the row matched but the budget cap cut it. */
+  seated: boolean
+}
+
+export const isHappeningCandidate = (c: SeatedRow): c is HappeningCandidate =>
   c.kind === 'happening'
 
 export type { DropReason }
@@ -126,7 +161,14 @@ export type PoolFunnel = {
 }
 
 export type RankedType = {
-  selected: readonly Candidate[]
+  /**
+   * Injected rows first, then the ranked fill — canon's `selected =
+   * list(keyword_injected)` (retrieval.md → Budget-fill termination). Widened
+   * past Candidate because a keyword seat carries no vector; a second field
+   * would leave every consumer responsible for merging, and forgetting would
+   * drop a row that has already spent the budget.
+   */
+  selected: readonly SeatedRow[]
   traces: readonly CandidateTrace[]
   funnel: PoolFunnel
   /**
@@ -170,4 +212,11 @@ export type RankAllInput = {
   chapterRanges: ReadonlyMap<string, ReadonlySet<string>>
   /** Injected so the ranker stays pure — tokens.ts is the production impl. */
   countTokens: (text: string) => number
+  /**
+   * Per-type seat lists (retrieval.md → `rank_all`'s `injected_by_type`). Named
+   * identically to RankTypeInput's array on purpose: the two are mutually
+   * unassignable, so rankAll cannot pass `input` straight through to rankPerType
+   * and every call site has to name the type whose seats it means.
+   */
+  keywordInjected?: Partial<Record<RetrievalType, readonly KeywordInjection[]>>
 }

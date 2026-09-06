@@ -1235,7 +1235,9 @@ describe('runRetrieval — pools', () => {
         }),
         params(),
       )
-      return expectOk(out).bundles.happenings.selected.find((c) => c.id === 'hap_1')?.pinSignal
+      return expectOk(out)
+        .bundles.happenings.selected.filter(isHappeningCandidate)
+        .find((c) => c.id === 'hap_1')?.pinSignal
     }
 
     // Nothing in the schema stops a common-knowledge row from carrying awareness
@@ -1343,7 +1345,9 @@ describe('runRetrieval — pools', () => {
       { id: 'haw_a', retrievalCount: 0 },
       { id: 'haw_b', retrievalCount: 0 },
     ])
-    const selected = ok.bundles.happenings.selected.find((c) => c.id === 'hap_1')
+    const selected = ok.bundles.happenings.selected
+      .filter(isHappeningCandidate)
+      .find((c) => c.id === 'hap_1')
     // Max over the holders, not min or first-wins: the most pinned holder is
     // what keeps the row alive against decay.
     expect(selected?.pinSignal).toBe(0.7)
