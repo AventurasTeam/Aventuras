@@ -158,7 +158,10 @@ const POOLABLE_THREAD_STATUS: ReadonlySet<string> = new Set(['pending', 'resolve
  * the next reply. Active entities are never suppressed; their name in prose is
  * the normal case.
  */
-export function filterEntityPool(rows: readonly EntityRow[], input: EntityPoolInput): EntityRow[] {
+export function filterEntityPool<T extends EntityRow>(
+  rows: readonly T[],
+  input: EntityPoolInput,
+): T[] {
   const staged = rows.filter((r) => r.status === 'staged')
   const hits = new Set(
     matchTerms(

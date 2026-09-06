@@ -6,7 +6,7 @@ import type { QueryAll, RetrievalType } from './types'
 
 export type Stale = { embeddingStale: boolean }
 
-export type LoadedEntityRow = EntityRow & Stale
+export type LoadedEntityRow = EntityRow & Stale & { keywords: string[]; priority: number }
 export type LoadedLoreRow = LoreRow & Stale & { keywords: string[] }
 export type LoadedThreadRow = ThreadRow & Stale
 export type LoadedHappeningRow = Stale & {
@@ -46,7 +46,17 @@ export type SourceRows = {
 // drivers rebuild positional rows with Object.values (lib/db/runtime/exec.native.ts
 // → queryRows) and a duplicate or numeric key silently collapses or reorders them.
 const SOURCE_COLUMNS = {
-  entity: ['id', 'kind', 'status', 'injection_mode', 'name', 'description', 'embedding_stale'],
+  entity: [
+    'id',
+    'kind',
+    'status',
+    'injection_mode',
+    'name',
+    'description',
+    'priority',
+    'keywords',
+    'embedding_stale',
+  ],
   lore: ['id', 'title', 'body', 'injection_mode', 'priority', 'keywords', 'embedding_stale'],
   happening: [
     'id',
@@ -102,6 +112,8 @@ export async function loadSourceRows(queryAll: QueryAll, branchId: string): Prom
       injectionMode: c.injection_mode as EntityRow['injectionMode'],
       name: c.name as string,
       description: c.description as string | null,
+      priority: Number(c.priority),
+      keywords: parseKeywords(c.keywords),
       embeddingStale: flagged(c.embedding_stale),
     }
   })

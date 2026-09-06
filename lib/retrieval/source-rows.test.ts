@@ -49,6 +49,8 @@ async function setup(): Promise<QueryAll> {
       description: 'A sunken vale.',
       status: 'staged',
       injectionMode: 'always',
+      priority: 40,
+      keywords: ['the hollow', 'the vale'],
       ...TS,
       embeddingStale: 1,
     },
@@ -222,6 +224,8 @@ describe('loadSourceRows against a real DB', () => {
         injectionMode: 'always',
         name: 'The Hollow',
         description: 'A sunken vale.',
+        priority: 40,
+        keywords: ['the hollow', 'the vale'],
         embeddingStale: true,
       },
     ])
