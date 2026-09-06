@@ -5,7 +5,7 @@
  * innermost one running.
  */
 
-import type { ActivityNode, ActivityStep } from './types'
+import type { ActivityNode, ActivityRow, ActivityStep } from './types'
 
 /**
  * Assemble the flat list into a forest, preserving append order among siblings.
@@ -72,4 +72,14 @@ export function deepestRunningStep(steps: ActivityStep[]): ActivityStep | null {
     }
   }
   return best
+}
+
+/** The forest in reading order, each step carrying its depth. */
+export function flattenTree(nodes: ActivityNode[], level = 0): ActivityRow[] {
+  const rows: ActivityRow[] = []
+  for (const node of nodes) {
+    rows.push({ step: node.step, level })
+    rows.push(...flattenTree(node.children, level + 1))
+  }
+  return rows
 }

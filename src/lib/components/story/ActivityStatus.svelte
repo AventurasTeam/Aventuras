@@ -26,7 +26,20 @@
     return () => clearInterval(handle)
   })
 
-  let running = $derived(turn ? activity.deepestRunning(turn) : null)
+  /**
+   * Values, not the step: like the timeline's rows, a live step is mutated in place, so the
+   * label and detail have to be recomputed rather than read off a held reference.
+   */
+  let current = $derived.by(() => {
+    const step = turn ? activity.deepestRunning(turn) : null
+    if (!step) return null
+    return {
+      label: step.label,
+      detail: step.detail ?? '',
+      isLLM: step.isLLM,
+      time: formatDuration(stepDuration(step, now)),
+    }
+  })
 </script>
 
 {#if turn}
@@ -41,17 +54,15 @@
         class="h-3 w-3 shrink-0 translate-y-0.5 transition-transform {expanded ? 'rotate-90' : ''}"
       />
 
-      {#if running}
-        {#if running.isLLM}
+      {#if current}
+        {#if current.isLLM}
           <Sparkles class="text-primary/70 h-3 w-3 shrink-0 translate-y-0.5" />
         {/if}
-        <span class="text-foreground min-w-0 truncate">{running.label}</span>
-        {#if running.detail}
-          <span class="text-muted-foreground/60 min-w-0 truncate">· {running.detail}</span>
+        <span class="text-foreground min-w-0 truncate">{current.label}</span>
+        {#if current.detail}
+          <span class="text-muted-foreground/60 min-w-0 truncate">· {current.detail}</span>
         {/if}
-        <span class="text-primary shrink-0 tabular-nums"
-          >{formatDuration(stepDuration(running, now))}</span
-        >
+        <span class="text-primary shrink-0 tabular-nums">{current.time}</span>
       {:else}
         <span class="min-w-0 truncate">{turn.endedAt ? 'Finished' : 'Working'}</span>
       {/if}

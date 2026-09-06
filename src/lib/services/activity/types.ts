@@ -37,3 +37,9 @@ export interface ActivityNode {
   step: ActivityStep
   children: ActivityNode[]
 }
+
+/** A step positioned for display: see `flattenTree`. */
+export interface ActivityRow {
+  step: ActivityStep
+  level: number
+}

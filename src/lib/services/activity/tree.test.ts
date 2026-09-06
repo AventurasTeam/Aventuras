@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildTree, deepestRunningStep } from './tree'
+import { buildTree, deepestRunningStep, flattenTree } from './tree'
 import type { ActivityStep } from './types'
 
 function step(partial: Partial<ActivityStep> & { id: string }): ActivityStep {
@@ -109,5 +109,44 @@ describe('deepestRunningStep', () => {
     ])
 
     expect(found).not.toBeNull()
+  })
+})
+
+describe('flattenTree', () => {
+  it('returns the forest in reading order with each step at its depth', () => {
+    const rows = flattenTree(
+      buildTree([
+        step({ id: 'retrieval' }),
+        step({ id: 'agent', parentId: 'retrieval' }),
+        step({ id: 'call-1', parentId: 'agent' }),
+        step({ id: 'grep', parentId: 'call-1' }),
+        step({ id: 'narrative' }),
+      ]),
+    )
+
+    expect(rows.map((r) => [r.step.id, r.level])).toEqual([
+      ['retrieval', 0],
+      ['agent', 1],
+      ['call-1', 2],
+      ['grep', 3],
+      ['narrative', 0],
+    ])
+  })
+
+  it('keeps concurrent siblings adjacent at the same depth', () => {
+    const rows = flattenTree(
+      buildTree([
+        step({ id: 'retrieval' }),
+        step({ id: 'worldstate', parentId: 'retrieval' }),
+        step({ id: 'lorebook', parentId: 'retrieval' }),
+      ]),
+    )
+
+    expect(rows.map((r) => r.step.id)).toEqual(['retrieval', 'worldstate', 'lorebook'])
+    expect(rows.slice(1).every((r) => r.level === 1)).toBe(true)
+  })
+
+  it('is empty for an empty forest', () => {
+    expect(flattenTree([])).toEqual([])
   })
 })

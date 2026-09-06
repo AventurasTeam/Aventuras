@@ -5,9 +5,9 @@
  * Pure and dependency-free: the reactive shell lives in `stores/activity.svelte.ts`.
  */
 
-export type { ActivityStep, ActivityTurn, ActivityNode, ActivityStatus } from './types'
+export type { ActivityStep, ActivityTurn, ActivityNode, ActivityRow, ActivityStatus } from './types'
 
-export { buildTree, deepestRunningStep } from './tree'
+export { buildTree, flattenTree, deepestRunningStep } from './tree'
 
 export { stepDuration, turnDuration, formatDuration, formatStepDuration } from './duration'
 
