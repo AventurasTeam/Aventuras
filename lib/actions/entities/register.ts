@@ -29,6 +29,8 @@ type EntityUpdatePatch = Partial<{
   retiredReason: string | null
   injectionMode: Entity['injectionMode']
   tags: string[]
+  keywords: string[]
+  priority: number
   state: EntityState
 }>
 
@@ -51,6 +53,8 @@ const UPDATABLE = [
   'retiredReason',
   'injectionMode',
   'tags',
+  'keywords',
+  'priority',
   'state',
 ] as const
 

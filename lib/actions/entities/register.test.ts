@@ -293,4 +293,44 @@ describe('entities CRUD arms', () => {
     )
     expect((await rowFor(db, 'char_1')).embeddingStale).toBe(1) // embedded column changed
   })
+
+  it('writes keywords and priority, and leaves the vector alone', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: { kind: 'createEntity', source: 'user_edit', payload: { entry: CHAR } },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    // Clear the create-time dirty flag so the assertion below reads this edit only.
+    await db.update(entities).set({ embeddingStale: 0 }).where(eq(entities.id, 'char_1'))
+
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateEntity',
+          source: 'user_edit',
+          payload: {
+            branchId: 'br_1',
+            id: 'char_1',
+            patch: { keywords: ['the grey wolf'], priority: 4 },
+          },
+        },
+        actionId: 'act_u',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+
+    // UPDATABLE is a silent allowlist: a column missing from it leaves `set` empty
+    // and the handler rejects, so this is what pins both new entries.
+    const row = await rowFor(db, 'char_1')
+    expect(row.keywords).toEqual(['the grey wolf'])
+    expect(row.priority).toBe(4)
+    // keywords is not in KIND_FIELDS.entity: re-embedding on an alias edit is pure cost.
+    expect(row.embeddingStale).toBe(0)
+    expect(entitiesStore.getById('char_1')?.keywords).toEqual(['the grey wolf'])
+  })
 })
