@@ -1,15 +1,16 @@
+// matchTerms NFC-normalizes and lowercases its haystack but leaves its terms
+// untouched, so every producer of a term has to match that shape or the lookup
+// silently misses — which is why the rule itself lives in a shared bare file
+// that a producer can reach without pulling the retrieval barrel behind it.
+import { normalizeTerm } from '@/lib/keyword-terms'
+
+export { normalizeTerm }
+
 export type NameKeywordIndex = {
   /** lowercased, NFC-normalized entity names present in the branch */
   entityNames: ReadonlySet<string>
   /** lowercased, NFC-normalized lore keywords present in the branch */
   loreKeywords: ReadonlySet<string>
-}
-
-// matchTerms NFC-normalizes and lowercases its haystack but leaves its terms
-// untouched, so every producer of a term has to match that shape or the lookup
-// silently misses.
-export function normalizeTerm(s: string): string {
-  return s.trim().toLowerCase().normalize('NFC')
 }
 
 export function parseKeywords(raw: unknown): string[] {
