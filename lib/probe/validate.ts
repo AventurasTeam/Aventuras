@@ -82,6 +82,11 @@ export function assertCaptureShape(decoded: unknown): asserts decoded is ProbeCa
     if (!Array.isArray(pools[type]))
       throw new CaptureShapeError(`pools.${type}`, `must be an array, got ${typeOf(pools[type])}`)
   }
+  if (!Array.isArray(payload.keyword_injections))
+    throw new CaptureShapeError(
+      'keyword_injections',
+      `must be an array, got ${typeOf(payload.keyword_injections)}`,
+    )
   if (!Array.isArray(payload.queries) || payload.queries.length !== 3)
     throw new CaptureShapeError('queries', 'must be a three-query stack')
   // Required-and-nullable, so `undefined` is rejected rather than defaulted:

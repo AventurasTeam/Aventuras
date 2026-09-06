@@ -204,6 +204,7 @@ describe('buildCapturePayload', () => {
       'embedding_model_id',
       'failure_reason',
       'funnels',
+      'keyword_injections',
       'params',
       'pools',
       'prompt_buffer_tokens',
@@ -217,6 +218,52 @@ describe('buildCapturePayload', () => {
     expect(payload.params.ranker).toEqual(RANKER_DEFAULTS)
     expect(payload.tokenizer.encoding).toBe('o200k_base')
     expect(payload.pools.lore[0].vector).toBeUndefined()
+  })
+
+  it('files a keyword seat as an injection, never as a candidate', () => {
+    const payload = buildCapturePayload({
+      ...identity,
+      mode: 'light',
+      settings,
+      params: RANKER_DEFAULTS,
+      outcome: retrievalSuccess({
+        queries: queryStack(),
+        keywordInjections: [
+          {
+            row: { kind: 'lore', id: 'l1', displayName: 'The Aetherium', renderedText: 'body' },
+            terms: ['aetherium'],
+            priority: 7,
+            tokensEstimated: 42,
+            seated: false,
+          },
+        ],
+      }),
+    })
+
+    expect(payload.keyword_injections).toEqual([
+      {
+        target_kind: 'lore',
+        target_id: 'l1',
+        display_name: 'The Aetherium',
+        terms: ['aetherium'],
+        tokens_estimated: 42,
+        seated: false,
+        priority: 7,
+      },
+    ])
+    expect(payload.pools.lore).toEqual([])
+  })
+
+  it('carries an empty injection list on a failed pass', () => {
+    const payload = buildCapturePayload({
+      ...identity,
+      mode: 'light',
+      settings,
+      params: RANKER_DEFAULTS,
+      outcome: syncStageFailureOutcome(),
+    })
+
+    expect(payload.keyword_injections).toEqual([])
   })
 
   it('stamps the capture identity fields from input, not swapped', () => {
@@ -241,7 +288,7 @@ describe('buildCapturePayload', () => {
       captured_at: 1_700_000_000_123,
       embedding_model_id: 'Xenova/all-MiniLM-L6-v2',
       capture_mode: 'light',
-      capture_version: 4,
+      capture_version: 5,
     })
   })
 

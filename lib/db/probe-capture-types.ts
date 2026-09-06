@@ -49,6 +49,23 @@ type CaptureCandidate = {
   vector?: number[]
 }
 
+/**
+ * One row a keyword hit matched (probe.md → Keyword injections). Deliberately
+ * NOT a CaptureCandidate: these rows never reached the ranker, so they have no
+ * sim_blend, final_score or kw_boost_value, and filing them as candidates would
+ * invent scores that never existed. `seated` false means the budget cap cut it;
+ * `priority` is recorded so the overflow order stays inspectable.
+ */
+type CaptureKeywordInjection = {
+  target_kind: VecTargetKind
+  target_id: string
+  display_name: string
+  terms: string[]
+  tokens_estimated: number
+  seated: boolean
+  priority: number
+}
+
 type PoolFunnelSummary = {
   pool_size: number
   pre_filtered_size: number
@@ -89,8 +106,9 @@ type CaptureTokenizer = { encoding: string; version: string }
 /**
  * Bumped when a captured field's shape or meaning changes, so a decode can
  * warn instead of silently misreading an older payload as the current type.
+ * 5: keyword_injections.
  */
-export const CAPTURE_VERSION = 4 as const
+export const CAPTURE_VERSION = 5 as const
 
 export type ProbeCapturePayload = {
   capture_version: number
@@ -114,6 +132,12 @@ export type ProbeCapturePayload = {
   funnels: Record<RetrievalType, PoolFunnelSummary>
   structural_floor: StructuralFloorRow[]
   /**
+   * Present only while `keywordRetrieval.mode` is `inject`, empty otherwise.
+   * Without it the probe under-reports what reached the prompt: a seated row
+   * consumed budget the ranked pools then competed for and appears in no pool.
+   */
+  keyword_injections: CaptureKeywordInjection[]
+  /**
    * Prompt-buffer cost as one number, not floor rows: the floor is a token
    * ledger and buffered entries carry no retrieval identity, so N rows would
    * add bulk without adding a tunable. Normally the largest floor term, so a
@@ -129,4 +153,4 @@ export type ProbeCapturePayload = {
   failure_reason: EmbedderErrorKind | null
 }
 
-export type { CaptureCandidate }
+export type { CaptureCandidate, CaptureKeywordInjection }

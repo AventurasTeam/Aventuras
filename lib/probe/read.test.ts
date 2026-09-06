@@ -139,6 +139,7 @@ describe('decodeCapture', () => {
       },
       /pools\.happenings/i,
     ],
+    ['keyword_injections', (p) => delete p.keyword_injections, /keyword_injections/i],
     ['queries', (p) => delete p.queries, /queries/i],
     [
       'a query',
