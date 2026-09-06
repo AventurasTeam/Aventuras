@@ -3,6 +3,12 @@ export type { AwarenessRow } from './awareness'
 export { promptBufferTake, readPromptBuffer } from './buffer'
 export type { BufferSettings } from './buffer'
 export { KNN_K, PROSE_EXTRACT_TOP_K, RANKER_DEFAULTS } from './constants'
+export { buildKeywordInjections } from './injection'
+export type {
+  KeywordInjectionInput,
+  KeywordInjections,
+  KeywordRetrievalSettings,
+} from './injection'
 export { matchTerms, nameKeywordIndexFrom, normalizeTerm } from './name-index'
 export type { NameKeywordIndex } from './name-index'
 export { buildStructuralFloor, filterEntityPool, filterLorePool, filterThreadPool } from './pools'
