@@ -8,11 +8,9 @@
     sideOffset = 4,
     portalProps,
     class: className,
-    // `bits-ui` resolves `preventScroll ?? true`, so a dropdown locks the body by default —
-    // its own sub-menus, popovers, selects and tooltips all opt out, and a dropdown has no
-    // more need of it than they do. `strategy` is derived from `preventScroll` upstream
-    // (`strategy ?? (preventScroll ? 'fixed' : 'absolute')`), so it is pinned here to keep
-    // positioning unchanged inside a scrolling container.
+    // `bits-ui` resolves `preventScroll ?? true`, so a dropdown locks the body unless told not
+    // to. `strategy` is derived from it upstream, and is pinned so opting out leaves position
+    // unchanged.
     preventScroll = false,
     strategy = 'fixed',
     ...restProps

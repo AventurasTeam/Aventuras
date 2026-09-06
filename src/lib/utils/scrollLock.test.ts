@@ -1,11 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { isBodyLocked } from './scrollLock'
 
-/**
- * The half-locked states are the point. `bits-ui` sets `overflow` synchronously and
- * `pointer-events` an `afterTick` later, so a snapshot taken between the two sees only one of
- * them -- and a lock the recovery net does not recognise is a session that never recovers.
- */
+/** The half-locked states are the point: they are what the library's deferred apply produces. */
 describe('isBodyLocked', () => {
   it('reports a lock from pointer-events alone', () => {
     expect(isBodyLocked('none', '')).toBe(true)

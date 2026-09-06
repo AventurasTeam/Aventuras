@@ -185,16 +185,9 @@
    * The single owner of orphaned-scroll-lock recovery, for the whole app. Two triggers, one
    * release: see `$lib/utils/scrollLock`.
    *
-   * The observer alone cannot be enough. It fires on writes to `body.style`, and an orphaned
-   * lock is precisely the case where nothing writes there again — it gets one look, at the
-   * moment the overlay is still legitimately open, and is never called back.
-   *
-   * Input is the trigger that cannot miss: a real event reaching the document while the body
-   * is locked and no owner is present means the lock is orphaned, whatever left it behind. A
-   * locked page still delivers these — `pointer-events: none` on `<body>` takes `<body>` and
-   * its subtree out of hit testing, but `<html>` keeps `auto`, so the event targets
-   * `documentElement` and still reaches a capture listener here. Hence document level, and
-   * hence not delegated from anywhere inside the app tree.
+   * The observer fires on writes to `body.style`, which an orphaned lock stops producing, so
+   * input is the trigger that cannot miss. Document level because a locked `<body>` leaves hit
+   * testing while `<html>` keeps `pointer-events: auto` and still receives the event.
    */
   $effect(() => {
     if (typeof document === 'undefined') return
@@ -217,17 +210,14 @@
 
     observer.observe(document.body, { attributes: true, attributeFilter: ['style'] })
 
-    // No settle delay: input arrives from a person, long after any close transition, and an
-    // overlay still exiting is still present and so still counts as an owner.
+    // No settle delay: input arrives long after any close transition, and an exiting overlay
+    // is still present and so still counts as an owner.
     function handleInput() {
       if (!isBodyLockPresent()) return
       release()
     }
 
-    // All three, because any one of them can be the first thing a person tries on a page that
-    // has stopped responding — and `overflow: hidden` makes a scroll the most likely of them.
-    // A wheel is not a pointerdown: without it, someone scrolling at a frozen page keeps
-    // scrolling and never recovers.
+    // `wheel` too: `overflow: hidden` makes scrolling the first thing tried on a frozen page.
     document.addEventListener('pointerdown', handleInput, true)
     document.addEventListener('keydown', handleInput, true)
     document.addEventListener('wheel', handleInput, { capture: true, passive: true })

@@ -19,19 +19,12 @@ export const NO_SCROLL_LOCK_ATTR = 'data-no-scroll-lock'
 /**
  * Everything in this stack that legitimately holds a body lock, as it appears in the DOM.
  *
- * `preventScroll` resolves to `preventScroll ?? true` in `bits-ui`, so dialog, alert-dialog,
- * context-menu AND dropdown/menu all lock; popover, select, tooltip, link-preview and
- * sub-menus pass `false`. `vaul` drawers lock through their own mechanism.
+ * `bits-ui` resolves `preventScroll ?? true`, so dialog, alert-dialog, context-menu and
+ * dropdown/menu lock; popover, select, tooltip and sub-menus opt out. `vaul` locks its own way.
  *
- * Two rules decide what belongs here, and both matter:
- *
- * - Presence, not open state. A lock owner is mounted and unmounted with its element, so it
- *   still holds the lock while animating closed. Matching `[data-state="open"]` would release
- *   the lock under a modal opening behind one that is still exiting.
- * - `[data-state]` is what separates a library-managed owner from a hand-rolled overlay
- *   carrying the same ARIA role. Both libraries set it for the element's whole life; the
- *   app's own overlays (the expanded portrait, the wizard discard prompt) never do, and must
- *   not be able to veto recovery — a veto strands the user, since they hold no lock to release.
+ * Matched on presence, not `[data-state="open"]`: an owner is mounted with its element and
+ * still holds the lock while animating closed. `[data-state]` itself separates a library-owned
+ * overlay from a hand-rolled one with the same role, which holds no lock and must not veto.
  */
 const OPEN_OVERLAY_SELECTOR = [
   '[role="dialog"][data-state]',
@@ -48,7 +41,7 @@ function hasOpenOverlay(): boolean {
 /**
  * Is the body locked? Pure so the decision can be tested without a DOM.
  *
- * Either property alone is a lock: `bits-ui` applies `overflow` synchronously and
+ * Either property alone counts: `bits-ui` applies `overflow` synchronously and
  * `pointer-events` an `afterTick` later, so both half-states are reachable.
  */
 export function isBodyLocked(pointerEvents: string, overflow: string): boolean {
