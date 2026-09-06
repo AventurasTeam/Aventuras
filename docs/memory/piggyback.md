@@ -11,7 +11,8 @@ fast-mutating subset of state mutations.
 | `story_entries.metadata.sceneEntities`                       | LLM-emitted  | Entity IDs present in this entry's scene (characters, items). Bracketed-ID prompt format gives the LLM stable handles.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `story_entries.metadata.currentLocationId`                   | LLM-emitted  | The singleton location entity that IS the current scene. Only ever an _existing_ entity's id — a location introduced this turn that doesn't exist yet as an entity leaves this field unchanged (stale/null) until the periodic classifier creates it. **The staleness does not stay in this field:** `apply.ts` inherits the previous location, and the computed bookkeeping then writes it as `state.current_location_id` on every in-scene character, so entity rows carry an affirmatively wrong location rather than merely a missing one, and the next turn's `wasInScene` comparison builds on it. Retrieval for the new location is degraded for a few turns, same accepted tolerance as [new-character introduction](../parked.md#early-classifier-trigger-on-new-entity-introduction-introducednewrelevantentity). |
 | `story_entries.metadata.worldTime`                           | LLM-emitted  | Seconds delta added to previous entry's `worldTime`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `story_entries.metadata.summary`                             | LLM-emitted  | Optional one-sentence enrichment for the next turn's Q2 structural digest; absent on parse failure or restart is fine.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `story_entries.metadata.summary`                             | LLM-emitted  | Optional one sentence; the next turn's [Q3 retrieval query](./retrieval.md#q3-piggyback-summary). Absent on parse failure or restart is fine.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `story_entries.metadata.retrievalQueries`                    | LLM-emitted  | Up to three strings the model wants retrieved next turn — the [Q4 slot](./retrieval.md#q4-classifier-emitted-queries). Optional; never inherited; excluded from `stateReport`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `story_entries.metadata.stateReport`                         | **Computed** | The full parsed block as emitted, plus the producing layer and any parse failure. Written on every generating turn — the record of what this turn reported, distinct from the inherited absolute fields above. See [Persistence and stripping](#persistence-and-stripping).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `entities.state.visual.*`                                    | LLM-emitted  | One full-replace value per visual category (`physique` / `face` / `hair` / `eyes` / `attire` / `distinguishing`) — never a partial edit of the category's existing text.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `entities.state.equipped_items` / `inventory` / `stackables` | LLM-emitted  | Structured item / stackable transfers between holders — see the tagged format below, not free text.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
@@ -44,6 +45,10 @@ substitution layer swaps both directions; see
     <stackable key="gold" amount="50" to="c1" from="c3" />
   </transfers>
   <summary>Aria pushed into the marshes; met an exiled noble who recognized House Eldrin's sigil.</summary>
+  <retrieval_queries>
+    <query>House Eldrin's history and its sigil</query>
+    <query>exiled nobility of the marsh territories</query>
+  </retrieval_queries>
 </state>
 ```
 
@@ -110,6 +115,26 @@ never have recovered them — a parse failure needs the per-turn
 classifier, not the periodic one, exactly like a `piggybackMode='off'`
 turn does.
 
+**Two fields are exempt from that recovery trigger.** `<summary>` and
+`<retrieval_queries>` must never put the turn into the fallback path on
+their own. Both feed retrieval, which is designed to run without them,
+and spending a full extra structured call to recover an optional
+retrieval hint inverts the cost of the recovery it triggers. Every
+other field is state the turn genuinely needs, which is why the
+all-or-nothing rule is right for them.
+
+The two fields reach that exemption differently, and only one gets it
+for free. Absence is free for both — an unrecognised tag is skipped,
+never recorded as a failure. Malformed content is free only for
+`<summary>`, whose parser is a bare trim and cannot raise.
+`<retrieval_queries>` nests `<query>` children, and every other
+nested-tag field here throws when content is present but resolves to no
+well-formed entries. **This one must not.** Its parser is required to
+be total — drop what it cannot read, return what it can, never raise.
+That is a deliberate exception to the rule above, not a property the
+shape confers, and it has to survive anyone later "fixing" the
+inconsistency.
+
 ## Persistence and stripping
 
 **`story_entries.content` stores prose only.** Both trailing blocks
@@ -131,10 +156,10 @@ persisted raw rather than committed blank.
 
 Three consequences:
 
-- **`promptProse` becomes a no-op for new rows but stays.** Four
+- **`promptProse` becomes a no-op for new rows but stays.** Three
   prompt-side consumers strip on read — the per-turn template's
-  story-so-far loop, Q3's prose extract, Layer-A same-name suppression,
-  and the periodic classifier's turn window. All four read a prose-only
+  story-so-far loop, Layer-A same-name suppression, and the periodic
+  classifier's turn window. All three read a prose-only
   column for rows written after the strip, so the call costs nothing
   there. It is **not** retired: the tolerant-reader decision below keeps
   pre-strip rows in the corpus, and those rows would otherwise feed
@@ -205,6 +230,18 @@ mechanism:
 No curation/detection pipeline for the capability flag exists yet —
 until one does, every model resolves to the first bullet.
 
+**Failing the gate costs more than a different code path.** Because the
+fallback now carries near-narrative context
+([Fallback classifier context](#fallback-classifier-context)), a model
+that permanently fails the gate pays a second full input pass on every
+turn, not just on the occasional parse failure. That skews toward
+small, cheap and local models whose users are the most token-sensitive.
+It is an accepted consequence of the gate rather than a defect: the
+alternative is a stand-in that cannot stand in. Empirically the gate
+looks survivable at that size — piggyback tested working on Gemma 4
+E4B (April 2026) — and whether reliability degrades as the context
+fills is a question for whoever builds the detection pipeline.
+
 **Delta provenance distinguishes the two paths.** The direct
 tagged-block path stamps its deltas `source = piggyback_tagged_block`;
 the per-turn fallback classifier stamps `source = per_turn_classifier` —
@@ -224,6 +261,48 @@ once before falling back to clamp-and-warn
 The direct tagged-block path can't do this cheaply — the delta rides
 the same call as the narrative prose — so it clamps immediately on a
 negative delta, no re-roll.
+
+## Fallback classifier context
+
+The fallback receives most of what the narrative call receives, because
+the two paths are one contract with two implementations and equivalent
+output cannot come from strictly poorer input. Concretely it gains the
+assembled memory blocks, the in-scene and current-location sections
+with descriptions, and the calendar vocabulary — reusing the run's
+stashed retrieval outcome, never triggering a second retrieval pass.
+
+The [Q4 slot](./retrieval.md#q4-classifier-emitted-queries) is what
+forces the question into the open. Every other field can be extracted
+from prose by either path; asking what context is **missing** cannot,
+because piggyback is the narrative call and already holds the memory
+blocks while the fallback is an isolated call that does not.
+
+It deliberately does **not** receive Setting, Genre or Tone. Those steer
+prose style, and feeding them to an extraction call biases it toward
+narrating rather than reporting. Nor either output-format macro — the
+fallback carries its own structured-output schema.
+
+It keeps one thing the narrative call never has: the flat referenceable
+entity roster with bracketed IDs. The narrative sees only in-scene plus
+retrieved entities, while the fallback must be able to name an entity
+in `sceneEntities` that neither set contains. The two contexts are not
+symmetric in both directions.
+
+**Marking the extraction target is mandatory, not stylistic.**
+`lastTurns` is a fixed pair — the last two non-system entries, bounded
+so neither the buffer knobs nor a template can narrow them, because the
+user's action can itself carry state changes ("I put the sword away").
+Extraction targets the last of that pair. Everything else in the prompt
+is background and must be marked as such — including the memory blocks,
+which are the larger hazard: retrieved happenings, chapter summaries
+and lore bodies are older and bulkier than any tail of entries and
+arrive with no framing that says "reference material, not this turn".
+Without that marking the context expansion becomes the main source of
+state extracted from the wrong turn.
+
+How far back the background extends is
+[`classifierContextEntries`](./cadence.md#user-tunable-knobs), which
+cannot narrow below the fixed pair.
 
 ## Mode-mixing across a story
 

@@ -437,6 +437,18 @@ Concretely: with both buffers at default 10 and the mode irrelevant:
 - Chapter 3 has 50 entries, full mode → all 50 current (floor
   trivially exceeded)
 
+**Classifier context.** Per-story setting
+`stories.settings.classifierContextEntries: number` (entries).
+Default 4, **minimum 2**. How many trailing entries the per-turn
+fallback classifier sees. The floor is not cosmetic: the last two
+entries are the fixed action-plus-reply pair the classifier extracts
+state from, and the user's action can itself carry state changes
+("I put the sword away"), so the control cannot go below it. Entries
+above the floor are background context only, marked as such in the
+prompt. Raising it improves what the classifier can reason over and
+raises its per-turn input cost on every turn it fires — which, while
+`piggybackMode` is off, is every turn.
+
 The structural floor — active+in-scene entities, current-location
 lore, awareness-driven happenings, always-injection rows — is not
 governed by these buffer settings. Those reach the prompt
@@ -453,8 +465,8 @@ this section captures what the screen renders.
 
 - **Cadence config** — in-place edit of
   `stories.settings.classifierCadence` (turns; v1 entry-counted
-  only) and the `piggybackMode` toggle. Buffer-aware cadence
-  indicator from
+  only), `classifierContextEntries` (entries, min 2), and the
+  `piggybackMode` toggle. Buffer-aware cadence indicator from
   [`memory/cadence.md → User-tunable knobs`](../../../memory/cadence.md#user-tunable-knobs)
   renders inline.
 - **`piggybackMode` capability gate.** The toggle is disabled when
@@ -463,9 +475,12 @@ this section captures what the screen renders.
   [`memory/cadence.md → Piggyback contract`](../../../memory/cadence.md)).
   In that state the toggle reads as off, a one-line hint explains
   the gate (`Requires a narrative model with structured-output
-capability`), and the periodic-classifier pass picks up the work
-  regardless. Swapping the narrative model to a capable profile
-  re-enables the toggle automatically.
+capability`), and the **per-turn fallback classifier** covers the
+  work on every turn — not the periodic classifier, whose write set is
+  disjoint from piggyback's and could never supply those fields (see
+  [`memory/piggyback.md → Capability gate`](../../../memory/piggyback.md#capability-gate)).
+  Swapping the narrative model to a capable profile re-enables the
+  toggle automatically.
 - **Status block** — current state for the active branch, one of
   _idle / running / retrying / failed-persistent_. Each state
   carries its own copy and inline actions; failed-persistent

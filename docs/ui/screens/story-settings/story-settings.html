@@ -790,6 +790,18 @@
         </div>
 
         <div class="field-row">
+          <div class="field-label">classifier context
+            <span class="hint">trailing entries the per-turn fallback classifier sees</span>
+          </div>
+          <div>
+            <span style="font-size: 11px; color: var(--ink-muted);">last</span>
+            <input class="input-text" value="4" style="width: 60px;">
+            <span style="font-size: 11px; color: var(--ink-muted); margin-left: 4px;">entries</span>
+            <div style="font-size: 10px; color: var(--ink-faint); margin-top: 4px;">minimum <b>2</b> &mdash; the action-plus-reply pair state is extracted from. Entries above the floor are background context only. Higher values cost input tokens on every turn the fallback fires.</div>
+          </div>
+        </div>
+
+        <div class="field-row">
           <div class="field-label">status
             <span class="hint">live state for the active branch &middot; <a href="#" style="color: var(--ink-faint);">demo states</a></span>
           </div>

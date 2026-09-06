@@ -59,3 +59,34 @@ slice-planning gate forces its resolution before that slice is planned.
     pointer-events or portal state rather than `data-density`, which
     every file sets for itself through the global decorator in
     `.storybook/preview.tsx`.
+
+- **The Q4 query slot's cost is projected, not measured, and no slice
+  owns measuring it.** The
+  [query-stack design](../explorations/2026-09-06-retrieval-query-stack.md)
+  takes the retrieval pass from three query vectors to as many as six,
+  and states plainly that the numbers in
+  [`retrieval.md → Per-turn cost budget`](../memory/retrieval.md#per-turn-cost-budget)
+  were not re-run: the ~143ms / ~250ms figures are a linear
+  extrapolation of a measured three-query table. Two terms sit outside
+  even that extrapolation — the embedder, which every figure in that
+  table explicitly excludes and which doubles from three calls per turn
+  to six, and mobile, which has never run the ranker at all and now
+  doubles an already-open risk. The doc assigns both to "whichever slice
+  implements Q4"; no such slice exists, and M3.4 is closed. Route this
+  to that slice's Open questions the moment it is drafted, so the
+  planning gate forces `pnpm bench:retrieval` to be re-run against the
+  real stack before the numbers in canon are trusted.
+
+- **Nothing decides when a degenerate retrieval query should be
+  dropped.**
+  [`retrieval.md → Redundancy`](../memory/retrieval.md#redundancy--reporting-a-degenerate-query)
+  captures, per emitted Q4 query, the share of its own top-K the
+  structural floor had already seated — the measure that makes a useless
+  query distinguishable from a useful one, which is precisely what the
+  removed prose-extract slot could never report. It is deliberately
+  observability-only in v1: acting on it needs a threshold, and setting
+  one needs data that does not exist yet. The parked Tier-2 tuning
+  surface covers _exposing_ ranker knobs, not the decision to drop a
+  query, so this has no home there. Revisit once real captures
+  accumulate; the answer may be that no automatic drop is wanted and the
+  number stays diagnostic.

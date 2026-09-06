@@ -1185,6 +1185,7 @@ stories.settings: {
   partialChapterBuffer: number       // default 10; entries from current chapter when fullChapterInBuffer = false. See docs/memory/cadence.md → User-tunable knobs
   protectedBuffer: number            // default 10; chapter-boundary spillover floor — applies to BOTH modes. If current chapter has fewer entries, fill from previous chapter up to this floor. See docs/memory/cadence.md → User-tunable knobs
   classifierCadence: number          // turns between periodic classifier runs in the background; entry-counted. Cadence-vs-window overlap warning only fires in partial mode (full mode catches up unclassified entries at chapter close)
+  classifierContextEntries: number   // default 4, MINIMUM 2; trailing entries the per-turn fallback classifier sees. The floor is the fixed action-plus-reply pair it extracts from — see docs/memory/cadence.md → User-tunable knobs
   piggybackMode: 'on' | 'off'       // capability-gated; on = narrative emits structured trailing block; off = separate per-turn classifier pass
   embeddingBackend: 'provider' | 'local'   // embedding runtime (provider endpoint OR bundled local ONNX); both produce identical retrieval algorithm
   embedding_model_id: string        // canonical embedding model id; copied from app_settings.embedding_model_id at story creation. Locked thereafter unless the user explicitly re-indexes via the model swap UX. Different stories may carry different model ids; vec0 partitions per branch. See docs/memory/retrieval.md → Storage and Model swap UX
@@ -1723,7 +1724,8 @@ story_entries.metadata: {
   worldTime: number                 // physical seconds since story start; calendar-uniform. Storage invariant: ≥ 0. Classifier writes are monotonically non-decreasing (delta ≥ 0 hard); user manual edits may produce non-monotonic sequences which the UI flags and consumers tolerate. See "In-world time tracking" below.
 
   // Narrative digest — piggyback/classifier-authored, one sentence
-  summary?: string                  // enrichment for the NEXT turn's Q2 structural digest (memory/retrieval.md#q2-structural-digest); absent on parse failure or restart is fine
+  summary?: string                  // one sentence; the NEXT turn's Q3 retrieval query (memory/retrieval.md#q3-piggyback-summary); absent on parse failure or restart is fine
+  retrievalQueries?: string[]       // up to 3; context the model asks to have retrieved NEXT turn (memory/retrieval.md#q4-classifier-emitted-queries). Never inherited — a stale query is worse than none
 
   // What THIS turn's generation reported — authored, never inherited. Absent means this entry reported nothing.
   stateReport?: {

@@ -194,8 +194,15 @@ external override prop, same as reasoning expansion.
 | **Changes this turn** | `stateReport.visualChanges` / `.transfers` | either is non-empty              | never     |
 | **Reported delta**    | `stateReport.worldTimeDelta`               | present                          | never     |
 | **Summary**           | `metadata.summary`                         | present                          | never     |
+| **Retrieval asks**    | `metadata.retrievalQueries`                | non-empty                        | never     |
 | **Parse failure**     | `stateReport.failedFields` / `.raw`        | `failedFields` non-empty         | never     |
 | **Legacy block**      | `stripTrailingBlocks(content).stateRaw`    | no `stateReport`, markup present | never     |
+
+**Retrieval asks** lists what the turn's classifier requested for the
+next turn's retrieval — the
+[Q4 slot](../../memory/retrieval.md#q4-classifier-emitted-queries).
+Read-only like the rest: it records what was asked, and the probe is
+where whether it helped gets answered.
 
 The panel header carries the producing layer as a muted badge
 (piggyback or classifier fallback) whenever `stateReport` is present.

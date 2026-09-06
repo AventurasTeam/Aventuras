@@ -22,6 +22,17 @@ Two architectural drivers shape the stratification:
   cheap models. The periodic classifier amortizes that cost over many
   turns.
 
+  The per-turn **fallback** classifier pays exactly that duplicate cost,
+  knowingly. It carries near-narrative context so it can produce
+  equivalent output — including
+  [the retrieval queries](./retrieval.md#q4-classifier-emitted-queries),
+  which cannot be answered without seeing what the turn was given (see
+  [`piggyback.md → Fallback classifier context`](./piggyback.md#fallback-classifier-context)).
+  This is affordable because it is the exception path: with piggyback
+  on, it fires only when a block fails to parse. A model that
+  permanently fails the capability gate pays it every turn, which is a
+  known consequence of the gate rather than a defect.
+
 See per-layer detail in [`piggyback.md`](./piggyback.md),
 [`classifier.md`](./classifier.md), and
 [`chapter-close.md`](./chapter-close.md).
@@ -41,15 +52,16 @@ them.
 
 ## User-tunable knobs
 
-Three knobs per story. Defaults copied from
+Five knobs per story. Defaults copied from
 `app_settings.default_story_settings` at story creation.
 
-| Knob                             | Effect                                                                                                                                                            | Foot-shooting check                                                                                                                                                |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `fullChapterInBuffer` (boolean)  | Two-mode axis. `true` = full current chapter verbatim. `false` = last `partialChapterBuffer` entries of current chapter.                                          | UI shows token cost at chapter threshold when on ("at the chapter threshold this consumes ~X tokens"). Off-mode token cost is bounded by `partialChapterBuffer`.   |
-| `partialChapterBuffer` (entries) | Size of the current-chapter slice when `fullChapterInBuffer = false`. Ignored in full mode.                                                                       | Interacts with `classifierCadence` — see Buffer-aware cadence indicator below.                                                                                     |
-| `protectedBuffer` (entries)      | Chapter-boundary spillover floor. Applies in **both** modes. If the current chapter has fewer entries than this floor, fill from the previous chapter to satisfy. | Floor for fresh-chapter "the LLM has no recent history" risk; keeps writing style consistent across boundaries. Set too low and a fresh chapter starts threadbare. |
-| `classifierCadence` (turns)      | When the periodic classifier runs in the background.                                                                                                              | UI warns in partial mode when cadence > `partialChapterBuffer` (unclassified turns slide out of the window before classifier catches up). Suppressed in full mode. |
+| Knob                                 | Effect                                                                                                                                                                                                                  | Foot-shooting check                                                                                                                                                |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `fullChapterInBuffer` (boolean)      | Two-mode axis. `true` = full current chapter verbatim. `false` = last `partialChapterBuffer` entries of current chapter.                                                                                                | UI shows token cost at chapter threshold when on ("at the chapter threshold this consumes ~X tokens"). Off-mode token cost is bounded by `partialChapterBuffer`.   |
+| `partialChapterBuffer` (entries)     | Size of the current-chapter slice when `fullChapterInBuffer = false`. Ignored in full mode.                                                                                                                             | Interacts with `classifierCadence` — see Buffer-aware cadence indicator below.                                                                                     |
+| `protectedBuffer` (entries)          | Chapter-boundary spillover floor. Applies in **both** modes. If the current chapter has fewer entries than this floor, fill from the previous chapter to satisfy.                                                       | Floor for fresh-chapter "the LLM has no recent history" risk; keeps writing style consistent across boundaries. Set too low and a fresh chapter starts threadbare. |
+| `classifierCadence` (turns)          | When the periodic classifier runs in the background.                                                                                                                                                                    | UI warns in partial mode when cadence > `partialChapterBuffer` (unclassified turns slide out of the window before classifier catches up). Suppressed in full mode. |
+| `classifierContextEntries` (entries) | How many trailing entries the per-turn fallback classifier sees. Minimum 2 — the fixed action-plus-reply pair it extracts from, which this knob must never be able to cut. Entries beyond the pair are background only. | Raising it widens what the classifier can reason over and raises the fallback's input cost on every turn it fires.                                                 |
 
 ### Composition rule
 
@@ -119,7 +131,8 @@ the cadence warning is hidden entirely.
   fullChapterInBuffer: boolean,    // default false
   partialChapterBuffer: number,    // entries; default 10
   protectedBuffer: number,         // entries; default 10
-  classifierCadence: number        // turns; v1 ships entry-counted only — see parked.md → Token-trigger classifier cadence
+  classifierCadence: number,       // turns; v1 ships entry-counted only — see parked.md → Token-trigger classifier cadence
+  classifierContextEntries: number // entries; default 4, minimum 2 (the fixed pair)
   // existing memory knobs continue: chapterTokenThreshold, chapterAutoClose
 }
 ```

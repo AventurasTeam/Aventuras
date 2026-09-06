@@ -52,7 +52,7 @@ ranker without being able to move a score. See
 - [`retrieval.md`](../../../../memory/retrieval.md) — the whole
   doc; load-bearing sections:
   [`Compute lifecycle`](../../../../memory/retrieval.md#compute-lifecycle),
-  [`Query construction`](../../../../memory/retrieval.md#query-construction--three-vector-stack),
+  [`Query construction`](../../../../memory/retrieval.md#query-construction--the-query-stack),
   [`Candidate pools`](../../../../memory/retrieval.md#candidate-pools),
   [`Hybrid retrieval per type`](../../../../memory/retrieval.md#hybrid-retrieval-per-type),
   [`Keywords schema`](../../../../memory/retrieval.md#keywords-schema),

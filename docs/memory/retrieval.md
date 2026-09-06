@@ -279,7 +279,7 @@ failure.)
 
 **Per-turn cost.** Retrieval pays the embed cost for rows dirtied
 since the last sync — for an ordinary turn, the handful the previous
-reply created or changed — plus the three query embeds. No per-write
+reply created or changed — plus one embed per live query. No per-write
 embed latency; the cost is batched at the sync stage.
 
 - **Pre-retrieval sync stage:** embed the dirty source rows, then
@@ -287,9 +287,9 @@ embed latency; the cost is batched at the sync stage.
   mode ~100–300 ms per network round-trip (batchable across rows in
   one transaction). A normal turn is a few rows; a swipe selection or
   rollback can dirty more.
-- **Query embeds:** embed the three queries (user action, structural
-  digest, scene context); see
-  [Query construction](#query-construction--three-vector-stack).
+- **Query embeds:** embed the live queries (user action, structural
+  digest, piggyback summary, classifier-emitted); see
+  [Query construction](#query-construction--the-query-stack).
   Short text; <20 ms local warm, <100 ms API.
 - **Cache:** keyed by `(target_kind, target_id, field, model_id)`.
   If the source field and model are unchanged, reuse — the
@@ -349,10 +349,11 @@ handles vec0 operations natively.
   lacking AVX2 SIMD, expo-sqlite bridge overhead, and 3-query vs
   1-query workload.
   **Read this as a per-query unit cost only.** "Three queries per pass"
-  is the PoC's single-family shape; the shipped pass issues fifteen —
-  three query vectors across five families — plus a by-id vector fetch
-  for chapter-admitted rows. The pass total lives in
-  [Per-turn cost budget](#per-turn-cost-budget).
+  is the PoC's single-family shape; the shipped pass issues one KNN per
+  live query per family — five families, and
+  [one to six live queries](#query-construction--the-query-stack) —
+  plus a by-id vector fetch for chapter-admitted rows. The pass total
+  lives in [Per-turn cost budget](#per-turn-cost-budget).
 - **Insert cost:** ~600 µs/row → 60 s to populate 100k vectors.
   Bulk-population events (first-story embed, model-swap re-index)
   need progress UI. Per-turn incremental writes are not a concern.
@@ -612,7 +613,7 @@ When `stories.settings.effectiveDim = N` is non-null:
    without re-normalization breaks the unit norm and degrades
    ranking.
 2. **Query vectors.** The same truncation + re-normalization
-   applies to the three per-turn query vectors (Q1 / Q2 / Q3) so
+   applies to every per-turn query vector so
    query and stored vectors live in the same N-dim space.
 3. **vec0 partitioning.** Vectors land in the `*_vec_<dim>` table
    matching the story's effective dim per the [Storage](#storage)
@@ -701,11 +702,14 @@ relabel` path is already user-attested-only. Effective dim
 
 ---
 
-## Query construction — three-vector stack
+## Query construction — the query stack
 
-Each retrieval pass embeds three queries and ranks candidates against
-each, blending the per-vector similarities into a final score per
-candidate.
+Each retrieval pass embeds between one and six queries and ranks
+candidates against each, blending the per-vector similarities into a
+final score per candidate. Only Q1 is structurally always-present —
+every other slot derives its own presence, and
+[the blend](#blending--weighted-average) re-normalizes across whichever
+are live.
 
 ### Q1: User action
 
@@ -715,7 +719,7 @@ Short, signal-dense, embeds fast.
 
 ### Q2: Structural digest
 
-Code-template floor + optional piggyback enrichment. **Every line is
+Code-template floor, structural fields only. **Every line is
 conditional** — a line whose fields are all empty is omitted rather
 than rendered as bare punctuation:
 
@@ -723,15 +727,14 @@ than rendered as bare punctuation:
 {sceneEntities.names}, {currentLocation.name}.   -- if either is present
 Active threads: {activeThreads.titles}.          -- if any
 Era: {era_name}.                                 -- if set
-{summary}                                        -- if the trailing block parsed
 ```
 
 Structural fields are computed from existing data: deterministic and
 free, though not all of them are always populated — see
-[Cold start](#cold-start). The summary line is **optional enrichment**
-from the piggyback trailing block (one sentence, ~30 tokens).
+[Cold start](#cold-start). The piggyback summary was once a fourth line
+here; it is now [a query of its own](#q3-piggyback-summary).
 
-**Why conditional rather than fixed.** Under a fixed four-line
+**Why conditional rather than fixed.** Under a fixed three-line
 template, a story with no cast, no location, no threads and no era
 renders Q2 as punctuation only — and that vector still takes a full
 `w_digest` share of every candidate's blended similarity, because
@@ -740,96 +743,189 @@ the rendered result rather than hardcoded true, so an empty digest
 reports itself absent and
 [the blend](#blending--weighted-average) re-normalizes across the
 remaining queries. The cost of conditionality is that Q2's text varies
-in shape between turns; the cost of the fixed form is a 35% weight
-spent on commas.
+in shape between turns; the cost of the fixed form is `w_digest` spent
+on commas.
 
-The bet on enrichment-not-dependence: rich digests improve retrieval
-ranking but the structural template is genuinely rich on its own
-(names, location, arc context). Tying retrieval quality to "the model
-emitted a clean structured block this turn" was rejected as too
-fragile at narrative-generation temperatures.
+Q2 is now purely structural, and that is the point: it is deterministic
+and free, so it never fails because a model had a bad turn. The
+LLM-emitted material it used to carry is isolated in slots that can
+report their own absence.
 
-### Q3: Heuristic prose extract
+### Q3: Piggyback summary
 
-> **Slated for removal.** Direction settled 2026-09-06: Q3 is deleted
-> rather than re-specced, with the per-turn classifier supplying
-> queries directly and Q2's summary line splitting into a query of its
-> own. What follows describes the shipped behaviour until the
-> replacement lands; the open items that replacement owes — the blend
-> weights, cold start, and probe capture — are tracked on
-> [`followups.md`](../followups.md).
+The one-sentence `metadata.summary` written on the last AI-authored
+entry, embedded as its own vector. Both per-turn writers produce it —
+piggyback's tagged block directly, the fallback classifier when
+piggyback did not fire or its block failed to parse — so it is
+available in either mode
+([`piggyback.md → Capability gate`](./piggyback.md#capability-gate)).
 
-Sentence-level signal-density extraction from the last narrative
-entry. Avoids embedding 400-1000 tokens of filler-heavy prose;
-isolates the high-signal slices.
+**Why it is not part of Q2.** It used to be the digest's last line, one
+natural-language sentence averaged into a single vector with a
+comma-separated proper-noun list. The two carry different shapes and
+different reliability, and the concatenation served neither.
 
-Per-sentence scoring:
+Its own weight, rather than a share of the digest's, follows from the
+same split. The digest is deterministic and free; the summary is
+LLM-emitted and optional. Were they to share, then on every turn the
+model failed to emit a summary the digest would silently inherit its
+share and gain influence nobody tuned for. Separate shares keep the
+reliability difference visible to the blend.
 
-| Signal                                                                                                         | Weight |
-| -------------------------------------------------------------------------------------------------------------- | ------ |
-| Named-entity hit (matches entity-name index)                                                                   | High   |
-| Lore-keyword hit (matches `lore.keywords` index)                                                               | High   |
-| Action-verb hit (drew, struck, said, killed, swore, revealed, named, refused, agreed, ran, fled, found, lost…) | Medium |
-| Dialogue (quoted span)                                                                                         | Medium |
-| Brevity bonus (short impactful sentences)                                                                      | Low    |
+Absent on parse failure or restart is fine — presence is derived, and
+the blend re-normalizes.
 
-Top-K sentences (K=3-5) concatenated, embedded as one vector. Reuses
-the entity-name and lore-keyword indexes already built for the
-[hybrid retrieval](#hybrid-retrieval-per-type) pathway.
+### Q4: Classifier-emitted queries
 
-What this catches that pure structural digest misses: terminology in
-dialogue, action cues, references the digest's structural fields
-don't carry. What it still misses: pure thematic / emotional signal,
-pronoun-mediated reference (genuinely needs an LLM-emitted digest or
-coreference resolution; not chased in v1).
+Up to **three** query strings the per-turn classifier emits directly,
+each embedded and KNN-queried individually rather than concatenated.
+Where Q1 through Q3 are reconstructions of what the turn was about,
+these are the model stating what context it wants.
+
+Both implementations of the per-turn contract carry the field: a
+`<retrieval_queries>` tag inside piggyback's `<state>` block, and the
+matching optional array on the fallback classifier's structured-output
+schema. Answering it requires seeing what the turn was already given,
+which is why the fallback receives the assembled memory blocks
+([`piggyback.md → Fallback classifier context`](./piggyback.md#fallback-classifier-context)).
+
+**Capped at three, and the cap is a cost decision.** KNN scales
+linearly in query count and is the pass's second-largest term; six
+queries doubles it to thirty passes across five types. See
+[Per-turn cost budget](#per-turn-cost-budget).
+
+**Emission contract.** Absent-tolerant and malformed-tolerant. Absence
+comes free — an unrecognised tag is skipped, not recorded as a failure.
+Malformed-tolerance does **not**: the tag nests `<query>` children, and
+every other nested-tag field in the block throws on content it cannot
+resolve into well-formed entries. This field must not. Its parser is
+required to be **total** — drop what it cannot read, return what it
+can, never raise — which makes it a deliberate exception to the
+all-or-nothing rule rather than an inherited property.
+
+That exception is load-bearing: a field-level parse failure fires a
+full extra structured call, and spending one to recover an optional
+retrieval hint inverts the cost of the recovery it triggers
+([`piggyback.md → Parse strategy and failure recovery`](./piggyback.md#parse-strategy-and-failure-recovery)).
+
+Three degenerate emissions are closed before embedding: identical
+strings are deduplicated (three copies would split the pooled weight
+evenly and cost triple the KNN for one signal), empty strings are
+filtered, and an oversized string is capped rather than left to the
+[truncation contract](#truncation-contract).
+
+**Storage.** `story_entries.metadata.retrievalQueries`, capped at
+three, excluded from `stateReport`, and **not inherited** — a query
+carried forward from three turns ago is exactly the staleness this
+pathway exists to avoid. Read from the last AI-authored entry, the same
+row Q3 reads.
+
+#### Redundancy — reporting a degenerate query
+
+A query that retrieves only rows the prompt already contains has spent
+its weight on duplicates. Without a way to see that, a useless query is
+indistinguishable from a good one — the failure that removed the
+heuristic prose extract this slot replaces.
+
+The structural floor is built before the query stack, so by KNN time
+both halves exist. Per emitted query, over its own top-K **before** pool
+filtering:
+
+```
+redundancy = |topK ∩ floor.seatedIds| / |topK|
+```
+
+Near 1.0 means the query asked for what the turn already had; near 0
+means it surfaced something the
+[structural floor](#structural-floor--always-inject) did not.
+
+Nothing new is computed. Pool assembly already discards that
+intersection on every pass — the floor filters run after KNN, not
+inside it — so this records what is currently dropped silently. It is
+captured per query in the probe ([`probe.md`](./probe.md)) and is
+**observability only** in v1: no automatic dropping, because the
+threshold that would justify one needs data nobody has yet.
+
+What it does not catch is a query retrieving novel but irrelevant rows.
+It detects "asked for what it already had", which is the predicted
+failure mode, not uselessness in general.
 
 ### Blending — weighted average
 
-Each candidate scores against each query vector via cosine similarity.
-Final score is the weighted average:
+Each candidate scores against each **live** query vector via cosine
+similarity. Final score is the weighted average over the present slots,
+with weights re-normalized across them:
 
 ```
-score(c) = w_action × sim(Q1, c) + w_digest × sim(Q2, c) + w_prose × sim(Q3, c)
+score(c) = w_action  × sim(Q1, c)
+         + w_digest  × sim(Q2, c)
+         + w_summary × sim(Q3, c)
+         + w_direct  × mean(sim(Q4ᵢ, c) for each emitted Q4ᵢ)
 ```
 
 Default weights (placeholder; user-tunable in advanced settings):
 
 ```
-w_action = 0.35
-w_digest = 0.35
-w_prose  = 0.30
+w_action  = 0.30
+w_digest  = 0.25
+w_summary = 0.20
+w_direct  = 0.25
 ```
+
+**The Q4 slot carries one pooled weight, not one per query.** Under
+per-query weighting a model emitting three queries would hand the
+pathway half the blend and one emitting none would hand it nothing —
+emission volume becomes influence, and the blend's composition swings
+turn to turn on how much the model felt like writing. Pooling means
+emitting three sharpens the pathway's aim without buying it weight.
 
 Weighted average over `max` because `max` lets a single strong signal
 dominate, which is recall-favoring but noisy. Weighted average is the
 consensus shape. Hybrid (`α × max + (1-α) × weighted_avg`) is reserved
 for if real testing surfaces over-conservative retrieval.
 
+**Correlation caveat.** Q2 and Q3 both describe the current scene — the
+summary names the entities the digest lists — so their combined 0.45
+may behave as one signal weighted 0.45 rather than two independent
+ones. That is a calibration question for the
+[tuning surface](#tuning-surface), not a reason to re-merge them: the
+reliability asymmetry that justifies the split is independent of how
+correlated the two texts happen to be.
+
+**At N=1** the scheme must still hold: Q1 re-normalizes to 1.0 and
+retrieval ranks on pure action similarity. That is the cold-start
+behaviour, not a degradation to guard against.
+
+**At N=0 there is no retrieval.** With no query vectors every pool is
+empty and the ranker ranks nothing. Two things still reach the prompt:
+the [structural floor](#structural-floor--always-inject), and — when
+`keywordRetrieval.mode` is `inject` — the
+[keyword injection](#keyword-injection) pre-pass, which needs no
+vectors at all. `boost` cannot survive a zero-query pass, since it
+modifies scores on candidates that do not exist. Injection is the only
+pathway in the system that produces retrieval output without a single
+vector.
+
 ### Cold start
 
-Turn 1 has no prior user action AND no prior AI entry to embed
-against. Fall back to:
+Turn 1 has no prior AI entry, so no classifier has run: no summary, no
+emitted queries. Q2 is thin-to-absent by construction. Turn 1 therefore
+ranks on **Q1 alone**, and no special-casing compensates for it.
 
-- Q1: user's first action (available; retrieval runs after Pre).
-- Q2: whatever the wizard actually committed. No piggyback summary yet.
-- Q3: heuristic prose extract from the **opening** entry, which the
-  wizard always commits.
+That is correct rather than tolerated. The opening entry reaches the
+model regardless of retrieval — chapter 1 holds only the opening, so
+the protected buffer floor pulls its prose in verbatim
+([`architecture.md → Opening-entry classifier exception`](../architecture.md#opening-entry-classifier-exception)).
+Retrieval on turn 1 is choosing _additional_ lore, entities and
+happenings, of which a fresh story has approximately none. The removed
+prose-extract slot was embedding a copy of text the buffer was already
+injecting whole.
 
-When a component is missing, weights re-normalize across the remaining
-queries. No special cold-start logic beyond that.
-
-**This is the load-bearing dependency on Q3.** Turn 1 has no prior
-classifier run, so once Q3 is removed the opening entry — the only
-world content a fresh story has — reaches retrieval through nothing
-unless the replacement seats it another way. Tracked on
-[`followups.md`](../followups.md); the removal cannot land without an
-answer here.
-
-**Q2 is thin-to-absent on turn 1, by construction.** Its four
+**Q2 is thin-to-absent on turn 1, by construction.** Its three
 structural fields do not all have producers at wizard-commit time, and
 this is a sequencing fact rather than a defect — Q2's presence flag is
 derived from the rendered digest, so an empty one re-normalizes away
-instead of spending 35% of the blend on nothing:
+instead of spending its share on nothing:
 
 | Q2 field         | Available at turn 1?                                                                      |
 | ---------------- | ----------------------------------------------------------------------------------------- |
@@ -838,15 +934,10 @@ instead of spending 35% of the blend on nothing:
 | Active threads   | No — thread authoring arrives with the M4.3 plot panel                                    |
 | Era              | No — the shipped calendar sets `eras: null`; flips are manual                             |
 
-So a default-wizard story's first turn ranks on Q1 and Q3. That is
-acceptable — the opening entry Q3 reads is itself wizard-derived, so
-the world context reaches retrieval through prose rather than through
-the digest. Whether the wizard _should_ commit a starting location is
-an open question against
+Whether the wizard _should_ commit a starting location is an open
+question against
 [Slice 3.6b](../implementation/milestones/03-memory-floor/slices/06b-wizard-cast.md),
 which is where locations are authored.
-
----
 
 ## Candidate pools
 
@@ -1316,7 +1407,7 @@ real-world testing shows persistent leakage.
 
 The ranker turns per-type candidate pools into the actual injected
 slice for each turn. **Inputs** are settled per the rest of this doc:
-three query vectors with weighted-average blending, per-type candidate
+the live query vectors with weighted-average blending, per-type candidate
 pools with the three-sub-pool entity model, per-type token budgets
 (additive sliders, hard partitions in v1), and per-row signals
 (`decay_resistance` on awareness, `priority` on lore, recency
@@ -1346,9 +1437,9 @@ pin_boost(c)      = 1 + k_pin(type_of(c)) × pin_signal(c)
 Where:
 
 - **`sim_blend(c)`** — weighted-avg of cosine similarities between `c`
-  and each of the three query vectors (action / structural digest /
-  prose extract). Already computed in the
-  [query stack](#query-construction--three-vector-stack).
+  and each live query vector (action / structural digest / piggyback
+  summary / classifier-emitted). Already computed in the
+  [query stack](#query-construction--the-query-stack).
 - **`pin_signal(c)`** — `decay_resistance` for awareness rows,
   `priority/100` for lore, `0` for entities and threads (no
   continuous pin signal in v1). `entities.priority` exists but is
@@ -1782,14 +1873,14 @@ bench:retrieval`) prices the shipped pass against the volumes
 desktop (Node 24 / V8, file-backed SQLite, `sqlite-vec` 0.1.9),
 median of seven warm passes, **excluding the embedder and IPC**.
 
-| Step                                    | dim 384 | dim 768 | Scales with                         |
-| --------------------------------------- | ------- | ------- | ----------------------------------- |
-| Source reads, awareness, chapter JOIN   | ~21ms   | ~21ms   | branch entity / lore / thread count |
-| KNN — 3 vectors × 5 types               | ~35ms   | ~75ms   | rows per family, and dim            |
-| Chapter-range admission                 | ~21ms   | ~24ms   | happenings on the branch            |
-| Candidate assembly                      | ~6ms    | ~8ms    | pool size                           |
-| Scoring, tokenization, MMR, budget fill | ~29ms   | ~44ms   | min(pool, `preFilterTopN`) per type |
-| **Total**                               | ~108ms  | ~175ms  |                                     |
+| Step                                    | dim 384 | dim 768 | Scales with                           |
+| --------------------------------------- | ------- | ------- | ------------------------------------- |
+| Source reads, awareness, chapter JOIN   | ~21ms   | ~21ms   | branch entity / lore / thread count   |
+| KNN — 3 vectors × 5 types               | ~35ms   | ~75ms   | **query count**, rows per family, dim |
+| Chapter-range admission                 | ~21ms   | ~24ms   | happenings on the branch              |
+| Candidate assembly                      | ~6ms    | ~8ms    | pool size                             |
+| Scoring, tokenization, MMR, budget fill | ~29ms   | ~44ms   | min(pool, `preFilterTopN`) per type   |
+| **Total**                               | ~108ms  | ~175ms  |                                       |
 
 Read at 6000 happenings / 15 000 awareness / 60 chapters — the top of
 the projected range. Lower scales are cheaper roughly in proportion:
@@ -1847,12 +1938,33 @@ rather than an absolute:
 - Terms proportional to **happenings on the branch** are accepted but
   budgeted, because that count is bounded by the chapter threshold.
 
+**The query stack is no longer three vectors, and the table above has
+not been re-run.** [Q4](#q4-classifier-emitted-queries) takes the worst
+case to six live queries, so KNN goes to thirty passes — linearly, since
+each is an independent `sqlite-vec` query. Extrapolating the row above
+puts KNN at ~70ms / ~150ms and the total at ~143ms / ~250ms, which
+lands dim 768 on the stated ceiling. That extrapolation is not a
+measurement and must not be quoted as one.
+
+Desktop is nonetheless the least interesting part of it. The scaling
+obligations below are unaffected — query count is a fixed small
+constant, not a term proportional to awareness rows or branch entries —
+and retrieval remains under 1% of a turn. The doubling bites in the two
+places this table does not cover, and both are obligations on whichever
+slice implements Q4 rather than assumptions the design may make:
+
+- **The embedder is excluded from every figure here.** It goes from
+  three embedding calls per turn to six, and on a local ONNX embedder
+  it is plausibly the largest single term in the pass. Nothing has
+  measured it.
+- **Mobile doubles an already-open risk** — see below.
+
 **Mobile is unmeasured.** Every figure here is desktop. The PoC's
 per-query KNN numbers under
 [Performance characteristics](#performance-characteristics--poc-findings)
 are the only mobile evidence and they predate the shipped pass, which
-issues fifteen KNN passes rather than three. Nothing has run the
-ranker on-device. Treat the mobile budget as open, not as a scaled
+issues five KNN passes per live query rather than three total — up to
+thirty once Q4 lands. Nothing has run the ranker on-device. Treat the mobile budget as open, not as a scaled
 copy of this table.
 
 ### Pseudocode
@@ -1958,8 +2070,10 @@ The Tier-2 knob set those controls would expose:
 - `min_score_threshold` noise floor.
 - `τ_revive` high-similarity bypass threshold (default 0.85;
   controls when decayed-but-extremely-similar rows resurface).
-- Per-query weights (`w_action`, `w_digest`, `w_prose`) — already in
-  the [query stack](#query-construction--three-vector-stack).
+- Per-query weights (`w_action`, `w_digest`, `w_summary`, `w_direct`)
+  — already in the
+  [query stack](#query-construction--the-query-stack). `w_direct` is a
+  pooled share across every emitted Q4, not a per-query weight.
 
 Real signal from testing tunes these. v1 ships with defaults;
 empirical calibration happens once test stories surface real

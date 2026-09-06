@@ -725,6 +725,24 @@ moved; resolve with the slice it names.
   already anticipates a main-process emit path, which is where the design
   should start. Surfaced by Slice 3.12a review (2026-08-19), routed
   2026-08-20.
+- **M7.1 — Tagged-block capability detection is unspecified, and its
+  reliability question is open at depth.**
+  [`memory/piggyback.md → Capability gate`](../memory/piggyback.md#capability-gate)
+  gates `piggybackMode` on a per-model "reliable at tagged blocks" flag
+  and states that no curation or detection pipeline exists — so every
+  model currently resolves to piggyback-off and pays the per-turn
+  fallback classifier, which since the
+  [query-stack design](../explorations/2026-09-06-retrieval-query-stack.md)
+  carries near-narrative context and therefore a second full input pass.
+  Detection lands with this slice's model-select surface. Two things it
+  must answer beyond "does the flag exist": how the flag is populated
+  (curation, probe, or both) given capabilities are always
+  user-overridable, and whether block reliability **degrades as the
+  context window fills** — piggyback tested working on Gemma 4 E4B
+  (April 2026), but only at modest depth, and a model that emits clean
+  blocks at turn 5 and malformed ones at turn 80 would silently move a
+  story onto the expensive path exactly as it gets long. Surfaced
+  2026-09-06 designing the query stack.
 - **M7.1 — Every future model-removal path must evict the native session cache.**
   `lib/embedder/local/runtime.native.ts` holds a lazy `bundles`
   `Map<modelId, SessionBundle>`; a removed then re-downloaded model reuses

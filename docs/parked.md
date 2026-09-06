@@ -123,8 +123,8 @@ gating concerns that share the same pass.
 
 The ranker's scoring-math knobs — per-type decay rates `λ`, MMR
 diversity `λ_div`, `kw_boost`, `min_score_threshold`, `τ_revive`,
-`chapter_boost`, and the three query weights `w_action` / `w_digest`
-/ `w_prose` — ship in v1 as hardcoded constants. Their starting
+`chapter_boost`, and the four query weights `w_action` / `w_digest` /
+`w_summary` / `w_direct` — ship in v1 as hardcoded constants. Their starting
 values live in prose under
 [`retrieval.md → Tuning surface`](./memory/retrieval.md#tuning-surface),
 calibrated against real story data by the empirical-tuning pass that
@@ -1022,11 +1022,12 @@ bites.
 
 #### Pre-blended query vector — escape hatch for high-dim provider on mobile
 
-Three-query KNN scales linearly with dim and triples per-pass cost
-vs single-query. For users running heavy provider embeddings
+KNN scales linearly with dim and with query count, so a full
+[query stack](./memory/retrieval.md#query-construction--the-query-stack)
+costs up to six times a single-query pass. For users running heavy provider embeddings
 (Qwen3-Embedding-8B at 4096-dim, OpenAI `text-embedding-3-large`)
 on mobile, retrieval-pass cost grows into multi-second territory at
-100k pools. Pre-blending the three query vectors before KNN is
+100k pools. Pre-blending the live query vectors before KNN is
 mathematically rank-equivalent to weighted score-blend for
 L2-normalized embeddings (with per-batch-constant scaling). Real
 trade-offs:

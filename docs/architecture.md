@@ -560,10 +560,16 @@ Two agents from the prior design were collapsed:
   semantic-cluster consolidation at chapter close. See
   [`memory/chapter-close.md → Phase 3`](./memory/chapter-close.md#phase-3--lore-management).
 - **Per-reply classifier** split into piggyback (when
-  `piggybackMode='on'` and the narrative model has structured-output
-  capability) + periodic classifier (background; handles the larger
-  multi-turn batch). Either path covers the same write set; mode
-  toggle is at `stories.settings.piggybackMode`.
+  `piggybackMode='on'` and the narrative model is capability-flagged
+  reliable at tagged blocks), its per-turn fallback classifier, and the
+  periodic classifier (background; handles the larger multi-turn
+  batch). Parity holds between **piggyback and its per-turn fallback**,
+  which cover the same write set — the periodic classifier's set is
+  disjoint from both and could never recover their fields, which is why
+  a failed parse falls back to a per-turn pass rather than waiting for
+  the background one (see
+  [`memory/piggyback.md → Parse strategy and failure recovery`](./memory/piggyback.md#parse-strategy-and-failure-recovery)).
+  Mode toggle is at `stories.settings.piggybackMode`.
 
 ### Classifier contract — metadata fields
 
@@ -574,6 +580,14 @@ populates the new entry's metadata:
   in the scene this entry depicts.
 - `currentLocationId: string | null` — the singleton location entity
   that IS the current scene.
+- `summary: string` — one sentence, optional. Written by the per-turn
+  paths only (piggyback or its fallback), never by the periodic
+  classifier. Feeds the next turn's
+  [Q3 retrieval query](./memory/retrieval.md#q3-piggyback-summary).
+- `retrievalQueries: string[]` — up to three strings naming context the
+  model wants retrieved next turn; optional, per-turn paths only, never
+  inherited. Feeds the
+  [Q4 slot](./memory/retrieval.md#q4-classifier-emitted-queries).
 - `worldTime: number` — seconds delta (universal across calendars)
   added to the previous entry's `worldTime`. The delta is
   **non-negative — `delta ≥ 0` is a hard pipeline-layer invariant**.

@@ -175,7 +175,8 @@ Click → opens inspect for that capture.
     story state under current params, writes a new capture
     pointing at the same `target_entry_id`. Useful for "is this
     still missing X under current params?" Costs a fresh embed of
-    the three queries (~20-100 ms local; ~50-300 ms provider). Does
+    every query the capture stored — one to six (~20-100 ms local
+    each; ~50-300 ms provider). Does
     NOT regenerate the prose turn.
   - **Export** — downloads the capture as a JSON blob (gzipped
     payload + metadata). Includes prose snippets — user is
@@ -198,39 +199,53 @@ Q1 — User action                       embedded · 18 tokens
 └─────────────────────────────────────────────────────┘
 [copy]  cosine histogram (deep mode only) ▁▂▅▇▆▃▁
 
-Q2 — Structural digest                 embedded · 32 tokens
+Q2 — Structural digest                 embedded · 28 tokens
 ┌─────────────────────────────────────────────────────┐
 │ "Aria, Kael, the study. Active threads: the locked  │
-│  letter, betrayal arc. Era: Reform. The diary..."   │
+│  letter, betrayal arc. Era: Reform."                │
 └─────────────────────────────────────────────────────┘
 sources: scene=2 entities · location=the_study ·
-         threads=2 active · summary=piggyback
+         threads=2 active
 [copy]  histogram ▁▂▄▆▇▆▄▂
 
-Q3 — Heuristic prose extract           embedded · 48 tokens
+Q3 — Piggyback summary                 embedded · 21 tokens
 ┌─────────────────────────────────────────────────────┐
-│ "She drew the iron key from her pocket."            │
-│ "Kael whispered, 'They mustn't know.'"              │
-│ "The diary lay open to page seven."                 │
+│ "Aria found the diary open to page seven and hid    │
+│  it from Kael."                                     │
 └─────────────────────────────────────────────────────┘
-selection scores: 1.4 · 1.1 · 0.9 (top-3 of 12)
-breakdown: entity hits, lore keyword hits, action verbs,
-           dialogue, brevity bonus per sentence
-[copy]
+written by: piggyback tagged block
+[copy]  histogram ▁▃▆▇▅▂▁
+
+Q4 — Classifier-emitted                2 of 3 · 19 tokens
+┌─────────────────────────────────────────────────────┐
+│ 1  "House Eldrin's history and its sigil"           │
+│    redundancy 0.10 · 1 of 10 top-K already seated   │
+│ 2  "who else has read the diary"                    │
+│    redundancy 0.80 · 8 of 10 top-K already seated ⚠ │
+└─────────────────────────────────────────────────────┘
+[copy]  histograms ▁▂▅▇▆▂▁ · ▇▆▂▁▁▁▁
 ```
 
-Three blocks, one per query. Each shows full text, token count,
-copy button, and (in deep mode) a tiny cosine-similarity histogram
-across the candidate pool — useful for spotting "this query had no
-high-sim hits anywhere."
+One block per live query — between one and six, since
+[the stack is variable-length](../../../memory/retrieval.md#query-construction--the-query-stack).
+An absent slot renders as a muted "not present this turn" row rather
+than being omitted, so a reader can tell "the model emitted no
+summary" from "the panel forgot to draw it." Each present block shows
+full text, token count, copy button, and (in deep mode) a tiny
+cosine-similarity histogram across the candidate pool — useful for
+spotting "this query had no high-sim hits anywhere."
 
 The Q2 source breakdown lists which structural fields fed the
-template (sceneEntities count, location, active thread count) and
-whether a piggyback summary line was included.
+template (sceneEntities count, location, active thread count).
 
-The Q3 breakdown shows top-K selected sentences with their per-
-sentence scores and the signal contributions
-(named-entity / lore-keyword / action-verb / dialogue / brevity).
+**Q4 carries a redundancy ratio per query**, the share of that query's
+own top-K the structural floor had already seated — see
+[`retrieval.md → Redundancy`](../../../memory/retrieval.md#redundancy--reporting-a-degenerate-query).
+It is the panel's most load-bearing number: a high ratio means the
+model asked for context the turn already had, and the query spent its
+weight retrieving duplicates. Ratios above a warn threshold carry the
+⚠ marker so a degenerate emission is visible at a glance rather than
+requiring the reader to cross-reference the floor tab by hand.
 
 #### Per-type tabs (Entities / Lore / Happenings / Threads / Chapter summaries)
 
@@ -254,7 +269,7 @@ Stale excluded from pool: 7
 Filter: [all] [selected] [dropped] [bypassed] [stale]
 
 ┌──────────────────────────────────────────────────────────────┐
-│ Name      Sts sim Q1 Q2 Q3 blend rec pin kw bypass score MMR result │
+│ Name      Sts sim Q1 Q2 Q3 Q4… blend rec pin kw byp score MMR result │
 ├──────────────────────────────────────────────────────────────┤
 │ Aria      ▣  .82 .91 .77  .83  1.0 .90 .10  -    .85    1  ✓ │
 │ Kael      ▣  .79 .85 .73  .79  1.0 .80 .10  -    .81    2  ✓ │
@@ -282,16 +297,16 @@ Filter chips — narrow the table to a subset:
 
 Table columns vary by type:
 
-- **Entities**: name, status, sim Q1/Q2/Q3, sim blend, recency,
+- **Entities**: name, status, per-query sims, sim blend, recency,
   pin (status-derived), kw boost, bypass, score, MMR rank, result.
-- **Lore**: title, priority, sim Q1/Q2/Q3, blend, kw boost, score,
+- **Lore**: title, priority, per-query sims, blend, kw boost, score,
   MMR rank, result.
-- **Happenings**: title, chapter, sim Q1/Q2/Q3, blend, recency,
+- **Happenings**: title, chapter, per-query sims, blend, recency,
   pin (`decay_resistance`), kw boost, chapter boost, bypass, score,
   MMR rank, result.
-- **Threads**: title, status, sim Q1/Q2/Q3, blend, recency, kw
+- **Threads**: title, status, per-query sims, blend, recency, kw
   boost, score, MMR rank, result.
-- **Chapter summaries**: chapter, title, sim Q1/Q2/Q3, blend, kw
+- **Chapter summaries**: chapter, title, per-query sims, blend, kw
   boost, score, MMR rank, result.
 
 Result cell glyphs:
@@ -374,10 +389,10 @@ plus a sticky parameter panel:
 ├──────────────────────────────────────────────┬────────────────┤
 │ Filter: [changes only] [all] [selected] ...  │ Param panel    │
 │                                              │ Query weights  │
-│ Name      Sts Q1 Q2 Q3 BL rec pin kw byp ... │ w_action  ▢   │
+│ Name      Sts Q1 Q2 Q3 Q4… BL rec pin kw ... │ w_action  ▢   │
 │ ─────────────────────────────────────────    │ w_digest  ▢   │
-│ Vael       ◌ .61 ...        ▲.45 was .44  ✓  │ w_prose   ▢   │
-│ Linde      ◌ .91 ...    ↗  ▲.07 was .05  ✓  │ Decay          │
+│ Vael       ◌ .61 ... ...    ▲.45 was .44  ✓  │ w_summary ▢   │
+│ Linde      ◌ .91 ... ...↗  ▲.07 was .05  ✓  │ w_direct  ▢   │
 │ Cap. Roen  ◌ .40 ...        ▲.39 was .38  ✓ NEW │ λ_happen ▢ │
 │ Sera       ◌ .29 ...        ▼.14 was .15  ↓ DROP│ ...        │
 │ ...                                          │ Bypass         │
@@ -389,8 +404,9 @@ plus a sticky parameter panel:
 ### Why single-table-with-diffs and not side-by-side
 
 Two parallel tables (captured | simulated) was the obvious framing
-but doesn't fit. The score table has 13 columns
-(name + status + Q1 / Q2 / Q3 + blend + recency + pin + kw + chapter
+but doesn't fit. The score table runs 12-17 columns — it varies,
+because the query stack does (name + status + one column per live
+query + blend + recency + pin + kw + chapter
 boost + bypass + final score + MMR rank + result). Two of those
 side-by-side plus the 280-pixel parameter panel exceeds desktop
 container width before any column gets readable padding. Phone tier
@@ -454,8 +470,10 @@ edit.
 Sticky right-side column on desktop and tablet, slide-up sheet on
 phone. Param groups in fixed order:
 
-- **Query weights** — `w_action`, `w_digest`, `w_prose`. Sum-to-one
-  re-normalization on edit (edit one, others rebalance).
+- **Query weights** — `w_action`, `w_digest`, `w_summary`,
+  `w_direct`. Sum-to-one re-normalization across _present_ slots on
+  edit (edit one, others rebalance). `w_direct` is pooled, not
+  per-query.
 - **Decay** — per-type `λ` (happenings, entities off-scene,
   threads). Lore and chapter-summary `λ` are 0 by design and not
   shown.
@@ -670,7 +688,7 @@ Exported capture is a JSON file:
 }
 ```
 
-Includes prose snippets (display fields, query texts, sentence
+Includes prose snippets (display fields, query texts, summary
 extracts). The user is responsible for redaction before sharing.
 A note in the export confirm dialog: "Exports include prose from
 the turn. Review before sharing externally."

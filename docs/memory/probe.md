@@ -127,12 +127,19 @@ Per capture:
   tunable a type error here instead of a silently absent capture
   field. Frozen to capture-time values; the simulator diffs against
   current story params at inspect time.
-- **Three queries.** Q1 / Q2 / Q3 text content, plus per-query
-  metadata: token count, source pointer (which entry / structural
-  fields produced it), and for Q3 the per-sentence selection scores
-  from the
-  [heuristic prose extract](./retrieval.md#q3-heuristic-prose-extract).
-  Query **vectors are never stored**, in either mode — see
+- **The queries.** One to six of them — the
+  [query stack](./retrieval.md#query-construction--the-query-stack) is
+  variable-length, so this is a list, not a fixed triple. Each carries
+  its text, token count, and source pointer (which entry or structural
+  fields produced it). Every
+  [Q4 entry](./retrieval.md#q4-classifier-emitted-queries) additionally
+  carries its
+  [redundancy ratio](./retrieval.md#redundancy--reporting-a-degenerate-query)
+  — the share of its own top-K that the structural floor had already
+  seated. That number is the only way to tell a degenerate query from a
+  useful one after the fact, which is the failure the removed
+  prose-extract slot could never report. Query **vectors are never
+  stored**, in either mode — see
   [Deep mode](#deep-mode-per-capture-opt-in).
 - **Keyword scan surface.** `scan_text` — the narrative text
   `kw_boost_value` was matched against, per
@@ -153,10 +160,11 @@ Per capture:
     indefinitely.
   - `display_text` — the exact string the ranker priced. **Null on a
     pre-filtered row**, which the simulator can never seat.
-  - `sim_q1`, `sim_q2`, `sim_q3` — per-query cosine similarities,
-    each **null where that query produced no vector**, a state a `0`
-    cannot express. Presence is read off these three and nowhere
-    else.
+  - `sims` — per-query cosine similarities, positionally aligned with
+    the capture's query list, each **null where that query produced no
+    vector**, a state a `0` cannot express. Presence is read off this
+    list and nowhere else. A list rather than `sim_q1..3` fields
+    because the stack's length varies per turn.
   - `sim_blend` — weighted-avg blend at capture-time weights.
   - `recency_factor`, `pin_signal`, `chapters_old`, `kw_boost_value`,
     `chapter_boost_applied` (bool), `bypass_triggered` (bool).
@@ -224,8 +232,8 @@ candidate in the pool.
 
 Candidate vectors alone are sufficient. `λ_div` — the one thing deep
 mode exists for — needs candidate-vs-candidate cosines, and every
-other simulation re-blends the per-row `sim_q1..3` the capture
-already stores, so a query vector would never be read.
+other simulation re-blends the per-row `sims` the capture already
+stores, so a query vector would never be read.
 
 Storage cost is 40-80x light mode gzipped — measured at dim 384 and
 dim 768 respectively on the fixture under
@@ -388,8 +396,9 @@ From a light capture:
 
 Adds in a deep capture, where the per-row vectors let MMR re-run:
 
-- `w_action`, `w_digest`, `w_prose` — re-blend stored per-query
-  sims into a new `sim_blend`.
+- `w_action`, `w_digest`, `w_summary`, `w_direct` — re-blend stored
+  per-query sims into a new `sim_blend`. `w_direct` is pooled across
+  every emitted Q4, so editing it moves all of them together.
 - Per-type `λ` decay rates — re-compute `recency_factor` from stored
   `chapters_old`, which every captured candidate carries.
 - `kw_boost` magnitude — re-scale stored `kw_boost_value`.
@@ -514,7 +523,7 @@ from a different branch is disabled.
 
 ### Embedding model swap
 
-Captured `sim_q*` and `sim_blend` values are pre-computed cosines —
+Captured `sims` and `sim_blend` values are pre-computed cosines —
 just numbers. They remain valid for inspection and simulation
 indefinitely, regardless of subsequent model swaps. The simulator
 re-blends and re-decays freely.
@@ -558,8 +567,8 @@ capture's `failure_reason` is set — on the row **and** in the payload,
 so `replayType` can refuse a failed capture without the row — and the
 body contains whatever partial state was reached:
 
-- Embedder failure during query embed — captures Q1/Q2/Q3 text
-  but no sims; pool data may be empty.
+- Embedder failure during query embed — captures the query text but
+  no sims; pool data may be empty.
 - Vector-invariant fault mid-pass — captures queries and partial
   pool data up to the failure point.
 
