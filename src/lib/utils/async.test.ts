@@ -46,6 +46,9 @@ describe('pLimit', () => {
 })
 
 describe('mergeGenerators cleanup', () => {
+  /** Cleanup is started but not awaited, so let the queued `return()` calls land. */
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+
   /** A generator that records whether its own cleanup ran. */
   function tracked(values: string[], cleanup: { closed: boolean }) {
     return (async function* () {
@@ -74,6 +77,7 @@ describe('mergeGenerators cleanup', () => {
       })(),
     ).rejects.toThrow('boom')
 
+    await settle()
     // Without this the sibling's `finally` never runs, so anything it owns stays open.
     expect(survivor.closed).toBe(true)
   })
@@ -89,6 +93,7 @@ describe('mergeGenerators cleanup', () => {
     await merged.next()
     await merged.return({} as never)
 
+    await settle()
     expect(first.closed).toBe(true)
     expect(second.closed).toBe(true)
   })
@@ -115,5 +120,34 @@ describe('mergeGenerators cleanup', () => {
       seen.push(next.value)
     }
     expect([...seen].sort()).toEqual(['x', 'y'])
+  })
+})
+
+describe('mergeGenerators cleanup is not blocking', () => {
+  it('propagates the failure without waiting on a sibling read that has not answered', async () => {
+    let releaseSibling: (() => void) | undefined
+    const merged = mergeGenerators({
+      thrower: (async function* () {
+        yield 'a'
+        throw new Error('boom')
+      })(),
+      // Stands in for a phase whose model call has not come back. `return()` on this
+      // generator queues behind the pending `next()`, so awaiting cleanup would hang here.
+      stuck: (async function* () {
+        yield 'b'
+        await new Promise<void>((resolve) => {
+          releaseSibling = resolve
+        })
+        yield 'c'
+      })(),
+    })
+
+    await expect(
+      (async () => {
+        for await (const _ of merged) void _
+      })(),
+    ).rejects.toThrow('boom')
+
+    releaseSibling?.()
   })
 })

@@ -78,9 +78,13 @@ export async function* mergeGenerators<
     }
   } finally {
     // One generator throwing, or the consumer walking away, leaves the rest mid-iteration.
-    // They are owned here, so their cleanup is closed here rather than left to collection --
-    // `allSettled` because a sibling failing to close must not mask the original failure.
-    await Promise.allSettled(
+    // They are owned here, so closing them is started here rather than left to collection.
+    //
+    // Started, not awaited: an async generator serialises its own requests, so `return()`
+    // queues behind whatever `next()` is already in flight -- a model call, here -- and that
+    // read cannot be cancelled from outside. Awaiting would hold the caller, and the failure
+    // it is propagating, for as long as an unrelated sibling takes to answer.
+    void Promise.allSettled(
       Array.from(activeGenerators.values()).map((gen) => gen.return(undefined)),
     )
   }

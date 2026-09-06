@@ -148,12 +148,8 @@ export class ActivityRecorder {
   }
 
   /**
-   * The retained record for an entry, or null once evicted.
-   *
-   * Reads the live turn rather than a copy out of `snapshot()`: this is called from a
-   * `$derived` in every mounted narration entry and re-runs on every step appended, so a
-   * fresh copy per call would churn allocations through a whole turn -- and change identity
-   * each time, restarting the timers and tree rebuilds downstream of it.
+   * The retained record for an entry, or null once evicted. The live turn, not a copy out of
+   * `snapshot()`: callers key their reactivity off its identity.
    */
   find(entryId: string): ActivityTurn | null {
     return findTurnByEntryId(this.turns, entryId)
