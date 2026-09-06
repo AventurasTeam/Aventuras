@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { matchTerms, nameKeywordIndexFrom, parseKeywords } from './name-index'
+import { matchTerms, nameKeywordIndexFrom, normalizeTerm, parseKeywords } from './name-index'
 
 const named = (...names: string[]) => names.map((name) => ({ name }))
 const keyworded = (...lists: string[][]) => lists.map((keywords) => ({ keywords }))
@@ -122,5 +122,48 @@ describe('matchTerms', () => {
       'mira',
       'veilstone',
     ])
+  })
+})
+
+// docs/memory/retrieval.md → Keyword scan surface: the match rule follows the
+// script of the keyword, per keyword.
+describe('matchTerms — per-term script rule', () => {
+  it('matches an unspaced Han term by substring', () => {
+    // Japanese prose supplies no inter-word space to anchor a boundary against,
+    // so the \p{L}\p{N} lookarounds can never fire inside it.
+    expect(matchTerms('彼女は月光剣を抜いた。', [normalizeTerm('月光剣')])).toEqual(['月光剣'])
+  })
+
+  it('matches a kana term', () => {
+    expect(matchTerms('カラたちは村へ戻った。', [normalizeTerm('カラ')])).toEqual(['カラ'])
+  })
+
+  it('matches a hangul term carrying an attached particle', () => {
+    expect(matchTerms('그는 은빛검을 들었다.', [normalizeTerm('은빛검')])).toEqual(['은빛검'])
+  })
+
+  it('keeps boundary matching for Latin terms', () => {
+    expect(matchTerms('he made a start on it', [normalizeTerm('art')])).toEqual([])
+  })
+
+  it('keeps boundary matching for Cyrillic terms', () => {
+    expect(matchTerms('Незоя вошла', [normalizeTerm('зоя')])).toEqual([])
+  })
+
+  it('denies substring mode to a single-character term', () => {
+    // One ideograph appears inside too much to carry signal.
+    expect(matchTerms('彼女は月光剣を抜いた。', [normalizeTerm('剣')])).toEqual([])
+  })
+
+  // An internal space means the author supplied a delimiter, so the term keeps
+  // boundary mode — which in CJK prose means it matches only where real
+  // punctuation or spacing brackets it, never mid-run.
+  it('denies substring mode to a term the author already delimited', () => {
+    expect(matchTerms('月光 剣。', [normalizeTerm('月光 剣')])).toEqual(['月光 剣'])
+    expect(matchTerms('その月光 剣士', [normalizeTerm('月光 剣')])).toEqual([])
+  })
+
+  it('still escapes regex metacharacters in a mixed-script term', () => {
+    expect(matchTerms('the 月光*剣 hummed', [normalizeTerm('月光*剣')])).toEqual(['月光*剣'])
   })
 })
