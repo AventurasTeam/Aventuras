@@ -297,9 +297,7 @@ async function runRetrievalPass(
       loadExistingVecTables(deps.queryAll, params.dim),
       countStaleHappenings(deps.queryAll, params.branchId),
     ])
-  // Only entityNames is read (below, for the happening keyword surface); an empty
-  // lore list skips scanning every lore row's keywords to build a set nothing reads.
-  const index = nameKeywordIndexFrom(sourceRows.entities, [])
+  const index = nameKeywordIndexFrom(sourceRows.entities)
 
   const floor = buildStructuralFloor({
     entities: sourceRows.entities,

@@ -7,8 +7,6 @@ export { normalizeTerm }
 export type NameKeywordIndex = {
   /** lowercased, NFC-normalized entity names present in the branch */
   entityNames: ReadonlySet<string>
-  /** lowercased, NFC-normalized lore keywords present in the branch */
-  loreKeywords: ReadonlySet<string>
 }
 
 export function parseKeywords(raw: unknown): string[] {
@@ -22,12 +20,8 @@ export function parseKeywords(raw: unknown): string[] {
   return Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === 'string') : []
 }
 
-export function nameKeywordIndexFrom(
-  entities: readonly { name: string }[],
-  lore: readonly { keywords: readonly string[] }[],
-): NameKeywordIndex {
+export function nameKeywordIndexFrom(entities: readonly { name: string }[]): NameKeywordIndex {
   const entityNames = new Set<string>()
-  const loreKeywords = new Set<string>()
 
   for (const entity of entities) {
     const term = normalizeTerm(entity.name)
@@ -35,15 +29,7 @@ export function nameKeywordIndexFrom(
     entityNames.add(term)
   }
 
-  for (const row of lore) {
-    for (const keyword of row.keywords) {
-      const term = normalizeTerm(keyword)
-      if (term === '') continue
-      loreKeywords.add(term)
-    }
-  }
-
-  return { entityNames, loreKeywords }
+  return { entityNames }
 }
 
 // Terms come from user-authored names/keywords, which may contain regex metacharacters.

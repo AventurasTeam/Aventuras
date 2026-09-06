@@ -3,45 +3,32 @@ import { describe, expect, it } from 'vitest'
 import { matchTerms, nameKeywordIndexFrom, normalizeTerm, parseKeywords } from './name-index'
 
 const named = (...names: string[]) => names.map((name) => ({ name }))
-const keyworded = (...lists: string[][]) => lists.map((keywords) => ({ keywords }))
 
 describe('nameKeywordIndexFrom', () => {
-  const index = nameKeywordIndexFrom(
-    named('Kara Vex', 'Mira', 'The Hollow'),
-    keyworded(['veilstone', 'amulet'], ['the Aetherium']),
-  )
+  const index = nameKeywordIndexFrom(named('Kara Vex', 'Mira', 'The Hollow'))
 
   it('lowercases entity names', () => {
     expect(index.entityNames.has('kara vex')).toBe(true)
     expect(index.entityNames.has('mira')).toBe(true)
   })
 
-  it('lowercases lore keywords', () => {
-    expect(index.loreKeywords.has('veilstone')).toBe(true)
-    expect(index.loreKeywords.has('the aetherium')).toBe(true)
-  })
-
   it('trims surrounding whitespace before storing a term', () => {
-    const idx = nameKeywordIndexFrom(named('  Kara Vex  '), keyworded(['  veilstone  ']))
+    const idx = nameKeywordIndexFrom(named('  Kara Vex  '))
     expect(idx.entityNames.has('kara vex')).toBe(true)
     expect(idx.entityNames.has('  kara vex  ')).toBe(false)
-    expect(idx.loreKeywords.has('veilstone')).toBe(true)
-    expect(idx.loreKeywords.has('  veilstone  ')).toBe(false)
   })
 
-  it('excludes whitespace-only entity names and lore keywords from the index', () => {
-    const idx = nameKeywordIndexFrom(named('   '), keyworded(['   ']))
+  it('excludes whitespace-only entity names from the index', () => {
+    const idx = nameKeywordIndexFrom(named('   '))
     expect(idx.entityNames.size).toBe(0)
-    expect(idx.loreKeywords.size).toBe(0)
   })
 
-  it('normalizes differently-encoded names and keywords to the same term', () => {
+  it('normalizes differently-encoded names to the same term', () => {
     const nfc = 'caf\u00e9' // U+00E9, precomposed
     const nfd = 'cafe\u0301' // 'e' + U+0301 combining acute
     expect(nfc).not.toBe(nfd) // sanity: distinct code unit sequences for the same rendered text
-    const idx = nameKeywordIndexFrom(named(nfc, nfd), keyworded([nfc], [nfd]))
+    const idx = nameKeywordIndexFrom(named(nfc, nfd))
     expect(idx.entityNames.size).toBe(1)
-    expect(idx.loreKeywords.size).toBe(1)
   })
 })
 
