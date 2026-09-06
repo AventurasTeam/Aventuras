@@ -14,6 +14,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Select, type SelectOption } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
+import { normalizeTerm } from '@/lib/keyword-terms'
 import { cn } from '@/lib/utils'
 
 import {
@@ -216,10 +217,20 @@ function MergeBody({
     return [...diff.keywords.both, ...diff.keywords.onlyInA, ...diff.keywords.onlyInB].sort()
   }, [diff.keywords, entityA.keywords])
 
-  const finalKeywords = useMemo(
-    () => allKeywords.filter((k) => !state.deselectedKeywords.includes(k)),
-    [allKeywords, state.deselectedKeywords],
-  )
+  // Deselects first (chips are what the user acted on), then the normalization
+  // collapse: collision-resolve.md requires that a case variant of the same alias
+  // not survive as a second entry, and the two sides spell them independently.
+  const finalKeywords = useMemo(() => {
+    const seen = new Set<string>()
+    return allKeywords
+      .filter((k) => !state.deselectedKeywords.includes(k))
+      .filter((k) => {
+        const key = normalizeTerm(k)
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+  }, [allKeywords, state.deselectedKeywords])
 
   function handleConfirm() {
     onSubmit({

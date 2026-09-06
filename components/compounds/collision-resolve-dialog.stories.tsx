@@ -42,7 +42,9 @@ const entityB = baseEntity({
   description: 'A city guardsman posted at the eastern gate.',
   status: 'staged',
   tags: ['guard', 'sword'],
-  keywords: ['the gate guard', 'the swordsman'],
+  // 'The Swordsman' is A's 'the swordsman' spelled differently — the two sides
+  // authored their aliases independently, and only one may survive the merge.
+  keywords: ['the gate guard', 'The Swordsman'],
   state: { hp: 90, post: 'east-gate' },
   relationCounts: {
     awarenessRows: 1,
@@ -198,8 +200,9 @@ export const MergeKeywordUnion: Story = {
     expect(resolution).not.toBeNull()
     expect(resolution).toMatchObject({
       mode: 'merge',
-      // The losing side's aliases survive; only the deselected one is dropped.
-      finalKeywords: ['the gate guard', 'the swordsman'],
+      // The losing side's aliases survive; the deselected one is dropped, and the
+      // case variant collapses into the entry that sorted first.
+      finalKeywords: ['The Swordsman', 'the gate guard'],
       finalTags: ['guard', 'hero', 'sword'],
     })
   },
