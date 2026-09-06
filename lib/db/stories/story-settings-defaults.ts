@@ -21,6 +21,15 @@ export const STORY_SETTINGS_DEFAULTS: StorySettings = {
   // entity block's macro wrapping alone costs 11 tokens before a word of the
   // row itself, so a count-shaped value here seats nothing.
   retrievalBudgets: { entities: 1200, lore: 1800, happenings: 1500, threads: 400, chapters: 600 },
+  // budgetShare 0.5 is a starting guess wanting calibration against real stories,
+  // in the same sense as the blend weights — not a derived value.
+  keywordRetrieval: {
+    mode: 'boost',
+    budgetShare: 0.5,
+    scanEntries: 1,
+    cascade: false,
+    cascadeMaxDepth: 2,
+  },
   probe_mode_active: false,
   composerModesEnabled: false,
   composerWrapPov: 'third',

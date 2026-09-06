@@ -1858,7 +1858,7 @@ copy of this table.
 ### Pseudocode
 
 ```python
-def rank_per_type(candidates, queries, scan_text, type_budget, λ_type, type_overhead, *, matched_chapters=None):
+def rank_per_type(candidates, queries, scan_text, type_budget, λ_type, type_overhead, *, matched_chapters=None, keyword_injected=()):
     # 1. Compute raw score per candidate
     scored = []
     for c in candidates:
@@ -1909,25 +1909,28 @@ def rank_per_type(candidates, queries, scan_text, type_budget, λ_type, type_ove
 
     return selected
 
-def rank_all(pools, queries, budgets, type_config):
+def rank_all(pools, queries, scan_text, budgets, type_config, injected_by_type):
     # Chapters first — small pool, ranks fast, output feeds happenings
     matched_chapters = rank_per_type(
-        pools['chapters'], queries, budgets['chapters'],
+        pools['chapters'], queries, scan_text, budgets['chapters'],
         type_config['chapters'].λ, type_config['chapters'].overhead
     )
 
     # Happenings depend on matched_chapters (chapter-match boost)
     happenings = rank_per_type(
-        pools['happenings'], queries, budgets['happenings'],
+        pools['happenings'], queries, scan_text, budgets['happenings'],
         type_config['happenings'].λ, type_config['happenings'].overhead,
         matched_chapters=matched_chapters
     )
 
-    # Other types run independently — no inter-type dependencies
+    # Other types run independently — no inter-type dependencies. Only these
+    # carry a keyword-injected set: chapters and happenings stay on `boost`
+    # unconditionally (→ Keyword injection), so theirs is always empty.
     others = {
         type: rank_per_type(
-            pools[type], queries, budgets[type],
-            type_config[type].λ, type_config[type].overhead
+            pools[type], queries, scan_text, budgets[type],
+            type_config[type].λ, type_config[type].overhead,
+            keyword_injected=injected_by_type.get(type, ())
         )
         for type in ('entities', 'lore', 'threads')
     }

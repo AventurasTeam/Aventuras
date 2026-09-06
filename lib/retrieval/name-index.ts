@@ -54,10 +54,36 @@ function escape(term: string): string {
 
 // Plain \b is ASCII-only and misses accented/Cyrillic names entirely (e.g.
 // "Zoë" never matches). \p{L}/\p{N} lookarounds cover any script with
-// letter/number boundaries; scripts without word delimiters (CJK) are a
-// separate segmentation problem this doesn't attempt to solve.
+// letter/number boundaries.
 function boundaryPattern(term: string): RegExp {
   return new RegExp(String.raw`(?<![\p{L}\p{N}_])${escape(term)}(?![\p{L}\p{N}_])`, 'u')
+}
+
+// Han, kana and hangul supply no inter-word delimiter (Korean attaches particles
+// straight onto nouns), so boundary lookarounds silently never fire inside their
+// prose. Substring is safe for these scripts because their characters are
+// morphemes — the "art" inside "start" risk boundaries exist to prevent is far
+// lower. docs/memory/retrieval.md → Keyword scan surface.
+const UNSPACED_SCRIPT = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u
+const LETTER = /\p{L}/u
+// \s, not ' ': U+3000 IDEOGRAPHIC SPACE is the delimiter a CJK author actually
+// types, so the ASCII space alone covers the wrong half of the set.
+const ANY_SPACE = /\s/u
+
+// Composed of those scripts, not merely containing one — a mostly-Latin term
+// with a single CJK character must keep boundary anchoring. Iterated by code
+// point so an astral ideograph counts as the one character it is rather than as
+// two UTF-16 units. An internal space is an author-supplied delimiter, and one
+// character appears inside too much to carry signal.
+function usesSubstringMatch(term: string): boolean {
+  const chars = [...term]
+  if (chars.length < 2 || ANY_SPACE.test(term)) return false
+  let sawUnspacedScript = false
+  for (const char of chars) {
+    if (UNSPACED_SCRIPT.test(char)) sawUnspacedScript = true
+    else if (LETTER.test(char)) return false
+  }
+  return sawUnspacedScript
 }
 
 export function matchTerms(text: string, terms: Iterable<string>): string[] {
@@ -68,6 +94,10 @@ export function matchTerms(text: string, terms: Iterable<string>): string[] {
   for (const term of terms) {
     if (term === '') continue
     if (!haystack.includes(term)) continue
+    if (usesSubstringMatch(term)) {
+      hits.push(term)
+      continue
+    }
     // Boundary-anchored: a substring hit (e.g. "Mira" inside "miracle") would
     // wrongly fire Layer-A suppression / kw_boost on ordinary prose.
     if (boundaryPattern(term).test(haystack)) hits.push(term)

@@ -134,6 +134,16 @@ Per capture:
   [heuristic prose extract](./retrieval.md#q3-heuristic-prose-extract).
   Query **vectors are never stored**, in either mode — see
   [Deep mode](#deep-mode-per-capture-opt-in).
+- **Keyword scan surface.** `scan_text` — the narrative text
+  `kw_boost_value` was matched against, per
+  [`retrieval.md → Keyword scan surface`](./retrieval.md#keyword-scan-surface).
+  Captured in both modes, because a keyword hit adjusts a ranked score
+  under `boost` as much as it seats a row under `inject`. It is a
+  separate field rather than a fourth query because it is not one: the
+  queries are embedded and the scan surface is not, and it is defined
+  independently of them by design. Without it a non-zero
+  `kw_boost_value` has no readable cause anywhere in the capture — the
+  matched term lives in neither the candidate row nor the queries.
 - **Per-type candidate pool.** For each type
   (entities / lore / happenings / threads / chapters), one row per
   candidate that entered the type's ranker pool:

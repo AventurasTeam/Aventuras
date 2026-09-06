@@ -38,6 +38,8 @@ export type CapturePayloadInput = {
   /** Priced on the composed buffer, not re-derived: the mode-dependent rule and
    * protected-buffer spillover are the phase's to resolve, not the capture's. */
   promptBufferTokens: number
+  /** The scan surface the pass ran with (retrieval.md → Keyword scan surface). */
+  scanText: string
   outcome: RetrievalOutcome
 }
 
@@ -190,6 +192,7 @@ export function buildCapturePayload(input: CapturePayloadInput): ProbeCapturePay
       retrievalBudgets: { ...input.settings.retrievalBudgets },
     },
     queries: queriesOf(stack),
+    scan_text: input.scanText,
     pools: {
       entities: poolOf(bundles.entities, mode),
       lore: poolOf(bundles.lore, mode),

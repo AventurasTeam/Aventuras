@@ -49,6 +49,7 @@ const capturePayload = (): ProbeCapturePayload => ({
       sentence_scores: [0.9, 0.6, 0.4],
     },
   ],
+  scan_text: 'What does the party do next?\nThe bridge fell during the third night of the siege.',
   // Three bands mirror rankPerType (lib/retrieval/ranker.ts:196-211): a
   // pre-filtered row never reaches MMR, so only it gets null text/tokens.
   pools: {

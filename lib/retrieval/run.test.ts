@@ -207,6 +207,7 @@ const BASE: RetrievalParams = {
   sceneEntityIds: ['char_a'],
   currentLocationId: null,
   recentProse: '',
+  scanText: 'I ask about the amulet.\nKara Vex drew the blade.',
 }
 
 const params = (
@@ -1550,25 +1551,53 @@ describe('runRetrieval — name/keyword index', () => {
 })
 
 describe('runRetrieval — keyword boost', () => {
-  it('matches the candidate keyword surface against the query texts, Q2 included', async () => {
+  const twoLoreRows = () =>
+    makeQueryAll({
+      lore: [
+        loreRow('lore_hit', 'The Veil', { keywords: ['Veilstone'] }),
+        loreRow('lore_miss', 'The Drift', { keywords: ['Driftmark'] }),
+      ],
+      knn: [hit('lore_hit'), hit('lore_miss')],
+    })
+
+  it('matches the candidate keyword surface against the scan text', async () => {
     const out = await runRetrieval(
-      deps({
-        queryAll: makeQueryAll({
-          lore: [
-            loreRow('lore_hit', 'The Veil', { keywords: ['Veilstone'] }),
-            loreRow('lore_miss', 'The Drift', { keywords: ['Driftmark'] }),
-          ],
-          knn: [hit('lore_hit'), hit('lore_miss')],
-        }),
-      }),
-      // The era name reaches the query stack through Q2 only.
-      params({ query: { eraName: 'Veilstone' } }),
+      deps({ queryAll: twoLoreRows() }),
+      params({ scanText: 'The Veilstone hummed under her hand.' }),
     )
 
     const ok = expectOk(out)
     const boost = (id: string) => ok.bundles.lore.traces.find((t) => t.id === id)?.kwBoostValue
     expect(boost('lore_hit')).toBeGreaterThan(0)
     expect(boost('lore_miss')).toBe(0)
+  })
+
+  // The digest is assembled from entity names, the location and thread titles —
+  // synthetic text, not something the prose said. Matching it manufactured a hit
+  // on every turn the named row was on stage.
+  it('does not boost on a term reaching only the structural digest', async () => {
+    const out = await runRetrieval(
+      deps({ queryAll: twoLoreRows() }),
+      // The era name reaches the query stack through Q2 only.
+      params({ query: { eraName: 'Veilstone' }, scanText: 'I ask about the amulet.' }),
+    )
+
+    expect(expectOk(out).bundles.lore.traces.find((t) => t.id === 'lore_hit')?.kwBoostValue).toBe(0)
+  })
+
+  // Q3 selects top-K sentences, so a proper noun in a sentence the extract
+  // skipped could never fire while the haystack came from the query stack.
+  it('boosts on prose Q3 left out of its extract', async () => {
+    const out = await runRetrieval(
+      deps({ queryAll: twoLoreRows() }),
+      params({
+        scanText: `${'Rain fell over the long grey afternoon. '.repeat(12)}The Veilstone hummed.`,
+      }),
+    )
+
+    expect(
+      expectOk(out).bundles.lore.traces.find((t) => t.id === 'lore_hit')?.kwBoostValue,
+    ).toBeGreaterThan(0)
   })
 
   it('keeps ranking a lore row whose keywords blob is unusable', async () => {
@@ -1594,7 +1623,7 @@ describe('runRetrieval — keyword boost', () => {
     expect(boost('lore_scalar')).toBe(0)
   })
 
-  it('matches a decomposed keyword against composed query prose', async () => {
+  it('matches a decomposed keyword against composed scan prose', async () => {
     // matchTerms NFC-normalizes its haystack but not its terms, so a keyword
     // stored decomposed never matches composed prose unless the term is
     // normalized the same way.
@@ -1610,7 +1639,7 @@ describe('runRetrieval — keyword boost', () => {
           knn: [hit('lore_nfd'), hit('lore_ascii')],
         }),
       }),
-      params({ query: { userAction: `I ask ${nfc} about the amulet.` } }),
+      params({ scanText: `I ask ${nfc} about the amulet.` }),
     )
 
     const ok = expectOk(out)

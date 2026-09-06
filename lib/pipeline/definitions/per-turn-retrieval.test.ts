@@ -1180,6 +1180,72 @@ describe('retrieval phase — RetrievalParams assembly', () => {
     expect(recentProse).not.toContain('ancient-prose')
   })
 
+  it('scans this turn\u2019s action and the entry standing before it', async () => {
+    seedOpenStory({
+      entries: [
+        entry(1, 'opening', 'The keep stands.', meta()),
+        entry(2, 'ai_reply', 'The Veilstone hummed.', meta()),
+        entry(3, 'user_action', 'I draw the blade.', meta()),
+      ],
+    })
+
+    await runRetrievalPhase()
+
+    const { scanText } = lastParams()
+    expect(scanText).toContain('I draw the blade.')
+    expect(scanText).toContain('The Veilstone hummed.')
+    // scanEntries defaults to one, so the opening stays out.
+    expect(scanText).not.toContain('The keep stands.')
+  })
+
+  it('carries the action once, not twice', async () => {
+    seedOpenStory({
+      entries: [
+        entry(1, 'ai_reply', 'The Veilstone hummed.', meta()),
+        entry(2, 'user_action', 'I draw the blade.', meta()),
+      ],
+    })
+
+    await runRetrievalPhase()
+
+    expect(lastParams().scanText.split('I draw the blade.')).toHaveLength(2)
+  })
+
+  // The whole reason the surface has its own read: protectedBuffer 0 with a
+  // one-entry partial window would otherwise hand it less prose than the story
+  // asked for, and say nothing about it.
+  it('reaches scanEntries deep regardless of the prompt-buffer knobs', async () => {
+    seedOpenStory({
+      settings: {
+        partialChapterBuffer: 1,
+        protectedBuffer: 0,
+        keywordRetrieval: {
+          mode: 'boost',
+          budgetShare: 0.5,
+          scanEntries: 3,
+          cascade: false,
+          cascadeMaxDepth: 2,
+        },
+      },
+      entries: [
+        entry(1, 'opening', 'ancient-prose', meta()),
+        entry(2, 'ai_reply', 'older-prose', meta()),
+        entry(3, 'ai_reply', 'recent-prose', meta()),
+        entry(4, 'user_action', 'newest-prose', meta()),
+      ],
+    })
+
+    await runRetrievalPhase()
+
+    const { scanText, recentProse } = lastParams()
+    expect(scanText).toContain('older-prose')
+    expect(scanText).toContain('recent-prose')
+    expect(scanText).toContain('newest-prose')
+    // Positive control: the prompt buffer really is narrower here, so the
+    // assertions above are about the dedicated read and not a wide window.
+    expect(recentProse).not.toContain('older-prose')
+  })
+
   // entriesStore holds the reader's window, which grows and shrinks with scroll
   // position — sourcing the buffer from it makes the prompt a function of where
   // the reader happened to be looking.
@@ -1256,6 +1322,23 @@ describe('retrieval phase — probe capture', () => {
       threads: 44,
       chapters: 55,
     })
+  })
+
+  // The scan surface is defined independently of the queries, so a kw_boost_value
+  // has no readable cause in the capture unless the text itself is carried.
+  it('captures the scan surface the pass matched keywords against', async () => {
+    const { db, sqlite, runInTransaction } = await probeDb()
+    await setAppGate(db, true)
+    seedProbeStory({ probe_mode_active: true })
+    runRetrievalMock.mockResolvedValue(retrievalSuccess({ queries: queryStack() }))
+
+    await runRetrievalPhase(undefined, runInTransaction)
+
+    const payload = payloadOf(captureRows(sqlite)[0])
+    expect(payload.scan_text).toContain('I draw the blade.')
+    expect(payload.scan_text).toContain('The keep stands.')
+    // Sourced from the pass, not re-derived from the queries beside it.
+    expect(payload.queries.map((q) => q.text)).not.toContain(payload.scan_text)
   })
 
   it('captures a failed pass with its reason and the queries it reached', async () => {

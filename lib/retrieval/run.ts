@@ -84,6 +84,12 @@ export type RetrievalParams = {
   currentLocationId: string | null
   /** Un-classified buffer prose, for Layer-A suppression. */
   recentProse: string
+  /**
+   * The keyword haystack: this turn's action plus the trailing entries
+   * (retrieval.md → Keyword scan surface). Independent of `query` by design —
+   * see buildScanText.
+   */
+  scanText: string
 }
 
 /**
@@ -313,10 +319,7 @@ async function runRetrievalPass(
     happenings: [] as readonly LoadedHappeningRow[],
     awareness,
     recentProse: params.recentProse,
-    // kw_boost is keyword_boost(c, queries) (retrieval.md → Pseudocode): the
-    // present query texts, which is where the era name and the piggyback
-    // summary become keyword surfaces.
-    queryText: queries.embedTexts.join('\n'),
+    scanText: params.scanText,
   }
 
   // A literal, not a built-up Record, so a missing key is a build error here
@@ -486,7 +489,7 @@ type PoolCtx = {
   happenings: readonly LoadedHappeningRow[]
   awareness: readonly AwarenessRow[]
   recentProse: string
-  queryText: string
+  scanText: string
 }
 
 /**
@@ -662,12 +665,12 @@ function assembleCandidates(
     sim(vector, queryVectors[2]),
   ]
 
-  // kw = keyword_boost(c, queries) (retrieval.md → Pseudocode) runs the
-  // candidate's own keyword surface against this turn's queries. The other
-  // direction — a candidate against the name index — is degenerate, since every
-  // row's own terms are in that index by construction.
+  // kw = keyword_boost(c, scan_text) (retrieval.md → Pseudocode) runs the
+  // candidate's own keyword surface against the scan text, NOT `queries`. The
+  // other direction — a candidate against the name index — is degenerate, since
+  // every row's own terms are in that index by construction.
   const kwHits = (surface: readonly string[]): string[] =>
-    matchTerms(ctx.queryText, surface.map(normalizeTerm))
+    matchTerms(ctx.scanText, surface.map(normalizeTerm))
 
   const inPool = <T extends { id: string }>(rows: readonly T[]): T[] =>
     rows.filter((r) => wanted.has(r.id))

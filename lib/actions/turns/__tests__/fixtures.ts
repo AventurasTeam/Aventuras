@@ -79,6 +79,13 @@ export const STORY_SETTINGS = storySettingsSchema.parse({
   // Embed failure is blocking).
   embedding_model_id: 'Xenova/all-MiniLM-L6-v2',
   retrievalBudgets: { entities: 1, lore: 1, happenings: 1, threads: 1, chapters: 1 },
+  keywordRetrieval: {
+    mode: 'boost',
+    budgetShare: 0.5,
+    scanEntries: 1,
+    cascade: false,
+    cascadeMaxDepth: 2,
+  },
   composerModesEnabled: true,
   composerWrapPov: 'first',
   suggestionsEnabled: false,

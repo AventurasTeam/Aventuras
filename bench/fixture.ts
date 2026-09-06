@@ -359,6 +359,8 @@ export function passInputs(
     embedRows: async () => [],
     runInTransaction: async () => {},
   }
+  const userAction = prose(rand, 20)
+  const lastNarrativeContent = prose(rand, 150)
   const params = {
     branchId: BRANCH,
     modelId: MODEL_ID,
@@ -368,15 +370,18 @@ export function passInputs(
       ...(chapterBudget === 'off' ? { chapters: 0 } : {}),
     },
     query: {
-      userAction: prose(rand, 20),
+      userAction,
       eraName: null,
       piggybackSummary: null,
-      lastNarrativeContent: prose(rand, 150),
+      lastNarrativeContent,
     },
     sceneCharacterIds,
     sceneEntityIds: sceneCharacterIds,
     currentLocationId: 'char_000000',
     recentProse: prose(rand, 200),
+    // The default one-entry surface, so the matchTerms cost measured here is the
+    // one a turn actually pays.
+    scanText: `${userAction}\n${lastNarrativeContent}`,
   }
   return { deps, params }
 }

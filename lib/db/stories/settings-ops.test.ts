@@ -50,6 +50,13 @@ describe('story settings ops', () => {
         threads: 400,
         chapters: 600,
       },
+      keywordRetrieval: {
+        mode: 'boost',
+        budgetShare: 0.5,
+        scanEntries: 1,
+        cascade: false,
+        cascadeMaxDepth: 2,
+      },
       probe_mode_active: false,
       composerModesEnabled: false,
       composerWrapPov: 'third',

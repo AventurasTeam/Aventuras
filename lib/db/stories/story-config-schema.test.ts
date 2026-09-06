@@ -30,6 +30,13 @@ const VALID_SETTINGS = {
   embeddingBackend: 'local' as const,
   embedding_model_id: 'bge-small',
   retrievalBudgets: { entities: 100, lore: 100, happenings: 100, threads: 100, chapters: 100 },
+  keywordRetrieval: {
+    mode: 'boost' as const,
+    budgetShare: 0.5,
+    scanEntries: 1,
+    cascade: false,
+    cascadeMaxDepth: 2,
+  },
   probe_mode_active: false,
   composerModesEnabled: false,
   composerWrapPov: 'first' as const,
@@ -219,6 +226,47 @@ describe('storySettingsSchema spec-pinned defaults', () => {
       expect(r.success).toBe(false)
     },
   )
+})
+
+describe('storySettingsSchema keywordRetrieval', () => {
+  const withKeyword = (over: Record<string, unknown>) => ({
+    ...VALID_SETTINGS,
+    keywordRetrieval: { ...VALID_SETTINGS.keywordRetrieval, ...over },
+  })
+
+  // Required, not defaulted: settings writes are key-scoped json_set, so a
+  // default here would never reach an existing story's blob. Migration 0011
+  // backfills it instead, and this assertion is what keeps the two in step.
+  it('requires the key', () => {
+    const { keywordRetrieval: _omitted, ...without } = VALID_SETTINGS
+    expect(storySettingsSchema.safeParse(without).success).toBe(false)
+  })
+
+  it('accepts both modes', () => {
+    expect(storySettingsSchema.safeParse(withKeyword({ mode: 'boost' })).success).toBe(true)
+    expect(storySettingsSchema.safeParse(withKeyword({ mode: 'inject' })).success).toBe(true)
+    expect(storySettingsSchema.safeParse(withKeyword({ mode: 'always' })).success).toBe(false)
+  })
+
+  it('bounds budgetShare to 0..1', () => {
+    expect(storySettingsSchema.safeParse(withKeyword({ budgetShare: 0 })).success).toBe(true)
+    expect(storySettingsSchema.safeParse(withKeyword({ budgetShare: 1 })).success).toBe(true)
+    expect(storySettingsSchema.safeParse(withKeyword({ budgetShare: 1.5 })).success).toBe(false)
+    expect(storySettingsSchema.safeParse(withKeyword({ budgetShare: -0.1 })).success).toBe(false)
+  })
+
+  // The user action is always scanned, so this counts the trailing entries
+  // beside it and one is the floor rather than zero.
+  it('floors scanEntries at one whole entry', () => {
+    expect(storySettingsSchema.safeParse(withKeyword({ scanEntries: 1 })).success).toBe(true)
+    expect(storySettingsSchema.safeParse(withKeyword({ scanEntries: 0 })).success).toBe(false)
+    expect(storySettingsSchema.safeParse(withKeyword({ scanEntries: 1.5 })).success).toBe(false)
+  })
+
+  it('floors cascadeMaxDepth at one', () => {
+    expect(storySettingsSchema.safeParse(withKeyword({ cascadeMaxDepth: 1 })).success).toBe(true)
+    expect(storySettingsSchema.safeParse(withKeyword({ cascadeMaxDepth: 0 })).success).toBe(false)
+  })
 })
 
 describe('storySettingsPartialSchema', () => {

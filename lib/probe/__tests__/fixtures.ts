@@ -88,6 +88,7 @@ export const captureInput = (overrides: Partial<CaptureWriteInput> = {}): Captur
   params: RANKER_DEFAULTS,
   settings,
   promptBufferTokens: 0,
+  scanText: '',
   outcome: successOutcome(),
   ...overrides,
 })

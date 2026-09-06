@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { matchTerms, nameKeywordIndexFrom, parseKeywords } from './name-index'
+import { matchTerms, nameKeywordIndexFrom, normalizeTerm, parseKeywords } from './name-index'
 
 const named = (...names: string[]) => names.map((name) => ({ name }))
 const keyworded = (...lists: string[][]) => lists.map((keywords) => ({ keywords }))
@@ -122,5 +122,75 @@ describe('matchTerms', () => {
       'mira',
       'veilstone',
     ])
+  })
+})
+
+// docs/memory/retrieval.md → Keyword scan surface: the match rule follows the
+// script of the keyword, per keyword.
+describe('matchTerms — per-term script rule', () => {
+  it('matches an unspaced Han term by substring', () => {
+    // Japanese prose supplies no inter-word space to anchor a boundary against,
+    // so the \p{L}\p{N} lookarounds can never fire inside it.
+    expect(matchTerms('彼女は月光剣を抜いた。', [normalizeTerm('月光剣')])).toEqual(['月光剣'])
+  })
+
+  it('matches a kana term', () => {
+    expect(matchTerms('カラたちは村へ戻った。', [normalizeTerm('カラ')])).toEqual(['カラ'])
+  })
+
+  it('matches a hangul term carrying an attached particle', () => {
+    expect(matchTerms('그는 은빛검을 들었다.', [normalizeTerm('은빛검')])).toEqual(['은빛검'])
+  })
+
+  it('keeps boundary matching for Latin terms', () => {
+    expect(matchTerms('he made a start on it', [normalizeTerm('art')])).toEqual([])
+  })
+
+  it('keeps boundary matching for Cyrillic terms', () => {
+    expect(matchTerms('Незоя вошла', [normalizeTerm('зоя')])).toEqual([])
+  })
+
+  it('denies substring mode to a single-character term', () => {
+    // One ideograph appears inside too much to carry signal.
+    expect(matchTerms('彼女は月光剣を抜いた。', [normalizeTerm('剣')])).toEqual([])
+  })
+
+  // An internal space means the author supplied a delimiter, so the term keeps
+  // boundary mode — which in CJK prose means it matches only where real
+  // punctuation or spacing brackets it, never mid-run.
+  it('denies substring mode to a term the author already delimited', () => {
+    expect(matchTerms('月光 剣。', [normalizeTerm('月光 剣')])).toEqual(['月光 剣'])
+    expect(matchTerms('その月光 剣士', [normalizeTerm('月光 剣')])).toEqual([])
+  })
+
+  // A single CJK character must not drag a mostly-Latin term into substring
+  // mode — the failure the per-term rule exists to prevent.
+  it('denies substring mode to a term carrying a letter from another script', () => {
+    expect(matchTerms('a veilstone月stone', [normalizeTerm('veilstone月')])).toEqual([])
+  })
+
+  it('counts characters, not UTF-16 units, at the two-character floor', () => {
+    // U+20BB7 is one ideograph and two code units; length >= 2 would admit it.
+    expect(matchTerms('彼は𠮷を見た。', [normalizeTerm('\u{20BB7}')])).toEqual([])
+  })
+
+  // The positive half of the same rule: iterating UTF-16 units instead of code
+  // points leaves every char a lone surrogate, which is neither Han nor a
+  // letter, so an astral term would fall out of substring mode entirely.
+  it('matches an astral ideograph pair by substring', () => {
+    const term = '\u{20BB7}\u{20BB7}'
+    expect(matchTerms(`彼は${term}を見た。`, [normalizeTerm(term)])).toEqual([term])
+  })
+
+  it('treats the ideographic space as an author-supplied delimiter', () => {
+    // U+3000 is the space a CJK author actually types; ' ' alone misses it.
+    expect(matchTerms('その月光\u3000剣士', [normalizeTerm('月光\u3000剣')])).toEqual([])
+  })
+
+  // Metacharacters only reach escape() on the boundary branch, so the term has
+  // to be one that stays there — a substring-mode term never sees it.
+  it('escapes regex metacharacters in a term the script rule sends to boundaries', () => {
+    expect(matchTerms('the vex*月 hummed', [normalizeTerm('vex*月')])).toEqual(['vex*月'])
+    expect(matchTerms('the vexX月 hummed', [normalizeTerm('vex*月')])).toEqual([])
   })
 })
