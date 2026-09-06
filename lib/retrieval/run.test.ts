@@ -214,13 +214,7 @@ const params = (
   over: Partial<Omit<RetrievalParams, 'query'>> & {
     query?: Partial<RetrievalParams['query']>
   } = {},
-): RetrievalParams => {
-  const query = { ...BASE.query, ...over.query }
-  // Production derives both from the same turn, so a test that varies the action
-  // would otherwise keep scanning BASE's prose. An explicit scanText still wins.
-  const scanText = [query.userAction, query.lastNarrativeContent].filter((s) => s !== '').join('\n')
-  return { ...BASE, scanText, ...over, query }
-}
+): RetrievalParams => ({ ...BASE, ...over, query: { ...BASE.query, ...over.query } })
 
 function expectOk(out: RetrievalOutcome): RetrievalSuccess {
   if (!out.ok)
@@ -1629,7 +1623,7 @@ describe('runRetrieval — keyword boost', () => {
     expect(boost('lore_scalar')).toBe(0)
   })
 
-  it('matches a decomposed keyword against composed query prose', async () => {
+  it('matches a decomposed keyword against composed scan prose', async () => {
     // matchTerms NFC-normalizes its haystack but not its terms, so a keyword
     // stored decomposed never matches composed prose unless the term is
     // normalized the same way.
@@ -1645,7 +1639,7 @@ describe('runRetrieval — keyword boost', () => {
           knn: [hit('lore_nfd'), hit('lore_ascii')],
         }),
       }),
-      params({ query: { userAction: `I ask ${nfc} about the amulet.` } }),
+      params({ scanText: `I ask ${nfc} about the amulet.` }),
     )
 
     const ok = expectOk(out)
