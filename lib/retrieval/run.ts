@@ -11,6 +11,7 @@ import { EmbedderCancelledError, type EmbedderErrorKind } from '@/lib/embedder'
 
 import { loadAwarenessForScene, type AwarenessRow } from './awareness'
 import { KNN_K, RANKER_DEFAULTS } from './constants'
+import { buildKeywordInjections, type KeywordRetrievalSettings } from './injection'
 import {
   matchTerms,
   nameKeywordIndexFrom,
@@ -48,8 +49,10 @@ import { classifyEmbedderFailure, runSyncStage, type SyncStageDeps } from './syn
 import { countTokens } from './tokens'
 import {
   isHappeningCandidate,
+  RETRIEVAL_TYPES,
   TYPE_OF_KIND,
   type Candidate,
+  type KeywordInjection,
   type QueryAll,
   type RankedType,
   type RetrievalType,
@@ -90,6 +93,13 @@ export type RetrievalParams = {
    * see buildScanText.
    */
   scanText: string
+  /**
+   * The second axis beside `injection_mode` (retrieval.md → Keyword injection).
+   * The whole block rather than just `mode`: the cap, the cascade depth and the
+   * mode are read together in one pre-pass, and splitting them across params
+   * invites a caller passing a mode without its budget.
+   */
+  keywordRetrieval: KeywordRetrievalSettings
 }
 
 /**
@@ -112,10 +122,12 @@ export type RetrievalTimings = {
    */
   knnMs: number
   /**
-   * Scoring and the sort over the whole pool, then MMR and the token estimate
-   * over the rows that survive the pre-filter — one span, because tokenization
-   * runs inside the same kept-row map that feeds MMR and splitting it would
-   * break the disjoint-sub-span contract above.
+   * The keyword-injection pre-pass, then scoring and the sort over the whole
+   * pool, then MMR and the token estimate over the rows that survive the
+   * pre-filter — one span, because tokenization runs inside the same kept-row
+   * map that feeds MMR and splitting it would break the disjoint-sub-span
+   * contract above. The pre-pass tokenizes too, hence its place here rather than
+   * in the unattributed remainder.
    */
   rankMs: number
 }
@@ -148,6 +160,12 @@ export type RetrievalPartial = {
   queries: QueryStack | null
   floor: StructuralFloor | null
   bundles: Partial<Record<RetrievalType, RankedType>>
+  /**
+   * Every keyword match this pass made, seated or cut — the probe's
+   * `keyword_injections` (probe.md → Keyword injections). Empty under
+   * `mode='boost'`, and on a pass that failed before ranking started.
+   */
+  keywordInjections: readonly KeywordInjection[]
 }
 
 export type RetrievalOutcome =
@@ -156,6 +174,12 @@ export type RetrievalOutcome =
       floor: StructuralFloor
       bundles: Record<RetrievalType, RankedType>
       queries: QueryStack
+      /**
+       * Every keyword match this pass made, seated or cut — the probe's
+       * `keyword_injections` (probe.md → Keyword injections). Empty under
+       * `keywordRetrieval.mode='boost'`.
+       */
+      keywordInjections: readonly KeywordInjection[]
       /**
        * A tripwire, not a report. The sync stage is blocking and clears the flag
        * on every row it embeds, so each count here is structurally 0 — a
@@ -216,7 +240,12 @@ export async function runRetrieval(
 ): Promise<RetrievalOutcome> {
   // Threaded rather than returned: the catch below reports progress from a throw at
   // any depth of the pass, which no return value can reach.
-  const partial: RetrievalPartial = { queries: null, floor: null, bundles: {} }
+  const partial: RetrievalPartial = {
+    queries: null,
+    floor: null,
+    bundles: {},
+    keywordInjections: [],
+  }
   try {
     return await runRetrievalPass(deps, params, partial)
   } catch (error) {
@@ -352,7 +381,26 @@ async function runRetrievalPass(
   }
 
   let rankStartedAt = performance.now()
-  const chapters = rankPerType(pools.chapters, 'chapters', params.budgets.chapters, rankTypeInput)
+  // Ahead of every rankPerType call and inside the rank span: it prices rows with
+  // the same tokenizer the ranker uses, so outside it that cost would vanish into
+  // the unattributed remainder. It needs no vectors, only source rows and the
+  // floor — which is why a keyword hit can seat a row the KNN never returned.
+  const injections = buildKeywordInjections({
+    settings: params.keywordRetrieval,
+    entities: sourceRows.entities,
+    lore: sourceRows.lore,
+    floorIds: floor.seatedIds,
+    recentProse: params.recentProse,
+    scanText: params.scanText,
+    budgets: params.budgets,
+    params: RANKER_DEFAULTS,
+    countTokens,
+  })
+  partial.keywordInjections = RETRIEVAL_TYPES.flatMap((type) => injections[type])
+  const chapters = rankPerType(pools.chapters, 'chapters', params.budgets.chapters, {
+    ...rankTypeInput,
+    keywordInjected: injections.chapters,
+  })
   let rankMs = performance.now() - rankStartedAt
   partial.bundles.chapters = chapters
 
@@ -381,6 +429,7 @@ async function runRetrievalPass(
     {
       pools,
       budgets: params.budgets,
+      keywordInjected: injections,
       ...rankTypeInput,
     },
     chapters,
@@ -400,6 +449,7 @@ async function runRetrievalPass(
     floor,
     bundles,
     queries,
+    keywordInjections: partial.keywordInjections,
     staleCounts: staleCountsOf(sourceRows, happeningsStale),
     injectedAwareness: bundles.happenings.selected
       .filter(isHappeningCandidate)

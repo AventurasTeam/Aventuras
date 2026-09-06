@@ -12,6 +12,7 @@ import {
   RETRIEVAL_TYPES,
   type Candidate,
   type CandidateTrace,
+  type KeywordInjection,
   type RankedType,
   type RetrievalType,
 } from '../types'
@@ -75,6 +76,7 @@ export type RetrievalSuccessOverrides = {
   /** Whole-bundle replacement, for traces or a funnel that must not be derived. */
   bundles?: Partial<Record<RetrievalType, RankedType>>
   queries?: QueryStack
+  keywordInjections?: readonly KeywordInjection[]
   staleCounts?: Partial<Record<RetrievalType, number>>
   injectedAwareness?: InjectedAwareness[]
   selectedLocationIds?: string[]
@@ -108,6 +110,7 @@ export function retrievalSuccess(over: RetrievalSuccessOverrides = {}): Retrieva
       presence: [false, false, false],
       embedTexts: [],
     },
+    keywordInjections: over.keywordInjections ?? [],
     staleCounts: { ...perType(() => 0), ...over.staleCounts },
     injectedAwareness: over.injectedAwareness ?? [],
     selectedLocationIds: over.selectedLocationIds ?? [],
@@ -127,6 +130,6 @@ export function retrievalFailure(
   return {
     ok: false,
     failure,
-    partial: { queries: null, floor: null, bundles: {}, ...partial },
+    partial: { queries: null, floor: null, bundles: {}, keywordInjections: [], ...partial },
   }
 }

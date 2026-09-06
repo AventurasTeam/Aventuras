@@ -148,6 +148,15 @@ export async function* retrievalPhase(
         // User-tunable knobs).
         recentProse: promptBuffer,
         scanText,
+        // Destructured rather than spread: `scanEntries` is already spent above,
+        // and lib/retrieval declares its own settings shape (BufferSettings'
+        // precedent) so it does not follow whatever else stories.settings grows.
+        keywordRetrieval: {
+          mode: open.settings.keywordRetrieval.mode,
+          budgetShare: open.settings.keywordRetrieval.budgetShare,
+          cascade: open.settings.keywordRetrieval.cascade,
+          cascadeMaxDepth: open.settings.keywordRetrieval.cascadeMaxDepth,
+        },
       },
     )
   } finally {

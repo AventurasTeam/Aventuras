@@ -968,6 +968,33 @@ describe('retrieval phase — RetrievalParams assembly', () => {
     expect(runRetrievalMock.mock.calls.at(-1)?.[0]).not.toHaveProperty('branchIds')
   })
 
+  // Every value differs from STORY_SETTINGS_DEFAULTS, so a phase reading the
+  // constant instead of the story fails rather than agreeing by coincidence.
+  it('passes the story keywordRetrieval block through to the pass', async () => {
+    seedOpenStory({
+      settings: {
+        keywordRetrieval: {
+          mode: 'inject',
+          budgetShare: 0.25,
+          scanEntries: 3,
+          cascade: true,
+          cascadeMaxDepth: 4,
+        },
+      },
+    })
+
+    await runRetrievalPhase()
+
+    // scanEntries is absent on purpose: readScanEntries already spent it, and
+    // lib/retrieval declares its own settings shape without it.
+    expect(lastParams().keywordRetrieval).toEqual({
+      mode: 'inject',
+      budgetShare: 0.25,
+      cascade: true,
+      cascadeMaxDepth: 4,
+    })
+  })
+
   it("takes the budgets from the story's settings, not the code defaults", async () => {
     seedOpenStory({
       settings: {
