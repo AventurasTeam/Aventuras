@@ -154,8 +154,8 @@ ranker without being able to move a score. See
   near-duplicate; budget-fill skips an oversized candidate and
   stops at the noise floor; common-knowledge rows score without
   recency or pin (vitest on the pure module — no store, no DB).
-- Q3 extraction picks the fixture's entity-name / keyword / verb
-  sentences over filler (vitest).
+- Q3 carries the piggyback summary verbatim and reports itself
+  absent when no summary was written (vitest).
 - POV union: awareness of any in-scene character enters the pool;
   a non-scene character's awareness does not.
 - `retrieval_count` increments exactly once per injected awareness
@@ -194,7 +194,8 @@ criterion 7 met by the timing log — is recorded under
   option as posed. The index is built in memory from the source rows
   the pass has already loaded, so it costs no query of its own and
   cannot drift from the rows the floor and the pools are reading.
-  Q3 and Layer A share it.
+  Q3 shared it until the heuristic prose extract was deleted; the
+  happening keyword surface is its remaining consumer.
 - **Per-type overhead constants** — **resolved:** measured against
   the shipped macro; the values and what shapes them are canon at
   [`retrieval.md → Token estimation`](../../../../memory/retrieval.md#token-estimation),
