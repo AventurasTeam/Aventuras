@@ -18,9 +18,17 @@ const window = () =>
     maxEntries: 20,
   })
 
-// Minimal entity fixture: the planner reads only id / kind / name / status.
-const entityRow = (id: string, status = 'active', name = id) =>
-  ({ id, branchId: 'branch_1', kind: 'character', name, description: 'x', status }) as never
+// Minimal entity fixture: the planner reads only id / kind / name / status / keywords.
+const entityRow = (id: string, status = 'active', name = id, keywords: string[] = []) =>
+  ({
+    id,
+    branchId: 'branch_1',
+    kind: 'character',
+    name,
+    description: 'x',
+    status,
+    keywords,
+  }) as never
 
 const nonCharacterRow = (id: string, kind: string) =>
   ({ id, branchId: 'branch_1', kind, name: id, description: 'x', status: 'active' }) as never
@@ -217,7 +225,13 @@ describe('buildClassifierActions', () => {
         relationships: [],
         statusFlips: [],
         newCharacters: [
-          { handle: 'h1', name: 'Eldrin', description: 'A dragon.', sourceTurn: 't1' },
+          {
+            handle: 'h1',
+            name: 'Eldrin',
+            description: 'A dragon.',
+            keywords: [],
+            sourceTurn: 't1',
+          },
         ],
       },
       { ...base, decisions },
@@ -242,7 +256,13 @@ describe('buildClassifierActions', () => {
         relationships: [],
         statusFlips: [],
         newCharacters: [
-          { handle: 'h1', name: 'Eldrin', description: 'The keeper.', sourceTurn: 't1' },
+          {
+            handle: 'h1',
+            name: 'Eldrin',
+            description: 'The keeper.',
+            keywords: [],
+            sourceTurn: 't1',
+          },
         ],
       },
       { ...base, decisions },
@@ -266,7 +286,13 @@ describe('buildClassifierActions', () => {
         relationships: [],
         statusFlips: [],
         newCharacters: [
-          { handle: 'h1', name: 'Eldrin', description: 'The keeper.', sourceTurn: 't1' },
+          {
+            handle: 'h1',
+            name: 'Eldrin',
+            description: 'The keeper.',
+            keywords: [],
+            sourceTurn: 't1',
+          },
         ],
       },
       { ...base, decisions },
@@ -305,7 +331,9 @@ describe('buildClassifierActions', () => {
         ],
         relationships: [],
         statusFlips: [],
-        newCharacters: [{ handle: 'h1', name: 'Eldrin', description: 'x', sourceTurn: 't1' }],
+        newCharacters: [
+          { handle: 'h1', name: 'Eldrin', description: 'x', keywords: [], sourceTurn: 't1' },
+        ],
       },
       { ...base, decisions },
     )
@@ -440,7 +468,9 @@ describe('buildClassifierActions', () => {
           happenings: [],
           relationships: [],
           statusFlips: [],
-          newCharacters: [{ handle: 'h9', name: 'Eldrin', description: 'x', sourceTurn: 't1' }],
+          newCharacters: [
+            { handle: 'h9', name: 'Eldrin', description: 'x', keywords: [], sourceTurn: 't1' },
+          ],
         },
         base,
       )
@@ -457,7 +487,9 @@ describe('buildClassifierActions', () => {
           happenings: [],
           relationships: [],
           statusFlips: [],
-          newCharacters: [{ handle: 'h1', name: 'char_a', description: 'x', sourceTurn: 't1' }],
+          newCharacters: [
+            { handle: 'h1', name: 'char_a', description: 'x', keywords: [], sourceTurn: 't1' },
+          ],
         },
         { ...base, decisions },
       )
@@ -477,8 +509,8 @@ describe('buildClassifierActions', () => {
           relationships: [],
           statusFlips: [],
           newCharacters: [
-            { handle: 'h1', name: 'First', description: 'x', sourceTurn: 't1' },
-            { handle: 'h1', name: 'Second', description: 'y', sourceTurn: 't1' },
+            { handle: 'h1', name: 'First', description: 'x', keywords: [], sourceTurn: 't1' },
+            { handle: 'h1', name: 'Second', description: 'y', keywords: [], sourceTurn: 't1' },
           ],
         },
         { ...base, decisions },
@@ -564,7 +596,9 @@ describe('buildClassifierActions', () => {
           happenings: [],
           relationships: [],
           statusFlips: [{ ref: 'char_s', to: 'retired', reason: 'fell', sourceTurn: 't2' }],
-          newCharacters: [{ handle: 'h1', name: 'char_s', description: 'x', sourceTurn: 't1' }],
+          newCharacters: [
+            { handle: 'h1', name: 'char_s', description: 'x', keywords: [], sourceTurn: 't1' },
+          ],
         },
         { ...base, decisions, entities: [entityRow('char_s', 'staged')] },
       )
@@ -583,7 +617,9 @@ describe('buildClassifierActions', () => {
           happenings: [],
           relationships: [],
           statusFlips: [{ ref: 'h1', to: 'retired', reason: 'fell', sourceTurn: 't2' }],
-          newCharacters: [{ handle: 'h1', name: 'Eldrin', description: 'x', sourceTurn: 't1' }],
+          newCharacters: [
+            { handle: 'h1', name: 'Eldrin', description: 'x', keywords: [], sourceTurn: 't1' },
+          ],
         },
         { ...base, decisions },
       )
@@ -592,6 +628,68 @@ describe('buildClassifierActions', () => {
         kind: 'updateEntity',
         payload: { id: createdId, patch: { status: 'retired' } },
       })
+    })
+  })
+})
+
+describe('entity keywords', () => {
+  const candidate = (keywords: string[]) => ({
+    happenings: [],
+    relationships: [],
+    statusFlips: [],
+    newCharacters: [{ handle: 'new:k', name: 'Kael', description: 'A courier.', keywords }],
+  })
+
+  const decide = (decision: ReconcileDecision) => new Map([['new:k', decision]])
+
+  // classifier.md → Entity keywords: the brand-new-entity object carries the
+  // epithets prose used for the character alongside its name.
+  it('seeds keywords on a created character', () => {
+    const { planned } = buildClassifierActions(candidate(['the grey wolf']), {
+      ...base,
+      decisions: decide({ kind: 'create', flagged: false }),
+    })
+    expect(payloadOf<{ entry: { keywords: string[] } }>(planned[0]).entry.keywords).toEqual([
+      'the grey wolf',
+    ])
+  })
+
+  // "Writes are strictly append-and-deduplicate and never remove, so user-authored
+  // aliases survive every subsequent pass."
+  it('appends to a known entity without dropping its authored aliases', () => {
+    const { planned } = buildClassifierActions(candidate(['the grey wolf']), {
+      ...base,
+      entities: [entityRow('char_kael', 'active', 'Kael', ['the innkeeper'])] as never[],
+      decisions: decide({ kind: 'known', entityId: 'char_kael', similarity: 0.9 }),
+    })
+    expect(payloadOf<{ patch: { keywords: string[] } }>(planned[0]).patch.keywords).toEqual([
+      'the innkeeper',
+      'the grey wolf',
+    ])
+  })
+
+  // Dedupe runs under matchTerms' normalization, so a case variant is not a second
+  // entry — and a pass that adds nothing must cost no delta row.
+  it('plans no write when every keyword is already held, case aside', () => {
+    const { planned } = buildClassifierActions(candidate(['the grey wolf']), {
+      ...base,
+      entities: [entityRow('char_kael', 'active', 'Kael', ['The Grey Wolf'])] as never[],
+      decisions: decide({ kind: 'known', entityId: 'char_kael', similarity: 0.9 }),
+    })
+    expect(planned).toEqual([])
+  })
+
+  // A promote already writes status; keywords ride the same patch, not a second delta.
+  it('carries keywords on the promote patch', () => {
+    const { planned } = buildClassifierActions(candidate(['the grey wolf']), {
+      ...base,
+      entities: [entityRow('char_kael', 'staged', 'Kael')] as never[],
+      decisions: decide({ kind: 'promote', entityId: 'char_kael', similarity: 0.9 }),
+    })
+    expect(planned).toHaveLength(1)
+    expect(payloadOf<{ patch: Record<string, unknown> }>(planned[0]).patch).toEqual({
+      status: 'active',
+      keywords: ['the grey wolf'],
     })
   })
 })

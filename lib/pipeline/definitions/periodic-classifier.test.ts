@@ -526,7 +526,13 @@ describe('periodicClassifierPhase', () => {
       status: 'ok',
       value: extraction({
         newCharacters: [
-          { handle: 'c1', name: 'Jorin', description: 'A ferryman.', sourceTurn: 't1' },
+          {
+            handle: 'c1',
+            name: 'Jorin',
+            description: 'A ferryman.',
+            keywords: [],
+            sourceTurn: 't1',
+          },
         ],
         happenings: [
           { title: 'A', sourceTurn: 't1', involvements: [{ ref: 'c1' }], awareness: [] },
@@ -563,7 +569,9 @@ describe('periodicClassifierPhase', () => {
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
       value: extraction({
-        newCharacters: [{ handle: 'nc1', name: 'kael', description: 'The courier from the ford.' }],
+        newCharacters: [
+          { handle: 'nc1', name: 'kael', description: 'The courier from the ford.', keywords: [] },
+        ],
         // Refers to the character by its temp handle, which must survive the
         // return trip untouched for the planner's handleMap to resolve it.
         happenings: [

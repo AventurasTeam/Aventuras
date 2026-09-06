@@ -55,6 +55,13 @@ describe('periodic classifier template', () => {
     expect(rendered).toMatch(/MUST start with/i)
   })
 
+  // A schema field the prompt never asks for is a field the model never fills.
+  it('asks for the epithets a new character is named by', () => {
+    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
+    expect(rendered).toMatch(/keywords/i)
+    expect(rendered).toMatch(/epithets/i)
+  })
+
   it('exposes the placeholder universe including happenings', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
     expect(rendered).toContain('[c1]')
