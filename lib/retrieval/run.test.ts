@@ -34,6 +34,10 @@ const entityRow = (
     status?: string
     mode?: string
     description?: string | null
+    priority?: number
+    keywords?: string[]
+    /** Bypasses JSON encoding, for the hand-edited-blob cases. */
+    rawKeywords?: string
     stale?: 0 | 1
   } = {},
 ): Row => [
@@ -45,6 +49,8 @@ const entityRow = (
   // Not `??`: these columns are nullable, and a null the caller asked for must
   // reach the row rather than fall back to the default string.
   o.description === undefined ? `About ${name}.` : o.description,
+  o.priority ?? 0,
+  o.rawKeywords ?? JSON.stringify(o.keywords ?? []),
   o.stale ?? 0,
 ]
 
@@ -1646,5 +1652,46 @@ describe('runRetrieval — keyword boost', () => {
     const boost = (id: string) => ok.bundles.lore.traces.find((t) => t.id === id)?.kwBoostValue
     expect(boost('lore_ascii')).toBeGreaterThan(0)
     expect(boost('lore_nfd')).toBeGreaterThan(0)
+  })
+
+  // retrieval.md → Keywords schema: "Keyword on `name` and `entities.keywords`".
+  it('boosts an entity on a keyword its name does not contain', async () => {
+    const boostFor = async (keywords: string[]) => {
+      const out = await runRetrieval(
+        deps({
+          queryAll: makeQueryAll({
+            entities: [entityRow('char_a', 'Kara Vex', { keywords })],
+            knn: [hit('char_a')],
+          }),
+        }),
+        // Cleared: BASE puts char_a in scene, and the structural floor seats an
+        // in-scene entity outside the ranker pool, where nothing is boosted.
+        params({
+          scanText: 'The grey wolf watched from the ridge.',
+          sceneEntityIds: [],
+          sceneCharacterIds: [],
+        }),
+      )
+      return expectOk(out).bundles.entities.traces.find((t) => t.id === 'char_a')?.kwBoostValue
+    }
+    expect(await boostFor(['the grey wolf'])).toBeGreaterThan(0)
+    // Same prose, no matching alias: the boost is the keyword's, not the scan text's.
+    expect(await boostFor(['the innkeeper'])).toBe(0)
+  })
+
+  // entities.priority orders keyword-inject overflow and nothing else. lore.priority
+  // feeding pin_signal is lore's own second effect — the branch two cases down in
+  // run.ts does exactly the thing this branch must not.
+  it('leaves an entity pin_signal at zero however high its priority', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          entities: [entityRow('char_a', 'Kara Vex', { priority: 99 })],
+          knn: [hit('char_a')],
+        }),
+      }),
+      params({ sceneEntityIds: [], sceneCharacterIds: [] }),
+    )
+    expect(expectOk(out).bundles.entities.traces.find((t) => t.id === 'char_a')?.pinSignal).toBe(0)
   })
 })

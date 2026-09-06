@@ -20,7 +20,9 @@ function baseEntity(overrides: Partial<EntitySummary> = {}): EntitySummary {
     status: 'active',
     retiredReason: undefined,
     injectionMode: 'on-relevance',
+    priority: 20,
     tags: ['hero', 'sword'],
+    keywords: ['the wanderer', 'the swordsman'],
     state: { hp: 100, mp: 30 },
     relationCounts: {
       awarenessRows: 12,
@@ -40,6 +42,9 @@ const entityB = baseEntity({
   description: 'A city guardsman posted at the eastern gate.',
   status: 'staged',
   tags: ['guard', 'sword'],
+  // 'The Swordsman' is A's 'the swordsman' spelled differently — the two sides
+  // authored their aliases independently, and only one may survive the merge.
+  keywords: ['the gate guard', 'The Swordsman'],
   state: { hp: 90, post: 'east-gate' },
   relationCounts: {
     awarenessRows: 1,
@@ -52,6 +57,12 @@ const entityB = baseEntity({
 
 const resolveOk = async (r: Resolution) => {
   console.log('[story] resolved:', r)
+}
+// Captures what the dialog actually submits: the union channels are derived in
+// the view, so nothing else observes whether they reach the resolution at all.
+let lastResolution: Resolution | null = null
+const resolveCapturing = async (r: Resolution) => {
+  lastResolution = r
 }
 const resolveLoading = () => new Promise<void>(() => {})
 const resolveError = () => Promise.reject(new Error('Write failed (story stub)'))
@@ -171,6 +182,29 @@ export const MergeLoading: Story = {
     // these clicks the loading lock isn't visible.
     await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
     await userEvent.click(await screen.findByRole('button', { name: /^Merge into / }))
+  },
+}
+
+export const MergeKeywordUnion: Story = {
+  render: () => (
+    <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveCapturing} />
+  ),
+  play: async () => {
+    lastResolution = null
+    // ControlledDialog opens by default; the Open button sits behind the overlay.
+    // Both sides' keywords are offered, deduplicated and sorted.
+    await userEvent.click(await screen.findByRole('button', { name: 'the wanderer' }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Merge into / }))
+
+    const resolution = lastResolution as Resolution | null
+    expect(resolution).not.toBeNull()
+    expect(resolution).toMatchObject({
+      mode: 'merge',
+      // The losing side's aliases survive; the deselected one is dropped, and the
+      // case variant collapses into the entry that sorted first.
+      finalKeywords: ['The Swordsman', 'the gate guard'],
+      finalTags: ['guard', 'hero', 'sword'],
+    })
   },
 }
 

@@ -29,6 +29,8 @@ type EntityUpdatePatch = Partial<{
   retiredReason: string | null
   injectionMode: Entity['injectionMode']
   tags: string[]
+  keywords: string[]
+  priority: number
   state: EntityState
 }>
 
@@ -51,6 +53,8 @@ const UPDATABLE = [
   'retiredReason',
   'injectionMode',
   'tags',
+  'keywords',
+  'priority',
   'state',
 ] as const
 
@@ -68,6 +72,8 @@ function fullRow(entry: NewEntity): Entity {
     nameCollisionFlag: entry.nameCollisionFlag ?? 0,
     state: entry.state ?? emptyEntityState(entry.kind),
     tags: entry.tags ?? [],
+    keywords: entry.keywords ?? [],
+    priority: entry.priority ?? 0,
     // A new row has no vector by definition — default dirty. Clearing happens via a
     // same-batch stale-clear op once the embed lands, never via an explicit 0.
     embeddingStale: entry.embeddingStale ?? 1,

@@ -85,6 +85,13 @@
       "when": 1788666500428,
       "tag": "0011_keyword_retrieval_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1788708593734,
+      "tag": "0012_entity_keywords_priority",
+      "breakpoints": true
     }
   ]
 }

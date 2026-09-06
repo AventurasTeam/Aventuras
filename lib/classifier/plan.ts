@@ -1,5 +1,6 @@
 import type { PipelineAction } from '@/lib/actions'
 import type { Entity } from '@/lib/db'
+import { normalizeTerm } from '@/lib/keyword-terms'
 
 import type { ReconcileDecision } from './reconcile'
 import type { ClassifierExtraction } from './schema'
@@ -31,6 +32,24 @@ export type PlanDeps = {
 
 const SOURCE = 'periodic_classifier' as const
 
+/**
+ * retrieval.md → Keywords schema: appends de-duplicate under the normalization
+ * matchTerms uses, and never remove — a user's authored aliases have to survive
+ * every later pass. null when nothing is new, so a character the prose names
+ * again costs no delta row.
+ */
+function appendKeywords(current: readonly string[], incoming: readonly string[]): string[] | null {
+  const seen = new Set(current.map(normalizeTerm))
+  const added: string[] = []
+  for (const term of incoming) {
+    const key = normalizeTerm(term)
+    if (key === '' || seen.has(key)) continue
+    seen.add(key)
+    added.push(term)
+  }
+  return added.length === 0 ? null : [...current, ...added]
+}
+
 export function buildClassifierActions(
   extraction: ClassifierExtraction,
   deps: PlanDeps,
@@ -50,9 +69,10 @@ export function buildClassifierActions(
   // Mutable, not a frozen snapshot: rows this pass plans are visible to later
   // facts in the same reply, so the flip guards read post-plan status and a ref
   // to a just-created character resolves.
-  const index = new Map<string, { kind: Entity['kind']; status: Entity['status'] }>(
-    entities.map((e) => [e.id, { kind: e.kind, status: e.status }]),
-  )
+  const index = new Map<
+    string,
+    { kind: Entity['kind']; status: Entity['status']; keywords: string[] }
+  >(entities.map((e) => [e.id, { kind: e.kind, status: e.status, keywords: e.keywords }]))
 
   const resolveRef = (ref: string, expectedKind?: Entity['kind']): string | null => {
     const id = handleMap.get(ref) ?? (index.has(ref) ? ref : null)
@@ -84,25 +104,52 @@ export function buildClassifierActions(
     if (decision.kind === 'promote') {
       handleMap.set(candidate.handle, decision.entityId)
       const promoted = index.get(decision.entityId)
-      if (promoted != null) index.set(decision.entityId, { ...promoted, status: 'active' })
+      const merged = appendKeywords(promoted?.keywords ?? [], candidate.keywords)
+      if (promoted != null)
+        index.set(decision.entityId, {
+          ...promoted,
+          status: 'active',
+          keywords: merged ?? promoted.keywords,
+        })
       planned.push({
         action: {
           kind: 'updateEntity',
           source: SOURCE,
-          payload: { branchId, id: decision.entityId, patch: { status: 'active' } },
+          payload: {
+            branchId,
+            id: decision.entityId,
+            patch: merged == null ? { status: 'active' } : { status: 'active', keywords: merged },
+          },
         },
         entryId,
       })
       continue
     }
+    // A known character emits a write only when the prose named it by something it
+    // does not already hold: keywords are not frozen after first introduction, but a
+    // recurring name must not cost a delta row per pass.
     if (decision.kind === 'known') {
       handleMap.set(candidate.handle, decision.entityId)
+      const known = index.get(decision.entityId)
+      const merged = appendKeywords(known?.keywords ?? [], candidate.keywords)
+      if (merged != null) {
+        if (known != null) index.set(decision.entityId, { ...known, keywords: merged })
+        planned.push({
+          action: {
+            kind: 'updateEntity',
+            source: SOURCE,
+            payload: { branchId, id: decision.entityId, patch: { keywords: merged } },
+          },
+          entryId,
+        })
+      }
       continue
     }
     const id = newId('char')
     const timestamp = now()
+    const keywords = appendKeywords([], candidate.keywords) ?? []
     handleMap.set(candidate.handle, id)
-    index.set(id, { kind: 'character', status: 'active' })
+    index.set(id, { kind: 'character', status: 'active', keywords })
     planned.push({
       action: {
         kind: 'createEntity',
@@ -116,6 +163,7 @@ export function buildClassifierActions(
             // First introduction is the classifier's one description write; it
             // never amends a description afterwards (authorship contract).
             description: candidate.description,
+            keywords,
             status: 'active',
             injectionMode: 'auto',
             nameCollisionFlag: decision.flagged ? 1 : 0,
@@ -241,7 +289,7 @@ export function buildClassifierActions(
     // hard-finality retirement only; retired->active is user-only in v1.
     if (flip.to === 'active' && current.status !== 'staged') continue
     if (flip.to === 'retired' && current.status !== 'active') continue
-    index.set(id, { kind: current.kind, status: flip.to })
+    index.set(id, { ...current, status: flip.to })
     planned.push({
       action: {
         kind: 'updateEntity',

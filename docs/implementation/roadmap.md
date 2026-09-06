@@ -168,6 +168,12 @@ chapter-management is M5.
   Collision-review + entity-merge driver wires the shipped
   `CollisionResolveDialog` against `name_collision_flag` rows
   per [`patterns/collision-resolve.md`](../ui/patterns/collision-resolve.md).
+  **The dialog's own `InjectionMode` is drifted** — `collision-resolve-diff.ts`
+  declares `'always' | 'on-relevance' | 'never'` against the shipped
+  enum `'always' | 'auto' | 'disabled'` (`lib/db/enums.ts`). Harmless
+  while the compound is unwired; a type error the moment the driver
+  passes it a real row, so fix it as the first step of wiring rather
+  than mid-way.
   `LocationState.parent_location_id` cycle-guard (action-layer
   pre-commit walk, depth-cap 100) per
   [`data-model.md → LocationState`](../data-model.md#locationstate-shape).

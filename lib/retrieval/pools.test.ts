@@ -39,6 +39,8 @@ const thread = (over: Partial<ThreadRow> & Pick<ThreadRow, 'id'>): ThreadRow => 
 
 const loadedEntity = (over: Partial<EntityRow> & Pick<EntityRow, 'id'>): LoadedEntityRow => ({
   ...entity(over),
+  keywords: [],
+  priority: 0,
   embeddingStale: true,
 })
 

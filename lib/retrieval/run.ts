@@ -714,7 +714,7 @@ function assembleCandidates(
           sims: simsFor(vector),
           vector,
           pinSignal: 0,
-          keywordHits: kwHits([r.name]),
+          keywordHits: kwHits([r.name, ...r.keywords]),
         }
       })
     }

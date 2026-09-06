@@ -14,6 +14,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Select, type SelectOption } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
+import { normalizeTerm } from '@/lib/keyword-terms'
 import { cn } from '@/lib/utils'
 
 import {
@@ -211,12 +212,33 @@ function MergeBody({
     [allTags, state.deselectedTags],
   )
 
+  const allKeywords = useMemo(() => {
+    if (diff.keywords == null) return [...entityA.keywords].sort()
+    return [...diff.keywords.both, ...diff.keywords.onlyInA, ...diff.keywords.onlyInB].sort()
+  }, [diff.keywords, entityA.keywords])
+
+  // Deselects first (chips are what the user acted on), then the normalization
+  // collapse: collision-resolve.md requires that a case variant of the same alias
+  // not survive as a second entry, and the two sides spell them independently.
+  const finalKeywords = useMemo(() => {
+    const seen = new Set<string>()
+    return allKeywords
+      .filter((k) => !state.deselectedKeywords.includes(k))
+      .filter((k) => {
+        const key = normalizeTerm(k)
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+  }, [allKeywords, state.deselectedKeywords])
+
   function handleConfirm() {
     onSubmit({
       mode: 'merge',
       canonicalId: state.canonicalId,
       fieldChoices: state.fieldChoices,
       finalTags,
+      finalKeywords,
     })
   }
 
@@ -263,6 +285,29 @@ function MergeBody({
               disabled={submitting}
             />
           ))}
+        </View>
+      )}
+
+      {diff.keywords != null && (
+        <View className="gap-2">
+          <Text size="sm" variant="muted">
+            Keywords (click to remove from merge)
+          </Text>
+          <View className="flex-row flex-wrap gap-2">
+            {allKeywords.map((keyword) => {
+              const deselected = state.deselectedKeywords.includes(keyword)
+              return (
+                <Chip
+                  key={keyword}
+                  selected={!deselected}
+                  onPress={() => dispatch({ type: 'toggle-keyword', keyword })}
+                  disabled={submitting}
+                >
+                  <Text className={cn(deselected && 'line-through')}>{keyword}</Text>
+                </Chip>
+              )
+            })}
+          </View>
         </View>
       )}
 

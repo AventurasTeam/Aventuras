@@ -12,7 +12,9 @@ function baseEntity(overrides: Partial<EntitySummary> = {}): EntitySummary {
     status: 'active',
     retiredReason: undefined,
     injectionMode: 'on-relevance',
+    priority: 0,
     tags: ['hero', 'sword'],
+    keywords: [],
     state: { hp: 100 },
     relationCounts: {
       awarenessRows: 0,
@@ -178,5 +180,50 @@ describe('computeDivergence', () => {
       expect(diff.tags).toBeNull()
       expect(diff.stateDivergent).toBe(false)
     })
+  })
+})
+
+describe('keywords', () => {
+  // Keywords are retrieval-targeted, not decorative: taking the canonical side's
+  // set alone silently narrows what the merged entity can be matched by.
+  it('partitions keywords the way it partitions tags', () => {
+    const diff = computeDivergence(
+      baseEntity({ keywords: ['the grey wolf', 'shared'] }),
+      baseEntity({ id: 'ent_b', keywords: ['the innkeeper', 'shared'] }),
+    )
+    expect(diff.keywords).toEqual({
+      onlyInA: ['the grey wolf'],
+      onlyInB: ['the innkeeper'],
+      both: ['shared'],
+    })
+  })
+
+  it('nulls the keyword channel when both sides carry the same set', () => {
+    const diff = computeDivergence(
+      baseEntity({ keywords: ['a'] }),
+      baseEntity({ id: 'ent_b', keywords: ['a'] }),
+    )
+    expect(diff.keywords).toBeNull()
+  })
+
+  // The two channels are independent: diverging tags must not manufacture a
+  // keyword row, which is what a single shared partition call would do.
+  it('keeps the tag and keyword channels independent', () => {
+    const diff = computeDivergence(
+      baseEntity({ keywords: ['a'], tags: ['x'] }),
+      baseEntity({ id: 'ent_b', keywords: ['a'], tags: ['y'] }),
+    )
+    expect(diff.keywords).toBeNull()
+    expect(diff.tags).not.toBeNull()
+  })
+
+  // Canon: priority rides the projection but is NOT a divergent scalar — the merge
+  // takes the canonical's value under the implicit-field rule.
+  it('does not treat priority as a divergent scalar', () => {
+    const diff = computeDivergence(
+      baseEntity({ priority: 0 }),
+      baseEntity({ id: 'ent_b', priority: 9 }),
+    )
+    expect(diff.divergentScalars).toEqual([])
   })
 })

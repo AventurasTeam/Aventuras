@@ -17,6 +17,8 @@ function ent(id: string, kind: Entity['kind'], name: string): Entity {
     nameCollisionFlag: 0,
     state: null,
     tags: [],
+    keywords: [],
+    priority: 0,
     embeddingStale: 0,
     createdAt: 1,
     updatedAt: 1,

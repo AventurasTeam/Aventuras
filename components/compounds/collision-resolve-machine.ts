@@ -4,12 +4,14 @@ export type MergeState = {
   canonicalId: string
   fieldChoices: Record<ScalarField, 'A' | 'B'>
   deselectedTags: string[]
+  deselectedKeywords: string[]
 }
 
 export type MergeAction =
   | { type: 'pick-canonical'; id: string; entityAId: string }
   | { type: 'pick-field'; field: ScalarField; side: 'A' | 'B' }
   | { type: 'toggle-tag'; tag: string }
+  | { type: 'toggle-keyword'; keyword: string }
   | {
       type: 'reset'
       diff: DiffPayload
@@ -40,6 +42,7 @@ export function initMergeState(
     canonicalId: defaultCanonicalId,
     fieldChoices: fieldChoicesForCanonical(diff.divergentScalars, side),
     deselectedTags: [],
+    deselectedKeywords: [],
   }
 }
 
@@ -52,7 +55,7 @@ export function mergeReducer(state: MergeState, action: MergeAction): MergeState
         ...state,
         canonicalId: action.id,
         fieldChoices: fieldChoicesForCanonical(fields, newSide),
-        // deselectedTags preserved — tag choices are independent of canonical pick.
+        // Both deselect sets preserved — chip choices are independent of the pick.
       }
     }
     case 'pick-field': {
@@ -68,6 +71,15 @@ export function mergeReducer(state: MergeState, action: MergeAction): MergeState
         deselectedTags: has
           ? state.deselectedTags.filter((t) => t !== action.tag)
           : [...state.deselectedTags, action.tag],
+      }
+    }
+    case 'toggle-keyword': {
+      const has = state.deselectedKeywords.includes(action.keyword)
+      return {
+        ...state,
+        deselectedKeywords: has
+          ? state.deselectedKeywords.filter((k) => k !== action.keyword)
+          : [...state.deselectedKeywords, action.keyword],
       }
     }
     case 'reset': {

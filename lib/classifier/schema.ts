@@ -57,6 +57,12 @@ export const classifierExtractionSchema = z.object({
         handle: z.string(),
         name: z.string(),
         description: z.string(),
+        keywords: z
+          .array(z.string())
+          .default([])
+          .describe(
+            'Titles, epithets and relational references the prose used for this character alongside the name — "the Grey Wolf", "the innkeeper". Not the name itself.',
+          ),
         sourceTurn: z.string().optional(),
       }),
     )

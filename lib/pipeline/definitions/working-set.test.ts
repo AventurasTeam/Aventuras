@@ -42,6 +42,8 @@ function entity(id: string, branchId = 'b1'): Entity {
     name: id,
     description: null,
     tags: [],
+    keywords: [],
+    priority: 0,
     status: 'active',
     retiredReason: null,
     nameCollisionFlag: 0,
