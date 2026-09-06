@@ -114,7 +114,6 @@ const queryOf = (q: QuerySpec) => ({
   text: q.text,
   token_count: countTokens(q.text),
   source: q.source,
-  ...(q.sentenceScores ? { sentence_scores: [...q.sentenceScores] } : {}),
 })
 
 // No query vector in either mode: λ_div — the one thing deep mode exists for —
@@ -125,7 +124,7 @@ const queriesOf = (stack: QueryStack | null): ProbeCapturePayload['queries'] => 
     return [
       queryOf({ text: '', source: 'user_action' }),
       queryOf({ text: '', source: 'structural_digest' }),
-      queryOf({ text: '', source: 'prose_extract' }),
+      queryOf({ text: '', source: 'piggyback_summary' }),
     ]
   }
   return [queryOf(stack.q1), queryOf(stack.q2), queryOf(stack.q3)]

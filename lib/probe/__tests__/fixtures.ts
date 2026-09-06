@@ -39,8 +39,6 @@ export const queryStack = () =>
     activeThreadTitles: [],
     eraName: null,
     piggybackSummary: null,
-    lastNarrativeContent: 'A courier arrived at dusk carrying nothing but an empty seal case.',
-    index: { entityNames: new Set(['mira']), loreKeywords: new Set() },
   })
 
 export const successOutcome = () =>

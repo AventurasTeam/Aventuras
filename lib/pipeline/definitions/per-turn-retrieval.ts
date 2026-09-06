@@ -135,7 +135,6 @@ export async function* retrievalPhase(
           // branch_era_flips has no writer wired, so no era can be named yet.
           eraName: null,
           piggybackSummary: lastNarrative?.metadata?.summary ?? null,
-          lastNarrativeContent: lastNarrative ? promptProse(lastNarrative) : '',
         },
         sceneCharacterIds,
         sceneEntityIds: scene.sceneEntities,

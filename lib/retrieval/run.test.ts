@@ -207,8 +207,7 @@ const BASE: RetrievalParams = {
   query: {
     userAction: 'I ask about the amulet.',
     eraName: null,
-    piggybackSummary: null,
-    lastNarrativeContent: 'Kara Vex drew the blade.',
+    piggybackSummary: 'Kara Vex drew the blade.',
   },
   sceneCharacterIds: ['char_a'],
   sceneEntityIds: ['char_a'],
@@ -750,7 +749,7 @@ describe('runRetrieval — KNN passes', () => {
     )
 
   // Every query is present here: Q1 from userAction, Q2 from the seated scene
-  // entity, Q3 from lastNarrativeContent.
+  // entity, Q3 from the piggyback summary.
   const allThree = () => makeQueryAll({ entities: [entityRow('char_a', 'Kara Vex')] })
 
   it("issues one pass per present query per type, against that type's vec family", async () => {
@@ -779,7 +778,7 @@ describe('runRetrieval — KNN passes', () => {
         params({
           sceneEntityIds: [],
           sceneCharacterIds: [],
-          query: { lastNarrativeContent: '' },
+          query: { piggybackSummary: null },
         }),
       ),
     )
@@ -932,7 +931,7 @@ describe('runRetrieval — query stack', () => {
       params({
         sceneEntityIds: [],
         sceneCharacterIds: [],
-        query: { userAction: '', lastNarrativeContent: '' },
+        query: { userAction: '', piggybackSummary: null },
       }),
     )
 
@@ -1509,8 +1508,8 @@ describe('runRetrieval — selected location ids', () => {
   })
 })
 
-// The index derives from source rows the pass already loaded; these pin that derivation
-// through both consumers: the happening keyword surface and Q3 sentence selection.
+// The index derives from source rows the pass already loaded; this pins that
+// derivation through its one consumer: the happening keyword surface.
 describe('runRetrieval — name/keyword index', () => {
   it('boosts a happening whose awareness source names a branch entity', async () => {
     const out = await runRetrieval(
@@ -1537,28 +1536,6 @@ describe('runRetrieval — name/keyword index', () => {
     expect(boost('hap_named')).toBeGreaterThan(0)
     // Negative control: an awareness source naming nothing in the index.
     expect(boost('hap_plain')).toBe(0)
-  })
-
-  it('scores Q3 sentence selection with the branch lore keywords', async () => {
-    const out = await runRetrieval(
-      deps({
-        queryAll: makeQueryAll({
-          lore: [loreRow('lore_1', 'The Veil', { keywords: ['veilstone'] })],
-        }),
-      }),
-      params({
-        sceneEntityIds: [],
-        sceneCharacterIds: [],
-        query: {
-          lastNarrativeContent:
-            'Rain fell over the long grey afternoon and nothing happened. The veilstone hummed.',
-        },
-      }),
-    )
-
-    const scores = expectOk(out).queries.q3.sentenceScores ?? []
-    expect(scores).toHaveLength(2)
-    expect(scores[1]).toBeGreaterThan(scores[0])
   })
 })
 

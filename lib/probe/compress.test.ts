@@ -45,7 +45,7 @@ const capturePayload = (): ProbeCapturePayload => ({
     {
       text: 'The bridge fell during the third night of the siege.',
       token_count: 11,
-      source: 'prose_extract',
+      source: 'piggyback_summary',
       sentence_scores: [0.9, 0.6, 0.4],
     },
   ],

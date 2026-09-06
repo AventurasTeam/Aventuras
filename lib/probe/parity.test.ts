@@ -468,7 +468,7 @@ describe('replay recomputes rather than echoing', () => {
     )
     const retunedParams: RankerParams = {
       ...capturedParams,
-      weights: { action: 0.5, digest: 0, prose: 0.5 },
+      weights: { action: 0.5, digest: 0, summary: 0.5, direct: 0 },
     }
     const production = rankPerType(pool, 'lore', 1, {
       params: retunedParams,

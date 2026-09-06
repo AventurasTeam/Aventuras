@@ -174,7 +174,13 @@ export type RankedType = {
   pool: readonly Candidate[]
 }
 
-export type QueryWeights = { action: number; digest: number; prose: number }
+export type QueryWeights = {
+  action: number
+  digest: number
+  summary: number
+  /** Pooled across every emitted Q4, not one share per query (retrieval.md → Blending). */
+  direct: number
+}
 
 /**
  * Every tunable the ranker reads. Frozen into each probe capture verbatim, and

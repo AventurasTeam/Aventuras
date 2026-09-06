@@ -78,10 +78,7 @@ export type RetrievalParams = {
   dim: number
   budgets: Record<RetrievalType, number>
   /** The floor supplies the scene / location / thread lines, so they are not accepted here. */
-  query: Omit<
-    QueryStackInput,
-    'index' | 'sceneEntityNames' | 'currentLocationName' | 'activeThreadTitles'
-  >
+  query: Omit<QueryStackInput, 'sceneEntityNames' | 'currentLocationName' | 'activeThreadTitles'>
   sceneCharacterIds: readonly string[]
   sceneEntityIds: readonly string[]
   currentLocationId: string | null
@@ -313,7 +310,6 @@ async function runRetrievalPass(
 
   const queries = buildQueryStack({
     ...params.query,
-    index,
     sceneEntityNames: floor.sceneEntities.map((e) => e.name),
     currentLocationName: floor.currentLocation?.name ?? null,
     activeThreadTitles: floor.activeThreads.map((t) => t.title),

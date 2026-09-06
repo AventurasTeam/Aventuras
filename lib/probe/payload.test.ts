@@ -309,20 +309,6 @@ describe('buildCapturePayload', () => {
     expect(payload.stale_counts).not.toBe(outcome.staleCounts)
   })
 
-  it('does not alias the query stack sentence_scores array', () => {
-    const stack = queryStack()
-    const payload = buildCapturePayload({
-      ...identity,
-      mode: 'light',
-      settings,
-      params: RANKER_DEFAULTS,
-      outcome: retrievalSuccess({ bundles: { lore: loreBundle() }, queries: stack }),
-    })
-
-    expect(payload.queries[2].sentence_scores).toEqual(stack.q3.sentenceScores)
-    expect(payload.queries[2].sentence_scores).not.toBe(stack.q3.sentenceScores)
-  })
-
   // The shared outcome fixture's `selected` shorthand derives its own traces;
   // poolOf refuses a pool row without one, so a fixture that seated candidates
   // and left traces empty would describe a bundle no capture can carry.
@@ -357,17 +343,19 @@ describe('buildCapturePayload', () => {
       sim_q1: 0.95,
       sim_q2: 0.9,
       sim_q3: 0.85,
-      sim_blend: 0.9025,
+      // (0.3*0.95 + 0.25*0.9 + 0.2*0.85) / (0.3 + 0.25 + 0.2).
+      sim_blend: expect.closeTo(0.906667, 6),
       recency_factor: 1,
       pin_signal: 0.4,
       chapters_old: 3,
       kw_boost_value: 0.1,
       chapter_boost_applied: false,
       bypass_triggered: true,
-      final_score: 1.09275,
+      // sim_blend * pinBoost(1 + 0.25*0.4) + kw_boost_value.
+      final_score: expect.closeTo(1.097333, 6),
       // Single candidate: MMR's first pick is lambdaDiv × score with no
       // diversity penalty (RANKER_DEFAULTS.lambdaDiv = 0.75).
-      mmr_score: expect.closeTo(0.8195625, 6),
+      mmr_score: expect.closeTo(0.823, 6),
       mmr_rank: 0,
       selected: true,
       drop_reason: 'not_dropped',
@@ -481,7 +469,7 @@ describe('buildCapturePayload', () => {
     expect(payload.queries).toEqual([
       { text: '', token_count: 0, source: 'user_action' },
       { text: '', token_count: 0, source: 'structural_digest' },
-      { text: '', token_count: 0, source: 'prose_extract' },
+      { text: '', token_count: 0, source: 'piggyback_summary' },
     ])
     expectEmptyPools(payload)
     expect(payload.structural_floor).toEqual([])

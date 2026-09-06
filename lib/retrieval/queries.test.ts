@@ -1,13 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { PROSE_EXTRACT_TOP_K } from './constants'
-import { extractProse, splitSentences } from './prose-extract'
 import { buildQueryStack, distributeQueryVectors, type QueryStackInput } from './queries'
-
-const index = {
-  entityNames: new Set(['kara vex']),
-  loreKeywords: new Set<string>(),
-}
 
 const base: QueryStackInput = {
   userAction: 'I draw the blade and wait.',
@@ -16,8 +9,6 @@ const base: QueryStackInput = {
   activeThreadTitles: ['Find the courier'],
   eraName: 'Third Age',
   piggybackSummary: null,
-  lastNarrativeContent: 'Kara Vex drew the blade. The awning had not been lowered.',
-  index,
 }
 
 describe('buildQueryStack', () => {
@@ -81,10 +72,9 @@ describe('buildQueryStack', () => {
       currentLocationName: ' The Hollow\n',
       activeThreadTitles: ['  Find the courier '],
       eraName: '  Third Age  ',
-      piggybackSummary: '  They agree to split up.  ',
     })
     expect(s.q2.text).toBe(
-      'Kara Vex, Mira, The Hollow.\nActive threads: Find the courier.\nEra: Third Age.\nThey agree to split up.',
+      'Kara Vex, Mira, The Hollow.\nActive threads: Find the courier.\nEra: Third Age.',
     )
   })
 
@@ -109,51 +99,30 @@ describe('buildQueryStack', () => {
     expect(buildQueryStack({ ...base, eraName: '   ' }).q2.text).toBe(expected)
   })
 
-  it('treats a blank or whitespace-only piggyback summary the same as a missing one', () => {
-    const expected = buildQueryStack({ ...base, piggybackSummary: null }).q2.text
-    expect(buildQueryStack({ ...base, piggybackSummary: '' }).q2.text).toBe(expected)
-    expect(buildQueryStack({ ...base, piggybackSummary: '  ' }).q2.text).toBe(expected)
+  it('makes the piggyback summary Q3 rather than a line of the digest', () => {
+    const s = buildQueryStack({ ...base, piggybackSummary: 'Aria fled into the marshes.' })
+    expect(s.q3.text).toBe('Aria fled into the marshes.')
+    expect(s.q3.source).toBe('piggyback_summary')
+    // The digest is structural only now — the summary sharing its vector was the
+    // whole reason it split out (retrieval.md → Why it is not part of Q2).
+    expect(s.q2.text).not.toContain('Aria fled into the marshes.')
   })
 
-  it('appends the piggyback summary to Q2 when the trailing block parsed', () => {
-    const s = buildQueryStack({ ...base, piggybackSummary: 'They agree to split up.' })
-    expect(s.q2.text.split('\n').at(-1)).toBe('They agree to split up.')
-  })
-
-  it('derives Q3 from the last narrative entry and carries sentence scores', () => {
-    const s = buildQueryStack(base)
-    expect(s.q3.text).toContain('Kara Vex')
-    expect(s.q3.sentenceScores).toEqual(
-      extractProse(base.lastNarrativeContent, index, PROSE_EXTRACT_TOP_K).scores,
-    )
-  })
-
-  it('keeps only the top-K sentences rather than the whole narrative entry', () => {
-    const lastNarrativeContent = [
-      'Kara Vex drew the blade.',
-      'The awning sagged.',
-      'A cart creaked somewhere behind the stalls.',
-      'Dust settled on the sill.',
-      'The lamps were unlit and the shutters stayed closed all morning, which nobody in the row of houses remarked upon.',
-    ].join(' ')
-    const s = buildQueryStack({ ...base, lastNarrativeContent })
-    // Scored per sentence over all five, not only the four that survive top-K —
-    // the probe pairs scores against sentences positionally.
-    expect(s.q3.sentenceScores).toHaveLength(5)
-    expect(splitSentences(s.q3.text)).toHaveLength(PROSE_EXTRACT_TOP_K)
-    expect(s.q3.text).toContain('Kara Vex drew the blade.')
-    expect(s.q3.text).not.toContain('The lamps were unlit')
-  })
-
-  it('marks Q3 absent on a cold start with no prior narrative', () => {
-    const s = buildQueryStack({ ...base, lastNarrativeContent: '' })
-    expect(s.presence).toEqual([true, true, false])
+  it('marks Q3 absent when no summary was written', () => {
+    const s = buildQueryStack({ ...base, piggybackSummary: null })
     expect(s.q3.text).toBe('')
+    expect(s.presence[2]).toBe(false)
+    expect(s.embedTexts).not.toContain('')
+  })
+
+  it('trims a whitespace-only summary to absent rather than embedding blanks', () => {
+    const s = buildQueryStack({ ...base, piggybackSummary: '   \n  ' })
+    expect(s.presence[2]).toBe(false)
   })
 
   it('marks Q1 absent on a blank user action', () => {
     const s = buildQueryStack({ ...base, userAction: '   ' })
-    expect(s.presence).toEqual([false, true, true])
+    expect(s.presence).toEqual([false, true, false])
   })
 
   it('marks Q2 absent when every structural field is empty', () => {
@@ -163,6 +132,7 @@ describe('buildQueryStack', () => {
       currentLocationName: null,
       activeThreadTitles: [],
       eraName: null,
+      piggybackSummary: 'Aria fled into the marshes.',
     })
     expect(s.q2.text).toBe('')
     expect(s.presence).toEqual([true, false, true])
@@ -176,7 +146,6 @@ describe('buildQueryStack', () => {
       currentLocationName: '  ',
       activeThreadTitles: ['\t'],
       eraName: '   ',
-      piggybackSummary: '  ',
     })
     expect(s.q2.text).toBe('')
     expect(s.presence[1]).toBe(false)
@@ -187,7 +156,6 @@ describe('buildQueryStack', () => {
       ...base,
       activeThreadTitles: [],
       eraName: null,
-      piggybackSummary: null,
     })
     expect(s.q2.text).toBe('Kara Vex, Mira, The Hollow.')
     expect(s.presence[1]).toBe(true)
@@ -201,7 +169,6 @@ describe('buildQueryStack', () => {
       currentLocationName: null,
       activeThreadTitles: [],
       eraName: null,
-      lastNarrativeContent: '',
     })
     expect(s.presence).toEqual([false, false, false])
     expect(s.embedTexts).toEqual([])
@@ -212,22 +179,26 @@ describe('buildQueryStack', () => {
     expect([s.q1.source, s.q2.source, s.q3.source]).toEqual([
       'user_action',
       'structural_digest',
-      'prose_extract',
+      'piggyback_summary',
     ])
   })
 
   it('lists exactly the present queries as embed inputs, in Q1/Q2/Q3 order', () => {
-    const s = buildQueryStack({ ...base, userAction: '' })
+    const s = buildQueryStack({
+      ...base,
+      userAction: '',
+      piggybackSummary: 'Aria fled into the marshes.',
+    })
     expect(s.embedTexts).toEqual([s.q2.text, s.q3.text])
   })
 
   it('lists all three as embed inputs when all three are present', () => {
-    const s = buildQueryStack(base)
+    const s = buildQueryStack({ ...base, piggybackSummary: 'Aria fled into the marshes.' })
     expect(s.embedTexts).toEqual([s.q1.text, s.q2.text, s.q3.text])
   })
 
   it('omits an absent Q3 from the embed inputs', () => {
-    const s = buildQueryStack({ ...base, lastNarrativeContent: '' })
+    const s = buildQueryStack(base)
     expect(s.embedTexts).toEqual([s.q1.text, s.q2.text])
   })
 })

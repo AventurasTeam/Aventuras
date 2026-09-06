@@ -97,10 +97,10 @@ describe('assertRankerParams', () => {
     const error = captureError(() =>
       assertRankerParams({
         ...RANKER_DEFAULTS,
-        weights: { ...RANKER_DEFAULTS.weights, prose: -0.1 },
+        weights: { ...RANKER_DEFAULTS.weights, summary: -0.1 },
       }),
     )
-    expect(error.field).toBe('weights.prose')
+    expect(error.field).toBe('weights.summary')
   })
 
   it('rejects a negative typeOverhead, which undercounts a candidate token cost', () => {

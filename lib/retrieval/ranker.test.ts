@@ -77,13 +77,13 @@ const base = {
 describe('rankPerType — scoring', () => {
   it('blends the three query sims by the configured weights', () => {
     const r = rankPerType([candidate({ id: 'a', sims: [1, 0, 0] })], 'happenings', 1000, base)
-    expect(r.traces[0].simBlend).toBeCloseTo(0.35, 6)
+    expect(r.traces[0].simBlend).toBeCloseTo(0.4, 6)
   })
 
   it('re-normalizes weights across the present queries when one is missing', () => {
-    // Q3 absent: 0.35/0.35 renormalize to 0.5/0.5, so sims [1, 0, null] blend to 0.5.
+    // Q3 absent: action/digest renormalize (0.3/0.55), so sims [1, 0, null] blend to 6/11.
     const r = rankPerType([candidate({ id: 'a', sims: [1, 0, null] })], 'happenings', 1000, base)
-    expect(r.traces[0].simBlend).toBeCloseTo(0.5, 6)
+    expect(r.traces[0].simBlend).toBeCloseTo(6 / 11, 6)
   })
 
   it('decays by chapter age at the type lambda', () => {
@@ -562,8 +562,8 @@ describe('blend with absent query vectors', () => {
     const byId = new Map(out.traces.map((t) => [t.id, t]))
     // Only Q1 is present, so the blend renormalizes to sim_q1 itself.
     expect(byId.get('absent')?.simBlend).toBeCloseTo(0.8, 10)
-    // All three present: 0.8*0.35 renormalized over the full weight total.
-    expect(byId.get('zero')?.simBlend).toBeCloseTo((0.8 * 0.35) / (0.35 + 0.35 + 0.3), 10)
+    // All three present: 0.8*0.3 renormalized over the full weight total.
+    expect(byId.get('zero')?.simBlend).toBeCloseTo((0.8 * 0.3) / (0.3 + 0.25 + 0.2), 10)
     expect(byId.get('absent')?.simQ2).toBeNull()
     expect(byId.get('zero')?.simQ2).toBe(0)
   })
@@ -603,7 +603,7 @@ describe('C4 — ranker purity', () => {
   // vacuously, so pin the files the closure is known to reach.
   it('reaches the modules the ranker and query stack actually pull in', () => {
     expect(closure).toEqual(
-      expect.arrayContaining(['ranker.ts', 'mmr.ts', 'vector.ts', 'queries.ts', 'name-index.ts']),
+      expect.arrayContaining(['ranker.ts', 'mmr.ts', 'vector.ts', 'queries.ts']),
     )
   })
 

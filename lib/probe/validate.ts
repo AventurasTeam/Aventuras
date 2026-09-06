@@ -120,7 +120,7 @@ export function assertRankerParams(params: RankerParams): void {
   inRange('preFilterTopN', params.preFilterTopN, 1, Infinity)
   requireInteger('preFilterTopN', params.preFilterTopN)
   requireObject('weights', params.weights)
-  for (const key of ['action', 'digest', 'prose'] as const)
+  for (const key of ['action', 'digest', 'summary', 'direct'] as const)
     inRange(`weights.${key}`, params.weights[key], 0, Infinity)
   eachNonNegative('lambda', params.lambda)
   eachNonNegative('pinBoost', params.pinBoost)

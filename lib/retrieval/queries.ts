@@ -1,6 +1,3 @@
-import { PROSE_EXTRACT_TOP_K } from './constants'
-import type { NameKeywordIndex } from './name-index'
-import { extractProse } from './prose-extract'
 import type { QueryTextPresence } from './types'
 
 export type QueryStackInput = {
@@ -9,22 +6,14 @@ export type QueryStackInput = {
   currentLocationName: string | null
   activeThreadTitles: readonly string[]
   eraName: string | null
-  /** One-sentence enrichment off the piggyback trailing block; null when absent. */
+  /** `metadata.summary` off the last AI-authored entry; null when absent. */
   piggybackSummary: string | null
-  /**
-   * The last narrative entry's prose — the opening entry on turn 1; '' only
-   * when the branch has no narrative entry.
-   */
-  lastNarrativeContent: string
-  index: NameKeywordIndex
 }
 
 /** `source` labels the query for the probe capture (`CaptureQuery.source`). */
-export type QuerySpec = {
-  text: string
-  source: 'user_action' | 'structural_digest' | 'prose_extract'
-  sentenceScores?: number[]
-}
+export type QuerySource = 'user_action' | 'structural_digest' | 'piggyback_summary'
+
+export type QuerySpec = { text: string; source: QuerySource }
 
 export type QueryStack = {
   q1: QuerySpec
@@ -42,27 +31,19 @@ function structuralDigest(input: QueryStackInput): string {
   const scene = [...input.sceneEntityNames, input.currentLocationName].map(trimmed).filter(nonEmpty)
   const threads = input.activeThreadTitles.map(trimmed).filter(nonEmpty)
   const era = trimmed(input.eraName)
-  const summary = trimmed(input.piggybackSummary)
   // docs/memory/retrieval.md → Q2: Structural digest. Every line is conditional, so an
   // all-empty one is the empty string — Q2 reads absent and spends none of the blend.
   return [
     ...(scene.length > 0 ? [`${scene.join(', ')}.`] : []),
     ...(threads.length > 0 ? [`Active threads: ${threads.join(', ')}.`] : []),
     ...(nonEmpty(era) ? [`Era: ${era}.`] : []),
-    ...(nonEmpty(summary) ? [summary] : []),
   ].join('\n')
 }
 
 export function buildQueryStack(input: QueryStackInput): QueryStack {
   const q1: QuerySpec = { text: input.userAction.trim(), source: 'user_action' }
   const q2: QuerySpec = { text: structuralDigest(input), source: 'structural_digest' }
-
-  const extract = extractProse(input.lastNarrativeContent, input.index, PROSE_EXTRACT_TOP_K)
-  const q3: QuerySpec = {
-    text: extract.text,
-    source: 'prose_extract',
-    sentenceScores: extract.scores,
-  }
+  const q3: QuerySpec = { text: trimmed(input.piggybackSummary), source: 'piggyback_summary' }
 
   // An empty query is marked absent rather than embedded: the ranker
   // re-normalizes the blend weights over the present queries, so carrying one

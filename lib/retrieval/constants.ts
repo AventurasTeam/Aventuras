@@ -9,7 +9,10 @@ import type { RankerParams } from './types'
  * and the constant does not.
  */
 export const RANKER_DEFAULTS = {
-  weights: { action: 0.35, digest: 0.35, prose: 0.3 },
+  // retrieval.md → Blending. Four slots, though only three can be live until the
+  // Q4 emitter ships: with no emitted query the `direct` share re-normalizes
+  // away, which is the same mechanism an absent Q2 or Q3 already uses.
+  weights: { action: 0.3, digest: 0.25, summary: 0.2, direct: 0.25 },
   lambda: { entities: 0.025, lore: 0, happenings: 0.07, threads: 0.025, chapters: 0 },
   // Non-zero only where lambda is 0 AND the type carries a pin signal, which is
   // lore alone: happenings' decay_resistance already acts through the exponent,
@@ -33,6 +36,3 @@ export const RANKER_DEFAULTS = {
  * `runRetrievalPass`, which admits chapter-range happenings separately.
  */
 export const KNN_K = 200
-
-/** Q3 keeps this many sentences (canon: 3-5). */
-export const PROSE_EXTRACT_TOP_K = 4

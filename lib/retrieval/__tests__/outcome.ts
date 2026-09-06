@@ -106,7 +106,7 @@ export function retrievalSuccess(over: RetrievalSuccessOverrides = {}): Retrieva
     queries: over.queries ?? {
       q1: { text: '', source: 'user_action' },
       q2: { text: '', source: 'structural_digest' },
-      q3: { text: '', source: 'prose_extract' },
+      q3: { text: '', source: 'piggyback_summary' },
       presence: [false, false, false],
       embedTexts: [],
     },

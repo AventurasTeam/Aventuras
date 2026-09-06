@@ -51,7 +51,7 @@ function blendSims(
   sims: readonly [number | null, number | null, number | null],
   weights: QueryWeights,
 ): number {
-  const w = [weights.action, weights.digest, weights.prose]
+  const w = [weights.action, weights.digest, weights.summary]
   let weighted = 0
   let total = 0
   for (let i = 0; i < 3; i++) {
