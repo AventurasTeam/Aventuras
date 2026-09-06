@@ -66,6 +66,13 @@ const empty = (): KeywordInjections => ({
 const toShare = (value: number): number =>
   Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0
 
+// A non-finite budget makes `used + cost > cap` false for every row, so the cap
+// would not cap at all — exactly the unbounded seating budgetShare exists to
+// prevent. replayType guards the same field for the mirror-image reason; every
+// other reader of a bad budget seats nothing, and this matches that direction.
+const toCap = (budget: number, share: number): number =>
+  Number.isFinite(budget) ? Math.max(0, budget) * share : 0
+
 const toDepth = (settings: KeywordRetrievalSettings): number =>
   settings.cascade && Number.isFinite(settings.cascadeMaxDepth)
     ? Math.max(1, Math.floor(settings.cascadeMaxDepth))
@@ -144,8 +151,8 @@ export function buildKeywordInjections(input: KeywordInjectionInput): KeywordInj
   // Per type, matching the hard partitions already in force: an unused keyword
   // allowance in one type does not migrate to another.
   const caps: Record<Injectable, number> = {
-    entities: input.budgets.entities * share,
-    lore: input.budgets.lore * share,
+    entities: toCap(input.budgets.entities, share),
+    lore: toCap(input.budgets.lore, share),
   }
   const used: Record<Injectable, number> = { entities: 0, lore: 0 }
   const costInput: Pick<RankTypeInput, 'params' | 'countTokens'> = {

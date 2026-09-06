@@ -208,6 +208,24 @@ describe('buildKeywordInjections — the budget cap', () => {
     expect(out.lore.filter((i) => i.seated).map((i) => i.row.id)).toEqual(['bb'])
   })
 
+  // The cap is a `>` comparison, so a NaN budget makes it false for every row and
+  // seats the whole match set unbounded — the opposite direction from every other
+  // reader of a bad budget, which seats nothing.
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, -100])(
+    'seats nothing when the type budget is %p',
+    (loreBudget) => {
+      const out = buildKeywordInjections(
+        input({
+          lore: [wide('aa', 0), wide('bb', 0)],
+          budgets: { entities: 0, lore: loreBudget, happenings: 0, threads: 0, chapters: 0 },
+          scanText: 'aa bb',
+        }),
+      )
+
+      expect(out.lore.map((i) => i.seated)).toEqual([false, false])
+    },
+  )
+
   // Sorts are stable in V8, so without the id fallback these keep source order —
   // which is SQLite's, and unordered.
   it('breaks a full tie on the id, not on the source read order', () => {
