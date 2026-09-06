@@ -56,6 +56,12 @@ const entityB = baseEntity({
 const resolveOk = async (r: Resolution) => {
   console.log('[story] resolved:', r)
 }
+// Captures what the dialog actually submits: the union channels are derived in
+// the view, so nothing else observes whether they reach the resolution at all.
+let lastResolution: Resolution | null = null
+const resolveCapturing = async (r: Resolution) => {
+  lastResolution = r
+}
 const resolveLoading = () => new Promise<void>(() => {})
 const resolveError = () => Promise.reject(new Error('Write failed (story stub)'))
 
@@ -174,6 +180,28 @@ export const MergeLoading: Story = {
     // these clicks the loading lock isn't visible.
     await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
     await userEvent.click(await screen.findByRole('button', { name: /^Merge into / }))
+  },
+}
+
+export const MergeKeywordUnion: Story = {
+  render: () => (
+    <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveCapturing} />
+  ),
+  play: async () => {
+    lastResolution = null
+    // ControlledDialog opens by default; the Open button sits behind the overlay.
+    // Both sides' keywords are offered, deduplicated and sorted.
+    await userEvent.click(await screen.findByRole('button', { name: 'the wanderer' }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Merge into / }))
+
+    const resolution = lastResolution as Resolution | null
+    expect(resolution).not.toBeNull()
+    expect(resolution).toMatchObject({
+      mode: 'merge',
+      // The losing side's aliases survive; only the deselected one is dropped.
+      finalKeywords: ['the gate guard', 'the swordsman'],
+      finalTags: ['guard', 'hero', 'sword'],
+    })
   },
 }
 
