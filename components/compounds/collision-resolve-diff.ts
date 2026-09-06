@@ -6,6 +6,8 @@ export type InjectionMode = 'always' | 'on-relevance' | 'never'
 
 export type ScalarField = 'name' | 'description' | 'status' | 'retiredReason' | 'injectionMode'
 
+export type TermPartition = { onlyInA: string[]; onlyInB: string[]; both: string[] } | null
+
 export type EntitySummary = {
   id: string
   kind: EntityKind
@@ -15,7 +17,9 @@ export type EntitySummary = {
   status: EntityStatus
   retiredReason?: string
   injectionMode: InjectionMode
+  priority: number
   tags: string[]
+  keywords: string[]
   state: Record<string, unknown>
   relationCounts: {
     awarenessRows: number
@@ -28,7 +32,8 @@ export type EntitySummary = {
 
 export type DiffPayload = {
   divergentScalars: ScalarField[]
-  tags: { onlyInA: string[]; onlyInB: string[]; both: string[] } | null
+  tags: TermPartition
+  keywords: TermPartition
   stateDivergent: boolean
 }
 
@@ -38,6 +43,7 @@ export type Resolution =
       canonicalId: string
       fieldChoices: Record<ScalarField, 'A' | 'B'>
       finalTags: string[]
+      finalKeywords: string[]
     }
   | {
       mode: 'rename'
@@ -75,17 +81,21 @@ function deepEqual(a: unknown, b: unknown): boolean {
   )
 }
 
+/** null when the two sides hold the same set, order aside — nothing to choose between. */
+function partition(a: readonly string[], b: readonly string[]): TermPartition {
+  const aSet = new Set(a)
+  const bSet = new Set(b)
+  const onlyInA = a.filter((t) => !bSet.has(t)).sort()
+  const onlyInB = b.filter((t) => !aSet.has(t)).sort()
+  if (onlyInA.length === 0 && onlyInB.length === 0) return null
+  return { onlyInA, onlyInB, both: a.filter((t) => bSet.has(t)).sort() }
+}
+
 export function computeDivergence(a: EntitySummary, b: EntitySummary): DiffPayload {
-  const divergentScalars = SCALAR_FIELDS.filter((f) => a[f] !== b[f])
-
-  const aTagSet = new Set(a.tags)
-  const bTagSet = new Set(b.tags)
-  const onlyInA = a.tags.filter((t) => !bTagSet.has(t)).sort()
-  const onlyInB = b.tags.filter((t) => !aTagSet.has(t)).sort()
-  const both = a.tags.filter((t) => bTagSet.has(t)).sort()
-  const tags = onlyInA.length === 0 && onlyInB.length === 0 ? null : { onlyInA, onlyInB, both }
-
-  const stateDivergent = !deepEqual(a.state, b.state)
-
-  return { divergentScalars, tags, stateDivergent }
+  return {
+    divergentScalars: SCALAR_FIELDS.filter((f) => a[f] !== b[f]),
+    tags: partition(a.tags, b.tags),
+    keywords: partition(a.keywords, b.keywords),
+    stateDivergent: !deepEqual(a.state, b.state),
+  }
 }

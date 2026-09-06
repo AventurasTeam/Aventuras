@@ -211,12 +211,23 @@ function MergeBody({
     [allTags, state.deselectedTags],
   )
 
+  const allKeywords = useMemo(() => {
+    if (diff.keywords == null) return [...entityA.keywords].sort()
+    return [...diff.keywords.both, ...diff.keywords.onlyInA, ...diff.keywords.onlyInB].sort()
+  }, [diff.keywords, entityA.keywords])
+
+  const finalKeywords = useMemo(
+    () => allKeywords.filter((k) => !state.deselectedKeywords.includes(k)),
+    [allKeywords, state.deselectedKeywords],
+  )
+
   function handleConfirm() {
     onSubmit({
       mode: 'merge',
       canonicalId: state.canonicalId,
       fieldChoices: state.fieldChoices,
       finalTags,
+      finalKeywords,
     })
   }
 
@@ -263,6 +274,29 @@ function MergeBody({
               disabled={submitting}
             />
           ))}
+        </View>
+      )}
+
+      {diff.keywords != null && (
+        <View className="gap-2">
+          <Text size="sm" variant="muted">
+            Keywords (click to remove from merge)
+          </Text>
+          <View className="flex-row flex-wrap gap-2">
+            {allKeywords.map((keyword) => {
+              const deselected = state.deselectedKeywords.includes(keyword)
+              return (
+                <Chip
+                  key={keyword}
+                  selected={!deselected}
+                  onPress={() => dispatch({ type: 'toggle-keyword', keyword })}
+                  disabled={submitting}
+                >
+                  <Text className={cn(deselected && 'line-through')}>{keyword}</Text>
+                </Chip>
+              )
+            })}
+          </View>
         </View>
       )}
 

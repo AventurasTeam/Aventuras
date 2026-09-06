@@ -20,7 +20,9 @@ function baseEntity(overrides: Partial<EntitySummary> = {}): EntitySummary {
     status: 'active',
     retiredReason: undefined,
     injectionMode: 'on-relevance',
+    priority: 20,
     tags: ['hero', 'sword'],
+    keywords: ['the wanderer', 'the swordsman'],
     state: { hp: 100, mp: 30 },
     relationCounts: {
       awarenessRows: 12,
@@ -40,6 +42,7 @@ const entityB = baseEntity({
   description: 'A city guardsman posted at the eastern gate.',
   status: 'staged',
   tags: ['guard', 'sword'],
+  keywords: ['the gate guard', 'the swordsman'],
   state: { hp: 90, post: 'east-gate' },
   relationCounts: {
     awarenessRows: 1,

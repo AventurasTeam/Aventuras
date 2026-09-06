@@ -13,7 +13,9 @@ function baseEntity(overrides: Partial<EntitySummary> = {}): EntitySummary {
     status: 'active',
     retiredReason: undefined,
     injectionMode: 'on-relevance',
+    priority: 0,
     tags: ['hero', 'sword'],
+    keywords: [],
     state: { hp: 100 },
     relationCounts: {
       awarenessRows: 0,
@@ -194,5 +196,39 @@ describe('mergeReducer', () => {
       expect(next.deselectedTags).toEqual([])
       expect(next.fieldChoices.description).toBe('A')
     })
+  })
+})
+
+describe('keyword deselection', () => {
+  const start = (): MergeState => {
+    const a = baseEntity({ keywords: ['the grey wolf'] })
+    const b = baseEntity({ id: 'ent_b', keywords: ['the innkeeper'] })
+    return initMergeState(computeDivergence(a, b), a.id, a.id)
+  }
+
+  it('toggles a keyword in and out of the deselected set', () => {
+    const after = mergeReducer(start(), { type: 'toggle-keyword', keyword: 'the grey wolf' })
+    expect(after.deselectedKeywords).toEqual(['the grey wolf'])
+    expect(
+      mergeReducer(after, { type: 'toggle-keyword', keyword: 'the grey wolf' }).deselectedKeywords,
+    ).toEqual([])
+  })
+
+  // Same contract deselectedTags has: keyword choices are independent of the pick.
+  it('preserves deselected keywords across a canonical re-pick', () => {
+    const deselected = mergeReducer(start(), { type: 'toggle-keyword', keyword: 'the grey wolf' })
+    const after = mergeReducer(deselected, {
+      type: 'pick-canonical',
+      id: 'ent_b',
+      entityAId: 'ent_a',
+    })
+    expect(after.deselectedKeywords).toEqual(['the grey wolf'])
+  })
+
+  // The two deselect sets must not share storage: toggling one would otherwise
+  // strike the other's chip in the dialog.
+  it('keeps the tag and keyword deselect sets apart', () => {
+    const after = mergeReducer(start(), { type: 'toggle-keyword', keyword: 'the grey wolf' })
+    expect(after.deselectedTags).toEqual([])
   })
 })
