@@ -1324,6 +1324,23 @@ describe('retrieval phase — probe capture', () => {
     })
   })
 
+  // The scan surface is defined independently of the queries, so a kw_boost_value
+  // has no readable cause in the capture unless the text itself is carried.
+  it('captures the scan surface the pass matched keywords against', async () => {
+    const { db, sqlite, runInTransaction } = await probeDb()
+    await setAppGate(db, true)
+    seedProbeStory({ probe_mode_active: true })
+    runRetrievalMock.mockResolvedValue(retrievalSuccess({ queries: queryStack() }))
+
+    await runRetrievalPhase(undefined, runInTransaction)
+
+    const payload = payloadOf(captureRows(sqlite)[0])
+    expect(payload.scan_text).toContain('I draw the blade.')
+    expect(payload.scan_text).toContain('The keep stands.')
+    // Sourced from the pass, not re-derived from the queries beside it.
+    expect(payload.queries.map((q) => q.text)).not.toContain(payload.scan_text)
+  })
+
   it('captures a failed pass with its reason and the queries it reached', async () => {
     const { db, sqlite, runInTransaction } = await probeDb()
     await setAppGate(db, true)

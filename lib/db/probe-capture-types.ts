@@ -90,7 +90,7 @@ type CaptureTokenizer = { encoding: string; version: string }
  * Bumped when a captured field's shape or meaning changes, so a decode can
  * warn instead of silently misreading an older payload as the current type.
  */
-export const CAPTURE_VERSION = 3 as const
+export const CAPTURE_VERSION = 4 as const
 
 export type ProbeCapturePayload = {
   capture_version: number
@@ -103,6 +103,13 @@ export type ProbeCapturePayload = {
   tokenizer: CaptureTokenizer
   params: CaptureParamsSnapshot
   queries: [CaptureQuery, CaptureQuery, CaptureQuery]
+  /**
+   * The narrative text kw_boost_value was matched against — separate from
+   * `queries` because the scan surface is defined independently of them and is
+   * never embedded (probe.md → Keyword scan surface). Captured in both modes;
+   * without it a non-zero kw_boost_value has no readable cause in the capture.
+   */
+  scan_text: string
   pools: Record<RetrievalType, CaptureCandidate[]>
   funnels: Record<RetrievalType, PoolFunnelSummary>
   structural_floor: StructuralFloorRow[]

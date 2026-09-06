@@ -64,6 +64,8 @@ function captureInputFor(outcome: RetrievalOutcome, mode: 'light' | 'deep'): Cap
     // One scalar, so it moves neither the payload size nor the assemble cost
     // this harness reports; a representative value keeps the shape honest.
     promptBufferTokens: 2_400,
+    // The default one-entry surface, so the payload is sized like a real one.
+    scanText: 'What does the party do next?\nThe bridge fell during the third night of the siege.',
     outcome,
   }
 }

@@ -36,6 +36,7 @@ const identity = {
   capturedAt: 1_700_000_000_000,
   embeddingModelId: 'Xenova/all-MiniLM-L6-v2',
   promptBufferTokens: 0,
+  scanText: '',
 }
 
 const zeroFunnel = {
@@ -207,6 +208,7 @@ describe('buildCapturePayload', () => {
       'pools',
       'prompt_buffer_tokens',
       'queries',
+      'scan_text',
       'stale_counts',
       'structural_floor',
       'target_entry_id',
@@ -228,6 +230,7 @@ describe('buildCapturePayload', () => {
       settings,
       params: RANKER_DEFAULTS,
       promptBufferTokens: 0,
+      scanText: '',
       outcome: successOutcome(),
     })
 
@@ -238,7 +241,7 @@ describe('buildCapturePayload', () => {
       captured_at: 1_700_000_000_123,
       embedding_model_id: 'Xenova/all-MiniLM-L6-v2',
       capture_mode: 'light',
-      capture_version: 3,
+      capture_version: 4,
     })
   })
 
@@ -450,6 +453,36 @@ describe('buildCapturePayload', () => {
     expect(payload.pools.chapters[0].target_id).toBe('ch_1')
     expect(payload.funnels.chapters.pool_size).toBe(1)
     expectEmptyPools(payload, ['chapters'])
+  })
+
+  it('carries the scan surface the keyword pathway matched against', () => {
+    // The queries are the wrong place to look for it: the scan surface is
+    // defined independently of them, so a kw_boost_value has no readable cause
+    // anywhere else in the capture.
+    const payload = buildCapturePayload({
+      ...identity,
+      scanText: 'I draw the blade.\nThe Veilstone hummed.',
+      mode: 'light',
+      settings,
+      params: RANKER_DEFAULTS,
+      outcome: successOutcome(),
+    })
+
+    expect(payload.scan_text).toBe('I draw the blade.\nThe Veilstone hummed.')
+    expect(payload.queries.map((q) => q.text)).not.toContain(payload.scan_text)
+  })
+
+  it('captures the scan surface in deep mode too, since kw_boost fires in both', () => {
+    const payload = buildCapturePayload({
+      ...identity,
+      scanText: 'The Veilstone hummed.',
+      mode: 'deep',
+      settings,
+      params: RANKER_DEFAULTS,
+      outcome: successOutcome(),
+    })
+
+    expect(payload.scan_text).toBe('The Veilstone hummed.')
   })
 
   it('carries the prompt buffer cost the phase priced, and no failure reason on a good pass', () => {

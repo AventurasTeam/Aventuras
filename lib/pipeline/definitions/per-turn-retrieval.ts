@@ -87,6 +87,10 @@ export async function* retrievalPhase(
     branchId,
     open.settings.keywordRetrieval.scanEntries,
   )
+  const scanText = buildScanText({
+    userAction: tail?.kind === 'user_action' ? tail.content : '',
+    trailing: scanEntries,
+  })
 
   // A provider that accepts the connection and stalls would otherwise park the
   // turn forever holding the hard gate, with the pill still offering a Cancel
@@ -143,10 +147,7 @@ export async function* retrievalPhase(
         // under partialChapterBuffer and under-suppressing past it (cadence.md →
         // User-tunable knobs).
         recentProse: promptBuffer,
-        scanText: buildScanText({
-          userAction: tail?.kind === 'user_action' ? tail.content : '',
-          trailing: scanEntries,
-        }),
+        scanText,
       },
     )
   } finally {
@@ -199,6 +200,7 @@ export async function* retrievalPhase(
           protectedBuffer: open.settings.protectedBuffer,
         },
         promptBufferTokens: countTokens(promptBuffer),
+        scanText,
         outcome: probed,
       },
     )
