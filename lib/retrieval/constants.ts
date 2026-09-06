@@ -9,9 +9,7 @@ import type { RankerParams } from './types'
  * and the constant does not.
  */
 export const RANKER_DEFAULTS = {
-  // retrieval.md → Blending. Four slots, though only three can be live until the
-  // Q4 emitter ships: with no emitted query the `direct` share re-normalizes
-  // away, which is the same mechanism an absent Q2 or Q3 already uses.
+  // retrieval.md → Blending.
   weights: { action: 0.3, digest: 0.25, summary: 0.2, direct: 0.25 },
   lambda: { entities: 0.025, lore: 0, happenings: 0.07, threads: 0.025, chapters: 0 },
   // Non-zero only where lambda is 0 AND the type carries a pin signal, which is

@@ -88,12 +88,9 @@ ranker without being able to move a score. See
   switch action imports 3.1b's swap-dialog open action per C8);
   stale-at-KNN rows excluded from pools.
 - **Query stack:** Q1 user action; Q2 structural digest
-  (code-template floor + optional piggyback `summary` enrichment,
-  handed off by 3.2's parse);
-  Q3 heuristic prose extract (per-sentence scoring over the
-  entity-name and lore-keyword indexes, top-K concatenated);
-  weight re-normalization when a component is missing; cold-start
-  per canon.
+  (code-template floor, purely structural); Q3 the piggyback summary
+  (`metadata.summary` handed off by 3.2's parse); weight
+  re-normalization when a component is missing; cold-start per canon.
 - **Pool build:** structural floor first (mode-dependent prompt
   buffer, active+in-scene, location, active threads, `always`
   rows), then per-type pools — three-sub-pool entity model,

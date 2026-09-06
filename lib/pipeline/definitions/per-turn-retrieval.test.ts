@@ -1090,11 +1090,9 @@ describe('retrieval phase — RetrievalParams assembly', () => {
     expect(lastParams().query.userAction).toBe('')
   })
 
-  // Cold start (retrieval.md → Cold start): turn 1 has no ai_reply, and the
-  // opening entry the wizard always commits is what Q3 reads its summary from.
-  // Selecting ai_reply alone passes null and silently drops Q3 on the first
-  // turn of every story.
-  it('takes the piggyback summary from the opening entry on turn 1', async () => {
+  // readSceneSource's NARRATIVE_KINDS filter also feeds Q2's scene entities and
+  // location; narrowing it to ai_reply alone would silently miss every opening row.
+  it("reads the opening entry's metadata when no ai_reply exists yet", async () => {
     seedOpenStory({
       entries: [
         entry(

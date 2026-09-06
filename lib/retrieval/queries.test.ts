@@ -103,8 +103,7 @@ describe('buildQueryStack', () => {
     const s = buildQueryStack({ ...base, piggybackSummary: 'Aria fled into the marshes.' })
     expect(s.q3.text).toBe('Aria fled into the marshes.')
     expect(s.q3.source).toBe('piggyback_summary')
-    // The digest is structural only now — the summary sharing its vector was the
-    // whole reason it split out (retrieval.md → Why it is not part of Q2).
+    // retrieval.md → Why it is not part of Q2.
     expect(s.q2.text).not.toContain('Aria fled into the marshes.')
   })
 

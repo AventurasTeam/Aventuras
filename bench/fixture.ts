@@ -372,7 +372,7 @@ export function passInputs(
     query: {
       userAction,
       eraName: null,
-      // Non-null so all three queries stay live — the pass this prices always ran three.
+      // Non-null so all three queries stay live — steady-state, not the turn-1 cold start.
       piggybackSummary: prose(rand, 20),
     },
     sceneCharacterIds,
