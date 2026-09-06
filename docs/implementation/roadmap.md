@@ -230,7 +230,9 @@ Carried deferrals, routed out of [`triage.md`](./triage.md)
 the story-open swap prompt and failed-turn text custody — moved to
 [`followups.md`](../followups.md) 2026-09-05: both want a design pass
 before any slice can own them, and neither was owned by an M4 slice as
-sketched.
+sketched. The last two entries below arrive from the other direction —
+canon that landed ahead of its surface, rather than a deferral routed
+out of implementation.
 
 - **M4.4 — The phone list state hides a dirty save bar.** `StorySettingsShell`
   renders the bar inside the detail pane, and `MasterDetailLayout`
@@ -282,6 +284,31 @@ sketched.
   so this is unbounded dead weight that survives an embedder swap, not
   wrong results. Surfaced by Slice 3.12a review (2026-08-19), verified and
   routed 2026-08-20.
+- **M4.2 — Entity and lore keyword editors are specced with no surface.**
+  The 2026-09-06 keyword-retrieval design added `keywords` and
+  `priority` to the entity Settings tab
+  ([`world.md → Settings`](../ui/screens/world/world.md#settings--entity-management-chrome))
+  and `keywords` to lore's
+  ([`world.md → Settings tab — lore`](../ui/screens/world/world.md#settings-tab--lore)),
+  both wireframed in `world.html`. The lore one is new scope rather than
+  a field added to an existing panel: lore had no documented edit
+  surface anywhere before that commit. Until they ship, entity keywords
+  reach the database only through the periodic classifier and lore
+  keywords only through seed data, so the user-authored half of a
+  pathway canon calls load-bearing has no way in. Introduced by the
+  keyword-retrieval design (2026-09-06).
+- **M4.4 — The Keyword retrieval settings panel is specced with no
+  surface.** Five `keywordRetrieval` knobs — `mode`, `budgetShare`,
+  `scanEntries`, `cascade`, `cascadeMaxDepth` — are specced and
+  wireframed at
+  [`story-settings.md → Keyword retrieval`](../ui/screens/story-settings/story-settings.md#keyword-retrieval)
+  and land in `stories.settings` ahead of the panel. Settings-only with
+  no UI is the established pattern here, not a gap — `piggybackMode` and
+  the composer modes both shipped that way — but `mode: 'inject'` is a
+  behaviour users will expect to reach, and the entry above is what
+  makes its keywords authorable in the first place, so the two want
+  sequencing together. Introduced by the keyword-retrieval design
+  (2026-09-06).
 
 **Gates.** M3 for real-data validation (no entities without the
 classifier; no awareness without it; no retrieval scores without
