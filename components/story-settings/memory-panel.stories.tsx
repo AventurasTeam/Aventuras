@@ -32,6 +32,7 @@ function buildSettings(overrides: Partial<StorySettings> = {}): StorySettings {
     embeddingBackend: 'local',
     embedding_model_id: MINILM,
     retrievalBudgets: STORY_SETTINGS_DEFAULTS.retrievalBudgets,
+    keywordRetrieval: STORY_SETTINGS_DEFAULTS.keywordRetrieval,
     composerModesEnabled: true,
     composerWrapPov: 'third',
     suggestionsEnabled: true,
