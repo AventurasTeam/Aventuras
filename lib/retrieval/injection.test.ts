@@ -128,12 +128,18 @@ describe('buildKeywordInjections — precedence and pool exclusions', () => {
     expect(out.lore).toEqual([])
   })
 
-  it('skips a row the structural floor already seated', () => {
+  it('skips a row the structural floor already seated, on either type', () => {
     const out = buildKeywordInjections(
-      input({ entities: [entity()], floorIds: new Set(['e1']), scanText: 'Kael waits.' }),
+      input({
+        entities: [entity()],
+        lore: [lore()],
+        floorIds: new Set(['e1', 'l1']),
+        scanText: 'Kael waits where the aetherium hums.',
+      }),
     )
 
     expect(out.entities).toEqual([])
+    expect(out.lore).toEqual([])
   })
 
   it('honours Layer-A suppression over the keyword hit', () => {
@@ -202,6 +208,22 @@ describe('buildKeywordInjections — the budget cap', () => {
     expect(out.lore.filter((i) => i.seated).map((i) => i.row.id)).toEqual(['bb'])
   })
 
+  // Sorts are stable in V8, so without the id fallback these keep source order —
+  // which is SQLite's, and unordered.
+  it('breaks a full tie on the id, not on the source read order', () => {
+    const out = buildKeywordInjections(
+      input({
+        lore: [
+          lore({ id: 'z1', title: 'dup', keywords: ['alpha'], priority: 1 }),
+          lore({ id: 'a2', title: 'DUP', keywords: ['alpha'], priority: 1 }),
+        ],
+        scanText: 'alpha',
+      }),
+    )
+
+    expect(ids(out.lore)).toEqual(['a2', 'z1'])
+  })
+
   it('seats nothing at budgetShare 0, leaving every match to the ranked path', () => {
     const out = buildKeywordInjections(
       input({
@@ -212,5 +234,130 @@ describe('buildKeywordInjections — the budget cap', () => {
     )
 
     expect(out.lore.map((i) => i.seated)).toEqual([false])
+  })
+})
+
+describe('buildKeywordInjections — cascade', () => {
+  const cascading = (over: Partial<KeywordInjectionInput['settings']> = {}) => ({
+    mode: 'inject' as const,
+    budgetShare: 1,
+    cascade: true,
+    cascadeMaxDepth: 2,
+    ...over,
+  })
+
+  const sized = (id: string, body: string, keywords: string[], priority = 0) =>
+    lore({ id, title: id, body, keywords, priority })
+
+  // 'a' names 'b' in its body; 'b' names 'c'. Only 'a' is in the scan text.
+  const chain = () => [
+    lore({ id: 'a', title: 'A', body: 'It speaks of the beacon.', keywords: ['anchor'] }),
+    lore({ id: 'b', title: 'B', body: 'It speaks of the cistern.', keywords: ['beacon'] }),
+    lore({ id: 'c', title: 'C', body: 'It speaks of nothing.', keywords: ['cistern'] }),
+  ]
+
+  it('stays at depth 1 while cascade is off', () => {
+    const out = buildKeywordInjections(
+      input({
+        settings: { mode: 'inject', budgetShare: 1, cascade: false, cascadeMaxDepth: 2 },
+        lore: chain(),
+        scanText: 'The anchor holds.',
+      }),
+    )
+
+    expect(ids(out.lore)).toEqual(['a'])
+  })
+
+  it("rescans a seated row's own text to cascadeMaxDepth and no further", () => {
+    const out = buildKeywordInjections(
+      input({ settings: cascading(), lore: chain(), scanText: 'The anchor holds.' }),
+    )
+
+    expect(ids(out.lore)).toEqual(['a', 'b'])
+  })
+
+  it('reaches the third link at depth 3', () => {
+    const out = buildKeywordInjections(
+      input({
+        settings: cascading({ cascadeMaxDepth: 3 }),
+        lore: chain(),
+        scanText: 'The anchor holds.',
+      }),
+    )
+
+    expect(ids(out.lore)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('terminates on a pair whose keywords name each other', () => {
+    const out = buildKeywordInjections(
+      input({
+        settings: cascading({ cascadeMaxDepth: 8 }),
+        lore: [
+          lore({ id: 'x', title: 'X', body: 'It speaks of the yoke.', keywords: ['ex'] }),
+          lore({ id: 'y', title: 'Y', body: 'It speaks of the ex.', keywords: ['yoke'] }),
+        ],
+        scanText: 'The ex is here.',
+      }),
+    )
+
+    expect(ids(out.lore)).toEqual(['x', 'y'])
+  })
+
+  it('spends the allowance on depth-1 rows before any depth-2 row', () => {
+    // 'deep' carries the higher priority and still loses: it is only reachable at
+    // depth 2, by which point depth 1 has spent the allowance. sized('one') costs
+    // 45 and sized('deep') 43 against a cap of 100 * 0.5.
+    const out = buildKeywordInjections(
+      input({
+        settings: cascading({ budgetShare: 0.5 }),
+        lore: [
+          sized('one', `${'x'.repeat(150)} the deep`, ['one']),
+          sized('deep', 'y'.repeat(150), ['the deep'], 9),
+        ],
+        budgets: { entities: 0, lore: 100, happenings: 0, threads: 0, chapters: 0 },
+        scanText: 'one',
+      }),
+    )
+
+    expect(out.lore.filter((i) => i.seated).map((i) => i.row.id)).toEqual(['one'])
+    expect(out.lore.find((i) => i.row.id === 'deep')?.seated).toBe(false)
+  })
+
+  it('does not rescan a row the cap cut — it is not in the prompt', () => {
+    // 'two' matches at depth 1 and the cap cuts it. Its body names 'the ghost';
+    // a frontier built from matched rather than seated rows would reach it.
+    // Costs: one 43, two 11, cap 50 — so 'one' seats and 'two' overflows.
+    const out = buildKeywordInjections(
+      input({
+        settings: cascading({ budgetShare: 0.5 }),
+        lore: [
+          sized('one', 'x'.repeat(150), ['one'], 5),
+          sized('two', 'It speaks of the ghost.', ['two'], 1),
+          sized('ghost', 'Nothing more.', ['the ghost']),
+        ],
+        budgets: { entities: 0, lore: 100, happenings: 0, threads: 0, chapters: 0 },
+        scanText: 'one two',
+      }),
+    )
+
+    expect(ids(out.lore)).toEqual(['one', 'two'])
+  })
+
+  it('records a cut row once, even when a seated row names it again', () => {
+    // 'two' is cut at depth 1, and the seated 'one' names it again at depth 2.
+    // Only the visited set stops it being matched — and recorded — twice.
+    const out = buildKeywordInjections(
+      input({
+        settings: cascading({ budgetShare: 0.5 }),
+        lore: [
+          sized('one', 'It speaks of the two.', ['one'], 5),
+          sized('two', 'x'.repeat(200), ['the two'], 1),
+        ],
+        budgets: { entities: 0, lore: 100, happenings: 0, threads: 0, chapters: 0 },
+        scanText: 'The one and the two.',
+      }),
+    )
+
+    expect(ids(out.lore)).toEqual(['one', 'two'])
   })
 })
