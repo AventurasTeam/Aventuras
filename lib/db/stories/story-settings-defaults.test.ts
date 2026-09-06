@@ -23,6 +23,17 @@ describe('STORY_SETTINGS_DEFAULTS', () => {
   it('is a complete, parseable StorySettings', () => {
     expect(() => storySettingsSchema.parse(STORY_SETTINGS_DEFAULTS)).not.toThrow()
   })
+  // 'boost' is the shipped behaviour, so a story migrating in behaves exactly as
+  // it did. The rest are inert until keyword injection lands.
+  it('starts the keyword pathway on boost with a one-entry scan', () => {
+    expect(STORY_SETTINGS_DEFAULTS.keywordRetrieval).toEqual({
+      mode: 'boost',
+      budgetShare: 0.5,
+      scanEntries: 1,
+      cascade: false,
+      cascadeMaxDepth: 2,
+    })
+  })
   it('has all M2-inert features off', () => {
     expect(STORY_SETTINGS_DEFAULTS.translation.enabled).toBe(false)
     expect(STORY_SETTINGS_DEFAULTS.composerModesEnabled).toBe(false)
