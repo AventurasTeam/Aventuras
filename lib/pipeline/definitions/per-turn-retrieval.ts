@@ -10,9 +10,11 @@ import { generateId } from '@/lib/ids'
 import { promptProse } from '@/lib/piggyback'
 import { commitCaptureMode, reserveCaptureMode, writeProbeCapture } from '@/lib/probe'
 import {
+  buildScanText,
   countTokens,
   RANKER_DEFAULTS,
   readPromptBuffer,
+  readScanEntries,
   runRetrieval,
   type RetrievalOutcome,
 } from '@/lib/retrieval'
@@ -77,6 +79,15 @@ export async function* retrievalPhase(
     .map((e) => promptProse(e))
     .join('\n')
 
+  // Its own read, not a slice of the buffer above: the keyword scan surface is
+  // defined independently of the prompt window (retrieval.md → Keyword scan
+  // surface), which protectedBuffer can make narrower than scanEntries.
+  const scanEntries = await readScanEntries(
+    ctx.db,
+    branchId,
+    open.settings.keywordRetrieval.scanEntries,
+  )
+
   // A provider that accepts the connection and stalls would otherwise park the
   // turn forever holding the hard gate, with the pill still offering a Cancel
   // that reaches nothing.
@@ -132,6 +143,10 @@ export async function* retrievalPhase(
         // under partialChapterBuffer and under-suppressing past it (cadence.md →
         // User-tunable knobs).
         recentProse: promptBuffer,
+        scanText: buildScanText({
+          userAction: tail?.kind === 'user_action' ? tail.content : '',
+          trailing: scanEntries,
+        }),
       },
     )
   } finally {
