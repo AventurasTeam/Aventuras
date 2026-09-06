@@ -3126,8 +3126,8 @@ class SettingsStore {
     // Reset UI settings
     this.uiSettings = getDefaultUISettings()
     await this.setNavPanelWidth(this.uiSettings.navPanelWidth)
-    // Through the setter: the defaults object alone leaves the live recorder on its old mode
-    // and never writes the key, so the previous mode came back on the next start.
+    // Through the setter, which is what reaches the live recorder and the persisted key;
+    // assigning the defaults object updates neither.
     await this.setActivityReporting(this.uiSettings.activityReporting)
     await ui.setNavPanelOpen(false)
 

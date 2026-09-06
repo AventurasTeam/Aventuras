@@ -9,7 +9,7 @@
  * onto.
  */
 
-import { retainTurns, RETAINED_TURNS } from './retention'
+import { findTurnByEntryId, retainTurns, RETAINED_TURNS } from './retention'
 import type { ActivityStatus, ActivityStep, ActivityTurn } from './types'
 
 /** How much of a turn's activity the story view reports. See design.md. */
@@ -145,6 +145,18 @@ export class ActivityRecorder {
   /** The turn in flight, or null between turns. */
   get activeTurn(): ActivityTurn | null {
     return this.current
+  }
+
+  /**
+   * The retained record for an entry, or null once evicted.
+   *
+   * Reads the live turn rather than a copy out of `snapshot()`: this is called from a
+   * `$derived` in every mounted narration entry and re-runs on every step appended, so a
+   * fresh copy per call would churn allocations through a whole turn -- and change identity
+   * each time, restarting the timers and tree rebuilds downstream of it.
+   */
+  find(entryId: string): ActivityTurn | null {
+    return findTurnByEntryId(this.turns, entryId)
   }
 
   /** Retained turns, oldest first. */

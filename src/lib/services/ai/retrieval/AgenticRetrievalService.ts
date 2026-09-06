@@ -323,9 +323,9 @@ export class AgenticRetrievalService extends BaseAIService {
 
     const lastStepOnly = finishOnlyOnLastStep('finish_retrieval', this.maxIterations)
 
-    // Wrapped to open an activity step per iteration. Without it the run reports only its
-    // tool calls, which are in-memory and effectively instant -- so a two-minute retrieval
-    // showed two minutes of nothing, when nearly all of it is these model calls.
+    // Wrapped to open an activity step per iteration. The run's time is in these model
+    // calls; its tool calls are in-memory and effectively instant, so reporting only those
+    // leaves the time unattributed.
     const prepareStep = ((input: { stepNumber: number }) => {
       activity.endStep(iterationStepId)
       iterationStepId = activity.startStep(`Model call ${input.stepNumber + 1}`, {
@@ -367,7 +367,12 @@ export class AgenticRetrievalService extends BaseAIService {
         'finish_retrieval',
       )
     } catch (error) {
-      if (signal?.aborted) throw error
+      if (signal?.aborted) {
+        // Rethrown past the closes below, so they happen here instead.
+        activity.endStep(iterationStepId, 'skipped')
+        activity.endStep(agentStepId, 'skipped', `${stepsTaken}/${this.maxIterations} steps`)
+        throw error
+      }
       failure = error instanceof Error ? error.message : String(error)
       log('Agent run failed -- salvaging what it gathered', { failure, steps: stepsTaken })
     }

@@ -12,7 +12,6 @@ import {
   ActivityRecorder,
   buildTree,
   deepestRunningStep,
-  findTurnByEntryId,
   type ActivityNode,
   type ActivityReporting,
   type ActivityStatus,
@@ -90,7 +89,7 @@ class ActivityStore {
   /** The retained record for an entry, or null once evicted. */
   recordFor(entryId: string): ActivityTurn | null {
     void this.version
-    return findTurnByEntryId(this.recorder.snapshot(), entryId)
+    return this.recorder.find(entryId)
   }
 
   /** True while an entry's record is still retained. */

@@ -504,16 +504,6 @@
     }
 
     ui.setGenerating(true)
-    const inputTranslation = options?.inputTranslation
-    activity.startTurn(narrationEntryId, inputTranslation?.startedAt)
-    if (inputTranslation) {
-      activity.recordStep('Translating input', {
-        isLLM: true,
-        startedAt: inputTranslation.startedAt,
-        durationMs: inputTranslation.durationMs,
-        status: inputTranslation.failed ? 'failed' : 'done',
-      })
-    }
     ui.clearGenerationError()
     ui.clearActionChoices(story.currentStory.id)
     ui.startStreaming(visualProseMode, streamingEntryId)
@@ -541,6 +531,19 @@
     ui.resetBackgroundedFlag()
 
     try {
+      // Inside the try: only its `finally` closes the turn, and a throw before that point
+      // would leave a record nothing can close.
+      const inputTranslation = options?.inputTranslation
+      activity.startTurn(narrationEntryId, inputTranslation?.startedAt)
+      if (inputTranslation) {
+        activity.recordStep('Translating input', {
+          isLLM: true,
+          startedAt: inputTranslation.startedAt,
+          durationMs: inputTranslation.durationMs,
+          status: inputTranslation.failed ? 'failed' : 'done',
+        })
+      }
+
       const worldState = story.worldStateSnapshot
 
       const storyPosition = story.entries.length

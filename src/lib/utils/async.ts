@@ -63,17 +63,26 @@ export async function* mergeGenerators<
     getNext(key)
   }
 
-  while (activeGenerators.size > 0) {
-    const { key, res } = await Promise.race(Array.from(pendingPromises.values()))
+  try {
+    while (activeGenerators.size > 0) {
+      const { key, res } = await Promise.race(Array.from(pendingPromises.values()))
 
-    if (res.done) {
-      results[key] = res.value
-      activeGenerators.delete(key)
-      pendingPromises.delete(key)
-    } else {
-      yield res.value
-      getNext(key)
+      if (res.done) {
+        results[key] = res.value
+        activeGenerators.delete(key)
+        pendingPromises.delete(key)
+      } else {
+        yield res.value
+        getNext(key)
+      }
     }
+  } finally {
+    // One generator throwing, or the consumer walking away, leaves the rest mid-iteration.
+    // They are owned here, so their cleanup is closed here rather than left to collection --
+    // `allSettled` because a sibling failing to close must not mask the original failure.
+    await Promise.allSettled(
+      Array.from(activeGenerators.values()).map((gen) => gen.return(undefined)),
+    )
   }
 
   return results
