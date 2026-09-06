@@ -20,7 +20,7 @@
   import STChatImportModal from '$lib/components/modals/STChatImportModal.svelte'
   import UpdateDialog from '$lib/components/updater/UpdateDialog.svelte'
   import { swipe } from '$lib/utils/swipe'
-  import { releaseOrphanScrollLock } from '$lib/utils/scrollLock'
+  import { releaseOrphanScrollLock, isBodyLockPresent } from '$lib/utils/scrollLock'
   import { createLogger } from '$lib/log'
   import { Bug } from '@lucide/svelte'
   import {
@@ -182,31 +182,62 @@
   })
 
   /**
-   * The single owner of orphaned-scroll-lock recovery, for the whole app: watches
-   * `document.body` for a lock and, once the close transition has had time to run, releases
-   * it if nothing on screen should be holding it. See `$lib/utils/scrollLock`.
+   * The single owner of orphaned-scroll-lock recovery, for the whole app. Two triggers, one
+   * release: see `$lib/utils/scrollLock`.
+   *
+   * The observer alone cannot be enough. It fires on writes to `body.style`, and an orphaned
+   * lock is precisely the case where nothing writes there again — it gets one look, at the
+   * moment the overlay is still legitimately open, and is never called back.
+   *
+   * Input is the trigger that cannot miss: a real event reaching the document while the body
+   * is locked and no owner is present means the lock is orphaned, whatever left it behind. A
+   * locked page still delivers these — `pointer-events: none` on `<body>` takes `<body>` and
+   * its subtree out of hit testing, but `<html>` keeps `auto`, so the event targets
+   * `documentElement` and still reaches a capture listener here. Hence document level, and
+   * hence not delegated from anywhere inside the app tree.
    */
   $effect(() => {
     if (typeof document === 'undefined') return
 
     let settleTimer: ReturnType<typeof setTimeout> | null = null
 
+    function release() {
+      if (releaseOrphanScrollLock()) log('Released an orphaned body scroll lock')
+    }
+
     const observer = new MutationObserver(() => {
-      const { pointerEvents, overflow } = document.body.style
-      if (pointerEvents !== 'none' && overflow !== 'hidden') return
+      if (!isBodyLockPresent()) return
 
       if (settleTimer) clearTimeout(settleTimer)
       settleTimer = setTimeout(() => {
         settleTimer = null
-        if (releaseOrphanScrollLock()) log('Released an orphaned body scroll lock')
+        release()
       }, MODAL_CLOSE_TRANSITION_MS)
     })
 
     observer.observe(document.body, { attributes: true, attributeFilter: ['style'] })
 
+    // No settle delay: input arrives from a person, long after any close transition, and an
+    // overlay still exiting is still present and so still counts as an owner.
+    function handleInput() {
+      if (!isBodyLockPresent()) return
+      release()
+    }
+
+    // All three, because any one of them can be the first thing a person tries on a page that
+    // has stopped responding — and `overflow: hidden` makes a scroll the most likely of them.
+    // A wheel is not a pointerdown: without it, someone scrolling at a frozen page keeps
+    // scrolling and never recovers.
+    document.addEventListener('pointerdown', handleInput, true)
+    document.addEventListener('keydown', handleInput, true)
+    document.addEventListener('wheel', handleInput, { capture: true, passive: true })
+
     return () => {
       if (settleTimer) clearTimeout(settleTimer)
       observer.disconnect()
+      document.removeEventListener('pointerdown', handleInput, true)
+      document.removeEventListener('keydown', handleInput, true)
+      document.removeEventListener('wheel', handleInput, true)
     }
   })
 </script>
