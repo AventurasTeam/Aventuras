@@ -126,9 +126,18 @@ describe('mergeGenerators cleanup', () => {
 describe('mergeGenerators cleanup is not blocking', () => {
   it('propagates the failure without waiting on a sibling read that has not answered', async () => {
     let releaseSibling: (() => void) | undefined
+    let siblingIsReading!: () => void
+    // The failure is held until the sibling is parked, so the test cannot pass by winning a
+    // race -- without a pending read there is nothing for cleanup to block on, and awaited
+    // cleanup would return promptly too.
+    const siblingParked = new Promise<void>((resolve) => {
+      siblingIsReading = resolve
+    })
+
     const merged = mergeGenerators({
       thrower: (async function* () {
         yield 'a'
+        await siblingParked
         throw new Error('boom')
       })(),
       // Stands in for a phase whose model call has not come back. `return()` on this
@@ -137,6 +146,7 @@ describe('mergeGenerators cleanup is not blocking', () => {
         yield 'b'
         await new Promise<void>((resolve) => {
           releaseSibling = resolve
+          siblingIsReading()
         })
         yield 'c'
       })(),
@@ -148,6 +158,7 @@ describe('mergeGenerators cleanup is not blocking', () => {
       })(),
     ).rejects.toThrow('boom')
 
-    releaseSibling?.()
+    expect(releaseSibling).toBeDefined()
+    releaseSibling!()
   })
 })
