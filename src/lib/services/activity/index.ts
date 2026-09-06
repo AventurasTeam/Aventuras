@@ -7,7 +7,7 @@
 
 export type { ActivityStep, ActivityTurn, ActivityNode, ActivityRow, ActivityStatus } from './types'
 
-export { buildTree, flattenTree, deepestRunningStep } from './tree'
+export { buildTree, flattenTree, deepestRunningStep, rootStep } from './tree'
 
 export { stepDuration, turnDuration, formatDuration, formatStepDuration } from './duration'
 

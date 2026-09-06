@@ -8,6 +8,7 @@
  * All logic lives in `$lib/services/activity`; this file only wires it to a rune.
  */
 
+import { SvelteMap } from 'svelte/reactivity'
 import {
   ActivityRecorder,
   buildTree,
@@ -23,8 +24,27 @@ import {
 class ActivityStore {
   /** Increments on every recorded change. Read it to make a derivation reactive. */
   version = $state(0)
-  /** Entry whose finished record the reader has opened, if any. */
-  openRecordEntryId = $state<string | null>(null)
+
+  /**
+   * Advances while a turn is in flight, so elapsed times tick. Shared rather than owned by a
+   * component: the streaming entry and the finished one both read it, and the report has to
+   * keep counting across the handover between them.
+   */
+  now = $state(Date.now())
+  private clock: ReturnType<typeof setInterval> | null = null
+
+  /**
+   * Two independent controls, both keyed by entry rather than held per component: a report
+   * opened during generation has to survive the streaming entry giving way to the finished
+   * one, which is what keeps the post-narrative steps on screen.
+   *
+   * Each map holds only what the reader has actually chosen. Absent means "whatever the
+   * default is here", which differs by context -- the report shows itself while a turn runs
+   * and hides once it is over, while the tree follows the reporting setting.
+   */
+  private reportVisible = new SvelteMap<string, boolean>()
+  private treeExpanded = new SvelteMap<string, boolean>()
+  private reporting: ActivityReporting = 'off'
 
   private recorder = new ActivityRecorder(() => this.version++)
 
@@ -33,8 +53,40 @@ class ActivityStore {
   }
 
   setReporting(reporting: ActivityReporting) {
+    this.reporting = reporting
     this.recorder.setReporting(reporting)
+    if (reporting === 'off') this.stopClock()
     this.version++
+  }
+
+  /** Whether the report shows at all. `whileRunning` is the default before the reader chooses. */
+  isReportVisible(entryId: string, whileRunning: boolean): boolean {
+    return this.reportVisible.get(entryId) ?? whileRunning
+  }
+
+  setReportVisible(entryId: string, visible: boolean) {
+    this.reportVisible.set(entryId, visible)
+  }
+
+  /** Whether the report is showing the full timeline rather than the line. */
+  isTreeExpanded(entryId: string): boolean {
+    return this.treeExpanded.get(entryId) ?? this.reporting === 'tree'
+  }
+
+  setTreeExpanded(entryId: string, expanded: boolean) {
+    this.treeExpanded.set(entryId, expanded)
+  }
+
+  private startClock() {
+    if (this.clock) return
+    // Once a second, matching the resolution durations are shown at.
+    this.clock = setInterval(() => (this.now = Date.now()), 1000)
+  }
+
+  private stopClock() {
+    if (!this.clock) return
+    clearInterval(this.clock)
+    this.clock = null
   }
 
   /**
@@ -52,10 +104,15 @@ class ActivityStore {
 
   startTurn(entryId: string, startedAt?: number) {
     this.guard(() => this.recorder.startTurn(entryId, startedAt), undefined)
+    if (!this.recorder.enabled) return
+    this.now = Date.now()
+    this.startClock()
   }
 
   endTurn() {
     this.guard(() => this.recorder.endTurn(), undefined)
+    this.now = Date.now()
+    this.stopClock()
   }
 
   startStep(label: string, options?: StartStepOptions): string {
@@ -92,11 +149,6 @@ class ActivityStore {
     return this.recorder.find(entryId)
   }
 
-  /** True while an entry's record is still retained. */
-  hasRecord(entryId: string): boolean {
-    return this.recordFor(entryId) !== null
-  }
-
   /**
    * The reads below touch `version` for the same reason `activeTurn` does: a turn is one
    * object whose `steps` array is mutated in place, so nothing about it changes identity as
@@ -115,6 +167,9 @@ class ActivityStore {
 
   clear() {
     this.recorder.clear()
+    this.reportVisible.clear()
+    this.treeExpanded.clear()
+    this.stopClock()
   }
 }
 

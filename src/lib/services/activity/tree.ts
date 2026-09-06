@@ -74,6 +74,26 @@ export function deepestRunningStep(steps: ActivityStep[]): ActivityStep | null {
   return best
 }
 
+/**
+ * The outermost step this one sits under, or the step itself when it is already a root.
+ *
+ * The short form names the innermost step running, which on its own says "Model call 1"
+ * without saying what that call is for. The root is the phase it belongs to.
+ */
+export function rootStep(steps: ActivityStep[], step: ActivityStep): ActivityStep {
+  const byId = new Map(steps.map((s) => [s.id, s]))
+  let current = step
+  const seen = new Set<string>([step.id])
+  while (current.parentId !== null) {
+    const parent = byId.get(current.parentId)
+    // A cycle cannot arise from correct recording, but the walk must still terminate.
+    if (!parent || seen.has(parent.id)) break
+    seen.add(parent.id)
+    current = parent
+  }
+  return current
+}
+
 /** The forest in reading order, each step carrying its depth. */
 export function flattenTree(nodes: ActivityNode[], level = 0): ActivityRow[] {
   const rows: ActivityRow[] = []

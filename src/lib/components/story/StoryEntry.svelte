@@ -127,7 +127,12 @@
       ? activity.recordFor(entry.id)
       : null,
   )
-  let showActivityRecord = $state(false)
+  // Held in the store, keyed by entry: a report opened while the streaming entry was on screen
+  // has to survive this entry replacing it, or it closes mid-turn. Shown by default until the
+  // turn's last task finishes, hidden by default once it has.
+  const showActivityRecord = $derived(
+    !!activityRecord && activity.isReportVisible(entry.id, !activityRecord.endedAt),
+  )
 
   function formatStoryTime(time: TimeTracker | null | undefined): string {
     if (!time) return ''
@@ -1375,11 +1380,11 @@
       <button
         type="button"
         class="bg-muted text-muted-foreground hover:text-foreground hidden rounded px-1.5 py-0.5 text-[11px] tabular-nums transition-colors sm:inline"
-        aria-expanded={showActivityRecord}
-        title="What this turn spent its time on"
-        onclick={() => (showActivityRecord = !showActivityRecord)}
+        aria-pressed={showActivityRecord}
+        title={showActivityRecord ? 'Hide generation activity' : 'Show generation activity'}
+        onclick={() => activity.setReportVisible(entry.id, !showActivityRecord)}
       >
-        {formatDuration(turnDuration(activityRecord, activityRecord.endedAt ?? Date.now()))}
+        {formatDuration(turnDuration(activityRecord, activity.now))}
       </button>
     {/if}
 
@@ -1657,7 +1662,9 @@
               </DropdownMenu.Item>
             {/if}
             {#if activityRecord}
-              <DropdownMenu.Item onclick={() => (showActivityRecord = !showActivityRecord)}>
+              <DropdownMenu.Item
+                onclick={() => activity.setReportVisible(entry.id, !showActivityRecord)}
+              >
                 <Clock class="h-4 w-4" />
                 {showActivityRecord ? 'Hide' : 'Show'} generation activity
               </DropdownMenu.Item>

@@ -7,6 +7,7 @@
   import { settings } from '$lib/stores/settings.svelte'
   import { replacePicTagsWithPlaceholders } from '$lib/utils/inlineImageParser'
   import { activity } from '$lib/stores/activity.svelte'
+  import { formatDuration, turnDuration } from '$lib/services/activity'
   import ActivityStatus from './ActivityStatus.svelte'
 
   // Reactive binding to streaming content
@@ -50,7 +51,10 @@
   // starts arriving -- below the text, so it never displaces what is being written.
   let reportingEnabled = $derived(settings.uiSettings.activityReporting !== 'off')
   let activeTurn = $derived(activity.activeTurn)
-  let showActivity = $derived(reportingEnabled && activeTurn !== null)
+  // Shown by default while the turn runs; the header badge hides it.
+  let showActivity = $derived(
+    reportingEnabled && activeTurn !== null && activity.isReportVisible(activeTurn.entryId, true),
+  )
 </script>
 
 <!-- Streaming content container -->
@@ -96,6 +100,18 @@
       <span class="text-muted-foreground ml-0.5">tokens</span>
     </span>
 
+    {#if activeTurn}
+      <button
+        type="button"
+        class="bg-muted text-muted-foreground hover:text-foreground rounded px-1.5 py-0.5 text-[11px] tabular-nums transition-colors"
+        aria-pressed={showActivity}
+        title={showActivity ? 'Hide generation activity' : 'Show generation activity'}
+        onclick={() => activity.setReportVisible(activeTurn!.entryId, !showActivity)}
+      >
+        {formatDuration(turnDuration(activeTurn, activity.now))}
+      </button>
+    {/if}
+
     <!-- Spacer to push buttons to the right -->
     <div class="flex-1"></div>
 
@@ -115,7 +131,7 @@
        narration grows underneath it, rather than being pushed off the bottom.
        A bystander to the entry -- a fault rendering it must not take the narration with it. -->
   <svelte:boundary>
-    {#if showActivity}
+    {#if showActivity && activeTurn}
       <div class="mb-2">
         <ActivityStatus turn={activeTurn} />
       </div>

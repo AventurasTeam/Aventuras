@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildTree, deepestRunningStep, flattenTree } from './tree'
+import { buildTree, deepestRunningStep, flattenTree, rootStep } from './tree'
 import type { ActivityStep } from './types'
 
 function step(partial: Partial<ActivityStep> & { id: string }): ActivityStep {
@@ -148,5 +148,35 @@ describe('flattenTree', () => {
 
   it('is empty for an empty forest', () => {
     expect(flattenTree([])).toEqual([])
+  })
+})
+
+describe('rootStep', () => {
+  const steps = [
+    step({ id: 'retrieval' }),
+    step({ id: 'memory', parentId: 'retrieval' }),
+    step({ id: 'agent', parentId: 'memory' }),
+    step({ id: 'call-1', parentId: 'agent' }),
+    step({ id: 'narrative' }),
+  ]
+
+  it('walks a nested step up to the phase it belongs to', () => {
+    expect(rootStep(steps, steps[3]).id).toBe('retrieval')
+  })
+
+  it('returns a root step unchanged', () => {
+    expect(rootStep(steps, steps[4]).id).toBe('narrative')
+  })
+
+  it('stops at the outermost step it can reach when a parent is missing', () => {
+    const orphaned = [step({ id: 'child', parentId: 'never-appended' })]
+
+    expect(rootStep(orphaned, orphaned[0]).id).toBe('child')
+  })
+
+  it('terminates on a parent cycle', () => {
+    const cyclic = [step({ id: 'a', parentId: 'b' }), step({ id: 'b', parentId: 'a' })]
+
+    expect(rootStep(cyclic, cyclic[0])).toBeDefined()
   })
 })
