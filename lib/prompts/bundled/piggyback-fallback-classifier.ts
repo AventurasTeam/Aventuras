@@ -9,7 +9,7 @@ export const PIGGYBACK_FALLBACK_CLASSIFIER = `Known entities, referenced only by
 {%- endfor %}
 {% if referenceable.size == 0 and stagedEntities.size == 0 %}(none){% endif %}
 
-Extract scene state from this turn:
+Extract scene state and a one-sentence summary of this turn:
 
 {% for entry in lastTurns %}
 {{ entry.content }}
