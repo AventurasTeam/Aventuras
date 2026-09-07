@@ -1,5 +1,5 @@
 import type { DeltaSource, PipelineAction } from '@/lib/actions'
-import type { CharacterState, Entity } from '@/lib/db'
+import type { CharacterState, Entity, EntryMetadata } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 
 import { dedupeSceneEntities, scenePromotionActions, sceneTrackingActions } from './scene-tracking'
@@ -27,13 +27,10 @@ type BuildArgs = {
 }
 
 type BuildResult = {
-  metadata: {
-    sceneEntities: string[]
-    currentLocationId: string | null
-    worldTime: number
-    summary?: string
-    retrievalQueries?: string[]
-  }
+  metadata: Pick<
+    EntryMetadata,
+    'sceneEntities' | 'currentLocationId' | 'worldTime' | 'summary' | 'retrievalQueries'
+  >
   actions: PipelineAction[]
   /** What validation did to the emitted values, for stateReport — so the reader renders
    *  the emitted-vs-applied divergence as fact instead of inferring a cause from it. */
@@ -74,7 +71,7 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
 
   const metadata: BuildResult['metadata'] = { sceneEntities, currentLocationId, worldTime }
   if (block.summary !== undefined) metadata.summary = block.summary
-  if (block.retrievalQueries !== undefined) metadata.retrievalQueries = block.retrievalQueries
+  if (block.retrievalQueries?.length) metadata.retrievalQueries = block.retrievalQueries
   // visual/inventory/stackables only exist on CharacterState (entity-state-schema.ts) —
   // an id that resolves but belongs to a location/item/faction would otherwise get
   // those fields merged onto its state unvalidated (state-patch-actions.ts never

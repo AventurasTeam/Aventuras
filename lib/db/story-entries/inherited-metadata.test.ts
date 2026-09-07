@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import type { EntryMetadata } from './entry-metadata'
 import { inheritedEntryMetadata } from './inherited-metadata'
 
 describe('inheritedEntryMetadata', () => {
@@ -41,12 +42,12 @@ describe('inheritedEntryMetadata', () => {
   // three turns ago is exactly the staleness Q4 exists to avoid
   // (docs/memory/retrieval.md#q4-classifier-emitted-queries).
   it('does not carry retrievalQueries forward', () => {
-    const inherited = inheritedEntryMetadata({
+    const tail: EntryMetadata = {
       sceneEntities: ['char_a'],
       currentLocationId: 'loc_a',
       worldTime: 10,
       retrievalQueries: ['House Eldrin sigil'],
-    } as never)
-    expect(inherited).not.toHaveProperty('retrievalQueries')
+    }
+    expect(inheritedEntryMetadata(tail)).not.toHaveProperty('retrievalQueries')
   })
 })

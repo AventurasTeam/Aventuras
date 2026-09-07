@@ -89,6 +89,20 @@ describe('buildPiggybackActions', () => {
     expect(result.metadata).not.toHaveProperty('retrievalQueries')
   })
 
+  // The parser cannot produce [] today, but the fallback classifier's schema can.
+  it('leaves retrievalQueries absent when the block emitted an empty array', () => {
+    const result = buildPiggybackActions({
+      source: 'ai_classifier',
+      entryId: 'entry_1',
+      block: { sceneEntities: [], retrievalQueries: [] },
+      entities: [],
+      previousMetadata,
+      branchId: 'main',
+    })
+
+    expect(result.metadata).not.toHaveProperty('retrievalQueries')
+  })
+
   it('promotes staged entities named in sceneEntities', () => {
     const stagedChar = mockEntity({ id: 'char_staged', status: 'staged' })
     const activeChar = mockEntity({ id: 'char_active', status: 'active' })

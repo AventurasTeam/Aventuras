@@ -134,17 +134,17 @@ describe('buildStateReport', () => {
     expect(report).not.toHaveProperty('summary')
   })
 
-  // Pins the ALLOWLIST, not absence. buildStateReport returns an explicit key list, so
-  // `not.toHaveProperty('retrievalQueries')` passes before any change is made — vacuous
-  // under this repo's green-is-not-covered rule. Asserting the exact key set is what
-  // fails the moment someone converts the return to `...reported`.
+  // Pins the full allowlisted shape, not absence: `not.toHaveProperty('retrievalQueries')`
+  // would pass before any change is made — vacuous under this repo's green-is-not-covered
+  // rule. Asserting the whole object is what fails the moment someone converts the return
+  // to `...block`.
   it('reports exactly the allowlisted keys, excluding summary and retrievalQueries', () => {
     const report = buildStateReport({
       layer: 'piggyback_tagged_block',
       block: { sceneEntities: ['char_a'], summary: 's', retrievalQueries: ['q'] },
       failures: [],
     })
-    expect(Object.keys(report!)).toEqual(['layer', 'sceneEntities'])
+    expect(report).toEqual({ layer: 'piggyback_tagged_block', sceneEntities: ['char_a'] })
   })
 
   // Judged on the block as emitted: a block carrying only retrieval asks reported

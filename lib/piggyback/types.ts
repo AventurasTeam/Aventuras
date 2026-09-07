@@ -15,8 +15,9 @@ export const VISUAL_CHANGE_TYPES = [
 export type VisualChangeType = (typeof VISUAL_CHANGE_TYPES)[number]
 
 // Drift guard, both directions: the two lists must stay identical, since the parser
-// validates against this one and entryMetadataSchema validates against lib/db's. A
-// divergence would let a parsed block fail schema validation at write time.
+// validates against this one and entryMetadataSchema's stateReport enum validates
+// against lib/db's own list directly. The type check below is what actually catches a
+// divergence — entryMetadataSchema.parse() never runs on piggyback-authored data.
 // Type-only on purpose — scripts/mock-llm reaches this module under plain Node, and a
 // value import would drag the whole db barrel in behind it.
 type _VisualCategoriesMatch = [VisualChangeType] extends [(typeof VISUAL_CATEGORIES)[number]]

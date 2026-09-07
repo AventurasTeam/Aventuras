@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import { MAX_RETRIEVAL_QUERIES } from '@/lib/piggyback'
+
 import { entryMetadataSchema } from './entry-metadata'
 
 describe('entryMetadataSchema', () => {
@@ -60,6 +62,15 @@ describe('entryMetadataSchema', () => {
       entryMetadataSchema.safeParse({ sceneEntities: [], currentLocationId: null, worldTime: -1 })
         .success,
     ).toBe(false)
+  })
+
+  it('rejects more queries than lib/piggyback caps the emission at', () => {
+    const base = { sceneEntities: [], currentLocationId: null, worldTime: 0 }
+    const over = Array.from({ length: MAX_RETRIEVAL_QUERIES + 1 }, (_, i) => `q${i}`)
+    expect(entryMetadataSchema.safeParse({ ...base, retrievalQueries: over }).success).toBe(false)
+    expect(
+      entryMetadataSchema.safeParse({ ...base, retrievalQueries: over.slice(0, -1) }).success,
+    ).toBe(true)
   })
 })
 
