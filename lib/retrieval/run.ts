@@ -10,7 +10,7 @@ import { logger } from '@/lib/diagnostics'
 import { EmbedderCancelledError, type EmbedderErrorKind } from '@/lib/embedder'
 
 import { loadAwarenessForScene, type AwarenessRow } from './awareness'
-import { KNN_K, RANKER_DEFAULTS } from './constants'
+import { KNN_K, RANKER_DEFAULTS, REDUNDANCY_K } from './constants'
 import { buildKeywordInjections, type KeywordRetrievalSettings } from './injection'
 import { entityNameIndexFrom, matchTerms, normalizeTerm, type EntityNameIndex } from './name-index'
 import {
@@ -18,6 +18,7 @@ import {
   filterEntityPool,
   filterLorePool,
   filterThreadPool,
+  FLOOR_SEATABLE_KINDS,
   poolIdsFromKnn,
   type KnnHit,
   type StructuralFloor,
@@ -138,12 +139,10 @@ export type InjectedAwareness = { id: string; retrievalCount: number }
 
 /**
  * retrieval.md → Redundancy. `ratio` is |topK ∩ floor.seatedIds| / |topK| for one
- * emitted Q4, where topK is that query's KNN cut UNIONED over the three kinds
- * floor.seatedIds can hold (entity, lore, thread). `k` is not derivable from
- * KNN_K: three per-kind cuts put its ceiling at 3 × KNN_K, and any kind holding
- * fewer than KNN_K rows returns its whole corpus to every query alike — so at
- * small `k` the ratio describes the corpus, not the query, and nothing else in
- * the capture says so.
+ * emitted Q4, where topK is the REDUNDANCY_K nearest rows that query wanted across
+ * the kinds the floor can seat. `k` is the realised cut size, below REDUNDANCY_K
+ * only on a corpus too small to fill it. Positionally aligned with
+ * `queries.specs`; null on a fixed slot and on an empty top-K.
  */
 export type QueryRedundancy = { ratio: number; k: number }
 
@@ -161,8 +160,6 @@ export type RetrievalPartial = {
    * under `mode='boost'`, and on a pass that failed before ranking started.
    */
   keywordInjections: readonly KeywordInjection[]
-  /** Positionally aligned with `queries.specs`; null on a fixed slot and on an
-   *  empty top-K. Empty on a pass that failed before KNN. */
   queryRedundancy: readonly (QueryRedundancy | null)[]
 }
 
@@ -177,8 +174,6 @@ export type RetrievalOutcome =
        * Empty under `keywordRetrieval.mode='boost'`.
        */
       keywordInjections: readonly KeywordInjection[]
-      /** Positionally aligned with `queries.specs`; null on a fixed slot and on an
-       *  empty top-K. */
       queryRedundancy: readonly (QueryRedundancy | null)[]
       /**
        * A tripwire, not a report. The sync stage is blocking and clears the flag
@@ -233,11 +228,6 @@ async function loadExistingVecTables(
   )
   return new Set(rows.map((row) => String(row[0])))
 }
-
-// The only kinds floor.seatedIds can hold (pools.ts → buildStructuralFloor). Counting
-// a chapter or happening top-K in the denominator would deflate every ratio by
-// construction, since neither can ever intersect the floor.
-const FLOOR_SEATABLE_KINDS = new Set<VecTargetKind>(['entity', 'lore', 'thread'])
 
 export async function runRetrieval(
   deps: RetrievalDeps,
@@ -333,6 +323,10 @@ async function runRetrievalPass(
     activeThreadTitles: floor.activeThreads.map((t) => t.title),
   })
   partial.queries = queries
+  // Set with the stack, not with the measurement: a failure between here and KNN
+  // otherwise leaves a 4-6 spec stack beside a length-0 array, and every consumer
+  // reads the two positionally.
+  partial.queryRedundancy = queries.specs.map(() => null)
 
   const embedStartedAt = performance.now()
   const embed = await embedQueries(deps, params, queries.embedTexts)
@@ -379,25 +373,27 @@ async function runRetrievalPass(
   let knnMs = performance.now() - knnStartedAt
   for (const [kind, pool] of built) pools[TYPE_OF_KIND[kind]] = pool.candidates
 
-  // Off perQueryIds — runKnn's raw rows — not off pool.candidates: assembleCandidates has
+  // Off perQueryHits — runKnn's raw rows — not off pool.candidates: assembleCandidates has
   // already run filterEntityPool/LorePool/ThreadPool over those, so a ratio taken there
   // intersects an empty set and reports 0 for every query (retrieval.md → Redundancy).
-  const topKByQuery = queries.specs.map(() => new Set<string>())
+  // The cut is global across the seatable kinds rather than per kind: a per-kind cut
+  // unioned dilutes by the kinds that rarely reach the floor, and lore reaches it only
+  // through a user-marked `always`.
+  const hitsByQuery: KnnHit[][] = queries.specs.map(() => [])
   for (const [kind, pool] of built) {
     if (!FLOOR_SEATABLE_KINDS.has(kind)) continue
-    pool.perQueryIds.forEach((ids, i) => {
-      for (const id of ids) topKByQuery[i]?.add(id)
-    })
+    pool.perQueryHits.forEach((hits, i) => hitsByQuery[i]?.push(...hits))
   }
   const queryRedundancy = queries.slots.map((slot, i) => {
     // 'direct' is the slot every classifier_emitted query maps to
     // (QUERY_SLOT_OF_SOURCE) — the fixed three carry no redundancy.
     if (slot !== 'direct') return null
-    const topK = topKByQuery[i]
-    if (topK === undefined || topK.size === 0) return null
+    const hits = hitsByQuery[i]
+    if (hits === undefined || hits.length === 0) return null
+    const topK = [...hits].sort((a, b) => a[1] - b[1]).slice(0, REDUNDANCY_K)
     let matched = 0
-    for (const id of topK) if (floor.seatedIds.has(id)) matched += 1
-    return { ratio: matched / topK.size, k: topK.size }
+    for (const [id] of topK) if (floor.seatedIds.has(id)) matched += 1
+    return { ratio: matched / topK.length, k: topK.length }
   })
   partial.queryRedundancy = queryRedundancy
 
@@ -608,9 +604,9 @@ async function loadAdmittedVectors(
 type KnnResult = {
   ids: Set<string>
   vectorById: Map<string, Float32Array>
-  /** Per query, in slot order — the pre-filter top-K the redundancy metric measures
-   *  over. `[]` for a slot that produced no vector. */
-  perQueryIds: readonly (readonly string[])[]
+  /** Per query, in slot order — the pre-filter matches the redundancy metric cuts
+   *  into its top-K. `[]` for a slot that produced no vector. */
+  perQueryHits: readonly (readonly KnnHit[])[]
 }
 
 /** Null when the dim family does not exist yet — a cold start, not a fault. */
@@ -653,11 +649,11 @@ async function runKnn(
   return {
     ids: poolIdsFromKnn(perQuery),
     vectorById,
-    perQueryIds: perQuery.map((rows) => rows.map(([id]) => id)),
+    perQueryHits: perQuery,
   }
 }
 
-type BuiltPool = { candidates: Candidate[]; perQueryIds: readonly (readonly string[])[] }
+type BuiltPool = { candidates: Candidate[]; perQueryHits: readonly (readonly KnnHit[])[] }
 
 async function buildPool(
   deps: RetrievalDeps,
@@ -665,9 +661,12 @@ async function buildPool(
   ctx: PoolCtx,
 ): Promise<BuiltPool> {
   const knn = await runKnn(deps, params, ctx)
-  if (knn === null) return { candidates: [], perQueryIds: [] }
+  // One empty entry per query, not one empty outer array: every other consumer reads
+  // `perQueryHits[i]` positionally, and a length-0 outer array is the sole shape where
+  // that alignment would not hold.
+  if (knn === null) return { candidates: [], perQueryHits: ctx.queryVectors.map(() => []) }
   const candidates = knn.ids.size === 0 ? [] : assembleCandidates(ctx, knn.ids, knn.vectorById)
-  return { candidates, perQueryIds: knn.perQueryIds }
+  return { candidates, perQueryHits: knn.perQueryHits }
 }
 
 /**

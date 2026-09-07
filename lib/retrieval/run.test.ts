@@ -989,38 +989,81 @@ describe('runRetrieval — per-Q4 redundancy', () => {
   const passWith = async (fixture: Parameters<typeof makeQueryAll>[0]) =>
     expectOk(await runRetrieval(deps({ queryAll: makeQueryAll(fixture) }), params(ASK)))
 
+  /**
+   * makeQueryAll answers every kind's MATCH from ONE list, but a real id lives in
+   * exactly one kind's vec table (ids carry disjoint kind prefixes) — so a shared
+   * list puts `char_a` in the entity, lore AND thread top-K at once, which the
+   * global merge counts three times. Routing by table keeps these fixtures inside
+   * the disjointness the merge relies on.
+   */
+  const passByKind = async (
+    fixture: Parameters<typeof makeQueryAll>[0],
+    knn: { entity?: Row[]; lore?: Row[]; thread?: Row[]; chapter?: Row[] },
+    over: Parameters<typeof params>[0] = {},
+  ) => {
+    const base = makeQueryAll(fixture)
+    const queryAll = vi.fn(async (sql: string, p: unknown[]) => {
+      if (!sql.includes('MATCH')) return base(sql, p)
+      if (sql.includes('entities_vec_')) return knn.entity ?? []
+      if (sql.includes('lore_vec_')) return knn.lore ?? []
+      if (sql.includes('threads_vec_')) return knn.thread ?? []
+      if (sql.includes('chapter_summaries_vec_')) return knn.chapter ?? []
+      return []
+    })
+    return expectOk(await runRetrieval(deps({ queryAll }), params({ ...ASK, ...over })))
+  }
+
   it('reports null on the three fixed slots', async () => {
     const out = await passWith({ entities: [SEATED], knn: [hit('char_a')] })
     expect(out.queryRedundancy.slice(0, 3)).toEqual([null, null, null])
   })
 
   it('scores 1.0 when the floor had already seated the whole top-K', async () => {
-    const out = await passWith({ entities: [SEATED], knn: [hit('char_a')] })
+    const out = await passByKind({ entities: [SEATED] }, { entity: [hit('char_a')] })
     expect(out.queryRedundancy[3]).toEqual({ ratio: 1, k: 1 })
   })
 
   it('scores 0 when the floor seated none of the top-K', async () => {
-    const out = await passWith({ entities: [SEATED], lore: [UNSEATED], knn: [hit('lo_x')] })
+    const out = await passByKind({ entities: [SEATED], lore: [UNSEATED] }, { lore: [hit('lo_x')] })
     expect(out.queryRedundancy[3]).toEqual({ ratio: 0, k: 1 })
   })
 
   // Chapters and happenings can never be in floor.seatedIds (pools.ts →
   // buildStructuralFloor seats entity, lore and thread ids only), so counting their
-  // top-K in the denominator would deflate every ratio by construction. makeQueryAll
-  // answers every kind's KNN from one list, so proving the exclusion needs a
-  // kind-aware arm: chapters return an id NO other kind returns, which moves k from
-  // 2 to 3 the moment they are counted.
+  // top-K in the denominator would deflate every ratio by construction. Chapters
+  // return an id NO other kind returns, which moves k from 2 to 3 the moment they
+  // are counted.
   it('measures over the entity, lore and thread top-Ks only', async () => {
-    const base = makeQueryAll({ entities: [SEATED], lore: [UNSEATED] })
-    const queryAll = vi.fn(async (sql: string, p: unknown[]) => {
-      if (!sql.includes('MATCH')) return base(sql, p)
-      if (sql.includes('entities_vec_')) return [hit('char_a')]
-      if (sql.includes('lore_vec_')) return [hit('lo_x')]
-      if (sql.includes('chapter_summaries_vec_')) return [hit('ch_only')]
-      return []
-    })
-    const out = expectOk(await runRetrieval(deps({ queryAll }), params(ASK)))
+    const out = await passByKind(
+      { entities: [SEATED], lore: [UNSEATED] },
+      { entity: [hit('char_a')], lore: [hit('lo_x')], chapter: [hit('ch_only')] },
+    )
     expect(out.queryRedundancy[3]).toEqual({ ratio: 0.5, k: 2 })
+  })
+
+  // The cut is REDUNDANCY_K nearest GLOBALLY across the seatable kinds, not each
+  // kind's own cut and not the whole KNN pass. Twelve hits: ten floor-seated
+  // entities at distance 0.5-1.4 and two unseated lore rows nearer than all of
+  // them. The ten nearest are both lore plus the eight closest entities.
+  //   global top-10 (correct) → { ratio: 0.8, k: 10 }
+  //   per-kind top-10 unioned → { ratio: 10/12, k: 12 }
+  //   no cut at all           → { ratio: 10/12, k: 12 }
+  it('measures the REDUNDANCY_K nearest rows across kinds, not one cut per kind', async () => {
+    const sceneIds = Array.from({ length: 10 }, (_, i) => `char_s${i}`)
+    const out = await passByKind(
+      {
+        entities: sceneIds.map((id, i) => entityRow(id, `Scene ${i}`)),
+        lore: [loreRow('lo_far', 'Marsh law'), loreRow('lo_near', 'Tide law')],
+      },
+      {
+        entity: sceneIds.map((id, i) => hit(id, 0.5 + i * 0.1)),
+        lore: [hit('lo_near', 0.1), hit('lo_far', 0.2)],
+      },
+      { sceneEntityIds: sceneIds, sceneCharacterIds: sceneIds },
+    )
+
+    expect(out.floor.seatedIds.size).toBe(10)
+    expect(out.queryRedundancy[3]).toEqual({ ratio: 0.8, k: 10 })
   })
 
   // A cold start: no dim family exists, so runKnn returns null and the query has no

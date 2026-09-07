@@ -1,4 +1,4 @@
-import type { Entity, EntityKind, InjectionMode, Thread } from '@/lib/db'
+import type { Entity, EntityKind, InjectionMode, Thread, VecTargetKind } from '@/lib/db'
 
 import { matchTerms, normalizeTerm } from './name-index'
 
@@ -73,6 +73,11 @@ const narrowThread = (t: ThreadRow): Required<ThreadRow> => ({
   title: t.title,
   description: t.description,
 })
+
+// The only kinds `buildStructuralFloor` below can seat. Counting a chapter or
+// happening top-K in the redundancy denominator would deflate every ratio by
+// construction, since neither can ever intersect the floor.
+export const FLOOR_SEATABLE_KINDS = new Set<VecTargetKind>(['entity', 'lore', 'thread'])
 
 /**
  * retrieval.md → Structural floor. These bypass the ranker and consume budget
@@ -208,8 +213,10 @@ export function filterThreadPool(
 }
 
 /**
- * One KNN row reduced to what pool assembly needs. Nothing scores on
- * `distance`; the ranker computes cosine over the returned vectors instead.
+ * One KNN row reduced to what pool assembly and the redundancy cut need. Nothing
+ * SCORES on `distance` — the ranker computes cosine over the returned vectors
+ * instead — but it orders, and it does so ACROSS kinds: every vector is
+ * unit-norm, so L2 order is cosine order (db/embeddings/knn.ts).
  */
 export type KnnHit = readonly [id: string, distance: number]
 
