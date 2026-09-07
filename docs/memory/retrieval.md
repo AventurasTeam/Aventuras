@@ -326,6 +326,12 @@ ORT-RN).**
   for the gap. Same pattern under both CPU and NNAPI EPs. **Per-turn
   budgeting uses the single-shot number** — three single-shot query
   embeds is realistically ~100 ms under normal use, not 30 ms.
+  **Read that three-embed total as PoC-era.** It predates the
+  [variable-length query stack](#query-construction--the-query-stack),
+  which embeds one to six queries per pass, and has not been re-run.
+  The embedder is excluded from every figure in
+  [Per-turn cost budget](#per-turn-cost-budget), so nothing there
+  covers it either.
 - **Cold init:** ~270 ms (asset extraction from APK dominates,
   ~150 ms). Warm re-init: ~120 ms.
 - **EP determinism:** CPU vs NNAPI cosine = 1.000000. Either ORT
@@ -1053,11 +1059,11 @@ configurable; the user action and one trailing entry are the floor.
 **The surface is defined here, independently of the query stack.** It
 is deliberately _not_ the assembled embed texts. Deriving it from the
 queries makes the lexical pathway inherit the dense pathway's inputs,
-which defeats the point of having a complement — and it made keyword
-matching conditional on Q3's top-K selection, so a proper noun in a
-sentence the extract skipped could never fire. With Q3 slated for
-removal, an independent surface is also what keeps that removal from
-disturbing this pathway.
+which defeats the point of having a complement — and under the removed
+prose extract it made keyword matching conditional on that slot's
+top-K selection, so a proper noun in a sentence the extract skipped
+could never fire. Independence is also what let that slot be deleted
+without disturbing this pathway.
 
 Entries inside `protectedBuffer` are scanned even though they are
 already in context verbatim: the mention is in context, but the lore

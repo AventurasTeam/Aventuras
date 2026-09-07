@@ -87,10 +87,14 @@ ranker without being able to move a score. See
   gate, since a resubmit re-runs the same blocking sync stage; the
   switch action imports 3.1b's swap-dialog open action per C8);
   stale-at-KNN rows excluded from pools.
-- **Query stack:** Q1 user action; Q2 structural digest
-  (code-template floor, purely structural); Q3 the piggyback summary
-  (`metadata.summary` handed off by 3.2's parse); weight
-  re-normalization when a component is missing; cold-start per canon.
+- **Query stack:** three to six ordered slots — Q1 user action; Q2
+  structural digest (code-template floor, purely structural); Q3 the
+  piggyback summary (`metadata.summary` handed off by 3.2's parse);
+  and up to three Q4 classifier-emitted queries, empties dropped,
+  capped at 200 characters before deduplication, sharing one pooled
+  `w_direct` rather than a weight each — built here, with nothing
+  emitting into the slot yet. Weight re-normalization over the live
+  slots; cold-start per canon.
 - **Pool build:** structural floor first (mode-dependent prompt
   buffer, active+in-scene, location, active threads, `always`
   rows), then per-type pools — three-sub-pool entity model,
@@ -194,8 +198,8 @@ criterion 7 met by the timing log — is recorded under
   option as posed. The index is built in memory from the source rows
   the pass has already loaded, so it costs no query of its own and
   cannot drift from the rows the floor and the pools are reading.
-  Q3 shared it until the heuristic prose extract was deleted; the
-  happening keyword surface is its remaining consumer.
+  The heuristic prose extract shared it until that slot was deleted;
+  the happening keyword surface is its remaining consumer.
 - **Per-type overhead constants** — **resolved:** measured against
   the shipped macro; the values and what shapes them are canon at
   [`retrieval.md → Token estimation`](../../../../memory/retrieval.md#token-estimation),

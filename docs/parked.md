@@ -1040,8 +1040,8 @@ trade-offs:
   isn't free.
 - **Lost per-query debug visibility.** The empirical-tuning pass
   leans on the [memory probe](./memory/probe.md) to inspect
-  per-query similarity contributions. Pre-blend collapses three
-  signals into one; "why was this row retrieved" gets murkier.
+  per-query similarity contributions. Pre-blend collapses every
+  live signal into one; "why was this row retrieved" gets murkier.
 - **Forecloses non-linear blends.** Pre-blend can only express
   linear combinations of query vectors. Future levers like
   per-query thresholds, max-of-cosines, or harmonic mean become

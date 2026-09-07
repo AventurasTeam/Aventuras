@@ -76,6 +76,10 @@ slice-planning gate forces its resolution before that slice is planned.
   to that slice's Open questions the moment it is drafted, so the
   planning gate forces `pnpm bench:retrieval` to be re-run against the
   real stack before the numbers in canon are trusted.
+  **Owner: PR 2 of the query-stack stack**, the one that sources Q4
+  from `metadata.retrievalQueries` — the mechanism landed without a
+  slice, so nothing will fire the routing above. PR 2 is where Q4
+  first costs anything, and it carries the re-run.
 
 - **Nothing decides when a degenerate retrieval query should be
   dropped.**

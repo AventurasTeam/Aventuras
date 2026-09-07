@@ -78,11 +78,11 @@ is off, a separate per-turn classifier call writes the same subset.
   classification call once → clamp + warn on the per-turn fallback
   classifier path (see
   [`piggyback.md → Capability gate`](../../../../memory/piggyback.md#capability-gate)).
-- **`<summary>` enrichment hand-off:** parse the trailing block's
-  optional one-sentence summary and hand it off for the next
-  turn's Q2 structural digest
-  ([`retrieval.md → Q2`](../../../../memory/retrieval.md#q2-structural-digest)
-  treats it as optional enrichment — absent on parse failure or
+- **`<summary>` hand-off:** parse the trailing block's optional
+  one-sentence summary and hand it off for the next turn's Q3
+  retrieval query
+  ([`retrieval.md → Q3`](../../../../memory/retrieval.md#q3-piggyback-summary)
+  embeds it as its own vector — absent on parse failure or
   restart is fine); the transport (run-scoped vs store-scoped) is a
   planning decision recorded at finish.
 - **Computed bookkeeping:** per-character `current_location_id`
