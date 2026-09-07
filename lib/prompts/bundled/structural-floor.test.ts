@@ -132,3 +132,14 @@ describe('non-structural rows reach the prompt only by winning budget', () => {
     expect(out).toContain('Mira (available to introduce): A courier who owes the guild.')
   })
 })
+
+describe('state emission includes retrieval query instructions', () => {
+  // A schema field with no instruction is a field the model never fills. The
+  // cap and the next-turn framing both have to reach the model, not just the parser.
+  it('asks for retrieval queries by tag, capped, framed as next-turn context', () => {
+    expect(STATE_EMISSION).toContain('<retrieval_queries>')
+    expect(STATE_EMISSION).toContain('<query>')
+    expect(STATE_EMISSION).toMatch(/up to three/i)
+    expect(STATE_EMISSION).toMatch(/next turn/i)
+  })
+})
