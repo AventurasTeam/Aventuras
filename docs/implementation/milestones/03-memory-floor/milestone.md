@@ -118,8 +118,8 @@ browsable.
   background pipeline, extraction + reconciliation + provenance,
   retry policy, classifier barrier
 - [Slice 3.4](./slices/04-retrieval.md) — retrieval: sync stage,
-  three-query stack, pure ranker, budgets, memory pack templates,
-  `js-tiktoken`
+  variable-length query stack, pure ranker, budgets, memory pack
+  templates, `js-tiktoken`
 - [Slice 3.5](./slices/05-dev-probe.md) — developer-only retrieval
   probe: first `probe_captures` writes, parity test
 - [Slice 3.6a](./slices/06a-wizard-world.md) — wizard step 3
@@ -272,7 +272,7 @@ their own. Entry-point signature fixed in 3.3's first commit.
 [`retrieval.md → Pseudocode`](../../../memory/retrieval.md#pseudocode))
 as a pure-function module with no store or DB imports, and its
 output includes a per-candidate **trace** carrying the fields the
-probe capture model needs (`sim_q1..q3`, `sim_blend`,
+probe capture model needs (`sims`, `sim_blend`,
 `recency_factor`, `pin_signal`, `kw_boost_value`,
 `chapter_boost_applied`, `bypass_triggered`, `final_score`,
 `mmr_rank`, `selected`, `drop_reason`, `tokens_estimated`, and the

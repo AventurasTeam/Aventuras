@@ -127,7 +127,8 @@ Per capture:
   tunable a type error here instead of a silently absent capture
   field. Frozen to capture-time values; the simulator diffs against
   current story params at inspect time.
-- **The queries.** One to six of them — the
+- **The queries.** Three to six of them — the fixed Q1-Q3 slots,
+  absent ones included, plus one per emitted Q4. The
   [query stack](./retrieval.md#query-construction--the-query-stack) is
   variable-length, so this is a list, not a fixed triple. Each carries
   its text, token count, and source pointer (which entry or structural

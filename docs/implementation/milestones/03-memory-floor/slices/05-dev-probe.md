@@ -307,7 +307,7 @@ each answer constrains the next.
   scope bullet and canon both promised are not captured, and canon was
   amended rather than the code.** Nothing on probe.md's simulatable
   list reads one: `λ_div` needs candidate-vs-candidate cosines, and a
-  re-blend reads the per-row `sim_q1..3` the capture already stores.
+  re-blend reads the per-row `sims` the capture already stores.
   Threading them would mean widening M3.4's `RetrievalOutcome` — they
   are a local inside `runRetrievalPass` — for a dev-only, deep-only
   field with no consumer. `CaptureQuery.vector` went with the input.
