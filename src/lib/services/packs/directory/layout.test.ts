@@ -10,7 +10,7 @@ import {
   classifyPath,
   collectTemplateFiles,
   groupFolderFor,
-  isRoundTrippableId,
+  isWritableTemplateId,
   templateIdFromPath,
   templatePath,
 } from './layout'
@@ -116,18 +116,47 @@ describe('collectTemplateFiles', () => {
   })
 })
 
-describe('isRoundTrippableId', () => {
+describe('isWritableTemplateId', () => {
   it('accepts every shipped row id', () => {
-    for (const id of storedRowIds()) expect(isRoundTrippableId(id)).toBe(true)
+    for (const id of storedRowIds()) expect(isWritableTemplateId(id)).toBe(true)
   })
 
   it('rejects an id that would gain a folder and come back as its last segment', () => {
-    expect(isRoundTrippableId('custom/example')).toBe(false)
-    expect(isRoundTrippableId('custom\\example')).toBe(false)
+    expect(isWritableTemplateId('custom/example')).toBe(false)
+    expect(isWritableTemplateId('custom\\example')).toBe(false)
   })
 
   it('accepts an underscore-prefixed id', () => {
-    expect(isRoundTrippableId('_scratch')).toBe(true)
+    expect(isWritableTemplateId('_scratch')).toBe(true)
+  })
+
+  // These reach buildTree through a hand-written .prompt.json, and plugin-fs fails on them.
+  it.each(['a:b', 'why?', 'a<b', 'a>b', 'a|b', 'a"b', 'a*b'])(
+    'rejects %s, which Windows forbids in a filename',
+    (id) => {
+      expect(isWritableTemplateId(id)).toBe(false)
+    },
+  )
+
+  it.each(['con', 'PRN', 'aux', 'nul', 'com1', 'LPT9'])(
+    'rejects the reserved device name %s',
+    (id) => {
+      expect(isWritableTemplateId(id)).toBe(false)
+    },
+  )
+
+  it('rejects a trailing dot or space, which Windows strips', () => {
+    expect(isWritableTemplateId('trailing.')).toBe(false)
+    expect(isWritableTemplateId('trailing ')).toBe(false)
+  })
+
+  it('rejects an empty id', () => {
+    expect(isWritableTemplateId('')).toBe(false)
+  })
+
+  it('still accepts ordinary hyphenated ids', () => {
+    expect(isWritableTemplateId('chapter-analysis')).toBe(true)
+    expect(isWritableTemplateId('image-style-soft-anime')).toBe(true)
   })
 })
 

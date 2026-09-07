@@ -125,6 +125,25 @@ describe('unwritable template ids', () => {
     ).toThrow(/custom\/example/)
   })
 
+  it('refuses an id Windows cannot use as a filename', () => {
+    expect(() => buildTree({ ...input, templates: [{ templateId: 'a:b', content: 'x' }] })).toThrow(
+      /a:b/,
+    )
+  })
+
+  // One file on Windows and macOS, so one would silently overwrite the other.
+  it('refuses two ids that differ only in capitalisation', () => {
+    expect(() =>
+      buildTree({
+        ...input,
+        templates: [
+          { templateId: 'adventure', content: 'x' },
+          { templateId: 'Adventure', content: 'y' },
+        ],
+      }),
+    ).toThrow(/capitalisation/)
+  })
+
   it('accepts an id starting with an underscore, which is a template and not a folder', () => {
     const built = buildTree({ ...input, templates: [{ templateId: '_scratch', content: 'x' }] })
     expect(built.has(`${UNGROUPED_DIR}/_scratch.md`)).toBe(true)

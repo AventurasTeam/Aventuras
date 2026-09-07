@@ -14,7 +14,7 @@ import {
   REFERENCE_DIR,
   USER_HALF_SUFFIX,
   classifyPath,
-  isRoundTrippableId,
+  isWritableTemplateId,
   templatePath,
 } from './layout'
 import {
@@ -67,14 +67,29 @@ export function shippedTemplateRows(): StoredTemplate[] {
 }
 
 export function buildTree(input: TreeInput): Tree {
-  const unwritable = input.templates
-    .map((t) => t.templateId)
-    .filter((id) => !isRoundTrippableId(id))
-    .sort()
+  const ids = input.templates.map((t) => t.templateId)
 
+  const unwritable = ids.filter((id) => !isWritableTemplateId(id)).sort()
   if (unwritable.length > 0) {
     throw new Error(
       `These template ids cannot be written as filenames, so exporting them would change what they are: ${unwritable.join(', ')}`,
+    )
+  }
+
+  // Two ids differing only in case are one file on Windows and macOS, so one would silently
+  // overwrite the other and the export would be missing a template.
+  const byLowercase = new Map<string, string[]>()
+  for (const id of ids) {
+    const key = id.toLowerCase()
+    byLowercase.set(key, [...(byLowercase.get(key) ?? []), id])
+  }
+  const colliding = [...byLowercase.values()]
+    .filter((group) => group.length > 1)
+    .map((group) => [...group].sort().join(' and '))
+    .sort()
+  if (colliding.length > 0) {
+    throw new Error(
+      `These template ids differ only in capitalisation, so they cannot both be written as files: ${colliding.join('; ')}`,
     )
   }
 

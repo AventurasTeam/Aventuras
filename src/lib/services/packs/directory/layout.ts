@@ -75,15 +75,37 @@ export function templateIdFromPath(path: string): string | null {
   return segments[segments.length - 1].slice(0, -MARKDOWN_EXTENSION.length)
 }
 
+/** Characters Win32 forbids outright in a filename. */
+const FILESYSTEM_UNSAFE = /[<>:"|?*]/
+
+/** MS-DOS device names, still refused by Win32 with or without an extension. */
+const RESERVED_DEVICE_NAMES = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i
+
+function hasControlCharacter(value: string): boolean {
+  for (let i = 0; i < value.length; i++) {
+    if (value.charCodeAt(i) < 32) return true
+  }
+  return false
+}
+
 /**
  * Whether this id survives being written as a filename and read back.
  *
  * `PackTemplateSchema` accepts any non-empty string, so a hand-written `.prompt.json` can
- * carry an id holding a path separator. Written out it would gain a folder and come back as
- * only its last segment — a different template, silently. Rather than encode ids and make
- * every filename harder to read, an export refuses the ones that would not survive.
+ * carry an id that is not a usable filename: a path separator, which would gain a folder and
+ * come back as only its last segment, or a character Windows forbids, which fails at the
+ * write. Rather than encode ids and make every filename harder to read, an export refuses
+ * the ones that would not survive.
  */
-export function isRoundTrippableId(templateId: string): boolean {
+export function isWritableTemplateId(templateId: string): boolean {
+  if (templateId.length === 0) return false
+  if (FILESYSTEM_UNSAFE.test(templateId)) return false
+  if (hasControlCharacter(templateId)) return false
+  if (RESERVED_DEVICE_NAMES.test(templateId)) return false
+  // Windows silently strips a trailing dot or space, so the file would not be found again
+  // under its own id.
+  if (/[. ]$/.test(templateId)) return false
+  // Catches the path separators, which would gain a folder and come back truncated.
   return templateIdFromPath(templatePath(templateId)) === templateId
 }
 

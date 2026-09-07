@@ -12,6 +12,7 @@ import type { PresetPack } from './types'
 import { PACK_FILE } from './directory/layout'
 import { pickDirectory, readTree, writeTree } from './directory/io'
 import { validateTree, type DirectoryValidationResult } from './directory/parse'
+import { parsePackFile } from './directory/serialize'
 import {
   buildShippedBaselineTree,
   buildTree,
@@ -48,8 +49,9 @@ export interface DirectoryExportPlan {
   tree: Tree
   prunePaths: string[]
   /**
-   * The folder holds files but carries no `pack.yaml`, so it is not a tree this export owns.
-   * Nothing is pruned in that case, but the user is asked before files land in it.
+   * The folder holds files but did not prove to be a tree this export owns — no readable
+   * `pack.yaml` this version can parse. Nothing is pruned in that case, but a file sharing a
+   * name with one being written is still overwritten, so the user is asked first.
    */
   needsConfirmation: boolean
 }
@@ -104,13 +106,22 @@ class ImportExportService {
   /** Where an existing tree's files sit, and which of them this export would leave behind. */
   private async planWrite(root: string, tree: Tree): Promise<DirectoryExportPlan> {
     let existingPaths: string[] = []
+    let packFileText: string | undefined
     try {
-      existingPaths = (await readTree(root)).allPaths
+      const existing = await readTree(root)
+      existingPaths = existing.allPaths
+      packFileText = existing.contents.get(PACK_FILE)
     } catch (e) {
+      // A folder that cannot be read is not one this export owns: nothing is pruned from it,
+      // and the confirmation stands in for the certainty we could not get.
       console.error('[ImportExportService] Failed to read the chosen folder:', e)
+      return { root, tree, prunePaths: [], needsConfirmation: true }
     }
 
-    const isPreviousExport = existingPaths.some((p) => p.replace(/\\/g, '/') === PACK_FILE)
+    // Pruning deletes files, so the folder has to prove it is one of ours. The name
+    // `pack.yaml` alone does not: other tools use it too, and treating a stranger's folder
+    // as a previous export would delete the Markdown nested inside it.
+    const isPreviousExport = packFileText !== undefined && parsePackFile(packFileText).ok
 
     return {
       root,

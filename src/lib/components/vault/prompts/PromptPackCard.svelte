@@ -41,15 +41,24 @@
   const canReplace = $derived(!pack.isDefault && !!onUpdateFromFile)
 </script>
 
-<button type="button" class="w-full text-left" {onclick}>
+<div class="relative">
   <Card
     class="group hover:border-primary/50 h-full cursor-pointer transition-colors {pack.isDefault
       ? 'border-dashed'
       : ''}"
   >
     <CardContent class="flex h-full flex-col p-4">
+      <!-- Covers the card so the whole surface opens the pack, while the action menu stays a
+           sibling: a menu trigger nested in a <button> breaks focus and activation. -->
+      <button
+        type="button"
+        class="absolute inset-0 z-0 h-full w-full cursor-pointer rounded-xl text-left"
+        aria-label="Open {pack.name}"
+        {onclick}
+      ></button>
+
       <div class="flex items-start justify-between">
-        <div class="min-w-0 flex-1">
+        <div class="pointer-events-none relative z-10 min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">
             <h3 class="truncate font-semibold">{pack.name}</h3>
             {#if usageCount > 0}
@@ -60,7 +69,7 @@
             {#if pack.description}{stripToPlainText(pack.description)}{:else}&nbsp;{/if}
           </p>
         </div>
-        <div class="flex shrink-0 items-center gap-0.5">
+        <div class="relative z-10 flex shrink-0 items-center gap-0.5">
           <DropdownMenu.Root bind:open={transferMenuOpen}>
             <DropdownMenu.Trigger>
               {#snippet child({ props })}
@@ -138,4 +147,4 @@
       </div>
     </CardContent>
   </Card>
-</button>
+</div>
