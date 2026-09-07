@@ -12,6 +12,11 @@ export const entryMetadataSchema = z.object({
   // Feeds the NEXT turn's Q3 retrieval query (docs/memory/retrieval.md#q3-piggyback-summary).
   // Optional — absent on parse failure or restart is fine per docs/memory/piggyback.md.
   summary: z.string().optional(),
+  // Feeds the NEXT turn's Q4 slot (docs/memory/retrieval.md#q4-classifier-emitted-queries).
+  // Never inherited, and excluded from stateReport. `.max(3)` states the contract; it
+  // does not enforce it — this schema is parsed only at create-story and in the seed,
+  // never on the piggyback write path. lib/piggyback caps at parse.
+  retrievalQueries: z.array(z.string()).max(3).optional(),
   sceneEntities: z.array(z.string()),
   currentLocationId: z.string().nullable(),
   worldTime: z.number().min(0),

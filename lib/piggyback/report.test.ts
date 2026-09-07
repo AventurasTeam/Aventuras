@@ -134,6 +134,31 @@ describe('buildStateReport', () => {
     expect(report).not.toHaveProperty('summary')
   })
 
+  // Pins the ALLOWLIST, not absence. buildStateReport returns an explicit key list, so
+  // `not.toHaveProperty('retrievalQueries')` passes before any change is made — vacuous
+  // under this repo's green-is-not-covered rule. Asserting the exact key set is what
+  // fails the moment someone converts the return to `...reported`.
+  it('reports exactly the allowlisted keys, excluding summary and retrievalQueries', () => {
+    const report = buildStateReport({
+      layer: 'piggyback_tagged_block',
+      block: { sceneEntities: ['char_a'], summary: 's', retrievalQueries: ['q'] },
+      failures: [],
+    })
+    expect(Object.keys(report!)).toEqual(['layer', 'sceneEntities'])
+  })
+
+  // Judged on the block as emitted: a block carrying only retrieval asks reported
+  // state, and suppressing its report would badge the turn as one where piggyback
+  // never ran.
+  it('still reports a block that carried only retrieval asks', () => {
+    const report = buildStateReport({
+      layer: 'piggyback_tagged_block',
+      block: { retrievalQueries: ['q'] },
+      failures: [],
+    })
+    expect(report?.layer).toBe('piggyback_tagged_block')
+  })
+
   it('carries the full transfer and visual-change shapes through', () => {
     const report = buildStateReport({
       layer: 'piggyback_tagged_block',

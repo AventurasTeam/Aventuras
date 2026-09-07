@@ -20,8 +20,9 @@ type BuildReportArgs = {
 /**
  * What the model EMITTED plus what `apply.ts` did with it — several causes collapse onto
  * the same emitted-vs-current difference (docs/ui/patterns/entry-card.md → Emitted vs.
- * applied). `summary` is not copied: it has a top-level home on EntryMetadata, and a
- * second copy would give the reader two sources for one sentence.
+ * applied). The return below is an explicit allowlist, so `summary` and `retrievalQueries`
+ * are excluded by omission: both have top-level homes on EntryMetadata, and a second copy
+ * would give the reader two sources for one value.
  */
 export function buildStateReport(args: BuildReportArgs): EntryMetadata['stateReport'] {
   const { layer, block, failures, raw, applied } = args

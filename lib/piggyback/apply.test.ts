@@ -63,6 +63,32 @@ describe('buildPiggybackActions', () => {
     })
   })
 
+  it('carries an emitted retrievalQueries onto the entry metadata', () => {
+    const result = buildPiggybackActions({
+      source: 'ai_classifier',
+      entryId: 'entry_1',
+      block: { sceneEntities: [], retrievalQueries: ['marsh nobility'] },
+      entities: [],
+      previousMetadata,
+      branchId: 'main',
+    })
+
+    expect(result.metadata.retrievalQueries).toEqual(['marsh nobility'])
+  })
+
+  it('leaves retrievalQueries absent when the block emitted none', () => {
+    const result = buildPiggybackActions({
+      source: 'ai_classifier',
+      entryId: 'entry_1',
+      block: { sceneEntities: [] },
+      entities: [],
+      previousMetadata,
+      branchId: 'main',
+    })
+
+    expect(result.metadata).not.toHaveProperty('retrievalQueries')
+  })
+
   it('promotes staged entities named in sceneEntities', () => {
     const stagedChar = mockEntity({ id: 'char_staged', status: 'staged' })
     const activeChar = mockEntity({ id: 'char_active', status: 'active' })
