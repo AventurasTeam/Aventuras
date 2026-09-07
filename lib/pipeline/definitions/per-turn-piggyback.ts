@@ -85,7 +85,7 @@ export const fallbackClassifierSchema = z.object({
     .string()
     .optional()
     .describe(
-      'One sentence summarizing what happened in this reply. Used verbatim as a retrieval query next turn, so name the people, places and things that mattered.',
+      'One sentence summarizing what happened in this turn. Used verbatim as a retrieval query next turn, so identify the people, places and things that mattered by name, not ID.',
     ),
 })
 

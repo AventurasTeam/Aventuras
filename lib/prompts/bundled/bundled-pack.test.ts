@@ -68,15 +68,13 @@ describe('bundled pack', () => {
     expect(classifier + refresh).not.toContain('<suggestions>')
   })
 
-  it('asks the fallback classifier for the one-sentence summary it must write', () => {
+  it('asks the fallback classifier for the one-sentence summary Q3 retrieval needs', () => {
     const context = {
       entities: [],
       lastTurns: [{ content: 'The gate groaned open.' }],
     }
     const classifier = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, context)
 
-    // An undescribed schema field with no prompt instruction is a field the model
-    // never fills; summary now carries a fifth of the retrieval blend (Q3).
     expect(classifier).toMatch(/one[- ]sentence summary/i)
   })
 })

@@ -1871,14 +1871,10 @@ describe('per-turn-piggyback', () => {
 
   describe('fallbackClassifierSchema', () => {
     it('describes the summary field so the description survives into the emitted JSON schema', () => {
-      const jsonSchema = z.toJSONSchema(fallbackClassifierSchema) as {
-        properties?: Record<string, { description?: string }>
-      }
+      const jsonSchema = z.toJSONSchema(fallbackClassifierSchema)
+      const summary = jsonSchema.properties?.summary
 
-      // Structured output only sees a field's .describe() text, not its name or
-      // position — an undescribed field is silently indistinguishable to the model
-      // from one it can skip.
-      expect(jsonSchema.properties?.summary?.description).toBeTruthy()
+      expect(typeof summary === 'object' ? summary.description : undefined).toBeTruthy()
     })
   })
 
