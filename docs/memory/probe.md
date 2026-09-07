@@ -139,9 +139,17 @@ Per capture:
   — the share of its own top-K that the structural floor had already
   seated. That number is the only way to tell a degenerate query from a
   useful one after the fact, which is the failure the removed
-  prose-extract slot could never report. Query **vectors are never
-  stored**, in either mode — see
-  [Deep mode](#deep-mode-per-capture-opt-in).
+  prose-extract slot could never report. The cut is the **ten nearest
+  rows**, merged across
+  [the kinds the floor can seat](./retrieval.md#structural-floor--always-inject)
+  — entities, lore and threads, and no others — and `redundancy_k`
+  stores the realised size of that cut beside the ratio. Both are
+  needed: at small `k` the ratio describes the corpus as much as the
+  query, since one duplicate reads as 0.33 over three rows and 0.10
+  over ten, and `funnels.pool_size` cannot stand in for the
+  denominator because that is the post-filter pool rather than the cut
+  the ratio was taken over. Query **vectors are never stored**, in
+  either mode — see [Deep mode](#deep-mode-per-capture-opt-in).
 - **Keyword scan surface.** `scan_text` — the narrative text
   `kw_boost_value` was matched against, per
   [`retrieval.md → Keyword scan surface`](./retrieval.md#keyword-scan-surface).

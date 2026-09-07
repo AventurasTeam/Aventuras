@@ -241,11 +241,17 @@ template (sceneEntities count, location, active thread count).
 **Q4 carries a redundancy ratio per query**, the share of that query's
 own top-K the structural floor had already seated — see
 [`retrieval.md → Redundancy`](../../../memory/retrieval.md#redundancy--reporting-a-degenerate-query).
+The top-K is ten rows, which is what the "n of 10" reading above
+renders; the panel shows the captured `redundancy_k` rather than a
+literal 10, because a corpus too small to fill the cut realises fewer.
 It is the panel's most load-bearing number: a high ratio means the
 model asked for context the turn already had, and the query spent its
 weight retrieving duplicates. Ratios above a warn threshold carry the
 ⚠ marker so a degenerate emission is visible at a glance rather than
-requiring the reader to cross-reference the floor tab by hand.
+requiring the reader to cross-reference the floor tab by hand. **The
+threshold itself is unset** — the pinned cut makes one meaningful, but
+no value exists in canon or in code, so the ⚠ rule is a placeholder
+until one is chosen.
 
 #### Per-type tabs (Entities / Lore / Happenings / Threads / Chapter summaries)
 
