@@ -133,8 +133,8 @@ const ABSENT_QUERY_STACK = buildQueryStack({
 // needs candidate-vs-candidate cosines, and every other simulation re-blends
 // the per-row `sims` (probe.md → Deep mode).
 //
-// `redundancy` is indexed defensively: a pass that failed before KNN carries an
-// empty array beside a three-slot stack.
+// `redundancy` is indexed defensively: a partial with no stack of its own carries
+// an empty array beside ABSENT_QUERY_STACK's three specs.
 const queriesOf = (
   stack: QueryStack | null,
   redundancy: readonly (QueryRedundancy | null)[],

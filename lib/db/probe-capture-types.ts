@@ -90,10 +90,10 @@ type CaptureQuery = {
    */
   redundancy: number | null
   /**
-   * The top-K size `redundancy` was measured over — that query's KNN cut unioned over
-   * the three kinds the floor can seat, so its ceiling is 3 × KNN_K, not KNN_K. Stored
-   * because at small `k` the ratio describes the corpus rather than the query, and
-   * nothing else in the capture says so — `funnels.pool_size` is the post-filter size.
+   * The realised size of the cut `redundancy` was measured over, below REDUNDANCY_K
+   * only on a corpus too small to fill it. Stored because at small `k` the ratio
+   * describes the corpus rather than the query, and nothing else in the capture says
+   * so — `funnels.pool_size` is the post-filter size, not this.
    */
   redundancy_k: number | null
 }

@@ -397,6 +397,13 @@ describe('buildCapturePayload', () => {
     expect(emittedPayload.queries[3].text).toBe('House Eldrin')
   })
 
+  // Literally 0, not null: near-0 is the BEST case (retrieval.md → Redundancy — it
+  // surfaced something the floor did not), so a falsy-collapsing `||` here would
+  // erase exactly the signal the field exists to carry.
+  it('keeps a zero redundancy ratio as 0 rather than collapsing it to null', () => {
+    expect(emittedPayload.queries[3]).toMatchObject({ redundancy: 0, redundancy_k: 1 })
+  })
+
   it('stores per-row sims as a list aligned with the query list', () => {
     const row = emittedPayload.pools.lore[0]
     expect(row.sims).toEqual([0.95, 0.9, null, 0.7])
@@ -440,21 +447,22 @@ describe('buildCapturePayload', () => {
     ])
   })
 
-  // A pass that failed before KNN carries an empty array while its stack still
-  // has three specs; reading past the end must not produce undefined in the payload.
-  it('nulls redundancy on a failed pass whose stack outlives its measurement', () => {
+  // A sync-stage failure reaches no stack at all, so the payload falls back to
+  // ABSENT_QUERY_STACK's three specs beside an empty measurement array; reading
+  // past the end must not produce undefined in the payload.
+  it('nulls redundancy on a failed pass that never built a query stack', () => {
     const payload = buildCapturePayload({
       ...identity,
       mode: 'light',
       settings,
       params: RANKER_DEFAULTS,
-      outcome: retrievalFailure(
-        { reason: 'call', detail: 'KNN blew up', staleCount: null },
-        { queries: queryStack(), queryRedundancy: [] },
-      ),
+      outcome: retrievalFailure({ reason: 'call', detail: 'sync blew up', staleCount: null }),
     })
 
-    expect(payload.queries.every((q) => q.redundancy === null)).toBe(true)
+    expect(payload.queries).toHaveLength(3)
+    expect(payload.queries.every((q) => q.redundancy === null && q.redundancy_k === null)).toBe(
+      true,
+    )
   })
 
   it('prices each query with the real tokenizer', () => {
