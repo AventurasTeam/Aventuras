@@ -1,4 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { z } from 'zod'
 
 import { APP_SETTINGS_DEFAULTS, STORY_SETTINGS_DEFAULTS, type StorySettings } from '@/lib/db'
 import { logger, makeLogger } from '@/lib/diagnostics'
@@ -1865,6 +1866,19 @@ describe('per-turn-piggyback', () => {
         'classifier.suggestions_fallback_parse_failed',
         expect.anything(),
       )
+    })
+  })
+
+  describe('fallbackClassifierSchema', () => {
+    it('describes the summary field so the description survives into the emitted JSON schema', () => {
+      const jsonSchema = z.toJSONSchema(fallbackClassifierSchema) as {
+        properties?: Record<string, { description?: string }>
+      }
+
+      // Structured output only sees a field's .describe() text, not its name or
+      // position — an undescribed field is silently indistinguishable to the model
+      // from one it can skip.
+      expect(jsonSchema.properties?.summary?.description).toBeTruthy()
     })
   })
 
