@@ -157,8 +157,12 @@ function parseTransfers(segment: string): ParsedTransfers {
 // full extra structured call, and spending one to recover an optional retrieval hint
 // inverts the cost of the recovery it triggers (piggyback.md → Parse strategy). Never
 // calls assertNotTruncated. Returns undefined rather than [] so a block carrying
-// nothing else stays "empty" and the fallback still fires.
+// nothing else stays "empty" and the fallback still fires. Dedupes before capping
+// because emittedSpecs (lib/retrieval/queries.ts) counts distinct queries toward its
+// cap — a cap that counted repeats would spend a stored slot on a duplicate and drop
+// a distinct ask.
 function parseRetrievalQueries(segment: string): string[] | undefined {
+  const seen = new Set<string>()
   const out: string[] = []
   const re = new RegExp(
     `<${RETRIEVAL_QUERY_ITEM_TAG}>([\\s\\S]*?)</${RETRIEVAL_QUERY_ITEM_TAG}>`,
@@ -166,7 +170,8 @@ function parseRetrievalQueries(segment: string): string[] | undefined {
   )
   for (const match of segment.matchAll(re)) {
     const text = match[1]?.trim()
-    if (text === undefined || text === '') continue
+    if (text === undefined || text === '' || seen.has(text)) continue
+    seen.add(text)
     out.push(text)
     if (out.length === MAX_RETRIEVAL_QUERIES) break
   }
@@ -204,16 +209,15 @@ export function parseStateBlock(raw: string): ParseStateBlockResult {
     if (segment === undefined) continue
     try {
       const value = parse(segment)
-      // Only parseRetrievalQueries returns undefined, and only when it read no usable
-      // query. Assigning the key anyway would make Object.keys below non-empty, so a
-      // block carrying nothing else would read as a clean parse and suppress the
-      // fallback it needs.
-      if (value === undefined)
+      // Object.keys below judges the block empty, so assigning an undefined key would
+      // make a block carrying nothing else read as a clean parse and lose its fallback.
+      if (value === undefined) {
         continue
-        // FIELD_PARSERS correlates each `field` with a `parse` producing its
-        // matching value type by construction, but that pairing is erased once
-        // collected into one array — narrower than `any`, still an intentional
-        // escape hatch for a heterogeneous field-descriptor list.
+      }
+      // FIELD_PARSERS correlates each `field` with a `parse` producing its
+      // matching value type by construction, but that pairing is erased once
+      // collected into one array — narrower than `any`, still an intentional
+      // escape hatch for a heterogeneous field-descriptor list.
       ;(block as Record<string, unknown>)[field] = value
     } catch (e) {
       failures.push({ field, detail: e instanceof Error ? e.message : String(e) })

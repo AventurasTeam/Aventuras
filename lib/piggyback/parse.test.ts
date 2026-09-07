@@ -19,6 +19,10 @@ const WELL_FORMED = `Some narrative prose here.
     <stackable key="gold" amount="50" to="c1" from="c3" />
   </transfers>
   <summary>Aria pushed into the marshes.</summary>
+  <retrieval_queries>
+    <query>House Eldrin's history and its sigil</query>
+    <query>exiled nobility of the marshes</query>
+  </retrieval_queries>
 </state>`
 
 describe('parseStateBlock', () => {
@@ -39,6 +43,7 @@ describe('parseStateBlock', () => {
         stackables: [{ key: 'gold', amount: 50, to: 'c1', from: 'c3' }],
       },
       summary: 'Aria pushed into the marshes.',
+      retrievalQueries: ["House Eldrin's history and its sigil", 'exiled nobility of the marshes'],
     })
   })
 
@@ -203,6 +208,17 @@ describe('parseStateBlock', () => {
 
     it('caps the emission at MAX_RETRIEVAL_QUERIES', () => {
       const queries = ['a', 'b', 'c', 'd'].map((q) => `<query>${q}</query>`).join('')
+      const { block: parsed } = parseStateBlock(
+        block(`<retrieval_queries>${queries}</retrieval_queries>`),
+      )
+      expect(parsed.retrievalQueries).toEqual(['a', 'b', 'c'])
+    })
+
+    // The cap counts DISTINCT queries, matching emittedSpecs (lib/retrieval/queries.ts).
+    // A cap that counted repeats would spend a stored slot on a duplicate and silently
+    // drop the distinct ask behind it.
+    it('dedupes before capping, so a repeat does not cost a distinct query its slot', () => {
+      const queries = ['a', 'a', 'b', 'c'].map((q) => `<query>${q}</query>`).join('')
       const { block: parsed } = parseStateBlock(
         block(`<retrieval_queries>${queries}</retrieval_queries>`),
       )

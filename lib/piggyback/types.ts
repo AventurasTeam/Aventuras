@@ -27,9 +27,8 @@ type _VisualCategoriesMatch = [VisualChangeType] extends [(typeof VISUAL_CATEGOR
 const _visualChecks: [_VisualCategoriesMatch] = [true]
 void _visualChecks
 
-// retrieval.md → Q4. Stated a second time in lib/retrieval's MAX_EMITTED_QUERIES,
-// which lib/piggyback cannot import: scripts/mock-llm loads this module under plain
-// Node, so a value import would drag the retrieval barrel in. parse.test.ts pins them equal.
+// retrieval.md → Q4. Restated from lib/retrieval's MAX_EMITTED_QUERIES, which this module
+// cannot value-import for the reason above; parse.test.ts pins them equal.
 export const MAX_RETRIEVAL_QUERIES = 3
 
 export type VisualChangeNote = { id: string; type: VisualChangeType; text: string }
