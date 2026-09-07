@@ -26,24 +26,26 @@ describe('retrieval cost', () => {
   for (const dim of [384, 768]) {
     for (const scale of SCALES) {
       for (const chapterBudget of ['on', 'off'] as const) {
-        it(`dim ${dim} — ${scale.label} — boost ${chapterBudget}`, async () => {
-          // A pass that throws mid-run must still drop its handle and temp dir:
-          // the run is 12 fixtures, each a file-backed db under tmpdir.
-          let sqlite: DatabaseSync | undefined
-          let dir: string | undefined
-          try {
-            const fixture = build(scale, dim)
-            sqlite = fixture.sqlite
-            dir = fixture.dir
-            await measure(fixture, dim, scale, chapterBudget)
-          } finally {
+        for (const emitted of [0, 3]) {
+          it(`dim ${dim} — ${scale.label} — boost ${chapterBudget} — Q4 ${emitted}`, async () => {
+            // A pass that throws mid-run must still drop its handle and temp dir:
+            // the run is 24 fixtures, each a file-backed db under tmpdir.
+            let sqlite: DatabaseSync | undefined
+            let dir: string | undefined
             try {
-              sqlite?.close()
+              const fixture = build(scale, dim)
+              sqlite = fixture.sqlite
+              dir = fixture.dir
+              await measure(fixture, dim, scale, chapterBudget, emitted)
             } finally {
-              if (dir !== undefined) rmSync(dir, { recursive: true, force: true })
+              try {
+                sqlite?.close()
+              } finally {
+                if (dir !== undefined) rmSync(dir, { recursive: true, force: true })
+              }
             }
-          }
-        }, 300_000)
+          }, 300_000)
+        }
       }
     }
   }
@@ -54,8 +56,9 @@ async function measure(
   dim: number,
   scale: Scale,
   chapterBudget: 'on' | 'off',
+  emitted: number,
 ): Promise<void> {
-  const { deps, params } = passInputs(fixture, dim, chapterBudget)
+  const { deps, params } = passInputs(fixture, dim, chapterBudget, emitted)
 
   const samples: Record<string, number>[] = []
   let funnels = ''
@@ -72,7 +75,7 @@ async function measure(
     .map((k) => `${k.replace('Ms', '')}=${median(samples.map((s) => s[k]!)).toFixed(1)}`)
     .join('  ')
   process.stdout.write(
-    `  dim=${dim} ${scale.label.padEnd(16)} boost=${chapterBudget.padEnd(3)} ${line}\n` +
+    `  dim=${dim} ${scale.label.padEnd(16)} boost=${chapterBudget.padEnd(3)} q4=${emitted} ${line}\n` +
       `    pools ${funnels}\n`,
   )
 }

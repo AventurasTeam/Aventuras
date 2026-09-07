@@ -338,20 +338,23 @@ export function passInputs(
   { sqlite, sceneCharacterIds, centroids }: Fixture,
   dim: number,
   chapterBudget: 'on' | 'off' = 'on',
+  emitted: number = 0,
 ) {
   const queryAll: QueryAll = async (sql, params) =>
     (sqlite.prepare(sql).all(...(params as never[])) as Record<string, unknown>[]).map((r) =>
       Object.values(r),
     )
   const rand = seededRandom(7)
-  // Each query sits near a different topic, so the three of them together
-  // reach a realistic slice of the pool rather than all of it or none.
-  const queryVectors = [0, 0, 0].map((t) => topical(centroids, t, rand, 0.9))
+  // One vector per live slot, each near a DIFFERENT topic. All three previously sat
+  // on centroid 0 and differed only by noise draw, so their KNN top-200 sets largely
+  // coincided — the pool union, and the ranker cost that scales with it, read
+  // optimistic in the very table this fixture prices. TOPICS is 12, so six fit.
+  const queryVectors = [0, 1, 2, 3, 4, 5].map((t) => topical(centroids, t, rand, 0.9))
 
   const deps = {
     queryAll,
     embedTexts: async (texts: string[]) => ({
-      vectors: texts.map((_, i) => queryVectors[i % 3]!),
+      vectors: texts.map((_, i) => queryVectors[i % queryVectors.length]!),
       dim,
     }),
     loadStaleRows: async () => [],
@@ -372,8 +375,11 @@ export function passInputs(
     query: {
       userAction,
       eraName: null,
-      // Non-null so all three queries stay live — steady-state, not the turn-1 cold start.
+      // Non-null so all three fixed queries stay live — steady-state, not the turn-1 cold start.
       piggybackSummary: prose(rand, 20),
+      // retrieval.md → Q4. 0 is the pre-PR-2 regime, 3 the worst case the cost
+      // budget has to hold at.
+      emittedQueries: Array.from({ length: emitted }, (_, i) => `${prose(rand, 8)} ${i}`),
     },
     sceneCharacterIds,
     sceneEntityIds: sceneCharacterIds,
