@@ -13,17 +13,22 @@ export const NARRATOR_REINFORCEMENT_VAR = 'narratorReinforcement'
 const LIQUID_COMMENT =
   /\{%-?\s*comment\s*-?%\}[\s\S]*?\{%-?\s*endcomment\s*-?%\}|\{%-?\s*#[\s\S]*?%\}/g
 
+/** Tags and output expressions — the only places a template can read a variable. */
+const LIQUID_EXPRESSION = /\{%-?[\s\S]*?-?%\}|\{\{-?[\s\S]*?-?\}\}/g
+
 /**
  * Whether a template would honour the setting at all.
  *
- * A bare mention rather than a `{{ }}` match: the level is branched on, so it appears in
+ * Any tag rather than a `{{ }}` match: the level is branched on, so it appears in
  * `{% if %}`, `{% case %}` or `{% unless %}` as readily as in an output tag. Comments are
- * removed first, so a branch someone commented out does not report the setting as working.
+ * removed and prose is ignored, so neither a branch someone commented out nor the variable's
+ * name written in the prompt text reports the setting as working.
  */
 export function templateUsesNarratorReinforcement(content: string | null | undefined): boolean {
   if (!content) return false
   const active = content.replace(LIQUID_COMMENT, '')
-  return new RegExp(`\\b${NARRATOR_REINFORCEMENT_VAR}\\b`).test(active)
+  const reference = new RegExp(`\\b${NARRATOR_REINFORCEMENT_VAR}\\b`)
+  return (active.match(LIQUID_EXPRESSION) ?? []).some((expression) => reference.test(expression))
 }
 
 /** The two prompts a turn sends, as the bodies that will actually run. */

@@ -160,3 +160,31 @@ describe('templateUsesNarratorReinforcement — comments do not count', () => {
     expect(templateUsesNarratorReinforcement(adventure?.userContent)).toBe(true)
   })
 })
+
+describe('templateUsesNarratorReinforcement — prose does not count', () => {
+  it('ignores the variable name written as prose', () => {
+    expect(
+      templateUsesNarratorReinforcement(
+        'Your narratorReinforcement level decides how much this prompt repeats.',
+      ),
+    ).toBe(false)
+  })
+
+  it('ignores it inside a quoted mention in prose', () => {
+    expect(templateUsesNarratorReinforcement('Set "narratorReinforcement" to none.')).toBe(false)
+  })
+
+  it('still sees a real branch alongside prose that names it', () => {
+    expect(
+      templateUsesNarratorReinforcement(
+        `Docs: narratorReinforcement picks a level.{% if narratorReinforcement == 'full' %}x{% endif %}`,
+      ),
+    ).toBe(true)
+  })
+
+  it('sees it in a tag split across lines', () => {
+    expect(
+      templateUsesNarratorReinforcement(`{% if\n  narratorReinforcement == 'full'\n%}x{% endif %}`),
+    ).toBe(true)
+  })
+})
