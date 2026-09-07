@@ -22,12 +22,9 @@ export const NO_SCROLL_LOCK_ATTR = 'data-no-scroll-lock'
  * Everything in this stack that legitimately holds a body lock, as it appears in the DOM.
  *
  * `bits-ui` resolves `preventScroll ?? true`, so dialog, alert-dialog, context-menu and
- * dropdown/menu lock. Popover, select and tooltip opt out upstream; a sub-menu shares
- * `MenuContentState` and so looks identical here, and is excluded by the same marker the
- * app's own dropdowns carry. `vaul` locks its own way.
- *
- * `[data-state]` is what separates a library-owned overlay from a hand-rolled one with the
- * same ARIA role, which holds no lock and must not be able to veto recovery.
+ * dropdown/menu lock; a sub-menu does not, but looks identical, hence the marker.
+ * `[data-state]` separates these from a hand-rolled overlay with the same role, which holds
+ * no lock and must not veto recovery.
  */
 const OVERLAY_CLAUSES = [
   '[role="dialog"]',
@@ -39,7 +36,6 @@ const OVERLAY_CLAUSES = [
 const OPEN_OVERLAY_SELECTOR = OVERLAY_CLAUSES.map((c) => `${c}[data-state="open"]`).join(', ')
 const CLOSING_OVERLAY_SELECTOR = OVERLAY_CLAUSES.map((c) => `${c}[data-state="closed"]`).join(', ')
 
-/** When each closing overlay was first seen, so the grace below is measured from somewhere. */
 const closingSince = new WeakMap<Element, number>()
 
 /** Is a closing overlay still within the window where it may hold its lock? */
@@ -48,26 +44,41 @@ export function isWithinCloseGrace(since: number, now: number): boolean {
 }
 
 /**
- * Is anything on screen entitled to be holding the body lock right now?
+ * Is any of these entitled to hold the body lock?
  *
- * A closing overlay still owns its lock — the owner unmounts with the element, not with the
- * state flip — so it counts, but only until its exit has had time to finish. `bits-ui` drops
- * the element from an animation callback, and a WebView that never delivers one would
- * otherwise leave a node at `data-state="closed"` vetoing recovery for the rest of the session.
+ * A closing overlay still owns its lock, since the owner unmounts with the element rather than
+ * with the state flip — but only until its exit could have finished, or a node stalled at
+ * `closed` would veto recovery for the rest of the session. Reopening clears the clock: the
+ * same element can close, reopen and close again, and the second close starts over.
  */
-function hasOpenOverlay(): boolean {
-  if (document.querySelector(OPEN_OVERLAY_SELECTOR) !== null) return true
+export function hasEntitledOwner<T extends object>(
+  open: readonly T[],
+  closing: readonly T[],
+  since: WeakMap<T, number>,
+  now: number,
+): boolean {
+  for (const el of open) since.delete(el)
+  if (open.length > 0) return true
 
-  const now = Date.now()
-  for (const el of document.querySelectorAll(CLOSING_OVERLAY_SELECTOR)) {
-    const since = closingSince.get(el)
-    if (since === undefined) {
-      closingSince.set(el, now)
+  for (const el of closing) {
+    const seen = since.get(el)
+    if (seen === undefined) {
+      since.set(el, now)
       return true
     }
-    if (isWithinCloseGrace(since, now)) return true
+    if (isWithinCloseGrace(seen, now)) return true
   }
   return false
+}
+
+/** Is anything on screen entitled to be holding the body lock right now? */
+function hasOpenOverlay(): boolean {
+  return hasEntitledOwner(
+    Array.from(document.querySelectorAll(OPEN_OVERLAY_SELECTOR)),
+    Array.from(document.querySelectorAll(CLOSING_OVERLAY_SELECTOR)),
+    closingSince,
+    Date.now(),
+  )
 }
 
 /**
