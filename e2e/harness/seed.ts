@@ -213,6 +213,25 @@ export function setClassifierCadence(dbPath: string, storyId: string, cadence: n
   }
 }
 
+// Arm the story half of the probe's two gates (the app half is enableDiagnostics).
+// Both must be on before a turn writes a capture. Runs before launch.
+export function enableStoryProbeMode(dbPath: string, storyId: string): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    const row = db.prepare(`SELECT settings FROM stories WHERE id = ?`).get(storyId) as {
+      settings: string
+    }
+    const settings = JSON.parse(row.settings) as Record<string, unknown>
+    settings.probe_mode_active = true
+    db.prepare(`UPDATE stories SET settings = ? WHERE id = ?`).run(
+      JSON.stringify(settings),
+      storyId,
+    )
+  } finally {
+    db.close()
+  }
+}
+
 function parkWatermark(db: DatabaseSync, branchId: string, processedThrough: number): void {
   db.prepare(
     `UPDATE branches SET classifier_status = json_set(
