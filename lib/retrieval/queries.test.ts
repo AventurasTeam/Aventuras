@@ -235,9 +235,29 @@ describe('emitted Q4 queries', () => {
     ])
   })
 
+  it('does not spend a cap slot on an emission it drops', () => {
+    const s = buildQueryStack({ ...base, emittedQueries: ['', 'a', 'b', 'c'] })
+    expect(s.specs.filter((q) => q.source === 'classifier_emitted').map((q) => q.text)).toEqual([
+      'a',
+      'b',
+      'c',
+    ])
+  })
+
   it('caps an oversized emission rather than embedding it whole', () => {
     const s = buildQueryStack({ ...base, emittedQueries: ['x'.repeat(500)] })
     expect(s.specs.at(-1)?.text).toBe('x'.repeat(200))
+  })
+
+  it('caps before deduplicating, so two oversized emissions can collapse to one', () => {
+    const shared = 'x'.repeat(200)
+    const s = buildQueryStack({
+      ...base,
+      emittedQueries: [`${shared} alpha`, `${shared} beta`],
+    })
+    expect(s.specs.filter((q) => q.source === 'classifier_emitted').map((q) => q.text)).toEqual([
+      shared,
+    ])
   })
 
   it('embeds an emitted query and marks its slot present', () => {
