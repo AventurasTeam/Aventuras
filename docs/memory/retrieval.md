@@ -870,6 +870,15 @@ over exactly the kinds the
 [structural floor](#structural-floor--always-inject) can seat, and no
 others.
 
+**The denominator moves with `keywordRetrieval.mode`.** It counts
+only `floor.seatedIds`, which is exact under the default `boost`
+mode but excludes rows [keyword injection](#keyword-injection) seats
+under `inject`, so a query can ask for something the prompt already
+carries via injection and still score near 0. Not a defect — canon's
+"structural floor" means the floor, not the full prompt — but it is
+a caveat whoever eventually sets the warn threshold will need to
+weigh.
+
 **The realised `k` travels with the ratio.** A corpus too small to fill
 the cut yields fewer than ten rows, and one duplicate in three is not
 the same evidence as one in ten. The probe stores both
@@ -1940,6 +1949,10 @@ saturated)** and the second are the same pass with the Q4 slot at its
 cap of three emitted queries, which is the worst case the budget has to
 hold at. Lower scales are cheaper roughly in proportion: at `q4=0`,
 ~68ms / ~126ms at 1200 happenings and ~110ms / ~179ms at 3600.
+`rankMs` carries no `q4` axis because it does not move with query
+count — the pre-filter caps what gets scored before ranking runs
+regardless of how many query vectors fed KNN. Measured at dim 384:
+~41.7ms at `q4=0` versus ~41.9ms at `q4=3`.
 
 **Why the shipped figures moved.** The bench fixture built all three
 query vectors on one topic centroid — the topic index was mapped over
@@ -1976,10 +1989,10 @@ not:
   endpoints measured under the pre-fix fixture, so read the drop and
   not the figures. The saving is not separately quotable: tokenization
   runs inside the same kept-row map that feeds MMR, so the two rows
-  this table used to carry are one row and one `rankMs` span. Scoring and the sort do
-  still walk the whole pool — the bench's 477-row swing between boost
-  on and off moves `rankMs` by ~1ms, which is what "scales with pool
-  size" is now worth here.
+  this table used to carry are one row and one `rankMs` span. Scoring
+  and the sort do still walk the whole pool — the bench's 477-row
+  swing between boost on and off moves `rankMs` by ~1ms, which is what
+  "scales with pool size" is now worth here.
 - **MMR is not the problem it looked like.** The measured ~6.5ms per
   type at N=200 is real, but only happenings reaches 200 in a typical
   story: entities, lore and threads are human-authored and sit in the
@@ -2036,8 +2049,8 @@ per-query KNN numbers under
 [Performance characteristics](#performance-characteristics--poc-findings)
 are the only mobile evidence and they predate the shipped pass, which
 issues five KNN passes per live query rather than three total — up to
-thirty with Q4 at its cap. Nothing has run the ranker on-device. Treat the mobile budget as open, not as a scaled
-copy of this table.
+thirty with Q4 at its cap. Nothing has run the ranker on-device.
+Treat the mobile budget as open, not as a scaled copy of this table.
 
 ### Pseudocode
 
