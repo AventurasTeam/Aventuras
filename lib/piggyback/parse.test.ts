@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
+import { MAX_EMITTED_QUERIES } from '@/lib/retrieval'
+
 import { parseStateBlock, parseSuggestionsBlock, stripTrailingBlocks } from './parse'
+import { MAX_RETRIEVAL_QUERIES } from './types'
 
 const WELL_FORMED = `Some narrative prose here.
 <state>
@@ -169,6 +172,63 @@ describe('parseStateBlock', () => {
     const result = parseStateBlock('<state><summary>Kael left.</summary></state>')
     expect(result.block).toEqual({ summary: 'Kael left.' })
     expect(result.failures).toEqual([])
+  })
+
+  // retrieval.md → Q4 and piggyback.md → Parse strategy both state this exception,
+  // because it reads like an inconsistency someone will later "fix": every other
+  // nested-tag field here throws when content resolves to no entries, which fires a
+  // full extra structured call. Spending one to recover an optional retrieval hint
+  // inverts the cost of the recovery it triggers, so this parser must never raise.
+  describe('<retrieval_queries> — total by contract', () => {
+    const block = (inner: string) => `prose\n<state>\n${inner}\n</state>`
+
+    it('extracts the emitted queries in order', () => {
+      const { block: parsed, failures } = parseStateBlock(
+        block(
+          '<retrieval_queries><query>House Eldrin sigil</query><query>marsh nobility</query></retrieval_queries>',
+        ),
+      )
+      expect(parsed.retrievalQueries).toEqual(['House Eldrin sigil', 'marsh nobility'])
+      expect(failures).toEqual([])
+    })
+
+    it.each([
+      ['unterminated children', '<retrieval_queries><query>House Eldrin'],
+      ['no children at all', '<retrieval_queries>just prose here</retrieval_queries>'],
+      ['empty children', '<retrieval_queries><query></query><query>  </query></retrieval_queries>'],
+    ])('records no failure for %s', (_label, inner) => {
+      const { failures } = parseStateBlock(block(`<summary>s</summary>${inner}`))
+      expect(failures).toEqual([])
+    })
+
+    it('caps the emission at MAX_RETRIEVAL_QUERIES', () => {
+      const queries = ['a', 'b', 'c', 'd'].map((q) => `<query>${q}</query>`).join('')
+      const { block: parsed } = parseStateBlock(
+        block(`<retrieval_queries>${queries}</retrieval_queries>`),
+      )
+      expect(parsed.retrievalQueries).toEqual(['a', 'b', 'c'])
+    })
+
+    // The cap is stated in two modules that cannot import one another (see
+    // MAX_RETRIEVAL_QUERIES' comment). Drift here means storage and the query
+    // stack disagree about how many asks a turn gets.
+    it('caps at the same number the query stack embeds', () => {
+      expect(MAX_RETRIEVAL_QUERIES).toBe(MAX_EMITTED_QUERIES)
+    })
+
+    // Not cosmetic: parseStateBlock judges an empty block on Object.keys(block).length,
+    // so a key set to undefined would read as a clean parse and suppress the fallback
+    // this turn needs — losing every other field with it.
+    it('leaves a state block carrying only an unusable retrieval_queries reported empty', () => {
+      const { block: parsed, failures } = parseStateBlock(
+        block('<retrieval_queries>nothing parseable</retrieval_queries>'),
+      )
+      expect(parsed.retrievalQueries).toBeUndefined()
+      expect(Object.keys(parsed)).toEqual([])
+      expect(failures).toEqual([
+        { field: 'state', detail: 'block content matched no known field tag' },
+      ])
+    })
   })
 })
 

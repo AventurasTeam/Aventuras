@@ -30,7 +30,7 @@ export const QUERY_SLOT_OF_SOURCE = {
 } as const satisfies Record<QuerySource, QuerySlot>
 
 /** retrieval.md → Q4: capped at three, and the cap is a cost decision. */
-const MAX_EMITTED_QUERIES = 3
+export const MAX_EMITTED_QUERIES = 3
 /** retrieval.md → Q4. A retrieval ask is phrase-shaped, far under any embedder input window. */
 const MAX_EMITTED_QUERY_CHARS = 200
 

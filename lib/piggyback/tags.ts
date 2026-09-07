@@ -6,7 +6,11 @@ export const STATE_TAGS = {
   visualChanges: 'visual_changes',
   transfers: 'transfers',
   summary: 'summary',
+  retrievalQueries: 'retrieval_queries',
 } as const
+
+/** The `<query>` children `<retrieval_queries>` nests. */
+export const RETRIEVAL_QUERY_ITEM_TAG = 'query'
 
 export const SUGGESTIONS_ROOT_TAG = 'suggestions'
 export const SUGGESTION_ITEM_TAG = 'item'

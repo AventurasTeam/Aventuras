@@ -3,13 +3,14 @@ import { jsonrepair } from 'jsonrepair'
 import type { StoryEntry } from '@/lib/db'
 
 import {
+  RETRIEVAL_QUERY_ITEM_TAG,
   STATE_ROOT_TAG,
   STATE_TAGS,
   SUGGESTION_ITEM_TAG,
   SUGGESTIONS_ROOT_TAG,
   TRAILING_ROOT_TAGS,
 } from './tags'
-import { VISUAL_CHANGE_TYPES } from './types'
+import { MAX_RETRIEVAL_QUERIES, VISUAL_CHANGE_TYPES } from './types'
 import type {
   ItemTransfer,
   SuggestionRef,
@@ -152,6 +153,26 @@ function parseTransfers(segment: string): ParsedTransfers {
   return { items, stackables }
 }
 
+// Total by contract, and the ONLY parser here that is: a field-level failure fires a
+// full extra structured call, and spending one to recover an optional retrieval hint
+// inverts the cost of the recovery it triggers (piggyback.md → Parse strategy). Never
+// calls assertNotTruncated. Returns undefined rather than [] so a block carrying
+// nothing else stays "empty" and the fallback still fires.
+function parseRetrievalQueries(segment: string): string[] | undefined {
+  const out: string[] = []
+  const re = new RegExp(
+    `<${RETRIEVAL_QUERY_ITEM_TAG}>([\\s\\S]*?)</${RETRIEVAL_QUERY_ITEM_TAG}>`,
+    'g',
+  )
+  for (const match of segment.matchAll(re)) {
+    const text = match[1]?.trim()
+    if (text === undefined || text === '') continue
+    out.push(text)
+    if (out.length === MAX_RETRIEVAL_QUERIES) break
+  }
+  return out.length === 0 ? undefined : out
+}
+
 type FieldParser = {
   field: keyof ParsedStateBlock
   tag: string
@@ -165,6 +186,7 @@ const FIELD_PARSERS: readonly FieldParser[] = [
   { field: 'visualChanges', tag: STATE_TAGS.visualChanges, parse: parseVisualChanges },
   { field: 'transfers', tag: STATE_TAGS.transfers, parse: parseTransfers },
   { field: 'summary', tag: STATE_TAGS.summary, parse: (s) => s.trim() },
+  { field: 'retrievalQueries', tag: STATE_TAGS.retrievalQueries, parse: parseRetrievalQueries },
 ]
 
 // Segment isolation + per-field best-effort parse: one failing top-level tag
@@ -182,10 +204,16 @@ export function parseStateBlock(raw: string): ParseStateBlockResult {
     if (segment === undefined) continue
     try {
       const value = parse(segment)
-      // FIELD_PARSERS correlates each `field` with a `parse` producing its
-      // matching value type by construction, but that pairing is erased once
-      // collected into one array — narrower than `any`, still an intentional
-      // escape hatch for a heterogeneous field-descriptor list.
+      // Only parseRetrievalQueries returns undefined, and only when it read no usable
+      // query. Assigning the key anyway would make Object.keys below non-empty, so a
+      // block carrying nothing else would read as a clean parse and suppress the
+      // fallback it needs.
+      if (value === undefined)
+        continue
+        // FIELD_PARSERS correlates each `field` with a `parse` producing its
+        // matching value type by construction, but that pairing is erased once
+        // collected into one array — narrower than `any`, still an intentional
+        // escape hatch for a heterogeneous field-descriptor list.
       ;(block as Record<string, unknown>)[field] = value
     } catch (e) {
       failures.push({ field, detail: e instanceof Error ? e.message : String(e) })
