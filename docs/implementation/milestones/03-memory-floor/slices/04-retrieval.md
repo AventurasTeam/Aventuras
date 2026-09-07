@@ -92,9 +92,9 @@ ranker without being able to move a score. See
   piggyback summary (`metadata.summary` handed off by 3.2's parse);
   and up to three Q4 classifier-emitted queries, empties dropped,
   capped at 200 characters before deduplication, sharing one pooled
-  `w_direct` rather than a weight each — built here, with nothing
-  emitting into the slot yet. Weight re-normalization over the live
-  slots; cold-start per canon.
+  `w_direct` rather than a weight each — the slot is built here, its
+  producer is not. Weight re-normalization over the live slots;
+  cold-start per canon.
 - **Pool build:** structural floor first (mode-dependent prompt
   buffer, active+in-scene, location, active threads, `always`
   rows), then per-type pools — three-sub-pool entity model,
