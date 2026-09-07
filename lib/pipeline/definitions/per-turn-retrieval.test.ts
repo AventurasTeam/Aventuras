@@ -296,9 +296,6 @@ const queryStack = (): QueryStack => {
     slots: ['action', 'digest', 'summary'],
     presence: [true, true, true],
     embedTexts: [...QUERY_TEXTS],
-    q1: specs[0],
-    q2: specs[1],
-    q3: specs[2],
   }
 }
 

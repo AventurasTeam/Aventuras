@@ -14,18 +14,18 @@ const base: QueryStackInput = {
 describe('buildQueryStack', () => {
   it('uses the user action verbatim as Q1', () => {
     const s = buildQueryStack(base)
-    expect(s.q1.text).toBe('I draw the blade and wait.')
+    expect(s.specs[0].text).toBe('I draw the blade and wait.')
     expect(s.presence[0]).toBe(true)
   })
 
   it('trims surrounding whitespace off the user action', () => {
     const s = buildQueryStack({ ...base, userAction: '  I draw the blade.\n' })
-    expect(s.q1.text).toBe('I draw the blade.')
+    expect(s.specs[0].text).toBe('I draw the blade.')
   })
 
   it('builds Q2 from the structural template', () => {
     const s = buildQueryStack(base)
-    expect(s.q2.text).toBe(
+    expect(s.specs[1].text).toBe(
       'Kara Vex, Mira, The Hollow.\nActive threads: Find the courier.\nEra: Third Age.',
     )
   })
@@ -35,23 +35,23 @@ describe('buildQueryStack', () => {
       ...base,
       activeThreadTitles: ['Find the courier', 'Repay the debt'],
     })
-    expect(s.q2.text).toContain('Kara Vex, Mira')
-    expect(s.q2.text).toContain('Active threads: Find the courier, Repay the debt.')
+    expect(s.specs[1].text).toContain('Kara Vex, Mira')
+    expect(s.specs[1].text).toContain('Active threads: Find the courier, Repay the debt.')
   })
 
   it('drops the location from the scene line when there is none', () => {
     const s = buildQueryStack({ ...base, currentLocationName: null })
-    expect(s.q2.text.split('\n')[0]).toBe('Kara Vex, Mira.')
+    expect(s.specs[1].text.split('\n')[0]).toBe('Kara Vex, Mira.')
   })
 
   it('opens the scene line with the location when there are no entities', () => {
     const s = buildQueryStack({ ...base, sceneEntityNames: [] })
-    expect(s.q2.text.split('\n')[0]).toBe('The Hollow.')
+    expect(s.specs[1].text.split('\n')[0]).toBe('The Hollow.')
   })
 
   it('drops the scene line entirely when there are neither entities nor a location', () => {
     const s = buildQueryStack({ ...base, sceneEntityNames: [], currentLocationName: null })
-    expect(s.q2.text).toBe('Active threads: Find the courier.\nEra: Third Age.')
+    expect(s.specs[1].text).toBe('Active threads: Find the courier.\nEra: Third Age.')
   })
 
   it('skips blank entity names and thread titles rather than rendering bare commas', () => {
@@ -60,7 +60,7 @@ describe('buildQueryStack', () => {
       sceneEntityNames: ['Kara Vex', '', '   ', 'Mira'],
       activeThreadTitles: ['', '  ', 'Find the courier'],
     })
-    expect(s.q2.text).toBe(
+    expect(s.specs[1].text).toBe(
       'Kara Vex, Mira, The Hollow.\nActive threads: Find the courier.\nEra: Third Age.',
     )
   })
@@ -73,43 +73,43 @@ describe('buildQueryStack', () => {
       activeThreadTitles: ['  Find the courier '],
       eraName: '  Third Age  ',
     })
-    expect(s.q2.text).toBe(
+    expect(s.specs[1].text).toBe(
       'Kara Vex, Mira, The Hollow.\nActive threads: Find the courier.\nEra: Third Age.',
     )
   })
 
   it('drops a whitespace-only location from the scene line', () => {
     const s = buildQueryStack({ ...base, currentLocationName: '   ' })
-    expect(s.q2.text.split('\n')[0]).toBe('Kara Vex, Mira.')
+    expect(s.specs[1].text.split('\n')[0]).toBe('Kara Vex, Mira.')
   })
 
   it('drops the threads line entirely when no thread is active', () => {
     const s = buildQueryStack({ ...base, activeThreadTitles: [] })
-    expect(s.q2.text).toBe('Kara Vex, Mira, The Hollow.\nEra: Third Age.')
+    expect(s.specs[1].text).toBe('Kara Vex, Mira, The Hollow.\nEra: Third Age.')
   })
 
   it('drops the era line entirely when there is no era', () => {
     const s = buildQueryStack({ ...base, eraName: null })
-    expect(s.q2.text).toBe('Kara Vex, Mira, The Hollow.\nActive threads: Find the courier.')
+    expect(s.specs[1].text).toBe('Kara Vex, Mira, The Hollow.\nActive threads: Find the courier.')
   })
 
   it('treats a blank or whitespace-only era the same as a missing one', () => {
     const expected = 'Kara Vex, Mira, The Hollow.\nActive threads: Find the courier.'
-    expect(buildQueryStack({ ...base, eraName: '' }).q2.text).toBe(expected)
-    expect(buildQueryStack({ ...base, eraName: '   ' }).q2.text).toBe(expected)
+    expect(buildQueryStack({ ...base, eraName: '' }).specs[1].text).toBe(expected)
+    expect(buildQueryStack({ ...base, eraName: '   ' }).specs[1].text).toBe(expected)
   })
 
   it('makes the piggyback summary Q3 rather than a line of the digest', () => {
     const s = buildQueryStack({ ...base, piggybackSummary: 'Aria fled into the marshes.' })
-    expect(s.q3.text).toBe('Aria fled into the marshes.')
-    expect(s.q3.source).toBe('piggyback_summary')
+    expect(s.specs[2].text).toBe('Aria fled into the marshes.')
+    expect(s.specs[2].source).toBe('piggyback_summary')
     // retrieval.md → Why it is not part of Q2.
-    expect(s.q2.text).not.toContain('Aria fled into the marshes.')
+    expect(s.specs[1].text).not.toContain('Aria fled into the marshes.')
   })
 
   it('marks Q3 absent when no summary was written', () => {
     const s = buildQueryStack({ ...base, piggybackSummary: null })
-    expect(s.q3.text).toBe('')
+    expect(s.specs[2].text).toBe('')
     expect(s.presence[2]).toBe(false)
     expect(s.embedTexts).not.toContain('')
   })
@@ -133,9 +133,9 @@ describe('buildQueryStack', () => {
       eraName: null,
       piggybackSummary: 'Aria fled into the marshes.',
     })
-    expect(s.q2.text).toBe('')
+    expect(s.specs[1].text).toBe('')
     expect(s.presence).toEqual([true, false, true])
-    expect(s.embedTexts).toEqual([s.q1.text, s.q3.text])
+    expect(s.embedTexts).toEqual([s.specs[0].text, s.specs[2].text])
   })
 
   it('marks Q2 absent when every structural field is whitespace only', () => {
@@ -146,7 +146,7 @@ describe('buildQueryStack', () => {
       activeThreadTitles: ['\t'],
       eraName: '   ',
     })
-    expect(s.q2.text).toBe('')
+    expect(s.specs[1].text).toBe('')
     expect(s.presence[1]).toBe(false)
   })
 
@@ -156,7 +156,7 @@ describe('buildQueryStack', () => {
       activeThreadTitles: [],
       eraName: null,
     })
-    expect(s.q2.text).toBe('Kara Vex, Mira, The Hollow.')
+    expect(s.specs[1].text).toBe('Kara Vex, Mira, The Hollow.')
     expect(s.presence[1]).toBe(true)
   })
 
@@ -175,7 +175,7 @@ describe('buildQueryStack', () => {
 
   it('labels each query with its probe-capture source', () => {
     const s = buildQueryStack(base)
-    expect([s.q1.source, s.q2.source, s.q3.source]).toEqual([
+    expect(s.specs.map((q) => q.source)).toEqual([
       'user_action',
       'structural_digest',
       'piggyback_summary',
@@ -188,17 +188,17 @@ describe('buildQueryStack', () => {
       userAction: '',
       piggybackSummary: 'Aria fled into the marshes.',
     })
-    expect(s.embedTexts).toEqual([s.q2.text, s.q3.text])
+    expect(s.embedTexts).toEqual([s.specs[1].text, s.specs[2].text])
   })
 
   it('lists all three as embed inputs when all three are present', () => {
     const s = buildQueryStack({ ...base, piggybackSummary: 'Aria fled into the marshes.' })
-    expect(s.embedTexts).toEqual([s.q1.text, s.q2.text, s.q3.text])
+    expect(s.embedTexts).toEqual([s.specs[0].text, s.specs[1].text, s.specs[2].text])
   })
 
   it('omits an absent Q3 from the embed inputs', () => {
     const s = buildQueryStack(base)
-    expect(s.embedTexts).toEqual([s.q1.text, s.q2.text])
+    expect(s.embedTexts).toEqual([s.specs[0].text, s.specs[1].text])
   })
 })
 
@@ -263,7 +263,7 @@ describe('emitted Q4 queries', () => {
   it('embeds an emitted query and marks its slot present', () => {
     const s = buildQueryStack({ ...base, emittedQueries: ['House Eldrin'] })
     expect(s.presence).toEqual([true, true, false, true])
-    expect(s.embedTexts).toEqual([s.q1.text, s.q2.text, 'House Eldrin'])
+    expect(s.embedTexts).toEqual([s.specs[0].text, s.specs[1].text, 'House Eldrin'])
   })
 
   it('records the fixed three even when all are absent, so the probe can render them', () => {

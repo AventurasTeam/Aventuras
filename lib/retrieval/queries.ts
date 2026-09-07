@@ -41,9 +41,6 @@ export type QueryStack = {
   presence: QueryTextPresence
   /** Present queries only, in slot order — the batched embed input. */
   embedTexts: string[]
-  q1: QuerySpec
-  q2: QuerySpec
-  q3: QuerySpec
 }
 
 const trimmed = (s: string | null): string => s?.trim() ?? ''
@@ -78,18 +75,19 @@ function emittedSpecs(raw: readonly string[]): QuerySpec[] {
 }
 
 export function buildQueryStack(input: QueryStackInput): QueryStack {
-  const q1: QuerySpec = { text: input.userAction.trim(), source: 'user_action' }
-  const q2: QuerySpec = { text: structuralDigest(input), source: 'structural_digest' }
-  const q3: QuerySpec = { text: trimmed(input.piggybackSummary), source: 'piggyback_summary' }
-
   // An absent fixed slot is recorded but not embedded: the probe renders it, and
   // the blend re-normalizes over the present ones rather than spending a share on noise.
-  const specs: QuerySpec[] = [q1, q2, q3, ...emittedSpecs(input.emittedQueries ?? [])]
+  const specs: QuerySpec[] = [
+    { text: input.userAction.trim(), source: 'user_action' },
+    { text: structuralDigest(input), source: 'structural_digest' },
+    { text: trimmed(input.piggybackSummary), source: 'piggyback_summary' },
+    ...emittedSpecs(input.emittedQueries ?? []),
+  ]
   const slots = specs.map((q) => QUERY_SLOT_OF_SOURCE[q.source])
   const presence = specs.map((q) => nonEmpty(q.text))
   const embedTexts = specs.filter((_, i) => presence[i]).map((q) => q.text)
 
-  return { specs, slots, presence, embedTexts, q1, q2, q3 }
+  return { specs, slots, presence, embedTexts }
 }
 
 /** Re-expand a batched embed result back onto the stack's slots. */

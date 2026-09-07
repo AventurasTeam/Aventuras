@@ -553,7 +553,7 @@ describe('runRetrieval — query embed failure', () => {
 
     const { partial } = expectBlocking(out)
     expect(partial.floor?.sceneEntities.map((e) => e.id)).toEqual(['char_a'])
-    expect(partial.queries?.q1.text).toBe('I ask about the amulet.')
+    expect(partial.queries?.specs[0].text).toBe('I ask about the amulet.')
     expect(partial.bundles).toEqual({})
   })
 
@@ -575,7 +575,7 @@ describe('runRetrieval — query embed failure', () => {
     if (out.ok) throw new Error('expected a cancellation')
     expect(out.cancelled).toBe(true)
     // The partial still reports how far the pass got, exactly as the failure arm does.
-    expect(out.partial.queries?.q1.text).toBe('I ask about the amulet.')
+    expect(out.partial.queries?.specs[0].text).toBe('I ask about the amulet.')
   })
 
   it('reports a typed call failure when the embed request itself fails', async () => {
@@ -941,7 +941,9 @@ describe('runRetrieval — query stack', () => {
       params({ currentLocationId: 'loc_1' }),
     )
 
-    expect(expectOk(out).queries.q2.text).toBe('Kara Vex, The Hollow.\nActive threads: The Amulet.')
+    expect(expectOk(out).queries.specs[1].text).toBe(
+      'Kara Vex, The Hollow.\nActive threads: The Amulet.',
+    )
   })
 
   it('skips the embed call when every query is empty', async () => {
