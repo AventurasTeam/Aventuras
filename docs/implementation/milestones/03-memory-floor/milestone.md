@@ -279,10 +279,10 @@ probe capture model needs (`sims`, `sim_blend`,
 row's `embedding_stale` flag at capture time — per
 [`probe.md → What gets captured`](../../../memory/probe.md#what-gets-captured--light-mode-default)).
 This contract pins the **per-candidate** trace only; the
-query-level metadata (incl. Q3 sentence scores), per-type funnel
-summary, structural-floor list, and stale-row counts that the
-capture model also needs come from 3.4's retrieval-phase output,
-which 3.5 consumes sequenced (3.4 gates 3.5).
+query-level metadata, per-type funnel summary, structural-floor
+list, and stale-row counts that the capture model also needs come
+from 3.4's retrieval-phase output, which 3.5 consumes sequenced
+(3.4 gates 3.5).
 [Slice 3.5](./slices/05-dev-probe.md) serializes that trace into
 `probe_captures` and pins the simulator-vs-prod parity test against
 the same module. Any ranker change that bypasses the pure module is
