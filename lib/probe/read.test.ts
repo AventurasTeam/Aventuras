@@ -177,6 +177,48 @@ describe('decodeCapture', () => {
     expect(() => decodeCapture(['pc_1', 'br_a', 1000, 'light', null, 100, bytes])).toThrow(message)
   })
 
+  // blendSims reads sims[i] against the slot of queries[i], so a candidate whose
+  // sims is not one number-or-null per query either throws raw inside the
+  // simulator or scores NaN with nothing to mark it. NaN and Infinity are absent
+  // here on purpose: the payload is JSON, which flattens both to null before a
+  // capture is ever stored, so no such case can reach the guard.
+  it.each<[string, unknown, RegExp]>([
+    ['not an array', null, /pools\.entities\[0\]\.sims must be an array/i],
+    ['one value short', [0.5, 0.5], /must carry one value per query/i],
+    ['one value long', [0.5, 0.5, 0.5, 0.5], /must carry one value per query/i],
+    ['a numeric string', [0.5, 0.5, '0.5'], /sims\[2\] must be a finite number or null/i],
+    ['a boolean', [0.5, true, 0.5], /sims\[1\] must be a finite number or null/i],
+  ])('rejects a capture whose first entity candidate has sims %s', (_label, sims, message) => {
+    const payload = buildCapturePayload(captureInput())
+    const [first, ...rest] = payload.pools.entities
+    const { bytes } = compressPayload({
+      ...payload,
+      pools: {
+        ...payload.pools,
+        entities: [{ ...first, sims }, ...rest] as ProbeCapturePayload['pools']['entities'],
+      },
+    })
+
+    expect(() => decodeCapture(['pc_1', 'br_a', 1000, 'light', null, 100, bytes])).toThrow(message)
+  })
+
+  it('accepts a candidate whose absent-query slots are null', () => {
+    const payload = buildCapturePayload(captureInput())
+    const [first, ...rest] = payload.pools.entities
+    const { bytes } = compressPayload({
+      ...payload,
+      pools: {
+        ...payload.pools,
+        entities: [
+          { ...first, sims: [0.5, null, null] },
+          ...rest,
+        ] as ProbeCapturePayload['pools']['entities'],
+      },
+    })
+
+    expect(decodeCapture(['pc_1', 'br_a', 1000, 'light', null, 100, bytes]).id).toBe('pc_1')
+  })
+
   it('rejects a payload that decodes to something other than an object', () => {
     const { bytes } = compressPayload('not a capture' as unknown as ProbeCapturePayload)
 

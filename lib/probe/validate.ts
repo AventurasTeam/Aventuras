@@ -99,6 +99,31 @@ export function assertCaptureShape(decoded: unknown): asserts decoded is ProbeCa
     if (typeof source !== 'string')
       throw new CaptureShapeError(`queries[${i}].source`, `must be a string, got ${typeOf(source)}`)
   })
+  // blendSims indexes sims positionally against queries, so a non-array dies at
+  // replay's `[...r.sims]` spread and a non-number blends to NaN unmarked.
+  // isFinite guards a format change only — JSON flattens NaN/Infinity to null.
+  const queryCount = payload.queries.length
+  for (const type of RETRIEVAL_TYPES) {
+    ;(pools[type] as unknown[]).forEach((candidate, i) => {
+      const field = `pools.${type}[${i}]`
+      requirePlainObject(field, candidate)
+      const sims = (candidate as Record<string, unknown>).sims
+      if (!Array.isArray(sims))
+        throw new CaptureShapeError(`${field}.sims`, `must be an array, got ${typeOf(sims)}`)
+      if (sims.length !== queryCount)
+        throw new CaptureShapeError(
+          `${field}.sims`,
+          `must carry one value per query, got ${sims.length} for ${queryCount}`,
+        )
+      sims.forEach((sim, j) => {
+        if (sim !== null && !(typeof sim === 'number' && Number.isFinite(sim)))
+          throw new CaptureShapeError(
+            `${field}.sims[${j}]`,
+            `must be a finite number or null, got ${typeOf(sim)}`,
+          )
+      })
+    })
+  }
   // Required-and-nullable, so `undefined` is rejected rather than defaulted:
   // replayType never sees the row, and an absent marker reads there as a
   // failure. A payload predating the field is refused, not silently replayed.
