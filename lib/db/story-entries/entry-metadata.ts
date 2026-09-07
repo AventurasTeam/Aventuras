@@ -9,7 +9,8 @@ export const entryMetadataSchema = z.object({
   model: z.string().optional(),
   generationTimingMs: z.number().optional(),
   reasoning: z.string().optional(),
-  // One-sentence enrichment for the NEXT turn's Q2 structural digest (docs/memory/retrieval.md#q2-structural-digest). Optional — absent on parse failure or restart is fine per docs/memory/piggyback.md.
+  // Feeds the NEXT turn's Q3 retrieval query (docs/memory/retrieval.md#q3-piggyback-summary).
+  // Optional — absent on parse failure or restart is fine per docs/memory/piggyback.md.
   summary: z.string().optional(),
   sceneEntities: z.array(z.string()),
   currentLocationId: z.string().nullable(),
