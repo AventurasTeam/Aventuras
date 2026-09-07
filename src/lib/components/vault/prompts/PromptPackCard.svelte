@@ -70,6 +70,8 @@
           </p>
         </div>
         <div class="relative z-10 flex shrink-0 items-center gap-0.5">
+          <!-- No onclick on the trigger: its own handlers arrive through the spread props, and
+               a second toggle on click opens then immediately closes it on touch. -->
           <DropdownMenu.Root bind:open={transferMenuOpen}>
             <DropdownMenu.Trigger>
               {#snippet child({ props })}
@@ -80,10 +82,6 @@
                   class="h-8 w-auto gap-0.5 px-1.5 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 {transferMenuOpen
                     ? 'sm:opacity-100'
                     : ''}"
-                  onclick={(e: MouseEvent) => {
-                    e.stopPropagation()
-                    transferMenuOpen = !transferMenuOpen
-                  }}
                   title="Import / Export pack"
                 >
                   <ArrowUpDown class="h-4 w-4" />
@@ -91,7 +89,7 @@
                 </Button>
               {/snippet}
             </DropdownMenu.Trigger>
-            <DropdownMenu.Content align="end" onclick={(e: MouseEvent) => e.stopPropagation()}>
+            <DropdownMenu.Content align="end">
               <DropdownMenu.Label>Export</DropdownMenu.Label>
               <DropdownMenu.Item onclick={() => onExport?.()}>
                 <FileJson class="text-accent-400 h-4 w-4" />
