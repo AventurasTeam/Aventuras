@@ -668,8 +668,8 @@ describe('per-turn-piggyback', () => {
       })
     })
 
-    // Canon carries Q4 on BOTH per-turn implementations, and this is the one the default
-    // piggybackMode: 'off' story actually runs (docs/memory/retrieval.md → Q4).
+    // Canon: Q4 on both per-turn implementations; this is the one the default piggybackMode:
+    // 'off' story actually runs (docs/memory/retrieval.md → Q4).
     it("carries the fallback classifier's emitted queries onto the entry metadata", async () => {
       currentStoryStore.set({
         storyId: 's1',
@@ -695,9 +695,8 @@ describe('per-turn-piggyback', () => {
       ])
       entitiesStore.hydrate('b1', [])
 
-      // Routed through the real schema's .parse() rather than a hand-built literal: the mock
-      // would otherwise smuggle the field past a schema that no longer declares it, and the
-      // mutation check would stop discriminating.
+      // Routed through the real schema's .parse(), not a hand-built literal — otherwise the mock
+      // smuggles a field the schema no longer declares, defeating the mutation check.
       const value = fallbackClassifierSchema.parse({
         sceneEntities: [],
         currentLocation: undefined,
@@ -1962,9 +1961,8 @@ describe('per-turn-piggyback', () => {
       ).toBeTruthy()
     })
 
-    // retrieval.md → Q4: the emission is malformed-tolerant. Structured output validates
-    // the object in one shot, so a raise here would cost a full extra provider call and,
-    // on a second over-emission, take the mandatory summary down with the optional hint.
+    // retrieval.md → Q4: emission is malformed-tolerant — raising here costs a full extra
+    // provider call and takes the mandatory summary field down with an over-long hint too.
     it('drops an over-long retrievalQueries without failing the sibling fields', () => {
       const parsed = fallbackClassifierSchema.parse({
         sceneEntities: ['char_a'],
@@ -2016,10 +2014,8 @@ describe('per-turn-piggyback', () => {
       expect(result.success).toBe(false)
     })
 
-    // Coverage for the schema every real story runs (buildStorySettings always
-    // populates suggestionCategories): .extend() carries retrievalQueries onto this
-    // schema too, but nothing else pins that — a refactor to a standalone z.object
-    // could silently drop Q4 for every real story.
+    // This is the schema every real story runs (suggestionCategories is always populated); its
+    // .extend() carries retrievalQueries but nothing else pins that — a refactor could drop Q4.
     it('carries retrievalQueries alongside suggestions', () => {
       const result = fallbackClassifierWithSuggestionsSchema.safeParse({
         sceneEntities: [],

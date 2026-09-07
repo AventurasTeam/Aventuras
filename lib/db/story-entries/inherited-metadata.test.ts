@@ -38,9 +38,8 @@ describe('inheritedEntryMetadata', () => {
     })
   })
 
-  // Never inherited, unlike the scene triple beside it: a query carried forward from
-  // three turns ago is exactly the staleness Q4 exists to avoid
-  // (docs/memory/retrieval.md#q4-classifier-emitted-queries).
+  // Never inherited, unlike the scene triple beside it: a carried-forward query
+  // is the staleness Q4 exists to avoid (retrieval.md#q4-classifier-emitted-queries).
   it('does not carry retrievalQueries forward', () => {
     const tail: EntryMetadata = {
       sceneEntities: ['char_a'],

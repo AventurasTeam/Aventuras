@@ -345,10 +345,9 @@ export function passInputs(
       Object.values(r),
     )
   const rand = seededRandom(7)
-  // One vector per live slot, each near a DIFFERENT topic. All three previously sat
-  // on centroid 0 and differed only by noise draw, so their KNN top-200 sets largely
-  // coincided — the pool union, and the ranker cost that scales with it, read
-  // optimistic in the very table this fixture prices. TOPICS is 12, so six fit.
+  // One vector per live slot, each near a DIFFERENT topic: same-centroid vectors' KNN
+  // top-200s coincide, making the pool union — and the ranker cost that scales with it —
+  // read optimistic. TOPICS is 12, so six fit.
   const queryVectors = [0, 1, 2, 3, 4, 5].map((t) => topical(centroids, t, rand, 0.9))
 
   const deps = {

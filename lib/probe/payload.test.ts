@@ -397,9 +397,8 @@ describe('buildCapturePayload', () => {
     expect(emittedPayload.queries[3].text).toBe('House Eldrin')
   })
 
-  // Literally 0, not null: near-0 is the BEST case (retrieval.md → Redundancy — it
-  // surfaced something the floor did not), so a falsy-collapsing `||` here would
-  // erase exactly the signal the field exists to carry.
+  // 0 is the best case (retrieval.md → Redundancy: it surfaced something the floor
+  // didn't) — a falsy-collapsing `||` here would erase exactly that signal.
   it('keeps a zero redundancy ratio as 0 rather than collapsing it to null', () => {
     expect(emittedPayload.queries[3]).toMatchObject({ redundancy: 0, redundancy_k: 1 })
   })
@@ -447,9 +446,8 @@ describe('buildCapturePayload', () => {
     ])
   })
 
-  // A sync-stage failure reaches no stack at all, so the payload falls back to
-  // ABSENT_QUERY_STACK's three specs beside an empty measurement array; reading
-  // past the end must not produce undefined in the payload.
+  // No stack on a sync-stage failure, so the payload falls back to ABSENT_QUERY_STACK's
+  // three specs beside an empty measurement array — reading past the end must not yield undefined.
   it('nulls redundancy on a failed pass that never built a query stack', () => {
     const payload = buildCapturePayload({
       ...identity,

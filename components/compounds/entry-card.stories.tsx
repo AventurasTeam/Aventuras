@@ -1011,9 +1011,8 @@ export const WorldStateReported: StoryT = {
   },
 }
 
-/** An empty array is a legal `retrievalQueries` value (the classifier emitted no queries
- *  this turn), distinct from `undefined` (no metadata at all) — but both must render no
- *  group, since a labelled group with no rows beneath it is a visible defect. */
+/** Empty `retrievalQueries` (classifier emitted none) and `undefined` (no metadata) must both
+ *  render no group — a labelled group with no rows beneath it is a visible defect. */
 export const WorldStateEmptyRetrievalQueries: StoryT = {
   ...wrap,
   args: { ...baseProps, ...aiEntry, ...reportedProps, retrievalQueries: [] },

@@ -653,8 +653,7 @@ function WorldStatePanel({
         </StateGroup>
       ) : null}
 
-      {/* Read-only, like the rest of the panel: it records what was asked, and the
-          probe is where whether it helped gets answered (entry-card.md → Panel anatomy). */}
+      {/* Read-only, like the rest of the panel (entry-card.md → Panel anatomy). */}
       {retrievalQueries != null && retrievalQueries.length > 0 ? (
         <StateGroup label={t('reader:entryCard.stateRetrievalAsks')}>
           {retrievalQueries.map((query) => (

@@ -563,10 +563,8 @@ describe('runRetrieval — query embed failure', () => {
     expect(partial.bundles).toEqual({})
   })
 
-  // partial.queries is written as soon as the stack is built; queryRedundancy has to be
-  // written in the same spot, not just initialised to `[]` up front, or a partial with an
-  // emitted Q4 ends up with a 4-spec stack beside a shorter redundancy array. One emitted
-  // query is enough to make specs.length 4, so a hardcoded 3-element array would be caught.
+  // queryRedundancy must be written alongside partial.queries, not initialised to `[]` up
+  // front, or an emitted Q4 leaves a 4-spec stack beside a shorter redundancy array.
   it('keeps queryRedundancy aligned with the query stack when the query embed fails', async () => {
     const out = await runRetrieval(
       deps({
@@ -579,10 +577,9 @@ describe('runRetrieval — query embed failure', () => {
     )
 
     const { partial } = expectBlocking(out)
-    // The embed stage fails AFTER the query stack is built, so a partial can carry specs
-    // with no measurement. queryRedundancy must still be positionally aligned — with
-    // noUncheckedIndexedAccess off, a short array types as (QueryRedundancy | null)[] and
-    // hands back undefined at runtime, which is a type lie rather than a guarded case.
+    // Embed fails AFTER the query stack is built, so partial specs can carry no measurement, but
+    // queryRedundancy must stay positionally aligned — noUncheckedIndexedAccess is off, so a
+    // short array types as (QueryRedundancy | null)[] yet returns undefined at runtime.
     expect(partial.queryRedundancy).toHaveLength(partial.queries!.specs.length)
     expect(partial.queryRedundancy.every((r) => r === null)).toBe(true)
   })
@@ -1001,10 +998,8 @@ describe('runRetrieval — query stack', () => {
   })
 })
 
-// retrieval.md → Redundancy. `char_a` is the scene entity, so buildStructuralFloor
-// seats it; `lo_x` is unseated lore. Measured over the query's own PRE-filter top-K,
-// so both are still in it — filterEntityPool removes the floor rows afterwards, which
-// is why a ratio taken after filtering reads 0 for every query by construction.
+// retrieval.md → Redundancy. `char_a` (seated by the floor) and `lo_x` (unseated) fixture the
+// PRE-filter top-K: filterEntityPool removes floor rows afterward, so a post-filter ratio reads 0.
 describe('runRetrieval — per-Q4 redundancy', () => {
   const SEATED = entityRow('char_a', 'Kara Vex')
   const UNSEATED = loreRow('lo_x', 'Marsh law')
@@ -1014,11 +1009,8 @@ describe('runRetrieval — per-Q4 redundancy', () => {
     expectOk(await runRetrieval(deps({ queryAll: makeQueryAll(fixture) }), params(ASK)))
 
   /**
-   * makeQueryAll answers every kind's MATCH from ONE list, but a real id lives in
-   * exactly one kind's vec table (ids carry disjoint kind prefixes) — so a shared
-   * list puts `char_a` in the entity, lore AND thread top-K at once, which the
-   * global merge counts three times. Routing by table keeps these fixtures inside
-   * the disjointness the merge relies on.
+   * makeQueryAll answers every kind's MATCH from one list, but each id lives in only one kind's
+   * vec table; passByKind routes fixtures per table so they don't triple-count in the merge.
    */
   const passByKind = async (
     fixture: Parameters<typeof makeQueryAll>[0],
@@ -1052,11 +1044,9 @@ describe('runRetrieval — per-Q4 redundancy', () => {
     expect(out.queryRedundancy[3]).toEqual({ ratio: 0, k: 1 })
   })
 
-  // Chapters and happenings can never be in floor.seatedIds (pools.ts →
-  // buildStructuralFloor seats entity, lore and thread ids only), so counting their
-  // top-K in the denominator would deflate every ratio by construction. Chapters
-  // return an id NO other kind returns, which moves k from 2 to 3 the moment they
-  // are counted.
+  // Chapters/happenings can never be in floor.seatedIds (pools.ts seats entity/lore/thread
+  // only), so counting their top-K would deflate every ratio; chapters return an id no other
+  // kind does, which moves k from 2 to 3 the moment they're counted.
   it('measures over the entity, lore and thread top-Ks only', async () => {
     const out = await passByKind(
       { entities: [SEATED], lore: [UNSEATED] },
@@ -1065,13 +1055,9 @@ describe('runRetrieval — per-Q4 redundancy', () => {
     expect(out.queryRedundancy[3]).toEqual({ ratio: 0.5, k: 2 })
   })
 
-  // The cut is REDUNDANCY_K nearest GLOBALLY across the seatable kinds, not each
-  // kind's own cut and not the whole KNN pass. Twelve hits: ten floor-seated
-  // entities at distance 0.5-1.4 and two unseated lore rows nearer than all of
-  // them. The ten nearest are both lore plus the eight closest entities.
-  //   global top-10 (correct) → { ratio: 0.8, k: 10 }
-  //   per-kind top-10 unioned → { ratio: 10/12, k: 12 }
-  //   no cut at all           → { ratio: 10/12, k: 12 }
+  // REDUNDANCY_K cuts the 10 nearest GLOBALLY across seatable kinds — not a per-kind cut, not
+  // the full KNN pass. Fixture forces both wrong approaches to read { ratio: 10/12, k: 12 }
+  // while the correct global cut reads { ratio: 0.8, k: 10 }, so the assertion distinguishes them.
   it('measures the REDUNDANCY_K nearest rows across kinds, not one cut per kind', async () => {
     const sceneIds = Array.from({ length: 10 }, (_, i) => `char_s${i}`)
     const out = await passByKind(
@@ -1090,9 +1076,8 @@ describe('runRetrieval — per-Q4 redundancy', () => {
     expect(out.queryRedundancy[3]).toEqual({ ratio: 0.8, k: 10 })
   })
 
-  // A cold start: no dim family exists, so runKnn returns null and the query has no
-  // top-K to measure. 0/0 is not 0 — an unmeasurable query must not read as a
-  // perfectly novel one.
+  // Cold start: no dim family exists, so runKnn returns null and there's no top-K to measure.
+  // 0/0 is not 0 — an unmeasurable query must not read as a perfectly novel one.
   it('reports null for a Q4 whose top-K came back empty', async () => {
     const out = await passWith({ entities: [SEATED], vecTables: [] })
     expect(out.queryRedundancy[3]).toBeNull()

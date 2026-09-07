@@ -17,11 +17,9 @@ import {
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
 
-// Q4 end-to-end (docs/memory/retrieval.md#q4-classifier-emitted-queries). The seam only a
-// running app reaches is the two-turn one: turn 1's tagged block writes
-// metadata.retrievalQueries, and turn 2's retrieval pass reads that row back as its
-// direct-slot queries. Parsing, capping and blending have thorough unit coverage and are
-// not re-driven here (docs/testing.md → Coverage).
+// Q4 end-to-end (docs/memory/retrieval.md#q4-classifier-emitted-queries) — the only seam a
+// running app reaches: turn 1 writes metadata.retrievalQueries, turn 2 reads it back as
+// direct-slot queries.
 
 const HERO_TITLE = 'The Veilstone Courier'
 const HERO_STORY_ID = 'story_hero'
@@ -79,9 +77,8 @@ async function tailEntryId(page: Page, branchId: string): Promise<string> {
 const LATEST_CAPTURE_SQL = `SELECT payload FROM probe_captures
    WHERE branch_id = ? ORDER BY captured_at DESC, id DESC LIMIT 1`
 
-// The payload is a gzipped blob; queryApp's evaluate bridge carries the BLOB column
-// back out as a real Uint8Array (Playwright has serialized typed arrays since 1.44),
-// so it can be gunzipped directly with no in-page widening/rebuild step.
+// Payload is a gzipped blob; queryApp's evaluate bridge returns the BLOB column as a real
+// Uint8Array (Playwright has serialized typed arrays since 1.44), so it gunzips directly.
 async function latestCapture(page: Page, branchId: string): Promise<ProbeCapturePayload | null> {
   const rows = await queryApp(page, LATEST_CAPTURE_SQL, [branchId])
   const blob = rows[0]?.[0] as Uint8Array | undefined
@@ -96,9 +93,8 @@ test.describe('retrieval Q4 — classifier-emitted queries across a turn boundar
   let userDataDir: string | undefined
 
   test.beforeAll(async () => {
-    // Retrieval blocks ahead of narrative, so a turn without an installed embedder
-    // never reaches the reply (model-management.md → Embed failure is blocking).
-    // Cold cache downloads ~24 MB from Hugging Face before launch.
+    // Embed failure blocks the reply (model-management.md → Embed failure is blocking); cold
+    // cache pulls ~24 MB from Hugging Face before launch, hence the long timeout.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
@@ -153,9 +149,8 @@ test.describe('retrieval Q4 — classifier-emitted queries across a turn boundar
     })
 
     await test.step('turn 2 embeds them as direct-slot queries and captures redundancy', async () => {
-      // Turn 2 emits different asks (ASK_C/ASK_D) so the capture assertion below
-      // discriminates "read the previous turn's row" (ASK_A/ASK_B, correct) from
-      // "read my own" (ASK_C/ASK_D, the regression this test exists to catch).
+      // Turn 2 emits different asks (ASK_C/ASK_D) so the capture below distinguishes "read the
+      // previous turn's row" (correct) from "read my own" — the regression this test catches.
       mock.setNarrative(narrative('E2E-Q4-TURN-2', ASK_C, ASK_D))
       await reader.composer(app.window).fill('E2E-Q4-USER-2 I ask what the sigil means.')
       await reader.send(app.window).click()
@@ -169,9 +164,8 @@ test.describe('retrieval Q4 — classifier-emitted queries across a turn boundar
         .toBe(5)
 
       const capture = (await latestCapture(app.window, branchId))!
-      // Hardcoded, not imported from CAPTURE_VERSION: a legitimate version bump is
-      // expected to require touching this line, so the failure points at the
-      // migration rather than looking like an E2E bug.
+      // Hardcoded, not imported from CAPTURE_VERSION: a version bump must touch this line, so
+      // a failure here points at the migration, not a mystery E2E regression.
       expect(capture.capture_version).toBe(7)
       expect(capture.queries.map((q) => q.source)).toEqual([
         'user_action',
@@ -186,9 +180,8 @@ test.describe('retrieval Q4 — classifier-emitted queries across a turn boundar
         // redundancy = matched / topK.length is closed on [0, 1] by construction; the
         // informative check is that it was computed at all (not null).
         expect(typeof q.redundancy).toBe('number')
-        // The cut is REDUNDANCY_K = 10 nearest rows globally, not the full KNN pass —
-        // a regression to the old unpinned denominator would blow past this
-        // (docs/memory/retrieval.md → Redundancy).
+        // Cut is REDUNDANCY_K = 10 nearest rows globally, not the full KNN pass — a regression
+        // to the old unpinned denominator would blow past this (retrieval.md → Redundancy).
         expect(q.redundancy_k).toBeGreaterThan(0)
         expect(q.redundancy_k).toBeLessThanOrEqual(10)
       }

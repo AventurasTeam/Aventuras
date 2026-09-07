@@ -138,11 +138,9 @@ export type RetrievalFailure = {
 export type InjectedAwareness = { id: string; retrievalCount: number }
 
 /**
- * retrieval.md → Redundancy. `ratio` is |topK ∩ floor.seatedIds| / |topK| for one
- * emitted Q4, where topK is the REDUNDANCY_K nearest rows that query wanted across
- * the kinds the floor can seat. `k` is the realised cut size, below REDUNDANCY_K
- * only on a corpus too small to fill it. Positionally aligned with
- * `queries.specs`; null on a fixed slot and on an empty top-K.
+ * retrieval.md → Redundancy: ratio = |topK ∩ floor.seatedIds| / |topK|, k the
+ * realised cut size (below REDUNDANCY_K only on a too-small corpus). Positionally
+ * aligned with `queries.specs`; null on a fixed slot and on an empty top-K.
  */
 export type QueryRedundancy = { ratio: number; k: number }
 
@@ -323,9 +321,8 @@ async function runRetrievalPass(
     activeThreadTitles: floor.activeThreads.map((t) => t.title),
   })
   partial.queries = queries
-  // Set with the stack, not with the measurement: a failure between here and KNN
-  // otherwise leaves a 4-6 spec stack beside a length-0 array, and every consumer
-  // reads the two positionally.
+  // Set with the stack, not the measurement: a failure before KNN would otherwise
+  // leave populated specs beside a length-0 array that consumers read positionally.
   partial.queryRedundancy = queries.specs.map(() => null)
 
   const embedStartedAt = performance.now()
@@ -373,12 +370,9 @@ async function runRetrievalPass(
   let knnMs = performance.now() - knnStartedAt
   for (const [kind, pool] of built) pools[TYPE_OF_KIND[kind]] = pool.candidates
 
-  // Off perQueryHits — runKnn's raw rows — not off pool.candidates: assembleCandidates has
-  // already run filterEntityPool/LorePool/ThreadPool over those, so a ratio taken there
-  // intersects an empty set and reports 0 for every query (retrieval.md → Redundancy).
-  // The cut is global across the seatable kinds rather than per kind: a per-kind cut
-  // unioned dilutes by the kinds that rarely reach the floor, and lore reaches it only
-  // through a user-marked `always`.
+  // Off perQueryHits (KNN's raw rows), not pool.candidates — assembleCandidates already
+  // filtered those, so the ratio would intersect an empty set and report 0 throughout.
+  // Cut is global across seatable kinds — per-kind dilutes by kinds that rarely reach the floor.
   const hitsByQuery: KnnHit[][] = queries.specs.map(() => [])
   for (const [kind, pool] of built) {
     if (!FLOOR_SEATABLE_KINDS.has(kind)) continue
@@ -661,9 +655,8 @@ async function buildPool(
   ctx: PoolCtx,
 ): Promise<BuiltPool> {
   const knn = await runKnn(deps, params, ctx)
-  // One empty entry per query, not one empty outer array: every other consumer reads
-  // `perQueryHits[i]` positionally, and a length-0 outer array is the sole shape where
-  // that alignment would not hold.
+  // One empty entry per query, not an empty outer array: consumers read `perQueryHits[i]`
+  // positionally, and length-0 is the only shape that breaks that alignment.
   if (knn === null) return { candidates: [], perQueryHits: ctx.queryVectors.map(() => []) }
   const candidates = knn.ids.size === 0 ? [] : assembleCandidates(ctx, knn.ids, knn.vectorById)
   return { candidates, perQueryHits: knn.perQueryHits }

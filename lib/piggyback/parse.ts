@@ -153,14 +153,9 @@ function parseTransfers(segment: string): ParsedTransfers {
   return { items, stackables }
 }
 
-// Total by contract, and the ONLY parser here that is: a field-level failure fires a
-// full extra structured call, and spending one to recover an optional retrieval hint
-// inverts the cost of the recovery it triggers (piggyback.md → Parse strategy). Never
-// calls assertNotTruncated. Returns undefined rather than [] so a block carrying
-// nothing else stays "empty" and the fallback still fires. Dedupes before capping
-// because emittedSpecs (lib/retrieval/queries.ts) counts distinct queries toward its
-// cap — a cap that counted repeats would spend a stored slot on a duplicate and drop
-// a distinct ask.
+// Total by contract, the only parser that never raises: recovering an optional hint via a
+// full extra structured call would invert that call's cost — never call assertNotTruncated.
+// Returns undefined, not [], so an otherwise-empty block reads empty and the fallback fires.
 function parseRetrievalQueries(segment: string): string[] | undefined {
   const seen = new Set<string>()
   const out: string[] = []

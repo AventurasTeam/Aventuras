@@ -22,20 +22,12 @@ export type KnnParams = {
 }
 
 /**
- * One KNN pass over a single (kind, dim) family. `branch_id` is a vec0
- * partition key so the engine pre-filters on it; `model_id` is a metadata
- * column constraint. Pool predicates (injection_mode, status, POV union) are
- * not expressible here — they filter the returned ids afterwards.
- *
- * `embedding` rides along because vec0 returns it on the match row for almost
- * nothing, whereas fetching vectors by id afterwards cannot: `id` is a metadata
- * column with no push-down, so such a query scans the whole partition instead.
- * Nothing SCORES on `distance` — the ranker computes cosine over the returned
- * vectors instead — though the redundancy cut orders by it, and vec0 will not
- * return the match row without it either way. That top-k is
- * cosine's top-k only because every stored and query vector is unit-norm —
- * enforced by lib/embedder's embedTexts and re-checked in lib/retrieval's
- * cosine, not by vec0 — which makes L2 order and cosine order the same order.
+ * `branch_id`/`model_id` push down in the vec0 query; other pool predicates
+ * (injection_mode, status, POV) don't, and filter ids afterwards. `embedding`
+ * rides along because `id` has no push-down, so a by-id refetch would scan
+ * the whole partition instead. `distance` isn't a score — cosine is
+ * recomputed — but it orders, and unit-norm vectors make that order equal
+ * cosine's, comparable across kinds.
  */
 export function knnQuery(kind: VecTargetKind, dim: number, p: KnnParams): RowQuery {
   // vec0 treats k = 0 as valid and returns nothing, so a misconfigured budget

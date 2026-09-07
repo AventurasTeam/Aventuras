@@ -74,9 +74,8 @@ const narrowThread = (t: ThreadRow): Required<ThreadRow> => ({
   description: t.description,
 })
 
-// The only kinds `buildStructuralFloor` below can seat. Counting a chapter or
-// happening top-K in the redundancy denominator would deflate every ratio by
-// construction, since neither can ever intersect the floor.
+// Only kinds `buildStructuralFloor` can seat; chapters/happenings never intersect
+// the floor, so counting them would deflate every ratio by construction.
 export const FLOOR_SEATABLE_KINDS = new Set<VecTargetKind>(['entity', 'lore', 'thread'])
 
 /**
@@ -213,10 +212,9 @@ export function filterThreadPool(
 }
 
 /**
- * One KNN row reduced to what pool assembly and the redundancy cut need. Nothing
- * SCORES on `distance` — the ranker computes cosine over the returned vectors
- * instead — but it orders, and it does so ACROSS kinds: every vector is
- * unit-norm, so L2 order is cosine order (db/embeddings/knn.ts).
+ * Reduced KNN row for pool assembly + the redundancy cut. `distance` isn't a
+ * score (the ranker recomputes cosine) but it orders — across kinds too, since
+ * unit-norm vectors make L2 order equal cosine order (db/embeddings/knn.ts).
  */
 export type KnnHit = readonly [id: string, distance: number]
 

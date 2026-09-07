@@ -6,11 +6,9 @@ import { dedupeSceneEntities, scenePromotionActions, sceneTrackingActions } from
 import { MAX_RETRIEVAL_QUERIES, type ParsedStateBlock } from './types'
 import { resolvePiggybackWorldTimeDelta } from './world-time'
 
-// Both producers of the field converge here, and only one filters its own input:
-// the tagged-block parser trims/drops/dedupes before capping, while the fallback
-// classifier's schema only counts, so it stores blanks and duplicates verbatim.
-// Deduping before the cap is what stops a repeat spending a slot the next distinct
-// ask needed (retrieval.md → Q4). Idempotent for the parser, which already did it.
+// Two producers write this field; only the tagged-block parser filters itself (trims,
+// dedupes, caps) — the classifier fallback only counts, so blanks/dupes reach here raw.
+// Dedupe before the cap so a repeat doesn't spend a slot a distinct ask needed (retrieval.md → Q4).
 function normalizeRetrievalQueries(queries: readonly string[]): string[] {
   const distinct = new Set(queries.map((q) => q.trim()).filter((q) => q !== ''))
   return [...distinct].slice(0, MAX_RETRIEVAL_QUERIES)
@@ -29,10 +27,8 @@ type BuildArgs = {
   entities: readonly Entity[]
   previousMetadata: PreviousMetadata
   branchId: string
-  // Which caller produced this block — piggyback's own direct tagged-block
-  // emission ('piggyback_tagged_block') or the synchronous per-turn fallback
-  // ('per_turn_classifier'). Not hardcoded here: the two paths are distinct
-  // agents and their deltas' provenance must say so (docs/memory/piggyback.md).
+  // Caller-supplied, not hardcoded: the two producers are distinct agents whose deltas'
+  // provenance must say so (docs/memory/piggyback.md).
   source: DeltaSource
 }
 

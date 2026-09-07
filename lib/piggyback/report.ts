@@ -18,10 +18,8 @@ type BuildReportArgs = {
 }
 
 /**
- * What the model EMITTED plus what `apply.ts` did with it — several causes collapse onto
- * the same emitted-vs-current difference (docs/ui/patterns/entry-card.md → Emitted vs.
- * applied). `summary` and `retrievalQueries` are excluded by omission: both have top-level
- * homes on EntryMetadata, and a second copy would give the reader two sources for one value.
+ * Emitted vs. applied causes collapse onto one diff (entry-card.md → Emitted vs. applied).
+ * `summary`/`retrievalQueries` omitted: they already live top-level on EntryMetadata.
  */
 export function buildStateReport(args: BuildReportArgs): EntryMetadata['stateReport'] {
   const { layer, block, failures, raw, applied } = args

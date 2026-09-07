@@ -179,11 +179,8 @@ describe('parseStateBlock', () => {
     expect(result.failures).toEqual([])
   })
 
-  // retrieval.md → Q4 and piggyback.md → Parse strategy both state this exception,
-  // because it reads like an inconsistency someone will later "fix": every other
-  // nested-tag field here throws when content resolves to no entries, which fires a
-  // full extra structured call. Spending one to recover an optional retrieval hint
-  // inverts the cost of the recovery it triggers, so this parser must never raise.
+  // Reads like inconsistency but isn't: every other field here throws on empty content,
+  // which fires a full extra LLM call — recovering an optional hint that way inverts cost.
   describe('<retrieval_queries> — total by contract', () => {
     const block = (inner: string) => `prose\n<state>\n${inner}\n</state>`
 
@@ -214,9 +211,8 @@ describe('parseStateBlock', () => {
       expect(parsed.retrievalQueries).toEqual(['a', 'b', 'c'])
     })
 
-    // The cap counts DISTINCT queries, matching emittedSpecs (lib/retrieval/queries.ts).
-    // A cap that counted repeats would spend a stored slot on a duplicate and silently
-    // drop the distinct ask behind it.
+    // Cap counts DISTINCT queries (matches emittedSpecs in lib/retrieval/queries.ts) —
+    // counting repeats would spend a slot on a duplicate and drop the distinct ask behind it.
     it('dedupes before capping, so a repeat does not cost a distinct query its slot', () => {
       const queries = ['a', 'a', 'b', 'c'].map((q) => `<query>${q}</query>`).join('')
       const { block: parsed } = parseStateBlock(
@@ -225,16 +221,14 @@ describe('parseStateBlock', () => {
       expect(parsed.retrievalQueries).toEqual(['a', 'b', 'c'])
     })
 
-    // The cap is stated in two modules that cannot import one another (see
-    // MAX_RETRIEVAL_QUERIES' comment). Drift here means storage and the query
-    // stack disagree about how many asks a turn gets.
+    // The cap lives in two modules that can't import each other (see MAX_RETRIEVAL_QUERIES) —
+    // drift here means storage and the query stack disagree on how many asks a turn gets.
     it('caps at the same number the query stack embeds', () => {
       expect(MAX_RETRIEVAL_QUERIES).toBe(MAX_EMITTED_QUERIES)
     })
 
-    // Not cosmetic: parseStateBlock judges an empty block on Object.keys(block).length,
-    // so a key set to undefined would read as a clean parse and suppress the fallback
-    // this turn needs — losing every other field with it.
+    // Not cosmetic: parseStateBlock judges emptiness via Object.keys(block).length, so a
+    // key set to undefined would read as a clean parse and suppress the fallback this turn needs.
     it('leaves a state block carrying only an unusable retrieval_queries reported empty', () => {
       const { block: parsed, failures } = parseStateBlock(
         block('<retrieval_queries>nothing parseable</retrieval_queries>'),

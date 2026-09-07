@@ -117,9 +117,9 @@ export function retrievalSuccess(over: RetrievalSuccessOverrides = {}): Retrieva
     bundles: perType((type) => over.bundles?.[type] ?? rankedBundle(over.selected?.[type] ?? [])),
     queries,
     keywordInjections: over.keywordInjections ?? [],
-    // Aligned with `specs` rather than defaulted to []: a pass emitting no Q4
-    // still reports one null per fixed slot. Non-null on a 'direct' slot so an
-    // emitted-stack fixture exercises the rendering path by default.
+    // Slot-aligned, not []: null on fixed slots, real value on 'direct' ones —
+    // so a fixture that skips this override still exercises the non-null path,
+    // and the falsy `ratio: 0` catches a `??`-vs-`||` truthiness bug.
     queryRedundancy:
       over.queryRedundancy ??
       queries.slots.map((s) => (s === 'direct' ? { ratio: 0, k: 1 } : null)),

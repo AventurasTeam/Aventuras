@@ -37,10 +37,8 @@ export function capturesForStoryQuery(storyId: string): RowQuery {
 // throw into `corrupt`, so the row stays listed and deletable rather than decoding
 // into a shape that lies about itself.
 //
-// Takes the raw decode so it can run ahead of the shape guard — an older capture is
-// missing whatever fields the shape rules have gained since, and reporting one of
-// those by name buries the real cause. A non-object isn't a version problem, so that
-// diagnostic is left to assertCaptureShape.
+// Runs ahead of the shape guard — an older capture's newly-added fields would otherwise
+// bury the real cause. A non-object isn't a version problem; that's assertCaptureShape's job.
 function assertCaptureVersion(id: string, payload: unknown): void {
   if (typeof payload !== 'object' || payload === null) return
   const version = (payload as Partial<ProbeCapturePayload>).capture_version
