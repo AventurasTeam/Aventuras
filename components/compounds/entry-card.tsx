@@ -110,6 +110,9 @@ type EntryCardProps = {
   /** What this turn reported. Absent means the entry reported nothing. */
   stateReport?: EntryMetadata['stateReport']
   summary?: string
+  /** Up to three classifier-emitted queries for next turn's retrieval; deduplicated
+   *  at parse time. Read-only — whether they helped is answered in the probe. */
+  retrievalQueries?: string[]
   /**
    * Desktop/tablet: fired by the in-card Dialog's Save. Resolve `{ ok: false }` to
    * report a failed write, carrying the action layer's rejection code where there is
@@ -485,6 +488,7 @@ function WorldStatePanel({
   entityNames,
   stateReport,
   summary,
+  retrievalQueries,
   legacyStateRaw,
   onOpenSceneEdit,
   editTriggerRef,
@@ -494,6 +498,7 @@ function WorldStatePanel({
   entityNames: readonly ResolvedEntity[]
   stateReport?: EntryMetadata['stateReport']
   summary?: string
+  retrievalQueries?: string[]
   legacyStateRaw?: string
   onOpenSceneEdit?: () => void
   editTriggerRef: RefObject<View | null>
@@ -647,6 +652,16 @@ function WorldStatePanel({
         </StateGroup>
       ) : null}
 
+      {/* Read-only, like the rest of the panel: it records what was asked, and the
+          probe is where whether it helped gets answered (entry-card.md → Panel anatomy). */}
+      {retrievalQueries != null && retrievalQueries.length > 0 ? (
+        <StateGroup label={t('reader:entryCard.stateRetrievalAsks')}>
+          {retrievalQueries.map((query) => (
+            <StateLine key={query}>{query}</StateLine>
+          ))}
+        </StateGroup>
+      ) : null}
+
       {failedFields.length > 0 ? (
         <View className="mt-2 rounded border border-warning p-1.5">
           <Text size="xs" className="text-warning">
@@ -731,6 +746,7 @@ export function EntryCard({
   entityNames,
   stateReport,
   summary,
+  retrievalQueries,
   onEditScene,
   onRequestEditScene,
   sceneOptions,
@@ -904,6 +920,7 @@ export function EntryCard({
             entityNames={entityNames ?? []}
             stateReport={stateReport}
             summary={summary}
+            retrievalQueries={retrievalQueries}
             legacyStateRaw={stateRaw}
             onOpenSceneEdit={sceneEdit?.open}
             editTriggerRef={sceneTriggerRef}

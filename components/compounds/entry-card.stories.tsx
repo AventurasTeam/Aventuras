@@ -976,6 +976,7 @@ const reportedProps = {
   currentLocationId: LOC_A,
   entityNames,
   summary: 'Aria pushed into the marshes and met an exiled noble.',
+  retrievalQueries: ["House Eldrin's history and its sigil", 'exiled nobility of the marshes'],
   stateReport: {
     layer: 'piggyback_tagged_block' as const,
     sceneEntities: [CHAR_A, CHAR_B],
@@ -1005,6 +1006,20 @@ export const WorldStateReported: StoryT = {
     expect(screen.getByText('Ashfen Marshes')).toBeVisible()
     expect(screen.getByText('cloak now muddied to the waist')).toBeVisible()
     expect(screen.getByText('120s')).toBeVisible()
+    expect(screen.getByText("House Eldrin's history and its sigil")).toBeVisible()
+    expect(screen.getByText('exiled nobility of the marshes')).toBeVisible()
+  },
+}
+
+/** An empty array is a legal `retrievalQueries` value (the classifier emitted no queries
+ *  this turn), distinct from `undefined` (no metadata at all) — but both must render no
+ *  group, since a labelled group with no rows beneath it is a visible defect. */
+export const WorldStateEmptyRetrievalQueries: StoryT = {
+  ...wrap,
+  args: { ...baseProps, ...aiEntry, ...reportedProps, retrievalQueries: [] },
+  play: async () => {
+    await openPanel()
+    expect(screen.queryByText('Retrieval asks')).not.toBeInTheDocument()
   },
 }
 

@@ -74,6 +74,7 @@
     "stateChanges": "Changes this turn",
     "stateDelta": "Reported delta",
     "stateSummary": "Summary",
+    "stateRetrievalAsks": "Retrieval asks",
     "stateDeltaSeconds": "{{n}}s",
     "stateDeltaClamped": "(clamped to {{n}}s)",
     "stateLocationRejected": "(emitted id was not a location — previous kept)",
