@@ -134,6 +134,56 @@ self.
 Importing a file always creates a *new* pack. A name collision offers a copy or a cancel, never an
 overwrite: replacing a pack is reached from that pack, not from a name that happens to match.
 
+### Exporting a Pack as a Directory
+
+A pack is also readable and writable as a directory of Markdown files — one per stored row, `pack.yaml` at
+the root for metadata and custom variables, generated reference material under `_reference/`. Desktop only:
+`tauri-plugin-dialog`'s folder picker is `FolderPickerNotImplemented` on mobile. On desktop the picked
+folder reaches `fs_scope.allow_directory`, so the capability's `$APPDATA`/`$TEMP` scope is not a constraint
+and the whole thing is plain `plugin-fs` from TypeScript.
+
+**The filename is the identity; the folder is presentation.** `<group>/<id>.md`, where the group comes from
+`TEMPLATE_GROUP_MAP` — which is code, and changes between releases. Were the path the identity, a template
+the app regroups would read as a delete plus an add of a file the user may also have edited. As a stem it is
+a rename, which git detects. Import ignores the folder entirely, so two files sharing a name anywhere in the
+tree are refused rather than resolved.
+
+Import reads `pack.yaml` and `.md` files inside folders. Root `.md` files and `_`-prefixed folders are
+ignored silently, which is what lets a user's `README.md`, their notes, and the generated reference share
+one tree with no manifest saying which is which. Export writes into that tree, and prunes template files and
+reference material it did not write — but only in a directory already carrying a `pack.yaml`, and never a
+root file it does not own.
+
+Two exports of unchanged content must be byte-identical or git cannot merge them, which is the whole point.
+Hence LF endings, one trailing newline, fixed key order in `pack.yaml`, variables sorted by `sortOrder` then
+name, and **no timestamp** — a value that moves between two exports of the same pack conflicts on every
+merge and says nothing the commit does not.
+
+`_reference/template-status.md` names the templates carrying an edit, and speaks a different language per
+source. For `default-pack` it uses `classifyTemplate`'s three states, because there the baseline *is* the
+shipped text; those rows are what would otherwise ride silently into a merge base. For a custom pack it uses
+`isUntouched` alone — a shipped comparison there would flag every row of a pack whose baseline was never the
+shipped text — and names what the next replace destroys.
+
+### Why the Baseline Lives in Git
+
+`baseline_hash` is a single-slot approximation of a three-way merge for one pack. The workflow the directory
+format exists for does the merge properly: export the shipped baseline on each release onto an upstream
+branch, merge it into the branch carrying your own edits, review the result as a diff, import that into a
+custom pack. `base` is the previous shipped-baseline export, `theirs` the new one, `ours` the edited tree.
+
+The app therefore contributes two things and models none of the rest: a `theirs` no edit can reach, and an
+import that does not lie about what it wrote. **The shipped-baseline export is a separate action** — it
+reads `PROMPT_TEMPLATES`, not a pack's rows, so one in-app edit to `default-pack` cannot poison the merge
+base. It lives beside `refreshTemplates` in the built-in pack's Pack Settings, whose subject is already the
+text the app ships rather than the pack it renders under.
+
+A directory import writes rows with `isBaseline: true`, as `updatePackFromFile` does, and for the same
+reason: the file *is* the pack's baseline, the user's edits live in git. The alternative reads every row as
+edited, so `summarizeUpdate` would warn that ~80 edits are about to be discarded on every single import —
+and a warning that always fires stops being read. The built-in pack stays excluded as an import target for
+the reason it already is.
+
 ## Prompt Ordering and Prefix Caching
 
 Inference servers reuse the KV cache for the longest prefix a request shares with the previous one, and

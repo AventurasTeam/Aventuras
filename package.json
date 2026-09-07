@@ -58,6 +58,7 @@
     "marked": "^18.0.7",
     "svelte-codemirror-editor": "^2.1.0",
     "tailwind-merge": "^3.6.0",
+    "yaml": "^2.9.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -92,8 +93,7 @@
     "typescript-eslint": "^8.65.0",
     "vaul-svelte": "^1.0.0-next.7",
     "vite": "^8.2.0",
-    "vitest": "^4.1.10",
-    "yaml": "^2.9.0"
+    "vitest": "^4.1.10"
   },
   "aube": {
     "allowBuilds": {

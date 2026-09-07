@@ -1,5 +1,6 @@
 import { open } from '@tauri-apps/plugin-dialog'
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs'
+import { getVersion } from '@tauri-apps/api/app'
 import { resolveSaveTarget } from '$lib/services/exportTarget'
 import { packService } from './pack-service'
 import { database } from '$lib/services/database'
@@ -8,9 +9,22 @@ import { templateEngine } from '$lib/services/templates/engine'
 import { hashContent } from './hash'
 import { packUpdateSummary, type PackUpdateSummary } from './update-summary'
 import type { PresetPack } from './types'
+import { PACK_FILE } from './directory/layout'
+import { pickDirectory, readTree, writeTree } from './directory/io'
+import { validateTree, type DirectoryValidationResult } from './directory/parse'
+import {
+  buildShippedBaselineTree,
+  buildTree,
+  planPrune,
+  shippedTemplateRows,
+  type Tree,
+} from './directory/tree'
+import type { StatusSource } from './directory/reference'
 
 interface TemplateError {
   templateId: string
+  /** Where it was found, when the source was a directory rather than a single file. */
+  path?: string
   error: string
 }
 
@@ -27,6 +41,24 @@ export interface ImportValidationResult {
  * that happens to match.
  */
 export type ConflictStrategy = 'rename' | 'cancel'
+
+/** An export worked out but not yet written, so the user can be asked about an unfamiliar folder. */
+export interface DirectoryExportPlan {
+  root: string
+  tree: Tree
+  prunePaths: string[]
+  /**
+   * The folder holds files but carries no `pack.yaml`, so it is not a tree this export owns.
+   * Nothing is pruned in that case, but the user is asked before files land in it.
+   */
+  needsConfirmation: boolean
+}
+
+/** A directory read and validated, ready for the same import paths a `.prompt.json` takes. */
+export interface DirectoryImportCandidate {
+  root: string
+  validation: DirectoryValidationResult
+}
 
 class ImportExportService {
   async exportPack(packId: string): Promise<boolean> {
@@ -67,6 +99,93 @@ class ImportExportService {
 
     await writeTextFile(target.destPath, JSON.stringify(exportData))
     return true
+  }
+
+  /** Where an existing tree's files sit, and which of them this export would leave behind. */
+  private async planWrite(root: string, tree: Tree): Promise<DirectoryExportPlan> {
+    let existingPaths: string[] = []
+    try {
+      existingPaths = (await readTree(root)).allPaths
+    } catch (e) {
+      console.error('[ImportExportService] Failed to read the chosen folder:', e)
+    }
+
+    const isPreviousExport = existingPaths.some((p) => p.replace(/\\/g, '/') === PACK_FILE)
+
+    return {
+      root,
+      tree,
+      prunePaths: isPreviousExport ? planPrune(existingPaths, tree) : [],
+      needsConfirmation: !isPreviousExport && existingPaths.length > 0,
+    }
+  }
+
+  /** Plan an export of a pack as it is stored. `null` if the user cancelled the folder pick. */
+  async planPackDirectoryExport(packId: string): Promise<DirectoryExportPlan | null> {
+    const fullPack = await packService.getFullPack(packId)
+    if (!fullPack) return null
+
+    const root = await pickDirectory('Export prompt pack to folder')
+    if (!root) return null
+
+    const status: StatusSource = fullPack.pack.isDefault
+      ? { kind: 'default-pack', rows: fullPack.templates, shippedHashes: await shippedHashes() }
+      : { kind: 'custom-pack', rows: fullPack.templates }
+
+    const tree = buildTree({
+      source: 'pack',
+      appVersion: await getVersion(),
+      name: fullPack.pack.name,
+      description: fullPack.pack.description ?? undefined,
+      author: fullPack.pack.author ?? undefined,
+      templates: fullPack.templates.map((t) => ({ templateId: t.templateId, content: t.content })),
+      variables: fullPack.variables.map((v) => ({
+        variableName: v.variableName,
+        displayName: v.displayName,
+        variableType: v.variableType,
+        isRequired: v.isRequired,
+        defaultValue: v.defaultValue,
+        enumOptions: v.enumOptions,
+        description: v.description,
+        sortOrder: v.sortOrder,
+      })),
+      status,
+    })
+
+    return this.planWrite(root, tree)
+  }
+
+  /** Plan an export of the prompt text the app ships, which no pack can influence. */
+  async planShippedBaselineExport(): Promise<DirectoryExportPlan | null> {
+    const root = await pickDirectory('Export shipped prompts to folder')
+    if (!root) return null
+
+    return this.planWrite(root, buildShippedBaselineTree(await getVersion()))
+  }
+
+  async applyDirectoryExport(plan: DirectoryExportPlan): Promise<void> {
+    await writeTree(plan.root, plan.tree, plan.prunePaths)
+  }
+
+  /** Pick a folder and validate it in full. `null` if the user cancelled. */
+  async pickAndValidateDirectory(): Promise<DirectoryImportCandidate | null> {
+    const root = await pickDirectory('Import prompt pack from folder')
+    if (!root) return null
+
+    try {
+      const { contents } = await readTree(root)
+      return { root, validation: validateTree(contents) }
+    } catch (e) {
+      console.error('[ImportExportService] Failed to read the chosen folder:', e)
+      return {
+        root,
+        validation: {
+          valid: false,
+          structuralErrors: [`Could not read that folder: ${(e as Error).message}`],
+          templateErrors: [],
+        },
+      }
+    }
   }
 
   async pickAndReadImportFile(): Promise<string | null> {
@@ -210,6 +329,16 @@ class ImportExportService {
 
     return pack.id
   }
+}
+
+/** The hash of the text the app ships, per stored row id, for the status report. */
+async function shippedHashes(): Promise<Map<string, string>> {
+  const entries = await Promise.all(
+    shippedTemplateRows().map(
+      async (row) => [row.templateId, await hashContent(row.content)] as [string, string],
+    ),
+  )
+  return new Map(entries)
 }
 
 export const importExportService = new ImportExportService()

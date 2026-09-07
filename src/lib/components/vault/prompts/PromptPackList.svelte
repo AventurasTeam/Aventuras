@@ -4,8 +4,10 @@
   import { database } from '$lib/services/database'
   import {
     importExportService,
+    type DirectoryExportPlan,
     type ImportValidationResult,
   } from '$lib/services/packs/import-export'
+  import { supportsDirectoryTransfer } from '$lib/services/packs/directory/support'
   import type { PackUpdateSummary } from '$lib/services/packs/update-summary'
   import { ui } from '$lib/stores/ui.svelte'
   import { errMessage } from '$lib/utils/error'
@@ -39,8 +41,15 @@
   let updateValidation = $state<ImportValidationResult | null>(null)
   let updateSummary = $state<PackUpdateSummary | null>(null)
   let updateErrors = $state<ImportValidationResult | null>(null)
+  let updateErrorSource = $state<'file' | 'folder'>('file')
   let updating = $state(false)
   let exportingBeforeUpdate = $state(false)
+
+  // A folder that already holds files but is not a previous export: nothing is pruned, but
+  // the user is asked before anything lands in it.
+  let pendingExport = $state<DirectoryExportPlan | null>(null)
+
+  const canUseDirectories = supportsDirectoryTransfer()
 
   async function loadPacks() {
     loading = true
@@ -94,16 +103,67 @@
     }
   }
 
+  async function handleExportPackDirectory(packId: string) {
+    try {
+      const plan = await importExportService.planPackDirectoryExport(packId)
+      if (!plan) return
+
+      if (plan.needsConfirmation) {
+        pendingExport = plan
+        return
+      }
+
+      await importExportService.applyDirectoryExport(plan)
+      ui.showToast('Pack exported to folder', 'info')
+    } catch (e) {
+      console.error('Folder export failed:', e)
+      ui.showToast(`Export failed: ${errMessage(e)}`, 'error')
+    }
+  }
+
+  async function confirmExportIntoUsedFolder() {
+    if (!pendingExport) return
+    const plan = pendingExport
+    pendingExport = null
+    try {
+      await importExportService.applyDirectoryExport(plan)
+      ui.showToast('Pack exported to folder', 'info')
+    } catch (e) {
+      console.error('Folder export failed:', e)
+      ui.showToast(`Export failed: ${errMessage(e)}`, 'error')
+    }
+  }
+
+  async function handleUpdateFromDirectory(pack: PresetPack) {
+    const candidate = await importExportService.pickAndValidateDirectory()
+    if (!candidate) return
+
+    if (!candidate.validation.valid || !candidate.validation.pack) {
+      updateErrorSource = 'folder'
+      updateErrors = candidate.validation
+      return
+    }
+
+    await openUpdateConfirmation(pack, candidate.validation)
+  }
+
   async function handleUpdateFromFile(pack: PresetPack) {
     const content = await importExportService.pickAndReadImportFile()
     if (!content) return
 
     const result = importExportService.validateImport(content)
     if (!result.valid || !result.pack) {
+      updateErrorSource = 'file'
       updateErrors = result
       return
     }
 
+    await openUpdateConfirmation(pack, result)
+  }
+
+  /** The confirmation is the same whichever source the replacement came from. */
+  async function openUpdateConfirmation(pack: PresetPack, result: ImportValidationResult) {
+    if (!result.pack) return
     try {
       updateSummary = await importExportService.summarizeUpdate(pack.id, result.pack)
       updateValidation = result
@@ -193,7 +253,11 @@
         usageCount={usageCounts.get(pack.id) ?? 0}
         onclick={() => onOpenPack(pack.id)}
         onExport={() => handleExportPack(pack.id)}
+        onExportDirectory={() => handleExportPackDirectory(pack.id)}
         onUpdateFromFile={pack.isDefault ? undefined : () => handleUpdateFromFile(pack)}
+        onUpdateFromDirectory={pack.isDefault || !canUseDirectories
+          ? undefined
+          : () => handleUpdateFromDirectory(pack)}
         onDelete={pack.isDefault
           ? undefined
           : () => {
@@ -228,6 +292,7 @@
   open={!!updateErrors}
   validationResult={updateErrors}
   conflictPack={null}
+  source={updateErrorSource}
   onConfirm={() => {
     updateErrors = null
   }}
@@ -235,6 +300,35 @@
     updateErrors = null
   }}
 />
+
+<!-- Exporting into a folder that holds files but is not a previous export. Nothing is removed
+     in that case, so the only question is whether the user meant this folder. -->
+<ResponsiveModal.Root
+  open={!!pendingExport}
+  onOpenChange={(v) => {
+    if (!v) pendingExport = null
+  }}
+>
+  <ResponsiveModal.Content class="p-0 sm:max-w-md">
+    <ResponsiveModal.Header class="border-b px-6 py-4">
+      <ResponsiveModal.Title>Export into this folder?</ResponsiveModal.Title>
+      <ResponsiveModal.Description>
+        This folder already holds files and was not written by a previous export. Nothing in it will
+        be deleted, but any file sharing a name with one of the exported files — including ABOUT.md,
+        .gitattributes and any prompt of the same name — will be overwritten.
+      </ResponsiveModal.Description>
+    </ResponsiveModal.Header>
+    <ResponsiveModal.Footer class="border-t px-6 py-4">
+      <Button
+        variant="outline"
+        onclick={() => {
+          pendingExport = null
+        }}>Cancel</Button
+      >
+      <Button onclick={confirmExportIntoUsedFolder}>Export here</Button>
+    </ResponsiveModal.Footer>
+  </ResponsiveModal.Content>
+</ResponsiveModal.Root>
 
 <!-- Delete confirmation -->
 <ResponsiveModal.Root
