@@ -754,6 +754,30 @@ describe('rankAll — keyword injection routing', () => {
   })
 })
 
+describe('sims / slot alignment', () => {
+  // A short sims scores NaN, but a long one reads as a plausible score, so the
+  // pool is refused rather than blended (replay.ts refuses a holed row the same way).
+  it('refuses a candidate carrying fewer sims than the pass has slots', () => {
+    expect(() =>
+      rankPerType([candidate({ id: 'short', sims: [1, 0] })], 'happenings', 1000, base),
+    ).toThrow('candidate short carries 2 sims for 3 query slots')
+  })
+
+  it('refuses a candidate carrying more sims than the pass has slots', () => {
+    expect(() =>
+      rankPerType([candidate({ id: 'long', sims: [1, 0, 0, 0.5] })], 'happenings', 1000, base),
+    ).toThrow('candidate long carries 4 sims for 3 query slots')
+  })
+
+  it('accepts a pool aligned with a widened slot list', () => {
+    const r = rankPerType([candidate({ id: 'wide', sims: [1, 0, 0, 0.5] })], 'happenings', 1000, {
+      ...base,
+      querySlots: [...FIXED_SLOTS, 'direct'],
+    })
+    expect(r.traces[0].id).toBe('wide')
+  })
+})
+
 describe('blendSims pooling', () => {
   const weights = { action: 0.3, digest: 0.25, summary: 0.2, direct: 0.25 }
 

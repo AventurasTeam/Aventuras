@@ -44,6 +44,7 @@ export type {
   KeywordInjection,
   PoolFunnel,
   QueryAll,
+  QuerySlot,
   QueryTextPresence,
   QueryWeights,
   RankAllInput,

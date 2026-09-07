@@ -3,6 +3,7 @@ import {
   rankPerType,
   type Candidate,
   type KeywordInjection,
+  type QuerySlot,
   type RankedType,
   type RetrievalType,
 } from '@/lib/retrieval'
@@ -12,6 +13,9 @@ import { assertRankerParams, RankerParamsError } from './validate'
 type CaptureRow = ProbeCapturePayload['pools'][RetrievalType][number]
 
 const REPLAY_CHAPTER = 'ch_replay'
+
+/** The capture's three sim columns are Q1/Q2/Q3 in order. */
+const CAPTURED_QUERY_SLOTS: readonly QuerySlot[] = ['action', 'digest', 'summary']
 
 const entryIdOf = (row: CaptureRow): string => `entry_${row.target_id}`
 
@@ -129,8 +133,7 @@ export function replayType(
   return rankPerType(pool, type, budget, {
     keywordInjected,
     params: payload.params.ranker,
-    // The capture's three sim columns are Q1/Q2/Q3 in order.
-    querySlots: ['action', 'digest', 'summary'],
+    querySlots: CAPTURED_QUERY_SLOTS,
     chapterRanges,
     matchedChapterIds: new Set([REPLAY_CHAPTER]),
     countTokens: options.countTokens ?? refusePromotedRow,

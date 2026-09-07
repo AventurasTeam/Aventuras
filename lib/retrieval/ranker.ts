@@ -62,7 +62,7 @@ export function blendSims(
   let total = 0
   for (let i = 0; i < slots.length; i++) {
     const s = sims[i]
-    if (s == null) continue
+    if (s === null) continue
     if (slots[i] === 'direct') {
       direct.push(s)
       continue
@@ -198,6 +198,19 @@ function boostedEntryIdsFor(input: RankTypeInput): ReadonlySet<string> {
   return out
 }
 
+// Checked here rather than inside blendSims, which runs per candidate. A short
+// `sims` scores NaN, but a long one silently drops a query's share and reads as a
+// plausible score instead.
+function assertSimsAligned(pool: readonly Candidate[], slots: readonly QuerySlot[]): void {
+  for (const c of pool) {
+    if (c.sims.length !== slots.length) {
+      throw new Error(
+        `rankPerType: candidate ${c.id} carries ${c.sims.length} sims for ${slots.length} query slots`,
+      )
+    }
+  }
+}
+
 export function rankPerType(
   wholePool: readonly Candidate[],
   type: RetrievalType,
@@ -209,6 +222,7 @@ export function rankPerType(
   // Seated rows leave the pool (retrieval.md → Keyword injection): never charged
   // twice, and filed as injections with no candidate record. CUT rows stay in.
   const pool = seatedIds.size === 0 ? wholePool : wholePool.filter((c) => !seatedIds.has(c.id))
+  assertSimsAligned(pool, input.querySlots)
 
   const boostedEntryIds = boostedEntryIdsFor(input)
   const scored = pool.map((c) => score(c, type, input, boostedEntryIds))
