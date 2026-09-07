@@ -9,11 +9,11 @@ export type {
   KeywordInjections,
   KeywordRetrievalSettings,
 } from './injection'
-export { matchTerms, nameKeywordIndexFrom, normalizeTerm } from './name-index'
-export type { NameKeywordIndex } from './name-index'
+export { entityNameIndexFrom, matchTerms, normalizeTerm } from './name-index'
+export type { EntityNameIndex } from './name-index'
 export { buildStructuralFloor, filterEntityPool, filterLorePool, filterThreadPool } from './pools'
 export type { EntityRow, LoreRow, StructuralFloor, ThreadRow } from './pools'
-export { buildQueryStack, distributeQueryVectors } from './queries'
+export { buildQueryStack, distributeQueryVectors, QUERY_SLOT_OF_SOURCE } from './queries'
 export type { QuerySource, QuerySpec, QueryStack, QueryStackInput } from './queries'
 export { rankAll, rankPerType, tokenCost } from './ranker'
 export type { RankTypeInput } from './ranker'

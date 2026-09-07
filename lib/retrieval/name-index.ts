@@ -4,7 +4,7 @@ import { normalizeTerm } from '@/lib/keyword-terms'
 
 export { normalizeTerm }
 
-export type NameKeywordIndex = {
+export type EntityNameIndex = {
   /** lowercased, NFC-normalized entity names present in the branch */
   entityNames: ReadonlySet<string>
 }
@@ -20,7 +20,7 @@ export function parseKeywords(raw: unknown): string[] {
   return Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === 'string') : []
 }
 
-export function nameKeywordIndexFrom(entities: readonly { name: string }[]): NameKeywordIndex {
+export function entityNameIndexFrom(entities: readonly { name: string }[]): EntityNameIndex {
   const entityNames = new Set<string>()
 
   for (const entity of entities) {

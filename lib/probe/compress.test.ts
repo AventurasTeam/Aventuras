@@ -46,7 +46,6 @@ const capturePayload = (): ProbeCapturePayload => ({
       text: 'The bridge fell during the third night of the siege.',
       token_count: 11,
       source: 'piggyback_summary',
-      sentence_scores: [0.9, 0.6, 0.4],
     },
   ],
   scan_text: 'What does the party do next?\nThe bridge fell during the third night of the siege.',
@@ -67,12 +66,10 @@ const capturePayload = (): ProbeCapturePayload => ({
         // under mutation.
         display_name: `Most přes Vltavu ${i}`,
         display_text: isPreFiltered ? null : 'The bridge fell during the third night of the siege.',
-        sim_q1: 0.5,
-        sim_q2: 0.4,
-        // Row 0 is the top selected row (not_dropped, mmr_rank 0) and
-        // carries a real sim_q3: null — the ranker's own "this query
-        // produced no vector" case.
-        sim_q3: i === 0 ? null : 0.3,
+        // Row 0 is the top selected row (not_dropped, mmr_rank 0) and carries
+        // a real null in the Q3 slot — the ranker's own "this query produced
+        // no vector" case.
+        sims: [0.5, 0.4, i === 0 ? null : 0.3],
         sim_blend: 0.45,
         recency_factor: 1,
         pin_signal: 0,
@@ -163,17 +160,17 @@ describe('compressPayload', () => {
   })
 
   it('preserves a null distinctly from an absent key', () => {
-    // sim_q* is nullable, and JSON.stringify drops `undefined` while keeping
-    // `null` — the capture's whole null-vs-zero distinction rides on that
-    // surviving the round trip. The top selected row (i === 0) carries a
-    // real sim_q3: null.
+    // A `sims` entry is nullable, and JSON.stringify drops `undefined` while
+    // keeping `null` — the capture's whole null-vs-zero distinction rides on
+    // that surviving the round trip. The top selected row (i === 0) carries a
+    // real null in the Q3 slot.
     const payload = capturePayload()
 
     const decoded = decompressPayload(compressPayload(payload).bytes) as ProbeCapturePayload
     const topSelected = decoded.pools.happenings[0]
     const preFiltered = decoded.pools.happenings[39]
 
-    expect(topSelected.sim_q3).toBeNull()
+    expect(topSelected.sims[2]).toBeNull()
     expect(topSelected.common_knowledge).toBe(true)
     // A genuinely pre-filtered row (never reached MMR) carries null across
     // all three fields at once — the combination costTokens never produces.
@@ -181,9 +178,9 @@ describe('compressPayload', () => {
     expect(preFiltered.display_text).toBeNull()
     expect(preFiltered.tokens_estimated).toBeNull()
     expect(preFiltered.mmr_rank).toBeNull()
-    // No producer emits sentence_scores for the action query, so the key
-    // itself — not just its value — must survive as absent.
-    expect('sentence_scores' in decoded.queries[0]).toBe(false)
+    // A light capture stores no vector at all, so the key itself — not just
+    // its value — must survive as absent.
+    expect('vector' in topSelected).toBe(false)
   })
 
   it('throws a named error when the payload cannot be JSON-encoded', () => {

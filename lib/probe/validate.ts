@@ -87,8 +87,10 @@ export function assertCaptureShape(decoded: unknown): asserts decoded is ProbeCa
       'keyword_injections',
       `must be an array, got ${typeOf(payload.keyword_injections)}`,
     )
-  if (!Array.isArray(payload.queries) || payload.queries.length !== 3)
-    throw new CaptureShapeError('queries', 'must be a three-query stack')
+  // Length is a floor, not an equality: the three fixed slots are always
+  // captured, absent ones included, and the emitted tail varies per turn.
+  if (!Array.isArray(payload.queries) || payload.queries.length < 3)
+    throw new CaptureShapeError('queries', 'must carry at least the three fixed query slots')
   // Required-and-nullable, so `undefined` is rejected rather than defaulted:
   // replayType never sees the row, and an absent marker reads there as a
   // failure. A payload predating the field is refused, not silently replayed.

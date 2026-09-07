@@ -55,10 +55,7 @@ const candidateOf = (
   target_id: t.id,
   display_name: t.displayName,
   display_text: t.renderedText,
-  // CaptureCandidate carries three sim columns, so slots past Q3 are not captured.
-  sim_q1: t.sims[0] ?? null,
-  sim_q2: t.sims[1] ?? null,
-  sim_q3: t.sims[2] ?? null,
+  sims: [...t.sims],
   sim_blend: t.simBlend,
   recency_factor: t.recencyFactor,
   pin_signal: t.pinSignal,
@@ -119,17 +116,15 @@ const queryOf = (q: QuerySpec) => ({
 
 // No query vector in either mode: λ_div — the one thing deep mode exists for —
 // needs candidate-vs-candidate cosines, and every other simulation re-blends
-// the per-row sim_q1..3 (probe.md → Deep mode).
-const queriesOf = (stack: QueryStack | null): ProbeCapturePayload['queries'] => {
-  if (stack === null) {
-    return [
-      queryOf({ text: '', source: 'user_action' }),
-      queryOf({ text: '', source: 'structural_digest' }),
-      queryOf({ text: '', source: 'piggyback_summary' }),
-    ]
-  }
-  return [queryOf(stack.q1), queryOf(stack.q2), queryOf(stack.q3)]
-}
+// the per-row `sims` (probe.md → Deep mode).
+const queriesOf = (stack: QueryStack | null): ProbeCapturePayload['queries'] =>
+  stack === null
+    ? [
+        queryOf({ text: '', source: 'user_action' }),
+        queryOf({ text: '', source: 'structural_digest' }),
+        queryOf({ text: '', source: 'piggyback_summary' }),
+      ]
+    : stack.specs.map(queryOf)
 
 const nameWithDescription = (name: string, description: string | null): string =>
   description ? `${name}: ${description}` : name

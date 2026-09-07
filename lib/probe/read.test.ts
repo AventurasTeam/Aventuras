@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { CAPTURE_VERSION, type ProbeCapturePayload } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
-import { RANKER_DEFAULTS } from '@/lib/retrieval'
+import { RANKER_DEFAULTS, type RankerParams } from '@/lib/retrieval'
 import { retrievalFailure } from '@/lib/retrieval/__tests__/outcome'
 import { queryAllOf } from '@/lib/retrieval/__tests__/query-all'
 
@@ -16,6 +16,7 @@ import {
   decodeCaptures,
   deleteCaptureOp,
 } from './read'
+import { assertRankerParams } from './validate'
 import { writeProbeCapture } from './writer'
 
 describe('capturesForStoryQuery', () => {
@@ -177,6 +178,31 @@ describe('decodeCapture', () => {
       capture_version: CAPTURE_VERSION - 1,
     })
 
+    expect(() => decodeCapture(['pc_1', 'br_a', 1000, 'light', null, 100, bytes])).toThrow(
+      /format version/i,
+    )
+  })
+
+  // The version guard has to run before the params guard: a capture whose
+  // tunables were renamed since otherwise reports as malformed rather than
+  // as out of date, and only the second reading tells a reader what to do.
+  it('refuses a v5 capture at the version check rather than on its stale weight keys', () => {
+    const payload = buildCapturePayload(captureInput())
+    const v5 = {
+      ...payload,
+      capture_version: 5,
+      params: {
+        ...payload.params,
+        ranker: {
+          ...RANKER_DEFAULTS,
+          weights: { action: 0.35, digest: 0.35, prose: 0.3 },
+        } as unknown as RankerParams,
+      },
+    }
+    const { bytes } = compressPayload(v5)
+
+    // Arms the trap: the stale weight keys really would throw on their own.
+    expect(() => assertRankerParams(v5.params.ranker)).toThrow(/weights\.summary/)
     expect(() => decodeCapture(['pc_1', 'br_a', 1000, 'light', null, 100, bytes])).toThrow(
       /format version/i,
     )

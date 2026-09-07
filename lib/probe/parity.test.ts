@@ -7,6 +7,7 @@ import {
   RANKER_DEFAULTS,
   type Candidate,
   type DropReason,
+  type QuerySource,
   type RankedType,
   type RankerParams,
   type RetrievalType,
@@ -385,7 +386,11 @@ const rankProd = (state: ParityState): RankedType =>
   })
 
 /** Round-trips the bundle through the real write/read path, gzip and all. */
-async function storedPayload(state: ParityState, prod: RankedType) {
+async function storedPayload(
+  state: Pick<ParityState, 'type' | 'budget' | 'params'>,
+  prod: RankedType,
+  stack = queryStack(),
+) {
   const { sqlite, runInTransaction } = await seededDb()
   const written = await writeProbeCapture(
     { runInTransaction },
@@ -397,7 +402,7 @@ async function storedPayload(state: ParityState, prod: RankedType) {
         ...settings,
         retrievalBudgets: { ...settings.retrievalBudgets, [state.type]: state.budget },
       },
-      outcome: retrievalSuccess({ bundles: { [state.type]: prod }, queries: queryStack() }),
+      outcome: retrievalSuccess({ bundles: { [state.type]: prod }, queries: stack }),
     }),
   )
   // The writer swallows its own failures, so an unasserted 'failed' would leave
@@ -424,6 +429,67 @@ describe.each(Object.entries(STATES))('parity — %s', (_name, state) => {
     expect(replayed.selected.map((c) => c.id)).toEqual(prod.selected.map((c) => c.id))
     expect(replayed.funnel).toEqual(prod.funnel)
     expect(replayed.traces).toEqual(prod.traces)
+  })
+})
+
+// A parity case where both sides run three slots can never catch a replay that
+// blends the wrong number of them, which is the whole hazard of a stack whose
+// length varies per turn.
+describe('parity — a stack longer than the three fixed slots', () => {
+  const stack = queryStack({
+    piggybackSummary: 'The tide reached the second shelf before the guild noticed.',
+    emittedQueries: ['House Eldrin and its sigil'],
+  })
+
+  const spec = (sims: readonly (number | null)[], text: string) => ({
+    renderedText: text,
+    sims,
+    chaptersOld: 0,
+    pinSignal: 0,
+    keywordHits: [],
+    embeddingStale: false,
+  })
+
+  // lo_1 blends under lo_0 across the fixed three and above it once the emitted
+  // slot counts: 0.75×0.45 + 0.25×1 = 0.5875 against 0.75×0.5 + 0.25×0 = 0.375.
+  const POOL: readonly Candidate[] = [
+    lore(0, spec([0.5, 0.5, 0.5, 0], PROSE[0])),
+    lore(1, spec([0.45, 0.45, 0.45, 1], PROSE[1])),
+  ]
+
+  const state = { type: 'lore', budget: 10_000, params: RANKER_DEFAULTS } as const
+
+  it('replays a four-slot capture to the same traces the four-slot pass produced', async () => {
+    const prod = rankPerType(POOL, 'lore', state.budget, {
+      params: RANKER_DEFAULTS,
+      querySlots: stack.slots,
+      chapterRanges: new Map(),
+      countTokens,
+    })
+    expect(marksOf(prod)).toEqual({
+      order: ['lo_1', 'lo_0'],
+      dropReasons: ['not_dropped'],
+      revived: false,
+    })
+
+    const payload = await storedPayload(state, prod, stack)
+
+    expect(payload.queries).toHaveLength(4)
+    expect(payload.pools.lore[0].sims).toHaveLength(4)
+    expect(replayType(payload, 'lore').traces).toEqual(prod.traces)
+  })
+
+  it('ranks the same rows the other way round over the fixed three alone', () => {
+    const threeSlot = rankPerType(
+      POOL.map((c) => ({ ...c, sims: c.sims.slice(0, 3) })),
+      'lore',
+      state.budget,
+      { params: RANKER_DEFAULTS, querySlots, chapterRanges: new Map(), countTokens },
+    )
+
+    // 0.375/0.75 = 0.5 against 0.3375/0.75 = 0.45: dropping the emitted slot
+    // flips the order, so the case above cannot pass on a replay that ignores it.
+    expect(threeSlot.traces.map((t) => t.id)).toEqual(['lo_0', 'lo_1'])
   })
 })
 
@@ -628,6 +694,21 @@ describe('replayType', () => {
     }
 
     expect(() => replayType(stripped, 'happenings')).toThrow(/common_knowledge/)
+  })
+
+  // A decoded payload is a cast over JSON.parse, so a source the current union no
+  // longer carries reaches here as a real value rather than a type error.
+  it('refuses a capture query whose source maps to no blend weight', async () => {
+    const state = STATES.normal
+    const payload = await storedPayload(state, rankProd(state))
+    const tampered = {
+      ...payload,
+      queries: payload.queries.map((q, i) =>
+        i === 0 ? { ...q, source: 'prose_extract' as unknown as QuerySource } : q,
+      ),
+    }
+
+    expect(() => replayType(tampered, 'happenings')).toThrow(/unknown source/)
   })
 
   // Named rather than left to cosine: a zero-length vector is neither unit-norm

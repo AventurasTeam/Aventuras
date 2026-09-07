@@ -1,5 +1,6 @@
 import type { ProbeCapturePayload } from '@/lib/db'
 import {
+  QUERY_SLOT_OF_SOURCE,
   rankPerType,
   type Candidate,
   type KeywordInjection,
@@ -14,8 +15,15 @@ type CaptureRow = ProbeCapturePayload['pools'][RetrievalType][number]
 
 const REPLAY_CHAPTER = 'ch_replay'
 
-/** The capture's three sim columns are Q1/Q2/Q3 in order. */
-const CAPTURED_QUERY_SLOTS: readonly QuerySlot[] = ['action', 'digest', 'summary']
+// The stack's length varies per turn, and a slot list disagreeing with the one
+// production blended re-scores every row and reports it as a ranking result.
+const capturedSlots = (payload: ProbeCapturePayload): QuerySlot[] =>
+  payload.queries.map((q) => {
+    const slot: QuerySlot | undefined = QUERY_SLOT_OF_SOURCE[q.source]
+    // Defaulting would blend the row under a weight the pass never spent.
+    if (slot === undefined) throw new Error(`capture query carries unknown source ${q.source}`)
+    return slot
+  })
 
 const entryIdOf = (row: CaptureRow): string => `entry_${row.target_id}`
 
@@ -88,7 +96,7 @@ export function replayType(
       displayName: r.display_name,
       // Null only on a pre-filtered row, which the captured params never costed.
       renderedText: r.display_text ?? '',
-      sims: [r.sim_q1, r.sim_q2, r.sim_q3] as const,
+      sims: [...r.sims],
       vector: Float32Array.from(r.vector),
       chaptersOld: r.chapters_old,
       pinSignal: r.pin_signal,
@@ -133,7 +141,7 @@ export function replayType(
   return rankPerType(pool, type, budget, {
     keywordInjected,
     params: payload.params.ranker,
-    querySlots: CAPTURED_QUERY_SLOTS,
+    querySlots: capturedSlots(payload),
     chapterRanges,
     matchedChapterIds: new Set([REPLAY_CHAPTER]),
     countTokens: options.countTokens ?? refusePromotedRow,

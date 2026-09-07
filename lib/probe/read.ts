@@ -75,8 +75,10 @@ export function decodeCapture(row: readonly unknown[]): StoredCapture {
   ]
   const decoded = decompressPayload(payloadBytes)
   assertCaptureShape(decoded)
-  assertRankerParams(decoded.params.ranker)
+  // Before the params guard: a stale capture reports as stale, not as the
+  // malformed ranker params a since-renamed tunable leaves it holding.
   assertCaptureVersion(id, decoded)
+  assertRankerParams(decoded.params.ranker)
   return { id, branchId, capturedAt, captureMode, failureReason, payloadSize, payload: decoded }
 }
 

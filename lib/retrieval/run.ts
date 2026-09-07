@@ -12,12 +12,7 @@ import { EmbedderCancelledError, type EmbedderErrorKind } from '@/lib/embedder'
 import { loadAwarenessForScene, type AwarenessRow } from './awareness'
 import { KNN_K, RANKER_DEFAULTS } from './constants'
 import { buildKeywordInjections, type KeywordRetrievalSettings } from './injection'
-import {
-  matchTerms,
-  nameKeywordIndexFrom,
-  normalizeTerm,
-  type NameKeywordIndex,
-} from './name-index'
+import { entityNameIndexFrom, matchTerms, normalizeTerm, type EntityNameIndex } from './name-index'
 import {
   buildStructuralFloor,
   filterEntityPool,
@@ -297,7 +292,7 @@ async function runRetrievalPass(
       loadExistingVecTables(deps.queryAll, params.dim),
       countStaleHappenings(deps.queryAll, params.branchId),
     ])
-  const index = nameKeywordIndexFrom(sourceRows.entities)
+  const index = entityNameIndexFrom(sourceRows.entities)
 
   const floor = buildStructuralFloor({
     entities: sourceRows.entities,
@@ -518,7 +513,7 @@ type PoolCtx = {
   kind: VecTargetKind
   existingVecTables: ReadonlySet<string>
   queryVectors: readonly (Float32Array | null)[]
-  index: NameKeywordIndex
+  index: EntityNameIndex
   floor: StructuralFloor
   sourceRows: SourceRows
   /** Pool-scoped, unlike sourceRows: see loadHappeningRows. Empty for other kinds. */

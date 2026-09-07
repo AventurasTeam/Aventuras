@@ -178,6 +178,18 @@ const FLOOR_TEXTS = {
   alwaysThread: "The Warden's Contract (pending)\na debt owed across three generations",
 }
 
+// A four-slot pass: Q3 absent (no summary), one emitted Q4. The candidate's
+// sims are aligned with it, so the capture is one production could write.
+const emittedStack = () => queryStack({ emittedQueries: ['House Eldrin'] })
+
+const emittedBundle = () =>
+  rankPerType([{ ...loreCandidate, sims: [0.95, 0.9, null, 0.7] as const }], 'lore', 10_000, {
+    params: RANKER_DEFAULTS,
+    querySlots: emittedStack().slots,
+    chapterRanges: new Map(),
+    countTokens,
+  })
+
 const floorFixture = () =>
   buildStructuralFloor({
     entities: FLOOR_ENTITIES,
@@ -290,7 +302,7 @@ describe('buildCapturePayload', () => {
       captured_at: 1_700_000_000_123,
       embedding_model_id: 'Xenova/all-MiniLM-L6-v2',
       capture_mode: 'light',
-      capture_version: 5,
+      capture_version: 6,
     })
   })
 
@@ -342,9 +354,7 @@ describe('buildCapturePayload', () => {
       target_id: 'lo_1',
       display_name: 'The drowned archive',
       display_text: 'Ledgers are kept below the waterline, where the tide reads them first.',
-      sim_q1: 0.95,
-      sim_q2: 0.9,
-      sim_q3: 0.85,
+      sims: [0.95, 0.9, 0.85],
       // (0.3*0.95 + 0.25*0.9 + 0.2*0.85) / (0.3 + 0.25 + 0.2).
       sim_blend: expect.closeTo(0.906667, 6),
       recency_factor: 1,
@@ -364,6 +374,49 @@ describe('buildCapturePayload', () => {
       tokens_estimated: 20,
       embedding_stale: true,
     })
+  })
+
+  it('captures one query entry per slot, absent ones included', () => {
+    const payload = buildCapturePayload({
+      ...identity,
+      mode: 'light',
+      settings,
+      params: RANKER_DEFAULTS,
+      outcome: retrievalSuccess({
+        bundles: { lore: emittedBundle() },
+        queries: emittedStack(),
+      }),
+    })
+
+    expect(payload.capture_version).toBe(6)
+    // Q3 is absent here and still occupies a slot: the probe renders an absent
+    // query rather than omitting it (memory-probe.md -> Queries tab).
+    expect(payload.queries.map((q) => q.source)).toEqual([
+      'user_action',
+      'structural_digest',
+      'piggyback_summary',
+      'classifier_emitted',
+    ])
+    expect(payload.queries[2].text).toBe('')
+    expect(payload.queries[3].text).toBe('House Eldrin')
+  })
+
+  it('stores per-row sims as a list aligned with the query list', () => {
+    const payload = buildCapturePayload({
+      ...identity,
+      mode: 'light',
+      settings,
+      params: RANKER_DEFAULTS,
+      outcome: retrievalSuccess({
+        bundles: { lore: emittedBundle() },
+        queries: emittedStack(),
+      }),
+    })
+
+    const row = payload.pools.lore[0]
+    expect(row.sims).toEqual([0.95, 0.9, null, 0.7])
+    expect(row.sims).toHaveLength(payload.queries.length)
+    expect(row).not.toHaveProperty('sim_q1')
   })
 
   it('prices each query with the real tokenizer', () => {

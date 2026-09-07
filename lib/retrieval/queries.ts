@@ -21,12 +21,13 @@ export type QuerySource =
 
 export type QuerySpec = { text: string; source: QuerySource }
 
-const SLOT_OF: Record<QuerySource, QuerySlot> = {
+/** Which blend weight each source's query draws on. */
+export const QUERY_SLOT_OF_SOURCE = {
   user_action: 'action',
   structural_digest: 'digest',
   piggyback_summary: 'summary',
   classifier_emitted: 'direct',
-}
+} as const satisfies Record<QuerySource, QuerySlot>
 
 /** retrieval.md → Q4: capped at three, and the cap is a cost decision. */
 const MAX_EMITTED_QUERIES = 3
@@ -84,7 +85,7 @@ export function buildQueryStack(input: QueryStackInput): QueryStack {
   // An absent fixed slot is recorded but not embedded: the probe renders it, and
   // the blend re-normalizes over the present ones rather than spending a share on noise.
   const specs: QuerySpec[] = [q1, q2, q3, ...emittedSpecs(input.emittedQueries ?? [])]
-  const slots = specs.map((q) => SLOT_OF[q.source])
+  const slots = specs.map((q) => QUERY_SLOT_OF_SOURCE[q.source])
   const presence = specs.map((q) => nonEmpty(q.text))
   const embedTexts = specs.filter((_, i) => presence[i]).map((q) => q.text)
 

@@ -1,7 +1,13 @@
 import type { DatabaseSync } from 'node:sqlite'
 
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { buildQueryStack, countTokens, rankPerType, RANKER_DEFAULTS } from '@/lib/retrieval'
+import {
+  buildQueryStack,
+  countTokens,
+  rankPerType,
+  RANKER_DEFAULTS,
+  type QueryStackInput,
+} from '@/lib/retrieval'
 import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 
 import type { CaptureWriteInput } from '../writer'
@@ -34,7 +40,7 @@ export const loreBundle = () =>
     countTokens,
   })
 
-export const queryStack = () =>
+export const queryStack = (overrides: Partial<QueryStackInput> = {}) =>
   buildQueryStack({
     userAction: 'Mira opens the ledger and reads the tide marks aloud.',
     sceneEntityNames: ['Mira'],
@@ -42,6 +48,7 @@ export const queryStack = () =>
     activeThreadTitles: [],
     eraName: null,
     piggybackSummary: null,
+    ...overrides,
   })
 
 export const successOutcome = () =>

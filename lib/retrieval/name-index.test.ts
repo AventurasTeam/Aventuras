@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { matchTerms, nameKeywordIndexFrom, normalizeTerm, parseKeywords } from './name-index'
+import { entityNameIndexFrom, matchTerms, normalizeTerm, parseKeywords } from './name-index'
 
 const named = (...names: string[]) => names.map((name) => ({ name }))
 
-describe('nameKeywordIndexFrom', () => {
-  const index = nameKeywordIndexFrom(named('Kara Vex', 'Mira', 'The Hollow'))
+describe('entityNameIndexFrom', () => {
+  const index = entityNameIndexFrom(named('Kara Vex', 'Mira', 'The Hollow'))
 
   it('lowercases entity names', () => {
     expect(index.entityNames.has('kara vex')).toBe(true)
@@ -13,13 +13,13 @@ describe('nameKeywordIndexFrom', () => {
   })
 
   it('trims surrounding whitespace before storing a term', () => {
-    const idx = nameKeywordIndexFrom(named('  Kara Vex  '))
+    const idx = entityNameIndexFrom(named('  Kara Vex  '))
     expect(idx.entityNames.has('kara vex')).toBe(true)
     expect(idx.entityNames.has('  kara vex  ')).toBe(false)
   })
 
   it('excludes whitespace-only entity names from the index', () => {
-    const idx = nameKeywordIndexFrom(named('   '))
+    const idx = entityNameIndexFrom(named('   '))
     expect(idx.entityNames.size).toBe(0)
   })
 
@@ -27,7 +27,7 @@ describe('nameKeywordIndexFrom', () => {
     const nfc = 'caf\u00e9' // U+00E9, precomposed
     const nfd = 'cafe\u0301' // 'e' + U+0301 combining acute
     expect(nfc).not.toBe(nfd) // sanity: distinct code unit sequences for the same rendered text
-    const idx = nameKeywordIndexFrom(named(nfc, nfd))
+    const idx = entityNameIndexFrom(named(nfc, nfd))
     expect(idx.entityNames.size).toBe(1)
   })
 })
@@ -80,7 +80,7 @@ describe('matchTerms', () => {
   })
 
   it('matches when prose uses a different Unicode normalization form than the stored term', () => {
-    const nfc = 'caf\u00e9' // how nameKeywordIndexFrom stores it
+    const nfc = 'caf\u00e9' // how entityNameIndexFrom stores it
     const nfd = 'cafe\u0301' // how an LLM might render the same word
     expect(nfc).not.toBe(nfd) // sanity: distinct code unit sequences
     expect(matchTerms(`the ${nfd} closed early`, new Set([nfc]))).toEqual([nfc])
