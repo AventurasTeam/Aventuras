@@ -376,46 +376,31 @@ describe('buildCapturePayload', () => {
     })
   })
 
-  it('captures one query entry per slot, absent ones included', () => {
-    const payload = buildCapturePayload({
-      ...identity,
-      mode: 'light',
-      settings,
-      params: RANKER_DEFAULTS,
-      outcome: retrievalSuccess({
-        bundles: { lore: emittedBundle() },
-        queries: emittedStack(),
-      }),
-    })
+  const emittedPayload = buildCapturePayload({
+    ...identity,
+    mode: 'light',
+    settings,
+    params: RANKER_DEFAULTS,
+    outcome: retrievalSuccess({ bundles: { lore: emittedBundle() }, queries: emittedStack() }),
+  })
 
-    expect(payload.capture_version).toBe(6)
+  it('captures one query entry per slot, absent ones included', () => {
     // Q3 is absent here and still occupies a slot: the probe renders an absent
     // query rather than omitting it (memory-probe.md -> Queries tab).
-    expect(payload.queries.map((q) => q.source)).toEqual([
+    expect(emittedPayload.queries.map((q) => q.source)).toEqual([
       'user_action',
       'structural_digest',
       'piggyback_summary',
       'classifier_emitted',
     ])
-    expect(payload.queries[2].text).toBe('')
-    expect(payload.queries[3].text).toBe('House Eldrin')
+    expect(emittedPayload.queries[2].text).toBe('')
+    expect(emittedPayload.queries[3].text).toBe('House Eldrin')
   })
 
   it('stores per-row sims as a list aligned with the query list', () => {
-    const payload = buildCapturePayload({
-      ...identity,
-      mode: 'light',
-      settings,
-      params: RANKER_DEFAULTS,
-      outcome: retrievalSuccess({
-        bundles: { lore: emittedBundle() },
-        queries: emittedStack(),
-      }),
-    })
-
-    const row = payload.pools.lore[0]
+    const row = emittedPayload.pools.lore[0]
     expect(row.sims).toEqual([0.95, 0.9, null, 0.7])
-    expect(row.sims).toHaveLength(payload.queries.length)
+    expect(row.sims).toHaveLength(emittedPayload.queries.length)
     expect(row).not.toHaveProperty('sim_q1')
   })
 

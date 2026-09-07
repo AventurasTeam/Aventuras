@@ -52,9 +52,9 @@ trustworthy.
 ## Scope: in
 
 - **Capture writer:** assemble the light-mode record from the C4
-  trace (identity, params snapshot, three queries with per-query
-  metadata and Q3 sentence scores, per-type candidate rows, funnel
-  summary, structural-floor list, stale counts); gzip payload;
+  trace (identity, params snapshot, the query list with per-query
+  metadata, per-type candidate rows, funnel summary,
+  structural-floor list, stale counts); gzip payload;
   write in the ranker's transaction; FIFO eviction at 100 per story
   (across branches) in the same transaction; failure-capture path
   with `failure_reason` and partial state; write-failure = log and

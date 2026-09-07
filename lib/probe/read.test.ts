@@ -160,6 +160,23 @@ describe('decodeCapture', () => {
     expect(() => decodeCapture(['pc_1', 'br_a', 1000, 'light', null, 100, bytes])).toThrow(message)
   })
 
+  // replayType reads queries[i].source to pick each entry's blend weight, so an
+  // element that is not an object carrying one dies inside the simulator unless
+  // the shape guard classifies the row as corrupt here.
+  it.each<[string, unknown, RegExp]>([
+    ['null', null, /queries\[0\] must be an object/i],
+    ['a bare string', 'user_action', /queries\[0\] must be an object/i],
+    ['an object with no source', { text: '', token_count: 0 }, /queries\[0\]\.source/i],
+  ])('rejects a capture whose first query entry is %s', (_label, entry, message) => {
+    const payload = buildCapturePayload(captureInput())
+    const { bytes } = compressPayload({
+      ...payload,
+      queries: [entry, ...payload.queries.slice(1)] as ProbeCapturePayload['queries'],
+    })
+
+    expect(() => decodeCapture(['pc_1', 'br_a', 1000, 'light', null, 100, bytes])).toThrow(message)
+  })
+
   it('rejects a payload that decodes to something other than an object', () => {
     const { bytes } = compressPayload('not a capture' as unknown as ProbeCapturePayload)
 

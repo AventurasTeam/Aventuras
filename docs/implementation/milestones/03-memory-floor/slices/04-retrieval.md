@@ -16,7 +16,7 @@
 ## Goal
 
 Each turn's prompt gains a retrieved slice: the pre-retrieval sync
-stage embeds dirty rows, three query vectors rank per-type
+stage embeds dirty rows, the query stack's vectors rank per-type
 candidate pools through the pure ranker module (scoring, decay,
 pinning, high-similarity bypass, MMR, greedy budget-fill), and the
 selected bundle renders into the prompt through new memory pack
@@ -30,7 +30,7 @@ Retrieval is a phase in the per-turn pipeline, after Pre commits
 the user-action delta. It never reads vec0 without syncing first —
 the sync stage embeds every `embedding_stale` row in one batch, and
 a row it cannot embed blocks the turn like a failed LLM call.
-Scoring blends three query similarities, decays by chapter age
+Scoring blends the per-query similarities, decays by chapter age
 scaled by the pin signal, adds keyword boosts, and revives
 deeply-decayed rows on very high similarity; MMR de-dupes within
 each type; hard-partitioned per-type token budgets fill greedily

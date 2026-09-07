@@ -484,7 +484,12 @@ describe('parity — a stack longer than the three fixed slots', () => {
       POOL.map((c) => ({ ...c, sims: c.sims.slice(0, 3) })),
       'lore',
       state.budget,
-      { params: RANKER_DEFAULTS, querySlots, chapterRanges: new Map(), countTokens },
+      {
+        params: RANKER_DEFAULTS,
+        querySlots: stack.slots.slice(0, 3),
+        chapterRanges: new Map(),
+        countTokens,
+      },
     )
 
     // 0.375/0.75 = 0.5 against 0.3375/0.75 = 0.45: dropping the emitted slot

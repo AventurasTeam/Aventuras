@@ -563,7 +563,7 @@ describe('blend with absent query vectors', () => {
     )
 
     const byId = new Map(out.traces.map((t) => [t.id, t]))
-    // Only Q1 is present, so the blend renormalizes to sim_q1 itself.
+    // Only Q1 is present, so the blend renormalizes to its similarity itself.
     expect(byId.get('absent')?.simBlend).toBeCloseTo(0.8, 10)
     // All three present: 0.8*0.3 renormalized over the full weight total.
     expect(byId.get('zero')?.simBlend).toBeCloseTo((0.8 * 0.3) / (0.3 + 0.25 + 0.2), 10)

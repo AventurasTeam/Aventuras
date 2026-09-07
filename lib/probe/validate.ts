@@ -91,6 +91,14 @@ export function assertCaptureShape(decoded: unknown): asserts decoded is ProbeCa
   // captured, absent ones included, and the emitted tail varies per turn.
   if (!Array.isArray(payload.queries) || payload.queries.length < 3)
     throw new CaptureShapeError('queries', 'must carry at least the three fixed query slots')
+  // `source` is dereferenced to pick the entry's blend weight, so a query the
+  // payload carries as a non-object reaches the simulator as a TypeError.
+  payload.queries.forEach((query, i) => {
+    requirePlainObject(`queries[${i}]`, query)
+    const source = (query as Record<string, unknown>).source
+    if (typeof source !== 'string')
+      throw new CaptureShapeError(`queries[${i}].source`, `must be a string, got ${typeOf(source)}`)
+  })
   // Required-and-nullable, so `undefined` is rejected rather than defaulted:
   // replayType never sees the row, and an absent marker reads there as a
   // failure. A payload predating the field is refused, not silently replayed.

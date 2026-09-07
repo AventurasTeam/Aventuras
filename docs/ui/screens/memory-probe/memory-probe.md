@@ -175,8 +175,8 @@ Click → opens inspect for that capture.
     story state under current params, writes a new capture
     pointing at the same `target_entry_id`. Useful for "is this
     still missing X under current params?" Costs a fresh embed of
-    every query the capture stored — one to six (~20-100 ms local
-    each; ~50-300 ms provider). Does
+    each present query — one to six of the three to six the capture
+    stored (~20-100 ms local each; ~50-300 ms provider). Does
     NOT regenerate the prose turn.
   - **Export** — downloads the capture as a JSON blob (gzipped
     payload + metadata). Includes prose snippets — user is
