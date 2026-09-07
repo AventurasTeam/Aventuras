@@ -1956,13 +1956,16 @@ Desktop is nonetheless the least interesting part of it. The scaling
 obligations below are unaffected — query count is a fixed small
 constant, not a term proportional to awareness rows or branch entries —
 and retrieval remains under 1% of a turn. The doubling bites in the two
-places this table does not cover, and both are obligations on whichever
-slice implements Q4 rather than assumptions the design may make:
+places this table does not cover, and both are obligations on whoever
+sources Q4 rather than assumptions the design may make:
 
-- **The embedder is excluded from every figure here.** It goes from
-  three embedding calls per turn to six, and on a local ONNX embedder
-  it is plausibly the largest single term in the pass. Nothing has
-  measured it.
+- **The embedder is excluded from every row of this table, though the
+  bench does measure it** — `embedMs` is one of the five spans it
+  emits, so re-running it reports the real figure. The per-turn embed
+  is **one batched call** whose text count goes from three to six, not
+  three calls becoming six; a local ONNX runtime may still loop per
+  text inside that call. Nothing has re-run it against the wider
+  stack.
 - **Mobile doubles an already-open risk** — see below.
 
 **Mobile is unmeasured.** Every figure here is desktop. The PoC's
