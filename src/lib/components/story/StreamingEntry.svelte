@@ -130,7 +130,9 @@
   <!-- Activity report. Above the content on purpose: it keeps one place on screen while the
        narration grows underneath it, rather than being pushed off the bottom.
        A bystander to the entry -- a fault rendering it must not take the narration with it. -->
-  <svelte:boundary>
+  <!-- `onerror` is what makes this catch: a boundary with neither it nor a `failed`
+       snippet rethrows. No fallback, so a report that cannot render leaves nothing behind. -->
+  <svelte:boundary onerror={(error) => console.warn('[activity] Report failed to render:', error)}>
     {#if showActivity && activeTurn}
       <div class="mb-2">
         <ActivityStatus turn={activeTurn} />

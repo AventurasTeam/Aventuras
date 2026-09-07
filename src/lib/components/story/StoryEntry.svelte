@@ -1817,7 +1817,9 @@
 
       <!-- The report is a bystander to the entry: a fault rendering it must not
          take the narration with it. -->
-      <svelte:boundary>
+      <svelte:boundary
+        onerror={(error) => console.warn('[activity] Report failed to render:', error)}
+      >
         {#if activityRecord && showActivityRecord}
           <div class="mb-2">
             <ActivityStatus turn={activityRecord} />

@@ -12,7 +12,7 @@
 import { findTurnByEntryId, retainTurns, RETAINED_TURNS } from './retention'
 import type { ActivityStatus, ActivityStep, ActivityTurn } from './types'
 
-/** How much of a turn's activity the story view reports. See design.md. */
+/** How much of a turn's activity the story view reports. See docs/architecture/overview.md. */
 export type ActivityReporting = 'off' | 'line' | 'tree'
 
 export interface StartStepOptions {

@@ -2,7 +2,7 @@
  * Activity Retention
  *
  * Records are kept for the current session only, bounded by a count of turns. See
- * design.md — Retention is five turns.
+ * docs/architecture/overview.md — Activity reporting.
  */
 
 import type { ActivityTurn } from './types'
