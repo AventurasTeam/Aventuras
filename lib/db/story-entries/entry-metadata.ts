@@ -13,7 +13,7 @@ export const entryMetadataSchema = z.object({
   // Optional — absent on parse failure or restart is fine per docs/memory/piggyback.md.
   summary: z.string().optional(),
   // Feeds the NEXT turn's Q4 slot (docs/memory/retrieval.md#q4-classifier-emitted-queries).
-  // `.max(3)` documents the cap; lib/piggyback enforces it at parse.
+  // `.max(3)` documents the cap; lib/piggyback and the fallback classifier schema both enforce it.
   retrievalQueries: z.array(z.string()).max(3).optional(),
   sceneEntities: z.array(z.string()),
   currentLocationId: z.string().nullable(),

@@ -695,11 +695,9 @@ describe('per-turn-piggyback', () => {
       ])
       entitiesStore.hydrate('b1', [])
 
-      // Routed through the real schema's .parse(), not a hand-built literal — a real
-      // classifier call validates its JSON reply the same way, and this is what makes
-      // the mutation check meaningful: dropping the field from the schema strips it
-      // here too (zod's default unknown-key behavior), rather than the mock smuggling
-      // it straight past a schema that no longer declares it.
+      // Routed through the real schema's .parse() rather than a hand-built literal: the mock
+      // would otherwise smuggle the field past a schema that no longer declares it, and the
+      // mutation check would stop discriminating.
       const value = fallbackClassifierSchema.parse({
         sceneEntities: [],
         currentLocation: undefined,
@@ -1954,6 +1952,30 @@ describe('per-turn-piggyback', () => {
 
       expect(typeof summary === 'object' ? summary.description : undefined).toBeTruthy()
     })
+
+    it('describes the retrievalQueries field so the description survives into the emitted JSON schema', () => {
+      const jsonSchema = z.toJSONSchema(fallbackClassifierSchema)
+      const retrievalQueries = jsonSchema.properties?.retrievalQueries
+
+      expect(
+        typeof retrievalQueries === 'object' ? retrievalQueries.description : undefined,
+      ).toBeTruthy()
+    })
+
+    // retrieval.md → Q4: the emission is malformed-tolerant. Structured output validates
+    // the object in one shot, so a raise here would cost a full extra provider call and,
+    // on a second over-emission, take the mandatory summary down with the optional hint.
+    it('drops an over-long retrievalQueries without failing the sibling fields', () => {
+      const parsed = fallbackClassifierSchema.parse({
+        sceneEntities: ['char_a'],
+        worldTimeDelta: 0,
+        summary: 'Kael drew.',
+        retrievalQueries: ['a', 'b', 'c', 'd'],
+      })
+      expect(parsed.retrievalQueries).toBeUndefined()
+      expect(parsed.summary).toBe('Kael drew.')
+      expect(parsed.sceneEntities).toEqual(['char_a'])
+    })
   })
 
   describe('fallbackClassifierWithSuggestionsSchema', () => {
@@ -1992,6 +2014,23 @@ describe('per-turn-piggyback', () => {
       })
 
       expect(result.success).toBe(false)
+    })
+
+    // Coverage for the schema every real story runs (buildStorySettings always
+    // populates suggestionCategories): .extend() carries retrievalQueries onto this
+    // schema too, but nothing else pins that — a refactor to a standalone z.object
+    // could silently drop Q4 for every real story.
+    it('carries retrievalQueries alongside suggestions', () => {
+      const result = fallbackClassifierWithSuggestionsSchema.safeParse({
+        sceneEntities: [],
+        worldTimeDelta: 5,
+        suggestions: [{ categoryRef: 'cat1', text: 'ok' }],
+        retrievalQueries: ['a query'],
+      })
+
+      expect(result.success).toBe(true)
+      if (!result.success) throw new Error('expected parse to succeed')
+      expect(result.data.retrievalQueries).toEqual(['a query'])
     })
   })
 
