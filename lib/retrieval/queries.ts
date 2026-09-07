@@ -30,7 +30,7 @@ const SLOT_OF: Record<QuerySource, QuerySlot> = {
 
 /** retrieval.md → Q4: capped at three, and the cap is a cost decision. */
 const MAX_EMITTED_QUERIES = 3
-/** Canon caps an oversized emission but names no number; a retrieval ask is phrase-shaped. */
+/** retrieval.md → Q4. A retrieval ask is phrase-shaped, far under any embedder input window. */
 const MAX_EMITTED_QUERY_CHARS = 200
 
 export type QueryStack = {
