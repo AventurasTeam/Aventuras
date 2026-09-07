@@ -1148,6 +1148,34 @@ describe('retrieval phase — RetrievalParams assembly', () => {
     expect(lastParams().query.piggybackSummary).toBeNull()
   })
 
+  it("carries the last narrative entry's emitted queries through to Q4", async () => {
+    seedOpenStory({
+      entries: [
+        entry(1, 'ai_reply', 'Steel sings.', meta({ retrievalQueries: ['House Eldrin sigil'] })),
+        entry(2, 'user_action', 'I press on.', meta()),
+      ],
+    })
+
+    await runRetrievalPhase()
+
+    expect(lastParams().query.emittedQueries).toEqual(['House Eldrin sigil'])
+  })
+
+  // Read from the same row Q3 reads (retrieval.md → Q4 Storage). An absent field is
+  // the common case for the whole of PR 2's life on models without the tagged block.
+  it('passes an empty emission when the last narrative entry carried none', async () => {
+    seedOpenStory({
+      entries: [
+        entry(1, 'ai_reply', 'Steel sings.', meta({ summary: 'Kael drew.' })),
+        entry(2, 'user_action', 'I press on.', meta()),
+      ],
+    })
+
+    await runRetrievalPhase()
+
+    expect(lastParams().query.emittedQueries).toEqual([])
+  })
+
   it('leaves the Q2 era line absent — nothing writes branch_era_flips yet', async () => {
     seedOpenStory()
 
