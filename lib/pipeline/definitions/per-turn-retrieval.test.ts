@@ -1161,8 +1161,8 @@ describe('retrieval phase — RetrievalParams assembly', () => {
     expect(lastParams().query.emittedQueries).toEqual(['House Eldrin sigil'])
   })
 
-  // Read from the same row Q3 reads (retrieval.md → Q4 Storage). An absent field is
-  // the common case for the whole of PR 2's life on models without the tagged block.
+  // Read from the same row Q3 reads (retrieval.md → Q4 Storage). An absent field is the
+  // pre-Q4 shape, and any turn whose classifier emitted none.
   it('passes an empty emission when the last narrative entry carried none', async () => {
     seedOpenStory({
       entries: [

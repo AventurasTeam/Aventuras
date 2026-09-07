@@ -377,8 +377,8 @@ export function passInputs(
       eraName: null,
       // Non-null so all three fixed queries stay live — steady-state, not the turn-1 cold start.
       piggybackSummary: prose(rand, 20),
-      // retrieval.md → Q4. 0 is the pre-PR-2 regime, 3 the worst case the cost
-      // budget has to hold at.
+      // retrieval.md → Q4. 0 is the three-vector stack, 3 the Q4 cap and the worst
+      // case the cost budget has to hold at.
       emittedQueries: Array.from({ length: emitted }, (_, i) => `${prose(rand, 8)} ${i}`),
     },
     sceneCharacterIds,

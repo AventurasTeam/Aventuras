@@ -37,14 +37,21 @@ export function capturesForStoryQuery(storyId: string): RowQuery {
 // throw into `corrupt`, so the row stays listed and deletable rather than decoding
 // into a shape that lies about itself.
 //
+// Takes the raw decode so it can run ahead of the shape guard — an older capture is
+// missing whatever fields the shape rules have gained since, and reporting one of
+// those by name buries the real cause. A non-object isn't a version problem, so that
+// diagnostic is left to assertCaptureShape.
+function assertCaptureVersion(id: string, payload: unknown): void {
+  if (typeof payload !== 'object' || payload === null) return
+  const version = (payload as Partial<ProbeCapturePayload>).capture_version
+  if (version !== CAPTURE_VERSION) {
+    throw new Error(`capture ${id} is format version ${version}, expected ${CAPTURE_VERSION}`)
+  }
+}
+
 // Tokenizer drift only warns — it makes tokens_estimated a count from a different
 // vocabulary, which only a re-price would notice, and invalidates nothing.
-function assertCaptureVersion(id: string, payload: ProbeCapturePayload): void {
-  if (payload.capture_version !== CAPTURE_VERSION) {
-    throw new Error(
-      `capture ${id} is format version ${payload.capture_version}, expected ${CAPTURE_VERSION}`,
-    )
-  }
+function warnOnTokenizerDrift(id: string, payload: ProbeCapturePayload): void {
   const tokenizer = payload.tokenizer
   const stored =
     tokenizer === undefined || tokenizer === null
@@ -74,10 +81,11 @@ export function decodeCapture(row: readonly unknown[]): StoredCapture {
     Uint8Array,
   ]
   const decoded = decompressPayload(payloadBytes)
-  assertCaptureShape(decoded)
-  // Before the params guard: a stale capture reports as stale, not as the
-  // malformed ranker params a since-renamed tunable leaves it holding.
+  // First of the three guards: a stale capture reports as stale, not as a missing
+  // field or as the malformed ranker params a since-renamed tunable leaves it holding.
   assertCaptureVersion(id, decoded)
+  assertCaptureShape(decoded)
+  warnOnTokenizerDrift(id, decoded)
   assertRankerParams(decoded.params.ranker)
   return { id, branchId, capturedAt, captureMode, failureReason, payloadSize, payload: decoded }
 }
