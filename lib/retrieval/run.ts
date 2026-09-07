@@ -137,6 +137,14 @@ export type RetrievalFailure = {
 export type InjectedAwareness = { id: string; retrievalCount: number }
 
 /**
+ * retrieval.md → Redundancy. `ratio` is |topK ∩ floor.seatedIds| / |topK| for one
+ * emitted Q4; `k` is that top-K's size. `k` is captured because KNN_K is per kind —
+ * below 200 rows per kind the top-K IS the whole corpus, so every query reports the
+ * same ratio and nothing else in the capture disproves it.
+ */
+export type QueryRedundancy = { ratio: number; k: number }
+
+/**
  * Whatever the pass reached before it failed. The probe captures failed passes
  * too (probe.md → Failed captures) and a capture with no queries is evidence of
  * nothing; a sync-stage failure genuinely reached none of it, hence the nulls.
@@ -150,6 +158,9 @@ export type RetrievalPartial = {
    * under `mode='boost'`, and on a pass that failed before ranking started.
    */
   keywordInjections: readonly KeywordInjection[]
+  /** Positionally aligned with `queries.specs`; null on a fixed slot and on an
+   *  empty top-K. Empty on a pass that failed before KNN. */
+  queryRedundancy: readonly (QueryRedundancy | null)[]
 }
 
 export type RetrievalOutcome =
@@ -163,6 +174,9 @@ export type RetrievalOutcome =
        * Empty under `keywordRetrieval.mode='boost'`.
        */
       keywordInjections: readonly KeywordInjection[]
+      /** Positionally aligned with `queries.specs`; null on a fixed slot and on an
+       *  empty top-K. */
+      queryRedundancy: readonly (QueryRedundancy | null)[]
       /**
        * A tripwire, not a report. The sync stage is blocking and clears the flag
        * on every row it embeds, so each count here is structurally 0 — a
@@ -217,6 +231,11 @@ async function loadExistingVecTables(
   return new Set(rows.map((row) => String(row[0])))
 }
 
+// The only kinds floor.seatedIds can hold (pools.ts → buildStructuralFloor). Counting
+// a chapter or happening top-K in the denominator would deflate every ratio by
+// construction, since neither can ever intersect the floor.
+const FLOOR_SEATABLE_KINDS = new Set<VecTargetKind>(['entity', 'lore', 'thread'])
+
 export async function runRetrieval(
   deps: RetrievalDeps,
   params: RetrievalParams,
@@ -228,6 +247,7 @@ export async function runRetrieval(
     floor: null,
     bundles: {},
     keywordInjections: [],
+    queryRedundancy: [],
   }
   try {
     return await runRetrievalPass(deps, params, partial)
@@ -354,7 +374,29 @@ async function runRetrievalPass(
     ),
   )
   let knnMs = performance.now() - knnStartedAt
-  for (const [kind, candidates] of built) pools[TYPE_OF_KIND[kind]] = candidates
+  for (const [kind, pool] of built) pools[TYPE_OF_KIND[kind]] = pool.candidates
+
+  // Taken here, before the pool filters below remove the floor rows: after them the
+  // intersection is empty by construction and every query would report 0
+  // (retrieval.md → Redundancy).
+  const topKByQuery = queries.specs.map(() => new Set<string>())
+  for (const [kind, pool] of built) {
+    if (!FLOOR_SEATABLE_KINDS.has(kind)) continue
+    pool.perQueryIds.forEach((ids, i) => {
+      for (const id of ids) topKByQuery[i]?.add(id)
+    })
+  }
+  const queryRedundancy = queries.slots.map((slot, i) => {
+    // 'direct' is the slot every classifier_emitted query maps to
+    // (QUERY_SLOT_OF_SOURCE) — the fixed three carry no redundancy.
+    if (slot !== 'direct') return null
+    const topK = topKByQuery[i]
+    if (topK === undefined || topK.size === 0) return null
+    let matched = 0
+    for (const id of topK) if (floor.seatedIds.has(id)) matched += 1
+    return { ratio: matched / topK.size, k: topK.size }
+  })
+  partial.queryRedundancy = queryRedundancy
 
   const rankTypeInput = {
     params: RANKER_DEFAULTS,
@@ -431,6 +473,7 @@ async function runRetrievalPass(
     bundles,
     queries,
     keywordInjections: partial.keywordInjections,
+    queryRedundancy,
     staleCounts: staleCountsOf(sourceRows, happeningsStale),
     injectedAwareness: bundles.happenings.selected
       .filter(isHappeningCandidate)
@@ -559,7 +602,13 @@ async function loadAdmittedVectors(
   }
 }
 
-type KnnResult = { ids: Set<string>; vectorById: Map<string, Float32Array> }
+type KnnResult = {
+  ids: Set<string>
+  vectorById: Map<string, Float32Array>
+  /** Per query, in slot order — the pre-filter top-K the redundancy metric measures
+   *  over. `[]` for a slot that produced no vector. */
+  perQueryIds: readonly (readonly string[])[]
+}
 
 /** Null when the dim family does not exist yet — a cold start, not a fault. */
 async function runKnn(
@@ -598,17 +647,24 @@ async function runKnn(
         }),
   )
 
-  return { ids: poolIdsFromKnn(perQuery), vectorById }
+  return {
+    ids: poolIdsFromKnn(perQuery),
+    vectorById,
+    perQueryIds: perQuery.map((rows) => rows.map(([id]) => id)),
+  }
 }
+
+type BuiltPool = { candidates: Candidate[]; perQueryIds: readonly (readonly string[])[] }
 
 async function buildPool(
   deps: RetrievalDeps,
   params: RetrievalParams,
   ctx: PoolCtx,
-): Promise<Candidate[]> {
+): Promise<BuiltPool> {
   const knn = await runKnn(deps, params, ctx)
-  if (knn === null || knn.ids.size === 0) return []
-  return assembleCandidates(ctx, knn.ids, knn.vectorById)
+  if (knn === null) return { candidates: [], perQueryIds: [] }
+  const candidates = knn.ids.size === 0 ? [] : assembleCandidates(ctx, knn.ids, knn.vectorById)
+  return { candidates, perQueryIds: knn.perQueryIds }
 }
 
 /**

@@ -350,7 +350,13 @@ describe('runRetrieval — sync ordering', () => {
   it('carries no partial state when the sync stage fails', async () => {
     const { partial } = await withSyncFailure()
 
-    expect(partial).toEqual({ queries: null, floor: null, bundles: {}, keywordInjections: [] })
+    expect(partial).toEqual({
+      queries: null,
+      floor: null,
+      bundles: {},
+      keywordInjections: [],
+      queryRedundancy: [],
+    })
   })
 
   it('reads the source rows AFTER the sync commits, not before', async () => {
@@ -968,6 +974,61 @@ describe('runRetrieval — query stack', () => {
     // The floor never consults a vector, so it survives a fully absent query stack.
     expect(ok.floor.alwaysLore.map((l) => l.id)).toEqual(['lore_1'])
     expect(Object.values(ok.bundles).every((b) => b.selected.length === 0)).toBe(true)
+  })
+})
+
+// retrieval.md → Redundancy. `char_a` is the scene entity, so buildStructuralFloor
+// seats it; `lo_x` is unseated lore. Measured over the query's own PRE-filter top-K,
+// so both are still in it — filterEntityPool removes the floor rows afterwards, which
+// is why a ratio taken after filtering reads 0 for every query by construction.
+describe('runRetrieval — per-Q4 redundancy', () => {
+  const SEATED = entityRow('char_a', 'Kara Vex')
+  const UNSEATED = loreRow('lo_x', 'Marsh law')
+  const ASK = { query: { emittedQueries: ['marsh nobility'] } }
+
+  const passWith = async (fixture: Parameters<typeof makeQueryAll>[0]) =>
+    expectOk(await runRetrieval(deps({ queryAll: makeQueryAll(fixture) }), params(ASK)))
+
+  it('reports null on the three fixed slots', async () => {
+    const out = await passWith({ entities: [SEATED], knn: [hit('char_a')] })
+    expect(out.queryRedundancy.slice(0, 3)).toEqual([null, null, null])
+  })
+
+  it('scores 1.0 when the floor had already seated the whole top-K', async () => {
+    const out = await passWith({ entities: [SEATED], knn: [hit('char_a')] })
+    expect(out.queryRedundancy[3]).toEqual({ ratio: 1, k: 1 })
+  })
+
+  it('scores 0 when the floor seated none of the top-K', async () => {
+    const out = await passWith({ entities: [SEATED], lore: [UNSEATED], knn: [hit('lo_x')] })
+    expect(out.queryRedundancy[3]).toEqual({ ratio: 0, k: 1 })
+  })
+
+  // Chapters and happenings can never be in floor.seatedIds (pools.ts →
+  // buildStructuralFloor seats entity, lore and thread ids only), so counting their
+  // top-K in the denominator would deflate every ratio by construction. makeQueryAll
+  // answers every kind's KNN from one list, so proving the exclusion needs a
+  // kind-aware arm: chapters return an id NO other kind returns, which moves k from
+  // 2 to 3 the moment they are counted.
+  it('measures over the entity, lore and thread top-Ks only', async () => {
+    const base = makeQueryAll({ entities: [SEATED], lore: [UNSEATED] })
+    const queryAll = vi.fn(async (sql: string, p: unknown[]) => {
+      if (!sql.includes('MATCH')) return base(sql, p)
+      if (sql.includes('entities_vec_')) return [hit('char_a')]
+      if (sql.includes('lore_vec_')) return [hit('lo_x')]
+      if (sql.includes('chapter_summaries_vec_')) return [hit('ch_only')]
+      return []
+    })
+    const out = expectOk(await runRetrieval(deps({ queryAll }), params(ASK)))
+    expect(out.queryRedundancy[3]).toEqual({ ratio: 0.5, k: 2 })
+  })
+
+  // A cold start: no dim family exists, so runKnn returns null and the query has no
+  // top-K to measure. 0/0 is not 0 — an unmeasurable query must not read as a
+  // perfectly novel one.
+  it('reports null for a Q4 whose top-K came back empty', async () => {
+    const out = await passWith({ entities: [SEATED], vecTables: [] })
+    expect(out.queryRedundancy[3]).toBeNull()
   })
 })
 

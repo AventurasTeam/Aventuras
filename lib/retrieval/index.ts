@@ -26,6 +26,7 @@ export { ENTITY_FRAMING, entityRenderedText, lines, loreRenderedText } from './r
 export { runRetrieval } from './run'
 export type {
   InjectedAwareness,
+  QueryRedundancy,
   RetrievalDeps,
   RetrievalFailure,
   RetrievalOutcome,
