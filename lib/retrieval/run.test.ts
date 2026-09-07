@@ -563,6 +563,30 @@ describe('runRetrieval — query embed failure', () => {
     expect(partial.bundles).toEqual({})
   })
 
+  // partial.queries is written as soon as the stack is built; queryRedundancy has to be
+  // written in the same spot, not just initialised to `[]` up front, or a partial with an
+  // emitted Q4 ends up with a 4-spec stack beside a shorter redundancy array. One emitted
+  // query is enough to make specs.length 4, so a hardcoded 3-element array would be caught.
+  it('keeps queryRedundancy aligned with the query stack when the query embed fails', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({ entities: [entityRow('char_a', 'Kara Vex')] }),
+        embedTexts: async () => {
+          throw new EmbedderInitError('no local model')
+        },
+      }),
+      params({ query: { emittedQueries: ['marsh nobility'] } }),
+    )
+
+    const { partial } = expectBlocking(out)
+    // The embed stage fails AFTER the query stack is built, so a partial can carry specs
+    // with no measurement. queryRedundancy must still be positionally aligned — with
+    // noUncheckedIndexedAccess off, a short array types as (QueryRedundancy | null)[] and
+    // hands back undefined at runtime, which is a type lie rather than a guarded case.
+    expect(partial.queryRedundancy).toHaveLength(partial.queries!.specs.length)
+    expect(partial.queryRedundancy.every((r) => r === null)).toBe(true)
+  })
+
   // The sync stage already carries a cancel on its own arm; the query embed is the
   // other place the shared abortSignal can land, and 'Switch embedder' is the wrong
   // fix to offer for a user stop.
