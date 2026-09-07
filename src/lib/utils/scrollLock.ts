@@ -13,6 +13,8 @@
  * Nothing here is a substitute for closing a modal properly. It is the net under it.
  */
 
+import { MODAL_CLOSE_TRANSITION_MS } from '$lib/constants/layout'
+
 /** Marks menu content that has opted out of the body lock, so it is never mistaken for an owner. */
 export const NO_SCROLL_LOCK_ATTR = 'data-no-scroll-lock'
 
@@ -20,22 +22,52 @@ export const NO_SCROLL_LOCK_ATTR = 'data-no-scroll-lock'
  * Everything in this stack that legitimately holds a body lock, as it appears in the DOM.
  *
  * `bits-ui` resolves `preventScroll ?? true`, so dialog, alert-dialog, context-menu and
- * dropdown/menu lock; popover, select, tooltip and sub-menus opt out. `vaul` locks its own way.
+ * dropdown/menu lock. Popover, select and tooltip opt out upstream; a sub-menu shares
+ * `MenuContentState` and so looks identical here, and is excluded by the same marker the
+ * app's own dropdowns carry. `vaul` locks its own way.
  *
- * Matched on presence, not `[data-state="open"]`: an owner is mounted with its element and
- * still holds the lock while animating closed. `[data-state]` itself separates a library-owned
- * overlay from a hand-rolled one with the same role, which holds no lock and must not veto.
+ * `[data-state]` is what separates a library-owned overlay from a hand-rolled one with the
+ * same ARIA role, which holds no lock and must not be able to veto recovery.
  */
-const OPEN_OVERLAY_SELECTOR = [
-  '[role="dialog"][data-state]',
-  '[role="alertdialog"][data-state]',
-  `[role="menu"][data-state]:not([${NO_SCROLL_LOCK_ATTR}])`,
-  '[data-vaul-drawer][data-state]',
-].join(', ')
+const OVERLAY_CLAUSES = [
+  '[role="dialog"]',
+  '[role="alertdialog"]',
+  `[role="menu"]:not([${NO_SCROLL_LOCK_ATTR}])`,
+  '[data-vaul-drawer]',
+]
 
-/** Is anything on screen entitled to be holding the body lock right now? */
+const OPEN_OVERLAY_SELECTOR = OVERLAY_CLAUSES.map((c) => `${c}[data-state="open"]`).join(', ')
+const CLOSING_OVERLAY_SELECTOR = OVERLAY_CLAUSES.map((c) => `${c}[data-state="closed"]`).join(', ')
+
+/** When each closing overlay was first seen, so the grace below is measured from somewhere. */
+const closingSince = new WeakMap<Element, number>()
+
+/** Is a closing overlay still within the window where it may hold its lock? */
+export function isWithinCloseGrace(since: number, now: number): boolean {
+  return now - since < MODAL_CLOSE_TRANSITION_MS
+}
+
+/**
+ * Is anything on screen entitled to be holding the body lock right now?
+ *
+ * A closing overlay still owns its lock — the owner unmounts with the element, not with the
+ * state flip — so it counts, but only until its exit has had time to finish. `bits-ui` drops
+ * the element from an animation callback, and a WebView that never delivers one would
+ * otherwise leave a node at `data-state="closed"` vetoing recovery for the rest of the session.
+ */
 function hasOpenOverlay(): boolean {
-  return document.querySelector(OPEN_OVERLAY_SELECTOR) !== null
+  if (document.querySelector(OPEN_OVERLAY_SELECTOR) !== null) return true
+
+  const now = Date.now()
+  for (const el of document.querySelectorAll(CLOSING_OVERLAY_SELECTOR)) {
+    const since = closingSince.get(el)
+    if (since === undefined) {
+      closingSince.set(el, now)
+      return true
+    }
+    if (isWithinCloseGrace(since, now)) return true
+  }
+  return false
 }
 
 /**
