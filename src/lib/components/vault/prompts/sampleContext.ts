@@ -63,6 +63,7 @@ export const runtimeSamples: Record<string, string> = {
   protagonistDescription: 'A young woman with silver hair and violet eyes',
   povInstruction: 'Write in second person perspective.',
   lengthInstruction: 'Write 2-3 paragraphs.',
+  narratorReinforcement: 'full',
 
   // Shared / Common
   userInput: 'I want to explore the ancient ruins to the north.',

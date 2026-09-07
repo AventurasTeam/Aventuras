@@ -24,3 +24,9 @@ export {
   formatLengthInstruction,
   templateUsesLengthInstruction,
 } from './lengthInstruction'
+
+export {
+  NARRATOR_REINFORCEMENT_VAR,
+  templateUsesNarratorReinforcement,
+  narratorReinforcementIsHonoured,
+} from './narratorReinforcement'

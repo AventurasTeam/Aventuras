@@ -4,8 +4,14 @@
   import { Label } from '$lib/components/ui/label'
   import { Input } from '$lib/components/ui/input'
   import { Switch } from '$lib/components/ui/switch'
-  import { BookOpen, User, Eye, AlignLeft } from '@lucide/svelte'
-  import type { POV, Tense, TargetLength, ImageGenerationMode } from '$lib/types'
+  import { BookOpen, User, Eye, AlignLeft, Repeat } from '@lucide/svelte'
+  import type {
+    POV,
+    Tense,
+    TargetLength,
+    ImageGenerationMode,
+    NarratorReinforcement,
+  } from '$lib/types'
 
   interface Props {
     selectedPOV: POV
@@ -26,6 +32,9 @@
     mode?: 'adventure' | 'creative-writing'
     /** Set to disable the length control, e.g. a custom prompt that never renders it. */
     targetLengthDisabledReason?: string
+    narratorReinforcement?: NarratorReinforcement
+    /** Set to disable the reinforcement control, e.g. prompts that never reference it. */
+    narratorReinforcementDisabledReason?: string
     onPOVChange: (v: POV) => void
     onTenseChange: (v: Tense) => void
     onToneChange: (v: string) => void
@@ -34,6 +43,7 @@
     onBackgroundImagesEnabledChange: (v: boolean) => void
     onReferenceModeChange: (v: boolean) => void
     onTargetLengthChange?: (v: TargetLength) => void
+    onNarratorReinforcementChange?: (v: NarratorReinforcement) => void
     disabledFields?: {
       pov?: boolean
       tense?: boolean
@@ -56,6 +66,8 @@
     targetLength = 'dynamic',
     mode = 'adventure',
     targetLengthDisabledReason,
+    narratorReinforcement = 'full',
+    narratorReinforcementDisabledReason,
     onPOVChange,
     onTenseChange,
     onToneChange,
@@ -64,6 +76,7 @@
     onBackgroundImagesEnabledChange,
     onReferenceModeChange,
     onTargetLengthChange,
+    onNarratorReinforcementChange,
     disabledFields,
     disabledReason,
   }: Props = $props()
@@ -143,6 +156,37 @@
     { id: 'medium', label: 'Medium' },
     { id: 'long', label: 'Long' },
   ]
+
+  // The prompt pack decides what each level actually sends, so these describe the shipped
+  // text rather than a guarantee.
+  const REINFORCEMENT_OPTIONS: {
+    id: NarratorReinforcement
+    label: string
+    short: string
+    long: string
+  }[] = [
+    {
+      id: 'full',
+      label: 'Full',
+      short: 'Role + rules',
+      long: 'As shipped: repeats the narrator role, point of view, tense and the agency rules ahead of every turn.',
+    },
+    {
+      id: 'minimal',
+      label: 'Minimal',
+      short: 'Role only',
+      long: 'As shipped: names the narrator and player roles and nothing else.',
+    },
+    {
+      id: 'none',
+      label: 'None',
+      short: 'Nothing',
+      long: 'As shipped: sends nothing ahead of the story, leaving the system prompt to carry the rules.',
+    },
+  ]
+  const selectedReinforcement = $derived(
+    REINFORCEMENT_OPTIONS.find((o) => o.id === narratorReinforcement) ?? REINFORCEMENT_OPTIONS[0],
+  )
 </script>
 
 <div class="space-y-4">
@@ -290,6 +334,43 @@
           : 'text-muted-foreground'}"
       >
         {targetLengthDisabledReason ?? lengthRanges[selectedLength].long}
+      </p>
+    </section>
+  {/if}
+
+  <!-- Narrator Reinforcement -->
+  {#if onNarratorReinforcementChange}
+    {@const reinforcementDisabled = !!narratorReinforcementDisabledReason}
+    <section class="space-y-2 pt-1">
+      <Label class="flex items-center gap-2 text-base font-semibold">
+        <Repeat class="h-4 w-4" />
+        Narrator Reinforcement
+      </Label>
+      <RadioGroup.Root
+        value={narratorReinforcement}
+        onValueChange={(v) => onNarratorReinforcementChange?.(v as NarratorReinforcement)}
+        disabled={reinforcementDisabled}
+        class="grid grid-cols-3 gap-2 {reinforcementDisabled ? 'opacity-50' : ''}"
+      >
+        {#each REINFORCEMENT_OPTIONS as item (item.id)}
+          <Label
+            for={`reinforcement-${item.id}`}
+            class="border-muted bg-popover has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 has-[:focus-visible]:ring-ring flex flex-col items-center justify-center rounded-md border-2 p-3 text-center has-[:focus-visible]:ring-2 {reinforcementDisabled
+              ? 'cursor-not-allowed'
+              : 'hover:bg-accent hover:text-accent-foreground cursor-pointer'}"
+          >
+            <RadioGroup.Item value={item.id} id={`reinforcement-${item.id}`} class="sr-only" />
+            <span class="font-medium">{item.label}</span>
+            <span class="text-muted-foreground text-xs">{item.short}</span>
+          </Label>
+        {/each}
+      </RadioGroup.Root>
+      <p
+        class="min-h-[1.25rem] text-xs {reinforcementDisabled
+          ? 'text-amber-500'
+          : 'text-muted-foreground'}"
+      >
+        {narratorReinforcementDisabledReason ?? selectedReinforcement.long}
       </p>
     </section>
   {/if}

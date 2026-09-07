@@ -100,6 +100,7 @@ export class ContextBuilder {
       inlineImageMode: story.settings?.imageGenerationMode === 'inline',
       targetLength,
       lengthInstruction,
+      narratorReinforcement: story.settings?.narratorReinforcement || 'full',
     })
 
     // Protagonist

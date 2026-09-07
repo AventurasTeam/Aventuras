@@ -1,7 +1,13 @@
 <script lang="ts">
   import WritingStyleFields from '$lib/components/shared/WritingStyleFields.svelte'
   import { ScrollArea } from '$lib/components/ui/scroll-area'
-  import type { POV, Tense, TargetLength, ImageGenerationMode } from '$lib/types'
+  import type {
+    POV,
+    Tense,
+    TargetLength,
+    NarratorReinforcement,
+    ImageGenerationMode,
+  } from '$lib/types'
 
   interface Props {
     selectedPOV: POV
@@ -13,6 +19,7 @@
     backgroundImagesEnabled: boolean
     referenceMode: boolean
     targetLength?: TargetLength
+    narratorReinforcement?: NarratorReinforcement
     mode?: 'adventure' | 'creative-writing'
     onPOVChange: (v: POV) => void
     onTenseChange: (v: Tense) => void
@@ -22,6 +29,7 @@
     onBackgroundImagesEnabledChange: (v: boolean) => void
     onReferenceModeChange: (v: boolean) => void
     onTargetLengthChange?: (v: TargetLength) => void
+    onNarratorReinforcementChange?: (v: NarratorReinforcement) => void
   }
 
   let {
@@ -34,6 +42,7 @@
     backgroundImagesEnabled,
     referenceMode,
     targetLength = 'dynamic',
+    narratorReinforcement = 'full',
     mode = 'adventure',
     onPOVChange,
     onTenseChange,
@@ -43,6 +52,7 @@
     onBackgroundImagesEnabledChange,
     onReferenceModeChange,
     onTargetLengthChange,
+    onNarratorReinforcementChange,
   }: Props = $props()
 
   // Force "none" mode when image generation is disabled (wizard only)
@@ -74,6 +84,7 @@
       {backgroundImagesEnabled}
       {referenceMode}
       {targetLength}
+      {narratorReinforcement}
       {mode}
       {onPOVChange}
       {onTenseChange}
@@ -83,6 +94,7 @@
       {onBackgroundImagesEnabledChange}
       {onReferenceModeChange}
       {onTargetLengthChange}
+      {onNarratorReinforcementChange}
     />
   </ScrollArea>
 </div>

@@ -16,8 +16,26 @@ Resolution order (`ContextBuilder.resolveTemplate`), first hit wins:
 
 A template has a system half (`content`) and an optional user half (`userContent`). The user half is
 stored under the id `<template-id>-user`, and `ContextBuilder.render(id)` returns `{ system, user }` by
-resolving both. A service that destructures only `system` silently drops the user half — every service
-except the two whose templates deliberately have none.
+resolving both. A service that destructures only `system` silently drops the user half, so a service whose
+template has one must take both.
+
+### The narrator's two prompts
+
+`adventure` and `creative-writing` each carry both halves. The system half is the narrator's standing
+instructions; the user half is prefixed to the turn message and repeats some of them, which helps models
+that expect a user-first conversation format and some smaller local models that need the rules closer to
+the generation point.
+
+How much it repeats is the story's `narratorReinforcement` setting, which reaches the template as the raw
+level — `full`, `minimal` or `none` — for the template to branch on, the way `pov` and `tense` already are.
+The pack therefore decides what each level says; the application only chooses between them. `full` is the
+default and is what a story that has never set it receives. `none` renders nothing, and
+`joinReinforcement` then sends the turn message alone rather than a blank prefix.
+
+A custom system prompt replaces the system half only. The turn message still comes from the pack, so
+Story Settings decides whether the reinforcement control is available by looking at the `-user` template
+regardless of an override — and at the effective system prompt too, since a pack may carry the
+reinforcement there instead.
 
 ### Which pack is "the active pack"
 

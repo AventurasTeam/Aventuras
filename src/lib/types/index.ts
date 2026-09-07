@@ -113,6 +113,12 @@ export interface MemoryConfig {
 /** Target narration length for a turn. Drives `{{ lengthInstruction }}` in the prompt. */
 export type TargetLength = 'short' | 'medium' | 'long' | 'dynamic'
 
+/**
+ * How much of the narrator's role and the agency rules the turn message repeats ahead of the
+ * story content. The pack's narrator templates decide what each level says.
+ */
+export type NarratorReinforcement = 'full' | 'minimal' | 'none'
+
 /** How a story generates images: not at all, on the model's initiative, or embedded in the prose. */
 export type ImageGenerationMode = 'none' | 'agentic' | 'inline'
 
@@ -129,6 +135,7 @@ export interface StorySettings {
   backgroundImagesEnabled?: boolean
   referenceMode?: boolean
   targetLength?: TargetLength
+  narratorReinforcement?: NarratorReinforcement
   customSystemPrompt?: string // Per-story Liquid template override; bypasses pack template when set
 }
 

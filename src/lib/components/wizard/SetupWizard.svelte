@@ -439,10 +439,12 @@
           backgroundImagesEnabled={wizard.narrative.backgroundImagesEnabled}
           referenceMode={wizard.narrative.referenceMode}
           targetLength={wizard.narrative.targetLength}
+          narratorReinforcement={wizard.narrative.narratorReinforcement}
           mode={wizard.narrative.selectedMode}
           onBackgroundImagesEnabledChange={(v) => (wizard.narrative.backgroundImagesEnabled = v)}
           onReferenceModeChange={(v) => (wizard.narrative.referenceMode = v)}
           onTargetLengthChange={(v) => (wizard.narrative.targetLength = v)}
+          onNarratorReinforcementChange={(v) => (wizard.narrative.narratorReinforcement = v)}
         />
       {:else if wizard.currentStep === 9}
         <Step8Opening

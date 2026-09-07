@@ -83,3 +83,116 @@ describe.each(storyTemplates.map((t) => [t.id, t.content] as const))(
     })
   },
 )
+
+const userHalf = (id: string) => {
+  const template = storyTemplates.find((t) => t.id === id)
+  if (!template?.userContent) throw new Error(`${id} has no userContent`)
+  return template.userContent
+}
+
+const renderUser = (
+  id: string,
+  narratorReinforcement: string | undefined,
+  pov: string,
+  tense: string,
+) =>
+  engine.parseAndRender(userHalf(id), {
+    narratorReinforcement,
+    pov,
+    tense,
+    protagonistName: 'Aria',
+  })
+
+describe.each(['adventure', 'creative-writing'])('%s user message', (id) => {
+  const povs = ['first', 'second', 'third']
+
+  it('emits no template machinery at any level', async () => {
+    for (const level of ['full', 'minimal', 'none']) {
+      for (const pov of povs) {
+        for (const tense of ['present', 'past']) {
+          expect(await renderUser(id, level, pov, tense)).not.toMatch(/\{%|\{\{/)
+        }
+      }
+    }
+  })
+
+  it('renders nothing at none', async () => {
+    // Whitespace, not '': a level with no branch of its own still leaves the line breaks
+    // between the branches that did not match. `joinReinforcement` is what keeps that off
+    // the message.
+    for (const pov of povs) {
+      expect((await renderUser(id, 'none', pov, 'present')).trim()).toBe('')
+    }
+  })
+
+  it('renders something at full and minimal, and reaches every pov branch', async () => {
+    const seen = new Set<string>()
+    for (const pov of povs) {
+      const full = await renderUser(id, 'full', pov, 'present')
+      expect(full.length).toBeGreaterThan(0)
+      seen.add(full)
+    }
+    expect(seen.size).toBe(povs.length)
+    expect((await renderUser(id, 'minimal', povs[0], 'present')).length).toBeGreaterThan(0)
+  })
+
+  it('varies full with tense', async () => {
+    for (const pov of povs) {
+      const present = await renderUser(id, 'full', pov, 'present')
+      const past = await renderUser(id, 'full', pov, 'past')
+      expect(present).toContain('present tense')
+      expect(past).toContain('past tense')
+      expect(present).not.toBe(past)
+    }
+  })
+})
+
+// What the shipped `full` text must say, rather than the exact bytes it says it in. Pinning
+// the wording would fight every edit to the templates, which are meant to be edited; these
+// are the properties a reworded template still has to hold.
+describe.each(['adventure', 'creative-writing'])('%s — full is complete for every pov', (id) => {
+  it('names the point of view it was rendered for', async () => {
+    for (const [pov, word] of [
+      ['first', 'first person'],
+      ['second', 'second person'],
+      ['third', 'third person'],
+    ]) {
+      expect(await renderUser(id, 'full', pov, 'present')).toContain(word)
+    }
+  })
+
+  it('leaves no unsubstituted variable name behind', async () => {
+    // Not asserting the name is present: creative writing's third-person branch never needs
+    // it, since it directs the writer rather than describing the protagonist.
+    for (const pov of ['first', 'second', 'third']) {
+      expect(await renderUser(id, 'full', pov, 'present')).not.toContain('protagonistName')
+    }
+  })
+
+  it('leaves no dangling example where an assign did not resolve', async () => {
+    // The adventure template builds its "I do X" example through {% assign %} inside a
+    // nested {% case pov %}. A pov the inner case does not cover renders the example empty
+    // and the line reads `-> "..."`, which nothing else here would catch.
+    for (const pov of ['first', 'second', 'third']) {
+      const out = await renderUser(id, 'full', pov, 'present')
+      expect(out).not.toMatch(/->\s*"\.\.\."/)
+      expect(out).not.toMatch(/->\s*""/)
+    }
+  })
+})
+
+describe('the agency rule is what the levels actually differ on', () => {
+  const AGENCY = /NEVER write/
+
+  it('adventure carries it at full and not below', async () => {
+    expect(await renderUser('adventure', 'full', 'second', 'present')).toMatch(AGENCY)
+    expect(await renderUser('adventure', 'minimal', 'second', 'present')).not.toMatch(AGENCY)
+    expect(await renderUser('adventure', 'none', 'second', 'present')).not.toMatch(AGENCY)
+  })
+
+  it('creative writing never carries it, since the author controls every character', async () => {
+    for (const level of ['full', 'minimal', 'none']) {
+      expect(await renderUser('creative-writing', level, 'third', 'present')).not.toMatch(AGENCY)
+    }
+  })
+})

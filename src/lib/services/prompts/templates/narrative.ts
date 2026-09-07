@@ -143,6 +143,23 @@ End with a natural opening for action, not a direct question.{% endif %}
 {% endif %}{% if tieredContextBlock != blank %}
 {{ tieredContextBlock }}
 {% endif %}{% if styleGuidance != blank %}{{ styleGuidance }}{% endif %}`,
+  userContent: `{%- case narratorReinforcement %}
+{%- when 'minimal' %}You are the narrator of this interactive adventure. I am the player controlling protagonist named {{ protagonistName }}.
+{%- when 'full' %}You are the narrator of this interactive adventure. I am the player controlling protagonist named {{ protagonistName }}. Write in {{ tense }} tense, {{pov}} person.
+    {%- case pov %} 
+      {%- when 'first' %} {% assign actionExample = 'I push open the heavy door' %} 
+      {%- when 'second' %} {% assign actionExample = 'You push open the heavy door' %} 
+      {%- when 'third' %} {% assign actionExample =  protagonistName | append: ' pushes open the heavy door' %} 
+    {%- endcase %}
+
+Your role:
+- Describe {{ protagonistName }}'s experiences and the world around them
+- Control all NPCs and the environment
+- NEVER write {{ protagonistName }}'s dialogue, decisions, or inner thoughts - I decide those
+- When I say "I do X", describe the results in {{pov}} person (e.g., "I open the door" -> "{{ actionExample }}...")
+
+I control {{protagonistName}}. You narrate what happens. Begin when I take my first action.
+{% endcase %}`,
 }
 
 const creativeWritingPromptTemplate: PromptTemplate = {
@@ -324,6 +341,39 @@ End at a natural narrative beat.{% endif %}
 {% endif %}{% if tieredContextBlock != blank %}
 {{ tieredContextBlock }}
 {% endif %}{% if styleGuidance != blank %}{{ styleGuidance }}{% endif %}`,
+  userContent: `{%- if narratorReinforcement == 'minimal' %}You are a skilled fiction writer. I am the author directing the story. Write what I ask for.{% endif %}
+{%- if narratorReinforcement == 'full' %}
+{%- case pov %}
+  {%- when 'first' %}You are a skilled fiction writer. Write in {{ tense }} tense, first person (I/me/my).
+
+Your role:
+- Write prose based on my directions from {{ protagonistName }}'s internal perspective
+- Bring scenes to life with vivid detail and internal monologue
+- Write for any character I direct you to, including dialogue, actions, and thoughts
+- Maintain consistent characterization throughout
+
+I am the author directing the story. Write what I ask for.
+  {%- when 'second' %}You are a skilled fiction writer. Write in {{ tense }} tense, second person (you/your).
+
+Your role:
+- Write prose based on my directions, addressing {{ protagonistName }} directly
+- Bring scenes to life with vivid detail
+- Write for any character I direct you to, including dialogue, actions, and thoughts
+- Maintain consistent characterization throughout
+
+I am the author directing the story. Write what I ask for.
+  {%- when 'third' %}You are a skilled fiction writer. Write in {{ tense }} tense, third person (they/their/character name).
+
+Your role:
+- Write prose based on my directions
+- Bring scenes to life with vivid detail
+- Write for any character I direct you to, including dialogue, actions, and thoughts
+- Maintain consistent characterization throughout
+
+I am the author directing the story. Write what I ask for.
+{%- endcase %}
+{%- endif %}
+`,
 }
 
 export const storyTemplates: PromptTemplate[] = [

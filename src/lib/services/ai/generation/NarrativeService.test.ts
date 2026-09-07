@@ -13,7 +13,36 @@ vi.mock('$lib/stores/settings.svelte', () => ({
   },
 }))
 
-import { buildChapterSummariesBlock } from './NarrativeService'
+import { buildChapterSummariesBlock, joinReinforcement } from './NarrativeService'
+
+describe('joinReinforcement', () => {
+  it('prefixes the turn message when the pack rendered reinforcement', () => {
+    expect(joinReinforcement('You are the narrator.', '## Current Action:\ngo north')).toBe(
+      'You are the narrator.\n\n## Current Action:\ngo north',
+    )
+  })
+
+  it('leaves the message untouched when nothing rendered', () => {
+    expect(joinReinforcement('', '## Current Action:\ngo north')).toBe(
+      '## Current Action:\ngo north',
+    )
+  })
+
+  it('leaves the message untouched when only whitespace rendered', () => {
+    // The likelier shape of `none`: the level's branches all miss and Liquid leaves the
+    // newlines between them behind.
+    expect(joinReinforcement('\n\n', '## Current Action:\ngo north')).toBe(
+      '## Current Action:\ngo north',
+    )
+    expect(joinReinforcement('   \n \t\n', '## Current Action:\ngo north')).toBe(
+      '## Current Action:\ngo north',
+    )
+  })
+
+  it('sends the untrimmed reinforcement, since trimming would change what full has always sent', () => {
+    expect(joinReinforcement('  padded  ', 'story')).toBe('  padded  \n\nstory')
+  })
+})
 
 const t = (years: number, days: number, hours: number, minutes: number): TimeTracker => ({
   years,
