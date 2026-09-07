@@ -3,8 +3,18 @@ import type { CharacterState, Entity, EntryMetadata } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 
 import { dedupeSceneEntities, scenePromotionActions, sceneTrackingActions } from './scene-tracking'
-import type { ParsedStateBlock } from './types'
+import { MAX_RETRIEVAL_QUERIES, type ParsedStateBlock } from './types'
 import { resolvePiggybackWorldTimeDelta } from './world-time'
+
+// Both producers of the field converge here, and only one filters its own input:
+// the tagged-block parser trims/drops/dedupes before capping, while the fallback
+// classifier's schema only counts, so it stores blanks and duplicates verbatim.
+// Deduping before the cap is what stops a repeat spending a slot the next distinct
+// ask needed (retrieval.md → Q4). Idempotent for the parser, which already did it.
+function normalizeRetrievalQueries(queries: readonly string[]): string[] {
+  const distinct = new Set(queries.map((q) => q.trim()).filter((q) => q !== ''))
+  return [...distinct].slice(0, MAX_RETRIEVAL_QUERIES)
+}
 
 type PreviousMetadata = {
   entryId?: string
@@ -71,7 +81,8 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
 
   const metadata: BuildResult['metadata'] = { sceneEntities, currentLocationId, worldTime }
   if (block.summary !== undefined) metadata.summary = block.summary
-  if (block.retrievalQueries?.length) metadata.retrievalQueries = block.retrievalQueries
+  const retrievalQueries = normalizeRetrievalQueries(block.retrievalQueries ?? [])
+  if (retrievalQueries.length > 0) metadata.retrievalQueries = retrievalQueries
   // visual/inventory/stackables only exist on CharacterState (entity-state-schema.ts) —
   // an id that resolves but belongs to a location/item/faction would otherwise get
   // those fields merged onto its state unvalidated (state-patch-actions.ts never

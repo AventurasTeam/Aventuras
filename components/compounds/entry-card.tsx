@@ -110,9 +110,10 @@ type EntryCardProps = {
   /** What this turn reported. Absent means the entry reported nothing. */
   stateReport?: EntryMetadata['stateReport']
   summary?: string
-  /** Up to three classifier-emitted queries for next turn's retrieval; deduplicated
-   *  at parse time. Read-only — whether they helped is answered in the probe. */
-  retrievalQueries?: string[]
+  /** Up to three classifier-emitted queries for next turn's retrieval; trimmed,
+   *  deduplicated and capped on the write path. Read-only — whether they helped is
+   *  answered in the probe. */
+  retrievalQueries?: readonly string[]
   /**
    * Desktop/tablet: fired by the in-card Dialog's Save. Resolve `{ ok: false }` to
    * report a failed write, carrying the action layer's rejection code where there is
@@ -498,7 +499,7 @@ function WorldStatePanel({
   entityNames: readonly ResolvedEntity[]
   stateReport?: EntryMetadata['stateReport']
   summary?: string
-  retrievalQueries?: string[]
+  retrievalQueries?: readonly string[]
   legacyStateRaw?: string
   onOpenSceneEdit?: () => void
   editTriggerRef: RefObject<View | null>
