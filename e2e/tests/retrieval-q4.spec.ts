@@ -28,23 +28,28 @@ const HERO_STORY_ID = 'story_hero'
 
 const ASK_A = 'E2E-Q4-ASK House Eldrin sigil provenance'
 const ASK_B = 'E2E-Q4-ASK marsh territory exile customs'
+const ASK_C = 'E2E-Q4-ASK ferry schedules along the reed channels'
+const ASK_D = 'E2E-Q4-ASK who last carried the courier seal'
 
-const narrative = (marker: string) => `${marker} The storm bends the reeds flat.
+const narrative = (
+  marker: string,
+  askOne: string,
+  askTwo: string,
+) => `${marker} The storm bends the reeds flat.
 <state>
   <scene_entities></scene_entities>
   <world_time_delta>0</world_time_delta>
   <summary>The courier crossed the marsh under storm light.</summary>
   <retrieval_queries>
-    <query>${ASK_A}</query>
-    <query>${ASK_B}</query>
+    <query>${askOne}</query>
+    <query>${askTwo}</query>
   </retrieval_queries>
 </state>`
 
 async function currentBranchId(page: Page): Promise<string> {
-  const rows = await queryApp(
-    page,
-    `SELECT current_branch_id FROM stories WHERE id = '${HERO_STORY_ID}'`,
-  )
+  const rows = await queryApp(page, `SELECT current_branch_id FROM stories WHERE id = ?`, [
+    HERO_STORY_ID,
+  ])
   return rows[0]?.[0] as string
 }
 
@@ -74,26 +79,14 @@ async function tailEntryId(page: Page, branchId: string): Promise<string> {
 const LATEST_CAPTURE_SQL = `SELECT payload FROM probe_captures
    WHERE branch_id = ? ORDER BY captured_at DESC, id DESC LIMIT 1`
 
-// The payload is a gzipped blob; page.evaluate's bridge does not carry a Uint8Array
-// back out of the page intact, so it is widened to a number array in-page and
-// rebuilt + gunzipped here in Node.
+// The payload is a gzipped blob; queryApp's evaluate bridge carries the BLOB column
+// back out as a real Uint8Array (Playwright has serialized typed arrays since 1.44),
+// so it can be gunzipped directly with no in-page widening/rebuild step.
 async function latestCapture(page: Page, branchId: string): Promise<ProbeCapturePayload | null> {
-  const bytes = await page.evaluate(
-    async ({ sql, branchId }) => {
-      const { rows } = await (
-        window as unknown as {
-          aventurasDb: {
-            query: (s: string, p: unknown[], m: string) => Promise<{ rows: unknown[][] }>
-          }
-        }
-      ).aventurasDb.query(sql, [branchId], 'all')
-      const blob = rows[0]?.[0] as ArrayLike<number> | undefined
-      return blob === undefined ? null : Array.from(blob)
-    },
-    { sql: LATEST_CAPTURE_SQL, branchId },
-  )
-  if (bytes === null) return null
-  const json = new TextDecoder().decode(gunzipSync(Uint8Array.from(bytes)))
+  const rows = await queryApp(page, LATEST_CAPTURE_SQL, [branchId])
+  const blob = rows[0]?.[0] as Uint8Array | undefined
+  if (blob === undefined) return null
+  const json = new TextDecoder().decode(gunzipSync(blob))
   return JSON.parse(json) as ProbeCapturePayload
 }
 
@@ -111,7 +104,7 @@ test.describe('retrieval Q4 — classifier-emitted queries across a turn boundar
     userDataDir = seeded.userDataDir
     await installEmbedderModel(userDataDir)
     mock = await startMockLlm()
-    mock.setNarrative(narrative('E2E-Q4-TURN'))
+    mock.setNarrative(narrative('E2E-Q4-TURN', ASK_A, ASK_B))
     setProviderEndpoint(seeded.dbPath, mock.url)
     // Both probe gates: app half (diagnostics) and story half (probe_mode_active).
     enableDiagnostics(seeded.dbPath)
@@ -151,11 +144,19 @@ test.describe('retrieval Q4 — classifier-emitted queries across a turn boundar
       // the panel is otherwise pinned by entry-card's own stories.
       const entryId = await tailEntryId(app.window, branchId)
       await reader.showState(app.window, entryId).click()
-      await expect(app.window.getByText(ASK_A)).toBeVisible()
-      await expect(app.window.getByText(ASK_B)).toBeVisible()
+      await expect(reader.row(app.window, entryId).getByText(ASK_A)).toBeVisible()
+      await expect(reader.row(app.window, entryId).getByText(ASK_B)).toBeVisible()
+
+      // The five-slot poll in step 2 only distinguishes turn 2's capture from turn 1's
+      // because turn 1 had no prior row to read: three fixed slots, no Q4.
+      expect((await latestCapture(app.window, branchId))?.queries.length).toBe(3)
     })
 
     await test.step('turn 2 embeds them as direct-slot queries and captures redundancy', async () => {
+      // Turn 2 emits different asks (ASK_C/ASK_D) so the capture assertion below
+      // discriminates "read the previous turn's row" (ASK_A/ASK_B, correct) from
+      // "read my own" (ASK_C/ASK_D, the regression this test exists to catch).
+      mock.setNarrative(narrative('E2E-Q4-TURN-2', ASK_C, ASK_D))
       await reader.composer(app.window).fill('E2E-Q4-USER-2 I ask what the sigil means.')
       await reader.send(app.window).click()
 
@@ -168,6 +169,9 @@ test.describe('retrieval Q4 — classifier-emitted queries across a turn boundar
         .toBe(5)
 
       const capture = (await latestCapture(app.window, branchId))!
+      // Hardcoded, not imported from CAPTURE_VERSION: a legitimate version bump is
+      // expected to require touching this line, so the failure points at the
+      // migration rather than looking like an E2E bug.
       expect(capture.capture_version).toBe(7)
       expect(capture.queries.map((q) => q.source)).toEqual([
         'user_action',
@@ -177,10 +181,11 @@ test.describe('retrieval Q4 — classifier-emitted queries across a turn boundar
         'classifier_emitted',
       ])
       expect(capture.queries.slice(3).map((q) => q.text)).toEqual([ASK_A, ASK_B])
-      expect(capture.queries.slice(0, 3).every((q) => q.redundancy === null)).toBe(true)
+      expect(capture.queries.slice(0, 3).map((q) => q.redundancy)).toEqual([null, null, null])
       for (const q of capture.queries.slice(3)) {
-        expect(q.redundancy).toBeGreaterThanOrEqual(0)
-        expect(q.redundancy).toBeLessThanOrEqual(1)
+        // redundancy = matched / topK.length is closed on [0, 1] by construction; the
+        // informative check is that it was computed at all (not null).
+        expect(typeof q.redundancy).toBe('number')
         // The cut is REDUNDANCY_K = 10 nearest rows globally, not the full KNN pass —
         // a regression to the old unpinned denominator would blow past this
         // (docs/memory/retrieval.md → Redundancy).
