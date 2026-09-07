@@ -196,3 +196,42 @@ describe('the agency rule is what the levels actually differ on', () => {
     }
   })
 })
+
+// The system half and the turn message must agree about the point of view. They disagreed
+// for first-person adventures: the system prompt fell through to its second-person branch
+// while the turn message named first person.
+describe('adventure system prompt covers every pov', () => {
+  const adventureSystem = storyTemplates.find((t) => t.id === 'adventure')!.content
+  const renderSystem = (pov: string, tense: string) =>
+    engine.parseAndRender(adventureSystem, {
+      pov,
+      tense,
+      protagonistName: 'Aria',
+      inlineImageMode: false,
+      visualProseMode: false,
+    })
+
+  it('gives first person its own voice rules in both tenses', async () => {
+    for (const tense of ['present', 'past']) {
+      const out = await renderSystem('first', tense)
+      expect(out).toContain('FIRST PERSON')
+      expect(out).not.toContain('SECOND PERSON')
+      expect(out).not.toMatch(/Use "you\/your" for the protagonist/)
+    }
+  })
+
+  it('leaves second and third person as they were', async () => {
+    expect(await renderSystem('second', 'present')).toContain('SECOND PERSON')
+    expect(await renderSystem('third', 'past')).toContain('THIRD PERSON')
+  })
+
+  it('agrees with the turn message about the pov', async () => {
+    for (const pov of ['first', 'second', 'third']) {
+      const system = await renderSystem(pov, 'present')
+      const turn = await renderUser('adventure', 'full', pov, 'present')
+      const word = { first: 'FIRST PERSON', second: 'SECOND PERSON', third: 'THIRD PERSON' }[pov]!
+      expect(system).toContain(word)
+      expect(turn).toContain(word.toLowerCase())
+    }
+  })
+})

@@ -9,14 +9,21 @@
 /** The template variable this feeds. A prompt without it cannot honour the setting. */
 export const NARRATOR_REINFORCEMENT_VAR = 'narratorReinforcement'
 
+/** `{% comment %}` blocks and `{% # %}` inline comments, which Liquid renders as nothing. */
+const LIQUID_COMMENT =
+  /\{%-?\s*comment\s*-?%\}[\s\S]*?\{%-?\s*endcomment\s*-?%\}|\{%-?\s*#[\s\S]*?%\}/g
+
 /**
  * Whether a template would honour the setting at all.
  *
  * A bare mention rather than a `{{ }}` match: the level is branched on, so it appears in
- * `{% if %}`, `{% case %}` or `{% unless %}` as readily as in an output tag.
+ * `{% if %}`, `{% case %}` or `{% unless %}` as readily as in an output tag. Comments are
+ * removed first, so a branch someone commented out does not report the setting as working.
  */
 export function templateUsesNarratorReinforcement(content: string | null | undefined): boolean {
-  return !!content && new RegExp(`\\b${NARRATOR_REINFORCEMENT_VAR}\\b`).test(content)
+  if (!content) return false
+  const active = content.replace(LIQUID_COMMENT, '')
+  return new RegExp(`\\b${NARRATOR_REINFORCEMENT_VAR}\\b`).test(active)
 }
 
 /** The two prompts a turn sends, as the bodies that will actually run. */

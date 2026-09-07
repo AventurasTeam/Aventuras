@@ -123,3 +123,40 @@ describe('narratorReinforcementIsHonoured', () => {
     }
   })
 })
+
+describe('templateUsesNarratorReinforcement — comments do not count', () => {
+  it('ignores a reference inside a comment block', () => {
+    expect(
+      templateUsesNarratorReinforcement(
+        `{% comment %}{% if narratorReinforcement == 'full' %}x{% endif %}{% endcomment %}`,
+      ),
+    ).toBe(false)
+  })
+
+  it('ignores a reference inside an inline comment', () => {
+    expect(templateUsesNarratorReinforcement(`{% # narratorReinforcement was here %}`)).toBe(false)
+  })
+
+  it('ignores whitespace-controlled comment tags', () => {
+    expect(
+      templateUsesNarratorReinforcement(`{%- comment -%}narratorReinforcement{%- endcomment -%}`),
+    ).toBe(false)
+  })
+
+  it('still sees an active branch alongside a commented one', () => {
+    expect(
+      templateUsesNarratorReinforcement(
+        `{% comment %}narratorReinforcement{% endcomment %}{% if narratorReinforcement == 'full' %}x{% endif %}`,
+      ),
+    ).toBe(true)
+  })
+
+  it('does not swallow the template around a comment', () => {
+    // The shipped adventure system prompt carries a {% comment %} block; stripping must not
+    // take the rest of the template with it.
+    const adventure = storyTemplates.find((t) => t.id === 'adventure')
+    expect(adventure?.content).toContain('{% comment %}')
+    expect(templateUsesNarratorReinforcement(adventure?.content)).toBe(false)
+    expect(templateUsesNarratorReinforcement(adventure?.userContent)).toBe(true)
+  })
+})
