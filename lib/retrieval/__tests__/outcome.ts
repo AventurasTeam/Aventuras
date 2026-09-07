@@ -118,8 +118,11 @@ export function retrievalSuccess(over: RetrievalSuccessOverrides = {}): Retrieva
     queries,
     keywordInjections: over.keywordInjections ?? [],
     // Aligned with `specs` rather than defaulted to []: a pass emitting no Q4
-    // still reports one null per fixed slot.
-    queryRedundancy: over.queryRedundancy ?? queries.specs.map(() => null),
+    // still reports one null per fixed slot. Non-null on a 'direct' slot so an
+    // emitted-stack fixture exercises the rendering path by default.
+    queryRedundancy:
+      over.queryRedundancy ??
+      queries.slots.map((s) => (s === 'direct' ? { ratio: 0, k: 1 } : null)),
     staleCounts: { ...perType(() => 0), ...over.staleCounts },
     injectedAwareness: over.injectedAwareness ?? [],
     selectedLocationIds: over.selectedLocationIds ?? [],

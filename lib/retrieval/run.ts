@@ -138,9 +138,12 @@ export type InjectedAwareness = { id: string; retrievalCount: number }
 
 /**
  * retrieval.md → Redundancy. `ratio` is |topK ∩ floor.seatedIds| / |topK| for one
- * emitted Q4; `k` is that top-K's size. `k` is captured because KNN_K is per kind —
- * below 200 rows per kind the top-K IS the whole corpus, so every query reports the
- * same ratio and nothing else in the capture disproves it.
+ * emitted Q4, where topK is that query's KNN cut UNIONED over the three kinds
+ * floor.seatedIds can hold (entity, lore, thread). `k` is not derivable from
+ * KNN_K: three per-kind cuts put its ceiling at 3 × KNN_K, and any kind holding
+ * fewer than KNN_K rows returns its whole corpus to every query alike — so at
+ * small `k` the ratio describes the corpus, not the query, and nothing else in
+ * the capture says so.
  */
 export type QueryRedundancy = { ratio: number; k: number }
 
@@ -376,9 +379,9 @@ async function runRetrievalPass(
   let knnMs = performance.now() - knnStartedAt
   for (const [kind, pool] of built) pools[TYPE_OF_KIND[kind]] = pool.candidates
 
-  // Taken here, before the pool filters below remove the floor rows: after them the
-  // intersection is empty by construction and every query would report 0
-  // (retrieval.md → Redundancy).
+  // Off perQueryIds — runKnn's raw rows — not off pool.candidates: assembleCandidates has
+  // already run filterEntityPool/LorePool/ThreadPool over those, so a ratio taken there
+  // intersects an empty set and reports 0 for every query (retrieval.md → Redundancy).
   const topKByQuery = queries.specs.map(() => new Set<string>())
   for (const [kind, pool] of built) {
     if (!FLOOR_SEATABLE_KINDS.has(kind)) continue
