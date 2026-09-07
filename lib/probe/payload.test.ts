@@ -302,7 +302,7 @@ describe('buildCapturePayload', () => {
       captured_at: 1_700_000_000_123,
       embedding_model_id: 'Xenova/all-MiniLM-L6-v2',
       capture_mode: 'light',
-      capture_version: 6,
+      capture_version: 7,
     })
   })
 
@@ -404,6 +404,59 @@ describe('buildCapturePayload', () => {
     expect(row).not.toHaveProperty('sim_q1')
   })
 
+  it('carries each Q4 entry its redundancy ratio and the top-K it was measured over', () => {
+    const stack = queryStack({ emittedQueries: ['marsh nobility'] })
+    const payload = buildCapturePayload({
+      ...identity,
+      mode: 'light',
+      settings,
+      params: RANKER_DEFAULTS,
+      outcome: retrievalSuccess({
+        queries: stack,
+        queryRedundancy: [null, null, null, { ratio: 0.25, k: 400 }],
+      }),
+    })
+
+    expect(payload.queries[3]).toMatchObject({
+      source: 'classifier_emitted',
+      redundancy: 0.25,
+      redundancy_k: 400,
+    })
+  })
+
+  it('leaves the fixed slots null on both redundancy fields', () => {
+    const payload = buildCapturePayload({
+      ...identity,
+      mode: 'light',
+      settings,
+      params: RANKER_DEFAULTS,
+      outcome: retrievalSuccess({ queries: queryStack(), queryRedundancy: [null, null, null] }),
+    })
+
+    expect(payload.queries.slice(0, 3).map((q) => [q.redundancy, q.redundancy_k])).toEqual([
+      [null, null],
+      [null, null],
+      [null, null],
+    ])
+  })
+
+  // A pass that failed before KNN carries an empty array while its stack still
+  // has three specs; reading past the end must not produce undefined in the payload.
+  it('nulls redundancy on a failed pass whose stack outlives its measurement', () => {
+    const payload = buildCapturePayload({
+      ...identity,
+      mode: 'light',
+      settings,
+      params: RANKER_DEFAULTS,
+      outcome: retrievalFailure(
+        { reason: 'call', detail: 'KNN blew up', staleCount: null },
+        { queries: queryStack(), queryRedundancy: [] },
+      ),
+    })
+
+    expect(payload.queries.every((q) => q.redundancy === null)).toBe(true)
+  })
+
   it('prices each query with the real tokenizer', () => {
     const payload = buildCapturePayload({
       ...identity,
@@ -417,6 +470,8 @@ describe('buildCapturePayload', () => {
       text: 'Mira opens the ledger and reads the tide marks aloud.',
       token_count: 12,
       source: 'user_action',
+      redundancy: null,
+      redundancy_k: null,
     })
   })
 
@@ -508,9 +563,21 @@ describe('buildCapturePayload', () => {
     })
 
     expect(payload.queries).toEqual([
-      { text: '', token_count: 0, source: 'user_action' },
-      { text: '', token_count: 0, source: 'structural_digest' },
-      { text: '', token_count: 0, source: 'piggyback_summary' },
+      { text: '', token_count: 0, source: 'user_action', redundancy: null, redundancy_k: null },
+      {
+        text: '',
+        token_count: 0,
+        source: 'structural_digest',
+        redundancy: null,
+        redundancy_k: null,
+      },
+      {
+        text: '',
+        token_count: 0,
+        source: 'piggyback_summary',
+        redundancy: null,
+        redundancy_k: null,
+      },
     ])
     expectEmptyPools(payload)
     expect(payload.structural_floor).toEqual([])

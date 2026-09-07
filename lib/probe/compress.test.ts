@@ -40,12 +40,26 @@ const capturePayload = (): ProbeCapturePayload => ({
     protectedBuffer: 200,
   },
   queries: [
-    { text: 'What does the party do next?', token_count: 6, source: 'user_action' },
-    { text: 'Summarize recent events.', token_count: 4, source: 'structural_digest' },
+    {
+      text: 'What does the party do next?',
+      token_count: 6,
+      source: 'user_action',
+      redundancy: null,
+      redundancy_k: null,
+    },
+    {
+      text: 'Summarize recent events.',
+      token_count: 4,
+      source: 'structural_digest',
+      redundancy: null,
+      redundancy_k: null,
+    },
     {
       text: 'The bridge fell during the third night of the siege.',
       token_count: 11,
       source: 'piggyback_summary',
+      redundancy: null,
+      redundancy_k: null,
     },
   ],
   scan_text: 'What does the party do next?\nThe bridge fell during the third night of the siege.',

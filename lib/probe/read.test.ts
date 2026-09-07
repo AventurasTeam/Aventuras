@@ -219,6 +219,33 @@ describe('decodeCapture', () => {
     expect(decodeCapture(['pc_1', 'br_a', 1000, 'light', null, 100, bytes]).id).toBe('pc_1')
   })
 
+  it.each<[string, unknown, RegExp]>([
+    ['a string', '0.5', /queries\[0\]\.redundancy must be a finite number or null/i],
+    ['a boolean', true, /queries\[0\]\.redundancy must be a finite number or null/i],
+  ])('rejects a capture whose first query has redundancy %s', (_label, redundancy, message) => {
+    const payload = buildCapturePayload(captureInput())
+    const [first, ...rest] = payload.queries
+    const { bytes } = compressPayload({
+      ...payload,
+      queries: [{ ...first, redundancy }, ...rest] as ProbeCapturePayload['queries'],
+    })
+
+    expect(() => decodeCapture(['pc_1', 'br_a', 1000, 'light', null, 100, bytes])).toThrow(message)
+  })
+
+  it('rejects a capture whose first query has a non-numeric redundancy_k', () => {
+    const payload = buildCapturePayload(captureInput())
+    const [first, ...rest] = payload.queries
+    const { bytes } = compressPayload({
+      ...payload,
+      queries: [{ ...first, redundancy_k: '400' }, ...rest] as ProbeCapturePayload['queries'],
+    })
+
+    expect(() => decodeCapture(['pc_1', 'br_a', 1000, 'light', null, 100, bytes])).toThrow(
+      /queries\[0\]\.redundancy_k must be a finite number or null/i,
+    )
+  })
+
   it('rejects a payload that decodes to something other than an object', () => {
     const { bytes } = compressPayload('not a capture' as unknown as ProbeCapturePayload)
 
