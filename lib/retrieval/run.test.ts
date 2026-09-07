@@ -760,6 +760,32 @@ describe('runRetrieval — KNN passes', () => {
     expect(knnCountsByFamily(queryAll)).toEqual(perKind(3))
   })
 
+  it('issues an extra pass per emitted Q4 query and blends it as one pooled share', async () => {
+    const queryAll = makeQueryAll({
+      entities: [entityRow('char_a', 'Kara Vex'), entityRow('char_b', 'Mira')],
+      knn: [hit('char_b')],
+    })
+    // Orthogonal past the fixed three: a blend that ignored the Q4 sims would
+    // score the same as one that charged them.
+    const embedTexts = vi.fn(async (texts: string[]) => ({
+      vectors: texts.map((_, i) => Float32Array.from(i < 3 ? [1, 0] : [0, 1])),
+      dim: DIM,
+    }))
+    const out = expectOk(
+      await runRetrieval(
+        deps({ queryAll, embedTexts }),
+        params({ query: { emittedQueries: ['House Eldrin', 'marsh nobility'] } }),
+      ),
+    )
+
+    expect(out.queries.slots).toEqual(['action', 'digest', 'summary', 'direct', 'direct'])
+    expect(knnCountsByFamily(queryAll)).toEqual(perKind(5))
+    const trace = out.bundles.entities.traces[0]
+    expect(trace.sims).toEqual([1, 1, 1, 0, 0])
+    // (0.3 + 0.25 + 0.2 + 0.25 * mean(0, 0)) / 1.0
+    expect(trace.simBlend).toBeCloseTo(0.75, 10)
+  })
+
   // A story that needs no lead entity embeds nothing at creation, so the dim
   // family does not exist on turn 1 and vec0 answers a KNN with "no such table".
   it('skips the KNN entirely when the dim family does not exist yet', async () => {

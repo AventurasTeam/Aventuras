@@ -24,6 +24,7 @@ import {
   loreBundle,
   loreCandidate,
   queryStack,
+  querySlots,
   settings,
   successOutcome,
 } from './__tests__/fixtures'
@@ -81,6 +82,7 @@ const chapterCandidate = {
 const chapterBundle = () =>
   rankPerType([chapterCandidate], 'chapters', 10_000, {
     params: RANKER_DEFAULTS,
+    querySlots,
     chapterRanges: new Map(),
     countTokens,
   })
@@ -424,6 +426,7 @@ describe('buildCapturePayload', () => {
     // if the mapping read `selected` instead of `pool`.
     const bundle = rankPerType([loreCandidate], 'lore', 0, {
       params: RANKER_DEFAULTS,
+      querySlots,
       chapterRanges: new Map(),
       countTokens,
     })

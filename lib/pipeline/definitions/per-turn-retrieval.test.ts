@@ -251,9 +251,7 @@ function trace(id: string, finalScore: number, mmrRank: number): CandidateTrace 
     kind: 'lore',
     id,
     displayName: 'The drowned archive',
-    simQ1: 0.71,
-    simQ2: 0.62,
-    simQ3: 0.53,
+    sims: [0.71, 0.62, 0.53],
     simBlend: 0.64,
     recencyFactor: 0.98,
     pinSignal: 0.41,
@@ -287,13 +285,22 @@ const QUERY_TEXTS = [
   'A courier arrived at dusk carrying nothing but an empty seal case.',
 ] as const
 
-const queryStack = (): QueryStack => ({
-  q1: { text: QUERY_TEXTS[0], source: 'user_action' },
-  q2: { text: QUERY_TEXTS[1], source: 'structural_digest' },
-  q3: { text: QUERY_TEXTS[2], source: 'piggyback_summary' },
-  presence: [true, true, true],
-  embedTexts: [...QUERY_TEXTS],
-})
+const queryStack = (): QueryStack => {
+  const specs = [
+    { text: QUERY_TEXTS[0], source: 'user_action' },
+    { text: QUERY_TEXTS[1], source: 'structural_digest' },
+    { text: QUERY_TEXTS[2], source: 'piggyback_summary' },
+  ] as const
+  return {
+    specs,
+    slots: ['action', 'digest', 'summary'],
+    presence: [true, true, true],
+    embedTexts: [...QUERY_TEXTS],
+    q1: specs[0],
+    q2: specs[1],
+    q3: specs[2],
+  }
+}
 
 type CaptureRow = {
   branch_id: string

@@ -363,6 +363,7 @@ async function runRetrievalPass(
 
   const rankTypeInput = {
     params: RANKER_DEFAULTS,
+    querySlots: queries.slots,
     chapterRanges,
     countTokens,
   }
@@ -674,13 +675,8 @@ function assembleCandidates(
 
   const sim = (vector: Float32Array, query: Float32Array | null): number | null =>
     query === null ? null : cosine(vector, query)
-  const simsFor = (
-    vector: Float32Array,
-  ): readonly [number | null, number | null, number | null] => [
-    sim(vector, queryVectors[0]),
-    sim(vector, queryVectors[1]),
-    sim(vector, queryVectors[2]),
-  ]
+  const simsFor = (vector: Float32Array): readonly (number | null)[] =>
+    queryVectors.map((query) => sim(vector, query))
 
   // kw = keyword_boost(c, scan_text) (retrieval.md → Pseudocode): candidate surface
   // vs scan text, NOT `queries` — the reverse matches every row's own indexed terms.

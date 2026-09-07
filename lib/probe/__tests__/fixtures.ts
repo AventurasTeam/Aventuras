@@ -21,12 +21,15 @@ export const loreCandidate = {
   embeddingStale: true,
 }
 
+export const querySlots = ['action', 'digest', 'summary'] as const
+
 // Priced with the real tokenizer, not a stand-in: a captured payload stamps
 // tokenizer: o200k_base, so a fixture priced any other way would make the
 // capture internally inconsistent with its own declared vocabulary.
 export const loreBundle = () =>
   rankPerType([loreCandidate], 'lore', 10_000, {
     params: RANKER_DEFAULTS,
+    querySlots,
     chapterRanges: new Map(),
     countTokens,
   })

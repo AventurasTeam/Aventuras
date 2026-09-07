@@ -1,5 +1,5 @@
 import type { StructuralFloor } from '../pools'
-import type { QueryStack } from '../queries'
+import { buildQueryStack, type QueryStack } from '../queries'
 import type {
   InjectedAwareness,
   RetrievalFailure,
@@ -20,6 +20,17 @@ import {
 const perType = <T>(value: (type: RetrievalType) => T): Record<RetrievalType, T> =>
   Object.fromEntries(RETRIEVAL_TYPES.map((t) => [t, value(t)])) as Record<RetrievalType, T>
 
+// Built rather than written out: a hand-shaped stack can describe slots no pass emits.
+const emptyQueryStack = (): QueryStack =>
+  buildQueryStack({
+    userAction: '',
+    sceneEntityNames: [],
+    currentLocationName: null,
+    activeThreadTitles: [],
+    eraName: null,
+    piggybackSummary: null,
+  })
+
 // A seated row's trace, carrying only what the candidate already fixes; the
 // scoring fields are placeholders, the one-per-pool-row pairing is not — a pool
 // row without a trace is a bundle the ranker cannot produce, and lib/probe's
@@ -28,9 +39,7 @@ const traceOf = (c: Candidate, mmrRank: number): CandidateTrace => ({
   kind: c.kind,
   id: c.id,
   displayName: c.displayName,
-  simQ1: c.sims[0],
-  simQ2: c.sims[1],
-  simQ3: c.sims[2],
+  sims: c.sims,
   simBlend: 0,
   recencyFactor: 1,
   pinSignal: c.pinSignal,
@@ -103,13 +112,7 @@ export function retrievalSuccess(over: RetrievalSuccessOverrides = {}): Retrieva
       ...over.floor,
     },
     bundles: perType((type) => over.bundles?.[type] ?? rankedBundle(over.selected?.[type] ?? [])),
-    queries: over.queries ?? {
-      q1: { text: '', source: 'user_action' },
-      q2: { text: '', source: 'structural_digest' },
-      q3: { text: '', source: 'piggyback_summary' },
-      presence: [false, false, false],
-      embedTexts: [],
-    },
+    queries: over.queries ?? emptyQueryStack(),
     keywordInjections: over.keywordInjections ?? [],
     staleCounts: { ...perType(() => 0), ...over.staleCounts },
     injectedAwareness: over.injectedAwareness ?? [],

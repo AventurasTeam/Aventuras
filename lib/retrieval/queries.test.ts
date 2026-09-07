@@ -202,6 +202,68 @@ describe('buildQueryStack', () => {
   })
 })
 
+describe('emitted Q4 queries', () => {
+  it('appends one slot per emitted query, after the fixed three', () => {
+    const s = buildQueryStack({ ...base, emittedQueries: ['House Eldrin', 'marsh nobility'] })
+    expect(s.specs).toHaveLength(5)
+    expect(s.specs.slice(3).map((q) => q.source)).toEqual([
+      'classifier_emitted',
+      'classifier_emitted',
+    ])
+    expect(s.slots).toEqual(['action', 'digest', 'summary', 'direct', 'direct'])
+  })
+
+  it('deduplicates identical emissions', () => {
+    // Three copies would split the pooled weight and cost triple the KNN for one signal.
+    const s = buildQueryStack({ ...base, emittedQueries: ['a sigil', 'a sigil', 'a sigil'] })
+    expect(s.specs.filter((q) => q.source === 'classifier_emitted')).toHaveLength(1)
+  })
+
+  it('drops empty and whitespace-only emissions', () => {
+    const s = buildQueryStack({ ...base, emittedQueries: ['', '   ', 'real'] })
+    expect(s.specs.filter((q) => q.source === 'classifier_emitted').map((q) => q.text)).toEqual([
+      'real',
+    ])
+  })
+
+  it('caps the emitted set at three', () => {
+    const s = buildQueryStack({ ...base, emittedQueries: ['a', 'b', 'c', 'd', 'e'] })
+    expect(s.specs.filter((q) => q.source === 'classifier_emitted').map((q) => q.text)).toEqual([
+      'a',
+      'b',
+      'c',
+    ])
+  })
+
+  it('caps an oversized emission rather than embedding it whole', () => {
+    const s = buildQueryStack({ ...base, emittedQueries: ['x'.repeat(500)] })
+    expect(s.specs.at(-1)?.text).toBe('x'.repeat(200))
+  })
+
+  it('embeds an emitted query and marks its slot present', () => {
+    const s = buildQueryStack({ ...base, emittedQueries: ['House Eldrin'] })
+    expect(s.presence).toEqual([true, true, false, true])
+    expect(s.embedTexts).toEqual([s.q1.text, s.q2.text, 'House Eldrin'])
+  })
+
+  it('records the fixed three even when all are absent, so the probe can render them', () => {
+    const s = buildQueryStack({
+      ...base,
+      userAction: '',
+      sceneEntityNames: [],
+      currentLocationName: null,
+      activeThreadTitles: [],
+      eraName: null,
+    })
+    expect(s.specs.map((q) => q.source)).toEqual([
+      'user_action',
+      'structural_digest',
+      'piggyback_summary',
+    ])
+    expect(s.embedTexts).toEqual([])
+  })
+})
+
 const v = (n: number) => Float32Array.from([n])
 
 describe('distributeQueryVectors', () => {
@@ -227,6 +289,15 @@ describe('distributeQueryVectors', () => {
 
   it('nulls the slots a short vector array cannot fill', () => {
     expect(distributeQueryVectors([v(1)], [true, true, true])).toEqual([v(1), null, null])
+  })
+
+  it('follows the presence list past the fixed three', () => {
+    expect(distributeQueryVectors([v(1), v(4)], [true, false, false, true])).toEqual([
+      v(1),
+      null,
+      null,
+      v(4),
+    ])
   })
 
   it('discards vectors beyond the present slots', () => {

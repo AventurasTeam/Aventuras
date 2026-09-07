@@ -14,7 +14,7 @@ import {
 import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import { queryAllOf } from '@/lib/retrieval/__tests__/query-all'
 
-import { captureInput, queryStack, seededDb, settings } from './__tests__/fixtures'
+import { captureInput, queryStack, querySlots, seededDb, settings } from './__tests__/fixtures'
 import { buildCapturePayload } from './payload'
 import { capturesForStoryQuery, decodeCapture } from './read'
 import { replayType } from './replay'
@@ -378,6 +378,7 @@ const marksOf = (bundle: RankedType): ParityState['marks'] => {
 const rankProd = (state: ParityState): RankedType =>
   rankPerType(state.pool, state.type, state.budget, {
     params: state.params,
+    querySlots,
     chapterRanges: new Map([[CHAPTER_ID, BOOSTED_ENTRY_IDS]]),
     matchedChapterIds: new Set([CHAPTER_ID]),
     countTokens,
@@ -452,6 +453,7 @@ describe('replay recomputes rather than echoing', () => {
     }
     const captured = rankPerType(pool, 'lore', 1, {
       params: capturedParams,
+      querySlots,
       chapterRanges: new Map(),
       countTokens: () => 1,
     })
@@ -472,6 +474,7 @@ describe('replay recomputes rather than echoing', () => {
     }
     const production = rankPerType(pool, 'lore', 1, {
       params: retunedParams,
+      querySlots,
       chapterRanges: new Map(),
       countTokens: () => 1,
     })

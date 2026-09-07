@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 import { RANKER_DEFAULTS } from './constants'
-import { rankAll, rankPerType } from './ranker'
-import type { Candidate, InjectedRow, KeywordInjection, RetrievalType } from './types'
+import { blendSims, rankAll, rankPerType } from './ranker'
+import type { Candidate, InjectedRow, KeywordInjection, QuerySlot, RetrievalType } from './types'
 
 const v = (...xs: number[]): Float32Array => {
   const n = Math.hypot(...xs)
@@ -68,10 +68,13 @@ const emptyPools = (): Record<RetrievalType, Candidate[]> => ({
 const HAPPENING_COST = 10 + RANKER_DEFAULTS.typeOverhead.happenings
 const LORE_COST = 10 + RANKER_DEFAULTS.typeOverhead.lore
 
+const FIXED_SLOTS: readonly QuerySlot[] = ['action', 'digest', 'summary']
+
 const base = {
   params: RANKER_DEFAULTS,
   chapterRanges: new Map<string, ReadonlySet<string>>(),
   countTokens,
+  querySlots: FIXED_SLOTS,
 }
 
 describe('rankPerType — scoring', () => {
@@ -564,8 +567,8 @@ describe('blend with absent query vectors', () => {
     expect(byId.get('absent')?.simBlend).toBeCloseTo(0.8, 10)
     // All three present: 0.8*0.3 renormalized over the full weight total.
     expect(byId.get('zero')?.simBlend).toBeCloseTo((0.8 * 0.3) / (0.3 + 0.25 + 0.2), 10)
-    expect(byId.get('absent')?.simQ2).toBeNull()
-    expect(byId.get('zero')?.simQ2).toBe(0)
+    expect(byId.get('absent')?.sims[1]).toBeNull()
+    expect(byId.get('zero')?.sims[1]).toBe(0)
   })
 })
 
@@ -748,5 +751,51 @@ describe('rankAll — keyword injection routing', () => {
     expect(out.lore.selected.map((c) => c.id)).toEqual(['l1'])
     for (const type of ['entities', 'happenings', 'threads', 'chapters'] as const)
       expect(out[type].selected).toEqual([])
+  })
+})
+
+describe('blendSims pooling', () => {
+  const weights = { action: 0.3, digest: 0.25, summary: 0.2, direct: 0.25 }
+
+  it('spends one pooled share across every emitted Q4, not one share each', () => {
+    // Emission volume must not become influence (retrieval.md → Blending).
+    const one = blendSims([1, null, null, 0.4], [...FIXED_SLOTS, 'direct'], weights)
+    const three = blendSims(
+      [1, null, null, 0.4, 0.4, 0.4],
+      [...FIXED_SLOTS, 'direct', 'direct', 'direct'],
+      weights,
+    )
+    // (0.3 * 1 + 0.25 * 0.4) / (0.3 + 0.25)
+    expect(one).toBeCloseTo(0.4 / 0.55, 10)
+    expect(three).toBeCloseTo(one, 10)
+  })
+
+  it('averages the emitted sims before applying the pooled weight', () => {
+    // mean(0.2, 0.8) = 0.5, and the pooled share is the only live one, so it renormalizes out.
+    const blended = blendSims(
+      [null, null, null, 0.2, 0.8],
+      [...FIXED_SLOTS, 'direct', 'direct'],
+      weights,
+    )
+    expect(blended).toBeCloseTo(0.5, 10)
+  })
+
+  it('leaves an emitted query with no vector out of the pooled average', () => {
+    // mean(0.4) = 0.4; counting the absent one as 0 would halve it.
+    const blended = blendSims(
+      [null, null, null, null, 0.4],
+      [...FIXED_SLOTS, 'direct', 'direct'],
+      weights,
+    )
+    expect(blended).toBeCloseTo(0.4, 10)
+  })
+
+  it('re-normalizes to the action share alone when nothing else is live', () => {
+    // Cold start: turn 1 ranks on Q1 alone (retrieval.md → Cold start).
+    expect(blendSims([0.7, null, null], FIXED_SLOTS, weights)).toBeCloseTo(0.7, 10)
+  })
+
+  it('returns 0 when no query produced a vector', () => {
+    expect(blendSims([null, null, null], FIXED_SLOTS, weights)).toBe(0)
   })
 })

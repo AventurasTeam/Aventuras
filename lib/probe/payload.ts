@@ -55,9 +55,10 @@ const candidateOf = (
   target_id: t.id,
   display_name: t.displayName,
   display_text: t.renderedText,
-  sim_q1: t.simQ1,
-  sim_q2: t.simQ2,
-  sim_q3: t.simQ3,
+  // CaptureCandidate carries three sim columns, so slots past Q3 are not captured.
+  sim_q1: t.sims[0] ?? null,
+  sim_q2: t.sims[1] ?? null,
+  sim_q3: t.sims[2] ?? null,
   sim_blend: t.simBlend,
   recency_factor: t.recencyFactor,
   pin_signal: t.pinSignal,

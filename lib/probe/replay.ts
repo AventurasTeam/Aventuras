@@ -129,6 +129,8 @@ export function replayType(
   return rankPerType(pool, type, budget, {
     keywordInjected,
     params: payload.params.ranker,
+    // The capture's three sim columns are Q1/Q2/Q3 in order.
+    querySlots: ['action', 'digest', 'summary'],
     chapterRanges,
     matchedChapterIds: new Set([REPLAY_CHAPTER]),
     countTokens: options.countTokens ?? refusePromotedRow,
