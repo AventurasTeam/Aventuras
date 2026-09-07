@@ -211,7 +211,7 @@ export type RankAllInput = {
   pools: Record<RetrievalType, readonly Candidate[]>
   budgets: Record<RetrievalType, number>
   params: RankerParams
-  /** The pass's slot order, positionally aligned with every candidate's `sims`. */
+  /** Must be the same order every candidate's `sims` was computed in; length is enforced. */
   querySlots: readonly QuerySlot[]
   /** Entry ids covered by each closed chapter, for the chapter-match boost. */
   chapterRanges: ReadonlyMap<string, ReadonlySet<string>>

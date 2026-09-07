@@ -811,8 +811,8 @@ retrieval hint inverts the cost of the recovery it triggers
 Three degenerate emissions are closed before embedding: identical
 strings are deduplicated (three copies would split the pooled weight
 evenly and cost triple the KNN for one signal), empty strings are
-filtered, and an oversized string is capped rather than left to the
-[truncation contract](#truncation-contract).
+filtered, and an oversized string is capped at 200 characters rather
+than left to the [truncation contract](#truncation-contract).
 
 **Storage.** `story_entries.metadata.retrievalQueries`, capped at
 three, excluded from `stateReport`, and **not inherited** — a query

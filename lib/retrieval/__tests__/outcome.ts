@@ -20,7 +20,7 @@ import {
 const perType = <T>(value: (type: RetrievalType) => T): Record<RetrievalType, T> =>
   Object.fromEntries(RETRIEVAL_TYPES.map((t) => [t, value(t)])) as Record<RetrievalType, T>
 
-// Built rather than written out: a hand-shaped stack can describe slots no pass emits.
+// A hand-shaped stack can describe slots no pass emits.
 const emptyQueryStack = (): QueryStack =>
   buildQueryStack({
     userAction: '',
