@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte'
   import { ui, type RetrievalCacheKey } from '$lib/stores/ui.svelte'
+  import { activity } from '$lib/stores/activity.svelte'
   import { toRetrievalSnapshot } from '$lib/services/ai/retrieval'
   import { buildTimelineFillBlock } from '$lib/services/ai/generation'
   import { joinPromptBlocks } from '$lib/utils/promptBlocks'
@@ -66,13 +67,29 @@
   // Translation Helper
   // ============================================================================
 
+  /** What the input translation cost, for the turn record. See `InputTranslationTiming`. */
+  type InputTranslationTiming = { startedAt: number; durationMs: number; failed: boolean }
+
   async function translateUserInput(
     content: string,
     translationSettings: typeof settings.translationSettings,
-  ): Promise<{ promptContent: string; originalInput: string | undefined }> {
+  ): Promise<{
+    promptContent: string
+    originalInput: string | undefined
+    timing?: InputTranslationTiming
+  }> {
     if (!TranslationService.shouldTranslateInput(translationSettings)) {
       return { promptContent: content, originalInput: undefined }
     }
+
+    // Measured here because this runs before the generation path opens the turn record, and
+    // it is a model call on the same critical path as everything the record does cover.
+    const startedAt = Date.now()
+    const timing = (failed: boolean): InputTranslationTiming => ({
+      startedAt,
+      durationMs: Date.now() - startedAt,
+      failed,
+    })
 
     try {
       log('Translating user input', {
@@ -87,10 +104,14 @@
         originalLength: content.length,
         translatedLength: result.translatedContent.length,
       })
-      return { promptContent: result.translatedContent, originalInput: content }
+      return {
+        promptContent: result.translatedContent,
+        originalInput: content,
+        timing: timing(false),
+      }
     } catch (error) {
       log('Input translation failed (non-fatal), using original', error)
-      return { promptContent: content, originalInput: undefined }
+      return { promptContent: content, originalInput: undefined, timing: timing(true) }
     }
   }
 
@@ -236,6 +257,7 @@
    */
   function buildPipelineDependencies(storyId: string): PipelineDependencies {
     return {
+      activity,
       shouldUseAgenticRetrieval: () =>
         aiService.shouldUseAgenticRetrieval(settings.systemServicesSettings.timelineFill),
       runAgenticRetrieval: (options) =>
@@ -248,7 +270,7 @@
       // The chapter-read budget is derived from this story's own chapterization threshold, so
       // it is bound here with the rest of the store rather than read from settings: a chapter
       // is about `tokenThreshold` tokens by construction. See `story.chapterReadBudget`.
-      runTimelineFill: (visibleEntries, chapters, alreadyInContext) =>
+      runTimelineFill: (visibleEntries, chapters, alreadyInContext, activityParentId) =>
         aiService.runTimelineFill(
           storyId,
           visibleEntries,
@@ -256,6 +278,7 @@
           story.getChapterEntries.bind(story),
           alreadyInContext,
           story.chapterReadBudget,
+          activityParentId,
         ),
       answerChapterQuestion: (chapterNumber, question, chapters) =>
         aiService.answerChapterQuestion(
@@ -451,6 +474,7 @@
       countStyleReview?: boolean
       styleReviewSource?: string
       cachedRetrievalResult?: RetrievalResult | null
+      inputTranslation?: InputTranslationTiming
     },
   ) {
     const countStyleReview = options?.countStyleReview ?? true
@@ -507,6 +531,19 @@
     ui.resetBackgroundedFlag()
 
     try {
+      // Inside the try: only its `finally` closes the turn, and a throw before that point
+      // would leave a record nothing can close.
+      const inputTranslation = options?.inputTranslation
+      activity.startTurn(narrationEntryId, inputTranslation?.startedAt)
+      if (inputTranslation) {
+        activity.recordStep('Translating input', {
+          isLLM: true,
+          startedAt: inputTranslation.startedAt,
+          durationMs: inputTranslation.durationMs,
+          status: inputTranslation.failed ? 'failed' : 'done',
+        })
+      }
+
       const worldState = story.worldStateSnapshot
 
       const storyPosition = story.entries.length
@@ -826,6 +863,8 @@
       ui.endStreaming()
       ui.setGenerating(false)
       ui.setGenerationStatus('')
+      // Closes the turn even when a step was left running, so the record is bounded.
+      activity.endTurn()
       activeAbortController = null
 
       // Android: always stop the foreground service when generation ends
@@ -1000,10 +1039,11 @@
       story.currentStory.timeTracker,
     )
 
-    const { promptContent, originalInput } = await translateUserInput(
-      content,
-      settings.translationSettings,
-    )
+    const {
+      promptContent,
+      originalInput,
+      timing: inputTranslation,
+    } = await translateUserInput(content, settings.translationSettings)
 
     const userActionEntry = await story.addEntry('user_action', promptContent)
 
@@ -1019,7 +1059,7 @@
     // entry the narrator reads holds `promptContent`. Passing the raw text here left
     // retrieval and classification working from a different wording than the narration —
     // and the retry path already passes `promptContent`, so the two disagreed.
-    await generateResponse(userActionEntry.id, promptContent)
+    await generateResponse(userActionEntry.id, promptContent, { inputTranslation })
   }
 
   async function handleStopGeneration() {
@@ -1195,10 +1235,11 @@
 
     await tick()
 
-    const { promptContent, originalInput } = await translateUserInput(
-      backup.userActionContent,
-      settings.translationSettings,
-    )
+    const {
+      promptContent,
+      originalInput,
+      timing: inputTranslation,
+    } = await translateUserInput(backup.userActionContent, settings.translationSettings)
     const userActionEntry = await story.addEntry('user_action', promptContent)
 
     if (originalInput) {
@@ -1219,6 +1260,7 @@
         countStyleReview: false,
         styleReviewSource: 'retry-last-message',
         cachedRetrievalResult: cacheKey ? ui.retrievalResultFor(cacheKey) : null,
+        inputTranslation,
       })
     } finally {
       ui.setRetryingLastMessage(false)

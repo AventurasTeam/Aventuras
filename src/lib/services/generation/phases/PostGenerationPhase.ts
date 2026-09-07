@@ -50,6 +50,8 @@ export interface PostWorldState {
 }
 
 /** Dependencies for post-generation phase */
+import { NO_ACTIVITY, trackStep, type ActivityReporter } from '$lib/services/activity'
+
 export interface PostGenerationDependencies {
   generateSuggestions: (
     entries: StoryEntry[],
@@ -94,6 +96,9 @@ export interface PostGenerationInput {
   pov: 'first' | 'second' | 'third'
   translationSettings: TranslationSettings
   abortSignal?: AbortSignal
+  activity?: ActivityReporter
+  /** Step this phase's own reporting nests under. */
+  activityParentId?: string | null
 }
 
 /** Result from post-generation phase */
@@ -153,20 +158,23 @@ export class PostGenerationPhase {
       narrativeResponse,
       translationSettings,
     } = input
-    const { suggestions } = await this.deps.generateSuggestions(
-      entries,
-      activeThreads,
-      lorebookEntries,
-      narrativeResponse,
-      storyId,
+    const llm = { parentId: input.activityParentId, isLLM: true }
+    const activity = input.activity ?? NO_ACTIVITY
+
+    const { suggestions } = await trackStep(activity, 'Generating suggestions', llm, () =>
+      this.deps.generateSuggestions(
+        entries,
+        activeThreads,
+        lorebookEntries,
+        narrativeResponse,
+        storyId,
+      ),
     )
 
     if (TranslationService.shouldTranslate(translationSettings)) {
       try {
-        return await this.deps.translateSuggestions(
-          suggestions,
-          translationSettings.targetLanguage,
-          storyId,
+        return await trackStep(activity, 'Translating suggestions', llm, () =>
+          this.deps.translateSuggestions(suggestions, translationSettings.targetLanguage, storyId),
         )
       } catch {
         return suggestions
@@ -186,22 +194,25 @@ export class PostGenerationPhase {
       pov,
       translationSettings,
     } = input
-    const { choices } = await this.deps.generateActionChoices(
-      entries,
-      worldState,
-      narrativeResponse,
-      lorebookEntries,
-      promptContext,
-      pov,
-      storyId,
+    const llm = { parentId: input.activityParentId, isLLM: true }
+    const activity = input.activity ?? NO_ACTIVITY
+
+    const { choices } = await trackStep(activity, 'Generating action choices', llm, () =>
+      this.deps.generateActionChoices(
+        entries,
+        worldState,
+        narrativeResponse,
+        lorebookEntries,
+        promptContext,
+        pov,
+        storyId,
+      ),
     )
 
     if (TranslationService.shouldTranslate(translationSettings)) {
       try {
-        return await this.deps.translateActionChoices(
-          choices,
-          translationSettings.targetLanguage,
-          storyId,
+        return await trackStep(activity, 'Translating action choices', llm, () =>
+          this.deps.translateActionChoices(choices, translationSettings.targetLanguage, storyId),
         )
       } catch {
         return choices

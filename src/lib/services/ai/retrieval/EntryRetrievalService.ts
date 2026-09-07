@@ -137,6 +137,8 @@ export interface EntryRetrievalOptions {
    * name it. Never travels the other way: see the haystack comment in `getRelevantEntries`.
    */
   sceneEntities?: SceneEntity[]
+  /** Step the Tier 3 selection nests under in the activity record, when reporting is on. */
+  activityParentId?: string
 }
 
 export const DEFAULT_ENTRY_RETRIEVAL_CONFIG: EntryRetrievalConfig = {
@@ -335,6 +337,7 @@ export class EntryRetrievalService extends BaseAIService {
         currentPosition,
         signal,
         userActionEntryId,
+        options.activityParentId,
       )
       log(
         'Tier 3 entries:',
@@ -562,6 +565,7 @@ export class EntryRetrievalService extends BaseAIService {
     currentPosition: number,
     signal?: AbortSignal,
     userActionEntryId?: string,
+    activityParentId?: string,
   ): Promise<RetrievedEntry[]> {
     if (availableEntries.length === 0) {
       return []
@@ -583,6 +587,7 @@ export class EntryRetrievalService extends BaseAIService {
       presetId: this.presetId,
       serviceLabel: 'tier3-lorebook-selection',
       userActionEntryId,
+      activityParentId,
       currentPosition,
       signal,
     })

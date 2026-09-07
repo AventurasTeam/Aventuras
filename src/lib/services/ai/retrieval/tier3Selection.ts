@@ -19,6 +19,8 @@ import { generateStructured } from '../sdk/generate'
 import { recentContent, AS_PROSE } from '$lib/utils/recentContent'
 import { TIER3_SELECTION_CACHE_POSITIONS } from '../core/defaults'
 
+import { activity } from '$lib/stores/activity.svelte'
+
 const log = createLogger('Tier3Selection')
 
 /**
@@ -61,6 +63,8 @@ export interface Tier3SelectionRequest {
    * a text comparison stops recognising it exactly when the two diverge.
    */
   userActionEntryId?: string
+  /** Step this selection nests under in the activity record. */
+  activityParentId?: string
   /**
    * Current story position, used to age the selection cache. Omit to bypass the cache — a
    * caller that cannot say "when" cannot say whether a hit is still fresh.
@@ -159,6 +163,7 @@ export async function runTier3Selection({
   presetId,
   serviceLabel,
   userActionEntryId,
+  activityParentId,
   currentPosition,
   signal,
 }: Tier3SelectionRequest): Promise<Tier3SelectionResult | null> {
@@ -190,6 +195,10 @@ export async function runTier3Selection({
       candidates: candidates.length,
       selected: cached.result.selectedIndices.size,
     })
+    activity.recordStep('Tier 3 selection', {
+      parentId: activityParentId,
+      detail: `cached · ${cached.result.selectedIndices.size} of ${candidates.length}`,
+    })
     return cached.result
   }
 
@@ -214,6 +223,12 @@ export async function runTier3Selection({
   })
   const { system, user: prompt } = await ctx.render('tier3-entry-selection')
 
+  const stepId = activity.startStep('Tier 3 selection', {
+    parentId: activityParentId,
+    isLLM: true,
+    detail: `${candidates.length} candidates`,
+  })
+
   try {
     const result = await generateStructured(
       { presetId, schema: entitySelectionSchema, system, prompt, signal },
@@ -230,10 +245,15 @@ export async function runTier3Selection({
         result: selection,
       })
     }
+    activity.endStep(stepId, 'done', `${selection.selectedIndices.size} of ${candidates.length}`)
     return selection
   } catch (error) {
     // Not cached: a failure says nothing about which candidates matter, and storing it
     // would suppress the retry that might succeed.
+    activity.endStep(
+      stepId,
+      error instanceof Error && error.name === 'AbortError' ? 'skipped' : 'failed',
+    )
     log('Tier 3 LLM selection failed', error)
     return null
   }

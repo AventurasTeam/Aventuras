@@ -2,6 +2,15 @@ import { describe, it, expect, vi } from 'vitest'
 import { EntryRetrievalService, SimpleActivationTracker } from './EntryRetrievalService'
 import type { Entry, StoryEntry } from '$lib/types'
 
+vi.mock('$lib/stores/activity.svelte', () => ({
+  activity: {
+    startStep: vi.fn(() => ''),
+    updateStep: vi.fn(),
+    endStep: vi.fn(),
+    recordStep: vi.fn(() => ''),
+  },
+}))
+
 vi.mock('$lib/stores/debug.svelte', () => ({
   debug: {
     addDebugRequest: vi.fn(),

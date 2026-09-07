@@ -111,7 +111,7 @@ function grepLabel(event: Extract<RetrievalEvent, { kind: 'grep' }>): string {
 }
 
 /**
- * Step budget. `steps` must come from the loop's stop condition, not `events.length`:
+ * Step budget. `steps` must come from the agent loop's own hooks, not `events.length`:
  * one step can call several tools, or none, so an event count misstates the budget.
  */
 export interface ProgressBudget {
@@ -255,7 +255,7 @@ export function formatRetrievalHistory(events: RetrievalEvent[]): string {
 export interface RetrievalMetrics {
   /**
    * Recorded tool calls, not agent steps -- one step can call several tools, or none.
-   * The step budget is `ProgressBudget.steps`, which only the loop's stop condition knows.
+   * The step budget is `ProgressBudget.steps`, which only the agent loop's hooks know.
    */
   toolCalls: number
   greps: number

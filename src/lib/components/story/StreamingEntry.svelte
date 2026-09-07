@@ -6,6 +6,9 @@
   import ReasoningBlock from './ReasoningBlock.svelte'
   import { settings } from '$lib/stores/settings.svelte'
   import { replacePicTagsWithPlaceholders } from '$lib/utils/inlineImageParser'
+  import { activity } from '$lib/stores/activity.svelte'
+  import { formatDuration, turnDuration } from '$lib/services/activity'
+  import ActivityStatus from './ActivityStatus.svelte'
 
   // Reactive binding to streaming content
   let content = $derived(ui.streamingContent)
@@ -43,6 +46,15 @@
   // Phase 2: content is actively streaming (has content)
   let isReasoningPhase = $derived(ui.isStreaming && reasoning.length > 0 && content.length === 0)
   let isContentPhase = $derived(ui.isStreaming && content.length > 0)
+
+  // Reported in place of the ellipsis while waiting, and kept reachable once the narration
+  // starts arriving -- below the text, so it never displaces what is being written.
+  let reportingEnabled = $derived(settings.uiSettings.activityReporting !== 'off')
+  let activeTurn = $derived(activity.activeTurn)
+  // Shown by default while the turn runs; the header badge hides it.
+  let showActivity = $derived(
+    reportingEnabled && activeTurn !== null && activity.isReportVisible(activeTurn.entryId, true),
+  )
 </script>
 
 <!-- Streaming content container -->
@@ -88,6 +100,18 @@
       <span class="text-muted-foreground ml-0.5">tokens</span>
     </span>
 
+    {#if activeTurn}
+      <button
+        type="button"
+        class="bg-muted text-muted-foreground hover:text-foreground rounded px-1.5 py-0.5 text-[11px] tabular-nums transition-colors"
+        aria-pressed={showActivity}
+        title={showActivity ? 'Hide generation activity' : 'Show generation activity'}
+        onclick={() => activity.setReportVisible(activeTurn!.entryId, !showActivity)}
+      >
+        {formatDuration(turnDuration(activeTurn, activity.now))}
+      </button>
+    {/if}
+
     <!-- Spacer to push buttons to the right -->
     <div class="flex-1"></div>
 
@@ -102,6 +126,19 @@
       >
     </div>
   </div>
+
+  <!-- Activity report. Above the content on purpose: it keeps one place on screen while the
+       narration grows underneath it, rather than being pushed off the bottom.
+       A bystander to the entry -- a fault rendering it must not take the narration with it. -->
+  <!-- `onerror` is what makes this catch: a boundary with neither it nor a `failed`
+       snippet rethrows. No fallback, so a report that cannot render leaves nothing behind. -->
+  <svelte:boundary onerror={(error) => console.warn('[activity] Report failed to render:', error)}>
+    {#if showActivity && activeTurn}
+      <div class="mb-2">
+        <ActivityStatus turn={activeTurn} />
+      </div>
+    {/if}
+  </svelte:boundary>
 
   <!-- Main Content -->
   <div class="min-w-0">
@@ -125,11 +162,13 @@
       </div>
     {:else if isReasoningPhase || isThinking}
       <!-- Pending Content Indicator (while reasoning or thinking) -->
-      <div class="story-text prose-content animate-fade-in text-muted-foreground mt-1">
-        <span class="typing-indicator">
-          <span>.</span><span>.</span><span>.</span>
-        </span>
-      </div>
+      {#if !showActivity}
+        <div class="story-text prose-content animate-fade-in text-muted-foreground mt-1">
+          <span class="typing-indicator">
+            <span>.</span><span>.</span><span>.</span>
+          </span>
+        </div>
+      {/if}
     {/if}
   </div>
 </div>

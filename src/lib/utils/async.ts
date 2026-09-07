@@ -63,17 +63,30 @@ export async function* mergeGenerators<
     getNext(key)
   }
 
-  while (activeGenerators.size > 0) {
-    const { key, res } = await Promise.race(Array.from(pendingPromises.values()))
+  try {
+    while (activeGenerators.size > 0) {
+      const { key, res } = await Promise.race(Array.from(pendingPromises.values()))
 
-    if (res.done) {
-      results[key] = res.value
-      activeGenerators.delete(key)
-      pendingPromises.delete(key)
-    } else {
-      yield res.value
-      getNext(key)
+      if (res.done) {
+        results[key] = res.value
+        activeGenerators.delete(key)
+        pendingPromises.delete(key)
+      } else {
+        yield res.value
+        getNext(key)
+      }
     }
+  } finally {
+    // One generator throwing, or the consumer walking away, leaves the rest mid-iteration.
+    // They are owned here, so closing them is started here rather than left to collection.
+    //
+    // Started, not awaited: an async generator serialises its own requests, so `return()`
+    // queues behind whatever `next()` is already in flight -- a model call, here -- and that
+    // read cannot be cancelled from outside. Awaiting would hold the caller, and the failure
+    // it is propagating, for as long as an unrelated sibling takes to answer.
+    void Promise.allSettled(
+      Array.from(activeGenerators.values()).map((gen) => gen.return(undefined)),
+    )
   }
 
   return results

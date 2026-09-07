@@ -203,6 +203,8 @@ export interface AgenticRetrievalOptions {
   getChapterEntries?: (chapter: Chapter) => StoryEntry[]
   getUnchapterizedEntries?: () => StoryEntry[]
   signal?: AbortSignal
+  /** Step the agent's own steps nest under in the activity record. */
+  activityParentId?: string
 }
 
 class AIService {
@@ -762,6 +764,7 @@ class AIService {
       queryChapter: options.onQueryChapter,
       getChapterEntries: options.getChapterEntries,
       getUnchapterizedEntries: options.getUnchapterizedEntries,
+      activityParentId: options.activityParentId,
     }
 
     const result = await service.runRetrieval(context, signal)
@@ -795,6 +798,8 @@ class AIService {
     alreadyInContext?: string,
     /** Budget for each answer prompt's chapter text; see `chapterReadBudget`. */
     maxChapterTokens?: number,
+    /** Step the fill's own work nests under in the activity record. */
+    activityParentId?: string,
   ): Promise<TimelineFillResult> {
     log('runTimelineFill called', {
       visibleEntriesCount: visibleEntries.length,
@@ -811,6 +816,7 @@ class AIService {
       getChapterEntries,
       alreadyInContext,
       maxChapterTokens,
+      activityParentId,
     )
   }
 

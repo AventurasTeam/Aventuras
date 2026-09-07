@@ -22,6 +22,7 @@ import type {
   TimeTracker,
   ActionInputType,
 } from '$lib/types'
+import { NO_ACTIVITY, type ActivityReporter } from '$lib/services/activity'
 
 /**
  * Data needed for retry backup - prepared by this phase, applied by caller
@@ -58,6 +59,9 @@ export interface PreGenerationInput {
   rawInput: string
   actionType: ActionInputType
   wasRawActionChoice: boolean
+  activity?: ActivityReporter
+  /** Step this phase nests under. */
+  activityParentId?: string | null
 }
 
 /**
@@ -81,6 +85,8 @@ export class PreGenerationPhase {
 
     const { context, rawInput, actionType, wasRawActionChoice } = input
     const { story, worldState } = context
+    const activity = input.activity ?? NO_ACTIVITY
+    const stepId = activity.startStep('Preparing', { parentId: input.activityParentId })
 
     // Prepare retry backup data
     // The actual backup is created by the caller using ui.createRetryBackup()
@@ -110,6 +116,8 @@ export class PreGenerationPhase {
       visualProseMode,
       streamingEntryId,
     }
+
+    activity.endStep(stepId)
 
     // Emit phase complete
     yield {

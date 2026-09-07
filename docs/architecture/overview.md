@@ -137,6 +137,32 @@ which is what keeps them testable.
 Alongside the pipeline, `BackgroundTaskRunner` handles what happens _after_ a turn — the chapter
 threshold check, lore management and the style review — on its own dependency object.
 
+### Activity reporting
+
+A turn records what it is doing as a tree of timed steps, so the wait before the first token is
+readable rather than a three-dot animation. `services/activity/` holds the record and the reading
+views over it — nesting, the deepest running step, durations, retention — all plain TypeScript;
+`stores/activity.svelte.ts` is the reactive shell.
+
+The phases reach it through an `ActivityReporter` on `PipelineDependencies`, bound in
+`buildPipelineDependencies` alongside everything else. They do not import the store: that is the same
+rule that keeps them testable without a provider, and `NO_ACTIVITY` stands in wherever no reporter was
+injected. Services under `services/ai/` write to the store directly instead, following the debug
+store's precedent — their tests mock it the same way.
+
+Nesting is by explicit parent id, threaded through the options objects that already reach those
+services (`activityParentId`). An implicit stack would not survive Stage A's two concurrent branches
+or the parallel post-narrative phases.
+
+Retrieval reports through the record it already keeps: `retrievalSteps.ts` translates `RetrievalEvent`
+into steps as `AgenticRetrievalService` records them, and chapter queries carry the `durationMs` the
+budget already measured. Phases with several completion paths are wrapped by `trackPhase` rather than
+instrumented one exit at a time.
+
+Reporting never alters a turn. Every write is guarded, the display sits inside a boundary, and the
+narrative retry loop is reported but unchanged. Records are session-only, bounded by `RETAINED_TURNS`,
+and never persisted or exported.
+
 ## Images
 
 Nine backends live under `src/lib/services/ai/image/providers/` — NanoGPT, OpenAI, OpenRouter,

@@ -21,11 +21,14 @@ import type {
 import type { Story, StoryEntry } from '$lib/types'
 import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
 import type { StreamChunk } from '$lib/services/ai/core/types'
+import { NO_ACTIVITY, type ActivityReporter } from '$lib/services/activity'
 
 const MAX_EMPTY_RESPONSE_RETRIES = 3
 
 /** Dependencies for narrative phase - injected to avoid tight coupling */
 export interface NarrativeDependencies {
+  /** Absent in tests and anywhere reporting is not wired; see NO_ACTIVITY. */
+  activity?: ActivityReporter
   streamNarrative: (
     entries: StoryEntry[],
     worldState: WorldState,
@@ -46,6 +49,8 @@ export interface NarrativeInput {
   retrievalResult: RetrievalResult
   styleReview: StyleReviewResult | null | undefined
   abortSignal?: AbortSignal
+  /** Step this phase nests under. */
+  activityParentId?: string | null
 }
 
 /** Result from narrative phase */
@@ -68,6 +73,8 @@ export class NarrativePhase {
     yield { type: 'phase_start', phase: 'narrative' } satisfies PhaseStartEvent
 
     const { visibleEntries, worldState, story, retrievalResult, styleReview, abortSignal } = input
+    const activity = this.deps.activity ?? NO_ACTIVITY
+    const narrativeStepId = activity.startStep('Narrative', { parentId: input.activityParentId })
 
     let fullResponse = ''
     let fullReasoning = ''
@@ -76,6 +83,7 @@ export class NarrativePhase {
 
     while (retryCount < MAX_EMPTY_RESPONSE_RETRIES) {
       if (abortSignal?.aborted) {
+        activity.endStep(narrativeStepId, 'skipped')
         yield { type: 'aborted', phase: 'narrative' } satisfies AbortedEvent
         return null
       }
@@ -83,6 +91,16 @@ export class NarrativePhase {
       fullResponse = ''
       fullReasoning = ''
       chunkCount = 0
+
+      // An attempt is its own step: the loop is otherwise silent, so three empty responses
+      // read as one long wait with nothing to show for it.
+      const attemptId = activity.startStep(
+        retryCount > 0 ? `Attempt ${retryCount + 1}` : 'Generating',
+        { parentId: narrativeStepId, isLLM: true },
+      )
+      // Closed at the first chunk carrying anything, so the wait for the model is separable
+      // from the time spent streaming.
+      let waitId = activity.startStep('Waiting for model', { parentId: attemptId })
 
       try {
         for await (const chunk of this.deps.streamNarrative(
@@ -96,8 +114,16 @@ export class NarrativePhase {
           retrievalResult.worldStateBlock,
         )) {
           if (abortSignal?.aborted) {
+            activity.endStep(waitId, 'skipped')
+            activity.endStep(attemptId, 'skipped')
+            activity.endStep(narrativeStepId, 'skipped')
             yield { type: 'aborted', phase: 'narrative' } satisfies AbortedEvent
             return null
+          }
+
+          if (waitId && (chunk.content || chunk.reasoning)) {
+            activity.endStep(waitId)
+            waitId = ''
           }
 
           chunkCount++
@@ -124,12 +150,19 @@ export class NarrativePhase {
           }
         }
 
+        activity.endStep(waitId, 'done', 'no tokens')
         if (fullResponse.trim()) {
+          activity.endStep(attemptId, 'done', `${chunkCount} chunks`)
           break // Success
         }
+        activity.endStep(attemptId, 'done', 'empty response')
         retryCount++
       } catch (error) {
-        if (error instanceof Error && error.name === 'AbortError') {
+        const aborted = error instanceof Error && error.name === 'AbortError'
+        activity.endStep(waitId, aborted ? 'skipped' : 'failed')
+        activity.endStep(attemptId, aborted ? 'skipped' : 'failed')
+        activity.endStep(narrativeStepId, aborted ? 'skipped' : 'failed')
+        if (aborted) {
           yield { type: 'aborted', phase: 'narrative' } satisfies AbortedEvent
           return null
         }
@@ -144,11 +177,17 @@ export class NarrativePhase {
     }
 
     if (abortSignal?.aborted) {
+      activity.endStep(narrativeStepId, 'skipped')
       yield { type: 'aborted', phase: 'narrative' } satisfies AbortedEvent
       return null
     }
 
     if (!fullResponse.trim()) {
+      activity.endStep(
+        narrativeStepId,
+        'failed',
+        `empty after ${MAX_EMPTY_RESPONSE_RETRIES} attempts`,
+      )
       yield {
         type: 'error',
         phase: 'narrative',
@@ -163,6 +202,8 @@ export class NarrativePhase {
       reasoning: fullReasoning,
       chunkCount,
     }
+
+    activity.endStep(narrativeStepId)
 
     yield {
       type: 'phase_complete',

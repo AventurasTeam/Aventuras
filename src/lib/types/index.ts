@@ -710,6 +710,8 @@ export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | '
 import type { ThemeId as ThemeIdImport } from '../../themes/themes'
 export type ThemeId = ThemeIdImport
 
+import type { ActivityReporting } from '$lib/services/activity'
+
 export type FontSource = 'default' | 'system' | 'google'
 
 export type FontSizeOption = 'small' | 'medium' | 'large' | 'xlarge' | 'xxlarge'
@@ -742,6 +744,12 @@ export interface UISettings {
   dialogueColor: string
   /** Android-only: ask the keyboard not to learn from what is typed. */
   incognitoKeyboard: boolean
+  /**
+   * How much of a turn's own progress the story view reports while generating.
+   * `line` is the collapsed status line, `tree` opens the full timeline. Independent of
+   * `debugMode`: that captures request payloads, this captures what ran and for how long.
+   */
+  activityReporting: ActivityReporting
 }
 
 /**

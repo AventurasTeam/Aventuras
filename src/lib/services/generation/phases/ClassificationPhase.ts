@@ -20,6 +20,8 @@ import type { Story, StoryEntry, TimeTracker } from '$lib/types'
 import type { ClassificationResult } from '$lib/services/ai/sdk/schemas/classifier'
 
 /** Dependencies for classification phase - injected to avoid tight coupling */
+import { NO_ACTIVITY, type ActivityReporter } from '$lib/services/activity'
+
 export interface ClassificationDependencies {
   classifyResponse: (
     narrativeResponse: string,
@@ -40,6 +42,9 @@ export interface ClassificationInput {
   story: Story | null | undefined
   visibleEntries: StoryEntry[]
   abortSignal?: AbortSignal
+  activity?: ActivityReporter
+  /** Step this phase's own reporting nests under. */
+  activityParentId?: string | null
 }
 
 /** Result from classification phase */
@@ -81,14 +86,29 @@ export class ClassificationPhase {
       // (once in chatHistory, once as narrativeResponse)
       const chatHistoryEntries = visibleEntries.filter((e) => e.id !== narrativeEntryId)
 
-      const classificationResult = await this.deps.classifyResponse(
-        narrativeContent,
-        userActionContent,
-        worldState,
-        story,
-        chatHistoryEntries,
-        story?.timeTracker,
-      )
+      const activity = input.activity ?? NO_ACTIVITY
+      const callId = activity.startStep('Classifying', {
+        parentId: input.activityParentId,
+        isLLM: true,
+      })
+      let classificationResult
+      try {
+        classificationResult = await this.deps.classifyResponse(
+          narrativeContent,
+          userActionContent,
+          worldState,
+          story,
+          chatHistoryEntries,
+          story?.timeTracker,
+        )
+        activity.endStep(callId)
+      } catch (error) {
+        activity.endStep(
+          callId,
+          error instanceof Error && error.name === 'AbortError' ? 'skipped' : 'failed',
+        )
+        throw error
+      }
 
       if (abortSignal?.aborted) {
         yield { type: 'aborted', phase: 'classification' } satisfies AbortedEvent
