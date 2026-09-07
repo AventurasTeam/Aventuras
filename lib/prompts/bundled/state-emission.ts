@@ -13,7 +13,7 @@ export const STATE_EMISSION = `After your narrative prose, append exactly one <s
   </transfers>
   <summary>one sentence summarizing what happened in this reply — identify the people, places and things that mattered by name, not ID</summary>
   <retrieval_queries>
-    <query>up to three short phrases naming context you want retrieved for the NEXT turn — what you would want looked up, not a recap of this one</query>
+    <query>up to three short phrases naming context you want retrieved for the NEXT turn — what you would want looked up, not a recap of this one; identify the people, places and things by name, not ID</query>
   </retrieval_queries>
 </state>
 

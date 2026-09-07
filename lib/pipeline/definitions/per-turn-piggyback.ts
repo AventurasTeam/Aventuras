@@ -90,13 +90,16 @@ export const fallbackClassifierSchema = z.object({
     ),
   // retrieval.md → Q4: this field must never raise the parse — an optional retrieval
   // hint isn't worth the cost of a full extra classifier call (or the mandatory summary).
+  // Over-emission therefore drops all of them rather than truncating as the tagged-block
+  // parser does: truncating needs a .transform(), which makes generateStructured's
+  // z.toJSONSchema throw and fail every call. The two producers diverge here on purpose.
   retrievalQueries: z
     .array(z.string())
     .max(MAX_RETRIEVAL_QUERIES)
     .optional()
     .catch(undefined)
     .describe(
-      'Up to three short phrases naming context you want retrieved for the NEXT turn — what you would want looked up, not a recap of this one.',
+      'Up to three short phrases naming context you want retrieved for the NEXT turn — what you would want looked up, not a recap of this one. Used verbatim as a retrieval query next turn, so identify the people, places and things by name, not ID.',
     ),
 })
 
