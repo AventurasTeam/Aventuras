@@ -6,6 +6,7 @@ import { inheritedEntryMetadata } from '@/lib/db'
 import {
   buildPiggybackActions,
   buildStateReport,
+  MAX_RETRIEVAL_QUERIES,
   resolveSuggestionEmission,
   resolveSuggestionItems,
   substitutePiggybackIds,
@@ -86,6 +87,13 @@ export const fallbackClassifierSchema = z.object({
     .optional()
     .describe(
       'One sentence summarizing what happened in this turn. Used verbatim as a retrieval query next turn, so identify the people, places and things that mattered by name, not ID.',
+    ),
+  retrievalQueries: z
+    .array(z.string())
+    .max(MAX_RETRIEVAL_QUERIES)
+    .optional()
+    .describe(
+      'Up to three short phrases naming context you want retrieved for the NEXT turn — what you would want looked up, not a recap of this one.',
     ),
 })
 

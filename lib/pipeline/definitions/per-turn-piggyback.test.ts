@@ -668,6 +668,84 @@ describe('per-turn-piggyback', () => {
       })
     })
 
+    // Canon carries Q4 on BOTH per-turn implementations, and this is the one the default
+    // piggybackMode: 'off' story actually runs (docs/memory/retrieval.md → Q4).
+    it("carries the fallback classifier's emitted queries onto the entry metadata", async () => {
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition,
+        settings: baseSettings({ models: {} }),
+      })
+      hydrateEntries(phaseDb, 'b1', [
+        {
+          id: 'entry-1',
+          branchId: 'b1',
+          position: 1,
+          content: 'Starting point',
+          metadata: { sceneEntities: [], currentLocationId: null, worldTime: 100 },
+        } as never,
+        {
+          id: 'entry-2',
+          branchId: 'b1',
+          position: 2,
+          content: 'Next step in forest',
+          metadata: { sceneEntities: [], currentLocationId: null, worldTime: 100 },
+        } as never,
+      ])
+      entitiesStore.hydrate('b1', [])
+
+      // Routed through the real schema's .parse(), not a hand-built literal — a real
+      // classifier call validates its JSON reply the same way, and this is what makes
+      // the mutation check meaningful: dropping the field from the schema strips it
+      // here too (zod's default unknown-key behavior), rather than the mock smuggling
+      // it straight past a schema that no longer declares it.
+      const value = fallbackClassifierSchema.parse({
+        sceneEntities: [],
+        currentLocation: undefined,
+        worldTimeDelta: 0,
+        visualChanges: [],
+        transfers: { items: [], stackables: [] },
+        retrievalQueries: ['House Eldrin sigil'],
+      })
+      generateStructuredMock.mockResolvedValueOnce({ status: 'ok', value })
+
+      const ctx = {
+        actionId: 'act_1',
+        abortSignal: new AbortController().signal,
+        intermediates: { idMap: new IdBiMap() },
+        log: makeLogger('act_1'),
+        db: phaseDb.db,
+        runInTransaction: async () => undefined,
+        storyId: 's1',
+        branchId: 'b1',
+      }
+
+      const gen = piggybackFallbackClassifierPhase(ctx)
+      const events = []
+      let result = await gen.next()
+      while (!result.done) {
+        events.push(result.value)
+        result = await gen.next()
+      }
+
+      expect(result.value).toEqual({ status: 'completed' })
+      expect(events[0]).toEqual({
+        type: 'delta_emitted',
+        action: expect.objectContaining({
+          kind: 'updateStoryEntryMetadata',
+          source: 'per_turn_classifier',
+          payload: expect.objectContaining({
+            branchId: 'b1',
+            id: 'entry-2',
+            metadata: expect.objectContaining({
+              retrievalQueries: ['House Eldrin sigil'],
+            }),
+          }),
+        }),
+      })
+    })
+
     it('prompts with a bracketed-ID list of active/staged entities and resolves the returned placeholder back to the real id', async () => {
       const heroId = 'char_00000000-0000-4000-8000-000000000001'
       currentStoryStore.set({
