@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { describeCalendarVocabulary, EARTH_GREGORIAN } from '@/lib/calendar'
 import {
@@ -899,20 +899,27 @@ describe('buildGenerationContext — data source', () => {
     ])
   })
 
-  it('exposes the last two non-system turns as lastTurns', async () => {
-    openStory()
+  it('excludes system rows from lastTurns at both the tail and mid-stack', async () => {
+    // A system row can sit mid-stack (defensive) or at the tail (a failed turn's
+    // error banner, per classifier-facts.ts) — neither may consume a slot.
+    openStory({ classifierContextEntries: 4 })
     await seedEntries([
       dbEntry(1, 'oldest'),
-      dbEntry(2, 'user turn', 'user_action'),
-      dbEntry(3, 'ai turn'),
-      dbEntry(4, 'ERROR', 'system'),
+      dbEntry(2, 'second'),
+      dbEntry(3, 'ERROR mid-stack', 'system'),
+      dbEntry(4, 'third'),
+      dbEntry(5, 'fourth'),
+      dbEntry(6, 'fifth'),
+      dbEntry(7, 'ERROR tail', 'system'),
     ])
 
     const context = await build({}, TEMPLATE_IDS.piggybackFallbackClassifier)
 
     expect((context.lastTurns as { content: string }[]).map((e) => e.content)).toEqual([
-      'user turn',
-      'ai turn',
+      'second',
+      'third',
+      'fourth',
+      'fifth',
     ])
   })
 
@@ -951,8 +958,7 @@ describe('buildGenerationContext — data source', () => {
   // The group's variable set does not shrink; the query behind an unread one does.
   it('skips the reads a template never mentions, leaving the variables empty', async () => {
     openStory()
-    // Real scene state, or skipping the scene read would look the same as
-    // reading a row that has none.
+    // Real scene state, so a read that fired is distinguishable from one that was skipped.
     await seedEntries([
       dbEntry(1, 'prose', 'ai_reply', {
         sceneEntities: [CHAR_ID],
@@ -964,19 +970,25 @@ describe('buildGenerationContext — data source', () => {
     ])
 
     const narrative = await build()
-    const classifier = await build({}, TEMPLATE_IDS.piggybackFallbackClassifier)
+    // Seeded so the scene ids below are pinned placeholders rather than whichever
+    // order substituteIds happened to walk the context keys in.
+    const classifier = await build(
+      { idMap: seededIdMap(CHAR_ID, LOC_A) },
+      TEMPLATE_IDS.piggybackFallbackClassifier,
+    )
 
     expect(narrative.entries).toHaveLength(2)
     expect(narrative.lastTurns).toEqual([])
     expect(narrative.sceneMetadata).toMatchObject({ worldTime: 7, summary: 'a summary' })
     expect(classifier.lastTurns).toHaveLength(2)
     expect(classifier.entries).toEqual([])
-    // The classifier reads no scene variable either, so its scene read is skipped.
+    // Its in-scene/current-location sections name sceneEntities (piggyback.md → Fallback
+    // classifier context), so that read fires too — the skipped pair is what this case turns on.
     expect(classifier.sceneMetadata).toEqual({
-      sceneEntities: [],
-      currentLocationId: null,
-      worldTime: 0,
-      summary: '',
+      sceneEntities: ['c1'],
+      currentLocationId: 'l1',
+      worldTime: 7,
+      summary: 'a summary',
     })
     for (const key of Object.keys(narrative)) expect(classifier).toHaveProperty(key)
   })
@@ -1172,6 +1184,94 @@ describe('buildGenerationContext — data source', () => {
   })
 })
 
+describe('buildGenerationContext — classifierContextEntries', () => {
+  const sixEntries = [
+    entry('e1', 1, 'e1 oldest'),
+    entry('e2', 2, 'e2'),
+    entry('e3', 3, 'e3'),
+    entry('e4', 4, 'e4'),
+    entry('e5', 5, 'e5 the action', 'user_action'),
+    entry('e6', 6, 'e6 the reply'),
+  ] as never[]
+
+  const contentsOf = (ctx: Record<string, unknown>): string[] =>
+    (ctx.lastTurns as { content: string }[]).map((e) => e.content)
+
+  // No global restoreMocks: without this, a thrown assertion in the spy case
+  // below leaks the spy into the describe after it.
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  // cadence.md → User-tunable knobs: the knob widens the background, and the
+  // fixed action-plus-reply pair is a floor it can never cut.
+  it('reads the knob many trailing entries for the fallback classifier', async () => {
+    const ctx = await buildContext({
+      entries: sixEntries,
+      settings: storySettings({ classifierContextEntries: 4 }),
+      templateId: TEMPLATE_IDS.piggybackFallbackClassifier,
+    })
+
+    expect(contentsOf(ctx)).toEqual(['e3', 'e4', 'e5 the action', 'e6 the reply'])
+  })
+
+  it.each([0, 1, 2])('never narrows below the fixed pair at %i', async (knob) => {
+    const ctx = await buildContext({
+      entries: sixEntries,
+      settings: storySettings({ classifierContextEntries: knob }),
+      templateId: TEMPLATE_IDS.piggybackFallbackClassifier,
+    })
+
+    expect(contentsOf(ctx)).toEqual(['e5 the action', 'e6 the reply'])
+  })
+
+  // z.number() admits a fractional knob from a hand-edited settings blob;
+  // schema-level .int() would refuse to open the story instead of degrading.
+  it('truncates a fractional knob down', async () => {
+    const ctx = await buildContext({
+      entries: sixEntries,
+      settings: storySettings({ classifierContextEntries: 3.5 }),
+      templateId: TEMPLATE_IDS.piggybackFallbackClassifier,
+    })
+
+    expect(contentsOf(ctx)).toEqual(['e4', 'e5 the action', 'e6 the reply'])
+  })
+
+  // Defense in depth: z.number() already rejects NaN/Infinity, so this guards a value that
+  // reached the read site outside storySettingsSchema — not one a user can produce via the app.
+  it('degrades to the pair on a NaN knob', async () => {
+    const ctx = await buildContext({
+      entries: sixEntries,
+      settings: storySettings({ classifierContextEntries: Number.NaN }),
+      templateId: TEMPLATE_IDS.piggybackFallbackClassifier,
+    })
+
+    expect(contentsOf(ctx)).toEqual(['e5 the action', 'e6 the reply'])
+  })
+
+  // cadence.md scopes the knob to the fallback classifier; perTurnNarrative reads
+  // worldTimeDeltaBasis off the same query but never lastTurns, so it stays pinned at the pair.
+  it('does not widen the narrative path, which reads the basis but not the turns', async () => {
+    // A file-hoisted vi.mock (the repo's usual pattern) would cover all 71
+    // tests in this file for this one case's benefit.
+    const entryReads = await import('./entry-reads')
+    const readLastTurnsSpy = vi.spyOn(entryReads, 'readLastTurns')
+
+    const ctx = await buildContext({
+      entries: sixEntries,
+      settings: storySettings({ classifierContextEntries: 6 }),
+      templateId: TEMPLATE_IDS.perTurnNarrative,
+    })
+
+    expect(ctx.lastTurns).toEqual([])
+    expect(ctx.worldTimeDeltaBasis).toBe('sinceLastAiReply')
+    expect(readLastTurnsSpy).toHaveBeenCalledTimes(1)
+    // ctx.lastTurns is gated to [] regardless of read width (see the field comment in
+    // generation-context.ts) — the spy call, not the exposed value, is what this case proves.
+    expect(readLastTurnsSpy.mock.calls.at(-1)?.[2]).toBeUndefined()
+  })
+})
+
 describe('buildGenerationContext — worldTimeDeltaBasis', () => {
   const entry = (position: number, kind: StoryEntry['kind'], worldTime: number): StoryEntry => ({
     id: `entry_${position}`,
@@ -1221,5 +1321,23 @@ describe('buildGenerationContext — worldTimeDeltaBasis', () => {
       entries: [entry(1, 'ai_reply', 900), entry(2, 'user_action', 300)],
     })
     expect(context.worldTimeDeltaBasis).toBe('sinceLastAiReply')
+  })
+
+  // perTurnNarrative's read is pinned to the floor (generation-context.ts); only the fallback
+  // classifier's read grows. resolveWorldTimeDeltaBasis reads .at(-1)/.at(-2), so it lands here.
+  it('resolves the same basis on the fallback template at a wide knob', async () => {
+    const context = await buildContext({
+      entries: [
+        entry(1, 'ai_reply', 10),
+        entry(2, 'user_action', 10),
+        entry(3, 'ai_reply', 20),
+        entry(4, 'user_action', 20),
+        entry(5, 'ai_reply', 100),
+        entry(6, 'user_action', 200),
+      ],
+      settings: storySettings({ classifierContextEntries: 6 }),
+      templateId: TEMPLATE_IDS.piggybackFallbackClassifier,
+    })
+    expect(context.worldTimeDeltaBasis).toBe('sinceUserAction')
   })
 })

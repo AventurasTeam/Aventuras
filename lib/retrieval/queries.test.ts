@@ -200,6 +200,33 @@ describe('buildQueryStack', () => {
     const s = buildQueryStack(base)
     expect(s.embedTexts).toEqual([s.specs[0].text, s.specs[1].text])
   })
+
+  it('caps an oversized piggyback summary at the shared query length', () => {
+    const long = 'a'.repeat(260)
+    const stack = buildQueryStack({ ...base, piggybackSummary: long })
+
+    // Not `.toBe(MAX_LLM_QUERY_CHARS)` — deriving the expectation from the constant
+    // under test passes against any value it holds. 200 is canon (retrieval.md → Q3).
+    expect(stack.specs[2]?.text).toHaveLength(200)
+    expect(stack.specs[2]?.text).toBe('a'.repeat(200))
+  })
+
+  it('leaves a summary under the cap untouched', () => {
+    const summary = 'The courier crossed the marsh under storm light.'
+    const stack = buildQueryStack({ ...base, piggybackSummary: summary })
+
+    expect(stack.specs[2]?.text).toBe(summary)
+  })
+
+  it('trims before capping the summary', () => {
+    // Trim before cap, not after — slicing first would yield fewer content chars.
+    const stack = buildQueryStack({
+      ...base,
+      piggybackSummary: `   ${'b'.repeat(210)}   `,
+    })
+
+    expect(stack.specs[2]?.text).toBe('b'.repeat(200))
+  })
 })
 
 describe('emitted Q4 queries', () => {

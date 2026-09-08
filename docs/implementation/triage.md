@@ -89,3 +89,60 @@ slice-planning gate forces its resolution before that slice is planned.
   projected cost once this branch measured it — but that left the
   decision living only as canon prose, with no queue entry to route it
   to an owner.
+
+- **Q1 and Q2 carry no length cap, and Q1 is the slot a user can blow
+  up on purpose.**
+  [`retrieval.md → Q3`](../memory/retrieval.md#q3-piggyback-summary) and
+  [`Q4`](../memory/retrieval.md#q4-classifier-emitted-queries) now share
+  one 200-char cap, applied at query build. Q1 is `userAction` trimmed
+  and nothing more, with no length limit on the composer that produces
+  it; Q2's structural digest grows with scene-entity and thread count.
+  Both are therefore still cut by the local tokenizer's `truncation:
+true` (`lib/embedder/local/runtime.native.ts`) at a length nobody
+  chose — the same silent limit the Q3 cap was added to replace. Q1 is
+  the highest-weighted slot, so a pasted wall of text degrades the turn
+  it was meant to steer. Unowned: capping user input is a composer
+  decision, capping the digest is a retrieval one, and neither has a
+  slice.
+
+- **Nothing links a new required settings key to its backfill
+  migration.** Settings writes are key-scoped `json_set`
+  (`lib/db/stories/settings-ops.ts`), so a key added to
+  `storySettingsSchema` without a `.default()` needs a migration or every
+  upgraded story fails `storySettingsSchema.parse` and will not open.
+  Migrations 0007, 0011 and 0013 all follow the pattern by hand, and
+  nothing enforces it — `story-config-schema.test.ts` counts the
+  _defaulted_ keys, which is the opposite half. A guard test walking
+  `storySettingsSchema.shape` for keys with no `ZodDefault` wrapper and
+  diffing them against a checked-in allowlist would close it in ~15
+  lines, but choosing that allowlist is a real decision (several keys
+  are legitimately required-and-unmigrated because they predate the
+  pattern). Unowned: it guards the schema layer on behalf of every
+  future slice, not any one of them.
+
+- **Four hand-rolled copies of the same settings-hardening guard.** The
+  shape `Number.isFinite(v) ? Math.max(floor, Math.floor(v)) : floor`
+  appears in `buffer.ts` (`toCount`), `scan-surface.ts` (`toTake`) and
+  `injection.ts` (`toDepth`), all under `lib/retrieval`, and now in
+  `entry-reads.ts` under `lib/pipeline/definitions`. Each guards a
+  `stories.settings` number that reaches a read site without having gone
+  through `storySettingsSchema` — a real and recurring need, since the
+  schema deliberately avoids `.int()` so a hand-edited blob degrades
+  instead of refusing to open the story. A shared helper is the obvious
+  move; what stops it being mechanical is that each caller's floor and
+  units differ, and three live in one module while the fourth does not,
+  so the helper has no obvious home under the `lib/*` public-API rule.
+  Unowned: a cross-module utility question, not any one slice's work.
+
+- **No bundled template exercises the scene-read gate's false branch.**
+  `buildGenerationContext` skips the scene query when a template names
+  none of `SCENE_VARIABLES`, and that gate is what keeps a prompt from
+  paying for reads it never renders. As of the fallback-parity work all
+  three bundled `generationContext` templates name `sceneEntities`, so
+  nothing covers the skip. It is not dead code — a user-authored pack
+  template can name no scene variable — but the only honest test needs a
+  registered template that production does not ship, so covering it
+  means deciding whether a test-only template belongs in the registry.
+  The sibling gates for `entries` and `lastTurns` are still covered.
+  Unowned: it guards the context builder on behalf of custom packs, not
+  any one slice.

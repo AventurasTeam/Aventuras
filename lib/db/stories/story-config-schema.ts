@@ -122,6 +122,9 @@ export const storySettingsSchema = z.object({
   partialChapterBuffer: z.number().int().nonnegative().default(10),
   protectedBuffer: z.number().int().nonnegative().default(10),
   classifierCadence: z.number(),
+  // cadence.md → User-tunable knobs. No `.min(2)`: a hand-edited 0 degrades at read time rather
+  // than failing story load. No `.default()` either — matches classifierCadence (migration 0013).
+  classifierContextEntries: z.number(),
   piggybackMode: z.enum(['on', 'off']),
   embeddingBackend: z.enum(['provider', 'local']),
   embedding_model_id: z.string(),

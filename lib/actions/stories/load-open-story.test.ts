@@ -33,6 +33,7 @@ const STORY_DEFINITION = storyDefinitionSchema.parse({
 })
 const STORY_SETTINGS = storySettingsSchema.parse({
   classifierCadence: 8,
+  classifierContextEntries: 4,
   piggybackMode: 'off',
   embeddingBackend: 'local',
   embedding_model_id: 'm',

@@ -1,14 +1,22 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
-import { APP_SETTINGS_DEFAULTS, STORY_SETTINGS_DEFAULTS, type StorySettings } from '@/lib/db'
+import {
+  APP_SETTINGS_DEFAULTS,
+  STORY_SETTINGS_DEFAULTS,
+  type StoryEntry,
+  type StorySettings,
+} from '@/lib/db'
 import { logger, makeLogger } from '@/lib/diagnostics'
 import { IdBiMap } from '@/lib/ids'
 import { runPreflight } from '@/lib/pipeline/runtime/preflight'
 import type { Pipeline, PreflightSnapshot } from '@/lib/pipeline/types'
+import type { EntityRow, LoreRow, RetrievalSuccess } from '@/lib/retrieval'
+import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import { currentStoryStore, entitiesStore, resetAllStores } from '@/lib/stores'
 
 import { createPhaseDb, hydrateEntries, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
+import { RETRIEVAL_INTERMEDIATE_KEY } from './intermediates'
 import {
   fallbackClassifierSchema,
   fallbackClassifierWithSuggestionsSchema,
@@ -1035,6 +1043,140 @@ describe('per-turn-piggyback', () => {
         }),
       })
     })
+
+    // Here, not the template's own test file: buildGenerationContext gates the read on a
+    // variable the template never names — mistyped, it silently empties instead of erroring.
+    describe('fallback classifier context (piggyback.md → Fallback classifier context)', () => {
+      const KEEP = 'loc_00000000-0000-4000-8000-0000000000a1'
+      const KAEL = 'char_00000000-0000-4000-8000-000000000001'
+
+      const entity = (id: string, name: string, description: string | null = null): EntityRow => ({
+        id,
+        kind: 'character',
+        status: 'active',
+        injectionMode: 'auto',
+        name,
+        description,
+      })
+
+      const place = (id: string, name: string, description: string): EntityRow => ({
+        ...entity(id, name, description),
+        kind: 'location',
+      })
+
+      const lore = (id: string, title: string, body: string): LoreRow => ({
+        id,
+        title,
+        body,
+        injectionMode: 'always',
+        priority: 0,
+      })
+
+      /**
+       * Renders the phase's prompt and returns it. The classifier call is mocked to fail,
+       * so the run stops at the resulting report — one `.next()` past the render.
+       */
+      async function renderFallbackPrompt(
+        over: {
+          settings?: Partial<StorySettings>
+          entries?: string[]
+          sceneEntities?: string[]
+          entities?: EntityRow[]
+          retrieval?: RetrievalSuccess
+          kinds?: StoryEntry['kind'][]
+          worldTimes?: number[]
+        } = {},
+      ): Promise<string> {
+        currentStoryStore.set({
+          storyId: 's1',
+          branchId: 'b1',
+          definition,
+          settings: baseSettings({ models: {}, ...over.settings }),
+        })
+        const contents = over.entries ?? ['I put the sword away.', 'The blade slides home.']
+        if (over.kinds && over.kinds.length !== contents.length)
+          throw new Error('kinds must have one entry per content string')
+        if (over.worldTimes && over.worldTimes.length !== contents.length)
+          throw new Error('worldTimes must have one entry per content string')
+        hydrateEntries(
+          phaseDb,
+          'b1',
+          contents.map(
+            (content, i) =>
+              ({
+                id: `entry-${i + 1}`,
+                branchId: 'b1',
+                position: i + 1,
+                kind: over.kinds?.[i] ?? (i % 2 === 0 ? 'user_action' : 'ai_reply'),
+                content,
+                metadata: {
+                  sceneEntities: i === contents.length - 1 ? (over.sceneEntities ?? []) : [],
+                  currentLocationId: null,
+                  worldTime: over.worldTimes?.[i] ?? 100,
+                },
+              }) as never,
+          ),
+        )
+        entitiesStore.hydrate(
+          'b1',
+          (over.entities ?? []).map((e) => ({ branchId: 'b1', ...e })) as never[],
+        )
+
+        const intermediates: Record<string, unknown> = { idMap: new IdBiMap() }
+        if (over.retrieval) intermediates[RETRIEVAL_INTERMEDIATE_KEY] = over.retrieval
+
+        generateStructuredMock.mockResolvedValueOnce({ status: 'failed', detail: 'LLM error' })
+        await piggybackFallbackClassifierPhase({
+          actionId: 'act_1',
+          abortSignal: new AbortController().signal,
+          intermediates,
+          log: makeLogger('act_1'),
+          db: phaseDb.db,
+          runInTransaction: async () => undefined,
+          storyId: 's1',
+          branchId: 'b1',
+        }).next()
+
+        // A phase that grew a yield before the render would otherwise surface as a
+        // TypeError inside toContain rather than as a failed expectation.
+        expect(generateStructuredMock).toHaveBeenCalledOnce()
+        return generateStructuredMock.mock.calls[0]![1] as string
+      }
+
+      it('renders the memory blocks, in-scene and location sections, and the calendar', async () => {
+        const prompt = await renderFallbackPrompt({
+          entities: [entity(KAEL, 'Kael', 'A courier with a stolen sigil.')],
+          sceneEntities: [KAEL],
+          retrieval: retrievalSuccess({
+            floor: {
+              currentLocation: place(KEEP, 'The Drowned Keep', 'Half sunk.'),
+              alwaysLore: [lore('lore_1', 'House Eldrin', 'An exiled line.')],
+            },
+          }),
+        })
+
+        expect(prompt).toContain('# In scene')
+        expect(prompt).toContain('A courier with a stolen sigil.')
+        expect(prompt).toContain('# Current location')
+        expect(prompt).toContain('The Drowned Keep')
+        expect(prompt).toContain('Half sunk.')
+        expect(prompt).toContain('# Relevant lore')
+        expect(prompt).toContain('An exiled line.')
+        expect(prompt).toContain('Calendar')
+      })
+
+      // Unreachable in production (narrative always fills the tail with ai_reply first) —
+      // forced here because the realistic shape can't discriminate a dropped variable.
+      it('states the sinceUserAction basis when the tail advanced time on its own action', async () => {
+        const prompt = await renderFallbackPrompt({
+          kinds: ['ai_reply', 'user_action'],
+          worldTimes: [100, 200],
+        })
+
+        expect(prompt).toContain("since the end of the user's action")
+        expect(prompt).toContain('never negative')
+      })
+    })
   })
 
   describe('classifier fold — suggestions', () => {
@@ -1945,6 +2087,55 @@ describe('per-turn-piggyback', () => {
   })
 
   describe('fallbackClassifierSchema', () => {
+    // Scoped to the exact node, not `toContain` over the blob. '[]' (not 'items') steps into
+    // the array-element schema, since 'items' is itself a real property name on transfers.
+    function fieldDescription(schema: unknown, path: readonly string[]): string | undefined {
+      let node: unknown = schema
+      for (const key of path) {
+        if (typeof node !== 'object' || node === null) return undefined
+        if (key === '[]') {
+          node = (node as { items?: unknown }).items
+          continue
+        }
+        node = (node as { properties?: Record<string, unknown> }).properties?.[key]
+      }
+      if (typeof node !== 'object' || node === null) return undefined
+      const description = (node as { description?: unknown }).description
+      return typeof description === 'string' ? description : undefined
+    }
+
+    // A field with no describe is one the model never fills well; parity means the
+    // fallback states it too (state-emission.ts; piggyback.md → Fallback classifier context).
+    it.each([
+      ['sceneEntities', ['sceneEntities'], 'present in this scene'],
+      ['currentLocation', ['currentLocation'], 'place this scene happens at'],
+      [
+        'visualChanges[].text',
+        ['visualChanges', '[]', 'text'],
+        'replaces whatever was there before',
+      ],
+      ['transfers.stackables[].key', ['transfers', 'stackables', '[]', 'key'], 'Lowercase name'],
+      [
+        'transfers.stackables[].amount',
+        ['transfers', 'stackables', '[]', 'amount'],
+        'not the resulting total',
+      ],
+      ['transfers.items[].to', ['transfers', 'items', '[]', 'to'], 'no other party'],
+      ['transfers.items[].from', ['transfers', 'items', '[]', 'from'], 'no other party'],
+      ['transfers.stackables[].to', ['transfers', 'stackables', '[]', 'to'], 'no other party'],
+      ['transfers.stackables[].from', ['transfers', 'stackables', '[]', 'from'], 'no other party'],
+    ] as const)('describes %s', (_field, path, marker) => {
+      const jsonSchema = z.toJSONSchema(fallbackClassifierSchema)
+      expect(fieldDescription(jsonSchema, path)).toContain(marker)
+    })
+
+    // The describes have to survive z.toJSONSchema — that is the only path by which
+    // they reach the provider, and it throws on a transform.
+    it('serialises to JSON schema without throwing', () => {
+      expect(() => z.toJSONSchema(fallbackClassifierSchema)).not.toThrow()
+      expect(() => z.toJSONSchema(fallbackClassifierWithSuggestionsSchema)).not.toThrow()
+    })
+
     it('describes the summary field so the description survives into the emitted JSON schema', () => {
       const jsonSchema = z.toJSONSchema(fallbackClassifierSchema)
       const summary = jsonSchema.properties?.summary

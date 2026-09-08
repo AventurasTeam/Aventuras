@@ -29,7 +29,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'Entry[]',
       category: 'Story',
       description:
-        'The last two non-system entries, bounded by the query so neither the buffer knobs nor a template can narrow them. Which kinds they are depends on when the phase asks. Overlaps `entries` — render one or the other, not both. For per-turn classification, not for narrating.',
+        'The trailing non-system entries the per-turn classifier reads, `classifierContextEntries` many, floored at the action-plus-reply pair so neither the buffer knobs nor a template can cut below it. Which kinds they are depends on when the phase asks. Overlaps `entries` — render one or the other, not both. For per-turn classification, not for narrating.',
       required: true,
     },
     {

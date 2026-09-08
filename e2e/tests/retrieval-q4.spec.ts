@@ -1,9 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
-import { gunzipSync } from 'fflate'
 
-import type { EntryMetadata, ProbeCapturePayload } from '@/lib/db'
-
-import { queryApp } from '../harness/db'
+import { currentBranchId, latestCapture, queryApp, tailMetadata } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm } from '../harness/mock-llm'
@@ -44,26 +41,6 @@ const narrative = (
   </retrieval_queries>
 </state>`
 
-async function currentBranchId(page: Page): Promise<string> {
-  const rows = await queryApp(page, `SELECT current_branch_id FROM stories WHERE id = ?`, [
-    HERO_STORY_ID,
-  ])
-  return rows[0]?.[0] as string
-}
-
-// queryApp is a raw SQL bridge, not drizzle's typed select, so the column's
-// `mode: 'json'` transform never runs — parse it here instead.
-async function tailMetadata(page: Page, branchId: string): Promise<EntryMetadata | null> {
-  const rows = await queryApp(
-    page,
-    `SELECT metadata FROM story_entries WHERE branch_id = ? AND kind = 'ai_reply'
-     ORDER BY position DESC LIMIT 1`,
-    [branchId],
-  )
-  const raw = rows[0]?.[0] as string | null | undefined
-  return raw ? (JSON.parse(raw) as EntryMetadata) : null
-}
-
 async function tailEntryId(page: Page, branchId: string): Promise<string> {
   const rows = await queryApp(
     page,
@@ -72,19 +49,6 @@ async function tailEntryId(page: Page, branchId: string): Promise<string> {
     [branchId],
   )
   return rows[0]?.[0] as string
-}
-
-const LATEST_CAPTURE_SQL = `SELECT payload FROM probe_captures
-   WHERE branch_id = ? ORDER BY captured_at DESC, id DESC LIMIT 1`
-
-// Payload is a gzipped blob; queryApp's evaluate bridge returns the BLOB column as a real
-// Uint8Array (Playwright has serialized typed arrays since 1.44), so it gunzips directly.
-async function latestCapture(page: Page, branchId: string): Promise<ProbeCapturePayload | null> {
-  const rows = await queryApp(page, LATEST_CAPTURE_SQL, [branchId])
-  const blob = rows[0]?.[0] as Uint8Array | undefined
-  if (blob === undefined) return null
-  const json = new TextDecoder().decode(gunzipSync(blob))
-  return JSON.parse(json) as ProbeCapturePayload
 }
 
 test.describe('retrieval Q4 — classifier-emitted queries across a turn boundary', () => {
@@ -128,7 +92,7 @@ test.describe('retrieval Q4 — classifier-emitted queries across a turn boundar
         timeout: 30_000,
       })
 
-      branchId = await currentBranchId(app.window)
+      branchId = await currentBranchId(app.window, HERO_STORY_ID)
 
       await expect
         .poll(async () => (await tailMetadata(app.window, branchId))?.retrievalQueries, {
@@ -149,8 +113,8 @@ test.describe('retrieval Q4 — classifier-emitted queries across a turn boundar
     })
 
     await test.step('turn 2 embeds them as direct-slot queries and captures redundancy', async () => {
-      // Turn 2 emits different asks (ASK_C/ASK_D) so the capture below distinguishes "read the
-      // previous turn's row" (correct) from "read my own" — the regression this test catches.
+      // Turn 2 emits different asks (ASK_C/ASK_D), so the capture below pins Q4 to the COMMITTED
+      // previous row — not a stale store copy, a re-read, or a shifted readSceneSource anchor.
       mock.setNarrative(narrative('E2E-Q4-TURN-2', ASK_C, ASK_D))
       await reader.composer(app.window).fill('E2E-Q4-USER-2 I ask what the sigil means.')
       await reader.send(app.window).click()

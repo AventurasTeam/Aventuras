@@ -289,8 +289,8 @@ in `sceneEntities` that neither set contains. The two contexts are not
 symmetric in both directions.
 
 **Marking the extraction target is mandatory, not stylistic.**
-`lastTurns` is a fixed pair — the last two non-system entries, bounded
-so neither the buffer knobs nor a template can narrow them, because the
+`lastTurns` has a fixed floor — the last two non-system entries — that
+neither the buffer knobs nor a template can narrow below, because the
 user's action can itself carry state changes ("I put the sword away").
 Extraction targets the last of that pair. Everything else in the prompt
 is background and must be marked as such — including the memory blocks,

@@ -45,16 +45,34 @@ export function shouldFallbackFire(outcome?: PiggybackOutcome): boolean {
   return !outcome.attempted || !outcome.succeeded
 }
 
+// Mirrors state-emission.ts's "found loose, spent on someone off-scene" — the roster
+// header's "never invent one" otherwise pulls toward a plausible-but-wrong ID instead.
+const TRANSFER_PARTY_DESCRIPTION =
+  'Omit rather than inventing a roster ID — there is no other party when something is found loose or spent on someone off-scene.'
+
 export const fallbackClassifierSchema = z.object({
-  sceneEntities: z.array(z.string()),
-  currentLocation: z.string().optional(),
+  sceneEntities: z
+    .array(z.string())
+    .describe(
+      'IDs of every character and item present in this scene — physically there in the last entry, not merely mentioned or remembered.',
+    ),
+  currentLocation: z
+    .string()
+    .optional()
+    .describe(
+      'The ID of the place this scene happens at. Only an ID from the prompt list; omit it if the scene moved somewhere with no ID yet.',
+    ),
   worldTimeDelta: z.number(),
   visualChanges: z
     .array(
       z.object({
         id: z.string(),
         type: z.enum(VISUAL_CHANGE_TYPES),
-        text: z.string(),
+        text: z
+          .string()
+          .describe(
+            'The FULL new value for the category named in `type` — this replaces whatever was there before, not a partial edit.',
+          ),
       }),
     )
     .optional(),
@@ -65,18 +83,18 @@ export const fallbackClassifierSchema = z.object({
           z.object({
             id: z.string(),
             slot: z.enum(['equipped_items', 'inventory']),
-            to: z.string().optional(),
-            from: z.string().optional(),
+            to: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
+            from: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
           }),
         )
         .default([]),
       stackables: z
         .array(
           z.object({
-            key: z.string(),
-            amount: z.number(),
-            to: z.string().optional(),
-            from: z.string().optional(),
+            key: z.string().describe('Lowercase name of the stackable, e.g. gold.'),
+            amount: z.number().describe('Quantity moved, not the resulting total.'),
+            to: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
+            from: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
           }),
         )
         .default([]),
@@ -150,9 +168,8 @@ export async function* piggybackFallbackClassifierPhase(
   if (!working.ok) return working.result
   const { open, entities } = working.set
 
-  // The same read the prompt's `lastTurns` comes from, so the extracted state is
-  // written back to the row the classifier actually reasoned over rather than to
-  // whatever the reader's window happens to end on.
+  // Same query at the floor width: the read is tail-anchored, so `.at(-1)`/`.at(-2)`
+  // match the wider window the prompt was built from (generation-context.ts).
   const turns = await readLastTurns(ctx.db, ctx.branchId)
   const tail = turns.at(-1)
   if (!tail) return { status: 'completed' }

@@ -28,6 +28,7 @@ const GEMMA = 'onnx-community/embeddinggemma-300m-ONNX'
 function buildSettings(overrides: Partial<StorySettings> = {}): StorySettings {
   return storySettingsSchema.parse({
     classifierCadence: 4,
+    classifierContextEntries: 4,
     piggybackMode: 'on',
     embeddingBackend: 'local',
     embedding_model_id: MINILM,

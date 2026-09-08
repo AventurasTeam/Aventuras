@@ -766,6 +766,15 @@ piggyback did not fire or its block failed to parse — so it is
 available in either mode
 ([`piggyback.md → Capability gate`](./piggyback.md#capability-gate)).
 
+**Capped at 200 characters, the same cap and the same constant as
+[Q4](#q4-classifier-emitted-queries).** Applied at query build, not at parse or
+persist: `metadata.summary` is a reader surface and reaches templates as
+`sceneMetadata.summary`, so truncating it there would cut what the user reads.
+One sentence is the instruction; the cap is what stops a model that writes a
+paragraph from getting a paragraph averaged into one vector. It binds on a long
+compound sentence as well as on a runaway one — a deliberate trade for a single
+shared constant over two that could drift.
+
 **Why it is not part of Q2.** It used to be the digest's last line, one
 natural-language sentence averaged into a single vector with a
 comma-separated proper-noun list. The two carry different shapes and
@@ -820,7 +829,9 @@ Three degenerate emissions are closed before embedding: identical
 strings are deduplicated (three copies would split the pooled weight
 evenly and cost triple the KNN for one signal), empty strings are
 filtered, and an oversized string is capped at 200 characters rather
-than left to the [truncation contract](#truncation-contract).
+than left to the [truncation contract](#truncation-contract) — the same
+constant as [Q3](#q3-piggyback-summary), which is the slot that shares
+it.
 
 **Storage.** `story_entries.metadata.retrievalQueries`, capped at
 three, excluded from `stateReport`, and **not inherited** — a query

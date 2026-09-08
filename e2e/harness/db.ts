@@ -1,6 +1,9 @@
 import { DatabaseSync } from 'node:sqlite'
 
 import type { Page } from '@playwright/test'
+import { gunzipSync } from 'fflate'
+
+import type { EntryMetadata, ProbeCapturePayload } from '@/lib/db'
 
 // Query the running app's own DB connection through the preload bridge
 // (window.aventurasDb). The faithful way to assert an in-app write: it reads
@@ -37,6 +40,38 @@ const BRANCH_STALE_TOTAL_SQL = `SELECT (SELECT count(*) FROM entities WHERE bran
 export async function branchStaleTotal(page: Page, branchId: string): Promise<number> {
   const [[total]] = await queryApp(page, BRANCH_STALE_TOTAL_SQL, Array<string>(5).fill(branchId))
   return Number(total)
+}
+
+export async function currentBranchId(page: Page, storyId: string): Promise<string> {
+  const rows = await queryApp(page, `SELECT current_branch_id FROM stories WHERE id = ?`, [storyId])
+  return rows[0]?.[0] as string
+}
+
+const TAIL_METADATA_SQL = `SELECT metadata FROM story_entries WHERE branch_id = ? AND kind = 'ai_reply'
+   ORDER BY position DESC LIMIT 1`
+
+// queryApp is a raw SQL bridge, not drizzle's typed select, so the column's
+// `mode: 'json'` transform never runs — parse it here instead.
+export async function tailMetadata(page: Page, branchId: string): Promise<EntryMetadata | null> {
+  const rows = await queryApp(page, TAIL_METADATA_SQL, [branchId])
+  const raw = rows[0]?.[0] as string | null | undefined
+  return raw ? (JSON.parse(raw) as EntryMetadata) : null
+}
+
+const LATEST_CAPTURE_SQL = `SELECT payload FROM probe_captures
+   WHERE branch_id = ? ORDER BY captured_at DESC, id DESC LIMIT 1`
+
+// Payload is a gzipped blob; queryApp's evaluate bridge returns the BLOB column as a real
+// Uint8Array (Playwright has serialized typed arrays since 1.44), so it gunzips directly.
+export async function latestCapture(
+  page: Page,
+  branchId: string,
+): Promise<ProbeCapturePayload | null> {
+  const rows = await queryApp(page, LATEST_CAPTURE_SQL, [branchId])
+  const blob = rows[0]?.[0] as Uint8Array | undefined
+  if (blob === undefined) return null
+  const json = new TextDecoder().decode(gunzipSync(blob))
+  return JSON.parse(json) as ProbeCapturePayload
 }
 
 // Read-only assertion handle over the fixture DB file. E2E drives the app

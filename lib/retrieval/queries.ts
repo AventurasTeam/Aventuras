@@ -31,8 +31,11 @@ export const QUERY_SLOT_OF_SOURCE = {
 
 /** retrieval.md → Q4: capped at three, and the cap is a cost decision. */
 export const MAX_EMITTED_QUERIES = 3
-/** retrieval.md → Q4. A retrieval ask is phrase-shaped, far under any embedder input window. */
-const MAX_EMITTED_QUERY_CHARS = 200
+/**
+ * retrieval.md → Q3/Q4 share this cap; Q1/Q2 are deliberately exempt. Query-build only —
+ * persisted `metadata.summary`/`retrievalQueries` stay uncapped: the summary is reader-visible.
+ */
+const MAX_LLM_QUERY_CHARS = 200
 
 export type QueryStack = {
   /** Q1, Q2, Q3, then one per emitted Q4. Empty `text` means the slot is absent. */
@@ -45,6 +48,7 @@ export type QueryStack = {
 
 const trimmed = (s: string | null): string => s?.trim() ?? ''
 const nonEmpty = (s: string): boolean => s !== ''
+const queryText = (s: string | null): string => trimmed(s).slice(0, MAX_LLM_QUERY_CHARS)
 
 function structuralDigest(input: QueryStackInput): string {
   const scene = [...input.sceneEntityNames, input.currentLocationName].map(trimmed).filter(nonEmpty)
@@ -65,7 +69,7 @@ function emittedSpecs(raw: readonly string[]): QuerySpec[] {
   const seen = new Set<string>()
   const out: QuerySpec[] = []
   for (const candidate of raw) {
-    const text = candidate.trim().slice(0, MAX_EMITTED_QUERY_CHARS)
+    const text = queryText(candidate)
     if (text === '' || seen.has(text)) continue
     seen.add(text)
     out.push({ text, source: 'classifier_emitted' })
@@ -80,7 +84,7 @@ export function buildQueryStack(input: QueryStackInput): QueryStack {
   const specs: QuerySpec[] = [
     { text: input.userAction.trim(), source: 'user_action' },
     { text: structuralDigest(input), source: 'structural_digest' },
-    { text: trimmed(input.piggybackSummary), source: 'piggyback_summary' },
+    { text: queryText(input.piggybackSummary), source: 'piggyback_summary' },
     ...emittedSpecs(input.emittedQueries ?? []),
   ]
   const slots = specs.map((q) => QUERY_SLOT_OF_SOURCE[q.source])
