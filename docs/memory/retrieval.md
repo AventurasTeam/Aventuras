@@ -781,6 +781,15 @@ reliability difference visible to the blend.
 Absent on parse failure or restart is fine — presence is derived, and
 the blend re-normalizes.
 
+**Capped at 200 characters, the same cap and the same constant as
+[Q4](#q4-classifier-emitted-queries).** Applied at query build, not at parse or
+persist: `metadata.summary` is a reader surface and reaches templates as
+`sceneMetadata.summary`, so truncating it there would cut what the user reads.
+One sentence is the instruction; the cap is what stops a model that writes a
+paragraph from getting a paragraph averaged into one vector. It binds on a long
+compound sentence as well as on a runaway one — a deliberate trade for a single
+shared constant over two that could drift.
+
 ### Q4: Classifier-emitted queries
 
 Up to **three** query strings the per-turn classifier emits directly,
