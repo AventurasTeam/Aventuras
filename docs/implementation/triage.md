@@ -104,3 +104,18 @@ true` (`lib/embedder/local/runtime.native.ts`) at a length nobody
   it was meant to steer. Unowned: capping user input is a composer
   decision, capping the digest is a retrieval one, and neither has a
   slice.
+
+- **Nothing links a new required settings key to its backfill
+  migration.** Settings writes are key-scoped `json_set`
+  (`lib/db/stories/settings-ops.ts`), so a key added to
+  `storySettingsSchema` without a `.default()` needs a migration or every
+  upgraded story fails `storySettingsSchema.parse` and will not open.
+  Migrations 0007, 0011 and 0013 all follow the pattern by hand, and
+  nothing enforces it — `story-config-schema.test.ts` counts the
+  _defaulted_ keys, which is the opposite half. A guard test walking
+  `storySettingsSchema.shape` for keys with no `ZodDefault` wrapper and
+  diffing them against a checked-in allowlist would close it in ~15
+  lines, but choosing that allowlist is a real decision (several keys
+  are legitimately required-and-unmigrated because they predate the
+  pattern). Unowned: it guards the schema layer on behalf of every
+  future slice, not any one of them.

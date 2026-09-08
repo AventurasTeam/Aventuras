@@ -29,6 +29,7 @@ const LEGACY_SETTINGS = {
   chapterTokenThreshold: 24000,
   classifierCadence: 5,
   piggybackMode: 'off',
+  retrievalBudgets: { entities: 1200, lore: 1800, happenings: 1500, threads: 400, chapters: 600 },
   keywordRetrieval: {
     mode: 'boost',
     budgetShare: 0.5,
@@ -71,7 +72,8 @@ describe(TAG, () => {
     expect(migrationTags()).toContain(TAG)
     const runtime = readFileSync(`${MIGRATIONS_DIR}/migrations.js`, 'utf8')
     expect(runtime).toContain(`${TAG}.sql`)
-    expect(runtime).toMatch(/^\s*m0013,\s*$/m)
+    const runtimeKey = `m${TAG.slice(0, 4)}`
+    expect(runtime).toMatch(new RegExp(`^\\s*${runtimeKey},\\s*$`, 'm'))
   })
 
   it('creates the key on a settings blob that predates it', () => {
@@ -130,8 +132,8 @@ describe(TAG, () => {
     expect(bad.settings).toBe(raw)
   })
 
-  // json_valid alone admits these, and json_set then rewrites the column re-serialized,
-  // normalizing a row the migration must not touch. The spacing is the assertion.
+  // json_valid alone admits these, and json_set would rewrite the column
+  // re-serialized. The array's spacing is the assertion; the scalar is parity.
   it.each([
     ['a spaced top-level array', '[1, 2]'],
     ['a quoted scalar', '"already gone"'],

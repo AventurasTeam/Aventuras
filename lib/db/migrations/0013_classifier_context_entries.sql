@@ -10,7 +10,9 @@ SET settings = json_set(settings, '$.classifierContextEntries', 4)
 -- statement: no story migrates and the app cannot boot past migrate(). A corrupt
 -- settings blob is already a per-story recoverable state elsewhere
 -- (lib/actions/stories/operational.ts sets a settings-corrupt open failure), so
--- skip those rows and leave the rest of the database migratable.
+-- skip those rows and leave the rest of the database migratable. json_valid must
+-- stay first: json_type and json_extract raise on a blob nested past SQLite's
+-- parser depth, where json_valid merely returns 0.
 WHERE settings IS NOT NULL
 	AND json_valid(settings)
 	AND json_type(settings) = 'object'
