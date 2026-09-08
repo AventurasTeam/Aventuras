@@ -237,7 +237,11 @@ export async function buildGenerationContext(
   const [buffer, lastTurns, sceneSource] = await Promise.all([
     reads.has('entries') ? readPromptBuffer(ctx.db, branchId, settings) : [],
     reads.has('lastTurns') || reads.has('worldTimeDeltaBasis')
-      ? readLastTurns(ctx.db, branchId, settings.classifierContextEntries)
+      ? readLastTurns(
+          ctx.db,
+          branchId,
+          reads.has('lastTurns') ? settings.classifierContextEntries : undefined,
+        )
       : [],
     readsScene ? readSceneSource(ctx.db, branchId) : undefined,
   ])

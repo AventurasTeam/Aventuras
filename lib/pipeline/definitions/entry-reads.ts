@@ -29,14 +29,13 @@ export async function readSceneSource(
 // asks, the classifier needs the action that caused a state change alongside the
 // prose around it; which kinds those two rows are depends on when in the run it
 // asks. `limit` widens the background above that floor (cadence.md → User-tunable
-// knobs); it can never cut into it, and a fractional or non-finite knob degrades
-// to the pair rather than throwing or reading the branch unbounded.
+// knobs). Hardened against settings that never went through storySettingsSchema.
 export async function readLastTurns(
   db: DbCtx['db'],
   branchId: string,
   limit: number = LAST_TURNS,
 ): Promise<StoryEntry[]> {
-  const take = Number.isFinite(limit) ? Math.max(LAST_TURNS, Math.trunc(limit)) : LAST_TURNS
+  const take = Number.isFinite(limit) ? Math.max(LAST_TURNS, Math.floor(limit)) : LAST_TURNS
   const rows = await db
     .select()
     .from(storyEntries)

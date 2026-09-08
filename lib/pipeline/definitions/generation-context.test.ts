@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { describeCalendarVocabulary, EARTH_GREGORIAN } from '@/lib/calendar'
 import {
@@ -899,19 +899,19 @@ describe('buildGenerationContext — data source', () => {
     ])
   })
 
-  it('excludes system rows from lastTurns at the default window', async () => {
-    openStory()
-    // The system row sits mid-stack, inside the top-4-by-position range: a
-    // naive position-only window would pull it in over 'second'. The WHERE
-    // clause excludes it before the window is taken, so 'second' fills the
-    // fourth slot instead.
+  it('excludes system rows from lastTurns at both the tail and mid-stack', async () => {
+    // A system row can sit mid-stack (defensive) or at the branch tail — a
+    // failed turn's error banner, per classifier-facts.ts — and neither may
+    // consume a slot.
+    openStory({ classifierContextEntries: 4 })
     await seedEntries([
       dbEntry(1, 'oldest'),
       dbEntry(2, 'second'),
-      dbEntry(3, 'ERROR', 'system'),
+      dbEntry(3, 'ERROR mid-stack', 'system'),
       dbEntry(4, 'third'),
       dbEntry(5, 'fourth'),
       dbEntry(6, 'fifth'),
+      dbEntry(7, 'ERROR tail', 'system'),
     ])
 
     const context = await build({}, TEMPLATE_IDS.piggybackFallbackClassifier)
@@ -1188,7 +1188,7 @@ describe('buildGenerationContext — classifierContextEntries', () => {
     entry('e4', 4, 'e4'),
     entry('e5', 5, 'e5 the action', 'user_action'),
     entry('e6', 6, 'e6 the reply'),
-  ] as unknown as StoryEntry[]
+  ] as never[]
 
   const contentsOf = (ctx: Record<string, unknown>): string[] =>
     (ctx.lastTurns as { content: string }[]).map((e) => e.content)
@@ -1227,8 +1227,9 @@ describe('buildGenerationContext — classifierContextEntries', () => {
     expect(contentsOf(ctx)).toEqual(['e4', 'e5 the action', 'e6 the reply'])
   })
 
-  // A NaN knob must degrade to the pair, not fall through Math.max to an
-  // unbounded read of the whole branch.
+  // Defense in depth: z.number() itself already rejects NaN and Infinity, so
+  // this guards a value that reached the read site without going through
+  // storySettingsSchema at all, not one a user can produce through the app.
   it('degrades to the pair on a NaN knob', async () => {
     const ctx = await buildContext({
       entries: sixEntries,
@@ -1239,32 +1240,27 @@ describe('buildGenerationContext — classifierContextEntries', () => {
     expect(contentsOf(ctx)).toEqual(['e5 the action', 'e6 the reply'])
   })
 
-  function withWorldTime(row: ReturnType<typeof entry>, n: number) {
-    return { ...row, metadata: { ...(row.metadata ?? {}), worldTime: n } }
-  }
-
-  // resolveWorldTimeDeltaBasis reads only .at(-1)/.at(-2), so a wider window
-  // must not change it. perTurnNarrative reads the basis but never lastTurns,
-  // so this is the only thing widening could have broken on that path.
-  it.each([2, 8])('resolves the same worldTimeDeltaBasis at knob %i', async (knob) => {
-    // basis is 'sinceUserAction' only when the tail is a user_action, the row
-    // before it is a narrative kind, and the tail's worldTime exceeds it.
-    const timed = [
-      entry('e1', 1, 'e1'),
-      entry('e2', 2, 'e2'),
-      entry('e3', 3, 'e3'),
-      entry('e4', 4, 'e4'),
-      withWorldTime(entry('e5', 5, 'e5 reply'), 100),
-      withWorldTime(entry('e6', 6, 'e6 action', 'user_action'), 200),
-    ] as unknown as StoryEntry[]
+  // cadence.md scopes the knob to the fallback classifier. perTurnNarrative reads
+  // worldTimeDeltaBasis off the same query but never lastTurns, so it must stay at
+  // the pair however wide the knob goes.
+  it('does not widen the narrative path, which reads the basis but not the turns', async () => {
+    const entryReads = await import('./entry-reads')
+    const readLastTurnsSpy = vi.spyOn(entryReads, 'readLastTurns')
 
     const ctx = await buildContext({
-      entries: timed,
-      settings: storySettings({ classifierContextEntries: knob }),
-      templateId: TEMPLATE_IDS.piggybackFallbackClassifier,
+      entries: sixEntries,
+      settings: storySettings({ classifierContextEntries: 6 }),
+      templateId: TEMPLATE_IDS.perTurnNarrative,
     })
 
-    expect(ctx.worldTimeDeltaBasis).toBe('sinceUserAction')
+    expect(ctx.lastTurns).toEqual([])
+    expect(ctx.worldTimeDeltaBasis).toBe('sinceLastAiReply')
+    // ctx.lastTurns is gated to [] by exposure regardless of read width (see
+    // the comment on that field in generation-context.ts) — the call itself,
+    // not the exposed value, is what proves the knob stayed off this path.
+    expect(readLastTurnsSpy.mock.calls.at(-1)?.[2]).toBeUndefined()
+
+    readLastTurnsSpy.mockRestore()
   })
 })
 
@@ -1317,5 +1313,24 @@ describe('buildGenerationContext — worldTimeDeltaBasis', () => {
       entries: [entry(1, 'ai_reply', 900), entry(2, 'user_action', 300)],
     })
     expect(context.worldTimeDeltaBasis).toBe('sinceLastAiReply')
+  })
+
+  // perTurnNarrative's read is pinned to the floor (generation-context.ts), so
+  // only the fallback classifier's read can grow past two rows. resolveWorldTimeDeltaBasis
+  // reads only .at(-1)/.at(-2), so a wide knob on that path must still land here.
+  it('resolves the same basis on the fallback template at a wide knob', async () => {
+    const context = await buildContext({
+      entries: [
+        entry(1, 'ai_reply', 10),
+        entry(2, 'user_action', 10),
+        entry(3, 'ai_reply', 20),
+        entry(4, 'user_action', 20),
+        entry(5, 'ai_reply', 100),
+        entry(6, 'user_action', 200),
+      ],
+      settings: storySettings({ classifierContextEntries: 6 }),
+      templateId: TEMPLATE_IDS.piggybackFallbackClassifier,
+    })
+    expect(context.worldTimeDeltaBasis).toBe('sinceUserAction')
   })
 })
