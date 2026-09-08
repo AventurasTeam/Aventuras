@@ -1,9 +1,22 @@
 import { describe, expect, it } from 'vitest'
 
 import { renderTemplate, TEMPLATE_IDS } from '../index'
+import { PIGGYBACK_FALLBACK_CLASSIFIER } from './piggyback-fallback-classifier'
+import { STATE_EMISSION } from './state-emission'
 
 const render = (context: Record<string, unknown>) =>
   renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, context)
+
+// Anchored on the fixed opening/closing tokens so the mid-section — the two branches'
+// inner phrasing — is whatever the source under test actually says, not assumed.
+const WORLD_TIME_DELTA_CLAUSE =
+  /\{% if worldTimeDeltaBasis == 'sinceUserAction' %\}[\s\S]*?\{% endif %\} \(0 for a flashback or memory; never negative\)/
+
+function worldTimeDeltaClause(source: string): string {
+  const match = source.match(WORLD_TIME_DELTA_CLAUSE)
+  if (!match) throw new Error('world-time-delta clause not found in template source')
+  return match[0]
+}
 
 /**
  * Every bucket buildGenerationContext emits, populated. Empty rather than absent
@@ -136,9 +149,8 @@ describe('bundled piggyback fallback classifier template', () => {
     expect(prompt).not.toContain('Use one of these place IDs')
   })
 
-  // state-emission.ts phrases the tagged block's <world_time_delta> the same way against
-  // the same variable — parity between the two per-turn implementations means a drift
-  // here is exactly the failure this template exists to close.
+  // Builder half (a real resolveWorldTimeDeltaBasis call over a seeded turn pair) is
+  // per-turn-piggyback.test.ts; this file only proves the template renders the variable.
   describe('world time delta basis', () => {
     it.each([
       ['sinceUserAction', "since the end of the user's action"],
@@ -148,6 +160,13 @@ describe('bundled piggyback fallback classifier template', () => {
 
       expect(prompt).toContain(phrase)
       expect(prompt).toContain('never negative')
+    })
+
+    // Hand-verified against state-emission.ts across three reviews; enforce it instead.
+    it('matches state-emission.ts word for word on the world-time-delta clause', () => {
+      expect(worldTimeDeltaClause(PIGGYBACK_FALLBACK_CLASSIFIER)).toBe(
+        worldTimeDeltaClause(STATE_EMISSION),
+      )
     })
   })
 

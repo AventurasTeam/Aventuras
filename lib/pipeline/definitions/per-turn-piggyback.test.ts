@@ -1,7 +1,12 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
-import { APP_SETTINGS_DEFAULTS, STORY_SETTINGS_DEFAULTS, type StorySettings } from '@/lib/db'
+import {
+  APP_SETTINGS_DEFAULTS,
+  STORY_SETTINGS_DEFAULTS,
+  type StoryEntry,
+  type StorySettings,
+} from '@/lib/db'
 import { logger, makeLogger } from '@/lib/diagnostics'
 import { IdBiMap } from '@/lib/ids'
 import { runPreflight } from '@/lib/pipeline/runtime/preflight'
@@ -1081,6 +1086,7 @@ describe('per-turn-piggyback', () => {
           sceneEntities?: string[]
           entities?: EntityRow[]
           retrieval?: RetrievalSuccess
+          kinds?: StoryEntry['kind'][]
           worldTimes?: number[]
         } = {},
       ): Promise<string> {
@@ -1091,6 +1097,10 @@ describe('per-turn-piggyback', () => {
           settings: baseSettings({ models: {}, ...over.settings }),
         })
         const contents = over.entries ?? ['I put the sword away.', 'The blade slides home.']
+        if (over.kinds && over.kinds.length !== contents.length)
+          throw new Error('kinds must have one entry per content string')
+        if (over.worldTimes && over.worldTimes.length !== contents.length)
+          throw new Error('worldTimes must have one entry per content string')
         hydrateEntries(
           phaseDb,
           'b1',
@@ -1100,16 +1110,7 @@ describe('per-turn-piggyback', () => {
                 id: `entry-${i + 1}`,
                 branchId: 'b1',
                 position: i + 1,
-                // worldTimes forces the tail to a user_action over a narrative-kind
-                // predecessor — resolveWorldTimeDeltaBasis (generation-context.ts)
-                // requires that shape before it looks at either worldTime value.
-                kind: over.worldTimes
-                  ? i === contents.length - 1
-                    ? 'user_action'
-                    : 'ai_reply'
-                  : i % 2 === 0
-                    ? 'user_action'
-                    : 'ai_reply',
+                kind: over.kinds?.[i] ?? (i % 2 === 0 ? 'user_action' : 'ai_reply'),
                 content,
                 metadata: {
                   sceneEntities: i === contents.length - 1 ? (over.sceneEntities ?? []) : [],
@@ -1167,19 +1168,13 @@ describe('per-turn-piggyback', () => {
         expect(prompt).toContain('Calendar')
       })
 
-      // The template-only half of this contract (both basis values, pure Liquid) lives in
-      // piggyback-fallback-classifier.test.ts. This is the builder half: only a real
-      // resolveWorldTimeDeltaBasis call over the seeded pair proves the phase actually
-      // supplies the variable rather than the template silently defaulting.
-      //
-      // This shape is unreachable in production: per-turn.ts always sequences narrative
-      // before this phase and awaits its ai_reply entry before resuming (orchestrator.ts),
-      // so the tail readLastTurns sees here is always ai_reply and the basis is always
-      // sinceLastAiReply in practice (generation-context.test.ts encodes the same
-      // assumption). Forcing the tail to a user_action is deliberate: the realistic shape
-      // can't discriminate — it would pass even if the builder dropped worldTimeDeltaBasis.
+      // Unreachable in production (narrative always fills the tail with ai_reply first) —
+      // forced here because the realistic shape can't discriminate a dropped variable.
       it('states the sinceUserAction basis when the tail advanced time on its own action', async () => {
-        const prompt = await renderFallbackPrompt({ worldTimes: [100, 200] })
+        const prompt = await renderFallbackPrompt({
+          kinds: ['ai_reply', 'user_action'],
+          worldTimes: [100, 200],
+        })
 
         expect(prompt).toContain("since the end of the user's action")
         expect(prompt).toContain('never negative')
@@ -2095,19 +2090,13 @@ describe('per-turn-piggyback', () => {
   })
 
   describe('fallbackClassifierSchema', () => {
-    /**
-     * Walks a `z.toJSONSchema()` result to one field's own `description`, treating
-     * 'items' as "descend into the array element schema" — so a caller can name
-     * `sceneEntities` and `visualChanges.items.text` the same way. Scoping to the
-     * exact node (rather than `toContain` over the whole serialized blob) is the
-     * point: a marker word landing in an unrelated field's describe would still
-     * pass a blob-wide check.
-     */
+    // Scoped to the exact node, not `toContain` over the blob. '[]' (not 'items') steps into
+    // the array-element schema, since 'items' is itself a real property name on transfers.
     function fieldDescription(schema: unknown, path: readonly string[]): string | undefined {
       let node: unknown = schema
       for (const key of path) {
         if (typeof node !== 'object' || node === null) return undefined
-        if (key === 'items') {
+        if (key === '[]') {
           node = (node as { items?: unknown }).items
           continue
         }
@@ -2118,18 +2107,26 @@ describe('per-turn-piggyback', () => {
       return typeof description === 'string' ? description : undefined
     }
 
-    // A schema field with no describe is a field the model never fills well. The
-    // tagged block spells these out (state-emission.ts); parity means the fallback
-    // must too — piggyback.md → Fallback classifier context.
+    // A field with no describe is one the model never fills well; parity means the
+    // fallback states it too (state-emission.ts; piggyback.md → Fallback classifier context).
     it.each([
       ['sceneEntities', ['sceneEntities'], 'present in this scene'],
       ['currentLocation', ['currentLocation'], 'place this scene happens at'],
       [
         'visualChanges[].text',
-        ['visualChanges', 'items', 'text'],
+        ['visualChanges', '[]', 'text'],
         'replaces whatever was there before',
       ],
-      ['transfers.stackables[].key', ['transfers', 'stackables', 'items', 'key'], 'Lowercase name'],
+      ['transfers.stackables[].key', ['transfers', 'stackables', '[]', 'key'], 'Lowercase name'],
+      [
+        'transfers.stackables[].amount',
+        ['transfers', 'stackables', '[]', 'amount'],
+        'not the resulting total',
+      ],
+      ['transfers.items[].to', ['transfers', 'items', '[]', 'to'], 'no other party'],
+      ['transfers.items[].from', ['transfers', 'items', '[]', 'from'], 'no other party'],
+      ['transfers.stackables[].to', ['transfers', 'stackables', '[]', 'to'], 'no other party'],
+      ['transfers.stackables[].from', ['transfers', 'stackables', '[]', 'from'], 'no other party'],
     ] as const)('describes %s', (_field, path, marker) => {
       const jsonSchema = z.toJSONSchema(fallbackClassifierSchema)
       expect(fieldDescription(jsonSchema, path)).toContain(marker)

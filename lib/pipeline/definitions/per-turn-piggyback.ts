@@ -45,12 +45,12 @@ export function shouldFallbackFire(outcome?: PiggybackOutcome): boolean {
   return !outcome.attempted || !outcome.succeeded
 }
 
+// Mirrors state-emission.ts's "found loose, spent on someone off-scene" — the roster
+// header's "never invent one" otherwise pulls toward a plausible-but-wrong ID instead.
+const TRANSFER_PARTY_DESCRIPTION =
+  'Omit rather than inventing a roster ID — there is no other party when something is found loose or spent on someone off-scene.'
+
 export const fallbackClassifierSchema = z.object({
-  // More explicit than state-emission.ts's "present in this scene": this call has no
-  // narrative context of its own — it did not write the prose it is classifying — so
-  // "present" needs the physically-there-vs-mentioned distinction spelled out. Not a
-  // different definition of scene presence, the same channel-justified elaboration as
-  // currentLocation's wording below.
   sceneEntities: z
     .array(z.string())
     .describe(
@@ -71,7 +71,7 @@ export const fallbackClassifierSchema = z.object({
         text: z
           .string()
           .describe(
-            'The FULL new value for that category — this replaces whatever was there before, not a partial edit.',
+            'The FULL new value for the category named in `type` — this replaces whatever was there before, not a partial edit.',
           ),
       }),
     )
@@ -83,8 +83,8 @@ export const fallbackClassifierSchema = z.object({
           z.object({
             id: z.string(),
             slot: z.enum(['equipped_items', 'inventory']),
-            to: z.string().optional(),
-            from: z.string().optional(),
+            to: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
+            from: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
           }),
         )
         .default([]),
@@ -92,9 +92,9 @@ export const fallbackClassifierSchema = z.object({
         .array(
           z.object({
             key: z.string().describe('Lowercase name of the stackable, e.g. gold.'),
-            amount: z.number(),
-            to: z.string().optional(),
-            from: z.string().optional(),
+            amount: z.number().describe('Quantity moved, not the resulting total.'),
+            to: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
+            from: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
           }),
         )
         .default([]),
