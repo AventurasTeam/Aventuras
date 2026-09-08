@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { describeCalendarVocabulary, EARTH_GREGORIAN } from '@/lib/calendar'
 import {
@@ -1193,6 +1193,12 @@ describe('buildGenerationContext — classifierContextEntries', () => {
   const contentsOf = (ctx: Record<string, unknown>): string[] =>
     (ctx.lastTurns as { content: string }[]).map((e) => e.content)
 
+  // No global restoreMocks: without this, a thrown assertion in the spy case
+  // below leaks the spy into the describe after it.
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   // cadence.md → User-tunable knobs: the knob widens the background, and the
   // fixed action-plus-reply pair is a floor it can never cut.
   it('reads the knob many trailing entries for the fallback classifier', async () => {
@@ -1244,6 +1250,8 @@ describe('buildGenerationContext — classifierContextEntries', () => {
   // worldTimeDeltaBasis off the same query but never lastTurns, so it must stay at
   // the pair however wide the knob goes.
   it('does not widen the narrative path, which reads the basis but not the turns', async () => {
+    // A file-hoisted vi.mock (the repo's usual pattern) would cover all 71
+    // tests in this file for this one case's benefit.
     const entryReads = await import('./entry-reads')
     const readLastTurnsSpy = vi.spyOn(entryReads, 'readLastTurns')
 
@@ -1255,12 +1263,11 @@ describe('buildGenerationContext — classifierContextEntries', () => {
 
     expect(ctx.lastTurns).toEqual([])
     expect(ctx.worldTimeDeltaBasis).toBe('sinceLastAiReply')
+    expect(readLastTurnsSpy).toHaveBeenCalledTimes(1)
     // ctx.lastTurns is gated to [] by exposure regardless of read width (see
     // the comment on that field in generation-context.ts) — the call itself,
     // not the exposed value, is what proves the knob stayed off this path.
     expect(readLastTurnsSpy.mock.calls.at(-1)?.[2]).toBeUndefined()
-
-    readLastTurnsSpy.mockRestore()
   })
 })
 
