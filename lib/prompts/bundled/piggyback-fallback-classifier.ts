@@ -63,6 +63,7 @@ a negative offset slices from the END in Liquid — coinciding with the intended
 {{ entry.content }}
 {% endfor %}
 Report the scene state as of the LAST entry above, a one-sentence summary of the turn, and up to three retrieval queries naming context you want looked up for the next turn.
+For the time delta, give {% if worldTimeDeltaBasis == 'sinceUserAction' %}seconds elapsed since the end of the user's action{% else %}seconds elapsed since the previous entry, including any time the user's action itself took{% endif %} (0 for a flashback or memory; never negative).
 Scene state is absolute, not a delta: report the full cast present at the end of the turn, not only what changed. Read the entry before it for state the user's own action changed.
 {% if suggestionsFire -%}
 {% include 'macro_suggestion_emission_json' %}

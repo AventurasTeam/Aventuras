@@ -82,6 +82,7 @@ const context = (over: Record<string, unknown> = {}) => ({
   ],
   piggybackFires: false,
   suggestionsFire: false,
+  worldTimeDeltaBasis: 'sinceLastAiReply',
   ...over,
 })
 
@@ -133,6 +134,21 @@ describe('bundled piggyback fallback classifier template', () => {
     expect(prompt.split('\n').find((l) => l.includes('Mora'))).toBe('Mora — last seen at the ford.')
     expect(prompt).not.toContain('include their ID (without brackets) in the trailing')
     expect(prompt).not.toContain('Use one of these place IDs')
+  })
+
+  // state-emission.ts phrases the tagged block's <world_time_delta> the same way against
+  // the same variable — parity between the two per-turn implementations means a drift
+  // here is exactly the failure this template exists to close.
+  describe('world time delta basis', () => {
+    it.each([
+      ['sinceUserAction', "since the end of the user's action"],
+      ['sinceLastAiReply', 'since the previous entry'],
+    ])('states the %s basis in the prompt', (basis, phrase) => {
+      const prompt = render(context({ worldTimeDeltaBasis: basis }))
+
+      expect(prompt).toContain(phrase)
+      expect(prompt).toContain('never negative')
+    })
   })
 
   describe('extraction-turn marking (mandatory, not stylistic)', () => {

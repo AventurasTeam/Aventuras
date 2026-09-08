@@ -1081,6 +1081,7 @@ describe('per-turn-piggyback', () => {
           sceneEntities?: string[]
           entities?: EntityRow[]
           retrieval?: RetrievalSuccess
+          worldTimes?: number[]
         } = {},
       ): Promise<string> {
         currentStoryStore.set({
@@ -1099,12 +1100,21 @@ describe('per-turn-piggyback', () => {
                 id: `entry-${i + 1}`,
                 branchId: 'b1',
                 position: i + 1,
-                kind: i % 2 === 0 ? 'user_action' : 'ai_reply',
+                // worldTimes forces the tail to a user_action over a narrative-kind
+                // predecessor — resolveWorldTimeDeltaBasis (generation-context.ts)
+                // requires that shape before it looks at either worldTime value.
+                kind: over.worldTimes
+                  ? i === contents.length - 1
+                    ? 'user_action'
+                    : 'ai_reply'
+                  : i % 2 === 0
+                    ? 'user_action'
+                    : 'ai_reply',
                 content,
                 metadata: {
                   sceneEntities: i === contents.length - 1 ? (over.sceneEntities ?? []) : [],
                   currentLocationId: null,
-                  worldTime: 100,
+                  worldTime: over.worldTimes?.[i] ?? 100,
                 },
               }) as never,
           ),
@@ -1155,6 +1165,17 @@ describe('per-turn-piggyback', () => {
         expect(prompt).toContain('# Relevant lore')
         expect(prompt).toContain('An exiled line.')
         expect(prompt).toContain('Calendar')
+      })
+
+      // The template-only half of this contract (both basis values, pure Liquid) lives in
+      // piggyback-fallback-classifier.test.ts. This is the builder half: only a real
+      // resolveWorldTimeDeltaBasis call over the seeded pair proves the phase actually
+      // supplies the variable rather than the template silently defaulting.
+      it('states the sinceUserAction basis when the tail advanced time on its own action', async () => {
+        const prompt = await renderFallbackPrompt({ worldTimes: [100, 200] })
+
+        expect(prompt).toContain("since the end of the user's action")
+        expect(prompt).toContain('never negative')
       })
     })
   })
@@ -2067,6 +2088,53 @@ describe('per-turn-piggyback', () => {
   })
 
   describe('fallbackClassifierSchema', () => {
+    /**
+     * Walks a `z.toJSONSchema()` result to one field's own `description`, treating
+     * 'items' as "descend into the array element schema" — so a caller can name
+     * `sceneEntities` and `visualChanges.items.text` the same way. Scoping to the
+     * exact node (rather than `toContain` over the whole serialized blob) is the
+     * point: a marker word landing in an unrelated field's describe would still
+     * pass a blob-wide check.
+     */
+    function fieldDescription(schema: unknown, path: readonly string[]): string | undefined {
+      let node: unknown = schema
+      for (const key of path) {
+        if (typeof node !== 'object' || node === null) return undefined
+        if (key === 'items') {
+          node = (node as { items?: unknown }).items
+          continue
+        }
+        node = (node as { properties?: Record<string, unknown> }).properties?.[key]
+      }
+      if (typeof node !== 'object' || node === null) return undefined
+      const description = (node as { description?: unknown }).description
+      return typeof description === 'string' ? description : undefined
+    }
+
+    // A schema field with no describe is a field the model never fills well. The
+    // tagged block spells these out (state-emission.ts); parity means the fallback
+    // must too — piggyback.md → Fallback classifier context.
+    it.each([
+      ['sceneEntities', ['sceneEntities'], 'present in this scene'],
+      ['currentLocation', ['currentLocation'], 'place this scene happens at'],
+      [
+        'visualChanges[].text',
+        ['visualChanges', 'items', 'text'],
+        'replaces whatever was there before',
+      ],
+      ['transfers.stackables[].key', ['transfers', 'stackables', 'items', 'key'], 'Lowercase name'],
+    ] as const)('describes %s', (_field, path, marker) => {
+      const jsonSchema = z.toJSONSchema(fallbackClassifierSchema)
+      expect(fieldDescription(jsonSchema, path)).toContain(marker)
+    })
+
+    // The describes have to survive z.toJSONSchema — that is the only path by which
+    // they reach the provider, and it throws on a transform.
+    it('serialises to JSON schema without throwing', () => {
+      expect(() => z.toJSONSchema(fallbackClassifierSchema)).not.toThrow()
+      expect(() => z.toJSONSchema(fallbackClassifierWithSuggestionsSchema)).not.toThrow()
+    })
+
     it('describes the summary field so the description survives into the emitted JSON schema', () => {
       const jsonSchema = z.toJSONSchema(fallbackClassifierSchema)
       const summary = jsonSchema.properties?.summary

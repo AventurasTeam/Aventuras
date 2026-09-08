@@ -46,15 +46,28 @@ export function shouldFallbackFire(outcome?: PiggybackOutcome): boolean {
 }
 
 export const fallbackClassifierSchema = z.object({
-  sceneEntities: z.array(z.string()),
-  currentLocation: z.string().optional(),
+  sceneEntities: z
+    .array(z.string())
+    .describe(
+      'IDs of every character and item present in this scene — physically there in the last entry, not merely mentioned or remembered.',
+    ),
+  currentLocation: z
+    .string()
+    .optional()
+    .describe(
+      'The ID of the place this scene happens at. Only an ID from the list above; omit it if the scene moved somewhere with no ID yet.',
+    ),
   worldTimeDelta: z.number(),
   visualChanges: z
     .array(
       z.object({
         id: z.string(),
         type: z.enum(VISUAL_CHANGE_TYPES),
-        text: z.string(),
+        text: z
+          .string()
+          .describe(
+            'The FULL new value for that category — this replaces whatever was there before, not a partial edit.',
+          ),
       }),
     )
     .optional(),
@@ -73,7 +86,7 @@ export const fallbackClassifierSchema = z.object({
       stackables: z
         .array(
           z.object({
-            key: z.string(),
+            key: z.string().describe('Lowercase name of the stackable, e.g. gold.'),
             amount: z.number(),
             to: z.string().optional(),
             from: z.string().optional(),
@@ -150,9 +163,8 @@ export async function* piggybackFallbackClassifierPhase(
   if (!working.ok) return working.result
   const { open, entities } = working.set
 
-  // The same read the prompt's `lastTurns` comes from, so the extracted state is
-  // written back to the row the classifier actually reasoned over rather than to
-  // whatever the reader's window happens to end on.
+  // Same query at the floor width: the read is tail-anchored, so `.at(-1)`/`.at(-2)`
+  // match the wider window the prompt was built from (generation-context.ts).
   const turns = await readLastTurns(ctx.db, ctx.branchId)
   const tail = turns.at(-1)
   if (!tail) return { status: 'completed' }
