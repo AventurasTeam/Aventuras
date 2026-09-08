@@ -829,7 +829,9 @@ Three degenerate emissions are closed before embedding: identical
 strings are deduplicated (three copies would split the pooled weight
 evenly and cost triple the KNN for one signal), empty strings are
 filtered, and an oversized string is capped at 200 characters rather
-than left to the [truncation contract](#truncation-contract).
+than left to the [truncation contract](#truncation-contract) — the same
+constant as [Q3](#q3-piggyback-summary), which is the slot that shares
+it.
 
 **Storage.** `story_entries.metadata.retrievalQueries`, capped at
 three, excluded from `stateReport`, and **not inherited** — a query

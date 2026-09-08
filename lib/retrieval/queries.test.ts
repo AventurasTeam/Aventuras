@@ -205,7 +205,7 @@ describe('buildQueryStack', () => {
     const long = 'a'.repeat(260)
     const stack = buildQueryStack({ ...base, piggybackSummary: long })
 
-    // Not `.toBe(MAX_QUERY_CHARS)` — deriving the expectation from the constant
+    // Not `.toBe(MAX_LLM_QUERY_CHARS)` — deriving the expectation from the constant
     // under test passes against any value it holds. 200 is canon (retrieval.md → Q3).
     expect(stack.specs[2]?.text).toHaveLength(200)
     expect(stack.specs[2]?.text).toBe('a'.repeat(200))
