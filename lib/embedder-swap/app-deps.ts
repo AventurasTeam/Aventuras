@@ -368,7 +368,7 @@ export function composeRetrievalEmbedDeps(config: EmbedderConfig): {
 } {
   return {
     // 'query' intent, not 'document': the local model's query prefix is what
-    // puts the three query vectors in the same space as the stored rows.
+    // puts the query vectors in the same space as the stored rows.
     embedTexts: (texts, abortSignal) =>
       embedTexts(config, texts, 'query', providerFor(config), abortSignal),
     embedRows: async (rows, abortSignal) =>

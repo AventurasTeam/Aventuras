@@ -175,8 +175,8 @@ Click → opens inspect for that capture.
     story state under current params, writes a new capture
     pointing at the same `target_entry_id`. Useful for "is this
     still missing X under current params?" Costs a fresh embed of
-    every query the capture stored — one to six (~20-100 ms local
-    each; ~50-300 ms provider). Does
+    each present query — one to six of the three to six the capture
+    stored (~20-100 ms local each; ~50-300 ms provider). Does
     NOT regenerate the prose turn.
   - **Export** — downloads the capture as a JSON blob (gzipped
     payload + metadata). Includes prose snippets — user is
@@ -268,16 +268,16 @@ Stale excluded from pool: 7
 
 Filter: [all] [selected] [dropped] [bypassed] [stale]
 
-┌──────────────────────────────────────────────────────────────┐
-│ Name      Sts sim Q1 Q2 Q3 Q4… blend rec pin kw byp score MMR result │
-├──────────────────────────────────────────────────────────────┤
-│ Aria      ▣  .82 .91 .77  .83  1.0 .90 .10  -    .85    1  ✓ │
-│ Kael      ▣  .79 .85 .73  .79  1.0 .80 .10  -    .81    2  ✓ │
-│ the_study ⌂  .58 .76 .42  .59  1.0  -  .00  -    .59    3  ✓ │
-│ Vael      ◌  .61 .54 .38  .51  .67  -  .10  -    .44    7  - │ ← pre-filtered
-│ Maelis    ◌  .42 .38 .31  .37  .55  -  .00  -    .20    -  ↓ │ ← below threshold
-│ ...                                                          │
-└──────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│ Name      Sts Q1 Q2 Q3 Q4… blend rec pin kw byp score MMR result │
+├──────────────────────────────────────────────────────────────────┤
+│ Aria      ▣  .82 .91 .77 .81  .83  1.0 .90 .10  -    .85    1  ✓ │
+│ Kael      ▣  .79 .85 .73 .78  .79  1.0 .80 .10  -    .81    2  ✓ │
+│ the_study ⌂  .58 .76 .42 .57  .59  1.0  -  .00  -    .59    3  ✓ │
+│ Vael      ◌  .61 .54 .38 .45  .51  .67  -  .10  -    .44    7  - │ ← pre-filtered
+│ Maelis    ◌  .42 .38 .31 .35  .37  .55  -  .00  -    .20    -  ↓ │ ← below threshold
+│ ...                                                              │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 Funnel summary — same numbers as the capture card, broken out per

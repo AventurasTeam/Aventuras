@@ -208,7 +208,8 @@ export async function loadHappeningRows(
 
   const columns = SOURCE_COLUMNS.happening.join(', ')
   const statements: [string, unknown[]][] = []
-  // Unchunked: the KNN cut caps this at three query vectors' worth of KNN_K.
+  // Unchunked: the KNN cut caps this at six query vectors' worth of KNN_K —
+  // 1200 ids, well under BIND_CHUNK.
   if (scope.ids.length > 0) {
     statements.push([
       `SELECT ${columns} FROM ${SOURCE_TABLES.happening} WHERE branch_id = ? AND id IN (${scope.ids.map(() => '?').join(', ')})`,

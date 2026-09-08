@@ -37,11 +37,11 @@ type CandidateBase = {
   /** Exactly the text the prompt will carry; token cost is measured on it. */
   renderedText: string
   /**
-   * Cosine similarity to Q1/Q2/Q3, computed in JS over the stored vectors.
-   * `null` means that query produced no vector this turn — which `0`, a
+   * Cosine similarity to each query in this pass's stack, positionally aligned
+   * with it. `null` means that query produced no vector this turn — which `0`, a
    * genuine orthogonal similarity, cannot be distinguished from.
    */
-  sims: readonly [number | null, number | null, number | null]
+  sims: readonly (number | null)[]
   /** Unit-norm, same space as the queries. MMR's pairwise similarity input. */
   vector: Float32Array
   /** Chapters since the row became relevant. 0 for every row until M5 closes one. */
@@ -117,9 +117,8 @@ export type CandidateTrace = {
   kind: CandidateKind
   id: string
   displayName: string
-  simQ1: number | null
-  simQ2: number | null
-  simQ3: number | null
+  /** Positionally aligned with the pass's query stack; null where that query had no vector. */
+  sims: readonly (number | null)[]
   simBlend: number
   recencyFactor: number
   pinSignal: number
@@ -174,7 +173,13 @@ export type RankedType = {
   pool: readonly Candidate[]
 }
 
-export type QueryWeights = { action: number; digest: number; prose: number }
+export type QueryWeights = {
+  action: number
+  digest: number
+  summary: number
+  /** Pooled across every emitted Q4, not one share per query (retrieval.md → Blending). */
+  direct: number
+}
 
 /**
  * Every tunable the ranker reads. Frozen into each probe capture verbatim, and
@@ -196,13 +201,18 @@ export type RankerParams = {
   readonly typeOverhead: Readonly<Record<RetrievalType, number>>
 }
 
-/** Which of Q1/Q2/Q3 had non-empty text and was submitted to the embedder. */
-export type QueryTextPresence = readonly [boolean, boolean, boolean]
+/** Which slots had non-empty text and were submitted to the embedder. */
+export type QueryTextPresence = readonly boolean[]
+
+/** Which blend weight a query draws on. `direct` is pooled across every Q4. */
+export type QuerySlot = 'action' | 'digest' | 'summary' | 'direct'
 
 export type RankAllInput = {
   pools: Record<RetrievalType, readonly Candidate[]>
   budgets: Record<RetrievalType, number>
   params: RankerParams
+  /** Must be the same order every candidate's `sims` was computed in; length is enforced. */
+  querySlots: readonly QuerySlot[]
   /** Entry ids covered by each closed chapter, for the chapter-match boost. */
   chapterRanges: ReadonlyMap<string, ReadonlySet<string>>
   /** Injected so the ranker stays pure — tokens.ts is the production impl. */

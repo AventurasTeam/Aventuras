@@ -326,6 +326,12 @@ ORT-RN).**
   for the gap. Same pattern under both CPU and NNAPI EPs. **Per-turn
   budgeting uses the single-shot number** — three single-shot query
   embeds is realistically ~100 ms under normal use, not 30 ms.
+  **Read that three-embed total as PoC-era.** It predates the
+  [variable-length query stack](#query-construction--the-query-stack),
+  which embeds one to six queries per pass, and has not been re-run.
+  The embedder is excluded from every figure in
+  [Per-turn cost budget](#per-turn-cost-budget), so nothing there
+  covers it either.
 - **Cold init:** ~270 ms (asset extraction from APK dominates,
   ~150 ms). Warm re-init: ~120 ms.
 - **EP determinism:** CPU vs NNAPI cosine = 1.000000. Either ORT
@@ -811,8 +817,8 @@ retrieval hint inverts the cost of the recovery it triggers
 Three degenerate emissions are closed before embedding: identical
 strings are deduplicated (three copies would split the pooled weight
 evenly and cost triple the KNN for one signal), empty strings are
-filtered, and an oversized string is capped rather than left to the
-[truncation contract](#truncation-contract).
+filtered, and an oversized string is capped at 200 characters rather
+than left to the [truncation contract](#truncation-contract).
 
 **Storage.** `story_entries.metadata.retrievalQueries`, capped at
 three, excluded from `stateReport`, and **not inherited** — a query
@@ -1053,11 +1059,11 @@ configurable; the user action and one trailing entry are the floor.
 **The surface is defined here, independently of the query stack.** It
 is deliberately _not_ the assembled embed texts. Deriving it from the
 queries makes the lexical pathway inherit the dense pathway's inputs,
-which defeats the point of having a complement — and it made keyword
-matching conditional on Q3's top-K selection, so a proper noun in a
-sentence the extract skipped could never fire. With Q3 slated for
-removal, an independent surface is also what keeps that removal from
-disturbing this pathway.
+which defeats the point of having a complement — and under the removed
+prose extract it made keyword matching conditional on that slot's
+top-K selection, so a proper noun in a sentence the extract skipped
+could never fire. Independence is also what let that slot be deleted
+without disturbing this pathway.
 
 Entries inside `protectedBuffer` are scanned even though they are
 already in context verbatim: the mention is in context, but the lore
@@ -1950,13 +1956,16 @@ Desktop is nonetheless the least interesting part of it. The scaling
 obligations below are unaffected — query count is a fixed small
 constant, not a term proportional to awareness rows or branch entries —
 and retrieval remains under 1% of a turn. The doubling bites in the two
-places this table does not cover, and both are obligations on whichever
-slice implements Q4 rather than assumptions the design may make:
+places this table does not cover, and both are obligations on whoever
+sources Q4 rather than assumptions the design may make:
 
-- **The embedder is excluded from every figure here.** It goes from
-  three embedding calls per turn to six, and on a local ONNX embedder
-  it is plausibly the largest single term in the pass. Nothing has
-  measured it.
+- **The embedder is excluded from every row of this table, though the
+  bench does measure it** — `embedMs` is one of the five spans it
+  emits, so re-running it reports the real figure. The per-turn embed
+  is **one batched call** whose text count goes from three to six, not
+  three calls becoming six; a local ONNX runtime may still loop per
+  text inside that call. Nothing has re-run it against the wider
+  stack.
 - **Mobile doubles an already-open risk** — see below.
 
 **Mobile is unmeasured.** Every figure here is desktop. The PoC's

@@ -67,4 +67,14 @@ describe('bundled pack', () => {
     // The tagged-block macro is the OTHER contract; it must not leak in here.
     expect(classifier + refresh).not.toContain('<suggestions>')
   })
+
+  it('asks the fallback classifier for the one-sentence summary Q3 retrieval needs', () => {
+    const context = {
+      entities: [],
+      lastTurns: [{ content: 'The gate groaned open.' }],
+    }
+    const classifier = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, context)
+
+    expect(classifier).toMatch(/one[- ]sentence summary/i)
+  })
 })

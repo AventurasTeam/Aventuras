@@ -12,12 +12,7 @@ import { EmbedderCancelledError, type EmbedderErrorKind } from '@/lib/embedder'
 import { loadAwarenessForScene, type AwarenessRow } from './awareness'
 import { KNN_K, RANKER_DEFAULTS } from './constants'
 import { buildKeywordInjections, type KeywordRetrievalSettings } from './injection'
-import {
-  matchTerms,
-  nameKeywordIndexFrom,
-  normalizeTerm,
-  type NameKeywordIndex,
-} from './name-index'
+import { entityNameIndexFrom, matchTerms, normalizeTerm, type EntityNameIndex } from './name-index'
 import {
   buildStructuralFloor,
   filterEntityPool,
@@ -78,10 +73,7 @@ export type RetrievalParams = {
   dim: number
   budgets: Record<RetrievalType, number>
   /** The floor supplies the scene / location / thread lines, so they are not accepted here. */
-  query: Omit<
-    QueryStackInput,
-    'index' | 'sceneEntityNames' | 'currentLocationName' | 'activeThreadTitles'
-  >
+  query: Omit<QueryStackInput, 'sceneEntityNames' | 'currentLocationName' | 'activeThreadTitles'>
   sceneCharacterIds: readonly string[]
   sceneEntityIds: readonly string[]
   currentLocationId: string | null
@@ -109,7 +101,7 @@ export type RetrievalTimings = {
   totalMs: number
   /** Blocking embed of every row a classifier dirtied since the last pass. */
   syncMs: number
-  /** The one embedder call behind the three-vector query stack. */
+  /** The one embedder call behind the query stack's one to six live queries. */
   embedMs: number
   /**
    * Wall-clock span covering every vec0 KNN round trip, plus the happenings
@@ -300,7 +292,7 @@ async function runRetrievalPass(
       loadExistingVecTables(deps.queryAll, params.dim),
       countStaleHappenings(deps.queryAll, params.branchId),
     ])
-  const index = nameKeywordIndexFrom(sourceRows.entities, sourceRows.lore)
+  const index = entityNameIndexFrom(sourceRows.entities)
 
   const floor = buildStructuralFloor({
     entities: sourceRows.entities,
@@ -313,7 +305,6 @@ async function runRetrievalPass(
 
   const queries = buildQueryStack({
     ...params.query,
-    index,
     sceneEntityNames: floor.sceneEntities.map((e) => e.name),
     currentLocationName: floor.currentLocation?.name ?? null,
     activeThreadTitles: floor.activeThreads.map((t) => t.title),
@@ -352,7 +343,7 @@ async function runRetrievalPass(
     threads: [],
     chapters: [],
   }
-  // Wall-clock, not a sum of per-call spans: the kinds and the three query
+  // Wall-clock, not a sum of per-call spans: the kinds and the one to six query
   // vectors inside each now overlap, so summing them would exceed the elapsed
   // time and break RetrievalTimings' disjoint-sub-span contract. Happenings sit
   // out this batch — their pool depends on which chapters win budget.
@@ -367,6 +358,7 @@ async function runRetrievalPass(
 
   const rankTypeInput = {
     params: RANKER_DEFAULTS,
+    querySlots: queries.slots,
     chapterRanges,
     countTokens,
   }
@@ -395,7 +387,7 @@ async function runRetrievalPass(
 
   // Chapter membership has to reach pool CONSTRUCTION, not only scoring
   // (retrieval.md → Chapter-match boost on happenings). A happening outside the
-  // KNN cut for all three query vectors is never scored, so a boost applied
+  // KNN cut for every live query is never scored, so a boost applied
   // afterwards can reorder the admitted set but never admit the scattered rows
   // the mechanism exists to rescue — and low own-similarity is exactly their
   // profile. Seating is still earned: these join the pool, they do not bypass
@@ -521,7 +513,7 @@ type PoolCtx = {
   kind: VecTargetKind
   existingVecTables: ReadonlySet<string>
   queryVectors: readonly (Float32Array | null)[]
-  index: NameKeywordIndex
+  index: EntityNameIndex
   floor: StructuralFloor
   sourceRows: SourceRows
   /** Pool-scoped, unlike sourceRows: see loadHappeningRows. Empty for other kinds. */
@@ -678,13 +670,8 @@ function assembleCandidates(
 
   const sim = (vector: Float32Array, query: Float32Array | null): number | null =>
     query === null ? null : cosine(vector, query)
-  const simsFor = (
-    vector: Float32Array,
-  ): readonly [number | null, number | null, number | null] => [
-    sim(vector, queryVectors[0]),
-    sim(vector, queryVectors[1]),
-    sim(vector, queryVectors[2]),
-  ]
+  const simsFor = (vector: Float32Array): readonly (number | null)[] =>
+    queryVectors.map((query) => sim(vector, query))
 
   // kw = keyword_boost(c, scan_text) (retrieval.md → Pseudocode): candidate surface
   // vs scan text, NOT `queries` — the reverse matches every row's own indexed terms.

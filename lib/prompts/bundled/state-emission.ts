@@ -11,7 +11,7 @@ export const STATE_EMISSION = `After your narrative prose, append exactly one <s
     <item id="item ID" to="ID" from="ID" slot="equipped_items | inventory" />
     <stackable key="lowercase name, e.g. gold" amount="quantity moved" to="ID" from="ID" />
   </transfers>
-  <summary>one sentence summarizing what happened in this reply</summary>
+  <summary>one sentence summarizing what happened in this reply — identify the people, places and things that mattered by name, not ID</summary>
 </state>
 
 Omit any inner tag you have nothing to report for. Use only the IDs shown to you above, without brackets — never invent one. Only reference items and locations that already have an ID; if something is genuinely new, describe it in prose only and leave it out of the structured block. \`to\` or \`from\` may be omitted on a transfer when there's no specific known other party (e.g. found loose, spent on someone off-scene).`

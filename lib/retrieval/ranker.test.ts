@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 import { RANKER_DEFAULTS } from './constants'
-import { rankAll, rankPerType } from './ranker'
-import type { Candidate, InjectedRow, KeywordInjection, RetrievalType } from './types'
+import { blendSims, rankAll, rankPerType } from './ranker'
+import type { Candidate, InjectedRow, KeywordInjection, QuerySlot, RetrievalType } from './types'
 
 const v = (...xs: number[]): Float32Array => {
   const n = Math.hypot(...xs)
@@ -68,22 +68,25 @@ const emptyPools = (): Record<RetrievalType, Candidate[]> => ({
 const HAPPENING_COST = 10 + RANKER_DEFAULTS.typeOverhead.happenings
 const LORE_COST = 10 + RANKER_DEFAULTS.typeOverhead.lore
 
+const FIXED_SLOTS: readonly QuerySlot[] = ['action', 'digest', 'summary']
+
 const base = {
   params: RANKER_DEFAULTS,
   chapterRanges: new Map<string, ReadonlySet<string>>(),
   countTokens,
+  querySlots: FIXED_SLOTS,
 }
 
 describe('rankPerType — scoring', () => {
   it('blends the three query sims by the configured weights', () => {
     const r = rankPerType([candidate({ id: 'a', sims: [1, 0, 0] })], 'happenings', 1000, base)
-    expect(r.traces[0].simBlend).toBeCloseTo(0.35, 6)
+    expect(r.traces[0].simBlend).toBeCloseTo(0.4, 6)
   })
 
   it('re-normalizes weights across the present queries when one is missing', () => {
-    // Q3 absent: 0.35/0.35 renormalize to 0.5/0.5, so sims [1, 0, null] blend to 0.5.
+    // Q3 absent: action/digest renormalize (0.3/0.55), so sims [1, 0, null] blend to 6/11.
     const r = rankPerType([candidate({ id: 'a', sims: [1, 0, null] })], 'happenings', 1000, base)
-    expect(r.traces[0].simBlend).toBeCloseTo(0.5, 6)
+    expect(r.traces[0].simBlend).toBeCloseTo(6 / 11, 6)
   })
 
   it('decays by chapter age at the type lambda', () => {
@@ -560,12 +563,12 @@ describe('blend with absent query vectors', () => {
     )
 
     const byId = new Map(out.traces.map((t) => [t.id, t]))
-    // Only Q1 is present, so the blend renormalizes to sim_q1 itself.
+    // Only Q1 is present, so the blend renormalizes to its similarity itself.
     expect(byId.get('absent')?.simBlend).toBeCloseTo(0.8, 10)
-    // All three present: 0.8*0.35 renormalized over the full weight total.
-    expect(byId.get('zero')?.simBlend).toBeCloseTo((0.8 * 0.35) / (0.35 + 0.35 + 0.3), 10)
-    expect(byId.get('absent')?.simQ2).toBeNull()
-    expect(byId.get('zero')?.simQ2).toBe(0)
+    // All three present: 0.8*0.3 renormalized over the full weight total.
+    expect(byId.get('zero')?.simBlend).toBeCloseTo((0.8 * 0.3) / (0.3 + 0.25 + 0.2), 10)
+    expect(byId.get('absent')?.sims[1]).toBeNull()
+    expect(byId.get('zero')?.sims[1]).toBe(0)
   })
 })
 
@@ -603,7 +606,7 @@ describe('C4 — ranker purity', () => {
   // vacuously, so pin the files the closure is known to reach.
   it('reaches the modules the ranker and query stack actually pull in', () => {
     expect(closure).toEqual(
-      expect.arrayContaining(['ranker.ts', 'mmr.ts', 'vector.ts', 'queries.ts', 'name-index.ts']),
+      expect.arrayContaining(['ranker.ts', 'mmr.ts', 'vector.ts', 'queries.ts']),
     )
   })
 
@@ -748,5 +751,75 @@ describe('rankAll — keyword injection routing', () => {
     expect(out.lore.selected.map((c) => c.id)).toEqual(['l1'])
     for (const type of ['entities', 'happenings', 'threads', 'chapters'] as const)
       expect(out[type].selected).toEqual([])
+  })
+})
+
+describe('sims / slot alignment', () => {
+  // A short sims scores NaN, but a long one reads as a plausible score, so the
+  // pool is refused rather than blended (replay.ts refuses a holed row the same way).
+  it('refuses a candidate carrying fewer sims than the pass has slots', () => {
+    expect(() =>
+      rankPerType([candidate({ id: 'short', sims: [1, 0] })], 'happenings', 1000, base),
+    ).toThrow('candidate short carries 2 sims for 3 query slots')
+  })
+
+  it('refuses a candidate carrying more sims than the pass has slots', () => {
+    expect(() =>
+      rankPerType([candidate({ id: 'long', sims: [1, 0, 0, 0.5] })], 'happenings', 1000, base),
+    ).toThrow('candidate long carries 4 sims for 3 query slots')
+  })
+
+  it('accepts a pool aligned with a widened slot list', () => {
+    const r = rankPerType([candidate({ id: 'wide', sims: [1, 0, 0, 0.5] })], 'happenings', 1000, {
+      ...base,
+      querySlots: [...FIXED_SLOTS, 'direct'],
+    })
+    expect(r.traces[0].id).toBe('wide')
+  })
+})
+
+describe('blendSims pooling', () => {
+  const weights = { action: 0.3, digest: 0.25, summary: 0.2, direct: 0.25 }
+
+  it('spends one pooled share across every emitted Q4, not one share each', () => {
+    // Emission volume must not become influence (retrieval.md → Blending).
+    const one = blendSims([1, null, null, 0.4], [...FIXED_SLOTS, 'direct'], weights)
+    const three = blendSims(
+      [1, null, null, 0.4, 0.4, 0.4],
+      [...FIXED_SLOTS, 'direct', 'direct', 'direct'],
+      weights,
+    )
+    // (0.3 * 1 + 0.25 * 0.4) / (0.3 + 0.25)
+    expect(one).toBeCloseTo(0.4 / 0.55, 10)
+    expect(three).toBeCloseTo(one, 10)
+  })
+
+  it('averages the emitted sims before applying the pooled weight', () => {
+    // mean(0.2, 0.8) = 0.5, and the pooled share is the only live one, so it renormalizes out.
+    const blended = blendSims(
+      [null, null, null, 0.2, 0.8],
+      [...FIXED_SLOTS, 'direct', 'direct'],
+      weights,
+    )
+    expect(blended).toBeCloseTo(0.5, 10)
+  })
+
+  it('leaves an emitted query with no vector out of the pooled average', () => {
+    // mean(0.4) = 0.4; counting the absent one as 0 would halve it.
+    const blended = blendSims(
+      [null, null, null, null, 0.4],
+      [...FIXED_SLOTS, 'direct', 'direct'],
+      weights,
+    )
+    expect(blended).toBeCloseTo(0.4, 10)
+  })
+
+  it('re-normalizes to the action share alone when nothing else is live', () => {
+    // Cold start: turn 1 ranks on Q1 alone (retrieval.md → Cold start).
+    expect(blendSims([0.7, null, null], FIXED_SLOTS, weights)).toBeCloseTo(0.7, 10)
+  })
+
+  it('returns 0 when no query produced a vector', () => {
+    expect(blendSims([null, null, null], FIXED_SLOTS, weights)).toBe(0)
   })
 })

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { CAPTURE_VERSION, type ProbeCapturePayload } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
-import { RANKER_DEFAULTS } from '@/lib/retrieval'
+import { RANKER_DEFAULTS, type RankerParams } from '@/lib/retrieval'
 import { retrievalFailure } from '@/lib/retrieval/__tests__/outcome'
 import { queryAllOf } from '@/lib/retrieval/__tests__/query-all'
 
@@ -16,6 +16,7 @@ import {
   decodeCaptures,
   deleteCaptureOp,
 } from './read'
+import { assertRankerParams } from './validate'
 import { writeProbeCapture } from './writer'
 
 describe('capturesForStoryQuery', () => {
@@ -159,6 +160,65 @@ describe('decodeCapture', () => {
     expect(() => decodeCapture(['pc_1', 'br_a', 1000, 'light', null, 100, bytes])).toThrow(message)
   })
 
+  // replayType reads queries[i].source to pick each entry's blend weight, so an
+  // element that is not an object carrying one dies inside the simulator unless
+  // the shape guard classifies the row as corrupt here.
+  it.each<[string, unknown, RegExp]>([
+    ['null', null, /queries\[0\] must be an object/i],
+    ['a bare string', 'user_action', /queries\[0\] must be an object/i],
+    ['an object with no source', { text: '', token_count: 0 }, /queries\[0\]\.source/i],
+  ])('rejects a capture whose first query entry is %s', (_label, entry, message) => {
+    const payload = buildCapturePayload(captureInput())
+    const { bytes } = compressPayload({
+      ...payload,
+      queries: [entry, ...payload.queries.slice(1)] as ProbeCapturePayload['queries'],
+    })
+
+    expect(() => decodeCapture(['pc_1', 'br_a', 1000, 'light', null, 100, bytes])).toThrow(message)
+  })
+
+  // blendSims reads sims[i] against the slot of queries[i], so a candidate whose
+  // sims is not one number-or-null per query either throws raw inside the
+  // simulator or scores NaN with nothing to mark it. NaN and Infinity are absent
+  // here on purpose: the payload is JSON, which flattens both to null before a
+  // capture is ever stored, so no such case can reach the guard.
+  it.each<[string, unknown, RegExp]>([
+    ['not an array', null, /pools\.entities\[0\]\.sims must be an array/i],
+    ['one value short', [0.5, 0.5], /must carry one value per query/i],
+    ['one value long', [0.5, 0.5, 0.5, 0.5], /must carry one value per query/i],
+    ['a numeric string', [0.5, 0.5, '0.5'], /sims\[2\] must be a finite number or null/i],
+    ['a boolean', [0.5, true, 0.5], /sims\[1\] must be a finite number or null/i],
+  ])('rejects a capture whose first entity candidate has sims %s', (_label, sims, message) => {
+    const payload = buildCapturePayload(captureInput())
+    const [first, ...rest] = payload.pools.entities
+    const { bytes } = compressPayload({
+      ...payload,
+      pools: {
+        ...payload.pools,
+        entities: [{ ...first, sims }, ...rest] as ProbeCapturePayload['pools']['entities'],
+      },
+    })
+
+    expect(() => decodeCapture(['pc_1', 'br_a', 1000, 'light', null, 100, bytes])).toThrow(message)
+  })
+
+  it('accepts a candidate whose absent-query slots are null', () => {
+    const payload = buildCapturePayload(captureInput())
+    const [first, ...rest] = payload.pools.entities
+    const { bytes } = compressPayload({
+      ...payload,
+      pools: {
+        ...payload.pools,
+        entities: [
+          { ...first, sims: [0.5, null, null] },
+          ...rest,
+        ] as ProbeCapturePayload['pools']['entities'],
+      },
+    })
+
+    expect(decodeCapture(['pc_1', 'br_a', 1000, 'light', null, 100, bytes]).id).toBe('pc_1')
+  })
+
   it('rejects a payload that decodes to something other than an object', () => {
     const { bytes } = compressPayload('not a capture' as unknown as ProbeCapturePayload)
 
@@ -177,6 +237,31 @@ describe('decodeCapture', () => {
       capture_version: CAPTURE_VERSION - 1,
     })
 
+    expect(() => decodeCapture(['pc_1', 'br_a', 1000, 'light', null, 100, bytes])).toThrow(
+      /format version/i,
+    )
+  })
+
+  // The version guard has to run before the params guard: a capture whose
+  // tunables were renamed since otherwise reports as malformed rather than
+  // as out of date, and only the second reading tells a reader what to do.
+  it('refuses a v5 capture at the version check rather than on its stale weight keys', () => {
+    const payload = buildCapturePayload(captureInput())
+    const v5 = {
+      ...payload,
+      capture_version: 5,
+      params: {
+        ...payload.params,
+        ranker: {
+          ...RANKER_DEFAULTS,
+          weights: { action: 0.35, digest: 0.35, prose: 0.3 },
+        } as unknown as RankerParams,
+      },
+    }
+    const { bytes } = compressPayload(v5)
+
+    // Arms the trap: the stale weight keys really would throw on their own.
+    expect(() => assertRankerParams(v5.params.ranker)).toThrow(/weights\.summary/)
     expect(() => decodeCapture(['pc_1', 'br_a', 1000, 'light', null, 100, bytes])).toThrow(
       /format version/i,
     )

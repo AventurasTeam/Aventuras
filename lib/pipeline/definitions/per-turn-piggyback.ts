@@ -81,7 +81,12 @@ export const fallbackClassifierSchema = z.object({
         .default([]),
     })
     .optional(),
-  summary: z.string().optional(),
+  summary: z
+    .string()
+    .optional()
+    .describe(
+      'One sentence summarizing what happened in this turn. Used verbatim as a retrieval query next turn, so identify the people, places and things that mattered by name, not ID.',
+    ),
 })
 
 // Structured output validates the whole object in one shot, so without

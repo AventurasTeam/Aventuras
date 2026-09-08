@@ -207,8 +207,7 @@ const BASE: RetrievalParams = {
   query: {
     userAction: 'I ask about the amulet.',
     eraName: null,
-    piggybackSummary: null,
-    lastNarrativeContent: 'Kara Vex drew the blade.',
+    piggybackSummary: 'Kara Vex drew the blade.',
   },
   sceneCharacterIds: ['char_a'],
   sceneEntityIds: ['char_a'],
@@ -554,7 +553,7 @@ describe('runRetrieval — query embed failure', () => {
 
     const { partial } = expectBlocking(out)
     expect(partial.floor?.sceneEntities.map((e) => e.id)).toEqual(['char_a'])
-    expect(partial.queries?.q1.text).toBe('I ask about the amulet.')
+    expect(partial.queries?.specs[0].text).toBe('I ask about the amulet.')
     expect(partial.bundles).toEqual({})
   })
 
@@ -576,7 +575,7 @@ describe('runRetrieval — query embed failure', () => {
     if (out.ok) throw new Error('expected a cancellation')
     expect(out.cancelled).toBe(true)
     // The partial still reports how far the pass got, exactly as the failure arm does.
-    expect(out.partial.queries?.q1.text).toBe('I ask about the amulet.')
+    expect(out.partial.queries?.specs[0].text).toBe('I ask about the amulet.')
   })
 
   it('reports a typed call failure when the embed request itself fails', async () => {
@@ -750,7 +749,7 @@ describe('runRetrieval — KNN passes', () => {
     )
 
   // Every query is present here: Q1 from userAction, Q2 from the seated scene
-  // entity, Q3 from lastNarrativeContent.
+  // entity, Q3 from the piggyback summary.
   const allThree = () => makeQueryAll({ entities: [entityRow('char_a', 'Kara Vex')] })
 
   it("issues one pass per present query per type, against that type's vec family", async () => {
@@ -759,6 +758,32 @@ describe('runRetrieval — KNN passes', () => {
 
     expect(out.queries.presence).toEqual([true, true, true])
     expect(knnCountsByFamily(queryAll)).toEqual(perKind(3))
+  })
+
+  it('issues an extra pass per emitted Q4 query and blends it as one pooled share', async () => {
+    const queryAll = makeQueryAll({
+      entities: [entityRow('char_a', 'Kara Vex'), entityRow('char_b', 'Mira')],
+      knn: [hit('char_b')],
+    })
+    // Orthogonal past the fixed three: a blend that ignored the Q4 sims would
+    // score the same as one that charged them.
+    const embedTexts = vi.fn(async (texts: string[]) => ({
+      vectors: texts.map((_, i) => Float32Array.from(i < 3 ? [1, 0] : [0, 1])),
+      dim: DIM,
+    }))
+    const out = expectOk(
+      await runRetrieval(
+        deps({ queryAll, embedTexts }),
+        params({ query: { emittedQueries: ['House Eldrin', 'marsh nobility'] } }),
+      ),
+    )
+
+    expect(out.queries.slots).toEqual(['action', 'digest', 'summary', 'direct', 'direct'])
+    expect(knnCountsByFamily(queryAll)).toEqual(perKind(5))
+    const trace = out.bundles.entities.traces[0]
+    expect(trace.sims).toEqual([1, 1, 1, 0, 0])
+    // (0.3 + 0.25 + 0.2 + 0.25 * mean(0, 0)) / 1.0
+    expect(trace.simBlend).toBeCloseTo(0.75, 10)
   })
 
   // A story that needs no lead entity embeds nothing at creation, so the dim
@@ -779,7 +804,7 @@ describe('runRetrieval — KNN passes', () => {
         params({
           sceneEntityIds: [],
           sceneCharacterIds: [],
-          query: { lastNarrativeContent: '' },
+          query: { piggybackSummary: null },
         }),
       ),
     )
@@ -916,7 +941,9 @@ describe('runRetrieval — query stack', () => {
       params({ currentLocationId: 'loc_1' }),
     )
 
-    expect(expectOk(out).queries.q2.text).toBe('Kara Vex, The Hollow.\nActive threads: The Amulet.')
+    expect(expectOk(out).queries.specs[1].text).toBe(
+      'Kara Vex, The Hollow.\nActive threads: The Amulet.',
+    )
   })
 
   it('skips the embed call when every query is empty', async () => {
@@ -932,7 +959,7 @@ describe('runRetrieval — query stack', () => {
       params({
         sceneEntityIds: [],
         sceneCharacterIds: [],
-        query: { userAction: '', lastNarrativeContent: '' },
+        query: { userAction: '', piggybackSummary: null },
       }),
     )
 
@@ -1509,8 +1536,8 @@ describe('runRetrieval — selected location ids', () => {
   })
 })
 
-// The index derives from source rows the pass already loaded; these pin that derivation
-// through both consumers: the happening keyword surface and Q3 sentence selection.
+// The index derives from source rows the pass already loaded; this pins that
+// derivation through its one consumer: the happening keyword surface.
 describe('runRetrieval — name/keyword index', () => {
   it('boosts a happening whose awareness source names a branch entity', async () => {
     const out = await runRetrieval(
@@ -1537,28 +1564,6 @@ describe('runRetrieval — name/keyword index', () => {
     expect(boost('hap_named')).toBeGreaterThan(0)
     // Negative control: an awareness source naming nothing in the index.
     expect(boost('hap_plain')).toBe(0)
-  })
-
-  it('scores Q3 sentence selection with the branch lore keywords', async () => {
-    const out = await runRetrieval(
-      deps({
-        queryAll: makeQueryAll({
-          lore: [loreRow('lore_1', 'The Veil', { keywords: ['veilstone'] })],
-        }),
-      }),
-      params({
-        sceneEntityIds: [],
-        sceneCharacterIds: [],
-        query: {
-          lastNarrativeContent:
-            'Rain fell over the long grey afternoon and nothing happened. The veilstone hummed.',
-        },
-      }),
-    )
-
-    const scores = expectOk(out).queries.q3.sentenceScores ?? []
-    expect(scores).toHaveLength(2)
-    expect(scores[1]).toBeGreaterThan(scores[0])
   })
 })
 

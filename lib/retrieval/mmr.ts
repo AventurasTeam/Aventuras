@@ -16,8 +16,8 @@ export function mmrRank<T extends MmrInput>(
   lambdaDiv: number,
 ): MmrRanked<T>[] {
   const remaining = [...candidates]
-  // Keyed by id: a pool holds one Candidate per id (Q1/Q2/Q3 hits are merged
-  // into a single row before ranking), so ids don't collide here.
+  // Keyed by id: a pool holds one Candidate per id (every query's hits are
+  // merged into a single row before ranking), so ids don't collide here.
   const maxSim = new Map<string, number>()
   const out: MmrRanked<T>[] = []
 

@@ -251,9 +251,7 @@ function trace(id: string, finalScore: number, mmrRank: number): CandidateTrace 
     kind: 'lore',
     id,
     displayName: 'The drowned archive',
-    simQ1: 0.71,
-    simQ2: 0.62,
-    simQ3: 0.53,
+    sims: [0.71, 0.62, 0.53],
     simBlend: 0.64,
     recencyFactor: 0.98,
     pinSignal: 0.41,
@@ -287,13 +285,19 @@ const QUERY_TEXTS = [
   'A courier arrived at dusk carrying nothing but an empty seal case.',
 ] as const
 
-const queryStack = (): QueryStack => ({
-  q1: { text: QUERY_TEXTS[0], source: 'user_action' },
-  q2: { text: QUERY_TEXTS[1], source: 'structural_digest' },
-  q3: { text: QUERY_TEXTS[2], source: 'prose_extract' },
-  presence: [true, true, true],
-  embedTexts: [...QUERY_TEXTS],
-})
+const queryStack = (): QueryStack => {
+  const specs = [
+    { text: QUERY_TEXTS[0], source: 'user_action' },
+    { text: QUERY_TEXTS[1], source: 'structural_digest' },
+    { text: QUERY_TEXTS[2], source: 'piggyback_summary' },
+  ] as const
+  return {
+    specs,
+    slots: ['action', 'digest', 'summary'],
+    presence: [true, true, true],
+    embedTexts: [...QUERY_TEXTS],
+  }
+}
 
 type CaptureRow = {
   branch_id: string
@@ -1090,32 +1094,16 @@ describe('retrieval phase — RetrievalParams assembly', () => {
     expect(lastParams().query.userAction).toBe('')
   })
 
-  it('takes Q3 from the last ai_reply', async () => {
-    seedOpenStory({
-      entries: [
-        entry(1, 'opening', 'The keep stands.', meta()),
-        entry(2, 'user_action', 'I look around.', meta()),
-        entry(3, 'ai_reply', 'The hall is cold.', meta()),
-        entry(4, 'user_action', 'I draw the blade.', meta()),
-      ],
-    })
-
-    await runRetrievalPhase()
-
-    expect(lastParams().query.lastNarrativeContent).toBe('The hall is cold.')
-  })
-
-  // A trailing block survives sentence splitting as one pseudo-sentence
-  // (splitSentences needs a terminator plus whitespace, which `</state>` never
-  // gives) and outscores real narrative, spending a Q3 slot on tags and ids.
-  it('strips a trailing block before Q3 extracts prose', async () => {
+  // readSceneSource's NARRATIVE_KINDS filter also feeds Q2's scene entities and
+  // location; narrowing it to ai_reply alone would silently miss every opening row.
+  it("reads the opening entry's metadata when no ai_reply exists yet", async () => {
     seedOpenStory({
       entries: [
         entry(
           1,
-          'ai_reply',
-          'The hall is cold.\n<state><summary>Kara waits</summary></state>',
-          meta(),
+          'opening',
+          'The keep stands against the ash.',
+          meta({ summary: 'The keep endures.' }),
         ),
         entry(2, 'user_action', 'I draw the blade.', meta()),
       ],
@@ -1123,35 +1111,18 @@ describe('retrieval phase — RetrievalParams assembly', () => {
 
     await runRetrievalPhase()
 
-    expect(lastParams().query.lastNarrativeContent).toBe('The hall is cold.')
+    expect(lastParams().query.piggybackSummary).toBe('The keep endures.')
   })
 
-  // Cold start (retrieval.md → Cold start): turn 1 has no ai_reply, and the
-  // opening entry the wizard always commits is what Q3 extracts from. Selecting
-  // ai_reply alone passes '' and silently drops Q3 on the first turn of every
-  // story.
-  it('takes Q3 from the opening entry on turn 1', async () => {
-    seedOpenStory({
-      entries: [
-        entry(1, 'opening', 'The keep stands against the ash.', meta()),
-        entry(2, 'user_action', 'I draw the blade.', meta()),
-      ],
-    })
-
-    await runRetrievalPhase()
-
-    expect(lastParams().query.lastNarrativeContent).toBe('The keep stands against the ash.')
-  })
-
-  it('leaves Q3 empty when the branch carries no narrative entry', async () => {
+  it('leaves the piggyback summary null when the branch carries no narrative entry', async () => {
     seedOpenStory({ entries: [entry(1, 'user_action', 'I draw the blade.', meta())] })
 
     await runRetrievalPhase()
 
-    expect(lastParams().query.lastNarrativeContent).toBe('')
+    expect(lastParams().query.piggybackSummary).toBeNull()
   })
 
-  it("enriches Q2 with the last narrative entry's piggyback summary", async () => {
+  it("carries the last narrative entry's piggyback summary through to Q3", async () => {
     seedOpenStory({
       entries: [
         entry(1, 'ai_reply', 'Steel sings.', meta({ summary: 'Kael drew on the guard.' })),
@@ -1164,7 +1135,7 @@ describe('retrieval phase — RetrievalParams assembly', () => {
     expect(lastParams().query.piggybackSummary).toBe('Kael drew on the guard.')
   })
 
-  it('leaves the Q2 summary line absent when the block never parsed', async () => {
+  it('leaves the piggyback summary (Q3) absent when the block never parsed', async () => {
     seedOpenStory({
       entries: [
         entry(1, 'ai_reply', 'Steel sings.', meta()),

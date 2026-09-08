@@ -4,6 +4,7 @@ import type {
   CandidateTrace,
   DropReason,
   KeywordInjection,
+  QuerySlot,
   QueryWeights,
   RankAllInput,
   RankedType,
@@ -14,6 +15,8 @@ import type {
 
 export type RankTypeInput = {
   params: RankerParams
+  /** Must be the same order every candidate's `sims` was computed in; length is enforced. */
+  querySlots: readonly QuerySlot[]
   chapterRanges: ReadonlyMap<string, ReadonlySet<string>>
   countTokens: (text: string) => number
   /** Chapters that won budget this turn; only they feed the happenings boost. */
@@ -47,18 +50,29 @@ type Scored = {
   bypassTriggered: boolean
 }
 
-function blendSims(
-  sims: readonly [number | null, number | null, number | null],
+// Q4 sims are averaged into one pooled share: per-query weighting would make
+// emission volume influence (retrieval.md → Blending).
+export function blendSims(
+  sims: readonly (number | null)[],
+  slots: readonly QuerySlot[],
   weights: QueryWeights,
 ): number {
-  const w = [weights.action, weights.digest, weights.prose]
+  const direct: number[] = []
   let weighted = 0
   let total = 0
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < slots.length; i++) {
     const s = sims[i]
     if (s === null) continue
-    weighted += w[i] * s
-    total += w[i]
+    if (slots[i] === 'direct') {
+      direct.push(s)
+      continue
+    }
+    weighted += weights[slots[i]] * s
+    total += weights[slots[i]]
+  }
+  if (direct.length > 0) {
+    weighted += weights.direct * (direct.reduce((a, b) => a + b, 0) / direct.length)
+    total += weights.direct
   }
   // Renormalizing over the present queries keeps an absent one from dragging
   // every candidate uniformly toward the noise floor.
@@ -72,7 +86,7 @@ function score(
   boostedEntryIds: ReadonlySet<string>,
 ): Scored {
   const { params } = input
-  const simBlend = blendSims(c.sims, params.weights)
+  const simBlend = blendSims(c.sims, input.querySlots, params.weights)
   const kwBoostValue = c.keywordHits.length > 0 ? params.kwBoost : 0
   const common = c.kind === 'happening' && c.commonKnowledge
   const lambda = params.lambda[type]
@@ -153,9 +167,7 @@ function trace(
     kind: s.candidate.kind,
     id: s.id,
     displayName: s.candidate.displayName,
-    simQ1: s.candidate.sims[0],
-    simQ2: s.candidate.sims[1],
-    simQ3: s.candidate.sims[2],
+    sims: s.candidate.sims,
     simBlend: s.simBlend,
     recencyFactor: s.recencyFactor,
     pinSignal: s.pinSignal,
@@ -186,6 +198,19 @@ function boostedEntryIdsFor(input: RankTypeInput): ReadonlySet<string> {
   return out
 }
 
+// Checked here rather than inside blendSims, which runs per candidate. A short
+// `sims` scores NaN, but a long one silently drops a query's share and reads as a
+// plausible score instead.
+function assertSimsAligned(pool: readonly Candidate[], slots: readonly QuerySlot[]): void {
+  for (const c of pool) {
+    if (c.sims.length !== slots.length) {
+      throw new Error(
+        `rankPerType: candidate ${c.id} carries ${c.sims.length} sims for ${slots.length} query slots`,
+      )
+    }
+  }
+}
+
 export function rankPerType(
   wholePool: readonly Candidate[],
   type: RetrievalType,
@@ -197,6 +222,7 @@ export function rankPerType(
   // Seated rows leave the pool (retrieval.md → Keyword injection): never charged
   // twice, and filed as injections with no candidate record. CUT rows stay in.
   const pool = seatedIds.size === 0 ? wholePool : wholePool.filter((c) => !seatedIds.has(c.id))
+  assertSimsAligned(pool, input.querySlots)
 
   const boostedEntryIds = boostedEntryIdsFor(input)
   const scored = pool.map((c) => score(c, type, input, boostedEntryIds))

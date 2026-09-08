@@ -16,7 +16,7 @@
 ## Goal
 
 Each turn's prompt gains a retrieved slice: the pre-retrieval sync
-stage embeds dirty rows, three query vectors rank per-type
+stage embeds dirty rows, the query stack's vectors rank per-type
 candidate pools through the pure ranker module (scoring, decay,
 pinning, high-similarity bypass, MMR, greedy budget-fill), and the
 selected bundle renders into the prompt through new memory pack
@@ -30,7 +30,7 @@ Retrieval is a phase in the per-turn pipeline, after Pre commits
 the user-action delta. It never reads vec0 without syncing first —
 the sync stage embeds every `embedding_stale` row in one batch, and
 a row it cannot embed blocks the turn like a failed LLM call.
-Scoring blends three query similarities, decays by chapter age
+Scoring blends the per-query similarities, decays by chapter age
 scaled by the pin signal, adds keyword boosts, and revives
 deeply-decayed rows on very high similarity; MMR de-dupes within
 each type; hard-partitioned per-type token budgets fill greedily
@@ -87,13 +87,14 @@ ranker without being able to move a score. See
   gate, since a resubmit re-runs the same blocking sync stage; the
   switch action imports 3.1b's swap-dialog open action per C8);
   stale-at-KNN rows excluded from pools.
-- **Query stack:** Q1 user action; Q2 structural digest
-  (code-template floor + optional piggyback `summary` enrichment,
-  handed off by 3.2's parse);
-  Q3 heuristic prose extract (per-sentence scoring over the
-  entity-name and lore-keyword indexes, top-K concatenated);
-  weight re-normalization when a component is missing; cold-start
-  per canon.
+- **Query stack:** three to six ordered slots — Q1 user action; Q2
+  structural digest (code-template floor, purely structural); Q3 the
+  piggyback summary (`metadata.summary` handed off by 3.2's parse);
+  and up to three Q4 classifier-emitted queries, empties dropped,
+  capped at 200 characters before deduplication, sharing one pooled
+  `w_direct` rather than a weight each — the slot is built here, its
+  producer is not. Weight re-normalization over the live slots;
+  cold-start per canon.
 - **Pool build:** structural floor first (mode-dependent prompt
   buffer, active+in-scene, location, active threads, `always`
   rows), then per-type pools — three-sub-pool entity model,
@@ -157,8 +158,8 @@ ranker without being able to move a score. See
   near-duplicate; budget-fill skips an oversized candidate and
   stops at the noise floor; common-knowledge rows score without
   recency or pin (vitest on the pure module — no store, no DB).
-- Q3 extraction picks the fixture's entity-name / keyword / verb
-  sentences over filler (vitest).
+- Q3 carries the piggyback summary verbatim and reports itself
+  absent when no summary was written (vitest).
 - POV union: awareness of any in-scene character enters the pool;
   a non-scene character's awareness does not.
 - `retrieval_count` increments exactly once per injected awareness
@@ -197,7 +198,8 @@ criterion 7 met by the timing log — is recorded under
   option as posed. The index is built in memory from the source rows
   the pass has already loaded, so it costs no query of its own and
   cannot drift from the rows the floor and the pools are reading.
-  Q3 and Layer A share it.
+  The heuristic prose extract shared it until that slot was deleted;
+  the happening keyword surface is its remaining consumer.
 - **Per-type overhead constants** — **resolved:** measured against
   the shipped macro; the values and what shapes them are canon at
   [`retrieval.md → Token estimation`](../../../../memory/retrieval.md#token-estimation),

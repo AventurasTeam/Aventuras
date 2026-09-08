@@ -360,7 +360,7 @@ export function passInputs(
     runInTransaction: async () => {},
   }
   const userAction = prose(rand, 20)
-  const lastNarrativeContent = prose(rand, 150)
+  const recentNarrative = prose(rand, 150)
   const params = {
     branchId: BRANCH,
     modelId: MODEL_ID,
@@ -372,15 +372,15 @@ export function passInputs(
     query: {
       userAction,
       eraName: null,
-      piggybackSummary: null,
-      lastNarrativeContent,
+      // Non-null so all three queries stay live — steady-state, not the turn-1 cold start.
+      piggybackSummary: prose(rand, 20),
     },
     sceneCharacterIds,
     sceneEntityIds: sceneCharacterIds,
     currentLocationId: 'char_000000',
     recentProse: prose(rand, 200),
     // The default one-entry surface: the matchTerms cost measured is what a turn actually pays.
-    scanText: `${userAction}\n${lastNarrativeContent}`,
+    scanText: `${userAction}\n${recentNarrative}`,
     // Shipped default: the pre-pass short-circuits, so the ranker cost measured
     // here is the one every story pays until a user turns injection on.
     keywordRetrieval: STORY_SETTINGS_DEFAULTS.keywordRetrieval,

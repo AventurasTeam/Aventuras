@@ -6,6 +6,7 @@ import {
   type VecTargetKind,
 } from '@/lib/db'
 import {
+  buildQueryStack,
   countTokens,
   ENTITY_FRAMING,
   lines,
@@ -55,9 +56,7 @@ const candidateOf = (
   target_id: t.id,
   display_name: t.displayName,
   display_text: t.renderedText,
-  sim_q1: t.simQ1,
-  sim_q2: t.simQ2,
-  sim_q3: t.simQ3,
+  sims: [...t.sims],
   sim_blend: t.simBlend,
   recency_factor: t.recencyFactor,
   pin_signal: t.pinSignal,
@@ -114,22 +113,24 @@ const queryOf = (q: QuerySpec) => ({
   text: q.text,
   token_count: countTokens(q.text),
   source: q.source,
-  ...(q.sentenceScores ? { sentence_scores: [...q.sentenceScores] } : {}),
+})
+
+// A pass that failed before building a stack still captures the fixed slots, so
+// the probe renders them absent rather than showing no queries at all.
+const ABSENT_QUERY_STACK = buildQueryStack({
+  userAction: '',
+  sceneEntityNames: [],
+  currentLocationName: null,
+  activeThreadTitles: [],
+  eraName: null,
+  piggybackSummary: null,
 })
 
 // No query vector in either mode: λ_div — the one thing deep mode exists for —
 // needs candidate-vs-candidate cosines, and every other simulation re-blends
-// the per-row sim_q1..3 (probe.md → Deep mode).
-const queriesOf = (stack: QueryStack | null): ProbeCapturePayload['queries'] => {
-  if (stack === null) {
-    return [
-      queryOf({ text: '', source: 'user_action' }),
-      queryOf({ text: '', source: 'structural_digest' }),
-      queryOf({ text: '', source: 'prose_extract' }),
-    ]
-  }
-  return [queryOf(stack.q1), queryOf(stack.q2), queryOf(stack.q3)]
-}
+// the per-row `sims` (probe.md → Deep mode).
+const queriesOf = (stack: QueryStack | null): ProbeCapturePayload['queries'] =>
+  (stack ?? ABSENT_QUERY_STACK).specs.map(queryOf)
 
 const nameWithDescription = (name: string, description: string | null): string =>
   description ? `${name}: ${description}` : name

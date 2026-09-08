@@ -1,7 +1,13 @@
 import type { DatabaseSync } from 'node:sqlite'
 
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { buildQueryStack, countTokens, rankPerType, RANKER_DEFAULTS } from '@/lib/retrieval'
+import {
+  buildQueryStack,
+  countTokens,
+  rankPerType,
+  RANKER_DEFAULTS,
+  type QueryStackInput,
+} from '@/lib/retrieval'
 import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 
 import type { CaptureWriteInput } from '../writer'
@@ -21,17 +27,20 @@ export const loreCandidate = {
   embeddingStale: true,
 }
 
+export const querySlots = ['action', 'digest', 'summary'] as const
+
 // Priced with the real tokenizer, not a stand-in: a captured payload stamps
 // tokenizer: o200k_base, so a fixture priced any other way would make the
 // capture internally inconsistent with its own declared vocabulary.
 export const loreBundle = () =>
   rankPerType([loreCandidate], 'lore', 10_000, {
     params: RANKER_DEFAULTS,
+    querySlots,
     chapterRanges: new Map(),
     countTokens,
   })
 
-export const queryStack = () =>
+export const queryStack = (overrides: Partial<QueryStackInput> = {}) =>
   buildQueryStack({
     userAction: 'Mira opens the ledger and reads the tide marks aloud.',
     sceneEntityNames: ['Mira'],
@@ -39,8 +48,7 @@ export const queryStack = () =>
     activeThreadTitles: [],
     eraName: null,
     piggybackSummary: null,
-    lastNarrativeContent: 'A courier arrived at dusk carrying nothing but an empty seal case.',
-    index: { entityNames: new Set(['mira']), loreKeywords: new Set() },
+    ...overrides,
   })
 
 export const successOutcome = () =>

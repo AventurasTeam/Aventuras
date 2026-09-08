@@ -118,8 +118,8 @@ browsable.
   background pipeline, extraction + reconciliation + provenance,
   retry policy, classifier barrier
 - [Slice 3.4](./slices/04-retrieval.md) — retrieval: sync stage,
-  three-query stack, pure ranker, budgets, memory pack templates,
-  `js-tiktoken`
+  variable-length query stack, pure ranker, budgets, memory pack
+  templates, `js-tiktoken`
 - [Slice 3.5](./slices/05-dev-probe.md) — developer-only retrieval
   probe: first `probe_captures` writes, parity test
 - [Slice 3.6a](./slices/06a-wizard-world.md) — wizard step 3
@@ -272,17 +272,17 @@ their own. Entry-point signature fixed in 3.3's first commit.
 [`retrieval.md → Pseudocode`](../../../memory/retrieval.md#pseudocode))
 as a pure-function module with no store or DB imports, and its
 output includes a per-candidate **trace** carrying the fields the
-probe capture model needs (`sim_q1..q3`, `sim_blend`,
+probe capture model needs (`sims`, `sim_blend`,
 `recency_factor`, `pin_signal`, `kw_boost_value`,
 `chapter_boost_applied`, `bypass_triggered`, `final_score`,
 `mmr_rank`, `selected`, `drop_reason`, `tokens_estimated`, and the
 row's `embedding_stale` flag at capture time — per
 [`probe.md → What gets captured`](../../../memory/probe.md#what-gets-captured--light-mode-default)).
 This contract pins the **per-candidate** trace only; the
-query-level metadata (incl. Q3 sentence scores), per-type funnel
-summary, structural-floor list, and stale-row counts that the
-capture model also needs come from 3.4's retrieval-phase output,
-which 3.5 consumes sequenced (3.4 gates 3.5).
+query-level metadata, per-type funnel summary, structural-floor
+list, and stale-row counts that the capture model also needs come
+from 3.4's retrieval-phase output, which 3.5 consumes sequenced
+(3.4 gates 3.5).
 [Slice 3.5](./slices/05-dev-probe.md) serializes that trace into
 `probe_captures` and pins the simulator-vs-prod parity test against
 the same module. Any ranker change that bypasses the pure module is

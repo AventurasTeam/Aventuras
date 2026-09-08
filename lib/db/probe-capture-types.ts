@@ -1,5 +1,5 @@
 import type { EmbedderErrorKind } from '@/lib/embedder'
-import type { QuerySpec, RankerParams, RetrievalType } from '@/lib/retrieval'
+import type { QuerySource, RankerParams, RetrievalType } from '@/lib/retrieval'
 
 import type { VecTargetKind } from './embeddings/vec-tables'
 
@@ -24,10 +24,11 @@ type CaptureCandidate = {
    * never be seated by the simulator, so its text and token cost are never read.
    */
   display_text: string | null
-  /** Null where that query produced no vector — which 0 cannot express. */
-  sim_q1: number | null
-  sim_q2: number | null
-  sim_q3: number | null
+  /**
+   * Per-query cosines, positionally aligned with the payload's `queries`. Null
+   * where that query produced no vector — which 0 cannot express.
+   */
+  sims: (number | null)[]
   sim_blend: number
   recency_factor: number
   pin_signal: number
@@ -81,8 +82,7 @@ type StructuralFloorRow = {
 type CaptureQuery = {
   text: string
   token_count: number
-  source: QuerySpec['source']
-  sentence_scores?: number[]
+  source: QuerySource
 }
 
 /** A new ranker tunable must be a type error here, not a silently absent capture field. */
@@ -102,10 +102,11 @@ type CaptureParamsSnapshot = {
 type CaptureTokenizer = { encoding: string; version: string }
 
 /**
- * Bumped when a captured field's shape or meaning changes, so a decode warns
- * rather than misreading an older payload. 5 added keyword_injections.
+ * Bumped when a captured field's shape or meaning changes, so a decode refuses
+ * rather than misreading an older payload. 5 added keyword_injections; 6 made
+ * the query stack variable-length.
  */
-export const CAPTURE_VERSION = 5 as const
+export const CAPTURE_VERSION = 6 as const
 
 export type ProbeCapturePayload = {
   capture_version: number
@@ -117,7 +118,8 @@ export type ProbeCapturePayload = {
   embedding_model_id: string
   tokenizer: CaptureTokenizer
   params: CaptureParamsSnapshot
-  queries: [CaptureQuery, CaptureQuery, CaptureQuery]
+  /** Three to six: the fixed Q1-Q3 slots, absent ones included, plus one per emitted Q4. */
+  queries: CaptureQuery[]
   /**
    * The narrative text kw_boost_value matched against, never embedded and defined
    * independently of `queries` (probe.md → Keyword scan surface). Both modes.
