@@ -1171,6 +1171,13 @@ describe('per-turn-piggyback', () => {
       // piggyback-fallback-classifier.test.ts. This is the builder half: only a real
       // resolveWorldTimeDeltaBasis call over the seeded pair proves the phase actually
       // supplies the variable rather than the template silently defaulting.
+      //
+      // This shape is unreachable in production: per-turn.ts always sequences narrative
+      // before this phase and awaits its ai_reply entry before resuming (orchestrator.ts),
+      // so the tail readLastTurns sees here is always ai_reply and the basis is always
+      // sinceLastAiReply in practice (generation-context.test.ts encodes the same
+      // assumption). Forcing the tail to a user_action is deliberate: the realistic shape
+      // can't discriminate — it would pass even if the builder dropped worldTimeDeltaBasis.
       it('states the sinceUserAction basis when the tail advanced time on its own action', async () => {
         const prompt = await renderFallbackPrompt({ worldTimes: [100, 200] })
 

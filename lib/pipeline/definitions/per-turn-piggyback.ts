@@ -46,6 +46,11 @@ export function shouldFallbackFire(outcome?: PiggybackOutcome): boolean {
 }
 
 export const fallbackClassifierSchema = z.object({
+  // More explicit than state-emission.ts's "present in this scene": this call has no
+  // narrative context of its own — it did not write the prose it is classifying — so
+  // "present" needs the physically-there-vs-mentioned distinction spelled out. Not a
+  // different definition of scene presence, the same channel-justified elaboration as
+  // currentLocation's wording below.
   sceneEntities: z
     .array(z.string())
     .describe(
@@ -55,7 +60,7 @@ export const fallbackClassifierSchema = z.object({
     .string()
     .optional()
     .describe(
-      'The ID of the place this scene happens at. Only an ID from the list above; omit it if the scene moved somewhere with no ID yet.',
+      'The ID of the place this scene happens at. Only an ID from the prompt list; omit it if the scene moved somewhere with no ID yet.',
     ),
   worldTimeDelta: z.number(),
   visualChanges: z
