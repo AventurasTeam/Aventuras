@@ -900,9 +900,8 @@ describe('buildGenerationContext — data source', () => {
   })
 
   it('excludes system rows from lastTurns at both the tail and mid-stack', async () => {
-    // A system row can sit mid-stack (defensive) or at the branch tail — a
-    // failed turn's error banner, per classifier-facts.ts — and neither may
-    // consume a slot.
+    // A system row can sit mid-stack (defensive) or at the tail (a failed turn's
+    // error banner, per classifier-facts.ts) — neither may consume a slot.
     openStory({ classifierContextEntries: 4 })
     await seedEntries([
       dbEntry(1, 'oldest'),
@@ -959,8 +958,7 @@ describe('buildGenerationContext — data source', () => {
   // The group's variable set does not shrink; the query behind an unread one does.
   it('skips the reads a template never mentions, leaving the variables empty', async () => {
     openStory()
-    // Real scene state, so a read that fired is distinguishable from one that
-    // was skipped.
+    // Real scene state, so a read that fired is distinguishable from one that was skipped.
     await seedEntries([
       dbEntry(1, 'prose', 'ai_reply', {
         sceneEntities: [CHAR_ID],
@@ -984,9 +982,8 @@ describe('buildGenerationContext — data source', () => {
     expect(narrative.sceneMetadata).toMatchObject({ worldTime: 7, summary: 'a summary' })
     expect(classifier.lastTurns).toHaveLength(2)
     expect(classifier.entries).toEqual([])
-    // Its in-scene and current-location sections name sceneEntities (piggyback.md →
-    // Fallback classifier context), so the scene read fires for it too; the skipped
-    // pair is what this case turns on.
+    // Its in-scene/current-location sections name sceneEntities (piggyback.md → Fallback
+    // classifier context), so that read fires too — the skipped pair is what this case turns on.
     expect(classifier.sceneMetadata).toEqual({
       sceneEntities: ['c1'],
       currentLocationId: 'l1',
@@ -1240,9 +1237,8 @@ describe('buildGenerationContext — classifierContextEntries', () => {
     expect(contentsOf(ctx)).toEqual(['e4', 'e5 the action', 'e6 the reply'])
   })
 
-  // Defense in depth: z.number() itself already rejects NaN and Infinity, so
-  // this guards a value that reached the read site without going through
-  // storySettingsSchema at all, not one a user can produce through the app.
+  // Defense in depth: z.number() already rejects NaN/Infinity, so this guards a value that
+  // reached the read site outside storySettingsSchema — not one a user can produce via the app.
   it('degrades to the pair on a NaN knob', async () => {
     const ctx = await buildContext({
       entries: sixEntries,
@@ -1253,9 +1249,8 @@ describe('buildGenerationContext — classifierContextEntries', () => {
     expect(contentsOf(ctx)).toEqual(['e5 the action', 'e6 the reply'])
   })
 
-  // cadence.md scopes the knob to the fallback classifier. perTurnNarrative reads
-  // worldTimeDeltaBasis off the same query but never lastTurns, so it must stay at
-  // the pair however wide the knob goes.
+  // cadence.md scopes the knob to the fallback classifier; perTurnNarrative reads
+  // worldTimeDeltaBasis off the same query but never lastTurns, so it stays pinned at the pair.
   it('does not widen the narrative path, which reads the basis but not the turns', async () => {
     // A file-hoisted vi.mock (the repo's usual pattern) would cover all 71
     // tests in this file for this one case's benefit.
@@ -1271,9 +1266,8 @@ describe('buildGenerationContext — classifierContextEntries', () => {
     expect(ctx.lastTurns).toEqual([])
     expect(ctx.worldTimeDeltaBasis).toBe('sinceLastAiReply')
     expect(readLastTurnsSpy).toHaveBeenCalledTimes(1)
-    // ctx.lastTurns is gated to [] by exposure regardless of read width (see
-    // the comment on that field in generation-context.ts) — the call itself,
-    // not the exposed value, is what proves the knob stayed off this path.
+    // ctx.lastTurns is gated to [] regardless of read width (see the field comment in
+    // generation-context.ts) — the spy call, not the exposed value, is what this case proves.
     expect(readLastTurnsSpy.mock.calls.at(-1)?.[2]).toBeUndefined()
   })
 })
@@ -1329,9 +1323,8 @@ describe('buildGenerationContext — worldTimeDeltaBasis', () => {
     expect(context.worldTimeDeltaBasis).toBe('sinceLastAiReply')
   })
 
-  // perTurnNarrative's read is pinned to the floor (generation-context.ts), so
-  // only the fallback classifier's read can grow past two rows. resolveWorldTimeDeltaBasis
-  // reads only .at(-1)/.at(-2), so a wide knob on that path must still land here.
+  // perTurnNarrative's read is pinned to the floor (generation-context.ts); only the fallback
+  // classifier's read grows. resolveWorldTimeDeltaBasis reads .at(-1)/.at(-2), so it lands here.
   it('resolves the same basis on the fallback template at a wide knob', async () => {
     const context = await buildContext({
       entries: [

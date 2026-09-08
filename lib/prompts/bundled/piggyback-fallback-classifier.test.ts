@@ -19,9 +19,8 @@ function worldTimeDeltaClause(source: string): string {
 }
 
 /**
- * Every bucket buildGenerationContext emits, populated. Empty rather than absent
- * where a case does not care: the builder emits all of them on every call, so a
- * fixture that omits one tests `nil.size > 0`, which is false for the wrong reason.
+ * Every bucket buildGenerationContext emits, kept non-empty — an omitted one would make a
+ * `nil.size > 0` assertion pass for the wrong reason.
  */
 const context = (over: Record<string, unknown> = {}) => ({
   definition: {
@@ -101,19 +100,16 @@ const context = (over: Record<string, unknown> = {}) => ({
 
 describe('bundled piggyback fallback classifier template', () => {
   /**
-   * The template mixes trimming and non-trimming delimiters on purpose — line 21's
-   * `{% comment %}` keeps the newline that separates the marker from `# In scene`,
-   * while its siblings trim. Normalising them is a plausible tidy-up that welds a
-   * heading onto the prose above it, and every `toContain` assertion survives that,
-   * because `turn.# In scene` contains `# In scene`. Only a snapshot sees it.
+   * Trimming vs. non-trimming delimiters here are intentional, not inconsistent — normalising
+   * them welds a heading onto the prose above it, and `toContain` can't catch that
+   * (`turn.# In scene` still contains `# In scene`). Only the snapshot below sees it.
    */
   it('matches the recorded snapshot', () => {
     expect(render(context())).toMatchSnapshot()
   })
 
-  // piggyback.md → Fallback classifier context: Setting, Genre and Tone steer prose
-  // style and bias an extraction call toward narrating. Neither output-format macro
-  // either — this call carries its own structured-output schema.
+  // piggyback.md → Fallback classifier context: Setting/Genre/Tone bias extraction toward
+  // narrating, so neither renders here — this call carries its own structured-output schema.
   it('never renders Setting, Genre, Tone or an output-format macro', () => {
     const prompt = render(
       context({
@@ -136,9 +132,8 @@ describe('bundled piggyback fallback classifier template', () => {
     expect(prompt).not.toContain('<state>')
   })
 
-  // piggybackFires stays false on this path, so macro_memory_blocks brackets no ids and
-  // the roster is the sole ID source; true would also inject per-turn.ts's
-  // tagged-block-only lines, which instruct an emission this call does not make.
+  // piggybackFires false → macro_memory_blocks brackets no ids (roster is the sole ID source);
+  // true would also inject per-turn.ts's tagged-block lines for an emission this never makes.
   it('renders memory blocks without bracketed ids and without tagged-block instructions', () => {
     const prompt = render(context())
 

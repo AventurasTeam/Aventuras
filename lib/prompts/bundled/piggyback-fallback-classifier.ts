@@ -47,8 +47,8 @@ This story tracks time in {{ calendarVocabulary.baseUnitName }}s ({{ calendarVoc
 
 {% endif -%}
 {%- comment -%}
-lastTurns is the knob's window over the pair (cadence.md → User-tunable knobs). Clamped because
-a negative offset slices from the END in Liquid — coinciding with the intended rows, not meaning them.
+lastTurns is the knob's window over the pair (cadence.md → User-tunable knobs). Clamped because a
+negative offset slices from the END in Liquid — coinciding with the intended rows, not meaning them.
 {%- endcomment -%}
 {%- assign pairStart = lastTurns | size | minus: 2 -%}
 {%- if pairStart < 0 -%}{%- assign pairStart = 0 -%}{%- endif -%}

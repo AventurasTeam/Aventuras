@@ -15,9 +15,8 @@ import {
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
 
-// Q4 on the FALLBACK path (docs/memory/retrieval.md#q4-classifier-emitted-queries), the one a
-// default-configured story runs: piggybackMode defaults to 'off', so the asks come from the
-// fallback classifier's own structured call. retrieval-q4.spec.ts covers the fold instead.
+// Q4 on the FALLBACK path (docs/memory/retrieval.md#q4-classifier-emitted-queries): a default
+// story's piggybackMode is 'off', so asks come from the classifier call — see retrieval-q4.spec.ts.
 
 const HERO_TITLE = 'The Veilstone Courier'
 const HERO_STORY_ID = 'story_hero'

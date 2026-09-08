@@ -1044,10 +1044,8 @@ describe('per-turn-piggyback', () => {
       })
     })
 
-    // Here rather than in the template's own test file because the gating is the
-    // subject: buildGenerationContext skips the read behind a variable the template
-    // never names, so a mis-typed name yields an empty section instead of an error,
-    // and a direct renderTemplate fixture would hand the template whatever it names.
+    // Here, not the template's own test file: buildGenerationContext gates the read on a
+    // variable the template never names — mistyped, it silently empties instead of erroring.
     describe('fallback classifier context (piggyback.md → Fallback classifier context)', () => {
       const KEEP = 'loc_00000000-0000-4000-8000-0000000000a1'
       const KAEL = 'char_00000000-0000-4000-8000-000000000001'
@@ -1075,9 +1073,8 @@ describe('per-turn-piggyback', () => {
       })
 
       /**
-       * Runs the phase far enough to have rendered its prompt and returns that prompt.
-       * The classifier call is failed rather than ok so the run stops at the report the
-       * failure path yields, which is one `.next()` after the render.
+       * Renders the phase's prompt and returns it. The classifier call is mocked to fail,
+       * so the run stops at the resulting report — one `.next()` past the render.
        */
       async function renderFallbackPrompt(
         over: {

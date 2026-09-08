@@ -24,12 +24,9 @@ export async function readSceneSource(
   return row
 }
 
-// Bounded by the query rather than by a caller or a template, so neither the
-// story's buffer knobs nor a pack can narrow it below the pair. Whichever phase
-// asks, the classifier needs the action that caused a state change alongside the
-// prose around it; which kinds those two rows are depends on when in the run it
-// asks. `limit` widens the background above that floor (cadence.md → User-tunable
-// knobs). Hardened against settings that never went through storySettingsSchema.
+// Bounded by the query, not the caller or a pack — nothing narrows it below the
+// action-plus-reply pair the classifier needs (cadence.md → User-tunable knobs). A
+// fractional or non-finite limit degrades to that floor instead of throwing or reading unbounded.
 export async function readLastTurns(
   db: DbCtx['db'],
   branchId: string,
