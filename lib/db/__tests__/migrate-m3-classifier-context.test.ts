@@ -108,6 +108,18 @@ describe(TAG, () => {
     expect(settingsOf(db, 's1')?.classifierContextEntries).toBe(9)
   })
 
+  // Deliberate — the key is z.number(), so a stored null fails story open as
+  // settings-corrupt; json_extract IS NULL matches it and the backfill repairs it.
+  it('repairs an explicit null rather than preserving it', () => {
+    insertStory(db, 's1', { ...LEGACY_SETTINGS, classifierContextEntries: null })
+
+    applyMigration(db, TAG)
+
+    expect(settingsOf(db, 's1')?.classifierContextEntries).toBe(
+      STORY_SETTINGS_DEFAULTS.classifierContextEntries,
+    )
+  })
+
   // json_set raises on non-JSON text and aborts the whole UPDATE: without the guard one
   // unparseable blob leaves every other story unmigrated and the app unable to boot.
   it.each([
