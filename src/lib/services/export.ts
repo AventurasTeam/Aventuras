@@ -23,6 +23,7 @@ import type {
   CheckpointRecord,
   Branch,
   EmbeddedImageMeta,
+  TimeAnchor,
 } from '$lib/types'
 
 class ExportService {
@@ -43,6 +44,7 @@ class ExportService {
     // Identity and variable *shape* only — never the pack's templates, which stay owned by the
     // pack as installed on whichever device generates. Null for a story with no pack row.
     packBinding: PackBindingExport | null = null,
+    timeAnchors: TimeAnchor[] = [],
   ): Promise<boolean> {
     // embeddedImages is metadata only (no base64). The native exporter fills in each image's
     // imageData from SQLite, so the heavy bytes never sit in the JS heap (their only home would
@@ -68,6 +70,7 @@ class ExportService {
       // Omitted rather than written as null, so a story with no pack produces a file that is
       // byte-for-byte the legacy shape and takes the legacy import path.
       ...(packBinding ? { packBinding } : {}),
+      ...(timeAnchors.length > 0 ? { timeAnchors } : {}),
     }
 
     const target = await resolveSaveTarget(`${this.sanitizeFilename(story.title)}.avt`, [

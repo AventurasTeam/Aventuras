@@ -17,6 +17,7 @@ import type {
   PersistentRetryState,
   PersistentStyleReviewState,
   TimeTracker,
+  TimeAnchor,
   EmbeddedImage,
   EmbeddedImageMeta,
   EmbeddedImageStatus,
@@ -3859,6 +3860,75 @@ class DatabaseService {
       storyId,
       this.keptSeparateBranch(branchId),
     ])
+  }
+
+  // ===== Time Anchor Operations =====
+
+  async getTimeAnchors(storyId: string): Promise<TimeAnchor[]> {
+    const db = await this.getDb()
+    const rows = await db.select<
+      {
+        id: string
+        story_id: string
+        entry_id: string
+        asserted_time: string
+        note: string | null
+        created_at: number
+      }[]
+    >(`SELECT * FROM time_anchors WHERE story_id = ?`, [storyId])
+    return rows.map((row) => ({
+      id: row.id,
+      storyId: row.story_id,
+      entryId: row.entry_id,
+      assertedTime: JSON.parse(row.asserted_time) as TimeTracker,
+      note: row.note,
+      createdAt: row.created_at,
+    }))
+  }
+
+  /**
+   * Write an anchor, replacing any the entry already carries.
+   *
+   * Upsert rather than delete-then-insert: the unique constraint is on `entry_id`, and a
+   * second anchor on one entry would be a second assertion about the same fact.
+   */
+  async setTimeAnchor(anchor: TimeAnchor): Promise<void> {
+    const db = await this.getDb()
+    await db.execute(
+      `INSERT INTO time_anchors (id, story_id, entry_id, asserted_time, note, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(entry_id) DO UPDATE SET asserted_time = excluded.asserted_time, note = excluded.note`,
+      [
+        anchor.id,
+        anchor.storyId,
+        anchor.entryId,
+        JSON.stringify(anchor.assertedTime),
+        anchor.note,
+        anchor.createdAt,
+      ],
+    )
+  }
+
+  async deleteTimeAnchor(entryId: string): Promise<void> {
+    const db = await this.getDb()
+    await db.execute(`DELETE FROM time_anchors WHERE entry_id = ?`, [entryId])
+  }
+
+  /**
+   * How many anchors these entries carry.
+   *
+   * Called before a deletion, not after: the foreign key takes the rows with the entries,
+   * and a count taken afterwards is always zero.
+   */
+  async countTimeAnchorsForEntries(entryIds: string[]): Promise<number> {
+    if (entryIds.length === 0) return 0
+    const db = await this.getDb()
+    const placeholders = entryIds.map(() => '?').join(',')
+    const rows = await db.select<{ count: number }[]>(
+      `SELECT COUNT(*) as count FROM time_anchors WHERE entry_id IN (${placeholders})`,
+      entryIds,
+    )
+    return rows[0]?.count ?? 0
   }
 
   // ===== Pack Variable Operations =====

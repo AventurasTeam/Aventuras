@@ -13,6 +13,7 @@
 
 <script lang="ts">
   import type { StoryEntry, EmbeddedImage, TimeTracker } from '$lib/types'
+  import TimeAnchorModal from '$lib/components/world/TimeAnchorModal.svelte'
   import { story } from '$lib/stores/story.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { settings } from '$lib/stores/settings.svelte'
@@ -28,6 +29,7 @@
     RotateCcw,
     Loader2,
     GitBranch,
+    Anchor,
     Bookmark,
     Volume2,
     Image as ImageIcon,
@@ -384,6 +386,7 @@
 
   // Checkpoint creation state
   let isCreatingCheckpoint = $state(false)
+  let isAnchoringTime = $state(false)
   let checkpointName = $state('')
 
   // Check if this is the latest entry (checkpoints can only be created at the latest entry)
@@ -1620,6 +1623,15 @@
         <Button
           variant="text"
           size="icon"
+          onclick={() => (isAnchoringTime = true)}
+          class="hidden h-7 w-7 text-teal-500 hover:text-teal-600 sm:flex"
+          title={story.timeAnchorFor(entry.id) ? 'Edit time anchor' : 'Create a time anchor'}
+        >
+          <Anchor class="h-4 w-4" />
+        </Button>
+        <Button
+          variant="text"
+          size="icon"
           onclick={handleTTSToggle}
           disabled={isGeneratingTTS}
           class="text-muted-foreground hover:text-foreground h-7 w-7"
@@ -1707,6 +1719,10 @@
                 Create checkpoint
               </DropdownMenu.Item>
             {/if}
+            <DropdownMenu.Item onclick={() => (isAnchoringTime = true)}>
+              <Anchor class="h-4 w-4" />
+              {story.timeAnchorFor(entry.id) ? 'Edit time anchor' : 'Create a time anchor'}
+            </DropdownMenu.Item>
             <!-- Static label and icon: selecting an item closes the menu, so the "Copied!"
                  state would never be on screen. The toast is the feedback here. -->
             <DropdownMenu.Item onclick={handleCopyContent}>
@@ -2075,6 +2091,8 @@
     {/if}
   </div>
 </div>
+
+<TimeAnchorModal bind:open={isAnchoringTime} entryId={entry.id} />
 
 <!-- View/Edit Image Modal -->
 <ResponsiveModal.Root bind:open={isViewingImage}>

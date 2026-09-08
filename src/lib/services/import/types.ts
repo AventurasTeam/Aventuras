@@ -17,6 +17,7 @@ import type {
   Entry,
   CheckpointRecord,
   Branch,
+  TimeAnchor,
   PersistentStyleReviewState,
   EmbeddedImage,
 } from '$lib/types'
@@ -90,6 +91,7 @@ export interface AventuraExport {
   chapters?: Chapter[] // Added in v1.7.0
   currentBgImage?: string | null // Added in v1.8.0
   packBinding?: PackBindingExport // Added in v1.9.0
+  timeAnchors?: TimeAnchor[] // Added in v1.10.0
 }
 
 /**
@@ -112,8 +114,11 @@ export interface AventuraExport {
  * - v1.8.0 Added currentBgImage (carried on the story record)
  * - v1.9.0 Added packBinding (prompt pack identity, the story's variable answers, and the
  *          pack's variable definitions — never its template content)
+ * - v1.10.0 Added timeAnchors (the in-story times the reader asserts entries ended at).
+ *          Deliberately absent from `FEATURE_HISTORY`: a story that carries no anchors is the
+ *          normal state, not a feature the file lost, so an older file has nothing to warn about.
  */
-export const EXPORT_FORMAT_VERSION = '1.9.0'
+export const EXPORT_FORMAT_VERSION = '1.10.0'
 
 export interface ImportResult {
   success: boolean

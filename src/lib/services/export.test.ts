@@ -39,6 +39,7 @@ const calls = {
   chapters: [] as any[],
   checkpoints: [] as any[],
   images: [] as any[],
+  anchors: [] as any[],
   branchUpdates: [] as any[],
   currentBranch: [] as any[],
 }
@@ -56,6 +57,7 @@ vi.mock('$lib/services/database', () => ({
     addChapter: vi.fn(async (c: any) => void calls.chapters.push(c)),
     createCheckpoint: vi.fn(async (c: any) => void calls.checkpoints.push(c)),
     createEmbeddedImage: vi.fn(async (i: any) => void calls.images.push(i)),
+    setTimeAnchor: vi.fn(async (a: any) => void calls.anchors.push(a)),
     updateBranch: vi.fn(async (id: string, u: any) => void calls.branchUpdates.push({ id, ...u })),
     setStoryCurrentBranch: vi.fn(
       async (s: string, b: string) => void calls.currentBranch.push({ s, b }),
@@ -253,6 +255,87 @@ describe('importFromContent — entry remapping', () => {
     await exportService.importFromContent(json(baseExport()))
     expect(calls.entries[0].content).toBe('Once upon a time')
     expect(calls.entries[0].position).toBe(0)
+  })
+})
+
+describe('importFromContent — time anchors', () => {
+  const anchored = (overrides: Record<string, any> = {}) =>
+    baseExport({
+      entries: [
+        { id: 'e1', type: 'narration', content: 'first', parentId: null, position: 0 },
+        { id: 'e2', type: 'narration', content: 'second', parentId: 'e1', position: 1 },
+      ],
+      timeAnchors: [
+        {
+          id: 'anchor-old',
+          storyId: 'story-old',
+          entryId: 'e2',
+          assertedTime: { years: 0, days: 1, hours: 20, minutes: 30 },
+          note: 'the night of the ball',
+          createdAt: 1_700_000_000_000,
+        },
+      ],
+      ...overrides,
+    })
+
+  it('binds each anchor to the entry corresponding to the one it was exported from', async () => {
+    await exportService.importFromContent(json(anchored()))
+
+    expect(calls.anchors).toHaveLength(1)
+    const [anchor] = calls.anchors
+    // The exported entry id is gone; the anchor follows the entry through the id map.
+    expect(anchor.entryId).not.toBe('e2')
+    expect(anchor.entryId).toBe(calls.entries[1].id)
+    expect(anchor.storyId).toBe(calls.stories[0].id)
+    expect(anchor.assertedTime).toEqual({ years: 0, days: 1, hours: 20, minutes: 30 })
+    expect(anchor.note).toBe('the night of the ball')
+  })
+
+  it('drops an anchor whose entry did not survive the import', async () => {
+    const data = anchored({
+      timeAnchors: [
+        {
+          id: 'anchor-orphan',
+          storyId: 'story-old',
+          entryId: 'entry-that-is-not-here',
+          assertedTime: { years: 0, days: 0, hours: 1, minutes: 0 },
+          note: null,
+          createdAt: 1,
+        },
+      ],
+    })
+
+    await exportService.importFromContent(json(data))
+    expect(calls.anchors).toEqual([])
+  })
+
+  it('writes each anchor once, even when branches inherit the anchored entry', async () => {
+    const data = anchored({
+      branches: [
+        { id: 'br1', name: 'A branch', parentBranchId: null, forkEntryId: 'e1', createdAt: 1 },
+        { id: 'br2', name: 'Another', parentBranchId: 'br1', forkEntryId: 'e1', createdAt: 2 },
+      ],
+    })
+
+    await exportService.importFromContent(json(data))
+    expect(calls.anchors).toHaveLength(1)
+  })
+
+  it('imports a file written before anchors existed with none, and without warning', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      // 1.9.0 is the last version before time anchors. Their absence is the normal state for a
+      // story, not a feature the file lost, so it must not warn.
+      await exportService.importFromContent(json(baseExport({ version: '1.9.0' })))
+
+      expect(calls.anchors).toEqual([])
+      const anchorWarnings = warn.mock.calls
+        .map((args) => String(args[0]))
+        .filter((msg) => msg.startsWith('[Import]') && /anchor/i.test(msg))
+      expect(anchorWarnings).toEqual([])
+    } finally {
+      warn.mockRestore()
+    }
   })
 })
 

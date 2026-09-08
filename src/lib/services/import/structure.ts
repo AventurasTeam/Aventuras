@@ -231,6 +231,23 @@ export async function importStructure(
     })
   }
 
+  // After the entries, because the anchor's foreign key points at one. An anchor whose entry
+  // did not survive the import is dropped rather than written against a dangling id: an
+  // assertion with no position cannot bound a repair.
+  for (const anchor of data.timeAnchors ?? []) {
+    const newEntryId = oldToNewId.get(anchor.entryId)
+    if (!newEntryId) continue
+
+    await database.setTimeAnchor({
+      id: crypto.randomUUID(),
+      storyId: newStoryId,
+      entryId: newEntryId,
+      assertedTime: anchor.assertedTime,
+      note: anchor.note ?? null,
+      createdAt: anchor.createdAt ?? Date.now(),
+    })
+  }
+
   for (const char of data.characters ?? []) {
     const newCharId = oldToNewId.get(char.id) ?? crypto.randomUUID()
 

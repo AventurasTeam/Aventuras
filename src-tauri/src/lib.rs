@@ -7,6 +7,7 @@ mod db;
 mod db_tx;
 mod migration_patch;
 mod sync;
+mod time_anchors;
 
 use backup::{
     backup_database, export_images_zip, export_single_image, export_story_avt, import_saf_to_temp,
@@ -242,6 +243,12 @@ pub fn run() {
             version: 37,
             description: "kept_separate",
             sql: include_str!("../migrations/037_kept_separate.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 38,
+            description: "time_anchors",
+            sql: include_str!("../migrations/038_time_anchors.sql"),
             kind: MigrationKind::Up,
         },
     ];

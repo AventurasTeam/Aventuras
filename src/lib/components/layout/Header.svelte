@@ -97,6 +97,7 @@
         data.chapters,
         null, // currentBgImage: unchanged from before; the importer reads it off story instead
         data.packBinding,
+        data.timeAnchors,
       )
     }, 'Aventuras (.avt)')
   }

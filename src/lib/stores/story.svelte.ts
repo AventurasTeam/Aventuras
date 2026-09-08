@@ -15,6 +15,7 @@ import type {
   StoryDetails,
   Entry,
   TimeTracker,
+  TimeAnchor,
   PersistentCharacterSnapshot,
   WorldStateDelta,
   WorldStateSnapshot,
@@ -27,6 +28,40 @@ import type {
 import { database } from '$lib/services/database'
 import { rollbackService } from '$lib/services/rollbackService'
 import { ui } from './ui.svelte'
+import {
+  analyzeTimeline,
+  applyRepair,
+  fingerprintPreview,
+  latestAssertedBoundary,
+  listBoundaries,
+  normalizeTime,
+  planRepair,
+  reconcileRange,
+  refuseRange,
+  selectableRanges,
+  type AssertedBoundaryReport,
+  type Boundary,
+  type DurationRequest,
+  type GapPolicy,
+  type RangeRefusal,
+  type ReconcileResult,
+  type RepairPlan,
+  type SelectableRange,
+  type TimelineAnomaly,
+} from '$lib/services/storyTime'
+
+/** What a previewed repair carries: the refusal, the outstanding requests, or the plan. */
+export type TimelineRepairPreview =
+  | { status: 'refused'; refusal: RangeRefusal; range?: SelectableRange }
+  | { status: 'needs-durations'; requests: DurationRequest[]; range: SelectableRange }
+  | {
+      status: 'ok'
+      result: Extract<ReconcileResult, { status: 'ok' }>
+      range: SelectableRange
+      rangeEntries: StoryEntry[]
+      plan: RepairPlan
+      fingerprint: string
+    }
 import { settings } from './settings.svelte'
 import { extractInlineCustomVars } from '$lib/services/ai/sdk/schemas/runtime-variables'
 import type { ClassificationResult } from '$lib/services/ai/sdk/schemas/classifier'
@@ -123,6 +158,7 @@ class StoryStore {
   // Memory system
   chapters = $state<Chapter[]>([])
   checkpoints = $state<Checkpoint[]>([])
+  timeAnchors = $state<TimeAnchor[]>([])
 
   // Batch chapterization (chapterizeFromBeginning) progress/cancel state.
   // Local to the store (not ui.svelte.ts) because this is a blocking,
@@ -1205,10 +1241,12 @@ class StoryStore {
     }
 
     const droppedCheckpoints = this.checkpointsAnchoredTo(new Set([entryId]))
+    const droppedAnchors = await database.countTimeAnchorsForEntries([entryId])
     await database.deleteEntriesWithDependents({
       entryIds: [entryId],
       checkpointIds: droppedCheckpoints.map((cp) => cp.id),
     })
+    this.announceDroppedAnchors(droppedAnchors)
     this.forgetCheckpoints(droppedCheckpoints)
     this.entries = this.entries.filter((e) => e.id !== entryId)
 
@@ -1469,6 +1507,193 @@ class StoryStore {
    * Delete all entries from a given position onward.
    * Used for entry-only retry restore (persistent retry).
    */
+  // ===== Time anchors and timeline repair =====
+
+  /** Assert when an entry ended. Replaces any anchor the entry already carries. */
+  async setTimeAnchor(entryId: string, assertedTime: TimeTracker, note: string | null = null) {
+    if (!this.currentStory) throw new Error('No story loaded')
+
+    const existing = this.timeAnchors.find((anchor) => anchor.entryId === entryId)
+    const anchor: TimeAnchor = {
+      id: existing?.id ?? crypto.randomUUID(),
+      storyId: this.currentStory.id,
+      entryId,
+      assertedTime: normalizeTime(assertedTime),
+      note,
+      createdAt: existing?.createdAt ?? Date.now(),
+    }
+
+    await database.setTimeAnchor(anchor)
+    this.timeAnchors = [
+      ...this.timeAnchors.filter((existingAnchor) => existingAnchor.entryId !== entryId),
+      anchor,
+    ]
+  }
+
+  async removeTimeAnchor(entryId: string): Promise<void> {
+    await database.deleteTimeAnchor(entryId)
+    this.timeAnchors = this.timeAnchors.filter((anchor) => anchor.entryId !== entryId)
+  }
+
+  timeAnchorFor(entryId: string): TimeAnchor | undefined {
+    return this.timeAnchors.find((anchor) => anchor.entryId === entryId)
+  }
+
+  /** The points a repair may be selected between, on the branch in view. */
+  get timeBoundaries(): Boundary[] {
+    const branchId = this.currentStory?.currentBranchId ?? null
+    const fork = branchId ? this.branches.find((b) => b.id === branchId)?.forkEntryId : null
+    return listBoundaries({
+      entries: this.entries,
+      anchors: this.timeAnchors,
+      forkEntryId: fork ?? null,
+      // Only what this branch owns may be rewritten, which is the rule `updateEntry` already
+      // enforces for edits. Inherited history is repaired from the branch that owns it.
+      ownedEntryIds: branchId
+        ? new Set(this.entries.filter((e) => e.branchId === branchId).map((e) => e.id))
+        : undefined,
+    })
+  }
+
+  get timeRanges(): SelectableRange[] {
+    return selectableRanges(this.entries, this.timeBoundaries)
+  }
+
+  /** Everything the review needs, and the fingerprint apply revalidates against. */
+  previewTimelineRepair(
+    range: SelectableRange,
+    suppliedDurations: Record<string, number> = {},
+    gapPolicies: Record<string, GapPolicy> = {},
+  ): TimelineRepairPreview {
+    const refusal = refuseRange(range.from, range.to)
+    if (refusal) return { status: 'refused', refusal }
+
+    const byId = new Map(this.entries.map((entry) => [entry.id, entry]))
+    const rangeEntries = range.entryIds
+      .map((id) => byId.get(id))
+      .filter((entry): entry is StoryEntry => !!entry)
+
+    const before = this.entries[range.from.index]
+    const after = this.entries[range.to.index + 1]
+
+    const result = reconcileRange({
+      entries: rangeEntries,
+      baseline: range.from.time!,
+      target: range.to.time!,
+      previousEnd: before?.metadata?.timeEnd ?? null,
+      nextStart: after?.metadata?.timeStart ?? null,
+      suppliedDurations,
+      gapPolicies,
+    })
+
+    if (result.status === 'refused') {
+      return {
+        status: 'refused',
+        refusal: { reason: 'backwards-span', boundaries: [range.from, range.to] },
+        range,
+      }
+    }
+    if (result.status === 'needs-durations') {
+      return { status: 'needs-durations', requests: result.requests, range }
+    }
+
+    return {
+      status: 'ok',
+      result,
+      range,
+      rangeEntries,
+      plan: planRepair({ entries: this.entries, chapters: this.chapters, times: result.times }),
+      fingerprint: this.timelineFingerprint(range, rangeEntries),
+    }
+  }
+
+  private timelineFingerprint(range: SelectableRange, rangeEntries: StoryEntry[]): string {
+    return fingerprintPreview({
+      storyId: this.currentStory?.id ?? '',
+      branchId: this.currentStory?.currentBranchId ?? null,
+      from: range.from,
+      to: range.to,
+      rangeEntries,
+      anchoredEntryIds: this.timeAnchors.map((anchor) => anchor.entryId),
+    })
+  }
+
+  /**
+   * Commit a previewed repair.
+   *
+   * Refuses when anything the preview was computed from has moved — generation, a deletion, an
+   * anchor edit, a branch switch, or an anchor appearing inside the range, which invalidates the
+   * selection even though both endpoints still resolve.
+   */
+  async applyTimelineRepair(preview: TimelineRepairPreview): Promise<'applied' | 'stale'> {
+    if (!this.currentStory) throw new Error('No story loaded')
+    if (preview.status !== 'ok') return 'stale'
+
+    this.assertNotBusy('repair the timeline')
+
+    const fresh = this.previewTimelineRepair(preview.range)
+    if (fresh.status !== 'ok' || fresh.fingerprint !== preview.fingerprint) return 'stale'
+
+    await applyRepair(preview.plan, this.entries, {
+      transaction: (statements) => database.transaction(statements),
+      publish: (plan) => {
+        const times = new Map(plan.times.map((time) => [time.entryId, time]))
+        this.entries = this.entries.map((entry) => {
+          const time = times.get(entry.id)
+          if (!time) return entry
+          return {
+            ...entry,
+            metadata: { ...entry.metadata, timeStart: time.start, timeEnd: time.end },
+          }
+        })
+
+        const spans = new Map(plan.chapterSpans.map((span) => [span.chapterId, span]))
+        this.chapters = this.chapters.map((chapter) => {
+          const span = spans.get(chapter.id)
+          return span ? { ...chapter, startTime: span.startTime, endTime: span.endTime } : chapter
+        })
+
+        if (plan.clock && this.currentStory) {
+          this.currentStory = { ...this.currentStory, timeTracker: plan.clock }
+        }
+
+        this.invalidateChapterCache()
+      },
+    })
+
+    log('Timeline repaired', {
+      entries: preview.plan.times.length,
+      chapters: preview.plan.chapterSpans.length,
+      clockMoved: !!preview.plan.clock,
+    })
+    return 'applied'
+  }
+
+  /** Anomalies and the latest asserted boundary, for the Time panel. */
+  get timelineReport(): { anomalies: TimelineAnomaly[]; asserted: AssertedBoundaryReport } {
+    return {
+      anomalies: analyzeTimeline({ entries: this.entries, chapters: this.chapters }),
+      asserted: latestAssertedBoundary(this.entries, this.timeAnchors),
+    }
+  }
+
+  /**
+   * Say what a deletion cost in time anchors.
+   *
+   * The count is taken before the delete, since the foreign key removes the rows with the
+   * entries. Chapters and checkpoints go silently because the story can produce them again;
+   * an anchor is a judgement the reader made and nothing reconstructs it.
+   */
+  private announceDroppedAnchors(count: number): void {
+    if (count === 0) return
+    ui.showToast(
+      count === 1
+        ? '1 time anchor was deleted with those entries'
+        : `${count} time anchors were deleted with those entries`,
+      'warning',
+    )
+  }
+
   async deleteEntriesFromPosition(
     position: number,
     options?: { skipRollback?: boolean },
@@ -1516,10 +1741,13 @@ class StoryStore {
 
     const droppedCheckpoints = this.checkpointsAnchoredTo(entryIdsToDelete)
 
+    const droppedAnchors = await database.countTimeAnchorsForEntries(Array.from(entryIdsToDelete))
+
     log('Deleting entries and the rows that reference them', {
       chaptersToDelete: chaptersToDelete.length,
       chapterNumbers: chaptersToDelete.map((ch) => ch.number),
       checkpointsToDelete: droppedCheckpoints.length,
+      timeAnchorsToDelete: droppedAnchors,
     })
 
     await database.deleteEntriesWithDependents({
@@ -1527,6 +1755,8 @@ class StoryStore {
       chapterIds: chaptersToDelete.map((ch) => ch.id),
       checkpointIds: droppedCheckpoints.map((cp) => cp.id),
     })
+
+    this.announceDroppedAnchors(droppedAnchors)
 
     this.chapters = this.chapters.filter((ch) => !chaptersToDelete.some((d) => d.id === ch.id))
     this.forgetCheckpoints(droppedCheckpoints)
@@ -4453,6 +4683,10 @@ class StoryStore {
         lorebookEntries: lorebookEntries.length,
       })
     }
+
+    // Anchors are per story, not per branch: one binds to an entry, and the entry carries the
+    // branch. A branch that inherits an entry inherits the assertion made about it.
+    this.timeAnchors = await database.getTimeAnchors(this.currentStory.id)
 
     // Restore time tracker from the last entry's metadata
     await this.restoreTimeFromLastEntry()

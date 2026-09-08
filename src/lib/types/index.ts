@@ -23,6 +23,21 @@ export interface TimeTracker {
   minutes: number
 }
 
+/**
+ * An in-story time the reader asserts an entry ended at.
+ *
+ * Every other timestamp is derived from the classifier's time progression; this is the only
+ * record of what the reader knows. See docs/architecture/story-time.md.
+ */
+export interface TimeAnchor {
+  id: string
+  storyId: string
+  entryId: string
+  assertedTime: TimeTracker
+  note: string | null
+  createdAt: number
+}
+
 export interface Story {
   id: string
   title: string
