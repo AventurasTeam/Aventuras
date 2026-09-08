@@ -900,7 +900,9 @@ describe('buildGenerationContext — data source', () => {
   })
 
   it('exposes the last two non-system turns as lastTurns', async () => {
-    openStory()
+    // Pinned at the floor: this test is about system-row exclusion, not the
+    // widening knob (covered separately above).
+    openStory({ classifierContextEntries: 2 })
     await seedEntries([
       dbEntry(1, 'oldest'),
       dbEntry(2, 'user turn', 'user_action'),
@@ -1169,6 +1171,70 @@ describe('buildGenerationContext — data source', () => {
     if (!load.ok) throw new Error('expected a context')
     expect(load.idMap).toBeInstanceOf(IdBiMap)
     expect(intermediates.idMap).toBe(load.idMap)
+  })
+})
+
+describe('buildGenerationContext — classifierContextEntries', () => {
+  const sixEntries = [
+    entry('e1', 1, 'e1 oldest'),
+    entry('e2', 2, 'e2'),
+    entry('e3', 3, 'e3'),
+    entry('e4', 4, 'e4'),
+    entry('e5', 5, 'e5 the action', 'user_action'),
+    entry('e6', 6, 'e6 the reply'),
+  ] as unknown as StoryEntry[]
+
+  const contentsOf = (ctx: Record<string, unknown>): string[] =>
+    (ctx.lastTurns as { content: string }[]).map((e) => e.content)
+
+  // cadence.md → User-tunable knobs: the knob widens the background, and the
+  // fixed action-plus-reply pair is a floor it can never cut.
+  it('reads the knob many trailing entries for the fallback classifier', async () => {
+    const ctx = await buildContext({
+      entries: sixEntries,
+      settings: storySettings({ classifierContextEntries: 4 }),
+      templateId: TEMPLATE_IDS.piggybackFallbackClassifier,
+    })
+
+    expect(contentsOf(ctx)).toEqual(['e3', 'e4', 'e5 the action', 'e6 the reply'])
+  })
+
+  it.each([0, 1, 2])('never narrows below the fixed pair at %i', async (knob) => {
+    const ctx = await buildContext({
+      entries: sixEntries,
+      settings: storySettings({ classifierContextEntries: knob }),
+      templateId: TEMPLATE_IDS.piggybackFallbackClassifier,
+    })
+
+    expect(contentsOf(ctx)).toEqual(['e5 the action', 'e6 the reply'])
+  })
+
+  function withWorldTime(row: ReturnType<typeof entry>, n: number) {
+    return { ...row, metadata: { ...(row.metadata ?? {}), worldTime: n } }
+  }
+
+  // resolveWorldTimeDeltaBasis reads only .at(-1)/.at(-2), so a wider window
+  // must not change it. perTurnNarrative reads the basis but never lastTurns,
+  // so this is the only thing widening could have broken on that path.
+  it.each([2, 8])('resolves the same worldTimeDeltaBasis at knob %i', async (knob) => {
+    // basis is 'sinceUserAction' only when the tail is a user_action, the row
+    // before it is a narrative kind, and the tail's worldTime exceeds it.
+    const timed = [
+      entry('e1', 1, 'e1'),
+      entry('e2', 2, 'e2'),
+      entry('e3', 3, 'e3'),
+      entry('e4', 4, 'e4'),
+      withWorldTime(entry('e5', 5, 'e5 reply'), 100),
+      withWorldTime(entry('e6', 6, 'e6 action', 'user_action'), 200),
+    ] as unknown as StoryEntry[]
+
+    const ctx = await buildContext({
+      entries: timed,
+      settings: storySettings({ classifierContextEntries: knob }),
+      templateId: TEMPLATE_IDS.piggybackFallbackClassifier,
+    })
+
+    expect(ctx.worldTimeDeltaBasis).toBe('sinceUserAction')
   })
 })
 

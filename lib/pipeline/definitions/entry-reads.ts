@@ -25,15 +25,21 @@ export async function readSceneSource(
 }
 
 // Bounded by the query rather than by a caller or a template, so neither the
-// story's buffer knobs nor a pack can narrow it. Whichever phase asks, the
-// classifier needs the action that caused a state change alongside the prose
-// around it; which kinds those two rows are depends on when in the run it asks.
-export async function readLastTurns(db: DbCtx['db'], branchId: string): Promise<StoryEntry[]> {
+// story's buffer knobs nor a pack can narrow it below the pair. Whichever phase
+// asks, the classifier needs the action that caused a state change alongside the
+// prose around it; which kinds those two rows are depends on when in the run it
+// asks. `limit` widens the background above that floor (cadence.md → User-tunable
+// knobs); it can never cut into it.
+export async function readLastTurns(
+  db: DbCtx['db'],
+  branchId: string,
+  limit: number = LAST_TURNS,
+): Promise<StoryEntry[]> {
   const rows = await db
     .select()
     .from(storyEntries)
     .where(and(eq(storyEntries.branchId, branchId), ne(storyEntries.kind, 'system')))
     .orderBy(desc(storyEntries.position), desc(storyEntries.createdAt))
-    .limit(LAST_TURNS)
+    .limit(Math.max(LAST_TURNS, limit))
   return rows.reverse()
 }
