@@ -1,9 +1,6 @@
-import { expect, test, type Page } from '@playwright/test'
-import { gunzipSync } from 'fflate'
+import { expect, test } from '@playwright/test'
 
-import type { EntryMetadata, ProbeCapturePayload } from '@/lib/db'
-
-import { queryApp } from '../harness/db'
+import { currentBranchId, latestCapture, queryApp, tailMetadata } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm } from '../harness/mock-llm'
@@ -18,12 +15,9 @@ import {
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
 
-// Q4 on the FALLBACK path (docs/memory/retrieval.md#q4-classifier-emitted-queries), the
-// one a default-configured story runs: piggybackMode defaults to 'off', so the asks come
-// from the fallback classifier's own structured call — generateStructured →
-// substitutePiggybackIds → buildPiggybackActions → metadata — not from a tagged <state>
-// block folded out of the narrative. retrieval-q4.spec.ts covers the fold; this covers the
-// seam it cannot reach.
+// Q4 on the FALLBACK path (docs/memory/retrieval.md#q4-classifier-emitted-queries), the one a
+// default-configured story runs: piggybackMode defaults to 'off', so the asks come from the
+// fallback classifier's own structured call. retrieval-q4.spec.ts covers the fold instead.
 
 const HERO_TITLE = 'The Veilstone Courier'
 const HERO_STORY_ID = 'story_hero'
@@ -37,9 +31,8 @@ const ASK_D = 'E2E-Q4F-ASK who last carried the courier seal'
 // fields, so a value in metadata came from the fallback's structured call or from nowhere.
 const narrative = (marker: string) => `${marker} The storm bends the reeds flat.`
 
-// The seeded story has suggestion categories enabled and the fold is off, so no chips are
-// in hand when the phase runs — it takes the `-suggestions` schema branch. Both shapes are
-// set anyway: which one fires is a property of the fixture's settings, not of Q4.
+// The seeded story has suggestion categories enabled and the fold is off, so the phase takes
+// the `-suggestions` branch. Both are set anyway: which fires is fixture settings, not Q4.
 function setAsks(mock: MockLlm, askOne: string, askTwo: string): void {
   const reply = {
     sceneEntities: [],
@@ -49,39 +42,6 @@ function setAsks(mock: MockLlm, askOne: string, askTwo: string): void {
   }
   mock.setStructured('per-turn-classifier', reply)
   mock.setStructured('per-turn-classifier-suggestions', { ...reply, suggestions: [] })
-}
-
-async function currentBranchId(page: Page): Promise<string> {
-  const rows = await queryApp(page, `SELECT current_branch_id FROM stories WHERE id = ?`, [
-    HERO_STORY_ID,
-  ])
-  return rows[0]?.[0] as string
-}
-
-// queryApp is a raw SQL bridge, not drizzle's typed select, so the column's
-// `mode: 'json'` transform never runs — parse it here instead.
-async function tailMetadata(page: Page, branchId: string): Promise<EntryMetadata | null> {
-  const rows = await queryApp(
-    page,
-    `SELECT metadata FROM story_entries WHERE branch_id = ? AND kind = 'ai_reply'
-     ORDER BY position DESC LIMIT 1`,
-    [branchId],
-  )
-  const raw = rows[0]?.[0] as string | null | undefined
-  return raw ? (JSON.parse(raw) as EntryMetadata) : null
-}
-
-const LATEST_CAPTURE_SQL = `SELECT payload FROM probe_captures
-   WHERE branch_id = ? ORDER BY captured_at DESC, id DESC LIMIT 1`
-
-// Payload is a gzipped blob; queryApp's evaluate bridge returns the BLOB column as a real
-// Uint8Array (Playwright has serialized typed arrays since 1.44), so it gunzips directly.
-async function latestCapture(page: Page, branchId: string): Promise<ProbeCapturePayload | null> {
-  const rows = await queryApp(page, LATEST_CAPTURE_SQL, [branchId])
-  const blob = rows[0]?.[0] as Uint8Array | undefined
-  if (blob === undefined) return null
-  const json = new TextDecoder().decode(gunzipSync(blob))
-  return JSON.parse(json) as ProbeCapturePayload
 }
 
 test.describe('retrieval Q4 — fallback classifier across a turn boundary', () => {
@@ -106,6 +66,12 @@ test.describe('retrieval Q4 — fallback classifier across a turn boundary', () 
     enableDiagnostics(seeded.dbPath)
     enableStoryProbeMode(seeded.dbPath, HERO_STORY_ID)
     app = await launchApp({ userDataDir, cleanupUserData: true })
+    // Tripwire: proves the seed landed, not that the app read it. Without it, deleting the
+    // call above still reads layer === 'per_turn_classifier' — a failed fold ends there too.
+    const [[raw]] = await queryApp(app.window, `SELECT settings FROM stories WHERE id = ?`, [
+      HERO_STORY_ID,
+    ])
+    expect((JSON.parse(raw as string) as { piggybackMode: string }).piggybackMode).toBe('off')
   })
 
   test.afterAll(async () => {
@@ -128,7 +94,7 @@ test.describe('retrieval Q4 — fallback classifier across a turn boundary', () 
         timeout: 30_000,
       })
 
-      branchId = await currentBranchId(app.window)
+      branchId = await currentBranchId(app.window, HERO_STORY_ID)
 
       await expect
         .poll(async () => (await tailMetadata(app.window, branchId))?.retrievalQueries, {
@@ -136,9 +102,8 @@ test.describe('retrieval Q4 — fallback classifier across a turn boundary', () 
         })
         .toEqual([ASK_A, ASK_B])
 
-      // Provenance, not inference: with the fold off it never builds a report, so
-      // 'per_turn_classifier' can only have come from this phase. 'piggyback_tagged_block'
-      // here would mean the fold ran after all and the rest of this spec proves nothing.
+      // Provenance: only this phase writes 'per_turn_classifier'. It does NOT prove the fold
+      // was off — a fold that fired and failed lands here too; the beforeAll tripwire covers that.
       expect((await tailMetadata(app.window, branchId))?.stateReport?.layer).toBe(
         'per_turn_classifier',
       )
@@ -174,9 +139,8 @@ test.describe('retrieval Q4 — fallback classifier across a turn boundary', () 
       ])
       expect(capture.queries.slice(3).map((q) => q.text)).toEqual([ASK_A, ASK_B])
 
-      // Without this the line above would also pass if the ASK_C/ASK_D override never
-      // reached the model — the assertion would be reading a stale mock, not a fresh
-      // previous-turn read. Turn 2's own row carries the new asks for turn 3.
+      // Without this, the line above passes even if the ASK_C/ASK_D override never reached the
+      // model — the mock's override Map persists, so turn 2 would re-serve turn 1's asks.
       await expect
         .poll(async () => (await tailMetadata(app.window, branchId))?.retrievalQueries, {
           timeout: 30_000,

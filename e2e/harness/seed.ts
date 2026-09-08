@@ -213,10 +213,8 @@ export function setClassifierCadence(dbPath: string, storyId: string, cadence: n
   }
 }
 
-// Set a story's piggybackMode. The fixture seeds 'on'; 'off' is what
-// story-settings-defaults.ts gives a real story, and the only gate that turns
-// the fold off without also lying about the model's capabilities (unlike
-// disablePiggybackCapability). Runs before launch.
+// The fixture seeds 'on'; 'off' is what story-settings-defaults.ts gives a real story — and
+// unlike disablePiggybackCapability it doesn't lie about the model. Runs before launch.
 export function setPiggybackMode(dbPath: string, storyId: string, mode: 'on' | 'off'): void {
   const db = new DatabaseSync(dbPath)
   try {
