@@ -26,6 +26,7 @@ const VALID_SETTINGS = {
   partialChapterBuffer: 10,
   protectedBuffer: 10,
   classifierCadence: 8,
+  classifierContextEntries: 4,
   piggybackMode: 'off' as const,
   embeddingBackend: 'local' as const,
   embedding_model_id: 'bge-small',

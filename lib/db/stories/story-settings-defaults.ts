@@ -14,6 +14,7 @@ export const STORY_SETTINGS_DEFAULTS: StorySettings = {
   partialChapterBuffer: 10,
   protectedBuffer: 10,
   classifierCadence: 5,
+  classifierContextEntries: 4,
   piggybackMode: 'off',
   embeddingBackend: 'local',
   embedding_model_id: 'Xenova/all-MiniLM-L6-v2',

@@ -72,6 +72,7 @@ export const STORY_DEFINITION = storyDefinitionSchema.parse({
 
 export const STORY_SETTINGS = storySettingsSchema.parse({
   classifierCadence: 8,
+  classifierContextEntries: 4,
   piggybackMode: 'off',
   embeddingBackend: 'local',
   // A catalog id, not a placeholder: the retrieval phase resolves this story's

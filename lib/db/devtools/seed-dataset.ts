@@ -146,6 +146,7 @@ function definition(input: {
 function settings(overrides: Partial<StorySettings> = {}): StorySettings {
   return storySettingsSchema.parse({
     classifierCadence: 4,
+    classifierContextEntries: 4,
     piggybackMode: 'on',
     embeddingBackend: 'local',
     embedding_model_id: 'Xenova/all-MiniLM-L6-v2',

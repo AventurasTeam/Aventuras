@@ -26,6 +26,7 @@ const DEFINITION = storyDefinitionSchema.parse({
 })
 const SETTINGS = storySettingsSchema.parse({
   classifierCadence: 1,
+  classifierContextEntries: 4,
   piggybackMode: 'off',
   embeddingBackend: 'local',
   embedding_model_id: 'm',
