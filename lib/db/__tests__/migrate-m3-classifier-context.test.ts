@@ -65,13 +65,13 @@ describe(TAG, () => {
     }
   })
 
-  // Applying by filename stays green against a migration the app never runs; an
-  // unjournalled 0013 fails storySettingsSchema on every upgraded story. A fresh DB
-  // never needs the migration, so E2E cannot catch it either.
+  // drizzle-orm looks migrations up by key (m0013), not by filename. Both halves
+  // must be present; an import-only file would boot crash on the missing key.
   it('is wired into the upgrade path, not just present on disk', () => {
     expect(migrationTags()).toContain(TAG)
     const runtime = readFileSync(`${MIGRATIONS_DIR}/migrations.js`, 'utf8')
     expect(runtime).toContain(`${TAG}.sql`)
+    expect(runtime).toMatch(/^\s*m0013,\s*$/m)
   })
 
   it('creates the key on a settings blob that predates it', () => {
