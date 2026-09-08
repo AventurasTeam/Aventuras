@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, readFileSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -113,7 +113,24 @@ export function build(scale: Scale, dim: number): Fixture {
   // File-backed, not :memory: — the pass is read-heavy and an in-memory db
   // prices away the page-cache and I/O the desktop app actually pays.
   const dir = mkdtempSync(join(tmpdir(), 'retrieval-bench-'))
-  const sqlite = new DatabaseSync(join(dir, 'bench.db'), { allowExtension: true })
+  let sqlite: DatabaseSync | undefined
+  try {
+    sqlite = new DatabaseSync(join(dir, 'bench.db'), { allowExtension: true })
+    return populate(sqlite, dir, scale, dim)
+  } catch (err) {
+    // A caller can only close what build returned, so a throw before that strands
+    // the temp db for the process's lifetime — 24 fixtures a run.
+    try {
+      sqlite?.close()
+    } catch {
+      // The construction failure is the useful one; don't mask it.
+    }
+    rmSync(dir, { recursive: true, force: true })
+    throw err
+  }
+}
+
+function populate(sqlite: DatabaseSync, dir: string, scale: Scale, dim: number): Fixture {
   sqlite.loadExtension(getLoadablePath())
   migrateInto(sqlite)
   for (const kind of [
