@@ -83,6 +83,19 @@ type CaptureQuery = {
   text: string
   token_count: number
   source: QuerySource
+  /**
+   * Q4 only (retrieval.md → Redundancy): the share of this query's own pre-filter
+   * top-K the structural floor had already seated. Null on the three fixed slots and
+   * on a query whose top-K came back empty.
+   */
+  redundancy: number | null
+  /**
+   * The realised size of the cut `redundancy` was measured over, below REDUNDANCY_K
+   * only on a corpus too small to fill it. Stored because at small `k` the ratio
+   * describes the corpus rather than the query, and nothing else in the capture says
+   * so — `funnels.pool_size` is the post-filter size, not this.
+   */
+  redundancy_k: number | null
 }
 
 /** A new ranker tunable must be a type error here, not a silently absent capture field. */
@@ -104,9 +117,9 @@ type CaptureTokenizer = { encoding: string; version: string }
 /**
  * Bumped when a captured field's shape or meaning changes, so a decode refuses
  * rather than misreading an older payload. 5 added keyword_injections; 6 made
- * the query stack variable-length.
+ * the query stack variable-length; 7 added per-Q4 redundancy.
  */
-export const CAPTURE_VERSION = 6 as const
+export const CAPTURE_VERSION = 7 as const
 
 export type ProbeCapturePayload = {
   capture_version: number

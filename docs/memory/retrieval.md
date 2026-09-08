@@ -795,9 +795,11 @@ schema. Answering it requires seeing what the turn was already given,
 which is why the fallback receives the assembled memory blocks
 ([`piggyback.md → Fallback classifier context`](./piggyback.md#fallback-classifier-context)).
 
-**Capped at three, and the cap is a cost decision.** KNN scales
-linearly in query count and is the pass's second-largest term; six
-queries doubles it to thirty passes across five types. See
+**Capped at three, and the cap is a cost decision.** KNN is the pass's
+largest measured span and it scales in query count: six live queries
+take it from fifteen `sqlite-vec` passes to thirty, measured at
+~77ms → ~121ms at dim 384 and ~150ms → ~244ms at dim 768. Well under a
+doubling, but it is the term the cap exists to bound. See
 [Per-turn cost budget](#per-turn-cost-budget).
 
 **Emission contract.** Absent-tolerant and malformed-tolerant. Absence
@@ -845,12 +847,57 @@ Near 1.0 means the query asked for what the turn already had; near 0
 means it surfaced something the
 [structural floor](#structural-floor--always-inject) did not.
 
-Nothing new is computed. Pool assembly already discards that
+**The cut is the ten nearest rows, taken globally.** `topK` is the ten
+rows the query wanted most, merged across the floor-seatable kinds and
+re-sorted by distance — not each kind's own cut, and not the full
+`KNN_K` pass. Global rather than per-kind because a per-kind cut then
+unioned dilutes by the kinds that rarely reach the floor: lore reaches
+it only through a user-marked `always`. Merging is legitimate because
+distances are comparable across those tables — every stored and query
+vector is unit-norm, so L2 order is cosine order.
+
+Pinning the cut is what makes the ratio mean anything. Read instead as
+the full `KNN_K = 200` pass unioned over those kinds, `k` runs to ~600
+against a floor holding ~12 ids: the ratio is then bounded above at
+~0.02, a maximally degenerate query and a perfectly novel one land four
+thousandths apart, and the "near 1.0" above is arithmetically
+unreachable.
+
+**Entities, lore and threads only.** `floor.seatedIds` can hold no
+chapter or happening id, so admitting either kind's top-K to the
+denominator would deflate every ratio by construction. The cut is taken
+over exactly the kinds the
+[structural floor](#structural-floor--always-inject) can seat, and no
+others.
+
+**The denominator moves with `keywordRetrieval.mode`.** It counts
+only `floor.seatedIds`, which is exact under the default `boost`
+mode but excludes rows [keyword injection](#keyword-injection) seats
+under `inject`, so a query can ask for something the prompt already
+carries via injection and still score near 0. Not a defect — canon's
+"structural floor" means the floor, not the full prompt — but it is
+a caveat whoever eventually sets the warn threshold will need to
+weigh.
+
+**The realised `k` travels with the ratio.** A corpus too small to fill
+the cut yields fewer than ten rows, and one duplicate in three is not
+the same evidence as one in ten. The probe stores both
+([`probe.md → What gets captured`](./probe.md#what-gets-captured--light-mode-default)).
+
+**Cheap, but not free.** Pool assembly already discards that
 intersection on every pass — the floor filters run after KNN, not
-inside it — so this records what is currently dropped silently. It is
-captured per query in the probe ([`probe.md`](./probe.md)) and is
-**observability only** in v1: no automatic dropping, because the
-threshold that would justify one needs data nobody has yet.
+inside it — so the metric reads what was being dropped silently. What
+it costs is granularity: assembly used to collapse its KNN hits into a
+single union set, and keeping them per query meant widening the KNN
+result rows it carries and reshaping what it returns.
+
+It is **observability only** in v1: no automatic dropping, because the
+threshold that would justify one needs data nobody has yet. A pinned
+cut makes the full range reachable and so makes a warn threshold
+meaningful for the first time — the
+[memory probe](../ui/screens/memory-probe/memory-probe.md#queries-tab)
+marks a degenerate emission with ⚠ — but no number is set for it, here
+or in code. Choosing one is open.
 
 What it does not catch is a query retrieving novel but irrelevant rows.
 It detects "asked for what it already had", which is the predicted
@@ -1610,7 +1657,9 @@ vector fetched by id — and `id` is a vec0 metadata column with no
 push-down, so that fetch scans the branch partition. Measured at dim
 384: seating five of sixty chapters admits ~480 happenings on top of a
 ~290-row KNN pool, and the whole mechanism costs ~24ms of a ~108ms pass
-at 6000 happenings, against ~5ms at 1200. It cost ~44ms before
+at 6000 happenings, against ~5ms at 1200 — figures from the pre-fix
+bench fixture, so read the share rather than the milliseconds
+([Per-turn cost budget](#per-turn-cost-budget)). It cost ~44ms before
 tokenization moved past the pre-filter: the admitted rows land beyond
 rank 200 and are no longer priced. Two consequences worth holding:
 
@@ -1726,7 +1775,7 @@ worst case at ~6.5ms per type at dim 384 and ~12.5ms at dim 768.
 
 In practice only happenings reaches 200; the other four types are
 bounded by how much a person authored. Measured across all five types
-together, scoring plus tokenization plus MMR plus budget fill is ~29ms
+together, scoring plus tokenization plus MMR plus budget fill is ~40ms
 at dim 384 — see [Per-turn cost budget](#per-turn-cost-budget). The
 bench no longer separates MMR from the tokenization the same map does,
 so the ~6.5ms figure above predates that merge and is not re-derivable
@@ -1866,10 +1915,10 @@ sound because a pre-filtered row can never be seated — not by the pass
 and not by the probe simulator, which cannot un-drop it without the
 per-row vectors that would let it re-run MMR. Per-row cost is ~45-60 µs
 with js-tiktoken `o200k_base`; capping the row count is what took the
-pass from ~140ms to ~108ms at dim 384 (see
-[Per-turn cost budget](#per-turn-cost-budget)). A `token_count INTEGER`
-column per table remains the fallback if that is not enough, with cache
-invalidation on row update.
+pass from ~140ms to ~108ms at dim 384 — both endpoints from the pre-fix
+bench fixture (see [Per-turn cost budget](#per-turn-cost-budget)).
+A `token_count INTEGER` column per table remains the fallback if that
+is not enough, with cache invalidation on row update.
 
 ### Per-turn cost budget
 
@@ -1877,29 +1926,56 @@ Measured, not estimated: `bench/retrieval-cost.test.ts` (`pnpm
 bench:retrieval`) prices the shipped pass against the volumes
 [Scale assumptions](#scale-assumptions) projects. Numbers below are
 desktop (Node 24 / V8, file-backed SQLite, `sqlite-vec` 0.1.9),
-median of seven warm passes, **excluding the embedder and IPC**.
+median of seven warm passes, **excluding the embedder and IPC**, taken
+on an otherwise-quiet machine across two consecutive runs that agreed
+within 2-4%.
 
-| Step                                    | dim 384 | dim 768 | Scales with                           |
-| --------------------------------------- | ------- | ------- | ------------------------------------- |
-| Source reads, awareness, chapter JOIN   | ~21ms   | ~21ms   | branch entity / lore / thread count   |
-| KNN — 3 vectors × 5 types               | ~35ms   | ~75ms   | **query count**, rows per family, dim |
-| Chapter-range admission                 | ~21ms   | ~24ms   | happenings on the branch              |
-| Candidate assembly                      | ~6ms    | ~8ms    | pool size                             |
-| Scoring, tokenization, MMR, budget fill | ~29ms   | ~44ms   | min(pool, `preFilterTopN`) per type   |
-| **Total**                               | ~108ms  | ~175ms  |                                       |
+| Step                                                   | dim 384 | dim 768 | Scales with                           |
+| ------------------------------------------------------ | ------- | ------- | ------------------------------------- |
+| `knnMs` — 3 live queries (`q4=0`)                      | ~77ms   | ~150ms  | **query count**, rows per family, dim |
+| `knnMs` — 6 live queries (`q4=3`, the Q4 cap)          | ~121ms  | ~244ms  | **query count**, rows per family, dim |
+| `rankMs` — scoring, tokenization, MMR, budget fill     | ~40ms   | ~57ms   | min(pool, `preFilterTopN`) per type   |
+| **Total**                                              | ~136ms  | ~228ms  |                                       |
+| **Total (Q4 saturated)**                               | ~182ms  | ~319ms  |                                       |
+| M3.4 sub-split — source reads, awareness, chapter JOIN | ~21ms   | ~21ms   | branch entity / lore / thread count   |
+| M3.4 sub-split — KNN, 3 vectors × 5 types              | ~35ms   | ~75ms   | **query count**, rows per family, dim |
+| M3.4 sub-split — chapter-range admission               | ~21ms   | ~24ms   | happenings on the branch              |
+| M3.4 sub-split — candidate assembly                    | ~6ms    | ~8ms    | pool size                             |
 
-Read at 6000 happenings / 15 000 awareness / 60 chapters — the top of
-the projected range. Lower scales are cheaper roughly in proportion:
-~51ms / ~91ms at 1200 happenings, ~87ms / ~134ms at 3600.
+Read at 6000 happenings / 15 000 awareness / 60 chapters with the
+chapter-match boost on — the top of the projected range. **Total** and
+the first `knnMs` row are the three-vector stack; **Total (Q4
+saturated)** and the second are the same pass with the Q4 slot at its
+cap of three emitted queries, which is the worst case the budget has to
+hold at. Lower scales are cheaper roughly in proportion: at `q4=0`,
+~68ms / ~126ms at 1200 happenings and ~110ms / ~179ms at 3600.
+`rankMs` carries no `q4` axis because it does not move with query
+count — the pre-filter caps what gets scored before ranking runs
+regardless of how many query vectors fed KNN. Measured at dim 384:
+~41.7ms at `q4=0` versus ~41.9ms at `q4=3`.
+
+**Why the shipped figures moved.** The bench fixture built all three
+query vectors on one topic centroid — the topic index was mapped over
+but never read — so their KNN top-200 sets largely coincided, the pool
+union came out small, and every term that scales with that union read
+optimistic in the table that exists to price it. The fixture now takes
+one centroid per query and carries a `q4` axis. That is what moved
+**Total** from ~108ms to ~136ms at dim 384 and `rankMs` from ~29ms to
+~40ms, and it is where the saturated rows come from.
 
 **Which rows a re-run reproduces.** The bench emits five spans:
-`totalMs`, `syncMs`, `embedMs`, `knnMs`, `rankMs`. Only two table rows
-map onto one of them — **Total** is `totalMs`, and **Scoring,
-tokenization, MMR, budget fill** is `rankMs`. The four rows above it
-are an ad-hoc M3.4 sub-split of `knnMs` and of the unnamed span before
-it (source loading has no `RetrievalTimings` member), hand-measured
-once and not instrumented since. Read them as proportions of the
-whole, not as figures `pnpm bench:retrieval` re-derives.
+`totalMs`, `syncMs`, `embedMs`, `knnMs`, `rankMs`. The first five table
+rows are spans: **Total** and **Total (Q4 saturated)** are `totalMs` at
+`q4=0` and `q4=3`, the two `knnMs` rows are that span at the same two
+settings, and the `rankMs` row is that span. The four **M3.4
+sub-split** rows are not. They are an ad-hoc split of `knnMs` and of
+the unnamed span before it (source loading has no `RetrievalTimings`
+member), hand-measured once during M3.4 and not instrumented since — so
+they predate the fixture fix and no longer sum to **Total**, and their
+KNN row is one component of that split rather than `knnMs` itself, so
+the gap between its ~35ms / ~75ms and the measured `knnMs` rows is not
+a discrepancy. Re-deriving them would mean instrumenting `runRetrieval`
+for a doc's sake. Read them as proportions, not as figures.
 
 Three things the table makes visible that the previous estimate did
 not:
@@ -1909,22 +1985,22 @@ not:
   to fill a non-nullable trace field — a 771-row happenings pool
   tokenized to seat 22. `rankPerType` now defers it past the
   pre-filter slice and leaves `tokensEstimated` null on dropped rows,
-  which is what took the total from ~140ms to ~108ms at dim 384. The
-  saving is not separately quotable: tokenization runs inside the same
-  kept-row map that feeds MMR, so the two rows this table used to
-  carry are one row and one `rankMs` span. Scoring and the sort do
-  still walk the whole pool — the bench's 477-row swing between boost
-  on and off moves `rankMs` by ~1ms, which is what "scales with pool
-  size" is now worth here.
+  which is what took the total from ~140ms to ~108ms at dim 384 — both
+  endpoints measured under the pre-fix fixture, so read the drop and
+  not the figures. The saving is not separately quotable: tokenization
+  runs inside the same kept-row map that feeds MMR, so the two rows
+  this table used to carry are one row and one `rankMs` span. Scoring
+  and the sort do still walk the whole pool — the bench's 477-row
+  swing between boost on and off moves `rankMs` by ~1ms, which is what
+  "scales with pool size" is now worth here.
 - **MMR is not the problem it looked like.** The measured ~6.5ms per
   type at N=200 is real, but only happenings reaches 200 in a typical
   story: entities, lore and threads are human-authored and sit in the
   low hundreds. Scoring, tokenization, MMR and budget fill together
-  are ~29ms at dim 384 against a 1067-row pool of which 496 survive
-  the pre-filter. A story that saturates the pre-filter on all five
-  types tokenizes and ranks 1000 rows rather than 496 — the honest
-  worst case, not the common one, and the one term in this table that
-  the bench fixture does not reach.
+  are ~40ms at dim 384. A story that saturates the pre-filter on all
+  five types tokenizes and ranks 1000 rows, which the bench fixture's
+  pool does not reach — the honest worst case, not the common one, and
+  the one term in this table left unpriced.
 - **The chapter-range admission is a first-class cost**, not a
   rounding error on the happenings pool. See
   [Chapter-match boost](#chapter-match-boost-on-happenings).
@@ -1944,28 +2020,28 @@ rather than an absolute:
 - Terms proportional to **happenings on the branch** are accepted but
   budgeted, because that count is bounded by the chapter threshold.
 
-**The query stack is no longer three vectors, and the table above has
-not been re-run.** [Q4](#q4-classifier-emitted-queries) takes the worst
-case to six live queries, so KNN goes to thirty passes — linearly, since
-each is an independent `sqlite-vec` query. Extrapolating the row above
-puts KNN at ~70ms / ~150ms and the total at ~143ms / ~250ms, which
-lands dim 768 on the stated ceiling. That extrapolation is not a
-measurement and must not be quoted as one.
+**The Q4-saturated pass at dim 768 is over that first bullet's
+ceiling** — ~319ms against ~250ms, measured, and it is the worst case
+the [Q4 cap](#q4-classifier-emitted-queries) allows rather than an
+outlier. Nothing here resolves it. Whether the ceiling moves, the cap
+tightens, or dim 768 stops being a desktop default is a decision this
+doc records the number for rather than makes. The other two obligations
+hold: query count is a fixed small constant, not a term proportional to
+awareness rows or branch entries.
 
-Desktop is nonetheless the least interesting part of it. The scaling
-obligations below are unaffected — query count is a fixed small
-constant, not a term proportional to awareness rows or branch entries —
-and retrieval remains under 1% of a turn. The doubling bites in the two
-places this table does not cover, and both are obligations on whoever
-sources Q4 rather than assumptions the design may make:
+Desktop is nonetheless the least interesting part of the widening —
+retrieval stays under 1% of a turn even saturated. The widening bites
+in the two places this table does not cover, and both are obligations
+on whoever sources Q4 rather than assumptions the design may make:
 
-- **The embedder is excluded from every row of this table, though the
-  bench does measure it** — `embedMs` is one of the five spans it
-  emits, so re-running it reports the real figure. The per-turn embed
-  is **one batched call** whose text count goes from three to six, not
-  three calls becoming six; a local ONNX runtime may still loop per
-  text inside that call. Nothing has re-run it against the wider
-  stack.
+- **The embedder is excluded from every row of this table, and the
+  bench cannot fill the gap.** It emits an `embedMs` span, but its
+  fixture stubs the embed call with precomputed vectors, so that span
+  reads 0.0 and prices nothing. The per-turn embed is **one batched
+  call** whose text count goes from three to six, not three calls
+  becoming six; a local ONNX runtime may still loop per text inside
+  that call. Nothing has measured it against the wider stack, and a
+  bench that could would need a real embedder wired into the fixture.
 - **Mobile doubles an already-open risk** — see below.
 
 **Mobile is unmeasured.** Every figure here is desktop. The PoC's
@@ -1973,8 +2049,8 @@ per-query KNN numbers under
 [Performance characteristics](#performance-characteristics--poc-findings)
 are the only mobile evidence and they predate the shipped pass, which
 issues five KNN passes per live query rather than three total — up to
-thirty once Q4 lands. Nothing has run the ranker on-device. Treat the mobile budget as open, not as a scaled
-copy of this table.
+thirty with Q4 at its cap. Nothing has run the ranker on-device.
+Treat the mobile budget as open, not as a scaled copy of this table.
 
 ### Pseudocode
 

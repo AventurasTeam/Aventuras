@@ -134,6 +134,28 @@ describe('buildStateReport', () => {
     expect(report).not.toHaveProperty('summary')
   })
 
+  // Pins the full allowlisted shape, not absence: `not.toHaveProperty(...)` would pass before
+  // any change (vacuous). Asserting the whole object fails once the return becomes `...block`.
+  it('reports exactly the allowlisted keys, excluding summary and retrievalQueries', () => {
+    const report = buildStateReport({
+      layer: 'piggyback_tagged_block',
+      block: { sceneEntities: ['char_a'], summary: 's', retrievalQueries: ['q'] },
+      failures: [],
+    })
+    expect(report).toEqual({ layer: 'piggyback_tagged_block', sceneEntities: ['char_a'] })
+  })
+
+  // Judged on the block as emitted: a block carrying only retrieval asks still reports state —
+  // suppressing it would badge the turn as one where piggyback never ran.
+  it('still reports a block that carried only retrieval asks', () => {
+    const report = buildStateReport({
+      layer: 'piggyback_tagged_block',
+      block: { retrievalQueries: ['q'] },
+      failures: [],
+    })
+    expect(report?.layer).toBe('piggyback_tagged_block')
+  })
+
   it('carries the full transfer and visual-change shapes through', () => {
     const report = buildStateReport({
       layer: 'piggyback_tagged_block',

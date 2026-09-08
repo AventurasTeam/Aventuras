@@ -15,6 +15,7 @@ import {
   type EntityRow,
   type KeywordInjection,
   type LoreRow,
+  type QueryRedundancy,
   type QuerySpec,
   type QueryStack,
   type RankedType,
@@ -109,10 +110,12 @@ const funnelOf = (bundle: RankedType | undefined): ProbeCapturePayload['funnels'
         type_budget: bundle.funnel.typeBudget,
       }
 
-const queryOf = (q: QuerySpec) => ({
+const queryOf = (q: QuerySpec, redundancy: QueryRedundancy | null) => ({
   text: q.text,
   token_count: countTokens(q.text),
   source: q.source,
+  redundancy: redundancy?.ratio ?? null,
+  redundancy_k: redundancy?.k ?? null,
 })
 
 // A pass that failed before building a stack still captures the fixed slots, so
@@ -129,8 +132,14 @@ const ABSENT_QUERY_STACK = buildQueryStack({
 // No query vector in either mode: λ_div — the one thing deep mode exists for —
 // needs candidate-vs-candidate cosines, and every other simulation re-blends
 // the per-row `sims` (probe.md → Deep mode).
-const queriesOf = (stack: QueryStack | null): ProbeCapturePayload['queries'] =>
-  (stack ?? ABSENT_QUERY_STACK).specs.map(queryOf)
+//
+// `redundancy` is indexed defensively: a partial with no stack of its own carries
+// an empty array beside ABSENT_QUERY_STACK's three specs.
+const queriesOf = (
+  stack: QueryStack | null,
+  redundancy: readonly (QueryRedundancy | null)[],
+): ProbeCapturePayload['queries'] =>
+  (stack ?? ABSENT_QUERY_STACK).specs.map((q, i) => queryOf(q, redundancy[i] ?? null))
 
 const nameWithDescription = (name: string, description: string | null): string =>
   description ? `${name}: ${description}` : name
@@ -189,6 +198,7 @@ export function buildCapturePayload(input: CapturePayloadInput): ProbeCapturePay
     floor,
     bundles,
     keywordInjections,
+    queryRedundancy,
   } = outcome.ok ? outcome : outcome.partial
 
   return {
@@ -205,7 +215,7 @@ export function buildCapturePayload(input: CapturePayloadInput): ProbeCapturePay
       ...input.settings,
       retrievalBudgets: { ...input.settings.retrievalBudgets },
     },
-    queries: queriesOf(stack),
+    queries: queriesOf(stack, queryRedundancy),
     scan_text: input.scanText,
     pools: {
       entities: poolOf(bundles.entities, mode),

@@ -2,6 +2,7 @@ import type { StructuralFloor } from '../pools'
 import { buildQueryStack, type QueryStack } from '../queries'
 import type {
   InjectedAwareness,
+  QueryRedundancy,
   RetrievalFailure,
   RetrievalOutcome,
   RetrievalPartial,
@@ -86,6 +87,7 @@ export type RetrievalSuccessOverrides = {
   bundles?: Partial<Record<RetrievalType, RankedType>>
   queries?: QueryStack
   keywordInjections?: readonly KeywordInjection[]
+  queryRedundancy?: readonly (QueryRedundancy | null)[]
   staleCounts?: Partial<Record<RetrievalType, number>>
   injectedAwareness?: InjectedAwareness[]
   selectedLocationIds?: string[]
@@ -99,6 +101,7 @@ export type RetrievalSuccessOverrides = {
  * shared empty bundle is one `.push` away from leaking across tests.
  */
 export function retrievalSuccess(over: RetrievalSuccessOverrides = {}): RetrievalSuccess {
+  const queries = over.queries ?? emptyQueryStack()
   return {
     ok: true,
     floor: {
@@ -112,8 +115,14 @@ export function retrievalSuccess(over: RetrievalSuccessOverrides = {}): Retrieva
       ...over.floor,
     },
     bundles: perType((type) => over.bundles?.[type] ?? rankedBundle(over.selected?.[type] ?? [])),
-    queries: over.queries ?? emptyQueryStack(),
+    queries,
     keywordInjections: over.keywordInjections ?? [],
+    // Slot-aligned, not []: null on fixed slots, real value on 'direct' ones —
+    // so a fixture that skips this override still exercises the non-null path,
+    // and the falsy `ratio: 0` catches a `??`-vs-`||` truthiness bug.
+    queryRedundancy:
+      over.queryRedundancy ??
+      queries.slots.map((s) => (s === 'direct' ? { ratio: 0, k: 1 } : null)),
     staleCounts: { ...perType(() => 0), ...over.staleCounts },
     injectedAwareness: over.injectedAwareness ?? [],
     selectedLocationIds: over.selectedLocationIds ?? [],
@@ -133,6 +142,13 @@ export function retrievalFailure(
   return {
     ok: false,
     failure,
-    partial: { queries: null, floor: null, bundles: {}, keywordInjections: [], ...partial },
+    partial: {
+      queries: null,
+      floor: null,
+      bundles: {},
+      keywordInjections: [],
+      queryRedundancy: [],
+      ...partial,
+    },
   }
 }

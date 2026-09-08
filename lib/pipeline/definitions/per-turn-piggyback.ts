@@ -6,6 +6,7 @@ import { inheritedEntryMetadata } from '@/lib/db'
 import {
   buildPiggybackActions,
   buildStateReport,
+  MAX_RETRIEVAL_QUERIES,
   resolveSuggestionEmission,
   resolveSuggestionItems,
   substitutePiggybackIds,
@@ -86,6 +87,17 @@ export const fallbackClassifierSchema = z.object({
     .optional()
     .describe(
       'One sentence summarizing what happened in this turn. Used verbatim as a retrieval query next turn, so identify the people, places and things that mattered by name, not ID.',
+    ),
+  // retrieval.md → Q4: must never raise the parse — a raise costs a full extra classifier
+  // call and, on failure, takes the mandatory summary down with it. Drops over-emission rather
+  // than truncating: truncation needs .transform(), which breaks z.toJSONSchema.
+  retrievalQueries: z
+    .array(z.string())
+    .max(MAX_RETRIEVAL_QUERIES)
+    .optional()
+    .catch(undefined)
+    .describe(
+      'Up to three short phrases naming context you want retrieved for the NEXT turn — what you would want looked up, not a recap of this one. Used verbatim as a retrieval query next turn, so identify the people, places and things by name, not ID.',
     ),
 })
 

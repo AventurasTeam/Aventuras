@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import type { EntryMetadata } from './entry-metadata'
 import { inheritedEntryMetadata } from './inherited-metadata'
 
 describe('inheritedEntryMetadata', () => {
@@ -35,5 +36,17 @@ describe('inheritedEntryMetadata', () => {
       currentLocationId: null,
       worldTime: 0,
     })
+  })
+
+  // Never inherited, unlike the scene triple beside it: a carried-forward query
+  // is the staleness Q4 exists to avoid (retrieval.md#q4-classifier-emitted-queries).
+  it('does not carry retrievalQueries forward', () => {
+    const tail: EntryMetadata = {
+      sceneEntities: ['char_a'],
+      currentLocationId: 'loc_a',
+      worldTime: 10,
+      retrievalQueries: ['House Eldrin sigil'],
+    }
+    expect(inheritedEntryMetadata(tail)).not.toHaveProperty('retrievalQueries')
   })
 })

@@ -1,10 +1,18 @@
 import type { DeltaSource, PipelineAction } from '@/lib/actions'
-import type { CharacterState, Entity } from '@/lib/db'
+import type { CharacterState, Entity, EntryMetadata } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 
 import { dedupeSceneEntities, scenePromotionActions, sceneTrackingActions } from './scene-tracking'
-import type { ParsedStateBlock } from './types'
+import { MAX_RETRIEVAL_QUERIES, type ParsedStateBlock } from './types'
 import { resolvePiggybackWorldTimeDelta } from './world-time'
+
+// Two producers write this field; only the tagged-block parser filters itself (trims,
+// dedupes, caps) — the classifier fallback only counts, so blanks/dupes reach here raw.
+// Dedupe before the cap so a repeat doesn't spend a slot a distinct ask needed (retrieval.md → Q4).
+function normalizeRetrievalQueries(queries: readonly string[]): string[] {
+  const distinct = new Set(queries.map((q) => q.trim()).filter((q) => q !== ''))
+  return [...distinct].slice(0, MAX_RETRIEVAL_QUERIES)
+}
 
 type PreviousMetadata = {
   entryId?: string
@@ -19,20 +27,16 @@ type BuildArgs = {
   entities: readonly Entity[]
   previousMetadata: PreviousMetadata
   branchId: string
-  // Which caller produced this block — piggyback's own direct tagged-block
-  // emission ('piggyback_tagged_block') or the synchronous per-turn fallback
-  // ('per_turn_classifier'). Not hardcoded here: the two paths are distinct
-  // agents and their deltas' provenance must say so (docs/memory/piggyback.md).
+  // Caller-supplied, not hardcoded: the two producers are distinct agents whose deltas'
+  // provenance must say so (docs/memory/piggyback.md).
   source: DeltaSource
 }
 
 type BuildResult = {
-  metadata: {
-    sceneEntities: string[]
-    currentLocationId: string | null
-    worldTime: number
-    summary?: string
-  }
+  metadata: Pick<
+    EntryMetadata,
+    'sceneEntities' | 'currentLocationId' | 'worldTime' | 'summary' | 'retrievalQueries'
+  >
   actions: PipelineAction[]
   /** What validation did to the emitted values, for stateReport — so the reader renders
    *  the emitted-vs-applied divergence as fact instead of inferring a cause from it. */
@@ -73,6 +77,8 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
 
   const metadata: BuildResult['metadata'] = { sceneEntities, currentLocationId, worldTime }
   if (block.summary !== undefined) metadata.summary = block.summary
+  const retrievalQueries = normalizeRetrievalQueries(block.retrievalQueries ?? [])
+  if (retrievalQueries.length > 0) metadata.retrievalQueries = retrievalQueries
   // visual/inventory/stackables only exist on CharacterState (entity-state-schema.ts) —
   // an id that resolves but belongs to a location/item/faction would otherwise get
   // those fields merged onto its state unvalidated (state-patch-actions.ts never

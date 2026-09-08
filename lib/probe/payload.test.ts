@@ -302,7 +302,7 @@ describe('buildCapturePayload', () => {
       captured_at: 1_700_000_000_123,
       embedding_model_id: 'Xenova/all-MiniLM-L6-v2',
       capture_mode: 'light',
-      capture_version: 6,
+      capture_version: 7,
     })
   })
 
@@ -397,11 +397,70 @@ describe('buildCapturePayload', () => {
     expect(emittedPayload.queries[3].text).toBe('House Eldrin')
   })
 
+  // 0 is the best case (retrieval.md → Redundancy: it surfaced something the floor
+  // didn't) — a falsy-collapsing `||` here would erase exactly that signal.
+  it('keeps a zero redundancy ratio as 0 rather than collapsing it to null', () => {
+    expect(emittedPayload.queries[3]).toMatchObject({ redundancy: 0, redundancy_k: 1 })
+  })
+
   it('stores per-row sims as a list aligned with the query list', () => {
     const row = emittedPayload.pools.lore[0]
     expect(row.sims).toEqual([0.95, 0.9, null, 0.7])
     expect(row.sims).toHaveLength(emittedPayload.queries.length)
     expect(row).not.toHaveProperty('sim_q1')
+  })
+
+  it('carries each Q4 entry its redundancy ratio and the top-K it was measured over', () => {
+    const stack = queryStack({ emittedQueries: ['marsh nobility'] })
+    const payload = buildCapturePayload({
+      ...identity,
+      mode: 'light',
+      settings,
+      params: RANKER_DEFAULTS,
+      outcome: retrievalSuccess({
+        queries: stack,
+        queryRedundancy: [null, null, null, { ratio: 0.25, k: 400 }],
+      }),
+    })
+
+    expect(payload.queries[3]).toMatchObject({
+      source: 'classifier_emitted',
+      redundancy: 0.25,
+      redundancy_k: 400,
+    })
+  })
+
+  it('leaves the fixed slots null on both redundancy fields', () => {
+    const payload = buildCapturePayload({
+      ...identity,
+      mode: 'light',
+      settings,
+      params: RANKER_DEFAULTS,
+      outcome: retrievalSuccess({ queries: queryStack(), queryRedundancy: [null, null, null] }),
+    })
+
+    expect(payload.queries.slice(0, 3).map((q) => [q.redundancy, q.redundancy_k])).toEqual([
+      [null, null],
+      [null, null],
+      [null, null],
+    ])
+  })
+
+  // No stack on a sync-stage failure, so the payload falls back to ABSENT_QUERY_STACK's
+  // three specs beside an empty measurement array — reading past the end must not yield undefined.
+  it('nulls redundancy on a failed pass that never built a query stack', () => {
+    const payload = buildCapturePayload({
+      ...identity,
+      mode: 'light',
+      settings,
+      params: RANKER_DEFAULTS,
+      outcome: retrievalFailure({ reason: 'call', detail: 'sync blew up', staleCount: null }),
+    })
+
+    expect(payload.queries).toHaveLength(3)
+    expect(payload.queries.every((q) => q.redundancy === null && q.redundancy_k === null)).toBe(
+      true,
+    )
   })
 
   it('prices each query with the real tokenizer', () => {
@@ -417,6 +476,8 @@ describe('buildCapturePayload', () => {
       text: 'Mira opens the ledger and reads the tide marks aloud.',
       token_count: 12,
       source: 'user_action',
+      redundancy: null,
+      redundancy_k: null,
     })
   })
 
@@ -508,9 +569,21 @@ describe('buildCapturePayload', () => {
     })
 
     expect(payload.queries).toEqual([
-      { text: '', token_count: 0, source: 'user_action' },
-      { text: '', token_count: 0, source: 'structural_digest' },
-      { text: '', token_count: 0, source: 'piggyback_summary' },
+      { text: '', token_count: 0, source: 'user_action', redundancy: null, redundancy_k: null },
+      {
+        text: '',
+        token_count: 0,
+        source: 'structural_digest',
+        redundancy: null,
+        redundancy_k: null,
+      },
+      {
+        text: '',
+        token_count: 0,
+        source: 'piggyback_summary',
+        redundancy: null,
+        redundancy_k: null,
+      },
     ])
     expectEmptyPools(payload)
     expect(payload.structural_floor).toEqual([])

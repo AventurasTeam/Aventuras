@@ -75,6 +75,10 @@ export const reader = {
     reader.worldTimeDialog(page).getByRole('textbox', { name: tier }),
   worldTimeSave: (page: Page): Locator =>
     reader.worldTimeDialog(page).getByRole('button', { name: t('save') }),
+  // Row-scoped: every ai_reply/opening row renders this toggle with the same
+  // accessible name, so an unscoped query is ambiguous once more than one exists.
+  showState: (page: Page, entryId: string): Locator =>
+    reader.row(page, entryId).getByRole('button', { name: t('reader:entryCard.showState') }),
   monotonicityIndicator: (page: Page, entryId: string): Locator =>
     reader.row(page, entryId).getByLabel(WORLD_TIME_BREAK_LABEL),
 

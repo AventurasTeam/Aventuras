@@ -18,14 +18,11 @@ type BuildReportArgs = {
 }
 
 /**
- * What the model EMITTED plus what `apply.ts` did with it — several causes collapse onto
- * the same emitted-vs-current difference (docs/ui/patterns/entry-card.md → Emitted vs.
- * applied). `summary` is not copied: it has a top-level home on EntryMetadata, and a
- * second copy would give the reader two sources for one sentence.
+ * Emitted vs. applied causes collapse onto one diff (entry-card.md → Emitted vs. applied).
+ * `summary`/`retrievalQueries` omitted: they already live top-level on EntryMetadata.
  */
 export function buildStateReport(args: BuildReportArgs): EntryMetadata['stateReport'] {
   const { layer, block, failures, raw, applied } = args
-  const { summary: _summary, ...reported } = block
   // Emptiness is judged on the block as emitted, summary included: a block carrying only
   // a summary reported state, and suppressing its report would badge the turn as one
   // where piggyback never ran.
@@ -33,19 +30,17 @@ export function buildStateReport(args: BuildReportArgs): EntryMetadata['stateRep
 
   return {
     layer,
-    ...(reported.sceneEntities !== undefined ? { sceneEntities: reported.sceneEntities } : {}),
-    ...(reported.currentLocation !== undefined
-      ? { currentLocation: reported.currentLocation }
-      : {}),
-    ...(reported.worldTimeDelta !== undefined ? { worldTimeDelta: reported.worldTimeDelta } : {}),
-    ...(reported.worldTimeDelta !== undefined && applied !== undefined
+    ...(block.sceneEntities !== undefined ? { sceneEntities: block.sceneEntities } : {}),
+    ...(block.currentLocation !== undefined ? { currentLocation: block.currentLocation } : {}),
+    ...(block.worldTimeDelta !== undefined ? { worldTimeDelta: block.worldTimeDelta } : {}),
+    ...(block.worldTimeDelta !== undefined && applied !== undefined
       ? { worldTimeDeltaApplied: applied.worldTimeDelta }
       : {}),
     ...(applied?.currentLocationRejected === true
       ? { currentLocationRejected: true as const }
       : {}),
-    ...(reported.visualChanges !== undefined ? { visualChanges: reported.visualChanges } : {}),
-    ...(reported.transfers !== undefined ? { transfers: reported.transfers } : {}),
+    ...(block.visualChanges !== undefined ? { visualChanges: block.visualChanges } : {}),
+    ...(block.transfers !== undefined ? { transfers: block.transfers } : {}),
     ...(failures.length > 0
       ? { failedFields: failures.map((f) => ({ field: f.field, detail: f.detail })) }
       : {}),

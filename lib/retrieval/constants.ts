@@ -34,3 +34,10 @@ export const RANKER_DEFAULTS = {
  * `runRetrievalPass`, which admits chapter-range happenings separately.
  */
 export const KNN_K = 200
+
+/**
+ * The cut the redundancy metric measures over, deliberately far shallower than
+ * `KNN_K`: over the full pass the floor's ~12 ids cannot move a 600-row
+ * denominator, so every query — degenerate or novel — scores near zero.
+ */
+export const REDUNDANCY_K = 10

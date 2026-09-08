@@ -170,6 +170,7 @@ const ReaderRow = memo(function ReaderRow({
       entityNames={entityNames}
       stateReport={row.metadata?.stateReport}
       summary={row.metadata?.summary}
+      retrievalQueries={row.metadata?.retrievalQueries}
       sceneOptions={sceneEditable ? sceneOptions : undefined}
       onEditScene={sceneEditable ? (next) => onEditScene(row.id, next) : undefined}
       onRequestEditScene={sceneEditable ? () => onRequestEditScene(row.id) : undefined}

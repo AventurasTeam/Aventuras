@@ -56,6 +56,13 @@ const eachNonNegative = (field: string, record: Readonly<Record<RetrievalType, n
 const typeOf = (value: unknown): string =>
   value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value
 
+// isFinite guards a format change only — JSON flattens NaN/Infinity to null before
+// a capture is ever stored, so no non-finite value can reach here today.
+const requireFiniteOrNull = (field: string, value: unknown): void => {
+  if (value !== null && !(typeof value === 'number' && Number.isFinite(value)))
+    throw new CaptureShapeError(field, `must be a finite number or null, got ${typeOf(value)}`)
+}
+
 const requirePlainObject = (field: string, value: unknown): void => {
   if (value === null || typeof value !== 'object' || Array.isArray(value))
     throw new CaptureShapeError(field, `must be an object, got ${typeOf(value)}`)
@@ -98,10 +105,16 @@ export function assertCaptureShape(decoded: unknown): asserts decoded is ProbeCa
     const source = (query as Record<string, unknown>).source
     if (typeof source !== 'string')
       throw new CaptureShapeError(`queries[${i}].source`, `must be a string, got ${typeOf(source)}`)
+    // Q4-only in practice, but validated on every entry: this module proves shapes,
+    // not which source may carry which field.
+    requireFiniteOrNull(`queries[${i}].redundancy`, (query as Record<string, unknown>).redundancy)
+    requireFiniteOrNull(
+      `queries[${i}].redundancy_k`,
+      (query as Record<string, unknown>).redundancy_k,
+    )
   })
   // blendSims indexes sims positionally against queries, so a non-array dies at
   // replay's `[...r.sims]` spread and a non-number blends to NaN unmarked.
-  // isFinite guards a format change only — JSON flattens NaN/Infinity to null.
   const queryCount = payload.queries.length
   for (const type of RETRIEVAL_TYPES) {
     ;(pools[type] as unknown[]).forEach((candidate, i) => {
@@ -115,13 +128,7 @@ export function assertCaptureShape(decoded: unknown): asserts decoded is ProbeCa
           `${field}.sims`,
           `must carry one value per query, got ${sims.length} for ${queryCount}`,
         )
-      sims.forEach((sim, j) => {
-        if (sim !== null && !(typeof sim === 'number' && Number.isFinite(sim)))
-          throw new CaptureShapeError(
-            `${field}.sims[${j}]`,
-            `must be a finite number or null, got ${typeOf(sim)}`,
-          )
-      })
+      sims.forEach((sim, j) => requireFiniteOrNull(`${field}.sims[${j}]`, sim))
     })
   }
   // Required-and-nullable, so `undefined` is rejected rather than defaulted:

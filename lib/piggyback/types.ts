@@ -14,11 +14,9 @@ export const VISUAL_CHANGE_TYPES = [
 ] as const
 export type VisualChangeType = (typeof VISUAL_CHANGE_TYPES)[number]
 
-// Drift guard, both directions: the two lists must stay identical, since the parser
-// validates against this one and entryMetadataSchema validates against lib/db's. A
-// divergence would let a parsed block fail schema validation at write time.
-// Type-only on purpose — scripts/mock-llm reaches this module under plain Node, and a
-// value import would drag the whole db barrel in behind it.
+// Drift guard: must match entryMetadataSchema's stateReport enum (lib/db) — that schema
+// never validates piggyback data, so the type check below is what actually catches drift.
+// Type-only: a value import would drag the whole db barrel into scripts/mock-llm's plain Node.
 type _VisualCategoriesMatch = [VisualChangeType] extends [(typeof VISUAL_CATEGORIES)[number]]
   ? [(typeof VISUAL_CATEGORIES)[number]] extends [VisualChangeType]
     ? true
@@ -26,6 +24,10 @@ type _VisualCategoriesMatch = [VisualChangeType] extends [(typeof VISUAL_CATEGOR
   : never
 const _visualChecks: [_VisualCategoriesMatch] = [true]
 void _visualChecks
+
+// retrieval.md → Q4. Restated from lib/retrieval's MAX_EMITTED_QUERIES, which this module
+// cannot value-import for the reason above; parse.test.ts pins them equal.
+export const MAX_RETRIEVAL_QUERIES = 3
 
 export type VisualChangeNote = { id: string; type: VisualChangeType; text: string }
 export type ItemTransfer = {
@@ -44,6 +46,7 @@ export type ParsedStateBlock = {
   visualChanges?: VisualChangeNote[]
   transfers?: ParsedTransfers
   summary?: string
+  retrievalQueries?: string[]
 }
 
 // `'state'` is the block-level failure: a <state> that parsed into no field at all.

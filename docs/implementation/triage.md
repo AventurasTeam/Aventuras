@@ -60,27 +60,6 @@ slice-planning gate forces its resolution before that slice is planned.
     every file sets for itself through the global decorator in
     `.storybook/preview.tsx`.
 
-- **The Q4 query slot's cost is projected, not measured, and no slice
-  owns measuring it.** The
-  [query-stack design](../explorations/2026-09-06-retrieval-query-stack.md)
-  takes the retrieval pass from three query vectors to as many as six,
-  and states plainly that the numbers in
-  [`retrieval.md → Per-turn cost budget`](../memory/retrieval.md#per-turn-cost-budget)
-  were not re-run: the ~143ms / ~250ms figures are a linear
-  extrapolation of a measured three-query table. Two terms sit outside
-  even that extrapolation — the embedder, which every figure in that
-  table explicitly excludes and which doubles from three calls per turn
-  to six, and mobile, which has never run the ranker at all and now
-  doubles an already-open risk. The doc assigns both to "whichever slice
-  implements Q4"; no such slice exists, and M3.4 is closed. Route this
-  to that slice's Open questions the moment it is drafted, so the
-  planning gate forces `pnpm bench:retrieval` to be re-run against the
-  real stack before the numbers in canon are trusted.
-  **Owner: PR 2 of the query-stack stack**, the one that sources Q4
-  from `metadata.retrievalQueries` — the mechanism landed without a
-  slice, so nothing will fire the routing above. PR 2 is where Q4
-  first costs anything, and it carries the re-run.
-
 - **Nothing decides when a degenerate retrieval query should be
   dropped.**
   [`retrieval.md → Redundancy`](../memory/retrieval.md#redundancy--reporting-a-degenerate-query)
@@ -94,3 +73,19 @@ slice-planning gate forces its resolution before that slice is planned.
   query, so this has no home there. Revisit once real captures
   accumulate; the answer may be that no automatic drop is wanted and the
   number stays diagnostic.
+
+- **The Q4-saturated retrieval pass breaches its own cost ceiling at
+  dim 768, and no one has chosen a response.**
+  [`retrieval.md → Per-turn cost budget`](../memory/retrieval.md#per-turn-cost-budget)
+  measures it at ~319ms against the Target bullet's stated ceiling of
+  under ~250ms at the top of the projected range on desktop. Not an
+  outlier: it is the worst case the Q4 cap allows — top of the
+  projected range, all three Q4 slots filled, dim 768. The doc names
+  three options without choosing one: move the ceiling, tighten the Q4
+  cap, or drop dim 768 as a desktop default. Dim 384 at the same scale
+  measures ~182ms and sits comfortably inside, so the breach is
+  specific to the larger embedding model. Unowned because commit
+  `220e94a2` correctly deleted the triage entry that used to own Q4's
+  projected cost once this branch measured it — but that left the
+  decision living only as canon prose, with no queue entry to route it
+  to an owner.

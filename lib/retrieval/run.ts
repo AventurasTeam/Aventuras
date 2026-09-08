@@ -10,7 +10,7 @@ import { logger } from '@/lib/diagnostics'
 import { EmbedderCancelledError, type EmbedderErrorKind } from '@/lib/embedder'
 
 import { loadAwarenessForScene, type AwarenessRow } from './awareness'
-import { KNN_K, RANKER_DEFAULTS } from './constants'
+import { KNN_K, RANKER_DEFAULTS, REDUNDANCY_K } from './constants'
 import { buildKeywordInjections, type KeywordRetrievalSettings } from './injection'
 import { entityNameIndexFrom, matchTerms, normalizeTerm, type EntityNameIndex } from './name-index'
 import {
@@ -18,6 +18,7 @@ import {
   filterEntityPool,
   filterLorePool,
   filterThreadPool,
+  FLOOR_SEATABLE_KINDS,
   poolIdsFromKnn,
   type KnnHit,
   type StructuralFloor,
@@ -137,6 +138,13 @@ export type RetrievalFailure = {
 export type InjectedAwareness = { id: string; retrievalCount: number }
 
 /**
+ * retrieval.md → Redundancy: ratio = |topK ∩ floor.seatedIds| / |topK|, k the
+ * realised cut size (below REDUNDANCY_K only on a too-small corpus). Positionally
+ * aligned with `queries.specs`; null on a fixed slot and on an empty top-K.
+ */
+export type QueryRedundancy = { ratio: number; k: number }
+
+/**
  * Whatever the pass reached before it failed. The probe captures failed passes
  * too (probe.md → Failed captures) and a capture with no queries is evidence of
  * nothing; a sync-stage failure genuinely reached none of it, hence the nulls.
@@ -150,6 +158,7 @@ export type RetrievalPartial = {
    * under `mode='boost'`, and on a pass that failed before ranking started.
    */
   keywordInjections: readonly KeywordInjection[]
+  queryRedundancy: readonly (QueryRedundancy | null)[]
 }
 
 export type RetrievalOutcome =
@@ -163,6 +172,7 @@ export type RetrievalOutcome =
        * Empty under `keywordRetrieval.mode='boost'`.
        */
       keywordInjections: readonly KeywordInjection[]
+      queryRedundancy: readonly (QueryRedundancy | null)[]
       /**
        * A tripwire, not a report. The sync stage is blocking and clears the flag
        * on every row it embeds, so each count here is structurally 0 — a
@@ -228,6 +238,7 @@ export async function runRetrieval(
     floor: null,
     bundles: {},
     keywordInjections: [],
+    queryRedundancy: [],
   }
   try {
     return await runRetrievalPass(deps, params, partial)
@@ -310,6 +321,9 @@ async function runRetrievalPass(
     activeThreadTitles: floor.activeThreads.map((t) => t.title),
   })
   partial.queries = queries
+  // Set with the stack, not the measurement: a failure before KNN would otherwise
+  // leave populated specs beside a length-0 array that consumers read positionally.
+  partial.queryRedundancy = queries.specs.map(() => null)
 
   const embedStartedAt = performance.now()
   const embed = await embedQueries(deps, params, queries.embedTexts)
@@ -354,7 +368,28 @@ async function runRetrievalPass(
     ),
   )
   let knnMs = performance.now() - knnStartedAt
-  for (const [kind, candidates] of built) pools[TYPE_OF_KIND[kind]] = candidates
+  for (const [kind, pool] of built) pools[TYPE_OF_KIND[kind]] = pool.candidates
+
+  // Off perQueryHits (KNN's raw rows), not pool.candidates — assembleCandidates already
+  // filtered those, so the ratio would intersect an empty set and report 0 throughout.
+  // Cut is global across seatable kinds — per-kind dilutes by kinds that rarely reach the floor.
+  const hitsByQuery: KnnHit[][] = queries.specs.map(() => [])
+  for (const [kind, pool] of built) {
+    if (!FLOOR_SEATABLE_KINDS.has(kind)) continue
+    pool.perQueryHits.forEach((hits, i) => hitsByQuery[i]?.push(...hits))
+  }
+  const queryRedundancy = queries.slots.map((slot, i) => {
+    // 'direct' is the slot every classifier_emitted query maps to
+    // (QUERY_SLOT_OF_SOURCE) — the fixed three carry no redundancy.
+    if (slot !== 'direct') return null
+    const hits = hitsByQuery[i]
+    if (hits === undefined || hits.length === 0) return null
+    const topK = [...hits].sort((a, b) => a[1] - b[1]).slice(0, REDUNDANCY_K)
+    let matched = 0
+    for (const [id] of topK) if (floor.seatedIds.has(id)) matched += 1
+    return { ratio: matched / topK.length, k: topK.length }
+  })
+  partial.queryRedundancy = queryRedundancy
 
   const rankTypeInput = {
     params: RANKER_DEFAULTS,
@@ -431,6 +466,7 @@ async function runRetrievalPass(
     bundles,
     queries,
     keywordInjections: partial.keywordInjections,
+    queryRedundancy,
     staleCounts: staleCountsOf(sourceRows, happeningsStale),
     injectedAwareness: bundles.happenings.selected
       .filter(isHappeningCandidate)
@@ -559,7 +595,13 @@ async function loadAdmittedVectors(
   }
 }
 
-type KnnResult = { ids: Set<string>; vectorById: Map<string, Float32Array> }
+type KnnResult = {
+  ids: Set<string>
+  vectorById: Map<string, Float32Array>
+  /** Per query, in slot order — the pre-filter matches the redundancy metric cuts
+   *  into its top-K. `[]` for a slot that produced no vector. */
+  perQueryHits: readonly (readonly KnnHit[])[]
+}
 
 /** Null when the dim family does not exist yet — a cold start, not a fault. */
 async function runKnn(
@@ -598,17 +640,26 @@ async function runKnn(
         }),
   )
 
-  return { ids: poolIdsFromKnn(perQuery), vectorById }
+  return {
+    ids: poolIdsFromKnn(perQuery),
+    vectorById,
+    perQueryHits: perQuery,
+  }
 }
+
+type BuiltPool = { candidates: Candidate[]; perQueryHits: readonly (readonly KnnHit[])[] }
 
 async function buildPool(
   deps: RetrievalDeps,
   params: RetrievalParams,
   ctx: PoolCtx,
-): Promise<Candidate[]> {
+): Promise<BuiltPool> {
   const knn = await runKnn(deps, params, ctx)
-  if (knn === null || knn.ids.size === 0) return []
-  return assembleCandidates(ctx, knn.ids, knn.vectorById)
+  // One empty entry per query, not an empty outer array: consumers read `perQueryHits[i]`
+  // positionally, and length-0 is the only shape that breaks that alignment.
+  if (knn === null) return { candidates: [], perQueryHits: ctx.queryVectors.map(() => []) }
+  const candidates = knn.ids.size === 0 ? [] : assembleCandidates(ctx, knn.ids, knn.vectorById)
+  return { candidates, perQueryHits: knn.perQueryHits }
 }
 
 /**

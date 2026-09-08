@@ -350,7 +350,13 @@ describe('runRetrieval — sync ordering', () => {
   it('carries no partial state when the sync stage fails', async () => {
     const { partial } = await withSyncFailure()
 
-    expect(partial).toEqual({ queries: null, floor: null, bundles: {}, keywordInjections: [] })
+    expect(partial).toEqual({
+      queries: null,
+      floor: null,
+      bundles: {},
+      keywordInjections: [],
+      queryRedundancy: [],
+    })
   })
 
   it('reads the source rows AFTER the sync commits, not before', async () => {
@@ -555,6 +561,27 @@ describe('runRetrieval — query embed failure', () => {
     expect(partial.floor?.sceneEntities.map((e) => e.id)).toEqual(['char_a'])
     expect(partial.queries?.specs[0].text).toBe('I ask about the amulet.')
     expect(partial.bundles).toEqual({})
+  })
+
+  // queryRedundancy must be written alongside partial.queries, not initialised to `[]` up
+  // front, or an emitted Q4 leaves a 4-spec stack beside a shorter redundancy array.
+  it('keeps queryRedundancy aligned with the query stack when the query embed fails', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({ entities: [entityRow('char_a', 'Kara Vex')] }),
+        embedTexts: async () => {
+          throw new EmbedderInitError('no local model')
+        },
+      }),
+      params({ query: { emittedQueries: ['marsh nobility'] } }),
+    )
+
+    const { partial } = expectBlocking(out)
+    // Embed fails AFTER the query stack is built, so partial specs can carry no measurement, but
+    // queryRedundancy must stay positionally aligned — noUncheckedIndexedAccess is off, so a
+    // short array types as (QueryRedundancy | null)[] yet returns undefined at runtime.
+    expect(partial.queryRedundancy).toHaveLength(partial.queries!.specs.length)
+    expect(partial.queryRedundancy.every((r) => r === null)).toBe(true)
   })
 
   // The sync stage already carries a cancel on its own arm; the query embed is the
@@ -968,6 +995,92 @@ describe('runRetrieval — query stack', () => {
     // The floor never consults a vector, so it survives a fully absent query stack.
     expect(ok.floor.alwaysLore.map((l) => l.id)).toEqual(['lore_1'])
     expect(Object.values(ok.bundles).every((b) => b.selected.length === 0)).toBe(true)
+  })
+})
+
+// retrieval.md → Redundancy. `char_a` (seated by the floor) and `lo_x` (unseated) fixture the
+// PRE-filter top-K: filterEntityPool removes floor rows afterward, so a post-filter ratio reads 0.
+describe('runRetrieval — per-Q4 redundancy', () => {
+  const SEATED = entityRow('char_a', 'Kara Vex')
+  const UNSEATED = loreRow('lo_x', 'Marsh law')
+  const ASK = { query: { emittedQueries: ['marsh nobility'] } }
+
+  const passWith = async (fixture: Parameters<typeof makeQueryAll>[0]) =>
+    expectOk(await runRetrieval(deps({ queryAll: makeQueryAll(fixture) }), params(ASK)))
+
+  /**
+   * makeQueryAll answers every kind's MATCH from one list, but each id lives in only one kind's
+   * vec table; passByKind routes fixtures per table so they don't triple-count in the merge.
+   */
+  const passByKind = async (
+    fixture: Parameters<typeof makeQueryAll>[0],
+    knn: { entity?: Row[]; lore?: Row[]; thread?: Row[]; chapter?: Row[] },
+    over: Parameters<typeof params>[0] = {},
+  ) => {
+    const base = makeQueryAll(fixture)
+    const queryAll = vi.fn(async (sql: string, p: unknown[]) => {
+      if (!sql.includes('MATCH')) return base(sql, p)
+      if (sql.includes('entities_vec_')) return knn.entity ?? []
+      if (sql.includes('lore_vec_')) return knn.lore ?? []
+      if (sql.includes('threads_vec_')) return knn.thread ?? []
+      if (sql.includes('chapter_summaries_vec_')) return knn.chapter ?? []
+      return []
+    })
+    return expectOk(await runRetrieval(deps({ queryAll }), params({ ...ASK, ...over })))
+  }
+
+  it('reports null on the three fixed slots', async () => {
+    const out = await passWith({ entities: [SEATED], knn: [hit('char_a')] })
+    expect(out.queryRedundancy.slice(0, 3)).toEqual([null, null, null])
+  })
+
+  it('scores 1.0 when the floor had already seated the whole top-K', async () => {
+    const out = await passByKind({ entities: [SEATED] }, { entity: [hit('char_a')] })
+    expect(out.queryRedundancy[3]).toEqual({ ratio: 1, k: 1 })
+  })
+
+  it('scores 0 when the floor seated none of the top-K', async () => {
+    const out = await passByKind({ entities: [SEATED], lore: [UNSEATED] }, { lore: [hit('lo_x')] })
+    expect(out.queryRedundancy[3]).toEqual({ ratio: 0, k: 1 })
+  })
+
+  // Chapters/happenings can never be in floor.seatedIds (pools.ts seats entity/lore/thread
+  // only), so counting their top-K would deflate every ratio; chapters return an id no other
+  // kind does, which moves k from 2 to 3 the moment they're counted.
+  it('measures over the entity, lore and thread top-Ks only', async () => {
+    const out = await passByKind(
+      { entities: [SEATED], lore: [UNSEATED] },
+      { entity: [hit('char_a')], lore: [hit('lo_x')], chapter: [hit('ch_only')] },
+    )
+    expect(out.queryRedundancy[3]).toEqual({ ratio: 0.5, k: 2 })
+  })
+
+  // REDUNDANCY_K cuts the 10 nearest GLOBALLY across seatable kinds — not a per-kind cut, not
+  // the full KNN pass. Fixture forces both wrong approaches to read { ratio: 10/12, k: 12 }
+  // while the correct global cut reads { ratio: 0.8, k: 10 }, so the assertion distinguishes them.
+  it('measures the REDUNDANCY_K nearest rows across kinds, not one cut per kind', async () => {
+    const sceneIds = Array.from({ length: 10 }, (_, i) => `char_s${i}`)
+    const out = await passByKind(
+      {
+        entities: sceneIds.map((id, i) => entityRow(id, `Scene ${i}`)),
+        lore: [loreRow('lo_far', 'Marsh law'), loreRow('lo_near', 'Tide law')],
+      },
+      {
+        entity: sceneIds.map((id, i) => hit(id, 0.5 + i * 0.1)),
+        lore: [hit('lo_near', 0.1), hit('lo_far', 0.2)],
+      },
+      { sceneEntityIds: sceneIds, sceneCharacterIds: sceneIds },
+    )
+
+    expect(out.floor.seatedIds.size).toBe(10)
+    expect(out.queryRedundancy[3]).toEqual({ ratio: 0.8, k: 10 })
+  })
+
+  // Cold start: no dim family exists, so runKnn returns null and there's no top-K to measure.
+  // 0/0 is not 0 — an unmeasurable query must not read as a perfectly novel one.
+  it('reports null for a Q4 whose top-K came back empty', async () => {
+    const out = await passWith({ entities: [SEATED], vecTables: [] })
+    expect(out.queryRedundancy[3]).toBeNull()
   })
 })
 

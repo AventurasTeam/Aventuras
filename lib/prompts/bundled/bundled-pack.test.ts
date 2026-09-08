@@ -77,4 +77,12 @@ describe('bundled pack', () => {
 
     expect(classifier).toMatch(/one[- ]sentence summary/i)
   })
+
+  it('asks the fallback classifier for the retrieval queries Q4 needs', () => {
+    const context = { entities: [], lastTurns: [{ content: 'The gate groaned open.' }] }
+    const classifier = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, context)
+
+    expect(classifier).toMatch(/up to three/i)
+    expect(classifier).toMatch(/next turn/i)
+  })
 })

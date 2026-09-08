@@ -63,6 +63,100 @@ describe('buildPiggybackActions', () => {
     })
   })
 
+  it('carries an emitted retrievalQueries onto the entry metadata', () => {
+    const result = buildPiggybackActions({
+      source: 'ai_classifier',
+      entryId: 'entry_1',
+      block: { sceneEntities: [], retrievalQueries: ['marsh nobility'] },
+      entities: [],
+      previousMetadata,
+      branchId: 'main',
+    })
+
+    expect(result.metadata.retrievalQueries).toEqual(['marsh nobility'])
+  })
+
+  it('leaves retrievalQueries absent when the block emitted none', () => {
+    const result = buildPiggybackActions({
+      source: 'ai_classifier',
+      entryId: 'entry_1',
+      block: { sceneEntities: [] },
+      entities: [],
+      previousMetadata,
+      branchId: 'main',
+    })
+
+    expect(result.metadata).not.toHaveProperty('retrievalQueries')
+  })
+
+  // The parser cannot produce [] today, but the fallback classifier's schema can.
+  it('leaves retrievalQueries absent when the block emitted an empty array', () => {
+    const result = buildPiggybackActions({
+      source: 'ai_classifier',
+      entryId: 'entry_1',
+      block: { sceneEntities: [], retrievalQueries: [] },
+      entities: [],
+      previousMetadata,
+      branchId: 'main',
+    })
+
+    expect(result.metadata).not.toHaveProperty('retrievalQueries')
+  })
+
+  // The next four pin the normalisation the fallback classifier's schema does not do:
+  // its .max() only counts, so blanks and repeats arrive here unfiltered.
+  it('stores a repeated query once', () => {
+    const result = buildPiggybackActions({
+      source: 'ai_classifier',
+      entryId: 'entry_1',
+      block: { sceneEntities: [], retrievalQueries: ['marsh nobility', 'marsh nobility'] },
+      entities: [],
+      previousMetadata,
+      branchId: 'main',
+    })
+
+    expect(result.metadata.retrievalQueries).toEqual(['marsh nobility'])
+  })
+
+  it('drops empty and whitespace-only queries', () => {
+    const result = buildPiggybackActions({
+      source: 'ai_classifier',
+      entryId: 'entry_1',
+      block: { sceneEntities: [], retrievalQueries: ['', '   ', 'House Eldrin sigil'] },
+      entities: [],
+      previousMetadata,
+      branchId: 'main',
+    })
+
+    expect(result.metadata.retrievalQueries).toEqual(['House Eldrin sigil'])
+  })
+
+  it('caps a four-query emission at MAX_RETRIEVAL_QUERIES', () => {
+    const result = buildPiggybackActions({
+      source: 'ai_classifier',
+      entryId: 'entry_1',
+      block: { sceneEntities: [], retrievalQueries: ['one', 'two', 'three', 'four'] },
+      entities: [],
+      previousMetadata,
+      branchId: 'main',
+    })
+
+    expect(result.metadata.retrievalQueries).toEqual(['one', 'two', 'three'])
+  })
+
+  it('leaves retrievalQueries absent when every emitted query is blank', () => {
+    const result = buildPiggybackActions({
+      source: 'ai_classifier',
+      entryId: 'entry_1',
+      block: { sceneEntities: [], retrievalQueries: ['', '  '] },
+      entities: [],
+      previousMetadata,
+      branchId: 'main',
+    })
+
+    expect(result.metadata).not.toHaveProperty('retrievalQueries')
+  })
+
   it('promotes staged entities named in sceneEntities', () => {
     const stagedChar = mockEntity({ id: 'char_staged', status: 'staged' })
     const activeChar = mockEntity({ id: 'char_active', status: 'active' })

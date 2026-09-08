@@ -135,6 +135,9 @@ export async function* retrievalPhase(
           // branch_era_flips has no writer wired, so no era can be named yet.
           eraName: null,
           piggybackSummary: lastNarrative?.metadata?.summary ?? null,
+          // Same row Q3 reads (retrieval.md → Q4 Storage). The cap, dedupe and
+          // empty-filter all live in buildQueryStack; this is the whole wiring.
+          emittedQueries: lastNarrative?.metadata?.retrievalQueries ?? [],
         },
         sceneCharacterIds,
         sceneEntityIds: scene.sceneEntities,

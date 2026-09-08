@@ -13,7 +13,12 @@ export { entityNameIndexFrom, matchTerms, normalizeTerm } from './name-index'
 export type { EntityNameIndex } from './name-index'
 export { buildStructuralFloor, filterEntityPool, filterLorePool, filterThreadPool } from './pools'
 export type { EntityRow, LoreRow, StructuralFloor, ThreadRow } from './pools'
-export { buildQueryStack, distributeQueryVectors, QUERY_SLOT_OF_SOURCE } from './queries'
+export {
+  buildQueryStack,
+  distributeQueryVectors,
+  MAX_EMITTED_QUERIES,
+  QUERY_SLOT_OF_SOURCE,
+} from './queries'
 export type { QuerySource, QuerySpec, QueryStack, QueryStackInput } from './queries'
 export { rankAll, rankPerType, tokenCost } from './ranker'
 export type { RankTypeInput } from './ranker'
@@ -21,6 +26,7 @@ export { ENTITY_FRAMING, entityRenderedText, lines, loreRenderedText } from './r
 export { runRetrieval } from './run'
 export type {
   InjectedAwareness,
+  QueryRedundancy,
   RetrievalDeps,
   RetrievalFailure,
   RetrievalOutcome,

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
+import { MAX_EMITTED_QUERIES } from '@/lib/retrieval'
+
 import { parseStateBlock, parseSuggestionsBlock, stripTrailingBlocks } from './parse'
+import { MAX_RETRIEVAL_QUERIES } from './types'
 
 const WELL_FORMED = `Some narrative prose here.
 <state>
@@ -16,6 +19,10 @@ const WELL_FORMED = `Some narrative prose here.
     <stackable key="gold" amount="50" to="c1" from="c3" />
   </transfers>
   <summary>Aria pushed into the marshes.</summary>
+  <retrieval_queries>
+    <query>House Eldrin's history and its sigil</query>
+    <query>exiled nobility of the marshes</query>
+  </retrieval_queries>
 </state>`
 
 describe('parseStateBlock', () => {
@@ -36,6 +43,7 @@ describe('parseStateBlock', () => {
         stackables: [{ key: 'gold', amount: 50, to: 'c1', from: 'c3' }],
       },
       summary: 'Aria pushed into the marshes.',
+      retrievalQueries: ["House Eldrin's history and its sigil", 'exiled nobility of the marshes'],
     })
   })
 
@@ -169,6 +177,68 @@ describe('parseStateBlock', () => {
     const result = parseStateBlock('<state><summary>Kael left.</summary></state>')
     expect(result.block).toEqual({ summary: 'Kael left.' })
     expect(result.failures).toEqual([])
+  })
+
+  // Reads like inconsistency but isn't: every other field here throws on empty content,
+  // which fires a full extra LLM call — recovering an optional hint that way inverts cost.
+  describe('<retrieval_queries> — total by contract', () => {
+    const block = (inner: string) => `prose\n<state>\n${inner}\n</state>`
+
+    it('extracts the emitted queries in order', () => {
+      const { block: parsed, failures } = parseStateBlock(
+        block(
+          '<retrieval_queries><query>House Eldrin sigil</query><query>marsh nobility</query></retrieval_queries>',
+        ),
+      )
+      expect(parsed.retrievalQueries).toEqual(['House Eldrin sigil', 'marsh nobility'])
+      expect(failures).toEqual([])
+    })
+
+    it.each([
+      ['unterminated children', '<retrieval_queries><query>House Eldrin'],
+      ['no children at all', '<retrieval_queries>just prose here</retrieval_queries>'],
+      ['empty children', '<retrieval_queries><query></query><query>  </query></retrieval_queries>'],
+    ])('records no failure for %s', (_label, inner) => {
+      const { failures } = parseStateBlock(block(`<summary>s</summary>${inner}`))
+      expect(failures).toEqual([])
+    })
+
+    it('caps the emission at MAX_RETRIEVAL_QUERIES', () => {
+      const queries = ['a', 'b', 'c', 'd'].map((q) => `<query>${q}</query>`).join('')
+      const { block: parsed } = parseStateBlock(
+        block(`<retrieval_queries>${queries}</retrieval_queries>`),
+      )
+      expect(parsed.retrievalQueries).toEqual(['a', 'b', 'c'])
+    })
+
+    // Cap counts DISTINCT queries (matches emittedSpecs in lib/retrieval/queries.ts) —
+    // counting repeats would spend a slot on a duplicate and drop the distinct ask behind it.
+    it('dedupes before capping, so a repeat does not cost a distinct query its slot', () => {
+      const queries = ['a', 'a', 'b', 'c'].map((q) => `<query>${q}</query>`).join('')
+      const { block: parsed } = parseStateBlock(
+        block(`<retrieval_queries>${queries}</retrieval_queries>`),
+      )
+      expect(parsed.retrievalQueries).toEqual(['a', 'b', 'c'])
+    })
+
+    // The cap lives in two modules that can't import each other (see MAX_RETRIEVAL_QUERIES) —
+    // drift here means storage and the query stack disagree on how many asks a turn gets.
+    it('caps at the same number the query stack embeds', () => {
+      expect(MAX_RETRIEVAL_QUERIES).toBe(MAX_EMITTED_QUERIES)
+    })
+
+    // Not cosmetic: parseStateBlock judges emptiness via Object.keys(block).length, so a
+    // key set to undefined would read as a clean parse and suppress the fallback this turn needs.
+    it('leaves a state block carrying only an unusable retrieval_queries reported empty', () => {
+      const { block: parsed, failures } = parseStateBlock(
+        block('<retrieval_queries>nothing parseable</retrieval_queries>'),
+      )
+      expect(parsed.retrievalQueries).toBeUndefined()
+      expect(Object.keys(parsed)).toEqual([])
+      expect(failures).toEqual([
+        { field: 'state', detail: 'block content matched no known field tag' },
+      ])
+    })
   })
 })
 

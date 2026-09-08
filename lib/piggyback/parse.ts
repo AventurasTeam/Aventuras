@@ -3,13 +3,14 @@ import { jsonrepair } from 'jsonrepair'
 import type { StoryEntry } from '@/lib/db'
 
 import {
+  RETRIEVAL_QUERY_ITEM_TAG,
   STATE_ROOT_TAG,
   STATE_TAGS,
   SUGGESTION_ITEM_TAG,
   SUGGESTIONS_ROOT_TAG,
   TRAILING_ROOT_TAGS,
 } from './tags'
-import { VISUAL_CHANGE_TYPES } from './types'
+import { MAX_RETRIEVAL_QUERIES, VISUAL_CHANGE_TYPES } from './types'
 import type {
   ItemTransfer,
   SuggestionRef,
@@ -152,6 +153,26 @@ function parseTransfers(segment: string): ParsedTransfers {
   return { items, stackables }
 }
 
+// Total by contract, the only parser that never raises: recovering an optional hint via a
+// full extra structured call would invert that call's cost — never call assertNotTruncated.
+// Returns undefined, not [], so an otherwise-empty block reads empty and the fallback fires.
+function parseRetrievalQueries(segment: string): string[] | undefined {
+  const seen = new Set<string>()
+  const out: string[] = []
+  const re = new RegExp(
+    `<${RETRIEVAL_QUERY_ITEM_TAG}>([\\s\\S]*?)</${RETRIEVAL_QUERY_ITEM_TAG}>`,
+    'g',
+  )
+  for (const match of segment.matchAll(re)) {
+    const text = match[1]?.trim()
+    if (text === undefined || text === '' || seen.has(text)) continue
+    seen.add(text)
+    out.push(text)
+    if (out.length === MAX_RETRIEVAL_QUERIES) break
+  }
+  return out.length === 0 ? undefined : out
+}
+
 type FieldParser = {
   field: keyof ParsedStateBlock
   tag: string
@@ -165,6 +186,7 @@ const FIELD_PARSERS: readonly FieldParser[] = [
   { field: 'visualChanges', tag: STATE_TAGS.visualChanges, parse: parseVisualChanges },
   { field: 'transfers', tag: STATE_TAGS.transfers, parse: parseTransfers },
   { field: 'summary', tag: STATE_TAGS.summary, parse: (s) => s.trim() },
+  { field: 'retrievalQueries', tag: STATE_TAGS.retrievalQueries, parse: parseRetrievalQueries },
 ]
 
 // Segment isolation + per-field best-effort parse: one failing top-level tag
@@ -182,6 +204,11 @@ export function parseStateBlock(raw: string): ParseStateBlockResult {
     if (segment === undefined) continue
     try {
       const value = parse(segment)
+      // Object.keys below judges the block empty, so assigning an undefined key would
+      // make a block carrying nothing else read as a clean parse and lose its fallback.
+      if (value === undefined) {
+        continue
+      }
       // FIELD_PARSERS correlates each `field` with a `parse` producing its
       // matching value type by construction, but that pairing is erased once
       // collected into one array — narrower than `any`, still an intentional

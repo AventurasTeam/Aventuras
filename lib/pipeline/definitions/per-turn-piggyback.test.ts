@@ -668,6 +668,81 @@ describe('per-turn-piggyback', () => {
       })
     })
 
+    // Canon: Q4 on both per-turn implementations; this is the one the default piggybackMode:
+    // 'off' story actually runs (docs/memory/retrieval.md → Q4).
+    it("carries the fallback classifier's emitted queries onto the entry metadata", async () => {
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition,
+        settings: baseSettings({ models: {} }),
+      })
+      hydrateEntries(phaseDb, 'b1', [
+        {
+          id: 'entry-1',
+          branchId: 'b1',
+          position: 1,
+          content: 'Starting point',
+          metadata: { sceneEntities: [], currentLocationId: null, worldTime: 100 },
+        } as never,
+        {
+          id: 'entry-2',
+          branchId: 'b1',
+          position: 2,
+          content: 'Next step in forest',
+          metadata: { sceneEntities: [], currentLocationId: null, worldTime: 100 },
+        } as never,
+      ])
+      entitiesStore.hydrate('b1', [])
+
+      // Routed through the real schema's .parse(), not a hand-built literal — otherwise the mock
+      // smuggles a field the schema no longer declares, defeating the mutation check.
+      const value = fallbackClassifierSchema.parse({
+        sceneEntities: [],
+        currentLocation: undefined,
+        worldTimeDelta: 0,
+        visualChanges: [],
+        transfers: { items: [], stackables: [] },
+        retrievalQueries: ['House Eldrin sigil'],
+      })
+      generateStructuredMock.mockResolvedValueOnce({ status: 'ok', value })
+
+      const ctx = {
+        actionId: 'act_1',
+        abortSignal: new AbortController().signal,
+        intermediates: { idMap: new IdBiMap() },
+        log: makeLogger('act_1'),
+        db: phaseDb.db,
+        runInTransaction: async () => undefined,
+        storyId: 's1',
+        branchId: 'b1',
+      }
+
+      const gen = piggybackFallbackClassifierPhase(ctx)
+      const events = []
+      let result = await gen.next()
+      while (!result.done) {
+        events.push(result.value)
+        result = await gen.next()
+      }
+
+      expect(result.value).toEqual({ status: 'completed' })
+      expect(events[0]).toEqual({
+        type: 'delta_emitted',
+        action: expect.objectContaining({
+          kind: 'updateStoryEntryMetadata',
+          source: 'per_turn_classifier',
+          payload: expect.objectContaining({
+            branchId: 'b1',
+            id: 'entry-2',
+            metadata: expect.objectContaining({
+              retrievalQueries: ['House Eldrin sigil'],
+            }),
+          }),
+        }),
+      })
+    })
+
     it('prompts with a bracketed-ID list of active/staged entities and resolves the returned placeholder back to the real id', async () => {
       const heroId = 'char_00000000-0000-4000-8000-000000000001'
       currentStoryStore.set({
@@ -1876,6 +1951,29 @@ describe('per-turn-piggyback', () => {
 
       expect(typeof summary === 'object' ? summary.description : undefined).toBeTruthy()
     })
+
+    it('describes the retrievalQueries field so the description survives into the emitted JSON schema', () => {
+      const jsonSchema = z.toJSONSchema(fallbackClassifierSchema)
+      const retrievalQueries = jsonSchema.properties?.retrievalQueries
+
+      expect(
+        typeof retrievalQueries === 'object' ? retrievalQueries.description : undefined,
+      ).toBeTruthy()
+    })
+
+    // retrieval.md → Q4: emission is malformed-tolerant — raising here costs a full extra
+    // provider call and takes the mandatory summary field down with an over-long hint too.
+    it('drops an over-long retrievalQueries without failing the sibling fields', () => {
+      const parsed = fallbackClassifierSchema.parse({
+        sceneEntities: ['char_a'],
+        worldTimeDelta: 0,
+        summary: 'Kael drew.',
+        retrievalQueries: ['a', 'b', 'c', 'd'],
+      })
+      expect(parsed.retrievalQueries).toBeUndefined()
+      expect(parsed.summary).toBe('Kael drew.')
+      expect(parsed.sceneEntities).toEqual(['char_a'])
+    })
   })
 
   describe('fallbackClassifierWithSuggestionsSchema', () => {
@@ -1914,6 +2012,21 @@ describe('per-turn-piggyback', () => {
       })
 
       expect(result.success).toBe(false)
+    })
+
+    // This is the schema every real story runs (suggestionCategories is always populated); its
+    // .extend() carries retrievalQueries but nothing else pins that — a refactor could drop Q4.
+    it('carries retrievalQueries alongside suggestions', () => {
+      const result = fallbackClassifierWithSuggestionsSchema.safeParse({
+        sceneEntities: [],
+        worldTimeDelta: 5,
+        suggestions: [{ categoryRef: 'cat1', text: 'ok' }],
+        retrievalQueries: ['a query'],
+      })
+
+      expect(result.success).toBe(true)
+      if (!result.success) throw new Error('expected parse to succeed')
+      expect(result.data.retrievalQueries).toEqual(['a query'])
     })
   })
 
