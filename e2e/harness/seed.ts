@@ -213,6 +213,27 @@ export function setClassifierCadence(dbPath: string, storyId: string, cadence: n
   }
 }
 
+// Set a story's piggybackMode. The fixture seeds 'on'; 'off' is what
+// story-settings-defaults.ts gives a real story, and the only gate that turns
+// the fold off without also lying about the model's capabilities (unlike
+// disablePiggybackCapability). Runs before launch.
+export function setPiggybackMode(dbPath: string, storyId: string, mode: 'on' | 'off'): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    const row = db.prepare(`SELECT settings FROM stories WHERE id = ?`).get(storyId) as {
+      settings: string
+    }
+    const settings = JSON.parse(row.settings) as Record<string, unknown>
+    settings.piggybackMode = mode
+    db.prepare(`UPDATE stories SET settings = ? WHERE id = ?`).run(
+      JSON.stringify(settings),
+      storyId,
+    )
+  } finally {
+    db.close()
+  }
+}
+
 // Arm the story half of the probe's two gates (the app half is enableDiagnostics).
 // Both must be on before a turn writes a capture. Runs before launch.
 export function enableStoryProbeMode(dbPath: string, storyId: string): void {
