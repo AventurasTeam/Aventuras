@@ -32,11 +32,11 @@ export const QUERY_SLOT_OF_SOURCE = {
 /** retrieval.md → Q4: capped at three, and the cap is a cost decision. */
 export const MAX_EMITTED_QUERIES = 3
 /**
- * retrieval.md → Q3 and Q4. One cap for both emitted slots. A retrieval ask is
- * phrase-shaped; a summary is one sentence. Query-build only — `metadata.summary`
- * and `metadata.retrievalQueries` persist uncapped for the reader.
+ * retrieval.md → Q3 and Q4, one cap for both. Q1 and Q2 are deliberately outside it.
+ * Query-build only: `metadata.summary` and `metadata.retrievalQueries` persist
+ * uncapped — the summary is a reader surface.
  */
-const MAX_QUERY_CHARS = 200
+const MAX_LLM_QUERY_CHARS = 200
 
 export type QueryStack = {
   /** Q1, Q2, Q3, then one per emitted Q4. Empty `text` means the slot is absent. */
@@ -49,6 +49,7 @@ export type QueryStack = {
 
 const trimmed = (s: string | null): string => s?.trim() ?? ''
 const nonEmpty = (s: string): boolean => s !== ''
+const queryText = (s: string | null): string => trimmed(s).slice(0, MAX_LLM_QUERY_CHARS)
 
 function structuralDigest(input: QueryStackInput): string {
   const scene = [...input.sceneEntityNames, input.currentLocationName].map(trimmed).filter(nonEmpty)
@@ -69,7 +70,7 @@ function emittedSpecs(raw: readonly string[]): QuerySpec[] {
   const seen = new Set<string>()
   const out: QuerySpec[] = []
   for (const candidate of raw) {
-    const text = candidate.trim().slice(0, MAX_QUERY_CHARS)
+    const text = queryText(candidate)
     if (text === '' || seen.has(text)) continue
     seen.add(text)
     out.push({ text, source: 'classifier_emitted' })
@@ -84,10 +85,7 @@ export function buildQueryStack(input: QueryStackInput): QueryStack {
   const specs: QuerySpec[] = [
     { text: input.userAction.trim(), source: 'user_action' },
     { text: structuralDigest(input), source: 'structural_digest' },
-    {
-      text: trimmed(input.piggybackSummary).slice(0, MAX_QUERY_CHARS),
-      source: 'piggyback_summary',
-    },
+    { text: queryText(input.piggybackSummary), source: 'piggyback_summary' },
     ...emittedSpecs(input.emittedQueries ?? []),
   ]
   const slots = specs.map((q) => QUERY_SLOT_OF_SOURCE[q.source])

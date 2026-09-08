@@ -218,9 +218,8 @@ describe('buildQueryStack', () => {
     expect(stack.specs[2]?.text).toBe(summary)
   })
 
-  // Trim before cap, not after: a summary padded to 205 chars by trailing
-  // whitespace must yield its 200 content chars, not 200 minus the padding.
   it('trims before capping the summary', () => {
+    // Trim before cap, not after — slicing first would yield fewer content chars.
     const stack = buildQueryStack({
       ...base,
       piggybackSummary: `   ${'b'.repeat(210)}   `,
