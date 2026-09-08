@@ -899,22 +899,28 @@ describe('buildGenerationContext — data source', () => {
     ])
   })
 
-  it('exposes the last two non-system turns as lastTurns', async () => {
-    // Pinned at the floor: this test is about system-row exclusion, not the
-    // widening knob (covered separately above).
-    openStory({ classifierContextEntries: 2 })
+  it('excludes system rows from lastTurns at the default window', async () => {
+    openStory()
+    // The system row sits mid-stack, inside the top-4-by-position range: a
+    // naive position-only window would pull it in over 'second'. The WHERE
+    // clause excludes it before the window is taken, so 'second' fills the
+    // fourth slot instead.
     await seedEntries([
       dbEntry(1, 'oldest'),
-      dbEntry(2, 'user turn', 'user_action'),
-      dbEntry(3, 'ai turn'),
-      dbEntry(4, 'ERROR', 'system'),
+      dbEntry(2, 'second'),
+      dbEntry(3, 'ERROR', 'system'),
+      dbEntry(4, 'third'),
+      dbEntry(5, 'fourth'),
+      dbEntry(6, 'fifth'),
     ])
 
     const context = await build({}, TEMPLATE_IDS.piggybackFallbackClassifier)
 
     expect((context.lastTurns as { content: string }[]).map((e) => e.content)).toEqual([
-      'user turn',
-      'ai turn',
+      'second',
+      'third',
+      'fourth',
+      'fifth',
     ])
   })
 
@@ -1203,6 +1209,30 @@ describe('buildGenerationContext — classifierContextEntries', () => {
     const ctx = await buildContext({
       entries: sixEntries,
       settings: storySettings({ classifierContextEntries: knob }),
+      templateId: TEMPLATE_IDS.piggybackFallbackClassifier,
+    })
+
+    expect(contentsOf(ctx)).toEqual(['e5 the action', 'e6 the reply'])
+  })
+
+  // z.number() admits a fractional knob from a hand-edited settings blob;
+  // schema-level .int() would refuse to open the story instead of degrading.
+  it('truncates a fractional knob down', async () => {
+    const ctx = await buildContext({
+      entries: sixEntries,
+      settings: storySettings({ classifierContextEntries: 3.5 }),
+      templateId: TEMPLATE_IDS.piggybackFallbackClassifier,
+    })
+
+    expect(contentsOf(ctx)).toEqual(['e4', 'e5 the action', 'e6 the reply'])
+  })
+
+  // A NaN knob must degrade to the pair, not fall through Math.max to an
+  // unbounded read of the whole branch.
+  it('degrades to the pair on a NaN knob', async () => {
+    const ctx = await buildContext({
+      entries: sixEntries,
+      settings: storySettings({ classifierContextEntries: Number.NaN }),
       templateId: TEMPLATE_IDS.piggybackFallbackClassifier,
     })
 
