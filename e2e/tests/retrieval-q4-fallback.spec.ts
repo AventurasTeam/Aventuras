@@ -149,8 +149,8 @@ test.describe('retrieval Q4 — fallback classifier across a turn boundary', () 
     })
 
     await test.step('turn 2 — retrieval embeds turn 1 asks, not its own', async () => {
-      // Turn 2 emits different asks so the capture below distinguishes "read the previous
-      // turn's row" (correct) from "read my own" — the regression this test catches.
+      // Turn 2 emits different asks, so the capture below pins Q4 to the COMMITTED previous
+      // row — not a stale store copy, a re-read, or a shifted readSceneSource anchor.
       setAsks(mock, ASK_C, ASK_D)
       mock.setNarrative(narrative('E2E-Q4F-TURN-2'))
       await reader.composer(app.window).fill('E2E-Q4F-USER-2 I ask what the sigil means.')

@@ -149,8 +149,8 @@ test.describe('retrieval Q4 — classifier-emitted queries across a turn boundar
     })
 
     await test.step('turn 2 embeds them as direct-slot queries and captures redundancy', async () => {
-      // Turn 2 emits different asks (ASK_C/ASK_D) so the capture below distinguishes "read the
-      // previous turn's row" (correct) from "read my own" — the regression this test catches.
+      // Turn 2 emits different asks (ASK_C/ASK_D), so the capture below pins Q4 to the COMMITTED
+      // previous row — not a stale store copy, a re-read, or a shifted readSceneSource anchor.
       mock.setNarrative(narrative('E2E-Q4-TURN-2', ASK_C, ASK_D))
       await reader.composer(app.window).fill('E2E-Q4-USER-2 I ask what the sigil means.')
       await reader.send(app.window).click()
