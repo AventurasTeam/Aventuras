@@ -6,9 +6,12 @@ import { logger, makeLogger } from '@/lib/diagnostics'
 import { IdBiMap } from '@/lib/ids'
 import { runPreflight } from '@/lib/pipeline/runtime/preflight'
 import type { Pipeline, PreflightSnapshot } from '@/lib/pipeline/types'
+import type { Candidate, EntityRow, LoreRow, RetrievalSuccess } from '@/lib/retrieval'
+import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import { currentStoryStore, entitiesStore, resetAllStores } from '@/lib/stores'
 
 import { createPhaseDb, hydrateEntries, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
+import { RETRIEVAL_INTERMEDIATE_KEY } from './intermediates'
 import {
   fallbackClassifierSchema,
   fallbackClassifierWithSuggestionsSchema,
@@ -1033,6 +1036,234 @@ describe('per-turn-piggyback', () => {
             metadata: expect.objectContaining({ worldTime: 0 }),
           }),
         }),
+      })
+    })
+
+    // The template is the drift surface: buildGenerationContext gates each read on
+    // whether the template names the variable, so a mis-typed name yields an empty
+    // section rather than an error — every case here asserts the rendered prompt.
+    describe('fallback classifier context (piggyback.md → Fallback classifier context)', () => {
+      const KEEP = 'loc_00000000-0000-4000-8000-0000000000a1'
+      const KAEL = 'char_00000000-0000-4000-8000-000000000001'
+      const MORA = 'char_00000000-0000-4000-8000-000000000002'
+
+      const entity = (id: string, name: string, description: string | null = null): EntityRow => ({
+        id,
+        kind: 'character',
+        status: 'active',
+        injectionMode: 'auto',
+        name,
+        description,
+      })
+
+      const place = (id: string, name: string, description: string): EntityRow => ({
+        ...entity(id, name, description),
+        kind: 'location',
+      })
+
+      const lore = (id: string, title: string, body: string): LoreRow => ({
+        id,
+        title,
+        body,
+        injectionMode: 'always',
+        priority: 0,
+      })
+
+      const ranked = (id: string, displayName: string, renderedText: string): Candidate => ({
+        kind: 'entity',
+        id,
+        displayName,
+        renderedText,
+        sims: [0, 0, 0],
+        vector: new Float32Array([1, 0, 0]),
+        chaptersOld: 0,
+        pinSignal: 0,
+        keywordHits: [],
+        embeddingStale: false,
+      })
+
+      /**
+       * Runs the phase far enough to have rendered its prompt and returns that prompt.
+       * The classifier call is failed rather than ok so the run stops at the report the
+       * failure path yields, which is one `.next()` after the render.
+       */
+      async function renderFallbackPrompt(
+        over: {
+          definition?: unknown
+          settings?: Partial<StorySettings>
+          entries?: string[]
+          sceneEntities?: string[]
+          entities?: EntityRow[]
+          retrieval?: RetrievalSuccess
+        } = {},
+      ): Promise<string> {
+        currentStoryStore.set({
+          storyId: 's1',
+          branchId: 'b1',
+          definition: (over.definition ?? definition) as never,
+          settings: baseSettings({ models: {}, ...over.settings }),
+        })
+        const contents = over.entries ?? ['I put the sword away.', 'The blade slides home.']
+        hydrateEntries(
+          phaseDb,
+          'b1',
+          contents.map(
+            (content, i) =>
+              ({
+                id: `entry-${i + 1}`,
+                branchId: 'b1',
+                position: i + 1,
+                kind: i % 2 === 0 ? 'user_action' : 'ai_reply',
+                content,
+                metadata: {
+                  sceneEntities: i === contents.length - 1 ? (over.sceneEntities ?? []) : [],
+                  currentLocationId: null,
+                  worldTime: 100,
+                },
+              }) as never,
+          ),
+        )
+        entitiesStore.hydrate(
+          'b1',
+          (over.entities ?? []).map((e) => ({ branchId: 'b1', ...e })) as never[],
+        )
+
+        const intermediates: Record<string, unknown> = { idMap: new IdBiMap() }
+        if (over.retrieval) intermediates[RETRIEVAL_INTERMEDIATE_KEY] = over.retrieval
+
+        generateStructuredMock.mockResolvedValueOnce({ status: 'failed', detail: 'LLM error' })
+        await piggybackFallbackClassifierPhase({
+          actionId: 'act_1',
+          abortSignal: new AbortController().signal,
+          intermediates,
+          log: makeLogger('act_1'),
+          db: phaseDb.db,
+          runInTransaction: async () => undefined,
+          storyId: 's1',
+          branchId: 'b1',
+        }).next()
+
+        return generateStructuredMock.mock.calls.at(-1)?.[1] as string
+      }
+
+      it('renders the memory blocks, in-scene and location sections, and the calendar', async () => {
+        const prompt = await renderFallbackPrompt({
+          entities: [entity(KAEL, 'Kael', 'A courier with a stolen sigil.')],
+          sceneEntities: [KAEL],
+          retrieval: retrievalSuccess({
+            floor: {
+              currentLocation: place(KEEP, 'The Drowned Keep', 'Half sunk.'),
+              alwaysLore: [lore('lore_1', 'House Eldrin', 'An exiled line.')],
+            },
+          }),
+        })
+
+        expect(prompt).toContain('# In scene')
+        expect(prompt).toContain('A courier with a stolen sigil.')
+        expect(prompt).toContain('# Current location')
+        expect(prompt).toContain('The Drowned Keep')
+        expect(prompt).toContain('Half sunk.')
+        expect(prompt).toContain('# Relevant lore')
+        expect(prompt).toContain('An exiled line.')
+        expect(prompt).toContain('Calendar')
+      })
+
+      // piggyback.md: Setting, Genre and Tone steer prose style and bias an extraction
+      // call toward narrating. Neither output-format macro either — this call carries
+      // its own structured-output schema.
+      it('never renders Setting, Genre, Tone or an output-format macro', async () => {
+        const prompt = await renderFallbackPrompt({
+          definition: {
+            ...definition,
+            setting: 'SETTING-MARKER a keep on a hill',
+            genre: { label: 'Fantasy', promptBody: 'GENRE-MARKER high fantasy' },
+            tone: { label: 'Wry', promptBody: 'TONE-MARKER dry and clipped' },
+          },
+        })
+
+        expect(prompt).not.toContain('SETTING-MARKER')
+        expect(prompt).not.toContain('GENRE-MARKER')
+        expect(prompt).not.toContain('TONE-MARKER')
+        expect(prompt).not.toContain('# Setting')
+        expect(prompt).not.toContain('# Genre')
+        expect(prompt).not.toContain('# Tone')
+        expect(prompt).not.toContain('Write the next beat of the story as prose')
+        expect(prompt).not.toContain('<state>')
+      })
+
+      // piggybackFires stays false, so macro_memory_blocks brackets no ids and the roster
+      // is the sole ID source; true would also inject per-turn.ts's tagged-block-only lines.
+      it('renders memory blocks without bracketed ids and without tagged-block instructions', async () => {
+        const prompt = await renderFallbackPrompt({
+          retrieval: retrievalSuccess({
+            selected: { entities: [ranked(MORA, 'Mora', 'Mora — elsewhere.')] },
+          }),
+        })
+
+        expect(prompt).toContain('# Elsewhere in the world')
+        // The whole line, not a substring: a bracketed id would prefix it.
+        expect(prompt.split('\n').find((l) => l.includes('Mora'))).toBe('Mora — elsewhere.')
+        expect(prompt).not.toContain('include their ID (without brackets) in the trailing')
+        expect(prompt).not.toContain('Use one of these place IDs')
+      })
+
+      describe('extraction-turn marking (mandatory, not stylistic)', () => {
+        // Newline-anchored: the background sentence quotes "# This turn" by name, so a
+        // bare indexOf would find the pointer to the header rather than the header.
+        const headingAt = (prompt: string, heading: string) => prompt.indexOf(`\n${heading}\n`)
+
+        // Everything but the pair is background, the memory blocks most of all — older
+        // and bulkier than any tail of entries, and arriving with no framing of their own.
+        it('marks the reference sections as background', async () => {
+          const prompt = await renderFallbackPrompt({
+            retrieval: retrievalSuccess({
+              floor: { alwaysLore: [lore('lore_1', 'House Eldrin', 'An exiled line.')] },
+            }),
+          })
+
+          const backgroundAt = prompt.indexOf('never the turn itself')
+          const loreAt = prompt.indexOf('# Relevant lore')
+          expect(backgroundAt).toBeGreaterThan(-1)
+          expect(loreAt).toBeGreaterThan(backgroundAt)
+        })
+
+        it('marks entries above the pair as background and the pair as this turn', async () => {
+          const prompt = await renderFallbackPrompt({
+            settings: { classifierContextEntries: 4 },
+            entries: ['e1 oldest', 'e2 older', 'e3 the action', 'e4 the reply'],
+          })
+
+          const earlierAt = prompt.indexOf('\n# Earlier turns')
+          const thisTurnAt = headingAt(prompt, '# This turn')
+          expect(earlierAt).toBeGreaterThan(-1)
+          expect(prompt.indexOf('e1 oldest')).toBeGreaterThan(earlierAt)
+          expect(prompt.indexOf('e2 older')).toBeGreaterThan(earlierAt)
+          expect(prompt.indexOf('e2 older')).toBeLessThan(thisTurnAt)
+          expect(prompt.indexOf('e3 the action')).toBeGreaterThan(thisTurnAt)
+          expect(prompt.indexOf('e4 the reply')).toBeGreaterThan(thisTurnAt)
+        })
+
+        // The pair is the evidence window — the user's action can carry the state change
+        // ("I put the sword away") — so it is never marked background, target or not.
+        it('omits the earlier-turns header when only the pair is present', async () => {
+          const prompt = await renderFallbackPrompt({
+            settings: { classifierContextEntries: 2 },
+            entries: ['e1 the action', 'e2 the reply'],
+          })
+
+          expect(prompt).not.toContain('# Earlier turns')
+          expect(headingAt(prompt, '# This turn')).toBeGreaterThan(-1)
+          expect(prompt).toContain('e1 the action')
+          expect(prompt).toContain('e2 the reply')
+        })
+
+        it('still marks this turn when the branch holds a single entry', async () => {
+          const prompt = await renderFallbackPrompt({ entries: ['e1 only'] })
+
+          expect(prompt).not.toContain('# Earlier turns')
+          expect(headingAt(prompt, '# This turn')).toBeGreaterThan(-1)
+          expect(prompt).toContain('e1 only')
+        })
       })
     })
   })

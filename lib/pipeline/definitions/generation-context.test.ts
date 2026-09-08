@@ -959,8 +959,8 @@ describe('buildGenerationContext — data source', () => {
   // The group's variable set does not shrink; the query behind an unread one does.
   it('skips the reads a template never mentions, leaving the variables empty', async () => {
     openStory()
-    // Real scene state, or skipping the scene read would look the same as
-    // reading a row that has none.
+    // Real scene state, so a read that fired is distinguishable from one that
+    // was skipped.
     await seedEntries([
       dbEntry(1, 'prose', 'ai_reply', {
         sceneEntities: [CHAR_ID],
@@ -979,13 +979,10 @@ describe('buildGenerationContext — data source', () => {
     expect(narrative.sceneMetadata).toMatchObject({ worldTime: 7, summary: 'a summary' })
     expect(classifier.lastTurns).toHaveLength(2)
     expect(classifier.entries).toEqual([])
-    // The classifier reads no scene variable either, so its scene read is skipped.
-    expect(classifier.sceneMetadata).toEqual({
-      sceneEntities: [],
-      currentLocationId: null,
-      worldTime: 0,
-      summary: '',
-    })
+    // Its in-scene section names sceneEntities (piggyback.md → Fallback classifier
+    // context), so the scene read fires for it too; the skipped pair is what this
+    // case turns on.
+    expect(classifier.sceneMetadata).toMatchObject({ worldTime: 7, summary: 'a summary' })
     for (const key of Object.keys(narrative)) expect(classifier).toHaveProperty(key)
   })
 
