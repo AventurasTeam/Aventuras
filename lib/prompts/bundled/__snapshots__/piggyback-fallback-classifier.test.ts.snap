@@ -1,0 +1,63 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`bundled piggyback fallback classifier template > matches the recorded snapshot 1`] = `
+"Known entities, referenced only by the ID shown below in brackets — write it without the brackets, never invent one:
+- [c1] Kael (character)
+- [l1] The Drowned Keep (location)
+
+- [i9] Veilstone (item, staged)
+
+Everything from here to "# This turn" is the world as it stands going into that turn — the baseline your report starts from, not a record of anything that happened in it.
+Take the changes from the turn below; nothing above it happened this turn.
+
+# In scene
+
+## Kael
+A courier with a stolen sigil.
+
+
+# Current location
+
+The Drowned Keep: Half sunk into the marsh.
+
+# Elsewhere in the world
+
+Mora — last seen at the ford.
+
+# Relevant lore
+
+House Eldrin
+An exiled line.
+
+# What has happened
+
+The siege broke on the third night.
+
+# Active threads
+
+Find the heir
+Still open.
+
+# Earlier chapters
+
+Chapter One: the marsh road.
+
+# Calendar
+This story tracks time in days (86400 seconds per day). Tiers: month (Frostmoon and Thawmoon). Convert relative-time prose ("two days later", "the next morning") into a seconds delta using these units.
+
+# Earlier turns — how the scene got here, not the turn you report on
+
+The marsh road ended at a wall of black water.
+
+Kael went first, testing the stones.
+
+# This turn
+
+I put the sword away and raised both hands.
+
+The keep answered with a single lantern, swinging.
+
+Report the scene state as of the LAST entry above, a one-sentence summary of the turn, and up to three retrieval queries naming context you want looked up for the next turn.
+Scene state is absolute, not a delta: report the full cast present at the end of the turn, not only what changed. Read the entry before it for state the user's own action changed.
+"
+`;

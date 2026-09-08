@@ -53,7 +53,7 @@ a negative offset slices from the END in Liquid — coinciding with the intended
 {%- assign pairStart = lastTurns | size | minus: 2 -%}
 {%- if pairStart < 0 -%}{%- assign pairStart = 0 -%}{%- endif -%}
 {% if pairStart > 0 -%}
-# Earlier turns — background only; do not report state from these
+# Earlier turns — how the scene got here, not the turn you report on
 {% for entry in lastTurns limit: pairStart %}
 {{ entry.content }}
 {% endfor %}
@@ -62,7 +62,8 @@ a negative offset slices from the END in Liquid — coinciding with the intended
 {% for entry in lastTurns offset: pairStart %}
 {{ entry.content }}
 {% endfor %}
-Report the scene state as of the LAST entry above, a one-sentence summary of it, and up to three retrieval queries naming context you want looked up for the next turn. Read the entry before it for state the user's own action changed.
+Report the scene state as of the LAST entry above, a one-sentence summary of the turn, and up to three retrieval queries naming context you want looked up for the next turn.
+Scene state is absolute, not a delta: report the full cast present at the end of the turn, not only what changed. Read the entry before it for state the user's own action changed.
 {% if suggestionsFire -%}
 {% include 'macro_suggestion_emission_json' %}
 {%- endif -%}`
