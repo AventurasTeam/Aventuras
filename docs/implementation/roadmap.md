@@ -857,6 +857,20 @@ moved; resolve with the slice it names.
   designed, and an M7.5 simulator that wants to re-run a whole captured
   pass at once will need `RankAllInput` widened. Surfaced by the Slice
   3.5 Task 2 review (2026-08-08).
+- **M7.5 — The query panel has no rendering rule for a redundancy value
+  outside its own range.** `assertCaptureShape` proves `redundancy` and
+  `redundancy_k` finite-or-null and no further, deliberately: the module is
+  structural, and a capture it refuses is also one the list cannot delete.
+  That leaves the panel to meet a ratio above 1, a zero or fractional
+  `redundancy_k`, or a `redundancy_k` sitting beside a null `redundancy`.
+  None of these can crash it — `redundancy_k` is a display denominator, not
+  an index — but each renders a nonsense line such as "12 of 0 top-K already
+  seated", under a ⚠ lit for the wrong reason. Decide it alongside the warn
+  threshold that
+  [`memory-probe.md → Queries tab`](../ui/screens/memory-probe/memory-probe.md#queries-tab)
+  also leaves unset; the likely answer is to render the raw value and mark it
+  out of range, since a producer bug is precisely what the screen exists to
+  expose. Surfaced by the query-stack Q4 review (2026-09-08).
 - **M7.3 — A non-embedder retrieval fault writes no capture, which is the
   case the probe most wants.** `runRetrieval` converts only
   `VectorInvariantError` into a captured failure and rethrows
