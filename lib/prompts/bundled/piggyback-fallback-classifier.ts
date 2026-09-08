@@ -12,10 +12,11 @@ export const PIGGYBACK_FALLBACK_CLASSIFIER = `Known entities, referenced only by
 {% if referenceable.size == 0 and stagedEntities.size == 0 %}(none)
 {% endif %}
 {%- comment -%}
-Marking is mandatory, not stylistic (piggyback.md): the memory blocks below are older and
-bulkier than any tail of entries, so unmarked they source state read off the wrong turn.
+Marking is mandatory, not stylistic (piggyback.md), and aimed at the memory blocks: older and
+bulkier than the entries. The scene sections are the baseline, so they are framed, not fenced off.
 {%- endcomment %}
-Everything from here to "# This turn" is reference material — background for reading the turn, never the turn itself. Do not report state from it.
+Everything from here to "# This turn" is the world as it stands going into that turn — the baseline your report starts from, not a record of anything that happened in it.
+Take the changes from the turn below; nothing above it happened this turn.
 
 {% comment %}The second half of the condition de-dupes the row named as both in-scene and the
 location; it is nil-safe, since a null structuralLocation makes it "e.id != nil".{% endcomment -%}
@@ -46,9 +47,8 @@ This story tracks time in {{ calendarVocabulary.baseUnitName }}s ({{ calendarVoc
 
 {% endif -%}
 {%- comment -%}
-lastTurns is the knob's window over the pair (cadence.md → User-tunable knobs): the pair is
-the evidence window, the last row alone the target. Clamped because a negative offset means
-slice-from-the-end in Liquid, which would coincide with the intended rows rather than mean them.
+lastTurns is the knob's window over the pair (cadence.md → User-tunable knobs). Clamped because
+a negative offset slices from the END in Liquid — coinciding with the intended rows, not meaning them.
 {%- endcomment -%}
 {%- assign pairStart = lastTurns | size | minus: 2 -%}
 {%- if pairStart < 0 -%}{%- assign pairStart = 0 -%}{%- endif -%}

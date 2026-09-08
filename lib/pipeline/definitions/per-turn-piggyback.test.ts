@@ -1212,8 +1212,8 @@ describe('per-turn-piggyback', () => {
         // bare indexOf would find the pointer to the header rather than the header.
         const headingAt = (prompt: string, heading: string) => prompt.indexOf(`\n${heading}\n`)
 
-        // Everything but the pair is background, the memory blocks most of all — older
-        // and bulkier than any tail of entries, and arriving with no framing of their own.
+        // The memory blocks are the hazard the marking exists for — older and bulkier than
+        // any tail of entries, and arriving with no framing of their own.
         it('marks the reference sections as background', async () => {
           const prompt = await renderFallbackPrompt({
             retrieval: retrievalSuccess({
@@ -1221,7 +1221,7 @@ describe('per-turn-piggyback', () => {
             }),
           })
 
-          const backgroundAt = prompt.indexOf('never the turn itself')
+          const backgroundAt = prompt.indexOf('the world as it stands going into that turn')
           const loreAt = prompt.indexOf('# Relevant lore')
           expect(backgroundAt).toBeGreaterThan(-1)
           expect(loreAt).toBeGreaterThan(backgroundAt)

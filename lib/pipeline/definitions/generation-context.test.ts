@@ -972,17 +972,27 @@ describe('buildGenerationContext — data source', () => {
     ])
 
     const narrative = await build()
-    const classifier = await build({}, TEMPLATE_IDS.piggybackFallbackClassifier)
+    // Seeded so the scene ids below are pinned placeholders rather than whichever
+    // order substituteIds happened to walk the context keys in.
+    const classifier = await build(
+      { idMap: seededIdMap(CHAR_ID, LOC_A) },
+      TEMPLATE_IDS.piggybackFallbackClassifier,
+    )
 
     expect(narrative.entries).toHaveLength(2)
     expect(narrative.lastTurns).toEqual([])
     expect(narrative.sceneMetadata).toMatchObject({ worldTime: 7, summary: 'a summary' })
     expect(classifier.lastTurns).toHaveLength(2)
     expect(classifier.entries).toEqual([])
-    // Its in-scene section names sceneEntities (piggyback.md → Fallback classifier
-    // context), so the scene read fires for it too; the skipped pair is what this
-    // case turns on.
-    expect(classifier.sceneMetadata).toMatchObject({ worldTime: 7, summary: 'a summary' })
+    // Its in-scene and current-location sections name sceneEntities (piggyback.md →
+    // Fallback classifier context), so the scene read fires for it too; the skipped
+    // pair is what this case turns on.
+    expect(classifier.sceneMetadata).toEqual({
+      sceneEntities: ['c1'],
+      currentLocationId: 'l1',
+      worldTime: 7,
+      summary: 'a summary',
+    })
     for (const key of Object.keys(narrative)) expect(classifier).toHaveProperty(key)
   })
 
