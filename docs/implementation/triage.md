@@ -46,3 +46,10 @@ slice-planning gate forces its resolution before that slice is planned.
     pointer-events or portal state rather than `data-density`, which
     every file sets for itself through the global decorator in
     `.storybook/preview.tsx`.
+
+  **Revisit trigger.** A browser-project regression that a parallel run
+  cannot localise. That is the moment the missing debugging move costs
+  something, and the moment a fourth serial run is worth what it takes
+  to get. Held rather than routed in the 2026-09-09 triage pass, which
+  did not re-run the suite serially — the evidence above is still as of
+  `edce17b8`.
