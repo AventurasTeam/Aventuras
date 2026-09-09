@@ -1116,6 +1116,21 @@ a payload-free list query plus decode-on-View, which also moves
 corruption detection onto the specific row. Deferred as latent.
 Surfaced by the Slice 3.5 review (2026-08-09).
 
+#### Nothing decides when a degenerate retrieval query should be dropped
+
+[`retrieval.md → Redundancy`](./memory/retrieval.md#redundancy--reporting-a-degenerate-query)
+captures, per emitted Q4 query, the share of its own top-K the
+structural floor had already seated — the measure that makes a useless
+query distinguishable from a useful one, which is precisely what the
+removed prose-extract slot could never report. It is deliberately
+observability-only in v1: acting on it needs a threshold, and setting
+one needs data that does not exist yet. The
+[Tier-2 tuning surface](#tier-2-retrieval-ranker-knob-tuning-surface)
+covers _exposing_ ranker knobs rather than the decision to drop a
+query, so it sits beside this rather than owning it. Revisit once real
+captures accumulate; the answer may be that no automatic drop is wanted
+and the number stays diagnostic.
+
 ### UX (parked)
 
 #### Drag-and-drop file import for ImportDialog

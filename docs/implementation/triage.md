@@ -46,17 +46,3 @@ slice-planning gate forces its resolution before that slice is planned.
     pointer-events or portal state rather than `data-density`, which
     every file sets for itself through the global decorator in
     `.storybook/preview.tsx`.
-
-- **Nothing decides when a degenerate retrieval query should be
-  dropped.**
-  [`retrieval.md → Redundancy`](../memory/retrieval.md#redundancy--reporting-a-degenerate-query)
-  captures, per emitted Q4 query, the share of its own top-K the
-  structural floor had already seated — the measure that makes a useless
-  query distinguishable from a useful one, which is precisely what the
-  removed prose-extract slot could never report. It is deliberately
-  observability-only in v1: acting on it needs a threshold, and setting
-  one needs data that does not exist yet. The parked Tier-2 tuning
-  surface covers _exposing_ ranker knobs, not the decision to drop a
-  query, so this has no home there. Revisit once real captures
-  accumulate; the answer may be that no automatic drop is wanted and the
-  number stays diagnostic.
