@@ -2959,16 +2959,18 @@ importer's rows; story-internal references do not.
 fields plus the `vec0` vectors are meaningless on another setup and
 are omitted from the envelope: `stories.settings.models[agentId]`
 (per-agent model overrides), `stories.settings.embedding_provider_id`
-(app*settings provider reference), `stories.settings.embedding_model_id`
-(embedding model choice), `stories.settings.embedding_upgrade_declined`
-(a prompt declined against the exporter's app default, which would
-suppress a legitimate prompt on the importer's), and `vec0` vectors
-(reproducible cache, not source data). On import the stripped slots take the importer's
-local defaults (`models = {}`, `embedding*\*`copied from`app_settings`, same path as new-story creation). The re-index
-pipeline runs post-insert using the importer's embedder — same
-compute as a deliberate
+(an `app_settings` provider reference),
+`stories.settings.embedding_model_id` (embedding model choice),
+`stories.settings.embedding_upgrade_declined` (a prompt declined
+against the exporter's app default, which would suppress a legitimate
+prompt on the importer's), and `vec0` vectors (reproducible cache, not
+source data). On import the stripped slots take the importer's local
+defaults: `models` empty, and every embedding field copied from
+`app_settings` — the same path new-story creation follows. The
+re-index pipeline runs post-insert using the importer's embedder —
+same compute as a deliberate
 [Model swap UX](./memory/retrieval.md#model-swap-ux) pass; until it
-completes, imported embeddable rows have no `vec0`vectors and
+completes, imported embeddable rows have no `vec0` vectors and
 retrieval treats them as stale. The import dialog surfaces the
 re-index cost up front ("Importing 'Story title'. Will index memory
 using your current embedder (~N entries, ~M seconds)."). Imported
