@@ -48,6 +48,8 @@
   "regenerateUnavailable": "This reply can't be regenerated.",
   "regenerateCancelledDraftKept": "Regeneration cancelled. Your draft was kept, so the discarded action wasn't restored.",
   "turnCancelledDraftKept": "Turn cancelled. Your draft was kept, so the cancelled action wasn't restored.",
+  "failedTurnTextRestored": "Put the failed turn's text back in the composer.",
+  "failedTurnTextDropped": "Your draft was kept, so the failed turn's text wasn't restored.",
   "spellcheckSuggestion": "→ {{text}}",
   "rollbackConfirm": {
     "title": "Delete from entry {{entryNumber}}?",

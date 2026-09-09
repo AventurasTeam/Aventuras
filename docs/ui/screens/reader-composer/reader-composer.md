@@ -481,6 +481,33 @@ this table — they're pure model id strings per
 and broken-model-catalog cases surface via the existing global
 broken-config banner instead.
 
+#### Custody of the turn's text
+
+A failure entry carries the submission that produced it
+(`metadata.systemFailure.submission`), and since the turn's
+`user_action` was reverse-replayed with the run, that copy is the only
+one left. It is a convenience for `Retry`, not a vault: **every path
+that destroys the entry hands the submission back to the composer
+draft** — `Dismiss`, and the pre-dispatch tail clear on a regenerate
+that then throws. An empty draft receives the text verbatim under
+composer mode `Free`, since the stored content is already wrapped and
+must not be wrapped twice; a non-empty draft wins and the user is told
+the text was dropped rather than losing it silently.
+
+Restoring the _entry_ is deliberately not the mechanism. A failure
+entry re-appends at the branch tail, so on a path where a partial
+sweep already moved the tail it would park a stale notice over a
+branch it no longer describes — which is why the regenerate rejection
+arm may put the entry back and the throw arm may not. A draft has no
+position, so it is safe on both.
+
+This leaves a failed turn's text under the same custody as any unsent
+draft, including the same limit: composer input is pre-submit state
+and does not survive a restart, the wart the
+[restore-draft mechanism](../../../parked.md#restore-draft-mechanism-for-tap-after-typing-on-suggestion-chips)
+entry tracks. Closing that gap means persisting drafts generally, not
+giving failure entries a second storage role.
+
 ### Persistent state — top-bar status pill error variant
 
 The top-bar status pill (per

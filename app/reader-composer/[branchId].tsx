@@ -8,7 +8,7 @@ import { type ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
 import { Composer, type ComposerHandle } from '@/components/reader/composer'
-import { isDraftEmpty } from '@/components/reader/composer-draft'
+import { isDraftEmpty, planSubmissionHandback } from '@/components/reader/composer-draft'
 import { readerPillPhase } from '@/components/reader/generation-phase'
 import { KeyboardInsetColumn } from '@/components/reader/keyboard-inset-column'
 import ReaderDocument, { type ReaderDocumentRef } from '@/components/reader/reader-document'
@@ -615,6 +615,21 @@ export default function ReaderComposerRoute() {
     [branchId, reload],
   )
 
+  // Position-independent, unlike restoreSystemTail: safe on the paths where a
+  // sweep may already have moved the tail, which is exactly where re-parking
+  // the entry is not. The stored content is wrapped, so it returns under
+  // 'free' — no re-wrap on send, the rule the cancel arm follows.
+  const handBackSubmission = useCallback((submission: SystemFailureMeta['submission']) => {
+    const plan = planSubmissionHandback(submission, composerRef.current?.getDraft())
+    if (plan.action === 'none') return
+    if (plan.action === 'keep-draft') {
+      toast.info(t('reader:failedTurnTextDropped'))
+      return
+    }
+    composerRef.current?.restoreDraft(plan.content, 'free')
+    toast.info(t('reader:failedTurnTextRestored'))
+  }, [])
+
   // `editBlocked` only goes true once a dispatch registers a hard-gate run or
   // enters its reversal barrier — several awaits and a branch-queue hop past the
   // tap. Send survives that window only because the composer clears its own text
@@ -731,6 +746,11 @@ export default function ReaderComposerRoute() {
           // A DeltaReplayError can commit its transaction and fail the store sync,
           // leaving entriesStore holding rows the sweep already deleted.
           await reload()
+          // The drop above destroyed an earlier failure's only copy of its text
+          // for a regenerate that then produced nothing. Restoring the entry is
+          // unsafe here (restoreSystemTail); the draft does not care where the
+          // tail moved.
+          if (branchUnchanged(branchId)) handBackSubmission(dropped?.failure?.submission)
           return
         }
         if (regen.status === 'rejected') {
@@ -826,6 +846,7 @@ export default function ReaderComposerRoute() {
       beginDispatch,
       endDispatch,
       branchUnchanged,
+      handBackSubmission,
     ],
   )
 
@@ -846,9 +867,13 @@ export default function ReaderComposerRoute() {
   )
 
   const dismissSystemEntry = useCallback(async () => {
+    // Read before the awaits: a branch switch under them would hand this
+    // branch's text to another branch's composer. Dismissing an error is not a
+    // request to discard the draft behind it, and the entry is its last copy.
+    handBackSubmission(systemFailure?.submission)
     await clearSystemEntry(branchId, ctx)
     await reload()
-  }, [branchId, reload])
+  }, [branchId, reload, handBackSubmission, systemFailure])
 
   const openRollback = useCallback(
     async (targetId: string) => {
