@@ -669,7 +669,10 @@ the underlying configuration surfaces.
   **embedder tab** full surface (curated catalog + HF-id import +
   custom-file import paths, per-model EP picker, cross-story
   staleness aggregate, download dialog with license fetch +
-  SHA256 verify + `.attestation`, remove / test flows);
+  SHA256 verify + `.attestation`, remove / test flows, plus the two
+  provider-model values nothing can detect: the **input window** and
+  the **tokenizer** the composer counts against, both set by hand per
+  [`retrieval.md → Capability flags`](../memory/retrieval.md#capability-flags--provider-side));
   **models tab** (agent-to-profile assignments including the
   `suggestion` slot from M3.7); **appearance tab** (theme picker
   - density toggle + reader font scale + `deriveAccent`
