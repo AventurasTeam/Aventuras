@@ -120,20 +120,6 @@ true` (`lib/embedder/local/runtime.native.ts`) at a length nobody
   pattern). Unowned: it guards the schema layer on behalf of every
   future slice, not any one of them.
 
-- **Four hand-rolled copies of the same settings-hardening guard.** The
-  shape `Number.isFinite(v) ? Math.max(floor, Math.floor(v)) : floor`
-  appears in `buffer.ts` (`toCount`), `scan-surface.ts` (`toTake`) and
-  `injection.ts` (`toDepth`), all under `lib/retrieval`, and now in
-  `entry-reads.ts` under `lib/pipeline/definitions`. Each guards a
-  `stories.settings` number that reaches a read site without having gone
-  through `storySettingsSchema` — a real and recurring need, since the
-  schema deliberately avoids `.int()` so a hand-edited blob degrades
-  instead of refusing to open the story. A shared helper is the obvious
-  move; what stops it being mechanical is that each caller's floor and
-  units differ, and three live in one module while the fourth does not,
-  so the helper has no obvious home under the `lib/*` public-API rule.
-  Unowned: a cross-module utility question, not any one slice's work.
-
 - **No bundled template exercises the scene-read gate's false branch.**
   `buildGenerationContext` skips the scene query when a template names
   none of `SCENE_VARIABLES`, and that gate is what keeps a prompt from

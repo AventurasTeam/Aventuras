@@ -2,14 +2,9 @@ import { and, desc, eq, ne } from 'drizzle-orm'
 
 import { storyEntries, type DbCtx, type StoryEntry } from '@/lib/db'
 import { promptProse } from '@/lib/piggyback'
+import { settingsCount } from '@/lib/settings-number'
 
 import { warnOnDuplicatePositions } from './buffer'
-
-// Hardens against settings that skipped storySettingsSchema, as readPromptBuffer's
-// toCount does: a fractional or NaN limit reaches SQLite raw. Floor of one entry.
-function toTake(value: number): number {
-  return Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 1
-}
 
 export type ScanSurfaceInput = {
   /** This turn's action, already committed ahead of the run. */
@@ -45,10 +40,10 @@ export async function readScanEntries(
     .from(storyEntries)
     .where(and(eq(storyEntries.branchId, branchId), ne(storyEntries.kind, 'system')))
     .orderBy(desc(storyEntries.position), desc(storyEntries.createdAt))
-    .limit(toTake(take) + 1)
+    .limit(settingsCount(take, 1) + 1)
   warnOnDuplicatePositions(rows, branchId)
   // The action reaches the surface through `userAction`; leaving it here too
   // would weight this turn's own words twice against every keyword.
   const trailing = rows[0]?.kind === 'user_action' ? rows.slice(1) : rows
-  return trailing.slice(0, toTake(take)).reverse()
+  return trailing.slice(0, settingsCount(take, 1)).reverse()
 }

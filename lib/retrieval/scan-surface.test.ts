@@ -133,7 +133,7 @@ describe('readScanEntries', () => {
   })
 
   // storySettingsSchema declares .int().min(1): these harden against a blob that
-  // skipped it, not reachable values — as readPromptBuffer's toCount does.
+  // skipped it, not reachable values — the shared settingsCount guard.
   it.each([0, -3, 1.7, Number.NaN, undefined])(
     'floors an unvalidated scanEntries of %s at one trailing entry',
     async (take) => {

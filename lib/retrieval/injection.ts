@@ -1,3 +1,5 @@
+import { settingsCount } from '@/lib/settings-number'
+
 import { matchTerms, normalizeTerm } from './name-index'
 import { filterEntityPool, filterLorePool, type EntityRow, type LoreRow } from './pools'
 import { tokenCost, type RankTypeInput } from './ranker'
@@ -70,9 +72,7 @@ const toCap = (budget: number, share: number): number =>
   Number.isFinite(budget) ? Math.max(0, budget) * share : 0
 
 const toDepth = (settings: KeywordRetrievalSettings): number =>
-  settings.cascade && Number.isFinite(settings.cascadeMaxDepth)
-    ? Math.max(1, Math.floor(settings.cascadeMaxDepth))
-    : 1
+  settings.cascade ? settingsCount(settings.cascadeMaxDepth, 1) : 1
 
 // Code units, never localeCompare: the host locale would make which rows seat
 // device-dependent, and case-only ties fall to SQLite's read order — hence the id key.

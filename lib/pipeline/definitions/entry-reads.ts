@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, ne } from 'drizzle-orm'
 
 import { storyEntries, type DbCtx, type StoryEntry } from '@/lib/db'
 import { NARRATIVE_KINDS } from '@/lib/piggyback'
+import { settingsCount } from '@/lib/settings-number'
 
 const LAST_TURNS = 2
 
@@ -32,7 +33,7 @@ export async function readLastTurns(
   branchId: string,
   limit: number = LAST_TURNS,
 ): Promise<StoryEntry[]> {
-  const take = Number.isFinite(limit) ? Math.max(LAST_TURNS, Math.floor(limit)) : LAST_TURNS
+  const take = settingsCount(limit, LAST_TURNS)
   const rows = await db
     .select()
     .from(storyEntries)

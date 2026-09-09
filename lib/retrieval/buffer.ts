@@ -2,6 +2,7 @@ import { and, count, desc, eq, isNull, ne } from 'drizzle-orm'
 
 import { storyEntries, type DbCtx, type StoryEntry } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
+import { settingsCount } from '@/lib/settings-number'
 
 export type BufferSettings = {
   fullChapterInBuffer: boolean
@@ -9,14 +10,9 @@ export type BufferSettings = {
   protectedBuffer: number
 }
 
-// Hardening against settings that never went through storySettingsSchema.
-// Fractions have to go before the count reaches a LIMIT, and the floors differ
-// per knob: partialChapterBuffer 0 asks for no window at all, whereas
-// protectedBuffer 0 legitimately means "no spillover floor".
-function toCount(value: number, floor: number): number {
-  return Number.isFinite(value) ? Math.max(floor, Math.floor(value)) : floor
-}
-
+// The two settingsCount floors below differ on purpose: partialChapterBuffer 0
+// asks for no window at all, whereas protectedBuffer 0 legitimately means "no
+// spillover floor".
 /**
  * How many entries the window holds, given the size of the open region.
  * Spillover is gated on that region running out, so protectedBuffer widens this
@@ -26,8 +22,8 @@ function toCount(value: number, floor: number): number {
 export function promptBufferTake(openCount: number, settings: BufferSettings): number {
   const wanted = settings.fullChapterInBuffer
     ? openCount
-    : toCount(settings.partialChapterBuffer, 1)
-  return Math.max(toCount(settings.protectedBuffer, 0), Math.min(openCount, wanted))
+    : settingsCount(settings.partialChapterBuffer, 1)
+  return Math.max(settingsCount(settings.protectedBuffer, 0), Math.min(openCount, wanted))
 }
 
 /**
