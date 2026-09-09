@@ -18,6 +18,9 @@ export type { EmbedderAppDefaults, EmbedderConfigResolution } from './resolve-co
 export { createDrainController } from './drain'
 export type { DrainDeps } from './drain'
 
+export { countEmbedderTokens } from './count-input'
+export type { EmbedderTokenCount } from './count-input'
+
 export {
   ASSUMED_PROVIDER_MAX_INPUT_TOKENS,
   NEAR_WINDOW_FRACTION,
