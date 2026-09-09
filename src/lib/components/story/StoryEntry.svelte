@@ -1620,15 +1620,19 @@
             <Bookmark class="h-4 w-4" />
           </Button>
         {/if}
-        <Button
-          variant="text"
-          size="icon"
-          onclick={() => (isAnchoringTime = true)}
-          class="hidden h-7 w-7 text-teal-500 hover:text-teal-600 sm:flex"
-          title={story.timeAnchorFor(entry.id) ? 'Edit time anchor' : 'Create a time anchor'}
-        >
-          <Anchor class="h-4 w-4" />
-        </Button>
+        {#if entry.type !== 'user_action'}
+          <Button
+            variant="text"
+            size="icon"
+            onclick={() => (isAnchoringTime = true)}
+            class="hidden h-7 w-7 sm:flex {story.timeAnchorFor(entry.id)
+              ? 'text-teal-500 hover:text-teal-600'
+              : 'text-muted-foreground hover:text-foreground'}"
+            title={story.timeAnchorFor(entry.id) ? 'Edit time anchor' : 'Create a time anchor'}
+          >
+            <Anchor class="h-4 w-4" />
+          </Button>
+        {/if}
         <Button
           variant="text"
           size="icon"
@@ -1719,10 +1723,12 @@
                 Create checkpoint
               </DropdownMenu.Item>
             {/if}
-            <DropdownMenu.Item onclick={() => (isAnchoringTime = true)}>
-              <Anchor class="h-4 w-4" />
-              {story.timeAnchorFor(entry.id) ? 'Edit time anchor' : 'Create a time anchor'}
-            </DropdownMenu.Item>
+            {#if entry.type !== 'user_action'}
+              <DropdownMenu.Item onclick={() => (isAnchoringTime = true)}>
+                <Anchor class="h-4 w-4" />
+                {story.timeAnchorFor(entry.id) ? 'Edit time anchor' : 'Create a time anchor'}
+              </DropdownMenu.Item>
+            {/if}
             <!-- Static label and icon: selecting an item closes the menu, so the "Copied!"
                  state would never be on screen. The toast is the feedback here. -->
             <DropdownMenu.Item onclick={handleCopyContent}>

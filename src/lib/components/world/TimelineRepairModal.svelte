@@ -28,6 +28,7 @@
   let staleMessage = $state<string | null>(null)
 
   const ranges = $derived(story.timeRanges)
+  const onBranch = $derived((story.currentStory?.currentBranchId ?? null) !== null)
   const range = $derived<SelectableRange | undefined>(ranges[selectedIndex])
 
   const byId = $derived(new Map(story.entries.map((entry) => [entry.id, entry])))
@@ -262,8 +263,26 @@
 
     {#if ranges.length === 0}
       <p class="text-muted-foreground text-sm">
-        There is nothing to reconcile yet. Pin when an entry ended from its info panel to create a
-        boundary.
+        There is nothing to reconcile yet. A repair runs between two boundaries, and this branch
+        offers fewer than two.
+      </p>
+      <!-- Named rather than implied: on a branch, "nothing to reconcile" alongside a list of
+           inherited anchors is a dead end unless the reason is spelled out. -->
+      <p class="text-muted-foreground mt-2 text-xs">
+        {#if onBranch && story.ownedAnchorCount === 0}
+          This branch has not been written on yet, so its fork point is its only boundary. Continue
+          the story here, or anchor an entry this branch owns. The
+          {story.timeAnchors.length}
+          {story.timeAnchors.length === 1 ? 'anchor' : 'anchors'} you can see
+          {story.timeAnchors.length === 1 ? 'belongs' : 'belong'} to inherited history and can only be
+          repaired from the branch that owns
+          {story.timeAnchors.length === 1 ? 'it' : 'them'}.
+        {:else}
+          On this branch: {story.entries.length}
+          {story.entries.length === 1 ? 'entry' : 'entries'}, {story.timeAnchors.length}
+          {story.timeAnchors.length === 1 ? 'anchor' : 'anchors'}, {story.timeBoundaries.length}
+          {story.timeBoundaries.length === 1 ? 'boundary' : 'boundaries'}.
+        {/if}
       </p>
     {:else}
       <label class="text-sm">

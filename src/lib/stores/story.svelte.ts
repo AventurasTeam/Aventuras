@@ -1539,6 +1539,25 @@ class StoryStore {
     return this.timeAnchors.find((anchor) => anchor.entryId === entryId)
   }
 
+  /**
+   * Whether the branch in view may write to this entry.
+   *
+   * A branch sees its whole lineage, so an inherited entry is visible without being editable
+   * here — and an anchor on one is the parent's assertion, shared with every descendant.
+   * Removing or moving it from a child would change the parent's timeline, which is the same
+   * hazard `updateEntry` refuses for entry text.
+   */
+  ownsEntry(entryId: string): boolean {
+    const branchId = this.currentStory?.currentBranchId ?? null
+    const entry = this.entries.find((e) => e.id === entryId)
+    return (entry?.branchId ?? null) === branchId
+  }
+
+  /** Anchors this branch may edit, as opposed to those it merely inherits. */
+  get ownedAnchorCount(): number {
+    return this.timeAnchors.filter((anchor) => this.ownsEntry(anchor.entryId)).length
+  }
+
   /** The points a repair may be selected between, on the branch in view. */
   get timeBoundaries(): Boundary[] {
     const branchId = this.currentStory?.currentBranchId ?? null

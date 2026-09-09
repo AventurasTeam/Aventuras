@@ -33,6 +33,14 @@
 
   const suspectedCount = $derived(all.filter((a) => a.severity === 'suspected').length)
 
+  /**
+   * A branch sees its whole lineage, but repairs only reach what it owns. An anomaly in
+   * inherited history is real and worth reading; it just cannot be fixed from here.
+   */
+  const inheritedCount = $derived(
+    all.filter((anomaly) => !story.ownsEntry(anomaly.entryIds[0])).length,
+  )
+
   function subject(anomaly: TimelineAnomaly): StoryEntry | undefined {
     return byId.get(anomaly.entryIds[0])
   }
@@ -99,6 +107,15 @@
       </Dialog.Description>
     </Dialog.Header>
 
+    {#if inheritedCount > 0}
+      <p class="text-muted-foreground text-xs">
+        {inheritedCount} of these
+        {inheritedCount === 1 ? 'sits' : 'sit'} in history this branch inherited rather than owns. They
+        are shown because they are real, but repairing them means switching to the branch that owns those
+        entries.
+      </p>
+    {/if}
+
     {#if suspectedCount > 0}
       <label class="flex items-center gap-2 text-xs">
         <input type="checkbox" bind:checked={hideSuspected} />
@@ -122,6 +139,14 @@
             </span>
             <span class="text-foreground font-semibold">{heading(anomaly)}</span>
             <span class="text-muted-foreground">{recorded(anomaly)}</span>
+            {#if !story.ownsEntry(anomaly.entryIds[0])}
+              <span
+                class="bg-muted text-muted-foreground rounded px-1 text-[10px] tracking-wide uppercase"
+                title="This entry belongs to another branch. Switch to it to repair this."
+              >
+                Inherited
+              </span>
+            {/if}
           </div>
 
           {#if excerpt(anomaly)}
