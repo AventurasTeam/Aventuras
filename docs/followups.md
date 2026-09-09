@@ -13,15 +13,6 @@ for the placement rule.
 
 ## UX
 
-- **M4.4 — "Upgrade to current default" story-open prompt deferred from 3.1b.**
-  Canon ([`retrieval.md → Model swap UX`](./memory/retrieval.md#model-swap-ux))
-  names a second dialog entry point: a prompt when opening a story whose
-  embedding model differs from the current app default; accepting it fires
-  the swap dialog. Slice 3.1b shipped only the Story Settings entry point
-  (planning decision 2026-07-24) — the prompt needs its own "stops nagging
-  until the next manual swap attempt" persistence decision. Owner: a future
-  reader/settings slice. Surfaced by M3.1b Task 14 (2026-07-24).
-
 - **M4.5 — Custody of a failed turn's text rests on one deletable system entry.**
   A failed or refused turn reverse-replays its own `user_action` with the
   rest of its action group (`abortRun` → `reverseReplayDeltas`, and

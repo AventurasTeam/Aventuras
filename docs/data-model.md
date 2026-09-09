@@ -1194,6 +1194,7 @@ stories.settings: {
   embedding_swap_provider_id?: string  // target's provider, set alongside embedding_swap_backend='provider'; cleared with the rest of the marker at Phase 2
   embedding_swap_source_dim?: number   // storage family the story reads before Phase 2; lets cancellation distinguish in-place same-dim re-indexing from a same-model-id swap staged into another dim family
   embedding_swap_target_dim?: number   // storage family Phase 1 stages into. Seeded from resolved config and corrected atomically with the first batch if the served dimension differs
+  embedding_upgrade_declined?: string  // app-default model id the user declined at the story-open upgrade prompt. Suppresses that prompt for as long as app_settings.embedding_model_id still equals this value; a default change to any other model lifts it. Optional, so no backfill migration is owed. See docs/memory/retrieval.md → Model swap UX
   embedding_provider_id?: string    // required when embeddingBackend === 'provider'; FK into app_settings.providers[].id picking which provider supplies the embedding endpoint. Distinct from the narrative-side provider routing (a user may run e.g. OpenAI for narrative and a local embedding provider, or vice versa). Null / undefined when embeddingBackend === 'local'.
   retrievalBudgets: {                // per-type token budgets, hard partitions in v1 (no spillover); see docs/memory/retrieval.md → Per-type retrieval budgets
     entities: number
@@ -2921,28 +2922,28 @@ below. A schema addition is **incomplete until its export
 disposition is added here** — the forcing function that keeps the
 manifest exhaustive.
 
-| Table                     | Disposition               | Rationale                                                                                                                                                                   |
-| ------------------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `stories`                 | Travels — fields stripped | The story row. `settings.models`, `settings.embedding_provider_id`, `settings.embedding_model_id` omitted (see below). All other `settings` and all of `definition` travel. |
-| `branches`                | Travels                   | All branches. Branch container — not delta-logged, but story content.                                                                                                       |
-| `story_entries`           | Travels                   | All entries, all branches; `metadata` JSON included.                                                                                                                        |
-| `entities`                | Travels                   | `embedding_stale` travels as-is; the post-import re-index reconciles it.                                                                                                    |
-| `lore`                    | Travels                   | Delta-logged story content.                                                                                                                                                 |
-| `threads`                 | Travels                   | Delta-logged story content.                                                                                                                                                 |
-| `happenings`              | Travels                   | Delta-logged story content.                                                                                                                                                 |
-| `happening_involvements`  | Travels                   | Delta-logged link table.                                                                                                                                                    |
-| `happening_awareness`     | Travels                   | Delta-logged link table; `retrieval_count` travels.                                                                                                                         |
-| `character_relationships` | Travels                   | Delta-logged story content.                                                                                                                                                 |
-| `chapters`                | Travels                   | Delta-logged story content.                                                                                                                                                 |
-| `branch_era_flips`        | Travels                   | Delta-logged narrative state.                                                                                                                                               |
-| `translations`            | Travels                   | Paid LLM output; carries no provider or model coupling (see below).                                                                                                         |
-| `entry_assets`            | Travels                   | Delta-logged link table.                                                                                                                                                    |
-| `deltas`                  | Travels                   | The delta log itself; every other table's integrity depends on it.                                                                                                          |
-| `assets`                  | Dependency — carried      | Referenced rows only, collected via `entry_assets` and `stories.cover_asset_id`. Binary embedded.                                                                           |
-| `vault_calendars`         | Dependency — carried      | The one referenced custom-calendar row, embedded (see below). Built-ins resolve by id and carry nothing.                                                                    |
-| `embeddings` (`vec0`)     | Stripped                  | Reproducible from source content; model-space-bound. Not delta-logged.                                                                                                      |
-| `probe_captures`          | Stripped                  | Diagnostic, not story state; not delta-logged; FIFO-evicted; deep-mode vectors model-bound. Branch-forking already drops them.                                              |
-| `app_settings`            | Does not travel           | Global singleton; sources the strip list, never itself exported.                                                                                                            |
+| Table                     | Disposition               | Rationale                                                                                                                                                                                                          |
+| ------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `stories`                 | Travels — fields stripped | The story row. `settings.models`, `settings.embedding_provider_id`, `settings.embedding_model_id`, `settings.embedding_upgrade_declined` omitted (see below). All other `settings` and all of `definition` travel. |
+| `branches`                | Travels                   | All branches. Branch container — not delta-logged, but story content.                                                                                                                                              |
+| `story_entries`           | Travels                   | All entries, all branches; `metadata` JSON included.                                                                                                                                                               |
+| `entities`                | Travels                   | `embedding_stale` travels as-is; the post-import re-index reconciles it.                                                                                                                                           |
+| `lore`                    | Travels                   | Delta-logged story content.                                                                                                                                                                                        |
+| `threads`                 | Travels                   | Delta-logged story content.                                                                                                                                                                                        |
+| `happenings`              | Travels                   | Delta-logged story content.                                                                                                                                                                                        |
+| `happening_involvements`  | Travels                   | Delta-logged link table.                                                                                                                                                                                           |
+| `happening_awareness`     | Travels                   | Delta-logged link table; `retrieval_count` travels.                                                                                                                                                                |
+| `character_relationships` | Travels                   | Delta-logged story content.                                                                                                                                                                                        |
+| `chapters`                | Travels                   | Delta-logged story content.                                                                                                                                                                                        |
+| `branch_era_flips`        | Travels                   | Delta-logged narrative state.                                                                                                                                                                                      |
+| `translations`            | Travels                   | Paid LLM output; carries no provider or model coupling (see below).                                                                                                                                                |
+| `entry_assets`            | Travels                   | Delta-logged link table.                                                                                                                                                                                           |
+| `deltas`                  | Travels                   | The delta log itself; every other table's integrity depends on it.                                                                                                                                                 |
+| `assets`                  | Dependency — carried      | Referenced rows only, collected via `entry_assets` and `stories.cover_asset_id`. Binary embedded.                                                                                                                  |
+| `vault_calendars`         | Dependency — carried      | The one referenced custom-calendar row, embedded (see below). Built-ins resolve by id and carry nothing.                                                                                                           |
+| `embeddings` (`vec0`)     | Stripped                  | Reproducible from source content; model-space-bound. Not delta-logged.                                                                                                                                             |
+| `probe_captures`          | Stripped                  | Diagnostic, not story state; not delta-logged; FIFO-evicted; deep-mode vectors model-bound. Branch-forking already drops them.                                                                                     |
+| `app_settings`            | Does not travel           | Global singleton; sources the strip list, never itself exported.                                                                                                                                                   |
 
 **Story-internal IDs import verbatim; dependency references
 resolve.** Story-scoped IDs — `branch_id`, delta `target_id`, the
@@ -2954,13 +2955,15 @@ and a custom `calendarSystemId` may be rewritten on calendar fork
 (see below). Dependency-table references resolve against the
 importer's rows; story-internal references do not.
 
-**Stripped `app_settings` references.** Three `stories.settings`
+**Stripped `app_settings` references.** Four `stories.settings`
 fields plus the `vec0` vectors are meaningless on another setup and
 are omitted from the envelope: `stories.settings.models[agentId]`
 (per-agent model overrides), `stories.settings.embedding_provider_id`
 (app*settings provider reference), `stories.settings.embedding_model_id`
-(embedding model choice), and `vec0` vectors (reproducible cache,
-not source data). On import the stripped slots take the importer's
+(embedding model choice), `stories.settings.embedding_upgrade_declined`
+(a prompt declined against the exporter's app default, which would
+suppress a legitimate prompt on the importer's), and `vec0` vectors
+(reproducible cache, not source data). On import the stripped slots take the importer's
 local defaults (`models = {}`, `embedding*\*`copied from`app_settings`, same path as new-story creation). The re-index
 pipeline runs post-insert using the importer's embedder — same
 compute as a deliberate

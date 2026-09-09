@@ -232,13 +232,13 @@ M4.6 once the M4.1 / M4.3 shells exist to host the import
 affordances.
 
 Carried deferrals, routed out of [`triage.md`](./triage.md)
-2026-08-18 and 2026-08-20, verified against the code first. Two more —
-the story-open swap prompt and failed-turn text custody — moved to
-[`followups.md`](../followups.md) 2026-09-05: both want a design pass
-before any slice can own them, and neither was owned by an M4 slice as
-sketched. The last two entries below arrive from the other direction —
-canon that landed ahead of its surface, rather than a deferral routed
-out of implementation.
+2026-08-18 and 2026-08-20, verified against the code first. Two more
+moved to [`followups.md`](../followups.md) 2026-09-05, wanting a design
+pass before any slice could own them: the story-open swap prompt came
+back 2026-09-09 with its suppression rule settled, and failed-turn text
+custody is still there. Entries below that name canon with no surface
+arrive from the other direction — spec that landed ahead of its screen,
+rather than a deferral routed out of implementation.
 
 - **M4.4 — The phone list state hides a dirty save bar.** `StorySettingsShell`
   renders the bar inside the detail pane, and `MasterDetailLayout`
@@ -315,6 +315,21 @@ out of implementation.
   makes its keywords authorable in the first place, so the two want
   sequencing together. Introduced by the keyword-retrieval design
   (2026-09-06).
+- **M4.4 — The story-open upgrade prompt is specced with no surface.**
+  [`retrieval.md → The story-open upgrade prompt`](../memory/retrieval.md#the-story-open-upgrade-prompt)
+  specs the second swap entry point Slice 3.1b left unbuilt: an
+  app-level host beside `SwapResumeHost` (`app/_layout.tsx`), gated on
+  the swap marker being absent, the story's model differing from the
+  app default, and `embedding_upgrade_declined` not naming that
+  default. Three actions mirroring `SwapResumeDialog` — Upgrade fires
+  the shipped swap dialog, Keep on the current model writes the
+  declined key, Later defers for the session only. The swap dialog's
+  own Keep option writes that same key, so the Story Settings path is
+  part of this work rather than a separate follow-up. The key itself
+  already parses — `storySettingsSchema` carries it optional — so what
+  is missing is the host, the gate and the two write sites. Routed out
+  of [`followups.md`](../followups.md) 2026-09-09, once the suppression
+  rule was settled.
 
 **Gates.** M3 for real-data validation (no entities without the
 classifier; no awareness without it; no retrieval scores without

@@ -421,10 +421,9 @@ app default doesn't disturb any existing story.
 
 **Where the dialog fires.** Per-story, when the user explicitly
 moves a story to a different model — either via Story Settings
-("Change embedding model for this story") or by accepting an
-"upgrade to current default" prompt surfaced when opening a story
-whose model differs from the current app default. AlertDialog
-surfaces three options:
+("Change embedding model for this story") or by choosing Upgrade on
+the [story-open upgrade prompt](#the-story-open-upgrade-prompt).
+AlertDialog surfaces three options:
 
 - **Re-index this story.** Default. The swap is crash-safe via a
   stage-then-flip flow tracked by
@@ -521,9 +520,12 @@ surfaces three options:
   parallel swap.
 
 - **Keep on the current model.** Don't change anything. Story
-  stays on its existing model; the "current model differs from app
-  default" prompt stops nagging until the next manual swap
-  attempt.
+  stays on its existing model, and the app default just turned down
+  is recorded in `embedding_upgrade_declined` so the
+  [story-open upgrade prompt](#the-story-open-upgrade-prompt) stops
+  firing. Recorded wherever this option is chosen, Story Settings
+  included: the suppression describes a model the user declined, not
+  the surface they declined it on.
 - **Skip with relabel.** Bulk-updates this story's recorded
   `embedding_model_id` to the new value without recomputing any
   vectors. `model_id` is part of the vec0 pk and the KNN filter, so
@@ -537,6 +539,49 @@ surfaces three options:
   id actually points to a different model, retrieval quality
   silently degrades and the system has no way to detect that.
   Instantaneous; no swap-target marker (nothing to crash through).
+
+#### The story-open upgrade prompt
+
+Fires on story open when three conditions hold together: no
+`embedding_swap_target` marker is set — the resume prompt owns that
+case, and model changes are already disabled while it stands — the
+story's `embedding_model_id` differs from
+`app_settings.embedding_model_id`, and `embedding_upgrade_declined`
+is not that same app default. One app-level mount keyed on the open
+story, beside the resume prompt's, because two hosts reading the
+same condition portal duplicate modals onto one body. No prompt when
+the app default is unset, and the comparison is on model id alone —
+not on backend or provider — because model id is what the vec0 pk and
+the KNN filter already treat as vector-space identity. The same model
+served locally and by a provider is not a swap worth asking about.
+
+Three actions, mirroring the resume prompt rather than inventing a
+shape for this one surface:
+
+- **Upgrade** — fires the swap dialog above with its three options.
+- **Keep on the current model** — writes the declined key, exactly
+  as the swap dialog's identically named option does. It is that
+  option surfaced one step early, not a second concept.
+- **Later** — dismisses without deciding, and is what an overlay tap
+  or a hardware back maps to. Session-scoped: the prompt fires again
+  next launch, because a dismissal is not a decision.
+
+**Suppression is scoped to the model declined, not to time.** The
+prompt returns as soon as the app default moves to a model the user
+has not turned down — a new question deserves a new ask — and stays
+away while the default is still the one they declined. Resetting it
+on the next manual swap attempt was considered and rejected: that
+rule inverts, prompting a user to adopt the app default on the very
+next story open after they deliberately moved this story to some
+other model. Story Settings keeps its own entry point throughout, so
+nothing is unreachable while the prompt is suppressed.
+
+The key is optional, so a story upgraded from before the prompt
+existed parses without a backfill migration. It is stripped on export
+alongside the other `app_settings` references
+([`data-model.md → Aventuras file format`](../data-model.md#aventuras-file-format-avts)):
+it names the exporter's app default, and travelling would suppress a
+prompt the importer should see.
 
 A standalone "Re-index this story now" button stays available in
 the same Story Settings panel for users who want to force a

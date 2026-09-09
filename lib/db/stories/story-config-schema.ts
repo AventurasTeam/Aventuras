@@ -136,6 +136,11 @@ export const storySettingsSchema = z.object({
   embedding_swap_provider_id: z.string().optional(),
   embedding_swap_source_dim: z.number().int().positive().optional(),
   embedding_swap_target_dim: z.number().int().positive().optional(),
+  // The app-default model id turned down at the story-open upgrade prompt
+  // (retrieval.md → The story-open upgrade prompt). Optional so a story that
+  // predates the prompt parses without a backfill migration; absent and a value
+  // no longer matching the app default both mean "ask again".
+  embedding_upgrade_declined: z.string().optional(),
   embedding_provider_id: z.string().optional(),
   retrievalBudgets: retrievalBudgetsSchema,
   keywordRetrieval: keywordRetrievalSchema,
