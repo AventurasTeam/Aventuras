@@ -567,11 +567,15 @@ surface lands.
   the token budget.
 - **Local can count exactly; remote cannot.** The real tokenizer lives
   in Electron main and in the native ORT bundle, so an exact count
-  needs a bridge method that the embedder bridge does not expose yet.
-  `countTokens` is not a substitute: it is `o200k_base`, a different
-  tokenizer family from the WordPiece and SentencePiece models in the
-  catalog, and its own note puts non-Latin about 30% low — it would
-  under-warn exactly the multilingual users EmbeddingGemma exists for.
+  needs a bridge method the embedder bridge does not expose yet.
+  `countTokens` is a usable proxy for one catalog model and not the
+  other. Measured against the installed tokenizers, its `o200k_base`
+  count lands within 7% of EmbeddingGemma across Latin, Cyrillic,
+  Arabic and Korean, but runs 50% to 64% under MiniLM-L6's WordPiece
+  on Russian, Arabic and Korean — 132 real tokens reported as 48.
+  MiniLM is the English-focused default, where the same estimate is
+  only 5% to 9% low, so an estimator is defensible per model rather
+  than as one global fudge factor.
 - **No provider advertises its limit.** The OpenAI-compatible
   `/v1/models` response carries only id, object, created and owned_by,
   and `usage.prompt_tokens` reports what a successful call spent
