@@ -696,6 +696,16 @@ not render as the endpoint's own answer. A local model's window needs
 no such guess: it comes from the catalog, and an uncatalogued custom
 import stays `unknown` rather than inheriting a ceiling nobody set.
 
+The same gap applies to counting. A provider model has no tokenizer to
+load, so the composer's counter falls back to an estimate and marks
+itself inexact — and the estimate is a different encoding from the one
+the endpoint actually bills, so it is approximate even for OpenAI. Both
+this and the window are set by hand on the embedder tab in
+[M7.1](../implementation/roadmap.md#m7--app-settings--diagnostics--onboarding);
+a tokenizer assigned there is a plain `tokenizer.json`, which is
+sufficient on its own — `tokenizer_config.json` contributes only
+`model_max_length`, which is what the window field supplies instead.
+
 `matryoshkaDims` is the **curated** ladder — the dims the
 provider explicitly endorses. The story-creation picker lists
 those first, plus a `Custom…` option for any N from 1 up to

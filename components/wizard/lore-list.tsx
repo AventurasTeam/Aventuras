@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { View } from 'react-native'
 
+import { EmbedWindowTextarea } from '@/components/compounds/embed-window-textarea'
 import { ExpandableRow, useRowExpansion } from '@/components/compounds/expandable-row'
 import { FormRow } from '@/components/compounds/form-row'
 import { TagInput } from '@/components/compounds/tag-input'
@@ -16,7 +17,6 @@ import { Input } from '@/components/ui/input'
 import { Select, type SelectOption } from '@/components/ui/select'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
-import { Textarea } from '@/components/ui/textarea'
 import type { InjectionMode, WizardLoreDraft } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { wizardStore } from '@/lib/stores'
@@ -157,7 +157,7 @@ function LoreRow({ row, invalid, expanded, onToggleExpanded }: LoreRowProps) {
             label={t('wizard:world.lore.body')}
             error={bodyBlank ? t('wizard:world.lore.errors.body') : undefined}
           >
-            <Textarea
+            <EmbedWindowTextarea
               value={row.body}
               onChangeText={(body) => wizardStore.patchLore(row.id, { body })}
               aria-label={t('wizard:world.lore.body')}

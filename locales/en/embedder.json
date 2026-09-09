@@ -100,5 +100,11 @@
     "continue": "Continue",
     "import": "Import",
     "resolve": "Resolve"
+  },
+  "inputWindow": {
+    "count": "{{tokens}} / {{window}} tokens",
+    "countApprox": "~{{tokens}} / {{window}} tokens",
+    "over": "{{tokens}} / {{window}} tokens — the end will not be searchable",
+    "overApprox": "~{{tokens}} / {{window}} tokens — the end may not be searchable"
   }
 }
