@@ -2084,8 +2084,10 @@ seconds, and the previous "<100ms total" target was never derived from
 it. The budget is therefore expressed as a **scaling** obligation
 rather than an absolute:
 
-- One pass stays **under ~250ms at the top of the projected range** on
-  desktop, which is under 1% of a turn.
+- One pass stays **under ~350ms at the top of the projected range** on
+  desktop, which is under 1% of a turn. Desktop is the whole of this
+  bullet's scope; the mobile budget is unset rather than scaled down
+  from it.
 - No term may scale with **awareness row count** or with total branch
   entries. Awareness is projected at 15-60k rows at 60 chapters and is
   the fastest-growing table in the schema; a term proportional to it
@@ -2093,14 +2095,24 @@ rather than an absolute:
 - Terms proportional to **happenings on the branch** are accepted but
   budgeted, because that count is bounded by the chapter threshold.
 
-**The Q4-saturated pass at dim 768 is over that first bullet's
-ceiling** — ~319ms against ~250ms, measured, and it is the worst case
-the [Q4 cap](#q4-classifier-emitted-queries) allows rather than an
-outlier. Nothing here resolves it. Whether the ceiling moves, the cap
-tightens, or dim 768 stops being a desktop default is a decision this
-doc records the number for rather than makes. The other two obligations
-hold: query count is a fixed small constant, not a term proportional to
-awareness rows or branch entries.
+**The ceiling moved rather than the pass.** The Q4-saturated pass at
+dim 768 measures ~319ms — the worst case the
+[Q4 cap](#q4-classifier-emitted-queries) allows rather than an outlier
+— and the first bullet was raised to clear that figure instead of the
+pass being cut to fit it. The two alternatives were tightening the Q4
+cap and dropping dim 768 as a desktop default, and both spend quality
+to buy back ~70ms out of a turn that runs tens of seconds: one cuts the
+classifier-emitted slot, the other the embedding. What makes the raise
+the cheap answer is that the absolute figure is the weakest of these
+three obligations — it is the one with no derivation behind it, as the
+superseded "<100ms total" target had none either — while the two
+scaling obligations both hold unchanged. Query count is a fixed small
+constant, not a term proportional to awareness rows or branch entries.
+
+**The raise does not travel past desktop.** Two terms sit outside it:
+the embedder, excluded from every row of this table, and mobile, which
+the paragraphs below leave open. Neither is bounded by ~350ms, and a
+mobile ceiling has to be measured rather than scaled from this one.
 
 Desktop is nonetheless the least interesting part of the widening —
 retrieval stays under 1% of a turn even saturated. The widening bites

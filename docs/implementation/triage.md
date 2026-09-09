@@ -61,22 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   accumulate; the answer may be that no automatic drop is wanted and the
   number stays diagnostic.
 
-- **The Q4-saturated retrieval pass breaches its own cost ceiling at
-  dim 768, and no one has chosen a response.**
-  [`retrieval.md → Per-turn cost budget`](../memory/retrieval.md#per-turn-cost-budget)
-  measures it at ~319ms against the Target bullet's stated ceiling of
-  under ~250ms at the top of the projected range on desktop. Not an
-  outlier: it is the worst case the Q4 cap allows — top of the
-  projected range, all three Q4 slots filled, dim 768. The doc names
-  three options without choosing one: move the ceiling, tighten the Q4
-  cap, or drop dim 768 as a desktop default. Dim 384 at the same scale
-  measures ~182ms and sits comfortably inside, so the breach is
-  specific to the larger embedding model. Unowned because commit
-  `220e94a2` correctly deleted the triage entry that used to own Q4's
-  projected cost once this branch measured it — but that left the
-  decision living only as canon prose, with no queue entry to route it
-  to an owner.
-
 - **Q1 and Q2 carry no length cap, and Q1 is the slot a user can blow
   up on purpose.**
   [`retrieval.md → Q3`](../memory/retrieval.md#q3-piggyback-summary) and
