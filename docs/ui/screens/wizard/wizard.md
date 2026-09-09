@@ -1203,8 +1203,6 @@ Tracked centrally:
   [parked.md](../../../parked.md#wizard-time-pack-selection).
 - **Chip input vs comma-separated string** — see
   [parked.md](../../../parked.md#chip-input-vs-comma-separated-string).
-- **Optional user-side scene tagging on user-written openings** —
-  see [followups.md](../../../followups.md#ux).
 - **Regenerate-opening from reader chrome** (post-commit) — see
   [parked.md](../../../parked.md#regenerate-opening-affordance--post-commit-from-reader-chrome).
 - **Classifier-on-opening retrofit** — see

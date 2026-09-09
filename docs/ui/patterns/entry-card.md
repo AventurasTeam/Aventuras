@@ -358,11 +358,14 @@ the controls disable and Save shows its loading indicator while
 pending; only a successful write closes it; a Save with nothing
 changed takes the cancel route without writing a delta.
 
-**The edit is the first ungated second writer to entry metadata**, so
-it inherits the writer-serialization fix — see
-[`followups.md`](../../followups.md#ux). Both pipeline writers run
-behind the hard gate today, which is the only reason the interleave is
-currently unreachable.
+**The edit is the second ungated writer to entry metadata**, so it
+serializes against the world-time footer's write on a per-row key
+(`entryMetadataLockKey`, `lib/actions/story-entries/world-time.ts`) —
+per row rather than per action, because same-row writers under different
+action names are the pair that must not interleave. Pipeline dispatches
+are not in that pair: `hard-gate` holds them apart from each other, and a
+dispatch's stale `tail` snapshot is answered by the handler's partial
+merge rather than by this lock.
 
 ### Legacy rows
 

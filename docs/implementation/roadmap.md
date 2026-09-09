@@ -445,8 +445,11 @@ DB-backed `openRegionTokens` resolves all of them.
   so the count survives a rewrite unchanged. (2) **Wrong text even when
   fresh** — it is provider `usage.outputTokens`
   (`lib/pipeline/definitions/per-turn.ts:256`), counting everything the
-  model emitted, including the state block stripped before persist; the
-  world-state-block work under [UX](../followups.md#ux) widens that gap deliberately. (3) **Wrong tokenizer** — provider-side, whichever
+  model emitted, including the state block stripped before persist — a gap
+  the world-state-block pass widened deliberately when it moved the block
+  out of `content`
+  ([`entry-card.md → World-state panel`](../ui/patterns/entry-card.md#world-state-panel)).
+  (3) **Wrong tokenizer** — provider-side, whichever
   one that provider uses, while `chapterTokenThreshold` and the
   token-progress strip measure in o200k via `countTokens`. A story that
   switches providers mid-run would sum two incompatible token scales.

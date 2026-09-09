@@ -146,21 +146,3 @@ true` (`lib/embedder/local/runtime.native.ts`) at a length nobody
   The sibling gates for `entries` and `lastTurns` are still covered.
   Unowned: it guards the context builder on behalf of custom packs, not
   any one slice.
-
-- **Four docs point at `followups.md#ux` for items that are no longer
-  there.** [`roadmap.md`](./roadmap.md) (the world-state-block pass),
-  [`wizard.md`](../ui/screens/wizard/wizard.md) (scene tagging on
-  user-written openings),
-  [`12a-runtime-integrity.md`](./milestones/03-memory-floor/slices/12a-runtime-integrity.md)
-  (the `updateEntryWorldTime` metadata race) and
-  [`entry-card.md`](../ui/patterns/entry-card.md) (the
-  writer-serialization fix) each cite the section as the owner of an
-  item that has since been resolved into canon or merged into a parked
-  entry — the wizard one duplicates the `classifier-on-opening-retrofit`
-  bullet directly below it. The anchor resolves only because the heading
-  was kept as an explicit empty section when the ledger drained
-  (2026-09-09). Each wants retargeting to where its content actually
-  landed, which is a per-reference lookup rather than one edit; the
-  writer-serialization fix may have no landing site at all, in which case
-  the citation is the item. Unowned: doc rot spread across four surfaces,
-  none of which owns the ledger.

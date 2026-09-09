@@ -338,9 +338,10 @@ with owners:** the `buildGenerationContext` data-source refactor and
 the `lib/actions` extraction pass → `followups.md`'s Code-structure
 section (near-future refactors, per the developer); both landed and
 the section is gone with them, the refactor on 2026-08-28. The
-`updateEntryWorldTime` metadata race → the world-state-block pass
-([`followups.md → UX`](../../../../followups.md#ux)), whose
-scene-field editor is the concrete second writer that would arm it;
+`updateEntryWorldTime` metadata race → the world-state-block pass, whose
+scene-field editor was the concrete second writer that would arm it; that
+pass shipped 2026-09-03 and closed it with a shared per-row lock
+([`entry-card.md → Scene editor`](../../../../ui/patterns/entry-card.md#scene-editor));
 the `vault_calendars` registry → M8.3; the per-request embed token
 budget and `structuredOutput: force-on` wiring → M7.1; the
 `validateRegistry` undeclared-variable direction → M7.2 (its pack
