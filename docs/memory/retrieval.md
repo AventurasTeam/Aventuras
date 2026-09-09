@@ -196,7 +196,13 @@ the classifier clamps the fields it emits, in `lib/classifier/plan.ts`.
 User-authored lore is deliberately not bounded — a long body is the
 feature, not a defect — which is why making it retrievable is a
 [deferred design session](../parked.md#chunking-long-embedded-text)
-rather than a cap.
+rather than a cap. What the user gets meanwhile is a counter: the
+multiline fields whose text reaches an embedder show their distance
+from the window from 75% on, counted by the model's own tokenizer
+where one can be loaded and marked approximate where it cannot. A
+user action is counted the same way but says something different when
+it overruns — it is a query rather than a stored row, so the prefix
+searches memory and the next turn asks again.
 
 ### Compute lifecycle
 

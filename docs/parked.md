@@ -535,14 +535,17 @@ in practice.
 The embedder truncates silently at the model's input window
 ([retrieval.md → What gets embedded per type](./memory/retrieval.md#what-gets-embedded-per-type)),
 so a lore body past that ceiling is unretrievable and stays that way.
-Two halves that ship together: **chunk**, so long text is embedded at
-all, and **steer**, so the user learns they are over the line before
-writing past it rather than never.
 
-Deferred because the steering half needs the embedder settings surface
-that [model-management.md → Open items](./memory/model-management.md#open-items)
-still lists as unbuilt. Revisit when the per-story embedding provider
-surface lands.
+The **steering** half has shipped: embedded fields carry a token
+counter against their model's own window, the embed path reports which
+rows it truncated, and the app's own writers are clamped so they cannot
+reach the ceiling. What remains is **chunking** — embedding long text
+at all, rather than only telling the user it will not be.
+
+Deferred on its own cost rather than on a dependency. The ranking
+effects below land in the candidate layer for every document, short
+ones included, so this wants a session of its own rather than a corner
+of someone else's.
 
 **Spine the session starts from:**
 
@@ -565,27 +568,17 @@ surface lands.
 - **Injection is untouched.** The seated row still carries its full
   text into the prompt, so chunking buys findability without moving
   the token budget.
-- **Local can count exactly; remote cannot.** The real tokenizer lives
-  in Electron main and in the native ORT bundle, so an exact count
-  needs a bridge method the embedder bridge does not expose yet.
-  `countTokens` is a usable proxy for one catalog model and not the
-  other. Measured against the installed tokenizers, its `o200k_base`
-  count lands within 7% of EmbeddingGemma across Latin, Cyrillic,
-  Arabic and Korean, but runs 50% to 64% under MiniLM-L6's WordPiece
-  on Russian, Arabic and Korean — 132 real tokens reported as 48.
-  MiniLM is the English-focused default, where the same estimate is
-  only 5% to 9% low, so an estimator is defensible per model rather
-  than as one global fudge factor.
-- **No provider advertises its limit.** The OpenAI-compatible
-  `/v1/models` response carries only id, object, created and owned_by,
-  and `usage.prompt_tokens` reports what a successful call spent
-  rather than the ceiling. Backend-specific probes exist but sniffing
-  them is its own surface, so the design should assume a manual
-  per-provider limit in settings as the fallback.
-- **The catalog does not carry the window.** `model_max_length` is
-  read from the installed `tokenizer_config.json`, but the model
-  picker needs it before install, so it belongs in
-  `catalog-data.json`.
+- **A provider's chunk boundaries would land on a guess.** Local text
+  is counted by the model's own tokenizer, so a splitter there knows
+  exactly where a chunk ends. A provider has no tokenizer to load and
+  falls back to `o200k_base`, which measured within 7% of
+  EmbeddingGemma across Latin, Cyrillic, Arabic and Korean but 50% to
+  64% under MiniLM-L6's WordPiece on Russian, Arabic and Korean — 132
+  real tokens reported as 48. Splitting on that is the one part of
+  chunking with no exact input, and the session has to decide whether
+  a provider corpus is chunked conservatively or not at all until a
+  tokenizer is assigned to it in
+  [M7.1](./implementation/roadmap.md#m7--app-settings--diagnostics--onboarding).
 
 #### Reader-composer swipes — alternate takes per turn
 
