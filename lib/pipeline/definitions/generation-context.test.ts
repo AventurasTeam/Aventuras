@@ -849,6 +849,12 @@ describe('buildGenerationContext — currentLocationId', () => {
 })
 
 describe('buildGenerationContext — data source', () => {
+  // No global restoreMocks: without this, a thrown assertion in the spy case
+  // below leaks the spy into every test after it.
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   const dbEntry = (
     position: number,
     content: string,
@@ -991,6 +997,34 @@ describe('buildGenerationContext — data source', () => {
       summary: 'a summary',
     })
     for (const key of Object.keys(narrative)) expect(classifier).toHaveProperty(key)
+  })
+
+  // Every bundled generationContext template names sceneEntities, so the gate's
+  // false branch belongs to user-authored pack templates only. Stubbed at
+  // templateReads, which is the gate's actual input — a test-only template in the
+  // shipped registry would have to be excused from the registry parity checks and
+  // from every surface that enumerates what a story can run.
+  it('skips the scene read for a template naming no scene variable', async () => {
+    openStory()
+    await seedEntries([
+      dbEntry(1, 'prose', 'ai_reply', {
+        sceneEntities: [CHAR_ID],
+        currentLocationId: LOC_A,
+        worldTime: 7,
+        summary: 'a summary',
+      }),
+    ])
+
+    const entryReads = await import('./entry-reads')
+    const readSceneSourceSpy = vi.spyOn(entryReads, 'readSceneSource')
+    const prompts = await import('@/lib/prompts')
+    vi.spyOn(prompts, 'templateReads').mockReturnValue(new Set(['entries']))
+
+    const context = await build()
+
+    expect(readSceneSourceSpy).not.toHaveBeenCalled()
+    expect(context.sceneEntities).toEqual([])
+    expect(context.currentLocationId).toBeNull()
   })
 
   it('takes sceneMetadata from the most recent AI entry, not the tail', async () => {

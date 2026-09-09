@@ -60,16 +60,3 @@ slice-planning gate forces its resolution before that slice is planned.
   query, so this has no home there. Revisit once real captures
   accumulate; the answer may be that no automatic drop is wanted and the
   number stays diagnostic.
-
-- **No bundled template exercises the scene-read gate's false branch.**
-  `buildGenerationContext` skips the scene query when a template names
-  none of `SCENE_VARIABLES`, and that gate is what keeps a prompt from
-  paying for reads it never renders. As of the fallback-parity work all
-  three bundled `generationContext` templates name `sceneEntities`, so
-  nothing covers the skip. It is not dead code — a user-authored pack
-  template can name no scene variable — but the only honest test needs a
-  registered template that production does not ship, so covering it
-  means deciding whether a test-only template belongs in the registry.
-  The sibling gates for `entries` and `lastTurns` are still covered.
-  Unowned: it guards the context builder on behalf of custom packs, not
-  any one slice.
