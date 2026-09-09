@@ -43,6 +43,7 @@ const embedderBridge: EmbedderBridge & {
   onDownloadProgress(cb: (progress: EmbedderDownloadProgress) => void): () => void
 } = {
   embed: (args) => ipcRenderer.invoke('embedder:embed', args),
+  countTokens: (args) => ipcRenderer.invoke('embedder:count-tokens', args),
   smokeTest: (args) => ipcRenderer.invoke('embedder:smoke-test', args),
   listInstalled: () => ipcRenderer.invoke('embedder:list-installed'),
   downloadFile: (args) => ipcRenderer.invoke('embedder:download-file', args),

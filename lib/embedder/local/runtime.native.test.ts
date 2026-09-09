@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BOUNDED_SIGNAL_EXPIRED } from '@/lib/abort'
 import { logger } from '@/lib/diagnostics'
 
-import { embedLocal } from './runtime.native'
+import { countTokensLocal, embedLocal } from './runtime.native'
 import { EmbedderCallError, EmbedderCancelledError } from '../types'
 
 const harness = vi.hoisted(() => ({
@@ -22,6 +22,8 @@ const harness = vi.hoisted(() => ({
   // Token count actually fed to the session, per call — the only way to tell a
   // truncated encoding from a reported-but-unapplied one.
   fedTokens: [] as number[],
+  // Session builds, so "counting tokens never loads the model" is assertable.
+  sessionCreates: 0,
 }))
 
 vi.mock('expo-file-system', () => {
@@ -40,8 +42,9 @@ vi.mock('expo-file-system', () => {
 
 vi.mock('onnxruntime-react-native', () => ({
   InferenceSession: {
-    create: () =>
-      Promise.resolve({
+    create: () => {
+      harness.sessionCreates++
+      return Promise.resolve({
         inputNames: ['input_ids', 'attention_mask'],
         outputNames: ['last_hidden_state'],
         run: (feeds: Record<string, { data: BigInt64Array }>) => {
@@ -63,7 +66,8 @@ vi.mock('onnxruntime-react-native', () => ({
             },
           })
         },
-      }),
+      })
+    },
   },
   Tensor: class {
     constructor(
@@ -118,6 +122,7 @@ beforeEach(() => {
   harness.tokenLengths = {}
   harness.maxLength = undefined
   harness.fedTokens = []
+  harness.sessionCreates = 0
 })
 
 // Inline restore skips on a failed assertion and leaves logger spied for the rest of the file.
@@ -264,5 +269,37 @@ describe('embedLocal (native) truncation reporting', () => {
     await embedLocal('model-uncut', ['a'])
 
     expect(harness.fedTokens).toEqual([9])
+  })
+})
+
+describe('countTokensLocal (native)', () => {
+  it('returns one exact count per text', async () => {
+    harness.tokenLengths = { a: 3, b: 11 }
+
+    await expect(countTokensLocal('model-count', ['a', 'b'])).resolves.toEqual([3, 11])
+  })
+
+  // A live counter in the composer must not pull a ~300MB session into memory.
+  it('builds no inference session', async () => {
+    harness.tokenLengths = { a: 3 }
+
+    await countTokensLocal('model-count-no-session', ['a'])
+
+    expect(harness.sessionCreates).toBe(0)
+    expect(harness.runCalls).toBe(0)
+  })
+
+  // Counting measures, it never truncates — a count clipped to the window would
+  // report the user as exactly at the limit however far past it they went.
+  it('counts past the window rather than clipping to it', async () => {
+    harness.maxLength = 4
+    harness.tokenLengths = { a: 30 }
+
+    await expect(countTokensLocal('model-count-uncapped', ['a'])).resolves.toEqual([30])
+  })
+
+  it('answers an empty request without loading a tokenizer', async () => {
+    await expect(countTokensLocal('model-count-empty', [])).resolves.toEqual([])
+    expect(harness.sessionCreates).toBe(0)
   })
 })

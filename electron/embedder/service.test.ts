@@ -3,7 +3,14 @@ import { join } from 'node:path'
 
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { __setPipelineFactoryForTest, embed, evictPipeline, listInstalled } from './service'
+import {
+  __setPipelineFactoryForTest,
+  __setTokenizerFactoryForTest,
+  countTokens,
+  embed,
+  evictPipeline,
+  listInstalled,
+} from './service'
 
 const { USERDATA } = vi.hoisted(() => ({
   USERDATA: `${process.env.TMPDIR ?? '/tmp'}/ave-service-test-${process.pid}-${Math.random()
@@ -309,5 +316,78 @@ describe('truncation boundary', () => {
     const result = await embed({ modelDir: '/models/edge', texts: ['abcd', 'abcde'] })
 
     expect(result).toMatchObject({ ok: true, truncated: [1] })
+  })
+})
+
+// The whole point of a separate tokenizer cache: a live token count in the composer
+// must not build an inference session, which is the ~300MB half of a model.
+describe('countTokens', () => {
+  const encoder = (count: (text: string) => number) =>
+    Object.assign((text: string) => ({ input_ids: { dims: [1, count(text)] } }), {})
+
+  afterEach(() => {
+    __setTokenizerFactoryForTest(null)
+    __setPipelineFactoryForTest(null)
+  })
+
+  it('returns one exact count per text', async () => {
+    __setTokenizerFactoryForTest(async () => encoder((text) => text.length))
+
+    const result = await countTokens({ modelDir: '/models/count', texts: ['ab', 'abcde'] })
+
+    expect(result).toEqual({ ok: true, counts: [2, 5] })
+  })
+
+  it('builds no inference pipeline', async () => {
+    let pipelineBuilds = 0
+    __setPipelineFactoryForTest(async () => {
+      pipelineBuilds += 1
+      throw new Error('a token count must not reach the model')
+    })
+    __setTokenizerFactoryForTest(async () => encoder((text) => text.length))
+
+    await countTokens({ modelDir: '/models/no-session', texts: ['abc'] })
+
+    expect(pipelineBuilds).toBe(0)
+  })
+
+  it('loads the tokenizer once across calls', async () => {
+    let builds = 0
+    __setTokenizerFactoryForTest(async () => {
+      builds += 1
+      return encoder((text) => text.length)
+    })
+
+    await countTokens({ modelDir: '/models/cached', texts: ['a'] })
+    await countTokens({ modelDir: '/models/cached', texts: ['bb'] })
+
+    expect(builds).toBe(1)
+  })
+
+  it('surfaces a failed tokenizer load as an init envelope', async () => {
+    __setTokenizerFactoryForTest(async () => {
+      throw new Error('tokenizer.json missing')
+    })
+
+    const result = await countTokens({ modelDir: '/models/broken', texts: ['a'] })
+
+    expect(result).toEqual({
+      ok: false,
+      error: { kind: 'init', message: 'tokenizer.json missing' },
+    })
+  })
+
+  it('answers an empty request without loading anything', async () => {
+    let builds = 0
+    __setTokenizerFactoryForTest(async () => {
+      builds += 1
+      return encoder(() => 1)
+    })
+
+    expect(await countTokens({ modelDir: '/models/empty', texts: [] })).toEqual({
+      ok: true,
+      counts: [],
+    })
+    expect(builds).toBe(0)
   })
 })

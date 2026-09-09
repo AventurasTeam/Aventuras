@@ -48,6 +48,11 @@ export type EmbedderBridge = {
       }
     | { ok: false; error: EmbedderErrorEnvelope }
   >
+  /** Exact counts from the model's own tokenizer; loads no inference session. */
+  countTokens(args: {
+    modelId: string
+    texts: string[]
+  }): Promise<{ ok: true; counts: number[] } | { ok: false; error: EmbedderErrorEnvelope }>
   smokeTest(args: {
     modelId: string
   }): Promise<{ ok: true; dim: number } | { ok: false; error: EmbedderErrorEnvelope }>

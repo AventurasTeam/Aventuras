@@ -20,7 +20,13 @@ import {
   assertSha256,
   modelDir,
 } from './embedder/paths'
-import { embed as embedderEmbed, evictPipeline, listInstalled, smokeTest } from './embedder/service'
+import {
+  countTokens as embedderCountTokens,
+  embed as embedderEmbed,
+  evictPipeline,
+  listInstalled,
+  smokeTest,
+} from './embedder/service'
 import type { EmbedderAttestation } from './embedder/types'
 import { NATIVE_CHANNELS } from './native/channels'
 
@@ -329,6 +335,9 @@ app.whenReady().then(async () => {
         }
       }
     },
+  )
+  ipcMain.handle('embedder:count-tokens', (_e, args: { modelId: string; texts: string[] }) =>
+    embedderCountTokens({ modelDir: requireModelDir(args.modelId), texts: args.texts }),
   )
   ipcMain.handle('embedder:cancel-embed', (_e, args: { requestId: string }) => {
     embedAborts.get(args.requestId)?.abort()

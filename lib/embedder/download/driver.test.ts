@@ -16,6 +16,7 @@ if (!modelRow) throw new Error('fixture missing model.onnx row')
 function makeBridge(overrides: Partial<EmbedderBridge> = {}): EmbedderBridge {
   return {
     embed: vi.fn(),
+    countTokens: vi.fn(async () => ({ ok: true, counts: [] as number[] }) as const),
     smokeTest: vi.fn(async () => ({ ok: true, dim: 384 }) as const),
     listInstalled: vi.fn(async () => []),
     downloadFile: vi.fn(async () => ({ ok: true }) as const),

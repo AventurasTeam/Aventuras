@@ -83,6 +83,14 @@ export async function embedLocal(
   return unwrapEmbed(result)
 }
 
+/** Desktop counterpart: main owns the tokenizer, so an exact count is one IPC hop. */
+export async function countTokensLocal(modelId: string, texts: string[]): Promise<number[]> {
+  if (texts.length === 0) return []
+  const result = await resolveBridge().countTokens({ modelId, texts })
+  if (!result.ok) throw envelopeToError(result.error)
+  return result.counts
+}
+
 export async function smokeTestLocal(modelId: string): Promise<{ dim: number }> {
   const result = await resolveBridge().smokeTest({ modelId })
   if (!result.ok) throw envelopeToError(result.error)

@@ -34,7 +34,7 @@ export type {
   EmbedderOutcomeKind,
 } from './types'
 
-export { embedLocal, listInstalledLocal, smokeTestLocal } from './local/runtime'
+export { countTokensLocal, embedLocal, listInstalledLocal, smokeTestLocal } from './local/runtime'
 export type { LocalEmbedResult } from './local/runtime'
 
 export { sanitizeModelDirName } from './local/sanitize'

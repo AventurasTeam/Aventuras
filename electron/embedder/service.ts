@@ -26,6 +26,8 @@ type EmbedResult =
 
 type SmokeResult = { ok: true; dim: number } | { ok: false; error: EmbedderErrorEnvelope }
 
+type CountResult = { ok: true; counts: number[] } | { ok: false; error: EmbedderErrorEnvelope }
+
 // Lazy per-modelDir cache. Nothing here touches transformers.js until the first
 // embed/smokeTest call — the dynamic import inside buildPipeline keeps main-process
 // boot cost at zero, which docs/memory/model-management.md → Embedder failures
@@ -50,10 +52,71 @@ function getPipeline(modelDir: string): Promise<FeaturePipeline> {
   return pipe
 }
 
+// Its own cache, not the pipeline's tokenizer: a live token count must not build
+// an inference session, which is the ~300MB half. Same dir key, same staleness rule.
+const tokenizers = new Map<string, Promise<PipelineTokenizer>>()
+
 // A removed/re-downloaded model reuses its dir path; without eviction the cache
 // would keep serving vectors from the deleted model. main.ts evicts before deletePartial.
 export function evictPipeline(modelDir: string): void {
   pipelines.delete(modelDir)
+  tokenizers.delete(modelDir)
+}
+
+let tokenizerFactory: (modelDir: string) => Promise<PipelineTokenizer> = buildTokenizer
+
+export function __setTokenizerFactoryForTest(
+  factory: ((modelDir: string) => Promise<PipelineTokenizer>) | null,
+): void {
+  tokenizerFactory = factory ?? buildTokenizer
+  tokenizers.clear()
+}
+
+async function buildTokenizer(modelDir: string): Promise<PipelineTokenizer> {
+  const transformers = await import('@huggingface/transformers')
+  transformers.env.allowRemoteModels = false
+  const AutoTokenizer = transformers.AutoTokenizer as unknown as {
+    from_pretrained(dir: string, options: { local_files_only: boolean }): Promise<PipelineTokenizer>
+  }
+  return AutoTokenizer.from_pretrained(modelDir, { local_files_only: true })
+}
+
+function getTokenizer(modelDir: string): Promise<PipelineTokenizer> {
+  let tokenizer = tokenizers.get(modelDir)
+  if (!tokenizer) {
+    tokenizer = tokenizerFactory(modelDir)
+    tokenizers.set(modelDir, tokenizer)
+    tokenizer.catch(() => tokenizers.delete(modelDir))
+  }
+  return tokenizer
+}
+
+/**
+ * Exact token counts from the model's own tokenizer — the estimate a tiktoken
+ * encoding gives is off by up to 3x on the scripts WordPiece fragments, so a
+ * counter shown to the user has to come from here.
+ */
+export async function countTokens(args: {
+  modelDir: string
+  texts: string[]
+}): Promise<CountResult> {
+  if (args.texts.length === 0) return { ok: true, counts: [] }
+  let tokenizer: PipelineTokenizer
+  try {
+    tokenizer = await getTokenizer(args.modelDir)
+  } catch (error) {
+    return { ok: false, error: { kind: 'init', message: messageOf(error) } }
+  }
+  try {
+    return {
+      ok: true,
+      counts: args.texts.map(
+        (text) => tokenizer(text, { padding: false, truncation: false }).input_ids.dims.at(-1) ?? 0,
+      ),
+    }
+  } catch (error) {
+    return { ok: false, error: { kind: 'call', message: messageOf(error) } }
+  }
 }
 
 export function __setPipelineFactoryForTest(

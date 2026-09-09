@@ -48,12 +48,54 @@ const loadOrt = lazyModule(
 // a failed load evicts itself so a later call can retry after the user reinstalls.
 const bundles = new Map<string, Promise<SessionBundle>>()
 
+// Its own cache, not the bundle's tokenizer: a live token count must not build an
+// inference session, which is the ~300MB half. Same key, same staleness rule.
+const tokenizerOnly = new Map<string, Promise<TokenizerFn>>()
+
 // A successfully-built session outlives the files it was built from, so a
 // remove/reinstall in the same session would keep embedding through the deleted
 // model and write vectors tagged with the new id. Desktop evicts via
 // evictPipeline; this is the native counterpart.
 export function evictBundle(modelId: string): void {
   bundles.delete(modelId)
+  tokenizerOnly.delete(modelId)
+}
+
+function getTokenizerOnly(modelId: string): Promise<TokenizerFn> {
+  let tokenizer = tokenizerOnly.get(modelId)
+  if (!tokenizer) {
+    tokenizer = loadTokenizer(modelDir(modelId))
+    tokenizerOnly.set(modelId, tokenizer)
+    tokenizer.catch(() => tokenizerOnly.delete(modelId))
+  }
+  return tokenizer
+}
+
+/**
+ * Exact token counts from the model's own tokenizer. A tiktoken estimate runs up
+ * to 3x under WordPiece on the scripts it fragments, so anything shown to the user
+ * has to come from here.
+ */
+export async function countTokensLocal(modelId: string, texts: string[]): Promise<number[]> {
+  if (texts.length === 0) return []
+  let tokenizer: TokenizerFn
+  try {
+    tokenizer = await getTokenizerOnly(modelId)
+  } catch (error) {
+    throw new EmbedderInitError(error instanceof Error ? error.message : String(error), error)
+  }
+  try {
+    return texts.map(
+      (text) =>
+        tokenizer(text, {
+          add_special_tokens: true,
+          return_token_type_ids: false,
+          truncation: false,
+        }).input_ids.dims.at(-1) ?? 0,
+    )
+  } catch (error) {
+    throw new EmbedderCallError(error instanceof Error ? error.message : String(error), error)
+  }
 }
 
 function getBundle(modelId: string): Promise<SessionBundle> {
