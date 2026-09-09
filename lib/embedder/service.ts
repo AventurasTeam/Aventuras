@@ -9,6 +9,7 @@ import {
   type EmbeddedFieldRow,
   type SqlOp,
 } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 
 import { EMBEDDER_INTEGRATIONS } from './integrations'
 import { l2Normalize } from './local/pooling'
@@ -17,7 +18,7 @@ import { EmbedderCallError, EmbedderInitError, type EmbedderConfig } from './typ
 
 export type EmbedIntent = 'document' | 'query'
 
-type RawEmbedding = { vectors: Float32Array[]; dim: number }
+type RawEmbedding = { vectors: Float32Array[]; dim: number; truncated: number[] | null }
 
 function localPrefix(modelId: string, intent: EmbedIntent): string {
   const integration = EMBEDDER_INTEGRATIONS[modelId]
@@ -53,7 +54,17 @@ async function embedRaw(
   const { embedViaProvider } = await import('@/lib/ai')
   const dimensions =
     config.truncation?.serverSide === true ? config.truncation.effectiveDim : undefined
-  return embedViaProvider(provider, config.modelId, texts, undefined, dimensions, abortSignal)
+  // null, not []: a provider neither reports truncation nor publishes the limit
+  // that would let this side predict it, so "none" would be a claim we cannot make.
+  const raw = await embedViaProvider(
+    provider,
+    config.modelId,
+    texts,
+    undefined,
+    dimensions,
+    abortSignal,
+  )
+  return { ...raw, truncated: null }
 }
 
 /**
@@ -81,8 +92,8 @@ export async function embedTexts(
   intent: EmbedIntent = 'document',
   provider?: ProviderInstanceWithStub,
   abortSignal?: AbortSignal,
-): Promise<{ vectors: Float32Array[]; dim: number }> {
-  if (texts.length === 0) return { vectors: [], dim: 0 }
+): Promise<{ vectors: Float32Array[]; dim: number; truncated: number[] | null }> {
+  if (texts.length === 0) return { vectors: [], dim: 0, truncated: [] }
 
   const raw = await embedRaw(config, texts, intent, provider, abortSignal)
 
@@ -118,7 +129,7 @@ export async function embedTexts(
     l2Normalize(targetDim < vector.length ? vector.slice(0, targetDim) : vector),
   )
 
-  return { vectors, dim: targetDim }
+  return { vectors, dim: targetDim, truncated: raw.truncated }
 }
 
 /**
@@ -159,7 +170,26 @@ export async function embedRowsToVecOps(
   if (rows.length === 0) return { ops: [], dim: null }
 
   const composites = rows.map((row) => compositeText(row.fields))
-  const { vectors, dim } = await embedTexts(config, composites, 'document', provider, abortSignal)
+  const { vectors, dim, truncated } = await embedTexts(
+    config,
+    composites,
+    'document',
+    provider,
+    abortSignal,
+  )
+
+  // The one place a cut is both permanent and attributable: source_hash covers the
+  // whole composite, so revalidation reads the short vector as fresh forever
+  // (docs/memory/retrieval.md -> What gets embedded per type).
+  // != null, not !== null: this crosses an IPC boundary, and a main process that
+  // predates the field sends nothing back — a diagnostic must not fail the embed.
+  if (truncated != null && truncated.length > 0) {
+    logger.warn('embedder.input_truncated', {
+      modelId: config.modelId,
+      count: truncated.length,
+      rows: truncated.map((i) => `${rows[i].kind}:${rows[i].id}`),
+    })
+  }
 
   try {
     await ensureVecTables(dim, exec)

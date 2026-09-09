@@ -5,13 +5,23 @@ import { embeddersRoot } from './paths'
 import type { EmbedderErrorEnvelope, EmbedderInstalled } from './types'
 
 type EmbeddingTensor = { tolist(): number[][]; dims: number[] }
-type FeaturePipeline = (
+
+// The pipeline truncates to model_max_length internally and reports nothing, so
+// re-encoding untruncated is the only way to learn that a text was cut. Passing
+// truncation explicitly (rather than leaving it null) also keeps transformers.js
+// off its own console.warn branches.
+type PipelineTokenizer = ((
+  text: string,
+  options: { padding: false; truncation: false },
+) => { input_ids: { dims: number[] } }) & { model_max_length?: number }
+
+type FeaturePipeline = ((
   texts: string[],
   options: { pooling: 'mean'; normalize: boolean },
-) => Promise<EmbeddingTensor>
+) => Promise<EmbeddingTensor>) & { tokenizer: PipelineTokenizer }
 
 type EmbedResult =
-  | { ok: true; vectors: number[][]; dim: number }
+  | { ok: true; vectors: number[][]; dim: number; truncated: number[] }
   | { ok: false; error: EmbedderErrorEnvelope }
 
 type SmokeResult = { ok: true; dim: number } | { ok: false; error: EmbedderErrorEnvelope }
@@ -112,7 +122,7 @@ export async function embed(args: {
   texts: string[]
   signal?: AbortSignal
 }): Promise<EmbedResult> {
-  if (args.texts.length === 0) return { ok: true, vectors: [], dim: 0 }
+  if (args.texts.length === 0) return { ok: true, vectors: [], dim: 0, truncated: [] }
 
   let pipe: FeaturePipeline
   try {
@@ -123,13 +133,23 @@ export async function embed(args: {
 
   try {
     const vectors: number[][] = []
+    const truncated: number[] = []
+    // Absent means the tokenizer never truncates either, so nothing is lost.
+    const limit = pipe.tokenizer.model_max_length
     let dim = 0
     for (let i = 0; i < args.texts.length; i += EMBED_CHUNK) {
       if (i > 0) await yieldToMacrotasks()
       if (args.signal?.aborted) {
         return { ok: false, error: { kind: 'cancelled', message: 'embed cancelled' } }
       }
-      const output = await pipe(args.texts.slice(i, i + EMBED_CHUNK), {
+      const chunk = args.texts.slice(i, i + EMBED_CHUNK)
+      if (limit !== undefined) {
+        for (let j = 0; j < chunk.length; j++) {
+          const encoded = pipe.tokenizer(chunk[j], { padding: false, truncation: false })
+          if ((encoded.input_ids.dims.at(-1) ?? 0) > limit) truncated.push(i + j)
+        }
+      }
+      const output = await pipe(chunk, {
         pooling: 'mean',
         normalize: true,
       })
@@ -157,7 +177,7 @@ export async function embed(args: {
         return { ok: false, error: { kind: 'cancelled', message: 'embed cancelled' } }
       }
     }
-    return { ok: true, vectors, dim }
+    return { ok: true, vectors, dim, truncated }
   } catch (error) {
     return { ok: false, error: { kind: 'call', message: messageOf(error) } }
   }

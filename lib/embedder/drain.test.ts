@@ -499,6 +499,7 @@ describe('drain controller', () => {
     mocks.embedLocal.mockImplementation(async (_id: string, texts: string[]) => ({
       vectors: texts.map(deterministicVec),
       dim: 384,
+      truncated: [],
     }))
 
     const { sqlite, runInTransaction } = await createTestDb()

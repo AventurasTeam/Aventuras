@@ -792,7 +792,7 @@ describe('composeRetrievalEmbedDeps', () => {
   }
 
   it('embeds the query stack at query intent, never document', async () => {
-    vi.mocked(embedTexts).mockResolvedValue({ vectors: [], dim: 384 })
+    vi.mocked(embedTexts).mockResolvedValue({ vectors: [], dim: 384, truncated: [] })
 
     await composeRetrievalEmbedDeps(LOCAL_CONFIG).embedTexts(['q1', 'q2'])
 
@@ -812,7 +812,7 @@ describe('composeRetrievalEmbedDeps', () => {
     await seedStores(storySettings({ embeddingBackend: 'provider' }, PROVIDER_MODEL, 'prov1'), [
       cachedProvider('prov1', [{ id: PROVIDER_MODEL }]),
     ])
-    vi.mocked(embedTexts).mockResolvedValue({ vectors: [], dim: 1536 })
+    vi.mocked(embedTexts).mockResolvedValue({ vectors: [], dim: 1536, truncated: [] })
 
     await composeRetrievalEmbedDeps(PROVIDER_CONFIG).embedTexts(['q1'])
 
@@ -1057,7 +1057,7 @@ describe('embedClassifierDescriptions', () => {
 
   it('embeds at document intent and returns the embedder result verbatim', async () => {
     await openLocalStory()
-    const result = { vectors: [new Float32Array([0.5])], dim: 384 }
+    const result = { vectors: [new Float32Array([0.5])], dim: 384, truncated: [] }
     vi.mocked(embedTexts).mockResolvedValue(result)
 
     await expect(embedClassifierDescriptions(['a knight', 'a sellsword'])).resolves.toBe(result)
@@ -1077,7 +1077,7 @@ describe('embedClassifierDescriptions', () => {
     const settings = storySettings({ embeddingBackend: 'provider' }, PROVIDER_MODEL, 'prov1')
     await seedStores(settings, [cachedProvider('prov1', [{ id: PROVIDER_MODEL }])])
     currentStoryStore.set({ storyId: 's1', branchId: 'b1', definition, settings })
-    vi.mocked(embedTexts).mockResolvedValue({ vectors: [], dim: 1536 })
+    vi.mocked(embedTexts).mockResolvedValue({ vectors: [], dim: 1536, truncated: [] })
 
     await embedClassifierDescriptions(['a knight'])
 

@@ -1,7 +1,7 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { __setPipelineFactoryForTest, embed, evictPipeline, listInstalled } from './service'
 
@@ -15,6 +15,21 @@ vi.mock('electron', () => ({ app: { getPath: () => USERDATA } }))
 
 const embeddersDir = join(USERDATA, 'embedders')
 
+// The real pipeline object carries the tokenizer embed() re-encodes through to
+// learn what was cut, so a stub that is only a function no longer stands in for it.
+function stubPipeline(
+  run: (texts: string[]) => Promise<{ tolist: () => number[][]; dims: number[] }>,
+  tokenizer: { count: (text: string) => number; limit?: number } = { count: () => 1 },
+) {
+  const encode = (text: string) => ({ input_ids: { dims: [1, tokenizer.count(text)] } })
+  return Object.assign(run, {
+    tokenizer: Object.assign(
+      encode,
+      tokenizer.limit === undefined ? {} : { model_max_length: tokenizer.limit },
+    ),
+  })
+}
+
 afterAll(() => {
   __setPipelineFactoryForTest(null)
   rmSync(USERDATA, { recursive: true, force: true })
@@ -25,10 +40,10 @@ describe('pipeline cache eviction', () => {
     let builds = 0
     __setPipelineFactoryForTest(async () => {
       builds += 1
-      return async (texts: string[]) => ({
+      return stubPipeline(async (texts: string[]) => ({
         tolist: () => texts.map(() => [1, 2, 3]),
         dims: [texts.length, 3],
-      })
+      }))
     })
 
     const dir = '/models/x'
@@ -53,23 +68,26 @@ describe('chunked embed', () => {
   // calls the native session inside one, and only that timing shows a cancel's true
   // cost. Vectors carry their text's index so a mis-sliced chunk shows as content.
   function recordingFactory(calls: number[], onCall?: () => void) {
-    return async () => (texts: string[]) =>
-      new Promise<FakeTensor>((resolve, reject) => {
-        setImmediate(() => {
-          calls.push(texts.length)
-          // onnxruntime-node rejects from inside the same setImmediate, so a
-          // throwing onCall models a failed run, not an escaped callback.
-          try {
-            onCall?.()
-            resolve({
-              tolist: () => texts.map((text) => [Number(text.slice(1))]),
-              dims: [texts.length, 1],
+    return async () =>
+      stubPipeline(
+        (texts: string[]) =>
+          new Promise<FakeTensor>((resolve, reject) => {
+            setImmediate(() => {
+              calls.push(texts.length)
+              // onnxruntime-node rejects from inside the same setImmediate, so a
+              // throwing onCall models a failed run, not an escaped callback.
+              try {
+                onCall?.()
+                resolve({
+                  tolist: () => texts.map((text) => [Number(text.slice(1))]),
+                  dims: [texts.length, 1],
+                })
+              } catch (error) {
+                reject(error instanceof Error ? error : new Error(String(error)))
+              }
             })
-          } catch (error) {
-            reject(error instanceof Error ? error : new Error(String(error)))
-          }
-        })
-      })
+          }),
+      )
   }
 
   it('feeds the pipeline 16 texts per call and concatenates in order', async () => {
@@ -83,6 +101,7 @@ describe('chunked embed', () => {
       ok: true,
       vectors: Array.from({ length: 40 }, (_, i) => [i]),
       dim: 1,
+      truncated: [],
     })
   })
 
@@ -127,18 +146,20 @@ describe('chunked embed', () => {
   // representable — last-chunk-wins would pass the facade's dim check regardless.
   it('fails rather than letting a later chunk redefine the dim', async () => {
     const calls: number[] = []
-    __setPipelineFactoryForTest(
-      async () => (texts: string[]) =>
-        new Promise<FakeTensor>((resolve) => {
-          setImmediate(() => {
-            calls.push(texts.length)
-            const dim = calls.length === 1 ? 3 : 5
-            resolve({
-              tolist: () => texts.map(() => Array.from({ length: dim }, () => 0)),
-              dims: [texts.length, dim],
+    __setPipelineFactoryForTest(async () =>
+      stubPipeline(
+        (texts: string[]) =>
+          new Promise<FakeTensor>((resolve) => {
+            setImmediate(() => {
+              calls.push(texts.length)
+              const dim = calls.length === 1 ? 3 : 5
+              resolve({
+                tolist: () => texts.map(() => Array.from({ length: dim }, () => 0)),
+                dims: [texts.length, dim],
+              })
             })
-          })
-        }),
+          }),
+      ),
     )
 
     const result = await embed({ modelDir: '/models/dim-drift', texts: numberedTexts(32) })
@@ -208,5 +229,85 @@ describe('listInstalled resilience', () => {
     const [entry] = installed
     expect(entry).toMatchObject({ id: 'valid/model', installedAt: 123 })
     expect(entry?.sizeBytes).toBeGreaterThan(0)
+  })
+})
+
+// Truncation is what makes an over-long field vanish from the index without a
+// trace, so the only defence is the embed reporting which texts it cut.
+describe('truncation reporting', () => {
+  const run = async (texts: string[]) => ({
+    tolist: () => texts.map(() => [1]),
+    dims: [texts.length, 1],
+  })
+  const byLength = (limit: number) => ({ count: (text: string) => text.length, limit })
+
+  afterEach(() => {
+    __setPipelineFactoryForTest(null)
+  })
+
+  it('names the index of every text that overran the window', async () => {
+    __setPipelineFactoryForTest(async () => stubPipeline(run, byLength(4)))
+
+    const result = await embed({
+      modelDir: '/models/trunc',
+      texts: ['ab', 'abcdefgh', 'abc', 'abcde'],
+    })
+
+    expect(result).toMatchObject({ ok: true, truncated: [1, 3] })
+  })
+
+  it('reports none when every text fits inside the window', async () => {
+    __setPipelineFactoryForTest(async () => stubPipeline(run, byLength(64)))
+
+    const result = await embed({ modelDir: '/models/fits', texts: ['ab', 'abc'] })
+
+    expect(result).toMatchObject({ ok: true, truncated: [] })
+  })
+
+  // A tokenizer with no model_max_length does not truncate either, so silence here
+  // is the truth rather than a missing check.
+  it('reports none when the tokenizer declares no window', async () => {
+    __setPipelineFactoryForTest(async () =>
+      stubPipeline(run, { count: (text: string) => text.length }),
+    )
+
+    const result = await embed({ modelDir: '/models/nolimit', texts: ['a'.repeat(5000)] })
+
+    expect(result).toMatchObject({ ok: true, truncated: [] })
+  })
+
+  // Indices are into the whole request, not into the chunk that carried the text —
+  // a chunk-local index would name the wrong row for anything past the first 16.
+  it('reports indices across chunk boundaries', async () => {
+    __setPipelineFactoryForTest(async () => stubPipeline(run, byLength(4)))
+    const texts = Array.from({ length: 40 }, (_, i) => (i === 17 || i === 33 ? 'abcdefgh' : 'ab'))
+
+    const result = await embed({ modelDir: '/models/chunk-trunc', texts })
+
+    expect(result).toMatchObject({ ok: true, truncated: [17, 33] })
+  })
+})
+
+// The window is inclusive: transformers.js truncates TO model_max_length, so a text
+// landing exactly on it loses nothing and must not be reported.
+describe('truncation boundary', () => {
+  afterEach(() => {
+    __setPipelineFactoryForTest(null)
+  })
+
+  it('does not report a text sitting exactly on the window', async () => {
+    __setPipelineFactoryForTest(async () =>
+      stubPipeline(
+        async (texts: string[]) => ({
+          tolist: () => texts.map(() => [1]),
+          dims: [texts.length, 1],
+        }),
+        { count: (text: string) => text.length, limit: 4 },
+      ),
+    )
+
+    const result = await embed({ modelDir: '/models/edge', texts: ['abcd', 'abcde'] })
+
+    expect(result).toMatchObject({ ok: true, truncated: [1] })
   })
 })

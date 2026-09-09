@@ -16,6 +16,12 @@ const harness = vi.hoisted(() => ({
   directions: { a: [1, 0], b: [0, 1], c: [0, -1], w: [1, 0, 0] } as Record<string, number[]>,
   // Per-text width, so a mid-embed dim disagreement is expressible at all.
   widths: { w: 3 } as Record<string, number>,
+  // Untruncated token count per text, and the window the tokenizer declares.
+  tokenLengths: {} as Record<string, number>,
+  maxLength: undefined as number | undefined,
+  // Token count actually fed to the session, per call — the only way to tell a
+  // truncated encoding from a reported-but-unapplied one.
+  fedTokens: [] as number[],
 }))
 
 vi.mock('expo-file-system', () => {
@@ -45,8 +51,16 @@ vi.mock('onnxruntime-react-native', () => ({
           const text = String.fromCodePoint(Number(feeds.input_ids?.data[0] ?? 0))
           const width = harness.widths[text] ?? 2
           const direction = harness.directions[text] ?? Array.from({ length: width }, () => 0)
+          // One hidden row per fed token, all the same direction: mean-pooling any
+          // count of them returns that direction, so token length stays orthogonal
+          // to the vector assertions.
+          const tokens = feeds.input_ids?.data.length ?? 1
+          harness.fedTokens.push(tokens)
           return Promise.resolve({
-            last_hidden_state: { dims: [1, 1, width], data: Float32Array.from(direction) },
+            last_hidden_state: {
+              dims: [1, tokens, width],
+              data: Float32Array.from(Array.from({ length: tokens }, () => direction).flat()),
+            },
           })
         },
       }),
@@ -63,11 +77,29 @@ vi.mock('onnxruntime-react-native', () => ({
 vi.mock('@huggingface/transformers', () => ({
   // A transformers.js tokenizer instance is callable, so the constructor returns it.
   PreTrainedTokenizer: function PreTrainedTokenizer() {
-    // One token per text, its id the text's code point; single-char texts keep that legible.
-    return (text: string) => ({
-      input_ids: { data: BigInt64Array.from([BigInt(text.codePointAt(0) ?? 0)]), dims: [1, 1] },
-      attention_mask: { data: BigInt64Array.from([1n]), dims: [1, 1] },
-    })
+    // Every token carries the text's code point, so the session mock can still
+    // identify the text from data[0] however many tokens the text encodes to.
+    const encode = (text: string, options?: { truncation?: boolean }) => {
+      const full = harness.tokenLengths[text] ?? 1
+      const limit = harness.maxLength
+      const count =
+        options?.truncation === true && limit !== undefined ? Math.min(full, limit) : full
+      const id = BigInt(text.codePointAt(0) ?? 0)
+      return {
+        input_ids: {
+          data: BigInt64Array.from(Array.from({ length: count }, () => id)),
+          dims: [1, count],
+        },
+        attention_mask: {
+          data: BigInt64Array.from(Array.from({ length: count }, () => 1n)),
+          dims: [1, count],
+        },
+      }
+    }
+    // A getter, not a captured value: bundles are cached, so a test that sets the
+    // window after construction must still be read live.
+    Object.defineProperty(encode, 'model_max_length', { get: () => harness.maxLength })
+    return encode
   },
 }))
 
@@ -83,6 +115,9 @@ async function rejectionOf(promise: Promise<unknown>): Promise<unknown> {
 beforeEach(() => {
   harness.runCalls = 0
   harness.onRun = undefined
+  harness.tokenLengths = {}
+  harness.maxLength = undefined
+  harness.fedTokens = []
 })
 
 // Inline restore skips on a failed assertion and leaves logger spied for the rest of the file.
@@ -178,5 +213,56 @@ describe('embedLocal (native)', () => {
     })
     // A stop reaching the error channel renders a Switch embedder affordance unasked-for.
     expect(errorLog).not.toHaveBeenCalled()
+  })
+})
+
+describe('embedLocal (native) truncation reporting', () => {
+  it('names the index of each text the tokenizer had to cut', async () => {
+    harness.maxLength = 4
+    harness.tokenLengths = { a: 2, b: 9, c: 7 }
+
+    const result = await embedLocal('model-trunc', ['a', 'b', 'c'])
+
+    expect(result.truncated).toEqual([1, 2])
+  })
+
+  it('reports none when every text fits', async () => {
+    harness.maxLength = 512
+    harness.tokenLengths = { a: 2, b: 9 }
+
+    const result = await embedLocal('model-fits', ['a', 'b'])
+
+    expect(result.truncated).toEqual([])
+  })
+
+  // No declared window means transformers.js never truncates either.
+  it('reports none when the tokenizer declares no window', async () => {
+    harness.tokenLengths = { a: 9000 }
+
+    const result = await embedLocal('model-nowindow', ['a'])
+
+    expect(result.truncated).toEqual([])
+  })
+
+  // Reporting the loss is not a reason to feed the model an over-long tensor: the
+  // session must still receive the truncated encoding, not the one used to measure.
+  it('feeds the session the truncated encoding, not the measured one', async () => {
+    harness.maxLength = 4
+    harness.tokenLengths = { a: 9 }
+
+    const result = await embedLocal('model-cut-still-embeds', ['a'])
+
+    expect(result.truncated).toEqual([0])
+    expect(harness.fedTokens).toEqual([4])
+    expect(Array.from(result.vectors[0])).toEqual([1, 0])
+  })
+
+  it('feeds an uncut text its whole encoding', async () => {
+    harness.maxLength = 16
+    harness.tokenLengths = { a: 9 }
+
+    await embedLocal('model-uncut', ['a'])
+
+    expect(harness.fedTokens).toEqual([9])
   })
 })

@@ -9,7 +9,12 @@ import { meanPoolAndNormalize } from './pooling'
 import { lazyModule } from '../lazy-module'
 import { EmbedderCallError, EmbedderCancelledError, EmbedderInitError } from '../types'
 
-export type LocalEmbedResult = { vectors: Float32Array[]; dim: number }
+export type LocalEmbedResult = {
+  vectors: Float32Array[]
+  dim: number
+  /** Indices of the input texts the tokenizer cut before inference. */
+  truncated: number[]
+}
 
 type EncodedTensor = { data: BigInt64Array; dims: readonly number[] }
 type Encoded = {
@@ -17,10 +22,10 @@ type Encoded = {
   attention_mask: EncodedTensor
   token_type_ids?: EncodedTensor
 }
-type TokenizerFn = (
+type TokenizerFn = ((
   text: string,
   options: { add_special_tokens: boolean; return_token_type_ids: boolean; truncation: boolean },
-) => Encoded
+) => Encoded) & { model_max_length?: number }
 
 // The slice of onnxruntime-react-native this runtime touches. A structural surface
 // (rather than `typeof import(...)`, which the type-import lint forbids, or a banned
@@ -99,13 +104,15 @@ async function buildBundle(modelId: string): Promise<SessionBundle> {
 async function embedOne(
   bundle: SessionBundle,
   text: string,
-): Promise<{ vector: Float32Array; dim: number }> {
+): Promise<{ vector: Float32Array; dim: number; truncated: boolean }> {
   const { Tensor } = bundle.ort
-  const encoded = bundle.tokenizer(text, {
-    add_special_tokens: true,
-    return_token_type_ids: true,
-    truncation: true,
-  })
+  const encodeOpts = { add_special_tokens: true, return_token_type_ids: true }
+  // Encoded untruncated first so the cut is observable at all; only a text that
+  // actually overruns pays the second pass. An absent limit never truncates.
+  let encoded = bundle.tokenizer(text, { ...encodeOpts, truncation: false })
+  const limit = bundle.tokenizer.model_max_length
+  const truncated = limit !== undefined && (encoded.input_ids.dims.at(-1) ?? 0) > limit
+  if (truncated) encoded = bundle.tokenizer(text, { ...encodeOpts, truncation: true })
 
   const feeds: Record<string, Tensor> = {}
   for (const name of bundle.session.inputNames) {
@@ -126,7 +133,7 @@ async function embedOne(
   const hiddenData = hidden.data as Float32Array
   const mask = Array.from(encoded.attention_mask.data, (v) => Number(v))
 
-  return { vector: meanPoolAndNormalize(hiddenData, mask, dim), dim }
+  return { vector: meanPoolAndNormalize(hiddenData, mask, dim), dim, truncated }
 }
 
 export async function embedLocal(
@@ -134,7 +141,7 @@ export async function embedLocal(
   texts: string[],
   signal?: AbortSignal,
 ): Promise<LocalEmbedResult> {
-  if (texts.length === 0) return { vectors: [], dim: 0 }
+  if (texts.length === 0) return { vectors: [], dim: 0, truncated: [] }
 
   let bundle: SessionBundle
   try {
@@ -145,12 +152,14 @@ export async function embedLocal(
 
   try {
     const vectors: Float32Array[] = []
+    const truncated: number[] = []
     let dim: number | null = null
     // ORT-RN batch=1 is fine for v1; per-text loop is deliberate, and one
     // session.run is un-interruptible, so its top is where a cancel can land.
-    for (const text of texts) {
+    for (const [index, text] of texts.entries()) {
       if (signal?.aborted) throw abortedEmbedError(signal)
-      const { vector, dim: d } = await embedOne(bundle, text)
+      const { vector, dim: d, truncated: cut } = await embedOne(bundle, text)
+      if (cut) truncated.push(index)
       // Fixed by the FIRST vector, never the last, as in desktop's chunk loop: a
       // later disagreeing width would describe none of them yet still pass the dim check.
       if (dim === null) dim = d
@@ -163,7 +172,7 @@ export async function embedLocal(
     // would still report success — a single-text embed being uncancellable outright.
     if (signal?.aborted) throw abortedEmbedError(signal)
     // texts is non-empty past the guard above, so dim is set by now.
-    return { vectors, dim: dim ?? 0 }
+    return { vectors, dim: dim ?? 0, truncated }
   } catch (error) {
     // Already classified — re-wrapping would relabel a user stop as a generic call fault.
     // Keep EmbedderCancelledError listed: sync.ts separates the tiers by class, not message.

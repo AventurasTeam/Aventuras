@@ -39,7 +39,14 @@ export type EmbedderBridge = {
     /** Handle for `cancelEmbed`. Omitted means the run cannot be cancelled. */
     requestId?: string
   }): Promise<
-    { ok: true; vectors: number[][]; dim: number } | { ok: false; error: EmbedderErrorEnvelope }
+    | {
+        ok: true
+        vectors: number[][]
+        dim: number
+        /** Indices of `texts` whose tail the tokenizer dropped before inference. */
+        truncated: number[]
+      }
+    | { ok: false; error: EmbedderErrorEnvelope }
   >
   smokeTest(args: {
     modelId: string

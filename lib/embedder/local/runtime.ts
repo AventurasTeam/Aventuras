@@ -4,7 +4,12 @@ import type { EmbedderBridge, EmbedderErrorEnvelope } from '@/types/embedder-bri
 import { abortedEmbedError } from './cancel'
 import { EmbedderCallError, EmbedderCancelledError, EmbedderInitError } from '../types'
 
-export type LocalEmbedResult = { vectors: Float32Array[]; dim: number }
+export type LocalEmbedResult = {
+  vectors: Float32Array[]
+  dim: number
+  /** Indices of the input texts the tokenizer cut before inference. */
+  truncated: number[]
+}
 
 function resolveBridge() {
   const bridge = globalThis.window?.aventurasEmbedder
@@ -35,7 +40,11 @@ export function envelopeToError(
 
 function unwrapEmbed(result: Awaited<ReturnType<EmbedderBridge['embed']>>): LocalEmbedResult {
   if (!result.ok) throw envelopeToError(result.error)
-  return { vectors: result.vectors.map((v) => Float32Array.from(v)), dim: result.dim }
+  return {
+    vectors: result.vectors.map((v) => Float32Array.from(v)),
+    dim: result.dim,
+    truncated: result.truncated,
+  }
 }
 
 export async function embedLocal(

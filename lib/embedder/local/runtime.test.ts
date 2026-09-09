@@ -19,7 +19,7 @@ const CALL_FAILED: EmbedResult = {
 }
 // Both values round-trip through Float32Array exactly, so the assertion can
 // name them literally.
-const ONE_VECTOR: EmbedResult = { ok: true, vectors: [[0.5, -0.25]], dim: 2 }
+const ONE_VECTOR: EmbedResult = { ok: true, vectors: [[0.5, -0.25]], dim: 2, truncated: [] }
 
 function stubBridge(bridge: BridgeStub): void {
   vi.stubGlobal('window', { aventurasEmbedder: bridge })

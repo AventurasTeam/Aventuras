@@ -7,9 +7,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { embedViaProvider } from '@/lib/ai'
 import type { ProviderInstanceWithStub } from '@/lib/ai'
 import { compositeText, packFloat32, sourceHash, type EmbeddedFieldRow, type SqlOp } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 
 import { embedLocal } from './local/runtime'
-import { embedAndBuildVecOps, embedTexts, testEmbedder } from './service'
+import { embedAndBuildVecOps, embedRowsToVecOps, embedTexts, testEmbedder } from './service'
 import { EmbedderCallError, EmbedderInitError, type EmbedderConfig } from './types'
 
 // Hoisted so the mock identities survive vi.resetModules() — the lazy-init test
@@ -56,7 +57,7 @@ afterEach(() => {
 
 describe('embedTexts routing + prefixing', () => {
   it('routes local MiniLM with unprefixed texts and returns unit-norm vectors', async () => {
-    vi.mocked(embedLocal).mockResolvedValue({ vectors: [unit([0.6, 0.8])], dim: 2 })
+    vi.mocked(embedLocal).mockResolvedValue({ vectors: [unit([0.6, 0.8])], dim: 2, truncated: [] })
 
     const config: EmbedderConfig = { backend: 'local', modelId: MINILM, dim: 2 }
     const result = await embedTexts(config, ['hello'], 'document')
@@ -67,7 +68,7 @@ describe('embedTexts routing + prefixing', () => {
   })
 
   it('applies Gemma document/query prefixes per intent', async () => {
-    vi.mocked(embedLocal).mockResolvedValue({ vectors: [unit([1, 0])], dim: 2 })
+    vi.mocked(embedLocal).mockResolvedValue({ vectors: [unit([1, 0])], dim: 2, truncated: [] })
     const config: EmbedderConfig = { backend: 'local', modelId: GEMMA, dim: 2 }
 
     await embedTexts(config, ['world'], 'document')
@@ -82,7 +83,7 @@ describe('embedTexts routing + prefixing', () => {
   })
 
   it('forwards the abort signal to the local runtime', async () => {
-    vi.mocked(embedLocal).mockResolvedValue({ vectors: [unit([1, 0])], dim: 2 })
+    vi.mocked(embedLocal).mockResolvedValue({ vectors: [unit([1, 0])], dim: 2, truncated: [] })
     const config: EmbedderConfig = { backend: 'local', modelId: MINILM, dim: 2 }
     const controller = new AbortController()
 
@@ -130,7 +131,7 @@ describe('embedTexts routing + prefixing', () => {
 
 describe('embedTexts dim verification', () => {
   it('throws EmbedderCallError when returned dim differs from a known config dim', async () => {
-    vi.mocked(embedLocal).mockResolvedValue({ vectors: [unit([1, 0])], dim: 2 })
+    vi.mocked(embedLocal).mockResolvedValue({ vectors: [unit([1, 0])], dim: 2, truncated: [] })
     const config: EmbedderConfig = { backend: 'local', modelId: MINILM, dim: 384 }
 
     await expect(embedTexts(config, ['a'])).rejects.toBeInstanceOf(EmbedderCallError)
@@ -167,7 +168,11 @@ describe('embedTexts dim verification', () => {
   })
 
   it('still checks the dim for a local config — no unprobed escape hatch', async () => {
-    vi.mocked(embedLocal).mockResolvedValue({ vectors: [new Float32Array([1, 0, 0])], dim: 3 })
+    vi.mocked(embedLocal).mockResolvedValue({
+      vectors: [new Float32Array([1, 0, 0])],
+      dim: 3,
+      truncated: [],
+    })
     const config: EmbedderConfig = {
       backend: 'local',
       modelId: 'Xenova/all-MiniLM-L6-v2',
@@ -383,7 +388,7 @@ describe('embedAndBuildVecOps integration', () => {
 
   it('ensures vec tables, lands a KNN-visible row, and flips embedding_stale to 0', async () => {
     const queryVec = oneHot(384, 3)
-    vi.mocked(embedLocal).mockResolvedValue({ vectors: [queryVec], dim: 384 })
+    vi.mocked(embedLocal).mockResolvedValue({ vectors: [queryVec], dim: 384, truncated: [] })
 
     const config: EmbedderConfig = { backend: 'local', modelId: MINILM, dim: 384 }
     const ops = await embedAndBuildVecOps(
@@ -410,7 +415,7 @@ describe('embedAndBuildVecOps integration', () => {
   })
 
   it('rethrows a failing vec-table ensure as EmbedderCallError', async () => {
-    vi.mocked(embedLocal).mockResolvedValue({ vectors: [oneHot(384, 0)], dim: 384 })
+    vi.mocked(embedLocal).mockResolvedValue({ vectors: [oneHot(384, 0)], dim: 384, truncated: [] })
     const config: EmbedderConfig = { backend: 'local', modelId: MINILM, dim: 384 }
 
     const failingExec = async () => {
@@ -442,7 +447,7 @@ describe('embedAndBuildVecOps integration', () => {
 
 describe('testEmbedder', () => {
   it('returns a success result with a non-negative duration', async () => {
-    vi.mocked(embedLocal).mockResolvedValue({ vectors: [unit([1, 0])], dim: 2 })
+    vi.mocked(embedLocal).mockResolvedValue({ vectors: [unit([1, 0])], dim: 2, truncated: [] })
     const config: EmbedderConfig = { backend: 'local', modelId: MINILM, dim: 2 }
 
     const result = await testEmbedder(config)
@@ -478,7 +483,7 @@ describe('embedAndBuildVecOps — vector/row alignment', () => {
       new Float32Array([0, 1, 0]),
       new Float32Array([0, 0, 1]),
     ]
-    vi.mocked(embedLocal).mockResolvedValue({ vectors, dim: 3 })
+    vi.mocked(embedLocal).mockResolvedValue({ vectors, dim: 3, truncated: [] })
 
     const ops = await embedAndBuildVecOps(
       { backend: 'local', modelId: 'Xenova/all-MiniLM-L6-v2', dim: 3 },
@@ -508,6 +513,7 @@ describe('embedAndBuildVecOps — vector/row alignment', () => {
     vi.mocked(embedLocal).mockResolvedValue({
       vectors: [new Float32Array([1, 0]), new Float32Array([0, 1])],
       dim: 2,
+      truncated: [],
     })
 
     await embedAndBuildVecOps(
@@ -518,5 +524,77 @@ describe('embedAndBuildVecOps — vector/row alignment', () => {
 
     const texts = vi.mocked(embedLocal).mock.calls.at(-1)?.[1]
     expect(texts).toEqual(['Kara a scout', 'Bram a smith'])
+  })
+})
+
+describe('truncation reporting', () => {
+  const localConfig = { backend: 'local', modelId: 'Xenova/all-MiniLM-L6-v2', dim: 2 } as const
+  const rows = [
+    { kind: 'entity', id: 'e1', branchId: 'b1', fields: ['Kara', 'a scout'] },
+    { kind: 'lore', id: 'l1', branchId: 'b1', fields: ['Harbour', 'a long body'] },
+  ] as never[]
+  const exec = async () => {}
+
+  it('passes the local runtime’s report through', async () => {
+    vi.mocked(embedLocal).mockResolvedValue({ vectors: [unit([1, 0])], dim: 2, truncated: [0] })
+
+    const result = await embedTexts(localConfig, ['long'], 'document')
+
+    expect(result.truncated).toEqual([0])
+  })
+
+  // null is not []: a provider neither reports the cut nor publishes the limit, so
+  // claiming "nothing was truncated" would be an answer we do not have.
+  it('reports null for a provider, which cannot say', async () => {
+    vi.mocked(embedViaProvider).mockResolvedValue({ vectors: [new Float32Array([1, 0])], dim: 2 })
+
+    const result = await embedTexts(
+      { backend: 'provider', providerId: 'p1', modelId: 'm', dim: 2, truncation: null },
+      ['long'],
+      'document',
+      {} as never,
+    )
+
+    expect(result.truncated).toBeNull()
+  })
+
+  it('names the truncated rows by kind and id', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    vi.mocked(embedLocal).mockResolvedValue({
+      vectors: [unit([1, 0]), unit([0, 1])],
+      dim: 2,
+      truncated: [1],
+    })
+
+    await embedRowsToVecOps(localConfig, rows, exec)
+
+    expect(warn).toHaveBeenCalledWith(
+      'embedder.input_truncated',
+      expect.objectContaining({ count: 1, rows: ['lore:l1'] }),
+    )
+  })
+
+  it('stays silent when nothing was cut', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    vi.mocked(embedLocal).mockResolvedValue({
+      vectors: [unit([1, 0]), unit([0, 1])],
+      dim: 2,
+      truncated: [],
+    })
+
+    await embedRowsToVecOps(localConfig, rows, exec)
+
+    expect(warn).not.toHaveBeenCalledWith('embedder.input_truncated', expect.anything())
+  })
+
+  // A main process predating the field sends nothing back; a diagnostic must not
+  // turn that into a failed embed.
+  it('survives a runtime that reports no truncation field at all', async () => {
+    vi.mocked(embedLocal).mockResolvedValue({
+      vectors: [unit([1, 0]), unit([0, 1])],
+      dim: 2,
+    } as never)
+
+    await expect(embedRowsToVecOps(localConfig, rows, exec)).resolves.toBeDefined()
   })
 })
