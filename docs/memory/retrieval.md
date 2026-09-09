@@ -251,17 +251,34 @@ and a failed embed (init failed, provider down, EP crashed) simply
 leaves it flagged and absent from vec0. There is no separate
 "drifted vs failed" state.
 
-**Embed failure is blocking, not "queue and continue."** When the
-pre-retrieval sync stage can't embed a dirty row, the turn can't
-reach retrieval. Treated identically to a failed LLM call: surfaced
-as an error, must be resolved, no ignore path. The user picks Switch
-embedder / Retry / Dismiss. There is no rollback action — the
-orchestrator has already reverse-replayed the turn by the time the
-error surfaces — and the composer is not gated, because a resubmit
-re-runs this same blocking sync stage, so a still-broken embedder
+**Embed failure is blocking, not "queue and continue."** The rule
+covers both embedder calls a pass makes. When the pre-retrieval sync
+stage can't embed a dirty row, the turn can't reach retrieval; when
+the live queries themselves can't embed, the pass fails there rather
+than continuing without them. Treated identically to a failed LLM
+call: surfaced as an error, must be resolved, no ignore path. The
+user picks Switch embedder / Retry / Dismiss. There is no rollback
+action — the orchestrator has already reverse-replayed the turn by
+the time the error surfaces — and the composer is not gated, because
+a resubmit re-runs the same blocking pass, so a still-broken embedder
 fails the turn again. The block is self-enforcing. See
 [`model-management.md → Embedder failures`](./model-management.md#embedder-failures)
 for the action surface and the wider failure-mode discussion.
+
+**A failed query embed does not degrade into a zero-query pass.** The
+degraded shape exists and is a legitimate success elsewhere: a stack
+with no live queries seats the structural floor and whatever
+[keyword injection](#keyword-injection) finds, neither of which needs a
+vector. It is still refused on the failure arm. A turn that dirtied no
+rows leaves the sync stage a no-op, which makes the query embed the
+first embedder contact of the turn — so a genuinely broken embedder
+fails _there_, on every turn, and degrading would let a user write a
+whole story on floor-only context without ever being told retrieval had
+stopped. One failure cannot tell a transient blip from a dead embedder,
+and refusing the degrade is what keeps the block self-enforcing. The
+observability consequence: the keyword pre-pass runs after the query
+embed, so a failed capture carries no keyword injections
+([`probe.md → Failed captures`](./probe.md#failed-captures)).
 
 A worker drains dirty rows opportunistically between turns when
 conditions allow, so a later sync stage finds less to do — a

@@ -13,23 +13,6 @@ for the placement rule.
 
 ## UX
 
-- **Embedder failure skips the one retrieval pathway that needs no
-  embedder.** `runRetrieval` returns on a failed query embed roughly
-  fifty lines before `buildKeywordInjections` runs, so when the embedder
-  actually fails — model not loaded, ONNX fault, provider down — the
-  [keyword injection](./memory/retrieval.md#keyword-injection) pre-pass
-  never executes and a story on `mode='inject'` gets nothing, where it
-  could have had its keyword hits. The pathway is vector-independent by
-  construction (`run.ts` says so at the call site: "Needs no vectors —
-  which is why a keyword hit can seat a row the KNN missed"), and a
-  zero-query stack already reaches it correctly; only the failure arm
-  short-circuits past it. Fixing it means deciding what a partial
-  success returns, so it touches `RetrievalPartial`'s failure arm and
-  the probe's
-  [failed-capture lane](./memory/probe.md#failed-captures) rather than
-  being a local reorder. Surfaced 2026-09-06 designing the
-  [query stack](./explorations/2026-09-06-retrieval-query-stack.md).
-
 - **M4.4 — "Upgrade to current default" story-open prompt deferred from 3.1b.**
   Canon ([`retrieval.md → Model swap UX`](./memory/retrieval.md#model-swap-ux))
   names a second dialog entry point: a prompt when opening a story whose

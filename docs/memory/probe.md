@@ -577,7 +577,10 @@ so `replayType` can refuse a failed capture without the row — and the
 body contains whatever partial state was reached:
 
 - Embedder failure during query embed — captures the query text but
-  no sims; pool data may be empty.
+  no sims; pool data may be empty, and the keyword injections are
+  empty too. The pre-pass needs no vectors, but it runs after the
+  query embed and the arm returns before it
+  ([`retrieval.md → Compute lifecycle`](./retrieval.md#compute-lifecycle)).
 - Vector-invariant fault mid-pass — captures queries and partial
   pool data up to the failure point.
 
