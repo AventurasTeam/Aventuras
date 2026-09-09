@@ -6,6 +6,7 @@ import {
   getCatalogEntry,
   getDefaultCatalogEntry,
   localModelDim,
+  localModelMaxInputTokens,
 } from './catalog'
 import { EMBEDDER_INTEGRATIONS } from './integrations'
 
@@ -82,6 +83,7 @@ describe('embedderCatalogSchema', () => {
       shortDescription: 'desc',
       size_bytes: 1,
       dim: 384,
+      maxInputTokens: 512,
       huggingfaceRevision: 'b'.repeat(40),
       files: {
         'model.onnx': file('onnx/model.onnx'),
@@ -131,5 +133,46 @@ describe('embedderCatalogSchema', () => {
 
   it('rejects a catalog with no default-tagged model', () => {
     expect(() => parse([entry({ tags: ['mobile'] })])).toThrow(/exactly one/)
+  })
+})
+
+// The window is what separates text that gets embedded from text that is
+// silently dropped, so an entry that omits it must not parse at all.
+describe('maxInputTokens', () => {
+  it('is declared by every catalog entry', () => {
+    for (const model of EMBEDDER_CATALOG.models) {
+      expect(model.maxInputTokens).toBeGreaterThan(0)
+    }
+  })
+
+  // Known answers, read from each model's own installed tokenizer_config.json.
+  it('matches the tokenizer each model actually ships', () => {
+    expect(localModelMaxInputTokens('Xenova/all-MiniLM-L6-v2')).toBe(512)
+    expect(localModelMaxInputTokens('onnx-community/embeddinggemma-300m-ONNX')).toBe(2048)
+  })
+
+  it('is undefined for a model the catalog does not carry', () => {
+    expect(localModelMaxInputTokens('acme/not-in-catalog')).toBeUndefined()
+  })
+
+  it('rejects a catalog entry that omits it', () => {
+    const { maxInputTokens: _omitted, ...withoutWindow } = {
+      id: 'acme/model',
+      displayName: 'Model',
+      shortDescription: 'desc',
+      size_bytes: 1,
+      dim: 384,
+      maxInputTokens: 512,
+      huggingfaceRevision: 'b'.repeat(40),
+      files: {
+        'model.onnx': { repoPath: 'onnx/model.onnx', sha256: 'a'.repeat(64) },
+        'config.json': { repoPath: 'config.json', sha256: 'a'.repeat(64) },
+        'tokenizer.json': { repoPath: 'tokenizer.json', sha256: 'a'.repeat(64) },
+        'tokenizer_config.json': { repoPath: 'tokenizer_config.json', sha256: 'a'.repeat(64) },
+      },
+      default_ep: { android: 'cpu', ios: 'cpu', linux: 'cpu', macos: 'cpu', windows: 'cpu' },
+      tags: ['default'],
+    }
+    expect(() => embedderCatalogSchema.parse({ version: '1', models: [withoutWindow] })).toThrow()
   })
 })

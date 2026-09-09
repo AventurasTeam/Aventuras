@@ -41,6 +41,14 @@ export const catalogModelEntrySchema = z
     shortDescription: z.string(),
     size_bytes: z.number().int().positive(),
     dim: z.number().int().positive(),
+    /**
+     * The tokenizer's `model_max_length`. Mirrored here rather than read from the
+     * installed `tokenizer_config.json` because the picker has to show it before
+     * anything is installed. Text past it is dropped at embed time and the vector
+     * cannot be told apart from one whose tail was never written
+     * (retrieval.md → What gets embedded per type).
+     */
+    maxInputTokens: z.number().int().positive(),
     huggingfaceRevision: z.string(),
     files: catalogFilesSchema,
     default_ep: catalogDefaultEpSchema,
@@ -85,4 +93,8 @@ export function getDefaultCatalogEntry(): CatalogModelEntry {
 
 export function localModelDim(id: string): number | undefined {
   return getCatalogEntry(id)?.dim
+}
+
+export function localModelMaxInputTokens(id: string): number | undefined {
+  return getCatalogEntry(id)?.maxInputTokens
 }

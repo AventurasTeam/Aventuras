@@ -5,6 +5,7 @@ export {
   getCatalogEntry,
   getDefaultCatalogEntry,
   localModelDim,
+  localModelMaxInputTokens,
 } from './catalog'
 export type { CatalogModelEntry, EmbedderCatalog } from './catalog'
 
