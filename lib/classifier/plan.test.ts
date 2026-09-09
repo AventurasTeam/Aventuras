@@ -691,3 +691,93 @@ describe('entity keywords', () => {
     })
   })
 })
+
+// The classifier is the only machine writer into an embedded column, and the
+// embedder drops anything past its window without a signal — so the planner is
+// where the app's own output stops being unbounded.
+describe('embedded-column bounds', () => {
+  const character = (name: string, description: string) => ({
+    happenings: [],
+    relationships: [],
+    statusFlips: [],
+    newCharacters: [{ handle: 'h1', name, description, keywords: [], sourceTurn: 't1' }],
+  })
+  const deps = {
+    ...base,
+    decisions: new Map([['h1', { kind: 'create', flagged: false }]]),
+  } as never
+  const entryOf = (planned: PlannedWrite[]) =>
+    payloadOf<{ entry: { name: string; description: string } }>(planned[0]).entry
+
+  it('cuts an over-long character name at 120 characters', () => {
+    const { planned } = buildClassifierActions(
+      character('N'.repeat(119) + 'X' + 'Y'.repeat(80), 'A dragon.'),
+      deps,
+    )
+    expect(entryOf(planned as PlannedWrite[]).name).toBe('N'.repeat(119) + 'X')
+  })
+
+  it('cuts an over-long character description at 1200 characters', () => {
+    const { planned } = buildClassifierActions(
+      character('Eldrin', 'D'.repeat(1199) + 'X' + 'Z'.repeat(500)),
+      deps,
+    )
+    expect(entryOf(planned as PlannedWrite[]).description).toBe('D'.repeat(1199) + 'X')
+  })
+
+  it('leaves a name and description already inside the bounds untouched', () => {
+    const { planned } = buildClassifierActions(character('Eldrin', 'A dragon.'), deps)
+    expect(entryOf(planned as PlannedWrite[])).toMatchObject({
+      name: 'Eldrin',
+      description: 'A dragon.',
+    })
+  })
+
+  // slice() alone would leave the cut sitting on whitespace, which renders as a
+  // trailing space everywhere the name is shown.
+  it('drops whitespace the cut lands on', () => {
+    const { planned } = buildClassifierActions(
+      character('A'.repeat(119) + ' ' + 'B'.repeat(80), 'A dragon.'),
+      deps,
+    )
+    expect(entryOf(planned as PlannedWrite[]).name).toBe('A'.repeat(119))
+  })
+
+  it('bounds a happening title and description', () => {
+    const { planned } = buildClassifierActions(
+      {
+        happenings: [
+          {
+            title: 'T'.repeat(119) + 'X' + 'Y'.repeat(80),
+            description: 'D'.repeat(1199) + 'X' + 'Z'.repeat(500),
+            sourceTurn: 't1',
+            involvements: [],
+            awareness: [],
+          },
+        ],
+        relationships: [],
+        statusFlips: [],
+        newCharacters: [],
+      },
+      base,
+    )
+    const entry = payloadOf<{ entry: { title: string; description: string } }>(planned[0]).entry
+    expect(entry.title).toBe('T'.repeat(119) + 'X')
+    expect(entry.description).toBe('D'.repeat(1199) + 'X')
+  })
+
+  // The clamp reads `description == null`, so an absent one must stay absent
+  // rather than becoming the empty string the column has no meaning for.
+  it('keeps an absent happening description null', () => {
+    const { planned } = buildClassifierActions(
+      {
+        happenings: [{ title: 'A', sourceTurn: 't1', involvements: [], awareness: [] }],
+        relationships: [],
+        statusFlips: [],
+        newCharacters: [],
+      },
+      base,
+    )
+    expect(payloadOf<{ entry: { description: null } }>(planned[0]).entry.description).toBeNull()
+  })
+})

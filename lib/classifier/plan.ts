@@ -32,6 +32,26 @@ export type PlanDeps = {
 
 const SOURCE = 'periodic_classifier' as const
 
+// Both fields of an embedded pair are composited as `${first} ${second}` before
+// embedding, so the pair has to clear the tightest catalog window — MiniLM-L6's
+// 512 tokens, the mobile default. At ~4 chars/token these cap a pair at ~330.
+const MAX_EMBEDDED_NAME = 120
+const MAX_EMBEDDED_BODY = 1200
+
+/**
+ * Bounds a classifier-written string before it lands in an embedded column.
+ *
+ * Past the embedder's own window the text is not merely diminished, it is absent
+ * from the vector — while `sourceHash` still covers the whole string, so nothing
+ * re-embeds it and nothing reports it. The bound cannot live in the schema as
+ * `.max()`: a violation is a parse failure, and the retry re-reads the same prose,
+ * so an over-long reply would fail the pass rather than shorten it. Clamped here
+ * for the same reason the severity clamp is (schema.ts).
+ */
+function clampEmbedded(text: string, limit: number): string {
+  return text.length <= limit ? text : text.slice(0, limit).trimEnd()
+}
+
 /**
  * retrieval.md → Keywords schema: append-only, de-duped under matchTerms' normalization — authored
  * aliases must survive every pass. null when nothing is new, so a repeated name writes no delta.
@@ -156,10 +176,10 @@ export function buildClassifierActions(
             id,
             branchId,
             kind: 'character',
-            name: candidate.name,
+            name: clampEmbedded(candidate.name, MAX_EMBEDDED_NAME),
             // First introduction is the classifier's one description write; it
             // never amends a description afterwards (authorship contract).
-            description: candidate.description,
+            description: clampEmbedded(candidate.description, MAX_EMBEDDED_BODY),
             keywords,
             status: 'active',
             injectionMode: 'auto',
@@ -197,8 +217,11 @@ export function buildClassifierActions(
           entry: {
             id: happeningId,
             branchId,
-            title: happening.title,
-            description: happening.description ?? null,
+            title: clampEmbedded(happening.title, MAX_EMBEDDED_NAME),
+            description:
+              happening.description == null
+                ? null
+                : clampEmbedded(happening.description, MAX_EMBEDDED_BODY),
             // Mutually exclusive per the table CHECK: an entry ref wins.
             temporal: occurredAtEntryId == null ? (happening.temporal ?? null) : null,
             occurredAtEntryId,
