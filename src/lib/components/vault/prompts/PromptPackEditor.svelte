@@ -24,8 +24,8 @@
   import { renderDescription } from '$lib/utils/markdown'
   import TestVariablesModal from './TestVariablesModal.svelte'
   import RefreshTemplatesDialog from './RefreshTemplatesDialog.svelte'
+  import ExportIntoFolderDialog from './ExportIntoFolderDialog.svelte'
   import { importExportService, type DirectoryExportPlan } from '$lib/services/packs/import-export'
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { supportsDirectoryTransfer } from '$lib/services/packs/directory/support'
   import {
     ChevronLeft,
@@ -816,31 +816,8 @@
   </Dialog.Content>
 </Dialog.Root>
 
-<!-- Exporting into a folder that holds files but is not a previous export. Nothing is removed
-     there, but a file of the same name is overwritten. -->
-<ResponsiveModal.Root
-  open={!!pendingExport}
-  onOpenChange={(v) => {
-    if (!v) pendingExport = null
-  }}
->
-  <ResponsiveModal.Content class="p-0 sm:max-w-md">
-    <ResponsiveModal.Header class="border-b px-6 py-4">
-      <ResponsiveModal.Title>Export into this folder?</ResponsiveModal.Title>
-      <ResponsiveModal.Description>
-        This folder already holds files and was not written by a previous export. Nothing in it will
-        be deleted, but any file sharing a name with one of the exported files — including ABOUT.md,
-        .gitattributes and any prompt of the same name — will be overwritten.
-      </ResponsiveModal.Description>
-    </ResponsiveModal.Header>
-    <ResponsiveModal.Footer class="border-t px-6 py-4">
-      <Button
-        variant="outline"
-        onclick={() => {
-          pendingExport = null
-        }}>Cancel</Button
-      >
-      <Button onclick={confirmExportIntoUsedFolder}>Export here</Button>
-    </ResponsiveModal.Footer>
-  </ResponsiveModal.Content>
-</ResponsiveModal.Root>
+<ExportIntoFolderDialog
+  plan={pendingExport}
+  onConfirm={confirmExportIntoUsedFolder}
+  onCancel={() => (pendingExport = null)}
+/>

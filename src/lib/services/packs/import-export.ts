@@ -47,11 +47,15 @@ export type ConflictStrategy = 'rename' | 'cancel'
 export interface DirectoryExportPlan {
   root: string
   tree: Tree
+  /** Template and reference files of a previous export that this one no longer writes. */
   prunePaths: string[]
+  /** The folder carries a `pack.yaml` this version can parse, so it is a tree we own. */
+  isKnownExport: boolean
   /**
-   * The folder holds files but did not prove to be a tree this export owns — no readable
-   * `pack.yaml` this version can parse. Nothing is pruned in that case, but a file sharing a
-   * name with one being written is still overwritten, so the user is asked first.
+   * Ask before writing. True when the folder holds files we did not put there — one sharing a
+   * name with a file being written is still overwritten — and whenever anything would be
+   * deleted, because a `.md` a user kept beside the prompts is indistinguishable from a
+   * template this export has dropped.
    */
   needsConfirmation: boolean
 }
@@ -115,19 +119,21 @@ class ImportExportService {
       // A folder that cannot be read is not one this export owns: nothing is pruned from it,
       // and the confirmation stands in for the certainty we could not get.
       console.error('[ImportExportService] Failed to read the chosen folder:', e)
-      return { root, tree, prunePaths: [], needsConfirmation: true }
+      return { root, tree, prunePaths: [], isKnownExport: false, needsConfirmation: true }
     }
 
     // Pruning deletes files, so the folder has to prove it is one of ours. The name
     // `pack.yaml` alone does not: other tools use it too, and treating a stranger's folder
     // as a previous export would delete the Markdown nested inside it.
-    const isPreviousExport = packFileText !== undefined && parsePackFile(packFileText).ok
+    const isKnownExport = packFileText !== undefined && parsePackFile(packFileText).ok
+    const prunePaths = isKnownExport ? planPrune(existingPaths, tree) : []
 
     return {
       root,
       tree,
-      prunePaths: isPreviousExport ? planPrune(existingPaths, tree) : [],
-      needsConfirmation: !isPreviousExport && existingPaths.length > 0,
+      prunePaths,
+      isKnownExport,
+      needsConfirmation: (!isKnownExport && existingPaths.length > 0) || prunePaths.length > 0,
     }
   }
 

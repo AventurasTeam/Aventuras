@@ -19,6 +19,7 @@
   import CreatePackDialog from './CreatePackDialog.svelte'
   import ImportPreviewDialog from './ImportPreviewDialog.svelte'
   import UpdatePackDialog from './UpdatePackDialog.svelte'
+  import ExportIntoFolderDialog from './ExportIntoFolderDialog.svelte'
 
   interface Props {
     onOpenPack: (packId: string) => void
@@ -48,6 +49,10 @@
   // A folder that already holds files but is not a previous export: nothing is pruned, but
   // the user is asked before anything lands in it.
   let pendingExport = $state<DirectoryExportPlan | null>(null)
+
+  // Two folder pickers open at once would run two exports, and the second could prune what
+  // the first had just written.
+  let directoryBusy = $state(false)
 
   const canUseDirectories = supportsDirectoryTransfer()
 
@@ -104,6 +109,8 @@
   }
 
   async function handleExportPackDirectory(packId: string) {
+    if (directoryBusy) return
+    directoryBusy = true
     try {
       const plan = await importExportService.planPackDirectoryExport(packId)
       if (!plan) return
@@ -118,6 +125,10 @@
     } catch (e) {
       console.error('Folder export failed:', e)
       ui.showToast(`Export failed: ${errMessage(e)}`, 'error')
+    } finally {
+      // A pending confirmation keeps its own plan; the guard lifts either way, since the
+      // dialog is modal.
+      directoryBusy = false
     }
   }
 
@@ -135,16 +146,22 @@
   }
 
   async function handleUpdateFromDirectory(pack: PresetPack) {
-    const candidate = await importExportService.pickAndValidateDirectory()
-    if (!candidate) return
+    if (directoryBusy) return
+    directoryBusy = true
+    try {
+      const candidate = await importExportService.pickAndValidateDirectory()
+      if (!candidate) return
 
-    if (!candidate.validation.valid || !candidate.validation.pack) {
-      updateErrorSource = 'folder'
-      updateErrors = candidate.validation
-      return
+      if (!candidate.validation.valid || !candidate.validation.pack) {
+        updateErrorSource = 'folder'
+        updateErrors = candidate.validation
+        return
+      }
+
+      await openUpdateConfirmation(pack, candidate.validation)
+    } finally {
+      directoryBusy = false
     }
-
-    await openUpdateConfirmation(pack, candidate.validation)
   }
 
   async function handleUpdateFromFile(pack: PresetPack) {
@@ -301,34 +318,11 @@
   }}
 />
 
-<!-- Exporting into a folder that holds files but is not a previous export. Nothing is removed
-     in that case, so the only question is whether the user meant this folder. -->
-<ResponsiveModal.Root
-  open={!!pendingExport}
-  onOpenChange={(v) => {
-    if (!v) pendingExport = null
-  }}
->
-  <ResponsiveModal.Content class="p-0 sm:max-w-md">
-    <ResponsiveModal.Header class="border-b px-6 py-4">
-      <ResponsiveModal.Title>Export into this folder?</ResponsiveModal.Title>
-      <ResponsiveModal.Description>
-        This folder already holds files and was not written by a previous export. Nothing in it will
-        be deleted, but any file sharing a name with one of the exported files — including ABOUT.md,
-        .gitattributes and any prompt of the same name — will be overwritten.
-      </ResponsiveModal.Description>
-    </ResponsiveModal.Header>
-    <ResponsiveModal.Footer class="border-t px-6 py-4">
-      <Button
-        variant="outline"
-        onclick={() => {
-          pendingExport = null
-        }}>Cancel</Button
-      >
-      <Button onclick={confirmExportIntoUsedFolder}>Export here</Button>
-    </ResponsiveModal.Footer>
-  </ResponsiveModal.Content>
-</ResponsiveModal.Root>
+<ExportIntoFolderDialog
+  plan={pendingExport}
+  onConfirm={confirmExportIntoUsedFolder}
+  onCancel={() => (pendingExport = null)}
+/>
 
 <!-- Delete confirmation -->
 <ResponsiveModal.Root

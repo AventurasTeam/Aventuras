@@ -21,6 +21,17 @@ function joinPath(root: string, relative: string): string {
   return `${root}/${relative}`
 }
 
+/**
+ * Directories never worth walking into.
+ *
+ * A tree lives in a git repository -- that is the point of the format -- so `.git` alone is
+ * thousands of loose-object files reached one `readDir` round-trip at a time. Nothing under a
+ * dot-directory can be a template or a file this export owns, so descending is pure cost.
+ */
+function isSkippedDirectory(name: string): boolean {
+  return name.startsWith('.') || name === 'node_modules'
+}
+
 /** Every file below `root`, as paths relative to it. */
 export async function listFiles(root: string, relativeDir = ''): Promise<string[]> {
   const entries = await readDir(relativeDir ? joinPath(root, relativeDir) : root)
@@ -28,8 +39,10 @@ export async function listFiles(root: string, relativeDir = ''): Promise<string[
 
   for (const entry of entries) {
     const relative = relativeDir ? `${relativeDir}/${entry.name}` : entry.name
-    if (entry.isDirectory) files.push(...(await listFiles(root, relative)))
-    else if (entry.isFile) files.push(relative)
+    if (entry.isDirectory) {
+      if (isSkippedDirectory(entry.name)) continue
+      files.push(...(await listFiles(root, relative)))
+    } else if (entry.isFile) files.push(relative)
   }
 
   return files

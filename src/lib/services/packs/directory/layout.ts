@@ -128,20 +128,24 @@ export interface CollectedTemplates {
  * rather than resolved: returning no templates keeps a partial import impossible.
  */
 export function collectTemplateFiles(paths: string[]): CollectedTemplates {
-  const byId = new Map<string, string[]>()
+  // Keyed without case, so two files that are one file on Windows and macOS are refused here
+  // rather than importing as two rows on Linux -- rows `buildTree` would then refuse to export,
+  // leaving a pack whose directory export can never succeed and no way to rename a stored id.
+  const byId = new Map<string, { templateId: string; paths: string[] }>()
 
   for (const path of paths) {
     const templateId = templateIdFromPath(path)
     if (templateId === null) continue
-    const existing = byId.get(templateId)
-    if (existing) existing.push(path)
-    else byId.set(templateId, [path])
+    const key = templateId.toLowerCase()
+    const existing = byId.get(key)
+    if (existing) existing.paths.push(path)
+    else byId.set(key, { templateId, paths: [path] })
   }
 
   const duplicates: DuplicateTemplate[] = []
   const templates = new Map<string, string>()
 
-  for (const [templateId, found] of byId) {
+  for (const { templateId, paths: found } of byId.values()) {
     if (found.length > 1) duplicates.push({ templateId, paths: [...found].sort() })
     else templates.set(templateId, found[0])
   }

@@ -102,6 +102,16 @@ describe('collectTemplateFiles', () => {
     expect([...collected.templates.keys()].sort()).toEqual(['classifier', 'classifier-user'])
   })
 
+  // buildTree refuses these on export, so accepting them here would import a pack whose
+  // directory export can never succeed, with no way to rename a stored id.
+  it('refuses two files whose stems differ only in capitalisation', () => {
+    const collected = collectTemplateFiles(['Analysis/adventure.md', 'Memory/Adventure.md'])
+
+    expect(collected.templates.size).toBe(0)
+    expect(collected.duplicates).toHaveLength(1)
+    expect(collected.duplicates[0].paths).toEqual(['Analysis/adventure.md', 'Memory/Adventure.md'])
+  })
+
   it('reports every conflicting path and yields no templates', () => {
     const collected = collectTemplateFiles([
       'Analysis/classifier.md',

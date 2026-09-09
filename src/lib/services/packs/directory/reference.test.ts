@@ -125,6 +125,12 @@ describe('generated root files', () => {
     expect(doc).toContain('Runtime variables are not part of this format.')
   })
 
+  it('warns that a file kept beside the prompts is treated as a prompt', () => {
+    const doc = aboutDoc()
+    expect(doc).toContain('Do not keep your own notes inside a group folder')
+    expect(doc).toContain('removed on the next export')
+  })
+
   it('explains that the files are Liquid and what happens when one is broken', () => {
     const doc = aboutDoc()
     expect(doc).toContain('Liquid templates, not Markdown')

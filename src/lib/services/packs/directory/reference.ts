@@ -328,7 +328,13 @@ Only \`${PACK_FILE}\` and the \`.md\` files inside folders. Ignored, silently:
 - Anything that is not a \`.md\` file
 
 Two files anywhere in the tree with the same name are refused, since the folder does not
-disambiguate them.
+disambiguate them. Names are compared without case, because two spellings are one file on
+Windows and macOS.
+
+**Do not keep your own notes inside a group folder.** Any \`.md\` there is a prompt as far as
+this format is concerned: it imports as one, and if the pack has no such prompt it is
+removed on the next export. The root is the safe place for your own files — the export
+never reads or deletes anything there apart from the generated files named above.
 
 ## Import replaces
 
