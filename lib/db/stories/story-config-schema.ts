@@ -114,6 +114,10 @@ const modelsSchema = z.object({
  * writes are key-scoped (`json_set`, settings-ops.ts), so the default never
  * materialises in an existing story's blob. Reads still apply it, so the gap
  * shows only where something reads the raw column.
+ *
+ * A key with neither `.default()` nor `.optional()` is the harder case — an
+ * un-backfilled story fails to parse and will not open at all. That set is
+ * pinned by `REQUIRED_SETTINGS_KEYS` in the test beside this file.
  */
 export const storySettingsSchema = z.object({
   chapterTokenThreshold: z.number().default(24000),
