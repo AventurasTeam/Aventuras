@@ -1,6 +1,7 @@
 import { Star } from 'lucide-react-native'
 import { View } from 'react-native'
 
+import { EmbedWindowTextarea } from '@/components/compounds/embed-window-textarea'
 import { FormRow } from '@/components/compounds/form-row'
 import { TagInput } from '@/components/compounds/tag-input'
 import {
@@ -14,7 +15,6 @@ import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
 import { Select, type SelectOption } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
-import { Textarea } from '@/components/ui/textarea'
 import { useTier } from '@/hooks/use-tier'
 import type {
   WizardCastDraft,
@@ -93,7 +93,7 @@ function NameStatusRow({ row, invalid }: { row: WizardCastDraft; invalid: boolea
 function DescriptionRow({ row }: { row: WizardCastDraft }) {
   return (
     <FormRow label={t('wizard:cast.editor.description')}>
-      <Textarea
+      <EmbedWindowTextarea
         value={row.description}
         onChangeText={(description) => wizardStore.patchCast(row, { description })}
         aria-label={t('wizard:cast.editor.description')}

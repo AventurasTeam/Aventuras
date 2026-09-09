@@ -40,3 +40,28 @@ describe('counterLabel', () => {
     expect(counterLabel(at(600, true, false))?.key).toBe('embedder:inputWindow.overApprox')
   })
 })
+
+// A user action is a query, not a stored document: overrunning searches memory on
+// the prefix and the next turn asks again, so it must not claim the text became
+// permanently unsearchable the way a lore body does.
+describe('counterLabel — query variant', () => {
+  it('uses the query wording past the window', () => {
+    expect(counterLabel(at(600, true, true), 'query')?.key).toBe('embedder:inputWindow.queryOver')
+  })
+
+  it('keeps the approximate marking on the query wording', () => {
+    expect(counterLabel(at(600, true, false), 'query')?.key).toBe(
+      'embedder:inputWindow.queryOverApprox',
+    )
+  })
+
+  // Under the window both variants say the same thing — the difference is only in
+  // what overrunning costs.
+  it('shares the plain count with the document variant', () => {
+    expect(counterLabel(at(400, false, true), 'query')?.key).toBe('embedder:inputWindow.count')
+  })
+
+  it('defaults to the document wording when no variant is given', () => {
+    expect(counterLabel(at(600, true, true))?.key).toBe('embedder:inputWindow.over')
+  })
+})

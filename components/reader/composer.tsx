@@ -8,6 +8,7 @@ import {
 } from 'react'
 import { View } from 'react-native'
 
+import { EmbedWindowCounter } from '@/components/compounds/embed-window-counter'
 import { Button } from '@/components/ui/button'
 import { Select, type SelectOption } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
@@ -154,6 +155,11 @@ export const Composer = forwardRef(function Composer(
         placeholder={t('reader:composerPlaceholder')}
         lints={lints}
       />
+
+      {/* Counted on the raw text, not the mode-wrapped form the entry stores: the
+          wrap adds a subject word and punctuation, a rounding error against a
+          512-token window and not worth threading pov and leadName down for. */}
+      <EmbedWindowCounter text={text} variant="query" />
 
       <View className="flex-row items-center justify-between gap-2">
         <View className="flex-row items-center gap-1.5">

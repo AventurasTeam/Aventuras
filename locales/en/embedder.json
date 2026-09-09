@@ -105,6 +105,8 @@
     "count": "{{tokens}} / {{window}} tokens",
     "countApprox": "~{{tokens}} / {{window}} tokens",
     "over": "{{tokens}} / {{window}} tokens — the end will not be searchable",
-    "overApprox": "~{{tokens}} / {{window}} tokens — the end may not be searchable"
+    "overApprox": "~{{tokens}} / {{window}} tokens — the end may not be searchable",
+    "queryOver": "{{tokens}} / {{window}} tokens — only the start will search memory",
+    "queryOverApprox": "~{{tokens}} / {{window}} tokens — only the start may search memory"
   }
 }
