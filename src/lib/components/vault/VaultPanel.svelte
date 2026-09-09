@@ -3,6 +3,7 @@
   import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
   import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
   import { ui } from '$lib/stores/ui.svelte'
+  import { errMessage } from '$lib/utils/error'
   import type { VaultCharacter, VaultLorebook, VaultScenario } from '$lib/types'
   import {
     Plus,
@@ -378,16 +379,22 @@
 
   // Import pack handlers
   async function handleImportPackDirectory() {
-    const candidate = await importExportService.pickAndValidateDirectory()
-    if (!candidate) return
+    try {
+      const candidate = await importExportService.pickAndValidateDirectory()
+      if (!candidate) return
 
-    importSource = 'folder'
-    importValidation = candidate.validation
-    importConflictPack =
-      candidate.validation.valid && candidate.validation.pack
-        ? await importExportService.checkNameConflict(candidate.validation.pack.name)
-        : null
-    importDialogOpen = true
+      importSource = 'folder'
+      importValidation = candidate.validation
+      importConflictPack =
+        candidate.validation.valid && candidate.validation.pack
+          ? await importExportService.checkNameConflict(candidate.validation.pack.name)
+          : null
+      importDialogOpen = true
+    } catch (e) {
+      // The folder picker itself can reject; only the read past it is handled in the service.
+      console.error('Folder import failed:', e)
+      ui.showToast(`Import failed: ${errMessage(e)}`, 'error')
+    }
   }
 
   async function handleImportPack() {

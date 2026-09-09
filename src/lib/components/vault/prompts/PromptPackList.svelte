@@ -159,6 +159,10 @@
       }
 
       await openUpdateConfirmation(pack, candidate.validation)
+    } catch (e) {
+      // The folder picker itself can reject; only the read past it is handled in the service.
+      console.error('Folder update failed:', e)
+      ui.showToast(`Update failed: ${errMessage(e)}`, 'error')
     } finally {
       directoryBusy = false
     }
