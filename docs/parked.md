@@ -530,6 +530,59 @@ in practice.
 
 ### Deferred design sessions
 
+#### Chunking long embedded text
+
+The embedder truncates silently at the model's input window
+([retrieval.md → What gets embedded per type](./memory/retrieval.md#what-gets-embedded-per-type)),
+so a lore body past that ceiling is unretrievable and stays that way.
+Two halves that ship together: **chunk**, so long text is embedded at
+all, and **steer**, so the user learns they are over the line before
+writing past it rather than never.
+
+Deferred because the steering half needs the embedder settings surface
+that [model-management.md → Open items](./memory/model-management.md#open-items)
+still lists as unbuilt. Revisit when the per-story embedding provider
+surface lands.
+
+**Spine the session starts from:**
+
+- **Chunking is a corpus change, not a query change.** The query stack
+  is untouched — Q1 through Q4 embed the same texts and issue the same
+  round trips. What moves is candidate identity: vec0 rows are keyed
+  one per source row today, so a chunked corpus needs a collapse step
+  from chunk hits back to a parent, scored by max over its chunks.
+- **`KNN_K` and the redundancy metric are the real cost.** `KNN_K` is
+  200 distinct rows per query today; over chunks it becomes 200
+  fragments, and one long entry can occupy many of them. Chunks of a
+  single parent are near-duplicates by construction, so `REDUNDANCY_K`
+  and MMR would read one long document as a redundant cluster and
+  diversify away from it — changing ranking for short documents too,
+  which is the part least likely to land right first try.
+- **The splitter joins the cache key.** `source_hash` goes per chunk,
+  so retuning chunk size or overlap re-embeds the whole corpus. The
+  swap engine's staging counts and the drain worker's batch size both
+  assume rows track source rows.
+- **Injection is untouched.** The seated row still carries its full
+  text into the prompt, so chunking buys findability without moving
+  the token budget.
+- **Local can count exactly; remote cannot.** The real tokenizer lives
+  in Electron main and in the native ORT bundle, so an exact count
+  needs a bridge method that the embedder bridge does not expose yet.
+  `countTokens` is not a substitute: it is `o200k_base`, a different
+  tokenizer family from the WordPiece and SentencePiece models in the
+  catalog, and its own note puts non-Latin about 30% low — it would
+  under-warn exactly the multilingual users EmbeddingGemma exists for.
+- **No provider advertises its limit.** The OpenAI-compatible
+  `/v1/models` response carries only id, object, created and owned_by,
+  and `usage.prompt_tokens` reports what a successful call spent
+  rather than the ceiling. Backend-specific probes exist but sniffing
+  them is its own surface, so the design should assume a manual
+  per-provider limit in settings as the fallback.
+- **The catalog does not carry the window.** `model_max_length` is
+  read from the installed `tokenizer_config.json`, but the model
+  picker needs it before install, so it belongs in
+  `catalog-data.json`.
+
 #### Reader-composer swipes — alternate takes per turn
 
 A **swipe** keeps multiple AI generations for one turn and lets the

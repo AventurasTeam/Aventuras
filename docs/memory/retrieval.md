@@ -177,6 +177,27 @@ mutations affect retrieval via the structural floor (active+in-scene
 short-circuit) and via the entity's role in scene digests, not via the
 entity embedding itself.
 
+**Every embedder has a finite input window, and past it the text is
+gone rather than diminished.** Both local runtimes truncate at the
+model's own `model_max_length` — 512 tokens on MiniLM-L6, the mobile
+default, 2048 on EmbeddingGemma — and neither reports having done it.
+The vector of an over-long field is indistinguishable from the vector
+of the same field with its tail deleted, so nothing past the cut is
+reachable by any query. `source_hash` still covers the whole field, so
+revalidation reads the row as fresh and never re-embeds it: the loss
+holds for as long as the text is unchanged. A provider backend has no
+discoverable limit at all, so it either rejects the request — a
+blocking embed failure, per [Compute lifecycle](#compute-lifecycle) —
+or truncates exactly as local does, and which one it does is a
+property of the backend rather than of the API.
+
+The app's own writers are bounded so they cannot reach that ceiling:
+the classifier clamps the fields it emits, in `lib/classifier/plan.ts`.
+User-authored lore is deliberately not bounded — a long body is the
+feature, not a defect — which is why making it retrievable is a
+[deferred design session](../parked.md#chunking-long-embedded-text)
+rather than a cap.
+
 ### Compute lifecycle
 
 **Sync-before-read contract.** vec0 is guaranteed consistent with
@@ -798,12 +819,13 @@ story's own cast and thread counts rather than by anything a model or a
 user chose.
 
 Neither exemption says the slots are unbounded in practice. What
-actually bounds them is whatever the configured embedder does with an
-oversized input, which differs by backend and is set nowhere: the local
-runtime truncates at the tokenizer's own limit, and a provider may
-reject the request outright — which
-[Compute lifecycle](#compute-lifecycle) makes a blocking failure.
-Bounding that is an embedder-side contract, not a query-stack cap.
+actually bounds them is the embedder's own input window: an oversized
+query is truncated or rejected exactly as an oversized document is
+([What gets embedded per type](#what-gets-embedded-per-type)). A
+truncated query is the milder half of that — it still retrieves,
+against a prefix of what the user wrote rather than against nothing —
+but it is no more reported than the document case. Bounding it is an
+embedder-side contract, not a query-stack cap.
 
 ### Q2: Structural digest
 
