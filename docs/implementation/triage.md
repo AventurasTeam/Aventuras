@@ -61,21 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   accumulate; the answer may be that no automatic drop is wanted and the
   number stays diagnostic.
 
-- **Q1 and Q2 carry no length cap, and Q1 is the slot a user can blow
-  up on purpose.**
-  [`retrieval.md → Q3`](../memory/retrieval.md#q3-piggyback-summary) and
-  [`Q4`](../memory/retrieval.md#q4-classifier-emitted-queries) now share
-  one 200-char cap, applied at query build. Q1 is `userAction` trimmed
-  and nothing more, with no length limit on the composer that produces
-  it; Q2's structural digest grows with scene-entity and thread count.
-  Both are therefore still cut by the local tokenizer's `truncation:
-true` (`lib/embedder/local/runtime.native.ts`) at a length nobody
-  chose — the same silent limit the Q3 cap was added to replace. Q1 is
-  the highest-weighted slot, so a pasted wall of text degrades the turn
-  it was meant to steer. Unowned: capping user input is a composer
-  decision, capping the digest is a retrieval one, and neither has a
-  slice.
-
 - **Nothing links a new required settings key to its backfill
   migration.** Settings writes are key-scoped `json_set`
   (`lib/db/stories/settings-ops.ts`), so a key added to

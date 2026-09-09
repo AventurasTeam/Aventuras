@@ -785,6 +785,26 @@ The user's action text for the current turn. Always available
 (retrieval runs after the Pre phase commits the user-action delta).
 Short, signal-dense, embeds fast.
 
+**Uncapped, and Q2 with it.** The 200-character cap that
+[Q3](#q3-piggyback-summary) and [Q4](#q4-classifier-emitted-queries)
+share is an editorial bound on model output: a generated line longer
+than that is a model misbehaving, so cutting it costs nothing. Q1 is
+the user's own prose, where length is intent, and it carries the
+heaviest weight in [the blend](#blending--weighted-average) — the same
+cap here would discard more of a long deliberate action than any limit
+downstream of it does. Q2 is exempt for the mirror-image reason: it is
+rendered from structural fields, so its length is bounded by the
+story's own cast and thread counts rather than by anything a model or a
+user chose.
+
+Neither exemption says the slots are unbounded in practice. What
+actually bounds them is whatever the configured embedder does with an
+oversized input, which differs by backend and is set nowhere: the local
+runtime truncates at the tokenizer's own limit, and a provider may
+reject the request outright — which
+[Compute lifecycle](#compute-lifecycle) makes a blocking failure.
+Bounding that is an embedder-side contract, not a query-stack cap.
+
 ### Q2: Structural digest
 
 Code-template floor, structural fields only. **Every line is
@@ -891,9 +911,9 @@ Three degenerate emissions are closed before embedding: identical
 strings are deduplicated (three copies would split the pooled weight
 evenly and cost triple the KNN for one signal), empty strings are
 filtered, and an oversized string is capped at 200 characters rather
-than left to the [truncation contract](#truncation-contract) — the same
-constant as [Q3](#q3-piggyback-summary), which is the slot that shares
-it.
+than left to whatever the embedder does with an oversized input — the
+same constant as [Q3](#q3-piggyback-summary), which is the slot that
+shares it.
 
 **Storage.** `story_entries.metadata.retrievalQueries`, capped at
 three, excluded from `stateReport`, and **not inherited** — a query

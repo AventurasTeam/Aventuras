@@ -32,7 +32,7 @@ export const QUERY_SLOT_OF_SOURCE = {
 /** retrieval.md → Q4: capped at three, and the cap is a cost decision. */
 export const MAX_EMITTED_QUERIES = 3
 /**
- * retrieval.md → Q3/Q4 share this cap; Q1/Q2 are deliberately exempt. Query-build only —
+ * retrieval.md → Q1 records why Q1/Q2 are exempt from this. Query-build only —
  * persisted `metadata.summary`/`retrievalQueries` stay uncapped: the summary is reader-visible.
  */
 const MAX_LLM_QUERY_CHARS = 200
