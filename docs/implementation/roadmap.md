@@ -612,6 +612,24 @@ verified against the code first. Resolve with the slice each names.
   widening to any delta anchored to a kept entry, since step 3's
   exclusion is already source-blind. Surfaced reviewing the content-edit
   invalidation scope (2026-09-05).
+- **M6.3 — The composer draft will carry across an in-reader branch
+  switch.** `Composer` (`app/reader-composer/[branchId].tsx`) takes no
+  `key={branchId}`, and the branch-change effect in the same file clears
+  `streamBufferRef`, `streaming`, `hasOlder` and `lastSubmission` while
+  leaving the draft alone — the comment on `lastSubmission` states the
+  reason the draft wants the same treatment, that carrying it across
+  offers the previous branch's text to this branch. Unreachable today:
+  the only two entries to the reader are a push from the story list and
+  a `replace` from the wizard, so `branchId` never changes under a
+  mounted route, and the effect exists for the picker rather than for
+  anything shipped. The picker is what arms it, and it arms a second
+  path with it —
+  [failed-turn text custody](../ui/screens/reader-composer/reader-composer.md#custody-of-the-turns-text)
+  now hands a destroyed failure entry's submission to that same draft.
+  Either key the composer on `branchId` or clear the draft in the
+  existing effect; the second keeps the mount stable for the keyboard
+  handling around it. Surfaced resolving the failed-turn custody
+  followup (2026-09-09).
 
 **Gates.** M5 (chapter-close writes that branches must respect
 need to exist first).
