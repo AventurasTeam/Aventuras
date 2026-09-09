@@ -1225,6 +1225,34 @@ directly and routes to the recovery-failure policy above). The
 return value is the delta count so callers can distinguish a
 pre-first-delta zero-delta case from a real recovery.
 
+**Undoing a `create` is a bare row delete, and consults no cascade.**
+A domain may register a cascade hook for its child rows, but that hook
+is **delete-op-only**: it replays a forward `delete`, so the undo of a
+`create` and the redo of a `delete` are the only arms that may read it.
+Reversing a `create` deliberately does not, and the reason is that the
+child rows are never the engine's to find. Under the actionId scope
+they are already in the set — every write a run makes shares the run's
+`actionId`, so a child's own `create` delta reverses itself — and an
+engine cascade on top would delete the same rows twice and emit
+duplicate store patches for them.
+
+**An entry-scoped reversal owes the closure by hand.** Selecting deltas
+by `entryId` rather than by `actionId` breaks the guarantee above,
+because a child row does not have to share its parent's anchor —
+awareness anchors to the turn that narrated the learning, which can sit
+either side of the happening's own provenance entry
+([`classifier.md → Provenance attribution`](./memory/classifier.md#provenance-attribution)).
+Reversing by anchor alone therefore deletes a happening and leaves its
+awareness rows pointing at nothing. The caller must widen its own
+selection to the child rows' deltas, which is also why the engine hook
+would not serve: the closure has to gather **deltas**, not rows, so
+they are pruned from the log with the parent's. A cascade that deleted
+the rows would leave their `create` deltas behind, and a later redo
+would re-insert children under a parent that is gone.
+`resolveClassifierFactDeltas` (`lib/actions/story-entries/classifier-facts.ts`)
+is the shipped instance; a second entry-scoped caller inherits the same
+obligation.
+
 Abort is conceptually identical to user CTRL-Z — same
 `undo_payload` primitive, same reverse-replay path. Whether the
 delta rows themselves are deleted or marked-reversed after replay

@@ -25,8 +25,14 @@ export type CascadeRestore = (undoPayload: Record<string, unknown>) => {
   cascadeKeys: string[]
 }
 
-// Replays the forward delete's cascade. Returns the child rows alongside the ops
-// so the caller can emit matching store patches.
+/**
+ * Replays the forward delete's cascade. Returns the child rows alongside the ops
+ * so the caller can emit matching store patches.
+ *
+ * **Delete-op-only.** Reversing a `create` must not read this — see
+ * `docs/generation-pipeline.md` → Reverse-replay for why the children are not
+ * the engine's to find there.
+ */
 export type CascadeDeleteOps = (
   branchId: string,
   targetId: string,

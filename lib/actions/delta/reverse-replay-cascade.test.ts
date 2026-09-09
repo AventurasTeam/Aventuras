@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 import { sqliteTable, text } from 'drizzle-orm/sqlite-core'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { branches, entities, stories, type NewEntity } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
@@ -30,6 +30,7 @@ const KNIGHT: NewEntity = {
 }
 
 async function setup() {
+  const cascadeDeleteOps = vi.fn(async () => ({ ops: [], children: {} }))
   // vitest.setup.ts registered the real domains process-globally; reset so the
   // fixture domain lands in a registry holding only what this file needs.
   __resetRegistry()
@@ -58,9 +59,10 @@ async function setup() {
       ],
       cascadeKeys: ['entityChildren'],
     }),
+    cascadeDeleteOps,
   })
 
-  return { db, ctx: { db, runInTransaction } }
+  return { db, ctx: { db, runInTransaction }, cascadeDeleteOps }
 }
 
 describe('reverse-replay of a cascade whose children are embeddable', () => {
@@ -98,5 +100,48 @@ describe('reverse-replay of a cascade whose children are embeddable', () => {
       .where(and(eq(entities.branchId, 'b1'), eq(entities.id, 'char_1')))
     expect(row.name).toBe('Kael')
     expect(row.embeddingStale).toBe(1)
+  })
+})
+
+// generation-pipeline.md → Reverse-replay: the hook is delete-op-only. Undoing a
+// create must leave the children to their own deltas, or to an entry-scoped
+// caller's hand-built closure.
+describe('reverse-replay of a create on a domain that registers a delete cascade', () => {
+  it('deletes the parent without consulting the cascade hook', async () => {
+    const { db, ctx, cascadeDeleteOps } = await setup()
+
+    await db.insert(cascadeParents).values({ id: 'p1', branchId: 'b1' })
+    await db.insert(entities).values(KNIGHT)
+
+    await reverseAndPruneDeltaRows(
+      [
+        {
+          id: 'delta_1',
+          branchId: 'b1',
+          entryId: null,
+          actionId: 'act_cascade',
+          logPosition: 1,
+          source: 'user_edit',
+          targetTable: 'cascade_parents',
+          targetId: 'p1',
+          op: 'create',
+          undoPayload: null,
+          encodingVersion: 1,
+          createdAt: 1,
+        },
+      ],
+      ctx,
+    )
+
+    expect(cascadeDeleteOps).not.toHaveBeenCalled()
+    const parents = await db.select().from(cascadeParents).where(eq(cascadeParents.id, 'p1'))
+    expect(parents).toHaveLength(0)
+    // Untouched on purpose: a real actionId-scoped set carries this row's own
+    // create delta, and reversing that is what takes it down.
+    const children = await db
+      .select()
+      .from(entities)
+      .where(and(eq(entities.branchId, 'b1'), eq(entities.id, 'char_1')))
+    expect(children).toHaveLength(1)
   })
 })
