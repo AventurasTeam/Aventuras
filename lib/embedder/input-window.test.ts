@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { ASSUMED_PROVIDER_MAX_INPUT_TOKENS, embedderInputWindow } from './input-window'
+import {
+  ASSUMED_PROVIDER_MAX_INPUT_TOKENS,
+  embedderInputWindow,
+  inputPressure,
+} from './input-window'
 import type { EmbedderConfig } from './types'
 
 const local = (modelId: string): EmbedderConfig => ({ backend: 'local', modelId, dim: 384 })
@@ -51,5 +55,35 @@ describe('embedderInputWindow', () => {
     expect(
       embedderInputWindow(provider, { maxInputTokens: ASSUMED_PROVIDER_MAX_INPUT_TOKENS }),
     ).toEqual({ tokens: 8192, source: 'configured' })
+  })
+})
+
+describe('inputPressure', () => {
+  const window = (tokens: number | null) => ({ tokens, source: 'catalog' as const })
+
+  it('stays quiet well under the window', () => {
+    expect(inputPressure(100, window(512))).toBe('ok')
+  })
+
+  it('turns near at three quarters', () => {
+    expect(inputPressure(384, window(512))).toBe('near')
+  })
+
+  it('is still quiet one token below three quarters', () => {
+    expect(inputPressure(383, window(512))).toBe('ok')
+  })
+
+  it('is near, not over, exactly on the window', () => {
+    expect(inputPressure(512, window(512))).toBe('near')
+  })
+
+  it('turns over one token past the window', () => {
+    expect(inputPressure(513, window(512))).toBe('over')
+  })
+
+  // A custom import establishes no ceiling; warning against one nobody set is worse
+  // than silence, and the embed reports a real cut regardless.
+  it('stays quiet when the window is unknown, however long the text', () => {
+    expect(inputPressure(99_999, { tokens: null, source: 'unknown' })).toBe('ok')
   })
 })
