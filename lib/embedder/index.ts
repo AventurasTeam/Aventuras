@@ -18,6 +18,9 @@ export type { EmbedderAppDefaults, EmbedderConfigResolution } from './resolve-co
 export { createDrainController } from './drain'
 export type { DrainDeps } from './drain'
 
+export { ASSUMED_PROVIDER_MAX_INPUT_TOKENS, embedderInputWindow } from './input-window'
+export type { InputWindow, InputWindowSource } from './input-window'
+
 export { resolveEmbedderGate } from './gate'
 export type { EmbedderGateResult } from './gate'
 

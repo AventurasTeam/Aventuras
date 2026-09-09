@@ -655,15 +655,16 @@ stories.settings.effectiveDim?: number
 
 #### Capability flags — provider-side
 
-The provider-model capability JSON gains two fields:
+The provider-model capability JSON carries:
 
 ```ts
 app_settings.providers[].cachedModels[].capabilities = {
   reasoning?: boolean,
   structuredOutput?: boolean,
   embeddingDim?: number,             // native output dimension learned by a probe
-  matryoshkaSupported?: boolean,    // NEW
-  matryoshkaDims?: number[],        // NEW; curated ladder, e.g. [256, 512, 1024, 1536, 2048, 3072]
+  matryoshkaSupported?: boolean,
+  matryoshkaDims?: number[],        // curated ladder, e.g. [256, 512, 1024, 1536, 2048, 3072]
+  maxInputTokens?: number,          // longest accepted input; user-supplied, never detected
 }
 ```
 
@@ -683,6 +684,17 @@ Settings · Providers · Models — same pattern as
 declare is a power-user assertion: the system honors it, and
 quality is the user's problem if the model wasn't actually
 trained for it.
+
+**`maxInputTokens` is the exception to detection.** Nothing in the
+OpenAI-compatible surface reports it: `/v1/models` carries id, object,
+created and owned_by, and `usage.prompt_tokens` prices a call that has
+already succeeded. So the field is user-supplied only, and its absence
+means unestablished rather than unlimited. Until it is set,
+`embedderInputWindow` answers with an assumption — 8192, matching the
+dominant hosted models — and labels it `assumed`, which a surface must
+not render as the endpoint's own answer. A local model's window needs
+no such guess: it comes from the catalog, and an uncatalogued custom
+import stays `unknown` rather than inheriting a ceiling nobody set.
 
 `matryoshkaDims` is the **curated** ladder — the dims the
 provider explicitly endorses. The story-creation picker lists
