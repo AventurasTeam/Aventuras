@@ -9,6 +9,9 @@
  * Release has exactly one owner: the holder that acquired it. Stop registers a rewind here
  * and waits for it, rather than releasing, which is what keeps the two from racing.
  *
+ * Carries the story as well as the branch: two stories' main branches are both `null`, so a
+ * branch alone cannot tell a write meant for one from a write meant for the other.
+ *
  * A leaf module rather than part of the rune store, so its ordering can be tested.
  */
 export class GenerationLease {
@@ -17,6 +20,7 @@ export class GenerationLease {
   private finished = false
 
   constructor(
+    readonly storyId: string,
     readonly branchId: string | null,
     private readonly onRelease: () => void,
   ) {}

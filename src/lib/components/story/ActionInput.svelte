@@ -708,7 +708,7 @@
           narrationEntry = await story.addEntry(
             'narration',
             fullResponse,
-            leasedBranchId,
+            lease,
             generationMeta,
             fullReasoning || undefined,
             narrationEntryId,
@@ -801,7 +801,7 @@
 
       if (!fullResponse.trim()) {
         const errorMessage = 'The AI returned an empty response after 3 attempts. Please try again.'
-        const errorEntry = await story.addEntry('system', errorMessage, leasedBranchId)
+        const errorEntry = await story.addEntry('system', errorMessage, lease)
         ui.setGenerationError({
           message: errorMessage,
           errorEntryId: errorEntry.id,
@@ -857,11 +857,7 @@
       const errorMessage = ui.wasBackgroundedDuringGeneration
         ? `Generation may have been interrupted while the app was in the background. ${baseMessage}`
         : baseMessage
-      const errorEntry = await story.addEntry(
-        'system',
-        `Generation failed: ${errorMessage}`,
-        leasedBranchId,
-      )
+      const errorEntry = await story.addEntry('system', `Generation failed: ${errorMessage}`, lease)
       ui.setGenerationError({
         message: errorMessage,
         errorEntryId: errorEntry.id,
@@ -1040,6 +1036,10 @@
     try {
       lease = story.acquireGenerationLease()
     } catch (error) {
+      // The box was cleared above on the assumption this would go ahead. Give the text back
+      // rather than making the reader retype it.
+      inputValue = rawInput
+      isRawActionChoice = wasRawActionChoice
       ui.showToast(errMessage(error), 'error')
       return
     }
@@ -1068,7 +1068,7 @@
         timing: inputTranslation,
       } = await translateUserInput(content, settings.translationSettings)
 
-      const userActionEntry = await story.addEntry('user_action', promptContent, lease.branchId)
+      const userActionEntry = await story.addEntry('user_action', promptContent, lease)
 
       if (originalInput) {
         await database.updateStoryEntry(userActionEntry.id, { originalInput })
@@ -1327,7 +1327,7 @@
         originalInput,
         timing: inputTranslation,
       } = await translateUserInput(backup.userActionContent, settings.translationSettings)
-      const userActionEntry = await story.addEntry('user_action', promptContent, lease.branchId)
+      const userActionEntry = await story.addEntry('user_action', promptContent, lease)
 
       if (originalInput) {
         await database.updateStoryEntry(userActionEntry.id, { originalInput })

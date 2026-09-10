@@ -14,7 +14,7 @@ function deferred<T = void>() {
 describe('GenerationLease', () => {
   it('releases through its holder when nothing was deferred', async () => {
     const onRelease = vi.fn()
-    const lease = new GenerationLease('branch-a', onRelease)
+    const lease = new GenerationLease('story-1', 'branch-a', onRelease)
 
     expect(lease.branchId).toBe('branch-a')
     expect(onRelease).not.toHaveBeenCalled()
@@ -26,12 +26,21 @@ describe('GenerationLease', () => {
   })
 
   it('carries a null branch for the main branch without conflating it', () => {
-    expect(new GenerationLease(null, vi.fn()).branchId).toBeNull()
+    expect(new GenerationLease('story-1', null, vi.fn()).branchId).toBeNull()
+  })
+
+  it('carries the story too, so two stories on main are distinguishable', () => {
+    const a = new GenerationLease('story-1', null, vi.fn())
+    const b = new GenerationLease('story-2', null, vi.fn())
+
+    // Both are on main, so the branch alone says nothing about which story a write belongs to.
+    expect(a.branchId).toBe(b.branchId)
+    expect(a.storyId).not.toBe(b.storyId)
   })
 
   it('runs a deferred restore before releasing, never after', async () => {
     const order: string[] = []
-    const lease = new GenerationLease(null, () => order.push('release'))
+    const lease = new GenerationLease('story-1', null, () => order.push('release'))
 
     lease.deferRestore(async () => {
       order.push('restore')
@@ -43,7 +52,7 @@ describe('GenerationLease', () => {
 
   it('does not release while a deferred restore is still running', async () => {
     const onRelease = vi.fn()
-    const lease = new GenerationLease(null, onRelease)
+    const lease = new GenerationLease('story-1', null, onRelease)
     const restoring = deferred()
 
     lease.deferRestore(() => restoring.promise)
@@ -58,7 +67,7 @@ describe('GenerationLease', () => {
   })
 
   it('settles the waiter once the deferred restore has run', async () => {
-    const lease = new GenerationLease(null, vi.fn())
+    const lease = new GenerationLease('story-1', null, vi.fn())
     const settled = lease.deferRestore(async () => {})
     expect(settled).not.toBeNull()
 
@@ -68,7 +77,7 @@ describe('GenerationLease', () => {
 
   it('releases even when the deferred restore throws, and reports it to the waiter', async () => {
     const onRelease = vi.fn()
-    const lease = new GenerationLease(null, onRelease)
+    const lease = new GenerationLease('story-1', null, onRelease)
     const boom = new Error('restore refused')
 
     const settled = lease.deferRestore(async () => {
@@ -86,7 +95,7 @@ describe('GenerationLease', () => {
   it('is idempotent: a second finish neither re-releases nor re-runs the restore', async () => {
     const onRelease = vi.fn()
     const restore = vi.fn(async () => {})
-    const lease = new GenerationLease(null, onRelease)
+    const lease = new GenerationLease('story-1', null, onRelease)
 
     lease.deferRestore(restore)
     await lease.finish()
@@ -97,7 +106,7 @@ describe('GenerationLease', () => {
   })
 
   it('refuses to defer onto a finished lease, so the caller acts directly instead', async () => {
-    const lease = new GenerationLease(null, vi.fn())
+    const lease = new GenerationLease('story-1', null, vi.fn())
     await lease.finish()
 
     const restore = vi.fn(async () => {})

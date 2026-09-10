@@ -866,7 +866,14 @@ class UIStore {
 
       // Only clear from database if explicitly requested (user dismissed or used retry)
       if (clearFromDb) {
-        this.queueRetryStateWrite(() => database.clearRetryState(scope.storyId), 'clear')
+        this.queueRetryStateWrite(async () => {
+          // One persisted slot per story, so clearing it for this branch would take whichever
+          // branch's state is actually in it. Clear only when it is this branch's.
+          const stored = (await database.getStory(scope.storyId))?.retryState
+          if (!stored || (stored.branchId ?? null) === scope.branchId) {
+            await database.clearRetryState(scope.storyId)
+          }
+        }, 'clear')
       }
     }
 

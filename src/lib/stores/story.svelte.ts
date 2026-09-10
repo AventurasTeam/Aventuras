@@ -842,7 +842,7 @@ class StoryStore {
   async addEntry(
     type: StoryEntry['type'],
     content: string,
-    expectedBranchId: string | null,
+    expected: { storyId: string; branchId: string | null },
     metadata?: StoryEntry['metadata'],
     reasoning?: string,
     id?: string,
@@ -852,12 +852,16 @@ class StoryStore {
     }
 
     // Unreachable while the generation lease holds the branch, and that is the point: it
-    // catches a switch path that bypasses the lease, rather than writing to whichever branch
-    // happens to be active on arrival.
-    if (expectedBranchId !== (this.currentStory.currentBranchId ?? null)) {
+    // catches a path that bypasses the lease, rather than writing to whatever happens to be
+    // open on arrival. The story is checked too — two stories' main branches are both null,
+    // so the branch alone would let a write cross between them.
+    if (
+      expected.storyId !== this.currentStory.id ||
+      expected.branchId !== (this.currentStory.currentBranchId ?? null)
+    ) {
       throw new Error(
-        'The active branch changed while a generation was writing to it. This is a bug in ' +
-          'the generation lease, not something you did — the entry was not saved.',
+        'The open story or branch changed while a generation was writing to it. This is a ' +
+          'bug in the generation lease, not something you did — the entry was not saved.',
       )
     }
 
@@ -3704,13 +3708,31 @@ class StoryStore {
     if (!this.currentStory) throw new Error('No story loaded')
 
     // Creating a branch ends by switching to it, so it is a branch switch with a write in
-    // front. Refused here rather than at that switch, which would leave the branch created
-    // and the story still on the old one.
+    // front. Refused before that write: the alternative leaves the branch created and the
+    // story still on the old one.
     if (this.generationLease) {
       throw new Error(
         'Cannot create a branch while a generation is in progress: creating one switches to it.',
       )
     }
+
+    // Counted as a pending switch for the whole operation, not just checked once at the top.
+    // The copy below is many awaits long, and a lease taken during it would strand the final
+    // switch with the branch already written.
+    this.pendingBranchSwitches++
+    try {
+      return await this.performBranchCreation(name, forkEntryId, checkpointId)
+    } finally {
+      this.pendingBranchSwitches--
+    }
+  }
+
+  private async performBranchCreation(
+    name: string,
+    forkEntryId: string,
+    checkpointId: string,
+  ): Promise<Branch> {
+    if (!this.currentStory) throw new Error('No story loaded')
 
     // Verify the checkpoint exists in memory
     const checkpoint = this.checkpoints.find((cp) => cp.id === checkpointId)
@@ -4043,11 +4065,15 @@ class StoryStore {
     }
     if (!this.currentStory) throw new Error('No story loaded')
 
-    const lease = new GenerationLease(this.currentStory.currentBranchId ?? null, () => {
-      if (this.generationLease === lease) this.generationLease = null
-    })
+    const lease = new GenerationLease(
+      this.currentStory.id,
+      this.currentStory.currentBranchId ?? null,
+      () => {
+        if (this.generationLease === lease) this.generationLease = null
+      },
+    )
     this.generationLease = lease
-    log('Generation lease acquired', { branchId: lease.branchId })
+    log('Generation lease acquired', { storyId: lease.storyId, branchId: lease.branchId })
     return lease
   }
 
