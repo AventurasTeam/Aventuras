@@ -48,8 +48,9 @@ const loadOrt = lazyModule(
 // a failed load evicts itself so a later call can retry after the user reinstalls.
 const bundles = new Map<string, Promise<SessionBundle>>()
 
-// Its own cache, not the bundle's tokenizer: a live token count must not build an
-// inference session, which is the ~300MB half. Same key, same staleness rule.
+// The tokenizer alone: a live token count must not build the inference session,
+// which is the ~300MB half. The bundle shares this entry — one tokenizer per model,
+// evicted with it under the same key.
 const tokenizerOnly = new Map<string, Promise<TokenizerFn>>()
 
 // A successfully-built session outlives the files it was built from, so a
@@ -138,7 +139,7 @@ async function buildBundle(modelId: string): Promise<SessionBundle> {
   const ort = await loadOrt()
   const [session, tokenizer] = await Promise.all([
     ort.InferenceSession.create(modelPath),
-    loadTokenizer(dir),
+    getTokenizerOnly(modelId),
   ])
   return { session, tokenizer, ort }
 }

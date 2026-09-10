@@ -24,6 +24,8 @@ const harness = vi.hoisted(() => ({
   fedTokens: [] as number[],
   // Session builds, so "counting tokens never loads the model" is assertable.
   sessionCreates: 0,
+  // Tokenizer constructions, so a second parse of tokenizer.json is assertable.
+  tokenizerBuilds: 0,
 }))
 
 vi.mock('expo-file-system', () => {
@@ -81,6 +83,7 @@ vi.mock('onnxruntime-react-native', () => ({
 vi.mock('@huggingface/transformers', () => ({
   // A transformers.js tokenizer instance is callable, so the constructor returns it.
   PreTrainedTokenizer: function PreTrainedTokenizer() {
+    harness.tokenizerBuilds++
     // Every token carries the text's code point, so the session mock can still
     // identify the text from data[0] however many tokens the text encodes to.
     const encode = (text: string, options?: { truncation?: boolean }) => {
@@ -123,6 +126,7 @@ beforeEach(() => {
   harness.maxLength = undefined
   harness.fedTokens = []
   harness.sessionCreates = 0
+  harness.tokenizerBuilds = 0
 })
 
 // Inline restore skips on a failed assertion and leaves logger spied for the rest of the file.
@@ -301,5 +305,17 @@ describe('countTokensLocal (native)', () => {
   it('answers an empty request without loading a tokenizer', async () => {
     await expect(countTokensLocal('model-count-empty', [])).resolves.toEqual([])
     expect(harness.sessionCreates).toBe(0)
+  })
+
+  // tokenizer.json is a 256k-vocab parse on the JS thread, and the counter reaches
+  // it first: a bundle that built its own would pay for the same model twice.
+  it('hands its tokenizer to the bundle the first embed builds', async () => {
+    harness.tokenLengths = { a: 3 }
+
+    await countTokensLocal('model-count-shared', ['a'])
+    await embedLocal('model-count-shared', ['a'])
+
+    expect(harness.tokenizerBuilds).toBe(1)
+    expect(harness.sessionCreates).toBe(1)
   })
 })
