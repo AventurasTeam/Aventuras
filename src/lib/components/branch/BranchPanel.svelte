@@ -17,6 +17,7 @@
   import { SvelteSet } from 'svelte/reactivity'
   import { untrack } from 'svelte'
   import { supportsHover } from '$lib/utils/platform'
+  import { errMessage } from '$lib/utils/error'
 
   // Track expanded branches in tree view
   let expandedBranches = $state<Set<string>>(new Set(['main']))
@@ -77,11 +78,17 @@
     return expandedBranches.has(branchId)
   }
 
+  // A generation writes against the branch loaded in memory, so it holds the branch until
+  // its last write lands. See docs/architecture/overview.md.
+  const switchingBlocked = $derived(story.isGenerationLeaseHeld)
+
   async function handleSwitchBranch(branchId: string | null) {
+    if (switchingBlocked) return
     try {
       await story.switchBranch(branchId)
     } catch (error) {
       console.error('Failed to switch branch:', error)
+      ui.showToast(errMessage(error), 'error')
     }
   }
 
@@ -341,14 +348,18 @@
     {@const children = getChildBranches(branch.id)}
     <div class="ml-4">
       <div
-        class="group flex cursor-pointer items-center gap-2 rounded-lg p-2 transition-colors {isCurrent(
-          branch.id,
-        )
+        class="group flex items-center gap-2 rounded-lg p-2 transition-colors {switchingBlocked
+          ? 'cursor-not-allowed opacity-50'
+          : 'cursor-pointer'} {isCurrent(branch.id)
           ? 'bg-accent-500/20 border-accent-500 border-l-2'
-          : 'hover:bg-surface-700/50'}"
+          : switchingBlocked
+            ? ''
+            : 'hover:bg-surface-700/50'}"
         onclick={() => handleSwitchBranch(branch.id)}
         role="button"
         tabindex="0"
+        aria-disabled={switchingBlocked}
+        title={switchingBlocked ? 'A generation is in progress' : undefined}
         onkeydown={(e) => e.key === 'Enter' && handleSwitchBranch(branch.id)}
       >
         {#if children.length > 0}
@@ -448,14 +459,18 @@
   <div class="space-y-1">
     <!-- Main Branch -->
     <div
-      class="flex cursor-pointer items-center gap-2 rounded-lg p-2 transition-colors {isCurrent(
-        null,
-      )
+      class="flex items-center gap-2 rounded-lg p-2 transition-colors {switchingBlocked
+        ? 'cursor-not-allowed opacity-50'
+        : 'cursor-pointer'} {isCurrent(null)
         ? 'bg-accent-500/20 border-accent-500 border-l-2'
-        : 'hover:bg-surface-700/50'}"
+        : switchingBlocked
+          ? ''
+          : 'hover:bg-surface-700/50'}"
       onclick={() => handleSwitchBranch(null)}
       role="button"
       tabindex="0"
+      aria-disabled={switchingBlocked}
+      title={switchingBlocked ? 'A generation is in progress' : undefined}
       onkeydown={(e) => e.key === 'Enter' && handleSwitchBranch(null)}
     >
       <button

@@ -79,6 +79,11 @@
   async function goToLandmark(landmark: Landmark) {
     const currentBranchId = story.currentStory?.currentBranchId ?? null
     if (landmarkNavigationMode === 'checkpoint-branch' && currentBranchId !== landmark.branchId) {
+      // Refused before the landing is claimed, so a blocked switch leaves no claim to clean up.
+      if (story.isGenerationLeaseHeld) {
+        ui.showToast('Cannot switch branches while a generation is in progress', 'error')
+        return
+      }
       // Claimed before the switch, because the event that triggers the story view's own
       // end-of-branch landing is emitted inside it.
       ui.claimBranchLanding(landmark.branchId)

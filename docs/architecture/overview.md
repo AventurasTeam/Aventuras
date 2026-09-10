@@ -86,7 +86,7 @@ The story is an append-only list of `StoryEntry` rows (`user_action`, `narration
   clearing the first. Both are gone from the schema.
 
   **Presence is reported, departure is inferred.** The classifier answers one question about the
-  cast — `scene.presentCharacterNames`, every *other* character in the scene at the end of the
+  cast — `scene.presentCharacterNames`, every _other_ character in the scene at the end of the
   passage; the protagonist is in every scene by definition and is added by the consumers — and
   `resolveCharacterPresence` (`services/generation/characterPresence.ts`) turns the complement into
   `inactive`. Asking a model to name thirty absent characters produces nothing; asking it to name
@@ -104,12 +104,22 @@ The story is an append-only list of `StoryEntry` rows (`user_action`, `narration
   survive an app restart or a story switch. A checkpoint is anchored to its `lastEntryId` and is
   deleted with that entry - in the same transaction, alongside the chapters and embedded images
   that reference it. It is the fork point a branch would be created from, so an orphaned one
-  yields a branch pointing at an entry the database no longer holds.
+  yields a branch pointing at an entry the database no longer holds. A retry backup is scoped to
+  a **branch** as well as a story: it records the branch it was taken on, is offered only there,
+  and is refused on any other. Positions are reused by sibling branches after a fork, so a
+  snapshot applied to the wrong branch deletes rows that merely share a number - and the
+  world-state restore deletes the active branch's rows and re-inserts the snapshot's under
+  _their_ branch id. The per-branch entity queries match `branch_id` exactly and never fall back
+  to inherited rows, so that leaves the active branch with none of its own whatever the
+  experimental settings say - main included, when the snapshot came from a branch. Lightweight
+  branches only decide how total it is: a pre-snapshot COW branch still resolves its ancestors'
+  entities, while snapshot isolation and the legacy per-branch load both leave the panels empty.
 - **Removing an entry a branch forks from is refused**, and the check runs before anything else
   the operation would rewind - a rollback, or the lorebook activation a retry restores - because
   a refusal raised afterwards would leave that half applied. Editing and deleting are refused the
   same way while a generation or a retry restore is running: the store throws, and the caller is
-  expected to say so rather than treat the untouched story as a completed edit.
+  expected to say so rather than treat the untouched story as a completed edit. **Switching
+  branches is refused on the same grounds**, for as long as a generation holds the branch.
 
 ## Generation Pipeline
 
@@ -136,6 +146,43 @@ which is what keeps them testable.
 
 Alongside the pipeline, `BackgroundTaskRunner` handles what happens _after_ a turn — the chapter
 threshold check, lore management and the style review — on its own dependency object.
+
+### The generation lease
+
+A generation is bound to the branch it started on, by a lease the initiating handler takes before
+its first read or write and gives up after its last one. There are four such handlers, all in
+`ActionInput.svelte`: `handleSubmit`, `handleRetryLastMessage`, `handleRegenerateNarration` and
+`handleRetry`. `generateResponse` takes the lease as a required parameter, so a fifth cannot be
+added without acquiring one.
+
+The lease and a branch switch are mutually exclusive in both directions: acquiring is refused while
+a switch is queued but unsettled, and `performBranchSwitch` refuses while a lease is held. That
+second check sits inside the queued body rather than at `switchBranch`'s entrance, because a switch
+accepted while idle reaches the front of the queue _after_ a generation may have begun.
+
+Two moments are distinct. **Drained** is when the generation's own writes have settled; **finished**
+is when a rewind deferred by Stop has run too, and only then is the branch given up. Stop registers
+its rewind on the lease and waits for it rather than releasing — aborting the request to the model
+is not the completion of the generation's writes, and an `applyClassificationResult` already entered
+keeps going regardless. One release owner throughout, so the rewind cannot race the writes it
+exists to reverse.
+
+**Why the switch is refused rather than the writes redirected.** `applyClassificationResult` reads
+the active branch and mutates the in-memory `characters`/`locations`/`items`/`storyBeats` arrays,
+which hold _that_ branch's view. Pointing it at another branch means decoupling "the branch being
+written" from "the branch loaded in memory" — an architectural change, not a parameter. Redirecting
+only the entries would be worse than redirecting nothing: the narration would land on the branch
+that asked for it while the classification accounting for it did not, leaving that branch holding an
+entry its world state does not know about.
+
+**When the restriction can be lifted.** Once world-state application takes the branch to write to as
+an argument instead of reading the active one, **and** `addEntry` redirects to the bound branch
+rather than asserting against it. Both, not either — the entry half alone produces exactly the
+mismatch described above. Branch-scoping `isGenerating`, so Stop and the streaming placeholder
+follow the generating branch, belongs to that work too; while the restriction stands the reader
+cannot reach another branch to see them. `addEntry`'s assertion is the tripwire in the meantime: if
+the exclusion is ever holed, a write lands as a thrown error rather than as a row on the wrong
+branch.
 
 ### Activity reporting
 

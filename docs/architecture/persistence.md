@@ -30,6 +30,14 @@ The database, the native layer that moves bytes around it, and the settings blob
   their rows through `SELECT id FROM stories WHERE pack_id = ?` rather than resolving the ids first:
   the batch is atomic, the round trip that fed it was not, and a story assigned to the pack in
   between kept a variable the pack no longer had.
+- **`stories.retry_state` is a JSON blob**, so fields are added inside it rather than by migration —
+  `embeddedImageIds`, `characterSnapshots`, `timeTracker` and now `branchId` all arrived that way.
+  `branchId` names the branch the snapshot was taken on, and a restore onto any other branch is
+  refused. State written before it was recorded cannot be attributed to a branch, and is **discarded
+  on load** rather than assumed to belong to main: the readers most likely to hold such state are
+  precisely those whose last generation was on a branch, and restoring one branch's snapshot onto
+  another deletes rows there. The cost is one lost cross-session retry per story; the next
+  generation records an attributable snapshot and the ability returns.
 
 ## The Native (Rust) Layer
 

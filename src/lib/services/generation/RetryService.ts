@@ -26,6 +26,8 @@ const log = createLogger('RetryService')
  */
 export interface RetryBackupData {
   storyId: string
+  /** The branch the snapshot was taken on. It may only be restored onto that branch. */
+  branchId: string | null
   timestamp: number
   entries: StoryEntry[]
   characters: Character[]
@@ -56,6 +58,7 @@ export interface RetryBackupData {
 export interface RetryStoreCallbacks {
   // Story store operations
   restoreFromRetryBackup: (backup: {
+    branchId: string | null
     entries: StoryEntry[]
     characters: Character[]
     locations: Location[]
@@ -111,12 +114,19 @@ export class RetryService {
   async restoreFromBackup(
     backup: RetryBackupData,
     callbacks: RetryStoreCallbacks,
+    activeBranchId: string | null,
   ): Promise<RestoreResult> {
     log('restoreFromBackup called', {
       hasFullState: backup.hasFullState,
       hasEntityIds: backup.hasEntityIds,
       entryCountBeforeAction: backup.entryCountBeforeAction,
     })
+
+    // Enforced here rather than only in preflight: this method is public, and a rewind
+    // reachable without the check is a rewind without the check. Positions are reused across
+    // sibling branches, so a foreign snapshot deletes rows that merely share a number.
+    const refusedForBranch = this.refuseForeignBranch(backup, activeBranchId)
+    if (refusedForBranch) return refusedForBranch
 
     try {
       if (backup.hasFullState) {
@@ -142,12 +152,35 @@ export class RetryService {
     }
   }
 
+  private refuseForeignBranch(
+    backup: RetryBackupData,
+    activeBranchId: string | null,
+  ): RestoreResult | null {
+    if ((backup.branchId ?? null) === (activeBranchId ?? null)) return null
+    log('Restore refused: snapshot belongs to another branch', {
+      snapshotBranchId: backup.branchId,
+      activeBranchId,
+    })
+    return {
+      success: false,
+      error:
+        'This snapshot was taken on another branch. Switch back to it to retry, or ' +
+        'regenerate the last response on this branch instead.',
+    }
+  }
+
   /**
    * Both entry points run this before they touch anything: the restore paths rewind lorebook
    * activation and clear the suggestions before they reach the entries, and a refusal that
    * surfaced later would leave all of that applied with nothing undone.
    */
-  private preflight(backup: RetryBackupData, callbacks: RetryStoreCallbacks): RestoreResult | null {
+  private preflight(
+    backup: RetryBackupData,
+    callbacks: RetryStoreCallbacks,
+    activeBranchId: string | null,
+  ): RestoreResult | null {
+    const refusedForBranch = this.refuseForeignBranch(backup, activeBranchId)
+    if (refusedForBranch) return refusedForBranch
     try {
       callbacks.assertEntriesRemovable(backup.entryCountBeforeAction)
       return null
@@ -174,6 +207,7 @@ export class RetryService {
 
     // Restore story state (this handles locking internally)
     await callbacks.restoreFromRetryBackup({
+      branchId: backup.branchId,
       entries: backup.entries,
       characters: backup.characters,
       locations: backup.locations,
@@ -251,10 +285,11 @@ export class RetryService {
       clearSuggestions: () => void
       clearActionChoices: () => void
     },
+    activeBranchId: string | null,
   ): Promise<RestoreResult> {
     log('handleStopGeneration called')
 
-    const refused = this.preflight(backup, callbacks)
+    const refused = this.preflight(backup, callbacks, activeBranchId)
     if (refused) return refused
 
     // Clear UI state first
@@ -266,7 +301,7 @@ export class RetryService {
     callbacks.setLastLorebookRetrieval(null)
 
     // Perform restore
-    return this.restoreFromBackup(backup, callbacks)
+    return this.restoreFromBackup(backup, callbacks, activeBranchId)
   }
 
   /**
@@ -280,13 +315,14 @@ export class RetryService {
       clearSuggestions: () => void
       clearActionChoices: () => void
     },
+    activeBranchId: string | null,
   ): Promise<RestoreResult> {
     log('handleRetryLastMessage called', {
       hasFullState: backup.hasFullState,
       entryCountBeforeAction: backup.entryCountBeforeAction,
     })
 
-    const refused = this.preflight(backup, callbacks)
+    const refused = this.preflight(backup, callbacks, activeBranchId)
     if (refused) return refused
 
     // Clear UI state
@@ -298,7 +334,7 @@ export class RetryService {
     callbacks.setLastLorebookRetrieval(null)
 
     // Perform restore
-    return this.restoreFromBackup(backup, callbacks)
+    return this.restoreFromBackup(backup, callbacks, activeBranchId)
   }
 }
 

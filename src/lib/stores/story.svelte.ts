@@ -58,6 +58,7 @@ import { sameEntityName } from '$lib/utils/text'
 import { grammarService } from '$lib/services/grammar'
 import { clearTier3SelectionCache } from '$lib/services/ai'
 import { clearImageMarkerCache } from '$lib/services/image'
+import { GenerationLease } from '$lib/utils/generationLease'
 
 const log = createLogger('StoryStore')
 
@@ -677,8 +678,8 @@ class StoryStore {
     // Clear stale lorebook retrieval from previous story to prevent cross-story contamination
     ui.setLastLorebookRetrieval(null)
 
-    // Set current story ID for retry backup tracking
-    ui.setCurrentRetryStoryId(storyId)
+    // Point retry tracking at this story and its active branch
+    ui.setCurrentRetryScope(storyId, story.currentBranchId ?? null)
 
     // Load retry state from DB if we don't have an in-memory backup for this story
     if (story.retryState) {
@@ -841,12 +842,23 @@ class StoryStore {
   async addEntry(
     type: StoryEntry['type'],
     content: string,
+    expectedBranchId: string | null,
     metadata?: StoryEntry['metadata'],
     reasoning?: string,
     id?: string,
   ): Promise<StoryEntry> {
     if (!this.currentStory) {
       throw new Error('No story loaded')
+    }
+
+    // Unreachable while the generation lease holds the branch, and that is the point: it
+    // catches a switch path that bypasses the lease, rather than writing to whichever branch
+    // happens to be active on arrival.
+    if (expectedBranchId !== (this.currentStory.currentBranchId ?? null)) {
+      throw new Error(
+        'The active branch changed while a generation was writing to it. This is a bug in ' +
+          'the generation lease, not something you did — the entry was not saved.',
+      )
     }
 
     // Count tokens for accurate auto-summarize threshold detection
@@ -3074,8 +3086,8 @@ class StoryStore {
     this.storyLoadSeq++
     this.resetStoryState()
 
-    // Clear current retry story ID (backups are kept per-story)
-    ui.setCurrentRetryStoryId(null)
+    // Clear the retry scope (backups are kept per story and branch)
+    ui.setCurrentRetryScope(null, null)
 
     // Clear all generation caches (style review, retrieval, lorebook debug)
     ui.clearGenerationCaches()
@@ -3990,6 +4002,50 @@ class StoryStore {
   private branchSwitchChain: Promise<unknown> = Promise.resolve()
   /** Sequence of the most recently requested switch; older queued ones are superseded. */
   private branchSwitchSeq = 0
+  /** Switches requested but not yet settled. A lease may not be taken against one. */
+  private pendingBranchSwitches = $state(0)
+
+  private generationLease = $state<GenerationLease | null>(null)
+
+  /** True while a generation holds the branch. Drives the switch affordances. */
+  get isGenerationLeaseHeld(): boolean {
+    return this.generationLease !== null
+  }
+
+  /**
+   * Claim the current branch for a generation, from before its first read or write until
+   * after its last one.
+   *
+   * A generation writes entries and world state against whichever branch is loaded in
+   * memory, so the branch must not move under it. `ui.isGenerating` cannot express that: it
+   * is set inside `generateResponse`, after the initiating handler has already taken a
+   * snapshot and written the user action.
+   *
+   * Refuses against an unsettled switch as well as a held lease — a switch accepted while
+   * idle lands after `setStoryCurrentBranch` resolves, which is after a generation could
+   * otherwise have begun.
+   */
+  acquireGenerationLease(): GenerationLease {
+    if (this.generationLease) {
+      throw new Error('A generation is already in progress')
+    }
+    if (this.pendingBranchSwitches > 0) {
+      throw new Error('A branch switch is still in progress')
+    }
+    if (!this.currentStory) throw new Error('No story loaded')
+
+    const lease = new GenerationLease(this.currentStory.currentBranchId ?? null, () => {
+      if (this.generationLease === lease) this.generationLease = null
+    })
+    this.generationLease = lease
+    log('Generation lease acquired', { branchId: lease.branchId })
+    return lease
+  }
+
+  /** The lease a stop or a late write must check itself against, if one is held. */
+  get currentGenerationLease(): GenerationLease | null {
+    return this.generationLease
+  }
 
   /**
    * Switch to a different branch.
@@ -4012,11 +4068,18 @@ class StoryStore {
     // of the queue the user may have opened a different story, and a null branchId
     // would sail past the branch validation and write onto that story instead.
     const storyId = this.currentStory?.id ?? null
-    const run = this.branchSwitchChain.then(
-      () => this.performBranchSwitch(branchId, seq, storyId),
-      // Run regardless of whether the previous switch settled or threw
-      () => this.performBranchSwitch(branchId, seq, storyId),
-    )
+    // Counted from the request, not from the front of the queue: a lease taken while this
+    // one is still queued would be bound to a branch that is about to move.
+    this.pendingBranchSwitches++
+    const run = this.branchSwitchChain
+      .then(
+        () => this.performBranchSwitch(branchId, seq, storyId),
+        // Run regardless of whether the previous switch settled or threw
+        () => this.performBranchSwitch(branchId, seq, storyId),
+      )
+      .finally(() => {
+        this.pendingBranchSwitches--
+      })
     // Keep the chain resolved so one failure can't poison later switches; the
     // caller still observes the error through `run`.
     this.branchSwitchChain = run.catch(() => {})
@@ -4036,6 +4099,14 @@ class StoryStore {
     // The story changed under a queued switch; it no longer refers to anything current
     if (this.currentStory?.id !== storyId) return
 
+    // Checked here rather than at switchBranch's entrance: a switch accepted while idle
+    // reaches this point after a generation has begun. Stands in for world-state application
+    // being unable to target a branch other than the one loaded — see "The generation lease"
+    // in docs/architecture/overview.md for why, and for when this can be lifted.
+    if (this.generationLease) {
+      throw new Error('Cannot switch branches while a generation is in progress')
+    }
+
     if (!this.currentStory) throw new Error('No story loaded')
 
     // Validate branch exists (if not null)
@@ -4047,6 +4118,9 @@ class StoryStore {
     // Update story's current branch in database
     await database.setStoryCurrentBranch(this.currentStory.id, branchId)
     this.currentStory = { ...this.currentStory, currentBranchId: branchId }
+
+    // Follow the branch: each keeps its own snapshot, offered only on itself.
+    ui.setCurrentRetryScope(this.currentStory.id, branchId)
 
     // Reload entries from the database for the target branch
     await this.reloadEntriesForCurrentBranch()
@@ -4412,6 +4486,7 @@ class StoryStore {
    * and allow regeneration.
    */
   async restoreFromRetryBackup(backup: {
+    branchId: string | null
     entries: StoryEntry[]
     characters: Character[]
     locations: Location[]
@@ -4422,6 +4497,12 @@ class StoryStore {
     entryCountBeforeAction: number
   }): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
+
+    // Backstop for a caller that bypasses RetryService: this deletes the active branch's
+    // world state and re-inserts the snapshot's rows, which carry their own branch_id.
+    if ((backup.branchId ?? null) !== (this.currentStory.currentBranchId ?? null)) {
+      throw new Error('Cannot restore a retry backup taken on another branch')
+    }
 
     // Lock editing during retry restore to prevent race conditions
     this._isRetryInProgress = true

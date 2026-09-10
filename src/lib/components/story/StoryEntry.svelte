@@ -174,11 +174,14 @@
   })
 
   // Check if retry is available for this entry
+  // Branch as well as story: a snapshot taken elsewhere would be refused on restore, and
+  // offering it here hides the regenerate that does work on this branch.
   const canRetry = $derived(
     isLatestNarration &&
       ui.retryBackup &&
       story.currentStory &&
       ui.retryBackup.storyId === story.currentStory.id &&
+      (ui.retryBackup.branchId ?? null) === (story.currentStory.currentBranchId ?? null) &&
       !ui.isGenerating &&
       !ui.lastGenerationError,
   )
