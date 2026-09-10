@@ -104,8 +104,7 @@ describe('reverse-replay of a cascade whose children are embeddable', () => {
 })
 
 // generation-pipeline.md → Reverse-replay: the hook is delete-op-only. Undoing a
-// create must leave the children to their own deltas, or to an entry-scoped
-// caller's hand-built closure.
+// create leaves the children to their own deltas.
 describe('reverse-replay of a create on a domain that registers a delete cascade', () => {
   it('deletes the parent without consulting the cascade hook', async () => {
     const { db, ctx, cascadeDeleteOps } = await setup()
@@ -136,8 +135,7 @@ describe('reverse-replay of a create on a domain that registers a delete cascade
     expect(cascadeDeleteOps).not.toHaveBeenCalled()
     const parents = await db.select().from(cascadeParents).where(eq(cascadeParents.id, 'p1'))
     expect(parents).toHaveLength(0)
-    // Untouched on purpose: a real actionId-scoped set carries this row's own
-    // create delta, and reversing that is what takes it down.
+    // Untouched on purpose: a real actionId-scoped set carries this row's own delta.
     const children = await db
       .select()
       .from(entities)

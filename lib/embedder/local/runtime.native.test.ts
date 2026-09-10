@@ -56,9 +56,8 @@ vi.mock('onnxruntime-react-native', () => ({
           const text = String.fromCodePoint(Number(feeds.input_ids?.data[0] ?? 0))
           const width = harness.widths[text] ?? 2
           const direction = harness.directions[text] ?? Array.from({ length: width }, () => 0)
-          // One hidden row per fed token, all the same direction: mean-pooling any
-          // count of them returns that direction, so token length stays orthogonal
-          // to the vector assertions.
+          // One hidden row per fed token, all the same direction: mean-pooling any count
+          // returns that direction, keeping token length orthogonal to the vector assertions.
           const tokens = feeds.input_ids?.data.length ?? 1
           harness.fedTokens.push(tokens)
           return Promise.resolve({
@@ -253,8 +252,7 @@ describe('embedLocal (native) truncation reporting', () => {
     expect(result.truncated).toEqual([])
   })
 
-  // Reporting the loss is not a reason to feed the model an over-long tensor: the
-  // session must still receive the truncated encoding, not the one used to measure.
+  // The session must receive the truncated encoding, not the untruncated one used to measure.
   it('feeds the session the truncated encoding, not the measured one', async () => {
     harness.maxLength = 4
     harness.tokenLengths = { a: 9 }

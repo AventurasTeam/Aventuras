@@ -692,9 +692,8 @@ describe('entity keywords', () => {
   })
 })
 
-// The classifier is the only machine writer into an embedded column, and the
-// embedder drops anything past its window without a signal — so the planner is
-// where the app's own output stops being unbounded.
+// The classifier is the only machine writer into an embedded column and the embedder
+// drops anything past its window silently, so bounding has to happen in the planner.
 describe('embedded-column bounds', () => {
   const character = (name: string, description: string) => ({
     happenings: [],

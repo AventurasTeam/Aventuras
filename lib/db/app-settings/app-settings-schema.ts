@@ -25,10 +25,8 @@ export const providerCapabilitiesSchema = z.object({
   embedding: z.boolean().optional(),
   embeddingDim: z.number().int().positive().optional(),
   /**
-   * Longest input the embedding endpoint accepts, in tokens. Absent means never
-   * established — nothing in the OpenAI-compatible surface publishes it, so this
-   * is user-supplied rather than detected, and its absence is read as unknown
-   * instead of unlimited (lib/embedder → embedderInputWindow).
+   * Longest input the embedding endpoint accepts, in tokens. User-supplied: no OpenAI-compatible
+   * field publishes it. Absent means unknown, not unlimited (lib/embedder → embedderInputWindow).
    */
   maxInputTokens: z.number().int().positive().optional(),
 })

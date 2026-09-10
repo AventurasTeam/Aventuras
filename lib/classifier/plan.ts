@@ -32,22 +32,14 @@ export type PlanDeps = {
 
 const SOURCE = 'periodic_classifier' as const
 
-// Both fields of an embedded pair are composited as `${first} ${second}` before
-// embedding, so the pair has to clear the tightest catalog window — MiniLM-L6's
-// 512 tokens, the mobile default. At ~4 chars/token these cap a pair at ~330.
+// An embedded pair composites as `${first} ${second}` and must clear the tightest catalog
+// window: MiniLM-L6's 512 tokens (the mobile default), ~4 chars/token, so ~330 per pair.
 const MAX_EMBEDDED_NAME = 120
 const MAX_EMBEDDED_BODY = 1200
 
-/**
- * Bounds a classifier-written string before it lands in an embedded column.
- *
- * Past the embedder's own window the text is not merely diminished, it is absent
- * from the vector — while `sourceHash` still covers the whole string, so nothing
- * re-embeds it and nothing reports it. The bound cannot live in the schema as
- * `.max()`: a violation is a parse failure, and the retry re-reads the same prose,
- * so an over-long reply would fail the pass rather than shorten it. Clamped here
- * for the same reason the severity clamp is (schema.ts).
- */
+// Past the embedder's window the tail is absent from the vector while `sourceHash` still
+// covers the whole string, so nothing re-embeds or reports it. Not a schema `.max()` —
+// a violation is a parse failure and the retry re-reads the same prose (cf. schema.ts).
 function clampEmbedded(text: string, limit: number): string {
   if (text.length <= limit) return text
   // A lone surrogate half would be stored, hashed into sourceHash and rendered
@@ -60,14 +52,10 @@ function clampEmbedded(text: string, limit: number): string {
 /**
  * A candidate character as its row will store it.
  *
- * Layer B decides against the stored row — an exact name match and a cosine
- * between descriptions (reconcile.ts) — so a candidate reconciled unclamped is
- * measured against a text that will never exist. An unbounded name stops matching
- * the row it created, reintroducing the character on every later pass; an
- * unbounded description scores a namesake against prose the row drops, which can
- * carry a genuine match out of TAU_HIGH into the ambiguous band. Both bounds live
- * here together so the write path and the reconcile key cannot be given one and
- * not the other.
+ * Layer B decides against the stored row (reconcile.ts), so an unclamped candidate is
+ * measured against text that will never exist: an unbounded name stops matching the row
+ * it created, an unbounded description can carry a genuine match out of TAU_HIGH. Both
+ * bounds live here so write path and reconcile key cannot be given one without the other.
  */
 export function clampEmbeddedCharacter(candidate: { name: string; description: string }): {
   name: string

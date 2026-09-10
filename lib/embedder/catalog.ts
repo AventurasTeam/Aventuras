@@ -42,11 +42,9 @@ export const catalogModelEntrySchema = z
     size_bytes: z.number().int().positive(),
     dim: z.number().int().positive(),
     /**
-     * The tokenizer's `model_max_length`. Mirrored here rather than read from the
-     * installed `tokenizer_config.json` because the picker has to show it before
-     * anything is installed. Text past it is dropped at embed time and the vector
-     * cannot be told apart from one whose tail was never written
-     * (retrieval.md → What gets embedded per type).
+     * The tokenizer's `model_max_length`, mirrored here because the picker must show it before
+     * anything is installed. Text past it is dropped at embed time, and the vector can't be told
+     * apart from one whose tail was never written (retrieval.md → What gets embedded per type).
      */
     maxInputTokens: z.number().int().positive(),
     huggingfaceRevision: z.string(),

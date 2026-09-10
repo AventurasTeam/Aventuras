@@ -6,9 +6,8 @@ import type { EmbedderErrorEnvelope, EmbedderInstalled } from './types'
 
 type EmbeddingTensor = { tolist(): number[][]; dims: number[] }
 
-// The pipeline truncates to model_max_length internally and reports nothing, so
-// re-encoding untruncated is the only way to learn that a text was cut. Passing
-// truncation explicitly (rather than leaving it null) also keeps transformers.js
+// The pipeline truncates to model_max_length silently, so re-encoding untruncated is
+// the only way to learn a text was cut. Explicit truncation also keeps transformers.js
 // off its own console.warn branches.
 type PipelineTokenizer = ((
   text: string,
@@ -92,9 +91,8 @@ function getTokenizer(modelDir: string): Promise<PipelineTokenizer> {
 }
 
 /**
- * Exact token counts from the model's own tokenizer — the estimate a tiktoken
- * encoding gives is off by up to 3x on the scripts WordPiece fragments, so a
- * counter shown to the user has to come from here.
+ * Exact token counts from the model's own tokenizer — a tiktoken estimate is off by up
+ * to 3x on the fragments WordPiece produces, so a user-facing counter must come here.
  */
 export async function countTokens(args: {
   modelDir: string

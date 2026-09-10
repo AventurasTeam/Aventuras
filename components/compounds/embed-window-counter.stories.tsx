@@ -17,10 +17,8 @@ export default meta
 type Story = StoryObj<typeof EmbedWindowCounter>
 
 /**
- * Storybook configures no embedder, so there is no window to measure against and
- * nothing honest to say — the state every field opens in, and the one the reserved
- * row exists for. The row must still stand a line tall, or the field it sits under
- * shifts the moment a count arrives.
+ * No embedder in Storybook, so the counter says nothing — the state every field opens
+ * in. Its row must still stand a line tall, or the field shifts when a count arrives.
  */
 export const ReservedBeforeTheFirstCount: Story = {
   render: () => (
@@ -35,8 +33,7 @@ export const ReservedBeforeTheFirstCount: Story = {
   ),
   play: async () => {
     const counter = screen.getByTestId('counter-row')
-    // Pins the silent state: a Storybook that ever resolved an embedder would
-    // render a real count here and measure nothing about the empty branch.
+    // Pins the silent branch: an embedder resolving here would measure nothing.
     expect(counter.textContent?.trim()).toBe('')
 
     const reserved = counter.getBoundingClientRect().height

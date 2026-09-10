@@ -34,8 +34,7 @@ describe('planSubmissionHandback', () => {
     expect(planSubmissionHandback(undefined, EMPTY)).toEqual({ action: 'none' })
   })
 
-  // A whitespace submission cannot come through the composer's send gate, so
-  // restoring one would raise a recovery notice over an empty restore.
+  // The send gate blocks whitespace, and restoring it would announce an empty recovery.
   it.each(['', '   ', '\n'])('owes nothing for a %j submission', (content) => {
     expect(planSubmissionHandback({ content }, EMPTY)).toEqual({ action: 'none' })
   })
@@ -67,8 +66,7 @@ describe('planSubmissionHandback', () => {
     })
   })
 
-  // Whitespace reads as empty here for the same reason isDraftEmpty says so:
-  // a stray space must not cost the user the only copy of their turn.
+  // A stray space must not cost the user the only copy of their turn.
   it('treats a whitespace-only draft as room to restore into', () => {
     expect(planSubmissionHandback({ content: 'I draw the blade' }, { text: '  \n' })).toEqual({
       action: 'restore',

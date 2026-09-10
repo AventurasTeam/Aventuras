@@ -320,16 +320,10 @@ describe('isStoryMode', () => {
 })
 
 /**
- * Every key here is required: neither `.default()` nor `.optional()`, so a story
- * whose stored blob predates it fails `storySettingsSchema.parse` and will not
- * open. Key-scoped `json_set` writes (settings-ops.ts) never reach an existing
- * blob, so each one owes a backfill migration — 0007, 0011 and 0013 are the
- * three added since the pattern was noticed; the rest shipped with 0000, before
- * any story existed to upgrade.
- *
- * Adding a key to this list is the moment to write that migration. Making the
- * key `.optional()` or `.default()` instead is the other legal answer, and needs
- * no entry here.
+ * Required = no `.default()`/`.optional()`: a blob predating a key fails parse and won't open.
+ * Key-scoped `json_set` writes (settings-ops.ts) never reach an existing blob, so each key here
+ * owes a backfill migration — 0007, 0011 and 0013 carry the ones added since; the rest shipped
+ * with 0000. Making the key `.optional()` / `.default()` instead needs no entry here.
  */
 const REQUIRED_SETTINGS_KEYS = [
   'activePackId',

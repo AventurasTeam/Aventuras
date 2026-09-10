@@ -12,11 +12,8 @@ import {
 import { countTokens } from '@/lib/retrieval'
 import { appSettingsStore, currentStoryStore } from '@/lib/stores'
 
-/**
- * Long enough that a fast typist re-counts once rather than per keystroke. The
- * count itself is sub-millisecond for an ordinary entry, so this is about not
- * re-entering the tokenizer, not about the tokenizer being slow.
- */
+// 300ms is about not re-entering the tokenizer, not about it being slow — the count is
+// sub-millisecond. A fast typist re-counts once rather than per keystroke.
 const DEBOUNCE_MS = 300
 
 export type EmbedInputPressure = {
@@ -36,9 +33,8 @@ export type EmbedInputPressure = {
  * before a story exists, and its embedder is whatever the app would give it.
  */
 export function useEmbedInputPressure(text: string): EmbedInputPressure {
-  // Scalar selectors throughout: an object or array built inside a selector
-  // breaks useSyncExternalStore's snapshot-stability contract. `providers` is the
-  // stored array itself, which is why it may be read whole.
+  // Scalar selectors: an object built inside a selector breaks useSyncExternalStore's
+  // snapshot-stability contract. `providers` is the stored array itself, so it reads whole.
   const appModelId = appSettingsStore.useAppSettings((s) => s.embeddingModelId)
   const appProviderId = appSettingsStore.useAppSettings((s) => s.embeddingProviderId)
   const appBackend = appSettingsStore.useAppSettings((s) => s.defaultStorySettings.embeddingBackend)

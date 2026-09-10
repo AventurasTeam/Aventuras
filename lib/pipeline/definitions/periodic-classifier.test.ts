@@ -594,9 +594,8 @@ describe('periodicClassifierPhase', () => {
     expect(actions[2].payload).toMatchObject({ entry: { entityId: CHAR_KAEL } })
   })
 
-  // The planner bounds the name it stores, so the reconcile key has to be bounded
-  // the same way — otherwise an over-long name never matches the row it created
-  // and the character is introduced again on every pass.
+  // The reconcile key must be bounded like the stored name, or an over-long name never
+  // matches the row it created and the character is introduced again every pass.
   it('matches a stored name against the bounded form of an over-long candidate', async () => {
     const vector = Float32Array.from([1, 0, 0])
     configureClassifierEmbedder(vi.fn(async () => ({ vectors: [vector, vector], dim: 3 })))
@@ -632,9 +631,8 @@ describe('periodicClassifierPhase', () => {
     expect(actions.at(-1)?.payload).toMatchObject({ entry: { entityId: CHAR_KAEL } })
   })
 
-  // The row stores a bounded description, so the reconcile key has to be bounded
-  // the same way: a candidate re-describing a character it already created must
-  // embed the text the row holds, not the tail the row dropped.
+  // The reconcile key must be bounded like the stored description: a re-describing
+  // candidate embeds the text the row holds, not the tail the row dropped.
   it('embeds the stored form of an over-long description on both sides', async () => {
     const vector = Float32Array.from([1, 0, 0])
     const embed = vi.fn<EmbedDescriptions>(async () => ({ vectors: [vector, vector], dim: 3 }))

@@ -9,11 +9,8 @@ import { openEmbedderSwapDialog } from '@/lib/stores'
 export type SystemEntryFixAction = { label: string; onPress: () => void } | undefined
 
 /**
- * Dismissal order: the draft returns to the composer only once the entry holding
- * it is gone. A clear that rejects leaves the notice and its Retry standing, and
- * a composer copy beside them would let the same turn go twice; a branch switch
- * under the awaits drops the hand-back rather than paste this branch's text into
- * another branch's composer.
+ * Hand the draft back only once the entry is gone: a rejected clear keeps Retry, and a
+ * composer copy would run the turn twice. Off-branch, the hand-back is dropped, not pasted.
  */
 export async function dismissSystemEntry(deps: {
   submission: SystemFailureMeta['submission']

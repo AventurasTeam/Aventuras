@@ -48,9 +48,8 @@ const loadOrt = lazyModule(
 // a failed load evicts itself so a later call can retry after the user reinstalls.
 const bundles = new Map<string, Promise<SessionBundle>>()
 
-// The tokenizer alone: a live token count must not build the inference session,
-// which is the ~300MB half. The bundle shares this entry — one tokenizer per model,
-// evicted with it under the same key.
+// A live token count must not build the inference session — the ~300MB half. One
+// tokenizer per model, shared with the bundle and evicted under the same key.
 const tokenizerOnly = new Map<string, Promise<TokenizerFn>>()
 
 // A successfully-built session outlives the files it was built from, so a
@@ -73,9 +72,8 @@ function getTokenizerOnly(modelId: string): Promise<TokenizerFn> {
 }
 
 /**
- * Exact token counts from the model's own tokenizer. A tiktoken estimate runs up
- * to 3x under WordPiece on the scripts it fragments, so anything shown to the user
- * has to come from here.
+ * Exact token counts from the model's own tokenizer. A tiktoken estimate runs up to
+ * 3x under on the scripts WordPiece fragments, so user-facing numbers come from here.
  */
 export async function countTokensLocal(modelId: string, texts: string[]): Promise<number[]> {
   if (texts.length === 0) return []

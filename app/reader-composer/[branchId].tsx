@@ -616,10 +616,8 @@ export default function ReaderComposerRoute() {
     [branchId, reload],
   )
 
-  // Position-independent, unlike restoreSystemTail: safe on the paths where a
-  // sweep may already have moved the tail, which is exactly where re-parking
-  // the entry is not. The stored content is wrapped, so it returns under
-  // 'free' — no re-wrap on send, the rule the cancel arm follows.
+  // Position-independent, unlike restoreSystemTail: safe where a sweep already moved the
+  // tail. Content is stored wrapped, so it returns under 'free' — no re-wrap on send.
   const handBackSubmission = useCallback((submission: SystemFailureMeta['submission']) => {
     const plan = planSubmissionHandback(submission, composerRef.current?.getDraft())
     if (plan.action === 'none') return
@@ -747,10 +745,8 @@ export default function ReaderComposerRoute() {
           // A DeltaReplayError can commit its transaction and fail the store sync,
           // leaving entriesStore holding rows the sweep already deleted.
           await reload()
-          // The drop above destroyed an earlier failure's only copy of its text
-          // for a regenerate that then produced nothing. Restoring the entry is
-          // unsafe here (restoreSystemTail); the draft does not care where the
-          // tail moved.
+          // The drop above destroyed an earlier failure's only copy of its text.
+          // restoreSystemTail is unsafe here (tail may have moved); the draft isn't.
           if (branchUnchanged(branchId)) handBackSubmission(dropped?.failure?.submission)
           return
         }

@@ -7,8 +7,7 @@ describe('settingsCount', () => {
     expect(settingsCount(7, 1)).toBe(7)
   })
 
-  // The schema omits .int() on purpose, so a fractional value is a shape the
-  // read sites genuinely see rather than a defensive hypothetical.
+  // The schema omits .int() on purpose, so read sites genuinely see fractional values.
   it('floors a fractional value rather than rounding it', () => {
     expect(settingsCount(7.9, 1)).toBe(7)
   })
@@ -21,8 +20,7 @@ describe('settingsCount', () => {
     expect(settingsCount(-4, 0)).toBe(0)
   })
 
-  // Flooring first is what makes this distinct from a plain clamp: 0.5 against
-  // a floor of 1 must land on 1, not on 0.5.
+  // Flooring first is what distinguishes this from a plain clamp: 0.5 lands on 1.
   it('floors before clamping', () => {
     expect(settingsCount(0.5, 1)).toBe(1)
   })

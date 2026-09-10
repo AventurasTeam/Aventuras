@@ -24,8 +24,7 @@ describe('embedderInputWindow', () => {
     })
   })
 
-  // A custom import has no catalog row. Inventing a ceiling would warn against a
-  // limit nobody set; the embed path still reports what it actually cut.
+  // A custom import has no catalog row; inventing a ceiling warns against a limit nobody set.
   it('reports a local model it does not carry as unknown, not as a default', () => {
     expect(embedderInputWindow(local('acme/hand-imported'))).toEqual({
       tokens: null,
@@ -48,8 +47,7 @@ describe('embedderInputWindow', () => {
     expect(embedderInputWindow(provider, {})).toEqual({ tokens: 8192, source: 'assumed' })
   })
 
-  // The surface has to be able to tell a guess from an answer, so these must not
-  // collapse into one label.
+  // The surface must tell a guess from an answer, so these two labels can't collapse.
   it('never labels an assumption as configured', () => {
     expect(embedderInputWindow(provider).source).not.toBe('configured')
     expect(
@@ -81,8 +79,7 @@ describe('inputPressure', () => {
     expect(inputPressure(513, window(512))).toBe('over')
   })
 
-  // A custom import establishes no ceiling; warning against one nobody set is worse
-  // than silence, and the embed reports a real cut regardless.
+  // A custom import establishes no ceiling, and the embed reports a real cut anyway.
   it('stays quiet when the window is unknown, however long the text', () => {
     expect(inputPressure(99_999, { tokens: null, source: 'unknown' })).toBe('ok')
   })

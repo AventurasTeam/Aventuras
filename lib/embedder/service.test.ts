@@ -543,8 +543,7 @@ describe('truncation reporting', () => {
     expect(result.truncated).toEqual([0])
   })
 
-  // null is not []: a provider neither reports the cut nor publishes the limit, so
-  // claiming "nothing was truncated" would be an answer we do not have.
+  // null is not []: a provider cannot report the cut, so [] would be a false claim.
   it('reports null for a provider, which cannot say', async () => {
     vi.mocked(embedViaProvider).mockResolvedValue({ vectors: [new Float32Array([1, 0])], dim: 2 })
 

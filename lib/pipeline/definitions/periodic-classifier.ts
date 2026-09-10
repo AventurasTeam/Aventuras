@@ -224,9 +224,8 @@ export async function* periodicClassifierPhase(
   for (const candidate of substituted.newCharacters) {
     decisions.set(
       candidate.handle,
-      // Reconciled against the row as it will be stored, never the raw reply: the
-      // planner bounds both embedded fields, and a key built from either unbounded
-      // one is measured against a text no row holds (plan.ts).
+      // Reconcile the clamped row, not the raw reply: plan.ts bounds both embedded
+      // fields, so a key built from an unbounded one measures text no row holds.
       await reconcileNewCharacter(clampEmbeddedCharacter(candidate), {
         entities,
         embedDescriptions,

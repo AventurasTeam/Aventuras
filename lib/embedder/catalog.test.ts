@@ -136,8 +136,7 @@ describe('embedderCatalogSchema', () => {
   })
 })
 
-// The window is what separates text that gets embedded from text that is
-// silently dropped, so an entry that omits it must not parse at all.
+// The window decides what gets silently dropped, so an entry omitting it must not parse.
 describe('maxInputTokens', () => {
   it('is declared by every catalog entry', () => {
     for (const model of EMBEDDER_CATALOG.models) {

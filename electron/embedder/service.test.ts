@@ -22,8 +22,7 @@ vi.mock('electron', () => ({ app: { getPath: () => USERDATA } }))
 
 const embeddersDir = join(USERDATA, 'embedders')
 
-// The real pipeline object carries the tokenizer embed() re-encodes through to
-// learn what was cut, so a stub that is only a function no longer stands in for it.
+// embed() re-encodes through the pipeline's own tokenizer to learn what was cut.
 function stubPipeline(
   run: (texts: string[]) => Promise<{ tolist: () => number[][]; dims: number[] }>,
   tokenizer: { count: (text: string) => number; limit?: number } = { count: () => 1 },
@@ -319,8 +318,7 @@ describe('truncation boundary', () => {
   })
 })
 
-// The whole point of a separate tokenizer cache: a live token count in the composer
-// must not build an inference session, which is the ~300MB half of a model.
+// Separate tokenizer cache: a live count in the composer must not build a ~300MB session.
 describe('countTokens', () => {
   const encoder = (count: (text: string) => number) =>
     Object.assign((text: string) => ({ input_ids: { dims: [1, count(text)] } }), {})

@@ -156,9 +156,8 @@ export const Composer = forwardRef(function Composer(
         lints={lints}
       />
 
-      {/* Counted on the raw text, not the mode-wrapped form the entry stores: the
-          wrap adds a subject word and punctuation, a rounding error against a
-          512-token window and not worth threading pov and leadName down for. */}
+      {/* Raw text, not the stored wrapped form: the wrap's subject word and punctuation are
+          a rounding error against a 512-token window, so pov/leadName stay unthreaded. */}
       <EmbedWindowCounter text={text} variant="query" />
 
       <View className="flex-row items-center justify-between gap-2">

@@ -17,10 +17,8 @@ export default meta
 type Story = StoryObj<typeof EmbedWindowTextarea>
 
 /**
- * The counter reads the app's configured embedder, so in Storybook — with no
- * embedder configured — the window is unknown and it stays quiet by design. That
- * is the same state a fresh install is in, and it is the one worth seeing: the
- * field must look ordinary, and the reserved counter row must not shift it.
+ * No embedder in Storybook: the window is unknown and the counter stays quiet, as on a
+ * fresh install. The field must look ordinary, and the reserved row must not shift it.
  */
 export const Default: Story = {
   render: () => {

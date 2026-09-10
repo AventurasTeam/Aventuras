@@ -110,14 +110,10 @@ const modelsSchema = z.object({
 })
 
 /**
- * Adding a key with a `.default()` here needs a backfill migration: settings
- * writes are key-scoped (`json_set`, settings-ops.ts), so the default never
- * materialises in an existing story's blob. Reads still apply it, so the gap
- * shows only where something reads the raw column.
- *
- * A key with neither `.default()` nor `.optional()` is the harder case — an
- * un-backfilled story fails to parse and will not open at all. That set is
- * pinned by `REQUIRED_SETTINGS_KEYS` in the test beside this file.
+ * A new key with `.default()` needs a backfill migration: key-scoped settings writes
+ * (`json_set`, settings-ops.ts) never materialise it in an existing story's blob, so
+ * only a raw-column reader sees the gap. With neither `.default()` nor `.optional()`,
+ * an un-backfilled story won't parse or open — `REQUIRED_SETTINGS_KEYS` pins that set.
  */
 export const storySettingsSchema = z.object({
   chapterTokenThreshold: z.number().default(24000),
@@ -140,10 +136,8 @@ export const storySettingsSchema = z.object({
   embedding_swap_provider_id: z.string().optional(),
   embedding_swap_source_dim: z.number().int().positive().optional(),
   embedding_swap_target_dim: z.number().int().positive().optional(),
-  // The app-default model id turned down at the story-open upgrade prompt
-  // (retrieval.md → The story-open upgrade prompt). Optional so a story that
-  // predates the prompt parses without a backfill migration; absent and a value
-  // no longer matching the app default both mean "ask again".
+  // The app-default model id turned down at the story-open upgrade prompt (retrieval.md
+  // → The story-open upgrade prompt). Absent, or no longer the app default: ask again.
   embedding_upgrade_declined: z.string().optional(),
   embedding_provider_id: z.string().optional(),
   retrievalBudgets: retrievalBudgetsSchema,

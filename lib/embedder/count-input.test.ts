@@ -31,8 +31,7 @@ describe('countEmbedderTokens', () => {
     })
   })
 
-  // No tokenizer exists for a provider model, so the estimate is the only answer —
-  // and it must never be dressed up as exact.
+  // A provider has no tokenizer, so the estimate is the only answer — never as exact.
   it('estimates for a provider, and says the count is not exact', async () => {
     await expect(countEmbedderTokens(provider, ['ab'], estimate)).resolves.toEqual({
       counts: [14],
@@ -41,8 +40,7 @@ describe('countEmbedderTokens', () => {
     expect(countTokensLocal).not.toHaveBeenCalled()
   })
 
-  // A fresh app has nothing installed. A counter that disappeared there would read
-  // as a broken field rather than as an absent model.
+  // A fresh app has nothing installed; a vanished counter reads as a broken field.
   it('falls back to the estimate when the local tokenizer cannot load', async () => {
     vi.mocked(countTokensLocal).mockRejectedValue(new Error('no model installed'))
 

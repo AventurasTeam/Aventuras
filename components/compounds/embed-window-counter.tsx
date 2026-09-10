@@ -16,12 +16,10 @@ type EmbedWindowCounterProps = {
 /**
  * A reserved row that reports how close `text` is to the embedder's input window.
  *
- * **Render it unconditionally.** The row always occupies its space and only the
- * label's opacity moves, because the counter first appears while someone is
- * mid-entry: gating it on the pressure would change the tree around a sibling
- * `TextInput` at exactly that moment, remounting it and taking focus and cursor
- * with it (`lessons-learned/input-adornment-dom-identity.md`). Reserving the row
- * also keeps the field from jumping when the label arrives.
+ * **Render it unconditionally** — only the label's opacity moves. Gating on the
+ * pressure would re-key the sibling `TextInput` mid-entry, taking focus and cursor
+ * with it (`lessons-learned/input-adornment-dom-identity.md`), and jump the field
+ * when the label arrives.
  */
 export function EmbedWindowCounter({ text, variant = 'document' }: EmbedWindowCounterProps) {
   const measured = useEmbedInputPressure(text)

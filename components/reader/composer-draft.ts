@@ -9,12 +9,10 @@ export function isDraftEmpty(draft: { text: string } | undefined): boolean {
 }
 
 /**
- * What a path that destroys a failure entry owes the composer.
- *
- * The entry's `submission` is the only copy of a failed turn's text — the
- * `user_action` was reverse-replayed with its action group — so dropping the
- * notice without handing it back deletes the user's words. A non-empty draft
- * wins: an older turn must not overwrite what is being typed now.
+ * What a path that destroys a failure entry owes the composer. The entry's
+ * `submission` is the only copy of a failed turn's text — the `user_action` went with
+ * its reverse-replayed action group — so dropping the notice without handing it back
+ * deletes the user's words. A non-empty draft wins: an older turn must not overwrite it.
  */
 export type SubmissionHandback =
   | { action: 'none' }
@@ -25,8 +23,7 @@ export function planSubmissionHandback(
   submission: { content: string } | undefined,
   draft: { text: string } | undefined,
 ): SubmissionHandback {
-  // Whitespace-only is unreachable through the composer's own send gate, and
-  // restoring it would announce a recovery that put nothing back.
+  // Unreachable through the send gate; restoring it would announce an empty recovery.
   if (submission === undefined || submission.content.trim().length === 0) return { action: 'none' }
   if (!isDraftEmpty(draft)) return { action: 'keep-draft' }
   return { action: 'restore', content: submission.content }

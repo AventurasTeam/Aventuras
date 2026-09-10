@@ -68,9 +68,8 @@ async function buildUndoOps(
     const where = whereForDelta(entry.descriptor, delta)
     const key = `${delta.targetTable}:${delta.branchId}:${delta.targetId}`
 
-    // No cascade here on purpose: an actionId-scoped set already carries the
-    // children's own deltas, and an entry-scoped caller owes the closure by hand
-    // (generation-pipeline.md → Reverse-replay).
+    // No cascade on purpose: an actionId-scoped set already carries the children's deltas;
+    // an entry-scoped caller owes the closure by hand (generation-pipeline.md → Reverse-replay).
     if (delta.op === 'create') {
       working.delete(key)
       ops.push(ctx.db.delete(table).where(where).toSQL())
