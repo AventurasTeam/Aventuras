@@ -2472,6 +2472,20 @@ overlay, a measurement mirror, a fade-through) must verify on hardware
 that the class resolves rather than assuming parity with RN-Web, which
 handles it correctly. Raised 2026-08-17.
 
+#### Peek quick-edits
+
+Pencil edits on single text fields in the reader's peek drawer,
+committing immediately as one-field sessions — the exception
+[`save-sessions.md → Quick-edit exception — peek drawer`](./ui/patterns/save-sessions.md#quick-edit-exception--peek-drawer)
+and
+[`collapse.md → Reader / composer`](./ui/foundations/mobile/collapse.md#reader--composer-narrative--rail--narrative--rail-strip)
+both spec. M4 ships the peek read-mostly with `Set as lead` as its only
+inline write, following
+[`reader-composer.md → State-field composition`](./ui/screens/reader-composer/reader-composer.md#state-field-composition--same-as-world-panel-overview);
+the three docs disagree and want reconciling when this is picked up.
+Parked until peek editing proves wanted over the `Open in World panel →`
+escalation. Filed at M4 promotion (2026-09-10).
+
 ### Code structure (parked)
 
 #### Unsaved-changes guard folder placement

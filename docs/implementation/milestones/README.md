@@ -26,3 +26,9 @@ directory (`NN-name/`) with a `milestone.md` definition and a
   retrieval + ranker, dev probe, full wizard World / Cast steps,
   suggestions, worldTime editing, batched undo, regenerate;
   fourteen slices, five day-one startable.
+- [Milestone 4 — World + Plot read surfaces](./04-world-plot-read-surfaces/milestone.md).
+  Memory-pipeline output becomes browsable and correctable: World panel
+  (shell, per-kind detail, lore, History, delete, collision review), Plot
+  panel, reader Browse rail and peek drawer, Story Settings basic surface,
+  per-row `.avts` import and export; nine slices, three day-one
+  startable.
