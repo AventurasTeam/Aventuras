@@ -39,7 +39,9 @@ export function EmbedWindowCounter({ text, variant = 'document' }: EmbedWindowCo
           !visible && 'opacity-0',
         )}
       >
-        {label === null ? '' : t(label.key, label.values)}
+        {/* An empty Text collapses to zero height, so the field would still jump
+            the first time a label arrives. */}
+        {label === null ? '\u00a0' : t(label.key, label.values)}
       </Text>
     </View>
   )
