@@ -17,7 +17,8 @@ defined `milestone.md`.
   [M1.5 — Data foundation](./milestones/01b-data-foundation/milestone.md)
   (inserted between M1 and M2; no renumber),
   [M2 — First user loop](./milestones/02-first-user-loop/milestone.md),
-  and [M3 — Memory floor](./milestones/03-memory-floor/milestone.md).
+  [M3 — Memory floor](./milestones/03-memory-floor/milestone.md), and
+  [M4 — World + Plot read surfaces](./milestones/04-world-plot-read-surfaces/milestone.md).
   M1.5 front-loads
   the full relational schema, typed working-set stores, and Tier-1 CRUD
   arms, so the planned milestones below **no longer carry their own
@@ -147,208 +148,9 @@ M9.3.
 
 ### M4 — World + Plot read surfaces
 
-**Goal.** Users can browse and edit the entity graph the memory
-pipeline produces. World panel renders entities by kind with
-overview + state tabs; Plot panel renders happenings with
-awareness; story settings exposes the controls users need now
-that real data exists (model overrides, basic per-story config).
-
-**Why now.** M3 produces entity / lore / happening / awareness
-rows; without surfaces to browse + edit them, the memory pipeline
-is invisible. This milestone is read-heavy with light edit; full
-chapter-management is M5.
-
-**Likely slices.**
-
-- M4.1 — World panel shell + per-kind tabs (characters /
-  locations / items / factions / etc.) + entity list rows.
-- M4.2 — Entity detail surface: overview tab, state tab, per-kind
-  fields per
-  [`docs/ui/screens/world/world.md`](../ui/screens/world/world.md).
-  Collision-review + entity-merge driver wires the shipped
-  `CollisionResolveDialog` against `name_collision_flag` rows
-  per [`patterns/collision-resolve.md`](../ui/patterns/collision-resolve.md).
-  **The dialog's own `InjectionMode` is drifted** — `collision-resolve-diff.ts`
-  declares `'always' | 'on-relevance' | 'never'` against the shipped
-  enum `'always' | 'auto' | 'disabled'` (`lib/db/enums.ts`). Harmless
-  while the compound is unwired; a type error the moment the driver
-  passes it a real row, so fix it as the first step of wiring rather
-  than mid-way.
-  `LocationState.parent_location_id` cycle-guard (action-layer
-  pre-commit walk, depth-cap 100) per
-  [`data-model.md → LocationState`](../data-model.md#locationstate-shape).
-  Entity search scope across `state` JSON via `json_extract` /
-  `json_each` per
-  [`patterns/entity.md → Search scope`](../ui/patterns/entity.md#search-scope).
-  **Entity delete needs the cascade merge already specifies.** The
-  overflow menu carries `Delete entity` per
-  [`world.md → Detail head`](../ui/screens/world/world.md), and
-  `deleteEntity` (`lib/actions/entities/register.ts`) deletes the
-  `entities` row and nothing else — `happening_involvements.entity_id`,
-  `happening_awareness.character_id` and `character_relationships.a_id` /
-  `b_id` are all FK-less by necessity (composite PK), so SQLite enforces
-  nothing and the rows dangle silently. The write set is already canon for
-  the merge path
-  ([`world.md → Merge writes`](../ui/screens/world/world.md)) — link rows,
-  inverse `state` refs on other entities, translations — and delete wants
-  the same list minus the rewrite-to-canonical half. Open where merge is
-  silent: `metadata.sceneEntities`. Historical entries keep the id and
-  render it as an Unknown-entity chip
-  ([`entry-card.md → World-state panel`](../ui/patterns/entry-card.md#world-state-panel)),
-  but the tail's copy is live — it drives retrieval's
-  `sceneEntities ∩ characters` union and prompt injection — so the tail
-  wants the id dropped the way the scene editor drops it.
-- M4.3 — Plot panel shell + threads tab + happenings tab; happenings
-  list with awareness tab on detail per
-  [`docs/ui/screens/plot/plot.md`](../ui/screens/plot/plot.md).
-  Threads data may be sparse until M5's chapter-close populates it
-  reliably; the surface ships in M4. Entry-ref picker primitive
-  (for `triggered_at_entry_id` / `resolved_at_entry_id` /
-  `occurred_at_entry_id` / `learned_at_entry_id` fields) ships here as
-  the first consumer; pattern reused across later entry-ref
-  surfaces.
-- M4.4 — Story settings real (basic): model overrides + basic
-  per-story config — the settings depth users need with real data
-  flowing. Deep settings tabs land in M7.
-- M4.5 — Reader-composer awareness affordances: peek drawer +
-  awareness chips on entries per
-  [`reader-composer.md → Peek drawer`](../ui/screens/reader-composer/reader-composer.md#peek-drawer--lead-affordance-for-characters).
-  Gates on M3.3 awareness writes.
-- M4.6 — Per-row imports: first wiring of the already-built
-  `ImportDialog` compound — World / Plot per-row entity / lore /
-  thread / happening import per
-  [`patterns/import-dialog.md`](../ui/patterns/import-dialog.md);
-  adds the per-row `.avts` envelope kinds (`aventuras-entity`,
-  `aventuras-lore`, `aventuras-thread`, `aventuras-happening`)
-  with kind-narrowed Zod payload schemas per
-  [`data-model.md → Aventuras file format`](../data-model.md#aventuras-file-format-avts).
-  Implementation prerequisite: `expo-document-picker` +
-  `expo-file-system` install and a dev-client rebuild **before
-  the slice runs** (web has no native-build step). Pattern reused
-  by vault calendar import (M8.3) and story import (M9.4).
-
-**Parallel paths.** {M4.1, M4.2} || {M4.3} || {M4.4} || {M4.5};
-M4.6 once the M4.1 / M4.3 shells exist to host the import
-affordances.
-
-Carried deferrals, routed out of [`triage.md`](./triage.md)
-2026-08-18 and 2026-08-20, verified against the code first. Two more
-moved to [`followups.md`](../followups.md) 2026-09-05, wanting a design
-pass before any slice could own them: the story-open swap prompt came
-back 2026-09-09 with its suppression rule settled, and failed-turn text
-custody is still there. Entries below that name canon with no surface
-arrive from the other direction — spec that landed ahead of its screen,
-rather than a deferral routed out of implementation.
-
-- **M4.4 — The phone list state hides a dirty save bar.** `StorySettingsShell`
-  renders the bar inside the detail pane, and `MasterDetailLayout`
-  drops that pane on phone when no tab is selected. No data loss —
-  panels stay mounted, and `←` and window-close both route through
-  the guard — but the unsaved state is invisible. Canon argues
-  against the obvious fix:
-  [`save-sessions.md → Save bar`](../ui/patterns/save-sessions.md#save-bar--the-visible-ui)
-  says the bar "spans the editable pane only — never the rail," and
-  [`story-settings.md → Mobile expression`](../ui/screens/story-settings/story-settings.md#mobile-expression)
-  puts it at "the bottom edge of the detail-route's scroll region."
-  Accepted at M3.7b planning; the call belongs to M4.4, the surface's
-  real owner. Surfaced by M3.7b implementation (2026-07-31).
-- **M4.4 — M2.5's composer modes are unreachable on every real story.**
-  `composerModesEnabled` defaults to `false` in
-  `lib/db/stories/story-settings-defaults.ts`, and app-level
-  `defaultStorySettings` carries only `activePackId`, so no story is
-  ever created with it on and no UI can flip it — the same
-  dead-feature shape M3.7b just fixed for `suggestionsEnabled`. Canon
-  puts its toggle and wrap-POV in the same Authoring aids grouping
-  M3.7b's section lives in, so M4.4 completing that grouping is the
-  natural owner. Surfaced by M3.7b implementation (2026-07-31).
-- **M4.2 — The wizard commits `parent_location_id` without the documented
-  cycle guard.**
-  [`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)
-  assigns cycle prevention to the action-layer mutator that writes
-  the field: walk the proposed parent chain, depth-cap 100, reject
-  with `reason: 'parent-cycle'`. Finish is such a writer and does no
-  walk, and neither authoring path blocks it — the editor's picker
-  and `cast-import.ts` each exclude only self, so `A → B` plus
-  `B → A` authors and commits cleanly. Inert today: nothing walks the
-  chain, and the only reader canon names is M4's prompt rendering
-  (`Aria is in [Shop in Town Square in City]`). Close by adopting M4's
-  shared guard rather than writing a wizard-local copy of it. Raised
-  2026-08-14.
-- **M4.2 — The first delete surface has to sweep the row's vectors.**
-  `deleteVecOps` (`lib/db/embeddings/ops.ts`) exists and is exported
-  through both barrels, but has **no production caller**, and there are
-  no SQL triggers in `lib/db/migrations/`, so nothing else reaches the
-  vec tables per row. Story delete is already covered — it calls the
-  branch-scoped `deleteBranchVecOps` — and `deleteEntity`, `deleteLore`,
-  `deleteHappening` and `deleteChapter` have no production caller yet, so
-  nothing leaks today; the leak starts with the first delete button.
-  Whichever slice ships that button owns wiring the four handlers, and it
-  is not only the delete arm: reverse-replay restores the row and
-  Slice 3.12a already forces it dirty so the drain re-embeds it, but
-  `applyRedo` re-applies the delete and would need to re-sweep. Retrieval
-  never serves orphans — its candidate pools are built from source rows —
-  so this is unbounded dead weight that survives an embedder swap, not
-  wrong results. Surfaced by Slice 3.12a review (2026-08-19), verified and
-  routed 2026-08-20.
-- **M4.2 — Entity and lore keyword editors are specced with no surface.**
-  The 2026-09-06 keyword-retrieval design added `keywords` and
-  `priority` to the entity Settings tab
-  ([`world.md → Settings`](../ui/screens/world/world.md#settings--entity-management-chrome))
-  and `keywords` to lore's
-  ([`world.md → Settings tab — lore`](../ui/screens/world/world.md#settings-tab--lore)),
-  both wireframed in `world.html`. The lore one is new scope rather than
-  a field added to an existing panel: lore had no documented edit
-  surface anywhere before that commit. Until they ship, entity keywords
-  reach the database only through the periodic classifier and lore
-  keywords only through seed data, so the user-authored half of a
-  pathway canon calls load-bearing has no way in. Introduced by the
-  keyword-retrieval design (2026-09-06).
-- **M4.4 — The Keyword retrieval settings panel is specced with no
-  surface.** Five `keywordRetrieval` knobs — `mode`, `budgetShare`,
-  `scanEntries`, `cascade`, `cascadeMaxDepth` — are specced and
-  wireframed at
-  [`story-settings.md → Keyword retrieval`](../ui/screens/story-settings/story-settings.md#keyword-retrieval)
-  and land in `stories.settings` ahead of the panel. Settings-only with
-  no UI is the established pattern here, not a gap — `piggybackMode` and
-  the composer modes both shipped that way — but `mode: 'inject'` is a
-  behaviour users will expect to reach, and the entry above is what
-  makes its keywords authorable in the first place, so the two want
-  sequencing together. Introduced by the keyword-retrieval design
-  (2026-09-06).
-- **M4.4 — The story-open upgrade prompt is specced with no surface.**
-  [`retrieval.md → The story-open upgrade prompt`](../memory/retrieval.md#the-story-open-upgrade-prompt)
-  specs the second swap entry point Slice 3.1b left unbuilt: an
-  app-level host beside `SwapResumeHost` (`app/_layout.tsx`), gated on
-  the swap marker being absent, the story's model differing from the
-  app default, and `embedding_upgrade_declined` not naming that
-  default. Three actions mirroring `SwapResumeDialog` — Upgrade fires
-  the shipped swap dialog, Keep on the current model writes the
-  declined key, Later defers for the session only. The swap dialog's
-  own Keep option writes that same key, so the Story Settings path is
-  part of this work rather than a separate follow-up. The key itself
-  already parses — `storySettingsSchema` carries it optional — so what
-  is missing is the host, the gate and the two write sites. Routed out
-  of [`followups.md`](../followups.md) 2026-09-09, once the suppression
-  rule was settled.
-
-**Gates.** M3 for real-data validation (no entities without the
-classifier; no awareness without it; no retrieval scores without
-retrieval). The UI build itself can look ahead against seeded mock
-rows — the entity / lore / happening / awareness shapes are frozen
-in [`data-model.md`](../data-model.md) — making M4 the strongest
-cross-milestone look-ahead candidate (see
-[Multi-contributor model](#multi-contributor-model)); surfaces
-ready mid-M3 also serve the human-inspection need named in
-[Milestones that may merge or split](#milestones-that-may-merge-or-split).
-M4's definition of done still requires rendering real classifier
-output.
-
-**Scope: out.** Bulk operations (parked); character-side awareness
-tab (parked); image generation; chapter-close UX (M5).
-
-**Note.** Entity / happening / thread history tabs render against
-raw delta-log queries in M4 — functional but uncached. Diff-cache
-acceleration lands in [M6.4](#m6--branches--diff-cache).
+**Promoted** — defined in
+[`milestones/04-world-plot-read-surfaces/`](./milestones/04-world-plot-read-surfaces/milestone.md)
+(milestone + nine slice docs).
 
 ---
 
@@ -1322,7 +1124,10 @@ the screen its goal requires; later milestones extend.
     per-entry worldTime click-to-edit + monotonicity flag (M3.8);
     CTRL-Z action-batched extension across classifier writes
     (M3.9).
-  - **M4** — Peek drawer + awareness chips on entries.
+  - **M4.5a / M4.5b** — Browse rail (collapsed strip, phone Browse
+    chip, rail-as-Sheet) and peek drawer. The earlier "awareness chips
+    on entries" phrase was dropped at promotion — no canonical doc
+    specs it.
   - **M5** — Chapter management affordances (insert break,
     navigate by chapter, chapter context badge); deep-rollback
     surface extends rollback-confirm with multi-chapter cascade
@@ -1331,8 +1136,10 @@ the screen its goal requires; later milestones extend.
   - **M7.2** — Era-flip reader affordances (time-chip popover,
     per-entry icon, Actions menu entry, flip-era modal).
 - **World panel** ([world.md](../ui/screens/world/world.md)).
-  - **M4.1 / M4.2** — Full v1 scope (shell, per-kind tabs, entity
-    detail overview + state tabs).
+  - **M4.1 / M4.2a–c** — Full v1 scope: shell and list pane (4.1),
+    per-kind detail panes (4.2a), lore detail, History and delete
+    (4.2b), collision review (4.2c) — except the Assets tab and
+    portrait slot, placeholders until the asset gallery pass.
 - **Plot panel** ([plot.md](../ui/screens/plot/plot.md)).
   - **M4.3** — Plot panel shell + threads tab + happenings tab +
     happening awareness tab. Threads data sparse until M5.2
@@ -1348,11 +1155,12 @@ the screen its goal requires; later milestones extend.
     surface yet.
 - **Story settings**
   ([story-settings.md](../ui/screens/story-settings/story-settings.md)).
-  - **M4.4** — Basic surface (model overrides, basic per-story
-    config).
-  - **M7.2** — Deep tabs (pack, definition, models, awareness,
-    calendar, translation, **Advanced**); era-flip surfaces
-    here.
+  - **M4.4** — Basic surface: Models tab (narrative and story-agent
+    overrides), About tab, Authoring aids completion, Memory knobs,
+    story-open upgrade prompt.
+  - **M7.2** — Deep tabs (pack, definition, classifier panel,
+    awareness, calendar, translation, **Advanced**); era-flip
+    surfaces here.
 - **Memory probe**
   ([memory-probe.md](../ui/screens/memory-probe/memory-probe.md)).
   - **M3.5** — Minimal developer-only inspector (logs / impl
@@ -1478,10 +1286,11 @@ explicit.
   the compound itself is already built (foundations, with
   stories). Consumers wire it:
   - **M4.6** — First consumer: World / Plot per-row entity / lore /
-    thread / happening import, the per-row `.avts` envelope kinds,
-    and the `expo-document-picker` + `expo-file-system` install
-    with its dev-client rebuild prerequisite (details in the M4.6
-    slice entry).
+    thread / happening import and export, the per-row `.avts`
+    envelope kinds. The picker and file-system modules are already
+    installed and imported by the dialog; what the slice adds on
+    native is `expo-sharing` for export, with its dev-client
+    rebuild.
   - **M8.3** — Vault calendars import.
   - **M9.4** — Story `.avts` import on the story list.
 
