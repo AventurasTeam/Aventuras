@@ -867,13 +867,15 @@ export default function ReaderComposerRoute() {
   )
 
   const dismissSystemEntry = useCallback(async () => {
-    // Read before the awaits: a branch switch under them would hand this
-    // branch's text to another branch's composer. Dismissing an error is not a
-    // request to discard the draft behind it, and the entry is its last copy.
-    handBackSubmission(systemFailure?.submission)
+    // Read before the awaits, handed back only after them: a failed clear leaves
+    // the notice and its Retry standing, and a composer copy alongside it would
+    // let the same turn go twice. Dismissing an error is not a request to discard
+    // the draft behind it, and the entry is its last copy.
+    const submission = systemFailure?.submission
     await clearSystemEntry(branchId, ctx)
     await reload()
-  }, [branchId, reload, handBackSubmission, systemFailure])
+    if (branchUnchanged(branchId)) handBackSubmission(submission)
+  }, [branchId, reload, handBackSubmission, systemFailure, branchUnchanged])
 
   const openRollback = useCallback(
     async (targetId: string) => {
