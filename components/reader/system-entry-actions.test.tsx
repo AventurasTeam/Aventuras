@@ -9,6 +9,7 @@ import { embedderSwapStore } from '@/lib/stores'
 
 import {
   describeTurnFailure,
+  dismissSystemEntry,
   toSystemFailureMeta,
   useEmbedderFixAction,
   useSystemEntryActions,
@@ -113,6 +114,72 @@ describe('toSystemFailureMeta', () => {
       systemFailure: meta,
     })
     expect(parsed.systemFailure).toEqual(meta)
+  })
+})
+
+describe('dismissSystemEntry', () => {
+  const SUBMISSION: SystemFailureMeta['submission'] = {
+    content: 'the unsent turn',
+    composerMode: 'free',
+  }
+
+  function harness(over: { clear?: () => Promise<void>; stillOnBranch?: () => boolean } = {}) {
+    const order: string[] = []
+    const handBack = vi.fn<(s: SystemFailureMeta['submission']) => void>(() => {
+      order.push('handBack')
+    })
+    return {
+      order,
+      handBack,
+      deps: {
+        submission: SUBMISSION,
+        clear:
+          over.clear ??
+          ((): Promise<void> => {
+            order.push('clear')
+            return Promise.resolve()
+          }),
+        reload: (): Promise<void> => {
+          order.push('reload')
+          return Promise.resolve()
+        },
+        stillOnBranch: over.stillOnBranch ?? ((): boolean => true),
+        handBack,
+      },
+    }
+  }
+
+  it('returns the draft only once the entry holding it is gone', async () => {
+    const h = harness()
+
+    await dismissSystemEntry(h.deps)
+
+    expect(h.order).toEqual(['clear', 'reload', 'handBack'])
+    expect(h.handBack).toHaveBeenCalledWith(SUBMISSION)
+  })
+
+  // The notice and its Retry survive a rejected clear, so a copy in the composer
+  // beside them is the same turn queued to send twice.
+  it('leaves the draft with the entry when the clear rejects', async () => {
+    const h = harness({
+      clear: () => {
+        h.order.push('clear')
+        return Promise.reject(new Error('db gone'))
+      },
+    })
+
+    await expect(dismissSystemEntry(h.deps)).rejects.toThrow('db gone')
+
+    expect(h.handBack).not.toHaveBeenCalled()
+    expect(h.order).toEqual(['clear'])
+  })
+
+  it('drops the hand-back when the branch changed under the awaits', async () => {
+    const h = harness({ stillOnBranch: () => false })
+
+    await dismissSystemEntry(h.deps)
+
+    expect(h.handBack).not.toHaveBeenCalled()
   })
 })
 

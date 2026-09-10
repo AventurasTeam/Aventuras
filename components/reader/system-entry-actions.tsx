@@ -8,6 +8,25 @@ import { openEmbedderSwapDialog } from '@/lib/stores'
 
 export type SystemEntryFixAction = { label: string; onPress: () => void } | undefined
 
+/**
+ * Dismissal order: the draft returns to the composer only once the entry holding
+ * it is gone. A clear that rejects leaves the notice and its Retry standing, and
+ * a composer copy beside them would let the same turn go twice; a branch switch
+ * under the awaits drops the hand-back rather than paste this branch's text into
+ * another branch's composer.
+ */
+export async function dismissSystemEntry(deps: {
+  submission: SystemFailureMeta['submission']
+  clear: () => Promise<void>
+  reload: () => Promise<void>
+  stillOnBranch: () => boolean
+  handBack: (submission: SystemFailureMeta['submission']) => void
+}): Promise<void> {
+  await deps.clear()
+  await deps.reload()
+  if (deps.stillOnBranch()) deps.handBack(deps.submission)
+}
+
 // Per-kind bubble copy (reader-composer.md → Error surface), resolved at write
 // time so the persisted entry keeps its vocabulary across an app restart.
 export function describeTurnFailure(error: PipelineError | undefined): {

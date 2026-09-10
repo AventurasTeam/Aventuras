@@ -32,6 +32,7 @@ import { describeSuggestionFailure } from '@/components/reader/suggestion-failur
 import { SuggestionStrip, type SuggestionStripPhase } from '@/components/reader/suggestion-strip'
 import {
   describeTurnFailure,
+  dismissSystemEntry,
   toSystemFailureMeta,
   useConfigFixAction,
   useSystemEntryActions,
@@ -866,16 +867,17 @@ export default function ReaderComposerRoute() {
     storyId,
   )
 
-  const dismissSystemEntry = useCallback(async () => {
-    // Read before the awaits, handed back only after them: a failed clear leaves
-    // the notice and its Retry standing, and a composer copy alongside it would
-    // let the same turn go twice. Dismissing an error is not a request to discard
-    // the draft behind it, and the entry is its last copy.
-    const submission = systemFailure?.submission
-    await clearSystemEntry(branchId, ctx)
-    await reload()
-    if (branchUnchanged(branchId)) handBackSubmission(submission)
-  }, [branchId, reload, handBackSubmission, systemFailure, branchUnchanged])
+  const handleDismissSystemEntry = useCallback(
+    () =>
+      dismissSystemEntry({
+        submission: systemFailure?.submission,
+        clear: () => clearSystemEntry(branchId, ctx),
+        reload,
+        stillOnBranch: () => branchUnchanged(branchId),
+        handBack: handBackSubmission,
+      }),
+    [branchId, reload, handBackSubmission, systemFailure, branchUnchanged],
+  )
 
   const openRollback = useCallback(
     async (targetId: string) => {
@@ -1228,7 +1230,7 @@ export default function ReaderComposerRoute() {
     onRequestEditScene: requestEditScene,
     onRegenerate: handleRequestRegenerate,
     onRetrySystemEntry: handleRetrySystemEntry,
-    onDismissSystemEntry: dismissSystemEntry,
+    onDismissSystemEntry: handleDismissSystemEntry,
     onFixSystemEntry: handleFixSystemEntry,
   }
 
