@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildClassifierActions, type PlannedWrite } from './plan'
+import { buildClassifierActions, clampEmbeddedCharacter, type PlannedWrite } from './plan'
 import type { ReconcileDecision } from './reconcile'
 import { buildClassifierWindow } from './window'
 
@@ -715,6 +715,20 @@ describe('embedded-column bounds', () => {
       deps,
     )
     expect(entryOf(planned as PlannedWrite[]).name).toBe('N'.repeat(119) + 'X')
+  })
+
+  // A cut landing between the halves of an astral character would store a lone
+  // surrogate, which renders as a replacement character wherever the name is shown.
+  it('backs off a cut that would split a surrogate pair', () => {
+    const name = 'A'.repeat(119) + '\u{1F409}' + 'B'.repeat(40)
+    expect(clampEmbeddedCharacter({ name, description: '' }).name).toBe('A'.repeat(119))
+  })
+
+  it('keeps an astral character the cut clears whole', () => {
+    const name = 'A'.repeat(118) + '\u{1F409}' + 'B'.repeat(40)
+    expect(clampEmbeddedCharacter({ name, description: '' }).name).toBe(
+      'A'.repeat(118) + '\u{1F409}',
+    )
   })
 
   it('cuts an over-long character description at 1200 characters', () => {

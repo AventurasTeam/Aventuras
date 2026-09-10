@@ -6,6 +6,7 @@ import {
   buildClassifierActions,
   buildClassifierWindow,
   classifierExtractionSchema,
+  clampEmbeddedCharacter,
   IDLE_STATUS_JSON,
   idleStatus,
   nextStatusOnFailure,
@@ -223,7 +224,13 @@ export async function* periodicClassifierPhase(
   for (const candidate of substituted.newCharacters) {
     decisions.set(
       candidate.handle,
-      await reconcileNewCharacter(candidate, { entities, embedDescriptions }),
+      // Reconciled against the row as it will be stored, never the raw reply: the
+      // planner bounds both embedded fields, and a key built from either unbounded
+      // one is measured against a text no row holds (plan.ts).
+      await reconcileNewCharacter(clampEmbeddedCharacter(candidate), {
+        entities,
+        embedDescriptions,
+      }),
     )
   }
 

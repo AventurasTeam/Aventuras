@@ -49,7 +49,34 @@ const MAX_EMBEDDED_BODY = 1200
  * for the same reason the severity clamp is (schema.ts).
  */
 function clampEmbedded(text: string, limit: number): string {
-  return text.length <= limit ? text : text.slice(0, limit).trimEnd()
+  if (text.length <= limit) return text
+  // A lone surrogate half would be stored, hashed into sourceHash and rendered
+  // as a replacement character.
+  const lead = text.charCodeAt(limit - 1)
+  const cut = lead >= 0xd800 && lead <= 0xdbff ? limit - 1 : limit
+  return text.slice(0, cut).trimEnd()
+}
+
+/**
+ * A candidate character as its row will store it.
+ *
+ * Layer B decides against the stored row — an exact name match and a cosine
+ * between descriptions (reconcile.ts) — so a candidate reconciled unclamped is
+ * measured against a text that will never exist. An unbounded name stops matching
+ * the row it created, reintroducing the character on every later pass; an
+ * unbounded description scores a namesake against prose the row drops, which can
+ * carry a genuine match out of TAU_HIGH into the ambiguous band. Both bounds live
+ * here together so the write path and the reconcile key cannot be given one and
+ * not the other.
+ */
+export function clampEmbeddedCharacter(candidate: { name: string; description: string }): {
+  name: string
+  description: string
+} {
+  return {
+    name: clampEmbedded(candidate.name, MAX_EMBEDDED_NAME),
+    description: clampEmbedded(candidate.description, MAX_EMBEDDED_BODY),
+  }
 }
 
 /**
@@ -165,6 +192,7 @@ export function buildClassifierActions(
     const id = newId('char')
     const timestamp = now()
     const keywords = appendKeywords([], candidate.keywords) ?? []
+    const stored = clampEmbeddedCharacter(candidate)
     handleMap.set(candidate.handle, id)
     index.set(id, { kind: 'character', status: 'active', keywords })
     planned.push({
@@ -176,10 +204,10 @@ export function buildClassifierActions(
             id,
             branchId,
             kind: 'character',
-            name: clampEmbedded(candidate.name, MAX_EMBEDDED_NAME),
+            name: stored.name,
             // First introduction is the classifier's one description write; it
             // never amends a description afterwards (authorship contract).
-            description: clampEmbedded(candidate.description, MAX_EMBEDDED_BODY),
+            description: stored.description,
             keywords,
             status: 'active',
             injectionMode: 'auto',
