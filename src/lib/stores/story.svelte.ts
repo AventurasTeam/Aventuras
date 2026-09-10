@@ -3703,6 +3703,15 @@ class StoryStore {
   ): Promise<Branch> {
     if (!this.currentStory) throw new Error('No story loaded')
 
+    // Creating a branch ends by switching to it, so it is a branch switch with a write in
+    // front. Refused here rather than at that switch, which would leave the branch created
+    // and the story still on the old one.
+    if (this.generationLease) {
+      throw new Error(
+        'Cannot create a branch while a generation is in progress: creating one switches to it.',
+      )
+    }
+
     // Verify the checkpoint exists in memory
     const checkpoint = this.checkpoints.find((cp) => cp.id === checkpointId)
     if (!checkpoint) {
