@@ -531,7 +531,23 @@ class StoryStore {
   }
 
   // Close the current story and reset state
+  /**
+   * Leave the story.
+   *
+   * Refused while a generation holds the store. The classification that follows a narration
+   * writes through the live story and branch, so opening another story under it would apply
+   * one story's world state to the next. See "The generation lease" in
+   * docs/architecture/overview.md for why that cannot simply be redirected.
+   */
   closeStory(): void {
+    if (this.generationLease) {
+      throw new Error(this.generationBusyMessage('leave the story'))
+    }
+    this.forceCloseStory()
+  }
+
+  /** Close without the guard, for the load path's own cleanup. */
+  private forceCloseStory(): void {
     this.storyLoadSeq++
     this.resetStoryState()
     this.currentBgImage = null
@@ -551,6 +567,11 @@ class StoryStore {
 
   // Load a specific story with all its data
   async loadStory(storyId: string): Promise<void> {
+    // Same reason as closeStory: a generation in flight writes through whatever story is
+    // open, so swapping it out from under one sends its remaining writes to the new story.
+    if (this.generationLease) {
+      throw new Error(this.generationBusyMessage('open another story'))
+    }
     const seq = ++this.storyLoadSeq
     const run = this.storyLoadChain.then(
       () => this.performStoryLoad(storyId, seq),
@@ -588,7 +609,7 @@ class StoryStore {
       // A load that failed *after* publishing leaves the store naming a story whose entries and
       // world state it never loaded. The caller shows the library, so the mismatch is invisible
       // but latent — tear it down rather than leave it for the next reader of the store.
-      if (this.currentStory?.id === storyId) this.closeStory()
+      if (this.currentStory?.id === storyId) this.forceCloseStory()
       throw error
     }
   }

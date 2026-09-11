@@ -157,6 +157,11 @@ its first read or write and gives up after its last one. There are four such han
 `handleRetry`. `generateResponse` takes the lease as a required parameter, so a fifth cannot be
 added without acquiring one.
 
+Leaving the story is refused for the same reason, and so is opening another one: the
+classification that follows a narration writes through whatever story and branch are live, so
+swapping either out from under a generation sends its remaining writes to the wrong place. The
+Library button and the Android back press both report the refusal rather than navigating.
+
 The lease and a branch switch are mutually exclusive in both directions: acquiring is refused while
 a switch is queued but unsettled, and `performBranchSwitch` refuses while a lease is held. That
 second check sits inside the queued body rather than at `switchBranch`'s entrance, because a switch
@@ -183,7 +188,8 @@ only the entries would be worse than redirecting nothing: the narration would la
 that asked for it while the classification accounting for it did not, leaving that branch holding an
 entry its world state does not know about.
 
-**When the restriction can be lifted.** Once world-state application takes the branch to write to as
+**When the restriction can be lifted.** This covers the story guard too — it is the same
+stand-in, for the same reason. Once world-state application takes the branch to write to as
 an argument instead of reading the active one, **and** `addEntry` redirects to the bound branch
 rather than asserting against it. Both, not either — the entry half alone produces exactly the
 mismatch described above. Branch-scoping `isGenerating`, so Stop and the streaming placeholder

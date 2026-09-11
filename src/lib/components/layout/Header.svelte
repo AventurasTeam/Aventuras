@@ -49,7 +49,14 @@
   })
 
   function goToLibrary() {
-    story.closeStory()
+    try {
+      story.closeStory()
+    } catch (error) {
+      // Refused while a generation is writing to this story. Stay put and say why, rather
+      // than navigating away from a story the store has not finished with.
+      ui.showToast(errMessage(error), 'error')
+      return
+    }
     ui.setActivePanel('library')
   }
 

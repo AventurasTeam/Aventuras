@@ -5,6 +5,7 @@
   import { ui } from '$lib/stores/ui.svelte'
   import { story } from '$lib/stores/story.svelte'
   import { isAndroid } from '$lib/utils/platform'
+  import { errMessage } from '$lib/utils/error'
 
   let { children } = $props()
 
@@ -48,7 +49,16 @@
         ) {
           ui.setActivePanel('story')
         } else {
-          if (story.currentStory) story.closeStory()
+          if (story.currentStory) {
+            try {
+              story.closeStory()
+            } catch (error) {
+              // A generation is still writing to this story. Back out of the navigation
+              // rather than the story, and say so — otherwise the press looks ignored.
+              ui.showToast(errMessage(error), 'error')
+              return
+            }
+          }
           ui.setActivePanel('library')
         }
         return
