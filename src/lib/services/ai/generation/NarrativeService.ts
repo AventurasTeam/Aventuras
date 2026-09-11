@@ -496,13 +496,12 @@ export class NarrativeService {
     }
 
     // Render system prompt — use per-story override when set, otherwise fall back to pack template
-    let systemPrompt: string
-    // A custom system prompt replaces the system half only; the turn message still comes
-    // from the pack, so the user half is rendered either way.
     const templateId = mode === 'creative-writing' ? 'creative-writing' : 'adventure'
-    const { system, user } = await ctx.render(templateId)
-
     const customPrompt = story?.settings?.customSystemPrompt
+
+    let systemPrompt: string
+    let user: string
+
     if (customPrompt) {
       const rendered = templateEngine.render(customPrompt, ctx.getContext())
       if (rendered === null) {
@@ -511,8 +510,11 @@ export class NarrativeService {
         )
       }
       systemPrompt = rendered
+      // The override replaces the system half only; the turn message still comes from the
+      // pack, so its user half is rendered on its own rather than through `render`.
+      user = await ctx.renderTemplate(`${templateId}-user`)
     } else {
-      systemPrompt = system
+      ;({ system: systemPrompt, user } = await ctx.render(templateId))
     }
 
     log('buildPrompts complete', {

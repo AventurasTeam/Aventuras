@@ -235,3 +235,36 @@ describe('adventure system prompt covers every pov', () => {
     }
   })
 })
+
+describe.each(['adventure', 'creative-writing'])('%s — full survives an unexpected pov', (id) => {
+  // `pov` comes from the settings blob with no runtime validation. A `case` without a
+  // fallback renders nothing for a value it does not list, which degrades `full` to `none`
+  // with no error anywhere.
+  it('still renders for a pov the template does not name', async () => {
+    for (const pov of ['fourth', 'omniscient']) {
+      const out = await renderUser(id, 'full', pov, 'present')
+      expect(out.trim().length).toBeGreaterThan(0)
+      expect(out).toContain('Your role:')
+    }
+  })
+
+  it('leaves no dangling example for an unexpected pov', async () => {
+    const out = await renderUser(id, 'full', 'fourth', 'present')
+    expect(out).not.toMatch(/->\s*"\.\.\."/)
+    expect(out).not.toMatch(/->\s*""/)
+  })
+})
+
+describe.each(['adventure', 'creative-writing'])('%s — full is clean whitespace', (id) => {
+  // Whitespace-control slips leak literal spaces that survive into every turn. The
+  // machinery and trimmed-emptiness assertions elsewhere do not see them.
+  it('has no space before a line break and no double space', async () => {
+    for (const pov of ['first', 'second', 'third']) {
+      for (const tense of ['present', 'past']) {
+        const out = await renderUser(id, 'full', pov, tense)
+        expect(out).not.toMatch(/ \n/)
+        expect(out).not.toMatch(/ {2}/)
+      }
+    }
+  })
+})

@@ -163,11 +163,11 @@ End with a natural opening for action, not a direct question.{% endif %}
   userContent: `{%- case narratorReinforcement %}
 {%- when 'minimal' %}You are the narrator of this interactive adventure. I am the player controlling protagonist named {{ protagonistName }}.
 {%- when 'full' %}You are the narrator of this interactive adventure. I am the player controlling protagonist named {{ protagonistName }}. Write in {{ tense }} tense, {{pov}} person.
-    {%- case pov %} 
-      {%- when 'first' %} {% assign actionExample = 'I push open the heavy door' %} 
-      {%- when 'second' %} {% assign actionExample = 'You push open the heavy door' %} 
-      {%- when 'third' %} {% assign actionExample =  protagonistName | append: ' pushes open the heavy door' %} 
-    {%- endcase %}
+{%- case pov -%}
+{%- when 'first' -%}{% assign actionExample = 'I push open the heavy door' %}
+{%- when 'second' -%}{% assign actionExample = 'You push open the heavy door' %}
+{%- else -%}{% assign actionExample = protagonistName | append: ' pushes open the heavy door' %}
+{%- endcase %}
 
 Your role:
 - Describe {{ protagonistName }}'s experiences and the world around them
@@ -379,7 +379,7 @@ Your role:
 - Maintain consistent characterization throughout
 
 I am the author directing the story. Write what I ask for.
-  {%- when 'third' %}You are a skilled fiction writer. Write in {{ tense }} tense, third person (they/their/character name).
+  {%- else %}You are a skilled fiction writer. Write in {{ tense }} tense, third person (they/their/character name).
 
 Your role:
 - Write prose based on my directions
