@@ -108,8 +108,10 @@ The story is an append-only list of `StoryEntry` rows (`user_action`, `narration
   a **branch** as well as a story: it records the branch it was taken on, is offered only there,
   and is refused on any other. Positions are reused by sibling branches after a fork, so a
   snapshot applied to the wrong branch deletes rows that merely share a number - and the
-  world-state restore deletes the active branch's rows and re-inserts the snapshot's under
-  _their_ branch id. The per-branch entity queries match `branch_id` exactly and never fall back
+  world-state restore deletes the active branch's rows and re-inserts only those of the
+  snapshot's that belong to that branch — the delete is branch-scoped, so the insert must be,
+  or a snapshot resolved through the lineage carries ancestor rows the delete never removed and
+  collides with them on the primary key. The per-branch entity queries match `branch_id` exactly and never fall back
   to inherited rows, so that leaves the active branch with none of its own whatever the
   experimental settings say - main included, when the snapshot came from a branch. Lightweight
   branches only decide how total it is: a pre-snapshot COW branch still resolves its ancestors'

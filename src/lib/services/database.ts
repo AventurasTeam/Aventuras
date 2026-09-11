@@ -1730,23 +1730,38 @@ class DatabaseService {
 
     // Restore entries not necessary as we are only deleting redundant entries since backup
 
+    // The insert has to cover exactly what the delete above covered, and the delete is scoped
+    // to this branch. A snapshot taken on a branch that resolves its world state through the
+    // lineage holds ancestor rows too — rows carrying their own branch_id, which the delete
+    // never touched. Re-inserting one collides on the primary key, and because these
+    // statements cannot share a transaction the deletes have already committed by then: the
+    // branch loses its entries and its own world state, and the restore dies with nothing put
+    // back. Filtering to the branch's own rows makes the two halves symmetric, whatever shape
+    // the branch is.
+    //
+    // An override the undone generation created is absent from the snapshot, so it is deleted
+    // and not restored — which is correct: the inherited row it was standing in for shows
+    // through again.
+    const ownedByBranch = <T extends { branchId: string | null }>(rows: T[]): T[] =>
+      rows.filter((row) => (row.branchId ?? null) === branchId)
+
     // Restore characters
-    for (const character of characters) {
+    for (const character of ownedByBranch(characters)) {
       await this.addCharacter(character)
     }
 
     // Restore locations
-    for (const location of locations) {
+    for (const location of ownedByBranch(locations)) {
       await this.addLocation(location)
     }
 
     // Restore items
-    for (const item of items) {
+    for (const item of ownedByBranch(items)) {
       await this.addItem(item)
     }
 
     // Restore story beats
-    for (const beat of storyBeats) {
+    for (const beat of ownedByBranch(storyBeats)) {
       await this.addStoryBeat(beat)
     }
 
