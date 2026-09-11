@@ -188,3 +188,40 @@ describe('templateUsesNarratorReinforcement — prose does not count', () => {
     ).toBe(true)
   })
 })
+
+describe('templateUsesNarratorReinforcement — unevaluated regions do not count', () => {
+  it('ignores a reference inside a raw block', () => {
+    expect(
+      templateUsesNarratorReinforcement(
+        `{% raw %}{% if narratorReinforcement == 'full' %}x{% endif %}{% endraw %}`,
+      ),
+    ).toBe(false)
+  })
+
+  it('ignores a reference inside a string literal', () => {
+    expect(templateUsesNarratorReinforcement(`{% assign label = 'narratorReinforcement' %}`)).toBe(
+      false,
+    )
+    expect(templateUsesNarratorReinforcement(`{{ "narratorReinforcement" }}`)).toBe(false)
+  })
+
+  it('still sees the variable in a tag that also carries a string literal', () => {
+    expect(
+      templateUsesNarratorReinforcement(`{% if narratorReinforcement == 'full' %}x{% endif %}`),
+    ).toBe(true)
+  })
+
+  it('still sees a real branch outside a raw block', () => {
+    expect(
+      templateUsesNarratorReinforcement(
+        `{% raw %}narratorReinforcement{% endraw %}{% if narratorReinforcement == 'none' %}x{% endif %}`,
+      ),
+    ).toBe(true)
+  })
+
+  it('holds for the templates the application ships', () => {
+    for (const template of storyTemplates) {
+      expect(templateUsesNarratorReinforcement(template.userContent)).toBe(true)
+    }
+  })
+})

@@ -9,26 +9,34 @@
 /** The template variable this feeds. A prompt without it cannot honour the setting. */
 export const NARRATOR_REINFORCEMENT_VAR = 'narratorReinforcement'
 
-/** `{% comment %}` blocks and `{% # %}` inline comments, which Liquid renders as nothing. */
-const LIQUID_COMMENT =
-  /\{%-?\s*comment\s*-?%\}[\s\S]*?\{%-?\s*endcomment\s*-?%\}|\{%-?\s*#[\s\S]*?%\}/g
+/**
+ * Regions Liquid never evaluates: `{% comment %}` blocks, `{% # %}` inline comments, and
+ * `{% raw %}` blocks, whose contents are emitted as text.
+ */
+const LIQUID_INERT =
+  /\{%-?\s*comment\s*-?%\}[\s\S]*?\{%-?\s*endcomment\s*-?%\}|\{%-?\s*raw\s*-?%\}[\s\S]*?\{%-?\s*endraw\s*-?%\}|\{%-?\s*#[\s\S]*?%\}/g
 
 /** Tags and output expressions — the only places a template can read a variable. */
 const LIQUID_EXPRESSION = /\{%-?[\s\S]*?-?%\}|\{\{-?[\s\S]*?-?\}\}/g
+
+/** String literals, which name no variable however they read. */
+const LIQUID_STRING = /'[^']*'|"[^"]*"/g
 
 /**
  * Whether a template would honour the setting at all.
  *
  * Any tag rather than a `{{ }}` match: the level is branched on, so it appears in
- * `{% if %}`, `{% case %}` or `{% unless %}` as readily as in an output tag. Comments are
- * removed and prose is ignored, so neither a branch someone commented out nor the variable's
- * name written in the prompt text reports the setting as working.
+ * `{% if %}`, `{% case %}` or `{% unless %}` as readily as in an output tag. What Liquid
+ * would not evaluate does not count -- comments, raw blocks, prose, and string literals --
+ * so only a reference the template can actually read reports the setting as working.
  */
 export function templateUsesNarratorReinforcement(content: string | null | undefined): boolean {
   if (!content) return false
-  const active = content.replace(LIQUID_COMMENT, '')
+  const active = content.replace(LIQUID_INERT, '')
   const reference = new RegExp(`\\b${NARRATOR_REINFORCEMENT_VAR}\\b`)
-  return (active.match(LIQUID_EXPRESSION) ?? []).some((expression) => reference.test(expression))
+  return (active.match(LIQUID_EXPRESSION) ?? []).some((expression) =>
+    reference.test(expression.replace(LIQUID_STRING, '')),
+  )
 }
 
 /** The two prompts a turn sends, as the bodies that will actually run. */

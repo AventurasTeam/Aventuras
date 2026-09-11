@@ -268,3 +268,21 @@ describe.each(['adventure', 'creative-writing'])('%s — full is clean whitespac
     }
   })
 })
+
+// The two templates fall back differently on purpose, each matching its own system half:
+// adventure's pov chain ends in SECOND PERSON, creative-writing's in THIRD PERSON. A turn
+// message that fell back the other way would contradict the system prompt beside it.
+describe('an unexpected pov falls back the way the system half does', () => {
+  it('adventure says second person and gives a second-person example', async () => {
+    const out = await renderUser('adventure', 'full', 'fourth', 'present')
+    expect(out).toContain('second person')
+    expect(out).toContain('You push open the heavy door')
+    expect(out).not.toContain('fourth person')
+  })
+
+  it('creative writing says third person', async () => {
+    const out = await renderUser('creative-writing', 'full', 'fourth', 'present')
+    expect(out).toContain('third person')
+    expect(out).not.toContain('fourth person')
+  })
+})
