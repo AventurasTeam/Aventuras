@@ -174,6 +174,14 @@
   })
 
   // Check if retry is available for this entry
+  // One notion of busy for every affordance in this file, so none of them offers what the
+  // store will refuse. The lease, not just `isGenerating`: that flag is unset for the
+  // preparation before a turn and for the drain after Stop, and the store refuses across
+  // both. A retry restore rewrites the same entries a generation does, so it counts too.
+  const entriesLocked = $derived(
+    ui.isGenerating || story.isRetryInProgress || story.isGenerationLeaseHeld,
+  )
+
   // Branch as well as story: a snapshot taken elsewhere would be refused on restore, and
   // offering it here hides the regenerate that does work on this branch.
   const canRetry = $derived(
@@ -182,7 +190,7 @@
       story.currentStory &&
       ui.retryBackup.storyId === story.currentStory.id &&
       (ui.retryBackup.branchId ?? null) === (story.currentStory.currentBranchId ?? null) &&
-      !ui.isGenerating &&
+      !entriesLocked &&
       !ui.lastGenerationError,
   )
 
@@ -203,16 +211,9 @@
     isLatestNarration &&
       isLastEntry &&
       !canRetry &&
-      !ui.isGenerating &&
+      !entriesLocked &&
       !ui.lastGenerationError &&
       !!findPrecedingUserAction(story.entries, entry.id),
-  )
-
-  // A retry restore rewrites the same entries a generation does, and the store refuses both.
-  // The lease, not just `isGenerating`: the store refuses on the same terms, and the flag is
-  // unset for the preparation before a turn and for the drain after Stop.
-  const entriesLocked = $derived(
-    ui.isGenerating || story.isRetryInProgress || story.isGenerationLeaseHeld,
   )
 
   /**
