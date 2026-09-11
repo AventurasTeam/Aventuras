@@ -920,7 +920,10 @@ class UIStore {
     // guess restores one branch's snapshot onto another. Discard it: the reader loses retry
     // across a restart once, and the next generation records an attributable snapshot.
     if (!Object.prototype.hasOwnProperty.call(retryState, 'branchId')) {
+      // Cleared as well as ignored. The branch-aware clear below can never match a row with
+      // no branch, so leaving it would have it re-read and re-discarded on every story load.
       console.log('[UI] Discarding persistent retry state that names no branch', { storyId })
+      this.queueRetryStateWrite(() => database.clearRetryState(storyId), 'clear')
       return
     }
     const branchId = retryState.branchId ?? null

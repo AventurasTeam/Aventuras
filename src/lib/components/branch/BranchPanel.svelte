@@ -517,7 +517,12 @@
     >
       <Lock class="text-surface-300 h-6 w-6" />
       <p class="text-surface-300 max-w-[18rem] px-4 text-center text-xs">
-        A response is generating on this branch. Switching a branch mid-flight is not available.
+        {#if story.isGenerationLeaseForAnotherStory}
+          A response in another story is still finishing. Switching a branch mid-flight is not
+          available.
+        {:else}
+          A response is generating on this branch. Switching a branch mid-flight is not available.
+        {/if}
       </p>
     </div>
   {/if}

@@ -105,6 +105,24 @@ describe('GenerationLease', () => {
     expect(onRelease).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps the first deferred restore, so its waiter cannot be stranded', async () => {
+    const onRelease = vi.fn()
+    const lease = new GenerationLease('story-1', null, onRelease)
+    const first = vi.fn(async () => {})
+    const second = vi.fn(async () => {})
+
+    const firstWaiter = lease.deferRestore(first)
+    const secondWaiter = lease.deferRestore(second)
+
+    // Replacing it would leave firstWaiter pending forever.
+    expect(secondWaiter).toBe(firstWaiter)
+
+    await lease.finish()
+    await expect(firstWaiter).resolves.toBeUndefined()
+    expect(first).toHaveBeenCalledTimes(1)
+    expect(second).not.toHaveBeenCalled()
+  })
+
   it('refuses to defer onto a finished lease, so the caller acts directly instead', async () => {
     const lease = new GenerationLease('story-1', null, vi.fn())
     await lease.finish()

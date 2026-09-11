@@ -375,11 +375,14 @@
   )
 
   // Show regeneration hint when editing the last user_action and retry is available
+  // Same scope check as `canRetry`: the two derive availability from one value and must not
+  // disagree about what makes it usable.
   const canSaveAndRegenerate = $derived(
     isLastUserAction &&
       !!ui.retryBackup &&
       !!story.currentStory &&
-      ui.retryBackup.storyId === story.currentStory.id,
+      ui.retryBackup.storyId === story.currentStory.id &&
+      (ui.retryBackup.branchId ?? null) === (story.currentStory.currentBranchId ?? null),
   )
 
   async function handleCreateCheckpoint() {

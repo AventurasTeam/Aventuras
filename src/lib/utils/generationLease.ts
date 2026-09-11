@@ -17,6 +17,7 @@
 export class GenerationLease {
   private deferredRestore: (() => Promise<void>) | null = null
   private restoreSettled: ((result: { error?: unknown }) => void) | null = null
+  private pendingRestore: Promise<void> | null = null
   private finished = false
 
   constructor(
@@ -38,10 +39,14 @@ export class GenerationLease {
    */
   deferRestore(restore: () => Promise<void>): Promise<void> | null {
     if (this.finished) return null
+    // Replacing a registered restore would strand its waiter forever — the promise handed
+    // out for it would never settle. One rewind per lease; a second caller gets the first's.
+    if (this.deferredRestore) return this.pendingRestore
     this.deferredRestore = restore
-    return new Promise<void>((resolve, reject) => {
+    this.pendingRestore = new Promise<void>((resolve, reject) => {
       this.restoreSettled = ({ error }) => (error ? reject(error) : resolve())
     })
+    return this.pendingRestore
   }
 
   /**
@@ -68,6 +73,7 @@ export class GenerationLease {
       }
     } finally {
       this.restoreSettled = null
+      this.pendingRestore = null
       this.onRelease()
     }
   }

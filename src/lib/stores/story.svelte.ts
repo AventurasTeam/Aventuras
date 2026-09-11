@@ -4044,6 +4044,25 @@ class StoryStore {
   }
 
   /**
+   * True when the lease belongs to a story that is no longer the open one.
+   *
+   * Closing a story does not release the lease — the generation is still writing through
+   * this store — so the next story opened is locked too. It is locked for a different
+   * reason, and saying so is the difference between an explanation and a lie.
+   */
+  get isGenerationLeaseForAnotherStory(): boolean {
+    const lease = this.generationLease
+    return !!lease && lease.storyId !== (this.currentStory?.id ?? null)
+  }
+
+  /** Why a switch or a new generation is being refused, in terms the reader can act on. */
+  private generationBusyMessage(action: string): string {
+    return this.isGenerationLeaseForAnotherStory
+      ? `Cannot ${action}: a generation in another story is still finishing.`
+      : `Cannot ${action} while a generation is in progress`
+  }
+
+  /**
    * Claim the current branch for a generation, from before its first read or write until
    * after its last one.
    *
@@ -4058,7 +4077,7 @@ class StoryStore {
    */
   acquireGenerationLease(): GenerationLease {
     if (this.generationLease) {
-      throw new Error('A generation is already in progress')
+      throw new Error(this.generationBusyMessage('start a generation'))
     }
     if (this.pendingBranchSwitches > 0) {
       throw new Error('A branch switch is still in progress')
@@ -4139,7 +4158,7 @@ class StoryStore {
     // being unable to target a branch other than the one loaded — see "The generation lease"
     // in docs/architecture/overview.md for why, and for when this can be lifted.
     if (this.generationLease) {
-      throw new Error('Cannot switch branches while a generation is in progress')
+      throw new Error(this.generationBusyMessage('switch branches'))
     }
 
     if (!this.currentStory) throw new Error('No story loaded')

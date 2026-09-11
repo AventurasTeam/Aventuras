@@ -160,8 +160,14 @@ a switch is queued but unsettled, and `performBranchSwitch` refuses while a leas
 second check sits inside the queued body rather than at `switchBranch`'s entrance, because a switch
 accepted while idle reaches the front of the queue _after_ a generation may have begun.
 
-Two moments are distinct. **Drained** is when the generation's own writes have settled; **finished**
-is when a rewind deferred by Stop has run too, and only then is the branch given up. Stop registers
+Two moments are distinct. **Drained** is when the turn's own writes have settled; **finished**
+is when a rewind deferred by Stop has run too, and only then is the branch given up.
+
+The lease does **not** cover the post-turn background tasks — chapter creation and lore
+management are started un-awaited and outlive it. Lore management refuses a write whose branch
+has moved (`loreCallbacks.assertScope`); chapter creation does not, so a chapter finished after
+a switch takes its number from the branch now loaded. The row still carries the right branch,
+so this is a numbering fault rather than a misplaced chapter. Stop registers
 its rewind on the lease and waits for it rather than releasing — aborting the request to the model
 is not the completion of the generation's writes, and an `applyClassificationResult` already entered
 keeps going regardless. One release owner throughout, so the rewind cannot race the writes it

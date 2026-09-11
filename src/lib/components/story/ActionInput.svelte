@@ -857,13 +857,26 @@
       const errorMessage = ui.wasBackgroundedDuringGeneration
         ? `Generation may have been interrupted while the app was in the background. ${baseMessage}`
         : baseMessage
-      const errorEntry = await story.addEntry('system', `Generation failed: ${errorMessage}`, lease)
-      ui.setGenerationError({
-        message: errorMessage,
-        errorEntryId: errorEntry.id,
-        userActionEntryId,
-        timestamp: Date.now(),
-      })
+      // The fallback must not be able to trip the same wire that brought us here. If the
+      // story or branch moved under the generation, `addEntry` refuses — and throwing again
+      // from the handler would lose the error entirely, leaving an unhandled rejection and
+      // no Retry affordance.
+      try {
+        const errorEntry = await story.addEntry(
+          'system',
+          `Generation failed: ${errorMessage}`,
+          lease,
+        )
+        ui.setGenerationError({
+          message: errorMessage,
+          errorEntryId: errorEntry.id,
+          userActionEntryId,
+          timestamp: Date.now(),
+        })
+      } catch (recordError) {
+        console.error('[ActionInput] Could not record the failure entry:', recordError)
+        ui.showToast(errorMessage, 'error')
+      }
 
       await notifyFailureIfBackgrounded()
     } finally {
@@ -1102,9 +1115,6 @@
       return
     }
 
-    ui.setLastLorebookRetrieval(null)
-    ui.setLastRetrievalResult(null)
-
     const activeBranchId = story.currentStory.currentBranchId ?? null
     const runRestore = () =>
       retryService.handleStopGeneration(
@@ -1155,6 +1165,11 @@
       ui.showToast(result.error ?? 'Could not restore the story', 'error')
       return
     }
+
+    // Cleared only now: a refused restore leaves the story untouched, so wiping lorebook
+    // stickiness and the retrieval cache on the way in would be the one thing preflight
+    // exists to prevent. RetryService clears the lorebook debug state itself once it commits.
+    ui.setLastRetrievalResult(null)
 
     await tick()
     actionType = (result.restoredActionType as ActionType) ?? actionType
