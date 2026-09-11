@@ -263,30 +263,24 @@ describe('decidePackPrompt — what the interactive import asks about', () => {
   ]
 
   const device = (over: Partial<Parameters<typeof decidePackPrompt>[1]> = {}) => ({
-    legacyImportPackMapping: false,
     packCount: 3,
     ...over,
   })
 
   describe('a file that records no pack', () => {
-    it('is not asked about while the opt-in is off', () => {
-      // The compatibility promise: files written before packs were recorded import exactly as
-      // they did, with no new step in a workflow people already rely on.
-      expect(decidePackPrompt(recordsNoPack, device({ packCount: 4 }))).toEqual({ prompt: 'none' })
+    it('is asked about whenever there is more than one pack', () => {
+      expect(decidePackPrompt(recordsNoPack, device({ packCount: 2 }))).toEqual({
+        prompt: 'choose-pack',
+      })
+      expect(decidePackPrompt(recordsNoPack, device({ packCount: 4 }))).toEqual({
+        prompt: 'choose-pack',
+      })
     })
 
-    it('is asked about when the opt-in is on and there is more than one pack', () => {
-      expect(
-        decidePackPrompt(recordsNoPack, device({ legacyImportPackMapping: true, packCount: 2 })),
-      ).toEqual({ prompt: 'choose-pack' })
-    })
-
-    it('is not asked about on a single-pack device, opt-in or not', () => {
+    it('is not asked about on a single-pack device', () => {
       // Nothing was named, so there is no information to convey and no choice to make. Counting
       // packs rather than looking for a custom one also covers a renamed built-in pack.
-      expect(
-        decidePackPrompt(recordsNoPack, device({ legacyImportPackMapping: true, packCount: 1 })),
-      ).toEqual({ prompt: 'none' })
+      expect(decidePackPrompt(recordsNoPack, device({ packCount: 1 }))).toEqual({ prompt: 'none' })
     })
   })
 
@@ -295,14 +289,6 @@ describe('decidePackPrompt — what the interactive import asks about', () => {
       // The point of the whole policy: every file written from 1.9.0 on records a pack, so a
       // confirm-on-match rule would put a modal in front of every import forever.
       expect(decidePackPrompt(file('exact'), device())).toEqual({ prompt: 'none' })
-    })
-
-    it('binds without asking whatever the legacy opt-in says', () => {
-      for (const legacyImportPackMapping of [true, false]) {
-        expect(decidePackPrompt(file('exact'), device({ legacyImportPackMapping }))).toEqual({
-          prompt: 'none',
-        })
-      }
     })
 
     it('asks which pack when the name matches but the author does not', () => {
@@ -395,7 +381,7 @@ describe('planPackBinding — the one policy both callers use', () => {
     db.packs.push(pack({ id: 'local-grimdark' }))
     const ctx = await buildBindingContext(named as never)
 
-    const plan = await planPackBinding(ctx, false)
+    const plan = await planPackBinding(ctx)
 
     expect(plan).toEqual({
       ask: false,
@@ -411,7 +397,7 @@ describe('planPackBinding — the one policy both callers use', () => {
       customVariableValues: { Mood: 'somber' },
     } as never)
 
-    const plan = await planPackBinding(ctx, false)
+    const plan = await planPackBinding(ctx)
 
     expect(plan).toEqual({
       ask: false,
@@ -425,7 +411,7 @@ describe('planPackBinding — the one policy both callers use', () => {
   it('asks which pack, with nothing locked, when the named pack is absent', async () => {
     const ctx = await buildBindingContext(named as never)
 
-    await expect(planPackBinding(ctx, false)).resolves.toEqual({ ask: true, lockedPack: null })
+    await expect(planPackBinding(ctx)).resolves.toEqual({ ask: true, lockedPack: null })
   })
 
   it('locks the pack and names the gap when only a required value is missing', async () => {
@@ -434,17 +420,18 @@ describe('planPackBinding — the one policy both callers use', () => {
     db.packVariables = [{ variableName: 'mood', isRequired: true } as never]
     const ctx = await buildBindingContext({ pack: named.pack } as never)
 
-    const plan = await planPackBinding(ctx, false)
+    const plan = await planPackBinding(ctx)
 
     expect(plan).toEqual({ ask: true, lockedPack: local, onlyVariables: ['mood'] })
   })
 
-  it('passes the legacy opt-in through for a file that records no pack', async () => {
-    db.packs.push(pack({ id: 'local-grimdark' }))
+  it('asks which pack for a file that records no pack, once there is a choice', async () => {
+    // `beforeEach` leaves the built-in pack installed and nothing else: one pack, no choice.
     const ctx = await buildBindingContext(undefined)
+    await expect(planPackBinding(ctx)).resolves.toMatchObject({ ask: false })
 
-    await expect(planPackBinding(ctx, false)).resolves.toMatchObject({ ask: false })
-    await expect(planPackBinding(ctx, true)).resolves.toEqual({ ask: true, lockedPack: null })
+    db.packs.push(pack({ id: 'local-grimdark' }))
+    await expect(planPackBinding(ctx)).resolves.toEqual({ ask: true, lockedPack: null })
   })
 })
 
@@ -632,7 +619,7 @@ describe('sync — the decision is made before anything is written', () => {
     expect(calls.deleted).toEqual([])
   })
 
-  it('binds a legacy file to the built-in pack without consulting the opt-in', async () => {
+  it('binds a legacy file to the built-in pack when the caller supplies no resolver', async () => {
     await syncImport(sampleExport(undefined))
 
     expect(calls.stories[0].packId).toBe('default-pack')

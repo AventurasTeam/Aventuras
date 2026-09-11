@@ -917,7 +917,6 @@ export function getDefaultExperimentalFeatures(): ExperimentalFeatures {
     backgroundGeneration: false,
     generationNotifications: false,
     notificationPreview: false,
-    legacyImportPackMapping: false,
   }
 }
 
@@ -1205,7 +1204,7 @@ export function getDefaultUISettings(): UISettings {
     highlightDialogue: false,
     dialogueColor: '',
     incognitoKeyboard: false,
-    activityReporting: 'off',
+    activityReporting: 'line',
   }
 }
 

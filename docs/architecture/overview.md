@@ -163,6 +163,11 @@ Reporting never alters a turn. Every write is guarded, the display sits inside a
 narrative retry loop is reported but unchanged. Records are session-only, bounded by `RETAINED_TURNS`,
 and never persisted or exported.
 
+`activityReporting` defaults to `line`, so an install that has never touched the setting reports the
+running step rather than the ellipsis. `activity_reporting` is written only by `setActivityReporting`
+and the interface reset, so a stored `off` is a choice and is read back as one — the default reaches
+absent keys only.
+
 ## Images
 
 Nine backends live under `src/lib/services/ai/image/providers/` — NanoGPT, OpenAI, OpenRouter,

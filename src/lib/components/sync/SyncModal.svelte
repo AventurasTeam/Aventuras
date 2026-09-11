@@ -18,7 +18,6 @@
   import type { SyncServerInfo, SyncStoryPreview, SyncConnectionData } from '$lib/types/sync'
   import { onDestroy, untrack } from 'svelte'
   import PackMappingDialog from '$lib/components/story/PackMappingDialog.svelte'
-  import { settings } from '$lib/stores/settings.svelte'
   import type { PresetPack } from '$lib/services/packs'
   import { planPackBinding, previewImport } from '$lib/services/import'
   import type { PackBindingContext, PackBindingResolution } from '$lib/services/import'
@@ -56,10 +55,7 @@
     if ('error' in preview) return preview
     const { context } = preview
 
-    const plan = await planPackBinding(
-      context,
-      settings.experimentalFeatures.legacyImportPackMapping,
-    )
+    const plan = await planPackBinding(context)
     if (!plan.ask) return plan.resolution
 
     return new Promise((resolve) => {
