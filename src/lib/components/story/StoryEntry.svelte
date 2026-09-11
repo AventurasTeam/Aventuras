@@ -209,7 +209,11 @@
   )
 
   // A retry restore rewrites the same entries a generation does, and the store refuses both.
-  const entriesLocked = $derived(ui.isGenerating || story.isRetryInProgress)
+  // The lease, not just `isGenerating`: the store refuses on the same terms, and the flag is
+  // unset for the preparation before a turn and for the drain after Stop.
+  const entriesLocked = $derived(
+    ui.isGenerating || story.isRetryInProgress || story.isGenerationLeaseHeld,
+  )
 
   /**
    * Dismiss/delete this error entry from the story.

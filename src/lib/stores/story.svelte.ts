@@ -1066,15 +1066,29 @@ class StoryStore {
    * `isRetryInProgress` and `ui.isGenerating` let the UI disable the affordance up front; this
    * refuses the ones that get through, rather than returning as if the work had been done.
    */
-  private assertNotBusy(action: string): void {
+  /**
+   * Refuse while the story is mid-turn.
+   *
+   * `ui.isGenerating` is not enough on its own: it is set inside `generateResponse`, after
+   * the initiating handler has already taken a snapshot and written the user action, and it
+   * is cleared by Stop while the classification is still writing. The lease covers both of
+   * those, so an edit or a delete in either window can no longer slip past.
+   *
+   * `holder` is the generation's own lease, for the two paths that legitimately edit under
+   * one — the error retry's delete of the failed entry, and the regenerate's undo.
+   */
+  private assertNotBusy(action: string, holder?: GenerationLease): void {
     if (this._isRetryInProgress || ui.isGenerating) {
       throw new Error(`Cannot ${action} while a generation or retry is in progress`)
+    }
+    if (this.generationLease && this.generationLease !== holder) {
+      throw new Error(`Cannot ${action} while a generation is in progress`)
     }
   }
 
   /** Every precondition for removing an entry, in one place. Returns the validated entry. */
-  private assertEntryDeletable(entryId: string): StoryEntry {
-    this.assertNotBusy('delete an entry')
+  private assertEntryDeletable(entryId: string, holder?: GenerationLease): StoryEntry {
+    this.assertNotBusy('delete an entry', holder)
 
     const entry = this.entries.find((e) => e.id === entryId)
     if (!entry) throw new Error('Entry not found')
@@ -1100,10 +1114,10 @@ class StoryStore {
   }
 
   // Delete a story entry
-  async deleteEntry(entryId: string): Promise<void> {
+  async deleteEntry(entryId: string, holder?: GenerationLease): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
-    const existingEntry = this.assertEntryDeletable(entryId)
+    const existingEntry = this.assertEntryDeletable(entryId, holder)
     const currentBranchId = this.currentStory.currentBranchId
 
     // Phase 2: Rollback on delete — cascade delete from this position with world state undo
@@ -1204,9 +1218,10 @@ class StoryStore {
    */
   async undoNarrationForRegenerate(
     entryId: string,
+    holder?: GenerationLease,
   ): Promise<{ entitiesUndone: boolean; timeUndone: boolean }> {
     if (!this.currentStory) throw new Error('No story loaded')
-    this.assertNotBusy('regenerate')
+    this.assertNotBusy('regenerate', holder)
 
     const entry = this.entries.find((e) => e.id === entryId)
     if (!entry) throw new Error('Entry not found')

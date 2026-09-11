@@ -1198,7 +1198,9 @@
       }
 
       try {
-        await story.deleteEntry(error.errorEntryId)
+        // The lease is this generation's own, so the guard lets it through: clearing the
+        // failed entry before regenerating is the holder tidying up after itself.
+        await story.deleteEntry(error.errorEntryId, lease)
       } catch (err) {
         // Regenerating over an entry that could not be removed would leave the failed one
         // above the new narration, so the retry stops here.
@@ -1251,7 +1253,7 @@
     try {
       let undo: { entitiesUndone: boolean; timeUndone: boolean }
       try {
-        undo = await story.undoNarrationForRegenerate(entryId)
+        undo = await story.undoNarrationForRegenerate(entryId, lease)
       } catch (error) {
         ui.showToast(errMessage(error), 'error')
         return
