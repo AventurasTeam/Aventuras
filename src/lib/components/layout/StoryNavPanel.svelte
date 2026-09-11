@@ -39,25 +39,27 @@
    * are about the story's shape across branches, and both jump to entries. The clock stays in
    * the sidebar, because it belongs to the branch being played.
    */
-  const tabs = ['navigation', 'timeline'] as const
+  /** Left to right on screen. Navigation sits nearest the story and opens first. */
+  const tabs = ['timeline', 'navigation'] as const
   let tab = $state<(typeof tabs)[number]>('navigation')
 
   /**
    * The sidebar's tab gestures, mirrored for a panel on the other edge.
    *
-   * There, swiping away from the right edge steps forward and swiping towards it steps back,
-   * closing once there is no tab left. Here the panel hangs off the left edge, so the two
-   * directions swap: inward goes forward, outward goes back and finally closes.
+   * One gesture carries the reader inward: the swipe that opens the panel keeps stepping
+   * through its tabs, and the opposite swipe walks back out and finally closes. The sidebar
+   * enters from the right on a left swipe; this panel enters from the left on a right one, so
+   * the tab strip is ordered to match and the first tab is the one nearest the story.
    */
   function handleSwipeRight() {
     const index = tabs.indexOf(tab)
-    if (index < tabs.length - 1) tab = tabs[index + 1]
+    if (index > 0) tab = tabs[index - 1]
   }
 
   function handleSwipeLeft() {
     const index = tabs.indexOf(tab)
-    if (index > 0) {
-      tab = tabs[index - 1]
+    if (index < tabs.length - 1) {
+      tab = tabs[index + 1]
     } else {
       ui.closeNavPanel()
     }
@@ -227,18 +229,18 @@
     <div class="border-border bg-muted/60 flex-shrink-0 border-b">
       <Tabs.List class="flex h-auto w-full justify-start rounded-none bg-transparent p-0">
         <Tabs.Trigger
-          value="navigation"
-          class="data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-muted/30 hover:bg-muted/20 text-muted-foreground flex-1 rounded-none border-b-2 border-transparent bg-transparent py-3 transition-colors"
-          title="Navigation"
-        >
-          <Navigation class="h-4 w-4" />
-        </Tabs.Trigger>
-        <Tabs.Trigger
           value="timeline"
           class="data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-muted/30 hover:bg-muted/20 text-muted-foreground flex-1 rounded-none border-b-2 border-transparent bg-transparent py-3 transition-colors"
           title="Timeline"
         >
           <Clock class="h-4 w-4" />
+        </Tabs.Trigger>
+        <Tabs.Trigger
+          value="navigation"
+          class="data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-muted/30 hover:bg-muted/20 text-muted-foreground flex-1 rounded-none border-b-2 border-transparent bg-transparent py-3 transition-colors"
+          title="Navigation"
+        >
+          <Navigation class="h-4 w-4" />
         </Tabs.Trigger>
       </Tabs.List>
     </div>

@@ -173,8 +173,10 @@
     const parts: string[] = []
     // TimeTracker's fields are all required, but this data is persisted JSON: a story imported
     // from an older .avt can carry a partial tracker that the type system never sees.
-    if (time.years && time.years > 0) parts.push(`Y${time.years}`)
-    if (time.days && time.days > 0) parts.push(`D${time.days}`)
+    // Counted from one, as `formatStoryTime` and every other story-time surface reads them.
+    // A zero is the first year or day and is left out, so a same-day stamp is just the clock.
+    if (time.years && time.years > 0) parts.push(`Y${time.years + 1}`)
+    if (time.days && time.days > 0) parts.push(`D${time.days + 1}`)
     const hours = time.hours ?? 0
     const minutes = time.minutes ?? 0
     parts.push(`${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`)
@@ -1626,7 +1628,7 @@
             size="icon"
             onclick={() => (isAnchoringTime = true)}
             class="hidden h-7 w-7 sm:flex {story.timeAnchorFor(entry.id)
-              ? 'text-teal-500 hover:text-teal-600'
+              ? 'text-amber-500 hover:text-amber-600'
               : 'text-muted-foreground hover:text-foreground'}"
             title={story.timeAnchorFor(entry.id) ? 'Edit time anchor' : 'Create a time anchor'}
           >

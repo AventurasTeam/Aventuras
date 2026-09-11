@@ -7,7 +7,7 @@
  * not at all.
  */
 
-import type { Chapter, StoryEntry, TimeTracker, WorldStateDelta } from '$lib/types'
+import type { Chapter, Checkpoint, StoryEntry, TimeTracker, WorldStateDelta } from '$lib/types'
 import type { RepairedTime } from './reconcile'
 import type { Boundary } from './boundaries'
 import { toMinutes } from './minutes'
@@ -23,6 +23,11 @@ export interface DeltaUpdate {
   delta: WorldStateDelta
 }
 
+export interface CheckpointClockUpdate {
+  checkpointId: string
+  timeTracker: TimeTracker
+}
+
 export interface RepairPlan {
   times: RepairedTime[]
   chapterSpans: ChapterSpanUpdate[]
@@ -35,6 +40,20 @@ export interface RepairPlan {
    * clock-only adjustment the reader had not yet committed by continuing the story.
    */
   clock: TimeTracker | null
+  /**
+   * Checkpoints at the range's asserted ending, reseeded with that assertion.
+   *
+   * A checkpoint holds the clock a branch forked there will be seeded with, read at the fork
+   * rather than at the repair, so leaving it would open that branch on a pre-repair time.
+   */
+  checkpointClocks: CheckpointClockUpdate[]
+  /**
+   * Entries whose automatic world-state keyframes this repair invalidates.
+   *
+   * A keyframe is a cache taken wherever the snapshot interval fell, so it can be neither
+   * pinned nor rewritten with confidence, and is discarded the way a rollback discards it.
+   */
+  keyframeEntryIds: string[]
 }
 
 export interface PlanRepairInput {
@@ -43,10 +62,13 @@ export interface PlanRepairInput {
   chapters: Chapter[]
   /** The reconciliation's output for the entries inside the range. */
   times: RepairedTime[]
+  checkpoints?: Checkpoint[]
+  /** The assertion at the range's later boundary, when that boundary carries one. */
+  assertedEnding?: { entryId: string; time: TimeTracker } | null
 }
 
 export function planRepair(input: PlanRepairInput): RepairPlan {
-  const { entries, chapters, times } = input
+  const { entries, chapters, times, checkpoints = [], assertedEnding = null } = input
   const repaired = new Map(times.map((time) => [time.entryId, time]))
 
   const startOf = (entry: StoryEntry) =>
@@ -93,16 +115,32 @@ export function planRepair(input: PlanRepairInput): RepairPlan {
   const reachesEnd = lastRepaired === entries.length - 1
   const clock = reachesEnd ? (times[times.length - 1]?.end ?? null) : null
 
-  return { times, chapterSpans, deltas, clock }
+  // Only an asserted ending overrides a checkpoint's clock. Without an assertion the boundary
+  // resolves to the entry's own recorded ending, which the repair leaves where it was, so a
+  // snapshot that differs is holding something no reading can supply.
+  const checkpointClocks: CheckpointClockUpdate[] = assertedEnding
+    ? checkpoints
+        .filter((checkpoint) => checkpoint.lastEntryId === assertedEnding.entryId)
+        .map((checkpoint) => ({ checkpointId: checkpoint.id, timeTracker: assertedEnding.time }))
+    : []
+
+  return {
+    times,
+    chapterSpans,
+    deltas,
+    clock,
+    checkpointClocks,
+    keyframeEntryIds: times.map((time) => time.entryId),
+  }
 }
 
 /**
  * What a preview was computed from.
  *
  * Compared before applying, so generation, a deletion, an anchor edit or a branch switch
- * cannot land a repair against figures that have moved. The anchored ids inside the range are
- * part of it: an anchor added there makes the selection invalid even though both endpoints
- * still resolve unchanged, because a range may not span an anchor.
+ * cannot land a repair against figures that have moved. The boundary ids inside the range are
+ * part of it: a boundary appearing there makes the selection invalid even though both endpoints
+ * still resolve unchanged, because a range may not span one.
  */
 export function fingerprintPreview(input: {
   storyId: string
@@ -110,9 +148,9 @@ export function fingerprintPreview(input: {
   from: Boundary
   to: Boundary
   rangeEntries: StoryEntry[]
-  anchoredEntryIds: string[]
+  boundaryEntryIds: string[]
 }): string {
-  const { storyId, branchId, from, to, rangeEntries, anchoredEntryIds } = input
+  const { storyId, branchId, from, to, rangeEntries, boundaryEntryIds } = input
   const stamp = (time: TimeTracker | null) => (time ? String(toMinutes(time)) : 'none')
   const inRange = new Set(rangeEntries.map((entry) => entry.id))
 
@@ -122,9 +160,9 @@ export function fingerprintPreview(input: {
     from: [from.entryId, stamp(from.time)],
     to: [to.entryId, stamp(to.time)],
     entries: rangeEntries.map((entry) => [entry.id, stamp(entry.metadata?.timeEnd ?? null)]),
-    // Excludes the later boundary, which is allowed to be anchored: it bounds the range
+    // Excludes the later boundary, which is a boundary by definition: it bounds the range
     // rather than sitting inside it.
-    anchoredInside: anchoredEntryIds.filter((id) => inRange.has(id) && id !== to.entryId).sort(),
+    boundariesInside: boundaryEntryIds.filter((id) => inRange.has(id) && id !== to.entryId).sort(),
   })
 }
 
@@ -166,6 +204,22 @@ export function repairStatements(
     statements.push({
       sql: 'UPDATE story_entries SET world_state_delta = ? WHERE id = ?',
       params: [JSON.stringify(delta.delta), delta.entryId],
+    })
+  }
+
+  for (const update of plan.checkpointClocks) {
+    statements.push({
+      sql: 'UPDATE checkpoints SET time_tracker_snapshot = ? WHERE id = ?',
+      params: [JSON.stringify(update.timeTracker), update.checkpointId],
+    })
+  }
+
+  if (plan.keyframeEntryIds.length > 0) {
+    statements.push({
+      sql: `DELETE FROM world_state_snapshots WHERE entry_id IN (${plan.keyframeEntryIds
+        .map(() => '?')
+        .join(', ')})`,
+      params: plan.keyframeEntryIds,
     })
   }
 

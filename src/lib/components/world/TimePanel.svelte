@@ -11,10 +11,18 @@
   let editHours = $state(0)
   let editMinutes = $state(0)
 
+  /**
+   * Years and days are stored counting from zero and shown counting from one, the way every
+   * other story-time surface reads them — `formatStoryTime`, the timeline panel, and the story
+   * time handed to the model. Hours and minutes are a clock face and stay as they are.
+   */
+  const displayYears = $derived(story.timeTracker.years + 1)
+  const displayDays = $derived(story.timeTracker.days + 1)
+
   function startEdit() {
     const time = story.timeTracker
-    editYears = time.years
-    editDays = time.days
+    editYears = time.years + 1
+    editDays = time.days + 1
     editHours = time.hours
     editMinutes = time.minutes
     isEditing = true
@@ -26,8 +34,8 @@
 
   async function saveEdit() {
     await story.setTimeTracker({
-      years: Math.max(0, Number(editYears) || 0),
-      days: Math.max(0, Number(editDays) || 0),
+      years: Math.max(0, (Number(editYears) || 1) - 1),
+      days: Math.max(0, (Number(editDays) || 1) - 1),
       hours: Math.max(0, Number(editHours) || 0),
       minutes: Math.max(0, Number(editMinutes) || 0),
     })
@@ -81,12 +89,12 @@
     <div class="border-border bg-card rounded-lg border p-3 shadow-sm">
       <div class="mb-3 grid grid-cols-2 gap-3">
         <div class="space-y-1">
-          <Label class="text-xs">Years</Label>
-          <Input type="number" bind:value={editYears} min="0" class="h-8 text-sm" />
+          <Label class="text-xs">Year</Label>
+          <Input type="number" bind:value={editYears} min="1" class="h-8 text-sm" />
         </div>
         <div class="space-y-1">
-          <Label class="text-xs">Days</Label>
-          <Input type="number" bind:value={editDays} min="0" max="364" class="h-8 text-sm" />
+          <Label class="text-xs">Day</Label>
+          <Input type="number" bind:value={editDays} min="1" max="365" class="h-8 text-sm" />
         </div>
         <div class="space-y-1">
           <Label class="text-xs">Hours</Label>
@@ -114,18 +122,18 @@
       <div class="grid grid-cols-4 gap-2 text-center">
         <div class="bg-muted/50 border-border/50 rounded border p-2">
           <div class="text-foreground text-lg font-medium">
-            {story.timeTracker.years}
+            {displayYears}
           </div>
           <div class="text-muted-foreground text-[10px] font-medium tracking-wider uppercase">
-            Years
+            Year
           </div>
         </div>
         <div class="bg-muted/50 border-border/50 rounded border p-2">
           <div class="text-foreground text-lg font-medium">
-            {story.timeTracker.days}
+            {displayDays}
           </div>
           <div class="text-muted-foreground text-[10px] font-medium tracking-wider uppercase">
-            Days
+            Day
           </div>
         </div>
         <div class="bg-muted/50 border-border/50 rounded border p-2">

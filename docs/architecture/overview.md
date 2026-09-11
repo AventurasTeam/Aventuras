@@ -34,6 +34,25 @@ aventuras/
 └── package.json             # Node dependencies and scripts
 ```
 
+## Panels and gestures
+
+Two panels flank the story: the world sidebar on the right (`Sidebar.svelte`) and the story
+navigation panel on the left (`StoryNavPanel.svelte`). Each opens with a swipe away from its own
+edge, and that same direction then keeps carrying the reader further in, while its opposite walks
+back out and finally closes the panel.
+
+| Panel                   | Opens with  | Next tab    | Back, then closes |
+| ----------------------- | ----------- | ----------- | ----------------- |
+| World sidebar (right)   | swipe left  | swipe left  | swipe right       |
+| Navigation panel (left) | swipe right | swipe right | swipe left        |
+
+One consequence is easy to undo by accident: **each tab strip is ordered so that the tab nearest
+the story is the one the panel opens on and the one a further outward swipe closes from.** The
+sidebar runs Characters -> Branches left to right and opens on Characters; the navigation panel
+runs Timeline -> Navigation and opens on Navigation. Reversing either list, or moving a tab into
+it at the wrong end, leaves the opening swipe with nowhere to go and puts the close on the wrong
+tab.
+
 ## Edge swipes
 
 The edge swipes that open the two side panels live in `AppShell.svelte` and are deliberately

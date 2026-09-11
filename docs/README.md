@@ -10,15 +10,15 @@ comments stay short and say only what the next reader cannot infer — see
 
 ## Architecture
 
-| Document                                                  | Read it before touching                                                                                         |
-| --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| [overview.md](architecture/overview.md)                   | the repository layout, `StoryEntry`/branches/chapters/world state, or the generation pipeline and its phases    |
-| [context-injection.md](architecture/context-injection.md) | `services/ai/retrieval/`, `WorldStateInjector`, the three tiers, stickiness, agentic or static memory retrieval |
-| [lore-management.md](architecture/lore-management.md)     | `services/ai/lorebook/`, `services/duplicates/`, `LoreManagementCoordinator`, the duplicates window             |
-| [prompts.md](architecture/prompts.md)                     | anything under `services/prompts/templates/`, prompt packs, or the order blocks are assembled in                |
-| [ai-services.md](architecture/ai-services.md)             | adding a `ServiceId`, agent profiles, reasoning effort, or a default in `ai/core/defaults.ts`                   |
-| [persistence.md](architecture/persistence.md)             | SQLite, a new migration, `src-tauri/src/`, or the shape of the settings blob                                    |
-| [dialogue-and-tts.md](architecture/dialogue-and-tts.md)   | `utils/dialogue.ts`, dialogue highlighting, or the TTS pipeline                                                 |
+| Document                                                  | Read it before touching                                                                                                                 |
+| --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| [overview.md](architecture/overview.md)                   | the repository layout, `StoryEntry`/branches/chapters/world state, the generation pipeline, or the side panels and their swipe gestures |
+| [context-injection.md](architecture/context-injection.md) | `services/ai/retrieval/`, `WorldStateInjector`, the three tiers, stickiness, agentic or static memory retrieval                         |
+| [lore-management.md](architecture/lore-management.md)     | `services/ai/lorebook/`, `services/duplicates/`, `LoreManagementCoordinator`, the duplicates window                                     |
+| [prompts.md](architecture/prompts.md)                     | anything under `services/prompts/templates/`, prompt packs, or the order blocks are assembled in                                        |
+| [ai-services.md](architecture/ai-services.md)             | adding a `ServiceId`, agent profiles, reasoning effort, or a default in `ai/core/defaults.ts`                                           |
+| [persistence.md](architecture/persistence.md)             | SQLite, a new migration, `src-tauri/src/`, or the shape of the settings blob                                                            |
+| [dialogue-and-tts.md](architecture/dialogue-and-tts.md)   | `utils/dialogue.ts`, dialogue highlighting, or the TTS pipeline                                                                         |
 
 ## Development
 

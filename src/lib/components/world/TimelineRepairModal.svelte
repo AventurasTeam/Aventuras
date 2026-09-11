@@ -26,12 +26,39 @@
   let selection = $state<{ kind: 'entry' | 'gap'; entryId: string } | null>(null)
   let applying = $state(false)
   let staleMessage = $state<string | null>(null)
+  let appliedMessage = $state<string | null>(null)
+  let fullTextOpen = $state(false)
 
   const ranges = $derived(story.timeRanges)
-  const onBranch = $derived((story.currentStory?.currentBranchId ?? null) !== null)
   const range = $derived<SelectableRange | undefined>(ranges[selectedIndex])
 
   const byId = $derived(new Map(story.entries.map((entry) => [entry.id, entry])))
+
+  /** What the range's entries record for themselves, first beginning to last ending. */
+  const recordedSpan = $derived.by(() => {
+    const start = range ? byId.get(range.entryIds[0])?.metadata?.timeStart : null
+    const end = range ? byId.get(range.to.entryId)?.metadata?.timeEnd : null
+    if (!start || !end) return null
+    return toMinutes(end) - toMinutes(start)
+  })
+
+  /** What the two reference points say it should occupy. The repair is the ratio between them. */
+  const assertedSpan = $derived(
+    range?.from.time && range?.to.time
+      ? toMinutes(range.to.time) - toMinutes(range.from.time)
+      : null,
+  )
+
+  /** The story's own last entry, which a repair must include before it may move the clock. */
+  const lastEntryNumber = $derived.by(() => {
+    const last = story.entries[story.entries.length - 1]
+    return last ? entryNumber(last.id) : null
+  })
+
+  function spanText(minutes: number | null): string {
+    if (minutes === null) return 'unreadable'
+    return minutes < 0 ? `-${formatDuration(-minutes)}` : formatDuration(minutes)
+  }
   const rangeEntries = $derived<StoryEntry[]>(
     range
       ? range.entryIds.map((id) => byId.get(id)).filter((entry): entry is StoryEntry => !!entry)
@@ -76,8 +103,21 @@
 
   function stampRange(start: TimeTracker | null | undefined, end: TimeTracker | null | undefined) {
     if (!start && !end) return 'no time recorded'
-    if (start && end && toMinutes(start) === toMinutes(end)) return stamp(start)
     return `${stamp(start)} → ${stamp(end)}`
+  }
+
+  /**
+   * The weight shown in the Was column, and whether the reader supplied it.
+   *
+   * Narration only. A player action is an instant, so it has no weight to show — and printing
+   * one as zero would read as the collapse warning a narration entry's zero really is.
+   */
+  function wasWeight(entryId: string): { text: string; supplied: boolean } {
+    if (overrides[entryId] !== undefined) {
+      return { text: formatDuration(overrides[entryId]), supplied: true }
+    }
+    const recorded = recordedWeight(entryId)
+    return { text: recorded === null ? 'unreadable' : formatDuration(recorded), supplied: false }
   }
 
   function describeMinutes(total: number): string {
@@ -110,8 +150,12 @@
     const ids = candidate.entryIds
     const span = `${stamp(candidate.from.time)} → ${stamp(candidate.to.time)}`
     if (ids.length === 0) return span
-    if (ids.length === 1) return `${span} (entry ${entryNumber(ids[0])})`
-    return `${span} (entries ${entryNumber(ids[0])}–${entryNumber(ids[ids.length - 1])})`
+    const covered =
+      ids.length === 1
+        ? `Entry ${entryNumber(ids[0])}`
+        : `Entries ${entryNumber(ids[0])}–${entryNumber(ids[ids.length - 1])}`
+    // Padded inside the brackets: the app's font all but fuses "(Y".
+    return `${covered} ( ${span} )`
   }
 
   function requestFor(entryId: string) {
@@ -213,12 +257,16 @@
     if (preview?.status !== 'ok') return
     applying = true
     staleMessage = null
+    appliedMessage = null
     try {
       const outcome = await story.applyTimelineRepair(preview)
       if (outcome === 'stale') {
         staleMessage = 'The story changed while this was open. Review the refreshed figures.'
       } else {
-        open = false
+        // Left open on purpose: the repair usually leads to the next range, and the figures
+        // below are now the repaired ones. Reconciling again scales by 1 and changes nothing.
+        reset()
+        appliedMessage = 'Repair applied. The figures below are the repaired timeline.'
       }
     } finally {
       applying = false
@@ -230,6 +278,8 @@
     gapPolicies = {}
     selection = null
     staleMessage = null
+    appliedMessage = null
+    fullTextOpen = false
   }
 
   $effect(() => {
@@ -252,7 +302,7 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="max-w-3xl">
+  <Dialog.Content class="max-w-3xl gap-4">
     <Dialog.Header>
       <Dialog.Title>Reconcile a range</Dialog.Title>
       <Dialog.Description>
@@ -263,26 +313,14 @@
 
     {#if ranges.length === 0}
       <p class="text-muted-foreground text-sm">
-        There is nothing to reconcile yet. A repair runs between two boundaries, and this branch
+        There is nothing to reconcile yet. A repair runs between two boundaries, and this story
         offers fewer than two.
       </p>
-      <!-- Named rather than implied: on a branch, "nothing to reconcile" alongside a list of
-           inherited anchors is a dead end unless the reason is spelled out. -->
-      <p class="text-muted-foreground mt-2 text-xs">
-        {#if onBranch && story.ownedAnchorCount === 0}
-          This branch has not been written on yet, so its fork point is its only boundary. Continue
-          the story here, or anchor an entry this branch owns. The
-          {story.timeAnchors.length}
-          {story.timeAnchors.length === 1 ? 'anchor' : 'anchors'} you can see
-          {story.timeAnchors.length === 1 ? 'belongs' : 'belong'} to inherited history and can only be
-          repaired from the branch that owns
-          {story.timeAnchors.length === 1 ? 'it' : 'them'}.
-        {:else}
-          On this branch: {story.entries.length}
-          {story.entries.length === 1 ? 'entry' : 'entries'}, {story.timeAnchors.length}
-          {story.timeAnchors.length === 1 ? 'anchor' : 'anchors'}, {story.timeBoundaries.length}
-          {story.timeBoundaries.length === 1 ? 'boundary' : 'boundaries'}.
-        {/if}
+      <p class="text-muted-foreground text-xs">
+        In view: {story.entries.length}
+        {story.entries.length === 1 ? 'entry' : 'entries'}, {story.timeAnchors.length}
+        {story.timeAnchors.length === 1 ? 'anchor' : 'anchors'}, {story.timeBoundaries.length}
+        {story.timeBoundaries.length === 1 ? 'boundary' : 'boundaries'}.
       </p>
     {:else}
       <label class="text-sm">
@@ -297,8 +335,13 @@
         </select>
       </label>
 
+      <div class="text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 text-xs">
+        <span>Was <span class="text-foreground">{spanText(recordedSpan)}</span></span>
+        <span>Becomes <span class="text-foreground">{spanText(assertedSpan)}</span></span>
+      </div>
+
       {#if refusal?.status === 'refused'}
-        <div class="border-destructive/50 bg-destructive/10 mt-3 rounded-md border p-3 text-sm">
+        <div class="border-destructive/50 bg-destructive/10 rounded-md border p-3 text-sm">
           <p class="flex items-center gap-2 font-medium">
             <TriangleAlert class="h-4 w-4" />
             {refusal.refusal.reason === 'backwards-span'
@@ -321,7 +364,7 @@
           </p>
         </div>
       {:else}
-        <div class="mt-3 max-h-72 overflow-y-auto">
+        <div class="max-h-72 overflow-y-auto">
           <table class="w-full border-collapse text-xs">
             <thead
               class="text-muted-foreground bg-background border-border sticky top-0 z-10 border-b text-left"
@@ -339,6 +382,7 @@
                 {@const request = requestFor(entry.id)}
                 {@const repaired = repairedTimes(entry.id)}
                 {@const interval = intervals.find((i) => i.afterEntryId === entry.id)}
+                {@const was = wasWeight(entry.id)}
                 <tr
                   class="border-border/50 hover:bg-muted/40 cursor-pointer border-t {selection?.kind ===
                     'entry' && selection.entryId === entry.id
@@ -362,19 +406,41 @@
                     </span>
                   </td>
                   <td class="py-1 pr-2 align-top">
-                    <span class="line-clamp-2 {isAction(entry.id) ? 'italic' : ''}">
+                    <span class="line-clamp-3 {isAction(entry.id) ? 'italic' : ''}">
                       {entryText(entry.id)}
                     </span>
                   </td>
                   <td class="text-muted-foreground py-1 pr-2 align-top whitespace-nowrap">
-                    {stampRange(entry.metadata?.timeStart, entry.metadata?.timeEnd)}
+                    <div class="grid grid-cols-[auto_1fr] gap-x-2">
+                      {#if isAction(entry.id)}
+                        <span>At:</span><span>{stamp(entry.metadata?.timeEnd)}</span>
+                      {:else}
+                        <span>Start:</span><span>{stamp(entry.metadata?.timeStart)}</span>
+                        <span>End:</span><span>{stamp(entry.metadata?.timeEnd)}</span>
+                        <span>Weight:</span>
+                        <span class={was.supplied ? 'text-foreground font-medium' : ''}>
+                          {was.text}
+                        </span>
+                      {/if}
+                    </div>
                   </td>
                   <td class="py-1 align-top whitespace-nowrap">
                     {#if repaired}
-                      {#if collapsed.includes(entry.id)}
-                        <TriangleAlert class="mr-1 inline h-3 w-3 text-amber-600" />
-                      {/if}
-                      {stampRange(repaired.start, repaired.end)}
+                      <div class="grid grid-cols-[auto_1fr] gap-x-2">
+                        {#if isAction(entry.id)}
+                          <span>At:</span><span>{stamp(repaired.end)}</span>
+                        {:else}
+                          <span>Start:</span><span>{stamp(repaired.start)}</span>
+                          <span>End:</span><span>{stamp(repaired.end)}</span>
+                          <span>Weight:</span>
+                          <span class="flex items-center gap-1">
+                            {#if collapsed.includes(entry.id)}
+                              <TriangleAlert class="h-3 w-3 shrink-0 text-amber-600" />
+                            {/if}
+                            {formatDuration(toMinutes(repaired.end) - toMinutes(repaired.start))}
+                          </span>
+                        {/if}
+                      </div>
                     {:else}
                       <span class="text-muted-foreground">—</span>
                     {/if}
@@ -427,8 +493,9 @@
         </div>
 
         <!-- The control panel. A fixed height so the dialog does not jump as the selection
-             moves between a gap, an entry and nothing at all. -->
-        <div class="mt-3 flex h-56 flex-col overflow-y-auto">
+             moves between a gap, an entry and nothing at all; clipped rather than scrolled,
+             since a scroll region inside the scrolling table is a trap to read in. -->
+        <div class="flex h-56 flex-col overflow-hidden">
           {#if selectedInterval}
             <div class="border-border rounded-md border p-3 text-xs">
               <p class="mb-2 font-medium">
@@ -470,11 +537,14 @@
                 </span>
                 Entry {entryNumber(selectedEntry.id)}
               </p>
-              <blockquote
-                class="border-border text-foreground/80 mb-2 max-h-24 overflow-y-auto border-l-2 pl-2 italic"
+              <Button
+                variant="outline"
+                size="sm"
+                class="mb-2 h-7 text-xs"
+                onclick={() => (fullTextOpen = true)}
               >
-                {entryText(selectedEntry.id)}
-              </blockquote>
+                Show full text
+              </Button>
 
               {#if request}
                 <p class="mb-2 flex items-start gap-1 text-amber-700 dark:text-amber-500">
@@ -511,7 +581,7 @@
                     Custom weight set as
                     <span class="text-foreground">
                       {overrides[selectedEntry.id] === undefined
-                        ? 'none'
+                        ? 'not set'
                         : formatDuration(overrides[selectedEntry.id])}
                     </span>
                   </span>
@@ -563,7 +633,7 @@
         </div>
 
         {#if !resolved}
-          <p class="text-muted-foreground mt-2 flex items-start gap-1 text-xs">
+          <p class="text-muted-foreground flex items-start gap-1 text-xs">
             <TriangleAlert class="mt-0.5 h-3 w-3 shrink-0 text-amber-600" />
             <span>
               {#if unreadable.length > 0}
@@ -581,7 +651,7 @@
             </span>
           </p>
         {:else if preview?.status === 'ok'}
-          <div class="text-muted-foreground mt-2 space-y-1 text-xs">
+          <div class="text-muted-foreground space-y-1 text-xs">
             {#if preview.result.leadingJoin.differenceMinutes !== 0}
               <p>
                 The entry before this range still ends at
@@ -602,14 +672,17 @@
               <p>This range reaches the end of the story, so the current time moves with it.</p>
             {:else}
               <p>
-                The story's current time is unchanged: this repair does not reach the last entry.
+                The story's current time is unchanged: this repair ends at entry
+                {entryNumber(preview.range.to.entryId)}, and the story ends at entry
+                {lastEntryNumber ?? '?'}. Widen the range to the end of the story to move the clock
+                with it.
               </p>
             {/if}
           </div>
 
           {#if collapsed.length > 0}
             <p
-              class="mt-2 flex items-start gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-2 text-xs"
+              class="flex items-start gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-2 text-xs"
             >
               <TriangleAlert class="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
               <span>
@@ -623,15 +696,39 @@
       {/if}
 
       {#if staleMessage}
-        <p class="text-destructive mt-2 text-xs">{staleMessage}</p>
+        <p class="text-destructive text-xs">{staleMessage}</p>
+      {/if}
+
+      {#if appliedMessage}
+        <p class="text-xs text-emerald-600 dark:text-emerald-400">{appliedMessage}</p>
       {/if}
     {/if}
 
     <Dialog.Footer>
-      <Button variant="outline" onclick={() => (open = false)}>Cancel</Button>
+      <Button variant="outline" onclick={() => (open = false)}>
+        {appliedMessage ? 'Close' : 'Cancel'}
+      </Button>
       <Button disabled={preview?.status !== 'ok' || applying} onclick={apply}>
         {applying ? 'Applying…' : 'Apply repair'}
       </Button>
+    </Dialog.Footer>
+  </Dialog.Content>
+</Dialog.Root>
+
+<Dialog.Root bind:open={fullTextOpen}>
+  <Dialog.Content class="max-w-2xl gap-4">
+    <Dialog.Header>
+      <Dialog.Title>
+        {selectedEntry ? `Entry ${entryNumber(selectedEntry.id)}` : 'Entry'}
+      </Dialog.Title>
+    </Dialog.Header>
+
+    <p class="max-h-[60vh] overflow-y-auto text-sm whitespace-pre-wrap">
+      {selectedEntry?.content ?? ''}
+    </p>
+
+    <Dialog.Footer>
+      <Button variant="outline" onclick={() => (fullTextOpen = false)}>Close</Button>
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>

@@ -93,7 +93,7 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="max-w-lg">
+  <Dialog.Content class="max-w-lg gap-4">
     <Dialog.Header>
       <Dialog.Title>{existing ? 'Edit an anchor' : 'Create an anchor'}</Dialog.Title>
       <Dialog.Description>
@@ -102,7 +102,7 @@
       </Dialog.Description>
     </Dialog.Header>
 
-    <div class="mt-3 flex flex-col gap-3 text-sm">
+    <div class="flex flex-col gap-3 text-sm">
       <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
         <label class="flex items-center gap-2">
           <span class="text-muted-foreground shrink-0">Entry number:</span>

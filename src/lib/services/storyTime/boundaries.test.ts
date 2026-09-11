@@ -54,34 +54,68 @@ describe('listBoundaries', () => {
     expect(refuseRange(boundaries[0], boundaries[1])!.reason).toBe('unusable-boundary')
   })
 
-  it('puts the fork in place of the story beginning on a branch', () => {
+  it('makes a fork point a boundary without displacing the story beginning', () => {
     const entries = [
       entry('A', t(1)),
       entry('B', t(2)),
       entry('C', t(3), 'br1'),
       entry('D', t(4), 'br1'),
     ]
-    const boundaries = listBoundaries({
-      entries,
-      anchors: [],
-      forkEntryId: 'B',
-      ownedEntryIds: new Set(['C', 'D']),
-    })
+    const boundaries = listBoundaries({ entries, anchors: [], forkEntryIds: ['B'] })
     expect(boundaries.map((b) => [b.entryId, b.kind])).toEqual([
+      ['A', 'story-start'],
       ['B', 'fork'],
       ['D', 'story-end'],
     ])
   })
 
-  it('does not add the first owned child entry as an extra boundary', () => {
-    const entries = [entry('A', t(1)), entry('B', t(2), 'br1'), entry('C', t(3), 'br1')]
+  it('walls the timeline at a fork belonging to another branch', () => {
+    const entries = [entry('A', t(1)), entry('B', t(2)), entry('C', t(3)), entry('D', t(4))]
+    const boundaries = listBoundaries({ entries, anchors: [], forkEntryIds: ['C'] })
+    expect(boundaries.map((b) => b.entryId)).toEqual(['A', 'C', 'D'])
+  })
+
+  it('ignores a boundary whose entry is not visible here', () => {
+    const entries = [entry('A', t(1)), entry('B', t(2))]
     const boundaries = listBoundaries({
       entries,
       anchors: [],
-      forkEntryId: 'A',
-      ownedEntryIds: new Set(['B', 'C']),
+      forkEntryIds: ['elsewhere'],
+      checkpointEntryIds: ['also-elsewhere'],
     })
-    expect(boundaries.map((b) => b.entryId)).toEqual(['A', 'C'])
+    expect(boundaries.map((b) => b.entryId)).toEqual(['A', 'B'])
+  })
+
+  it('makes a checkpoint a boundary', () => {
+    const entries = [entry('A', t(1)), entry('B', t(2)), entry('C', t(3))]
+    const boundaries = listBoundaries({ entries, anchors: [], checkpointEntryIds: ['B'] })
+    expect(boundaries.map((b) => [b.entryId, b.kind])).toEqual([
+      ['A', 'story-start'],
+      ['B', 'checkpoint'],
+      ['C', 'story-end'],
+    ])
+  })
+
+  it('gives an entry that is both anchored and natural a single boundary', () => {
+    const entries = [entry('A', t(1)), entry('B', t(2)), entry('C', t(3))]
+    const boundaries = listBoundaries({
+      entries,
+      anchors: [anchor('B', t(9))],
+      checkpointEntryIds: ['B'],
+      forkEntryIds: ['B'],
+    })
+    expect(boundaries).toHaveLength(3)
+    expect(boundaries[1].kind).toBe('anchor')
+    expect(boundaries[1].time).toEqual(t(9))
+  })
+
+  it('keeps the story beginning its own kind when a branch forked there', () => {
+    const entries = [entry('A', t(1)), entry('B', t(2), 'br1'), entry('C', t(3), 'br1')]
+    const boundaries = listBoundaries({ entries, anchors: [], forkEntryIds: ['A'] })
+    expect(boundaries.map((b) => [b.entryId, b.kind])).toEqual([
+      ['A', 'story-start'],
+      ['C', 'story-end'],
+    ])
   })
 
   it('yields no selectable range for a one-entry story', () => {
@@ -118,22 +152,17 @@ describe('selectableRanges', () => {
     expect(selectableRanges(entries, boundaries)[0].entryIds).toEqual(['B', 'C'])
   })
 
-  it('clamps a branch range at the fork point', () => {
+  it('offers a range on each side of a fork point, and none across it', () => {
     const entries = [
       entry('A', t(1)),
       entry('B', t(2)),
       entry('C', t(3), 'br1'),
       entry('D', t(4), 'br1'),
     ]
-    const boundaries = listBoundaries({
-      entries,
-      anchors: [],
-      forkEntryId: 'B',
-      ownedEntryIds: new Set(['C', 'D']),
-    })
+    const boundaries = listBoundaries({ entries, anchors: [], forkEntryIds: ['B'] })
     const ranges = selectableRanges(entries, boundaries)
-    expect(ranges).toHaveLength(1)
-    expect(ranges[0].entryIds).toEqual(['C', 'D'])
+    expect(ranges.map((r) => r.entryIds)).toEqual([['B'], ['C', 'D']])
+    expect(ranges.every((r) => !r.entryIds.includes('B') || r.to.entryId === 'B')).toBe(true)
   })
 })
 

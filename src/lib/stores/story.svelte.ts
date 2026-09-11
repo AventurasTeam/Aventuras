@@ -1540,12 +1540,11 @@ class StoryStore {
   }
 
   /**
-   * Whether the branch in view may write to this entry.
+   * Whether this entry belongs to the branch in view rather than to its inherited history.
    *
-   * A branch sees its whole lineage, so an inherited entry is visible without being editable
-   * here — and an anchor on one is the parent's assertion, shared with every descendant.
-   * Removing or moving it from a child would change the parent's timeline, which is the same
-   * hazard `updateEntry` refuses for entry text.
+   * Times on an inherited entry are writable from here — it is the same row every branch reads,
+   * so a wrong stamp is one wrong fact. This says only that the entry is shared, which is worth
+   * telling the reader before they repair it.
    */
   ownsEntry(entryId: string): boolean {
     const branchId = this.currentStory?.currentBranchId ?? null
@@ -1553,24 +1552,16 @@ class StoryStore {
     return (entry?.branchId ?? null) === branchId
   }
 
-  /** Anchors this branch may edit, as opposed to those it merely inherits. */
-  get ownedAnchorCount(): number {
-    return this.timeAnchors.filter((anchor) => this.ownsEntry(anchor.entryId)).length
-  }
-
   /** The points a repair may be selected between, on the branch in view. */
   get timeBoundaries(): Boundary[] {
-    const branchId = this.currentStory?.currentBranchId ?? null
-    const fork = branchId ? this.branches.find((b) => b.id === branchId)?.forkEntryId : null
     return listBoundaries({
       entries: this.entries,
       anchors: this.timeAnchors,
-      forkEntryId: fork ?? null,
-      // Only what this branch owns may be rewritten, which is the rule `updateEntry` already
-      // enforces for edits. Inherited history is repaired from the branch that owns it.
-      ownedEntryIds: branchId
-        ? new Set(this.entries.filter((e) => e.branchId === branchId).map((e) => e.id))
-        : undefined,
+      // Every fork and every checkpoint in the story, not just this branch's: a range that
+      // spanned another branch's fork would slide that branch's opening out from under it.
+      // `listBoundaries` keeps only the ones whose entry is visible here.
+      forkEntryIds: this.branches.map((branch) => branch.forkEntryId),
+      checkpointEntryIds: this.checkpoints.map((checkpoint) => checkpoint.lastEntryId),
     })
   }
 
@@ -1621,9 +1612,21 @@ class StoryStore {
       result,
       range,
       rangeEntries,
-      plan: planRepair({ entries: this.entries, chapters: this.chapters, times: result.times }),
+      plan: planRepair({
+        entries: this.entries,
+        chapters: this.chapters,
+        times: result.times,
+        checkpoints: this.checkpoints,
+        assertedEnding: this.assertedEnding(range),
+      }),
       fingerprint: this.timelineFingerprint(range, rangeEntries),
     }
+  }
+
+  /** The assertion at a range's later boundary, when that boundary carries one. */
+  private assertedEnding(range: SelectableRange): { entryId: string; time: TimeTracker } | null {
+    const anchor = this.timeAnchorFor(range.to.entryId)
+    return anchor ? { entryId: range.to.entryId, time: anchor.assertedTime } : null
   }
 
   private timelineFingerprint(range: SelectableRange, rangeEntries: StoryEntry[]): string {
@@ -1633,7 +1636,9 @@ class StoryStore {
       from: range.from,
       to: range.to,
       rangeEntries,
-      anchoredEntryIds: this.timeAnchors.map((anchor) => anchor.entryId),
+      // Every kind of boundary, not just anchors: a checkpoint taken inside the range while the
+      // preview is open splits it the same way an anchor does.
+      boundaryEntryIds: this.timeBoundaries.map((boundary) => boundary.entryId),
     })
   }
 
@@ -1671,6 +1676,14 @@ class StoryStore {
           const span = spans.get(chapter.id)
           return span ? { ...chapter, startTime: span.startTime, endTime: span.endTime } : chapter
         })
+
+        const clocks = new Map(plan.checkpointClocks.map((u) => [u.checkpointId, u.timeTracker]))
+        if (clocks.size > 0) {
+          this.checkpoints = this.checkpoints.map((checkpoint) => {
+            const timeTracker = clocks.get(checkpoint.id)
+            return timeTracker ? { ...checkpoint, timeTrackerSnapshot: timeTracker } : checkpoint
+          })
+        }
 
         if (plan.clock && this.currentStory) {
           this.currentStory = { ...this.currentStory, timeTracker: plan.clock }

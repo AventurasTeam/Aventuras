@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { Chapter, StoryEntry, TimeTracker, WorldStateDelta } from '$lib/types'
+import type { Checkpoint } from '$lib/types'
 import { planRepair, fingerprintPreview, applyRepair, repairStatements } from './repair'
 import type { RepairedTime } from './reconcile'
 import type { Boundary } from './boundaries'
@@ -26,6 +27,10 @@ function entry(
     branchId: null,
     worldStateDelta: delta ?? null,
   } as StoryEntry
+}
+
+function checkpoint(id: string, lastEntryId: string, snapshot: TimeTracker | null): Checkpoint {
+  return { id, storyId: 's1', name: id, lastEntryId, timeTrackerSnapshot: snapshot } as Checkpoint
 }
 
 function delta(before: TimeTracker | null): WorldStateDelta {
@@ -201,6 +206,7 @@ describe('applyRepair', () => {
       'UPDATE story_entries',
       'UPDATE chapters',
       'UPDATE story_entries',
+      'DELETE FROM',
       'UPDATE stories',
     ])
   })
@@ -217,7 +223,7 @@ describe('fingerprintPreview', () => {
   const from: Boundary = { entryId: 'A', index: 0, kind: 'story-start', time: t(0) }
   const to: Boundary = { entryId: 'C', index: 2, kind: 'anchor', time: t(9) }
   const rangeEntries = [entry('B', t(1), t(2)), entry('C', t(2), t(3))]
-  const base = { storyId: 's1', branchId: null, from, to, rangeEntries, anchoredEntryIds: ['C'] }
+  const base = { storyId: 's1', branchId: null, from, to, rangeEntries, boundaryEntryIds: ['C'] }
 
   it('is stable for unchanged inputs', () => {
     expect(fingerprintPreview(base)).toBe(fingerprintPreview({ ...base }))
@@ -244,13 +250,86 @@ describe('fingerprintPreview', () => {
   })
 
   it('changes when an anchor appears inside the range, though both endpoints still resolve', () => {
-    const withInner = fingerprintPreview({ ...base, anchoredEntryIds: ['B', 'C'] })
+    const withInner = fingerprintPreview({ ...base, boundaryEntryIds: ['B', 'C'] })
     expect(withInner).not.toBe(fingerprintPreview(base))
   })
 
   it('does not change because the later boundary is itself anchored', () => {
-    expect(fingerprintPreview({ ...base, anchoredEntryIds: ['C'] })).toBe(
-      fingerprintPreview({ ...base, anchoredEntryIds: ['C'] }),
+    expect(fingerprintPreview({ ...base, boundaryEntryIds: ['C'] })).toBe(
+      fingerprintPreview({ ...base, boundaryEntryIds: ['C'] }),
     )
+  })
+})
+
+describe('planRepair: the records at an asserted ending', () => {
+  const entries = [entry('A', t(0), t(1)), entry('B', t(1), t(2)), entry('C', t(2), t(3))]
+
+  it('reseeds a checkpoint taken at the anchored ending', () => {
+    const plan = planRepair({
+      entries,
+      chapters: [],
+      times: [repaired('B', t(1), t(9))],
+      checkpoints: [checkpoint('cp1', 'B', t(2))],
+      assertedEnding: { entryId: 'B', time: t(9) },
+    })
+    expect(plan.checkpointClocks).toEqual([{ checkpointId: 'cp1', timeTracker: t(9) }])
+  })
+
+  it('leaves a checkpoint alone when the ending carries no assertion', () => {
+    const plan = planRepair({
+      entries,
+      chapters: [],
+      times: [repaired('B', t(1), t(2))],
+      checkpoints: [checkpoint('cp1', 'B', t(7))],
+    })
+    expect(plan.checkpointClocks).toEqual([])
+  })
+
+  it('does not touch a checkpoint outside the asserted ending', () => {
+    const plan = planRepair({
+      entries,
+      chapters: [],
+      times: [repaired('B', t(1), t(9))],
+      checkpoints: [checkpoint('cp-elsewhere', 'A', t(1))],
+      assertedEnding: { entryId: 'B', time: t(9) },
+    })
+    expect(plan.checkpointClocks).toEqual([])
+  })
+
+  it('writes the assertion to the checkpoint row', () => {
+    const plan = planRepair({
+      entries,
+      chapters: [],
+      times: [repaired('B', t(1), t(9))],
+      checkpoints: [checkpoint('cp1', 'B', t(2))],
+      assertedEnding: { entryId: 'B', time: t(9) },
+    })
+    const written = repairStatements(plan, entries).find((s) =>
+      s.sql.startsWith('UPDATE checkpoints'),
+    )
+    expect(written).toBeDefined()
+    expect(JSON.parse(String(written!.params![0]))).toEqual(t(9))
+    expect(written!.params![1]).toBe('cp1')
+  })
+})
+
+describe('planRepair: keyframes', () => {
+  const entries = [entry('A', t(0), t(1)), entry('B', t(1), t(2)), entry('C', t(2), t(3))]
+
+  it('invalidates the keyframes of every repaired entry', () => {
+    const plan = planRepair({
+      entries,
+      chapters: [],
+      times: [repaired('B', t(1), t(4)), repaired('C', t(4), t(6))],
+    })
+    expect(plan.keyframeEntryIds).toEqual(['B', 'C'])
+    const del = repairStatements(plan, entries).find((s) => s.sql.startsWith('DELETE FROM'))
+    expect(del!.sql).toContain('world_state_snapshots')
+    expect(del!.params).toEqual(['B', 'C'])
+  })
+
+  it('writes no delete when nothing was repaired', () => {
+    const plan = planRepair({ entries, chapters: [], times: [] })
+    expect(repairStatements(plan, entries).some((s) => s.sql.startsWith('DELETE FROM'))).toBe(false)
   })
 })

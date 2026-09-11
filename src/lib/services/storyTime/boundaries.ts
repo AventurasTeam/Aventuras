@@ -9,7 +9,7 @@
 import type { StoryEntry, TimeAnchor, TimeTracker } from '$lib/types'
 import { toMinutes } from './minutes'
 
-export type BoundaryKind = 'anchor' | 'story-start' | 'story-end' | 'fork'
+export type BoundaryKind = 'anchor' | 'story-start' | 'story-end' | 'fork' | 'checkpoint'
 
 export interface Boundary {
   entryId: string
@@ -24,40 +24,45 @@ export interface BoundaryInput {
   /** The entries visible on the current branch, in story order. */
   entries: StoryEntry[]
   anchors: TimeAnchor[]
-  /** The entry this branch forked from, when on a branch. */
-  forkEntryId?: string | null
-  /** Ids the current branch owns and may rewrite. Undefined means every entry is owned. */
-  ownedEntryIds?: Set<string>
+  /** Entries any branch in the story forked from, not only the branch in view. */
+  forkEntryIds?: Iterable<string>
+  /** Entries any checkpoint in the story was taken at. */
+  checkpointEntryIds?: Iterable<string>
 }
 
 /**
  * Every boundary on the branch, in story order.
  *
- * The first entry -- or the fork point on a branch -- opens the list, the last closes it, and
- * anchors fall between. An unanchored entry is never a boundary, so the ranges between
- * consecutive boundaries are the repairs on offer.
+ * The first entry opens the list and the last closes it; between them sit the anchors, the
+ * entries some branch forked from, and the entries a checkpoint was taken at. A natural
+ * boundary is a seam rather than a claim about the time: something else has already copied
+ * that moment, so the ending recorded there may not move. An entry that is both anchored and
+ * natural is one boundary, and resolves to the assertion either way.
  */
 export function listBoundaries(input: BoundaryInput): Boundary[] {
-  const { entries, anchors, forkEntryId = null, ownedEntryIds } = input
+  const { entries, anchors, forkEntryIds = [], checkpointEntryIds = [] } = input
   if (entries.length === 0) return []
 
   const anchorByEntry = new Map(anchors.map((anchor) => [anchor.entryId, anchor]))
-  const owns = (id: string) => !ownedEntryIds || ownedEntryIds.has(id)
-
-  const forkIndex = forkEntryId ? entries.findIndex((entry) => entry.id === forkEntryId) : -1
-  const startIndex = forkIndex >= 0 ? forkIndex : 0
-  const startKind: BoundaryKind = forkIndex >= 0 ? 'fork' : 'story-start'
+  const forks = new Set(forkEntryIds)
+  const checkpoints = new Set(checkpointEntryIds)
 
   const indices = new Map<number, BoundaryKind>()
-  indices.set(startIndex, startKind)
-  indices.set(entries.length - 1, indices.get(entries.length - 1) ?? 'story-end')
+  indices.set(0, 'story-start')
+  if (!indices.has(entries.length - 1)) indices.set(entries.length - 1, 'story-end')
 
-  for (let i = startIndex; i < entries.length; i++) {
-    const entry = entries[i]
-    if (!anchorByEntry.has(entry.id)) continue
-    // An anchor before the fork is visible but cannot bound a repair on this branch.
-    if (i > startIndex && !owns(entry.id)) continue
-    indices.set(i, i === startIndex || i === entries.length - 1 ? indices.get(i)! : 'anchor')
+  for (let i = 0; i < entries.length; i++) {
+    // The ends keep their own kind; their time still resolves to an anchor when one is there.
+    if (indices.has(i)) continue
+    const { id } = entries[i]
+    const kind: BoundaryKind | null = anchorByEntry.has(id)
+      ? 'anchor'
+      : forks.has(id)
+        ? 'fork'
+        : checkpoints.has(id)
+          ? 'checkpoint'
+          : null
+    if (kind) indices.set(i, kind)
   }
 
   return [...indices.keys()]

@@ -27,22 +27,33 @@
   const ordered = $derived.by(() => {
     const position = new Map(story.entries.map((entry, index) => [entry.id, index]))
     return [...shown].sort(
-      (a, b) => (position.get(a.entryIds[0]) ?? 0) - (position.get(b.entryIds[0]) ?? 0),
+      (a, b) => (position.get(subjectId(a)) ?? 0) - (position.get(subjectId(b)) ?? 0),
     )
   })
 
   const suspectedCount = $derived(all.filter((a) => a.severity === 'suspected').length)
 
   /**
-   * A branch sees its whole lineage, but repairs only reach what it owns. An anomaly in
-   * inherited history is real and worth reading; it just cannot be fixed from here.
+   * An anomaly on an inherited entry can be repaired from here, but that entry is one row every
+   * branch descending through it reads, so the repair lands on all of them.
    */
-  const inheritedCount = $derived(
-    all.filter((anomaly) => !story.ownsEntry(anomaly.entryIds[0])).length,
-  )
+  const sharedCount = $derived(all.filter((anomaly) => !story.ownsEntry(subjectId(anomaly))).length)
+
+  /**
+   * The entry a card is about.
+   *
+   * A pair anomaly lists its two entries in story order, and which of them the wording accuses
+   * depends on the kind: a gap lies after the first, while an entry that runs backwards or
+   * overlaps is the second. Reading `entryIds[0]` for every kind points the card at the
+   * innocent neighbour.
+   */
+  function subjectId(anomaly: TimelineAnomaly): string {
+    const accusesSecond = anomaly.kind === 'backwards' || anomaly.kind === 'overlap'
+    return (accusesSecond ? anomaly.entryIds[1] : anomaly.entryIds[0]) ?? anomaly.entryIds[0]
+  }
 
   function subject(anomaly: TimelineAnomaly): StoryEntry | undefined {
-    return byId.get(anomaly.entryIds[0])
+    return byId.get(subjectId(anomaly))
   }
 
   function heading(anomaly: TimelineAnomaly): string {
@@ -52,7 +63,8 @@
     if (anomaly.kind === 'flatline' && entries.length > 1) {
       return `Entries ${entryNumber(entries[0])}–${entryNumber(entries[entries.length - 1])}`
     }
-    return `Entry ${entryNumber(entries[0])}`
+    const entry = subject(anomaly)
+    return entry ? `Entry ${entryNumber(entry)}` : `Entry ${entryNumber(entries[0])}`
   }
 
   function marker(anomaly: TimelineAnomaly): { text: string; class: string } {
@@ -98,7 +110,7 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="max-w-2xl">
+  <Dialog.Content class="max-w-2xl gap-4">
     <Dialog.Header>
       <Dialog.Title>Timeline anomalies</Dialog.Title>
       <Dialog.Description>
@@ -107,11 +119,13 @@
       </Dialog.Description>
     </Dialog.Header>
 
-    {#if inheritedCount > 0}
+    {#if sharedCount > 0}
       <p class="text-muted-foreground text-xs">
-        {inheritedCount} of these
-        {inheritedCount === 1 ? 'sits' : 'sit'} in history this branch inherited rather than owns. They
-        are shown because they are real, but repairing them means switching to the branch that owns those
+        {sharedCount} of these
+        {sharedCount === 1 ? 'sits' : 'sit'} in history shared with other branches. {sharedCount ===
+        1
+          ? 'It'
+          : 'They'} can be repaired from here, and the repair will be seen by every branch reading those
         entries.
       </p>
     {/if}
@@ -139,12 +153,12 @@
             </span>
             <span class="text-foreground font-semibold">{heading(anomaly)}</span>
             <span class="text-muted-foreground">{recorded(anomaly)}</span>
-            {#if !story.ownsEntry(anomaly.entryIds[0])}
+            {#if !story.ownsEntry(subjectId(anomaly))}
               <span
                 class="bg-muted text-muted-foreground rounded px-1 text-[10px] tracking-wide uppercase"
-                title="This entry belongs to another branch. Switch to it to repair this."
+                title="This entry is shared with other branches. Repairing it here repairs it for all of them."
               >
-                Inherited
+                Shared
               </span>
             {/if}
           </div>

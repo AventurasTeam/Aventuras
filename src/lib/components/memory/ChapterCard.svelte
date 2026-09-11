@@ -45,8 +45,10 @@
   function formatTime(time: TimeTracker | null): string {
     if (!time) return ''
     const parts: string[] = []
-    if (time.years > 0) parts.push(`Y${time.years}`)
-    if (time.days > 0) parts.push(`D${time.days}`)
+    // Counted from one, matching `formatStoryTime`; a zero is the first year or day and is
+    // left out, so a same-day span reads as just the clock.
+    if (time.years > 0) parts.push(`Y${time.years + 1}`)
+    if (time.days > 0) parts.push(`D${time.days + 1}`)
     const hour = time.hours.toString().padStart(2, '0')
     const minute = time.minutes.toString().padStart(2, '0')
     parts.push(`${hour}:${minute}`)

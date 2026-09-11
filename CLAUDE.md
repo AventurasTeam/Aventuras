@@ -62,17 +62,17 @@ that block; do not add more of it.
 `docs/` holds the architecture, one file per area. Read the relevant one **before** changing
 that area, and update it in the same commit when behaviour it describes changes.
 
-| Touching                                                                     | Read                                                                             |
-| ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| repo layout, story/branch/chapter data model, generation phases              | [docs/architecture/overview.md](docs/architecture/overview.md)                   |
-| `services/ai/retrieval/`, `WorldStateInjector`, tiers, stickiness, memory     | [docs/architecture/context-injection.md](docs/architecture/context-injection.md) |
-| `services/ai/lorebook/`, `services/duplicates/`, the duplicates window        | [docs/architecture/lore-management.md](docs/architecture/lore-management.md)     |
-| `services/prompts/`, prompt packs, block ordering                            | [docs/architecture/prompts.md](docs/architecture/prompts.md)                     |
-| a new `ServiceId`, agent profiles, reasoning effort, defaults                 | [docs/architecture/ai-services.md](docs/architecture/ai-services.md)             |
-| SQLite, migrations, `src-tauri/src/`, the settings blob                       | [docs/architecture/persistence.md](docs/architecture/persistence.md)             |
-| `utils/dialogue.ts`, dialogue highlighting, TTS                              | [docs/architecture/dialogue-and-tts.md](docs/architecture/dialogue-and-tts.md)   |
-| tests                                                                        | [docs/development/testing.md](docs/development/testing.md)                       |
-| the updater, CI, release scripts, Android builds                             | [docs/development/release.md](docs/development/release.md)                       |
+| Touching                                                                       | Read                                                                             |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| repo layout, data model, generation phases, the side panels and their gestures | [docs/architecture/overview.md](docs/architecture/overview.md)                   |
+| `services/ai/retrieval/`, `WorldStateInjector`, tiers, stickiness, memory      | [docs/architecture/context-injection.md](docs/architecture/context-injection.md) |
+| `services/ai/lorebook/`, `services/duplicates/`, the duplicates window         | [docs/architecture/lore-management.md](docs/architecture/lore-management.md)     |
+| `services/prompts/`, prompt packs, block ordering                              | [docs/architecture/prompts.md](docs/architecture/prompts.md)                     |
+| a new `ServiceId`, agent profiles, reasoning effort, defaults                  | [docs/architecture/ai-services.md](docs/architecture/ai-services.md)             |
+| SQLite, migrations, `src-tauri/src/`, the settings blob                        | [docs/architecture/persistence.md](docs/architecture/persistence.md)             |
+| `utils/dialogue.ts`, dialogue highlighting, TTS                                | [docs/architecture/dialogue-and-tts.md](docs/architecture/dialogue-and-tts.md)   |
+| tests                                                                          | [docs/development/testing.md](docs/development/testing.md)                       |
+| the updater, CI, release scripts, Android builds                               | [docs/development/release.md](docs/development/release.md)                       |
 
 The index is [docs/README.md](docs/README.md).
 
