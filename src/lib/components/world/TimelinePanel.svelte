@@ -1,5 +1,6 @@
 <script lang="ts">
   import { story } from '$lib/stores/story.svelte'
+  import { timelineLayout } from '$lib/stores/timelineLayout.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import {
     Anchor,
@@ -98,7 +99,20 @@
   }
 </script>
 
-<h3 class="text-foreground mb-2 text-xl font-bold tracking-tight">Timeline</h3>
+<div class="mb-2 flex items-center justify-between gap-2">
+  <h3 class="text-foreground text-xl font-bold tracking-tight">Timeline</h3>
+  <!-- TEMPORARY: compare both reconcile layouts on one dev run. Remove with
+       `timelineLayout` and the branches it drives in TimelineRepairModal. -->
+  <Button
+    variant="outline"
+    size="sm"
+    class="h-7 text-xs"
+    onclick={() => timelineLayout.toggle()}
+    title="Temporary: switch the reconcile dialog layout"
+  >
+    {timelineLayout.mobile ? 'Mobile' : 'Desktop'}
+  </Button>
+</div>
 
 <!-- What the recorded timeline looks like, and what has been asserted about it -->
 <div class="border-border bg-card rounded-lg border p-3 shadow-sm">

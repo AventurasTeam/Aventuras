@@ -30,7 +30,7 @@ export type TimelineAnomalyKind =
  * How much a finding is worth to the reader.
  *
  * `note` exists because an interval between two entries is neither provably wrong nor a guess:
- * it is time the story did not narrate, and only the reader knows whether that is a skip, an
+ * it is time not claimed by adjacent entries, and only the reader knows whether that is a skip, an
  * entry that ran long, or a clock that was nudged.
  */
 export type TimelineSeverity = 'defect' | 'suspected' | 'note'
@@ -124,7 +124,7 @@ export function analyzeTimeline(input: TimelineAnalysisInput): TimelineAnomaly[]
       anomalies.push({
         kind: 'gap',
         entryIds: [previous.id, entry.id],
-        detail: `${toMinutes(start) - toMinutes(previousEnd)} minutes pass between these two entries, which the story does not narrate.`,
+        detail: `${toMinutes(start) - toMinutes(previousEnd)} minutes pass between these two entries, not claimed by either of them.`,
         severity: 'note',
       })
     }
