@@ -3636,6 +3636,11 @@ class StoryStore {
   async createCheckpoint(name: string): Promise<Checkpoint> {
     if (!this.currentStory) throw new Error('No story loaded')
 
+    // A checkpoint is a full snapshot, and a branch created from one copies it wholesale. Taken
+    // mid-turn it would freeze a half-written turn — the user action in, the narration or its
+    // world state not yet — and hand that to every branch made from it afterwards.
+    this.assertNotBusy('create a checkpoint')
+
     const lastEntry = this.entries[this.entries.length - 1]
     if (!lastEntry) throw new Error('No entries to checkpoint')
 
@@ -4566,6 +4571,7 @@ class StoryStore {
    * and allow regeneration.
    */
   async restoreFromRetryBackup(backup: {
+    storyId: string
     branchId: string | null
     entries: StoryEntry[]
     characters: Character[]
@@ -4579,14 +4585,13 @@ class StoryStore {
     if (!this.currentStory) throw new Error('No story loaded')
 
     // Backstop for a caller that bypasses RetryService: this deletes the active branch's
-    // world state and re-inserts the snapshot's rows, which carry their own branch_id.
-    if ((backup.branchId ?? null) !== (this.currentStory.currentBranchId ?? null)) {
-      throw new Error('Cannot restore a retry backup taken on another branch')
+    // world state and re-inserts the snapshot's rows. The story is checked as well as the
+    // branch — a deferred rewind runs after Stop, by which time another story may be open,
+    // and two stories' main branches are both null.
+    const scope = { storyId: backup.storyId, branchId: backup.branchId ?? null }
+    if (!this.isOpen(scope)) {
+      throw new Error('Cannot restore a retry backup taken in another story or branch')
     }
-
-    // Captured here for the same reason addEntry captures its own: the rewind is many awaits
-    // long and a story load during it would point the database work at the wrong story.
-    const scope = { storyId: this.currentStory.id, branchId: backup.branchId ?? null }
 
     // Lock editing during retry restore to prevent race conditions
     this._isRetryInProgress = true

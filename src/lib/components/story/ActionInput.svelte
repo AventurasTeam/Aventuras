@@ -1115,7 +1115,13 @@
       return
     }
 
-    const activeBranchId = story.currentStory.currentBranchId ?? null
+    // Read when the rewind actually runs, not now: it is deferred until the generation
+    // drains, and another story can be opened in between. Capturing here would hand the
+    // service a scope that was true only at the moment Stop was pressed.
+    const activeScope = () => ({
+      storyId: story.currentStory?.id ?? '',
+      branchId: story.currentStory?.currentBranchId ?? null,
+    })
     const runRestore = () =>
       retryService.handleStopGeneration(
         backup,
@@ -1137,7 +1143,7 @@
           clearSuggestions: () => ui.clearSuggestions(story.currentStory!.id),
           clearActionChoices: () => ui.clearActionChoices(story.currentStory!.id),
         },
-        activeBranchId,
+        activeScope(),
       )
 
     // Aborting the request is not the end of the generation's writes: a classification
@@ -1329,7 +1335,7 @@
           clearSuggestions: () => ui.clearSuggestions(storyId),
           clearActionChoices: () => ui.clearActionChoices(storyId),
         },
-        lease.branchId,
+        { storyId, branchId: story.currentStory.currentBranchId ?? null },
       )
 
       if (!result.success) {

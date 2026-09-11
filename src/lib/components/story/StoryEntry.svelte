@@ -371,7 +371,9 @@
   )
 
   // Can create checkpoint: latest entry, not a system entry, and no checkpoint exists yet
-  const canCreateCheckpoint = $derived(isLatestEntry && entry.type !== 'system' && !entryCheckpoint)
+  const canCreateCheckpoint = $derived(
+    isLatestEntry && entry.type !== 'system' && !entryCheckpoint && !entriesLocked,
+  )
 
   // Is this the last user_action in the story? (used for the regeneration hint)
   const isLastUserAction = $derived(

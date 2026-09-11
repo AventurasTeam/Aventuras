@@ -75,7 +75,10 @@ describe('RetryService branch enforcement', () => {
 
   describe('restoreFromBackup, entered directly', () => {
     it('refuses a snapshot from another branch without touching state', async () => {
-      const result = await service.restoreFromBackup(makeBackup(), callbacks, 'branch-b')
+      const result = await service.restoreFromBackup(makeBackup(), callbacks, {
+        storyId: 'story-1',
+        branchId: 'branch-b',
+      })
 
       expect(result.success).toBe(false)
       expect(result.error).toMatch(/another branch/i)
@@ -83,7 +86,10 @@ describe('RetryService branch enforcement', () => {
     })
 
     it('proceeds on a matching branch', async () => {
-      const result = await service.restoreFromBackup(makeBackup(), callbacks, 'branch-a')
+      const result = await service.restoreFromBackup(makeBackup(), callbacks, {
+        storyId: 'story-1',
+        branchId: 'branch-a',
+      })
 
       expect(result.success).toBe(true)
       expect(callbacks.restoreFromRetryBackup).toHaveBeenCalledTimes(1)
@@ -92,7 +98,10 @@ describe('RetryService branch enforcement', () => {
     it('refuses the ID-based path from another branch too', async () => {
       const backup = makeBackup({ hasFullState: false })
 
-      const result = await service.restoreFromBackup(backup, callbacks, 'branch-b')
+      const result = await service.restoreFromBackup(backup, callbacks, {
+        storyId: 'story-1',
+        branchId: 'branch-b',
+      })
 
       expect(result.success).toBe(false)
       expect(callbacks.deleteEntriesFromPosition).not.toHaveBeenCalled()
@@ -103,14 +112,20 @@ describe('RetryService branch enforcement', () => {
     it('proceeds on the ID-based path when the branch matches', async () => {
       const backup = makeBackup({ hasFullState: false })
 
-      const result = await service.restoreFromBackup(backup, callbacks, 'branch-a')
+      const result = await service.restoreFromBackup(backup, callbacks, {
+        storyId: 'story-1',
+        branchId: 'branch-a',
+      })
 
       expect(result.success).toBe(true)
       expect(callbacks.deleteEntriesFromPosition).toHaveBeenCalledWith(12)
     })
 
     it('passes the snapshot branch to the store so it can backstop the check', async () => {
-      await service.restoreFromBackup(makeBackup(), callbacks, 'branch-a')
+      await service.restoreFromBackup(makeBackup(), callbacks, {
+        storyId: 'story-1',
+        branchId: 'branch-a',
+      })
 
       expect(callbacks.restoreFromRetryBackup).toHaveBeenCalledWith(
         expect.objectContaining({ branchId: 'branch-a' }),
@@ -118,31 +133,59 @@ describe('RetryService branch enforcement', () => {
     })
   })
 
+  describe('the story is checked as well as the branch', () => {
+    it('refuses a snapshot from another story on the same branch name', async () => {
+      // Both on main, so the branch alone cannot tell the two apart. A deferred rewind runs
+      // after Stop, by which time another story may be open.
+      const result = await service.restoreFromBackup(
+        makeBackup({ storyId: 'story-1', branchId: null }),
+        callbacks,
+        { storyId: 'story-2', branchId: null },
+      )
+
+      expect(result.success).toBe(false)
+      expect(result.error).toMatch(/another story/i)
+      for (const call of mutatingCalls(callbacks)) expect(call).not.toHaveBeenCalled()
+    })
+
+    it('passes the snapshot story to the store so it can backstop the check', async () => {
+      await service.restoreFromBackup(makeBackup(), callbacks, {
+        storyId: 'story-1',
+        branchId: 'branch-a',
+      })
+
+      expect(callbacks.restoreFromRetryBackup).toHaveBeenCalledWith(
+        expect.objectContaining({ storyId: 'story-1', branchId: 'branch-a' }),
+      )
+    })
+  })
+
   describe('main branch is not conflated with a named branch', () => {
     it('refuses a main-branch snapshot while a named branch is active', async () => {
-      const result = await service.restoreFromBackup(
-        makeBackup({ branchId: null }),
-        callbacks,
-        'branch-a',
-      )
+      const result = await service.restoreFromBackup(makeBackup({ branchId: null }), callbacks, {
+        storyId: 'story-1',
+        branchId: 'branch-a',
+      })
 
       expect(result.success).toBe(false)
       for (const call of mutatingCalls(callbacks)) expect(call).not.toHaveBeenCalled()
     })
 
     it('refuses a named-branch snapshot while main is active', async () => {
-      const result = await service.restoreFromBackup(makeBackup(), callbacks, null)
+      const result = await service.restoreFromBackup(makeBackup(), callbacks, {
+        storyId: 'story-1',
+        branchId: null,
+      })
 
       expect(result.success).toBe(false)
       for (const call of mutatingCalls(callbacks)) expect(call).not.toHaveBeenCalled()
     })
 
     it('proceeds when both are main', async () => {
-      const result = await service.restoreFromBackup(
-        makeBackup({ branchId: null }),
-        callbacks,
-        null,
-      )
+      const result = await service.restoreFromBackup(makeBackup({ branchId: null }), callbacks, {
+        storyId: 'story-1',
+        branchId: null,
+      })
 
       expect(result.success).toBe(true)
     })
@@ -152,12 +195,10 @@ describe('RetryService branch enforcement', () => {
     it('refuses before the preflight touches anything', async () => {
       const cleanup = uiCleanup()
 
-      const result = await service.handleRetryLastMessage(
-        makeBackup(),
-        callbacks,
-        cleanup,
-        'branch-b',
-      )
+      const result = await service.handleRetryLastMessage(makeBackup(), callbacks, cleanup, {
+        storyId: 'story-1',
+        branchId: 'branch-b',
+      })
 
       expect(result.success).toBe(false)
       expect(callbacks.assertEntriesRemovable).not.toHaveBeenCalled()
@@ -167,12 +208,10 @@ describe('RetryService branch enforcement', () => {
     })
 
     it('proceeds on a matching branch', async () => {
-      const result = await service.handleRetryLastMessage(
-        makeBackup(),
-        callbacks,
-        uiCleanup(),
-        'branch-a',
-      )
+      const result = await service.handleRetryLastMessage(makeBackup(), callbacks, uiCleanup(), {
+        storyId: 'story-1',
+        branchId: 'branch-a',
+      })
 
       expect(result.success).toBe(true)
       expect(callbacks.restoreFromRetryBackup).toHaveBeenCalledTimes(1)
@@ -183,12 +222,10 @@ describe('RetryService branch enforcement', () => {
     it('refuses a snapshot from another branch and leaves the active branch alone', async () => {
       const cleanup = uiCleanup()
 
-      const result = await service.handleStopGeneration(
-        makeBackup(),
-        callbacks,
-        cleanup,
-        'branch-b',
-      )
+      const result = await service.handleStopGeneration(makeBackup(), callbacks, cleanup, {
+        storyId: 'story-1',
+        branchId: 'branch-b',
+      })
 
       expect(result.success).toBe(false)
       expect(cleanup.clearGenerationError).not.toHaveBeenCalled()
@@ -196,12 +233,10 @@ describe('RetryService branch enforcement', () => {
     })
 
     it('proceeds on a matching branch', async () => {
-      const result = await service.handleStopGeneration(
-        makeBackup(),
-        callbacks,
-        uiCleanup(),
-        'branch-a',
-      )
+      const result = await service.handleStopGeneration(makeBackup(), callbacks, uiCleanup(), {
+        storyId: 'story-1',
+        branchId: 'branch-a',
+      })
 
       expect(result.success).toBe(true)
     })
@@ -212,12 +247,10 @@ describe('RetryService branch enforcement', () => {
       throw new Error('should not be consulted')
     })
 
-    const result = await service.handleRetryLastMessage(
-      makeBackup(),
-      callbacks,
-      uiCleanup(),
-      'branch-b',
-    )
+    const result = await service.handleRetryLastMessage(makeBackup(), callbacks, uiCleanup(), {
+      storyId: 'story-1',
+      branchId: 'branch-b',
+    })
 
     expect(result.error).toMatch(/another branch/i)
   })
