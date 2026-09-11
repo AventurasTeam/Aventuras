@@ -302,7 +302,7 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="max-w-3xl gap-4">
+  <Dialog.Content class="flex max-h-[90vh] max-w-3xl flex-col gap-4">
     <Dialog.Header>
       <Dialog.Title>Reconcile a range</Dialog.Title>
       <Dialog.Description>
@@ -311,399 +311,404 @@
       </Dialog.Description>
     </Dialog.Header>
 
-    {#if ranges.length === 0}
-      <p class="text-muted-foreground text-sm">
-        There is nothing to reconcile yet. A repair runs between two boundaries, and this story
-        offers fewer than two.
-      </p>
-      <p class="text-muted-foreground text-xs">
-        In view: {story.entries.length}
-        {story.entries.length === 1 ? 'entry' : 'entries'}, {story.timeAnchors.length}
-        {story.timeAnchors.length === 1 ? 'anchor' : 'anchors'}, {story.timeBoundaries.length}
-        {story.timeBoundaries.length === 1 ? 'boundary' : 'boundaries'}.
-      </p>
-    {:else}
-      <label class="text-sm">
-        Range
-        <select
-          class="border-input bg-background mt-1 w-full rounded-md border px-2 py-1 text-sm"
-          bind:value={selectedIndex}
-        >
-          {#each ranges as candidate, index (candidate.from.entryId + candidate.to.entryId)}
-            <option value={index}>{rangeLabel(candidate)}</option>
-          {/each}
-        </select>
-      </label>
-
-      <div class="text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 text-xs">
-        <span>Was <span class="text-foreground">{spanText(recordedSpan)}</span></span>
-        <span>Becomes <span class="text-foreground">{spanText(assertedSpan)}</span></span>
-      </div>
-
-      {#if refusal?.status === 'refused'}
-        <div class="border-destructive/50 bg-destructive/10 rounded-md border p-3 text-sm">
-          <p class="flex items-center gap-2 font-medium">
-            <TriangleAlert class="h-4 w-4" />
-            {refusal.refusal.reason === 'backwards-span'
-              ? 'These two boundaries contradict each other'
-              : 'A boundary has no time'}
-          </p>
-          <p class="text-muted-foreground mt-1 text-xs">
-            {#if refusal.refusal.reason === 'backwards-span'}
-              Entry {entryNumber(refusal.refusal.boundaries[0].entryId)} is asserted at
-              {stamp(refusal.refusal.boundaries[0].time)}, entry
-              {entryNumber(refusal.refusal.boundaries[1].entryId)} at
-              {stamp(refusal.refusal.boundaries[1].time)}. The later one asserts an earlier time,
-              and only you can say which is wrong.
-            {:else}
-              {#each refusal.refusal.boundaries as boundary (boundary.entryId)}
-                Entry {entryNumber(boundary.entryId)} has no recorded ending. Pin when it ended to use
-                it as a boundary.
-              {/each}
-            {/if}
-          </p>
-        </div>
+    <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
+      {#if ranges.length === 0}
+        <p class="text-muted-foreground text-sm">
+          There is nothing to reconcile yet. A repair runs between two boundaries, and this story
+          offers fewer than two.
+        </p>
+        <p class="text-muted-foreground text-xs">
+          In view: {story.entries.length}
+          {story.entries.length === 1 ? 'entry' : 'entries'}, {story.timeAnchors.length}
+          {story.timeAnchors.length === 1 ? 'anchor' : 'anchors'}, {story.timeBoundaries.length}
+          {story.timeBoundaries.length === 1 ? 'boundary' : 'boundaries'}.
+        </p>
       {:else}
-        <div class="max-h-72 overflow-y-auto">
-          <table class="w-full border-collapse text-xs">
-            <thead
-              class="text-muted-foreground bg-background border-border sticky top-0 z-10 border-b text-left"
-            >
-              <tr>
-                <th class="w-8 py-1 pr-2 font-medium">#</th>
-                <th class="w-24 py-1 pr-2 font-medium">Label</th>
-                <th class="py-1 pr-2 font-medium">Entry</th>
-                <th class="w-36 py-1 pr-2 font-medium">Was</th>
-                <th class="w-36 py-1 font-medium">Becomes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each rangeEntries as entry (entry.id)}
-                {@const request = requestFor(entry.id)}
-                {@const repaired = repairedTimes(entry.id)}
-                {@const interval = intervals.find((i) => i.afterEntryId === entry.id)}
-                {@const was = wasWeight(entry.id)}
-                <tr
-                  class="border-border/50 hover:bg-muted/40 cursor-pointer border-t {selection?.kind ===
-                    'entry' && selection.entryId === entry.id
-                    ? 'bg-primary/10'
-                    : ''}"
-                  onclick={() => (selection = { kind: 'entry', entryId: entry.id })}
-                >
-                  <td class="text-muted-foreground py-1 pr-2 align-top">{entryNumber(entry.id)}</td>
-                  <td class="py-1 pr-2 align-top">
-                    <span class="flex items-center gap-1">
-                      {#if request}
-                        <TriangleAlert class="h-3 w-3 shrink-0 text-amber-600" />
-                      {/if}
-                      <span
-                        class="rounded px-1 text-[10px] tracking-wide uppercase {isAction(entry.id)
-                          ? 'bg-muted text-muted-foreground'
-                          : 'bg-primary/10 text-primary'}"
-                      >
-                        {label(entry.id)}
-                      </span>
-                    </span>
-                  </td>
-                  <td class="py-1 pr-2 align-top">
-                    <span class="line-clamp-3 {isAction(entry.id) ? 'italic' : ''}">
-                      {entryText(entry.id)}
-                    </span>
-                  </td>
-                  <td class="text-muted-foreground py-1 pr-2 align-top whitespace-nowrap">
-                    <div class="grid grid-cols-[auto_1fr] gap-x-2">
-                      {#if isAction(entry.id)}
-                        <span>At:</span><span>{stamp(entry.metadata?.timeEnd)}</span>
-                      {:else}
-                        <span>Start:</span><span>{stamp(entry.metadata?.timeStart)}</span>
-                        <span>End:</span><span>{stamp(entry.metadata?.timeEnd)}</span>
-                        <span>Weight:</span>
-                        <span class={was.supplied ? 'text-foreground font-medium' : ''}>
-                          {was.text}
-                        </span>
-                      {/if}
-                    </div>
-                  </td>
-                  <td class="py-1 align-top whitespace-nowrap">
-                    {#if repaired}
-                      <div class="grid grid-cols-[auto_1fr] gap-x-2">
-                        {#if isAction(entry.id)}
-                          <span>At:</span><span>{stamp(repaired.end)}</span>
-                        {:else}
-                          <span>Start:</span><span>{stamp(repaired.start)}</span>
-                          <span>End:</span><span>{stamp(repaired.end)}</span>
-                          <span>Weight:</span>
-                          <span class="flex items-center gap-1">
-                            {#if collapsed.includes(entry.id)}
-                              <TriangleAlert class="h-3 w-3 shrink-0 text-amber-600" />
-                            {/if}
-                            {formatDuration(toMinutes(repaired.end) - toMinutes(repaired.start))}
-                          </span>
-                        {/if}
-                      </div>
-                    {:else}
-                      <span class="text-muted-foreground">—</span>
-                    {/if}
-                  </td>
-                </tr>
+        <label class="text-sm">
+          Range
+          <select
+            class="border-input bg-background mt-1 w-full rounded-md border px-2 py-1 text-sm"
+            bind:value={selectedIndex}
+          >
+            {#each ranges as candidate, index (candidate.from.entryId + candidate.to.entryId)}
+              <option value={index}>{rangeLabel(candidate)}</option>
+            {/each}
+          </select>
+        </label>
 
-                {#if interval}
-                  {@const decided = gapPolicies[interval.afterEntryId] !== undefined}
-                  {@const scaled = scaledInterval(interval.afterEntryId, interval.beforeEntryId)}
+        <div class="text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 text-xs">
+          <span>Was <span class="text-foreground">{spanText(recordedSpan)}</span></span>
+          <span>Becomes <span class="text-foreground">{spanText(assertedSpan)}</span></span>
+        </div>
+
+        {#if refusal?.status === 'refused'}
+          <div class="border-destructive/50 bg-destructive/10 rounded-md border p-3 text-sm">
+            <p class="flex items-center gap-2 font-medium">
+              <TriangleAlert class="h-4 w-4" />
+              {refusal.refusal.reason === 'backwards-span'
+                ? 'These two boundaries contradict each other'
+                : 'A boundary has no time'}
+            </p>
+            <p class="text-muted-foreground mt-1 text-xs">
+              {#if refusal.refusal.reason === 'backwards-span'}
+                Entry {entryNumber(refusal.refusal.boundaries[0].entryId)} is asserted at
+                {stamp(refusal.refusal.boundaries[0].time)}, entry
+                {entryNumber(refusal.refusal.boundaries[1].entryId)} at
+                {stamp(refusal.refusal.boundaries[1].time)}. The later one asserts an earlier time,
+                and only you can say which is wrong.
+              {:else}
+                {#each refusal.refusal.boundaries as boundary (boundary.entryId)}
+                  Entry {entryNumber(boundary.entryId)} has no recorded ending. Pin when it ended to use
+                  it as a boundary.
+                {/each}
+              {/if}
+            </p>
+          </div>
+        {:else}
+          <div>
+            <table class="w-full border-collapse text-xs">
+              <thead
+                class="text-muted-foreground bg-background border-border sticky top-0 z-10 border-b text-left"
+              >
+                <tr>
+                  <th class="w-8 py-1 pr-2 font-medium">#</th>
+                  <th class="w-24 py-1 pr-2 font-medium">Label</th>
+                  <th class="py-1 pr-2 font-medium">Entry</th>
+                  <th class="w-36 py-1 pr-2 font-medium">Was</th>
+                  <th class="w-36 py-1 font-medium">Becomes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each rangeEntries as entry (entry.id)}
+                  {@const request = requestFor(entry.id)}
+                  {@const repaired = repairedTimes(entry.id)}
+                  {@const interval = intervals.find((i) => i.afterEntryId === entry.id)}
+                  {@const was = wasWeight(entry.id)}
                   <tr
                     class="border-border/50 hover:bg-muted/40 cursor-pointer border-t {selection?.kind ===
-                      'gap' && selection.entryId === interval.afterEntryId
+                      'entry' && selection.entryId === entry.id
                       ? 'bg-primary/10'
-                      : 'bg-muted/20'}"
-                    onclick={() => (selection = { kind: 'gap', entryId: interval.afterEntryId })}
+                      : ''}"
+                    onclick={() => (selection = { kind: 'entry', entryId: entry.id })}
                   >
-                    <td class="py-1 pr-2"></td>
+                    <td class="text-muted-foreground py-1 pr-2 align-top"
+                      >{entryNumber(entry.id)}</td
+                    >
                     <td class="py-1 pr-2 align-top">
                       <span class="flex items-center gap-1">
-                        {#if !decided}
+                        {#if request}
                           <TriangleAlert class="h-3 w-3 shrink-0 text-amber-600" />
                         {/if}
                         <span
-                          class="rounded bg-amber-500/15 px-1 text-[10px] tracking-wide text-amber-700 uppercase dark:text-amber-500"
+                          class="rounded px-1 text-[10px] tracking-wide uppercase {isAction(
+                            entry.id,
+                          )
+                            ? 'bg-muted text-muted-foreground'
+                            : 'bg-primary/10 text-primary'}"
                         >
-                          Time gap
+                          {label(entry.id)}
                         </span>
                       </span>
                     </td>
-                    <td class="text-muted-foreground py-1 pr-2 align-top">
-                      Time the story does not narrate
+                    <td class="py-1 pr-2 align-top">
+                      <span class="line-clamp-3 {isAction(entry.id) ? 'italic' : ''}">
+                        {entryText(entry.id)}
+                      </span>
                     </td>
                     <td class="text-muted-foreground py-1 pr-2 align-top whitespace-nowrap">
-                      {describeMinutes(interval.recordedMinutes)}
+                      <div class="grid grid-cols-[auto_1fr] gap-x-2">
+                        {#if isAction(entry.id)}
+                          <span>At:</span><span>{stamp(entry.metadata?.timeEnd)}</span>
+                        {:else}
+                          <span>Start:</span><span>{stamp(entry.metadata?.timeStart)}</span>
+                          <span>End:</span><span>{stamp(entry.metadata?.timeEnd)}</span>
+                          <span>Weight:</span>
+                          <span class={was.supplied ? 'text-foreground font-medium' : ''}>
+                            {was.text}
+                          </span>
+                        {/if}
+                      </div>
                     </td>
-                    <td class="text-muted-foreground py-1 align-top whitespace-nowrap">
-                      {#if scaled === null}
-                        —
-                      {:else if scaled === 0}
-                        closed
+                    <td class="py-1 align-top whitespace-nowrap">
+                      {#if repaired}
+                        <div class="grid grid-cols-[auto_1fr] gap-x-2">
+                          {#if isAction(entry.id)}
+                            <span>At:</span><span>{stamp(repaired.end)}</span>
+                          {:else}
+                            <span>Start:</span><span>{stamp(repaired.start)}</span>
+                            <span>End:</span><span>{stamp(repaired.end)}</span>
+                            <span>Weight:</span>
+                            <span class="flex items-center gap-1">
+                              {#if collapsed.includes(entry.id)}
+                                <TriangleAlert class="h-3 w-3 shrink-0 text-amber-600" />
+                              {/if}
+                              {formatDuration(toMinutes(repaired.end) - toMinutes(repaired.start))}
+                            </span>
+                          {/if}
+                        </div>
                       {:else}
-                        {describeMinutes(scaled)}
+                        <span class="text-muted-foreground">—</span>
                       {/if}
                     </td>
                   </tr>
-                {/if}
-              {/each}
-            </tbody>
-          </table>
-        </div>
 
-        <!-- The control panel. A fixed height so the dialog does not jump as the selection
-             moves between a gap, an entry and nothing at all; clipped rather than scrolled,
-             since a scroll region inside the scrolling table is a trap to read in. -->
-        <div class="flex h-56 flex-col overflow-hidden">
-          {#if selectedInterval}
-            <div class="border-border rounded-md border p-3 text-xs">
-              <p class="mb-2 font-medium">
-                Time gap · after entry {entryNumber(selectedInterval.afterEntryId)}
-              </p>
-              <p class="text-muted-foreground mb-2">
-                {describeMinutes(selectedInterval.recordedMinutes)} between entry
-                {entryNumber(selectedInterval.afterEntryId)} and entry
-                {entryNumber(selectedInterval.beforeEntryId)}, which the story does not narrate.
-              </p>
-              <div class="flex flex-col gap-1">
-                {#each gapChoices(selectedInterval) as choice (choice.value)}
-                  <label class="flex cursor-pointer items-baseline gap-2">
-                    <input
-                      type="radio"
-                      checked={gapPolicies[selectedInterval.afterEntryId] === choice.value}
-                      onchange={() => (gapPolicies[selectedInterval.afterEntryId] = choice.value)}
-                    />
-                    <span>
-                      {choice.label}
-                      <span class="text-muted-foreground">— {choice.hint}</span>
-                    </span>
-                  </label>
-                {/each}
-              </div>
-            </div>
-          {:else if selectedEntry}
-            {@const request = requestFor(selectedEntry.id)}
-            <div class="border-border rounded-md border p-3 text-xs">
-              <p class="mb-2 flex items-center gap-2 font-medium">
-                <span
-                  class="rounded px-1 text-[10px] tracking-wide uppercase {isAction(
-                    selectedEntry.id,
-                  )
-                    ? 'bg-muted text-muted-foreground'
-                    : 'bg-primary/10 text-primary'}"
-                >
-                  {label(selectedEntry.id)}
-                </span>
-                Entry {entryNumber(selectedEntry.id)}
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                class="mb-2 h-7 text-xs"
-                onclick={() => (fullTextOpen = true)}
-              >
-                Show full text
-              </Button>
-
-              {#if request}
-                <p class="mb-2 flex items-start gap-1 text-amber-700 dark:text-amber-500">
-                  <TriangleAlert class="mt-0.5 h-3 w-3 shrink-0" />
-                  <span>{reasonText(request.reason)}</span>
-                </p>
-              {/if}
-
-              {#if isAction(selectedEntry.id)}
-                <p class="text-muted-foreground">
-                  An action is an instant — the clock advances while the story responds, not while
-                  you decide. It weighs nothing and takes no length.
-                </p>
-              {:else}
-                <div class="text-muted-foreground mb-2 flex flex-wrap gap-x-6 gap-y-1">
-                  <span>
-                    Recorded
-                    <span class="text-foreground">
-                      {stampRange(
-                        selectedEntry.metadata?.timeStart,
-                        selectedEntry.metadata?.timeEnd,
-                      )}
-                    </span>
-                  </span>
-                  <span>
-                    Originally weighed as
-                    <span class="text-foreground">
-                      {recordedWeight(selectedEntry.id) === null
-                        ? 'unreadable'
-                        : formatDuration(recordedWeight(selectedEntry.id) ?? 0)}
-                    </span>
-                  </span>
-                  <span>
-                    Custom weight set as
-                    <span class="text-foreground">
-                      {overrides[selectedEntry.id] === undefined
-                        ? 'not set'
-                        : formatDuration(overrides[selectedEntry.id])}
-                    </span>
-                  </span>
-                </div>
-                <div class="flex flex-wrap items-center gap-2">
-                  <label class="flex items-center gap-2">
-                    <span class="text-muted-foreground shrink-0">Set custom weight</span>
-                    <Input
-                      placeholder="e.g. 90, 2h 30m, 3d"
-                      class="h-7 w-48 text-xs"
-                      bind:value={supplied[selectedEntry.id]}
-                    />
-                  </label>
-                  <span class="text-muted-foreground">
-                    {#if overrides[selectedEntry.id] !== undefined}
-                      = {formatDuration(overrides[selectedEntry.id])}
-                    {:else}
-                      minutes, or units: y d h m
-                    {/if}
-                  </span>
-                  {#if supplied[selectedEntry.id]}
-                    <Button
-                      variant="text"
-                      size="sm"
-                      class="h-7 text-xs"
-                      onclick={() => clearOverride(selectedEntry.id)}
+                  {#if interval}
+                    {@const decided = gapPolicies[interval.afterEntryId] !== undefined}
+                    {@const scaled = scaledInterval(interval.afterEntryId, interval.beforeEntryId)}
+                    <tr
+                      class="border-border/50 hover:bg-muted/40 cursor-pointer border-t {selection?.kind ===
+                        'gap' && selection.entryId === interval.afterEntryId
+                        ? 'bg-primary/10'
+                        : 'bg-muted/20'}"
+                      onclick={() => (selection = { kind: 'gap', entryId: interval.afterEntryId })}
                     >
-                      Clear
-                    </Button>
+                      <td class="py-1 pr-2"></td>
+                      <td class="py-1 pr-2 align-top">
+                        <span class="flex items-center gap-1">
+                          {#if !decided}
+                            <TriangleAlert class="h-3 w-3 shrink-0 text-amber-600" />
+                          {/if}
+                          <span
+                            class="rounded bg-amber-500/15 px-1 text-[10px] tracking-wide text-amber-700 uppercase dark:text-amber-500"
+                          >
+                            Time gap
+                          </span>
+                        </span>
+                      </td>
+                      <td class="text-muted-foreground py-1 pr-2 align-top">
+                        Time the story does not narrate
+                      </td>
+                      <td class="text-muted-foreground py-1 pr-2 align-top whitespace-nowrap">
+                        {describeMinutes(interval.recordedMinutes)}
+                      </td>
+                      <td class="text-muted-foreground py-1 align-top whitespace-nowrap">
+                        {#if scaled === null}
+                          —
+                        {:else if scaled === 0}
+                          closed
+                        {:else}
+                          {describeMinutes(scaled)}
+                        {/if}
+                      </td>
+                    </tr>
                   {/if}
+                {/each}
+              </tbody>
+            </table>
+          </div>
+
+          <!-- A floor rather than a fixed height: it keeps the dialog from jumping as the
+             selection moves between a gap, an entry and nothing at all, without cropping the
+             card's own border when the controls need more room than that. -->
+          <div class="flex min-h-56 flex-col">
+            {#if selectedInterval}
+              <div class="border-border rounded-md border p-3 text-xs">
+                <p class="mb-2 font-medium">
+                  Time gap · after entry {entryNumber(selectedInterval.afterEntryId)}
+                </p>
+                <p class="text-muted-foreground mb-2">
+                  {describeMinutes(selectedInterval.recordedMinutes)} between entry
+                  {entryNumber(selectedInterval.afterEntryId)} and entry
+                  {entryNumber(selectedInterval.beforeEntryId)}, which the story does not narrate.
+                </p>
+                <div class="flex flex-col gap-1">
+                  {#each gapChoices(selectedInterval) as choice (choice.value)}
+                    <label class="flex cursor-pointer items-baseline gap-2">
+                      <input
+                        type="radio"
+                        checked={gapPolicies[selectedInterval.afterEntryId] === choice.value}
+                        onchange={() => (gapPolicies[selectedInterval.afterEntryId] = choice.value)}
+                      />
+                      <span>
+                        {choice.label}
+                        <span class="text-muted-foreground">— {choice.hint}</span>
+                      </span>
+                    </label>
+                  {/each}
                 </div>
-                {#if durationIsInvalid(supplied[selectedEntry.id])}
-                  <p class="text-destructive mt-1">
-                    Not a duration. Try a number of minutes, or units like 2h 30m.
+              </div>
+            {:else if selectedEntry}
+              {@const request = requestFor(selectedEntry.id)}
+              <div class="border-border rounded-md border p-3 text-xs">
+                <p class="mb-2 flex items-center gap-2 font-medium">
+                  <span
+                    class="rounded px-1 text-[10px] tracking-wide uppercase {isAction(
+                      selectedEntry.id,
+                    )
+                      ? 'bg-muted text-muted-foreground'
+                      : 'bg-primary/10 text-primary'}"
+                  >
+                    {label(selectedEntry.id)}
+                  </span>
+                  Entry {entryNumber(selectedEntry.id)}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="mb-2 h-7 text-xs"
+                  onclick={() => (fullTextOpen = true)}
+                >
+                  Show full text
+                </Button>
+
+                {#if request}
+                  <p class="mb-2 flex items-start gap-1 text-amber-700 dark:text-amber-500">
+                    <TriangleAlert class="mt-0.5 h-3 w-3 shrink-0" />
+                    <span>{reasonText(request.reason)}</span>
                   </p>
                 {/if}
-                <p class="text-muted-foreground mt-2">
-                  This sets what the entry is <em>worth</em>, not the length it ends up with: the
-                  range is fitted to its boundaries, so each entry takes a share in proportion to
-                  its weight.
-                </p>
-              {/if}
-            </div>
-          {:else}
-            <p class="text-muted-foreground m-auto text-xs">
-              Select a row to set an entry's weight or decide what a time gap is worth.
-            </p>
-          {/if}
-        </div>
 
-        {#if !resolved}
-          <p class="text-muted-foreground flex items-start gap-1 text-xs">
-            <TriangleAlert class="mt-0.5 h-3 w-3 shrink-0 text-amber-600" />
-            <span>
-              {#if unreadable.length > 0}
-                {unreadable.length}
-                {unreadable.length === 1 ? 'entry needs' : 'entries need'} a length{undecidedGaps.length >
-                0
-                  ? ', '
-                  : '. '}
-              {/if}
-              {#if undecidedGaps.length > 0}
-                {undecidedGaps.length} time
-                {undecidedGaps.length === 1 ? 'gap needs' : 'gaps need'} a decision.
-              {/if}
-              Nothing is calculated until each is settled.
-            </span>
-          </p>
-        {:else if preview?.status === 'ok'}
-          <div class="text-muted-foreground space-y-1 text-xs">
-            {#if preview.result.leadingJoin.differenceMinutes !== 0}
-              <p>
-                The entry before this range still ends at
-                {stamp(preview.result.leadingJoin.neighbourTime)}, so it will
-                {preview.result.leadingJoin.differenceMinutes > 0
-                  ? 'overlap'
-                  : 'leave a gap before'} the new start. Reconcile the range before this one to close
-                it.
-              </p>
-            {/if}
-            {#if preview.result.trailingJoin && preview.result.trailingJoin.differenceMinutes !== 0}
-              <p>
-                The entry after this range still begins at
-                {stamp(preview.result.trailingJoin.neighbourTime)}, leaving a break at the end.
-              </p>
-            {/if}
-            {#if preview.plan.clock}
-              <p>This range reaches the end of the story, so the current time moves with it.</p>
+                {#if isAction(selectedEntry.id)}
+                  <p class="text-muted-foreground">
+                    An action is an instant — the clock advances while the story responds, not while
+                    you decide. It weighs nothing and takes no length.
+                  </p>
+                {:else}
+                  <div class="text-muted-foreground mb-2 flex flex-wrap gap-x-6 gap-y-1">
+                    <span>
+                      Recorded
+                      <span class="text-foreground">
+                        {stampRange(
+                          selectedEntry.metadata?.timeStart,
+                          selectedEntry.metadata?.timeEnd,
+                        )}
+                      </span>
+                    </span>
+                    <span>
+                      Originally weighed as
+                      <span class="text-foreground">
+                        {recordedWeight(selectedEntry.id) === null
+                          ? 'unreadable'
+                          : formatDuration(recordedWeight(selectedEntry.id) ?? 0)}
+                      </span>
+                    </span>
+                    <span>
+                      Custom weight set as
+                      <span class="text-foreground">
+                        {overrides[selectedEntry.id] === undefined
+                          ? 'not set'
+                          : formatDuration(overrides[selectedEntry.id])}
+                      </span>
+                    </span>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <label class="flex items-center gap-2">
+                      <span class="text-muted-foreground shrink-0">Set custom weight</span>
+                      <Input
+                        placeholder="e.g. 90, 2h 30m, 3d"
+                        class="h-7 w-48 text-xs"
+                        bind:value={supplied[selectedEntry.id]}
+                      />
+                    </label>
+                    <span class="text-muted-foreground">
+                      {#if overrides[selectedEntry.id] !== undefined}
+                        = {formatDuration(overrides[selectedEntry.id])}
+                      {:else}
+                        minutes, or units: y d h m
+                      {/if}
+                    </span>
+                    {#if supplied[selectedEntry.id]}
+                      <Button
+                        variant="text"
+                        size="sm"
+                        class="h-7 text-xs"
+                        onclick={() => clearOverride(selectedEntry.id)}
+                      >
+                        Clear
+                      </Button>
+                    {/if}
+                  </div>
+                  {#if durationIsInvalid(supplied[selectedEntry.id])}
+                    <p class="text-destructive mt-1">
+                      Not a duration. Try a number of minutes, or units like 2h 30m.
+                    </p>
+                  {/if}
+                  <p class="text-muted-foreground mt-2">
+                    This sets what the entry is <em>worth</em>, not the length it ends up with: the
+                    range is fitted to its boundaries, so each entry takes a share in proportion to
+                    its weight.
+                  </p>
+                {/if}
+              </div>
             {:else}
-              <p>
-                The story's current time is unchanged: this repair ends at entry
-                {entryNumber(preview.range.to.entryId)}, and the story ends at entry
-                {lastEntryNumber ?? '?'}. Widen the range to the end of the story to move the clock
-                with it.
+              <p class="text-muted-foreground m-auto text-xs">
+                Select a row to set an entry's weight or decide what a time gap is worth.
               </p>
             {/if}
           </div>
 
-          {#if collapsed.length > 0}
-            <p
-              class="flex items-start gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-2 text-xs"
-            >
-              <TriangleAlert class="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+          {#if !resolved}
+            <p class="text-muted-foreground flex items-start gap-1 text-xs">
+              <TriangleAlert class="mt-0.5 h-3 w-3 shrink-0 text-amber-600" />
               <span>
-                {collapsed.length === 1 ? 'One entry is' : `${collapsed.length} entries are`}
-                compressed to no length, marked above. Their share of the pacing cannot be recovered by
-                widening the range later.
+                {#if unreadable.length > 0}
+                  {unreadable.length}
+                  {unreadable.length === 1 ? 'entry needs' : 'entries need'} a length{undecidedGaps.length >
+                  0
+                    ? ', '
+                    : '. '}
+                {/if}
+                {#if undecidedGaps.length > 0}
+                  {undecidedGaps.length} time
+                  {undecidedGaps.length === 1 ? 'gap needs' : 'gaps need'} a decision.
+                {/if}
+                Nothing is calculated until each is settled.
               </span>
             </p>
+          {:else if preview?.status === 'ok'}
+            <div class="text-muted-foreground space-y-1 text-xs">
+              {#if preview.result.leadingJoin.differenceMinutes !== 0}
+                <p>
+                  The entry before this range still ends at
+                  {stamp(preview.result.leadingJoin.neighbourTime)}, so it will
+                  {preview.result.leadingJoin.differenceMinutes > 0
+                    ? 'overlap'
+                    : 'leave a gap before'} the new start. Reconcile the range before this one to close
+                  it.
+                </p>
+              {/if}
+              {#if preview.result.trailingJoin && preview.result.trailingJoin.differenceMinutes !== 0}
+                <p>
+                  The entry after this range still begins at
+                  {stamp(preview.result.trailingJoin.neighbourTime)}, leaving a break at the end.
+                </p>
+              {/if}
+              {#if preview.plan.clock}
+                <p>This range reaches the end of the story, so the current time moves with it.</p>
+              {:else}
+                <p>
+                  The story's current time is unchanged: this repair ends at entry
+                  {entryNumber(preview.range.to.entryId)}, and the story ends at entry
+                  {lastEntryNumber ?? '?'}. Widen the range to the end of the story to move the
+                  clock with it.
+                </p>
+              {/if}
+            </div>
+
+            {#if collapsed.length > 0}
+              <p
+                class="flex items-start gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-2 text-xs"
+              >
+                <TriangleAlert class="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+                <span>
+                  {collapsed.length === 1 ? 'One entry is' : `${collapsed.length} entries are`}
+                  compressed to no length, marked above. Their share of the pacing cannot be recovered
+                  by widening the range later.
+                </span>
+              </p>
+            {/if}
           {/if}
         {/if}
-      {/if}
 
-      {#if staleMessage}
-        <p class="text-destructive text-xs">{staleMessage}</p>
-      {/if}
+        {#if staleMessage}
+          <p class="text-destructive text-xs">{staleMessage}</p>
+        {/if}
 
-      {#if appliedMessage}
-        <p class="text-xs text-emerald-600 dark:text-emerald-400">{appliedMessage}</p>
+        {#if appliedMessage}
+          <p class="text-xs text-emerald-600 dark:text-emerald-400">{appliedMessage}</p>
+        {/if}
       {/if}
-    {/if}
-
+    </div>
     <Dialog.Footer>
       <Button variant="outline" onclick={() => (open = false)}>
         {appliedMessage ? 'Close' : 'Cancel'}
@@ -716,14 +721,14 @@
 </Dialog.Root>
 
 <Dialog.Root bind:open={fullTextOpen}>
-  <Dialog.Content class="max-w-2xl gap-4">
+  <Dialog.Content class="flex max-h-[90vh] max-w-2xl flex-col gap-4">
     <Dialog.Header>
       <Dialog.Title>
         {selectedEntry ? `Entry ${entryNumber(selectedEntry.id)}` : 'Entry'}
       </Dialog.Title>
     </Dialog.Header>
 
-    <p class="max-h-[60vh] overflow-y-auto text-sm whitespace-pre-wrap">
+    <p class="min-h-0 flex-1 overflow-y-auto text-sm whitespace-pre-wrap">
       {selectedEntry?.content ?? ''}
     </p>
 
