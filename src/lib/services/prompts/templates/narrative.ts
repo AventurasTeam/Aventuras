@@ -23,6 +23,12 @@ Example: "{{ protagonistName }} steps forward..." or "They examine the door..."
 Do NOT use "you" to refer to the protagonist.{% elsif pov == 'third' and tense == 'past' %}Write in PAST TENSE, THIRD PERSON.
 Refer to the protagonist as "{{ protagonistName }}" or "they/them".
 Example: "{{ protagonistName }} stepped forward..." or "They examined the door..."
+Do NOT use "you" to refer to the protagonist.{% elsif pov == 'first' and tense == 'past' %}Write in PAST TENSE, FIRST PERSON.
+Use "I/me/my" as {{ protagonistName }}, whom the player controls.
+Example: "I stepped forward..." or "I examined the door..."
+Do NOT use "you" to refer to the protagonist.{% elsif pov == 'first' %}Write in PRESENT TENSE, FIRST PERSON.
+Use "I/me/my" as {{ protagonistName }}, whom the player controls.
+Example: "I step forward..." or "I examine the door..."
 Do NOT use "you" to refer to the protagonist.{% elsif tense == 'past' %}Write in PAST TENSE, SECOND PERSON.
 Use "you/your" for the protagonist.
 Example: "You stepped forward..." or "You examined the door..."{% else %}Write in PRESENT TENSE, SECOND PERSON.
@@ -107,6 +113,17 @@ CRITICAL VOICE RULES:
 - You are the NARRATOR describing what happens, not the protagonist themselves.
 - NEVER write the protagonist's dialogue, thoughts, or decisions.
 
+End with a natural opening for action, not a direct question.{% elsif pov == 'first' %}Respond to the player's action with an engaging narrative continuation:
+1. Show the immediate results of their action through sensory detail
+2. Bring NPCs and environment to life with their own reactions
+3. Create new tension, opportunity, or discovery
+
+CRITICAL VOICE RULES:
+- Use FIRST PERSON (I/me/my) as {{ protagonistName }}. When the player writes "I do X", narrate the result as "I do X".
+- Do NOT use "you" to address the protagonist.
+- The player decides what {{ protagonistName }} does; you narrate what follows and what the world does back.
+- NEVER write the protagonist's dialogue, thoughts, or decisions.
+
 End with a natural opening for action, not a direct question.{% else %}Respond to the player's action with an engaging narrative continuation:
 1. Show the immediate results of their action through sensory detail
 2. Bring NPCs and environment to life with their own reactions
@@ -143,6 +160,24 @@ End with a natural opening for action, not a direct question.{% endif %}
 {% endif %}{% if tieredContextBlock != blank %}
 {{ tieredContextBlock }}
 {% endif %}{% if styleGuidance != blank %}{{ styleGuidance }}{% endif %}`,
+  userContent: `{%- case narratorReinforcement %}
+{%- when 'minimal' %}You are the narrator of this interactive adventure. I am the player controlling protagonist named {{ protagonistName }}.
+{%- when 'full' -%}
+{%- case pov -%}
+{%- when 'first' -%}{% assign povWord = 'first' %}{% assign actionExample = 'I push open the heavy door' %}
+{%- when 'third' -%}{% assign povWord = 'third' %}{% assign actionExample = protagonistName | append: ' pushes open the heavy door' %}
+{%- else -%}{% assign povWord = 'second' %}{% assign actionExample = 'You push open the heavy door' %}
+{%- endcase -%}
+You are the narrator of this interactive adventure. I am the player controlling protagonist named {{ protagonistName }}. Write in {{ tense }} tense, {{ povWord }} person.
+
+Your role:
+- Describe {{ protagonistName }}'s experiences and the world around them
+- Control all NPCs and the environment
+- NEVER write {{ protagonistName }}'s dialogue, decisions, or inner thoughts - I decide those
+- When I say "I do X", describe the results in {{ povWord }} person (e.g., "I open the door" -> "{{ actionExample }}...")
+
+I control {{protagonistName}}. You narrate what happens. Begin when I take my first action.
+{% endcase %}`,
 }
 
 const creativeWritingPromptTemplate: PromptTemplate = {
@@ -324,6 +359,39 @@ End at a natural narrative beat.{% endif %}
 {% endif %}{% if tieredContextBlock != blank %}
 {{ tieredContextBlock }}
 {% endif %}{% if styleGuidance != blank %}{{ styleGuidance }}{% endif %}`,
+  userContent: `{%- if narratorReinforcement == 'minimal' %}You are a skilled fiction writer. I am the author directing the story. Write what I ask for.{% endif %}
+{%- if narratorReinforcement == 'full' %}
+{%- case pov %}
+  {%- when 'first' %}You are a skilled fiction writer. Write in {{ tense }} tense, first person (I/me/my).
+
+Your role:
+- Write prose based on my directions from {{ protagonistName }}'s internal perspective
+- Bring scenes to life with vivid detail and internal monologue
+- Write for any character I direct you to, including dialogue, actions, and thoughts
+- Maintain consistent characterization throughout
+
+I am the author directing the story. Write what I ask for.
+  {%- when 'second' %}You are a skilled fiction writer. Write in {{ tense }} tense, second person (you/your).
+
+Your role:
+- Write prose based on my directions, addressing {{ protagonistName }} directly
+- Bring scenes to life with vivid detail
+- Write for any character I direct you to, including dialogue, actions, and thoughts
+- Maintain consistent characterization throughout
+
+I am the author directing the story. Write what I ask for.
+  {%- else %}You are a skilled fiction writer. Write in {{ tense }} tense, third person (they/their/character name).
+
+Your role:
+- Write prose based on my directions
+- Bring scenes to life with vivid detail
+- Write for any character I direct you to, including dialogue, actions, and thoughts
+- Maintain consistent characterization throughout
+
+I am the author directing the story. Write what I ask for.
+{%- endcase %}
+{%- endif %}
+`,
 }
 
 export const storyTemplates: PromptTemplate[] = [

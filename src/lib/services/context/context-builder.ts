@@ -100,6 +100,7 @@ export class ContextBuilder {
       inlineImageMode: story.settings?.imageGenerationMode === 'inline',
       targetLength,
       lengthInstruction,
+      narratorReinforcement: story.settings?.narratorReinforcement || 'full',
     })
 
     // Protagonist
@@ -160,26 +161,26 @@ export class ContextBuilder {
   async render(templateId: string): Promise<RenderResult> {
     log('render', { templateId, packId: this.packId })
 
-    const systemTemplate = await this.resolveTemplate(templateId)
-    const userTemplate = await this.resolveTemplate(`${templateId}-user`)
-
-    const systemResult = systemTemplate?.content
-      ? templateEngine.render(systemTemplate.content, this.context)
-      : ''
-    if (systemResult === null) {
-      log('ERROR: system template render failed, using raw content', { templateId })
-    }
-    const userResult = userTemplate?.content
-      ? templateEngine.render(userTemplate.content, this.context)
-      : ''
-    if (userResult === null) {
-      log('ERROR: user template render failed, using raw content', { templateId })
-    }
-
     return {
-      system: systemResult ?? systemTemplate?.content ?? '',
-      user: userResult ?? userTemplate?.content ?? '',
+      system: await this.renderTemplate(templateId),
+      user: await this.renderTemplate(`${templateId}-user`),
     }
+  }
+
+  /**
+   * Render one template id, for a caller that needs a single half — a story overriding
+   * its system prompt still takes its user half from the pack, and resolving the half it
+   * discards costs a lookup and a full render of the largest prompt in the app.
+   */
+  async renderTemplate(templateId: string): Promise<string> {
+    const template = await this.resolveTemplate(templateId)
+    if (!template?.content) return ''
+
+    const result = templateEngine.render(template.content, this.context)
+    if (result === null) {
+      log('ERROR: template render failed, using raw content', { templateId })
+    }
+    return result ?? template.content
   }
 
   /**

@@ -473,6 +473,14 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     description: 'Response length instruction',
     required: false,
   },
+  {
+    name: 'narratorReinforcement',
+    type: 'text',
+    category: 'runtime',
+    description:
+      "How much the turn message repeats the narrator's role and agency rules: full, minimal or none",
+    required: false,
+  },
 
   // === Shared / Common ===
   {

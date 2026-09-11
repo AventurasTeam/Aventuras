@@ -416,6 +416,8 @@ export class WizardStore {
           imageGenerationMode: this.narrative.imageGenerationMode,
           backgroundImagesEnabled: this.narrative.backgroundImagesEnabled,
           referenceMode: this.narrative.referenceMode,
+          targetLength: this.narrative.targetLength,
+          narratorReinforcement: this.narrative.narratorReinforcement,
         },
         title: this.narrative.storyTitle,
         openingGuidance: this.narrative.openingGuidance.trim() || undefined,

@@ -148,6 +148,17 @@ export interface NarrativeWorldState extends WorldStateContext {
 }
 
 /**
+ * Prefix the turn message with the narrator reinforcement the pack rendered.
+ *
+ * Emptiness is decided on the trimmed render, but the untrimmed value is what is sent:
+ * a level whose branches all miss can still leave newlines behind, and trimming what goes
+ * out would change the text `full` has always sent.
+ */
+export function joinReinforcement(reinforcement: string, userPrompt: string): string {
+  return reinforcement.trim() ? `${reinforcement}\n\n${userPrompt}` : userPrompt
+}
+
+/**
  * Build a block containing chapter summaries for injection into the system prompt.
  * Per design doc: summarized entries are excluded from direct context,
  * but their summaries provide narrative continuity.
@@ -297,7 +308,7 @@ export class NarrativeService {
     })
 
     // Build system prompt via ContextBuilder pipeline
-    const { systemPrompt, primingMessage } = await this.buildPrompts(
+    const { systemPrompt, reinforcement } = await this.buildPrompts(
       story,
       worldState,
       tieredContextBlock,
@@ -315,7 +326,7 @@ export class NarrativeService {
       // Stream using the main narrative profile
       const stream = streamNarrative({
         system: systemPrompt,
-        prompt: `${primingMessage}\n\n${userPrompt}`,
+        prompt: joinReinforcement(reinforcement, userPrompt),
         signal,
       })
 
@@ -357,7 +368,7 @@ export class NarrativeService {
     log('generate', { entriesCount: entries.length })
 
     // Build system prompt via ContextBuilder pipeline
-    const { systemPrompt, primingMessage } = await this.buildPrompts(
+    const { systemPrompt, reinforcement } = await this.buildPrompts(
       story,
       worldState,
       tieredContextBlock,
@@ -371,13 +382,13 @@ export class NarrativeService {
 
     return generateNarrative({
       system: systemPrompt,
-      prompt: `${primingMessage}\n\n${userPrompt}`,
+      prompt: joinReinforcement(reinforcement, userPrompt),
       signal,
     })
   }
 
   /**
-   * Build system and priming prompts through the ContextBuilder pipeline.
+   * Build both halves of the prompt through the ContextBuilder pipeline.
    *
    * Creates a ContextBuilder from the story, adds runtime variables
    * (tiered context, chapter summaries, style guidance), then renders
@@ -390,7 +401,7 @@ export class NarrativeService {
     styleReview?: StyleReviewResult | null,
     retrievedChapterContext?: string | null,
     timelineFillResult?: TimelineFillResult | null,
-  ): Promise<{ systemPrompt: string; primingMessage: string }> {
+  ): Promise<{ systemPrompt: string; reinforcement: string }> {
     const mode = story?.mode ?? 'adventure'
 
     // Create ContextBuilder -- forStory auto-populates mode, pov, tense, genre,
@@ -433,6 +444,9 @@ export class NarrativeService {
         targetLength,
         lengthInstruction: formatLengthInstruction(targetLength, mode),
       })
+    }
+    if (!ctx.getContext().narratorReinforcement) {
+      ctx.add({ narratorReinforcement: story?.settings?.narratorReinforcement || 'full' })
     }
 
     // Add runtime variables for template rendering
@@ -482,8 +496,12 @@ export class NarrativeService {
     }
 
     // Render system prompt — use per-story override when set, otherwise fall back to pack template
-    let systemPrompt: string
+    const templateId = mode === 'creative-writing' ? 'creative-writing' : 'adventure'
     const customPrompt = story?.settings?.customSystemPrompt
+
+    let systemPrompt: string
+    let user: string
+
     if (customPrompt) {
       const rendered = templateEngine.render(customPrompt, ctx.getContext())
       if (rendered === null) {
@@ -492,29 +510,21 @@ export class NarrativeService {
         )
       }
       systemPrompt = rendered
+      // The override replaces the system half only; the turn message still comes from the
+      // pack, so its user half is rendered on its own rather than through `render`.
+      user = await ctx.renderTemplate(`${templateId}-user`)
     } else {
-      const templateId = mode === 'creative-writing' ? 'creative-writing' : 'adventure'
-      const { system } = await ctx.render(templateId)
-      systemPrompt = system
+      ;({ system: systemPrompt, user } = await ctx.render(templateId))
     }
-
-    // Build priming message based on mode/pov/tense
-    const context = ctx.getContext()
-    const primingMessage = this.buildPrimingMessage(
-      mode,
-      (context.pov as string) ?? 'second',
-      (context.tense as string) ?? 'present',
-      (context.protagonistName as string) ?? 'the protagonist',
-    )
 
     log('buildPrompts complete', {
       mode,
       usingCustomPrompt: !!customPrompt,
       systemPromptLength: systemPrompt.length,
-      primingMessageLength: primingMessage.length,
+      reinforcementLength: user.length,
     })
 
-    return { systemPrompt, primingMessage }
+    return { systemPrompt, reinforcement: user }
   }
 
   /**
@@ -568,92 +578,5 @@ export class NarrativeService {
     prompt += 'Continue the narrative:'
 
     return prompt
-  }
-
-  /**
-   * Build a priming user message to establish the narrator role.
-   * This helps models that expect user-first conversation format.
-   */
-  private buildPrimingMessage(
-    mode: string,
-    pov: string,
-    tense: string,
-    protagonistName: string,
-  ): string {
-    if (mode === 'creative-writing') {
-      return this.buildCreativeWritingPriming(pov, tense, protagonistName)
-    }
-    return this.buildAdventurePriming(pov, tense, protagonistName)
-  }
-
-  private buildAdventurePriming(pov: string, tense: string, protagonistName: string): string {
-    const tenseWord = tense === 'past' ? 'past' : 'present'
-    const actionExample =
-      tense === 'past' ? 'pushed open the heavy door' : 'pushes open the heavy door'
-    const descWords =
-      tense === 'past'
-        ? 'saw, heard, and experienced as I explored'
-        : 'see, hear, and experience as I explore'
-
-    if (pov === 'third') {
-      return `You are the narrator of this interactive adventure. Write in ${tenseWord} tense, third person (they/the character name).
-
-Your role:
-- Describe ${protagonistName}'s experiences and the world around them
-- Control all NPCs and the environment
-- NEVER write ${protagonistName}'s dialogue, decisions, or inner thoughts - I decide those
-- When I say "I do X", describe the results in third person (e.g., "I open the door" -> "${protagonistName} ${actionExample}...")
-
-I am the player controlling ${protagonistName}. You narrate what happens. Begin when I take my first action.`
-    }
-
-    return `You are the narrator of this interactive adventure. Write in ${tenseWord} tense, second person (you/your).
-
-Your role:
-- Describe what I ${descWords}
-- Control all NPCs and the environment
-- NEVER write my dialogue, decisions, or inner thoughts
-- When I say "I do X", describe the results using "you" (e.g., "I open the door" -> "You ${actionExample}...")
-
-I am the player. You narrate the world around me. Begin when I take my first action.`
-  }
-
-  private buildCreativeWritingPriming(pov: string, tense: string, protagonistName: string): string {
-    const tenseWord = tense === 'past' ? 'past' : 'present'
-
-    if (pov === 'first') {
-      return `You are a skilled fiction writer. Write in ${tenseWord} tense, first person (I/me/my).
-
-Your role:
-- Write prose based on my directions from ${protagonistName}'s internal perspective
-- Bring scenes to life with vivid detail and internal monologue
-- Write for any character I direct you to, including dialogue, actions, and thoughts
-- Maintain consistent characterization throughout
-
-I am the author directing the story. Write what I ask for.`
-    }
-
-    if (pov === 'second') {
-      return `You are a skilled fiction writer. Write in ${tenseWord} tense, second person (you/your).
-
-Your role:
-- Write prose based on my directions, addressing ${protagonistName} directly
-- Bring scenes to life with vivid detail
-- Write for any character I direct you to, including dialogue, actions, and thoughts
-- Maintain consistent characterization throughout
-
-I am the author directing the story. Write what I ask for.`
-    }
-
-    // Third person (default for creative-writing)
-    return `You are a skilled fiction writer. Write in ${tenseWord} tense, third person (they/the character name).
-
-Your role:
-- Write prose based on my directions
-- Bring scenes to life with vivid detail
-- Write for any character I direct you to, including dialogue, actions, and thoughts
-- Maintain consistent characterization throughout
-
-I am the author directing the story. Write what I ask for.`
   }
 }

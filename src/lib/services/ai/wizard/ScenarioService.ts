@@ -9,6 +9,7 @@ import type {
   StoryMode,
   POV,
   TargetLength,
+  NarratorReinforcement,
   Character,
   Location,
   Item,
@@ -56,6 +57,7 @@ export interface WizardData {
     backgroundImagesEnabled?: boolean
     referenceMode?: boolean
     targetLength?: TargetLength
+    narratorReinforcement?: NarratorReinforcement
   }
   title: string
   openingGuidance?: string
@@ -806,6 +808,7 @@ class ScenarioService {
       backgroundImagesEnabled?: boolean
       referenceMode?: boolean
       targetLength?: TargetLength
+      narratorReinforcement?: NarratorReinforcement
     }
     protagonist: Partial<Character>
     startingLocation: Partial<Location>
@@ -832,6 +835,7 @@ class ScenarioService {
         backgroundImagesEnabled: writingStyle.backgroundImagesEnabled,
         referenceMode: writingStyle.referenceMode,
         targetLength: writingStyle.targetLength,
+        narratorReinforcement: writingStyle.narratorReinforcement,
       },
       protagonist: {
         name: protagonist?.name || (writingStyle.pov === 'second' ? 'You' : 'The Protagonist'),

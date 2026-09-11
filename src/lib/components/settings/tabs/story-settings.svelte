@@ -7,6 +7,8 @@
     PROMPT_TEMPLATES,
     LENGTH_INSTRUCTION_VAR,
     templateUsesLengthInstruction,
+    NARRATOR_REINFORCEMENT_VAR,
+    narratorReinforcementIsHonoured,
   } from '$lib/services/prompts/templates'
   import { ContextBuilder } from '$lib/services/context'
   import { database } from '$lib/services/database'
@@ -43,6 +45,7 @@
     'runtimeVars_items',
     'runtimeVars_storyBeats',
     'runtimeVars_protagonist',
+    'narratorReinforcement',
   ])
 
   const VARIABLE_REFERENCE = [
@@ -181,6 +184,49 @@
       cancelled = true
     }
   })
+
+  /**
+   * Narrator Reinforcement is carried by the turn message, which comes from the pack whether
+   * or not a custom system prompt replaces the system half — so unlike Response Length this
+   * checks the `-user` template regardless of an override. A pack may carry the reinforcement
+   * in the system prompt instead, so a reference in either prompt counts.
+   */
+  let reinforcementUnavailableReason = $state<string | undefined>(undefined)
+  $effect(() => {
+    const storyId = story.currentStory?.id
+    const override = savedCustomPrompt
+    const templateId =
+      story.currentStory?.mode === 'creative-writing' ? 'creative-writing' : 'adventure'
+    if (!storyId) return
+
+    let cancelled = false
+    const resolve = async () => {
+      const packId = (await database.getStoryPackId(storyId)) || DEFAULT_PACK_ID
+      const ctx = new ContextBuilder(packId)
+      const [userTemplate, systemTemplate] = await Promise.all([
+        ctx.resolveTemplate(`${templateId}-user`),
+        ctx.resolveTemplate(templateId),
+      ])
+      return narratorReinforcementIsHonoured({
+        userTemplate: userTemplate?.content,
+        systemTemplate: systemTemplate?.content,
+        customSystemPrompt: override,
+      })
+    }
+
+    resolve().then((supported) => {
+      if (cancelled) return
+      reinforcementUnavailableReason = supported
+        ? undefined
+        : `Neither prompt this story sends references {{ ${NARRATOR_REINFORCEMENT_VAR} }}, so ` +
+          `this setting would have no effect. Add it to the narrator turn message in the ` +
+          `story's prompt pack, or switch the story to a pack that has it.`
+    })
+
+    return () => {
+      cancelled = true
+    }
+  })
   const isDirty = $derived(customPromptDraft !== (savedCustomPrompt ?? ''))
   const canSave = $derived(
     isDirty && (customPromptDraft.trim() === '' || (validationResult?.success ?? false)),
@@ -260,6 +306,9 @@
     onReferenceModeChange={(v) => story.updateStorySettings({ referenceMode: v })}
     onTargetLengthChange={(v) => story.updateStorySettings({ targetLength: v })}
     targetLengthDisabledReason={lengthUnavailableReason}
+    narratorReinforcement={storySettings.narratorReinforcement ?? 'full'}
+    onNarratorReinforcementChange={(v) => story.updateStorySettings({ narratorReinforcement: v })}
+    narratorReinforcementDisabledReason={reinforcementUnavailableReason}
     disabledFields={{ pov: true, tense: true, visualProseMode: true }}
     disabledReason="Cannot be changed mid-story. Set during story creation."
   />
