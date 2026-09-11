@@ -8,7 +8,6 @@
   import SetupWizard from '../wizard/SetupWizard.svelte'
   import STImportWizard from '../wizard/STImportWizard.svelte'
   import PackMappingDialog from './PackMappingDialog.svelte'
-  import { settings } from '$lib/stores/settings.svelte'
   import type { PresetPack } from '$lib/services/packs'
   import { planPackBinding } from '$lib/services/import'
   import type { PackBindingContext, PackBindingResolution } from '$lib/services/import'
@@ -88,10 +87,7 @@
   async function resolvePackBinding(
     context: PackBindingContext,
   ): Promise<PackBindingResolution | null> {
-    const plan = await planPackBinding(
-      context,
-      settings.experimentalFeatures.legacyImportPackMapping,
-    )
+    const plan = await planPackBinding(context)
     if (!plan.ask) return plan.resolution
 
     return new Promise((resolve) => {

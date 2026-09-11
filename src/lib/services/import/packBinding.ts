@@ -202,23 +202,21 @@ export type PackPromptDecision =
  * why the pack-count gate applies there and not here.
  *
  * A pure decision rather than a branch inside `runImport`: the pipeline keeps one rule ("ask the
- * resolver"), and the UI decides what it has to ask. Sync never calls this at all.
+ * resolver"), and the UI decides what it has to ask. Both interactive paths — file import and
+ * sync — go through it.
  */
 export function decidePackPrompt(
   ctx: PackBindingContext,
   device: {
-    legacyImportPackMapping: boolean
     packCount: number
     /** The matched pack's variables. Only consulted on a confident match. */
     matchedPackVariables?: RequiredVariableDef[]
   },
 ): PackPromptDecision {
-  // A file that records no pack: today's silent path, unless the Labs opt-in is on and the
-  // device has a choice worth offering.
+  // A file that records no pack has named nothing to match, so the only question worth asking is
+  // which pack — and only where there is more than one to pick from.
   if (!ctx.binding) {
-    return device.legacyImportPackMapping && device.packCount > 1
-      ? { prompt: 'choose-pack' }
-      : { prompt: 'none' }
+    return device.packCount > 1 ? { prompt: 'choose-pack' } : { prompt: 'none' }
   }
 
   if (ctx.match.confidence !== 'exact' || !ctx.match.pack) return { prompt: 'choose-pack' }
@@ -248,10 +246,7 @@ export type PackPromptPlan =
  * lives in one place and the components keep only their own dialog plumbing. `database` is
  * reached from here rather than from the components for the same reason.
  */
-export async function planPackBinding(
-  ctx: PackBindingContext,
-  legacyImportPackMapping: boolean,
-): Promise<PackPromptPlan> {
+export async function planPackBinding(ctx: PackBindingContext): Promise<PackPromptPlan> {
   const matched = ctx.match.pack
   const [packs, matchedPackVariables] = await Promise.all([
     database.getAllPacks(),
@@ -259,7 +254,6 @@ export async function planPackBinding(
   ])
 
   const decision = decidePackPrompt(ctx, {
-    legacyImportPackMapping,
     packCount: packs.length,
     matchedPackVariables,
   })
