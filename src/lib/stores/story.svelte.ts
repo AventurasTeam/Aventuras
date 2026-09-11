@@ -875,32 +875,43 @@ class StoryStore {
       : { years: 0, days: 0, hours: 0, minutes: 0 }
     const timeEnd = { ...timeStart }
 
-    const position = await database.getNextEntryPosition(
-      this.currentStory.id,
-      this.currentStory.currentBranchId,
-    )
+    // The validated identity, not the live one: the check above is a moment, and the awaits
+    // below are not. Nothing refuses a story load mid-generation, so reading the store again
+    // here would file the row against whatever had since been opened.
+    const position = await database.getNextEntryPosition(expected.storyId, expected.branchId)
     const entry = await database.addStoryEntry({
       id: id ?? crypto.randomUUID(),
-      storyId: this.currentStory.id,
+      storyId: expected.storyId,
       type,
       content,
       parentId: null,
       position,
       metadata: { ...metadata, tokenCount, timeStart, timeEnd },
-      branchId: this.currentStory.currentBranchId,
+      branchId: expected.branchId,
       reasoning,
     })
 
-    this.entries = [...this.entries, entry]
-
-    // Invalidate caches
-    this.invalidateWordCountCache()
-    this.invalidateChapterCache()
+    // `entries` is the open branch's view. The row belongs to the branch it was written for
+    // either way, but pushing it into a view it does not belong to is the on-screen half of
+    // the bug this guards against.
+    if (this.isOpen(expected)) {
+      this.entries = [...this.entries, entry]
+      this.invalidateWordCountCache()
+      this.invalidateChapterCache()
+    }
 
     // Update story's updatedAt
-    await database.updateStory(this.currentStory.id, {})
+    await database.updateStory(expected.storyId, {})
 
     return entry
+  }
+
+  /** Whether the given story and branch are still the ones loaded in memory. */
+  private isOpen(scope: { storyId: string; branchId: string | null }): boolean {
+    return (
+      this.currentStory?.id === scope.storyId &&
+      (this.currentStory.currentBranchId ?? null) === scope.branchId
+    )
   }
 
   // Update a story entry
@@ -4558,6 +4569,10 @@ class StoryStore {
       throw new Error('Cannot restore a retry backup taken on another branch')
     }
 
+    // Captured here for the same reason addEntry captures its own: the rewind is many awaits
+    // long and a story load during it would point the database work at the wrong story.
+    const scope = { storyId: this.currentStory.id, branchId: backup.branchId ?? null }
+
     // Lock editing during retry restore to prevent race conditions
     this._isRetryInProgress = true
     log('Retry restore started - editing locked')
@@ -4594,8 +4609,8 @@ class StoryStore {
       // Restore to database (branch-aware: only delete/restore world state for current branch)
       await database.restoreRetryBackup(
         entryIdsToDelete,
-        this.currentStory.id,
-        this.currentStory.currentBranchId,
+        scope.storyId,
+        scope.branchId,
         backup.characters,
         backup.locations,
         backup.items,
@@ -4629,8 +4644,11 @@ class StoryStore {
         finalCharDescriptors,
       })
 
-      // Restore time tracker if provided (null clears)
-      await this.restoreTimeTrackerSnapshot(backup.timeTracker)
+      // Restore time tracker if provided (null clears). Skipped when the story moved under
+      // the rewind — the tracker is a live-state write, and it would land on the new one.
+      if (this.isOpen(scope)) {
+        await this.restoreTimeTrackerSnapshot(backup.timeTracker)
+      }
 
       log('Retry backup restored', {
         entries: this.entries.length,
