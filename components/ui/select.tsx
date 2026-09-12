@@ -29,6 +29,8 @@ import { useRegisteredOverlay } from '@/lib/stores'
 import { useTheme } from '@/lib/themes'
 import { cn } from '@/lib/utils'
 
+import { changedPick } from './select-pick'
+
 const FullWindowOverlay = Platform.OS === 'ios' ? RNFullWindowOverlay : Fragment
 
 const Root = SelectBase.Root
@@ -706,7 +708,8 @@ function DropdownBranch({
     <Root
       value={selected ? { value: selected.value, label: selected.label } : undefined}
       onValueChange={(opt) => {
-        if (opt) onValueChange(opt.value)
+        const next = changedPick(value, opt)
+        if (next != null) onValueChange(next)
       }}
       disabled={disabled}
     >
