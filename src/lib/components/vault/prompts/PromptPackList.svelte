@@ -4,8 +4,10 @@
   import { database } from '$lib/services/database'
   import {
     importExportService,
+    type DirectoryExportPlan,
     type ImportValidationResult,
   } from '$lib/services/packs/import-export'
+  import { supportsDirectoryTransfer } from '$lib/services/packs/directory/support'
   import type { PackUpdateSummary } from '$lib/services/packs/update-summary'
   import { ui } from '$lib/stores/ui.svelte'
   import { errMessage } from '$lib/utils/error'
@@ -17,6 +19,7 @@
   import CreatePackDialog from './CreatePackDialog.svelte'
   import ImportPreviewDialog from './ImportPreviewDialog.svelte'
   import UpdatePackDialog from './UpdatePackDialog.svelte'
+  import ExportIntoFolderDialog from './ExportIntoFolderDialog.svelte'
 
   interface Props {
     onOpenPack: (packId: string) => void
@@ -39,8 +42,19 @@
   let updateValidation = $state<ImportValidationResult | null>(null)
   let updateSummary = $state<PackUpdateSummary | null>(null)
   let updateErrors = $state<ImportValidationResult | null>(null)
+  let updateErrorSource = $state<'file' | 'folder'>('file')
   let updating = $state(false)
   let exportingBeforeUpdate = $state(false)
+
+  // A folder that already holds files but is not a previous export: nothing is pruned, but
+  // the user is asked before anything lands in it.
+  let pendingExport = $state<DirectoryExportPlan | null>(null)
+
+  // Two folder pickers open at once would run two exports, and the second could prune what
+  // the first had just written.
+  let directoryBusy = $state(false)
+
+  const canUseDirectories = supportsDirectoryTransfer()
 
   async function loadPacks() {
     loading = true
@@ -94,16 +108,93 @@
     }
   }
 
+  async function handleExportPackDirectory(packId: string) {
+    if (directoryBusy) return
+    directoryBusy = true
+    let awaitingConfirmation = false
+    try {
+      const plan = await importExportService.planPackDirectoryExport(packId)
+      if (!plan) return
+
+      if (plan.needsConfirmation) {
+        pendingExport = plan
+        awaitingConfirmation = true
+        return
+      }
+
+      await importExportService.applyDirectoryExport(plan)
+      ui.showToast('Pack exported to folder', 'info')
+    } catch (e) {
+      console.error('Folder export failed:', e)
+      ui.showToast(`Export failed: ${errMessage(e)}`, 'error')
+    } finally {
+      // The guard has to span the write, not just the planning: once the dialog closes the UI
+      // is live again, and a second export interleaving with this one reads a half-written
+      // tree or prunes what it has just put there. The confirmation keeps it until answered.
+      if (!awaitingConfirmation) directoryBusy = false
+    }
+  }
+
+  async function confirmExportIntoUsedFolder() {
+    if (!pendingExport) return
+    const plan = pendingExport
+    pendingExport = null
+    try {
+      await importExportService.applyDirectoryExport(plan)
+      ui.showToast('Pack exported to folder', 'info')
+    } catch (e) {
+      console.error('Folder export failed:', e)
+      ui.showToast(`Export failed: ${errMessage(e)}`, 'error')
+    } finally {
+      directoryBusy = false
+    }
+  }
+
+  function cancelExportIntoUsedFolder() {
+    pendingExport = null
+    directoryBusy = false
+  }
+
+  async function handleUpdateFromDirectory(pack: PresetPack) {
+    if (directoryBusy) return
+    directoryBusy = true
+    try {
+      const candidate = await importExportService.pickAndValidateDirectory()
+      if (!candidate) return
+
+      if (!candidate.validation.valid || !candidate.validation.pack) {
+        updateErrorSource = 'folder'
+        updateErrors = candidate.validation
+        return
+      }
+
+      await openUpdateConfirmation(pack, candidate.validation)
+    } catch (e) {
+      // The folder picker itself can reject; only the read past it is handled in the service.
+      console.error('Folder update failed:', e)
+      ui.showToast(`Update failed: ${errMessage(e)}`, 'error')
+    } finally {
+      directoryBusy = false
+    }
+  }
+
   async function handleUpdateFromFile(pack: PresetPack) {
     const content = await importExportService.pickAndReadImportFile()
     if (!content) return
 
     const result = importExportService.validateImport(content)
     if (!result.valid || !result.pack) {
+      updateErrorSource = 'file'
       updateErrors = result
       return
     }
 
+    await openUpdateConfirmation(pack, result)
+  }
+
+  /** The confirmation is the same whichever source the replacement came from. */
+  async function openUpdateConfirmation(pack: PresetPack, result: ImportValidationResult) {
+    if (!result.pack) return
     try {
       updateSummary = await importExportService.summarizeUpdate(pack.id, result.pack)
       updateValidation = result
@@ -193,7 +284,11 @@
         usageCount={usageCounts.get(pack.id) ?? 0}
         onclick={() => onOpenPack(pack.id)}
         onExport={() => handleExportPack(pack.id)}
+        onExportDirectory={() => handleExportPackDirectory(pack.id)}
         onUpdateFromFile={pack.isDefault ? undefined : () => handleUpdateFromFile(pack)}
+        onUpdateFromDirectory={pack.isDefault || !canUseDirectories
+          ? undefined
+          : () => handleUpdateFromDirectory(pack)}
         onDelete={pack.isDefault
           ? undefined
           : () => {
@@ -228,12 +323,19 @@
   open={!!updateErrors}
   validationResult={updateErrors}
   conflictPack={null}
+  source={updateErrorSource}
   onConfirm={() => {
     updateErrors = null
   }}
   onCancel={() => {
     updateErrors = null
   }}
+/>
+
+<ExportIntoFolderDialog
+  plan={pendingExport}
+  onConfirm={confirmExportIntoUsedFolder}
+  onCancel={cancelExportIntoUsedFolder}
 />
 
 <!-- Delete confirmation -->

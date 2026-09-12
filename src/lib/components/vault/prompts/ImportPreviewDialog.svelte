@@ -13,11 +13,20 @@
     open: boolean
     validationResult: ImportValidationResult | null
     conflictPack: PresetPack | null
+    /** What the user picked, so an error names the thing they chose. */
+    source?: 'file' | 'folder'
     onConfirm: (strategy: ConflictStrategy) => void
     onCancel: () => void
   }
 
-  let { open, validationResult, conflictPack, onConfirm, onCancel }: Props = $props()
+  let {
+    open,
+    validationResult,
+    conflictPack,
+    source = 'file',
+    onConfirm,
+    onCancel,
+  }: Props = $props()
 
   let isValid = $derived(validationResult?.valid ?? false)
   let pack = $derived(validationResult?.pack)
@@ -46,7 +55,7 @@
         {#if isValid}
           Review the pack details before importing.
         {:else}
-          The selected file contains errors and cannot be imported.
+          The selected {source} contains errors and cannot be imported.
         {/if}
       </ResponsiveModal.Description>
     </ResponsiveModal.Header>
@@ -72,7 +81,9 @@
               <ul class="text-destructive list-disc pl-5 text-sm">
                 {#each validationResult.templateErrors as templateError (templateError.templateId)}
                   <li>
-                    <span class="font-mono text-xs">{templateError.templateId}</span>:
+                    <span class="font-mono text-xs">
+                      {templateError.path ?? templateError.templateId}
+                    </span>:
                     {templateError.error}
                   </li>
                 {/each}
@@ -111,8 +122,8 @@
             <Alert.Title>Name conflict</Alert.Title>
             <Alert.Description>
               A pack named "{conflictPack.name}" already exists. Importing creates a separate copy.
-              To replace that pack's contents with this file, use its "Update from file" action
-              instead.
+              To replace that pack's contents instead, use "Replace this pack from" in its
+              import/export menu.
             </Alert.Description>
           </Alert.Root>
         {/if}

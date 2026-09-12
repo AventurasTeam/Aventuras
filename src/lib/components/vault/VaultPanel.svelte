@@ -3,6 +3,7 @@
   import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
   import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
   import { ui } from '$lib/stores/ui.svelte'
+  import { errMessage } from '$lib/utils/error'
   import type { VaultCharacter, VaultLorebook, VaultScenario } from '$lib/types'
   import {
     Plus,
@@ -18,6 +19,7 @@
     Bot,
     FileCode,
     Download,
+    FolderDown,
   } from '@lucide/svelte'
   import UniversalVaultCard from './UniversalVaultCard.svelte'
   import InteractiveVaultAssistant from './InteractiveVaultAssistant.svelte'
@@ -35,6 +37,7 @@
   import PromptPackEditor from './prompts/PromptPackEditor.svelte'
   import ImportPreviewDialog from './prompts/ImportPreviewDialog.svelte'
   import VaultExportModal from './VaultExportModal.svelte'
+  import { supportsDirectoryTransfer } from '$lib/services/packs/directory/support'
   import {
     importExportService,
     type ImportValidationResult,
@@ -81,6 +84,8 @@
   let importDialogOpen = $state(false)
   let importValidation = $state<ImportValidationResult | null>(null)
   let importConflictPack = $state<PresetPack | null>(null)
+  let importSource = $state<'file' | 'folder'>('file')
+  const canUseDirectories = supportsDirectoryTransfer()
   // Prompts tab view state
   type PromptsViewState = { mode: 'browsing' } | { mode: 'editing'; packId: string }
   let promptsViewState = $state<PromptsViewState>({ mode: 'browsing' })
@@ -373,10 +378,30 @@
   }
 
   // Import pack handlers
+  async function handleImportPackDirectory() {
+    try {
+      const candidate = await importExportService.pickAndValidateDirectory()
+      if (!candidate) return
+
+      importSource = 'folder'
+      importValidation = candidate.validation
+      importConflictPack =
+        candidate.validation.valid && candidate.validation.pack
+          ? await importExportService.checkNameConflict(candidate.validation.pack.name)
+          : null
+      importDialogOpen = true
+    } catch (e) {
+      // The folder picker itself can reject; only the read past it is handled in the service.
+      console.error('Folder import failed:', e)
+      ui.showToast(`Import failed: ${errMessage(e)}`, 'error')
+    }
+  }
+
   async function handleImportPack() {
     const content = await importExportService.pickAndReadImportFile()
     if (!content) return
     const result = importExportService.validateImport(content)
+    importSource = 'file'
     importValidation = result
     if (result.valid && result.pack) {
       importConflictPack = await importExportService.checkNameConflict(result.pack.name)
@@ -458,6 +483,17 @@
             class="h-9"
             onclick={handleImportPack}
           />
+
+          {#if canUseDirectories}
+            <Button
+              icon={FolderDown}
+              label="Import Folder"
+              variant="outline"
+              size="sm"
+              class="h-9"
+              onclick={handleImportPackDirectory}
+            />
+          {/if}
 
           <Button
             icon={Plus}
@@ -769,6 +805,7 @@
   open={importDialogOpen}
   validationResult={importValidation}
   conflictPack={importConflictPack}
+  source={importSource}
   onConfirm={handleImportConfirm}
   onCancel={() => {
     importDialogOpen = false

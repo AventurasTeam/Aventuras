@@ -24,12 +24,16 @@
   import { renderDescription } from '$lib/utils/markdown'
   import TestVariablesModal from './TestVariablesModal.svelte'
   import RefreshTemplatesDialog from './RefreshTemplatesDialog.svelte'
+  import ExportIntoFolderDialog from './ExportIntoFolderDialog.svelte'
+  import { importExportService, type DirectoryExportPlan } from '$lib/services/packs/import-export'
+  import { supportsDirectoryTransfer } from '$lib/services/packs/directory/support'
   import {
     ChevronLeft,
     Menu,
     Save,
     Undo2,
     RotateCcw,
+    FolderUp,
     Pencil,
     Eye,
     Check,
@@ -121,6 +125,13 @@
   let classified = $state<ClassifiedTemplates | null>(null)
   let refreshDialogOpen = $state(false)
   let refreshing = $state(false)
+  let exportingBaseline = $state(false)
+
+  // A folder that already holds files and was not written by a previous export. Nothing is
+  // pruned there, but a file of the same name is still overwritten.
+  let pendingExport = $state<DirectoryExportPlan | null>(null)
+
+  const canUseDirectories = supportsDirectoryTransfer()
 
   let editedCount = $derived(
     (classified?.behind.length ?? 0) + (classified?.customised.length ?? 0),
@@ -138,6 +149,53 @@
       console.error('[PromptPackEditor] Failed to classify templates:', error)
       classified = null
     }
+  }
+
+  async function handleExportShippedBaseline() {
+    if (exportingBaseline) return
+    exportingBaseline = true
+    let awaitingConfirmation = false
+    try {
+      const plan = await importExportService.planShippedBaselineExport()
+      if (!plan) return
+
+      // Nothing is pruned from a folder this export does not own, but a file of the same name
+      // is still overwritten, so the folder is confirmed before anything is written.
+      if (plan.needsConfirmation) {
+        pendingExport = plan
+        awaitingConfirmation = true
+        return
+      }
+
+      await importExportService.applyDirectoryExport(plan)
+      ui.showToast('Shipped prompts exported to folder', 'info')
+    } catch (e) {
+      console.error('Shipped baseline export failed:', e)
+      ui.showToast(`Export failed: ${errMessage(e)}`, 'error')
+    } finally {
+      // Held until the confirmation is answered, so the guard spans the write itself.
+      if (!awaitingConfirmation) exportingBaseline = false
+    }
+  }
+
+  async function confirmExportIntoUsedFolder() {
+    if (!pendingExport) return
+    const plan = pendingExport
+    pendingExport = null
+    try {
+      await importExportService.applyDirectoryExport(plan)
+      ui.showToast('Shipped prompts exported to folder', 'info')
+    } catch (e) {
+      console.error('Shipped baseline export failed:', e)
+      ui.showToast(`Export failed: ${errMessage(e)}`, 'error')
+    } finally {
+      exportingBaseline = false
+    }
+  }
+
+  function cancelExportIntoUsedFolder() {
+    pendingExport = null
+    exportingBaseline = false
   }
 
   async function handleRefresh(scope: RefreshScope) {
@@ -602,7 +660,7 @@
                       </p>
                     {/if}
                   </div>
-                  <div>
+                  <div class="flex flex-wrap gap-2">
                     <Button
                       variant="outline"
                       size="sm"
@@ -613,7 +671,25 @@
                       <RotateCcw class="h-3.5 w-3.5" />
                       Refresh from shipped prompts
                     </Button>
+                    {#if canUseDirectories}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        class="h-7 gap-1.5 text-xs"
+                        disabled={exportingBaseline}
+                        onclick={handleExportShippedBaseline}
+                      >
+                        <FolderUp class="h-3.5 w-3.5" />
+                        {exportingBaseline ? 'Exporting…' : 'Export shipped prompts to folder'}
+                      </Button>
+                    {/if}
                   </div>
+                  {#if canUseDirectories}
+                    <p class="text-muted-foreground text-xs">
+                      Writes the prompts this version ships, not this pack, so no edit above can
+                      reach it — the merge base to carry your own edits onto after an update.
+                    </p>
+                  {/if}
                 </div>
               {/if}
 
@@ -747,3 +823,9 @@
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>
+
+<ExportIntoFolderDialog
+  plan={pendingExport}
+  onConfirm={confirmExportIntoUsedFolder}
+  onCancel={cancelExportIntoUsedFolder}
+/>
