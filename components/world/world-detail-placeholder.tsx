@@ -7,15 +7,14 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Icon } from '@/components/ui/icon'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
-import type { Entity, EntityKind, Lore } from '@/lib/db'
+import type { Entity, Lore } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import type { RecentlyClassified } from '@/lib/row-signals'
 
 import { worldKindName } from './world-selection'
 
-export type WorldDetailSelection =
-  | { category: EntityKind; row: Entity }
-  | { category: 'lore'; row: Lore }
+/** An entity's kind lives only on its row, so no copy of it can disagree. */
+export type WorldDetailSelection = { type: 'entity'; row: Entity } | { type: 'lore'; row: Lore }
 
 type WorldDetailPlaceholderProps = {
   selection: WorldDetailSelection | null
@@ -38,7 +37,7 @@ export function WorldDetailPlaceholder({
     recentlyClassified != null ? (
       <Tag tone="recently-classified">{t('world:detail.recentlyClassified')}</Tag>
     ) : undefined
-  if (selection.category === 'lore') {
+  if (selection.type === 'lore') {
     return (
       <DetailPane
         kindIcon={<Icon as={BookOpen} size="sm" />}

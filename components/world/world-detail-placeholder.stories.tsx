@@ -64,7 +64,7 @@ export const NoSelection: Story = {
 }
 
 export const EntitySelected: Story = {
-  args: { selection: { category: 'character', row: KAEL }, recentlyClassified: 'fresh' },
+  args: { selection: { type: 'entity', row: KAEL }, recentlyClassified: 'fresh' },
   play: async ({ canvasElement }) => {
     expect(screen.getByText('Kael')).toBeInTheDocument()
     expect(screen.getByText('character')).toBeInTheDocument()
@@ -75,7 +75,7 @@ export const EntitySelected: Story = {
 }
 
 export const LoreSelected: Story = {
-  args: { selection: { category: 'lore', row: VEIL } },
+  args: { selection: { type: 'lore', row: VEIL } },
   play: async () => {
     expect(screen.getByText('The Veil')).toBeInTheDocument()
     expect(screen.getByText('lore')).toBeInTheDocument()
@@ -88,7 +88,7 @@ export const LoreSelected: Story = {
 }
 
 export const EntityFading: Story = {
-  args: { selection: { category: 'character', row: KAEL }, recentlyClassified: 'fading' },
+  args: { selection: { type: 'entity', row: KAEL }, recentlyClassified: 'fading' },
   play: async ({ canvasElement }) => {
     expect(screen.getByText('Kael')).toBeInTheDocument()
     expect(screen.getByText('Recently classified')).toBeInTheDocument()

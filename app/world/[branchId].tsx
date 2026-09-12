@@ -246,7 +246,7 @@ export default function WorldRoute() {
       ? [
           {
             key: 'row',
-            label: selection.category === 'lore' ? selection.row.title : selection.row.name,
+            label: selection.type === 'lore' ? selection.row.title : selection.row.name,
           },
         ]
       : []),

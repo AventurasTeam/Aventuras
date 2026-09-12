@@ -80,7 +80,7 @@ describe('useWorldSelection', () => {
     expect(latest?.selectedId).toBe('char_kael')
     expect(latest?.selection).toBeNull()
     rerender(<Probe entities={[KAEL]} initialId="char_kael" />)
-    expect(latest?.selection).toEqual({ category: 'character', row: KAEL })
+    expect(latest?.selection).toEqual({ type: 'entity', row: KAEL })
   })
 
   // An undo or a reversed run can remove the row; a redo restores it under the same id.
@@ -101,7 +101,7 @@ describe('useWorldSelection', () => {
 
   it("resolves only the current category's rows", () => {
     render(<Probe entities={[KAEL]} lore={[VEIL]} category="lore" initialId="lore_veil" />)
-    expect(latest?.selection).toEqual({ category: 'lore', row: VEIL })
+    expect(latest?.selection).toEqual({ type: 'lore', row: VEIL })
     cleanup()
     render(<Probe entities={[KAEL]} category="location" initialId="char_kael" />)
     expect(latest?.selection).toBeNull()

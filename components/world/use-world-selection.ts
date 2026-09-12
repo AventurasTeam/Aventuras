@@ -27,10 +27,10 @@ export function useWorldSelection({
     if (selectedId == null) return null
     if (isEntityCategory(category)) {
       const row = entities.find((e) => e.id === selectedId && e.kind === category)
-      return row == null ? null : { category, row }
+      return row == null ? null : { type: 'entity', row }
     }
     const row = lore.find((l) => l.id === selectedId)
-    return row == null ? null : { category: 'lore', row }
+    return row == null ? null : { type: 'lore', row }
   }, [selectedId, category, entities, lore])
 
   // A row that disappears (an undo, a reversed run) takes its selection with it, so a
