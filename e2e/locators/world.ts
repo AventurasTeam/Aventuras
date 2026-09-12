@@ -10,14 +10,17 @@ export const world = {
   actionsTrigger: (page: Page): Locator =>
     page.getByRole('button', { name: new RegExp(t('chrome.actions')) }),
 
-  // GO TO rows, from the shared chrome copy — plain text (see actions-menu.tsx's MenuRow, no
-  // distinct role), matching reader.ts's undoRow/redoRow precedent.
+  // Actions menu rows are listbox options (searchable-overlay-list.tsx) named by their label.
   goToWorldRow: (page: Page): Locator =>
-    page.getByText(t('chrome.goTo.openWorld'), { exact: true }),
+    page.getByRole('option', { name: t('chrome.goTo.openWorld'), exact: true }),
   goToStorySettingsRow: (page: Page): Locator =>
-    page.getByText(t('chrome.goTo.openStorySettings'), { exact: true }),
+    page.getByRole('option', { name: t('chrome.goTo.openStorySettings'), exact: true }),
   goToReaderRow: (page: Page): Locator =>
-    page.getByText(t('chrome.goTo.openReader'), { exact: true }),
+    page.getByRole('option', { name: t('chrome.goTo.openReader'), exact: true }),
+  addEntityRow: (page: Page): Locator =>
+    page.getByRole('option', { name: t('world:actions.addEntity'), exact: true }),
+  addLoreRow: (page: Page): Locator =>
+    page.getByRole('option', { name: t('world:actions.addLore'), exact: true }),
 
   // ListRow's Pressable carries the label as its accessible name.
   row: (page: Page, name: string): Locator => page.getByRole('button', { name, exact: true }),
@@ -65,10 +68,6 @@ export const world = {
   // — a plain Tag, no role of its own.
   recentlyClassifiedBadge: (page: Page): Locator =>
     page.getByText(t('world:detail.recentlyClassified'), { exact: true }),
-
-  // The contextual "Add entity…" row — same plain-text MenuRow shape as the GO TO rows above.
-  addEntityRow: (page: Page): Locator =>
-    page.getByText(t('world:actions.addEntity'), { exact: true }),
 
   // ImporterMenu options (importer-menu.tsx); every world option is present-but-disabled, so its
   // accessible name resolves to the disabled reason — assert the visible label text instead.

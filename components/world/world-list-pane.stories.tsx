@@ -621,6 +621,18 @@ export const RevealInFlatViewKeepsCollapse: Story = {
   },
 }
 
+// Five steady frames, not two equal polls, which a smooth scroll can pass mid-flight.
+async function waitForScrollToSettle(container: HTMLElement) {
+  let last = container.scrollTop
+  let steadyFrames = 0
+  for (let frame = 0; frame < 300 && steadyFrames < 5; frame++) {
+    await new Promise((resolve) => requestAnimationFrame(resolve))
+    steadyFrames = container.scrollTop === last ? steadyFrames + 1 : 0
+    last = container.scrollTop
+  }
+  expect(steadyFrames).toBeGreaterThanOrEqual(5)
+}
+
 /** Revealing the same row again scrolls back to it: every request is fresh. */
 export const RepeatRevealScrollsAgain: Story = {
   args: { fillers: 'active', showRevealButton: true },
@@ -631,12 +643,7 @@ export const RepeatRevealScrollsAgain: Story = {
     await expectScrolledIntoView(row)
     const container = scrollContainerOf(row)
     // Let the first smooth scroll finish, or it would carry the list back on its own.
-    let last = -1
-    await waitFor(() => {
-      const settled = container.scrollTop === last
-      last = container.scrollTop
-      expect(settled).toBe(true)
-    }, REVEAL_WAIT)
+    await waitForScrollToSettle(container)
     container.scrollTop = 0
     await waitFor(() => expect(container.scrollTop).toBe(0))
     expect(row.getBoundingClientRect().top).toBeGreaterThan(

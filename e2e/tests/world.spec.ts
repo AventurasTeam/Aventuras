@@ -5,6 +5,7 @@ import type { StorySettings, SuggestionCategory } from '@/lib/db'
 import { currentBranchId, queryApp } from '../harness/db'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
+import { reloadFromMain, suppressNativeUnloadDialogRace } from '../harness/reload'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
@@ -83,6 +84,20 @@ test.describe.serial('World panel', () => {
     await world.row(app.window, 'Brannoc').click()
     await expect(world.detailName(app.window)).toHaveText('Brannoc')
     await expect(world.recentlyClassifiedBadge(app.window)).toBeVisible()
+
+    // The strip link jumps to the staged namesake, which isn't recently classified: selected,
+    // and revealed by expanding Staged. Staged is shut again after, as the later tests expect.
+    const stagedLabel = t('world:tiers.staged')
+    await world.collisionStrip(app.window, 'Brannoc').click()
+    await expect(world.tierHeader(app.window, stagedLabel)).toHaveAttribute('aria-expanded', 'true')
+    await expect(world.row(app.window, 'Brannoc')).toHaveCount(2)
+    await expect(world.detailName(app.window)).toHaveText('Brannoc')
+    await expect(world.recentlyClassifiedBadge(app.window)).toHaveCount(0)
+    await world.tierHeader(app.window, stagedLabel).click()
+    await expect(world.tierHeader(app.window, stagedLabel)).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
 
     await world.categoryTrigger(app.window).click()
     await world.categoryOption(app.window, 'lore').click()
@@ -204,10 +219,16 @@ test.describe.serial('World panel', () => {
     await reader.actionsTrigger(page).click()
     await world.goToWorldRow(page).click()
     await page.waitForURL(/\/world\//)
-    // Fresh World mount: Characters / All view, Active tier expanded by default.
+    // A fresh World instance starts on Characters, but tier collapse is session-scoped: this
+    // relies on the earlier tests leaving Active open and Staged shut.
     await expect(world.categoryTrigger(page)).toHaveText(t('world:categories.character'))
-
     const activeLabel = t('world:tiers.active')
+    await expect(world.tierHeader(page, activeLabel)).toHaveAttribute('aria-expanded', 'true')
+    await expect(world.tierHeader(page, t('world:tiers.staged'))).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+
     await world.tierHeader(page, activeLabel).click()
     await expect(world.row(page, 'Brannoc')).toHaveCount(0)
     await expect(world.tierBadge(page, activeLabel, 1)).toBeVisible()
@@ -254,6 +275,15 @@ test.describe.serial('World panel', () => {
 
     await page.keyboard.press('Escape')
     await expect(world.addMenuOption(page, 'blank')).toHaveCount(0)
+
+    // Add lore… switches to Lore and opens the menu in the same update — the seam's other half.
+    await world.actionsTrigger(page).click()
+    await world.addLoreRow(page).click()
+    await expect(world.categoryTrigger(page)).toHaveText(t('world:categories.lore'))
+    await expect(world.addMenuOption(page, 'blank')).toBeVisible()
+
+    await page.keyboard.press('Escape')
+    await expect(world.addMenuOption(page, 'blank')).toHaveCount(0)
   })
 
   // Hand-written URL (docs/testing.md → Harness structure): no in-app path reaches a mid-session
@@ -293,16 +323,3 @@ test.describe.serial('World panel', () => {
     await page.waitForURL(/\/reader-composer\//)
   })
 })
-
-// Electron's `will-prevent-unload` fires a native `dialog` event, not Playwright's dialog API;
-// dismissed to avoid a race with Playwright's own detection (playwright#36627) hanging a reload.
-function suppressNativeUnloadDialogRace(app: LaunchedApp): void {
-  app.window.on('dialog', (dialog) => {
-    void dialog.dismiss().catch(() => {})
-  })
-}
-
-const reloadFromMain = (app: LaunchedApp) =>
-  app.app.evaluate(({ BrowserWindow }) => {
-    BrowserWindow.getAllWindows()[0].webContents.reload()
-  })

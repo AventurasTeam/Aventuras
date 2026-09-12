@@ -325,6 +325,15 @@ function ActionsMenuOpensImporterHarness() {
   )
 }
 
+// Checked on every frame, not once after a sleep: a late steal must fail, not slip past the check.
+async function expectFocusHeld(element: HTMLElement, ms = 200) {
+  const until = performance.now() + ms
+  while (performance.now() < until) {
+    expect(document.activeElement).toBe(element)
+    await new Promise((resolve) => requestAnimationFrame(resolve))
+  }
+}
+
 /**
  * Activating a contextual entry that opens this icon `ImporterMenu` must not let the closing
  * Actions popover steal focus back a tick later — covers mouse and keyboard-Enter activation.
@@ -337,11 +346,9 @@ export const ActionsMenuEntryOpensImporter: Story = {
     await userEvent.click(entry)
 
     const blank = await screen.findByRole('menuitem', { name: 'Blank' })
-    expect(document.activeElement).toBe(blank)
-    // Assert past onCloseAutoFocus's tick-after-unmount fire, not just at the activation instant.
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    // Past onCloseAutoFocus's tick-after-unmount fire, not just at the activation instant.
+    await expectFocusHeld(blank)
     expect(screen.getByRole('menuitem', { name: 'Blank' })).toBeInTheDocument()
-    expect(document.activeElement).toBe(blank)
 
     await userEvent.keyboard('{Escape}')
     await waitFor(() =>
@@ -353,9 +360,8 @@ export const ActionsMenuEntryOpensImporter: Story = {
     await userEvent.keyboard('{ArrowDown}{Enter}')
 
     const blankAgain = await screen.findByRole('menuitem', { name: 'Blank' })
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    await expectFocusHeld(blankAgain)
     expect(screen.getByRole('menuitem', { name: 'Blank' })).toBeInTheDocument()
-    expect(document.activeElement).toBe(blankAgain)
   },
 }
 
