@@ -34,6 +34,20 @@ describe('lib/i18n', () => {
     expect(t('chrome.back')).toBe('Back')
   })
 
+  it('resolves the world namespace and the shared GO TO / collision-row keys', () => {
+    expect(t('world:title')).toBe('World')
+    expect(t('world:categories.location')).toBe('Locations')
+    expect(t('world:search.placeholder', { category: 'characters' })).toBe('Search characters…')
+    expect(t('world:collision.needReview', { count: 1 })).toBe('1 need review')
+    expect(t('world:collision.needReview', { count: 3 })).toBe('3 need review')
+    expect(t('world:addMenu.blankEntityReason')).toBe('Lands in Slice 4.2a')
+    expect(t('chrome.goTo.header')).toBe('Go to')
+    expect(t('chrome.goTo.openWorld')).toBe('Open World')
+    expect(t('chrome.goTo.plotLandsLater')).toBe('Plot lands in Slice 4.3')
+    expect(t('collisionRow.collidesWith', { name: 'Kael' })).toBe('⚠ Collides with Kael')
+    expect(t('collisionRow.resolve')).toBe('Resolve →')
+  })
+
   it('resolves every custom color picker label and interpolation', () => {
     expect(t('colorPicker.customColor')).toBe('Custom color')
     expect(t('colorPicker.pickCustomColor')).toBe('Pick custom color')

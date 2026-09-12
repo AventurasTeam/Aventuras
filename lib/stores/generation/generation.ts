@@ -35,6 +35,9 @@ export function isUserEditBlocked(txState: TxState): boolean {
 
 type GenerationState = {
   txState: TxState
+  // Monotonic; bumps when a run leaves txState (finish, successor swap, abort)
+  // or a reversal settles — the points where a run's writes are final.
+  settleCount: number
   startRun: (run: RunState) => void
   setCurrentPhase: (runId: string, phase: string) => void
   recordPhaseResult: (
@@ -50,6 +53,7 @@ type GenerationState = {
 
 const store = createStore<GenerationState>()((set) => ({
   txState: { runs: new Map(), reversalInProgress: false },
+  settleCount: 0,
   startRun: (run) =>
     set((s) => {
       const runs = new Map(s.txState.runs)
@@ -75,21 +79,28 @@ const store = createStore<GenerationState>()((set) => ({
       const runs = new Map(s.txState.runs)
       runs.delete(runId)
       if (successor) runs.set(successor.runId, successor)
-      return { txState: { ...s.txState, runs } }
+      return { txState: { ...s.txState, runs }, settleCount: s.settleCount + 1 }
     }),
   abortRun: (runId) =>
     set((s) => {
       const runs = new Map(s.txState.runs)
       runs.delete(runId)
-      return { txState: { ...s.txState, runs } }
+      return { txState: { ...s.txState, runs }, settleCount: s.settleCount + 1 }
     }),
   setReversalInProgress: (value) =>
-    set((s) => ({ txState: { ...s.txState, reversalInProgress: value } })),
-  __reset: () => set({ txState: { runs: new Map(), reversalInProgress: false } }),
+    set((s) => ({
+      txState: { ...s.txState, reversalInProgress: value },
+      settleCount: !value && s.txState.reversalInProgress ? s.settleCount + 1 : s.settleCount,
+    })),
+  __reset: () => set({ txState: { runs: new Map(), reversalInProgress: false }, settleCount: 0 }),
 }))
 
 function getTxState(): TxState {
   return store.getState().txState
+}
+
+function getSettleCount(): number {
+  return store.getState().settleCount
 }
 
 // Selectors must return a value that is stable under Object.is while the state
@@ -97,7 +108,7 @@ function getTxState(): TxState {
 // useSyncExternalStore with no equality function, so a freshly allocated object
 // or array re-renders without end. Derive primitives here, shape them in the
 // component.
-function useGeneration<T>(selector: (s: { txState: TxState }) => T): T {
+function useGeneration<T>(selector: (s: { txState: TxState; settleCount: number }) => T): T {
   return useStore(store, selector as (s: GenerationState) => T)
 }
 
@@ -106,6 +117,7 @@ const api = store.getState()
 export const generationStore = {
   useGeneration,
   getTxState,
+  getSettleCount,
   isUserEditBlocked: () => isUserEditBlocked(getTxState()),
   hasActiveRun: () => getTxState().runs.size > 0,
   startRun: api.startRun,

@@ -1,0 +1,98 @@
+{
+  "title": "World",
+  "categorySelect": "Category",
+  "categories": {
+    "character": "Characters",
+    "location": "Locations",
+    "item": "Items",
+    "faction": "Factions",
+    "lore": "Lore"
+  },
+  "kindName": {
+    "character": "character",
+    "location": "location",
+    "item": "item",
+    "faction": "faction",
+    "lore": "lore"
+  },
+  "add": {
+    "character": "New character",
+    "location": "New location",
+    "item": "New item",
+    "faction": "New faction",
+    "lore": "New lore"
+  },
+  "addMenu": {
+    "blank": "Blank",
+    "blankEntityReason": "Lands in Slice 4.2a",
+    "blankLoreReason": "Lands in Slice 4.2b",
+    "fromJson": "From JSON file…",
+    "fromJsonReason": "Lands in Slice 4.6",
+    "fromVault": "From Vault…",
+    "fromVaultReason": "Vault lands in M8"
+  },
+  "actions": {
+    "addEntity": "Add entity…",
+    "addLore": "Add lore…"
+  },
+  "filters": {
+    "all": "All",
+    "in-scene": "In scene",
+    "active": "Active",
+    "staged": "Staged",
+    "retired": "Retired"
+  },
+  "tiers": {
+    "active": "Active",
+    "staged": "Staged",
+    "retired": "Retired"
+  },
+  "status": {
+    "active": "active",
+    "staged": "staged",
+    "retired": "retired"
+  },
+  "lead": {
+    "you": "You",
+    "protagonist": "Protagonist"
+  },
+  "search": {
+    "placeholder": "Search {{category}}…",
+    "scope": {
+      "name": "name",
+      "description": "description",
+      "tags": "tags",
+      "retiredReason": "retired-reason",
+      "traits": "traits",
+      "drives": "drives",
+      "voice": "voice",
+      "visual": "visual (physique, face, hair, eyes, attire, distinguishing)",
+      "condition": "condition",
+      "standing": "standing",
+      "agenda": "agenda",
+      "title": "title",
+      "body": "body",
+      "category": "category"
+    }
+  },
+  "empty": {
+    "title": "No {{category}} on this branch yet.",
+    "classifierBody": "The classifier writes most rows automatically as the story progresses. You can also add them manually with + New.",
+    "loreBody": "Add one with + New."
+  },
+  "noResults": "No results.",
+  "noResultsHint": "Try clearing the search or another filter.",
+  "collision": {
+    "needReview_one": "{{count}} need review",
+    "needReview_other": "{{count}} need review",
+    "resolveReason": "Lands in Slice 4.2c"
+  },
+  "detail": {
+    "selectRow": "Select a row",
+    "selectRowBody": "Pick an entity or lore entry from the list to see it here.",
+    "entityPlaceholder": "Details land in Slice 4.2a",
+    "lorePlaceholder": "Details land in Slice 4.2b",
+    "placeholderBody": "Tabs and editors for this row aren't available yet.",
+    "recentlyClassified": "Recently classified"
+  }
+}

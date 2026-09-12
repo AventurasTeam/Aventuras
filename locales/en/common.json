@@ -54,6 +54,16 @@
     "back": "Back",
     "chapterProgress": "Chapter progress",
     "onThisScreen": "On this screen",
+    "goTo": {
+      "header": "Go to",
+      "openReader": "Open Reader",
+      "openWorld": "Open World",
+      "openPlot": "Open Plot",
+      "openChapterTimeline": "Open Chapter Timeline",
+      "openStorySettings": "Open Story Settings",
+      "plotLandsLater": "Plot lands in Slice 4.3",
+      "chapterTimelineLandsLater": "Chapter Timeline lands in a later milestone"
+    },
     "generationStatusPill": {
       "phase": {
         "reasoning": "reasoning…",
@@ -74,6 +84,11 @@
       "cancelChapterClose": "Cancel chapter close",
       "cancelSuggestionRefresh": "Cancel suggestion refresh"
     }
+  },
+  "collisionRow": {
+    "collidesWith": "⚠ Collides with {{name}}",
+    "resolve": "Resolve →",
+    "warning": "Collision warning"
   },
   "modelPicker": {
     "placeholder": "Pick a model",

@@ -63,6 +63,55 @@ describe('generation store', () => {
   })
 })
 
+describe('settleCount', () => {
+  beforeEach(() => generationStore.__reset())
+
+  it('does not bump on startRun', () => {
+    generationStore.startRun(run('run_1'))
+    expect(generationStore.getSettleCount()).toBe(0)
+  })
+
+  it('bumps by one on finishRun', () => {
+    generationStore.startRun(run('run_1'))
+    generationStore.finishRun('run_1')
+    expect(generationStore.getSettleCount()).toBe(1)
+  })
+
+  it('bumps by one on finishRun with a successor', () => {
+    generationStore.startRun(run('run_1'))
+    generationStore.finishRun('run_1', run('run_2'))
+    expect(generationStore.getSettleCount()).toBe(1)
+  })
+
+  it('bumps by one on abortRun', () => {
+    generationStore.startRun(run('run_1'))
+    generationStore.abortRun('run_1')
+    expect(generationStore.getSettleCount()).toBe(1)
+  })
+
+  it('bumps by one when reversalInProgress settles true -> false', () => {
+    generationStore.setReversalInProgress(true)
+    expect(generationStore.getSettleCount()).toBe(0)
+    generationStore.setReversalInProgress(false)
+    expect(generationStore.getSettleCount()).toBe(1)
+  })
+
+  it('does not bump on false -> false or false -> true', () => {
+    generationStore.setReversalInProgress(false)
+    expect(generationStore.getSettleCount()).toBe(0)
+    generationStore.setReversalInProgress(true)
+    expect(generationStore.getSettleCount()).toBe(0)
+  })
+
+  it('__reset returns settleCount to 0', () => {
+    generationStore.startRun(run('run_1'))
+    generationStore.finishRun('run_1')
+    expect(generationStore.getSettleCount()).toBe(1)
+    generationStore.__reset()
+    expect(generationStore.getSettleCount()).toBe(0)
+  })
+})
+
 describe('isForegroundGenerating', () => {
   beforeEach(() => generationStore.__reset())
 
