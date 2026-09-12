@@ -11,9 +11,10 @@ type CollisionReviewPillProps = {
 export function CollisionReviewPill({ count, onPress }: CollisionReviewPillProps) {
   const isPhone = useTier() === 'phone'
   if (count === 0) return null
+  const label = t('world:collision.needReview', { count })
   return (
-    <Tag tone="warning" onPress={onPress}>
-      {isPhone ? `⚠ ${count}` : `⚠ ${t('world:collision.needReview', { count })}`}
+    <Tag tone="warning" accessibilityLabel={label} onPress={onPress}>
+      {isPhone ? `⚠ ${count}` : `⚠ ${label}`}
     </Tag>
   )
 }

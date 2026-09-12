@@ -22,10 +22,10 @@ export const world = {
   // ListRow's Pressable carries the label as its accessible name.
   row: (page: Page, name: string): Locator => page.getByRole('button', { name, exact: true }),
 
-  // `⚠ N need review` — pressable Tag (testing.md → E2E target: desktop-only);
-  // the phone tier's glyph-only `⚠ N` copy never applies here.
+  // `⚠ N need review` — pressable Tag whose accessible name drops the glyph
+  // (collision-review-pill.tsx); the same name on every tier.
   reviewPill: (page: Page, count: number): Locator =>
-    page.getByRole('button', { name: `⚠ ${t('world:collision.needReview', { count })}` }),
+    page.getByRole('button', { name: t('world:collision.needReview', { count }), exact: true }),
 
   collisionStrip: (page: Page, otherName: string): Locator =>
     page.getByRole('link', { name: t('collisionRow.collidesWith', { name: otherName }) }),
@@ -39,7 +39,7 @@ export const world = {
   search: (page: Page, category: string): Locator =>
     page.getByPlaceholder(
       t('world:search.placeholder', {
-        category: t(`world:categories.${category}`).toLocaleLowerCase(),
+        category: t(`world:categories.${category}`).toLocaleLowerCase('en'),
       }),
     ),
 
@@ -49,10 +49,13 @@ export const world = {
   tierHeader: (page: Page, tierLabel: string): Locator =>
     page.locator('[aria-expanded]').filter({ hasText: tierLabel }),
 
-  // The collapsed-tier `⚠ N` badge (module-list.tsx) — exact text, no
-  // "need review" suffix (that's the top-bar reviewPill's copy).
-  tierBadge: (page: Page, count: number): Locator =>
-    page.getByRole('button', { name: `⚠ ${count}`, exact: true }),
+  // The collapsed-tier `⚠ N` badge (module-list.tsx); its accessible name scopes
+  // the count to the tier, distinct from the top-bar reviewPill's.
+  tierBadge: (page: Page, tierLabel: string, count: number): Locator =>
+    page.getByRole('button', {
+      name: t('world:collision.groupNeedReview', { count, group: tierLabel }),
+      exact: true,
+    }),
 
   subHeader: (page: Page): Locator => page.getByTestId('world-sub-header'),
 

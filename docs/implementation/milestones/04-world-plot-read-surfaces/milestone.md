@@ -538,7 +538,7 @@ use.
   lists the edit and the classifier's earlier writes.
 - **Collision resolved.** On a branch with a `name_collision_flag`
   pair (seeded by 4.1 or real): the top-bar pill reads
-  `⚠ 1 need review`, the flagged row carries the strip, and merging through `Resolve →` removes the losing row, moves its awareness and involvement
+  `⚠ 1 needs review`, the flagged row carries the strip, and merging through `Resolve →` removes the losing row, moves its awareness and involvement
   rows, rewrites inverse refs, clears the flag and writes everything
   under one `action_id`; CTRL-Z restores both rows and the restored
   loser is `embedding_stale` (vitest on the driver plus manual smoke).

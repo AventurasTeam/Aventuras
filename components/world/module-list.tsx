@@ -13,6 +13,7 @@ import { Chip } from '@/components/ui/chip'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
+import { t } from '@/lib/i18n'
 
 import { useRevealScroll, type RevealRequest } from './use-reveal-scroll'
 
@@ -135,7 +136,14 @@ export function ModuleList<
                     </AccordionTrigger>
                   </View>
                   {collapsed.has(group.key) && flaggedRows.length > 0 ? (
-                    <Tag tone="warning" onPress={() => onReveal(flaggedRows[0].id)}>
+                    <Tag
+                      tone="warning"
+                      accessibilityLabel={t('world:collision.groupNeedReview', {
+                        count: flaggedRows.length,
+                        group: grouped.label(group.key),
+                      })}
+                      onPress={() => onReveal(flaggedRows[0].id)}
+                    >
                       {`⚠ ${flaggedRows.length}`}
                     </Tag>
                   ) : null}

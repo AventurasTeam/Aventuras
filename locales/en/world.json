@@ -83,8 +83,10 @@
   "noResults": "No results.",
   "noResultsHint": "Try clearing the search or another filter.",
   "collision": {
-    "needReview_one": "{{count}} need review",
+    "needReview_one": "{{count}} needs review",
     "needReview_other": "{{count}} need review",
+    "groupNeedReview_one": "{{count}} in {{group}} needs review",
+    "groupNeedReview_other": "{{count}} in {{group}} need review",
     "resolveReason": "Lands in Slice 4.2c"
   },
   "detail": {

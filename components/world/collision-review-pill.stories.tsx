@@ -16,7 +16,9 @@ type Story = StoryObj<typeof CollisionReviewPill>
 export const Desktop: Story = {
   args: { count: 1, onPress: fn() },
   play: async ({ args }) => {
-    await userEvent.click(screen.getByRole('button', { name: '⚠ 1 need review' }))
+    const pill = screen.getByRole('button', { name: '1 needs review' })
+    expect(pill).toHaveTextContent(/^⚠ 1 needs review$/)
+    await userEvent.click(pill)
     await waitFor(() => expect(args.onPress).toHaveBeenCalled())
   },
 }
@@ -26,7 +28,9 @@ export const Phone: Story = {
   globals: { viewport: { value: 'mobile1' } },
   play: async () => {
     // Dimensions caching + the async resize event mean the phone-tier render lands a tick after mount.
-    await waitFor(() => expect(screen.getByRole('button', { name: '⚠ 3' })).toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '3 need review' })).toHaveTextContent(/^⚠ 3$/),
+    )
   },
 }
 

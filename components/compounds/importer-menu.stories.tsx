@@ -469,3 +469,76 @@ export const RerenderWithFreshCallbackDoesNotReDriveRefusal: Story = {
     expect(onOpenChangeRerenderSpy).toHaveBeenCalledTimes(1)
   },
 }
+
+function UncontrolledDisabledWhileOpenHarness() {
+  const [disabled, setDisabled] = useState(false)
+  return (
+    <ImporterMenu
+      label="New entity"
+      options={ENTITY_OPTIONS}
+      trigger="icon"
+      disabled={disabled}
+      // Observer only (no `open`): disables the menu a beat after it opens, with no outside click.
+      onOpenChange={(next) => {
+        if (next) setTimeout(() => setDisabled(true), 100)
+      }}
+    />
+  )
+}
+
+/**
+ * An uncontrolled menu that becomes disabled while open must close, or its items stay
+ * actionable under a disabled trigger.
+ */
+export const UncontrolledMenuClosesWhenDisabled: Story = {
+  render: () => <UncontrolledDisabledWhileOpenHarness />,
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'New entity' }))
+    await screen.findByRole('menuitem', { name: 'Blank' })
+    await waitFor(() =>
+      expect(screen.queryByRole('menuitem', { name: 'Blank' })).not.toBeInTheDocument(),
+    )
+  },
+}
+
+const onDisabledWhileOpenSpy = fn()
+
+function ControlledDisabledWhileOpenHarness() {
+  const [open, setOpen] = useState(false)
+  const [disabled, setDisabled] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    const timer = setTimeout(() => setDisabled(true), 100)
+    return () => clearTimeout(timer)
+  }, [open])
+  return (
+    <View className="flex-col gap-3">
+      <ImporterMenu
+        label="New entity"
+        options={ENTITY_OPTIONS}
+        trigger="icon"
+        disabled={disabled}
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next)
+          onDisabledWhileOpenSpy(next)
+        }}
+      />
+      <Text testID="disabled-while-open-state">{open ? 'open' : 'closed'}</Text>
+    </View>
+  )
+}
+
+/** A controlled menu disabled while open closes and reports that close exactly once. */
+export const ControlledMenuReportsCloseOnceWhenDisabled: Story = {
+  render: () => <ControlledDisabledWhileOpenHarness />,
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'New entity' }))
+    await screen.findByRole('menuitem', { name: 'Blank' })
+    await waitFor(() =>
+      expect(screen.queryByRole('menuitem', { name: 'Blank' })).not.toBeInTheDocument(),
+    )
+    expect(screen.getByTestId('disabled-while-open-state')).toHaveTextContent('closed')
+    expect(onDisabledWhileOpenSpy.mock.calls).toEqual([[true], [false]])
+  },
+}

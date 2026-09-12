@@ -39,7 +39,7 @@ type ImporterMenuProps = {
   variant?: 'primary' | 'secondary' | 'ghost'
   /** Trigger size — both the `button` and `icon` triggers. */
   size?: 'sm' | 'md' | 'lg'
-  /** External disabled state — e.g. permission / write-lock gating. */
+  /** External disabled state — e.g. permission / write-lock gating. Closes an open menu. */
   disabled?: boolean
   className?: string
   /** `button` (default) renders `label ▾`; `icon` renders a bare `[+]` IconAction. */
@@ -75,14 +75,11 @@ export function ImporterMenu({
   }, [onOpenChange])
 
   // Root has no controlled `open` prop — sync through the trigger ref's imperative open()/close().
+  // close() reports `false` via handleOpenChange; reporting a refused `true` keeps a disabled
+  // parent's stale `true` from reopening the menu once re-enabled.
   useEffect(() => {
-    if (open === true) {
-      // Report the refusal, or a disabled parent's stale `true` reopens the menu once re-enabled.
-      if (disabled) onOpenChangeRef.current?.(false)
-      else triggerRef.current?.open()
-    } else if (open === false) {
-      triggerRef.current?.close()
-    }
+    if (open === true && !disabled) triggerRef.current?.open()
+    else if (open === false || disabled) triggerRef.current?.close()
   }, [open, disabled])
 
   // Filters the sync effect's re-drive, which would otherwise echo each open/close twice.

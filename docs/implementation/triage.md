@@ -114,20 +114,22 @@ slice-planning gate forces its resolution before that slice is planned.
   current-segment cap measures the breadcrumb's own text, biting only
   when the current segment is more than ~2.3× the rest (e.g. a
   one-character story title). Fix belongs in the shell's title slot.
-- **World's search placeholder lowercasing is English-only.**
-  (2026-09-11) The placeholder lowercases the category label with
-  `toLocaleLowerCase`; translators lose casing on a translated label.
-- **Collapsed-tier badge has no accessible name and drops focus.**
-  (2026-09-11) The collapsed-tier `⚠ N` badge's accessible name is
-  `⚠ 1` (no noun or verb — `Tag` has no label prop, see next item),
-  and clicking it unmounts it (the tier expands), dropping keyboard
-  focus to the page body; move focus to the revealed row instead.
-- **`Tag` has no `accessibilityLabel` prop.** (2026-09-11) A compact
-  pressable `Tag` can't carry a fuller accessible name than its
-  visible label: World's phone review pill reads `⚠ 3`, and the
-  generation pill's phone variant is a spinner-only `Tag` with no
-  name (`generation-status-pill.tsx`). A forwarded
-  `accessibilityLabel` on `Tag` fixes both.
+- **World's category-label lowercasing is English-only.**
+  (2026-09-11) The search placeholder and the empty-list title
+  lowercase the category label in code, in the app language, so a
+  translation whose nouns keep their capital (German) can't opt out.
+  A formatter in the string itself (`{{category, lowercase}}`) would
+  hand the choice to translators.
+- **Collapsed-tier badge drops focus.** (2026-09-11) Clicking the
+  collapsed-tier `⚠ N` badge unmounts it (the tier expands), dropping
+  keyboard focus to the page body; move focus to the revealed row
+  instead.
+- **Generation pill's phone variant has no accessible name.**
+  (2026-09-11) On phone the pill is a spinner-only, non-pressable
+  `Tag` (`generation-status-pill.tsx`), bare or inside the cancel
+  `PopoverTrigger`, so the phase copy never reaches assistive tech.
+  `Tag`'s `accessibilityLabel` covers only a pressable `Tag`; the name
+  belongs on the trigger, or on the bare pill as a labelled status.
 - **Namesake matching doesn't NFC-normalize.** (2026-09-11, pre-existing)
   `normalizeCollisionName` (trim plus lowercase) doesn't NFC-normalize,
   while keyword terms (`lib/keyword-terms`) do — composed vs

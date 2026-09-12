@@ -77,6 +77,11 @@ type TagProps = {
   onRemove?: () => void
   /** Optional press handler on the tag body itself (clickable label). */
   onPress?: () => void
+  /**
+   * Accessible name for a pressable tag whose visible label is too terse to stand alone
+   * (glyph + count). Ignored without `onPress`.
+   */
+  accessibilityLabel?: string
   disabled?: boolean
   className?: string
   /**
@@ -92,6 +97,7 @@ export function Tag({
   removable,
   onRemove,
   onPress,
+  accessibilityLabel,
   disabled,
   className,
   leading,
@@ -178,6 +184,7 @@ export function Tag({
     <Pressable
       role="button"
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       disabled={disabled}
       onPress={onPress}
       className={baseClass}

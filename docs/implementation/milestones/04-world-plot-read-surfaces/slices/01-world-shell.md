@@ -198,7 +198,7 @@ it should be.
   character whose only change is leaving the scene tints; a
   `user_edit` delta never tints (vitest on the C1 module over fixture
   deltas and entries).
-- With the seeded flagged pair, the pill reads `⚠ 1 need review` on
+- With the seeded flagged pair, the pill reads `⚠ 1 needs review` on
   desktop and `⚠ 1` on phone, the flagged row carries the strip,
   collapsing its group shows the badge, and clicking the pill expands
   the group and scrolls to the row (component test plus manual).

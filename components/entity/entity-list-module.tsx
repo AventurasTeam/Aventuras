@@ -1,5 +1,5 @@
 import type { Entity, EntityKind } from '@/lib/db'
-import { t } from '@/lib/i18n'
+import { i18n, t } from '@/lib/i18n'
 import {
   ENTITY_FILTERS,
   entitySearchScope,
@@ -23,17 +23,19 @@ function buildEntityListModule(kind: EntityKind): EntityListModule {
       group: (rows, signals) => groupEntitiesByTier(rows, signals.leadId),
       label: (key) => t(`world:tiers.${key}`),
     },
-    copy: (categoryLabel) => ({
-      searchPlaceholder: t('world:search.placeholder', {
-        category: categoryLabel.toLocaleLowerCase(),
-      }),
-      searchScope: entitySearchScope(kind).map((key) => t(`world:search.scope.${key}`)),
-      filterLabel: (filter) => t(`world:filters.${filter}`),
-      emptyTitle: t('world:empty.title', { category: categoryLabel.toLocaleLowerCase() }),
-      emptySubtext: t('world:empty.classifierBody'),
-      noResults: t('world:noResults'),
-      noResultsHint: t('world:noResultsHint'),
-    }),
+    copy: (categoryLabel) => {
+      // The app language, not the host locale: a Turkish host lowercases "I" to a dotless "ı".
+      const category = categoryLabel.toLocaleLowerCase(i18n.language)
+      return {
+        searchPlaceholder: t('world:search.placeholder', { category }),
+        searchScope: entitySearchScope(kind).map((key) => t(`world:search.scope.${key}`)),
+        filterLabel: (filter) => t(`world:filters.${filter}`),
+        emptyTitle: t('world:empty.title', { category }),
+        emptySubtext: t('world:empty.classifierBody'),
+        noResults: t('world:noResults'),
+        noResultsHint: t('world:noResultsHint'),
+      }
+    },
     Row: EntityRow,
   }
 }

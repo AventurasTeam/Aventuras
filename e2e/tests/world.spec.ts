@@ -210,9 +210,9 @@ test.describe.serial('World panel', () => {
     const activeLabel = t('world:tiers.active')
     await world.tierHeader(page, activeLabel).click()
     await expect(world.row(page, 'Brannoc')).toHaveCount(0)
-    await expect(world.tierBadge(page, 1)).toBeVisible()
+    await expect(world.tierBadge(page, activeLabel, 1)).toBeVisible()
 
-    await world.tierBadge(page, 1).click()
+    await world.tierBadge(page, activeLabel, 1).click()
     await expect(world.row(page, 'Brannoc')).toBeVisible()
     await expect(world.row(page, 'Brannoc')).toBeInViewport()
 

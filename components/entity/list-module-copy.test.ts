@@ -21,4 +21,25 @@ describe('list module copy', () => {
     )
     expect(loreListModule.copy('Codex').emptyTitle).toBe('No codex on this branch yet.')
   })
+
+  it('lowercases the label in the app language, not the host locale', () => {
+    const hostLower = String.prototype.toLocaleLowerCase
+    // A Turkish host lowercases "I" to a dotless "ı" when no locale is passed.
+    const spy = vi.spyOn(String.prototype, 'toLocaleLowerCase').mockImplementation(function (
+      this: string,
+      locales?: Parameters<string['toLocaleLowerCase']>[0],
+    ) {
+      return hostLower.call(this, locales ?? 'tr')
+    })
+    try {
+      const itemCopy = entityListModule('item').copy('Items')
+      expect(itemCopy.searchPlaceholder).toBe('Search items…')
+      expect(itemCopy.emptyTitle).toBe('No items on this branch yet.')
+      const loreCopy = loreListModule.copy('Index')
+      expect(loreCopy.searchPlaceholder).toBe('Search index…')
+      expect(loreCopy.emptyTitle).toBe('No index on this branch yet.')
+    } finally {
+      spy.mockRestore()
+    }
+  })
 })

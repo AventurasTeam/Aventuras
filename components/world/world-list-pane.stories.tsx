@@ -360,7 +360,7 @@ export const FlaggedRow: Story = {
   play: async () => {
     expect(await screen.findByRole('link', { name: '⚠ Collides with Brannoc' })).toBeInTheDocument()
     expect(screen.getByTitle('Lands in Slice 4.2c')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^⚠/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /needs? review/ })).toBeNull()
   },
 }
 
@@ -371,13 +371,13 @@ export const CollapsedWithBadge: Story = {
     worldListStore.setCollapsed('active', true)
   },
   play: async () => {
-    const badge = await screen.findByRole('button', { name: '⚠ 1' })
+    const badge = await screen.findByRole('button', { name: '1 in Active needs review' })
     expect(screen.queryByRole('link', { name: '⚠ Collides with Brannoc' })).toBeNull()
     await userEvent.click(badge)
     expect(await screen.findByRole('link', { name: '⚠ Collides with Brannoc' })).toBeInTheDocument()
     await expectScrolledIntoView(screen.getByRole('button', { name: 'Brannoc' }))
     await waitFor(
-      () => expect(screen.queryByRole('button', { name: '⚠ 1' })).toBeNull(),
+      () => expect(screen.queryByRole('button', { name: '1 in Active needs review' })).toBeNull(),
       REVEAL_WAIT,
     )
   },
@@ -497,7 +497,7 @@ export const RevealKeepsSearchThatShowsRow: Story = {
     worldListStore.setCollapsed('active', true)
   },
   play: async () => {
-    await userEvent.click(await screen.findByRole('button', { name: '⚠ 1' }))
+    await userEvent.click(await screen.findByRole('button', { name: '1 in Active needs review' }))
     expect(await screen.findByRole('link', { name: '⚠ Collides with Brannoc' })).toBeInTheDocument()
     await expectScrolledIntoView(screen.getByRole('button', { name: 'Brannoc' }))
     expect(screen.getByPlaceholderText('Search characters…')).toHaveValue('Brannoc')
