@@ -10,6 +10,7 @@ import { ImporterMenu } from '@/components/compounds/importer-menu'
 import { MasterDetailLayout } from '@/components/shells/master-detail-layout'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import {
+  generationGateReason,
   selectStorySettingsGenerationRunKind,
   storySettingsGenerationPhase,
 } from '@/components/story-settings/generation-run'
@@ -137,13 +138,7 @@ export default function WorldRoute() {
     selectStorySettingsGenerationRunKind(s.txState, storyId ?? undefined),
   )
   const editBlocked = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
-  const gateReason = editBlocked
-    ? t(
-        activeRunKind === 'chapter-close'
-          ? 'generationGate.chapterClose'
-          : 'generationGate.inFlight',
-      )
-    : undefined
+  const gateReason = generationGateReason(editBlocked, activeRunKind)
   const openRegionPct = useOpenRegionTokens(storyId)
   const memoryHealth = useMemoryHealth(storyId, open?.settings.embedding_swap_target)
 

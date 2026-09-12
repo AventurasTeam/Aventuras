@@ -8,6 +8,7 @@ import { ScreenShell } from '@/components/shells/screen-shell'
 import { StorySettingsShell } from '@/components/shells/story-settings-shell'
 import { AuthoringAidsPanel } from '@/components/story-settings/authoring-aids-panel'
 import {
+  generationGateReason,
   selectStorySettingsGenerationRunKind,
   storySettingsGenerationPhase,
 } from '@/components/story-settings/generation-run'
@@ -149,13 +150,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
         ?.branchId ?? null,
   )
   const editBlocked = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
-  const disabledReason = editBlocked
-    ? t(
-        activeRunKind === 'chapter-close'
-          ? 'generationGate.chapterClose'
-          : 'generationGate.inFlight',
-      )
-    : undefined
+  const disabledReason = generationGateReason(editBlocked, activeRunKind)
 
   // Scoped to THIS route's story: the open story survives navigation, so an
   // unscoped read would show whichever story the session last opened in the

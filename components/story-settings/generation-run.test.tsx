@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { generationStore, type RunState, type TxState } from '@/lib/stores'
 
 import {
+  generationGateReason,
   selectStorySettingsGenerationRunKind,
   storySettingsGenerationPhase,
 } from './generation-run'
@@ -86,5 +87,19 @@ describe('storySettingsGenerationPhase', () => {
     expect(storySettingsGenerationPhase('chapter-close')).toBe('closing-chapter')
     expect(storySettingsGenerationPhase('suggestion-refresh')).toBe('refreshing-suggestions')
     expect(storySettingsGenerationPhase('per-turn')).toBe('generating-narrative')
+  })
+})
+
+describe('generationGateReason', () => {
+  it('is undefined while nothing blocks edits', () => {
+    expect(generationGateReason(false, 'chapter-close')).toBeUndefined()
+  })
+
+  it('names a chapter close, and any other blocking run as generation in flight', () => {
+    expect(generationGateReason(true, 'chapter-close')).toBe(
+      'Chapter close in progress. Cancel to edit.',
+    )
+    expect(generationGateReason(true, 'per-turn')).toBe('Generation is in flight. Cancel to edit.')
+    expect(generationGateReason(true, null)).toBe('Generation is in flight. Cancel to edit.')
   })
 })
