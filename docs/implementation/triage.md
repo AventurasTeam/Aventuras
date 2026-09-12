@@ -95,10 +95,6 @@ slice-planning gate forces its resolution before that slice is planned.
   [`iconography.md → Entity kind glyphs`](../ui/foundations/iconography.md#entity-kind-glyphs)
   has no lore glyph; `BookOpen` (the app logo) is inlined in `LoreRow`
   and `WorldDetailPlaceholder` — needs a shared kind icon covering lore.
-- **Collapsed-tier badge drops focus.** (2026-09-11) Clicking the
-  collapsed-tier `⚠ N` badge unmounts it (the tier expands), dropping
-  keyboard focus to the page body; move focus to the revealed row
-  instead.
 - **DB IPC has no retry for transient failures.** (2026-09-12) A
   one-off rejection on the renderer-to-main SQLite bridge fails the
   operation outright; for a story open it now sends the user back to

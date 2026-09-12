@@ -28,6 +28,13 @@ async function accordionSettled(node: View): Promise<void> {
   }
 }
 
+// A reveal is a go-to, so keyboard focus follows it; the collapsed-tier badge that asks for one
+// unmounts on expand. preventScroll leaves the animated scroll in charge.
+function focusRow(node: View): void {
+  const el = node as unknown as Partial<Pick<Element, 'querySelector'>>
+  el.querySelector?.<HTMLElement>('[tabindex="0"]')?.focus({ preventScroll: true })
+}
+
 /**
  * Scrolls to the row a reveal names, or back to top when `resetKey` changes without one. The
  * caller must mount the row — expanding its group, widening the view — in the same update.
@@ -52,7 +59,9 @@ export function useRevealScroll(reveal: RevealRequest | null, resetKey: string) 
       void accordionSettled(content).then(() => {
         if (cancelled) return
         row.measureLayout(content, (_x, y) => {
-          if (!cancelled) scrollRef.current?.scrollTo({ y, animated: true })
+          if (cancelled) return
+          scrollRef.current?.scrollTo({ y, animated: true })
+          focusRow(row)
         })
       })
       return () => {
