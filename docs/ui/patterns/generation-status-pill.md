@@ -242,19 +242,24 @@ props on every render.
   node name to a `GenerationPhase` — exhaustively over the per-turn
   phase-name union, so a phase added to that pipeline fails the
   build until it is labelled, and with a generic-label fallback so an
-  unmapped name never blanks the pill mid-run. Story Settings still
-  derives its phase from the run's _kind_, and the remaining in-story
-  surfaces are unwired.
-- **Memory error observation.** Surface `memory-incomplete` from
-  staleness detection per
-  [`memory/model-management.md → Staleness UI`](../../memory/model-management.md#staleness-ui);
-  `classifier-offline` from failed-persistent classifier state per
-  [`memory/classifier.md → Pill priority`](../../memory/classifier.md#background-task-framing).
-  Consumer collapses simultaneous errors to one (embedder >
-  classifier).
+  unmapped name never blanks the pill mid-run. Story Settings and
+  World still derive their phase from the run's _kind_; Plot and
+  Chapter Timeline are unwired.
+- **Memory error observation.** `memory-incomplete` from staleness
+  detection per
+  [`memory/model-management.md → Staleness UI`](../../memory/model-management.md#staleness-ui)
+  and `swap-paused` from the swap marker are observed by one shared
+  hook, `hooks/use-memory-health.ts`, which every wired consumer
+  reads; `classifier-offline` from failed-persistent classifier state
+  per
+  [`memory/classifier.md → Pill priority`](../../memory/classifier.md#background-task-framing)
+  is still unobserved. Consumer collapses simultaneous errors to one
+  (embedder > classifier).
 - **Top-bar consumer wiring.** Render the pill on Reader, World,
   Plot, Story Settings, Chapter Timeline per
   [`principles.md → Universal in-story chrome`](../principles.md#universal-in-story-chrome).
+  Done for Reader, World and Story Settings, each tapping its error
+  through to Story Settings · Memory.
 - **World top-bar `⚠ N need review` pill.** Deferred from
   collision-resolve work; now unblocked since `Tag tone="warning"`
   is available (see

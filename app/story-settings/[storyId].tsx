@@ -30,6 +30,7 @@ import {
 import { EmptyState } from '@/components/ui/empty-state'
 import { Text } from '@/components/ui/text'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
+import { memoryPillError, useMemoryHealth } from '@/hooks/use-memory-health'
 import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
 import { useTier } from '@/hooks/use-tier'
 import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard'
@@ -160,6 +161,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
   // unscoped read would show whichever story the session last opened in the
   // reader against that story's threshold.
   const openRegionPct = useOpenRegionTokens(storyId)
+  const memoryHealth = useMemoryHealth(storyId ?? null, settings?.embedding_swap_target)
 
   const isDirty = session.snapshot.dirtyFields.length > 0
   useUnsavedChangesGuard(isDirty, session.requestLeave)
@@ -280,7 +282,10 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
               void awaitRunTerminal(activeRunKind, cancelBranchId, 'cancel')
             }
           }}
-          onErrorTap={() => {}}
+          error={memoryPillError(memoryHealth)}
+          onErrorTap={(code) => {
+            if (code !== 'classifier-offline') setSelectedTab('memory')
+          }}
         />
       }
     >

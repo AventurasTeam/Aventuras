@@ -30,6 +30,7 @@ import {
   worldCategoryLabel,
 } from '@/components/world/world-selection'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
+import { memoryPillError, useMemoryHealth } from '@/hooks/use-memory-health'
 import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
 import { useRowSignals } from '@/hooks/use-row-signals'
 import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
@@ -146,6 +147,7 @@ export default function WorldRoute() {
       )
     : undefined
   const openRegionPct = useOpenRegionTokens(storyId)
+  const memoryHealth = useMemoryHealth(storyId, open?.settings.embedding_swap_target)
 
   const selectCategory = useCallback((next: WorldCategory) => {
     setCategory(next)
@@ -272,10 +274,14 @@ export default function WorldRoute() {
             activePhase={
               activeRunKind != null ? storySettingsGenerationPhase(activeRunKind) : undefined
             }
+            error={memoryPillError(memoryHealth)}
             onCancel={() => {
               if (activeRunKind != null) void awaitRunTerminal(activeRunKind, branchId, 'cancel')
             }}
-            onErrorTap={() => {}}
+            onErrorTap={(code) => {
+              if (code !== 'classifier-offline' && storyId != null)
+                surfaceNavigate(`/story-settings/${storyId}?tab=memory`)
+            }}
           />
           <CollisionReviewPill count={collisions.size} onPress={onPillPress} />
         </>

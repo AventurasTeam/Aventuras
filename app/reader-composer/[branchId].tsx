@@ -43,6 +43,7 @@ import { ScreenShell } from '@/components/shells/screen-shell'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Text } from '@/components/ui/text'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
+import { memoryPillError, useMemoryHealth } from '@/hooks/use-memory-health'
 import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
 import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
 import { useTier } from '@/hooks/use-tier'
@@ -96,8 +97,6 @@ import {
   awaitRunTerminal,
   backgroundClassifierRunning,
   currentStoryStore,
-  embedderSwapStore,
-  embeddingStatusStore,
   entitiesStore,
   entriesStore,
   generationStore,
@@ -338,24 +337,11 @@ export default function ReaderComposerRoute() {
   // branch switch replaces the strip's contents, so the error must not ride along.
   useEffect(() => setStripError(null), [branchId, terminalEntry?.id])
 
-  const staleTotal = embeddingStatusStore.useEmbeddingStatus((s) =>
-    embeddingStatusStore.staleTotalFor(s, storyId),
-  )
-  // Narrow selector: a boolean stays stable across embed-batch ticks, where the
-  // run's own entry changes identity on every one (onProgress fires per batch).
-  const swapRunningHere = embedderSwapStore.useSwap(
-    (s) => embedderSwapStore.progressFor(s, storyId) != null,
-  )
-  // A paused swap is signalled off the MARKER, not the stale count: phase-1
-  // staging clears embedding_stale row by row, so a half-finished swap drives
-  // that count toward zero and a healthy story sits at exactly zero throughout.
-  // A live loop reports through the Memory panel's own progress row instead.
-  const swapPaused =
-    storyId != null && openForBranch?.settings.embedding_swap_target != null && !swapRunningHere
+  const memoryHealth = useMemoryHealth(storyId, openForBranch?.settings.embedding_swap_target)
   // Composing is fine mid-swap; submitting is not. submitTurn refuses either way
   // (a swap owns the vec tables), so gate here rather than let the user write a
   // turn and take a failure entry for it.
-  const swapPending = swapRunningHere || swapPaused
+  const swapPending = memoryHealth.swapRunning || memoryHealth.swapPaused
 
   const activePhase = readerPillPhase({
     turnKind,
@@ -1251,13 +1237,7 @@ export default function ReaderComposerRoute() {
       statusSlot={
         <GenerationStatusPill
           activePhase={activePhase}
-          error={
-            swapPaused
-              ? { code: 'swap-paused' }
-              : staleTotal > 0
-                ? { code: 'memory-incomplete', pendingRows: staleTotal }
-                : undefined
-          }
+          error={memoryPillError(memoryHealth)}
           // A background classifier pass has no cancel affordance, so the prop is
           // absent rather than a no-op handler that would still open the dialog.
           {...(isGenerating || refreshingSuggestions
