@@ -119,11 +119,6 @@ slice-planning gate forces its resolution before that slice is planned.
   collapsed-tier `⚠ N` badge unmounts it (the tier expands), dropping
   keyboard focus to the page body; move focus to the revealed row
   instead.
-- **Collapsed-tier state is keyed by tier only, not per kind.**
-  (2026-09-12) `lib/stores/ui/world-list.ts` keys collapse on
-  `EntityTier` alone, so collapsing Staged on Characters also
-  collapses it on Locations. Canon doesn't say whether collapse should
-  be per kind. Needs a design call.
 - **DB IPC has no retry for transient failures.** (2026-09-12) A
   one-off rejection on the renderer-to-main SQLite bridge fails the
   operation outright; for a story open it now sends the user back to

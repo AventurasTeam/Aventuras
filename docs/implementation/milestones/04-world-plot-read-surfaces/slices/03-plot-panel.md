@@ -251,6 +251,16 @@ chapters` (deferred by canon), and `retrieval_count` review — M5.
   `CollisionListRowProps`, so Plot's modules would import from the
   entity folder and inherit entity assumptions. Decide when Plot
   lands: move the type to a neutral home, and drop the entity default.
+- **Collapsed-tier state is keyed by tier only, not per kind.**
+  (2026-09-12) `lib/stores/ui/world-list.ts` keys collapse on
+  `EntityTier` alone, so collapsing Staged on Characters also
+  collapses it on Locations. Canon doesn't say whether collapse should
+  be per kind. Needs a design call. There is a third option beside
+  per-kind and global: reset to the defaults on a category switch,
+  which World's `selectCategory` already does for filter and search.
+  The store is typed to `EntityTier`, so Plot's thread tiers and
+  chapter buckets need their own or a generic collapse store — decide
+  once for both panels.
 
 ## Implementation notes
 
