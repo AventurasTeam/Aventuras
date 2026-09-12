@@ -17,11 +17,9 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { CollisionReviewPill } from '@/components/world/collision-review-pill'
 import { deriveCollisions } from '@/components/world/collisions'
 import { firstFlaggedRow } from '@/components/world/first-flagged-row'
+import { useWorldSelection } from '@/components/world/use-world-selection'
 import { worldAddOptions } from '@/components/world/world-add-options'
-import {
-  WorldDetailPlaceholder,
-  type WorldDetailSelection,
-} from '@/components/world/world-detail-placeholder'
+import { WorldDetailPlaceholder } from '@/components/world/world-detail-placeholder'
 import { WorldListPane, type WorldListPaneHandle } from '@/components/world/world-list-pane'
 import {
   parseWorldSelection,
@@ -71,7 +69,6 @@ export default function WorldRoute() {
     parseWorldSelection({ kind: params.kind, id: params.id, tab: params.tab }),
   )
   const [category, setCategory] = useState<WorldCategory>(initialSelection?.category ?? 'character')
-  const [selectedId, setSelectedId] = useState<string | null>(initialSelection?.id ?? null)
   const [filter, setFilter] = useState<EntityFilter>('all')
   const [search, setSearch] = useState('')
   const [addOpen, setAddOpen] = useState(false)
@@ -127,16 +124,13 @@ export default function WorldRoute() {
   const leadLabel =
     open == null ? null : open.definition.mode === 'adventure' ? 'you' : 'protagonist'
 
-  const selection = useMemo<WorldDetailSelection | null>(() => {
-    if (selectedId == null) return null
-    if (isEntityCategory(category)) {
-      const row = entities.find((e) => e.id === selectedId && e.kind === category)
-      return row == null ? null : { category, row }
-    }
-    const row = lore.find((l) => l.id === selectedId)
-    return row == null ? null : { category: 'lore', row }
-  }, [selectedId, category, entities, lore])
-  // Keyed on the resolved row, not the id: a stale deep-link id already shows the list.
+  const { selectedId, setSelectedId, selection } = useWorldSelection({
+    initialId: initialSelection?.id ?? null,
+    category,
+    entities,
+    lore,
+    ready: open != null,
+  })
   const detailOpen = isPhone && selection != null
 
   const activeRunKind = generationStore.useGeneration((s) =>
@@ -153,17 +147,23 @@ export default function WorldRoute() {
   const openRegionPct = useOpenRegionTokens(storyId)
   const memoryHealth = useMemoryHealth(storyId, open?.settings.embedding_swap_target)
 
-  const selectCategory = useCallback((next: WorldCategory) => {
-    setCategory(next)
-    setSelectedId(null)
-    setFilter('all')
-    setSearch('')
-  }, [])
+  const selectCategory = useCallback(
+    (next: WorldCategory) => {
+      setCategory(next)
+      setSelectedId(null)
+      setFilter('all')
+      setSearch('')
+    },
+    [setSelectedId],
+  )
 
-  const jumpToRow = useCallback((id: string) => {
-    setSelectedId(id)
-    listRef.current?.revealRow(id)
-  }, [])
+  const jumpToRow = useCallback(
+    (id: string) => {
+      setSelectedId(id)
+      listRef.current?.revealRow(id)
+    },
+    [setSelectedId],
+  )
 
   // One synchronous handler: the pane drops a reveal whose row isn't mounted in
   // the same commit. Phone hides the list while a row is selected, so clear it.
@@ -189,13 +189,14 @@ export default function WorldRoute() {
     signals.inScene,
     isPhone,
     selectCategory,
+    setSelectedId,
   ])
 
   // Phone is list-first: an open detail collapses to the list; any other back leaves.
   const handleBack = useCallback(() => {
     if (detailOpen) setSelectedId(null)
     else router.back()
-  }, [detailOpen, router])
+  }, [detailOpen, router, setSelectedId])
   useMasterDetailBack(detailOpen, handleBack)
 
   // The popover measures its trigger on open, and phone hides the list (and its
@@ -206,7 +207,7 @@ export default function WorldRoute() {
       if (isPhone) setSelectedId(null)
       setAddOpen(true)
     },
-    [category, isPhone, selectCategory],
+    [category, isPhone, selectCategory, setSelectedId],
   )
 
   const contextual: ActionGroup = useMemo(
