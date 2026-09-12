@@ -291,6 +291,14 @@ export const Characters: Story = {
     // Staged and Retired start collapsed — their rows are not mounted.
     expect(screen.queryByRole('button', { name: 'The Ashen Sage' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Vorne' })).toBeNull()
+    // The pane feeds each row its channels: Kael is in scene, the flagged Brannoc is fresh.
+    const kael = screen.getByRole('button', { name: 'Kael' })
+    const mira = screen.getByRole('button', { name: 'Mira' })
+    const brannoc = screen.getByRole('button', { name: 'Brannoc' })
+    expect(kael.querySelector('.left-0.bg-success')).not.toBeNull()
+    expect(mira.querySelector('.left-0.bg-success')).toBeNull()
+    expect(brannoc).toHaveClass('bg-recently-classified-bg')
+    expect(kael).not.toHaveClass('bg-recently-classified-bg')
   },
 }
 
