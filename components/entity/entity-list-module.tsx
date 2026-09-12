@@ -1,5 +1,5 @@
 import type { Entity, EntityKind } from '@/lib/db'
-import { i18n, t } from '@/lib/i18n'
+import { t } from '@/lib/i18n'
 import {
   ENTITY_FILTERS,
   entitySearchScope,
@@ -12,6 +12,7 @@ import {
 
 import { EntityRow } from './entity-row'
 import type { ListModule } from './list-module'
+import { worldListCopy } from './world-list-copy'
 
 export type EntityListModule = ListModule<Entity, EntityFilter, EntityListSignals, EntityTier>
 
@@ -23,19 +24,12 @@ function buildEntityListModule(kind: EntityKind): EntityListModule {
       group: (rows, signals) => groupEntitiesByTier(rows, signals.leadId),
       label: (key) => t(`world:tiers.${key}`),
     },
-    copy: (categoryLabel) => {
-      // The app language, not the host locale: a Turkish host lowercases "I" to a dotless "ı".
-      const category = categoryLabel.toLocaleLowerCase(i18n.language)
-      return {
-        searchPlaceholder: t('world:search.placeholder', { category }),
-        searchScope: entitySearchScope(kind).map((key) => t(`world:search.scope.${key}`)),
-        filterLabel: (filter) => t(`world:filters.${filter}`),
-        emptyTitle: t('world:empty.title', { category }),
-        emptySubtext: t('world:empty.classifierBody'),
-        noResults: t('world:noResults'),
-        noResultsHint: t('world:noResultsHint'),
-      }
-    },
+    copy: (categoryLabel) =>
+      worldListCopy(
+        categoryLabel,
+        entitySearchScope(kind).map((key) => t(`world:search.scope.${key}`)),
+        t('world:empty.classifierBody'),
+      ),
     Row: EntityRow,
   }
 }
