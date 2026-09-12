@@ -454,7 +454,7 @@ function RerenderWithFreshCallbackHarness() {
 
 /**
  * A parent re-rendering with a fresh inline `onOpenChange` (never memoized) must not re-drive
- * the disabled refusal each time — the sync effect reads it through a ref, keyed on open/disabled.
+ * the disabled refusal each time — the sync effect is keyed on open/disabled only.
  */
 export const RerenderWithFreshCallbackDoesNotReDriveRefusal: Story = {
   render: () => <RerenderWithFreshCallbackHarness />,

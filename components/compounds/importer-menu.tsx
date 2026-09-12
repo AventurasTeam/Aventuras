@@ -68,11 +68,6 @@ export function ImporterMenu({
   useLayoutEffect(() => {
     openRef.current = open
   }, [open])
-  // A fresh inline onOpenChange every render must not re-drive the primitive.
-  const onOpenChangeRef = useRef(onOpenChange)
-  useLayoutEffect(() => {
-    onOpenChangeRef.current = onOpenChange
-  }, [onOpenChange])
 
   // Root has no controlled `open` prop — sync through the trigger ref's imperative open()/close().
   // close() reports `false` via handleOpenChange; reporting a refused `true` keeps a disabled
