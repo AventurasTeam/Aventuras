@@ -4,7 +4,7 @@
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
   import * as Dialog from '$lib/components/ui/dialog'
-  import { TriangleAlert, ChevronDown, ChevronRight } from '@lucide/svelte'
+  import { TriangleAlert, ChevronDown, ChevronRight, Plus } from '@lucide/svelte'
   import {
     toMinutes,
     parseDuration,
@@ -13,7 +13,7 @@
     outstandingDurations,
     rangeIntervals,
   } from '$lib/services/storyTime'
-  import type { SelectableRange, GapPolicy } from '$lib/services/storyTime'
+  import type { SelectableRange } from '$lib/services/storyTime'
   import type { StoryEntry, TimeTracker } from '$lib/types'
 
   let { open = $bindable(false) }: { open?: boolean } = $props()
@@ -21,8 +21,6 @@
   let selectedIndex = $state(0)
   /** What the reader typed into each entry's weight field, by entry id. */
   let supplied = $state<Record<string, string>>({})
-  /** What to do with each interval, keyed by the entry it follows. A missing key is undecided. */
-  let gapPolicies = $state<Record<string, GapPolicy>>({})
   /** The row the control panel acts on: an entry, or the interval after one. */
   let selection = $state<{ kind: 'entry' | 'gap'; entryId: string } | null>(null)
   let applying = $state(false)
@@ -87,20 +85,77 @@
     return parsed
   })
 
-  const intervals = $derived(rangeIntervals(rangeEntries).filter((i) => i.recordedMinutes > 0))
-  const unreadable = $derived(outstandingDurations(rangeEntries, overrides))
-  const undecidedGaps = $derived(
-    intervals.filter((interval) => gapPolicies[interval.afterEntryId] === undefined),
+  /** Interval lengths the reader has typed, keyed by the entry each follows. */
+  let gapWeights = $state<Record<string, string>>({})
+  /** Intervals the reader created. Listed even while empty, or there is nothing to type into. */
+  let addedGapIds = $state<string[]>([])
+
+  const statedWeights = $derived.by(() => {
+    const parsed: Record<string, number> = {}
+    for (const [entryId, text] of Object.entries(gapWeights)) {
+      const minutes = parseDuration(text)
+      if (minutes !== null) parsed[entryId] = minutes
+    }
+    return parsed
+  })
+
+  // Listed while the record holds one, or the reader is involved with it. Weighing nothing is
+  // not the same as not existing: an interval the reader zeroed has to stay visible to be undone.
+  /** What the record holds for each interval, before anything the reader has stated. */
+  const recordedIntervals = $derived(rangeIntervals(rangeEntries))
+
+  function originalGapMinutes(entryId: string): number {
+    return recordedIntervals.find((i) => i.afterEntryId === entryId)?.recordedMinutes ?? 0
+  }
+
+  const intervals = $derived(
+    rangeIntervals(rangeEntries, statedWeights).filter(
+      (i) =>
+        i.recordedMinutes > 0 ||
+        addedGapIds.includes(i.afterEntryId) ||
+        gapWeights[i.afterEntryId] !== undefined,
+    ),
   )
-  /** Nothing is reconciled until every length is known and every interval decided. */
-  const resolved = $derived(unreadable.length === 0 && undecidedGaps.length === 0)
+
+  /** An entry can be given an interval when nothing already follows it inside the range. */
+  function canAddGap(entryId: string): boolean {
+    // Not after a player action: the clock advances during the narration answering it, so there
+    // is no time between the two for the reader to claim. It is why a fuse steps over one too.
+    if (isAction(entryId)) return false
+    if (addedGapIds.includes(entryId)) return false
+    if (rangeEntries[rangeEntries.length - 1]?.id === entryId) return false
+    return !intervals.some((i) => i.afterEntryId === entryId)
+  }
+
+  function addGap(entryId: string) {
+    addedGapIds = [...addedGapIds, entryId]
+    gapWeights = { ...gapWeights, [entryId]: '' }
+    selection = { kind: 'gap', entryId }
+  }
+
+  function removeGap(entryId: string) {
+    addedGapIds = addedGapIds.filter((id) => id !== entryId)
+    const { [entryId]: _weight, ...weights } = gapWeights
+    gapWeights = weights
+    selection = null
+  }
+
+  function setGapWeight(entryId: string, text: string) {
+    gapWeights = { ...gapWeights, [entryId]: text }
+  }
+  const unreadable = $derived(outstandingDurations(rangeEntries, overrides))
+  /**
+   * Nothing is reconciled until every length is known. An interval needs no decision: left
+   * alone it keeps its recorded length and takes its share like any other weight.
+   */
+  const resolved = $derived(unreadable.length === 0)
 
   const refusal = $derived(range ? story.previewTimelineRepair(range, {}, {}) : null)
   const isRefused = $derived(refusal?.status === 'refused')
 
   const preview = $derived<TimelineRepairPreview | null>(
     range && resolved && !isRefused
-      ? story.previewTimelineRepair(range, overrides, gapPolicies)
+      ? story.previewTimelineRepair(range, overrides, statedWeights)
       : null,
   )
 
@@ -222,43 +277,6 @@
       .filter((entryId) => (weightOf(entryId) ?? 0) > 0)
   })
 
-  function gapChoices(interval: {
-    afterEntryId: string
-    fusePreviousEntryId: string | null
-    fuseNextEntryId: string | null
-    recordedMinutes: number
-  }) {
-    const sum = (targetId: string) => {
-      const own = weightOf(targetId)
-      // The arithmetic is only shown when the target's own length is settled.
-      if (own === null) return 'its length is not set yet'
-      return `${describeMinutes(own)} + ${describeMinutes(interval.recordedMinutes)}`
-    }
-    const choices: { value: GapPolicy; label: string; hint: string }[] = [
-      {
-        value: 'keep',
-        label: 'Keep it where it is',
-        hint: `weighed as ${describeMinutes(interval.recordedMinutes)}`,
-      },
-      { value: 'void', label: 'Void it', hint: 'no share; the entries take the span' },
-    ]
-    if (interval.fusePreviousEntryId) {
-      choices.push({
-        value: 'fuse-previous',
-        label: `Fuse back into entry ${entryNumber(interval.fusePreviousEntryId)}`,
-        hint: `that entry weighs ${sum(interval.fusePreviousEntryId)}`,
-      })
-    }
-    if (interval.fuseNextEntryId) {
-      choices.push({
-        value: 'fuse-next',
-        label: `Fuse forward into entry ${entryNumber(interval.fuseNextEntryId)}`,
-        hint: `that entry weighs ${sum(interval.fuseNextEntryId)}`,
-      })
-    }
-    return choices
-  }
-
   function clearOverride(entryId: string) {
     const next = { ...supplied }
     delete next[entryId]
@@ -287,7 +305,8 @@
 
   function reset() {
     supplied = {}
-    gapPolicies = {}
+    gapWeights = {}
+    addedGapIds = []
     selection = null
     staleMessage = null
     appliedMessage = null
@@ -366,18 +385,9 @@
           <p class="text-muted-foreground flex items-start gap-1 text-xs">
             <TriangleAlert class="mt-0.5 h-3 w-3 shrink-0 text-amber-600" />
             <span>
-              {#if unreadable.length > 0}
-                {unreadable.length}
-                {unreadable.length === 1 ? 'entry needs' : 'entries need'} a length{undecidedGaps.length >
-                0
-                  ? ', '
-                  : '. '}
-              {/if}
-              {#if undecidedGaps.length > 0}
-                {undecidedGaps.length} time
-                {undecidedGaps.length === 1 ? 'gap needs' : 'gaps need'} a decision.
-              {/if}
-              Nothing is calculated until each is settled.
+              {unreadable.length}
+              {unreadable.length === 1 ? 'entry needs' : 'entries need'} a length. Nothing is calculated
+              until each is settled.
             </span>
           </p>
         {/if}
@@ -511,7 +521,6 @@
                   {/if}
 
                   {#if interval}
-                    {@const decided = gapPolicies[interval.afterEntryId] !== undefined}
                     {@const scaled = scaledInterval(interval.afterEntryId, interval.beforeEntryId)}
                     <tr
                       class="border-border/50 hover:bg-muted/40 cursor-pointer border-t {selection?.kind ===
@@ -532,33 +541,41 @@
                       {#if !timelineLayout.mobile}
                         <td class="py-1 pr-2 align-top">
                           <span class="flex items-center gap-1">
-                            {#if !decided}
-                              <TriangleAlert class="h-3 w-3 shrink-0 text-amber-600" />
-                            {/if}
                             {@render gapChip()}
                           </span>
                         </td>
                       {/if}
                       <td class="text-muted-foreground py-1 pr-2 align-top">
                         {#if timelineLayout.mobile}
-                          {#if !decided}
-                            <TriangleAlert class="mr-1 inline h-3 w-3 text-amber-600" />
-                          {/if}
                           {@render gapChip()}
                         {/if}
                         Time not claimed by adjacent entries
                       </td>
                       <td class="text-muted-foreground py-1 pr-2 align-top whitespace-nowrap">
-                        {describeMinutes(interval.recordedMinutes)}
+                        <div class="grid grid-cols-[auto_1fr] gap-x-2">
+                          <span>Weight:</span>
+                          <span
+                            class={statedWeights[interval.afterEntryId] !== undefined
+                              ? 'text-foreground font-medium'
+                              : ''}
+                          >
+                            {formatDuration(interval.recordedMinutes)}
+                          </span>
+                        </div>
                       </td>
                       <td class="text-muted-foreground py-1 align-top whitespace-nowrap">
-                        {#if scaled === null}
-                          —
-                        {:else if scaled === 0}
-                          closed
-                        {:else}
-                          {describeMinutes(scaled)}
-                        {/if}
+                        <div class="grid grid-cols-[auto_1fr] gap-x-2">
+                          <span>Weight:</span>
+                          <span>
+                            {#if scaled === null}
+                              —
+                            {:else if scaled === 0}
+                              closed
+                            {:else}
+                              {formatDuration(scaled)}
+                            {/if}
+                          </span>
+                        </div>
                       </td>
                     </tr>
 
@@ -676,21 +693,65 @@
         {entryNumber(selectedInterval.afterEntryId)} and entry
         {entryNumber(selectedInterval.beforeEntryId)}, not claimed by either of them.
       </p>
-      <div class="flex flex-col gap-1">
-        {#each gapChoices(selectedInterval) as choice (choice.value)}
-          <label class="flex cursor-pointer items-baseline gap-2">
-            <input
-              type="radio"
-              checked={gapPolicies[selectedInterval.afterEntryId] === choice.value}
-              onchange={() => (gapPolicies[selectedInterval.afterEntryId] = choice.value)}
-            />
-            <span>
-              {choice.label}
-              <span class="text-muted-foreground">— {choice.hint}</span>
-            </span>
-          </label>
-        {/each}
+
+      <div class="text-muted-foreground mb-2 flex flex-wrap gap-x-6 gap-y-1">
+        <span>
+          Originally weighed as
+          <span class="text-foreground">
+            {formatDuration(originalGapMinutes(selectedInterval.afterEntryId))}
+          </span>
+        </span>
+        <span>
+          Custom weight set as
+          <span class="text-foreground">
+            {statedWeights[selectedInterval.afterEntryId] === undefined
+              ? 'not set'
+              : formatDuration(statedWeights[selectedInterval.afterEntryId])}
+          </span>
+        </span>
       </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <label class="flex items-center gap-2">
+          <span class="text-muted-foreground shrink-0">Set custom weight</span>
+          <Input
+            value={gapWeights[selectedInterval.afterEntryId] ?? ''}
+            oninput={(event) =>
+              setGapWeight(selectedInterval.afterEntryId, event.currentTarget.value)}
+            placeholder="e.g. 90, 2h 30m, 3d"
+            class="h-7 w-48 text-xs"
+          />
+        </label>
+        <span class="text-muted-foreground">minutes, or units: y d h m</span>
+        {#if gapWeights[selectedInterval.afterEntryId]}
+          <Button
+            variant="text"
+            size="sm"
+            class="h-7 text-xs"
+            onclick={() => setGapWeight(selectedInterval.afterEntryId, '')}
+          >
+            Clear
+          </Button>
+        {/if}
+      </div>
+      {#if durationIsInvalid(gapWeights[selectedInterval.afterEntryId])}
+        <p class="text-destructive mt-1">
+          Not a duration. Try a number of minutes, or units like 2h 30m.
+        </p>
+      {/if}
+      <p class="text-muted-foreground mt-2">
+        A weight of nothing closes the interval, leaving the entries either side adjacent.
+      </p>
+
+      {#if addedGapIds.includes(selectedInterval.afterEntryId)}
+        <Button
+          variant="text"
+          size="sm"
+          class="text-destructive mt-2 h-8 px-2"
+          onclick={() => removeGap(selectedInterval.afterEntryId)}
+        >
+          Remove this time gap
+        </Button>
+      {/if}
     </div>
   {:else if selectedEntry}
     {@const request = requestFor(selectedEntry.id)}
@@ -787,6 +848,18 @@
           This sets what the entry is <em>worth</em>, not the length it ends up with: the range is
           fitted to its boundaries, so each entry takes a share in proportion to its weight.
         </p>
+      {/if}
+
+      {#if canAddGap(selectedEntry.id)}
+        <Button
+          variant="outline"
+          size="sm"
+          class="mt-2 h-7 text-xs"
+          onclick={() => addGap(selectedEntry.id)}
+        >
+          <Plus class="h-3.5 w-3.5" />
+          Add a time gap after this entry
+        </Button>
       {/if}
     </div>
   {:else}

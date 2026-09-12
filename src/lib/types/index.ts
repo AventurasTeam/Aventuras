@@ -696,6 +696,9 @@ export type ActivePanel =
   'story' | 'library' | 'settings' | 'templates' | 'lorebook' | 'memory' | 'vault' | 'gallery'
 export type SidebarTab = 'characters' | 'locations' | 'inventory' | 'quests' | 'time' | 'branches'
 
+/** Left to right on screen, so the last of them is the one nearest the story. */
+export type NavPanelTab = 'timeline' | 'navigation'
+
 // Provider types matching Vercel AI SDK providers
 export type ProviderType =
   | 'openrouter' // @openrouter/ai-sdk-provider

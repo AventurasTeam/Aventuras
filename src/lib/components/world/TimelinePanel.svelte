@@ -12,8 +12,10 @@
     CornerDownLeft,
     ChevronRight,
     ChevronDown,
+    Filter,
   } from '@lucide/svelte'
   import { Button } from '$lib/components/ui/button'
+  import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
   import { entryNumber } from '$lib/utils/storyNavigation'
   import { supportsHover } from '$lib/utils/platform'
   import TimelineRepairModal from './TimelineRepairModal.svelte'
@@ -27,6 +29,9 @@
   let anchorModalEntryId = $state<string | null>(null)
   /** Reference points whose recorded times are unfolded. An array, not a Set: runes want one. */
   let expanded = $state<string[]>([])
+  // Opt-in: nothing ticked is no filter at all, rather than a filter that hides everything.
+  let filterAnchors = $state(false)
+  let filterNatural = $state(false)
 
   function toggleTimes(entryId: string) {
     expanded = expanded.includes(entryId)
@@ -73,6 +78,13 @@
         boundary,
         anchor,
         checkpoint,
+        // Independent of the anchor: asserting a time does not stop the entry being where the
+        // story opens, ends, forks, or was checkpointed.
+        natural:
+          boundary.index === 0 ||
+          boundary.index === story.entries.length - 1 ||
+          forkEntryIds.has(boundary.entryId) ||
+          checkpoint !== null,
         entryEnd: entry?.metadata?.timeEnd ?? null,
         roles: [
           boundary.index === 0 ? 'Beginning' : null,
@@ -85,10 +97,18 @@
       }
     }),
   )
+
+  const filtered = $derived(filterAnchors || filterNatural)
+  // Either qualifies, so a point that is both stays visible while either box is ticked.
+  const shown = $derived(
+    filtered
+      ? rows.filter((row) => (row.anchor && filterAnchors) || (row.natural && filterNatural))
+      : rows,
+  )
+
   const report = $derived(story.timelineReport)
   const defects = $derived(report.anomalies.filter((a) => a.severity === 'defect').length)
   const suspected = $derived(report.anomalies.filter((a) => a.severity === 'suspected').length)
-  const notes = $derived(report.anomalies.filter((a) => a.severity === 'note').length)
 
   function pad(n: number, width: number = 2): string {
     return n.toString().padStart(width, '0')
@@ -147,14 +167,12 @@
     <div class="flex justify-between gap-3 py-0.5">
       <dt class="text-muted-foreground">Anomalies</dt>
       <dd class="text-right">
-        {#if defects === 0 && suspected === 0 && notes === 0}
+        {#if defects === 0 && suspected === 0}
           none found
         {:else}
           {#if defects > 0}<span class="text-destructive">{defects} definite</span>{/if}
-          {#if defects > 0 && (suspected > 0 || notes > 0)}<span>, </span>{/if}
+          {#if defects > 0 && suspected > 0}<span>, </span>{/if}
           {#if suspected > 0}<span class="text-muted-foreground">{suspected} suspected</span>{/if}
-          {#if suspected > 0 && notes > 0}<span>, </span>{/if}
-          {#if notes > 0}<span class="text-muted-foreground">{notes} to decide</span>{/if}
         {/if}
       </dd>
     </div>
@@ -178,25 +196,62 @@
 <div class="border-border bg-card mt-3 rounded-lg border p-3 shadow-sm">
   <div class="mb-2 flex items-center justify-between">
     <h4 class="text-foreground text-sm font-semibold">Reference points</h4>
-    <Button
-      variant="outline"
-      size="icon"
-      class="h-7 w-7"
-      aria-label="Create a time anchor"
-      title="Create a time anchor"
-      onclick={() => openAnchorModal(null)}
-    >
-      <Plus class="h-3.5 w-3.5" />
-    </Button>
+    <div class="flex items-center gap-1">
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger>
+          {#snippet child({ props })}
+            <Button
+              variant="outline"
+              size="icon"
+              class="h-7 w-7 {filtered ? 'text-amber-500' : ''}"
+              aria-label="Filter reference points"
+              title="Filter reference points"
+              {...props}
+            >
+              <Filter class="h-3.5 w-3.5" />
+            </Button>
+          {/snippet}
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="end">
+          <!-- Stays open: the two boxes are read against each other, so closing after one
+               would make comparing them a matter of reopening the menu each time. -->
+          <DropdownMenu.CheckboxItem bind:checked={filterAnchors} closeOnSelect={false}>
+            Anchors
+          </DropdownMenu.CheckboxItem>
+          <DropdownMenu.CheckboxItem bind:checked={filterNatural} closeOnSelect={false}>
+            Natural boundaries
+          </DropdownMenu.CheckboxItem>
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
+      <Button
+        variant="outline"
+        size="icon"
+        class="h-7 w-7"
+        aria-label="Create a time anchor"
+        title="Create a time anchor"
+        onclick={() => openAnchorModal(null)}
+      >
+        <Plus class="h-3.5 w-3.5" />
+      </Button>
+    </div>
   </div>
 
   {#if rows.length === 0}
     <p class="text-muted-foreground text-xs">
       Nothing to bound yet. Write an entry, then anchor one you are sure of.
     </p>
+  {:else if shown.length === 0}
+    <p class="text-muted-foreground text-xs">
+      {#if filterAnchors}
+        Nothing is anchored yet. A natural boundary resolves to a recorded ending, which is what a
+        repair measures from until you assert otherwise.
+      {:else}
+        Every reference point here is an anchor of your own.
+      {/if}
+    </p>
   {:else}
     <ul class="space-y-3">
-      {#each rows as row (row.boundary.entryId)}
+      {#each shown as row (row.boundary.entryId)}
         <li class="text-xs">
           <div class="flex items-center justify-between gap-2">
             <span class="text-foreground font-medium">
@@ -239,6 +294,29 @@
               {/if}
             </span>
           </div>
+          <p class="flex flex-wrap items-center gap-1">
+            {#if row.anchor}
+              <span
+                class="rounded bg-amber-500/15 px-1 text-[10px] tracking-wide text-amber-700 uppercase dark:text-amber-500"
+              >
+                Anchor
+              </span>
+            {/if}
+            {#each row.roles as role (role)}
+              <span
+                class="bg-muted text-muted-foreground rounded px-1 text-[10px] tracking-wide uppercase"
+              >
+                {role}
+              </span>
+            {/each}
+            {#if row.checkpoint}
+              <span
+                class="bg-muted text-muted-foreground rounded px-1 text-[10px] tracking-wide uppercase"
+              >
+                Checkpoint
+              </span>
+            {/if}
+          </p>
           <button
             type="button"
             class="text-muted-foreground hover:text-foreground flex items-center gap-1"
@@ -271,9 +349,6 @@
                 <dd>{row.entryEnd ? stamp(row.entryEnd) : 'none recorded'}</dd>
               </div>
             </dl>
-          {/if}
-          {#if row.roles.length > 0}
-            <p class="text-muted-foreground">{row.roles.join(' · ')}</p>
           {/if}
           {#if row.checkpoint}
             <p class="text-muted-foreground">Checkpoint: {row.checkpoint.name}</p>

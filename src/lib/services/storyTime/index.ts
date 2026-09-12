@@ -30,8 +30,6 @@ export {
   type ReconcileResult,
   type RepairedTime,
   type DurationRequest,
-  type GapPolicy,
-  type RangeGap,
   type Join,
 } from './reconcile'
 export {

@@ -159,78 +159,6 @@ describe('reconcileRange', () => {
       const [first, second] = result.times
       expect(toMinutes(second.start)).toBe(toMinutes(first.end))
     })
-
-    it('reports each interval with the policy it was weighed under', () => {
-      const a = entry(t(0), t(1), 'a')
-      const b = entry(t(3), t(4), 'b')
-      const result = ok(reconcileRange({ entries: [a, b], baseline: t(0), target: t(4) }))
-      expect(result.gaps).toEqual([
-        {
-          afterEntryId: 'a',
-          beforeEntryId: 'b',
-          recordedMinutes: 120,
-          policy: 'keep',
-          weightedMinutes: 120,
-          fusePreviousEntryId: 'a',
-          fuseNextEntryId: 'b',
-        },
-      ])
-    })
-  })
-
-  describe('what the reader decides about an interval', () => {
-    // Durations 60 and 60 with a 120-minute interval, fitted to four hours.
-    const pair = () => [entry(t(0), t(1), 'a'), entry(t(3), t(4), 'b')]
-    const repair = (policy?: 'keep' | 'void' | 'fuse-previous' | 'fuse-next') =>
-      ok(
-        reconcileRange({
-          entries: pair(),
-          baseline: t(0),
-          target: t(4),
-          ...(policy ? { gapPolicies: { a: policy } } : {}),
-        }),
-      )
-    const shape = (r: ReturnType<typeof repair>) => {
-      const [first, second] = r.times
-      return {
-        first: toMinutes(first.end) - toMinutes(first.start),
-        gap: toMinutes(second.start) - toMinutes(first.end),
-        second: toMinutes(second.end) - toMinutes(second.start),
-      }
-    }
-
-    it('keeps the interval by default, scaled with everything else', () => {
-      expect(shape(repair())).toEqual({ first: 60, gap: 120, second: 60 })
-      expect(shape(repair('keep'))).toEqual(shape(repair()))
-    })
-
-    it('voids the interval, leaving the entries to share the span', () => {
-      expect(shape(repair('void'))).toEqual({ first: 120, gap: 0, second: 120 })
-    })
-
-    it('fuses the interval into the entry before it', () => {
-      // The first entry weighs 60 + 120, the second 60: three quarters and one quarter.
-      expect(shape(repair('fuse-previous'))).toEqual({ first: 180, gap: 0, second: 60 })
-    })
-
-    it('fuses the interval into the entry after it', () => {
-      expect(shape(repair('fuse-next'))).toEqual({ first: 60, gap: 0, second: 180 })
-    })
-
-    it('stays stable when repeated under any policy', () => {
-      for (const policy of ['keep', 'void', 'fuse-previous', 'fuse-next'] as const) {
-        const first = repair(policy)
-        const again = ok(
-          reconcileRange({
-            entries: first.times.map((time, i) => entry(time.start, time.end, i === 0 ? 'a' : 'b')),
-            baseline: t(0),
-            target: t(4),
-            gapPolicies: { a: policy },
-          }),
-        )
-        expect(shape(again)).toEqual(shape(first))
-      }
-    })
   })
 
   describe('the reported failure', () => {
@@ -370,62 +298,6 @@ describe('reconcileRange', () => {
   })
 })
 
-describe('fusing an interval past a user action', () => {
-  // Narration, then an interval, then a user action, then narration — the shape every turn
-  // takes. A user action records no duration, so it must not be handed one.
-  const shaped = () => [
-    entry(t(0), t(1), 'narr1'),
-    entry(t(4), t(4), 'act', 'user_action'),
-    entry(t(4), t(5), 'narr2'),
-  ]
-  const repair = (policy: 'fuse-previous' | 'fuse-next' | 'keep') =>
-    ok(
-      reconcileRange({
-        entries: shaped(),
-        baseline: t(0),
-        target: t(6),
-        gapPolicies: { narr1: policy },
-      }),
-    )
-  const lengths = (r: ReturnType<typeof repair>) =>
-    Object.fromEntries(r.times.map((x) => [x.entryId, toMinutes(x.end) - toMinutes(x.start)]))
-
-  it('names the narration either side as the fuse targets, never the user action', () => {
-    const gap = repair('keep').gaps[0]
-    expect(gap.fusePreviousEntryId).toBe('narr1')
-    expect(gap.fuseNextEntryId).toBe('narr2')
-  })
-
-  it('fuses forward into the next narration, leaving the user action at zero', () => {
-    // Weights become 60 : 0 : 240 once the three-hour interval joins the second narration,
-    // and that 1:4 ratio fills the six-hour span as 72 : 0 : 288.
-    const result = lengths(repair('fuse-next'))
-    expect(result.act).toBe(0)
-    expect(result.narr1).toBe(72)
-    expect(result.narr2).toBe(288)
-  })
-
-  it('fuses backward into the previous narration', () => {
-    const result = lengths(repair('fuse-previous'))
-    expect(result.act).toBe(0)
-    expect(result.narr1).toBe(288)
-    expect(result.narr2).toBe(72)
-  })
-
-  it('keeps an interval that has no narration to fuse into', () => {
-    const result = ok(
-      reconcileRange({
-        entries: [entry(t(0), t(0), 'a1', 'user_action'), entry(t(3), t(3), 'a2', 'user_action')],
-        baseline: t(0),
-        target: t(6),
-        gapPolicies: { a1: 'fuse-next' },
-      }),
-    )
-    expect(result.gaps[0].policy).toBe('keep')
-    expect(result.gaps[0].fuseNextEntryId).toBeNull()
-  })
-})
-
 describe('a user action weighs nothing, whatever the record says', () => {
   const cases: [string, StoryEntry][] = [
     ['no times at all', entry(null, null, 'ua', 'user_action')],
@@ -485,27 +357,15 @@ describe('what the review can ask before a repair is run', () => {
     ])
   })
 
-  it('lists the intervals with what a fuse would land on', () => {
+  it('lists every adjacent pair, including the one a user action closes', () => {
     const entries = [
       entry(t(0), t(1), 'narr1'),
       entry(t(4), t(4), 'act', 'user_action'),
       entry(t(4), t(5), 'narr2'),
     ]
     expect(rangeIntervals(entries)).toEqual([
-      {
-        afterEntryId: 'narr1',
-        beforeEntryId: 'act',
-        recordedMinutes: 180,
-        fusePreviousEntryId: 'narr1',
-        fuseNextEntryId: 'narr2',
-      },
-      {
-        afterEntryId: 'act',
-        beforeEntryId: 'narr2',
-        recordedMinutes: 0,
-        fusePreviousEntryId: 'narr1',
-        fuseNextEntryId: 'narr2',
-      },
+      { afterEntryId: 'narr1', beforeEntryId: 'act', recordedMinutes: 180 },
+      { afterEntryId: 'act', beforeEntryId: 'narr2', recordedMinutes: 0 },
     ])
   })
 })
@@ -529,5 +389,53 @@ describe('an override sets the weight, not the resulting length', () => {
       reconcileRange({ entries, baseline: t(0), target: t(2), suppliedDurations: { a: 180 } }),
     )
     expect(toMinutes(result.times[0].end) - toMinutes(result.times[0].start)).toBe(90)
+  })
+})
+
+describe('an interval the reader adds', () => {
+  it('is listed even before it has a length', () => {
+    const entries = chained([t(0), t(1), t(2)], 'add')
+    const listed = rangeIntervals(entries, {})
+    expect(listed.every((i) => i.recordedMinutes === 0)).toBe(true)
+
+    const withAdded = rangeIntervals(entries, { [entries[0].id]: 0 })
+    expect(withAdded[0].recordedMinutes).toBe(0)
+  })
+
+  it('stands in for the recorded length rather than adding to it', () => {
+    const a = entry(t(0), t(1))
+    const b = entry(t(2), t(3))
+    const listed = rangeIntervals([a, b], { [a.id]: 30 })
+    expect(listed[0].recordedMinutes).toBe(30)
+  })
+
+  it('takes a share of the span like any other weight', () => {
+    const entries = chained([t(0), t(1), t(2)], 'share')
+    const result = reconcileRange({
+      entries,
+      baseline: t(0),
+      target: t(4),
+      intervalWeights: { [entries[0].id]: 60 },
+    })
+    expect(result.status).toBe('ok')
+    const ok = result as Extract<ReconcileResult, { status: 'ok' }>
+
+    // Three equal weights of an hour each: the entries take one third of four hours apiece,
+    // and the interval between them takes the remaining third rather than being closed.
+    expect(toMinutes(ok.times[0].end) - toMinutes(ok.times[0].start)).toBe(80)
+    expect(toMinutes(ok.times[1].start) - toMinutes(ok.times[0].end)).toBe(80)
+    expect(toMinutes(ok.times[1].end) - toMinutes(ok.times[1].start)).toBe(80)
+  })
+
+  it('closes the interval when it is stated as weighing nothing', () => {
+    const entries = chained([t(0), t(1), t(2)], 'void')
+    const result = reconcileRange({
+      entries,
+      baseline: t(0),
+      target: t(4),
+      intervalWeights: { [entries[0].id]: 0 },
+    })
+    const ok = result as Extract<ReconcileResult, { status: 'ok' }>
+    expect(toMinutes(ok.times[1].start) - toMinutes(ok.times[0].end)).toBe(0)
   })
 })

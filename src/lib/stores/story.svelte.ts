@@ -42,7 +42,6 @@ import {
   type AssertedBoundaryReport,
   type Boundary,
   type DurationRequest,
-  type GapPolicy,
   type RangeRefusal,
   type ReconcileResult,
   type RepairPlan,
@@ -1573,7 +1572,7 @@ class StoryStore {
   previewTimelineRepair(
     range: SelectableRange,
     suppliedDurations: Record<string, number> = {},
-    gapPolicies: Record<string, GapPolicy> = {},
+    intervalWeights: Record<string, number> = {},
   ): TimelineRepairPreview {
     const refusal = refuseRange(range.from, range.to)
     if (refusal) return { status: 'refused', refusal }
@@ -1593,7 +1592,7 @@ class StoryStore {
       previousEnd: before?.metadata?.timeEnd ?? null,
       nextStart: after?.metadata?.timeStart ?? null,
       suppliedDurations,
-      gapPolicies,
+      intervalWeights,
     })
 
     if (result.status === 'refused') {
@@ -1660,37 +1659,7 @@ class StoryStore {
 
     await applyRepair(preview.plan, this.entries, {
       transaction: (statements) => database.transaction(statements),
-      publish: (plan) => {
-        const times = new Map(plan.times.map((time) => [time.entryId, time]))
-        this.entries = this.entries.map((entry) => {
-          const time = times.get(entry.id)
-          if (!time) return entry
-          return {
-            ...entry,
-            metadata: { ...entry.metadata, timeStart: time.start, timeEnd: time.end },
-          }
-        })
-
-        const spans = new Map(plan.chapterSpans.map((span) => [span.chapterId, span]))
-        this.chapters = this.chapters.map((chapter) => {
-          const span = spans.get(chapter.id)
-          return span ? { ...chapter, startTime: span.startTime, endTime: span.endTime } : chapter
-        })
-
-        const clocks = new Map(plan.checkpointClocks.map((u) => [u.checkpointId, u.timeTracker]))
-        if (clocks.size > 0) {
-          this.checkpoints = this.checkpoints.map((checkpoint) => {
-            const timeTracker = clocks.get(checkpoint.id)
-            return timeTracker ? { ...checkpoint, timeTrackerSnapshot: timeTracker } : checkpoint
-          })
-        }
-
-        if (plan.clock && this.currentStory) {
-          this.currentStory = { ...this.currentStory, timeTracker: plan.clock }
-        }
-
-        this.invalidateChapterCache()
-      },
+      publish: (plan) => this.publishRepair(plan),
     })
 
     log('Timeline repaired', {
@@ -1699,6 +1668,67 @@ class StoryStore {
       clockMoved: !!preview.plan.clock,
     })
     return 'applied'
+  }
+
+  /** In-memory state after a repair commits, shared by every path that plans one. */
+  private publishRepair(plan: RepairPlan): void {
+    const times = new Map(plan.times.map((time) => [time.entryId, time]))
+    this.entries = this.entries.map((entry) => {
+      const time = times.get(entry.id)
+      if (!time) return entry
+      return {
+        ...entry,
+        metadata: { ...entry.metadata, timeStart: time.start, timeEnd: time.end },
+      }
+    })
+
+    const spans = new Map(plan.chapterSpans.map((span) => [span.chapterId, span]))
+    this.chapters = this.chapters.map((chapter) => {
+      const span = spans.get(chapter.id)
+      return span ? { ...chapter, startTime: span.startTime, endTime: span.endTime } : chapter
+    })
+
+    const clocks = new Map(plan.checkpointClocks.map((u) => [u.checkpointId, u.timeTracker]))
+    if (clocks.size > 0) {
+      this.checkpoints = this.checkpoints.map((checkpoint) => {
+        const timeTracker = clocks.get(checkpoint.id)
+        return timeTracker ? { ...checkpoint, timeTrackerSnapshot: timeTracker } : checkpoint
+      })
+    }
+
+    if (plan.clock && this.currentStory) {
+      this.currentStory = { ...this.currentStory, timeTracker: plan.clock }
+    }
+
+    this.invalidateChapterCache()
+  }
+
+  /**
+   * Write one entry's own beginning and ending.
+   *
+   * Planned as a one-entry repair rather than a bare metadata write, so it carries the same
+   * guarantees: chapter spans covering it are recomputed, the clock inside its delta follows,
+   * the keyframe it invalidates is discarded, and the story clock moves only when the entry is
+   * the last one. All of it commits together.
+   */
+  async setEntryTimes(entryId: string, start: TimeTracker, end: TimeTracker): Promise<void> {
+    if (!this.currentStory) throw new Error('No story loaded')
+    const entry = this.entries.find((e) => e.id === entryId)
+    if (!entry) throw new Error('Entry not found')
+
+    const plan = planRepair({
+      entries: this.entries,
+      chapters: this.chapters,
+      times: [{ entryId, start, end }],
+      checkpoints: this.checkpoints,
+    })
+
+    await applyRepair(plan, this.entries, {
+      transaction: (statements) => database.transaction(statements),
+      publish: (applied) => this.publishRepair(applied),
+    })
+
+    log('Entry times set', { entryId, clockMoved: !!plan.clock })
   }
 
   /** Anomalies and the latest asserted boundary, for the Time panel. */

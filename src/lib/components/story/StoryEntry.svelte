@@ -80,6 +80,7 @@
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
   import { Textarea } from '$lib/components/ui/textarea'
   import { Input } from '$lib/components/ui/input'
+  import { formatStoryTime, parseStoryTime, storyTimeIsInvalid } from '$lib/services/storyTime'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { SvelteMap, SvelteSet } from 'svelte/reactivity'
   import { escapeHtml } from '$lib/utils/inlineImageParser'
@@ -168,7 +169,7 @@
   // An action is an instant and a system entry is not story, so neither has a span to show.
   const showEntryMeta = $derived(settings.uiSettings.showEntryNumberAndTime && isNarrationLike)
 
-  function formatStoryTime(time: TimeTracker | null | undefined): string {
+  function compactStoryTime(time: TimeTracker | null | undefined): string {
     if (!time) return ''
     const parts: string[] = []
     // TimeTracker's fields are all required, but this data is persisted JSON: a story imported
@@ -186,8 +187,8 @@
   const generationInfo = $derived.by(() => {
     const m = entry.metadata
     // In-story time range for this message (start → end after time progression)
-    const start = formatStoryTime(m?.timeStart)
-    const end = formatStoryTime(m?.timeEnd)
+    const start = compactStoryTime(m?.timeStart)
+    const end = compactStoryTime(m?.timeEnd)
     const storyTime = start && end && start !== end ? `${start} → ${end}` : start || end || null
     return {
       model: m?.model,
@@ -321,6 +322,12 @@
 
   let isEditing = $state(false)
   let editContent = $state('')
+  let editingTimes = $state(false)
+  let editStart = $state('')
+  let editEnd = $state('')
+
+  const startInvalid = $derived(storyTimeIsInvalid(editStart))
+  const endInvalid = $derived(storyTimeIsInvalid(editEnd))
   let isDeleting = $state(false)
 
   // Embedded images state
@@ -1221,21 +1228,40 @@
 
   function startEdit() {
     editContent = entry.content
+    editStart = entry.metadata?.timeStart ? formatStoryTime(entry.metadata.timeStart) : ''
+    editEnd = entry.metadata?.timeEnd ? formatStoryTime(entry.metadata.timeEnd) : ''
+    editingTimes = false
     isEditing = true
   }
 
   async function saveEdit() {
     const newContent = editContent.trim()
-    if (!newContent || newContent === entry.content) {
+    const start = editingTimes ? parseStoryTime(editStart) : null
+    const end = editingTimes ? parseStoryTime(editEnd) : null
+    const timesChanged =
+      !!start &&
+      !!end &&
+      (formatStoryTime(start) !==
+        formatStoryTime(entry.metadata?.timeStart ?? { years: 0, days: 0, hours: 0, minutes: 0 }) ||
+        formatStoryTime(end) !==
+          formatStoryTime(entry.metadata?.timeEnd ?? { years: 0, days: 0, hours: 0, minutes: 0 }))
+    const contentChanged = !!newContent && newContent !== entry.content
+
+    if (!contentChanged && !timesChanged) {
       isEditing = false
       return
     }
 
     try {
-      await story.updateEntry(entry.id, newContent)
-      // Keep retry backup in sync so a subsequent Retry uses the updated text
-      if (canSaveAndRegenerate) {
-        ui.updateRetryBackupContent(newContent)
+      if (contentChanged) {
+        await story.updateEntry(entry.id, newContent)
+        // Keep retry backup in sync so a subsequent Retry uses the updated text
+        if (canSaveAndRegenerate) {
+          ui.updateRetryBackupContent(newContent)
+        }
+      }
+      if (timesChanged) {
+        await story.setEntryTimes(entry.id, start!, end!)
       }
       isEditing = false
     } catch (error) {
@@ -1441,6 +1467,21 @@
       <div class="hidden @min-[40rem]:flex">
         {@render storyTimeChip()}
       </div>
+    {/if}
+
+    {#if isEditing && entry.type !== 'user_action'}
+      <Button
+        variant="text"
+        size="icon"
+        class="h-7 w-7 {editingTimes
+          ? 'text-amber-500'
+          : 'text-muted-foreground hover:text-foreground'}"
+        onclick={() => (editingTimes = !editingTimes)}
+        title={editingTimes ? 'Hide the entry times' : 'Edit the entry times'}
+        aria-label={editingTimes ? 'Hide the entry times' : 'Edit the entry times'}
+      >
+        <Clock class="h-4 w-4" />
+      </Button>
     {/if}
 
     <!-- Spacer to push buttons to the right -->
@@ -1797,6 +1838,35 @@
   <div class="min-w-0">
     {#if isEditing}
       <div class="space-y-2">
+        {#if editingTimes}
+          <div class="border-border grid gap-2 rounded-md border p-2 sm:grid-cols-2">
+            <label class="text-xs">
+              Begins
+              <Input
+                bind:value={editStart}
+                placeholder="Y1 D4 14:30"
+                class="mt-1 h-8 text-sm {startInvalid ? 'border-destructive' : ''}"
+              />
+            </label>
+            <label class="text-xs">
+              Ends
+              <Input
+                bind:value={editEnd}
+                placeholder="Y1 D4 16:00"
+                class="mt-1 h-8 text-sm {endInvalid ? 'border-destructive' : ''}"
+              />
+            </label>
+            {#if startInvalid || endInvalid}
+              <p class="text-destructive text-xs sm:col-span-2">
+                Give both as Y1 D4 14:30. An unreadable time is left as it was.
+              </p>
+            {:else if isLastEntry}
+              <p class="text-muted-foreground text-xs sm:col-span-2">
+                This is the last entry, so the story's current time moves to its ending.
+              </p>
+            {/if}
+          </div>
+        {/if}
         <Textarea
           bind:value={editContent}
           onkeydown={handleKeydown}

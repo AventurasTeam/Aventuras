@@ -1,6 +1,7 @@
 import type {
   ActivePanel,
   SidebarTab,
+  NavPanelTab,
   EntryType,
   StoryEntry,
   Character,
@@ -117,6 +118,9 @@ interface PersistedActivationData {
 class UIStore {
   activePanel = $state<ActivePanel>('story')
   sidebarTab = $state<SidebarTab>('characters')
+  // Held here rather than in the panel so it survives closing and reopening, as the sidebar's
+  // does. It opens on Navigation until the reader leaves it somewhere else.
+  navPanelTab = $state<NavPanelTab>('navigation')
   sidebarOpen = $state(typeof window !== 'undefined' ? window.innerWidth >= 640 : false)
   // Persisted like `sidebarOpen`, but defaults closed at every width: it is a place the
   // reader opts into, not an ambient reference the way the sidebar is.
@@ -372,6 +376,10 @@ class UIStore {
 
   setSidebarTab(tab: SidebarTab) {
     this.sidebarTab = tab
+  }
+
+  setNavPanelTab(tab: NavPanelTab) {
+    this.navPanelTab = tab
   }
 
   setVaultTab(tab: VaultTab) {

@@ -28,28 +28,6 @@ export interface DurationRequest {
   invalid?: boolean
 }
 
-/**
- * What the reader has decided about one interval.
- *
- * `keep` weighs it where it is, `void` gives it no share while everything else keeps theirs,
- * and the two `fuse` forms hand its time to the entry on one side.
- */
-export type GapPolicy = 'keep' | 'void' | 'fuse-previous' | 'fuse-next'
-
-export interface RangeGap {
-  /** The entry the interval follows. */
-  afterEntryId: string
-  beforeEntryId: string
-  recordedMinutes: number
-  /** The policy actually applied, which falls back to `keep` when a fuse has no target. */
-  policy: GapPolicy
-  /** What it contributes to the weighting once the policy is applied. */
-  weightedMinutes: number
-  /** The entry a backward fuse would land on, or null when there is none in the range. */
-  fusePreviousEntryId: string | null
-  fuseNextEntryId: string | null
-}
-
 export interface Join {
   /** The unchanged time on the far side of the join. */
   neighbourTime: TimeTracker | null
@@ -73,7 +51,14 @@ export interface ReconcileInput {
   /** Reader-supplied entry durations in whole minutes, by entry id. */
   suppliedDurations?: Record<string, number>
   /** What to do with the interval after each entry, keyed by that entry's id. Defaults to `keep`. */
-  gapPolicies?: Record<string, GapPolicy>
+  /**
+   * Interval lengths the reader states, in minutes, keyed by the entry each follows.
+   *
+   * A stated length replaces the recorded one, and stands in for it where the record holds
+   * none: an interval the record does not have is still a fact about the story, and a reader
+   * who knows a night passed has no other way to say so.
+   */
+  intervalWeights?: Record<string, number>
 }
 
 export type ReconcileResult =
@@ -82,7 +67,6 @@ export type ReconcileResult =
   | {
       status: 'ok'
       times: RepairedTime[]
-      gaps: RangeGap[]
       leadingJoin: Join
       trailingJoin: Join | null
     }
@@ -161,6 +145,11 @@ function weighEntries(
  * interval reads as zero. That is two records disagreeing rather than time passing, and
  * detection reports it.
  */
+/** Interval lengths, one per adjacent pair, the reader's own standing in where given. */
+function gapsOf(entries: StoryEntry[], stated: Record<string, number>): number[] {
+  return recordedGaps(entries).map((minutes, i) => stated[entries[i].id] ?? minutes)
+}
+
 function recordedGaps(entries: StoryEntry[]): number[] {
   const gaps: number[] = []
   for (let i = 0; i < entries.length - 1; i++) {
@@ -184,62 +173,6 @@ function recordedGaps(entries: StoryEntry[]): number[] {
  * what is recorded.
  */
 /**
- * The nearest entry in one direction that can hold scene time.
- *
- * A user action records no duration by construction — the clock advances during
- * classification, which writes back to the narration entry — so fusing an interval into one
- * would give an instant a length. The search steps over them to the narration either side.
- */
-function fuseTarget(entries: StoryEntry[], from: number, step: -1 | 1): number | null {
-  for (let i = from; i >= 0 && i < entries.length; i += step) {
-    if (entries[i].type !== 'user_action') return i
-  }
-  return null
-}
-
-function applyGapPolicies(
-  entries: StoryEntry[],
-  durations: number[],
-  gaps: number[],
-  policies: Record<string, GapPolicy>,
-): { durations: number[]; gapWeights: number[]; decisions: RangeGap[] } {
-  const adjusted = [...durations]
-  const gapWeights: number[] = []
-  const decisions: RangeGap[] = []
-
-  gaps.forEach((recorded, i) => {
-    const afterEntryId = entries[i].id
-    const previousTarget = fuseTarget(entries, i, -1)
-    const nextTarget = fuseTarget(entries, i + 1, 1)
-    const requested = policies[afterEntryId] ?? 'keep'
-
-    // A fuse with nowhere to land keeps the interval instead of silently discarding it.
-    const policy: GapPolicy =
-      (requested === 'fuse-previous' && previousTarget === null) ||
-      (requested === 'fuse-next' && nextTarget === null)
-        ? 'keep'
-        : requested
-
-    if (policy === 'fuse-previous') adjusted[previousTarget!] += recorded
-    if (policy === 'fuse-next') adjusted[nextTarget!] += recorded
-    const weighted = policy === 'keep' ? recorded : 0
-    gapWeights.push(weighted)
-
-    decisions.push({
-      afterEntryId,
-      beforeEntryId: entries[i + 1].id,
-      recordedMinutes: recorded,
-      policy,
-      weightedMinutes: weighted,
-      fusePreviousEntryId: previousTarget === null ? null : entries[previousTarget].id,
-      fuseNextEntryId: nextTarget === null ? null : entries[nextTarget].id,
-    })
-  })
-
-  return { durations: adjusted, gapWeights, decisions }
-}
-
-/**
  * What the range cannot weigh yet, without attempting a repair.
  *
  * The review needs this to mark rows while the Becomes column is still blank: nothing is
@@ -256,23 +189,18 @@ export interface RangeInterval {
   afterEntryId: string
   beforeEntryId: string
   recordedMinutes: number
-  fusePreviousEntryId: string | null
-  fuseNextEntryId: string | null
 }
 
-/** The intervals the record holds inside a range, with what a fuse in each direction would hit. */
-export function rangeIntervals(entries: StoryEntry[]): RangeInterval[] {
-  return recordedGaps(entries).map((recordedMinutes, i) => {
-    const previousTarget = fuseTarget(entries, i, -1)
-    const nextTarget = fuseTarget(entries, i + 1, 1)
-    return {
-      afterEntryId: entries[i].id,
-      beforeEntryId: entries[i + 1].id,
-      recordedMinutes,
-      fusePreviousEntryId: previousTarget === null ? null : entries[previousTarget].id,
-      fuseNextEntryId: nextTarget === null ? null : entries[nextTarget].id,
-    }
-  })
+/** The intervals inside a range, the reader's own included. */
+export function rangeIntervals(
+  entries: StoryEntry[],
+  intervalWeights: Record<string, number> = {},
+): RangeInterval[] {
+  return gapsOf(entries, intervalWeights).map((recordedMinutes, i) => ({
+    afterEntryId: entries[i].id,
+    beforeEntryId: entries[i + 1].id,
+    recordedMinutes,
+  }))
 }
 
 /**
@@ -295,16 +223,12 @@ export function reconcileRange(input: ReconcileInput): ReconcileResult {
   // apparently empty range into a paced one.
   if (requests.length > 0) return { status: 'needs-durations', requests }
 
-  const {
-    durations: weighted,
-    gapWeights,
-    decisions,
-  } = applyGapPolicies(entries, durations, recordedGaps(entries), input.gapPolicies ?? {})
+  const gapWeights = gapsOf(entries, input.intervalWeights ?? {})
   const span = targetMinutes - baselineMinutes
 
   // Durations and the intervals between them, alternating: [d0, g0, d1, g1, … dN-1].
   const weights: number[] = []
-  weighted.forEach((duration, i) => {
+  durations.forEach((duration, i) => {
     weights.push(duration)
     if (i < gapWeights.length) weights.push(gapWeights[i])
   })
@@ -350,7 +274,6 @@ export function reconcileRange(input: ReconcileInput): ReconcileResult {
   return {
     status: 'ok',
     times,
-    gaps: decisions,
     leadingJoin: {
       neighbourTime: previousEnd,
       edgeTime: baseline,

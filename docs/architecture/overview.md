@@ -47,11 +47,15 @@ back out and finally closes the panel.
 | Navigation panel (left) | swipe right | swipe right | swipe left        |
 
 One consequence is easy to undo by accident: **each tab strip is ordered so that the tab nearest
-the story is the one the panel opens on and the one a further outward swipe closes from.** The
-sidebar runs Characters -> Branches left to right and opens on Characters; the navigation panel
-runs Timeline -> Navigation and opens on Navigation. Reversing either list, or moving a tab into
-it at the wrong end, leaves the opening swipe with nowhere to go and puts the close on the wrong
-tab.
+the story is its default and the one a further outward swipe closes from.** The sidebar runs
+Characters -> Branches left to right and starts on Characters; the navigation panel runs Timeline ->
+Navigation and starts on Navigation. Reversing either list, or moving a tab into it at the wrong
+end, leaves the opening swipe with nowhere to go and puts the close on the wrong tab.
+
+Only the _first_ opening uses that default. Both panels keep their current tab in `ui.svelte.ts`
+(`sidebarTab`, `navPanelTab`) rather than in the component, so closing and reopening returns the
+reader to where they were. Holding it in the panel would reset it on every mount, which reads as
+the panel forgetting what you were doing.
 
 ## Edge swipes
 

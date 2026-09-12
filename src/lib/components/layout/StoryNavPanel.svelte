@@ -41,7 +41,6 @@
    */
   /** Left to right on screen. Navigation sits nearest the story and opens first. */
   const tabs = ['timeline', 'navigation'] as const
-  let tab = $state<(typeof tabs)[number]>('navigation')
 
   /**
    * The sidebar's tab gestures, mirrored for a panel on the other edge.
@@ -52,14 +51,14 @@
    * the tab strip is ordered to match and the first tab is the one nearest the story.
    */
   function handleSwipeRight() {
-    const index = tabs.indexOf(tab)
-    if (index > 0) tab = tabs[index - 1]
+    const index = tabs.indexOf(ui.navPanelTab)
+    if (index > 0) ui.setNavPanelTab(tabs[index - 1])
   }
 
   function handleSwipeLeft() {
-    const index = tabs.indexOf(tab)
+    const index = tabs.indexOf(ui.navPanelTab)
     if (index < tabs.length - 1) {
-      tab = tabs[index + 1]
+      ui.setNavPanelTab(tabs[index + 1])
     } else {
       ui.closeNavPanel()
     }
@@ -222,8 +221,8 @@
   use:swipe={{ onSwipeLeft: handleSwipeLeft, onSwipeRight: handleSwipeRight, threshold: 50 }}
 >
   <Tabs.Root
-    value={tab}
-    onValueChange={(v) => (tab = v as (typeof tabs)[number])}
+    value={ui.navPanelTab}
+    onValueChange={(v) => ui.setNavPanelTab(v as (typeof tabs)[number])}
     class="flex min-h-0 flex-1 flex-col"
   >
     <div class="border-border bg-muted/60 flex-shrink-0 border-b">

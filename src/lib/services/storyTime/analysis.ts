@@ -21,19 +21,12 @@ export type TimelineAnomalyKind =
   | 'suspect-zero'
   | 'backwards'
   | 'overlap'
-  | 'gap'
   | 'implausible-jump'
   | 'flatline'
   | 'chapter-span-disagreement'
 
-/**
- * How much a finding is worth to the reader.
- *
- * `note` exists because an interval between two entries is neither provably wrong nor a guess:
- * it is time not claimed by adjacent entries, and only the reader knows whether that is a skip, an
- * entry that ran long, or a clock that was nudged.
- */
-export type TimelineSeverity = 'defect' | 'suspected' | 'note'
+/** How much a finding is worth to the reader. */
+export type TimelineSeverity = 'defect' | 'suspected'
 
 export interface TimelineAnomaly {
   kind: TimelineAnomalyKind
@@ -118,17 +111,8 @@ export function analyzeTimeline(input: TimelineAnalysisInput): TimelineAnomaly[]
       })
     }
 
-    // An interval is reported so the reader knows there is something to decide about, not
-    // because it is wrong. An entry beginning *before* the previous one ended is wrong.
-    if (previousEnd && start && toMinutes(start) > toMinutes(previousEnd)) {
-      anomalies.push({
-        kind: 'gap',
-        entryIds: [previous.id, entry.id],
-        detail: `${toMinutes(start) - toMinutes(previousEnd)} minutes pass between these two entries, not claimed by either of them.`,
-        severity: 'note',
-      })
-    }
-
+    // An interval is time the story is entitled to leave unclaimed, so nothing is reported for
+    // it. An entry beginning *before* the previous one ended is wrong.
     if (previousEnd && start && toMinutes(start) < toMinutes(previousEnd)) {
       anomalies.push({
         kind: 'overlap',

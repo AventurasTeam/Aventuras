@@ -3,7 +3,7 @@
   import { ui } from '$lib/stores/ui.svelte'
   import { Button } from '$lib/components/ui/button'
   import * as Dialog from '$lib/components/ui/dialog'
-  import { TriangleAlert, Info, CornerDownLeft, Clock } from '@lucide/svelte'
+  import { TriangleAlert, Info, CornerDownLeft } from '@lucide/svelte'
   import { formatStoryTime } from '$lib/services/storyTime'
   import type { TimelineAnomaly } from '$lib/services/storyTime'
   import { entryNumber } from '$lib/utils/storyNavigation'
@@ -59,7 +59,6 @@
   function heading(anomaly: TimelineAnomaly): string {
     const entries = anomaly.entryIds.map((id) => byId.get(id)).filter(Boolean) as StoryEntry[]
     if (entries.length === 0) return 'Unknown entry'
-    if (anomaly.kind === 'gap') return `After entry ${entryNumber(entries[0])}`
     if (anomaly.kind === 'flatline' && entries.length > 1) {
       return `Entries ${entryNumber(entries[0])}–${entryNumber(entries[entries.length - 1])}`
     }
@@ -68,12 +67,6 @@
   }
 
   function marker(anomaly: TimelineAnomaly): { text: string; class: string } {
-    if (anomaly.kind === 'gap') {
-      return {
-        text: 'Time gap',
-        class: 'bg-amber-500/15 text-amber-700 dark:text-amber-500',
-      }
-    }
     const entry = subject(anomaly)
     if (entry?.type === 'user_action')
       return { text: 'You', class: 'bg-muted text-muted-foreground' }
@@ -178,8 +171,6 @@
           >
             {#if anomaly.severity === 'defect'}
               <TriangleAlert class="mt-0.5 h-3 w-3 shrink-0" />
-            {:else if anomaly.severity === 'note'}
-              <Clock class="mt-0.5 h-3 w-3 shrink-0" />
             {:else}
               <Info class="mt-0.5 h-3 w-3 shrink-0" />
             {/if}
