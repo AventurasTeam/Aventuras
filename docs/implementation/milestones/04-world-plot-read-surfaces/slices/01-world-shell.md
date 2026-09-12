@@ -307,8 +307,10 @@ it should be.
   E2E instead.
 - Breadcrumb: every segment shares one vertical box (`py-2` tablet and
   desktop, 44px minimum on phone), so the sub-header holds its height
-  across select and deselect; the root grows to fill its row, so the
-  current segment's 70% cap measures the bar, not itself.
+  across select and deselect; the root grows to fill its row, so in the
+  sub-header the current segment's 70% cap measures the bar, not itself
+  (the top bar's content-sized title slot doesn't — see
+  [triage](../../../triage.md)).
 - The sub-header renders taller than the top bar because
   `MasterDetailLayout`'s wrapper pads too — see
   [Slice 4.3](./03-plot-panel.md)'s Open questions.

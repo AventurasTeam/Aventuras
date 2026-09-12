@@ -59,7 +59,6 @@ export function useRevealScroll(reveal: RevealRequest | null, resetKey: string) 
         cancelled = true
       }
     }
-    // Skipped when a reveal already lands this update — that branch returns above.
     if (resetKey !== previous.resetKey) scrollRef.current?.scrollTo({ y: 0, animated: false })
     return undefined
   }, [reveal, resetKey])

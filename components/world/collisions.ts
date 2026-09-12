@@ -10,7 +10,7 @@ const keyOf = (e: Entity) => `${e.kind}:${normalizeCollisionName(e.name)}`
 /**
  * Flagged rows → the same-kind namesake they collide with. Ranked
  * unflagged-first, then oldest, then by id — a total order independent of
- * Map/array iteration order and of which namesake is flagged.
+ * Map/array iteration order.
  */
 export function deriveCollisions(
   entities: readonly Entity[],

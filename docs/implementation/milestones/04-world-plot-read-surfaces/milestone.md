@@ -238,8 +238,8 @@ renders, so no consumer computes its own.
 
 **Recently-classified.** Given the branch's delta rows and its latest
 entries, return `ReadonlyMap<rowId, RecentlyClassified>` — the
-shipped value union from `components/compounds/list-row.tsx`
-(`'fresh' | 'fading'`) — over every classifier-touched row across
+value union from `lib/row-signals/types.ts` (`'fresh' | 'fading'`)
+— over every classifier-touched row across
 `entities`, `lore`, `threads` and `happenings`, plus a per-kind
 aggregate (`fresh` if any contributor is fresh, `fading` if all are
 fading, absent otherwise) for the rail strip's cells and the phone

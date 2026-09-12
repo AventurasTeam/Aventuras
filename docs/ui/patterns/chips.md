@@ -148,6 +148,7 @@ API (all orthogonal):
 - `leading?: React.ReactNode` — optional element rendered before the label, separated by the existing `gap-1`. Stays inside the `TextClassContext` so child text colors continue to cascade. Used by [`GenerationStatusPill`](./generation-status-pill.md) to inject a Spinner during active phases.
 - `dashed?: boolean` — solid border → dashed border. Used for **standalone add-affordance** in pre-existing chip rows ("+ relationship" on entity panes, quick-add UI in chip-only contexts). **Not** the right shape for tag-field entry — that pattern lives in [`forms.md → TagInput pattern`](./forms.md#taginput-pattern), which composes Tag + Input into a single tokenized-input surface. Mutually-exclusive with `removable` in practice (add vs. remove are different use cases).
 - `onPress?: () => void` — optional. Sets `role="button"` when present.
+- `accessibilityLabel?: string` — the accessible name for a pressable Tag whose visible text doesn't say what it does (a glyph and a count). Ignored without `onPress`.
 - `disabled?: boolean` — `opacity-50`.
 
 Visual contract:

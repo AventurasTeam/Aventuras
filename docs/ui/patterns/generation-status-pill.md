@@ -260,9 +260,3 @@ props on every render.
   [`principles.md → Universal in-story chrome`](../principles.md#universal-in-story-chrome).
   Done for Reader, World and Story Settings, each tapping its error
   through to Story Settings · Memory.
-- **World top-bar `⚠ N need review` pill.** Deferred from
-  collision-resolve work; now unblocked since `Tag tone="warning"`
-  is available (see
-  [`chips.md → Tag tone vocabulary`](./chips.md#tag--tone-vocabulary)).
-  Sits beside (not inside) the generation pill — its own slot on
-  the top bar.

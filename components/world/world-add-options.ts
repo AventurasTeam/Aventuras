@@ -2,7 +2,6 @@ import type { ImporterMenuOption } from '@/components/compounds/importer-menu'
 import { t } from '@/lib/i18n'
 import type { WorldCategory } from '@/lib/list-modules'
 
-// Every option is present-but-disabled; disabledReason names why it's inert.
 export function worldAddOptions(category: WorldCategory): ImporterMenuOption[] {
   return [
     {
