@@ -108,14 +108,24 @@ The story is an append-only list of `StoryEntry` rows (`user_action`, `narration
   a **branch** as well as a story: it records the branch it was taken on, is offered only there,
   and is refused on any other. Positions are reused by sibling branches after a fork, so a
   snapshot applied to the wrong branch deletes rows that merely share a number - and the
-  world-state restore deletes the active branch's rows and re-inserts only those of the
-  snapshot's that belong to that branch — the delete is branch-scoped, so the insert must be,
-  or a snapshot resolved through the lineage carries ancestor rows the delete never removed and
-  collides with them on the primary key. The per-branch entity queries match `branch_id` exactly and never fall back
-  to inherited rows, so that leaves the active branch with none of its own whatever the
-  experimental settings say - main included, when the snapshot came from a branch. Lightweight
-  branches only decide how total it is: a pre-snapshot COW branch still resolves its ancestors'
-  entities, while snapshot isolation and the legacy per-branch load both leave the panels empty.
+  world-state restore deletes the active branch's rows and **re-inserts only the snapshot rows
+  belonging to that branch**. The delete is branch-scoped, so the insert has to be: a snapshot
+  taken on a branch that resolves its world state through the lineage carries ancestor rows too,
+  with their own `branch_id`, which the delete never touched. Re-inserting one collides on the
+  primary key — and since these statements cannot share a transaction (see
+  [persistence.md](persistence.md)), the deletes have already committed by then, so the branch
+  loses its entries _and_ its own world state and the restore dies with nothing put back.
+  Filtering makes the two halves symmetric whatever shape the branch is, which matters because
+  `snapshot_complete` no longer reliably says which shape that is. An override the undone
+  generation created is absent from the snapshot, so it is deleted and not restored — correct,
+  because the inherited row it stood in for shows through again.
+
+  That the branch ends up with nothing is not an experimental-settings matter: the per-branch
+  entity queries match `branch_id` exactly and never fall back to inherited rows, main included
+  when the snapshot came from a branch. Lightweight branches only decide how total it is — a
+  pre-snapshot COW branch still resolves its ancestors' entities, while snapshot isolation and
+  the legacy per-branch load both leave the panels empty.
+
 - **Removing an entry a branch forks from is refused**, and the check runs before anything else
   the operation would rewind - a rollback, or the lorebook activation a retry restores - because
   a refusal raised afterwards would leave that half applied. Editing and deleting are refused the

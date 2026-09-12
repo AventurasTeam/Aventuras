@@ -1084,25 +1084,25 @@ class StoryStore {
 
   /**
    * Editing and deleting race with a generation or a retry restore rewriting the same entries.
-   * `isRetryInProgress` and `ui.isGenerating` let the UI disable the affordance up front; this
-   * refuses the ones that get through, rather than returning as if the work had been done.
-   */
-  /**
-   * Refuse while the story is mid-turn.
+   * The UI disables the affordance up front; this refuses the ones that get through, rather
+   * than returning as if the work had been done.
    *
-   * `ui.isGenerating` is not enough on its own: it is set inside `generateResponse`, after
-   * the initiating handler has already taken a snapshot and written the user action, and it
-   * is cleared by Stop while the classification is still writing. The lease covers both of
-   * those, so an edit or a delete in either window can no longer slip past.
+   * `ui.isGenerating` is not enough on its own: it is set inside `generateResponse`, after the
+   * initiating handler has already taken a snapshot and written the user action, and it is
+   * cleared by Stop while the classification is still writing. The lease covers both windows.
    *
-   * `holder` is the generation's own lease, for the two paths that legitimately edit under
-   * one — the error retry's delete of the failed entry, and the regenerate's undo.
+   * `holder` is the generation's own lease, for the two paths that legitimately edit under one
+   * — the error retry's delete of the failed entry, and the regenerate's undo.
    */
   private assertNotBusy(action: string, holder?: GenerationLease): void {
-    if (this._isRetryInProgress || ui.isGenerating) {
+    // A restore is rewriting these very entries, which refuses everyone — holder included.
+    if (this._isRetryInProgress) {
       throw new Error(`Cannot ${action} while a generation or retry is in progress`)
     }
-    if (this.generationLease && this.generationLease !== holder) {
+    // The lease and `ui.isGenerating` describe one generation, so the holder clears both or
+    // neither. Testing them apart let it through one and be refused by the other.
+    if (holder && this.generationLease === holder) return
+    if (ui.isGenerating || this.generationLease) {
       throw new Error(`Cannot ${action} while a generation is in progress`)
     }
   }
