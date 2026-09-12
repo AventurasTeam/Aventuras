@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   branches,
   entities,
+  lore,
   storyDefinitionSchema,
   storyEntries,
   storySettingsSchema,
@@ -15,6 +16,7 @@ import {
   currentStoryStore,
   entitiesStore,
   entriesStore,
+  loreStore,
   resetAllStores,
   storiesStore,
 } from '@/lib/stores'
@@ -78,7 +80,7 @@ describe('loadOpenStory', () => {
     resetAllStores()
   })
 
-  it('parses config, hydrates entries + entities, and populates currentStoryStore', async () => {
+  it('parses config, hydrates entries + entities + lore, and populates currentStoryStore', async () => {
     const { db, ctx } = await setup()
     await db.insert(stories).values({
       id: 'story_1',
@@ -110,16 +112,34 @@ describe('loadOpenStory', () => {
       createdAt: 1,
       updatedAt: 1,
     })
+    await db.insert(lore).values({
+      id: 'lore_1',
+      branchId: 'br_1',
+      title: 'The Veil',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await db
+      .insert(branches)
+      .values({ id: 'br_2', storyId: 'story_1', name: 'branch-2', createdAt: 1 })
+    await db.insert(lore).values({
+      id: 'lore_2',
+      branchId: 'br_2',
+      title: 'Hidden Secrets',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
 
-    // Spy attached right before the call under test: the only selects it can
-    // see are loadOpenStory's own reads — 1 branch/story join + 1 story_entries
-    // + 1 entities. Anything beyond 3 would mean an extra (N+1-shaped) domain read.
+    // Spy attached right before the call: only sees loadOpenStory's own reads —
+    // join + entries + entities + lore = 4. More would mean an extra N+1-shaped read.
     const selectSpy = vi.spyOn(ctx.db, 'select')
 
     const result = await loadOpenStory('br_1', ctx)
 
     expect(result).toEqual({ status: 'ok', storyId: 'story_1', branchId: 'br_1' })
-    expect(selectSpy).toHaveBeenCalledTimes(3)
+    expect(selectSpy).toHaveBeenCalledTimes(4)
 
     const open = currentStoryStore.getCurrentStory()
     expect(open?.storyId).toBe('story_1')
@@ -132,6 +152,10 @@ describe('loadOpenStory', () => {
 
     expect(entitiesStore.getLoadedBranch()).toBe('br_1')
     expect([...entitiesStore.getEntities().values()].map((e) => e.id)).toEqual(['char_1'])
+
+    expect(loreStore.getLoadedBranch()).toBe('br_1')
+    expect([...loreStore.getLore().values()].map((l) => l.id)).toEqual(['lore_1'])
+    expect(loreStore.getById('lore_2')).toBeUndefined()
 
     expect(storiesStore.getStories().openFailures.story_1).toBeUndefined()
   })

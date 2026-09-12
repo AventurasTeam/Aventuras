@@ -5,6 +5,7 @@ import {
   branches,
   deltas,
   entities,
+  lore,
   storyDefinitionSchema,
   storyEntries,
   storySettingsSchema,
@@ -17,6 +18,7 @@ import {
   currentStoryStore,
   entitiesStore,
   entriesStore,
+  loreStore,
   navigationStore,
   storiesStore,
 } from '@/lib/stores'
@@ -105,6 +107,7 @@ async function setup() {
   currentStoryStore.__reset()
   entriesStore.__reset()
   entitiesStore.__reset()
+  loreStore.__reset()
   return { db, sqlite, ctx: { db, runInTransaction } }
 }
 
@@ -179,6 +182,28 @@ describe('stories column writes', () => {
 
     expect(entriesStore.getLoadedBranch()).toBe('old_branch')
     expect(entitiesStore.getLoadedBranch()).toBe('old_branch')
+    expect(currentStoryStore.getCurrentStory()).toEqual(previousOpen)
+  })
+
+  it('loadOpenStory publishes no working-set state when the lore query fails', async () => {
+    const { ctx, sqlite } = await setup()
+    entriesStore.hydrate('old_branch', [])
+    entitiesStore.hydrate('old_branch', [])
+    loreStore.hydrate('old_branch', [])
+    const previousOpen = {
+      storyId: 'old_story',
+      branchId: 'old_branch',
+      definition: STORY_DEFINITION,
+      settings: STORY_SETTINGS,
+    }
+    currentStoryStore.set(previousOpen)
+    sqlite.exec('DROP TABLE lore')
+
+    await expect(loadOpenStory('br_1', ctx)).rejects.toThrow()
+
+    expect(entriesStore.getLoadedBranch()).toBe('old_branch')
+    expect(entitiesStore.getLoadedBranch()).toBe('old_branch')
+    expect(loreStore.getLoadedBranch()).toBe('old_branch')
     expect(currentStoryStore.getCurrentStory()).toEqual(previousOpen)
   })
 
@@ -266,9 +291,18 @@ describe('stories column writes', () => {
       createdAt: 1,
       updatedAt: 1,
     })
+    await db.insert(lore).values({
+      id: 'lore_1',
+      branchId: 'br_1',
+      title: 'The Veil',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
     const navigate = vi.fn()
     const isCurrent = vi
       .fn<() => boolean>()
+      .mockReturnValueOnce(true)
       .mockReturnValueOnce(true)
       .mockReturnValueOnce(true)
       .mockReturnValueOnce(true)
@@ -282,6 +316,8 @@ describe('stories column writes', () => {
     expect(entriesStore.getEntries().size).toBe(0)
     expect(entitiesStore.getLoadedBranch()).toBeNull()
     expect(entitiesStore.getEntities().size).toBe(0)
+    expect(loreStore.getLoadedBranch()).toBeNull()
+    expect(loreStore.getLore().size).toBe(0)
     expect(navigationStore.getNavigation()).toEqual({
       currentStoryId: null,
       currentBranchId: null,

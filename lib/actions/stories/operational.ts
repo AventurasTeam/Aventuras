@@ -1,12 +1,20 @@
 import { eq } from 'drizzle-orm'
 
-import { branches, entities, storyDefinitionSchema, storySettingsSchema, stories } from '@/lib/db'
+import {
+  branches,
+  entities,
+  lore,
+  storyDefinitionSchema,
+  storySettingsSchema,
+  stories,
+} from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { kickStoryDrain } from '@/lib/embedder-swap'
 import {
   currentStoryStore,
   entitiesStore,
   entriesStore,
+  loreStore,
   navigationStore,
   rehydrateStories,
   storiesStore,
@@ -71,10 +79,8 @@ type IsCurrentRequest = () => boolean
 
 const alwaysCurrent: IsCurrentRequest = () => true
 
-// Parses the story's config JSON, hydrates the working-set stores the per-turn
-// loop reads (entries + entities), and populates currentStoryStore — the single
-// place that does all three, so any story-open path (landing, wizard finish,
-// future deep-link) gets the same guarantees a corrupt-JSON badge included.
+// Single place that parses story config JSON, hydrates entries/entities/lore, and sets
+// currentStoryStore — every story-open path (landing, wizard, deep link) shares these guarantees.
 export async function loadOpenStory(
   branchId: string,
   ctx: DbCtx,
@@ -119,10 +125,13 @@ export async function loadOpenStory(
   if (!isCurrentRequest()) return { status: 'cancelled' }
   const entityRows = await ctx.db.select().from(entities).where(eq(entities.branchId, branchId))
   if (!isCurrentRequest()) return { status: 'cancelled' }
+  const loreRows = await ctx.db.select().from(lore).where(eq(lore.branchId, branchId))
+  if (!isCurrentRequest()) return { status: 'cancelled' }
 
   storiesStore.clearOpenFailure(row.storyId)
   entriesStore.hydrate(branchId, entryRows)
   entitiesStore.hydrate(branchId, entityRows)
+  loreStore.hydrate(branchId, loreRows)
   currentStoryStore.set({ storyId: row.storyId, branchId, definition, settings })
   // Warm the vec cache for a story opened with pre-existing stale rows; no-op
   // until boot wires the drain controller, and the sync stage owns correctness.

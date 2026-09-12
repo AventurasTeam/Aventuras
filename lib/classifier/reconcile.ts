@@ -34,7 +34,8 @@ export function cosine(a: Float32Array, b: Float32Array): number {
   return Math.round((dot / (Math.sqrt(na) * Math.sqrt(nb))) * 1e6) / 1e6
 }
 
-const normalizeName = (name: string) => name.trim().toLowerCase()
+/** Namesake key: case- and whitespace-insensitive. */
+export const normalizeCollisionName = (name: string) => name.trim().toLowerCase()
 
 /**
  * Layer B reconciliation (edge-cases.md -> Layer B). Every namesake is embedded
@@ -49,9 +50,9 @@ export async function reconcileNewCharacter(
   candidate: { name: string; description: string },
   deps: { entities: readonly Entity[]; embedDescriptions: EmbedDescriptions },
 ): Promise<ReconcileDecision> {
-  const target = normalizeName(candidate.name)
+  const target = normalizeCollisionName(candidate.name)
   const namesakes = deps.entities.filter(
-    (e) => e.kind === 'character' && normalizeName(e.name) === target,
+    (e) => e.kind === 'character' && normalizeCollisionName(e.name) === target,
   )
   if (namesakes.length === 0) return { kind: 'create', flagged: false }
 

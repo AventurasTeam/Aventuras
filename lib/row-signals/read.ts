@@ -1,0 +1,96 @@
+import { and, asc, eq, gte, inArray, ne, notInArray } from 'drizzle-orm'
+
+import { deltas, pipelineRuns, type DbCtx } from '@/lib/db'
+
+import { isLinkTable, LINK_TABLES, resolveLinkOwners, type LinkDeltaRow } from './link-owners'
+import { lastTwoReplies } from './replies'
+import { SIGNAL_TARGET_TABLES } from './types'
+import type { SignalDelta, SignalEntry, TurnBoundaries } from './types'
+
+/** The last two ai_reply ids, latest first. Entries ascending by position. */
+export function latestReplyIds(entries: readonly SignalEntry[]): string[] {
+  return lastTwoReplies(entries).map((r) => r.reply.id)
+}
+
+export async function readTurnBoundaries(
+  db: DbCtx['db'],
+  branchId: string,
+  entries: readonly SignalEntry[],
+): Promise<TurnBoundaries | null> {
+  const ids = latestReplyIds(entries)
+  if (ids.length === 0) return null
+  const rows = await db
+    .select({ targetId: deltas.targetId, logPosition: deltas.logPosition })
+    .from(deltas)
+    .where(
+      and(
+        eq(deltas.branchId, branchId),
+        eq(deltas.targetTable, 'story_entries'),
+        eq(deltas.op, 'create'),
+        inArray(deltas.targetId, ids),
+      ),
+    )
+  const byId = new Map(rows.map((r) => [r.targetId, r.logPosition]))
+  const fresh = byId.get(ids[0])
+  if (fresh == null) return null
+  const fading = ids[1] != null ? (byId.get(ids[1]) ?? null) : null
+  return { fresh, fading }
+}
+
+export async function readSignalDeltas(
+  db: DbCtx['db'],
+  branchId: string,
+  fromLogPosition: number,
+): Promise<SignalDelta[]> {
+  const rowTables = [...SIGNAL_TARGET_TABLES.keys()]
+  // A reversed run's deltas stay in the log even though its writes are undone.
+  const reversedActionIds = db
+    .select({ actionId: pipelineRuns.actionId })
+    .from(pipelineRuns)
+    .where(inArray(pipelineRuns.outcome, ['aborted', 'failed', 'recovered']))
+  const rows = await db
+    .select({
+      source: deltas.source,
+      targetTable: deltas.targetTable,
+      targetId: deltas.targetId,
+      logPosition: deltas.logPosition,
+      op: deltas.op,
+      undoPayload: deltas.undoPayload,
+    })
+    .from(deltas)
+    .where(
+      and(
+        eq(deltas.branchId, branchId),
+        gte(deltas.logPosition, fromLogPosition),
+        ne(deltas.source, 'user_edit'),
+        inArray(deltas.targetTable, [...rowTables, ...LINK_TABLES]),
+        notInArray(deltas.actionId, reversedActionIds),
+      ),
+    )
+    .orderBy(asc(deltas.logPosition))
+
+  const passThrough: SignalDelta[] = []
+  const linkRows: LinkDeltaRow[] = []
+  for (const r of rows) {
+    if (isLinkTable(r.targetTable)) {
+      linkRows.push({
+        source: r.source,
+        targetTable: r.targetTable,
+        targetId: r.targetId,
+        logPosition: r.logPosition,
+        op: r.op,
+        undoPayload: r.undoPayload,
+      })
+    } else {
+      passThrough.push({
+        source: r.source,
+        targetTable: r.targetTable,
+        targetId: r.targetId,
+        logPosition: r.logPosition,
+      })
+    }
+  }
+
+  const linkResolved = await resolveLinkOwners(db, branchId, linkRows)
+  return [...passThrough, ...linkResolved].sort((a, b) => a.logPosition - b.logPosition)
+}

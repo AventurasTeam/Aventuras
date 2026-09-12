@@ -21,6 +21,7 @@ import { embedderSwapStore } from './ui/embedder-swap'
 import { embeddingStatusStore } from './ui/embedding-status'
 import { recoveryReportStore } from './ui/recovery-report'
 import { undoRedoStore } from './ui/undo-redo'
+import { worldListStore } from './ui/world-list'
 import { CAST_ID_PREFIX, wizardStore } from './wizard/wizard'
 
 // Test-harness seam: resets every domain store in one call
@@ -47,6 +48,7 @@ export function resetAllStores(): void {
   blockingOverlaysStore.__reset()
   recoveryReportStore.__reset()
   undoRedoStore.clear()
+  worldListStore.__reset()
   wizardStore.reset()
 }
 
@@ -79,6 +81,7 @@ export {
   undoRedoStore,
   useRegisteredOverlay,
   wizardStore,
+  worldListStore,
 }
 
 export { createWorkingSetStore } from './factory/working-set-store'

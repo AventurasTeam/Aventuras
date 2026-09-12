@@ -4,7 +4,13 @@ export type { ClassifierWindow, WindowTurn } from './window'
 export { classifierExtractionSchema } from './schema'
 export type { ClassifierExtraction } from './schema'
 export { NEW_HANDLE_PREFIX, PLACEHOLDER_FIELDS, substituteClassifierIds } from './substitute'
-export { cosine, reconcileNewCharacter, TAU_HIGH, TAU_LOW } from './reconcile'
+export {
+  cosine,
+  normalizeCollisionName,
+  reconcileNewCharacter,
+  TAU_HIGH,
+  TAU_LOW,
+} from './reconcile'
 export type { EmbedDescriptions, FlagReason, ReconcileDecision } from './reconcile'
 export { buildClassifierActions, clampEmbeddedCharacter } from './plan'
 export type { PlanDeps, PlannedWrite, PlanResult } from './plan'

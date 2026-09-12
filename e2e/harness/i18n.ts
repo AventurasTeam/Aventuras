@@ -21,6 +21,7 @@ const NAMESPACES = [
   'settings',
   'storySettings',
   'wizard',
+  'world',
 ] as const
 
 const FILE_OVERRIDE: Partial<Record<(typeof NAMESPACES)[number], string>> = {
