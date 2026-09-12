@@ -63,12 +63,6 @@ slice-planning gate forces its resolution before that slice is planned.
 - **`pipeline_runs` has no `action_id` index.** (2026-09-11) The C1
   read's reversed-run subquery scans the table on every refetch
   (~0.6 ms at 10k rows, ~15 ms at 200k, measured on Electron main).
-- **UNVERIFIED: reversed-run deltas may confuse rollback.**
-  (2026-09-11, read-only finding) Reversed runs keep their deltas, so after an
-  aborted turn `selectUndoTarget` may pick the dead turn's deltas as the head
-  group; `resolveRollbackWindow` then rejects, and Ctrl-Z returns `integrity`
-  until another action lands. A rollback sweeping an aborted run's `delete`
-  delta may also re-insert a row the abort already restored. Needs a repro.
 - **`CollisionListRow` accessibility role drift.** (2026-09-11)
   The strip uses `accessibilityRole="alert"` (every flagged row
   announces); [`collision-resolve.md → Accessibility`](../ui/patterns/collision-resolve.md#accessibility)

@@ -54,9 +54,8 @@ export async function resetStuckClassifierRunState(
   ctx: DbCtx,
   unreversedActionIds: readonly string[],
 ): Promise<void> {
-  // Keyed on surviving deltas, not on the failure alone: the boot path reverses
-  // without pruning, so a failure that left nothing behind (the marker write threw
-  // after a clean reversal) correctly reconciles.
+  // Keyed on surviving deltas, not on the failure alone: a reversal prunes what it
+  // replays, so an orphan with no deltas left has nothing stranded and reconciles.
   const quarantine =
     unreversedActionIds.length === 0
       ? sql``

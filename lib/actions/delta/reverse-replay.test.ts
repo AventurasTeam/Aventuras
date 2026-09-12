@@ -123,8 +123,8 @@ describe('reverseReplayDeltas', () => {
       .from(storyEntries)
       .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'entry_1')))
     expect(rows.length).toBe(0)
-    // and no residual deltas applied wrong: assert the deltas still exist (framework consumes the primitive; deletion of delta rows is a data-model decision, not this primitive)
-    expect((await db.select().from(deltas).where(eq(deltas.actionId, 'act_1'))).length).toBe(2)
+    // The replayed deltas leave the log with the reversal, as CTRL-Z's do.
+    expect((await db.select().from(deltas).where(eq(deltas.actionId, 'act_1'))).length).toBe(0)
   })
 
   it('restores a schema-backed column that was NULL before the update', async () => {

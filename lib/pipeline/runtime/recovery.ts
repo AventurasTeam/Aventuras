@@ -35,9 +35,8 @@ export async function recoverInFlightRuns(ctx: DbCtx): Promise<RecoveryReport> {
 
   for (const orphan of orphans) {
     try {
-      // Settling the marker rides the reversal's own transaction: the replay is not
-      // idempotent (undoing a `delete` re-inserts), so an orphan left open over
-      // already-reversed deltas fails deterministically on every later boot.
+      // Settling the marker rides the reversal's own transaction, so the marker never
+      // claims a reversal the log doesn't reflect.
       const count = await reverseReplayDeltas(orphan.actionId, ctx, (deltaCount) => [
         deltaCount === 0
           ? ctx.db.delete(pipelineRuns).where(eq(pipelineRuns.runId, orphan.runId)).toSQL()

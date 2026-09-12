@@ -172,8 +172,7 @@ async function buildUndoOps(
 }
 
 // Rollback path: reverse a pre-selected delta set AND prune those delta rows
-// from the log in one transaction (gaps in log_position are expected). The
-// actionId-scoped reverseReplayDeltas deliberately does not prune; this does.
+// from the log in one transaction (gaps in log_position are expected).
 export async function reverseAndPruneDeltaRows(
   rows: Delta[],
   ctx: DbCtx,
@@ -205,12 +204,11 @@ export async function reverseAndPruneDeltaRows(
 }
 
 /**
- * `settleOps` commits caller ops in the SAME transaction as the reversal, keyed on
- * the delta count so the caller can branch on it. Recovery uses it for the
- * `pipeline_runs` marker: written separately, a failure between the two leaves the
- * deltas reversed but the orphan open, and the next boot's replay is not idempotent
- * — undoing a `create` deletes (repeatable), undoing a `delete` re-inserts (conflicts),
- * so a transient error would harden into a permanent one.
+ * Reverses one action's deltas and prunes them in the same transaction, as CTRL-Z does:
+ * rows left in the log would read as the undo head and as a later rollback's to-do
+ * (data-model.md -> Entry mutability & rollback). `settleOps` joins that transaction,
+ * keyed on the delta count so the caller can branch on it — recovery settles its
+ * `pipeline_runs` marker this way, so the marker never disagrees with the log.
  */
 export async function reverseReplayDeltas(
   actionId: string,
@@ -226,10 +224,10 @@ export async function reverseReplayDeltas(
     const settle = settleOps(rows.length)
     if (rows.length === 0 && settle.length === 0) return 0
 
-    const { ops, patches } = await buildUndoOps(rows, ctx)
-    await ctx.runInTransaction([...ops, ...settle])
+    const plan = await buildReverseAndPrunePlan(rows, ctx)
+    await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...settle])
     // Action layer owns the patch: invert in the held-branch store after the tx.
-    for (const p of patches) resolveByTable(p.table)?.patcher?.(p.branchId, p.patch)
+    emitPatches(plan.patches)
     return rows.length
   } catch (e) {
     if (e instanceof DeltaReplayError) throw e

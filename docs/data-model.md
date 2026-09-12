@@ -2218,6 +2218,14 @@ background fact about a surviving turn). Entity rows
 (and lore / thread / happening / chapter rows) are mutated in place for
 fast reads; the delta log is the history of record.
 
+**A reversal takes its deltas with it.** Every reversal removes the
+deltas it replays in the same transaction: CTRL-Z and rollback (below),
+and every run the pipeline reverses itself — an aborted or failed turn,
+a crash-recovered orphan, a turn refused at admission. Deltas are never
+kept and marked reversed: a kept row would read as the next undo head
+and be re-reversed by a later rollback. A reversed run's only trace is
+its `pipeline_runs.outcome`; a refused admission leaves none.
+
 User editing an entry's text does **not** auto-trigger re-classification.
 Text edits are separate from state edits; state stays put unless the user
 explicitly re-classifies, which appends new deltas at the log head rather

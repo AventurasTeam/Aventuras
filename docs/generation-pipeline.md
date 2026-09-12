@@ -1254,10 +1254,9 @@ is the shipped instance; a second entry-scoped caller inherits the same
 obligation.
 
 Abort is conceptually identical to user CTRL-Z — same
-`undo_payload` primitive, same reverse-replay path. Whether the
-delta rows themselves are deleted or marked-reversed after replay
-is a [data-model decision](./data-model.md#entry-mutability--rollback);
-the framework just consumes the primitive.
+`undo_payload` primitive, same reverse-replay path, and the replayed
+delta rows are deleted in the same transaction, as CTRL-Z deletes them
+([`data-model.md → Entry mutability & rollback`](./data-model.md#entry-mutability--rollback)).
 
 ### Streaming partial-entry on abort
 
