@@ -29,7 +29,7 @@ import { useRegisteredOverlay } from '@/lib/stores'
 import { useTheme } from '@/lib/themes'
 import { cn } from '@/lib/utils'
 
-import { changedPick } from './select-pick'
+import { changesOnly } from './select-pick'
 
 const FullWindowOverlay = Platform.OS === 'ios' ? RNFullWindowOverlay : Fragment
 
@@ -708,8 +708,7 @@ function DropdownBranch({
     <Root
       value={selected ? { value: selected.value, label: selected.label } : undefined}
       onValueChange={(opt) => {
-        const next = changedPick(value, opt)
-        if (next != null) onValueChange(next)
+        if (opt) onValueChange(opt.value)
       }}
       disabled={disabled}
     >
@@ -765,7 +764,8 @@ function DropdownBranch({
 export function Select(props: SelectProps) {
   const tier = useTier()
   const mode = resolveMode(props.options, props.mode, tier)
-  if (mode === 'segment') return <SegmentBranch {...props} />
-  if (mode === 'radio') return <RadioBranch {...props} />
-  return <DropdownBranch {...props} />
+  const branchProps = { ...props, onValueChange: changesOnly(props.value, props.onValueChange) }
+  if (mode === 'segment') return <SegmentBranch {...branchProps} />
+  if (mode === 'radio') return <RadioBranch {...branchProps} />
+  return <DropdownBranch {...branchProps} />
 }

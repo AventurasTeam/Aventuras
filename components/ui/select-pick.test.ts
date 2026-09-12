@@ -1,23 +1,25 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
-import { changedPick } from './select-pick'
+import { changesOnly } from './select-pick'
 
-describe('changedPick', () => {
-  // Native items report every press as a fresh { value, label }, a re-pick included, and
-  // the primitive's controlled-state check compares by reference, so it lets them through.
+describe('changesOnly', () => {
+  // Native radio items fire on every press, and native dropdown items hand the primitive a
+  // fresh { value, label } its controlled-state check compares by reference, a re-pick included.
   it('drops a re-pick of the current value', () => {
-    expect(changedPick('character', { value: 'character' })).toBeNull()
+    const onValueChange = vi.fn()
+    changesOnly('character', onValueChange)('character')
+    expect(onValueChange).not.toHaveBeenCalled()
   })
 
   it('reports a pick of another value', () => {
-    expect(changedPick('character', { value: 'location' })).toBe('location')
+    const onValueChange = vi.fn()
+    changesOnly('character', onValueChange)('location')
+    expect(onValueChange).toHaveBeenCalledExactlyOnceWith('location')
   })
 
   it('reports a first pick', () => {
-    expect(changedPick(undefined, { value: 'location' })).toBe('location')
-  })
-
-  it('drops an empty pick', () => {
-    expect(changedPick('character', undefined)).toBeNull()
+    const onValueChange = vi.fn()
+    changesOnly(undefined, onValueChange)('location')
+    expect(onValueChange).toHaveBeenCalledExactlyOnceWith('location')
   })
 })
