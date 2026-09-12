@@ -18,7 +18,7 @@ import {
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
-import { latestReplyIds, readSignalDeltas, readTurnBoundaries } from './read'
+import { latestReplyIds, readReplyEdits, readSignalDeltas, readTurnBoundaries } from './read'
 import type { SignalEntry } from './types'
 
 const ENTRIES: SignalEntry[] = [
@@ -784,5 +784,85 @@ describe('readSignalDeltas — link attribution', () => {
     )
     const rows = await readSignalDeltas(db, 'b1', 10)
     expect(rows).toEqual([])
+  })
+})
+
+describe('readReplyEdits', () => {
+  it("returns the replies' user_edit updates on story_entries, oldest first, on this branch only", async () => {
+    const db = await seedLinkFixtures()
+    await db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'fork', createdAt: 1 })
+    await db.insert(deltas).values([
+      row({
+        id: 'd_second',
+        logPosition: 14,
+        targetTable: 'story_entries',
+        targetId: 'e5',
+        op: 'update',
+        source: 'user_edit',
+        undoPayload: { metadata: { currentLocationId: 'loc_1' } },
+      }),
+      row({
+        id: 'd_first',
+        logPosition: 12,
+        targetTable: 'story_entries',
+        targetId: 'e5',
+        op: 'update',
+        source: 'user_edit',
+        undoPayload: { metadata: { sceneEntities: ['char_kael'] } },
+      }),
+      row({
+        id: 'd_fold',
+        logPosition: 11,
+        targetTable: 'story_entries',
+        targetId: 'e5',
+        op: 'update',
+        source: 'per_turn_classifier',
+      }),
+      row({
+        id: 'd_create',
+        logPosition: 10,
+        targetTable: 'story_entries',
+        targetId: 'e5',
+        op: 'create',
+        source: 'user_edit',
+      }),
+      row({
+        id: 'd_not_reply',
+        logPosition: 13,
+        targetTable: 'story_entries',
+        targetId: 'e4',
+        op: 'update',
+        source: 'user_edit',
+      }),
+      row({
+        id: 'd_entity',
+        logPosition: 15,
+        targetTable: 'entities',
+        targetId: 'e5',
+        op: 'update',
+        source: 'user_edit',
+      }),
+      row({
+        id: 'd_fork',
+        logPosition: 16,
+        targetTable: 'story_entries',
+        targetId: 'e5',
+        op: 'update',
+        source: 'user_edit',
+        branchId: 'b2',
+      }),
+    ])
+    expect(await readReplyEdits(db, 'b1', ['e5', 'e3'])).toEqual([
+      {
+        targetId: 'e5',
+        logPosition: 12,
+        undoPayload: { metadata: { sceneEntities: ['char_kael'] } },
+      },
+      {
+        targetId: 'e5',
+        logPosition: 14,
+        undoPayload: { metadata: { currentLocationId: 'loc_1' } },
+      },
+    ])
   })
 })

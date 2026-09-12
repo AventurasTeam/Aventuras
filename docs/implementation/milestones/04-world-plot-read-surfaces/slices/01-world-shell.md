@@ -251,12 +251,13 @@ it should be.
 - C1 refetch is keyed on a monotonic `generationStore.settleCount`
   (bumped when a run leaves `txState` or a reversal settles), shared
   by every mounted consumer.
-- Known C1 limitations: a manual scene edit on the last two replies
-  reads as a transition and tints (canon says manual edits don't —
-  see [`entity.md → Recently-classified row accent`](../../../../ui/patterns/entity.md#recently-classified-row-accent)
-  and [triage](../../../triage.md)); a classifier happening delete
-  removes its links inside its own delta, so linked characters don't
-  tint.
+- Known C1 limitation: a classifier happening delete removes its
+  links inside its own delta, so linked characters don't tint.
+- **Manual scene edits** (developer, 2026-09-13) — C1 diffs a reply's
+  scene as the classifier left it, rebuilt from the reply's own
+  `user_edit` undo payloads, and `useRowSignals` diffs the entries its
+  window was read against, so a hand edit tints nothing, per
+  [`entity.md → Recently-classified row accent`](../../../../ui/patterns/entity.md#recently-classified-row-accent).
 - **D3** the route is `/world/[branchId]?kind&id&tab`; **D4** the
   contextual `Add entity…` / `Add lore…` entries open the `[+]`
   `ImporterMenu` via a controlled `open` seam (the rn-primitives

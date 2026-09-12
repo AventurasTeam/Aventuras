@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { EntityKind, EntryMetadata } from '@/lib/db'
 
 import { sceneTransitionIds, selectRecentlyClassified } from './recently-classified'
-import type { SignalDelta, SignalEntry } from './types'
+import type { ReplyEdit, SignalDelta, SignalEntry } from './types'
 
 const KINDS: Record<string, EntityKind> = {
   char_a: 'character',
@@ -45,6 +45,7 @@ const BOUNDARIES = { fresh: 10, fading: 7 }
 describe('selectRecentlyClassified', () => {
   it('tiers pipeline deltas by log position: fresh at/after N, fading between N-1 and N, none before', () => {
     const { rows } = selectRecentlyClassified({
+      replyEdits: [],
       deltas: [
         delta(10, 'entities', 'char_x'),
         delta(12, 'happenings', 'hap_1'),
@@ -63,6 +64,7 @@ describe('selectRecentlyClassified', () => {
 
   it('ignores user_edit deltas and tables that are not row surfaces', () => {
     const { rows } = selectRecentlyClassified({
+      replyEdits: [],
       deltas: [
         delta(11, 'entities', 'char_a', 'user_edit'),
         delta(11, 'chapters', 'chap_1'),
@@ -77,6 +79,7 @@ describe('selectRecentlyClassified', () => {
 
   it('ignores a targetTable that collides with an inherited Object.prototype key', () => {
     const { rows } = selectRecentlyClassified({
+      replyEdits: [],
       deltas: [delta(11, 'constructor', 'x'), delta(11, 'toString', 'y')],
       entries: [],
       boundaries: BOUNDARIES,
@@ -94,6 +97,7 @@ describe('selectRecentlyClassified', () => {
       { id: 'e5', kind: 'ai_reply', position: 5, metadata: meta(['char_b'], 'loc_2') },
     ]
     const { rows } = selectRecentlyClassified({
+      replyEdits: [],
       deltas: [],
       entries,
       boundaries: BOUNDARIES,
@@ -108,6 +112,7 @@ describe('selectRecentlyClassified', () => {
 
   it('only transitioning rows tint; an unchanged scene member stays untinted', () => {
     const { rows } = selectRecentlyClassified({
+      replyEdits: [],
       deltas: [],
       entries: ENTRIES,
       boundaries: BOUNDARIES,
@@ -126,6 +131,7 @@ describe('selectRecentlyClassified', () => {
       { id: 'e2', kind: 'ai_reply', position: 2, metadata: meta(['item_1'], null) },
     ]
     const { rows } = selectRecentlyClassified({
+      replyEdits: [],
       deltas: [],
       entries,
       boundaries: BOUNDARIES,
@@ -140,6 +146,7 @@ describe('selectRecentlyClassified', () => {
       { id: 'e2', kind: 'ai_reply', position: 2, metadata: meta([], null) },
     ]
     const { rows } = selectRecentlyClassified({
+      replyEdits: [],
       deltas: [],
       entries,
       boundaries: BOUNDARIES,
@@ -157,6 +164,7 @@ describe('selectRecentlyClassified', () => {
       { id: 'e5', kind: 'ai_reply', position: 5, metadata: meta(['char_a'], 'loc_1') },
     ]
     const { rows, byCategory } = selectRecentlyClassified({
+      replyEdits: [],
       deltas: [],
       entries,
       boundaries: BOUNDARIES,
@@ -188,6 +196,7 @@ describe('selectRecentlyClassified', () => {
       { id: 'e7', kind: 'ai_reply', position: 7, metadata: meta(['old_char', 'mid_char'], null) },
     ]
     const { rows } = selectRecentlyClassified({
+      replyEdits: [],
       deltas: [],
       entries,
       boundaries: BOUNDARIES,
@@ -199,6 +208,7 @@ describe('selectRecentlyClassified', () => {
 
   it('lets fresh win over fading for one row and aggregates per category', () => {
     const { rows, byCategory } = selectRecentlyClassified({
+      replyEdits: [],
       deltas: [
         delta(8, 'entities', 'char_a'),
         delta(11, 'entities', 'char_a'),
@@ -216,6 +226,7 @@ describe('selectRecentlyClassified', () => {
 
   it('keeps a category fresh even when the fresh delta is processed before a fading one', () => {
     const { byCategory } = selectRecentlyClassified({
+      replyEdits: [],
       deltas: [delta(11, 'entities', 'char_a'), delta(8, 'entities', 'char_b')],
       entries: [],
       boundaries: BOUNDARIES,
@@ -226,6 +237,7 @@ describe('selectRecentlyClassified', () => {
 
   it('aggregates threads and happenings deltas under their own categories', () => {
     const { byCategory } = selectRecentlyClassified({
+      replyEdits: [],
       deltas: [delta(10, 'threads', 'thr_1'), delta(10, 'happenings', 'hap_1')],
       entries: [],
       boundaries: BOUNDARIES,
@@ -241,6 +253,7 @@ describe('selectRecentlyClassified', () => {
       { id: 'e2', kind: 'ai_reply', position: 2, metadata: meta(['mystery_1'], null) },
     ]
     const { rows, byCategory } = selectRecentlyClassified({
+      replyEdits: [],
       deltas: [],
       entries,
       boundaries: BOUNDARIES,
@@ -256,6 +269,7 @@ describe('selectRecentlyClassified', () => {
       { id: 'e2', kind: 'ai_reply', position: 2, metadata: meta(['fac_1'], null) },
     ]
     const { rows, byCategory } = selectRecentlyClassified({
+      replyEdits: [],
       deltas: [],
       entries,
       boundaries: BOUNDARIES,
@@ -271,6 +285,7 @@ describe('selectRecentlyClassified', () => {
       { id: 'e2', kind: 'ai_reply', position: 2, metadata: meta(['loc_1'], null) },
     ]
     const { rows } = selectRecentlyClassified({
+      replyEdits: [],
       deltas: [],
       entries,
       boundaries: BOUNDARIES,
@@ -285,6 +300,7 @@ describe('selectRecentlyClassified', () => {
       { id: 'e2', kind: 'ai_reply', position: 2, metadata: meta([], 'char_a') },
     ]
     const { rows } = selectRecentlyClassified({
+      replyEdits: [],
       deltas: [],
       entries,
       boundaries: BOUNDARIES,
@@ -299,6 +315,7 @@ describe('selectRecentlyClassified', () => {
       { id: 'e2', kind: 'ai_reply', position: 2, metadata: meta([], null) },
     ]
     const { rows, byCategory } = selectRecentlyClassified({
+      replyEdits: [],
       deltas: [],
       entries,
       boundaries: BOUNDARIES,
@@ -314,6 +331,7 @@ describe('selectRecentlyClassified', () => {
       { id: 'e2', kind: 'ai_reply', position: 2, metadata: meta([], 'loc_1') },
     ]
     const { rows } = selectRecentlyClassified({
+      replyEdits: [],
       deltas: [],
       entries,
       boundaries: BOUNDARIES,
@@ -325,6 +343,7 @@ describe('selectRecentlyClassified', () => {
 
   it('returns nothing without a boundary (no ai_reply on the branch yet)', () => {
     const { rows, byCategory } = selectRecentlyClassified({
+      replyEdits: [],
       deltas: [delta(1, 'entities', 'char_a')],
       entries: ENTRIES,
       boundaries: null,
@@ -340,6 +359,7 @@ describe('selectRecentlyClassified', () => {
       { id: 'e6', kind: 'user_action', position: 6, metadata: meta(['char_a', 'char_b'], 'loc_2') },
     ]
     const { rows } = selectRecentlyClassified({
+      replyEdits: [],
       deltas: [],
       entries,
       boundaries: BOUNDARIES,
@@ -355,6 +375,7 @@ describe('selectRecentlyClassified', () => {
       { id: 'e3', kind: 'ai_reply', position: 3, metadata: meta(['char_a', 'char_b'], 'loc_1') },
     ]
     const { rows } = selectRecentlyClassified({
+      replyEdits: [],
       deltas: [],
       entries,
       boundaries: BOUNDARIES,
@@ -391,5 +412,74 @@ describe('sceneTransitionIds', () => {
     expect(
       sceneTransitionIds(meta(['a', 'b'], null), meta([], null), mismatchedCategoryOf),
     ).toEqual(['a'])
+  })
+})
+
+describe('selectRecentlyClassified — manual scene edits', () => {
+  function edit(
+    logPosition: number,
+    targetId: string,
+    metadata: Record<string, unknown> | null,
+  ): ReplyEdit {
+    return { targetId, logPosition, undoPayload: { metadata } }
+  }
+
+  function rowsFor(replyEdits: ReplyEdit[], entries: SignalEntry[] = ENTRIES) {
+    return selectRecentlyClassified({
+      deltas: [],
+      replyEdits,
+      entries,
+      boundaries: BOUNDARIES,
+      categoryOf,
+    }).rows
+  }
+
+  it('does not tint a character the user added, while the classifier move still tints', () => {
+    // The classifier moved loc_1 → loc_2; the user then added char_b by hand.
+    const rows = rowsFor([edit(11, 'e5', { sceneEntities: ['char_a'] })])
+    expect(rows.has('char_b')).toBe(false)
+    expect(rows.get('loc_1')).toBe('fresh')
+    expect(rows.get('loc_2')).toBe('fresh')
+  })
+
+  it('does not tint a location the user set, while the classifier arrival still tints', () => {
+    // The classifier brought char_b in; the user then moved loc_1 → loc_2 by hand.
+    const rows = rowsFor([edit(11, 'e5', { currentLocationId: 'loc_1' })])
+    expect(rows.has('loc_1')).toBe(false)
+    expect(rows.has('loc_2')).toBe(false)
+    expect(rows.get('char_b')).toBe('fresh')
+  })
+
+  it('reads each field from its earliest edit', () => {
+    // Two hand edits, char_b then item_1: the second one's prior scene already holds char_b.
+    const entries: SignalEntry[] = [
+      ...ENTRIES.slice(0, 4),
+      { ...ENTRIES[4], metadata: meta(['char_a', 'char_b', 'item_1'], 'loc_2') },
+    ]
+    const rows = rowsFor(
+      [
+        edit(11, 'e5', { sceneEntities: ['char_a'] }),
+        edit(12, 'e5', { sceneEntities: ['char_a', 'char_b'] }),
+      ],
+      entries,
+    )
+    expect(rows.has('char_b')).toBe(false)
+    expect(rows.has('item_1')).toBe(false)
+  })
+
+  it('ignores an edit that changed no scene field, and an edit on another entry', () => {
+    const rows = rowsFor([
+      edit(11, 'e5', { worldTime: 3 }),
+      edit(12, 'e3', { sceneEntities: ['char_a'] }),
+    ])
+    expect(rows.get('char_b')).toBe('fresh')
+    expect(rows.get('loc_2')).toBe('fresh')
+  })
+
+  it('reads a NULL metadata column as the empty scene the reply held before the edit', () => {
+    const rows = rowsFor([edit(11, 'e5', null)])
+    expect(rows.get('char_a')).toBe('fresh')
+    expect(rows.get('loc_1')).toBe('fresh')
+    expect(rows.has('char_b')).toBe(false)
   })
 })

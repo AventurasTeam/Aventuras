@@ -27,6 +27,8 @@ export type RecentlyClassifiedSignals = {
 export type TurnBoundaries = { fresh: number; fading: number | null }
 
 export type SignalDelta = Pick<Delta, 'source' | 'targetTable' | 'targetId' | 'logPosition'>
+/** A reply's own `user_edit` update; its undo payload holds the fields it replaced. */
+export type ReplyEdit = Pick<Delta, 'targetId' | 'logPosition' | 'undoPayload'>
 export type SignalEntry = Pick<StoryEntry, 'id' | 'kind' | 'position' | 'metadata'>
 export type SignalEntity = { id: string; kind: EntityKind }
 

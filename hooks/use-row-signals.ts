@@ -5,12 +5,15 @@ import { db, type EntityKind } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import {
   latestReplyIds,
+  readReplyEdits,
   readSignalDeltas,
   readTurnBoundaries,
   selectInScene,
   selectRecentlyClassified,
   type RecentlyClassifiedSignals,
+  type ReplyEdit,
   type SignalDelta,
+  type SignalEntry,
   type TurnBoundaries,
 } from '@/lib/row-signals'
 import { entitiesStore, entriesStore, generationStore } from '@/lib/stores'
@@ -22,8 +25,14 @@ export type RowSignalsSnapshot = {
 
 const EMPTY_SIGNALS: RecentlyClassifiedSignals = { rows: new Map(), byCategory: new Map() }
 
-type SignalWindow = { deltas: SignalDelta[]; boundaries: TurnBoundaries | null }
-const EMPTY_WINDOW: SignalWindow = { deltas: [], boundaries: null }
+type SignalWindow = {
+  /** The entries the reads ran against; the scene pass diffs these, not the live ones. */
+  entries: readonly SignalEntry[]
+  deltas: SignalDelta[]
+  replyEdits: ReplyEdit[]
+  boundaries: TurnBoundaries | null
+}
+const EMPTY_WINDOW: SignalWindow = { entries: [], deltas: [], replyEdits: [], boundaries: null }
 
 export function useRowSignals(branchId: string): RowSignalsSnapshot {
   // Raw maps are stable; a fresh derived array here would break useSyncExternalStore's contract.
@@ -50,10 +59,14 @@ export function useRowSignals(branchId: string): RowSignalsSnapshot {
     // Local DB read, not a flaky network call — a failure is worth surfacing, not retried.
     retry: false,
     queryFn: async (): Promise<SignalWindow> => {
-      const boundaries = await readTurnBoundaries(db, branchId, entries)
+      // A manual scene edit reaches the store at once but refetches nothing, so the scene
+      // pass must read these entries: live ones would carry an edit its window can't explain.
+      const snapshot = entries
+      const boundaries = await readTurnBoundaries(db, branchId, snapshot)
       if (boundaries == null) return EMPTY_WINDOW
       const deltas = await readSignalDeltas(db, branchId, boundaries.fading ?? boundaries.fresh)
-      return { deltas, boundaries }
+      const replyEdits = await readReplyEdits(db, branchId, latestReplyIds(snapshot))
+      return { entries: snapshot, deltas, replyEdits, boundaries }
     },
   })
 
@@ -87,11 +100,12 @@ export function useRowSignals(branchId: string): RowSignalsSnapshot {
         ? EMPTY_SIGNALS
         : selectRecentlyClassified({
             deltas: signalWindow.deltas,
-            entries,
+            replyEdits: signalWindow.replyEdits,
+            entries: signalWindow.entries,
             boundaries: signalWindow.boundaries,
             categoryOf,
           }),
-    [signalWindow, entries, categoryOf],
+    [signalWindow, categoryOf],
   )
   const inScene = useMemo(() => selectInScene(entries, entities), [entries, entities])
 

@@ -20,6 +20,7 @@ import { useRowSignals, type RowSignalsSnapshot } from './use-row-signals'
 const reads = vi.hoisted(() => ({
   boundaries: vi.fn(),
   deltas: vi.fn(),
+  replyEdits: vi.fn(),
 }))
 
 // The runtime `db` is a bridge client; the reads are what the hook composes.
@@ -31,6 +32,7 @@ vi.mock('@/lib/row-signals', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   readTurnBoundaries: reads.boundaries,
   readSignalDeltas: reads.deltas,
+  readReplyEdits: reads.replyEdits,
 }))
 
 function entry(
@@ -140,6 +142,8 @@ describe('useRowSignals', () => {
     renders = 0
     reads.boundaries.mockReset()
     reads.deltas.mockReset()
+    reads.replyEdits.mockReset()
+    reads.replyEdits.mockResolvedValue([])
   })
   afterEach(() => {
     cleanup()
@@ -543,5 +547,46 @@ describe('useRowSignals', () => {
     expect(reads.boundaries).not.toHaveBeenCalled()
     expect(latest?.recentlyClassified.rows.size).toBe(0)
     expect(latest?.inScene.size).toBe(0)
+  })
+
+  it('diffs the scene its window read, so a manual scene edit in the store tints nothing', async () => {
+    seedOneReply('br_1', ['char_a'], [entity('char_a', 'character'), entity('char_b', 'character')])
+    reads.boundaries.mockResolvedValue({ fresh: 2, fading: null })
+    reads.deltas.mockResolvedValue([])
+
+    renderProbe()
+    await waitFor(() => expect(latest?.recentlyClassified.rows.get('char_a')).toBe('fresh'))
+    expect(reads.replyEdits).toHaveBeenCalledWith({}, 'br_1', ['e2'])
+
+    // The user adds char_b by hand: the store takes it at once, and nothing settles.
+    act(() => {
+      entriesStore.hydrate('br_1', [
+        entry('e1', 'opening', 1, []),
+        entry('e2', 'ai_reply', 2, ['char_a', 'char_b']),
+      ])
+    })
+    expect(latest?.inScene.has('char_b')).toBe(true)
+    expect(reads.boundaries).toHaveBeenCalledTimes(1)
+    expect(latest?.recentlyClassified.rows.get('char_a')).toBe('fresh')
+    expect(latest?.recentlyClassified.rows.has('char_b')).toBe(false)
+  })
+
+  it("feeds the window's reply edits to the scene pass", async () => {
+    entriesStore.hydrate('br_1', [
+      entry('e1', 'opening', 1, ['char_a']),
+      entry('e2', 'ai_reply', 2, ['char_a', 'char_b']),
+    ])
+    entitiesStore.hydrate('br_1', [entity('char_a', 'character'), entity('char_b', 'character')])
+    reads.boundaries.mockResolvedValue({ fresh: 2, fading: null })
+    reads.deltas.mockResolvedValue([delta('char_c', 2)])
+    // char_b was added by hand before this read; the edit's undo payload holds the prior scene.
+    reads.replyEdits.mockResolvedValue([
+      { targetId: 'e2', logPosition: 3, undoPayload: { metadata: { sceneEntities: ['char_a'] } } },
+    ])
+
+    renderProbe()
+    // Positive control: the window has landed, so the absence below means something.
+    await waitFor(() => expect(latest?.recentlyClassified.rows.get('char_c')).toBe('fresh'))
+    expect(latest?.recentlyClassified.rows.has('char_b')).toBe(false)
   })
 })

@@ -54,12 +54,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **Manual scene edits tint under C1.** (2026-09-11) C1 tints a
-  manual scene edit on the last two replies as though it were a
-  classifier transition; canon
-  ([`entity.md → Recently-classified row accent`](../ui/patterns/entity.md#recently-classified-row-accent))
-  says manual edits don't tint. A fix would diff against the pre-edit metadata carried in the
-  `user_edit` delta's undo payload. Needs a developer call.
 - **`CollisionListRow` accessibility role drift.** (2026-09-11)
   The strip uses `accessibilityRole="alert"` (every flagged row
   announces); [`collision-resolve.md → Accessibility`](../ui/patterns/collision-resolve.md#accessibility)

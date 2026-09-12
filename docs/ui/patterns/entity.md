@@ -540,6 +540,8 @@ count directly; link-table writes (`happening_awareness`,
 rows they connect, with per-turn retrieval-count bumps excluded. A
 reversed run leaves nothing to read, since reversal prunes its deltas
 ([`data-model.md → Entry mutability & rollback`](../../data-model.md#entry-mutability--rollback)).
-Coordinates are write-time, so a
+A reply's scene is diffed as the classifier left it — each field's
+earliest manual edit keeps the prior value in its undo payload — so
+the scene editor never tints. Coordinates are write-time, so a
 periodic classifier pass tints whenever it lands. Revisit if users
 want configurability.
