@@ -101,9 +101,6 @@ slice-planning gate forces its resolution before that slice is planned.
   [`iconography.md → Entity kind glyphs`](../ui/foundations/iconography.md#entity-kind-glyphs)
   has no lore glyph; `BookOpen` (the app logo) is inlined in `LoreRow`
   and `WorldDetailPlaceholder` — needs a shared kind icon covering lore.
-- **Reader and Story Settings titles aren't `Breadcrumb`.**
-  (2026-09-11) World's top-bar title converted to `Breadcrumb`; the
-  reader and Story Settings top-bar titles have not.
 - **Breadcrumb's 70% cap measures itself on web.** (2026-09-11)
   `ScreenShell`'s content-sized title slot means the top bar's 70%
   current-segment cap measures the breadcrumb's own text, biting only

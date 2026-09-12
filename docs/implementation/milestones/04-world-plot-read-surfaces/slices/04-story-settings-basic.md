@@ -252,6 +252,15 @@ a column patch beside the settings patch.
   swap-resume prompt and upgrade prompt all key on boot or open; the
   order above (recovery, resume, upgrade) is the default — confirm the
   three never portal together.
+- **Story Settings title isn't `Breadcrumb`.** (2026-09-11) World's
+  top-bar title converted to `Breadcrumb`; Story Settings' has not. It
+  renders one `<title> / Story Settings` string, so the story segment
+  isn't the tappable parent
+  [`principles.md → Breadcrumb tappability`](../../../../ui/principles.md#breadcrumb-tappability)
+  asks for, and the phone detail route has no `/ <tab>` segment
+  ([`story-settings.md → Mobile expression`](../../../../ui/screens/story-settings/story-settings.md#mobile-expression)).
+  The story segment has to go through the unsaved-changes guard, as
+  the Actions menu there already does with `beforeNavigate`.
 
 ## Implementation notes
 
