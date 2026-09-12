@@ -33,48 +33,38 @@ export function WorldDetailPlaceholder({
       </View>
     )
   }
-  const badge =
-    recentlyClassified != null ? (
-      <Tag tone="recently-classified">{t('world:detail.recentlyClassified')}</Tag>
-    ) : undefined
-  if (selection.type === 'lore') {
-    return (
-      <DetailPane
-        kindIcon={<Icon as={BookOpen} size="sm" />}
-        kindName={worldKindName('lore')}
-        nameSlot={
-          <Text testID="world-detail-name" size="lg" className="font-semibold" numberOfLines={1}>
-            {selection.row.title}
-          </Text>
+  const head =
+    selection.type === 'lore'
+      ? {
+          kindIcon: <Icon as={BookOpen} size="sm" />,
+          kindName: worldKindName('lore'),
+          name: selection.row.title,
+          placeholder: t('world:detail.lorePlaceholder'),
         }
-        badges={badge}
-        overflowMenu={null}
-        tabs={null}
-      >
-        <EmptyState
-          title={t('world:detail.lorePlaceholder')}
-          subtext={t('world:detail.placeholderBody')}
-        />
-      </DetailPane>
-    )
-  }
+      : {
+          kindIcon: <EntityKindIcon kind={selection.row.kind} className="h-4 w-4" />,
+          kindName: worldKindName(selection.row.kind),
+          name: selection.row.name,
+          placeholder: t('world:detail.entityPlaceholder'),
+        }
   return (
     <DetailPane
-      kindIcon={<EntityKindIcon kind={selection.row.kind} className="h-4 w-4" />}
-      kindName={worldKindName(selection.row.kind)}
+      kindIcon={head.kindIcon}
+      kindName={head.kindName}
       nameSlot={
         <Text testID="world-detail-name" size="lg" className="font-semibold" numberOfLines={1}>
-          {selection.row.name}
+          {head.name}
         </Text>
       }
-      badges={badge}
+      badges={
+        recentlyClassified != null ? (
+          <Tag tone="recently-classified">{t('world:detail.recentlyClassified')}</Tag>
+        ) : undefined
+      }
       overflowMenu={null}
       tabs={null}
     >
-      <EmptyState
-        title={t('world:detail.entityPlaceholder')}
-        subtext={t('world:detail.placeholderBody')}
-      />
+      <EmptyState title={head.placeholder} subtext={t('world:detail.placeholderBody')} />
     </DetailPane>
   )
 }
