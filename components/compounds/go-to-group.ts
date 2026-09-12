@@ -48,12 +48,6 @@ const ENTRY: Record<InStorySurface, SurfaceEntry> = {
   },
 }
 
-/** The surface's route, or null while it has no route yet. */
-export function inStoryRoute(surface: InStorySurface, story: StoryIds): string | null {
-  const entry = ENTRY[surface]
-  return 'route' in entry ? entry.route(story) : null
-}
-
 // actions-menu.md → Curated core: self-omits current surface, unbuilt disables (not hides).
 export function buildGoToGroup(
   story: InStoryContext,
