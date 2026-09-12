@@ -87,16 +87,10 @@ slice-planning gate forces its resolution before that slice is planned.
   [`principles.md → Breadcrumb tappability`](../ui/principles.md#breadcrumb-tappability)'s
   tap-to-tooltip for a truncated current breadcrumb segment is not
   implemented anywhere.
-- **No `Link` primitive; no navigation landmark role.** (2026-09-11)
-  Breadcrumb is the fourth hand-rolled link `Pressable`; no
-  navigation landmark role exists anywhere in the app.
 - **Lead badge looks like the active status pill.** (2026-09-11)
   The lead badge is a default outline `Tag` stand-in (canon: gold
   pill), which looks identical to the `active` status pill; "gold"
   maps to `warning` elsewhere, which means retired. Design call.
-- **`ListRow`'s `aria-label` hides its channel content.**
-  (2026-09-11) The row's `aria-label` replaces its child content, so
-  status, lead and in-scene never reach screen readers.
 - **No shared lore kind glyph.** (2026-09-11)
   [`iconography.md → Entity kind glyphs`](../ui/foundations/iconography.md#entity-kind-glyphs)
   has no lore glyph; `BookOpen` (the app logo) is inlined in `LoreRow`
