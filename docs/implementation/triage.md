@@ -130,11 +130,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `PopoverTrigger`, so the phase copy never reaches assistive tech.
   `Tag`'s `accessibilityLabel` covers only a pressable `Tag`; the name
   belongs on the trigger, or on the bare pill as a labelled status.
-- **Namesake matching doesn't NFC-normalize.** (2026-09-11, pre-existing)
-  `normalizeCollisionName` (trim plus lowercase) doesn't NFC-normalize,
-  while keyword terms (`lib/keyword-terms`) do — composed vs
-  decomposed spellings ("Zoë") match as keywords but not as
-  namesakes.
 - **Collapsed-tier state is keyed by tier only, not per kind.**
   (2026-09-12) `lib/stores/ui/world-list.ts` keys collapse on
   `EntityTier` alone, so collapsing Staged on Characters also
