@@ -1,9 +1,7 @@
-import { Plus } from 'lucide-react-native'
 import { type ReactNode } from 'react'
 import { View } from 'react-native'
 
 import { Toolbar, type ToolbarSearchProps } from '@/components/compounds/toolbar'
-import { IconAction } from '@/components/ui/icon-action'
 import { cn } from '@/lib/utils'
 
 type EntityListPaneProps = {
@@ -13,13 +11,10 @@ type EntityListPaneProps = {
   kindSelector?: ReactNode
 
   /**
-   * Right-anchored on the kind-selector row. Visual: minimalist `[+]`
-   * icon-action
+   * Right-anchored `[+]` affordance. Pass an `IconAction` or an `ImporterMenu`
+   * with `trigger="icon"` (world.md → Per-row import).
    */
-  addAction: {
-    label: string
-    onPress: () => void
-  }
+  addSlot?: ReactNode
 
   /**
    * Search state — forwarded to `Toolbar.Search`. Mirrors the
@@ -28,9 +23,10 @@ type EntityListPaneProps = {
   search: ToolbarSearchProps
 
   /**
-   * Chip strip — consumer renders chips with their own active state.
+   * Chip strip — consumer renders chips with their own active state. Omit or
+   * pass `null` to hide the row; any other node, even an empty array, shows it.
    */
-  filterChips: ReactNode
+  filterChips?: ReactNode
 
   /**
    * Optional sort control (lore list uses this). Position is handled
@@ -57,7 +53,7 @@ type EntityListPaneProps = {
 
 export function EntityListPane({
   kindSelector,
-  addAction,
+  addSlot,
   search,
   filterChips,
   sortControl,
@@ -70,12 +66,12 @@ export function EntityListPane({
     <View className={cn('w-full flex-1 flex-col gap-3 bg-bg-base p-3', className)}>
       <View className="flex-row items-center gap-2">
         <View className="min-w-0 flex-1">{kindSelector}</View>
-        <IconAction icon={Plus} label={addAction.label} onPress={addAction.onPress} />
+        {addSlot != null ? <View className="shrink-0">{addSlot}</View> : null}
       </View>
 
       <Toolbar>
         <Toolbar.Search {...search} />
-        <Toolbar.FilterChips>{filterChips}</Toolbar.FilterChips>
+        {filterChips != null ? <Toolbar.FilterChips>{filterChips}</Toolbar.FilterChips> : null}
         {sortControl}
       </Toolbar>
 

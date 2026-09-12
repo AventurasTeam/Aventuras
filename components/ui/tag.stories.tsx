@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
 import { View } from 'react-native'
+import { expect, screen } from 'storybook/test'
 
 import { Spinner } from '@/components/ui/spinner'
 import { themes } from '@/lib/themes'
@@ -154,6 +155,14 @@ export const ToneAccent: Story = {
   render: () => <Tag tone="accent">reasoning…</Tag>,
 }
 
+export const RecentlyClassified: Story = {
+  render: () => <Tag tone="recently-classified">Recently classified</Tag>,
+  play: async () => {
+    const label = screen.getByText('Recently classified')
+    expect(label).toHaveClass('text-fg-primary')
+  },
+}
+
 export const WithLeading: Story = {
   render: () => (
     <Tag tone="accent" leading={<Spinner size="sm" colorSlot="--accent-fg" />}>
@@ -181,6 +190,7 @@ export const TonesInThemeMatrix: Story = {
           <Tag tone="accent" leading={<Spinner size="sm" colorSlot="--accent-fg" />}>
             accent
           </Tag>
+          <Tag tone="recently-classified">recently-classified</Tag>
         </View>
       ))}
     </View>

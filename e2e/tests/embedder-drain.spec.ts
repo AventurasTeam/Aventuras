@@ -11,7 +11,9 @@ import {
 } from '../harness/seed'
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
+import { statusPill } from '../locators/status-pill'
 import { storySettings } from '../locators/story-settings'
+import { world } from '../locators/world'
 
 const HERO_TITLE = 'The Veilstone Courier'
 const HERO_BRANCH = 'br_hero_main'
@@ -84,7 +86,7 @@ test.describe('embedder — drain on story open', () => {
     // wrote last. They agree with the branch-scoped poll above only because
     // every embeddable seeded row lives on br_hero_main; one on the fork branch
     // would leave a story-wide count the drain never clears.
-    await expect(reader.memoryIncompletePill(app.window)).toBeHidden()
+    await expect(statusPill.memoryIncomplete(app.window)).toBeHidden()
   })
 })
 
@@ -110,7 +112,7 @@ test.describe('embedder — offline status pill', () => {
     await home.openStory(app.window, HERO_TITLE).click()
     await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
 
-    await expect(reader.memoryIncompletePill(app.window)).toBeVisible({ timeout: 20_000 })
+    await expect(statusPill.memoryIncomplete(app.window)).toBeVisible({ timeout: 20_000 })
     expect(await staleTotal(app)).toBeGreaterThan(0)
   })
 })
@@ -118,7 +120,8 @@ test.describe('embedder — offline status pill', () => {
 // A swap interrupted mid-phase-1 leaves only the marker behind. Staging clears
 // embedding_stale as it goes, so the count-driven pill cannot be relied on to
 // raise this state — the marker is the signal, and it outranks the count.
-test.describe('embedder — swap-paused status pill', () => {
+// Serial: the second test carries on from the reader the first one leaves open.
+test.describe.serial('embedder — swap-paused status pill', () => {
   let app: LaunchedApp
   let userDataDir: string | undefined
 
@@ -143,10 +146,30 @@ test.describe('embedder — swap-paused status pill', () => {
     await expect(storySettings.resumePrompt(app.window)).toBeVisible({ timeout: 20_000 })
     await storySettings.resumeLater(app.window).click()
 
-    await expect(reader.swapPausedPill(app.window)).toBeVisible({ timeout: 20_000 })
+    await expect(statusPill.swapPaused(app.window)).toBeVisible({ timeout: 20_000 })
     // The seed leaves rows stale, so both conditions hold — a wedged swap is the
     // one the user has to act on, and it must not be masked by the count.
     expect(await staleTotal(app)).toBeGreaterThan(0)
-    await expect(reader.memoryIncompletePill(app.window)).toBeHidden()
+    await expect(statusPill.memoryIncomplete(app.window)).toBeHidden()
+  })
+
+  test('World and Story Settings show it too, each tapping through to Memory', async () => {
+    const page = app.window
+    await expect(reader.composer(page)).toBeVisible()
+
+    await reader.actionsTrigger(page).click()
+    await world.goToWorldRow(page).click()
+    await page.waitForURL(/\/world\//)
+    await expect(statusPill.swapPaused(page)).toBeVisible()
+
+    await statusPill.swapPaused(page).click()
+    await page.waitForURL(/\/story-settings\/[^?]+\?tab=memory/)
+    await expect(storySettings.memoryPanel(page)).toBeVisible()
+
+    // Story Settings' own tap switches its tab in place.
+    await storySettings.generationTab(page).click()
+    await expect(storySettings.memoryPanel(page)).toBeHidden()
+    await statusPill.swapPaused(page).click()
+    await expect(storySettings.memoryPanel(page)).toBeVisible()
   })
 })

@@ -1,13 +1,15 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { ChevronDown } from 'lucide-react-native'
+import { ChevronDown, Plus } from 'lucide-react-native'
 import { useMemo, useState } from 'react'
 import { Pressable, ScrollView, View } from 'react-native'
+import { expect, screen } from 'storybook/test'
 
 import { Toolbar } from '@/components/compounds/toolbar'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Icon } from '@/components/ui/icon'
+import { IconAction } from '@/components/ui/icon-action'
 import { Select } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
 import { themes } from '@/lib/themes'
@@ -57,6 +59,19 @@ function KindTriggerPlaceholder({ label }: { label: string }) {
   )
 }
 
+// Toolbar elements besides the search field (and the chip row, when shown);
+// used to assert chrome in both toolbar layouts.
+function toolbarExtras(searchPlaceholder: string, kindSelector: Element): Element[] {
+  const field = screen.getByPlaceholderText(searchPlaceholder).parentElement as Element
+  let toolbar = field
+  while (toolbar.parentElement != null && !toolbar.parentElement.contains(kindSelector)) {
+    toolbar = toolbar.parentElement
+  }
+  return Array.from(toolbar.querySelectorAll('*')).filter(
+    (el) => !el.contains(field) && !field.contains(el),
+  )
+}
+
 const meta: Meta<typeof EntityListPane> = {
   title: 'Shells/EntityListPane',
   component: EntityListPane,
@@ -72,7 +87,6 @@ const LORE_SCOPE = ['title', 'body', 'category', 'tags'] as const
 
 const CHARACTER_FILTERS = ['All', 'In scene', 'Active', 'Staged', 'Retired'] as const
 const THREAD_FILTERS = ['All', 'Active', 'Pending', 'Resolved', 'Failed'] as const
-const LORE_FILTERS = ['All', 'Worldbuilding', 'Politics', 'Religion', 'History'] as const
 
 const FAKE_CHARACTERS = [
   { name: 'Aria', subtitle: 'Lead · in scene' },
@@ -116,7 +130,7 @@ function WorldCharactersHarness() {
     <View style={{ width: 340, height: 560 }} className="rounded-md border border-border">
       <EntityListPane
         kindSelector={<KindTriggerPlaceholder label="Characters" />}
-        addAction={{ label: 'New character', onPress: noop }}
+        addSlot={<IconAction icon={Plus} label="New character" onPress={noop} />}
         search={{
           value: query,
           onChange: setQuery,
@@ -143,6 +157,12 @@ function WorldCharactersHarness() {
 
 export const WorldCharacters: Story = {
   render: () => <WorldCharactersHarness />,
+  play: async () => {
+    const kindSelector = screen.getByRole('button', { name: 'Characters' })
+    expect(toolbarExtras('Search characters…', kindSelector)).toContain(
+      screen.getByRole('button', { name: 'All' }),
+    )
+  },
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -169,7 +189,7 @@ function PlotThreadsHarness() {
             ]}
           />
         }
-        addAction={{ label: addLabel, onPress: noop }}
+        addSlot={<IconAction icon={Plus} label={addLabel} onPress={noop} />}
         search={{
           value: query,
           onChange: setQuery,
@@ -211,7 +231,7 @@ function EmptyHarness() {
     <View style={{ width: 340, height: 560 }} className="rounded-md border border-border">
       <EntityListPane
         kindSelector={<KindTriggerPlaceholder label="Characters" />}
-        addAction={{ label: 'New character', onPress: noop }}
+        addSlot={<IconAction icon={Plus} label="New character" onPress={noop} />}
         search={{
           value: query,
           onChange: setQuery,
@@ -252,31 +272,25 @@ export const Empty: Story = {
 }
 
 // ──────────────────────────────────────────────────────────────────
-// Story 4 — Optional sort slot (lore list). Demonstrates passing a
-// Toolbar.Sort element into the sortControl slot.
+// Story 4 — sort slot. filterChips is null: lore has no chip row (world.md → List filter — lore).
 // ──────────────────────────────────────────────────────────────────
 
 function WithSortHarness() {
   const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState<(typeof LORE_FILTERS)[number]>('All')
   const [sort, setSort] = useState('category')
 
   return (
     <View style={{ width: 340, height: 560 }} className="rounded-md border border-border">
       <EntityListPane
         kindSelector={<KindTriggerPlaceholder label="Lore" />}
-        addAction={{ label: 'New lore entry', onPress: noop }}
+        addSlot={<IconAction icon={Plus} label="New lore entry" onPress={noop} />}
         search={{
           value: query,
           onChange: setQuery,
           placeholder: 'Search lore…',
           scope: LORE_SCOPE,
         }}
-        filterChips={LORE_FILTERS.map((label) => (
-          <Chip key={label} selected={filter === label} onPress={() => setFilter(label)}>
-            {label}
-          </Chip>
-        ))}
+        filterChips={null}
         sortControl={
           <Toolbar.Sort value={sort} onChange={setSort} label="Sort" options={[...SORT_OPTIONS]} />
         }
@@ -298,8 +312,36 @@ export const WithSort: Story = {
 }
 
 // ──────────────────────────────────────────────────────────────────
-// Story 5 — Long list. Demonstrates that scroll containment lives in
-// the body slot, not in the shell's chrome rows.
+// Story 5 — no chip row: null filterChips hides the whole row, not just the chips.
+// ──────────────────────────────────────────────────────────────────
+
+export const NoFilterChips: Story = {
+  render: () => (
+    <View style={{ width: 340, height: 460 }} className="rounded-md border border-border">
+      <EntityListPane
+        kindSelector={<KindTriggerPlaceholder label="Lore" />}
+        addSlot={<IconAction icon={Plus} label="New lore entry" onPress={noop} />}
+        search={{ value: '', onChange: noop, placeholder: 'Search lore…', scope: LORE_SCOPE }}
+        filterChips={null}
+        isEmpty={false}
+        emptyState={null}
+      >
+        <ScrollView className="flex-1">
+          {FAKE_LORE.map((l) => (
+            <FakeListRow key={l.title} label={l.title} subtitle={l.cat} />
+          ))}
+        </ScrollView>
+      </EntityListPane>
+    </View>
+  ),
+  play: async () => {
+    const kindSelector = screen.getByRole('button', { name: 'Lore' })
+    expect(toolbarExtras('Search lore…', kindSelector)).toHaveLength(0)
+  },
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Story 6 — long list; scroll containment lives in the body slot, not the chrome rows.
 // ──────────────────────────────────────────────────────────────────
 
 function LongListHarness() {
@@ -318,7 +360,7 @@ function LongListHarness() {
     <View style={{ width: 340, height: 560 }} className="rounded-md border border-border">
       <EntityListPane
         kindSelector={<KindTriggerPlaceholder label="Characters" />}
-        addAction={{ label: 'New character', onPress: noop }}
+        addSlot={<IconAction icon={Plus} label="New character" onPress={noop} />}
         search={{
           value: query,
           onChange: setQuery,
@@ -348,15 +390,14 @@ export const LongList: Story = {
 }
 
 // ──────────────────────────────────────────────────────────────────
-// Story 6 — Theme matrix. Mirrors the ScreenShell story pattern; one
-// WorldCharacters pane per theme at fixed width.
+// Story 7 — theme matrix, mirrors the ScreenShell story pattern.
 // ──────────────────────────────────────────────────────────────────
 
 function ThemePaneSample() {
   return (
     <EntityListPane
       kindSelector={<KindTriggerPlaceholder label="Characters" />}
-      addAction={{ label: 'New character', onPress: noop }}
+      addSlot={<IconAction icon={Plus} label="New character" onPress={noop} />}
       search={{
         value: '',
         onChange: noop,

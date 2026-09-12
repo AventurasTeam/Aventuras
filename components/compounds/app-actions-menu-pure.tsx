@@ -6,6 +6,8 @@ type AppActionsMenuPureProps = {
   onOpenDiagnosticsHub: () => void
   /** Screen-contributed "ON THIS SCREEN" group; omitted → zone hidden. */
   contextual?: ActionGroup
+  /** The in-story `GO TO` group (go-to-group.ts); omitted off-story. */
+  goTo?: ActionGroup
   /** Passed through to `ActionsMenu`; the route owns the focus state. */
   hotkeyEnabled?: boolean
   /** Passed through to `ActionsMenu`; the route owns which overlays block it. */
@@ -19,6 +21,7 @@ export function AppActionsMenuPure({
   diagnosticsEnabled,
   onOpenDiagnosticsHub,
   contextual,
+  goTo,
   hotkeyEnabled,
   blocked,
 }: AppActionsMenuPureProps) {
@@ -41,7 +44,7 @@ export function AppActionsMenuPure({
   return (
     <ActionsMenu
       contextual={contextual}
-      coreGroups={[appGroup]}
+      coreGroups={goTo != null ? [goTo, appGroup] : [appGroup]}
       triggerLabel={t('chrome.actions')}
       triggerSize="lg"
       hotkeyEnabled={hotkeyEnabled}

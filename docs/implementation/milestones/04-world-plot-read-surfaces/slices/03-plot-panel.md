@@ -228,6 +228,29 @@ chapters` (deferred by canon), and `retrieval_count` review — M5.
 - **Thread `icon` catalog.** The "string key from a preset catalog"
   has no shipped catalog; pick the smallest honest set (a few Lucide
   names) and let visual identity revise.
+- **`ModuleList` / `useRevealScroll` reuse.** Both (`components/world/`)
+  are reusable as-is for Threads and Happenings; the reveal planning
+  inside World's `revealRow` (is the row visible, which group to
+  expand, whether to widen) is entity/World-typed — lift it into a
+  generic helper next to `ModuleList` if Plot needs deep-link reveal.
+  API edges to settle then: `flagged` is required (Plot would pass an
+  empty set), `ModuleList` hard-codes `'all'` as the unfiltered value,
+  and the `⚠ N` collision badge lives inside the generic list.
+- **Filter-set shrinkage.** A kind's `filters(signals)` set can shrink
+  (e.g. `This chapter` hidden when no chapter is open) — the surface
+  must reset a selected filter that is no longer offered; return
+  stable module-level arrays.
+- **World sub-header height.** `MasterDetailLayout`'s sub-header
+  wrapper pads on top of Breadcrumb's own box, so World's sub-header
+  renders taller than its top bar (~52 / 60 px desktop, ~65 px phone)
+  — Plot inherits the same shell. Decide whether to shrink the
+  wrapper's padding here or leave it.
+- **`ListModule`'s entity-typed home.** The C2 type lives in
+  `components/entity/list-module.ts`; its `Signals` parameter defaults
+  to `EntityListSignals`, and `RowSignals` ties `collision` to
+  `CollisionListRowProps`, so Plot's modules would import from the
+  entity folder and inherit entity assumptions. Decide when Plot
+  lands: move the type to a neutral home, and drop the entity default.
 
 ## Implementation notes
 

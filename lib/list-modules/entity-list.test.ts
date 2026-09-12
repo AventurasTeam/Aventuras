@@ -332,12 +332,12 @@ describe('groupEntitiesByTier', () => {
     expect(grouping.groups).toEqual([])
   })
 
-  it('does not pin an Active lead and keeps input order in Active', () => {
+  it('pins an Active lead above the groups and removes it from Active', () => {
     const activeLead = makeEntity({ id: 'char_lead', kind: 'character', name: 'Zed' })
     const activeOther = makeEntity({ id: 'char_other', kind: 'character', name: 'Anna' })
     const grouping = groupEntitiesByTier([activeLead, activeOther], 'char_lead')
-    expect(grouping.pinned).toBeNull()
-    expect(grouping.groups).toEqual([{ key: 'active', rows: [activeLead, activeOther] }])
+    expect(grouping.pinned).toEqual(activeLead)
+    expect(grouping.groups).toEqual([{ key: 'active', rows: [activeOther] }])
   })
 
   it('returns pinned null when leadId is null', () => {

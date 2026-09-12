@@ -200,6 +200,10 @@ slice plans when relevant.
   — a file-load flake, not a test failure; contention is ruled out
   empirically and serializing the project breaks isolation, so check
   `server.fs.allow` first.
+- [Storybook viewport → `useTier` is asynchronous](./storybook-viewport-usetier-async.md)
+  — the viewport control lands before RN-Web's `Dimensions` cache
+  updates, so a tier-dependent play assertion made synchronously
+  after mount can still see the desktop tier; wrap it in `waitFor`.
 
 ### Native deps / install ritual
 

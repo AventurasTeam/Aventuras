@@ -6,7 +6,14 @@ import { Icon } from '@/components/ui/icon'
 import { Text, TextClassContext } from '@/components/ui/text'
 import { cn } from '@/lib/utils'
 
-type TagTone = 'default' | 'soft' | 'success' | 'warning' | 'danger' | 'accent'
+type TagTone =
+  | 'default'
+  | 'soft'
+  | 'success'
+  | 'warning'
+  | 'danger'
+  | 'accent'
+  | 'recently-classified'
 
 const TONE_CLASSES: Record<TagTone, { container: string; label: string; filled: boolean }> = {
   default: {
@@ -39,6 +46,11 @@ const TONE_CLASSES: Record<TagTone, { container: string; label: string; filled: 
     label: 'text-accent-fg',
     filled: true,
   },
+  'recently-classified': {
+    container: 'border-transparent bg-recently-classified-bg',
+    label: 'text-fg-primary',
+    filled: true,
+  },
 }
 
 type TagProps = {
@@ -50,6 +62,7 @@ type TagProps = {
    * - `warning` — filled `bg-warning` + `text-warning-fg` (retired entity, Pending thread, error-pill variant).
    * - `danger` — filled `bg-danger` + `text-danger-fg` (Failed thread).
    * - `accent` — filled `bg-accent` + `text-accent-fg` (gen pill active phase).
+   * - `recently-classified` — tint fill `bg-recently-classified-bg` + `text-fg-primary` (recently classified badge).
    */
   tone?: TagTone
   /**
@@ -64,6 +77,11 @@ type TagProps = {
   onRemove?: () => void
   /** Optional press handler on the tag body itself (clickable label). */
   onPress?: () => void
+  /**
+   * Accessible name for a pressable tag whose visible label is too terse to stand alone
+   * (glyph + count). Ignored without `onPress`.
+   */
+  accessibilityLabel?: string
   disabled?: boolean
   className?: string
   /**
@@ -79,6 +97,7 @@ export function Tag({
   removable,
   onRemove,
   onPress,
+  accessibilityLabel,
   disabled,
   className,
   leading,
@@ -165,6 +184,7 @@ export function Tag({
     <Pressable
       role="button"
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       disabled={disabled}
       onPress={onPress}
       className={baseClass}

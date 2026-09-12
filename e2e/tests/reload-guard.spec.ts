@@ -4,6 +4,7 @@ import type { StorySettings, SuggestionCategory } from '@/lib/db'
 
 import { queryApp } from '../harness/db'
 import { launchApp, type LaunchedApp } from '../harness/launch'
+import { reloadFromMain, suppressNativeUnloadDialogRace } from '../harness/reload'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
@@ -56,21 +57,6 @@ async function redirtyGenerationTab(app: LaunchedApp, label: string): Promise<Su
   await storySettings.categoryLabel(page, original.id).fill(label)
   await expect(storySettings.save(page)).toBeVisible()
   return original
-}
-
-const reloadFromMain = (app: LaunchedApp) =>
-  app.app.evaluate(({ BrowserWindow }) => {
-    BrowserWindow.getAllWindows()[0].webContents.reload()
-  })
-
-// Electron's `will-prevent-unload` (not Playwright's dialog API) decides if a reload proceeds,
-// but Chromium still surfaces it to Playwright as a native `dialog` event, and left to its own
-// timing Playwright intermittently loses the race and throws "No dialog is showing"
-// (microsoft/playwright#36627). Dismiss it ourselves, synchronously; `.catch()` covers the race.
-function suppressNativeUnloadDialogRace(app: LaunchedApp): void {
-  app.window.on('dialog', (dialog) => {
-    void dialog.dismiss().catch(() => {})
-  })
 }
 
 // Serial: these share one app AND each other's end state — `redirtyGenerationTab`

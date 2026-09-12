@@ -118,11 +118,12 @@ it should be.
   slot so the `[+]` can host an `ImporterMenu` (today it renders a bare
   `IconAction`); 4.3 consumes the same slot.
 - **C2 modules — entities and lore:** the `ListModule` interface and
-  its two World instances — list query (LIKE over `name` /
-  `description` / `tags` / `retired_reason`, `json_extract` for
-  single-string state fields, `json_each` for array state fields,
+  its two World instances — list query (an in-memory predicate over
+  the hydrated working set: `name` / `description` / `tags` /
+  `retired_reason` plus the per-kind `state` fields canon scopes,
   composed per active kind; lore over `title` / `body` / `category` /
-  `tags`), the four-layer sort with the lead pinned and the lore
+  `tags` — the branch's lore is hydrated at story open from this
+  slice on), the four-layer sort with the lead pinned and the lore
   two-layer sort, grouping keys, chip vocabularies, search-scope copy,
   empty and no-results copy, and the `EntityRow` / `LoreRow` renderers
   over `ListRow` taking derived signals and a density prop, with the
@@ -180,9 +181,9 @@ it should be.
   the self-omit rule).
 - Search on Characters for a term that appears only in
   `state.visual.hair` matches; the same term on Locations does not;
-  an array field (`traits`) matches via `json_each`, and a term that
-  only appears in JSON syntax never matches (vitest on the query
-  builder against an in-memory DB).
+  an array field (`traits`) matches element-wise, and a term that
+  only appears in JSON syntax or an FK reference never matches
+  (vitest on the search predicate over fixture rows).
 - The entity list order is lead → Active in-scene → Active
   off-scene → Staged → Retired, alphabetical within each; filtering
   to `Staged` keeps alphabetical order; lore sorts by `priority` DESC
@@ -197,7 +198,7 @@ it should be.
   character whose only change is leaving the scene tints; a
   `user_edit` delta never tints (vitest on the C1 module over fixture
   deltas and entries).
-- With the seeded flagged pair, the pill reads `⚠ 1 need review` on
+- With the seeded flagged pair, the pill reads `⚠ 1 needs review` on
   desktop and `⚠ 1` on phone, the flagged row carries the strip,
   collapsing its group shows the badge, and clicking the pill expands
   the group and scrolls to the row (component test plus manual).
@@ -213,8 +214,9 @@ it should be.
 
 ## Tests
 
-- Vitest: C2 query builder (per-kind WHERE composition, JSON-syntax
-  non-match, NULL safety), sort layers, C1 recently-classified matrix
+- Vitest: C2 search predicate and sort (per-kind field scope,
+  JSON-syntax and FK non-match, null safety), sort layers, C1
+  recently-classified matrix
   (fresh / fading / expired, scene-transition touch, source
   exclusions, per-kind aggregate), C1 in-scene selector (characters,
   items, singleton location, inherited tail).
@@ -226,18 +228,101 @@ it should be.
 - E2E (desktop): open World from the reader and from `GO TO`, switch
   category, search, select a row.
 
-## Open questions
-
-- **Turn boundary for C1.** Whether "the last turn" is measured from
-  the latest `ai_reply` entry's position or from the latest
-  `action_id`. Default: the last `ai_reply`, since boot recovery
-  reverse-replays a dangling in-flight turn and a failed turn leaves a
-  system entry behind. Pin in the module's doc comment.
-- **Lore `Recently classified` before M5.** Lore is classifier-touched
-  only at chapter close, which lands in M5; the badge slot is wired
-  here and stays inert until then — confirm nothing in M4 fakes it.
-
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved
-developer decisions._
+- **D1.** C2's query runs in memory over the hydrated working set
+  (lore is hydrated at story open from this slice on); the
+  [SQLite mechanics](../../../../ui/patterns/entity.md#sqlite-mechanics)
+  `entity.md` describes stay the contract for a future SQL path, not
+  a description of the v1 read path.
+- **D2** (resolves the Turn-boundary open question) — C1's boundary is
+  the log-position window of the last two `ai_reply` create deltas
+  (fresh, fading); scene-presence transitions tier the same way,
+  kind-aware like in-scene. Full rule:
+  [`entity.md → Recently-classified row accent`](../../../../ui/patterns/entity.md#recently-classified-row-accent).
+- **D6** (developer, 2026-09-11) — C1 attributes link-table writes
+  (`happening_awareness`, `happening_involvements`,
+  `character_relationships`) to the rows they connect; per-turn
+  retrieval-count bumps are excluded.
+- C1 excludes deltas of reversed runs (`pipeline_runs.outcome`
+  aborted, failed, or recovered) — reversal keeps the log.
+- C1 refetch is keyed on a monotonic `generationStore.settleCount`
+  (bumped when a run leaves `txState` or a reversal settles), shared
+  by every mounted consumer.
+- Known C1 limitations: a manual scene edit on the last two replies
+  reads as a transition and tints (canon says manual edits don't —
+  see [`entity.md → Recently-classified row accent`](../../../../ui/patterns/entity.md#recently-classified-row-accent)
+  and [triage](../../../triage.md)); a classifier happening delete
+  removes its links inside its own delta, so linked characters don't
+  tint.
+- **D3** the route is `/world/[branchId]?kind&id&tab`; **D4** the
+  contextual `Add entity…` / `Add lore…` entries open the `[+]`
+  `ImporterMenu` via a controlled `open` seam (the rn-primitives
+  popover root is uncontrolled, so the seam drives the trigger ref).
+- **D5** (developer, 2026-09-11; revised 2026-09-12) — on the All
+  view the lead is pinned above the tier accordion whatever its tier,
+  and excluded from its group, so collapsing Active never hides it.
+- **Resolves the "Lore Recently classified before M5" open
+  question.** C1 treats every row category generically; lore gets no
+  non-`user_edit` deltas until M5's chapter close, so the badge stays
+  honestly inert this milestone, as assumed.
+- C2's contract is fixed here for 4.3 / 4.5a:
+  `ListModule<Row, Filter, Signals, GroupKey>` — `filters`, `query`, a
+  nullable `grouping`, `copy`, and a `Row` renderer with `density` (a
+  no-op on entity rows, which carry no description line). C2's
+  "tooltip" is `Toolbar.Search`'s ⓘ popover.
+- In-story navigation (`GO TO`, World's breadcrumb story segment and
+  gear, the reader's gear) pops to an exact match already in the
+  stack, else pushes (`hooks/use-surface-navigate.ts`) — never
+  `dismissTo`, which replaces the current screen when the target is
+  absent.
+- The Actions menu (`SearchableOverlayList`'s desktop popover) no
+  longer reclaims focus another surface already took on close —
+  needed for Actions → `[+]`.
+- List reveal (review pill, badge, strip link) expands the target's
+  tier, resets the chip or search only if it hides the target, and
+  scrolls once the accordion's animation settles (mid-animation
+  scrolls clamp short on web); a category switch resets scroll to top
+  unless a reveal lands with it.
+- The collapsed-tier `⚠ N` badge sits right of the chevron, outside
+  the accordion trigger
+  ([`world.md → Surfacing`](../../../../ui/screens/world/world.md#surfacing)):
+  inside the trigger it would nest a button in a button and toggle the
+  tier.
+- `EntityListPane` hides its chip row when `filterChips` is null
+  (lore has no chips, per
+  [`world.md → List filter — lore`](../../../../ui/screens/world/world.md#list-filter--lore)).
+- The list pane's Phone story has no play: the category `Select`
+  opens a Sheet only on native, so the pane has no phone-only web
+  behavior to assert.
+- `ModuleList` and `useRevealScroll` (`components/world/`) are
+  reusable as they are for Plot's threads and happenings; only the
+  reveal planning inside World's `revealRow` is entity/World-typed and
+  would need lifting if [Slice 4.3](./03-plot-panel.md) needs
+  deep-link reveal — see its Open questions.
+- Route pre-selection evidence is the param-parser unit test plus an
+  E2E cold-mount deep link (desktop) and the Android smoke (phone
+  lands-in-detail, first `←`) — there's no route-level component
+  harness, so the acceptance criterion's component test is met by the
+  E2E instead.
+- Breadcrumb: every segment shares one vertical box (`py-2` tablet and
+  desktop, 44px minimum on phone), so the sub-header holds its height
+  across select and deselect; the root grows to fill its row, so in the
+  sub-header the current segment's 70% cap measures the bar, not itself
+  (the top bar's content-sized title slot doesn't — see
+  [triage](../../../triage.md)).
+- The sub-header renders taller than the top bar because
+  `MasterDetailLayout`'s wrapper pads too — see
+  [Slice 4.3](./03-plot-panel.md)'s Open questions.
+- The review pill's target and the pane's list signals are built
+  separately under a comment-only switch-and-reveal contract — see
+  [Slice 4.2c](./02c-collision-review.md)'s Open questions for a
+  possible `revealFirstFlagged()` handle.
+- The route shows the reader's loading copy until the story is open
+  (an empty list would otherwise read "No characters on this branch
+  yet."), and hides `Add entity…` / `Add lore…` until then; a failed
+  open returns to the story list with an error toast, as the reader's
+  does.
+- Seed gained a flagged `Brannoc` namesake pair plus a
+  periodic-classifier create delta; run `pnpm db:seed` to see it
+  locally.

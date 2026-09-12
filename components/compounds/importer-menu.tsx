@@ -1,10 +1,12 @@
-import { ChevronDown } from 'lucide-react-native'
-import { useRef, type ComponentRef } from 'react'
+import { ChevronDown, Plus } from 'lucide-react-native'
+import { useEffect, useLayoutEffect, useRef, type ComponentRef } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
+import { IconAction } from '@/components/ui/icon-action'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Text } from '@/components/ui/text'
 import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useTier } from '@/hooks/use-tier'
@@ -29,19 +31,31 @@ type ImporterMenuOption = {
 }
 
 type ImporterMenuProps = {
-  /** Trigger button label, e.g. `+ New character`, `+ Add calendar`. */
+  /** Trigger label, e.g. `+ New character`; with `trigger="icon"` it is the accessible name. */
   label: string
   /** Action items rendered in the popover, in order. */
   options: readonly ImporterMenuOption[]
-  /**
-   * Trigger Button variant.
-   */
+  /** Trigger Button variant — applies only to the `button` trigger. */
   variant?: 'primary' | 'secondary' | 'ghost'
+  /** Trigger size — both the `button` and `icon` triggers. */
   size?: 'sm' | 'md' | 'lg'
-  /** External disabled state — e.g. permission / write-lock gating. */
+  /** External disabled state — e.g. permission / write-lock gating. Closes an open menu. */
   disabled?: boolean
   className?: string
-}
+  /** `button` (default) renders `label ▾`; `icon` renders a bare `[+]` IconAction. */
+  trigger?: 'button' | 'icon'
+} & (
+  | { open?: never; onOpenChange?: (open: boolean) => void }
+  | {
+      /**
+       * Controlled open state; ignoring a reported `false` desyncs from the trigger, and a
+       * `true` against `disabled` is refused and reported back as `false`. Omit `open` for
+       * uncontrolled, where `onOpenChange` still observes.
+       */
+      open: boolean
+      onOpenChange: (open: boolean) => void
+    }
+)
 
 export function ImporterMenu({
   label,
@@ -50,18 +64,59 @@ export function ImporterMenu({
   size = 'md',
   disabled,
   className,
+  trigger = 'button',
+  open,
+  onOpenChange,
 }: ImporterMenuProps) {
   const triggerRef = useRef<ComponentRef<typeof PopoverTrigger>>(null)
+  const openRef = useRef(open)
+  useLayoutEffect(() => {
+    openRef.current = open
+  }, [open])
 
-  return (
-    <Popover>
+  // Root has no controlled `open` prop — sync through the trigger ref's imperative open()/close().
+  // close() reports `false` via handleOpenChange; reporting a refused `true` keeps a disabled
+  // parent's stale `true` from reopening the menu once re-enabled.
+  useEffect(() => {
+    if (open === true && !disabled) triggerRef.current?.open()
+    else if (open === false || disabled) triggerRef.current?.close()
+  }, [open, disabled])
+
+  // Filters the sync effect's re-drive, which would otherwise echo each open/close twice.
+  const handleOpenChange = (next: boolean) => {
+    if (next !== openRef.current) onOpenChange?.(next)
+  }
+
+  const triggerElement =
+    trigger === 'icon' ? (
+      <PopoverTrigger ref={triggerRef} asChild>
+        <IconAction
+          icon={Plus}
+          label={label}
+          size={size}
+          disabled={disabled}
+          className={className}
+        />
+      </PopoverTrigger>
+    ) : (
       <PopoverTrigger ref={triggerRef} asChild>
         <Button variant={variant} size={size} disabled={disabled} className={className}>
           <Text>{label}</Text>
           <Icon as={ChevronDown} size="sm" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-72 p-1">
+    )
+
+  return (
+    <Popover onOpenChange={handleOpenChange}>
+      {/* IconAction's own title only covers its disabled+reason case — wrap outside
+          the asChild target so the trigger label still surfaces as a hover tooltip. */}
+      {trigger === 'icon' ? (
+        <ReasonTooltip reason={label}>{triggerElement}</ReasonTooltip>
+      ) : (
+        triggerElement
+      )}
+      <PopoverContent align={trigger === 'icon' ? 'end' : 'start'} className="w-72 p-1">
         <View className="flex-col">
           {options.map((opt) => (
             <ImporterMenuItem

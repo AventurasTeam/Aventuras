@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { AppActionsMenuPure } from './app-actions-menu-pure'
+import { buildGoToGroup } from './go-to-group'
 
 const meta: Meta<typeof AppActionsMenuPure> = {
   title: 'Compounds/AppActionsMenuPure',
@@ -60,5 +61,28 @@ export const HotkeyDisabledStillOpensFromTheTrigger: Story = {
 
     await userEvent.click(screen.getByRole('button', { name: /Actions/ }))
     expect(await screen.findByPlaceholderText('Search actions…')).toBeInTheDocument()
+  },
+}
+
+// In-story on World: GO TO renders, `Open World` self-omits, `Open Plot` is
+// present-but-disabled with its lands-later reason, `Open Reader` navigates.
+const navigateFromWorld = fn()
+
+export const InStoryWorld: Story = {
+  args: {
+    diagnosticsEnabled: false,
+    onOpenDiagnosticsHub: fn(),
+    goTo: buildGoToGroup(
+      { storyId: 'story_1', branchId: 'br_1', surface: 'world' },
+      navigateFromWorld,
+    ),
+  },
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: /Actions/ }))
+    await screen.findByPlaceholderText('Search actions…')
+    expect(screen.queryByRole('option', { name: 'Open World' })).toBeNull()
+    expect(screen.getByTitle('Plot lands in Slice 4.3')).toBeInTheDocument()
+    await userEvent.click(await screen.findByRole('option', { name: 'Open Reader' }))
+    await waitFor(() => expect(navigateFromWorld).toHaveBeenCalledWith('/reader-composer/br_1'))
   },
 }

@@ -3,13 +3,13 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useState, type ReactElement } from 'react'
 
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
-import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
+import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import { StorySettingsShell } from '@/components/shells/story-settings-shell'
 import { AuthoringAidsPanel } from '@/components/story-settings/authoring-aids-panel'
 import {
-  selectStorySettingsGenerationRunKind,
   storySettingsGenerationPhase,
+  useStoryGenerationGate,
 } from '@/components/story-settings/generation-run'
 import { MemoryPanel } from '@/components/story-settings/memory-panel'
 import { type StorySettingsPanelData } from '@/components/story-settings/panel-data'
@@ -41,7 +41,6 @@ import {
   awaitRunTerminal,
   generationStore,
   isBackgroundKind,
-  isUserEditBlocked,
   rehydrateStories,
   storiesStore,
 } from '@/lib/stores'
@@ -133,9 +132,10 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
   const definition = storiesStore.useStories(
     (s) => s.rows.find((r) => r.id === storyId)?.definition ?? null,
   )
-  const activeRunKind = generationStore.useGeneration((s) =>
-    selectStorySettingsGenerationRunKind(s.txState, storyId),
+  const currentBranchId = storiesStore.useStories(
+    (s) => s.rows.find((r) => r.id === storyId)?.currentBranchId ?? null,
   )
+  const { activeRunKind, editBlocked, gateReason: disabledReason } = useStoryGenerationGate(storyId)
   // awaitRunTerminal is branch-scoped, and this screen has no branch param. Any
   // cancellable run for this story carries it: runs only exist for the open
   // story/branch.
@@ -144,14 +144,6 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
       [...s.txState.runs.values()].find((r) => r.storyId === storyId && !isBackgroundKind(r.kind))
         ?.branchId ?? null,
   )
-  const editBlocked = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
-  const disabledReason = editBlocked
-    ? t(
-        activeRunKind === 'chapter-close'
-          ? 'generationGate.chapterClose'
-          : 'generationGate.inFlight',
-      )
-    : undefined
 
   // Scoped to THIS route's story: the open story survives navigation, so an
   // unscoped read would show whichever story the session last opened in the
@@ -257,10 +249,20 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
       hideSelfReferentialIcon
       onBack={handleBack}
       actions={
-        <AppActionsMenu beforeNavigate={session.requestLeave} blocked={session.pendingLeave} />
+        <AppActionsMenu
+          story={
+            storyId != null && currentBranchId != null
+              ? { storyId, branchId: currentBranchId, surface: 'story-settings' }
+              : undefined
+          }
+          beforeNavigate={session.requestLeave}
+          blocked={session.pendingLeave}
+        />
       }
       statusSlot={
-        <GenerationStatusPill
+        <StoryStatusPill
+          storyId={storyId ?? null}
+          swapTarget={settings?.embedding_swap_target}
           activePhase={
             activeRunKind != null ? storySettingsGenerationPhase(activeRunKind) : undefined
           }
@@ -269,7 +271,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
               void awaitRunTerminal(activeRunKind, cancelBranchId, 'cancel')
             }
           }}
-          onErrorTap={() => {}}
+          onOpenMemory={() => setSelectedTab('memory')}
         />
       }
     >

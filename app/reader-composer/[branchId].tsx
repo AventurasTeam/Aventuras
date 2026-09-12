@@ -6,7 +6,7 @@ import { Platform, View } from 'react-native'
 
 import { type ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
-import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
+import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { Composer, type ComposerHandle } from '@/components/reader/composer'
 import { isDraftEmpty, planSubmissionHandback } from '@/components/reader/composer-draft'
 import { readerPillPhase } from '@/components/reader/generation-phase'
@@ -43,7 +43,10 @@ import { ScreenShell } from '@/components/shells/screen-shell'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Text } from '@/components/ui/text'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
+import { useLeaveFailedStoryOpen } from '@/hooks/use-leave-failed-story-open'
+import { useSwapState } from '@/hooks/use-memory-health'
 import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
+import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
 import { useTier } from '@/hooks/use-tier'
 import {
   clearSystemEntry,
@@ -95,8 +98,6 @@ import {
   awaitRunTerminal,
   backgroundClassifierRunning,
   currentStoryStore,
-  embedderSwapStore,
-  embeddingStatusStore,
   entitiesStore,
   entriesStore,
   generationStore,
@@ -138,7 +139,6 @@ type BranchHydrationState =
       status: 'success'
       result: Extract<LoadOpenStoryResult, { status: 'ok' }>
     }
-  | { branchId: string; status: 'failure'; result: LoadOpenStoryResult | null }
 
 // Module scope, not useCallback([]): useGlobalHotkey lists `matches` in its effect
 // deps, so identity has to hold unconditionally.
@@ -151,7 +151,6 @@ function matchesJumpToBottomShortcut(ev: KeyboardEvent): boolean {
 }
 
 type ReaderGateState = {
-  hydrationFailed: boolean
   hydrationSucceeded: boolean
   swapPending: boolean
   actionsBlocked: boolean
@@ -160,21 +159,18 @@ type ReaderGateState = {
 // Precedence, not independent conditions: hydration outranks the swap, which
 // outranks a run in flight. An object, so the order can't transpose at the call site.
 function composerDisabledReason(state: ReaderGateState): string | undefined {
-  if (state.hydrationFailed) return t('reader:hydrationFailedBody')
   if (!state.hydrationSucceeded) return t('reader:hydrationLoading')
   if (state.swapPending) return t('reader:actions.blockedWhileSwapping')
   if (state.actionsBlocked) return t('reader:actions.blockedWhileGenerating')
   return undefined
 }
 
-// Same precedence order as above; null means the reader itself renders.
+// Same precedence order as above; null means the reader itself renders. A failed
+// open never lands here: it leaves for the story list.
 function readerPlaceholder(state: {
-  hydrationFailed: boolean
   hydrationSucceeded: boolean
   isEmpty: boolean
 }): { title: string; subtext?: string } | null {
-  if (state.hydrationFailed)
-    return { title: t('reader:hydrationFailedTitle'), subtext: t('reader:hydrationFailedBody') }
   if (!state.hydrationSucceeded) return { title: t('reader:hydrationLoading') }
   if (state.isEmpty) return { title: t('reader:emptyTitle'), subtext: t('reader:emptyBody') }
   return null
@@ -182,6 +178,7 @@ function readerPlaceholder(state: {
 
 export default function ReaderComposerRoute() {
   const router = useRouter()
+  const surfaceNavigate = useSurfaceNavigate()
   const tier = useTier()
   const showRail = tier !== 'phone'
   const isFocused = useIsFocused()
@@ -258,7 +255,6 @@ export default function ReaderComposerRoute() {
   const hydrationIsCurrent = hydration.branchId === branchId
   const hydrationSucceeded =
     hydrationIsCurrent && hydration.status === 'success' && hydration.result.branchId === branchId
-  const hydrationFailed = hydrationIsCurrent && hydration.status === 'failure'
   const openForBranch = hydrationSucceeded && open?.branchId === branchId ? open : null
   const leadEntityId = openForBranch?.definition.leadEntityId ?? null
   const leadName = entitiesStore.useEntities((m) =>
@@ -336,24 +332,12 @@ export default function ReaderComposerRoute() {
   // branch switch replaces the strip's contents, so the error must not ride along.
   useEffect(() => setStripError(null), [branchId, terminalEntry?.id])
 
-  const staleTotal = embeddingStatusStore.useEmbeddingStatus((s) =>
-    embeddingStatusStore.staleTotalFor(s, storyId),
-  )
-  // Narrow selector: a boolean stays stable across embed-batch ticks, where the
-  // run's own entry changes identity on every one (onProgress fires per batch).
-  const swapRunningHere = embedderSwapStore.useSwap(
-    (s) => embedderSwapStore.progressFor(s, storyId) != null,
-  )
-  // A paused swap is signalled off the MARKER, not the stale count: phase-1
-  // staging clears embedding_stale row by row, so a half-finished swap drives
-  // that count toward zero and a healthy story sits at exactly zero throughout.
-  // A live loop reports through the Memory panel's own progress row instead.
-  const swapPaused =
-    storyId != null && openForBranch?.settings.embedding_swap_target != null && !swapRunningHere
+  const swapTarget = openForBranch?.settings.embedding_swap_target
+  const { swapRunning, swapPaused } = useSwapState(storyId, swapTarget)
   // Composing is fine mid-swap; submitting is not. submitTurn refuses either way
   // (a swap owns the vec tables), so gate here rather than let the user write a
   // turn and take a failure entry for it.
-  const swapPending = swapRunningHere || swapPaused
+  const swapPending = swapRunning || swapPaused
 
   const activePhase = readerPillPhase({
     turnKind,
@@ -517,6 +501,7 @@ export default function ReaderComposerRoute() {
     if (storyId != null) void refreshEmbeddingStatus(storyId)
   }, [storyId])
 
+  const leaveFailedOpen = useLeaveFailedStoryOpen()
   useEffect(() => {
     let cancelled = false
     const current = currentStoryStore.getCurrentStory()
@@ -536,16 +521,16 @@ export default function ReaderComposerRoute() {
         if (result.status === 'ok' && result.branchId === branchId) {
           setHydration({ branchId, status: 'success', result })
         } else {
-          setHydration({ branchId, status: 'failure', result })
+          leaveFailedOpen()
         }
       })
       .catch(() => {
-        if (!cancelled) setHydration({ branchId, status: 'failure', result: null })
+        if (!cancelled) leaveFailedOpen()
       })
     return () => {
       cancelled = true
     }
-  }, [branchId])
+  }, [branchId, leaveFailedOpen])
 
   const storyRows = storiesStore.useStories((s) => s.rows)
   useEffect(() => {
@@ -1199,7 +1184,6 @@ export default function ReaderComposerRoute() {
   const { theme } = useTheme()
 
   const placeholder = readerPlaceholder({
-    hydrationFailed,
     hydrationSucceeded,
     isEmpty: entries.length === 0,
   })
@@ -1237,24 +1221,20 @@ export default function ReaderComposerRoute() {
       chapterProgress={openRegionPct}
       onBack={() => router.back()}
       onOpenStorySettings={() => {
-        if (storyId != null) router.push(`/story-settings/${storyId}`)
+        if (storyId != null) surfaceNavigate(`/story-settings/${storyId}`)
       }}
       actions={
         <AppActionsMenu
           contextual={contextualActions}
+          story={storyId != null ? { storyId, branchId, surface: 'reader' } : undefined}
           blocked={rollback != null || timeEdit != null}
         />
       }
       statusSlot={
-        <GenerationStatusPill
+        <StoryStatusPill
+          storyId={storyId}
+          swapTarget={swapTarget}
           activePhase={activePhase}
-          error={
-            swapPaused
-              ? { code: 'swap-paused' }
-              : staleTotal > 0
-                ? { code: 'memory-incomplete', pendingRows: staleTotal }
-                : undefined
-          }
           // A background classifier pass has no cancel affordance, so the prop is
           // absent rather than a no-op handler that would still open the dialog.
           {...(isGenerating || refreshingSuggestions
@@ -1266,9 +1246,8 @@ export default function ReaderComposerRoute() {
                   void awaitRunTerminal(turnKind ?? SUGGESTION_REFRESH_KIND, branchId, 'cancel'),
               }
             : {})}
-          onErrorTap={(code) => {
-            if (code !== 'classifier-offline' && storyId != null)
-              router.push(`/story-settings/${storyId}?tab=memory`)
+          onOpenMemory={() => {
+            if (storyId != null) router.push(`/story-settings/${storyId}?tab=memory`)
           }}
         />
       }
@@ -1332,7 +1311,6 @@ export default function ReaderComposerRoute() {
                 disabled={!hydrationSucceeded || swapPending}
                 sendBlocked={actionsBlocked}
                 disabledReason={composerDisabledReason({
-                  hydrationFailed,
                   hydrationSucceeded,
                   swapPending,
                   actionsBlocked,

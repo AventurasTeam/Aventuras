@@ -1,5 +1,6 @@
+import { t } from '@/lib/i18n'
 import { SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
-import { isBackgroundKind, type TxState } from '@/lib/stores'
+import { generationStore, isBackgroundKind, isUserEditBlocked, type TxState } from '@/lib/stores'
 
 type StorySettingsGenerationPhase =
   | 'generating-narrative'
@@ -30,6 +31,25 @@ export function selectStorySettingsGenerationRunKind(
     storyRuns.find((candidate) => candidate.kind !== SUGGESTION_REFRESH_KIND) ??
     storyRuns[0]
   return run?.kind ?? null
+}
+
+/** Why an in-story edit is blocked right now, or undefined when it isn't. */
+export function generationGateReason(
+  editBlocked: boolean,
+  runKind: string | null,
+): string | undefined {
+  if (!editBlocked) return undefined
+  return t(runKind === 'chapter-close' ? 'generationGate.chapterClose' : 'generationGate.inFlight')
+}
+
+/** The run the story's status pill describes, and whether and why in-story edits are blocked. */
+export function useStoryGenerationGate(storyId: string | undefined) {
+  const activeRunKind = generationStore.useGeneration((s) =>
+    selectStorySettingsGenerationRunKind(s.txState, storyId),
+  )
+  const editBlocked = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
+  const gateReason = generationGateReason(editBlocked, activeRunKind)
+  return { activeRunKind, editBlocked, gateReason }
 }
 
 export function storySettingsGenerationPhase(kind: string): StorySettingsGenerationPhase {

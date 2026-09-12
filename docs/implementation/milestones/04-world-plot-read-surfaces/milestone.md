@@ -238,20 +238,24 @@ renders, so no consumer computes its own.
 
 **Recently-classified.** Given the branch's delta rows and its latest
 entries, return `ReadonlyMap<rowId, RecentlyClassified>` — the
-shipped value union from `components/compounds/list-row.tsx`
-(`'fresh' | 'fading'`) — over every classifier-touched row across
+value union from `lib/row-signals/types.ts` (`'fresh' | 'fading'`)
+— over every classifier-touched row across
 `entities`, `lore`, `threads` and `happenings`, plus a per-kind
 aggregate (`fresh` if any contributor is fresh, `fading` if all are
 fading, absent otherwise) for the rail strip's cells and the phone
-Browse chip. "Touched" follows
-[the accent rule](../../../ui/patterns/entity.md#recently-classified-row-accent):
-deltas whose `source` is a pipeline agent (not `user_edit`) anchored
-within the last two turns, **and** scene-presence transitions read by
-diffing `metadata.sceneEntities` / `metadata.currentLocationId`
-between the latest entry and its predecessor. Decay is pinned at two
-turns as this milestone's default; that resolves a
-[`plot.md` open question](../../../ui/screens/plot/plot.md#screen-specific-open-questions),
-so 4.1's PR amends `plot.md` to record it.
+Browse chip. The exact rule is fixed in 4.1: a delta log-position
+window over the create deltas of the last two `ai_reply` entries
+(fresh, fading), tiering pipeline-source deltas (not `user_edit`)
+directly and link-table writes (`happening_awareness`,
+`happening_involvements`, `character_relationships`) by the rows they
+connect; scene-presence transitions tier per reply, kind-aware like
+in-scene; deltas of reversed runs are excluded. See
+[`entity.md → Recently-classified row
+accent`](../../../ui/patterns/entity.md#recently-classified-row-accent)
+for the full rule. Decay at two turns resolves the
+[`plot.md` open question](../../../ui/screens/plot/plot.md#screen-specific-open-questions)
+of the same name, which 4.1's PR removes now that `entity.md` carries
+the rule.
 
 **In-scene.** From the branch tail's scene triple (read through the
 reader's inherited-metadata helper, so a tail `user_action` inherits
@@ -261,8 +265,7 @@ set of row ids.
 
 Consumers: 4.1 (World rows, detail-head badge), 4.3 (Plot rows and
 badge), 4.5a (rail rows, strip cells and counts, Browse chip), 4.5b
-(peek head badge). Exact turn-boundary rule and names fixed in 4.1's
-first commit.
+(peek head badge).
 
 ### C2 — Per-kind list modules
 
@@ -535,7 +538,7 @@ use.
   lists the edit and the classifier's earlier writes.
 - **Collision resolved.** On a branch with a `name_collision_flag`
   pair (seeded by 4.1 or real): the top-bar pill reads
-  `⚠ 1 need review`, the flagged row carries the strip, and merging through `Resolve →` removes the losing row, moves its awareness and involvement
+  `⚠ 1 needs review`, the flagged row carries the strip, and merging through `Resolve →` removes the losing row, moves its awareness and involvement
   rows, rewrites inverse refs, clears the flag and writes everything
   under one `action_id`; CTRL-Z restores both rows and the restored
   loser is `embedding_stale` (vitest on the driver plus manual smoke).
