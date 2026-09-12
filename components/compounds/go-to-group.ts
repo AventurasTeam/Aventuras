@@ -13,30 +13,24 @@ export type InStorySurface = (typeof IN_STORY_SURFACES)[number]
 /** What an in-story screen hands the Actions menu so the GO TO group can render. */
 export type InStoryContext = { storyId: string; branchId: string; surface: InStorySurface }
 
-/** The surface's route, or null while it has no route yet. */
-export function inStoryRoute(
-  surface: InStorySurface,
-  story: Pick<InStoryContext, 'storyId' | 'branchId'>,
-): string | null {
-  switch (surface) {
-    case 'reader':
-      return `/reader-composer/${story.branchId}`
-    case 'world':
-      return `/world/${story.branchId}`
-    case 'story-settings':
-      return `/story-settings/${story.storyId}`
-    case 'plot':
-    case 'chapter-timeline':
-      return null
-  }
-}
+type StoryIds = Pick<InStoryContext, 'storyId' | 'branchId'>
 
-const ENTRY: Record<
-  InStorySurface,
-  { id: string; label: () => string; landsLater?: () => string }
-> = {
-  reader: { id: 'open-reader', label: () => t('chrome.goTo.openReader') },
-  world: { id: 'open-world', label: () => t('chrome.goTo.openWorld') },
+type SurfaceEntry = { id: string; label: () => string } & (
+  | { route: (story: StoryIds) => string }
+  | { landsLater: () => string }
+)
+
+const ENTRY: Record<InStorySurface, SurfaceEntry> = {
+  reader: {
+    id: 'open-reader',
+    label: () => t('chrome.goTo.openReader'),
+    route: (story) => `/reader-composer/${story.branchId}`,
+  },
+  world: {
+    id: 'open-world',
+    label: () => t('chrome.goTo.openWorld'),
+    route: (story) => `/world/${story.branchId}`,
+  },
   plot: {
     id: 'open-plot',
     label: () => t('chrome.goTo.openPlot'),
@@ -47,7 +41,17 @@ const ENTRY: Record<
     label: () => t('chrome.goTo.openChapterTimeline'),
     landsLater: () => t('chrome.goTo.chapterTimelineLandsLater'),
   },
-  'story-settings': { id: 'open-story-settings', label: () => t('chrome.goTo.openStorySettings') },
+  'story-settings': {
+    id: 'open-story-settings',
+    label: () => t('chrome.goTo.openStorySettings'),
+    route: (story) => `/story-settings/${story.storyId}`,
+  },
+}
+
+/** The surface's route, or null while it has no route yet. */
+export function inStoryRoute(surface: InStorySurface, story: StoryIds): string | null {
+  const entry = ENTRY[surface]
+  return 'route' in entry ? entry.route(story) : null
 }
 
 // actions-menu.md → Curated core: self-omits current surface, unbuilt disables (not hides).
@@ -57,18 +61,18 @@ export function buildGoToGroup(
 ): ActionGroup {
   const entries = IN_STORY_SURFACES.filter((surface) => surface !== story.surface).map(
     (surface) => {
-      const spec = ENTRY[surface]
-      const route = inStoryRoute(surface, story)
-      if (route == null) {
-        return {
-          id: spec.id,
-          label: spec.label(),
-          disabled: true,
-          disabledReason: spec.landsLater?.(),
-          onActivate: () => {},
-        }
+      const entry = ENTRY[surface]
+      if ('route' in entry) {
+        const route = entry.route(story)
+        return { id: entry.id, label: entry.label(), onActivate: () => navigate(route) }
       }
-      return { id: spec.id, label: spec.label(), onActivate: () => navigate(route) }
+      return {
+        id: entry.id,
+        label: entry.label(),
+        disabled: true,
+        disabledReason: entry.landsLater(),
+        onActivate: () => {},
+      }
     },
   )
   return { id: 'go-to', header: t('chrome.goTo.header'), entries }
