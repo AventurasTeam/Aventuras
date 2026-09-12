@@ -286,9 +286,9 @@ it should be.
   unless a reveal lands with it.
 - The collapsed-tier `⚠ N` badge sits right of the chevron, outside
   the accordion trigger
-  ([`world.md → Surfacing`](../../../../ui/screens/world/world.md#surfacing)
-  says "right of the group count"; inside the trigger it would nest a
-  button in a button and toggle the tier).
+  ([`world.md → Surfacing`](../../../../ui/screens/world/world.md#surfacing)):
+  inside the trigger it would nest a button in a button and toggle the
+  tier.
 - `EntityListPane` hides its chip row when `filterChips` is null
   (lore has no chips, per
   [`world.md → List filter — lore`](../../../../ui/screens/world/world.md#list-filter--lore)).

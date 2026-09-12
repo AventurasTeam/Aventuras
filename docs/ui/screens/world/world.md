@@ -660,7 +660,8 @@ discovery step.
 3. **Collapsed-accordion badge** — when an accordion group
    (Active / Staged / Retired) is collapsed AND contains one or
    more flagged rows, the group header carries a small
-   `⚠ N` count badge to the right of the group count. Keeps
+   `⚠ N` count badge right of its chevron, outside the accordion
+   trigger so pressing it never toggles the group. Keeps
    the signal visible without overriding the user's manual
    collapse intent. Click the badge → expands the group and
    scrolls to its first flagged row. Hidden when the group is
