@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import type { ReactNode } from 'react'
 import { View } from 'react-native'
-import { expect, screen, userEvent } from 'storybook/test'
+import { expect, screen, userEvent, waitFor } from 'storybook/test'
 
 import {
   AlertDialog,
@@ -338,5 +338,33 @@ export const FocusGateSuppressesTheShortcut: Story = {
     // The trigger itself is untouched — only the listener is gated, unlike `blocked`.
     await userEvent.click(screen.getByRole('button', { name: /Actions/ }))
     expect(await screen.findByPlaceholderText('Search actions…')).toBeInTheDocument()
+  },
+}
+
+// onCloseAutoFocus skips its default focus restore only once another surface
+// has focus; on every ordinary close it must still return focus to the trigger,
+// or keyboard users land nowhere across every consumer that uses this menu.
+export const ClosingReturnsFocusToTheTrigger: Story = {
+  render: () => <ActionsMenu contextual={WORLD_CONTEXT} coreGroups={[GO_TO, STORY_TOOLS, APP]} />,
+  play: async () => {
+    const trigger = screen.getByRole('button', { name: /Actions/ })
+
+    await userEvent.click(trigger)
+    const entry = await screen.findByRole('option', { name: 'Add entity…' })
+    await userEvent.click(entry)
+    expect(screen.queryByPlaceholderText('Search actions…')).not.toBeInTheDocument()
+    await waitFor(() => expect(document.activeElement).toBe(trigger))
+
+    await userEvent.click(trigger)
+    await screen.findByRole('option', { name: 'Add entity…' })
+    await userEvent.keyboard('{ArrowDown}{Enter}')
+    expect(screen.queryByPlaceholderText('Search actions…')).not.toBeInTheDocument()
+    await waitFor(() => expect(document.activeElement).toBe(trigger))
+
+    await userEvent.click(trigger)
+    await screen.findByPlaceholderText('Search actions…')
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByPlaceholderText('Search actions…')).not.toBeInTheDocument()
+    await waitFor(() => expect(document.activeElement).toBe(trigger))
   },
 }

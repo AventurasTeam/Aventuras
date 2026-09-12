@@ -89,11 +89,7 @@ function WorldCharacterHarness() {
           kindIcon={<EntityKindIcon kind="character" />}
           kindName="character"
           nameSlot={<InlineEditableName value={name} onChange={setName} size="lg" />}
-          badges={
-            <Tag tone="accent" leading={<Icon as={Sparkles} size="sm" />}>
-              Recently classified
-            </Tag>
-          }
+          badges={<Tag tone="recently-classified">Recently classified</Tag>}
           overflowMenu={<OverflowTrigger />}
           tabs={
             <TabsList>
@@ -275,11 +271,7 @@ function DirtyHarness() {
           kindIcon={<EntityKindIcon kind="character" />}
           kindName="character"
           nameSlot={<InlineEditableName value={name} onChange={setName} size="lg" />}
-          badges={
-            <Tag tone="accent" leading={<Icon as={Sparkles} size="sm" />}>
-              Recently classified
-            </Tag>
-          }
+          badges={<Tag tone="recently-classified">Recently classified</Tag>}
           overflowMenu={<OverflowTrigger />}
           tabs={
             <TabsList>

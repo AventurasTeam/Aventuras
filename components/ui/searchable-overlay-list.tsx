@@ -1046,6 +1046,11 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
       role="dialog"
       aria-label={ariaLabel}
       aria-labelledby={ariaLabelledBy}
+      onCloseAutoFocus={(e) => {
+        // Don't reclaim focus another surface already took.
+        const active = document.activeElement
+        if (active && active !== document.body) e.preventDefault()
+      }}
       className={cn(
         'z-50 rounded-md border border-border bg-bg-overlay p-4',
         !props.matchTriggerWidth && 'w-80',

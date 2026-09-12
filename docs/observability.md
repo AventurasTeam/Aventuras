@@ -191,11 +191,15 @@ convention, and the expectation that subsystems route through
   renders empty, which silently drops every world-time footer in the
   window), `pad_width_invalid`
 - `app.*` — cross-cutting runtime events not owned by a single
-  subsystem. Currently all three members come from the global
-  rejection handler's backstop (`lib/boot/rejection-handler.ts`) and
-  are all always recorded regardless of the master gate — see
-  Console mirroring, below: `unhandled_rejection`,
-  `rejection_handled_late`, `rejection_tracker_unavailable`
+  subsystem. The global rejection handler's backstop
+  (`lib/boot/rejection-handler.ts`) emits three kinds, all always
+  recorded regardless of the master gate — see Console mirroring,
+  below: `unhandled_rejection`, `rejection_handled_late`,
+  `rejection_tracker_unavailable`. `row_signals_read_failed`
+  (`hooks/use-row-signals.ts`, a bounded-read failure) and
+  `world_story_load_failed` (the World route's cold-mount
+  `loadOpenStory` rejection) are gated by the master gate like any
+  other kind
 - `reader.*` — reader-composer dispatches routed through `runAction`
   (`lib/utils.ts`) instead of a bare `void`: `story_id_load_failed`,
   `undo_failed`, `redo_failed`, `rollback_failed`, `regenerate_failed`

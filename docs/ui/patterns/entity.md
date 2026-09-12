@@ -170,6 +170,10 @@ group when a non-All filter is active." Pattern lives here because
 World entities adopted it first; Plot generalized to the keys above
 without changing the rendering primitive.
 
+On World, the lead pin wins over grouping: a non-Active lead renders
+pinned above the tier groups and is not repeated in its tier (the
+Browse rail follows the same rule).
+
 ---
 
 ## Search scope
@@ -196,12 +200,12 @@ Names trace into [`entities.state`](../../data-model.md#world-state-storage)
 via `json_extract` / `json_each` (see [SQLite
 mechanics](#sqlite-mechanics) below).
 
-| Kind      | State fields in scope                                                                                                                       |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Character | `traits[]`, `drives[]`, `voice`, `visual.physique`, `visual.face`, `visual.hair`, `visual.eyes`, `visual.attire`, `visual.distinguishing[]` |
-| Location  | `condition`                                                                                                                                 |
-| Item      | `condition`                                                                                                                                 |
-| Faction   | `standing`, `agenda[]`                                                                                                                      |
+| Kind      | State fields in scope                                                                                                                     |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Character | `traits[]`, `drives[]`, `voice`, `visual.physique`, `visual.face`, `visual.hair`, `visual.eyes`, `visual.attire`, `visual.distinguishing` |
+| Location  | `condition`                                                                                                                               |
+| Item      | `condition`                                                                                                                               |
+| Faction   | `standing`, `agenda[]`                                                                                                                    |
 
 ### Explicitly out of scope
 
@@ -237,11 +241,11 @@ shape.
 - **Top-level columns** (`name`, `description`, `tags`,
   `retired_reason`) — `LIKE` (existing).
 - **Single-string state fields** (`voice`, `condition`,
-  `standing`, `visual.physique`, etc.) —
+  `standing`, `visual.physique`, `visual.distinguishing`, etc.) —
   `json_extract(state, '$.<path>') LIKE '%query%'`. NULL-safe
   (`NULL LIKE x` is NULL → falsy).
-- **Array state fields** (`traits`, `drives`, `agenda`,
-  `visual.distinguishing`) **must use `json_each`** with `LIKE`
+- **Array state fields** (`traits`, `drives`, `agenda`)
+  **must use `json_each`** with `LIKE`
   on the `value` column — same shape `tags` already uses.
   Partial-`LIKE` on raw `json_extract` of an array would match
   against JSON syntax (commas, brackets, quotes) and is brittle.
@@ -254,6 +258,13 @@ FTS5 upgrade path is unchanged — [`patterns/lists.md → Search bar
 scope`](./lists.md#search-bar-scope) names the threshold; [`parked.md
 → FTS5 upgrade for search`](../../parked.md#fts5-upgrade-for-search)
 carries the deferred work. v1 stays on LIKE + JSON1.
+
+**Where v1 actually filters.** The World list pane and the Browse
+rail filter the hydrated working-set stores in memory with exactly
+this field scope (`lib/list-modules`); the branch's entities and lore
+are held whole at story open. The SQLite mechanics above are the
+contract for the day search moves into SQL or FTS5, not a description
+of the v1 read path.
 
 **Translation rows are not searched.** Search runs over
 source-language text only; the
@@ -483,10 +494,10 @@ fading by name.
 
 **What counts as "touched."** Any classifier-authored change
 concerning the row — writes to the entity's stored state JSON,
-scene-presence transitions on the latest entry's
-`metadata.sceneEntities` or `metadata.currentLocationId`, and any
-future classifier-authored signal touching the row. The signal is
-about classifier-driven world change, not about which storage
+scene-presence transitions computed per reply over the last two
+`ai_reply` entries (latest fresh, previous fading), kind-aware like
+in-scene, and any future classifier-authored signal touching the row.
+The signal is about classifier-driven world change, not about which storage
 location got written: a character whose only change this turn is
 "left the kitchen" tints, even though the entity's own state JSON
 didn't change. Manual user edits (peek-drawer pencil edits,
@@ -510,12 +521,22 @@ signals. Color separation is also load-bearing: the
 `--recently-classified-bg` slot is reserved for "recently written,"
 other signals get their own treatments.
 
-**Detail-pane mirroring.** The tint is echoed in the detail head as
-a "Recently classified" badge in the same color, visible while the
-row is in the fresh or fading state and decaying alongside the row
-tint. Self-documenting via visual repetition — open a row, see the
-same signal echoed in text. No copy needed beyond the badge label.
+**Detail-pane mirroring.** The tint is echoed in the detail head as a
+"Recently classified" badge in the same color. The badge is shown
+while the row is tinted (fresh or fading), at full strength per
+[`foundations/color.md → Recently-classified
+slot`](../foundations/color.md#recently-classified-slot) — presence
+is the signal; the row tint alone carries the decay. Self-documenting
+via visual repetition — open a row, see the same signal echoed in
+text. No copy needed beyond the badge label.
 
-**Implementation.** Computed runtime from the delta log; no schema
-change. Decay rule is hardcoded for v1 (1-2 turns); revisit if users
+**Implementation.** Computed at runtime from the delta log; no schema
+change. Decay is hardcoded at two turns, measured in delta log
+positions of the create deltas of the last two `ai_reply` entries.
+Pipeline-source deltas on entities, lore, threads and happenings
+count directly; link-table writes (`happening_awareness`,
+`happening_involvements`, `character_relationships`) attribute to the
+rows they connect, with per-turn retrieval-count bumps excluded;
+deltas of reversed runs are excluded. Coordinates are write-time, so a
+periodic classifier pass tints whenever it lands. Revisit if users
 want configurability.

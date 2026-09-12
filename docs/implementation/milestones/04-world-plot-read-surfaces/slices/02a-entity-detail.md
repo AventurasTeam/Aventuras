@@ -242,6 +242,12 @@ the asset gallery pass` / `lands in Slice 4.2b`).
   commits immediately (one-field session, like the peek exception) or
   joins the pane's session as a `deleteCharacterRelationship` in the
   group. Default: joins, so one Save reverses everything.
+- **`visual.distinguishing` shape drift.**
+  [`world.md → Identity`](../../../../ui/screens/world/world.md#identity--editable-body-of-who-this-is)
+  (~208) shows it as a chip list; the schema
+  ([`data-model.md → CharacterState shape`](../../../../data-model.md#characterstate-shape))
+  has it as a single string. Fix the Identity-tab treatment to the
+  string shape and amend `world.md`.
 
 ## Implementation notes
 

@@ -270,6 +270,9 @@ type CollisionListRowProps = {
     otherName: string
     onJumpToOther: () => void
     onResolve: () => void
+    /** Keeps Resolve visible but inert; the reason doubles as its tooltip and a11y hint. */
+    resolveDisabled?: boolean
+    resolveDisabledReason?: string
   }
 }
 ```
@@ -316,8 +319,8 @@ row + region as siblings.
   only per
   [`world.md → Authorship and 3+ collisions`](../screens/world/world.md#authorship-and-3-collisions).
 - **Disabled-while-generating gating on the `Resolve →` button** —
-  the caller passes `row.disabled` through; the dialog and strip
-  are unaware of generation state. The
+  the caller passes `collision.resolveDisabled` and its reason; the
+  dialog and strip are unaware of generation state itself. The
   [edit-restrictions rule](../principles.md#edit-restrictions-during-in-flight-generation)
   is enforced at the World consumer.
 

@@ -133,6 +133,9 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
   const definition = storiesStore.useStories(
     (s) => s.rows.find((r) => r.id === storyId)?.definition ?? null,
   )
+  const currentBranchId = storiesStore.useStories(
+    (s) => s.rows.find((r) => r.id === storyId)?.currentBranchId ?? null,
+  )
   const activeRunKind = generationStore.useGeneration((s) =>
     selectStorySettingsGenerationRunKind(s.txState, storyId),
   )
@@ -257,7 +260,15 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
       hideSelfReferentialIcon
       onBack={handleBack}
       actions={
-        <AppActionsMenu beforeNavigate={session.requestLeave} blocked={session.pendingLeave} />
+        <AppActionsMenu
+          story={
+            storyId != null && currentBranchId != null
+              ? { storyId, branchId: currentBranchId, surface: 'story-settings' }
+              : undefined
+          }
+          beforeNavigate={session.requestLeave}
+          blocked={session.pendingLeave}
+        />
       }
       statusSlot={
         <GenerationStatusPill

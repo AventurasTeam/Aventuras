@@ -176,6 +176,12 @@ chip, whose tint is the aggregate classifier signal.
   row, and amend `navigation.md`'s empty-state rule in this PR.
 - **Rail width.** Canon says ~300 px; the placeholder is 260 px. Pick
   at planning against the reader's narrow-window behavior.
+- **Empty-state copy mismatch.** `world:empty.classifierBody` says
+  "+ New", which the rail doesn't have — needs per-surface empty
+  subtext. More broadly, `EntityRow` and list-module copy read the
+  `world:` i18n namespace, so the rail pulls World's namespace into
+  the reader — decide whether to move the shared C2 copy to a neutral
+  namespace.
 
 ## Implementation notes
 

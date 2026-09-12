@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
+import { expect, fn, screen, userEvent } from 'storybook/test'
 
 import { EntityKindIcon } from '@/components/entity/entity-kind-icon'
 import { Text } from '@/components/ui/text'
@@ -24,9 +25,11 @@ const baseRow = {
 
 const baseCollision = {
   otherName: 'Kael',
-  onJumpToOther: () => {},
-  onResolve: () => {},
+  onJumpToOther: fn(),
+  onResolve: fn(),
 }
+
+const onResolveDisabled = fn()
 
 export const Default: Story = {
   render: () => (
@@ -34,6 +37,11 @@ export const Default: Story = {
       <CollisionListRow row={baseRow} collision={baseCollision} />
     </View>
   ),
+  play: async () => {
+    const resolveButton = screen.getByRole('button', { name: 'Resolve →' })
+    await userEvent.click(resolveButton)
+    expect(baseCollision.onResolve).toHaveBeenCalledTimes(1)
+  },
 }
 
 export const LongCollisionTarget: Story = {
@@ -104,4 +112,28 @@ export const ThemeMatrix: Story = {
       ))}
     </View>
   ),
+}
+
+/** Resolve stays visible but inert, with its reason as the tooltip. */
+export const ResolveDisabledWithReason: Story = {
+  render: () => (
+    <View style={{ width: 360 }}>
+      <CollisionListRow
+        row={baseRow}
+        collision={{
+          ...baseCollision,
+          onResolve: onResolveDisabled,
+          resolveDisabled: true,
+          resolveDisabledReason: 'Lands in Slice 4.2c',
+        }}
+      />
+    </View>
+  ),
+  play: async () => {
+    expect(screen.getByTitle('Lands in Slice 4.2c')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '⚠ Collides with Kael' })).toBeInTheDocument()
+    const resolveButton = screen.getByRole('button', { name: 'Resolve →' })
+    await userEvent.click(resolveButton, { pointerEventsCheck: 0 })
+    expect(onResolveDisabled).not.toHaveBeenCalled()
+  },
 }

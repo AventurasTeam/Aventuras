@@ -158,6 +158,25 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   update arm's `UPDATABLE` set makes any future user-edit path able to
   flip it; confirm no classifier path routes through the user-edit
   arm so the M1.5 operational seam stays the only setter.
+- **Orphaned flags.** World derives each flagged row's "Collides
+  with" target from a same-kind namesake; a flagged row with no
+  namesake left (e.g. after a Merge that keeps the newer, flagged row
+  and deletes the older — canon never says the survivor's flag
+  clears — or after a rename or delete in 4.2a / 4.2b) gets no strip
+  and no pill count, so its flag can never be cleared. Decide: count
+  flagged rows directly and render a no-namesake strip, or have
+  merge / rename / delete clear the orphaned flag (and write that
+  into canon). Also canon drift: [world.md → Authorship and 3+
+  collisions](../../../../ui/screens/world/world.md#authorship-and-3-collisions)
+  says the remaining pair "re-surfaces in the filter view", but
+  [Surfacing](../../../../ui/screens/world/world.md#surfacing)
+  rejected the filter chip.
+- **`revealFirstFlagged()` handle.** The review pill's target
+  (`components/world/first-flagged-row.ts`) and the pane's list
+  signals are built separately, and the switch-plus-reveal "one
+  synchronous handler" contract is comment-only, not type-enforced. A
+  `revealFirstFlagged()` handle method would own both if this slice
+  touches the pill.
 
 ## Implementation notes
 

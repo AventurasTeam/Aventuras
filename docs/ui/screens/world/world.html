@@ -292,11 +292,11 @@
   body[data-review-state="has-flags"] .list-row.flagged > .row-main { padding: 8px 8px; }
   body[data-review-state="none"] .list-row.flagged { display: none; }
 
-  /* Group-header flag badge — shown when the group contains flagged rows.
-     Doubly-helpful when collapsed (the strips are hidden behind the
-     accordion); still shows when expanded (cheap chrome, useful at-a-glance). */
+  /* Group-header flag badge — shown only when the group is collapsed AND
+     contains flagged rows; hidden once expanded, since the strips
+     themselves are visible then (world.md → Surfacing). */
   .list-group-header .group-flag { display: none; font-size: 9px; color: #7a4f1a; padding: 1px 6px; border: 1px solid var(--warn); border-radius: 999px; background: #fdf6e8; cursor: pointer; }
-  body[data-review-state="has-flags"] .list-group.has-flags .group-flag { display: inline-flex; align-items: center; gap: 3px; }
+  body[data-review-state="has-flags"] .list-group.has-flags.collapsed .group-flag { display: inline-flex; align-items: center; gap: 3px; }
 
   /* Resolve dialog — anchored to .viewport. Mobile reflow noted in world.md → Mobile expression. */
   .resolve-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.18); display: none; z-index: 25; align-items: flex-start; justify-content: center; padding: 32px 24px; box-sizing: border-box; overflow: auto; }
@@ -677,9 +677,9 @@
           <span class="group-collapse">&#9662;</span>
           <span>Active</span>
           <span class="group-count">5</span>
-          <!-- Group flag badge — visible only when body[data-review-state="has-flags"]
-               AND .list-group.has-flags. Visible regardless of expand state, but
-               doubly-helpful when collapsed (strip is hidden, badge is the only signal). -->
+          <!-- Group flag badge — shown only when the group is collapsed AND
+               has-flags; hidden once expanded, since the strips themselves
+               are visible then (world.md → Surfacing). -->
           <span class="group-flag" title="Click to expand and jump to first flagged row">&#9888; 1</span>
         </div>
         <div class="list-group-body">

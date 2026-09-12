@@ -360,9 +360,6 @@ inherit unchanged.
 
 ## Screen-specific open questions
 
-- **Recently-classified decay rule** — currently "fades over 1-2
-  turns." Worth making configurable (`stories.settings.recentlyClassifiedTurns`),
-  or hardcode 2? Lean: hardcode 2 for v1, revisit if users want more.
 - **Visual icon set for thread / happening categories** — placeholder
   glyphs only; finalize with the visual identity session.
 - **Entry-ref picker UX** — picking a `triggered_at_entry_id`,

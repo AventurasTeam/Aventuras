@@ -142,6 +142,16 @@ Sheet.
   unchanged for those kinds and defines no body; the summaries above
   are the default assumption — confirm and, if kept, add a line to
   `reader-composer.md`.
+- **Deep-link stack matching ignores params.** `hooks/use-surface-navigate.ts`
+  matches stack entries on the path only, so `/world/<branch>?kind=…&id=…`
+  pops back to an existing World screen and drops the selection — and
+  does nothing at all when that World screen is already on top,
+  dropping the selection the same way. Decide: match on path plus
+  params, or `setParams` when the params differ.
+- **Deep-linked selection isn't revealed.** A row selected via the
+  deep link is selected but not revealed in the list (its tier stays
+  collapsed, the list sits at the top) — call the list's `revealRow`
+  once the story is hydrated.
 
 ## Implementation notes
 

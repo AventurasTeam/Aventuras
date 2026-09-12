@@ -44,6 +44,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Text } from '@/components/ui/text'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
 import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
+import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
 import { useTier } from '@/hooks/use-tier'
 import {
   clearSystemEntry,
@@ -182,6 +183,7 @@ function readerPlaceholder(state: {
 
 export default function ReaderComposerRoute() {
   const router = useRouter()
+  const surfaceNavigate = useSurfaceNavigate()
   const tier = useTier()
   const showRail = tier !== 'phone'
   const isFocused = useIsFocused()
@@ -1237,11 +1239,12 @@ export default function ReaderComposerRoute() {
       chapterProgress={openRegionPct}
       onBack={() => router.back()}
       onOpenStorySettings={() => {
-        if (storyId != null) router.push(`/story-settings/${storyId}`)
+        if (storyId != null) surfaceNavigate(`/story-settings/${storyId}`)
       }}
       actions={
         <AppActionsMenu
           contextual={contextualActions}
+          story={storyId != null ? { storyId, branchId, surface: 'reader' } : undefined}
           blocked={rollback != null || timeEdit != null}
         />
       }

@@ -3,9 +3,8 @@ import { Platform, Pressable, View } from 'react-native'
 
 import { Text } from '@/components/ui/text'
 import { POINTER_EVENTS_NONE } from '@/constants/styles'
+import type { RecentlyClassified } from '@/lib/row-signals'
 import { cn } from '@/lib/utils'
-
-type RecentlyClassified = 'fresh' | 'fading'
 
 type ListRowProps = {
   /** Primary text — entity name, thread title, happening summary. */

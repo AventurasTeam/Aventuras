@@ -33,12 +33,10 @@ type DetailPaneProps = {
   badges?: ReactNode
 
   /**
-   * ⋯ menu content (Set as lead, Export entity, View raw JSON,
-   * Delete entity, etc.). Consumer renders the trigger + popover
-   * (using `ImporterMenu` or a Popover-with-trigger pattern); the
-   * shell only anchors the slot on the right of the name row.
+   * ⋯ menu content (Set as lead, Export entity, View raw JSON, Delete entity, etc.). Consumer
+   * renders trigger and popover; shell only anchors the slot. Omitted for a read-only placeholder.
    */
-  overflowMenu: ReactNode
+  overflowMenu?: ReactNode
 
   /**
    * Tabs primitive **strip** — consumer renders a `<TabsList>` of
@@ -67,7 +65,7 @@ type DetailPaneProps = {
    * </Tabs>
    * ```
    */
-  tabs: ReactNode
+  tabs?: ReactNode
   children: ReactNode
 
   /**
@@ -105,19 +103,21 @@ export function DetailPane({
           {badges != null ? (
             <View className="shrink-0 flex-row items-center gap-2">{badges}</View>
           ) : null}
-          <View className="shrink-0">{overflowMenu}</View>
+          {overflowMenu != null ? <View className="shrink-0">{overflowMenu}</View> : null}
         </View>
       </View>
 
       <View className="h-px bg-border" />
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        className="flex-none"
-        contentContainerClassName="px-row-x-md"
-      >
-        {tabs}
-      </ScrollView>
+      {tabs != null ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          className="flex-none"
+          contentContainerClassName="px-row-x-md"
+        >
+          {tabs}
+        </ScrollView>
+      ) : null}
 
       <ScrollView className="min-h-0 flex-1" contentContainerClassName="px-row-x-md py-row-y-md">
         {children}
