@@ -109,12 +109,6 @@ slice-planning gate forces its resolution before that slice is planned.
   current-segment cap measures the breadcrumb's own text, biting only
   when the current segment is more than ~2.3× the rest (e.g. a
   one-character story title). Fix belongs in the shell's title slot.
-- **World's category-label lowercasing is English-only.**
-  (2026-09-11) The search placeholder and the empty-list title
-  lowercase the category label in code, in the app language, so a
-  translation whose nouns keep their capital (German) can't opt out.
-  A formatter in the string itself (`{{category, lowercase}}`) would
-  hand the choice to translators.
 - **Collapsed-tier badge drops focus.** (2026-09-11) Clicking the
   collapsed-tier `⚠ N` badge unmounts it (the tier expands), dropping
   keyboard focus to the page body; move focus to the revealed row
