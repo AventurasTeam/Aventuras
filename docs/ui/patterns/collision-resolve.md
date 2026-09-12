@@ -266,21 +266,19 @@ footer: `[ Cancel ]` · `[ Keep as distinct ]`.
 ```ts
 type CollisionListRowProps = {
   row: ListRowProps // forwarded verbatim
-  collision: {
-    otherName: string
-    onJumpToOther: () => void
-    onResolve: () => void
-    /** Keeps Resolve visible but inert; the reason doubles as its tooltip and a11y hint. */
-    resolveDisabled?: boolean
-    resolveDisabledReason?: string
-  }
+  collision: { otherName: string; onJumpToOther: () => void } & (
+    | { onResolve: () => void; resolveDisabledReason?: never }
+    // Resolve stays visible but inert; the reason doubles as its tooltip and a11y hint.
+    | { onResolve?: never; resolveDisabledReason: string }
+  )
 }
 ```
 
 Forwarding `ListRowProps` verbatim keeps the row's contract intact.
 The strip is rendered as a sibling `<View>` below the row's
 `<Pressable>` — outside its tap surface so the strip's own buttons
-own their tap targets cleanly.
+own their tap targets cleanly. Resolve either acts or says why it
+can't; an inert Resolve with no reason can't be expressed.
 
 ### Strip render
 
@@ -292,7 +290,8 @@ The compound stacks two children:
    - `<Pressable onPress={collision.onJumpToOther}>` rendering
      `⚠ Collides with <otherName>` (link styling, underlined).
    - `<Button>` labeled `Resolve →` (compact / secondary variant),
-     wired to `collision.onResolve`.
+     wired to `collision.onResolve`, or disabled with
+     `collision.resolveDisabledReason` as its tooltip and a11y hint.
 
 The strip's tap surfaces are separate from the row's `Pressable`.
 On phone, the strip's two children stack vertically if the layout
@@ -307,11 +306,8 @@ row + region as siblings.
 
 ## Out of scope
 
-- **World top-bar `⚠ N need review` pill** — screen chrome. Covered
-  by
-  [`generation-status-pill.md → Open items`](./generation-status-pill.md#open-items)
-  (the `Tag tone="warning"` extension that unblocks it now ships
-  per [`chips.md → Tag tone vocabulary`](./chips.md#tag--tone-vocabulary)).
+- **World top-bar `⚠ N need review` pill** — screen chrome; see
+  [`world.md → Surfacing`](../screens/world/world.md#surfacing).
 - **Collapsed-accordion `⚠ N` badge** — screen chrome on the World
   accordion groups.
 - **3+ collision iteration** — multi-way collision orchestration is

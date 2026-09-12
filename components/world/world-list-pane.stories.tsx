@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useMemo, useRef, useState } from 'react'
 import { View } from 'react-native'
-import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { ImporterMenu } from '@/components/compounds/importer-menu'
 import { Button } from '@/components/ui/button'
@@ -122,8 +122,6 @@ const SIGNALS: RowSignalsSnapshot = {
   },
 }
 
-const onResolveCollision = fn()
-
 const TIER_HEADER = /^(Active|Staged|Retired)\s*\d+$/
 
 type HarnessProps = {
@@ -212,8 +210,7 @@ function Harness({
           setSelectedId(id)
           ref.current?.revealRow(id)
         }}
-        onResolveCollision={onResolveCollision}
-        resolveDisabledReason="Lands in Slice 4.2c"
+        resolveCollision={{ disabledReason: 'Lands in Slice 4.2c' }}
         addSlot={
           <ImporterMenu
             trigger="icon"

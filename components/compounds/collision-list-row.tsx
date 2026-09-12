@@ -10,18 +10,18 @@ import { ListRow, type ListRowProps } from './list-row'
 
 type CollisionListRowProps = {
   row: ListRowProps
-  collision: {
-    otherName: string
-    onJumpToOther: () => void
-    onResolve: () => void
-    /** Keeps Resolve visible but inert; `resolveDisabledReason` is its tooltip and a11y hint. */
-    resolveDisabled?: boolean
-    resolveDisabledReason?: string
-  }
+  collision: { otherName: string; onJumpToOther: () => void } & (
+    | { onResolve: () => void; resolveDisabledReason?: never }
+    | {
+        onResolve?: never
+        /** Keeps Resolve visible but inert; the reason is its tooltip and a11y hint. */
+        resolveDisabledReason: string
+      }
+  )
 }
 
 export function CollisionListRow({ row, collision }: CollisionListRowProps) {
-  const resolveDisabled = collision.resolveDisabled === true
+  const disabledReason = collision.resolveDisabledReason
   return (
     <View>
       <ListRow {...row} />
@@ -50,8 +50,8 @@ export function CollisionListRow({ row, collision }: CollisionListRowProps) {
           <Button
             variant="secondary"
             onPress={collision.onResolve}
-            disabled={resolveDisabled}
-            disabledReason={resolveDisabled ? collision.resolveDisabledReason : undefined}
+            disabled={disabledReason != null}
+            disabledReason={disabledReason}
           >
             <Text>{t('collisionRow.resolve')}</Text>
           </Button>

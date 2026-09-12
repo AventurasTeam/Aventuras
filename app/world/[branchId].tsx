@@ -313,9 +313,7 @@ export default function WorldRoute() {
               leadLabel={leadLabel}
               collisions={collisions}
               onJumpToRow={jumpToRow}
-              // Resolve is disabled via resolveDisabledReason, so this callback never fires.
-              onResolveCollision={() => {}}
-              resolveDisabledReason={t('world:collision.resolveReason')}
+              resolveCollision={{ disabledReason: t('world:collision.resolveReason') }}
               addSlot={
                 <ImporterMenu
                   trigger="icon"

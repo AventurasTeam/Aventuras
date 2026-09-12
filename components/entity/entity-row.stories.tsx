@@ -138,8 +138,6 @@ export const Collision: Story = {
       collision: {
         otherName: 'Brannoc',
         onJumpToOther,
-        onResolve: fn(),
-        resolveDisabled: true,
         resolveDisabledReason: 'Lands in Slice 4.2c',
       },
     },

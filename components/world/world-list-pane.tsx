@@ -56,9 +56,8 @@ export type WorldListPaneProps = {
   collisions: ReadonlyMap<string, CollisionTarget>
   /** In-surface jump from a collision strip: select and reveal the other row. */
   onJumpToRow: (id: string) => void
-  onResolveCollision: (id: string) => void
-  /** Present → Resolve renders disabled with this reason. */
-  resolveDisabledReason?: string
+  /** Resolve on each flagged row: acts on it, or stays inert with this reason. */
+  resolveCollision: { onResolve: (id: string) => void } | { disabledReason: string }
   addSlot: ReactNode
   ref?: Ref<WorldListPaneHandle>
 }
@@ -96,8 +95,7 @@ export function WorldListPane({
   leadLabel,
   collisions,
   onJumpToRow,
-  onResolveCollision,
-  resolveDisabledReason,
+  resolveCollision,
   addSlot,
   ref,
 }: WorldListPaneProps) {
@@ -156,9 +154,9 @@ export function WorldListPane({
           : {
               otherName: target.otherName,
               onJumpToOther: () => onJumpToRow(target.otherId),
-              onResolve: () => onResolveCollision(id),
-              resolveDisabled: resolveDisabledReason != null,
-              resolveDisabledReason,
+              ...('onResolve' in resolveCollision
+                ? { onResolve: () => resolveCollision.onResolve(id) }
+                : { resolveDisabledReason: resolveCollision.disabledReason }),
             },
     }
   }

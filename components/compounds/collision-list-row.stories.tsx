@@ -29,8 +29,6 @@ const baseCollision = {
   onResolve: fn(),
 }
 
-const onResolveDisabled = fn()
-
 export const Default: Story = {
   render: () => (
     <View style={{ width: 360 }}>
@@ -121,9 +119,8 @@ export const ResolveDisabledWithReason: Story = {
       <CollisionListRow
         row={baseRow}
         collision={{
-          ...baseCollision,
-          onResolve: onResolveDisabled,
-          resolveDisabled: true,
+          otherName: baseCollision.otherName,
+          onJumpToOther: baseCollision.onJumpToOther,
           resolveDisabledReason: 'Lands in Slice 4.2c',
         }}
       />
@@ -132,8 +129,9 @@ export const ResolveDisabledWithReason: Story = {
   play: async () => {
     expect(screen.getByTitle('Lands in Slice 4.2c')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '⚠ Collides with Kael' })).toBeInTheDocument()
-    const resolveButton = screen.getByRole('button', { name: 'Resolve →' })
-    await userEvent.click(resolveButton, { pointerEventsCheck: 0 })
-    expect(onResolveDisabled).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Resolve →' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
   },
 }
