@@ -469,6 +469,32 @@
     }
   }
 
+  /**
+   * Run a generation under its own lease.
+   *
+   * Acquiring is the first thing a handler does, before it touches anything: a refusal then
+   * has nothing to undo, and every side effect written above the acquire would otherwise
+   * inherit an obligation to reverse itself that nothing enforces.
+   *
+   * `generateResponse` takes the lease as a required parameter, so a handler cannot skip
+   * acquiring one. This is the other half — releasing — which a handler copied from another
+   * can lose without the compiler noticing.
+   */
+  async function withGenerationLease(run: (lease: GenerationLease) => Promise<void>) {
+    let lease: GenerationLease
+    try {
+      lease = story.acquireGenerationLease()
+    } catch (error) {
+      ui.showToast(errMessage(error), 'error')
+      return
+    }
+    try {
+      await run(lease)
+    } finally {
+      await lease.finish()
+    }
+  }
+
   async function generateResponse(
     lease: GenerationLease,
     userActionEntryId: string,
@@ -1026,41 +1052,28 @@
 
   async function handleSubmit() {
     if (!inputValue.trim() || ui.isGenerating || !story.currentStory) return
+    const currentStory = story.currentStory
 
-    ui.clearGenerationError()
-    ui.resetScrollBreak()
-    ui.clearSuggestions(story.currentStory.id)
+    await withGenerationLease(async (lease) => {
+      ui.clearGenerationError()
+      ui.resetScrollBreak()
+      ui.clearSuggestions(currentStory.id)
 
-    const rawInput = inputValue.trim()
-    const wasRawActionChoice = isRawActionChoice
-    const forceFreeMode = settings.uiSettings.disableActionPrefixes
+      const rawInput = inputValue.trim()
+      const wasRawActionChoice = isRawActionChoice
+      const forceFreeMode = settings.uiSettings.disableActionPrefixes
 
-    let content: string
-    if (isCreativeMode || wasRawActionChoice || forceFreeMode) content = rawInput
-    else content = actionPrefixes[actionType] + rawInput + actionSuffixes[actionType]
+      let content: string
+      if (isCreativeMode || wasRawActionChoice || forceFreeMode) content = rawInput
+      else content = actionPrefixes[actionType] + rawInput + actionSuffixes[actionType]
 
-    isRawActionChoice = false
-    inputValue = ''
-    if (textareaRef) textareaRef.scrollTop = 0
+      isRawActionChoice = false
+      inputValue = ''
+      if (textareaRef) textareaRef.scrollTop = 0
 
-    // Claimed before the snapshot: everything below reads or writes on this generation's
-    // behalf, and the awaits between here and the narration are long enough to switch in.
-    let lease: GenerationLease
-    try {
-      lease = story.acquireGenerationLease()
-    } catch (error) {
-      // The box was cleared above on the assumption this would go ahead. Give the text back
-      // rather than making the reader retype it.
-      inputValue = rawInput
-      isRawActionChoice = wasRawActionChoice
-      ui.showToast(errMessage(error), 'error')
-      return
-    }
-
-    try {
-      const embeddedImageIds = await database.getEmbeddedImageIdsForStory(story.currentStory.id)
+      const embeddedImageIds = await database.getEmbeddedImageIdsForStory(currentStory.id)
       ui.createRetryBackup(
-        story.currentStory.id,
+        currentStory.id,
         lease.branchId,
         story.entries,
         story.characters,
@@ -1072,7 +1085,7 @@
         rawInput,
         actionType,
         wasRawActionChoice,
-        story.currentStory.timeTracker,
+        currentStory.timeTracker,
       )
 
       const {
@@ -1096,9 +1109,7 @@
       // retrieval and classification working from a different wording than the narration —
       // and the retry path already passes `promptContent`, so the two disagreed.
       await generateResponse(lease, userActionEntry.id, promptContent, { inputTranslation })
-    } finally {
-      await lease.finish()
-    }
+    })
   }
 
   async function handleStopGeneration() {
@@ -1188,15 +1199,7 @@
     const error = ui.lastGenerationError
     if (!error || ui.isGenerating) return
 
-    let lease: GenerationLease
-    try {
-      lease = story.acquireGenerationLease()
-    } catch (err) {
-      ui.showToast(errMessage(err), 'error')
-      return
-    }
-
-    try {
+    await withGenerationLease(async (lease) => {
       const userActionEntry = story.entries.find((e) => e.id === error.userActionEntryId)
       if (!userActionEntry) {
         ui.clearGenerationError()
@@ -1219,9 +1222,7 @@
         countStyleReview: false,
         styleReviewSource: 'retry-error',
       })
-    } finally {
-      await lease.finish()
-    }
+    })
   }
 
   function dismissError() {
@@ -1248,15 +1249,7 @@
 
     // Claimed before the undo, which is itself an asynchronous write on this generation's
     // behalf.
-    let lease: GenerationLease
-    try {
-      lease = story.acquireGenerationLease()
-    } catch (error) {
-      ui.showToast(errMessage(error), 'error')
-      return
-    }
-
-    try {
+    await withGenerationLease(async (lease) => {
       let undo: { entitiesUndone: boolean; timeUndone: boolean }
       try {
         undo = await story.undoNarrationForRegenerate(entryId, lease)
@@ -1285,9 +1278,7 @@
         styleReviewSource: 'regenerate',
         cachedRetrievalResult: cachedRetrieval ? ui.retrievalResultFor(cachedRetrieval) : null,
       })
-    } finally {
-      await lease.finish()
-    }
+    })
   }
 
   async function handleRetryLastMessage() {
@@ -1306,15 +1297,7 @@
 
     // Claimed before the rewind, which deletes entries and entities on this generation's
     // behalf before the model is ever called.
-    let lease: GenerationLease
-    try {
-      lease = story.acquireGenerationLease()
-    } catch (error) {
-      ui.showToast(errMessage(error), 'error')
-      return
-    }
-
-    try {
+    await withGenerationLease(async (lease) => {
       const result = await retryService.handleRetryLastMessage(
         backup,
         {
@@ -1335,7 +1318,7 @@
           clearSuggestions: () => ui.clearSuggestions(storyId),
           clearActionChoices: () => ui.clearActionChoices(storyId),
         },
-        { storyId, branchId: story.currentStory.currentBranchId ?? null },
+        lease,
       )
 
       if (!result.success) {
@@ -1375,9 +1358,7 @@
       } finally {
         ui.setRetryingLastMessage(false)
       }
-    } finally {
-      await lease.finish()
-    }
+    })
   }
 
   function handleKeydown(event: KeyboardEvent) {

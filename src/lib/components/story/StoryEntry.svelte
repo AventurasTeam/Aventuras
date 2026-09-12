@@ -58,6 +58,7 @@
   import { formatDuration, turnDuration } from '$lib/services/activity'
   import { countTokens } from '$lib/services/tokenizer'
   import { errMessage } from '$lib/utils/error'
+  import { sameBranchScope } from '$lib/utils/branchScope'
   import { Button } from '$lib/components/ui/button'
   import * as Popover from '$lib/components/ui/popover'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
@@ -187,9 +188,8 @@
   const canRetry = $derived(
     isLatestNarration &&
       ui.retryBackup &&
-      story.currentStory &&
-      ui.retryBackup.storyId === story.currentStory.id &&
-      (ui.retryBackup.branchId ?? null) === (story.currentStory.currentBranchId ?? null) &&
+      story.currentScope &&
+      sameBranchScope(ui.retryBackup, story.currentScope) &&
       !entriesLocked &&
       !ui.lastGenerationError,
   )
@@ -387,9 +387,8 @@
   const canSaveAndRegenerate = $derived(
     isLastUserAction &&
       !!ui.retryBackup &&
-      !!story.currentStory &&
-      ui.retryBackup.storyId === story.currentStory.id &&
-      (ui.retryBackup.branchId ?? null) === (story.currentStory.currentBranchId ?? null),
+      !!story.currentScope &&
+      sameBranchScope(ui.retryBackup, story.currentScope),
   )
 
   async function handleCreateCheckpoint() {

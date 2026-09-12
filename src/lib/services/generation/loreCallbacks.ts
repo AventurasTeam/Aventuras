@@ -12,6 +12,7 @@
  */
 
 import { story } from '$lib/stores/story.svelte'
+import { sameBranchScope, type BranchScope } from '$lib/utils/branchScope'
 import { ui } from '$lib/stores/ui.svelte'
 import { aiService } from '$lib/services/ai'
 import { database } from '$lib/services/database'
@@ -27,10 +28,7 @@ import type {
  * The callbacks write through the `story` store, which always means the story open *now*,
  * while a session outlives the turn that started it.
  */
-export interface LoreCallbackScope {
-  storyId: string
-  branchId: string | null
-}
+export type LoreCallbackScope = BranchScope
 
 /**
  * Refuse a write meant for a branch that is no longer open.
@@ -39,8 +37,8 @@ export interface LoreCallbackScope {
  * than reporting a tidy-up that wrote nothing.
  */
 function assertScope(scope: LoreCallbackScope, action: string): void {
-  const current = story.currentStory
-  if (current?.id === scope.storyId && current.currentBranchId === scope.branchId) return
+  const current = story.currentScope
+  if (current && sameBranchScope(current, scope)) return
   throw new Error(
     `Lore management: refusing to ${action}. The session was started for story ${scope.storyId}` +
       ` (branch ${scope.branchId ?? 'main'}), which is no longer the open one.`,

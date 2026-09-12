@@ -18,6 +18,7 @@ import type {
   PersistentCharacterSnapshot,
 } from '$lib/types'
 import { createLogger } from '$lib/log'
+import { sameBranchScope, type BranchScope } from '$lib/utils/branchScope'
 
 const log = createLogger('RetryService')
 
@@ -90,10 +91,7 @@ export interface RetryStoreCallbacks {
 }
 
 /** The story and branch a restore is allowed to touch. */
-export interface RestoreScope {
-  storyId: string
-  branchId: string | null
-}
+export type RestoreScope = BranchScope
 
 /**
  * Result of a restore operation
@@ -160,9 +158,8 @@ export class RetryService {
   }
 
   private refuseForeignScope(backup: RetryBackupData, active: RestoreScope): RestoreResult | null {
+    if (sameBranchScope(backup, active)) return null
     const sameStory = backup.storyId === active.storyId
-    const sameBranch = (backup.branchId ?? null) === (active.branchId ?? null)
-    if (sameStory && sameBranch) return null
     log('Restore refused: snapshot belongs elsewhere', {
       snapshot: { storyId: backup.storyId, branchId: backup.branchId },
       active,

@@ -9,3 +9,20 @@
 export function branchScopeKey(storyId: string, branchId: string | null): string {
   return `${storyId}:${branchId ?? 'main'}`
 }
+
+/** A story and one of its branches. `null` is the main branch. */
+export interface BranchScope {
+  storyId: string
+  branchId: string | null
+}
+
+/**
+ * Whether two scopes name the same branch of the same story.
+ *
+ * Normalises the branch on both sides. A missing branch reaches this as `null` from the store
+ * and as `undefined` from anything spread out of a partial record, and a comparison that tells
+ * those apart reports one branch as two — the same divergence `branchScopeKey` exists to stop.
+ */
+export function sameBranchScope(a: BranchScope, b: BranchScope): boolean {
+  return a.storyId === b.storyId && (a.branchId ?? null) === (b.branchId ?? null)
+}

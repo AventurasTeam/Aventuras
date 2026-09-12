@@ -59,6 +59,7 @@ import { grammarService } from '$lib/services/grammar'
 import { clearTier3SelectionCache } from '$lib/services/ai'
 import { clearImageMarkerCache } from '$lib/services/image'
 import { GenerationLease } from '$lib/utils/generationLease'
+import { sameBranchScope, type BranchScope } from '$lib/utils/branchScope'
 
 const log = createLogger('StoryStore')
 
@@ -863,7 +864,7 @@ class StoryStore {
   async addEntry(
     type: StoryEntry['type'],
     content: string,
-    expected: { storyId: string; branchId: string | null },
+    expected: BranchScope,
     metadata?: StoryEntry['metadata'],
     reasoning?: string,
     id?: string,
@@ -876,10 +877,7 @@ class StoryStore {
     // catches a path that bypasses the lease, rather than writing to whatever happens to be
     // open on arrival. The story is checked too — two stories' main branches are both null,
     // so the branch alone would let a write cross between them.
-    if (
-      expected.storyId !== this.currentStory.id ||
-      expected.branchId !== (this.currentStory.currentBranchId ?? null)
-    ) {
+    if (!this.isOpen(expected)) {
       throw new Error(
         'The open story or branch changed while a generation was writing to it. This is a ' +
           'bug in the generation lease, not something you did — the entry was not saved.',
@@ -927,12 +925,16 @@ class StoryStore {
     return entry
   }
 
+  /** The story and branch currently loaded, for anything that must check it still is. */
+  get currentScope(): BranchScope | null {
+    if (!this.currentStory) return null
+    return { storyId: this.currentStory.id, branchId: this.currentStory.currentBranchId ?? null }
+  }
+
   /** Whether the given story and branch are still the ones loaded in memory. */
-  private isOpen(scope: { storyId: string; branchId: string | null }): boolean {
-    return (
-      this.currentStory?.id === scope.storyId &&
-      (this.currentStory.currentBranchId ?? null) === scope.branchId
-    )
+  private isOpen(scope: BranchScope): boolean {
+    const current = this.currentScope
+    return !!current && sameBranchScope(current, scope)
   }
 
   // Update a story entry
