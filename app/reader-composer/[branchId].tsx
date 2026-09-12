@@ -139,7 +139,6 @@ type BranchHydrationState =
       status: 'success'
       result: Extract<LoadOpenStoryResult, { status: 'ok' }>
     }
-  | { branchId: string; status: 'failure'; result: LoadOpenStoryResult | null }
 
 // Module scope, not useCallback([]): useGlobalHotkey lists `matches` in its effect
 // deps, so identity has to hold unconditionally.
@@ -521,14 +520,11 @@ export default function ReaderComposerRoute() {
         if (result.status === 'ok' && result.branchId === branchId) {
           setHydration({ branchId, status: 'success', result })
         } else {
-          setHydration({ branchId, status: 'failure', result })
           leaveFailedOpen()
         }
       })
       .catch(() => {
-        if (cancelled) return
-        setHydration({ branchId, status: 'failure', result: null })
-        leaveFailedOpen()
+        if (!cancelled) leaveFailedOpen()
       })
     return () => {
       cancelled = true
