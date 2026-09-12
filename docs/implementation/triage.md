@@ -153,3 +153,10 @@ slice-planning gate forces its resolution before that slice is planned.
   queues as a `GO_BACK` with no `canGoBack()` check, so nothing
   happens. Read from expo-router's source, not run. A `canGoBack()`
   fallback to the story list would fix all three.
+- **Collision strip's role contradicts canon.** (2026-09-12,
+  pre-existing)
+  [`collision-resolve.md → Accessibility`](../ui/patterns/collision-resolve.md#accessibility)
+  specifies `accessibilityRole="region"`, but `CollisionListRow` has
+  rendered `role="alert"` since it shipped, which screen readers
+  announce assertively as each flagged row mounts. Pick one and align
+  the other.
