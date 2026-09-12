@@ -44,13 +44,18 @@ type ImporterMenuProps = {
   className?: string
   /** `button` (default) renders `label ▾`; `icon` renders a bare `[+]` IconAction. */
   trigger?: 'button' | 'icon'
-  /**
-   * Controlled open state; ignoring a reported `false` desyncs from the trigger, and a `true`
-   * against `disabled` is refused and reported back as `false`. Omit both props for uncontrolled.
-   */
-  open?: boolean
-  onOpenChange?: (open: boolean) => void
-}
+} & (
+  | { open?: never; onOpenChange?: (open: boolean) => void }
+  | {
+      /**
+       * Controlled open state; ignoring a reported `false` desyncs from the trigger, and a
+       * `true` against `disabled` is refused and reported back as `false`. Omit `open` for
+       * uncontrolled, where `onOpenChange` still observes.
+       */
+      open: boolean
+      onOpenChange: (open: boolean) => void
+    }
+)
 
 export function ImporterMenu({
   label,
