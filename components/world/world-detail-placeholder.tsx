@@ -49,6 +49,8 @@ export function WorldDetailPlaceholder({
           </Text>
         }
         badges={badge}
+        overflowMenu={null}
+        tabs={null}
       >
         <EmptyState
           title={t('world:detail.lorePlaceholder')}
@@ -67,6 +69,8 @@ export function WorldDetailPlaceholder({
         </Text>
       }
       badges={badge}
+      overflowMenu={null}
+      tabs={null}
     >
       <EmptyState
         title={t('world:detail.entityPlaceholder')}

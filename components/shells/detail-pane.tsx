@@ -34,13 +34,14 @@ type DetailPaneProps = {
 
   /**
    * ⋯ menu content (Set as lead, Export entity, View raw JSON, Delete entity, etc.). Consumer
-   * renders trigger and popover; shell only anchors the slot. Omitted for a read-only placeholder.
+   * renders trigger and popover; shell only anchors the slot. `null` for a read-only placeholder.
    */
-  overflowMenu?: ReactNode
+  overflowMenu: ReactNode
 
   /**
    * Tabs primitive **strip** — consumer renders a `<TabsList>` of
-   * `<TabsTrigger>` children from `components/ui/tabs.tsx`.
+   * `<TabsTrigger>` children from `components/ui/tabs.tsx`; `null` while the
+   * pane has no tabs (a read-only placeholder).
    *
    * **Integration pattern.** The Tabs primitive's
    * `TabsList` / `TabsContent` read state from a shared `<Tabs>`
@@ -65,7 +66,7 @@ type DetailPaneProps = {
    * </Tabs>
    * ```
    */
-  tabs?: ReactNode
+  tabs: ReactNode
   children: ReactNode
 
   /**
