@@ -4,7 +4,6 @@
   "emptyBody": "Your story will begin here.",
   "hydrationLoading": "Loading story…",
   "hydrationFailedTitle": "Couldn't open this story",
-  "hydrationFailedBody": "The link may be invalid or the story data may be corrupted.",
   "composerPlaceholder": "Write your next turn…",
   "send": "Send",
   "railPlaceholder": "World-state browse",

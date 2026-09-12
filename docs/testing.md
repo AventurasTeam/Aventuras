@@ -222,11 +222,11 @@ import from `locators/` and `flows/`; they do not construct raw
 selectors inline.
 
 The same rule covers navigation: specs reach a screen by driving the
-UI, never by `page.goto`. The one exception is
-`e2e/tests/reader-hydration-failed.spec.ts`, which hand-writes a
-reader URL for a branch that does not exist, because no in-app path
-can produce that state — both reader entry points navigate only
-after `loadOpenStory` succeeds — and because the deep-route fallback
+UI, never by `page.goto`. The standing exception is
+`e2e/tests/story-open-failure.spec.ts`, which hand-writes reader and
+World URLs for a branch that does not exist, because no in-app path
+can produce that state — every entry point navigates only after
+`loadOpenStory` succeeds — and because the deep-route fallback
 (`app://bundle` → `index.html`) is itself the seam under test. A new
 spec that wants a URL needs the same two-part justification in a
 comment, or it does not get one.

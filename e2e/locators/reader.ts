@@ -107,10 +107,6 @@ export const reader = {
   regenerateConfirm: (page: Page): Locator =>
     page.getByRole('button', { name: t('reader:regenerateConfirm.confirm'), exact: true }),
 
-  // Bad-branch hydration failure state.
-  hydrationFailed: (page: Page): Locator =>
-    page.getByText(t('reader:hydrationFailedTitle'), { exact: false }),
-
   // Next-turn suggestion strip (components/reader/suggestion-strip.tsx). The
   // chip's accessible name is the interpolated chipLabel ("Category: text"),
   // not the chip prose alone, so the locator takes both parts.

@@ -29,6 +29,7 @@ import {
   worldAddLabel,
   worldCategoryLabel,
 } from '@/components/world/world-selection'
+import { useLeaveFailedStoryOpen } from '@/hooks/use-leave-failed-story-open'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
 import { memoryPillError, useMemoryHealth } from '@/hooks/use-memory-health'
 import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
@@ -74,35 +75,38 @@ export default function WorldRoute() {
   const [filter, setFilter] = useState<EntityFilter>('all')
   const [search, setSearch] = useState('')
   const [addOpen, setAddOpen] = useState(false)
-  const [failedBranchId, setFailedBranchId] = useState<string | null>(null)
   const listRef = useRef<WorldListPaneHandle>(null)
+  const leaveFailedOpen = useLeaveFailedStoryOpen()
 
   // A cold mount (reload, deep link) hydrates the working set the way the reader does.
   useEffect(() => {
-    if (branchId === '' || currentStoryStore.getCurrentStory()?.branchId === branchId) return
+    if (branchId === '') {
+      leaveFailedOpen()
+      return
+    }
+    if (currentStoryStore.getCurrentStory()?.branchId === branchId) return
     let current = true
     void loadOpenStory(branchId, ctx, () => current)
       .then((result) => {
-        if (current && result.status !== 'ok') setFailedBranchId(branchId)
+        if (current && result.status !== 'ok') leaveFailedOpen()
       })
       .catch((err: unknown) => {
         logger.error('app.world_story_load_failed', {
           branchId,
           error: err instanceof Error ? err.message : String(err),
         })
-        if (current) setFailedBranchId(branchId)
+        if (current) leaveFailedOpen()
       })
     return () => {
       current = false
     }
-  }, [branchId])
+  }, [branchId, leaveFailedOpen])
   useEffect(() => {
     // Never rejects: internally try/caught, logs bootstrap.stories_hydrate_failed on its own.
     void rehydrateStories(db)
   }, [])
 
   const open = currentStoryStore.useCurrentStory((o) => (o?.branchId === branchId ? o : null))
-  const loadFailed = branchId === '' || failedBranchId === branchId
   const storyId = open?.storyId ?? null
   const storyTitle = storiesStore.useStories((s) => s.rows.find((r) => r.id === storyId)?.title)
 
@@ -289,14 +293,7 @@ export default function WorldRoute() {
     >
       {open == null ? (
         <View className="flex-1 items-center justify-center">
-          {loadFailed ? (
-            <EmptyState
-              title={t('reader:hydrationFailedTitle')}
-              subtext={t('reader:hydrationFailedBody')}
-            />
-          ) : (
-            <EmptyState title={t('reader:hydrationLoading')} />
-          )}
+          <EmptyState title={t('reader:hydrationLoading')} />
         </View>
       ) : (
         <MasterDetailLayout

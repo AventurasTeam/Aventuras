@@ -43,6 +43,7 @@ import { ScreenShell } from '@/components/shells/screen-shell'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Text } from '@/components/ui/text'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
+import { useLeaveFailedStoryOpen } from '@/hooks/use-leave-failed-story-open'
 import { memoryPillError, useMemoryHealth } from '@/hooks/use-memory-health'
 import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
 import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
@@ -151,7 +152,6 @@ function matchesJumpToBottomShortcut(ev: KeyboardEvent): boolean {
 }
 
 type ReaderGateState = {
-  hydrationFailed: boolean
   hydrationSucceeded: boolean
   swapPending: boolean
   actionsBlocked: boolean
@@ -160,21 +160,18 @@ type ReaderGateState = {
 // Precedence, not independent conditions: hydration outranks the swap, which
 // outranks a run in flight. An object, so the order can't transpose at the call site.
 function composerDisabledReason(state: ReaderGateState): string | undefined {
-  if (state.hydrationFailed) return t('reader:hydrationFailedBody')
   if (!state.hydrationSucceeded) return t('reader:hydrationLoading')
   if (state.swapPending) return t('reader:actions.blockedWhileSwapping')
   if (state.actionsBlocked) return t('reader:actions.blockedWhileGenerating')
   return undefined
 }
 
-// Same precedence order as above; null means the reader itself renders.
+// Same precedence order as above; null means the reader itself renders. A failed
+// open never lands here: it leaves for the story list.
 function readerPlaceholder(state: {
-  hydrationFailed: boolean
   hydrationSucceeded: boolean
   isEmpty: boolean
 }): { title: string; subtext?: string } | null {
-  if (state.hydrationFailed)
-    return { title: t('reader:hydrationFailedTitle'), subtext: t('reader:hydrationFailedBody') }
   if (!state.hydrationSucceeded) return { title: t('reader:hydrationLoading') }
   if (state.isEmpty) return { title: t('reader:emptyTitle'), subtext: t('reader:emptyBody') }
   return null
@@ -259,7 +256,6 @@ export default function ReaderComposerRoute() {
   const hydrationIsCurrent = hydration.branchId === branchId
   const hydrationSucceeded =
     hydrationIsCurrent && hydration.status === 'success' && hydration.result.branchId === branchId
-  const hydrationFailed = hydrationIsCurrent && hydration.status === 'failure'
   const openForBranch = hydrationSucceeded && open?.branchId === branchId ? open : null
   const leadEntityId = openForBranch?.definition.leadEntityId ?? null
   const leadName = entitiesStore.useEntities((m) =>
@@ -505,6 +501,7 @@ export default function ReaderComposerRoute() {
     if (storyId != null) void refreshEmbeddingStatus(storyId)
   }, [storyId])
 
+  const leaveFailedOpen = useLeaveFailedStoryOpen()
   useEffect(() => {
     let cancelled = false
     const current = currentStoryStore.getCurrentStory()
@@ -525,15 +522,18 @@ export default function ReaderComposerRoute() {
           setHydration({ branchId, status: 'success', result })
         } else {
           setHydration({ branchId, status: 'failure', result })
+          leaveFailedOpen()
         }
       })
       .catch(() => {
-        if (!cancelled) setHydration({ branchId, status: 'failure', result: null })
+        if (cancelled) return
+        setHydration({ branchId, status: 'failure', result: null })
+        leaveFailedOpen()
       })
     return () => {
       cancelled = true
     }
-  }, [branchId])
+  }, [branchId, leaveFailedOpen])
 
   const storyRows = storiesStore.useStories((s) => s.rows)
   useEffect(() => {
@@ -1187,7 +1187,6 @@ export default function ReaderComposerRoute() {
   const { theme } = useTheme()
 
   const placeholder = readerPlaceholder({
-    hydrationFailed,
     hydrationSucceeded,
     isEmpty: entries.length === 0,
   })
@@ -1315,7 +1314,6 @@ export default function ReaderComposerRoute() {
                 disabled={!hydrationSucceeded || swapPending}
                 sendBlocked={actionsBlocked}
                 disabledReason={composerDisabledReason({
-                  hydrationFailed,
                   hydrationSucceeded,
                   swapPending,
                   actionsBlocked,

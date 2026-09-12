@@ -316,10 +316,11 @@ it should be.
   separately under a comment-only switch-and-reveal contract — see
   [Slice 4.2c](./02c-collision-review.md)'s Open questions for a
   possible `revealFirstFlagged()` handle.
-- The route shows the reader's loading and failed copy until the
-  story is open (an empty list would otherwise read "No characters on
-  this branch yet."), and hides `Add entity…` / `Add lore…` until
-  then.
+- The route shows the reader's loading copy until the story is open
+  (an empty list would otherwise read "No characters on this branch
+  yet."), and hides `Add entity…` / `Add lore…` until then; a failed
+  open returns to the story list with an error toast, as the reader's
+  does.
 - Seed gained a flagged `Brannoc` namesake pair plus a
   periodic-classifier create delta; run `pnpm db:seed` to see it
   locally.
