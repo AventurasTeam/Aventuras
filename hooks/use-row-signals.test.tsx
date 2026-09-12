@@ -496,6 +496,28 @@ describe('useRowSignals', () => {
     expect(reads.deltas).toHaveBeenCalledTimes(3)
   })
 
+  it('re-reads when an older reply loads in under an unchanged latest reply', async () => {
+    // A window holding one reply; loadOlderEntries then patches the previous one in.
+    entriesStore.hydrate('br_1', [
+      entry('e3', 'user_action', 3, []),
+      entry('e4', 'ai_reply', 4, []),
+    ])
+    entitiesStore.hydrate('br_1', [entity('char_a', 'character')])
+    reads.boundaries
+      .mockResolvedValueOnce({ fresh: 4, fading: null })
+      .mockResolvedValueOnce({ fresh: 4, fading: 2 })
+    reads.deltas.mockResolvedValueOnce([]).mockResolvedValueOnce([delta('char_a', 3)])
+
+    renderProbe()
+    await waitFor(() => expect(reads.boundaries).toHaveBeenCalledTimes(1))
+
+    act(() => {
+      entriesStore.patch('br_1', { op: 'create', id: 'e2', row: entry('e2', 'ai_reply', 2, []) })
+    })
+    await waitFor(() => expect(latest?.recentlyClassified.rows.get('char_a')).toBe('fading'))
+    expect(reads.deltas).toHaveBeenLastCalledWith({}, 'br_1', 2)
+  })
+
   it('sorts entries by position before reading, regardless of Map insertion order', async () => {
     // loadOlderEntries inserts older rows after newer ones in the Map.
     entriesStore.hydrate('br_1', [entry('e2', 'ai_reply', 2, []), entry('e1', 'opening', 1, [])])

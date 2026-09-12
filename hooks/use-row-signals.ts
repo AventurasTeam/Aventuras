@@ -40,12 +40,12 @@ export function useRowSignals(branchId: string): RowSignalsSnapshot {
     () => [...entityRows.values()].filter((e) => e.branchId === branchId),
     [entityRows, branchId],
   )
-  const latestReplyId = latestReplyIds(entries)[0] ?? null
+  const [latestReplyId = null, fadingReplyId = null] = latestReplyIds(entries)
   // settleCount marks the moment a run's writes are final; shared across every mounted instance.
   const settleCount = generationStore.useGeneration((s) => s.settleCount)
 
   const { data, error } = useQuery({
-    queryKey: ['row-signals', branchId, latestReplyId, settleCount],
+    queryKey: ['row-signals', branchId, latestReplyId, fadingReplyId, settleCount],
     enabled: branchId !== '' && latestReplyId != null,
     // Local DB read, not a flaky network call — a failure is worth surfacing, not retried.
     retry: false,
