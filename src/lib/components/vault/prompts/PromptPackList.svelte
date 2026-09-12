@@ -111,12 +111,14 @@
   async function handleExportPackDirectory(packId: string) {
     if (directoryBusy) return
     directoryBusy = true
+    let awaitingConfirmation = false
     try {
       const plan = await importExportService.planPackDirectoryExport(packId)
       if (!plan) return
 
       if (plan.needsConfirmation) {
         pendingExport = plan
+        awaitingConfirmation = true
         return
       }
 
@@ -126,9 +128,10 @@
       console.error('Folder export failed:', e)
       ui.showToast(`Export failed: ${errMessage(e)}`, 'error')
     } finally {
-      // A pending confirmation keeps its own plan; the guard lifts either way, since the
-      // dialog is modal.
-      directoryBusy = false
+      // The guard has to span the write, not just the planning: once the dialog closes the UI
+      // is live again, and a second export interleaving with this one reads a half-written
+      // tree or prunes what it has just put there. The confirmation keeps it until answered.
+      if (!awaitingConfirmation) directoryBusy = false
     }
   }
 
@@ -142,7 +145,14 @@
     } catch (e) {
       console.error('Folder export failed:', e)
       ui.showToast(`Export failed: ${errMessage(e)}`, 'error')
+    } finally {
+      directoryBusy = false
     }
+  }
+
+  function cancelExportIntoUsedFolder() {
+    pendingExport = null
+    directoryBusy = false
   }
 
   async function handleUpdateFromDirectory(pack: PresetPack) {
@@ -325,7 +335,7 @@
 <ExportIntoFolderDialog
   plan={pendingExport}
   onConfirm={confirmExportIntoUsedFolder}
-  onCancel={() => (pendingExport = null)}
+  onCancel={cancelExportIntoUsedFolder}
 />
 
 <!-- Delete confirmation -->

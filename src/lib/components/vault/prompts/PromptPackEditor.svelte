@@ -152,7 +152,9 @@
   }
 
   async function handleExportShippedBaseline() {
+    if (exportingBaseline) return
     exportingBaseline = true
+    let awaitingConfirmation = false
     try {
       const plan = await importExportService.planShippedBaselineExport()
       if (!plan) return
@@ -161,9 +163,26 @@
       // is still overwritten, so the folder is confirmed before anything is written.
       if (plan.needsConfirmation) {
         pendingExport = plan
+        awaitingConfirmation = true
         return
       }
 
+      await importExportService.applyDirectoryExport(plan)
+      ui.showToast('Shipped prompts exported to folder', 'info')
+    } catch (e) {
+      console.error('Shipped baseline export failed:', e)
+      ui.showToast(`Export failed: ${errMessage(e)}`, 'error')
+    } finally {
+      // Held until the confirmation is answered, so the guard spans the write itself.
+      if (!awaitingConfirmation) exportingBaseline = false
+    }
+  }
+
+  async function confirmExportIntoUsedFolder() {
+    if (!pendingExport) return
+    const plan = pendingExport
+    pendingExport = null
+    try {
       await importExportService.applyDirectoryExport(plan)
       ui.showToast('Shipped prompts exported to folder', 'info')
     } catch (e) {
@@ -174,20 +193,9 @@
     }
   }
 
-  async function confirmExportIntoUsedFolder() {
-    if (!pendingExport) return
-    const plan = pendingExport
+  function cancelExportIntoUsedFolder() {
     pendingExport = null
-    exportingBaseline = true
-    try {
-      await importExportService.applyDirectoryExport(plan)
-      ui.showToast('Shipped prompts exported to folder', 'info')
-    } catch (e) {
-      console.error('Shipped baseline export failed:', e)
-      ui.showToast(`Export failed: ${errMessage(e)}`, 'error')
-    } finally {
-      exportingBaseline = false
-    }
+    exportingBaseline = false
   }
 
   async function handleRefresh(scope: RefreshScope) {
@@ -819,5 +827,5 @@
 <ExportIntoFolderDialog
   plan={pendingExport}
   onConfirm={confirmExportIntoUsedFolder}
-  onCancel={() => (pendingExport = null)}
+  onCancel={cancelExportIntoUsedFolder}
 />
