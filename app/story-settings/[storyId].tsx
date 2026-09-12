@@ -8,9 +8,8 @@ import { ScreenShell } from '@/components/shells/screen-shell'
 import { StorySettingsShell } from '@/components/shells/story-settings-shell'
 import { AuthoringAidsPanel } from '@/components/story-settings/authoring-aids-panel'
 import {
-  generationGateReason,
-  selectStorySettingsGenerationRunKind,
   storySettingsGenerationPhase,
+  useStoryGenerationGate,
 } from '@/components/story-settings/generation-run'
 import { MemoryPanel } from '@/components/story-settings/memory-panel'
 import { type StorySettingsPanelData } from '@/components/story-settings/panel-data'
@@ -43,7 +42,6 @@ import {
   awaitRunTerminal,
   generationStore,
   isBackgroundKind,
-  isUserEditBlocked,
   rehydrateStories,
   storiesStore,
 } from '@/lib/stores'
@@ -138,9 +136,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
   const currentBranchId = storiesStore.useStories(
     (s) => s.rows.find((r) => r.id === storyId)?.currentBranchId ?? null,
   )
-  const activeRunKind = generationStore.useGeneration((s) =>
-    selectStorySettingsGenerationRunKind(s.txState, storyId),
-  )
+  const { activeRunKind, editBlocked, gateReason: disabledReason } = useStoryGenerationGate(storyId)
   // awaitRunTerminal is branch-scoped, and this screen has no branch param. Any
   // cancellable run for this story carries it: runs only exist for the open
   // story/branch.
@@ -149,8 +145,6 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
       [...s.txState.runs.values()].find((r) => r.storyId === storyId && !isBackgroundKind(r.kind))
         ?.branchId ?? null,
   )
-  const editBlocked = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
-  const disabledReason = generationGateReason(editBlocked, activeRunKind)
 
   // Scoped to THIS route's story: the open story survives navigation, so an
   // unscoped read would show whichever story the session last opened in the

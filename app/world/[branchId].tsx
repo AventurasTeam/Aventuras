@@ -10,9 +10,8 @@ import { ImporterMenu } from '@/components/compounds/importer-menu'
 import { MasterDetailLayout } from '@/components/shells/master-detail-layout'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import {
-  generationGateReason,
-  selectStorySettingsGenerationRunKind,
   storySettingsGenerationPhase,
+  useStoryGenerationGate,
 } from '@/components/story-settings/generation-run'
 import { EmptyState } from '@/components/ui/empty-state'
 import { CollisionReviewPill } from '@/components/world/collision-review-pill'
@@ -44,8 +43,6 @@ import {
   awaitRunTerminal,
   currentStoryStore,
   entitiesStore,
-  generationStore,
-  isUserEditBlocked,
   loreStore,
   rehydrateStories,
   storiesStore,
@@ -134,11 +131,7 @@ export default function WorldRoute() {
   })
   const detailOpen = isPhone && selection != null
 
-  const activeRunKind = generationStore.useGeneration((s) =>
-    selectStorySettingsGenerationRunKind(s.txState, storyId ?? undefined),
-  )
-  const editBlocked = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
-  const gateReason = generationGateReason(editBlocked, activeRunKind)
+  const { activeRunKind, editBlocked, gateReason } = useStoryGenerationGate(storyId ?? undefined)
   const openRegionPct = useOpenRegionTokens(storyId)
   const memoryHealth = useMemoryHealth(storyId, open?.settings.embedding_swap_target)
 
