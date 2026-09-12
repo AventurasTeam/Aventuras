@@ -279,12 +279,18 @@ const meta: Meta<typeof Harness> = {
 export default meta
 type Story = StoryObj<typeof Harness>
 
-/** Characters, All view: Active lead first, in-scene stripe, Staged / Retired collapsed. */
+/** Characters, All view: the lead pinned above the tiers, in-scene stripe, Staged / Retired collapsed. */
 export const Characters: Story = {
   play: async () => {
     const rows = await screen.findAllByRole('button', { name: /Kael|Mira|Brannoc/ })
     expect(rows[0]).toHaveAccessibleName('Kael')
     expect(screen.getByText('You')).toBeInTheDocument()
+    // An Active lead pins too: above the Active header, and out of its count.
+    const activeHeader = screen.getByRole('button', { name: /^Active\s*\d+$/ })
+    expect(rows[0].compareDocumentPosition(activeHeader) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    )
+    expect(activeHeader).toHaveAccessibleName(/^Active\s*2$/)
     expect(toolbarExtras('Search characters…')).toContain(
       screen.getByRole('button', { name: 'All' }),
     )
@@ -327,7 +333,9 @@ export const ToggleTiers: Story = {
     expect(await screen.findByRole('button', { name: 'The Ashen Sage' })).toBeInTheDocument()
     expect(worldListStore.getCollapsedTiers().has('staged')).toBe(false)
     await userEvent.click(screen.getByRole('button', { name: /^Active\s*\d+$/ }))
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Kael' })).toBeNull())
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Mira' })).toBeNull())
+    // The pinned lead sits outside every tier, so collapsing Active leaves it listed.
+    expect(screen.getByRole('button', { name: 'Kael' })).toBeInTheDocument()
     expect(worldListStore.getCollapsedTiers().has('active')).toBe(true)
   },
 }

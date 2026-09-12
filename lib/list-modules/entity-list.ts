@@ -141,7 +141,7 @@ export function groupEntitiesByTier(
   leadId: string | null,
 ): ListGrouping<Entity, EntityTier> {
   const lead = leadId == null ? undefined : rows.find((r) => r.id === leadId)
-  const pinned = lead != null && entityTier(lead) !== 'active' ? lead : null
+  const pinned = lead ?? null
   const tierRows = pinned == null ? rows : rows.filter((r) => r.id !== pinned.id)
   const groups = ENTITY_TIERS.map((tier) => ({
     key: tier,

@@ -259,9 +259,9 @@ it should be.
   contextual `Add entity…` / `Add lore…` entries open the `[+]`
   `ImporterMenu` via a controlled `open` seam (the rn-primitives
   popover root is uncontrolled, so the seam drives the trigger ref).
-- **D5** (developer, 2026-09-11) — on the All view a non-Active lead
-  is pinned above the tier accordion and excluded from its group; an
-  Active lead stays first in Active.
+- **D5** (developer, 2026-09-11; revised 2026-09-12) — on the All
+  view the lead is pinned above the tier accordion whatever its tier,
+  and excluded from its group, so collapsing Active never hides it.
 - **Resolves the "Lore Recently classified before M5" open
   question.** C1 treats every row category generically; lore gets no
   non-`user_edit` deltas until M5's chapter close, so the badge stays

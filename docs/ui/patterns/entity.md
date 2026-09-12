@@ -170,9 +170,10 @@ group when a non-All filter is active." Pattern lives here because
 World entities adopted it first; Plot generalized to the keys above
 without changing the rendering primitive.
 
-On World, the lead pin wins over grouping: a non-Active lead renders
-pinned above the tier groups and is not repeated in its tier (the
-Browse rail follows the same rule).
+On World, the lead pin wins over grouping: the lead renders pinned
+above the tier groups whatever its tier and is not repeated in it, so
+collapsing a tier never hides the lead (the Browse rail follows the
+same rule).
 
 ---
 
