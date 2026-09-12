@@ -12,15 +12,6 @@ import {
 
 const ALL_VIEW: ListQuery<EntityFilter> = { search: '', filter: 'all' }
 
-function listOrder(
-  kind: EntityKind,
-  entities: readonly Entity[],
-  view: ListQuery<EntityFilter>,
-  signals: EntityListSignals,
-): Entity[] {
-  return renderOrder(arrangeRows(entityListModule(kind), entities, view, signals))
-}
-
 type FirstFlaggedRowInput = {
   entities: readonly Entity[]
   flagged: { has: (id: string) => boolean }
@@ -50,9 +41,9 @@ export function firstFlaggedRow({
     if (kind !== category) attempts.push({ kind, view: ALL_VIEW })
   }
   for (const attempt of attempts) {
-    const row = listOrder(attempt.kind, entities, attempt.view, signals).find((e) =>
-      flagged.has(e.id),
-    )
+    const listModule = entityListModule(attempt.kind)
+    const rows = renderOrder(arrangeRows(listModule, entities, attempt.view, signals))
+    const row = rows.find((e) => flagged.has(e.id))
     if (row != null) return row
   }
   return null
