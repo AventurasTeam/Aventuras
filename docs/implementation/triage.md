@@ -101,11 +101,6 @@ slice-planning gate forces its resolution before that slice is planned.
   [`iconography.md → Entity kind glyphs`](../ui/foundations/iconography.md#entity-kind-glyphs)
   has no lore glyph; `BookOpen` (the app logo) is inlined in `LoreRow`
   and `WorldDetailPlaceholder` — needs a shared kind icon covering lore.
-- **`ImporterMenu` accessibility role mismatch.** (2026-09-11) The
-  popover content uses the default `role="dialog"` over `menuitem`s
-  (`aria-haspopup="dialog"`, no `menu`) with no Popover `ariaLabel`;
-  [`world.md → Mobile expression`](../ui/screens/world/world.md#mobile-expression)
-  wants a short Sheet on phone but it's a Popover at every size.
 - **Reader and Story Settings titles aren't `Breadcrumb`.**
   (2026-09-11) World's top-bar title converted to `Breadcrumb`; the
   reader and Story Settings top-bar titles have not.
