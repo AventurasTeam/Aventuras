@@ -244,8 +244,10 @@ it should be.
   (`happening_awareness`, `happening_involvements`,
   `character_relationships`) to the rows they connect; per-turn
   retrieval-count bumps are excluded.
-- C1 excludes deltas of reversed runs (`pipeline_runs.outcome`
-  aborted, failed, or recovered) — reversal keeps the log.
+- C1 excluded deltas of reversed runs while reversal kept the log;
+  reversal now prunes them
+  ([`data-model.md → Entry mutability & rollback`](../../../../data-model.md#entry-mutability--rollback)),
+  so the filter is gone.
 - C1 refetch is keyed on a monotonic `generationStore.settleCount`
   (bumped when a run leaves `txState` or a reversal settles), shared
   by every mounted consumer.

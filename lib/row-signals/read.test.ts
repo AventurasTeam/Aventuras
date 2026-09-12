@@ -8,7 +8,6 @@ import {
   happeningAwareness,
   happeningInvolvements,
   happenings,
-  pipelineRuns,
   stories,
   type NewCharacterRelationship,
   type NewDelta,
@@ -16,7 +15,6 @@ import {
   type NewHappening,
   type NewHappeningAwareness,
   type NewHappeningInvolvement,
-  type NewPipelineRun,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
@@ -786,152 +784,5 @@ describe('readSignalDeltas — link attribution', () => {
     )
     const rows = await readSignalDeltas(db, 'b1', 10)
     expect(rows).toEqual([])
-  })
-})
-
-describe('readSignalDeltas — reversed runs', () => {
-  function pipelineRunRow(
-    overrides: Pick<NewPipelineRun, 'runId' | 'actionId' | 'outcome'> & Partial<NewPipelineRun>,
-  ): NewPipelineRun {
-    return { kind: 'periodic-classifier', storyId: 's1', startedAt: 1, finishedAt: 2, ...overrides }
-  }
-
-  it('drops a delta whose run outcome is aborted, failed, or recovered, on both row and link tables', async () => {
-    const db = await seedLinkFixtures()
-    await db
-      .insert(happeningAwareness)
-      .values(awarenessRow({ id: 'haw_1', happeningId: 'hap_1', characterId: 'char_kael' }))
-    await db
-      .insert(pipelineRuns)
-      .values([
-        pipelineRunRow({ runId: 'run_ok', actionId: 'act_ok', outcome: 'completed' }),
-        pipelineRunRow({ runId: 'run_aborted', actionId: 'act_aborted', outcome: 'aborted' }),
-        pipelineRunRow({ runId: 'run_failed', actionId: 'act_failed', outcome: 'failed' }),
-        pipelineRunRow({ runId: 'run_recovered', actionId: 'act_recovered', outcome: 'recovered' }),
-      ])
-    await db.insert(deltas).values([
-      row({
-        id: 'd_ok_row',
-        logPosition: 10,
-        targetTable: 'entities',
-        targetId: 'char_kael',
-        op: 'update',
-        source: 'periodic_classifier',
-        actionId: 'act_ok',
-      }),
-      row({
-        id: 'd_ok_link',
-        logPosition: 11,
-        targetTable: 'happening_awareness',
-        targetId: 'haw_1',
-        op: 'create',
-        source: 'periodic_classifier',
-        actionId: 'act_ok',
-      }),
-      row({
-        id: 'd_aborted_row',
-        logPosition: 12,
-        targetTable: 'entities',
-        targetId: 'char_kael',
-        op: 'update',
-        source: 'periodic_classifier',
-        actionId: 'act_aborted',
-      }),
-      row({
-        id: 'd_failed_link',
-        logPosition: 13,
-        targetTable: 'happening_awareness',
-        targetId: 'haw_1',
-        op: 'create',
-        source: 'periodic_classifier',
-        actionId: 'act_failed',
-      }),
-      row({
-        id: 'd_recovered_row',
-        logPosition: 14,
-        targetTable: 'entities',
-        targetId: 'char_kael',
-        op: 'update',
-        source: 'periodic_classifier',
-        actionId: 'act_recovered',
-      }),
-    ])
-    const rows = await readSignalDeltas(db, 'b1', 10)
-    expect(rows).toEqual([
-      {
-        source: 'periodic_classifier',
-        targetTable: 'entities',
-        targetId: 'char_kael',
-        logPosition: 10,
-      },
-      {
-        source: 'periodic_classifier',
-        targetTable: 'happenings',
-        targetId: 'hap_1',
-        logPosition: 11,
-      },
-      {
-        source: 'periodic_classifier',
-        targetTable: 'entities',
-        targetId: 'char_kael',
-        logPosition: 11,
-      },
-    ])
-  })
-
-  it('keeps a delta whose action has no pipeline_runs row at all', async () => {
-    const db = await seedLinkFixtures()
-    await db.insert(deltas).values(
-      row({
-        id: 'd_no_run',
-        logPosition: 10,
-        targetTable: 'entities',
-        targetId: 'char_kael',
-        op: 'update',
-        source: 'periodic_classifier',
-        actionId: 'act_no_run',
-      }),
-    )
-    const rows = await readSignalDeltas(db, 'b1', 10)
-    expect(rows).toEqual([
-      {
-        source: 'periodic_classifier',
-        targetTable: 'entities',
-        targetId: 'char_kael',
-        logPosition: 10,
-      },
-    ])
-  })
-
-  it('keeps a delta whose run has a null outcome (failed reversal, writes still on disk)', async () => {
-    const db = await seedLinkFixtures()
-    await db.insert(pipelineRuns).values(
-      pipelineRunRow({
-        runId: 'run_stuck',
-        actionId: 'act_stuck',
-        outcome: null,
-        finishedAt: null,
-      }),
-    )
-    await db.insert(deltas).values(
-      row({
-        id: 'd_stuck',
-        logPosition: 10,
-        targetTable: 'entities',
-        targetId: 'char_kael',
-        op: 'update',
-        source: 'periodic_classifier',
-        actionId: 'act_stuck',
-      }),
-    )
-    const rows = await readSignalDeltas(db, 'b1', 10)
-    expect(rows).toEqual([
-      {
-        source: 'periodic_classifier',
-        targetTable: 'entities',
-        targetId: 'char_kael',
-        logPosition: 10,
-      },
-    ])
   })
 })

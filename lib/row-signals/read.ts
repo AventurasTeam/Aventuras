@@ -1,6 +1,6 @@
-import { and, asc, eq, gte, inArray, ne, notInArray } from 'drizzle-orm'
+import { and, asc, eq, gte, inArray, ne } from 'drizzle-orm'
 
-import { deltas, pipelineRuns, type DbCtx } from '@/lib/db'
+import { deltas, type DbCtx } from '@/lib/db'
 
 import { isLinkTable, LINK_TABLES, resolveLinkOwners, type LinkDeltaRow } from './link-owners'
 import { lastTwoReplies } from './replies'
@@ -43,11 +43,6 @@ export async function readSignalDeltas(
   fromLogPosition: number,
 ): Promise<SignalDelta[]> {
   const rowTables = [...SIGNAL_TARGET_TABLES.keys()]
-  // A reversed run's deltas stay in the log even though its writes are undone.
-  const reversedActionIds = db
-    .select({ actionId: pipelineRuns.actionId })
-    .from(pipelineRuns)
-    .where(inArray(pipelineRuns.outcome, ['aborted', 'failed', 'recovered']))
   const rows = await db
     .select({
       source: deltas.source,
@@ -64,7 +59,6 @@ export async function readSignalDeltas(
         gte(deltas.logPosition, fromLogPosition),
         ne(deltas.source, 'user_edit'),
         inArray(deltas.targetTable, [...rowTables, ...LINK_TABLES]),
-        notInArray(deltas.actionId, reversedActionIds),
       ),
     )
     .orderBy(asc(deltas.logPosition))

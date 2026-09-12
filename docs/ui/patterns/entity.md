@@ -537,7 +537,9 @@ positions of the create deltas of the last two `ai_reply` entries.
 Pipeline-source deltas on entities, lore, threads and happenings
 count directly; link-table writes (`happening_awareness`,
 `happening_involvements`, `character_relationships`) attribute to the
-rows they connect, with per-turn retrieval-count bumps excluded;
-deltas of reversed runs are excluded. Coordinates are write-time, so a
+rows they connect, with per-turn retrieval-count bumps excluded. A
+reversed run leaves nothing to read, since reversal prunes its deltas
+([`data-model.md → Entry mutability & rollback`](../../data-model.md#entry-mutability--rollback)).
+Coordinates are write-time, so a
 periodic classifier pass tints whenever it lands. Revisit if users
 want configurability.

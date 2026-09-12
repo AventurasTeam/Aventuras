@@ -60,9 +60,6 @@ slice-planning gate forces its resolution before that slice is planned.
   ([`entity.md → Recently-classified row accent`](../ui/patterns/entity.md#recently-classified-row-accent))
   says manual edits don't tint. A fix would diff against the pre-edit metadata carried in the
   `user_edit` delta's undo payload. Needs a developer call.
-- **`pipeline_runs` has no `action_id` index.** (2026-09-11) The C1
-  read's reversed-run subquery scans the table on every refetch
-  (~0.6 ms at 10k rows, ~15 ms at 200k, measured on Electron main).
 - **`CollisionListRow` accessibility role drift.** (2026-09-11)
   The strip uses `accessibilityRole="alert"` (every flagged row
   announces); [`collision-resolve.md → Accessibility`](../ui/patterns/collision-resolve.md#accessibility)
