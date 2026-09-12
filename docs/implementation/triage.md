@@ -124,12 +124,6 @@ slice-planning gate forces its resolution before that slice is planned.
   collapsed-tier `⚠ N` badge unmounts it (the tier expands), dropping
   keyboard focus to the page body; move focus to the revealed row
   instead.
-- **Generation pill's phone variant has no accessible name.**
-  (2026-09-11) On phone the pill is a spinner-only, non-pressable
-  `Tag` (`generation-status-pill.tsx`), bare or inside the cancel
-  `PopoverTrigger`, so the phase copy never reaches assistive tech.
-  `Tag`'s `accessibilityLabel` covers only a pressable `Tag`; the name
-  belongs on the trigger, or on the bare pill as a labelled status.
 - **Collapsed-tier state is keyed by tier only, not per kind.**
   (2026-09-12) `lib/stores/ui/world-list.ts` keys collapse on
   `EntityTier` alone, so collapsing Staged on Characters also
