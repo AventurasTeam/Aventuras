@@ -4,49 +4,12 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import type { Entity, Lore } from '@/lib/db'
 import type { WorldCategory } from '@/lib/list-modules'
+import { makeEntity, makeLore } from '@/lib/list-modules/__tests__/fixtures'
 
 import { useWorldSelection } from './use-world-selection'
 
-function character(id: string, name: string): Entity {
-  return {
-    id,
-    branchId: 'br_1',
-    kind: 'character',
-    name,
-    description: '',
-    status: 'active',
-    retiredReason: null,
-    injectionMode: 'auto',
-    nameCollisionFlag: 0,
-    state: null,
-    tags: [],
-    keywords: [],
-    priority: 0,
-    embeddingStale: 0,
-    createdAt: 1,
-    updatedAt: 1,
-  }
-}
-
-function loreRow(id: string, title: string): Lore {
-  return {
-    id,
-    branchId: 'br_1',
-    title,
-    body: '',
-    category: 'history',
-    tags: [],
-    keywords: [],
-    injectionMode: 'auto',
-    priority: 0,
-    embeddingStale: 0,
-    createdAt: 1,
-    updatedAt: 1,
-  }
-}
-
-const KAEL = character('char_kael', 'Kael')
-const VEIL = loreRow('lore_veil', 'The Veil')
+const KAEL = makeEntity({ id: 'char_kael', kind: 'character', name: 'Kael' })
+const VEIL = makeLore({ id: 'lore_veil', title: 'The Veil' })
 
 type ProbeProps = {
   entities?: Entity[]
