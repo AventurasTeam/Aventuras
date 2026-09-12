@@ -64,3 +64,39 @@ export type ListModule<
   copy: (categoryLabel: string) => ListCopy<Filter>
   Row: ComponentType<RowRendererProps<Row>>
 }
+
+export type ArrangedRows<Row, GroupKey extends string> = {
+  visible: Row[]
+  /** The All view's groups; null under a narrowing chip or for a module without grouping. */
+  grouped: (ListGrouping<Row, GroupKey> & { label: (key: GroupKey) => string }) | null
+}
+
+/** A module's list for one view, as `ModuleList` renders it. */
+export function arrangeRows<
+  Row extends { id: string },
+  Filter extends string,
+  Signals,
+  GroupKey extends string,
+>(
+  listModule: ListModule<Row, Filter, Signals, GroupKey>,
+  rows: readonly Row[],
+  view: ListQuery<Filter>,
+  signals: Signals,
+): ArrangedRows<Row, GroupKey> {
+  const visible = listModule.query(rows, view, signals)
+  const grouping = listModule.grouping
+  if (view.filter !== 'all' || grouping == null) return { visible, grouped: null }
+  return { visible, grouped: { ...grouping.group(visible, signals), label: grouping.label } }
+}
+
+/** The rows top to bottom: the pinned row, then each group's rows; flat when ungrouped. */
+export function renderOrder<Row, GroupKey extends string>({
+  visible,
+  grouped,
+}: ArrangedRows<Row, GroupKey>): Row[] {
+  if (grouped == null) return visible
+  return [
+    ...(grouped.pinned == null ? [] : [grouped.pinned]),
+    ...grouped.groups.flatMap((g) => g.rows),
+  ]
+}

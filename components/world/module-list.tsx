@@ -1,7 +1,7 @@
 import { useMemo, type ReactNode } from 'react'
 import { ScrollView, View } from 'react-native'
 
-import type { ListModule, RowSignals } from '@/components/entity/list-module'
+import { arrangeRows, type ListModule, type RowSignals } from '@/components/entity/list-module'
 import { EntityListPane } from '@/components/shells/entity-list-pane'
 import {
   Accordion,
@@ -81,15 +81,10 @@ export function ModuleList<
 }: ModuleListProps<Row, Filter, Key, Signals>) {
   const { scrollRef, contentRef, rowRef } = useRevealScroll(reveal, resetKey)
 
-  const visible = useMemo(
-    () => listModule.query(rows, { search, filter }, listSignals),
+  const { visible, grouped } = useMemo(
+    () => arrangeRows(listModule, rows, { search, filter }, listSignals),
     [listModule, rows, search, filter, listSignals],
   )
-  const grouped = useMemo(() => {
-    const grouping = listModule.grouping
-    if (filter !== 'all' || grouping == null) return null
-    return { ...grouping.group(visible, listSignals), label: grouping.label }
-  }, [listModule, visible, filter, listSignals])
 
   const copy = listModule.copy(categoryLabel)
   const filters = listModule.filters(listSignals)

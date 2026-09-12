@@ -1,4 +1,5 @@
 import { entityListModule } from '@/components/entity/entity-list-module'
+import { arrangeRows, renderOrder } from '@/components/entity/list-module'
 import type { Entity, EntityKind } from '@/lib/db'
 import {
   isEntityCategory,
@@ -11,18 +12,13 @@ import {
 
 const ALL_VIEW: ListQuery<EntityFilter> = { search: '', filter: 'all' }
 
-// Mirrors ModuleList's render order: All view groups, pinned row first; chip view is flat.
 function listOrder(
   kind: EntityKind,
   entities: readonly Entity[],
   view: ListQuery<EntityFilter>,
   signals: EntityListSignals,
 ): Entity[] {
-  const listModule = entityListModule(kind)
-  const rows = listModule.query(entities, view, signals)
-  if (view.filter !== 'all' || listModule.grouping == null) return rows
-  const { pinned, groups } = listModule.grouping.group(rows, signals)
-  return [...(pinned == null ? [] : [pinned]), ...groups.flatMap((g) => g.rows)]
+  return renderOrder(arrangeRows(entityListModule(kind), entities, view, signals))
 }
 
 type FirstFlaggedRowInput = {
