@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
-import { expect, screen } from 'storybook/test'
+import { expect, screen, waitFor } from 'storybook/test'
 
 import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
 import { Tag } from '@/components/ui/tag'
@@ -128,6 +128,16 @@ export const InStoryReader: Story = {
       </ScreenShell>
     </View>
   ),
+  play: async () => {
+    const title = await screen.findByText("Aria's Descent")
+    const chip = screen.getByText('Chap 3')
+    // The title slot grows only when nothing sits beside it; here the chips must stay adjacent.
+    await waitFor(() =>
+      expect(chip.getBoundingClientRect().left - title.getBoundingClientRect().right).toBeLessThan(
+        40,
+      ),
+    )
+  },
 }
 
 export const InStoryReaderPhone: Story = {

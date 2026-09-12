@@ -298,6 +298,38 @@ export const InShellTopBar: Story = {
   },
 }
 
+/**
+ * Desktop top bar, short parent: the current segment's 70% cap resolves against the bar, so a
+ * current label over ~2.3x the rest of the trail still renders whole.
+ */
+export const InShellTopBarShortParent: Story = {
+  args: { segments: [] },
+  render: () => (
+    <View style={{ width: 800 }}>
+      <ScreenShell
+        variant="in-story"
+        title={
+          <Breadcrumb
+            segments={[
+              { key: 'story', label: 'A', onPress: fn() },
+              { key: 'surface', label: 'Story Settings' },
+            ]}
+          />
+        }
+        onBack={fn()}
+        onOpenStorySettings={fn()}
+        onOpenActions={fn()}
+      >
+        <View />
+      </ScreenShell>
+    </View>
+  ),
+  play: async () => {
+    const current = await screen.findByText('Story Settings')
+    expect(current.scrollWidth, 'current segment whole').toBeLessThanOrEqual(current.clientWidth)
+  },
+}
+
 const SIZES = ['sm', 'base'] as const
 
 /**

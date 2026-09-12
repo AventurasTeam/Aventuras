@@ -95,11 +95,6 @@ slice-planning gate forces its resolution before that slice is planned.
   [`iconography.md → Entity kind glyphs`](../ui/foundations/iconography.md#entity-kind-glyphs)
   has no lore glyph; `BookOpen` (the app logo) is inlined in `LoreRow`
   and `WorldDetailPlaceholder` — needs a shared kind icon covering lore.
-- **Breadcrumb's 70% cap measures itself on web.** (2026-09-11)
-  `ScreenShell`'s content-sized title slot means the top bar's 70%
-  current-segment cap measures the breadcrumb's own text, biting only
-  when the current segment is more than ~2.3× the rest (e.g. a
-  one-character story title). Fix belongs in the shell's title slot.
 - **Collapsed-tier badge drops focus.** (2026-09-11) Clicking the
   collapsed-tier `⚠ N` badge unmounts it (the tier expands), dropping
   keyboard focus to the page body; move focus to the revealed row
