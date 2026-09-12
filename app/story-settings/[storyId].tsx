@@ -3,7 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useState, type ReactElement } from 'react'
 
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
-import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
+import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import { StorySettingsShell } from '@/components/shells/story-settings-shell'
 import { AuthoringAidsPanel } from '@/components/story-settings/authoring-aids-panel'
@@ -30,7 +30,6 @@ import {
 import { EmptyState } from '@/components/ui/empty-state'
 import { Text } from '@/components/ui/text'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
-import { memoryPillError, useMemoryHealth } from '@/hooks/use-memory-health'
 import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
 import { useTier } from '@/hooks/use-tier'
 import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard'
@@ -150,7 +149,6 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
   // unscoped read would show whichever story the session last opened in the
   // reader against that story's threshold.
   const openRegionPct = useOpenRegionTokens(storyId)
-  const memoryHealth = useMemoryHealth(storyId ?? null, settings?.embedding_swap_target)
 
   const isDirty = session.snapshot.dirtyFields.length > 0
   useUnsavedChangesGuard(isDirty, session.requestLeave)
@@ -262,7 +260,9 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
         />
       }
       statusSlot={
-        <GenerationStatusPill
+        <StoryStatusPill
+          storyId={storyId ?? null}
+          swapTarget={settings?.embedding_swap_target}
           activePhase={
             activeRunKind != null ? storySettingsGenerationPhase(activeRunKind) : undefined
           }
@@ -271,10 +271,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
               void awaitRunTerminal(activeRunKind, cancelBranchId, 'cancel')
             }
           }}
-          error={memoryPillError(memoryHealth)}
-          onErrorTap={(code) => {
-            if (code !== 'classifier-offline') setSelectedTab('memory')
-          }}
+          onOpenMemory={() => setSelectedTab('memory')}
         />
       }
     >

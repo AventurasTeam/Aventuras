@@ -249,8 +249,11 @@ props on every render.
   detection per
   [`memory/model-management.md → Staleness UI`](../../memory/model-management.md#staleness-ui)
   and `swap-paused` from the swap marker are observed by one shared
-  hook, `hooks/use-memory-health.ts`, which every wired consumer
-  reads; `classifier-offline` from failed-persistent classifier state
+  hook, `hooks/use-memory-health.ts`. Every wired consumer renders
+  the pill through `StoryStatusPill`, which reads that hook in a leaf
+  of its own, so the stale count's per-batch ticks re-render only the
+  pill; the reader reads the hook's swap half again for its composer
+  gate. `classifier-offline` from failed-persistent classifier state
   per
   [`memory/classifier.md → Pill priority`](../../memory/classifier.md#background-task-framing)
   is still unobserved. Consumer collapses simultaneous errors to one

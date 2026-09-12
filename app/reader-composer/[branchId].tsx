@@ -6,7 +6,7 @@ import { Platform, View } from 'react-native'
 
 import { type ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
-import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
+import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { Composer, type ComposerHandle } from '@/components/reader/composer'
 import { isDraftEmpty, planSubmissionHandback } from '@/components/reader/composer-draft'
 import { readerPillPhase } from '@/components/reader/generation-phase'
@@ -44,7 +44,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Text } from '@/components/ui/text'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
 import { useLeaveFailedStoryOpen } from '@/hooks/use-leave-failed-story-open'
-import { memoryPillError, useMemoryHealth } from '@/hooks/use-memory-health'
+import { useSwapState } from '@/hooks/use-memory-health'
 import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
 import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
 import { useTier } from '@/hooks/use-tier'
@@ -332,11 +332,12 @@ export default function ReaderComposerRoute() {
   // branch switch replaces the strip's contents, so the error must not ride along.
   useEffect(() => setStripError(null), [branchId, terminalEntry?.id])
 
-  const memoryHealth = useMemoryHealth(storyId, openForBranch?.settings.embedding_swap_target)
+  const swapTarget = openForBranch?.settings.embedding_swap_target
+  const { swapRunning, swapPaused } = useSwapState(storyId, swapTarget)
   // Composing is fine mid-swap; submitting is not. submitTurn refuses either way
   // (a swap owns the vec tables), so gate here rather than let the user write a
   // turn and take a failure entry for it.
-  const swapPending = memoryHealth.swapRunning || memoryHealth.swapPaused
+  const swapPending = swapRunning || swapPaused
 
   const activePhase = readerPillPhase({
     turnKind,
@@ -1230,9 +1231,10 @@ export default function ReaderComposerRoute() {
         />
       }
       statusSlot={
-        <GenerationStatusPill
+        <StoryStatusPill
+          storyId={storyId}
+          swapTarget={swapTarget}
           activePhase={activePhase}
-          error={memoryPillError(memoryHealth)}
           // A background classifier pass has no cancel affordance, so the prop is
           // absent rather than a no-op handler that would still open the dialog.
           {...(isGenerating || refreshingSuggestions
@@ -1244,9 +1246,8 @@ export default function ReaderComposerRoute() {
                   void awaitRunTerminal(turnKind ?? SUGGESTION_REFRESH_KIND, branchId, 'cancel'),
               }
             : {})}
-          onErrorTap={(code) => {
-            if (code !== 'classifier-offline' && storyId != null)
-              router.push(`/story-settings/${storyId}?tab=memory`)
+          onOpenMemory={() => {
+            if (storyId != null) router.push(`/story-settings/${storyId}?tab=memory`)
           }}
         />
       }

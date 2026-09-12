@@ -5,8 +5,8 @@ import { View } from 'react-native'
 import type { ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { Breadcrumb, type BreadcrumbSegment } from '@/components/compounds/breadcrumb'
-import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
 import { ImporterMenu } from '@/components/compounds/importer-menu'
+import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { MasterDetailLayout } from '@/components/shells/master-detail-layout'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import {
@@ -29,7 +29,6 @@ import {
 } from '@/components/world/world-selection'
 import { useLeaveFailedStoryOpen } from '@/hooks/use-leave-failed-story-open'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
-import { memoryPillError, useMemoryHealth } from '@/hooks/use-memory-health'
 import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
 import { useRowSignals } from '@/hooks/use-row-signals'
 import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
@@ -133,7 +132,6 @@ export default function WorldRoute() {
 
   const { activeRunKind, editBlocked, gateReason } = useStoryGenerationGate(storyId ?? undefined)
   const openRegionPct = useOpenRegionTokens(storyId)
-  const memoryHealth = useMemoryHealth(storyId, open?.settings.embedding_swap_target)
 
   const selectCategory = useCallback(
     (next: WorldCategory) => {
@@ -263,17 +261,17 @@ export default function WorldRoute() {
       }
       statusSlot={
         <>
-          <GenerationStatusPill
+          <StoryStatusPill
+            storyId={storyId}
+            swapTarget={open?.settings.embedding_swap_target}
             activePhase={
               activeRunKind != null ? storySettingsGenerationPhase(activeRunKind) : undefined
             }
-            error={memoryPillError(memoryHealth)}
             onCancel={() => {
               if (activeRunKind != null) void awaitRunTerminal(activeRunKind, branchId, 'cancel')
             }}
-            onErrorTap={(code) => {
-              if (code !== 'classifier-offline' && storyId != null)
-                surfaceNavigate(`/story-settings/${storyId}?tab=memory`)
+            onOpenMemory={() => {
+              if (storyId != null) surfaceNavigate(`/story-settings/${storyId}?tab=memory`)
             }}
           />
           <CollisionReviewPill count={collisions.size} onPress={onPillPress} />
