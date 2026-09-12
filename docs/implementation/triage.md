@@ -140,3 +140,16 @@ slice-planning gate forces its resolution before that slice is planned.
   `EntityTier` alone, so collapsing Staged on Characters also
   collapses it on Locations. Canon doesn't say whether collapse should
   be per kind. Needs a design call.
+- **DB IPC has no retry for transient failures.** (2026-09-12) A
+  one-off rejection on the renderer-to-main SQLite bridge fails the
+  operation outright; for a story open it now sends the user back to
+  the story list. A bounded retry for transient bridge errors would
+  cover every DB call, not just opens. Needs a call on which errors
+  count as transient.
+- **Back does nothing on a cold-mounted in-story screen.**
+  (2026-09-12, pre-existing) After a reload (Ctrl+R replays the URL)
+  the stack holds only the current screen, and the reader's, World's
+  and Story Settings' Back call `router.back()`, which expo-router
+  queues as a `GO_BACK` with no `canGoBack()` check, so nothing
+  happens. Read from expo-router's source, not run. A `canGoBack()`
+  fallback to the story list would fix all three.

@@ -147,7 +147,13 @@ Sheet.
   pops back to an existing World screen and drops the selection — and
   does nothing at all when that World screen is already on top,
   dropping the selection the same way. Decide: match on path plus
-  params, or `setParams` when the params differ.
+  params, or `setParams` when the params differ. Either way the World
+  route must also react to changed params — today it reads `kind`,
+  `id` and `tab` once, at mount — and Story Settings' `?tab=` has the
+  same limit (World's pill tap to `?tab=memory` pops back to an open
+  Story Settings on whatever tab it shows). Pair the fix with a
+  `worldHref()` builder beside `parseWorldSelection`, so producers
+  stop hand-writing the URL.
 - **Deep-linked selection isn't revealed.** A row selected via the
   deep link is selected but not revealed in the list (its tier stays
   collapsed, the list sits at the top) — call the list's `revealRow`
