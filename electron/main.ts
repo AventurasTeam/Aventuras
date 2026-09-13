@@ -46,6 +46,19 @@ const isDev = !app.isPackaged
 // Must precede the first app.getPath('userData') (in initDb on whenReady).
 if (isDev) app.setName('aventuras-dev')
 
+// A second process on this userData would open the same DB beside this one's in-memory stores,
+// so it hands focus to the first and quits before initDb. Taken after setName: dev and an
+// installed build have separate data and must not block each other.
+const isPrimaryInstance = app.requestSingleInstanceLock()
+if (!isPrimaryInstance) app.quit()
+
+app.on('second-instance', () => {
+  const win = BrowserWindow.getAllWindows()[0]
+  if (win == null) return
+  if (win.isMinimized()) win.restore()
+  win.focus()
+})
+
 const APP_SCHEME = 'app'
 const APP_HOST = 'bundle'
 
@@ -270,6 +283,7 @@ function requireModelDir(modelId: string): string {
 }
 
 app.whenReady().then(async () => {
+  if (!isPrimaryInstance) return
   if (!isDev) Menu.setApplicationMenu(Menu.buildFromTemplate(appMenuTemplate(process.platform)))
   await initDb()
   applyContentSecurityPolicy()

@@ -58,12 +58,6 @@ slice-planning gate forces its resolution before that slice is planned.
   [`iconography.md → Entity kind glyphs`](../ui/foundations/iconography.md#entity-kind-glyphs)
   has no lore glyph; `BookOpen` (the app logo) is inlined in `LoreRow`
   and `WorldDetailPlaceholder` — needs a shared kind icon covering lore.
-- **DB IPC has no retry for transient failures.** (2026-09-12) A
-  one-off rejection on the renderer-to-main SQLite bridge fails the
-  operation outright; for a story open it now sends the user back to
-  the story list. A bounded retry for transient bridge errors would
-  cover every DB call, not just opens. Needs a call on which errors
-  count as transient.
 - **catppuccin-latte's success and warning pairs fail contrast.**
   (2026-09-13) White on `#40a02b` measures 3.3:1 and on `#df8e1d`
   2.6:1, under the 4.5:1 that filled Tags' `text-xs` labels need

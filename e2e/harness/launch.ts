@@ -1,3 +1,4 @@
+import { spawn, type ChildProcess } from 'node:child_process'
 import { readFile, rm } from 'node:fs/promises'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
@@ -23,6 +24,8 @@ function currentMode(): Mode {
 
 // Linux electron-builder --dir output.
 const PACKAGED_APP = join(REPO_ROOT, 'release', 'linux-unpacked', 'aventuras')
+// The binary `electron.launch` resolves for the dev project, for processes spawned without it.
+const DEV_ELECTRON = join(REPO_ROOT, 'node_modules', 'electron', 'dist', 'electron')
 
 const APP_SCHEME_ORIGIN = 'app://'
 
@@ -161,4 +164,31 @@ export async function launchApp(opts: {
     await cleanupUserData()
     throw err
   }
+}
+
+/**
+ * Starts one more app process on `userDataDir`, outside Playwright: `electron.launch` would
+ * wait for a window that a refused instance never opens. The caller owns the process. In dev
+ * it gets no renderer origin, so it only lives long enough to be observed.
+ */
+export function spawnAppProcess(userDataDir: string): ChildProcess {
+  const args = [...ozoneArgs, `--user-data-dir=${userDataDir}`]
+  if (currentMode() === 'packaged') return spawn(PACKAGED_APP, args, { stdio: 'ignore' })
+  return spawn(DEV_ELECTRON, ['electron/dist/main.js', ...args], {
+    cwd: REPO_ROOT,
+    env: { ...process.env, EXPO_WEB_URL: 'http://127.0.0.1:9' },
+    stdio: 'ignore',
+  })
+}
+
+/** Resolves with the exit code, or `null` if the process is still running after `ms`. */
+export function exitWithin(proc: ChildProcess, ms: number): Promise<number | null> {
+  if (proc.exitCode != null) return Promise.resolve(proc.exitCode)
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), ms)
+    proc.once('exit', (code) => {
+      clearTimeout(timer)
+      resolve(code ?? 0)
+    })
+  })
 }

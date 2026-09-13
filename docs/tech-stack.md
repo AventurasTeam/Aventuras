@@ -33,7 +33,7 @@ Items numbered in install order — each layer composes with the previous. State
 Local data. All user config and data lives in SQLite. No env vars, no BaaS.
 
 - `expo-sqlite` (+ `drizzle-orm/expo-sqlite`) on iOS / Android, with sqlite-vec via the bundled extension.
-- Under Electron the database runs in the **main process** (Node's built-in `node:sqlite` + the sqlite-vec loadable extension), reached from the renderer through Drizzle's `sqlite-proxy` over IPC — expo-sqlite's web/WASM backend can't host sqlite-vec.
+- Under Electron the database runs in the **main process** (Node's built-in `node:sqlite` + the sqlite-vec loadable extension), reached from the renderer through Drizzle's `sqlite-proxy` over IPC — expo-sqlite's web/WASM backend can't host sqlite-vec. One process per data directory: main takes Electron's single-instance lock, so a second launch focuses the running window instead of opening the same database beside it.
 - `drizzle-orm` for TypeScript-first queries — schema as source of truth; types flow from schema definitions
 - `drizzle-kit` for migrations generated from schema diffs
 
