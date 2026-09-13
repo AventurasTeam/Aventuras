@@ -18,7 +18,7 @@ const STATUS_TONE: Record<Entity['status'], TagTone> = {
 }
 
 // `density` is unused: entity rows have no description line to drop (unlike other rows).
-export function EntityRow({ row, selected, onPress, signals }: RowRendererProps<Entity>) {
+export function EntityRow({ row, selected, onPress, signals, focusRef }: RowRendererProps<Entity>) {
   const props: ListRowProps = {
     label: row.name,
     leading: <EntityKindIcon kind={row.kind} />,
@@ -36,6 +36,7 @@ export function EntityRow({ row, selected, onPress, signals }: RowRendererProps<
     recentlyClassified: signals.recentlyClassified,
     selected,
     onPress,
+    ref: focusRef,
   }
   if (signals.collision != null) {
     return <CollisionListRow row={props} collision={signals.collision} />

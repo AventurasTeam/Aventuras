@@ -664,15 +664,15 @@ discovery step.
    trigger so pressing it never toggles the group. Keeps
    the signal visible without overriding the user's manual
    collapse intent. Click the badge → expands the group,
-   scrolls to its first flagged row and moves keyboard focus to
-   it. Hidden when the group is expanded (the strips themselves
+   scrolls to its first flagged row and moves focus to it.
+   Hidden when the group is expanded (the strips themselves
    are visible) or when the group has no flagged rows.
 
 The pill is the at-a-glance count and jump target. The strip is
 the action surface. The badge is the bridge — keeps signal
 visible when accordions hide rows. Every jump — pill, badge, or
-the strip's `Collides with` link — moves keyboard focus to the
-row it lands on.
+the strip's `Collides with` link — moves focus to the row it
+lands on: keyboard focus on web, the screen reader's on native.
 
 A "Needs review" filter chip was considered and rejected:
 filter chips are for browsing modes, and a collision is an

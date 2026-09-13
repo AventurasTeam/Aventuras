@@ -79,7 +79,7 @@ export function ModuleList<
   reveal,
   resetKey,
 }: ModuleListProps<Row, Filter, Key, Signals>) {
-  const { scrollRef, contentRef, rowRef } = useRevealScroll(reveal, resetKey)
+  const { scrollRef, contentRef, rowRef, focusRef } = useRevealScroll(reveal, resetKey)
 
   const { visible, grouped } = useMemo(
     () => arrangeRows(listModule, rows, { search, filter }, listSignals),
@@ -97,6 +97,7 @@ export function ModuleList<
         selected={row.id === selectedId}
         onPress={() => onSelect(row.id)}
         signals={rowSignals(row.id)}
+        focusRef={focusRef(row.id)}
       />
     </View>
   )

@@ -26,9 +26,11 @@ export function LoreRow({
   onPress,
   signals,
   density = 'default',
+  focusRef,
 }: RowRendererProps<Lore>) {
   return (
     <ListRow
+      ref={focusRef}
       label={row.title}
       description={density === 'compact' ? undefined : excerpt(row.body)}
       leading={<EntityKindIcon kind="lore" />}
