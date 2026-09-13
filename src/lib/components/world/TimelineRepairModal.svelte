@@ -1,10 +1,20 @@
 <script lang="ts">
   import { story, type TimelineRepairPreview } from '$lib/stores/story.svelte'
-  import { timelineLayout } from '$lib/stores/timelineLayout.svelte'
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
-  import * as Dialog from '$lib/components/ui/dialog'
-  import { TriangleAlert, ChevronDown, ChevronRight, Plus } from '@lucide/svelte'
+  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
+  import { createIsMobile } from '$lib/hooks/is-mobile.svelte'
+  import { timelineLayout } from '$lib/stores/timelineLayout.svelte'
+  import { swipe } from '$lib/utils/swipe'
+  import type { Snippet } from 'svelte'
+  import {
+    TriangleAlert,
+    ChevronDown,
+    ChevronRight,
+    ChevronLeft,
+    Pencil,
+    Plus,
+  } from '@lucide/svelte'
   import {
     toMinutes,
     parseDuration,
@@ -13,31 +23,34 @@
     outstandingDurations,
     rangeIntervals,
   } from '$lib/services/storyTime'
-  import type { SelectableRange } from '$lib/services/storyTime'
+  import type {
+    SelectableRange,
+    RangeInterval,
+    RangeRefusal,
+    Boundary,
+  } from '$lib/services/storyTime'
   import type { StoryEntry, TimeTracker } from '$lib/types'
 
   let { open = $bindable(false) }: { open?: boolean } = $props()
 
+  const isMobile = createIsMobile()
+  /** The ladder, either because the screen is narrow or because the toggle asked for it. */
+  const narrow = $derived(isMobile.current || timelineLayout.mobile)
+
   let selectedIndex = $state(0)
   /** What the reader typed into each entry's weight field, by entry id. */
   let supplied = $state<Record<string, string>>({})
-  /** The row the control panel acts on: an entry, or the interval after one. */
-  let selection = $state<{ kind: 'entry' | 'gap'; entryId: string } | null>(null)
+  /** Table rows opened onto their controls, as `entry:<id>` / `gap:<id>`. Any number at once. */
+  let openRows = $state<string[]>([])
   let applying = $state(false)
   let staleMessage = $state<string | null>(null)
   let appliedMessage = $state<string | null>(null)
-  let fullTextOpen = $state(false)
-  function isOpen(kind: 'entry' | 'gap', entryId: string): boolean {
-    return selection?.kind === kind && selection.entryId === entryId
-  }
-
-  /**
-   * Selection and expansion are the same thing: the desktop layout draws it in the panel below,
-   * the narrow one unfolds it under the row. Tapping the open row closes it again.
-   */
-  function chooseRow(next: { kind: 'entry' | 'gap'; entryId: string }) {
-    selection = isOpen(next.kind, next.entryId) && timelineLayout.mobile ? null : next
-  }
+  /** The entry whose whole text is being read. Full text is only ever its own surface. */
+  let fullTextId = $state<string | null>(null)
+  /** Ladder cards the reader has unfolded, by card key. */
+  let unfolded = $state<Record<string, boolean>>({})
+  /** Bands folded to a summary, by band id. */
+  let foldedBands = $state<string[]>([])
 
   const ranges = $derived(story.timeRanges)
   const range = $derived<SelectableRange | undefined>(ranges[selectedIndex])
@@ -130,14 +143,16 @@
   function addGap(entryId: string) {
     addedGapIds = [...addedGapIds, entryId]
     gapWeights = { ...gapWeights, [entryId]: '' }
-    selection = { kind: 'gap', entryId }
+    // The new row opens with its weight already asking, which is the decision that made it.
+    openRows = [...openRows, rowKey('gap', entryId)]
+    unfolded = { ...unfolded, [`wg:${entryId}`]: true }
   }
 
   function removeGap(entryId: string) {
     addedGapIds = addedGapIds.filter((id) => id !== entryId)
     const { [entryId]: _weight, ...weights } = gapWeights
     gapWeights = weights
-    selection = null
+    openRows = openRows.filter((key) => key !== rowKey('gap', entryId))
   }
 
   function setGapWeight(entryId: string, text: string) {
@@ -168,13 +183,19 @@
     return `Y${time.years + 1} D${time.days + 1} ${pad(time.hours)}:${pad(time.minutes)}`
   }
 
+  /** A stamp split where the ladder dims it: year, day, clock. */
+  function stampParts(time: TimeTracker | null | undefined): string[] {
+    if (!time) return ['—']
+    return [`Y${time.years + 1}`, `D${time.days + 1}`, `${pad(time.hours)}:${pad(time.minutes)}`]
+  }
+
   function stampRange(start: TimeTracker | null | undefined, end: TimeTracker | null | undefined) {
     if (!start && !end) return 'no time recorded'
     return `${stamp(start)} → ${stamp(end)}`
   }
 
   /**
-   * The weight shown in the Was column, and whether the reader supplied it.
+   * The weight shown against the repaired one, and whether the reader supplied it.
    *
    * Narration only. A player action is an instant, so it has no weight to show — and printing
    * one as zero would read as the collapse warning a narration entry's zero really is.
@@ -307,10 +328,12 @@
     supplied = {}
     gapWeights = {}
     addedGapIds = []
-    selection = null
+    openRows = []
     staleMessage = null
     appliedMessage = null
-    fullTextOpen = false
+    fullTextId = null
+    unfolded = {}
+    foldedBands = []
   }
 
   $effect(() => {
@@ -322,391 +345,1058 @@
     if (!open) reset()
   })
 
-  const selectedEntry = $derived(
-    selection?.kind === 'entry' ? (byId.get(selection.entryId) ?? null) : null,
-  )
-  const selectedInterval = $derived.by(() => {
-    const current = selection
-    if (current?.kind !== 'gap') return null
-    return intervals.find((i) => i.afterEntryId === current.entryId) ?? null
+  const fullTextEntry = $derived(fullTextId ? (byId.get(fullTextId) ?? null) : null)
+
+  function rowKey(kind: 'entry' | 'gap', entryId: string): string {
+    return `${kind}:${entryId}`
+  }
+
+  function isOpen(kind: 'entry' | 'gap', entryId: string): boolean {
+    return openRows.includes(rowKey(kind, entryId))
+  }
+
+  /** The table unfolds its controls under the row. Choosing the open row closes it again. */
+  function chooseRow(kind: 'entry' | 'gap', entryId: string) {
+    const key = rowKey(kind, entryId)
+    openRows = openRows.includes(key) ? openRows.filter((open) => open !== key) : [...openRows, key]
+  }
+
+  // ——— The ladder ———
+  //
+  // A band is the space between two rungs. A rung is earned by the clock moving, so everything
+  // sharing a start time shares a band however many entries that is — a run of instants and
+  // zero-length narration is one band, not a stack of rungs all reading the same time. An
+  // interval always takes a band of its own.
+
+  type Band =
+    | { kind: 'entries'; id: string; entries: StoryEntry[] }
+    | { kind: 'interval'; id: string; interval: RangeInterval }
+
+  const bands = $derived.by(() => {
+    const built: Band[] = []
+    let current: StoryEntry[] = []
+    for (const entry of rangeEntries) {
+      current.push(entry)
+      const interval = intervals.find((i) => i.afterEntryId === entry.id)
+      if (interval || timeMoved(current[0], entry)) {
+        built.push({ kind: 'entries', id: current[0].id, entries: current })
+        current = []
+      }
+      if (interval) {
+        built.push({ kind: 'interval', id: `gap:${interval.afterEntryId}`, interval })
+      }
+    }
+    if (current.length > 0) built.push({ kind: 'entries', id: current[0].id, entries: current })
+    return built
   })
+
+  /** Two readings of one instant. A missing time cannot be shown to be either. */
+  function sameInstant(
+    a: TimeTracker | null | undefined,
+    b: TimeTracker | null | undefined,
+  ): boolean {
+    return !!a && !!b && toMinutes(a) === toMinutes(b)
+  }
+
+  /** Whether the clock moved across a run of entries, on either rail. Nothing else earns a rung. */
+  function timeMoved(first: StoryEntry, last: StoryEntry): boolean {
+    const repairedFrom = repairedTimes(first.id)?.start
+    const repairedTo = repairedTimes(last.id)?.end
+    if (repairedFrom && repairedTo && !sameInstant(repairedFrom, repairedTo)) return true
+    return !sameInstant(recordedStart(first), last.metadata?.timeEnd)
+  }
+
+  function recordedStart(entry: StoryEntry): TimeTracker | null {
+    const metadata = entry.metadata
+    return (entry.type === 'user_action' ? metadata?.timeEnd : metadata?.timeStart) ?? null
+  }
+
+  interface BandEdges {
+    recorded: [TimeTracker | null, TimeTracker | null]
+    repaired: [TimeTracker | null, TimeTracker | null]
+  }
+
+  function bandEdges(band: Band): BandEdges {
+    if (band.kind === 'entries') {
+      const first = band.entries[0]
+      const last = band.entries[band.entries.length - 1]
+      return {
+        recorded: [recordedStart(first), last.metadata?.timeEnd ?? null],
+        repaired: [repairedTimes(first.id)?.start ?? null, repairedTimes(last.id)?.end ?? null],
+      }
+    }
+    const after = byId.get(band.interval.afterEntryId)
+    const before = byId.get(band.interval.beforeEntryId)
+    return {
+      recorded: [after?.metadata?.timeEnd ?? null, before ? recordedStart(before) : null],
+      repaired: [
+        repairedTimes(band.interval.afterEntryId)?.end ?? null,
+        repairedTimes(band.interval.beforeEntryId)?.start ?? null,
+      ],
+    }
+  }
+
+  /** One more rung than there are bands: bands are contiguous, so each rung serves two. */
+  const rungs = $derived.by(() => {
+    if (bands.length === 0) return []
+    const first = bandEdges(bands[0])
+    return [
+      { recorded: first.recorded[0], repaired: first.repaired[0] },
+      ...bands.map((band) => {
+        const edges = bandEdges(band)
+        return { recorded: edges.recorded[1], repaired: edges.repaired[1] }
+      }),
+    ]
+  })
+
+  function bandLength(band: Band): number | null {
+    const { repaired } = bandEdges(band)
+    if (!repaired[0] || !repaired[1]) return null
+    return toMinutes(repaired[1]) - toMinutes(repaired[0])
+  }
+
+  function bandUnsettled(band: Band): boolean {
+    return band.kind === 'entries' && band.entries.some((entry) => !!requestFor(entry.id))
+  }
+
+  function bandLabel(band: Band): string {
+    if (band.kind === 'interval') return `Time gap after ${entryNumber(band.interval.afterEntryId)}`
+    const numbers = band.entries.map((entry) => entryNumber(entry.id))
+    return numbers.length === 1
+      ? `Entry ${numbers[0]}`
+      : `Entries ${numbers[0]}–${numbers[numbers.length - 1]}`
+  }
+
+  function isUnfolded(key: string): boolean {
+    return unfolded[key] === true
+  }
+
+  function toggleCard(key: string) {
+    unfolded = { ...unfolded, [key]: !unfolded[key] }
+  }
+
+  function foldBand(id: string) {
+    if (!foldedBands.includes(id)) foldedBands = [...foldedBands, id]
+  }
+
+  function openBand(id: string) {
+    foldedBands = foldedBands.filter((folded) => folded !== id)
+  }
+
+  const storyBands = $derived(bands.filter((band) => band.kind === 'entries'))
+  const allFolded = $derived(
+    storyBands.length > 0 && storyBands.every((band) => foldedBands.includes(band.id)),
+  )
+
+  function toggleAll() {
+    foldedBands = allFolded ? [] : storyBands.map((band) => band.id)
+  }
+
+  /**
+   * The strip steers the reading: to the first band still owed a weight, or to the end when
+   * nothing is outstanding and the reader only wants to apply.
+   */
+  function jump() {
+    const target = resolved ? 'repair-footer' : `band-${unreadable[0]?.entryId}`
+    document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
 </script>
 
-<Dialog.Root bind:open>
-  <Dialog.Content
-    class="max-w-3xl gap-4 {timelineLayout.mobile ? 'max-h-[90vh] overflow-y-auto' : ''}"
+<svelte:window
+  onkeydowncapture={(event) => {
+    if (fullTextId && event.key === 'Escape') {
+      event.stopPropagation()
+      fullTextId = null
+    }
+  }}
+/>
+
+<ResponsiveModal.Root bind:open>
+  <ResponsiveModal.Content
+    class={narrow ? 'flex flex-col' : 'flex h-[85vh] max-w-3xl flex-col gap-4'}
   >
-    <Dialog.Header>
-      <Dialog.Title>Reconcile a range</Dialog.Title>
-      <Dialog.Description>
-        Fits the entries between two boundaries to the time they assert, keeping their relative
-        pacing. Nothing outside the range is touched.
-      </Dialog.Description>
-    </Dialog.Header>
+    <ResponsiveModal.Header class={narrow ? 'border-b-0' : ''}>
+      <ResponsiveModal.Title>Reconcile a range</ResponsiveModal.Title>
+      {#if !narrow}
+        <ResponsiveModal.Description>
+          Fits the entries between two boundaries to the time they assert, keeping their relative
+          pacing. Nothing outside the range is touched.
+        </ResponsiveModal.Description>
+      {/if}
+    </ResponsiveModal.Header>
 
-    <div class="flex flex-col gap-4">
-      {#if ranges.length === 0}
-        <p class="text-muted-foreground text-sm">
-          There is nothing to reconcile yet. A repair runs between two boundaries, and this story
-          offers fewer than two.
+    <!--
+      The body stays mounted under the text rather than being swapped out for it: unmounting a
+      scroll container loses where the reader was, and returning to the top of a long ladder
+      after reading one entry is the opposite of what the button is for.
+    -->
+    {#if narrow}
+      <div class="min-h-0 flex-1 overflow-y-auto">
+        {@render mobileBody()}
+      </div>
+    {:else}
+      <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
+        {@render desktopBody()}
+      </div>
+    {/if}
+
+    {#if !narrow}
+      <ResponsiveModal.Footer>
+        <Button variant="outline" onclick={() => (open = false)}>
+          {appliedMessage ? 'Close' : 'Cancel'}
+        </Button>
+        <Button disabled={preview?.status !== 'ok' || applying} onclick={apply}>
+          {applying ? 'Applying…' : 'Apply repair'}
+        </Button>
+      </ResponsiveModal.Footer>
+    {/if}
+
+    {#if fullTextEntry}
+      <!--
+        Over the whole surface, header and footer included: reading an entry is its own screen, and
+        the only way off it is Back. A stacked dialog could not do this — it is portalled outside
+        this content, so dismissing it reads as a click outside and closes the repair as well.
+      -->
+      <div
+        class="bg-background absolute inset-0 z-30 flex flex-col gap-3 rounded-[inherit] px-4 py-3"
+      >
+        <Button
+          variant="text"
+          size="sm"
+          class="h-8 w-fit px-1 text-xs"
+          onclick={() => (fullTextId = null)}
+        >
+          <ChevronLeft class="h-4 w-4" />
+          Back
+        </Button>
+        <p class="text-sm font-medium">Entry {entryNumber(fullTextEntry.id)}</p>
+        <p class="min-h-0 flex-1 overflow-y-auto text-sm whitespace-pre-wrap">
+          {fullTextEntry.content}
         </p>
-        <p class="text-muted-foreground text-xs">
-          In view: {story.entries.length}
-          {story.entries.length === 1 ? 'entry' : 'entries'}, {story.timeAnchors.length}
-          {story.timeAnchors.length === 1 ? 'anchor' : 'anchors'}, {story.timeBoundaries.length}
-          {story.timeBoundaries.length === 1 ? 'boundary' : 'boundaries'}.
-        </p>
+      </div>
+    {/if}
+  </ResponsiveModal.Content>
+</ResponsiveModal.Root>
+
+{#snippet emptyRanges()}
+  <p class="text-muted-foreground text-sm">
+    There is nothing to reconcile yet. A repair runs between two boundaries, and this story offers
+    fewer than two.
+  </p>
+  <p class="text-muted-foreground text-xs">
+    In view: {story.entries.length}
+    {story.entries.length === 1 ? 'entry' : 'entries'}, {story.timeAnchors.length}
+    {story.timeAnchors.length === 1 ? 'anchor' : 'anchors'}, {story.timeBoundaries.length}
+    {story.timeBoundaries.length === 1 ? 'boundary' : 'boundaries'}.
+  </p>
+{/snippet}
+
+{#snippet rangePicker(withSpans: boolean)}
+  <label class="text-sm">
+    Range
+    <select
+      class="border-input bg-background mt-1 w-full rounded-md border px-2 py-1 text-sm"
+      bind:value={selectedIndex}
+    >
+      {#each ranges as candidate, index (candidate.from.entryId + candidate.to.entryId)}
+        <option value={index}>{rangeLabel(candidate)}</option>
+      {/each}
+    </select>
+  </label>
+
+  {#if withSpans}
+    <div class="text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 text-xs">
+      <span>Was <span class="text-foreground">{spanText(recordedSpan)}</span></span>
+      <span>Becomes <span class="text-foreground">{spanText(assertedSpan)}</span></span>
+    </div>
+  {/if}
+{/snippet}
+
+{#snippet refusalCard(reason: RangeRefusal['reason'], boundaries: Boundary[])}
+  <div class="border-destructive/50 bg-destructive/10 rounded-md border p-3 text-sm">
+    <p class="flex items-center gap-2 font-medium">
+      <TriangleAlert class="h-4 w-4" />
+      {reason === 'backwards-span'
+        ? 'These two boundaries contradict each other'
+        : 'A boundary has no time'}
+    </p>
+    <p class="text-muted-foreground mt-1 text-xs">
+      {#if reason === 'backwards-span'}
+        Entry {entryNumber(boundaries[0].entryId)} is asserted at
+        {stamp(boundaries[0].time)}, entry
+        {entryNumber(boundaries[1].entryId)} at
+        {stamp(boundaries[1].time)}. The later one asserts an earlier time, and only you can say
+        which is wrong.
       {:else}
-        <label class="text-sm">
-          Range
-          <select
-            class="border-input bg-background mt-1 w-full rounded-md border px-2 py-1 text-sm"
-            bind:value={selectedIndex}
-          >
-            {#each ranges as candidate, index (candidate.from.entryId + candidate.to.entryId)}
-              <option value={index}>{rangeLabel(candidate)}</option>
-            {/each}
-          </select>
-        </label>
+        {#each boundaries as boundary (boundary.entryId)}
+          Entry {entryNumber(boundary.entryId)} has no recorded ending. Pin when it ended to use it as
+          a boundary.
+        {/each}
+      {/if}
+    </p>
+  </div>
+{/snippet}
 
-        <div class="text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 text-xs">
-          <span>Was <span class="text-foreground">{spanText(recordedSpan)}</span></span>
-          <span>Becomes <span class="text-foreground">{spanText(assertedSpan)}</span></span>
-        </div>
-
-        {#if timelineLayout.mobile}
-          <p class="text-muted-foreground text-xs">
-            Open a row to set an entry's weight or decide what a time gap is worth.
-          </p>
-        {/if}
-
-        <!-- Above the table: what the reader still has to settle is the reason to read it. -->
-        {#if !resolved}
-          <p class="text-muted-foreground flex items-start gap-1 text-xs">
-            <TriangleAlert class="mt-0.5 h-3 w-3 shrink-0 text-amber-600" />
-            <span>
-              {unreadable.length}
-              {unreadable.length === 1 ? 'entry needs' : 'entries need'} a length. Nothing is calculated
-              until each is settled.
-            </span>
-          </p>
-        {/if}
-
-        {#if refusal?.status === 'refused'}
-          <div class="border-destructive/50 bg-destructive/10 rounded-md border p-3 text-sm">
-            <p class="flex items-center gap-2 font-medium">
-              <TriangleAlert class="h-4 w-4" />
-              {refusal.refusal.reason === 'backwards-span'
-                ? 'These two boundaries contradict each other'
-                : 'A boundary has no time'}
-            </p>
-            <p class="text-muted-foreground mt-1 text-xs">
-              {#if refusal.refusal.reason === 'backwards-span'}
-                Entry {entryNumber(refusal.refusal.boundaries[0].entryId)} is asserted at
-                {stamp(refusal.refusal.boundaries[0].time)}, entry
-                {entryNumber(refusal.refusal.boundaries[1].entryId)} at
-                {stamp(refusal.refusal.boundaries[1].time)}. The later one asserts an earlier time,
-                and only you can say which is wrong.
-              {:else}
-                {#each refusal.refusal.boundaries as boundary (boundary.entryId)}
-                  Entry {entryNumber(boundary.entryId)} has no recorded ending. Pin when it ended to use
-                  it as a boundary.
-                {/each}
-              {/if}
-            </p>
-          </div>
-        {:else}
-          <div class={timelineLayout.mobile ? '' : 'max-h-72 overflow-y-auto'}>
-            <table class="w-full border-collapse text-xs">
-              <thead
-                class="text-muted-foreground bg-background border-border sticky top-0 z-10 border-b text-left"
-              >
-                <tr>
-                  <th class="w-8 py-1 pr-2 font-medium">#</th>
-                  {#if !timelineLayout.mobile}
-                    <th class="w-24 py-1 pr-2 font-medium">Label</th>
-                  {/if}
-                  <th class="py-1 pr-2 font-medium">Entry</th>
-                  <th class="w-36 py-1 pr-2 font-medium">Was</th>
-                  <th class="w-36 py-1 font-medium">Becomes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each rangeEntries as entry (entry.id)}
-                  {@const request = requestFor(entry.id)}
-                  {@const repaired = repairedTimes(entry.id)}
-                  {@const interval = intervals.find((i) => i.afterEntryId === entry.id)}
-                  {@const was = wasWeight(entry.id)}
-                  <tr
-                    class="border-border/50 hover:bg-muted/40 cursor-pointer border-t {selection?.kind ===
-                      'entry' && selection.entryId === entry.id
-                      ? 'bg-primary/10'
-                      : ''}"
-                    onclick={() => chooseRow({ kind: 'entry', entryId: entry.id })}
-                  >
-                    <td class="text-muted-foreground py-1 pr-2 align-top">
-                      <span class="flex items-center gap-0.5">
-                        {#if timelineLayout.mobile}
-                          {#if isOpen('entry', entry.id)}
-                            <ChevronDown class="h-3.5 w-3.5 shrink-0" />
-                          {:else}
-                            <ChevronRight class="h-3.5 w-3.5 shrink-0" />
-                          {/if}
-                        {/if}
-                        {entryNumber(entry.id)}
-                      </span>
-                    </td>
-                    {#if !timelineLayout.mobile}
-                      <td class="py-1 pr-2 align-top">
-                        <span class="flex items-center gap-1">
-                          {#if request}
-                            <TriangleAlert class="h-3 w-3 shrink-0 text-amber-600" />
-                          {/if}
-                          {@render entryChip(entry.id)}
-                        </span>
-                      </td>
-                    {/if}
-                    <td class="py-1 pr-2 align-top">
-                      <span class="line-clamp-3 {isAction(entry.id) ? 'italic' : ''}">
-                        {#if timelineLayout.mobile}
-                          {#if request}
-                            <TriangleAlert class="mr-1 inline h-3 w-3 text-amber-600" />
-                          {/if}
-                          {@render entryChip(entry.id)}
-                        {/if}
-                        {entryText(entry.id)}
-                      </span>
-                    </td>
-                    <td class="text-muted-foreground py-1 pr-2 align-top whitespace-nowrap">
-                      <div class="grid grid-cols-[auto_1fr] gap-x-2">
-                        {#if isAction(entry.id)}
-                          <span>At:</span><span>{stamp(entry.metadata?.timeEnd)}</span>
-                        {:else}
-                          <span>Start:</span><span>{stamp(entry.metadata?.timeStart)}</span>
-                          <span>End:</span><span>{stamp(entry.metadata?.timeEnd)}</span>
-                          <span>Weight:</span>
-                          <span class={was.supplied ? 'text-foreground font-medium' : ''}>
-                            {was.text}
-                          </span>
-                        {/if}
-                      </div>
-                    </td>
-                    <td class="py-1 align-top whitespace-nowrap">
-                      {#if repaired}
-                        <div class="grid grid-cols-[auto_1fr] gap-x-2">
-                          {#if isAction(entry.id)}
-                            <span>At:</span><span>{stamp(repaired.end)}</span>
-                          {:else}
-                            <span>Start:</span><span>{stamp(repaired.start)}</span>
-                            <span>End:</span><span>{stamp(repaired.end)}</span>
-                            <span>Weight:</span>
-                            <span class="flex items-center gap-1">
-                              {#if collapsed.includes(entry.id)}
-                                <TriangleAlert class="h-3 w-3 shrink-0 text-amber-600" />
-                              {/if}
-                              {formatDuration(toMinutes(repaired.end) - toMinutes(repaired.start))}
-                            </span>
-                          {/if}
-                        </div>
-                      {:else}
-                        <span class="text-muted-foreground">—</span>
-                      {/if}
-                    </td>
-                  </tr>
-
-                  {#if timelineLayout.mobile && isOpen('entry', entry.id)}
-                    <tr class="border-border/50 bg-primary/5 border-t">
-                      <td colspan="4" class="p-2">{@render controlPanel()}</td>
-                    </tr>
-                  {/if}
-
-                  {#if interval}
-                    {@const scaled = scaledInterval(interval.afterEntryId, interval.beforeEntryId)}
-                    <tr
-                      class="border-border/50 hover:bg-muted/40 cursor-pointer border-t {selection?.kind ===
-                        'gap' && selection.entryId === interval.afterEntryId
-                        ? 'bg-primary/10'
-                        : 'bg-muted/20'}"
-                      onclick={() => chooseRow({ kind: 'gap', entryId: interval.afterEntryId })}
-                    >
-                      <td class="text-muted-foreground py-1 pr-2 align-top">
-                        {#if timelineLayout.mobile}
-                          {#if isOpen('gap', interval.afterEntryId)}
-                            <ChevronDown class="h-3.5 w-3.5 shrink-0" />
-                          {:else}
-                            <ChevronRight class="h-3.5 w-3.5 shrink-0" />
-                          {/if}
-                        {/if}
-                      </td>
-                      {#if !timelineLayout.mobile}
-                        <td class="py-1 pr-2 align-top">
-                          <span class="flex items-center gap-1">
-                            {@render gapChip()}
-                          </span>
-                        </td>
-                      {/if}
-                      <td class="text-muted-foreground py-1 pr-2 align-top">
-                        {#if timelineLayout.mobile}
-                          {@render gapChip()}
-                        {/if}
-                        Time not claimed by adjacent entries
-                      </td>
-                      <td class="text-muted-foreground py-1 pr-2 align-top whitespace-nowrap">
-                        <div class="grid grid-cols-[auto_1fr] gap-x-2">
-                          <span>Weight:</span>
-                          <span
-                            class={statedWeights[interval.afterEntryId] !== undefined
-                              ? 'text-foreground font-medium'
-                              : ''}
-                          >
-                            {formatDuration(interval.recordedMinutes)}
-                          </span>
-                        </div>
-                      </td>
-                      <td class="text-muted-foreground py-1 align-top whitespace-nowrap">
-                        <div class="grid grid-cols-[auto_1fr] gap-x-2">
-                          <span>Weight:</span>
-                          <span>
-                            {#if scaled === null}
-                              —
-                            {:else if scaled === 0}
-                              closed
-                            {:else}
-                              {formatDuration(scaled)}
-                            {/if}
-                          </span>
-                        </div>
-                      </td>
-                    </tr>
-
-                    {#if timelineLayout.mobile && isOpen('gap', interval.afterEntryId)}
-                      <tr class="border-border/50 bg-primary/5 border-t">
-                        <td colspan="4" class="p-2">{@render controlPanel()}</td>
-                      </tr>
-                    {/if}
-                  {/if}
-                {/each}
-              </tbody>
-            </table>
-          </div>
-
-          {#if !timelineLayout.mobile}
-            <!-- A floor rather than a fixed height: it keeps the dialog from jumping as the
-                 selection moves between a gap, an entry and nothing at all, without cropping
-                 the card's own border when the controls need more room than that. -->
-            <div class="flex min-h-56 flex-col">
-              {@render controlPanel()}
-            </div>
-          {/if}
-
-          {#if resolved && preview?.status === 'ok'}
-            <div class="text-muted-foreground space-y-1 text-xs">
-              {#if preview.result.leadingJoin.differenceMinutes !== 0}
-                <p>
-                  The entry before this range still ends at
-                  {stamp(preview.result.leadingJoin.neighbourTime)}, so it will
-                  {preview.result.leadingJoin.differenceMinutes > 0
-                    ? 'overlap'
-                    : 'leave a gap before'} the new start. Reconcile the range before this one to close
-                  it.
-                </p>
-              {/if}
-              {#if preview.result.trailingJoin && preview.result.trailingJoin.differenceMinutes !== 0}
-                <p>
-                  The entry after this range still begins at
-                  {stamp(preview.result.trailingJoin.neighbourTime)}, leaving a break at the end.
-                </p>
-              {/if}
-              {#if preview.plan.clock}
-                <p>This range reaches the end of the story, so the current time moves with it.</p>
-              {:else}
-                <p>
-                  The story's current time is unchanged: this repair ends at entry
-                  {entryNumber(preview.range.to.entryId)}, and the story ends at entry
-                  {lastEntryNumber ?? '?'}. Widen the range to the end of the story to move the
-                  clock with it.
-                </p>
-              {/if}
-            </div>
-
-            {#if collapsed.length > 0}
-              <p
-                class="flex items-start gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-2 text-xs"
-              >
-                <TriangleAlert class="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
-                <span>
-                  {collapsed.length === 1 ? 'One entry is' : `${collapsed.length} entries are`}
-                  compressed to no length, marked above. Their share of the pacing cannot be recovered
-                  by widening the range later.
-                </span>
-              </p>
-            {/if}
-          {/if}
-        {/if}
-
-        {#if staleMessage}
-          <p class="text-destructive text-xs">{staleMessage}</p>
-        {/if}
-
-        {#if appliedMessage}
-          <p class="text-xs text-emerald-600 dark:text-emerald-400">{appliedMessage}</p>
-        {/if}
+{#snippet outcomeNotes()}
+  {#if resolved && preview?.status === 'ok'}
+    <div class="text-muted-foreground space-y-1 text-xs">
+      {#if preview.result.leadingJoin.differenceMinutes !== 0}
+        <p>
+          The entry before this range still ends at
+          {stamp(preview.result.leadingJoin.neighbourTime)}, so it will
+          {preview.result.leadingJoin.differenceMinutes > 0 ? 'overlap' : 'leave a gap before'} the new
+          start. Reconcile the range before this one to close it.
+        </p>
+      {/if}
+      {#if preview.result.trailingJoin && preview.result.trailingJoin.differenceMinutes !== 0}
+        <p>
+          The entry after this range still begins at
+          {stamp(preview.result.trailingJoin.neighbourTime)}, leaving a break at the end.
+        </p>
+      {/if}
+      {#if preview.plan.clock}
+        <p>This range reaches the end of the story, so the current time moves with it.</p>
+      {:else}
+        <p>
+          The story's current time is unchanged: this repair ends at entry
+          {entryNumber(preview.range.to.entryId)}, and the story ends at entry
+          {lastEntryNumber ?? '?'}. Widen the range to the end of the story to move the clock with
+          it.
+        </p>
       {/if}
     </div>
-    <Dialog.Footer>
-      <Button variant="outline" onclick={() => (open = false)}>
-        {appliedMessage ? 'Close' : 'Cancel'}
-      </Button>
-      <Button disabled={preview?.status !== 'ok' || applying} onclick={apply}>
-        {applying ? 'Applying…' : 'Apply repair'}
-      </Button>
-    </Dialog.Footer>
-  </Dialog.Content>
-</Dialog.Root>
 
-<Dialog.Root bind:open={fullTextOpen}>
-  <Dialog.Content class="flex max-h-[90vh] max-w-2xl flex-col gap-4">
-    <Dialog.Header>
-      <Dialog.Title>
-        {selectedEntry ? `Entry ${entryNumber(selectedEntry.id)}` : 'Entry'}
-      </Dialog.Title>
-    </Dialog.Header>
+    {#if collapsed.length > 0}
+      <p
+        class="flex items-start gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-2 text-xs"
+      >
+        <TriangleAlert class="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+        <span>
+          {collapsed.length === 1 ? 'One entry is' : `${collapsed.length} entries are`}
+          compressed to no length, marked above. Their share of the pacing cannot be recovered by widening
+          the range later.
+        </span>
+      </p>
+    {/if}
+  {/if}
 
-    <p class="min-h-0 flex-1 overflow-y-auto text-sm whitespace-pre-wrap">
-      {selectedEntry?.content ?? ''}
+  {#if staleMessage}
+    <p class="text-destructive text-xs">{staleMessage}</p>
+  {/if}
+
+  {#if appliedMessage}
+    <p class="text-xs text-emerald-600 dark:text-emerald-400">{appliedMessage}</p>
+  {/if}
+{/snippet}
+
+{#snippet desktopBody()}
+  {#if ranges.length === 0}
+    {@render emptyRanges()}
+  {:else}
+    {@render rangePicker(true)}
+
+    <!-- Above the table: what the reader still has to settle is the reason to read it. -->
+    {#if !resolved}
+      <p class="text-muted-foreground flex items-start gap-1 text-xs">
+        <TriangleAlert class="mt-0.5 h-3 w-3 shrink-0 text-amber-600" />
+        <span>
+          {unreadable.length}
+          {unreadable.length === 1 ? 'entry needs' : 'entries need'} a length. Nothing is calculated until
+          each is settled.
+        </span>
+      </p>
+    {/if}
+
+    {#if refusal?.status === 'refused'}
+      {@render refusalCard(refusal.refusal.reason, refusal.refusal.boundaries)}
+    {:else}
+      <table class="w-full border-collapse text-xs">
+        <thead
+          class="text-muted-foreground bg-background border-border sticky top-0 z-10 border-b text-left"
+        >
+          <tr>
+            <th class="w-8 py-1 pr-2 font-medium">#</th>
+            <th class="w-24 py-1 pr-2 font-medium">Label</th>
+            <th class="py-1 pr-2 font-medium">Entry</th>
+            <th class="w-36 py-1 pr-2 font-medium">Was</th>
+            <th class="w-36 py-1 font-medium">Becomes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each rangeEntries as entry (entry.id)}
+            {@const request = requestFor(entry.id)}
+            {@const repaired = repairedTimes(entry.id)}
+            {@const interval = intervals.find((i) => i.afterEntryId === entry.id)}
+            {@const was = wasWeight(entry.id)}
+            <tr
+              class="border-border/50 hover:bg-muted/40 cursor-pointer border-t {isOpen(
+                'entry',
+                entry.id,
+              )
+                ? 'bg-primary/10'
+                : ''}"
+              onclick={() => chooseRow('entry', entry.id)}
+            >
+              <td class="text-muted-foreground py-1 pr-2 align-top">{entryNumber(entry.id)}</td>
+              <td class="py-1 pr-2 align-top">
+                <span class="flex items-center gap-1">
+                  {#if request}
+                    <TriangleAlert class="h-3 w-3 shrink-0 text-amber-600" />
+                  {/if}
+                  {@render entryChip(entry.id)}
+                </span>
+              </td>
+              <td class="py-1 pr-2 align-top">
+                <span class="line-clamp-3 {isAction(entry.id) ? 'italic' : ''}">
+                  {entryText(entry.id)}
+                </span>
+              </td>
+              <td class="text-muted-foreground py-1 pr-2 align-top whitespace-nowrap">
+                <div class="grid grid-cols-[auto_1fr] gap-x-2">
+                  {#if isAction(entry.id)}
+                    <span>At:</span><span>{stamp(entry.metadata?.timeEnd)}</span>
+                  {:else}
+                    <span>Start:</span><span>{stamp(entry.metadata?.timeStart)}</span>
+                    <span>End:</span><span>{stamp(entry.metadata?.timeEnd)}</span>
+                    <span>Weight:</span>
+                    <span class={was.supplied ? 'text-foreground font-medium' : ''}>
+                      {was.text}
+                    </span>
+                  {/if}
+                </div>
+              </td>
+              <td class="py-1 align-top whitespace-nowrap">
+                {#if repaired}
+                  <div class="grid grid-cols-[auto_1fr] gap-x-2">
+                    {#if isAction(entry.id)}
+                      <span>At:</span><span>{stamp(repaired.end)}</span>
+                    {:else}
+                      <span>Start:</span><span>{stamp(repaired.start)}</span>
+                      <span>End:</span><span>{stamp(repaired.end)}</span>
+                      <span>Weight:</span>
+                      <span class="flex items-center gap-1">
+                        {#if collapsed.includes(entry.id)}
+                          <TriangleAlert class="h-3 w-3 shrink-0 text-amber-600" />
+                        {/if}
+                        {formatDuration(toMinutes(repaired.end) - toMinutes(repaired.start))}
+                      </span>
+                    {/if}
+                  </div>
+                {:else}
+                  <span class="text-muted-foreground">—</span>
+                {/if}
+              </td>
+            </tr>
+
+            {#if isOpen('entry', entry.id)}
+              <tr class="border-border/50 bg-primary/5 border-t">
+                <td colspan="5" class="p-2">{@render entryPanel(entry)}</td>
+              </tr>
+            {/if}
+
+            {#if interval}
+              {@const scaled = scaledInterval(interval.afterEntryId, interval.beforeEntryId)}
+              <tr
+                class="border-border/50 hover:bg-muted/40 cursor-pointer border-t {isOpen(
+                  'gap',
+                  interval.afterEntryId,
+                )
+                  ? 'bg-primary/10'
+                  : 'bg-muted/20'}"
+                onclick={() => chooseRow('gap', interval.afterEntryId)}
+              >
+                <td class="py-1 pr-2"></td>
+                <td class="py-1 pr-2 align-top">
+                  <span class="flex items-center gap-1">{@render gapChip()}</span>
+                </td>
+                <td class="text-muted-foreground py-1 pr-2 align-top">
+                  Time not claimed by adjacent entries
+                </td>
+                <td class="text-muted-foreground py-1 pr-2 align-top whitespace-nowrap">
+                  <div class="grid grid-cols-[auto_1fr] gap-x-2">
+                    <span>Weight:</span>
+                    <span
+                      class={statedWeights[interval.afterEntryId] !== undefined
+                        ? 'text-foreground font-medium'
+                        : ''}
+                    >
+                      {formatDuration(interval.recordedMinutes)}
+                    </span>
+                  </div>
+                </td>
+                <td class="text-muted-foreground py-1 align-top whitespace-nowrap">
+                  <div class="grid grid-cols-[auto_1fr] gap-x-2">
+                    <span>Weight:</span>
+                    <span>
+                      {#if scaled === null}
+                        —
+                      {:else if scaled === 0}
+                        closed
+                      {:else}
+                        {formatDuration(scaled)}
+                      {/if}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+
+              {#if isOpen('gap', interval.afterEntryId)}
+                <tr class="border-border/50 bg-primary/5 border-t">
+                  <td colspan="5" class="p-2">{@render intervalPanel(interval)}</td>
+                </tr>
+              {/if}
+            {/if}
+          {/each}
+        </tbody>
+      </table>
+    {/if}
+
+    {@render outcomeNotes()}
+  {/if}
+{/snippet}
+
+{#snippet mobileBody()}
+  <div class="flex flex-col gap-3 px-4 pb-2">
+    {#if ranges.length === 0}
+      {@render emptyRanges()}
+    {:else}
+      <div class="border-border -mx-4 border-b px-4 pt-1 pb-3">
+        <ResponsiveModal.Description class="text-muted-foreground text-xs">
+          Fits the entries between two boundaries to the time they assert, keeping their relative
+          pacing. Nothing outside the range is touched.
+        </ResponsiveModal.Description>
+      </div>
+      {@render rangePicker(false)}
+
+      {#if bands.length > 1}
+        <div class="text-muted-foreground flex items-center gap-2 text-[11px]">
+          <Button variant="outline" size="sm" class="h-7 shrink-0 text-xs" onclick={toggleAll}>
+            {allFolded ? 'Expand all' : 'Collapse all'}
+          </Button>
+          <span>swipe a band ◂ to fold, ▸ a summary to open</span>
+        </div>
+      {/if}
+    {/if}
+  </div>
+
+  {#if ranges.length > 0}
+    <!-- The one thing that must not scroll away: it is what the reader steers by. -->
+    <div class="bg-background border-border sticky top-0 z-10 border-y px-4 py-2">
+      <button type="button" class="flex w-full items-center gap-2 text-left text-xs" onclick={jump}>
+        {#if resolved}
+          <span class="flex-1">Nothing outstanding</span>
+          <span class="text-muted-foreground shrink-0">Jump to end ›</span>
+        {:else}
+          <TriangleAlert class="h-3.5 w-3.5 shrink-0 text-amber-600" />
+          <span class="flex-1">
+            {unreadable.length}
+            {unreadable.length === 1 ? 'entry still needs' : 'entries still need'} a weight
+          </span>
+          <span class="text-muted-foreground shrink-0">Jump ›</span>
+        {/if}
+      </button>
+    </div>
+
+    <div class="flex flex-col gap-3 px-4 pt-3 pb-4">
+      {#if refusal?.status === 'refused'}
+        {@render refusalCard(refusal.refusal.reason, refusal.refusal.boundaries)}
+      {:else}
+        {@render ladder()}
+      {/if}
+
+      {@render outcomeNotes()}
+
+      <div id="repair-footer" class="flex gap-2 pt-2">
+        <Button variant="outline" class="flex-1" onclick={() => (open = false)}>
+          {appliedMessage ? 'Close' : 'Cancel'}
+        </Button>
+        <Button class="flex-1" disabled={preview?.status !== 'ok' || applying} onclick={apply}>
+          {applying ? 'Applying…' : 'Apply repair'}
+        </Button>
+      </div>
+    </div>
+  {/if}
+{/snippet}
+
+{#snippet ladder()}
+  <!-- Which rail is which, and what each one comes to, stated once rather than on every rung. -->
+  <div class="-mx-2 mb-1 flex items-end justify-between px-3 text-[10px]">
+    <span class="flex flex-col gap-0.5">
+      <span class="text-muted-foreground tracking-wide uppercase">Was</span>
+      <span class="text-muted-foreground">
+        <span class="text-foreground font-medium">{spanText(recordedSpan)}</span> total
+      </span>
+    </span>
+    <span class="flex flex-col items-end gap-0.5">
+      <span class="text-muted-foreground tracking-wide uppercase">Becomes</span>
+      <span class="text-muted-foreground">
+        <span class="text-foreground font-medium">{spanText(assertedSpan)}</span> total
+      </span>
+    </span>
+  </div>
+
+  <!-- Two unbroken rails, the dots riding on top of them. -->
+  <div class="relative -mx-2">
+    <span class="bg-foreground/40 absolute inset-y-0 left-[3px] w-px"></span>
+    <span class="bg-foreground/40 absolute inset-y-0 right-[3px] w-px"></span>
+    <div class="relative flex flex-col px-3">
+      {#if preview?.status === 'ok' && preview.result.leadingJoin.differenceMinutes !== 0}
+        {@render joinStub(
+          `Entry ${entryNumber(preview.range.entryIds[0])} is preceded by one still ending at ${stamp(
+            preview.result.leadingJoin.neighbourTime,
+          )}`,
+        )}
+      {/if}
+
+      {#each bands as band, index (band.id)}
+        {@render rung(index)}
+        <div
+          class="pb-1"
+          use:swipe={{
+            threshold: 48,
+            onSwipeLeft: () => band.kind === 'entries' && foldBand(band.id),
+            onSwipeRight: () => openBand(band.id),
+          }}
+        >
+          {#if foldedBands.includes(band.id)}
+            {@render bandSummary(band)}
+          {:else if band.kind === 'entries'}
+            {#each band.entries as entry (entry.id)}
+              {@render entryCard(entry)}
+              {#if entry.type !== 'user_action'}
+                {@render weightCard(entry.id)}
+              {/if}
+            {/each}
+          {:else}
+            {@render intervalCard(band.interval)}
+            {@render gapWeightCard(band.interval)}
+          {/if}
+        </div>
+      {/each}
+
+      {@render rung(bands.length)}
+
+      {#if preview?.status === 'ok' && preview.result.trailingJoin && preview.result.trailingJoin.differenceMinutes !== 0}
+        {@render joinStub(
+          `The next entry still begins at ${stamp(preview.result.trailingJoin.neighbourTime)}`,
+        )}
+      {/if}
+    </div>
+  </div>
+{/snippet}
+
+{#snippet joinStub(text: string)}
+  <p class="text-muted-foreground py-1 text-[11px]">{text}</p>
+{/snippet}
+
+{#snippet rung(index: number)}
+  {@const point = rungs[index]}
+  {#if point}
+    {@const before = stampParts(point.recorded)}
+    {@const after = stampParts(point.repaired)}
+    <div class="relative flex items-center gap-1 py-1.5 font-mono text-[10px]">
+      <!-- The dots sit on the rails, which run behind them unbroken. -->
+      <span
+        class="bg-foreground/70 absolute top-1/2 -left-3 size-[7px] -translate-y-1/2 rounded-full"
+      ></span>
+      <span class="flex shrink-0 gap-1">
+        {#each before as part, i (i)}
+          <!-- The record lights only where it disagrees: the eye tracks what the repair moves. -->
+          <span class={after[i] === part ? 'text-muted-foreground/60' : 'text-foreground'}>
+            {part}
+          </span>
+        {/each}
+      </span>
+      <span class="bg-border/70 h-px min-w-2 flex-1"></span>
+      <span class="text-foreground shrink-0 font-medium">{after.join(' ')}</span>
+      <span
+        class="bg-foreground/70 absolute top-1/2 -right-3 size-[7px] -translate-y-1/2 rounded-full"
+      ></span>
+    </div>
+  {/if}
+{/snippet}
+
+{#snippet bandSummary(band: Band)}
+  {@const length = bandLength(band)}
+  <div class="border-border bg-muted/30 mb-2 flex items-center gap-2 rounded-md border px-2 py-2">
+    <span class="flex-1 text-xs">{bandLabel(band)}</span>
+    {#if bandUnsettled(band)}
+      <span class="flex items-center gap-1 text-xs text-amber-700 dark:text-amber-500">
+        <TriangleAlert class="h-3 w-3 shrink-0" />
+        needs a weight
+      </span>
+    {:else}
+      <span class="text-muted-foreground text-xs">
+        {length === null ? '—' : formatDuration(length)}
+      </span>
+    {/if}
+  </div>
+{/snippet}
+
+{#snippet cardShell(
+  key: string,
+  header: Snippet,
+  body: Snippet,
+  controls: Snippet,
+  anchorId?: string,
+)}
+  <div id={anchorId} class="border-border bg-card mb-2 rounded-md border">
+    <button
+      type="button"
+      class="flex w-full flex-col gap-1 p-2 text-left"
+      aria-expanded={isUnfolded(key)}
+      onclick={() => toggleCard(key)}
+    >
+      <span class="flex w-full items-center gap-2 text-[11px]">
+        {@render header()}
+        {#if isUnfolded(key)}
+          <ChevronDown class="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+        {:else}
+          <ChevronRight class="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+        {/if}
+      </span>
+      {@render body()}
+    </button>
+    {#if isUnfolded(key)}
+      <div class="border-border/60 flex flex-col items-start gap-2 border-t p-2 text-xs">
+        {@render controls()}
+      </div>
+    {/if}
+  </div>
+{/snippet}
+
+{#snippet entryCard(entry: StoryEntry)}
+  {@const request = requestFor(entry.id)}
+  {#snippet header()}
+    {@render entryChip(entry.id)}
+    <span class="flex-1">Entry {entryNumber(entry.id)}</span>
+    {#if request}
+      <TriangleAlert class="h-3 w-3 shrink-0 text-amber-600" />
+    {/if}
+  {/snippet}
+  {#snippet body()}
+    <span class="line-clamp-3 text-xs {isAction(entry.id) ? 'italic' : ''}">
+      {entryText(entry.id)}
+    </span>
+  {/snippet}
+  {#snippet controls()}
+    <Button variant="outline" size="sm" class="h-7 text-xs" onclick={() => (fullTextId = entry.id)}>
+      Show full text
+    </Button>
+    {#if isAction(entry.id)}
+      <p class="text-muted-foreground">
+        An action is an instant — the clock advances while the story responds, not while you decide.
+        It weighs nothing and takes no length.
+      </p>
+    {:else if canAddGap(entry.id)}
+      <Button variant="outline" size="sm" class="h-7 text-xs" onclick={() => addGap(entry.id)}>
+        <Plus class="h-3.5 w-3.5" />
+        Add a time gap after this entry
+      </Button>
+    {/if}
+  {/snippet}
+  {@render cardShell(`e:${entry.id}`, header, body, controls, `band-${entry.id}`)}
+{/snippet}
+
+{#snippet intervalCard(interval: RangeInterval)}
+  {#snippet header()}
+    {@render gapChip()}
+    <span class="flex-1">after {entryNumber(interval.afterEntryId)}</span>
+  {/snippet}
+  {#snippet body()}
+    <span class="text-muted-foreground line-clamp-2 text-xs">
+      Time not claimed by adjacent entries.
+    </span>
+  {/snippet}
+  {#snippet controls()}
+    <p class="text-muted-foreground">
+      {describeMinutes(originalGapMinutes(interval.afterEntryId))} between entry
+      {entryNumber(interval.afterEntryId)} and entry
+      {entryNumber(interval.beforeEntryId)}, not claimed by either of them.
+    </p>
+    {#if addedGapIds.includes(interval.afterEntryId)}
+      <Button
+        variant="text"
+        size="sm"
+        class="text-destructive h-7 px-1 text-xs"
+        onclick={() => removeGap(interval.afterEntryId)}
+      >
+        Remove this time gap
+      </Button>
+    {/if}
+  {/snippet}
+  {@render cardShell(`g:${interval.afterEntryId}`, header, body, controls)}
+{/snippet}
+
+{#snippet weightPair(was: string, becomes: string)}
+  <span class="text-muted-foreground text-xs">
+    was <span class="text-foreground font-medium">{was}</span>
+    → becomes <span class="text-foreground font-medium">{becomes}</span>
+  </span>
+{/snippet}
+
+{#snippet weightCard(entryId: string)}
+  {@const was = wasWeight(entryId)}
+  {@const repaired = repairedTimes(entryId)}
+  {@const request = requestFor(entryId)}
+  {#snippet header()}
+    <span class="text-muted-foreground flex-1 tracking-wide uppercase">Weight</span>
+    {#if request}
+      <span class="flex shrink-0 items-center gap-1 text-amber-700 dark:text-amber-500">
+        <TriangleAlert class="h-3 w-3 shrink-0" />
+        unreadable
+      </span>
+    {:else if collapsed.includes(entryId)}
+      <span class="flex shrink-0 items-center gap-1 text-amber-700 dark:text-amber-500">
+        <TriangleAlert class="h-3 w-3 shrink-0" />
+        no length
+      </span>
+    {:else if was.supplied}
+      <span class="text-muted-foreground flex shrink-0 items-center gap-1">
+        <Pencil class="h-3 w-3 shrink-0" />
+        edited
+      </span>
+    {/if}
+  {/snippet}
+  {#snippet body()}
+    {@render weightPair(
+      was.text,
+      repaired ? formatDuration(toMinutes(repaired.end) - toMinutes(repaired.start)) : '—',
+    )}
+  {/snippet}
+  {#snippet controls()}
+    {#if request}
+      <p class="flex items-start gap-1 text-amber-700 dark:text-amber-500">
+        <TriangleAlert class="mt-0.5 h-3 w-3 shrink-0" />
+        <span>{reasonText(request.reason)}</span>
+      </p>
+    {/if}
+    <p class="text-muted-foreground">
+      Recorded
+      <span class="text-foreground">
+        {stampRange(byId.get(entryId)?.metadata?.timeStart, byId.get(entryId)?.metadata?.timeEnd)}
+      </span>
+    </p>
+    <p class="text-muted-foreground">
+      Originally weighed as
+      <span class="text-foreground">
+        {recordedWeight(entryId) === null
+          ? 'unreadable'
+          : formatDuration(recordedWeight(entryId) ?? 0)}
+      </span>
+    </p>
+    <label class="flex w-full flex-col gap-1">
+      <span class="text-muted-foreground">Set custom weight (minutes or units y d h m):</span>
+      <span class="flex items-center gap-2">
+        <Input
+          placeholder="e.g. 90, 2h 30m, 3d"
+          class="h-7 flex-1 text-xs"
+          bind:value={supplied[entryId]}
+        />
+        {#if supplied[entryId]}
+          <Button
+            variant="text"
+            size="sm"
+            class="h-7 shrink-0 px-1 text-xs"
+            onclick={() => clearOverride(entryId)}
+          >
+            Clear
+          </Button>
+        {/if}
+      </span>
+    </label>
+    {#if durationIsInvalid(supplied[entryId])}
+      <p class="text-destructive">Not a duration. Try a number of minutes, or units like 2h 30m.</p>
+    {/if}
+    <p class="text-muted-foreground">
+      This sets what the entry is <em>worth</em>, not the length it ends up with: the range is
+      fitted to its boundaries, so each entry takes a share in proportion to its weight.
+    </p>
+  {/snippet}
+  {@render cardShell(`w:${entryId}`, header, body, controls)}
+{/snippet}
+
+{#snippet gapWeightCard(interval: RangeInterval)}
+  {@const scaled = scaledInterval(interval.afterEntryId, interval.beforeEntryId)}
+  {@const edited = statedWeights[interval.afterEntryId] !== undefined}
+  {#snippet header()}
+    <span class="text-muted-foreground flex-1 tracking-wide uppercase">Weight</span>
+    {#if edited}
+      <span class="text-muted-foreground flex shrink-0 items-center gap-1">
+        <Pencil class="h-3 w-3 shrink-0" />
+        edited
+      </span>
+    {/if}
+  {/snippet}
+  {#snippet body()}
+    {@render weightPair(
+      formatDuration(interval.recordedMinutes),
+      scaled === null ? '—' : scaled === 0 ? 'closed' : formatDuration(scaled),
+    )}
+  {/snippet}
+  {#snippet controls()}
+    <p class="text-muted-foreground">
+      Originally weighed as
+      <span class="text-foreground">
+        {formatDuration(originalGapMinutes(interval.afterEntryId))}
+      </span>
+    </p>
+    <label class="flex w-full flex-col gap-1">
+      <span class="text-muted-foreground">Set custom weight (minutes or units y d h m):</span>
+      <span class="flex items-center gap-2">
+        <Input
+          value={gapWeights[interval.afterEntryId] ?? ''}
+          oninput={(event) => setGapWeight(interval.afterEntryId, event.currentTarget.value)}
+          placeholder="e.g. 90, 2h 30m, 3d"
+          class="h-7 flex-1 text-xs"
+        />
+        {#if gapWeights[interval.afterEntryId]}
+          <Button
+            variant="text"
+            size="sm"
+            class="h-7 shrink-0 px-1 text-xs"
+            onclick={() => setGapWeight(interval.afterEntryId, '')}
+          >
+            Clear
+          </Button>
+        {/if}
+      </span>
+    </label>
+    {#if durationIsInvalid(gapWeights[interval.afterEntryId])}
+      <p class="text-destructive">Not a duration. Try a number of minutes, or units like 2h 30m.</p>
+    {/if}
+    <p class="text-muted-foreground">
+      A weight of nothing closes the interval, leaving the entries either side adjacent.
+    </p>
+  {/snippet}
+  {@render cardShell(`wg:${interval.afterEntryId}`, header, body, controls)}
+{/snippet}
+
+{#snippet intervalPanel(interval: RangeInterval)}
+  <div class="border-border rounded-md border p-3 text-xs">
+    <p class="mb-2 font-medium">
+      Time gap · after entry {entryNumber(interval.afterEntryId)}
+    </p>
+    <p class="text-muted-foreground mb-2">
+      {describeMinutes(interval.recordedMinutes)} between entry
+      {entryNumber(interval.afterEntryId)} and entry
+      {entryNumber(interval.beforeEntryId)}, not claimed by either of them.
     </p>
 
-    <Dialog.Footer>
-      <Button variant="outline" onclick={() => (fullTextOpen = false)}>Close</Button>
-    </Dialog.Footer>
-  </Dialog.Content>
-</Dialog.Root>
-
-{#snippet controlPanel()}
-  {#if selectedInterval}
-    <div class="border-border rounded-md border p-3 text-xs">
-      <p class="mb-2 font-medium">
-        Time gap · after entry {entryNumber(selectedInterval.afterEntryId)}
+    <div class="text-muted-foreground mb-2 flex flex-wrap gap-x-6 gap-y-1">
+      <span>
+        Originally weighed as
+        <span class="text-foreground">
+          {formatDuration(originalGapMinutes(interval.afterEntryId))}
+        </span>
+      </span>
+      <span>
+        Custom weight set as
+        <span class="text-foreground">
+          {statedWeights[interval.afterEntryId] === undefined
+            ? 'not set'
+            : formatDuration(statedWeights[interval.afterEntryId])}
+        </span>
+      </span>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <label class="flex items-center gap-2">
+        <span class="text-muted-foreground shrink-0">Set custom weight</span>
+        <Input
+          value={gapWeights[interval.afterEntryId] ?? ''}
+          oninput={(event) => setGapWeight(interval.afterEntryId, event.currentTarget.value)}
+          placeholder="e.g. 90, 2h 30m, 3d"
+          class="h-7 w-48 text-xs"
+        />
+      </label>
+      <span class="text-muted-foreground">minutes, or units: y d h m</span>
+      {#if gapWeights[interval.afterEntryId]}
+        <Button
+          variant="text"
+          size="sm"
+          class="h-7 text-xs"
+          onclick={() => setGapWeight(interval.afterEntryId, '')}
+        >
+          Clear
+        </Button>
+      {/if}
+    </div>
+    {#if durationIsInvalid(gapWeights[interval.afterEntryId])}
+      <p class="text-destructive mt-1">
+        Not a duration. Try a number of minutes, or units like 2h 30m.
       </p>
-      <p class="text-muted-foreground mb-2">
-        {describeMinutes(selectedInterval.recordedMinutes)} between entry
-        {entryNumber(selectedInterval.afterEntryId)} and entry
-        {entryNumber(selectedInterval.beforeEntryId)}, not claimed by either of them.
-      </p>
+    {/if}
+    <p class="text-muted-foreground mt-2">
+      A weight of nothing closes the interval, leaving the entries either side adjacent.
+    </p>
 
+    {#if addedGapIds.includes(interval.afterEntryId)}
+      <Button
+        variant="text"
+        size="sm"
+        class="text-destructive mt-2 h-8 px-2"
+        onclick={() => removeGap(interval.afterEntryId)}
+      >
+        Remove this time gap
+      </Button>
+    {/if}
+  </div>
+{/snippet}
+
+{#snippet entryPanel(entry: StoryEntry)}
+  {@const request = requestFor(entry.id)}
+  <div class="border-border rounded-md border p-3 text-xs">
+    <p class="mb-2 flex items-center gap-2 font-medium">
+      <span
+        class="rounded px-1 text-[10px] tracking-wide uppercase {isAction(entry.id)
+          ? 'bg-muted text-muted-foreground'
+          : 'bg-primary/10 text-primary'}"
+      >
+        {label(entry.id)}
+      </span>
+      Entry {entryNumber(entry.id)}
+    </p>
+    <Button
+      variant="outline"
+      size="sm"
+      class="mb-2 h-7 text-xs"
+      onclick={() => (fullTextId = entry.id)}
+    >
+      Show full text
+    </Button>
+
+    {#if request}
+      <p class="mb-2 flex items-start gap-1 text-amber-700 dark:text-amber-500">
+        <TriangleAlert class="mt-0.5 h-3 w-3 shrink-0" />
+        <span>{reasonText(request.reason)}</span>
+      </p>
+    {/if}
+
+    {#if isAction(entry.id)}
+      <p class="text-muted-foreground">
+        An action is an instant — the clock advances while the story responds, not while you decide.
+        It weighs nothing and takes no length.
+      </p>
+    {:else}
       <div class="text-muted-foreground mb-2 flex flex-wrap gap-x-6 gap-y-1">
+        <span>
+          Recorded
+          <span class="text-foreground">
+            {stampRange(entry.metadata?.timeStart, entry.metadata?.timeEnd)}
+          </span>
+        </span>
         <span>
           Originally weighed as
           <span class="text-foreground">
-            {formatDuration(originalGapMinutes(selectedInterval.afterEntryId))}
+            {recordedWeight(entry.id) === null
+              ? 'unreadable'
+              : formatDuration(recordedWeight(entry.id) ?? 0)}
           </span>
         </span>
         <span>
           Custom weight set as
           <span class="text-foreground">
-            {statedWeights[selectedInterval.afterEntryId] === undefined
-              ? 'not set'
-              : formatDuration(statedWeights[selectedInterval.afterEntryId])}
+            {overrides[entry.id] === undefined ? 'not set' : formatDuration(overrides[entry.id])}
           </span>
         </span>
       </div>
@@ -714,164 +1404,52 @@
         <label class="flex items-center gap-2">
           <span class="text-muted-foreground shrink-0">Set custom weight</span>
           <Input
-            value={gapWeights[selectedInterval.afterEntryId] ?? ''}
-            oninput={(event) =>
-              setGapWeight(selectedInterval.afterEntryId, event.currentTarget.value)}
             placeholder="e.g. 90, 2h 30m, 3d"
             class="h-7 w-48 text-xs"
+            bind:value={supplied[entry.id]}
           />
         </label>
-        <span class="text-muted-foreground">minutes, or units: y d h m</span>
-        {#if gapWeights[selectedInterval.afterEntryId]}
+        <span class="text-muted-foreground">
+          {#if overrides[entry.id] !== undefined}
+            = {formatDuration(overrides[entry.id])}
+          {:else}
+            minutes, or units: y d h m
+          {/if}
+        </span>
+        {#if supplied[entry.id]}
           <Button
             variant="text"
             size="sm"
             class="h-7 text-xs"
-            onclick={() => setGapWeight(selectedInterval.afterEntryId, '')}
+            onclick={() => clearOverride(entry.id)}
           >
             Clear
           </Button>
         {/if}
       </div>
-      {#if durationIsInvalid(gapWeights[selectedInterval.afterEntryId])}
+      {#if durationIsInvalid(supplied[entry.id])}
         <p class="text-destructive mt-1">
           Not a duration. Try a number of minutes, or units like 2h 30m.
         </p>
       {/if}
       <p class="text-muted-foreground mt-2">
-        A weight of nothing closes the interval, leaving the entries either side adjacent.
+        This sets what the entry is <em>worth</em>, not the length it ends up with: the range is
+        fitted to its boundaries, so each entry takes a share in proportion to its weight.
       </p>
+    {/if}
 
-      {#if addedGapIds.includes(selectedInterval.afterEntryId)}
-        <Button
-          variant="text"
-          size="sm"
-          class="text-destructive mt-2 h-8 px-2"
-          onclick={() => removeGap(selectedInterval.afterEntryId)}
-        >
-          Remove this time gap
-        </Button>
-      {/if}
-    </div>
-  {:else if selectedEntry}
-    {@const request = requestFor(selectedEntry.id)}
-    <div class="border-border rounded-md border p-3 text-xs">
-      <p class="mb-2 flex items-center gap-2 font-medium">
-        <span
-          class="rounded px-1 text-[10px] tracking-wide uppercase {isAction(selectedEntry.id)
-            ? 'bg-muted text-muted-foreground'
-            : 'bg-primary/10 text-primary'}"
-        >
-          {label(selectedEntry.id)}
-        </span>
-        Entry {entryNumber(selectedEntry.id)}
-      </p>
-      <Button
-        variant="outline"
-        size="sm"
-        class="mb-2 h-7 text-xs"
-        onclick={() => (fullTextOpen = true)}
-      >
-        Show full text
+    {#if canAddGap(entry.id)}
+      <Button variant="outline" size="sm" class="mt-2 h-7 text-xs" onclick={() => addGap(entry.id)}>
+        <Plus class="h-3.5 w-3.5" />
+        Add a time gap after this entry
       </Button>
-
-      {#if request}
-        <p class="mb-2 flex items-start gap-1 text-amber-700 dark:text-amber-500">
-          <TriangleAlert class="mt-0.5 h-3 w-3 shrink-0" />
-          <span>{reasonText(request.reason)}</span>
-        </p>
-      {/if}
-
-      {#if isAction(selectedEntry.id)}
-        <p class="text-muted-foreground">
-          An action is an instant — the clock advances while the story responds, not while you
-          decide. It weighs nothing and takes no length.
-        </p>
-      {:else}
-        <div class="text-muted-foreground mb-2 flex flex-wrap gap-x-6 gap-y-1">
-          <span>
-            Recorded
-            <span class="text-foreground">
-              {stampRange(selectedEntry.metadata?.timeStart, selectedEntry.metadata?.timeEnd)}
-            </span>
-          </span>
-          <span>
-            Originally weighed as
-            <span class="text-foreground">
-              {recordedWeight(selectedEntry.id) === null
-                ? 'unreadable'
-                : formatDuration(recordedWeight(selectedEntry.id) ?? 0)}
-            </span>
-          </span>
-          <span>
-            Custom weight set as
-            <span class="text-foreground">
-              {overrides[selectedEntry.id] === undefined
-                ? 'not set'
-                : formatDuration(overrides[selectedEntry.id])}
-            </span>
-          </span>
-        </div>
-        <div class="flex flex-wrap items-center gap-2">
-          <label class="flex items-center gap-2">
-            <span class="text-muted-foreground shrink-0">Set custom weight</span>
-            <Input
-              placeholder="e.g. 90, 2h 30m, 3d"
-              class="h-7 w-48 text-xs"
-              bind:value={supplied[selectedEntry.id]}
-            />
-          </label>
-          <span class="text-muted-foreground">
-            {#if overrides[selectedEntry.id] !== undefined}
-              = {formatDuration(overrides[selectedEntry.id])}
-            {:else}
-              minutes, or units: y d h m
-            {/if}
-          </span>
-          {#if supplied[selectedEntry.id]}
-            <Button
-              variant="text"
-              size="sm"
-              class="h-7 text-xs"
-              onclick={() => clearOverride(selectedEntry.id)}
-            >
-              Clear
-            </Button>
-          {/if}
-        </div>
-        {#if durationIsInvalid(supplied[selectedEntry.id])}
-          <p class="text-destructive mt-1">
-            Not a duration. Try a number of minutes, or units like 2h 30m.
-          </p>
-        {/if}
-        <p class="text-muted-foreground mt-2">
-          This sets what the entry is <em>worth</em>, not the length it ends up with: the range is
-          fitted to its boundaries, so each entry takes a share in proportion to its weight.
-        </p>
-      {/if}
-
-      {#if canAddGap(selectedEntry.id)}
-        <Button
-          variant="outline"
-          size="sm"
-          class="mt-2 h-7 text-xs"
-          onclick={() => addGap(selectedEntry.id)}
-        >
-          <Plus class="h-3.5 w-3.5" />
-          Add a time gap after this entry
-        </Button>
-      {/if}
-    </div>
-  {:else}
-    <p class="text-muted-foreground m-auto text-xs">
-      Select a row to set an entry's weight or decide what a time gap is worth.
-    </p>
-  {/if}
+    {/if}
+  </div>
 {/snippet}
 
 {#snippet entryChip(entryId: string)}
   <span
-    class="rounded px-1 text-[10px] tracking-wide uppercase {isAction(entryId)
+    class="shrink-0 rounded px-1 text-[10px] tracking-wide uppercase {isAction(entryId)
       ? 'bg-muted text-muted-foreground'
       : 'bg-primary/10 text-primary'}"
   >
@@ -881,7 +1459,7 @@
 
 {#snippet gapChip()}
   <span
-    class="rounded bg-amber-500/15 px-1 text-[10px] tracking-wide text-amber-700 uppercase dark:text-amber-500"
+    class="shrink-0 rounded bg-amber-500/15 px-1 text-[10px] tracking-wide text-amber-700 uppercase dark:text-amber-500"
   >
     Time gap
   </span>

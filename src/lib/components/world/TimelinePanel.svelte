@@ -121,8 +121,8 @@
 
 <div class="mb-2 flex items-center justify-between gap-2">
   <h3 class="text-foreground text-xl font-bold tracking-tight">Timeline</h3>
-  <!-- TEMPORARY: compare both reconcile layouts on one dev run. Remove with
-       `timelineLayout` and the branches it drives in TimelineRepairModal. -->
+  <!-- TEMPORARY: read the reconcile ladder on a desktop dev run. Remove with
+       `timelineLayout` and the `narrow` flag it feeds in TimelineRepairModal. -->
   <Button
     variant="outline"
     size="sm"
@@ -130,7 +130,7 @@
     onclick={() => timelineLayout.toggle()}
     title="Temporary: switch the reconcile dialog layout"
   >
-    {timelineLayout.mobile ? 'Mobile' : 'Desktop'}
+    {timelineLayout.mobile ? 'Ladder' : 'Table'}
   </Button>
 </div>
 
