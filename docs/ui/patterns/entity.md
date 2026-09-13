@@ -66,6 +66,7 @@ Wireframe placeholder glyphs:
 | location  | ⌂     |
 | item      | ◆     |
 | faction   | ⚑     |
+| lore      | 📜    |
 
 Visual identity (session 5) picked the canonical Lucide names for
 this scratch table — see
@@ -83,13 +84,15 @@ primitives — each owns its own channel so any combination renders
 correctly, and every row has identical structure (no value-dependent
 absence that makes "nothing shown" ambiguous):
 
-- **Lead badge** (gold pill, text mode-dependent): inline immediately
-  after the name. Only present for the story's lead character. Label
+- **Lead badge** (accent pill led by the filled `Star` glyph per
+  [`iconography.md → Status / state`](../foundations/iconography.md#status--state),
+  text mode-dependent): inline immediately after the name. Only present for the story's lead character. Label
   is `You` in adventure mode, `Protagonist` in creative mode.
 - **Status pill** (always shown, muted when active): on the far
   right. Every row carries one of `active` / `staged` / `retired`.
-  Active renders with muted styling (faint gray); staged = soft
-  green; retired = soft amber.
+  Active takes the muted `default` tone; staged and retired take the
+  filled `success` and `warning` tones per
+  [`chips.md → Tag — tone vocabulary`](./chips.md#tag--tone-vocabulary).
 - **Scene presence** (left-edge stripe): an in-scene row gets a
   3px green accent stripe along the left edge. Steady-state signal —
   "which rows matter right now."
@@ -537,7 +540,11 @@ positions of the create deltas of the last two `ai_reply` entries.
 Pipeline-source deltas on entities, lore, threads and happenings
 count directly; link-table writes (`happening_awareness`,
 `happening_involvements`, `character_relationships`) attribute to the
-rows they connect, with per-turn retrieval-count bumps excluded;
-deltas of reversed runs are excluded. Coordinates are write-time, so a
+rows they connect, with per-turn retrieval-count bumps excluded. A
+reversed run leaves nothing to read, since reversal prunes its deltas
+([`data-model.md → Entry mutability & rollback`](../../data-model.md#entry-mutability--rollback)).
+A reply's scene is diffed as the classifier left it — each field's
+earliest manual edit keeps the prior value in its undo payload — so
+the scene editor never tints. Coordinates are write-time, so a
 periodic classifier pass tints whenever it lands. Revisit if users
 want configurability.

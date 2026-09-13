@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
-import { expect, fn, screen, userEvent } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
@@ -45,6 +45,11 @@ export const ActiveReasoning: Story = {
   render: () => (
     <GenerationStatusPill activePhase="reasoning" onCancel={onCancel} onErrorTap={onErrorTap} />
   ),
+  play: async () => {
+    const phase = t('chrome.generationStatusPill.phase.reasoning')
+    await userEvent.click(screen.getByRole('button', { name: phase }))
+    expect(await screen.findByRole('dialog', { name: phase })).toBeInTheDocument()
+  },
 }
 
 export const ActiveRecallingMemory: Story = {
@@ -210,6 +215,18 @@ export const PhonePopover: Story = {
       <GenerationStatusPill activePhase="reasoning" onCancel={onCancel} onErrorTap={onErrorTap} />
     </View>
   ),
+}
+
+// Cancel-less, so the pill renders bare — no trigger to carry the name.
+export const PhoneBareNamedByPhase: Story = {
+  globals: { viewport: { value: 'mobile1' } },
+  render: () => <GenerationStatusPill activePhase="updating-memory" onErrorTap={onErrorTap} />,
+  play: async () => {
+    const phase = t('chrome.generationStatusPill.phase.updatingMemory')
+    await waitFor(() =>
+      expect(screen.getByRole('progressbar', { name: phase })).toBeInTheDocument(),
+    )
+  },
 }
 
 export const ThemeMatrix: Story = {

@@ -1,9 +1,10 @@
 export { selectInScene } from './in-scene'
-export { latestReplyIds, readSignalDeltas, readTurnBoundaries } from './read'
+export { latestReplyIds, readReplyEdits, readSignalDeltas, readTurnBoundaries } from './read'
 export { selectRecentlyClassified } from './recently-classified'
 export type {
   RecentlyClassified,
   RecentlyClassifiedSignals,
+  ReplyEdit,
   RowCategory,
   SignalDelta,
   SignalEntity,

@@ -180,6 +180,6 @@ describe('parallel group', () => {
     const result = await runPipeline('synthetic', ctx)
     expect(result.outcome).toBe('failed')
     expect((await db.select().from(storyEntries)).length).toBe(0) // both branch deltas reversed
-    expect((await db.select().from(deltas)).length).toBe(2)
+    expect((await db.select().from(deltas)).length).toBe(0) // and pruned with the reversal
   })
 })

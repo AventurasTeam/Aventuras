@@ -108,7 +108,7 @@ export function ImporterMenu({
     )
 
   return (
-    <Popover onOpenChange={handleOpenChange}>
+    <Popover ariaLabel={label} onOpenChange={handleOpenChange}>
       {/* IconAction's own title only covers its disabled+reason case — wrap outside
           the asChild target so the trigger label still surfaces as a hover tooltip. */}
       {trigger === 'icon' ? (

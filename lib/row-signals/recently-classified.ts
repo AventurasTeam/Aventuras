@@ -1,29 +1,32 @@
-import { inheritedEntryMetadata, type EntityKind } from '@/lib/db'
+import { inheritedEntryMetadata, type EntityKind, type EntryMetadata } from '@/lib/db'
 
 import { lastTwoReplies } from './replies'
 import {
   SIGNAL_TARGET_TABLES,
   type RecentlyClassified,
   type RecentlyClassifiedSignals,
+  type ReplyEdit,
   type RowCategory,
   type SignalDelta,
   type SignalEntry,
   type TurnBoundaries,
 } from './types'
 
-/*
- * patterns/entity.md → Recently-classified row accent. Tiers by log position of the
- * last two `ai_reply` creates (not `entry_id`: the periodic classifier anchors facts to
- * older turns); a manual scene edit also reads as a transition — accepted v1 limitation.
- */
+// patterns/entity.md → Recently-classified row accent. Tiers by log position of the last two
+// `ai_reply` creates, not `entry_id`: the periodic classifier anchors facts to older turns.
 
 type Input = {
   deltas: readonly SignalDelta[]
+  /** The last two replies' `user_edit` updates, ascending by log position. */
+  replyEdits: readonly ReplyEdit[]
   /** Ascending by position. */
   entries: readonly SignalEntry[]
   boundaries: TurnBoundaries | null
   categoryOf: (entityId: string) => EntityKind | null
 }
+
+type SceneSource = Parameters<typeof inheritedEntryMetadata>[0]
+type SceneFields = Pick<EntryMetadata, 'sceneEntities' | 'currentLocationId'>
 
 function tierFor(logPosition: number, b: TurnBoundaries): RecentlyClassified | null {
   if (logPosition >= b.fresh) return 'fresh'
@@ -40,8 +43,8 @@ function stronger(
 
 // Same kind gate as selectInScene — never factions, unresolvable ids don't tint.
 export function sceneTransitionIds(
-  current: SignalEntry['metadata'],
-  previous: SignalEntry['metadata'],
+  current: SceneSource,
+  previous: SceneSource,
   categoryOf: (entityId: string) => EntityKind | null,
 ): string[] {
   const now = inheritedEntryMetadata(current)
@@ -68,6 +71,37 @@ export function sceneTransitionIds(
   return [...ids]
 }
 
+// An undo payload is the partial an edit replaced; a null `metadata` restores a NULL
+// column, where both fields stood at their defaults.
+function priorScene(undoPayload: unknown): Partial<SceneFields> {
+  if (typeof undoPayload !== 'object' || undoPayload == null || !('metadata' in undoPayload)) {
+    return {}
+  }
+  const { metadata } = undoPayload
+  if (metadata === null) return { sceneEntities: [], currentLocationId: null }
+  if (typeof metadata !== 'object') return {}
+  const prior: Partial<SceneFields> = {}
+  if ('sceneEntities' in metadata) {
+    const ids = metadata.sceneEntities
+    prior.sceneEntities = Array.isArray(ids) ? ids.filter((id) => typeof id === 'string') : []
+  }
+  if ('currentLocationId' in metadata) {
+    const id = metadata.currentLocationId
+    prior.currentLocationId = typeof id === 'string' ? id : null
+  }
+  return prior
+}
+
+// Manual edits don't tint, so a reply's scene is diffed as the classifier left it: each
+// field's earliest `user_edit` payload holds its value from before the user touched it.
+function classifierScene(reply: SignalEntry, edits: readonly ReplyEdit[]): SceneSource {
+  let prior: Partial<SceneFields> = {}
+  for (const edit of edits) {
+    if (edit.targetId === reply.id) prior = { ...priorScene(edit.undoPayload), ...prior }
+  }
+  return { ...inheritedEntryMetadata(reply.metadata), ...prior }
+}
+
 export function selectRecentlyClassified(input: Input): RecentlyClassifiedSignals {
   const rows = new Map<string, RecentlyClassified>()
   const byCategory = new Map<RowCategory, RecentlyClassified>()
@@ -90,7 +124,8 @@ export function selectRecentlyClassified(input: Input): RecentlyClassifiedSignal
   lastTwoReplies(input.entries).forEach(({ reply, before }, i) => {
     if (before == null) return
     const tier: RecentlyClassified = i === 0 ? 'fresh' : 'fading'
-    for (const id of sceneTransitionIds(reply.metadata, before.metadata, input.categoryOf)) {
+    const scene = classifierScene(reply, input.replyEdits)
+    for (const id of sceneTransitionIds(scene, before.metadata, input.categoryOf)) {
       mark(id, input.categoryOf(id), tier)
     }
   })

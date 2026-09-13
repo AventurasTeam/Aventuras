@@ -1,9 +1,10 @@
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-import { app, BrowserWindow, ipcMain, net, protocol, session, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, net, protocol, session, shell } from 'electron'
 import type { WebContents } from 'electron'
 
+import { appMenuTemplate } from './app-menu'
 import { resolveBundlePath } from './bundle-path'
 import {
   exec as dbExec,
@@ -44,6 +45,18 @@ const isDev = !app.isPackaged
 // never collide with an installed build, whose name comes from electron-builder.
 // Must precede the first app.getPath('userData') (in initDb on whenReady).
 if (isDev) app.setName('aventuras-dev')
+
+// A second process on this userData would open the same DB beside this one's in-memory stores,
+// so it quits before initDb. After setName: dev and an installed build must not block each other.
+const isPrimaryInstance = app.requestSingleInstanceLock()
+if (!isPrimaryInstance) app.quit()
+
+app.on('second-instance', () => {
+  const win = BrowserWindow.getAllWindows()[0]
+  if (win == null) return
+  if (win.isMinimized()) win.restore()
+  win.focus()
+})
 
 const APP_SCHEME = 'app'
 const APP_HOST = 'bundle'
@@ -159,6 +172,7 @@ function createWindow(): void {
     height: 800,
     show: false,
     backgroundColor: '#000000',
+    autoHideMenuBar: !isDev,
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -268,6 +282,8 @@ function requireModelDir(modelId: string): string {
 }
 
 app.whenReady().then(async () => {
+  if (!isPrimaryInstance) return
+  if (!isDev) Menu.setApplicationMenu(Menu.buildFromTemplate(appMenuTemplate(process.platform)))
   await initDb()
   applyContentSecurityPolicy()
   registerBundleProtocol()

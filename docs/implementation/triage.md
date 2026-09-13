@@ -54,109 +54,20 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **Manual scene edits tint under C1.** (2026-09-11) C1 tints a
-  manual scene edit on the last two replies as though it were a
-  classifier transition; canon
-  ([`entity.md → Recently-classified row accent`](../ui/patterns/entity.md#recently-classified-row-accent))
-  says manual edits don't tint. A fix would diff against the pre-edit metadata carried in the
-  `user_edit` delta's undo payload. Needs a developer call.
-- **`pipeline_runs` has no `action_id` index.** (2026-09-11) The C1
-  read's reversed-run subquery scans the table on every refetch
-  (~0.6 ms at 10k rows, ~15 ms at 200k, measured on Electron main).
-- **UNVERIFIED: reversed-run deltas may confuse rollback.**
-  (2026-09-11, read-only finding) Reversed runs keep their deltas, so after an
-  aborted turn `selectUndoTarget` may pick the dead turn's deltas as the head
-  group; `resolveRollbackWindow` then rejects, and Ctrl-Z returns `integrity`
-  until another action lands. A rollback sweeping an aborted run's `delete`
-  delta may also re-insert a row the abort already restored. Needs a repro.
-- **`CollisionListRow` accessibility role drift.** (2026-09-11)
-  The strip uses `accessibilityRole="alert"` (every flagged row
-  announces); [`collision-resolve.md → Accessibility`](../ui/patterns/collision-resolve.md#accessibility)
-  specs `region`. On Android
-  (2026-09-12 emulator smoke) the accessibility tree also reports
-  content-desc "Collision warning" on a container spanning the whole
-  Active group, not only the strip — cause unverified.
-- **Pressable `Tag` misses the phone tap floor.** (2026-09-11) A
-  20 dp pill with `hitSlop={8}` reaches only ~36 dp against the
-  [tap-target floor](../ui/foundations/spacing.md#tap-target-on-native)
-  ([`touch.md`](../ui/foundations/mobile/touch.md#touch-target-floor-on-phone)),
-  and Android's `hitSlop` can't extend past the parent anyway. Affects
-  the review pill and the generation pill; fix is visible size, not
-  more slop.
-- **Breadcrumb truncation has no tap-to-tooltip.** (2026-09-11)
-  [`principles.md → Breadcrumb tappability`](../ui/principles.md#breadcrumb-tappability)'s
-  tap-to-tooltip for a truncated current breadcrumb segment is not
-  implemented anywhere.
-- **No `Link` primitive; no navigation landmark role.** (2026-09-11)
-  Breadcrumb is the fourth hand-rolled link `Pressable`; no
-  navigation landmark role exists anywhere in the app.
-- **Lead badge looks like the active status pill.** (2026-09-11)
-  The lead badge is a default outline `Tag` stand-in (canon: gold
-  pill), which looks identical to the `active` status pill; "gold"
-  maps to `warning` elsewhere, which means retired. Design call.
-- **`ListRow`'s `aria-label` hides its channel content.**
-  (2026-09-11) The row's `aria-label` replaces its child content, so
-  status, lead and in-scene never reach screen readers.
-- **No shared lore kind glyph.** (2026-09-11)
-  [`iconography.md → Entity kind glyphs`](../ui/foundations/iconography.md#entity-kind-glyphs)
-  has no lore glyph; `BookOpen` (the app logo) is inlined in `LoreRow`
-  and `WorldDetailPlaceholder` — needs a shared kind icon covering lore.
-- **`ImporterMenu` accessibility role mismatch.** (2026-09-11) The
-  popover content uses the default `role="dialog"` over `menuitem`s
-  (`aria-haspopup="dialog"`, no `menu`) with no Popover `ariaLabel`;
-  [`world.md → Mobile expression`](../ui/screens/world/world.md#mobile-expression)
-  wants a short Sheet on phone but it's a Popover at every size.
-- **Reader and Story Settings titles aren't `Breadcrumb`.**
-  (2026-09-11) World's top-bar title converted to `Breadcrumb`; the
-  reader and Story Settings top-bar titles have not.
-- **Breadcrumb's 70% cap measures itself on web.** (2026-09-11)
-  `ScreenShell`'s content-sized title slot means the top bar's 70%
-  current-segment cap measures the breadcrumb's own text, biting only
-  when the current segment is more than ~2.3× the rest (e.g. a
-  one-character story title). Fix belongs in the shell's title slot.
-- **World's category-label lowercasing is English-only.**
-  (2026-09-11) The search placeholder and the empty-list title
-  lowercase the category label in code, in the app language, so a
-  translation whose nouns keep their capital (German) can't opt out.
-  A formatter in the string itself (`{{category, lowercase}}`) would
-  hand the choice to translators.
-- **Collapsed-tier badge drops focus.** (2026-09-11) Clicking the
-  collapsed-tier `⚠ N` badge unmounts it (the tier expands), dropping
-  keyboard focus to the page body; move focus to the revealed row
-  instead.
-- **Generation pill's phone variant has no accessible name.**
-  (2026-09-11) On phone the pill is a spinner-only, non-pressable
-  `Tag` (`generation-status-pill.tsx`), bare or inside the cancel
-  `PopoverTrigger`, so the phase copy never reaches assistive tech.
-  `Tag`'s `accessibilityLabel` covers only a pressable `Tag`; the name
-  belongs on the trigger, or on the bare pill as a labelled status.
-- **Namesake matching doesn't NFC-normalize.** (2026-09-11, pre-existing)
-  `normalizeCollisionName` (trim plus lowercase) doesn't NFC-normalize,
-  while keyword terms (`lib/keyword-terms`) do — composed vs
-  decomposed spellings ("Zoë") match as keywords but not as
-  namesakes.
-- **Collapsed-tier state is keyed by tier only, not per kind.**
-  (2026-09-12) `lib/stores/ui/world-list.ts` keys collapse on
-  `EntityTier` alone, so collapsing Staged on Characters also
-  collapses it on Locations. Canon doesn't say whether collapse should
-  be per kind. Needs a design call.
-- **DB IPC has no retry for transient failures.** (2026-09-12) A
-  one-off rejection on the renderer-to-main SQLite bridge fails the
-  operation outright; for a story open it now sends the user back to
-  the story list. A bounded retry for transient bridge errors would
-  cover every DB call, not just opens. Needs a call on which errors
-  count as transient.
-- **Back does nothing on a cold-mounted in-story screen.**
-  (2026-09-12, pre-existing) After a reload (Ctrl+R replays the URL)
-  the stack holds only the current screen, and the reader's, World's
-  and Story Settings' Back call `router.back()`, which expo-router
-  queues as a `GO_BACK` with no `canGoBack()` check, so nothing
-  happens. Read from expo-router's source, not run. A `canGoBack()`
-  fallback to the story list would fix all three.
-- **Collision strip's role contradicts canon.** (2026-09-12,
-  pre-existing)
-  [`collision-resolve.md → Accessibility`](../ui/patterns/collision-resolve.md#accessibility)
-  specifies `accessibilityRole="region"`, but `CollisionListRow` has
-  rendered `role="alert"` since it shipped, which screen readers
-  announce assertively as each flagged row mounts. Pick one and align
-  the other.
+- **catppuccin-latte's success and warning pairs fail contrast.**
+  (2026-09-13) White on `#40a02b` measures 3.3:1 and on `#df8e1d`
+  2.6:1, under the 4.5:1 that filled Tags' `text-xs` labels need
+  (staged and retired pills, the review pill, the generation error
+  pill). Every other theme passes. Theme-token call: darken the tones
+  or give them a dark `-fg`.
+- **Spinner's default accessible name is English.** (2026-09-13)
+  `components/ui/spinner.tsx` defaults `accessibilityLabel` to the raw
+  string `'Loading'`, bypassing `t()`, so every Spinner that passes no
+  label announces English.
+- **Popover names were never swept.** (2026-09-13) `Popover` warns in
+  `__DEV__` when it gets neither `ariaLabel` nor `ariaLabelledBy`. The
+  2026-09-13 triage pass named `ImporterMenu`'s; the other consumers
+  were not checked.
+- **The packaged app menu's `View` label is English.** (2026-09-13)
+  `electron/app-menu.ts` hardcodes it, and main has no i18n, so the
+  menu stays English whatever the app locale.

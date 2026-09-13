@@ -288,12 +288,6 @@
     "heading": "Who's in this story?",
     "suggest": "Suggest cast",
     "add": "Add",
-    "kinds": {
-      "character": "Character",
-      "location": "Location",
-      "item": "Item",
-      "faction": "Faction"
-    },
     "empty": "No cast yet. Add someone, or let ✨ suggest a few.",
     "remove": "Remove {{name}}",
     "expand": "Expand {{name}}",

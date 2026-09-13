@@ -152,21 +152,22 @@ at narrow widths (`Aria's Descent of the Crown's Bargain` doesn't
 fit at 390 px alongside the icon group).
 
 - **Single-line ellipsis truncation** when the title overflows.
-  Standard text-overflow behavior; the title slot has a fixed
-  max-width within the row.
+  Standard text-overflow behavior; the title slot shrinks to the
+  room the rest of the row leaves it.
 - **Tap on the truncated title reveals the full title in a small
   popover** anchored to the title element. Popover dismisses on
   tap-outside or after a brief idle.
 - **No persistency.** Popover is transient. No `app_settings`
   field, no localStorage, no expand/collapse state.
-- **Sub-screen breadcrumbs follow standard text-ellipsis behavior**
-  — head element (story title) truncates first; the popover
-  affordance is reader-specific, not a general "expand chrome"
-  mechanism.
+- **Sub-screen breadcrumbs** truncate head-first (the story title
+  gives way before the current segment); a truncated current segment
+  gets the same tap-to-reveal, per the general rule in
+  [`touch.md → Tap-to-tooltip on inert chrome text`](./touch.md#tap-to-tooltip-on-inert-chrome-text).
 
-This is the only tap-to-reveal in mobile chrome. Distinguishes it
-from larger reveals (action menus, drawers, sheets) that all open
-through different affordances and live in session 3's vocabulary.
+Every tap-to-reveal on inert chrome text follows that rule, which
+distinguishes it from larger reveals (action menus, drawers, sheets)
+that all open through different affordances and live in session 3's
+vocabulary.
 
 ## Cross-surface navigation model
 

@@ -94,6 +94,10 @@ export const CurrentSegmentNeverLink: Story = {
     expect(screen.queryByRole('link', { name: 'Kael' })).toBeNull()
     await userEvent.click(screen.getByText('Kael'))
     expect(args.segments[1].onPress).not.toHaveBeenCalled()
+    // It fits, so it offers no full-text reveal either; two frames let ResizeObserver report.
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.queryByRole('dialog')).toBeNull()
   },
 }
 
@@ -154,6 +158,9 @@ export const LongTitleLongCurrent: Story = {
     const rect = currentEl.getBoundingClientRect()
     expect(Math.round(rect.right)).toBeLessThanOrEqual(Math.round(containerRect.right))
     expect(currentEl.scrollWidth).toBeGreaterThan(currentEl.clientWidth)
+    const full = 'Kael Vex, Warden of the Shattered Eastern Marches and Keeper of the Ninth Gate'
+    await userEvent.click(await screen.findByRole('button', { name: full }))
+    expect(await screen.findByRole('dialog', { name: 'Full text' })).toHaveTextContent(full)
   },
 }
 
@@ -295,6 +302,38 @@ export const InShellTopBar: Story = {
     expect(storyTitle.scrollWidth, 'story title truncates').toBeGreaterThan(storyTitle.clientWidth)
     const world = screen.getByText('World')
     expect(world.scrollWidth, 'World stays whole').toBeLessThanOrEqual(world.clientWidth)
+  },
+}
+
+/**
+ * Desktop top bar, short parent: the current segment's 70% cap resolves against the bar, so a
+ * current label over ~2.3x the rest of the trail still renders whole.
+ */
+export const InShellTopBarShortParent: Story = {
+  args: { segments: [] },
+  render: () => (
+    <View style={{ width: 800 }}>
+      <ScreenShell
+        variant="in-story"
+        title={
+          <Breadcrumb
+            segments={[
+              { key: 'story', label: 'A', onPress: fn() },
+              { key: 'surface', label: 'Story Settings' },
+            ]}
+          />
+        }
+        onBack={fn()}
+        onOpenStorySettings={fn()}
+        onOpenActions={fn()}
+      >
+        <View />
+      </ScreenShell>
+    </View>
+  ),
+  play: async () => {
+    const current = await screen.findByText('Story Settings')
+    expect(current.scrollWidth, 'current segment whole').toBeLessThanOrEqual(current.clientWidth)
   },
 }
 

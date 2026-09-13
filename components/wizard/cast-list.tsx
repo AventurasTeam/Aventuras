@@ -1,17 +1,9 @@
-import {
-  AlertTriangle,
-  Flag,
-  MapPin,
-  Package,
-  Plus,
-  Star,
-  User,
-  type LucideIcon,
-} from 'lucide-react-native'
+import { AlertTriangle, Plus, Star } from 'lucide-react-native'
 import { useMemo, useRef, type ComponentRef } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
 import { ExpandableRow, useRowExpansion } from '@/components/compounds/expandable-row'
+import { KIND_GLYPHS } from '@/components/entity/entity-kind-icon'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -41,13 +33,6 @@ import {
   type CastAssistValue,
   type WizardAssistListRun,
 } from './wizard-assist'
-
-const KIND_ICON: Record<WizardCastDraft['kind'], LucideIcon> = {
-  character: User,
-  location: MapPin,
-  item: Package,
-  faction: Flag,
-}
 
 const KIND_ORDER = ['character', 'location', 'item', 'faction'] as const
 
@@ -84,7 +69,7 @@ function AddCastMenu({ onAdd }: { onAdd: (kind: WizardCastDraft['kind']) => void
             <Pressable
               key={kind}
               accessibilityRole="menuitem"
-              accessibilityLabel={t(`wizard:cast.kinds.${kind}`)}
+              accessibilityLabel={t(`kinds.${kind}`)}
               onPress={() => {
                 triggerRef.current?.close()
                 onAdd(kind)
@@ -95,9 +80,9 @@ function AddCastMenu({ onAdd }: { onAdd: (kind: WizardCastDraft['kind']) => void
                 Platform.select({ web: 'cursor-pointer hover:bg-tint-hover' }),
               )}
             >
-              <Icon as={KIND_ICON[kind]} size="sm" className="text-fg-secondary" />
+              <Icon as={KIND_GLYPHS[kind]} size="sm" className="text-fg-secondary" />
               <Text size="sm" className="font-medium">
-                {t(`wizard:cast.kinds.${kind}`)}
+                {t(`kinds.${kind}`)}
               </Text>
             </Pressable>
           ))}
@@ -124,7 +109,7 @@ function CompactRow({ row, isLead, invalid, expanded, cast }: CompactRowProps) {
     <>
       <View className="min-h-control-sm flex-row flex-wrap content-center items-center gap-2">
         <Icon
-          as={KIND_ICON[row.kind]}
+          as={KIND_GLYPHS[row.kind]}
           aria-hidden
           size="sm"
           className={staged ? 'text-fg-muted' : 'text-fg-secondary'}

@@ -171,6 +171,16 @@ exported file to the user.
   should match.
 - **Import of a `staged` entity.** Status travels; confirm a staged
   import is what the user expects versus forcing `active`.
+- **`ImporterMenu` is a Popover on phone.** (2026-09-11)
+  [`world.md → Mobile expression`](../../../../ui/screens/world/world.md#mobile-expression)
+  wants a short Sheet on phone but it's a Popover at every size. The
+  surface binding it cites has no `ImporterMenu` row, so that sentence
+  is the only canon. This slice re-plumbs the menu to host
+  `ImportDialog`; a Sheet there makes it the third caller of the phone
+  wrap, which is the extraction trigger in
+  [the parked tier-wrap entry](../../../../parked.md#duplicated-desktop-popover--phone-sheet-tier-wrap).
+  The controlled-open seam drives the trigger ref, so a Sheet needs it
+  re-plumbed.
 
 ## Implementation notes
 

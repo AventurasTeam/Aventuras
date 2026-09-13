@@ -21,8 +21,8 @@ export type RecoveryFailure = {
 }
 export type RecoveryReport = { reversed: RecoveredRun[]; failures: RecoveryFailure[] }
 
-// Never throws — boot must not be blocked by orphan recovery; per-orphan
-// failures are logged and the row left for the next boot to retry.
+// Per-orphan failures are logged and their rows left for the next boot, so one bad
+// orphan can't block the rest; only the orphan query itself can throw.
 export async function recoverInFlightRuns(ctx: DbCtx): Promise<RecoveryReport> {
   const orphans = await ctx.db
     .select()
@@ -35,9 +35,7 @@ export async function recoverInFlightRuns(ctx: DbCtx): Promise<RecoveryReport> {
 
   for (const orphan of orphans) {
     try {
-      // Settling the marker rides the reversal's own transaction: the replay is not
-      // idempotent (undoing a `delete` re-inserts), so an orphan left open over
-      // already-reversed deltas fails deterministically on every later boot.
+      // Marker rides the reversal's transaction: never claims an uncommitted reversal.
       const count = await reverseReplayDeltas(orphan.actionId, ctx, (deltaCount) => [
         deltaCount === 0
           ? ctx.db.delete(pipelineRuns).where(eq(pipelineRuns.runId, orphan.runId)).toSQL()
@@ -57,9 +55,6 @@ export async function recoverInFlightRuns(ctx: DbCtx): Promise<RecoveryReport> {
       })
       logger.debug('pipeline.recovered', { runId: orphan.runId, kind: orphan.kind, deltas: count })
     } catch (e) {
-      // Boot must never be blocked: any per-orphan failure (a DeltaReplayError, or
-      // a transient DB error on the marker write) is logged and left for next boot.
-      // TODO: consider a stronger resolution to not polute the data, ie. deletion of orphaned data
       failures.push({
         runId: orphan.runId,
         kind: orphan.kind,

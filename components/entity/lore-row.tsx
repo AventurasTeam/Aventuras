@@ -1,11 +1,8 @@
-import { BookOpen } from 'lucide-react-native'
-import { View } from 'react-native'
-
 import { ListRow } from '@/components/compounds/list-row'
-import { Icon } from '@/components/ui/icon'
 import { Tag } from '@/components/ui/tag'
 import type { Lore } from '@/lib/db'
 
+import { EntityKindIcon } from './entity-kind-icon'
 import type { RowRendererProps } from './list-module'
 
 const EXCERPT_CHARS = 120
@@ -34,11 +31,7 @@ export function LoreRow({
     <ListRow
       label={row.title}
       description={density === 'compact' ? undefined : excerpt(row.body)}
-      leading={
-        <View className="h-[22px] w-[22px] items-center justify-center">
-          <Icon as={BookOpen} size="sm" />
-        </View>
-      }
+      leading={<EntityKindIcon kind="lore" />}
       trailing={row.category?.trim() ? <Tag tone="soft">{row.category}</Tag> : undefined}
       recentlyClassified={signals.recentlyClassified}
       selected={selected}

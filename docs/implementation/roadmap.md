@@ -1004,9 +1004,10 @@ author it as 2–3 slices so the audit spreads across contributors
 instead of serializing on one.
 
 Carried deferrals, routed out of [`triage.md`](./triage.md)
-2026-08-18, verified against the code first. Two are a11y-contract
-rather than visual, so M9.2's audit has to widen past glyphs and
-spacing to own them — or they need a slice of their own.
+(2026-08-18 and 2026-09-13), verified against the code first. Several
+are a11y-contract rather than visual, so M9.2's audit has to widen
+past glyphs and spacing to own them — or they need a slice of their
+own.
 
 - **M9.2 — `disabledReason` never reaches the accessibility tree on web.**
   `Button`, `SwitchRow`, `swap-dialog`'s `CandidateRow` and
@@ -1062,6 +1063,39 @@ spacing to own them — or they need a slice of their own.
   would let a caller-supplied `role="combobox"` through — nobody has
   applied or tested it. Applies to every `dropdown`-mode `Select` that
   carries a `label`. Raised 2026-08-13.
+- **M9.2 — `ListRow`'s `aria-label` hides its channel content.** The
+  row's `aria-label` replaces its child content, so status, lead and
+  in-scene never reach screen readers. Only part of that is the label:
+  the lead and status tags are text it hides, but in-scene and
+  recently-classified are text-less visuals (an `aria-hidden` stripe
+  and a tint), so dropping the label would not surface them. They need
+  the hidden-text primitive the `disabledReason` entry above is
+  missing. Dropping the label also breaks the E2E row locators, which
+  match it as the exact accessible name. `ListRow` is pan-domain and
+  canon never says what a row announces, so this wants a
+  shared-contract design pass. Raised 2026-09-11 by Slice 4.1.
+- **M9.5 — No navigation landmark anywhere.** No `navigation` landmark
+  role exists in the app. Breadcrumb is the natural first one, but
+  World renders two (the top-bar title and the sub-header), so a role
+  on the primitive gives two identically named landmarks: each
+  instance needs its own name, or only one takes the role. RN spells
+  it `role="navigation"`, which renders a `<nav>` on web and does
+  nothing on Android.
+  [`mobile/platform.md → Accessibility`](../ui/foundations/mobile/platform.md#accessibility)
+  already leaves landmark structure to the per-screen passes. Raised
+  2026-09-11 by Slice 4.1.
+- **M9.5 — A removable `Tag`'s × likely misses the phone tap floor on
+  Android.** [`chips.md → Tag`](../ui/patterns/chips.md#tag--pill-labeled-content)
+  promises the × its own 44 px target. It is a 20 px circle with
+  `hitSlop={8}`, 36 px on paper, and its parent is the bordered pill
+  (about 22 px tall); React Native never lets slop reach past the
+  parent's bounds, so on Android the target is probably the pill's
+  height. Needs a device check first. If the clip is real, the call is
+  taller removable Tags on phone (the wizard's cast and lore tag
+  fields) or a lower promise in chips.md. Pressable pill bodies took
+  `IconAction`'s visible + 2 × slop rule in the same pass, equally
+  unverified on a device. Raised 2026-09-11 by Slice 4.1; split
+  2026-09-13.
 - **M9.5 — The retrieval pass has never been measured on mobile.** Every
   figure in
   [`retrieval.md → Per-turn cost budget`](../memory/retrieval.md#per-turn-cost-budget)

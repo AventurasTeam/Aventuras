@@ -36,6 +36,9 @@ export const Default: Story = {
     </View>
   ),
   play: async () => {
+    // A standing state, not an event: a named group, never an assertive alert.
+    expect(screen.getByRole('group', { name: 'Collision warning' })).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).toBeNull()
     const resolveButton = screen.getByRole('button', { name: 'Resolve →' })
     await userEvent.click(resolveButton)
     expect(baseCollision.onResolve).toHaveBeenCalledTimes(1)

@@ -5,7 +5,7 @@ import { expect, screen } from 'storybook/test'
 import { Text, TextClassContext } from '@/components/ui/text'
 import { themes } from '@/lib/themes'
 
-import { EntityKindIcon, type EntityKind } from './entity-kind-icon'
+import { EntityKindIcon, type GlyphKind } from './entity-kind-icon'
 
 const meta: Meta<typeof EntityKindIcon> = {
   title: 'Compounds/Entity/EntityKindIcon',
@@ -17,11 +17,11 @@ const meta: Meta<typeof EntityKindIcon> = {
 export default meta
 type Story = StoryObj<typeof EntityKindIcon>
 
-const KINDS: EntityKind[] = ['character', 'location', 'item', 'faction']
+const KINDS: GlyphKind[] = ['character', 'location', 'item', 'faction', 'lore']
 
 /**
- * All four kinds side-by-side. The 22×22 wrapper is a fixed box —
- * inner glyph (Lucide, 16 px) is centered.
+ * Every kind glyph side by side, lore included. The 22×22 wrapper is a
+ * fixed box — inner glyph (Lucide, 16 px) is centered.
  */
 export const AllKinds: Story = {
   render: () => (
@@ -36,6 +36,12 @@ export const AllKinds: Story = {
       ))}
     </View>
   ),
+  play: async () => {
+    // Named through the locale, not the raw kind id.
+    for (const name of ['Character', 'Location', 'Item', 'Faction', 'Lore']) {
+      expect(screen.getByRole('img', { name })).toBeInTheDocument()
+    }
+  },
 }
 
 /**
@@ -110,13 +116,12 @@ export const ThemeMatrix: Story = {
 }
 
 /**
- * Each glyph carries an aria-label matching its kind, so screen
- * readers announce "character", "location", etc. The image role
- * lets assistive tech treat it as a single nameable element.
+ * Each glyph is a single image-role element named with the translated
+ * kind ("Character"), not the raw kind id.
  */
 export const AccessibilityLabel: Story = {
   render: () => <EntityKindIcon kind="character" />,
   play: async () => {
-    expect(screen.getByLabelText('character')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Character' })).toBeInTheDocument()
   },
 }

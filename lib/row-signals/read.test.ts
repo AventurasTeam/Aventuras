@@ -8,7 +8,6 @@ import {
   happeningAwareness,
   happeningInvolvements,
   happenings,
-  pipelineRuns,
   stories,
   type NewCharacterRelationship,
   type NewDelta,
@@ -16,11 +15,10 @@ import {
   type NewHappening,
   type NewHappeningAwareness,
   type NewHappeningInvolvement,
-  type NewPipelineRun,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
-import { latestReplyIds, readSignalDeltas, readTurnBoundaries } from './read'
+import { latestReplyIds, readReplyEdits, readSignalDeltas, readTurnBoundaries } from './read'
 import type { SignalEntry } from './types'
 
 const ENTRIES: SignalEntry[] = [
@@ -789,148 +787,81 @@ describe('readSignalDeltas — link attribution', () => {
   })
 })
 
-describe('readSignalDeltas — reversed runs', () => {
-  function pipelineRunRow(
-    overrides: Pick<NewPipelineRun, 'runId' | 'actionId' | 'outcome'> & Partial<NewPipelineRun>,
-  ): NewPipelineRun {
-    return { kind: 'periodic-classifier', storyId: 's1', startedAt: 1, finishedAt: 2, ...overrides }
-  }
-
-  it('drops a delta whose run outcome is aborted, failed, or recovered, on both row and link tables', async () => {
+describe('readReplyEdits', () => {
+  it("returns the replies' user_edit updates on story_entries, oldest first, on this branch only", async () => {
     const db = await seedLinkFixtures()
-    await db
-      .insert(happeningAwareness)
-      .values(awarenessRow({ id: 'haw_1', happeningId: 'hap_1', characterId: 'char_kael' }))
-    await db
-      .insert(pipelineRuns)
-      .values([
-        pipelineRunRow({ runId: 'run_ok', actionId: 'act_ok', outcome: 'completed' }),
-        pipelineRunRow({ runId: 'run_aborted', actionId: 'act_aborted', outcome: 'aborted' }),
-        pipelineRunRow({ runId: 'run_failed', actionId: 'act_failed', outcome: 'failed' }),
-        pipelineRunRow({ runId: 'run_recovered', actionId: 'act_recovered', outcome: 'recovered' }),
-      ])
+    await db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'fork', createdAt: 1 })
     await db.insert(deltas).values([
       row({
-        id: 'd_ok_row',
-        logPosition: 10,
-        targetTable: 'entities',
-        targetId: 'char_kael',
-        op: 'update',
-        source: 'periodic_classifier',
-        actionId: 'act_ok',
-      }),
-      row({
-        id: 'd_ok_link',
-        logPosition: 11,
-        targetTable: 'happening_awareness',
-        targetId: 'haw_1',
-        op: 'create',
-        source: 'periodic_classifier',
-        actionId: 'act_ok',
-      }),
-      row({
-        id: 'd_aborted_row',
-        logPosition: 12,
-        targetTable: 'entities',
-        targetId: 'char_kael',
-        op: 'update',
-        source: 'periodic_classifier',
-        actionId: 'act_aborted',
-      }),
-      row({
-        id: 'd_failed_link',
-        logPosition: 13,
-        targetTable: 'happening_awareness',
-        targetId: 'haw_1',
-        op: 'create',
-        source: 'periodic_classifier',
-        actionId: 'act_failed',
-      }),
-      row({
-        id: 'd_recovered_row',
+        id: 'd_second',
         logPosition: 14,
-        targetTable: 'entities',
-        targetId: 'char_kael',
+        targetTable: 'story_entries',
+        targetId: 'e5',
         op: 'update',
-        source: 'periodic_classifier',
-        actionId: 'act_recovered',
+        source: 'user_edit',
+        undoPayload: { metadata: { currentLocationId: 'loc_1' } },
       }),
-    ])
-    const rows = await readSignalDeltas(db, 'b1', 10)
-    expect(rows).toEqual([
-      {
-        source: 'periodic_classifier',
-        targetTable: 'entities',
-        targetId: 'char_kael',
-        logPosition: 10,
-      },
-      {
-        source: 'periodic_classifier',
-        targetTable: 'happenings',
-        targetId: 'hap_1',
-        logPosition: 11,
-      },
-      {
-        source: 'periodic_classifier',
-        targetTable: 'entities',
-        targetId: 'char_kael',
-        logPosition: 11,
-      },
-    ])
-  })
-
-  it('keeps a delta whose action has no pipeline_runs row at all', async () => {
-    const db = await seedLinkFixtures()
-    await db.insert(deltas).values(
       row({
-        id: 'd_no_run',
-        logPosition: 10,
-        targetTable: 'entities',
-        targetId: 'char_kael',
+        id: 'd_first',
+        logPosition: 12,
+        targetTable: 'story_entries',
+        targetId: 'e5',
         op: 'update',
-        source: 'periodic_classifier',
-        actionId: 'act_no_run',
+        source: 'user_edit',
+        undoPayload: { metadata: { sceneEntities: ['char_kael'] } },
       }),
-    )
-    const rows = await readSignalDeltas(db, 'b1', 10)
-    expect(rows).toEqual([
-      {
-        source: 'periodic_classifier',
-        targetTable: 'entities',
-        targetId: 'char_kael',
-        logPosition: 10,
-      },
-    ])
-  })
-
-  it('keeps a delta whose run has a null outcome (failed reversal, writes still on disk)', async () => {
-    const db = await seedLinkFixtures()
-    await db.insert(pipelineRuns).values(
-      pipelineRunRow({
-        runId: 'run_stuck',
-        actionId: 'act_stuck',
-        outcome: null,
-        finishedAt: null,
-      }),
-    )
-    await db.insert(deltas).values(
       row({
-        id: 'd_stuck',
-        logPosition: 10,
-        targetTable: 'entities',
-        targetId: 'char_kael',
+        id: 'd_fold',
+        logPosition: 11,
+        targetTable: 'story_entries',
+        targetId: 'e5',
         op: 'update',
-        source: 'periodic_classifier',
-        actionId: 'act_stuck',
+        source: 'per_turn_classifier',
       }),
-    )
-    const rows = await readSignalDeltas(db, 'b1', 10)
-    expect(rows).toEqual([
-      {
-        source: 'periodic_classifier',
-        targetTable: 'entities',
-        targetId: 'char_kael',
+      row({
+        id: 'd_create',
         logPosition: 10,
+        targetTable: 'story_entries',
+        targetId: 'e5',
+        op: 'create',
+        source: 'user_edit',
+      }),
+      row({
+        id: 'd_not_reply',
+        logPosition: 13,
+        targetTable: 'story_entries',
+        targetId: 'e4',
+        op: 'update',
+        source: 'user_edit',
+      }),
+      row({
+        id: 'd_entity',
+        logPosition: 15,
+        targetTable: 'entities',
+        targetId: 'e5',
+        op: 'update',
+        source: 'user_edit',
+      }),
+      row({
+        id: 'd_fork',
+        logPosition: 16,
+        targetTable: 'story_entries',
+        targetId: 'e5',
+        op: 'update',
+        source: 'user_edit',
+        branchId: 'b2',
+      }),
+    ])
+    expect(await readReplyEdits(db, 'b1', ['e5', 'e3'])).toEqual([
+      {
+        targetId: 'e5',
+        logPosition: 12,
+        undoPayload: { metadata: { sceneEntities: ['char_kael'] } },
+      },
+      {
+        targetId: 'e5',
+        logPosition: 14,
+        undoPayload: { metadata: { currentLocationId: 'loc_1' } },
       },
     ])
   })

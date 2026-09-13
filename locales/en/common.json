@@ -47,6 +47,13 @@
     "incompleteNamed": "An interrupted background update in {{storyName}} could not be undone. Your story content is intact, and restarting the app retries automatically.",
     "incompleteUnnamed": "An interrupted background update could not be undone. Your story content is intact, and restarting the app retries automatically."
   },
+  "kinds": {
+    "character": "Character",
+    "location": "Location",
+    "item": "Item",
+    "faction": "Faction",
+    "lore": "Lore"
+  },
   "chrome": {
     "appSettings": "App Settings",
     "storySettings": "Story Settings",
@@ -54,6 +61,7 @@
     "back": "Back",
     "chapterProgress": "Chapter progress",
     "onThisScreen": "On this screen",
+    "fullText": "Full text",
     "goTo": {
       "header": "Go to",
       "openReader": "Open Reader",

@@ -161,17 +161,17 @@ Visual contract:
 
 ### Tag — tone vocabulary
 
-| Tone                  | Tokens                                                             | Row + chrome uses                                                                                                                                  |
-| --------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `default`             | `border-border-strong text-fg-muted bg-bg-base`                    | active entity row, Active thread, neutral                                                                                                          |
-| `soft`                | `border-border-strong text-fg-muted bg-bg-raised`                  | inline entity refs, tag chips                                                                                                                      |
-| `success`             | translucent success tint + colored text and border                 | staged entity, Resolved thread                                                                                                                     |
-| `warning`             | `bg-warning` (12% opacity overlay) + `border-warning text-warning` | retired entity, Pending thread, **status-pill error**                                                                                              |
-| `danger`              | translucent danger tint + colored text and border                  | Failed thread                                                                                                                                      |
-| `accent`              | translucent accent tint + colored text and border                  | status-pill **active phase** (paired with `leading`)                                                                                               |
-| `recently-classified` | `bg-recently-classified-bg` fill + `text-fg-primary` label         | recently-classified badge, full strength in both tiers ([`color.md → Recently-classified slot`](../foundations/color.md#recently-classified-slot)) |
+| Tone                  | Tokens                                                     | Row + chrome uses                                                                                                                                  |
+| --------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `default`             | `border-border-strong text-fg-muted bg-bg-base`            | active entity row, Active thread, neutral                                                                                                          |
+| `soft`                | `border-border-strong text-fg-muted bg-bg-raised`          | inline entity refs, tag chips                                                                                                                      |
+| `success`             | `border-success bg-success text-success-fg`                | staged entity, Resolved thread                                                                                                                     |
+| `warning`             | `border-warning bg-warning text-warning-fg`                | retired entity, Pending thread, **status-pill error**                                                                                              |
+| `danger`              | `border-danger bg-danger text-danger-fg`                   | Failed thread                                                                                                                                      |
+| `accent`              | `border-accent bg-accent text-accent-fg`                   | status-pill **active phase** (paired with `leading`), entity lead badge (paired with a `Star` leading)                                             |
+| `recently-classified` | `bg-recently-classified-bg` fill + `text-fg-primary` label | recently-classified badge, full strength in both tiers ([`color.md → Recently-classified slot`](../foundations/color.md#recently-classified-slot)) |
 
-The semantic tones (`success` / `warning` / `danger` / `accent`) mirror the project's overlay-tint pattern established in [`save-bar`](../../../components/compounds/save-bar.tsx). The active gen pill pairs `tone="accent"` with `leading={<Spinner size="sm" />}`; the error pill uses `tone="warning"` with no leading.
+The semantic tones (`success` / `warning` / `danger` / `accent`) are filled: the tone token as background and border, its `-fg` pair as the label. A 12% tint carrying tone-colored `text-xs` reads softer but falls below 4.5:1 in the light themes, while each `-fg` pair is authored against its own tone. The active gen pill pairs `tone="accent"` with `leading={<Spinner size="sm" />}`; the error pill uses `tone="warning"` with no leading.
 
 ## Implementation
 

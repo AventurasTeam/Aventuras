@@ -1,12 +1,12 @@
 import { eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { branches, deltas, stories, storyEntries } from '@/lib/db'
+import { branches, deltas, pipelineRuns, stories, storyEntries } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
 import { redoLastAction, undoLastAction } from './undo'
-import { DeltaReplayError } from '../delta/reverse-replay'
+import { DeltaReplayError, reverseReplayDeltas } from '../delta/reverse-replay'
 
 afterEach(() => {
   entriesStore.__reset()
@@ -400,5 +400,81 @@ describe('undoLastAction / redoLastAction', () => {
     entriesStore.hydrate('b2', [])
     const redoResult = await redoLastAction('b1', ctx)
     expect(redoResult.status).toBe('rejected')
+  })
+})
+
+describe('undoLastAction after a reversed turn', () => {
+  const DEAD_ROW = {
+    id: 'e_dead',
+    branchId: 'b1',
+    position: 3,
+    kind: 'user_action' as const,
+    content: 'go north',
+    chapterId: null,
+    metadata: null,
+    createdAt: 3,
+  }
+
+  // Shaped like submitTurn: the user_action's create delta carries the run's actionId.
+  async function seedDeadTurn(db: Awaited<ReturnType<typeof createTestDb>>['db']) {
+    await seed(db)
+    await db.insert(storyEntries).values(DEAD_ROW)
+    await db.insert(deltas).values({
+      id: 'd_dead',
+      branchId: 'b1',
+      actionId: 'act_dead',
+      op: 'create',
+      targetTable: 'story_entries',
+      targetId: 'e_dead',
+      entryId: null,
+      source: 'user_edit',
+      undoPayload: null,
+      logPosition: 2,
+      encodingVersion: 1,
+      createdAt: 3,
+    })
+    entriesStore.hydrate('b1', [
+      OPENING_ROW,
+      { ...OPENING_ROW, id: 'e_turn', position: 2, kind: 'ai_reply', content: 'a reply' },
+      DEAD_ROW,
+    ])
+  }
+
+  it('undoes the last surviving turn after an aborted run', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedDeadTurn(db)
+    await db.insert(pipelineRuns).values({
+      runId: 'run_dead',
+      kind: 'per-turn',
+      actionId: 'act_dead',
+      storyId: 's1',
+      startedAt: 3,
+    })
+    await reverseReplayDeltas('act_dead', ctx, () => [
+      db
+        .update(pipelineRuns)
+        .set({ finishedAt: 4, outcome: 'aborted' })
+        .where(eq(pipelineRuns.runId, 'run_dead'))
+        .toSQL(),
+    ])
+    expect(entriesStore.getById('e_dead')).toBeUndefined()
+
+    expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+    expect(entriesStore.getById('e_turn')).toBeUndefined()
+    expect(await db.select().from(storyEntries).where(eq(storyEntries.id, 'e_turn'))).toEqual([])
+  })
+
+  // A refused admission reverses its user_action with no pipeline_runs row to mark.
+  it('undoes the last surviving turn after a refused admission', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedDeadTurn(db)
+    await reverseReplayDeltas('act_dead', ctx)
+    expect(entriesStore.getById('e_dead')).toBeUndefined()
+
+    expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+    expect(entriesStore.getById('e_turn')).toBeUndefined()
+    expect(await db.select().from(storyEntries).where(eq(storyEntries.id, 'e_turn'))).toEqual([])
   })
 })

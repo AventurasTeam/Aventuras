@@ -187,7 +187,15 @@ export function ScreenShell({
         {leftSlot}
         <View className="min-w-0 flex-1 flex-row items-center gap-3">
           <TextClassContext.Provider value="text-fg-primary !leading-none translate-y-[0.08em]">
-            <View className="min-w-0 flex-shrink flex-row items-center">{title}</View>
+            {/* Grows without inline extras, so a title's % max-width resolves against the bar. */}
+            <View
+              className={cn(
+                'min-w-0 flex-shrink flex-row items-center',
+                inlineCenterExtras == null && 'grow',
+              )}
+            >
+              {title}
+            </View>
           </TextClassContext.Provider>
           {inlineCenterExtras != null ? (
             <View className="flex-row items-center gap-2">{inlineCenterExtras}</View>
