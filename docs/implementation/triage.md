@@ -54,10 +54,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **Spinner's default accessible name is English.** (2026-09-13)
-  `components/ui/spinner.tsx` defaults `accessibilityLabel` to the raw
-  string `'Loading'`, bypassing `t()`, so every Spinner that passes no
-  label announces English.
 - **Popover names were never swept.** (2026-09-13) `Popover` warns in
   `__DEV__` when it gets neither `ariaLabel` nor `ariaLabelledBy`. The
   2026-09-13 triage pass named `ImporterMenu`'s; the other consumers
