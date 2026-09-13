@@ -1,9 +1,10 @@
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-import { app, BrowserWindow, ipcMain, net, protocol, session, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, net, protocol, session, shell } from 'electron'
 import type { WebContents } from 'electron'
 
+import { appMenuTemplate } from './app-menu'
 import { resolveBundlePath } from './bundle-path'
 import {
   exec as dbExec,
@@ -159,6 +160,7 @@ function createWindow(): void {
     height: 800,
     show: false,
     backgroundColor: '#000000',
+    autoHideMenuBar: !isDev,
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -268,6 +270,7 @@ function requireModelDir(modelId: string): string {
 }
 
 app.whenReady().then(async () => {
+  if (!isDev) Menu.setApplicationMenu(Menu.buildFromTemplate(appMenuTemplate(process.platform)))
   await initDb()
   applyContentSecurityPolicy()
   registerBundleProtocol()
