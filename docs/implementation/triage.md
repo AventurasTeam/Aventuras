@@ -53,8 +53,3 @@ slice-planning gate forces its resolution before that slice is planned.
   to get. Held rather than routed in the 2026-09-09 triage pass, which
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
-
-- **Main's strings are English.** (2026-09-13) `electron/app-menu.ts`
-  hardcodes the packaged menu's `File` and `View` labels and
-  `electron/boot-failure.ts` the failed-boot dialog's title, and main
-  has no i18n, so they stay English whatever the app locale.

@@ -735,6 +735,11 @@ Note: this is **app-UI translation only**, distinct from per-story
 content translation (Story Settings · Translation). The two are
 independent.
 
+The desktop main process owns a few strings of its own — the packaged
+app menu and the failed-boot dialog — and follows the same setting.
+The boot dialog falls back to the OS locale, since it can fire before
+settings are readable.
+
 ## APP · Data
 
 Operational data actions. Each is destructive or large-impact, so
