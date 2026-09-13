@@ -54,13 +54,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **`CollisionListRow` accessibility role drift.** (2026-09-11)
-  The strip uses `accessibilityRole="alert"` (every flagged row
-  announces); [`collision-resolve.md → Accessibility`](../ui/patterns/collision-resolve.md#accessibility)
-  specs `region`. On Android
-  (2026-09-12 emulator smoke) the accessibility tree also reports
-  content-desc "Collision warning" on a container spanning the whole
-  Active group, not only the strip — cause unverified.
 - **Pressable `Tag` misses the phone tap floor.** (2026-09-11) A
   20 dp pill with `hitSlop={8}` reaches only ~36 dp against the
   [tap-target floor](../ui/foundations/spacing.md#tap-target-on-native)
@@ -93,10 +86,3 @@ slice-planning gate forces its resolution before that slice is planned.
   queues as a `GO_BACK` with no `canGoBack()` check, so nothing
   happens. Read from expo-router's source, not run. A `canGoBack()`
   fallback to the story list would fix all three.
-- **Collision strip's role contradicts canon.** (2026-09-12,
-  pre-existing)
-  [`collision-resolve.md → Accessibility`](../ui/patterns/collision-resolve.md#accessibility)
-  specifies `accessibilityRole="region"`, but `CollisionListRow` has
-  rendered `role="alert"` since it shipped, which screen readers
-  announce assertively as each flagged row mounts. Pick one and align
-  the other.
