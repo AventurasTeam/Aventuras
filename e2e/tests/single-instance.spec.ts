@@ -4,7 +4,13 @@ import { join } from 'node:path'
 
 import { expect, test } from '@playwright/test'
 
-import { exitWithin, launchApp, spawnAppProcess, type LaunchedApp } from '../harness/launch'
+import {
+  exitWithin,
+  launchApp,
+  spawnAppProcess,
+  stopAppProcess,
+  type LaunchedApp,
+} from '../harness/launch'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
 
 const windowCount = (app: LaunchedApp) =>
@@ -26,13 +32,16 @@ test.describe('single instance', () => {
     removeUserDataDir(userDataDir)
   })
 
-  test('a second launch on the same data directory quits and opens no window', async () => {
+  test('a second launch on the same data directory quits cleanly and adds no window', async () => {
     const before = await windowCount(app)
     const second = spawnAppProcess(userDataDir)
     try {
-      expect(await exitWithin(second, 20_000)).toBe(0)
+      expect(await exitWithin(second.process, 20_000), second.stderr()).toEqual({
+        code: 0,
+        signal: null,
+      })
     } finally {
-      second.kill()
+      await stopAppProcess(second.process)
     }
     expect(await windowCount(app)).toBe(before)
   })
@@ -43,10 +52,9 @@ test.describe('single instance', () => {
     const otherDir = mkdtempSync(join(tmpdir(), 'aventuras-e2e-other-'))
     const other = spawnAppProcess(otherDir)
     try {
-      expect(await exitWithin(other, 8_000)).toBeNull()
+      expect(await exitWithin(other.process, 8_000), other.stderr()).toBeNull()
     } finally {
-      other.kill()
-      await exitWithin(other, 10_000)
+      await stopAppProcess(other.process)
       removeUserDataDir(otherDir)
     }
   })
