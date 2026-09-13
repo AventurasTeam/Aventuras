@@ -51,7 +51,10 @@ export function ensureDeltaActionPort(): void {
   configureDeltaActionPort({
     applyDeltaAction,
     reverseReplayDeltas,
-    describeReplayError: (e) => (e instanceof DeltaReplayError ? String(e.cause) : undefined),
+    describeReplayError: (e) =>
+      e instanceof DeltaReplayError
+        ? { detail: String(e.cause), committed: e.committed }
+        : undefined,
   })
 }
 

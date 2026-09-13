@@ -11,9 +11,9 @@ export type DeltaActionPort = {
     ctx: DbCtx,
     settleOps?: (deltaCount: number) => readonly SqlOp[],
   ) => Promise<number>
-  // Returns the reversal-failure detail when `e` is a committed-aware
-  // DeltaReplayError, or undefined for any other thrown value.
-  describeReplayError: (e: unknown) => string | undefined
+  // Undefined for anything but a DeltaReplayError. `committed` means the reversal
+  // landed and only the store sync after it failed.
+  describeReplayError: (e: unknown) => { detail: string; committed: boolean } | undefined
 }
 
 let port: DeltaActionPort | undefined
@@ -47,6 +47,8 @@ export function reverseReplayDeltas(
   return requirePort().reverseReplayDeltas(...args)
 }
 
-export function describeReplayError(e: unknown): string | undefined {
+export function describeReplayError(
+  e: unknown,
+): ReturnType<DeltaActionPort['describeReplayError']> {
   return requirePort().describeReplayError(e)
 }

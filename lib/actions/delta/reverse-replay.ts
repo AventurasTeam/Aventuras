@@ -43,6 +43,20 @@ export function emitPatches(patches: readonly PatchEmission[]): void {
   for (const p of patches) resolveByTable(p.table)?.patcher?.(p.branchId, p.patch)
 }
 
+// Past the transaction the reversal + prune are committed; a patcher throw is a
+// store-sync failure, not a rollback failure. Flag committed so callers don't retry.
+function emitCommittedPatches(patches: readonly PatchEmission[], actionId: string): void {
+  try {
+    emitPatches(patches)
+  } catch (e) {
+    throw new DeltaReplayError('Post-commit patch sync failed', {
+      cause: e,
+      actionId,
+      committed: true,
+    })
+  }
+}
+
 // Membership only, never a value compare: an undo restores a prior value by
 // construction, and a degenerate value-equal undo costs one revalidation hash.
 function undoDirtiesVector(targetTable: string, payloadKeys: readonly string[]): boolean {
@@ -188,17 +202,7 @@ export async function reverseAndPruneDeltaRows(
     if (e instanceof DeltaReplayError) throw e
     throw new DeltaReplayError('Reverse-and-prune failed', { cause: e, actionId })
   }
-  // Past the transaction the reversal + prune are committed; a patcher throw is a
-  // store-sync failure, not a rollback failure. Flag committed so callers don't retry.
-  try {
-    emitPatches(patches)
-  } catch (e) {
-    throw new DeltaReplayError('Post-commit patch sync failed', {
-      cause: e,
-      actionId,
-      committed: true,
-    })
-  }
+  emitCommittedPatches(patches, actionId)
   return rows.length
 }
 
@@ -212,8 +216,10 @@ export async function reverseReplayDeltas(
   ctx: DbCtx,
   settleOps: (deltaCount: number) => readonly SqlOp[] = () => [],
 ): Promise<number> {
+  let rows: Delta[]
+  let patches: PatchEmission[]
   try {
-    const rows = (await ctx.db
+    rows = (await ctx.db
       .select()
       .from(deltas)
       .where(eq(deltas.actionId, actionId))
@@ -222,12 +228,13 @@ export async function reverseReplayDeltas(
     if (rows.length === 0 && settle.length === 0) return 0
 
     const plan = await buildReverseAndPrunePlan(rows, ctx)
+    patches = plan.patches
     await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...settle])
-    // Action layer owns the patch: invert in the held-branch store after the tx.
-    emitPatches(plan.patches)
-    return rows.length
   } catch (e) {
     if (e instanceof DeltaReplayError) throw e
     throw new DeltaReplayError('Reverse-replay failed', { cause: e, actionId })
   }
+  // Action layer owns the patch: invert in the held-branch store after the tx.
+  emitCommittedPatches(patches, actionId)
+  return rows.length
 }

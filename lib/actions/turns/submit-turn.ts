@@ -1,6 +1,7 @@
 import { and, desc, eq, ne } from 'drizzle-orm'
 
 import { inheritedEntryMetadata, storyEntries, type EntryMetadata } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { isStorySwapPending, withTurnAdmission } from '@/lib/embedder-swap'
 import { generateId } from '@/lib/ids'
 import {
@@ -108,9 +109,15 @@ export async function submitTurn(
         try {
           await reverseReplayDeltas(turnActionId, ctx)
         } catch (e) {
-          // Deltas are reversed even if the post-commit store sync failed; the
-          // caller still sees the rejection, same tolerance abortRun applies.
           if (!(e instanceof DeltaReplayError)) throw e
+          // The caller still sees the rejection. Uncommitted leaves the user_action
+          // standing with no marker for boot to retry; committed leaves entriesStore stale.
+          logger.warn('action_layer.submit_rejected_reversal_failed', {
+            branchId: ids.branchId,
+            entryId,
+            committed: e.committed,
+            error: String(e.cause),
+          })
         }
       }
       return runResult

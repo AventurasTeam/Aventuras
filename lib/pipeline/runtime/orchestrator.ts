@@ -310,11 +310,12 @@ async function abortRun(
     // Marker rides the reversal's transaction: never records an uncommitted reversal.
     await reverseReplayDeltas(run.actionId, ctx, () => [markerOp(outcome).toSQL()])
   } catch (e) {
-    const detail = describeReplayError(e)
-    if (detail === undefined) throw e
-    error = { kind: 'orchestrator', detail: `reverse-replay failed: ${detail}` }
+    const failure = describeReplayError(e)
+    if (failure === undefined) throw e
+    const stage = failure.committed ? 'post-commit store sync' : 'reverse-replay'
+    error = { kind: 'orchestrator', detail: `${stage} failed: ${failure.detail}` }
     outcome = 'failed'
-    reversalFailed = true
+    reversalFailed = !failure.committed
   }
   generationStore.abortRun(run.runId)
   // A failed reversal leaves its writes on disk, and `finished_at IS NULL` is the
