@@ -617,8 +617,9 @@ focus-visible:ring-focus-ring/50`.
 
 ### Switch — implementation contract
 
-- **Baseline source.** `react-native-reusables` Switch scaffold
-  reshaped over `@rn-primitives/switch` (Root + Thumb).
+- **Baseline source.** `react-native-reusables` Switch scaffold,
+  rebuilt on a plain `Pressable` (`role="switch"`, explicit
+  `aria-checked`) with the visual extracted to `SwitchVisual`.
 - **Required props.** `checked`, `onCheckedChange`. Storybook
   static states pass a no-op handler.
 - **Density binding** happens in-component via `useDensity()`;
