@@ -1,10 +1,11 @@
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-import { app, BrowserWindow, ipcMain, Menu, net, protocol, session, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, session, shell } from 'electron'
 import type { WebContents } from 'electron'
 
 import { appMenuTemplate } from './app-menu'
+import { reportBootFailure } from './boot-failure'
 import { resolveBundlePath } from './bundle-path'
 import {
   exec as dbExec,
@@ -281,7 +282,7 @@ function requireModelDir(modelId: string): string {
   }
 }
 
-app.whenReady().then(async () => {
+async function boot(): Promise<void> {
   if (!isPrimaryInstance) return
   if (!isDev) Menu.setApplicationMenu(Menu.buildFromTemplate(appMenuTemplate(process.platform)))
   await initDb()
@@ -431,7 +432,18 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
-})
+}
+
+app
+  .whenReady()
+  .then(boot)
+  .catch((error: unknown) => {
+    console.error('Boot failed:', error)
+    reportBootFailure(error, {
+      showErrorBox: (title, content) => dialog.showErrorBox(title, content),
+      exit: (code) => app.exit(code),
+    })
+  })
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

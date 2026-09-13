@@ -68,6 +68,7 @@ slice-planning gate forces its resolution before that slice is planned.
   `__DEV__` when it gets neither `ariaLabel` nor `ariaLabelledBy`. The
   2026-09-13 triage pass named `ImporterMenu`'s; the other consumers
   were not checked.
-- **The packaged app menu's `View` label is English.** (2026-09-13)
-  `electron/app-menu.ts` hardcodes it, and main has no i18n, so the
-  menu stays English whatever the app locale.
+- **Main's strings are English.** (2026-09-13) `electron/app-menu.ts`
+  hardcodes the packaged menu's `View` label and
+  `electron/boot-failure.ts` the failed-boot dialog's title, and main
+  has no i18n, so both stay English whatever the app locale.
