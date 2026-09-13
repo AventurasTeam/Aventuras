@@ -493,7 +493,17 @@ describe('selectRecentlyClassified — manual scene edits', () => {
     }
   })
 
-  it('survives a scene field of the wrong type in an undo payload', () => {
-    expect(() => rowsFor([edit(11, 'e5', { sceneEntities: 42 })])).not.toThrow()
+  it('reads the live value for a scene field of the wrong type', () => {
+    const rows = rowsFor([edit(11, 'e5', { sceneEntities: 42, currentLocationId: 7 })])
+    // The classifier's own arrival and move still tint; nothing departs that never left.
+    expect(rows.get('char_b')).toBe('fresh')
+    expect(rows.get('loc_2')).toBe('fresh')
+    expect(rows.has('char_a')).toBe(false)
+  })
+
+  it('reads a null sceneEntities as the absent array it encodes', () => {
+    const rows = rowsFor([edit(11, 'e5', { sceneEntities: null })])
+    expect(rows.get('char_a')).toBe('fresh')
+    expect(rows.has('char_b')).toBe(false)
   })
 })

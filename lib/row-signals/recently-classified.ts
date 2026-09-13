@@ -72,7 +72,9 @@ export function sceneTransitionIds(
 }
 
 // An undo payload is the partial an edit replaced; a null `metadata` restores a NULL
-// column, where both fields stood at their defaults.
+// column, where both fields stood at their defaults, and a null field is its own default.
+// A field of any other wrong type is unreadable, so the live value stands rather than an
+// invented scene.
 function priorScene(undoPayload: unknown): Partial<SceneFields> {
   if (typeof undoPayload !== 'object' || undoPayload == null || !('metadata' in undoPayload)) {
     return {}
@@ -83,11 +85,12 @@ function priorScene(undoPayload: unknown): Partial<SceneFields> {
   const prior: Partial<SceneFields> = {}
   if ('sceneEntities' in metadata) {
     const ids = metadata.sceneEntities
-    prior.sceneEntities = Array.isArray(ids) ? ids.filter((id) => typeof id === 'string') : []
+    if (ids === null) prior.sceneEntities = []
+    else if (Array.isArray(ids)) prior.sceneEntities = ids.filter((id) => typeof id === 'string')
   }
   if ('currentLocationId' in metadata) {
     const id = metadata.currentLocationId
-    prior.currentLocationId = typeof id === 'string' ? id : null
+    if (id === null || typeof id === 'string') prior.currentLocationId = id
   }
   return prior
 }
