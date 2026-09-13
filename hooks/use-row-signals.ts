@@ -59,8 +59,7 @@ export function useRowSignals(branchId: string): RowSignalsSnapshot {
     // Local DB read, not a flaky network call — a failure is worth surfacing, not retried.
     retry: false,
     queryFn: async (): Promise<SignalWindow> => {
-      // A manual scene edit reaches the store at once but refetches nothing, so the scene
-      // pass must read these entries: live ones would carry an edit its window can't explain.
+      // Manual scene edits don't refetch; live entries may carry edits this window can't explain.
       const snapshot = entries
       const boundaries = await readTurnBoundaries(db, branchId, snapshot)
       if (boundaries == null) return EMPTY_WINDOW

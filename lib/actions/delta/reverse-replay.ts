@@ -28,6 +28,7 @@ export type ReversePlan = { ops: SqlOp[]; pruneOps: SqlOp[]; patches: PatchEmiss
  * The reversal of a delta set, unexecuted — so a caller that owns a transaction of its
  * own can commit it alongside its own work rather than in a second one. Ops and prunes
  * stay separate because their order relative to the caller's ops is the caller's call.
+ * The prunes leave gaps in log_position; that's expected.
  */
 export async function buildReverseAndPrunePlan(rows: Delta[], ctx: DbCtx): Promise<ReversePlan> {
   const built = await buildUndoOps(rows, ctx)
@@ -171,8 +172,6 @@ async function buildUndoOps(
   return { ops, patches }
 }
 
-// Rollback path: reverse a pre-selected delta set AND prune those delta rows
-// from the log in one transaction (gaps in log_position are expected).
 export async function reverseAndPruneDeltaRows(
   rows: Delta[],
   ctx: DbCtx,
@@ -204,11 +203,9 @@ export async function reverseAndPruneDeltaRows(
 }
 
 /**
- * Reverses one action's deltas and prunes them in the same transaction, as CTRL-Z does:
- * rows left in the log would read as the undo head and as a later rollback's to-do
- * (data-model.md -> Entry mutability & rollback). `settleOps` joins that transaction,
- * keyed on the delta count so the caller can branch on it — recovery settles its
- * `pipeline_runs` marker this way, so the marker never disagrees with the log.
+ * Reverses and prunes in one transaction, as CTRL-Z does: rows left in the log would read as
+ * the undo head and a later rollback's to-do (data-model.md → Entry mutability & rollback).
+ * Ops from `settleOps(deltaCount)` join that transaction, even when `deltaCount` is 0.
  */
 export async function reverseReplayDeltas(
   actionId: string,

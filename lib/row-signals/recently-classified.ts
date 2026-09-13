@@ -12,11 +12,8 @@ import {
   type TurnBoundaries,
 } from './types'
 
-/*
- * patterns/entity.md → Recently-classified row accent. Tiers by log position of the
- * last two `ai_reply` creates (not `entry_id`: the periodic classifier anchors facts to
- * older turns).
- */
+// patterns/entity.md → Recently-classified row accent. Tiers by log position of the last two
+// `ai_reply` creates, not `entry_id`: the periodic classifier anchors facts to older turns.
 
 type Input = {
   deltas: readonly SignalDelta[]

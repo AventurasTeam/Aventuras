@@ -110,7 +110,7 @@ function Lengthens(args: TruncatedTextProps) {
   )
 }
 
-/** A stretched box keeps its size when the string grows, so no layout event fires; it still re-measures. */
+/** No layout event fires when a stretched box's string grows; TruncatedText still re-measures. */
 export const LengthensInPlace: Story = {
   render: (args) => <Lengthens {...args} />,
   play: async () => {

@@ -56,8 +56,7 @@ export const EntityRow: Story = {
 }
 
 /**
- * Lead character — `meta` slot carries the inline lead badge (accent pill,
- * `Star` glyph); ListRow doesn't own the badge styling.
+ * Lead character — `meta` carries the lead badge; ListRow doesn't style it.
  */
 export const LeadCharacter: Story = {
   render: () => (

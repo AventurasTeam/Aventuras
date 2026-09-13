@@ -116,10 +116,8 @@ export const ThemeMatrix: Story = {
 }
 
 /**
- * Each glyph carries the translated kind name as its aria-label, so
- * screen readers announce "Character", "Location", etc. rather than the
- * raw kind id. The image role lets assistive tech treat it as a single
- * nameable element.
+ * Each glyph is a single image-role element named with the translated
+ * kind ("Character"), not the raw kind id.
  */
 export const AccessibilityLabel: Story = {
   render: () => <EntityKindIcon kind="character" />,

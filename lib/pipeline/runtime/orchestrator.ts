@@ -307,8 +307,7 @@ async function abortRun(
       .where(eq(pipelineRuns.runId, run.runId))
   let reversalFailed = false
   try {
-    // The marker rides the reversal's transaction, so it never records a reversal
-    // that didn't commit.
+    // Marker rides the reversal's transaction: never records an uncommitted reversal.
     await reverseReplayDeltas(run.actionId, ctx, () => [markerOp(outcome).toSQL()])
   } catch (e) {
     const detail = describeReplayError(e)

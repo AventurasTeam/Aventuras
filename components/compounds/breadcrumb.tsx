@@ -31,8 +31,7 @@ const PHONE_SEGMENT_BOX = 'min-h-[44px] justify-center'
 export function Breadcrumb({ segments, className, testID, size = 'base' }: BreadcrumbProps) {
   const isPhone = useTier() === 'phone'
   const segmentBox = cn(SEGMENT_BOX, isPhone && PHONE_SEGMENT_BOX)
-  // Grows to fill its row, so the current segment's 70% cap measures the bar; a content-sized
-  // parent would cap it against its own text.
+  // Grows to fill its row so the current segment's 70% cap measures the row, not the trail's text.
   return (
     <View
       className={cn('min-w-0 shrink grow flex-row items-center gap-1', className)}

@@ -123,7 +123,7 @@ describe('reverseReplayDeltas', () => {
       .from(storyEntries)
       .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'entry_1')))
     expect(rows.length).toBe(0)
-    // The replayed deltas leave the log with the reversal, as CTRL-Z's do.
+    // Reversal prunes the action's deltas from the log, as CTRL-Z does.
     expect((await db.select().from(deltas).where(eq(deltas.actionId, 'act_1'))).length).toBe(0)
   })
 

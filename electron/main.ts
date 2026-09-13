@@ -47,8 +47,7 @@ const isDev = !app.isPackaged
 if (isDev) app.setName('aventuras-dev')
 
 // A second process on this userData would open the same DB beside this one's in-memory stores,
-// so it hands focus to the first and quits before initDb. Taken after setName: dev and an
-// installed build have separate data and must not block each other.
+// so it quits before initDb. After setName: dev and an installed build must not block each other.
 const isPrimaryInstance = app.requestSingleInstanceLock()
 if (!isPrimaryInstance) app.quit()
 

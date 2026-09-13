@@ -167,9 +167,8 @@ export async function launchApp(opts: {
 }
 
 /**
- * Starts one more app process on `userDataDir`, outside Playwright: `electron.launch` would
- * wait for a window that a refused instance never opens. The caller owns the process. In dev
- * it gets no renderer origin, so it only lives long enough to be observed.
+ * Bypasses Playwright: `electron.launch` would await a window a refused instance never opens.
+ * Caller owns the process. In dev its renderer URL is dead, so it lives only to be observed.
  */
 export function spawnAppProcess(userDataDir: string): ChildProcess {
   const args = [...ozoneArgs, `--user-data-dir=${userDataDir}`]
