@@ -501,6 +501,12 @@ describe('selectRecentlyClassified — manual scene edits', () => {
     expect(rows.has('char_a')).toBe(false)
   })
 
+  it('reads the live value for a sceneEntities array holding a non-string', () => {
+    // One bad id makes the whole array unreadable, not just that id.
+    const rows = rowsFor([edit(11, 'e5', { sceneEntities: ['char_a', 42] })])
+    expect(rows.get('char_b')).toBe('fresh')
+  })
+
   it('reads a null sceneEntities as the absent array it encodes', () => {
     const rows = rowsFor([edit(11, 'e5', { sceneEntities: null })])
     expect(rows.get('char_a')).toBe('fresh')

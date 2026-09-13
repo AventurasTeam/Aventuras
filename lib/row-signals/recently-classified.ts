@@ -86,7 +86,8 @@ function priorScene(undoPayload: unknown): Partial<SceneFields> {
   if ('sceneEntities' in metadata) {
     const ids = metadata.sceneEntities
     if (ids === null) prior.sceneEntities = []
-    else if (Array.isArray(ids)) prior.sceneEntities = ids.filter((id) => typeof id === 'string')
+    else if (Array.isArray(ids) && ids.every((id) => typeof id === 'string'))
+      prior.sceneEntities = ids
   }
   if ('currentLocationId' in metadata) {
     const id = metadata.currentLocationId
