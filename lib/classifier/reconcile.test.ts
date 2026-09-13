@@ -52,6 +52,14 @@ describe('reconcileNewCharacter', () => {
     expect(decision).toEqual({ kind: 'promote', entityId: 'char_1', similarity: 0.9 })
   })
 
+  it('matches a decomposed stored name against a composed candidate', async () => {
+    const decision = await reconcileNewCharacter(
+      { name: 'Zoë', description: 'The tavern keeper, ink on her hands.' },
+      { entities: [entity({ name: 'Zoë' })], embedDescriptions: stubEmbedder(0.9) },
+    )
+    expect(decision).toEqual({ kind: 'promote', entityId: 'char_1', similarity: 0.9 })
+  })
+
   it('treats an already-active namesake as a known mention, not a promotion', async () => {
     const decision = await reconcileNewCharacter(
       { name: 'Eldrin', description: 'The tavern keeper, ink on his hands.' },

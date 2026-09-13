@@ -482,4 +482,18 @@ describe('selectRecentlyClassified — manual scene edits', () => {
     expect(rows.get('loc_1')).toBe('fresh')
     expect(rows.has('char_b')).toBe(false)
   })
+
+  // The column is unchecked JSON and this runs during render: a corrupt row must not throw.
+  it('reads the live scene when an undo payload carries no readable metadata', () => {
+    for (const undoPayload of [null, 'x', 42, {}, { metadata: 'x' }]) {
+      const corrupt = { targetId: 'e5', logPosition: 11, undoPayload } as unknown as ReplyEdit
+      const rows = rowsFor([corrupt])
+      expect(rows.get('char_b')).toBe('fresh')
+      expect(rows.get('loc_2')).toBe('fresh')
+    }
+  })
+
+  it('survives a scene field of the wrong type in an undo payload', () => {
+    expect(() => rowsFor([edit(11, 'e5', { sceneEntities: 42 })])).not.toThrow()
+  })
 })
