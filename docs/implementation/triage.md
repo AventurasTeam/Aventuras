@@ -61,10 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   and Android's `hitSlop` can't extend past the parent anyway. Affects
   the review pill and the generation pill; fix is visible size, not
   more slop.
-- **Lead badge looks like the active status pill.** (2026-09-11)
-  The lead badge is a default outline `Tag` stand-in (canon: gold
-  pill), which looks identical to the `active` status pill; "gold"
-  maps to `warning` elsewhere, which means retired. Design call.
 - **No shared lore kind glyph.** (2026-09-11)
   [`iconography.md → Entity kind glyphs`](../ui/foundations/iconography.md#entity-kind-glyphs)
   has no lore glyph; `BookOpen` (the app logo) is inlined in `LoreRow`

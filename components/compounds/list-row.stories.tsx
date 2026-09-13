@@ -1,8 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { Star } from 'lucide-react-native'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { EntityKindIcon } from '@/components/entity/entity-kind-icon'
+import { Icon } from '@/components/ui/icon'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
 import { themes } from '@/lib/themes'
@@ -54,16 +56,22 @@ export const EntityRow: Story = {
 }
 
 /**
- * Lead character — `meta` slot carries the inline gold lead-badge.
- * Tag is a stand-in for the eventual gold-pill; ListRow doesn't
- * own the badge styling.
+ * Lead character — `meta` slot carries the inline lead badge (accent pill,
+ * `Star` glyph); ListRow doesn't own the badge styling.
  */
 export const LeadCharacter: Story = {
   render: () => (
     <ListRow
       label="Aiko"
       leading={<EntityKindIcon kind="character" />}
-      meta={<Tag>You</Tag>}
+      meta={
+        <Tag
+          tone="accent"
+          leading={<Icon as={Star} aria-hidden size="sm" className="fill-accent-fg" />}
+        >
+          You
+        </Tag>
+      }
       trailing={<Tag>active</Tag>}
       onPress={fn()}
     />
