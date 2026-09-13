@@ -93,7 +93,8 @@ function priorScene(undoPayload: unknown): Partial<SceneFields> {
 }
 
 // Manual edits don't tint, so a reply's scene is diffed as the classifier left it: each
-// field's earliest `user_edit` payload holds its value from before the user touched it.
+// field's earliest `user_edit` payload holds its value from before the user touched it. The
+// entry before it needs no such pass: edits reach only the tail (scene-fields.ts).
 function classifierScene(reply: SignalEntry, edits: readonly ReplyEdit[]): SceneSource {
   let prior: Partial<SceneFields> = {}
   for (const edit of edits) {

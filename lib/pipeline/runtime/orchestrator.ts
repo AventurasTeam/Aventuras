@@ -318,10 +318,7 @@ async function abortRun(
     reversalFailed = !failure.committed
   }
   generationStore.abortRun(run.runId)
-  // A failed reversal leaves its writes on disk, and `finished_at IS NULL` is the
-  // only thing that hands them to boot recovery — settling the marker here would
-  // strand them with no retry at all. Nothing user-facing reads pipeline_runs; the
-  // outcome the user sees rides `run_complete` on the event bus, still 'failed'.
+  // Uncommitted: the marker rolled back with the reversal, so boot recovery still owns the run.
   if (reversalFailed)
     logger.warn(
       'pipeline.orphan_left_for_recovery',

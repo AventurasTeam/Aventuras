@@ -43,7 +43,7 @@ export async function readClassifierStatus(
  * process that no longer exists. Scoped to `$.state` and to 'running' only —
  * 'retrying' / 'failed-persistent' are real errors the manual run must surface.
  *
- * `unreversedActionIds` are the orphans boot could not reverse-replay. A branch
+ * `unreversedActionIds` are the orphans whose boot reversal threw. A branch
  * still holding their deltas is NOT reconcilable, so it keeps `running`, which
  * already suspends the cadence — reconciling it would let the classifier re-read a
  * window whose partial writes are still on disk. The boot that finally reverses

@@ -21,8 +21,8 @@ export type RecoveryFailure = {
 }
 export type RecoveryReport = { reversed: RecoveredRun[]; failures: RecoveryFailure[] }
 
-// Per-orphan failures are logged and their rows left for the next boot, so one bad
-// orphan can't block the rest; only the orphan query itself can throw.
+// Per-orphan failures are logged and reported, so one bad orphan can't block the rest; an
+// uncommitted one keeps its marker open for the next boot. Only the orphan query itself can throw.
 export async function recoverInFlightRuns(ctx: DbCtx): Promise<RecoveryReport> {
   const orphans = await ctx.db
     .select()

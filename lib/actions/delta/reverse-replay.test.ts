@@ -73,7 +73,7 @@ async function knightRow(db: Awaited<ReturnType<typeof createTestDb>>['db']) {
 }
 
 describe('reverseReplayDeltas', () => {
-  it('reverses create + update in DESC order, returns count', async () => {
+  it('reverses create + update in DESC order, prunes their deltas, returns count', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seed(db)

@@ -53,8 +53,8 @@ const TONE_CLASSES: Record<TagTone, { container: string; label: string; filled: 
   },
 }
 
-// A pressable pill is ~22px tall, so 2 × 11 reaches 44 by IconAction's visible + 2 × slop rule
-// (spacing.md); sideways stays small because adjacent pills sit 8px apart.
+// ~22px pill + 2 × 11 slop = 44 on paper (spacing.md's IconAction rule): RN Web ignores hitSlop
+// and Android clips it at the parent's bounds. Sideways stays small: adjacent pills sit 8px apart.
 export const TAG_HIT_SLOP = { top: 11, bottom: 11, left: 4, right: 4 }
 
 type TagProps = {
@@ -111,7 +111,7 @@ export function Tag({
   const toneClasses = TONE_CLASSES[tone]
   // Fixed pill geometry, not the density `row-x/row-y` tokens: those scale on a
   // single step (8×8, 10×10), which reads as a square on a `rounded-full` shape.
-  // Tag is content, not a row-shaped tap target — the × carries its own target.
+  // Tag is content, not a row-shaped tap target: the × and a pressable body carry their own.
   const baseClass = cn(
     'group flex-row items-center gap-1 rounded-full border px-2.5 py-0.5',
     toneClasses.container,
