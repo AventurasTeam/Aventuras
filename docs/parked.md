@@ -1779,6 +1779,21 @@ schemes natively; route mapping plus a launch-time deep-link
 handler. Schema cost is also small (URL templates per surface).
 Held parked because v1 doesn't have a consumer that benefits.
 
+**Back on a screen entered without the story list beneath it lands
+with this.** Today the only such entry is a renderer reload, which
+packaged builds no longer bind (dev keeps Electron's default menu, so
+a dev reload still does it); an external `aventuras://` link would do
+the same on Android, since the scheme is registered in every build.
+There, Back does nothing: the reader, World, Story Settings, App
+Settings, Diagnostics and the wizard call `router.back()`, which
+expo-router queues as a `GO_BACK` that the stack router drops at
+index 0. When deep links land, choose between canon's empty-stack exit
+confirm
+([`ui/principles.md → Stack-aware Return`](./ui/principles.md#stack-aware-return))
+and Expo's documented `unstable_settings = { initialRouteName: 'index' }`,
+which seeds the story list under any deep-linked route. Moved here from
+triage 2026-09-13.
+
 #### Observability — file-based persistent logger
 
 The [observability layer](./observability.md) ships in-memory
