@@ -79,6 +79,11 @@
   async function goToLandmark(landmark: Landmark) {
     const currentBranchId = story.currentStory?.currentBranchId ?? null
     if (landmarkNavigationMode === 'checkpoint-branch' && currentBranchId !== landmark.branchId) {
+      // Refused before the landing is claimed, so a blocked switch leaves no claim to clean up.
+      if (story.isGenerationLeaseHeld) {
+        ui.showToast('Cannot switch branches while a generation is in progress', 'error')
+        return
+      }
       // Claimed before the switch, because the event that triggers the story view's own
       // end-of-branch landing is emitted inside it.
       ui.claimBranchLanding(landmark.branchId)
@@ -258,6 +263,10 @@
     {/if}
   </div>
 
+  <!-- Not locked during a generation: this chooses what a landmark tap does, it does not
+       switch anything. Locking it would hide which mode is set and block the one useful
+       response — selecting "stay on current branch". The switch itself is refused in
+       goToLandmark. -->
   <div class="border-border border-t p-3">
     <p class="text-muted-foreground mb-2 text-xs font-medium tracking-wider uppercase">
       Landmark navigation

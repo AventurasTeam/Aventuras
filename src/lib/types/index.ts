@@ -66,6 +66,9 @@ export interface PersistentRetryState {
   // Lorebook activation data for stickiness preservation (optional for backwards compatibility)
   activationData?: Record<string, number>
   storyPosition?: number
+  // The branch the generation was bound to. Absent in state written before it was recorded;
+  // such state cannot be attributed to a branch and is discarded rather than guessed at.
+  branchId?: string | null
 }
 
 export interface PersistentCharacterSnapshot {

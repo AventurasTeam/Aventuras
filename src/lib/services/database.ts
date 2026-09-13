@@ -1730,23 +1730,28 @@ class DatabaseService {
 
     // Restore entries not necessary as we are only deleting redundant entries since backup
 
+    // The insert covers exactly what the delete covered — see the retry-backup bullet under
+    // Data Model in docs/architecture/overview.md for what a wider one destroys.
+    const ownedByBranch = <T extends { branchId: string | null }>(rows: T[]): T[] =>
+      rows.filter((row) => (row.branchId ?? null) === branchId)
+
     // Restore characters
-    for (const character of characters) {
+    for (const character of ownedByBranch(characters)) {
       await this.addCharacter(character)
     }
 
     // Restore locations
-    for (const location of locations) {
+    for (const location of ownedByBranch(locations)) {
       await this.addLocation(location)
     }
 
     // Restore items
-    for (const item of items) {
+    for (const item of ownedByBranch(items)) {
       await this.addItem(item)
     }
 
     // Restore story beats
-    for (const beat of storyBeats) {
+    for (const beat of ownedByBranch(storyBeats)) {
       await this.addStoryBeat(beat)
     }
 

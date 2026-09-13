@@ -12,11 +12,13 @@
     Check,
     X,
     LayerArrowUp,
+    Lock,
   } from '@lucide/svelte'
   import type { Branch, Checkpoint } from '$lib/types'
   import { SvelteSet } from 'svelte/reactivity'
   import { untrack } from 'svelte'
   import { supportsHover } from '$lib/utils/platform'
+  import { errMessage } from '$lib/utils/error'
 
   // Track expanded branches in tree view
   let expandedBranches = $state<Set<string>>(new Set(['main']))
@@ -77,11 +79,17 @@
     return expandedBranches.has(branchId)
   }
 
+  // A generation writes against the branch loaded in memory, so it holds the branch until
+  // its last write lands. See docs/architecture/overview.md.
+  const switchingBlocked = $derived(story.isGenerationLeaseHeld)
+
   async function handleSwitchBranch(branchId: string | null) {
+    if (switchingBlocked) return
     try {
       await story.switchBranch(branchId)
     } catch (error) {
       console.error('Failed to switch branch:', error)
+      ui.showToast(errMessage(error), 'error')
     }
   }
 
@@ -274,228 +282,248 @@
   }
 </script>
 
-<div class="space-y-3">
-  <!-- Header -->
-  <div class="flex items-center justify-between">
-    <h3 class="text-surface-200 font-medium">Branches</h3>
-    <div class="flex items-center">
-      <button
-        class="btn-ghost flex min-h-[40px] min-w-[40px] items-center justify-center rounded p-2 sm:min-h-0 sm:min-w-0 sm:p-1.5 {canGoToForkPoint
-          ? 'text-surface-400 hover:text-surface-200'
-          : 'text-surface-600 cursor-not-allowed'}"
-        onclick={goToForkPoint}
-        disabled={!canGoToForkPoint}
-        title={forkPointTitle}
-      >
-        <LayerArrowUp class="h-5 w-5 sm:h-4 sm:w-4" />
-      </button>
-      <button
-        class="btn-ghost flex min-h-[40px] min-w-[40px] items-center justify-center rounded p-2 sm:min-h-0 sm:min-w-0 sm:p-1.5 {canCreateBranch
-          ? 'text-surface-400 hover:text-surface-200'
-          : 'text-surface-600 cursor-not-allowed'}"
-        onclick={() => canCreateBranch && (showCreateForm = !showCreateForm)}
-        disabled={!canCreateBranch}
-        title={createBranchTitle}
-      >
-        <Plus class="h-5 w-5 sm:h-4 sm:w-4" />
-      </button>
-    </div>
-  </div>
-
-  <!-- Create Branch Form -->
-  {#if showCreateForm && latestCheckpoint}
-    <div class="card space-y-2 p-3">
-      <p class="text-surface-400 text-xs">
-        Branch from: <span class="text-surface-300">{latestCheckpoint.name}</span>
-      </p>
-      <input
-        type="text"
-        class="input w-full"
-        placeholder="Branch name..."
-        bind:value={newBranchName}
-        onkeydown={(e) => e.key === 'Enter' && handleCreateBranch()}
-      />
-      <div class="flex justify-end gap-2">
+<div class="relative">
+  <!-- Unreachable rather than merely discouraged: a dimmed row with a tooltip says nothing on a
+       touch device, where there is no cursor to change and no hover to explain it. -->
+  <div class="space-y-3" inert={switchingBlocked}>
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+      <h3 class="text-surface-200 font-medium">Branches</h3>
+      <div class="flex items-center">
         <button
-          class="btn-ghost min-h-[40px] rounded px-3 py-2 text-sm sm:min-h-0 sm:px-2 sm:py-1 sm:text-xs"
-          onclick={() => {
-            showCreateForm = false
-            newBranchName = ''
-          }}
+          class="btn-ghost flex min-h-[40px] min-w-[40px] items-center justify-center rounded p-2 sm:min-h-0 sm:min-w-0 sm:p-1.5 {canGoToForkPoint
+            ? 'text-surface-400 hover:text-surface-200'
+            : 'text-surface-600 cursor-not-allowed'}"
+          onclick={goToForkPoint}
+          disabled={!canGoToForkPoint}
+          title={forkPointTitle}
         >
-          Cancel
+          <LayerArrowUp class="h-5 w-5 sm:h-4 sm:w-4" />
         </button>
         <button
-          class="btn-primary min-h-[40px] rounded px-3 py-2 text-sm sm:min-h-0 sm:px-2 sm:py-1 sm:text-xs"
-          onclick={handleCreateBranch}
-          disabled={!newBranchName.trim()}
+          class="btn-ghost flex min-h-[40px] min-w-[40px] items-center justify-center rounded p-2 sm:min-h-0 sm:min-w-0 sm:p-1.5 {canCreateBranch
+            ? 'text-surface-400 hover:text-surface-200'
+            : 'text-surface-600 cursor-not-allowed'}"
+          onclick={() => canCreateBranch && (showCreateForm = !showCreateForm)}
+          disabled={!canCreateBranch}
+          title={createBranchTitle}
         >
-          Create
+          <Plus class="h-5 w-5 sm:h-4 sm:w-4" />
         </button>
       </div>
     </div>
-  {/if}
 
-  <!-- Recursive branch item snippet -->
-  {#snippet branchItem(branch: Branch)}
-    {@const children = getChildBranches(branch.id)}
-    <div class="ml-4">
+    <!-- Create Branch Form -->
+    {#if showCreateForm && latestCheckpoint}
+      <div class="card space-y-2 p-3">
+        <p class="text-surface-400 text-xs">
+          Branch from: <span class="text-surface-300">{latestCheckpoint.name}</span>
+        </p>
+        <input
+          type="text"
+          class="input w-full"
+          placeholder="Branch name..."
+          bind:value={newBranchName}
+          onkeydown={(e) => e.key === 'Enter' && handleCreateBranch()}
+        />
+        <div class="flex justify-end gap-2">
+          <button
+            class="btn-ghost min-h-[40px] rounded px-3 py-2 text-sm sm:min-h-0 sm:px-2 sm:py-1 sm:text-xs"
+            onclick={() => {
+              showCreateForm = false
+              newBranchName = ''
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            class="btn-primary min-h-[40px] rounded px-3 py-2 text-sm sm:min-h-0 sm:px-2 sm:py-1 sm:text-xs"
+            onclick={handleCreateBranch}
+            disabled={!newBranchName.trim()}
+          >
+            Create
+          </button>
+        </div>
+      </div>
+    {/if}
+
+    <!-- Recursive branch item snippet -->
+    {#snippet branchItem(branch: Branch)}
+      {@const children = getChildBranches(branch.id)}
+      <div class="ml-4">
+        <div
+          class="group flex cursor-pointer items-center gap-2 rounded-lg p-2 transition-colors {isCurrent(
+            branch.id,
+          )
+            ? 'bg-accent-500/20 border-accent-500 border-l-2'
+            : 'hover:bg-surface-700/50'}"
+          onclick={() => handleSwitchBranch(branch.id)}
+          role="button"
+          tabindex="0"
+          onkeydown={(e) => e.key === 'Enter' && handleSwitchBranch(branch.id)}
+        >
+          {#if children.length > 0}
+            <button
+              class="text-surface-400 hover:text-surface-200 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 sm:min-h-0 sm:min-w-0 sm:p-0.5"
+              onclick={(e) => {
+                e.stopPropagation()
+                toggleExpand(branch.id)
+              }}
+            >
+              {#if isExpanded(branch.id)}
+                <ChevronDown class="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+              {:else}
+                <ChevronRight class="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+              {/if}
+            </button>
+          {:else}
+            <span class="w-8 sm:w-5"></span>
+          {/if}
+          <GitBranch class="text-surface-400 h-4 w-4" />
+
+          {#if renamingBranchId === branch.id}
+            <input
+              type="text"
+              class="input flex-1 px-1 py-0.5 text-sm"
+              bind:value={renameValue}
+              onclick={(e) => e.stopPropagation()}
+              onkeydown={(e) => {
+                e.stopPropagation()
+                if (e.key === 'Enter') confirmRename()
+                if (e.key === 'Escape') cancelRename()
+              }}
+            />
+            <button
+              class="flex min-h-[32px] min-w-[32px] items-center justify-center p-1 text-green-400 hover:text-green-300 sm:min-h-0 sm:min-w-0 sm:p-0.5"
+              onclick={(e) => {
+                e.stopPropagation()
+                confirmRename()
+              }}
+            >
+              <Check class="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+            </button>
+            <button
+              class="text-surface-400 hover:text-surface-200 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 sm:min-h-0 sm:min-w-0 sm:p-0.5"
+              onclick={(e) => {
+                e.stopPropagation()
+                cancelRename()
+              }}
+            >
+              <X class="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+            </button>
+          {:else}
+            <span class="text-surface-200 flex-1 truncate text-sm">{branch.name}</span>
+            <span class="text-surface-500 text-xs">{getBranchEntryCount(branch.id)}</span>
+            {#if isCurrent(branch.id)}
+              <span class="bg-accent-500 h-2 w-2 rounded-full" title="Current branch"></span>
+            {/if}
+            <button
+              class="text-surface-500 hover:text-surface-200 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 transition-opacity sm:min-h-0 sm:min-w-0 sm:p-0.5 sm:opacity-0 sm:group-hover:opacity-100"
+              onclick={(e) => {
+                e.stopPropagation()
+                startRename(branch)
+              }}
+              title="Rename"
+            >
+              <Edit2 class="h-4 w-4 sm:h-3 sm:w-3" />
+            </button>
+            {#if !isCurrent(branch.id)}
+              <button
+                class="text-surface-500 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 transition-opacity sm:min-h-0 sm:min-w-0 sm:p-0.5 {children.length >
+                0
+                  ? 'cursor-not-allowed opacity-30'
+                  : 'hover:text-red-400 sm:opacity-0 sm:group-hover:opacity-100'}"
+                onclick={(e) => {
+                  e.stopPropagation()
+                  handleDeleteBranch(branch.id)
+                }}
+                disabled={children.length > 0}
+                title={children.length > 0 ? 'Cannot delete: has child branches' : 'Delete'}
+              >
+                <Trash2 class="h-4 w-4 sm:h-3 sm:w-3" />
+              </button>
+            {/if}
+          {/if}
+        </div>
+
+        <!-- Recursively render children -->
+        {#if isExpanded(branch.id) && children.length > 0}
+          {#each children as child (child.id)}
+            {@render branchItem(child)}
+          {/each}
+        {/if}
+      </div>
+    {/snippet}
+
+    <!-- Branch Tree -->
+    <div class="space-y-1">
+      <!-- Main Branch -->
       <div
-        class="group flex cursor-pointer items-center gap-2 rounded-lg p-2 transition-colors {isCurrent(
-          branch.id,
+        class="flex cursor-pointer items-center gap-2 rounded-lg p-2 transition-colors {isCurrent(
+          null,
         )
           ? 'bg-accent-500/20 border-accent-500 border-l-2'
           : 'hover:bg-surface-700/50'}"
-        onclick={() => handleSwitchBranch(branch.id)}
+        onclick={() => handleSwitchBranch(null)}
         role="button"
         tabindex="0"
-        onkeydown={(e) => e.key === 'Enter' && handleSwitchBranch(branch.id)}
+        onkeydown={(e) => e.key === 'Enter' && handleSwitchBranch(null)}
       >
-        {#if children.length > 0}
-          <button
-            class="text-surface-400 hover:text-surface-200 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 sm:min-h-0 sm:min-w-0 sm:p-0.5"
-            onclick={(e) => {
-              e.stopPropagation()
-              toggleExpand(branch.id)
-            }}
-          >
-            {#if isExpanded(branch.id)}
-              <ChevronDown class="h-4 w-4 sm:h-3.5 sm:w-3.5" />
-            {:else}
-              <ChevronRight class="h-4 w-4 sm:h-3.5 sm:w-3.5" />
-            {/if}
-          </button>
-        {:else}
-          <span class="w-8 sm:w-5"></span>
-        {/if}
+        <button
+          class="text-surface-400 hover:text-surface-200 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 sm:min-h-0 sm:min-w-0 sm:p-0.5"
+          onclick={(e) => {
+            e.stopPropagation()
+            toggleExpand('main')
+          }}
+        >
+          {#if isExpanded('main')}
+            <ChevronDown class="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+          {:else}
+            <ChevronRight class="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+          {/if}
+        </button>
         <GitBranch class="text-surface-400 h-4 w-4" />
-
-        {#if renamingBranchId === branch.id}
-          <input
-            type="text"
-            class="input flex-1 px-1 py-0.5 text-sm"
-            bind:value={renameValue}
-            onclick={(e) => e.stopPropagation()}
-            onkeydown={(e) => {
-              e.stopPropagation()
-              if (e.key === 'Enter') confirmRename()
-              if (e.key === 'Escape') cancelRename()
-            }}
-          />
-          <button
-            class="flex min-h-[32px] min-w-[32px] items-center justify-center p-1 text-green-400 hover:text-green-300 sm:min-h-0 sm:min-w-0 sm:p-0.5"
-            onclick={(e) => {
-              e.stopPropagation()
-              confirmRename()
-            }}
-          >
-            <Check class="h-4 w-4 sm:h-3.5 sm:w-3.5" />
-          </button>
-          <button
-            class="text-surface-400 hover:text-surface-200 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 sm:min-h-0 sm:min-w-0 sm:p-0.5"
-            onclick={(e) => {
-              e.stopPropagation()
-              cancelRename()
-            }}
-          >
-            <X class="h-4 w-4 sm:h-3.5 sm:w-3.5" />
-          </button>
-        {:else}
-          <span class="text-surface-200 flex-1 truncate text-sm">{branch.name}</span>
-          <span class="text-surface-500 text-xs">{getBranchEntryCount(branch.id)}</span>
-          {#if isCurrent(branch.id)}
-            <span class="bg-accent-500 h-2 w-2 rounded-full" title="Current branch"></span>
-          {/if}
-          <button
-            class="text-surface-500 hover:text-surface-200 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 transition-opacity sm:min-h-0 sm:min-w-0 sm:p-0.5 sm:opacity-0 sm:group-hover:opacity-100"
-            onclick={(e) => {
-              e.stopPropagation()
-              startRename(branch)
-            }}
-            title="Rename"
-          >
-            <Edit2 class="h-4 w-4 sm:h-3 sm:w-3" />
-          </button>
-          {#if !isCurrent(branch.id)}
-            <button
-              class="text-surface-500 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 transition-opacity sm:min-h-0 sm:min-w-0 sm:p-0.5 {children.length >
-              0
-                ? 'cursor-not-allowed opacity-30'
-                : 'hover:text-red-400 sm:opacity-0 sm:group-hover:opacity-100'}"
-              onclick={(e) => {
-                e.stopPropagation()
-                handleDeleteBranch(branch.id)
-              }}
-              disabled={children.length > 0}
-              title={children.length > 0 ? 'Cannot delete: has child branches' : 'Delete'}
-            >
-              <Trash2 class="h-4 w-4 sm:h-3 sm:w-3" />
-            </button>
-          {/if}
+        <span class="text-surface-200 flex-1 text-sm">Main</span>
+        <span class="text-surface-500 text-xs">{getBranchEntryCount(null)}</span>
+        {#if isCurrent(null)}
+          <span class="bg-accent-500 h-2 w-2 rounded-full" title="Current branch"></span>
         {/if}
       </div>
 
-      <!-- Recursively render children -->
-      {#if isExpanded(branch.id) && children.length > 0}
-        {#each children as child (child.id)}
-          {@render branchItem(child)}
+      <!-- Child branches of main (recursive) -->
+      {#if isExpanded('main')}
+        {#each getChildBranches(null) as branch (branch.id)}
+          {@render branchItem(branch)}
         {/each}
       {/if}
     </div>
-  {/snippet}
 
-  <!-- Branch Tree -->
-  <div class="space-y-1">
-    <!-- Main Branch -->
-    <div
-      class="flex cursor-pointer items-center gap-2 rounded-lg p-2 transition-colors {isCurrent(
-        null,
-      )
-        ? 'bg-accent-500/20 border-accent-500 border-l-2'
-        : 'hover:bg-surface-700/50'}"
-      onclick={() => handleSwitchBranch(null)}
-      role="button"
-      tabindex="0"
-      onkeydown={(e) => e.key === 'Enter' && handleSwitchBranch(null)}
-    >
-      <button
-        class="text-surface-400 hover:text-surface-200 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 sm:min-h-0 sm:min-w-0 sm:p-0.5"
-        onclick={(e) => {
-          e.stopPropagation()
-          toggleExpand('main')
-        }}
-      >
-        {#if isExpanded('main')}
-          <ChevronDown class="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+    <!-- Empty state -->
+    {#if story.branches.length === 0}
+      <p class="text-surface-400 py-4 text-center text-sm">
+        {#if canCreateBranch}
+          No branches yet. Create one to explore alternate storylines.
         {:else}
-          <ChevronRight class="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+          Branches can be created from checkpoints. Checkpoints are automatically saved at chapter
+          boundaries.
         {/if}
-      </button>
-      <GitBranch class="text-surface-400 h-4 w-4" />
-      <span class="text-surface-200 flex-1 text-sm">Main</span>
-      <span class="text-surface-500 text-xs">{getBranchEntryCount(null)}</span>
-      {#if isCurrent(null)}
-        <span class="bg-accent-500 h-2 w-2 rounded-full" title="Current branch"></span>
-      {/if}
-    </div>
-
-    <!-- Child branches of main (recursive) -->
-    {#if isExpanded('main')}
-      {#each getChildBranches(null) as branch (branch.id)}
-        {@render branchItem(branch)}
-      {/each}
+      </p>
     {/if}
   </div>
 
-  <!-- Empty state -->
-  {#if story.branches.length === 0}
-    <p class="text-surface-400 py-4 text-center text-sm">
-      {#if canCreateBranch}
-        No branches yet. Create one to explore alternate storylines.
-      {:else}
-        Branches can be created from checkpoints. Checkpoints are automatically saved at chapter
-        boundaries.
-      {/if}
-    </p>
+  {#if switchingBlocked}
+    <div
+      class="bg-surface-900/60 absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-lg backdrop-blur-[1px]"
+    >
+      <Lock class="text-surface-300 h-6 w-6" />
+      <p class="text-surface-300 max-w-[18rem] px-4 text-center text-xs">
+        {#if story.isGenerationLeaseForAnotherStory}
+          A response in another story is still finishing. Switching a branch mid-flight is not
+          available.
+        {:else}
+          A response is generating on this branch. Switching a branch mid-flight is not available.
+        {/if}
+      </p>
+    </div>
   {/if}
 </div>

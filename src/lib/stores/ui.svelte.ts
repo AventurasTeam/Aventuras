@@ -49,6 +49,10 @@ export type VaultTab = 'characters' | 'lorebooks' | 'scenarios' | 'prompts'
 // Backup for retry functionality - captures state before each user message
 export interface RetryBackup {
   storyId: string
+  // The branch the generation was bound to. A snapshot is only ever offered, or restored, on
+  // its own branch: positions are reused across siblings, so applying one elsewhere deletes
+  // rows that happen to share a number.
+  branchId: string | null
   timestamp: number
   // State snapshots (captured BEFORE user action is added)
   // These may be empty if loaded from persistent storage (entry-only restore)
@@ -167,27 +171,28 @@ class UIStore {
   // Error state for retry
   lastGenerationError = $state<GenerationError | null>(null)
 
-  // Retry backups - per-story backups for "retry last message" feature
-  // Stored by storyId so they persist across story switches within a session
+  // Retry backups, keyed by story *and* branch so they survive a story or branch switch
+  // within a session. Branch is part of the key because a snapshot restored onto another
+  // branch deletes rows there: positions are reused across siblings after a fork.
   private retryBackups = new SvelteMap<string, RetryBackup>()
-  private currentRetryStoryId = $state<string | null>(null)
+  private currentRetryScope = $state<{ storyId: string; branchId: string | null } | null>(null)
   retryStateWrite = Promise.resolve()
 
-  // Computed getter for current story's retry backup
+  // Computed getter for the current story and branch's retry backup
   get retryBackup(): RetryBackup | null {
-    if (!this.currentRetryStoryId) {
+    if (!this.currentRetryScope) {
       return null
     }
-    const backup = this.retryBackups.get(this.currentRetryStoryId) ?? null
-    return backup
+    const key = branchScopeKey(this.currentRetryScope.storyId, this.currentRetryScope.branchId)
+    return this.retryBackups.get(key) ?? null
   }
 
   /**
-   * Set the current story ID for retry backup tracking.
-   * Called when switching stories to ensure the correct backup is returned.
+   * Point retry tracking at a story and branch.
+   * Called when switching stories and when switching branches.
    */
-  setCurrentRetryStoryId(storyId: string | null) {
-    this.currentRetryStoryId = storyId
+  setCurrentRetryScope(storyId: string | null, branchId: string | null) {
+    this.currentRetryScope = storyId ? { storyId, branchId } : null
   }
 
   // Gallery image cache methods
@@ -672,6 +677,7 @@ class UIStore {
    */
   createRetryBackup(
     storyId: string,
+    branchId: string | null,
     entries: StoryEntry[],
     characters: Character[],
     locations: Location[],
@@ -735,6 +741,7 @@ class UIStore {
 
     const backup: RetryBackup = {
       storyId,
+      branchId,
       timestamp,
       // Large data - shallow copy to break potential proxy chains
       entries: [...entries],
@@ -781,11 +788,11 @@ class UIStore {
         JSON.stringify(charDescriptorsAtBackup) === JSON.stringify(charDescriptorsInBackup),
     })
 
-    this.retryBackups.set(storyId, backup)
-    this.currentRetryStoryId = storyId
+    this.retryBackups.set(branchScopeKey(storyId, branchId), backup)
+    this.currentRetryScope = { storyId, branchId }
 
     // Debug: Verify the stored backup is correct immediately after storing
-    const storedBackup = this.retryBackups.get(storyId)
+    const storedBackup = this.retryBackups.get(branchScopeKey(storyId, branchId))
     if (storedBackup) {
       const storedCharDescriptors = storedBackup.characters.map((c) => ({
         name: c.name,
@@ -803,6 +810,7 @@ class UIStore {
       () =>
         database.saveRetryState(storyId, {
           timestamp,
+          branchId,
           entryCountBeforeAction: nextEntryPosition,
           userActionContent,
           rawInput,
@@ -839,18 +847,37 @@ class UIStore {
    * @param storyId - Optional story ID. If not provided, clears the current story's backup.
    */
   clearRetryBackup(clearFromDb: boolean = false, storyId?: string) {
-    const targetStoryId = storyId ?? this.currentRetryStoryId
+    // A story-scoped clear drops every branch's backup for it: the caller is dismissing the
+    // story's retry state, and the persisted blob it clears is a single per-story slot.
+    if (storyId) {
+      for (const key of [...this.retryBackups.keys()]) {
+        if (key.startsWith(`${storyId}:`)) this.retryBackups.delete(key)
+      }
+      if (clearFromDb) {
+        this.queueRetryStateWrite(() => database.clearRetryState(storyId), 'clear')
+      }
+      console.log('[UI] Retry backups cleared for story', { clearFromDb, storyId })
+      return
+    }
 
-    if (targetStoryId) {
-      this.retryBackups.delete(targetStoryId)
+    const scope = this.currentRetryScope
+    if (scope) {
+      this.retryBackups.delete(branchScopeKey(scope.storyId, scope.branchId))
 
       // Only clear from database if explicitly requested (user dismissed or used retry)
       if (clearFromDb) {
-        this.queueRetryStateWrite(() => database.clearRetryState(targetStoryId), 'clear')
+        this.queueRetryStateWrite(async () => {
+          // One persisted slot per story, so clearing it for this branch would take whichever
+          // branch's state is actually in it. Clear only when it is this branch's.
+          const stored = (await database.getStory(scope.storyId))?.retryState
+          if (!stored || (stored.branchId ?? null) === scope.branchId) {
+            await database.clearRetryState(scope.storyId)
+          }
+        }, 'clear')
       }
     }
 
-    console.log('[UI] Retry backup cleared', { clearFromDb, storyId: targetStoryId })
+    console.log('[UI] Retry backup cleared', { clearFromDb, scope })
   }
 
   private queueRetryStateWrite(task: () => Promise<void>, label: string) {
@@ -886,18 +913,36 @@ class UIStore {
       timeTracker?: TimeTracker | null
       activationData?: Record<string, number>
       storyPosition?: number
+      branchId?: string | null
     },
   ) {
-    // Skip if we already have an in-memory backup for this story (it's more complete)
-    if (this.retryBackups.has(storyId)) {
-      const existing = this.retryBackups.get(storyId)
+    // State written before the branch was recorded cannot be attributed to one, and a wrong
+    // guess restores one branch's snapshot onto another. Discard it: the reader loses retry
+    // across a restart once, and the next generation records an attributable snapshot.
+    if (!Object.prototype.hasOwnProperty.call(retryState, 'branchId')) {
+      // Cleared as well as ignored. The branch-aware clear below can never match a row with
+      // no branch, so leaving it would have it re-read and re-discarded on every story load.
+      console.log('[UI] Discarding persistent retry state that names no branch', { storyId })
+      this.queueRetryStateWrite(() => database.clearRetryState(storyId), 'clear')
+      return
+    }
+    const branchId = retryState.branchId ?? null
+    const key = branchScopeKey(storyId, branchId)
+
+    // Skip if we already have an in-memory backup for it (it's more complete)
+    if (this.retryBackups.has(key)) {
+      const existing = this.retryBackups.get(key)
       console.log('[UI] Skipping persistent retry state load - in-memory backup exists', {
         storyId,
+        branchId,
         existingHasFullState: existing?.hasFullState,
       })
       return
     }
-    console.log('[UI] Loading persistent retry backup (no in-memory backup found)', { storyId })
+    console.log('[UI] Loading persistent retry backup (no in-memory backup found)', {
+      storyId,
+      branchId,
+    })
 
     // Validate required fields exist
     if (
@@ -920,6 +965,7 @@ class UIStore {
 
     const backup: RetryBackup = {
       storyId,
+      branchId,
       timestamp: retryState.timestamp,
       // Empty state arrays - will use ID-based restore
       entries: [],
@@ -951,9 +997,10 @@ class UIStore {
         ? (retryState.timeTracker ?? null)
         : undefined,
     }
-    this.retryBackups.set(storyId, backup)
+    this.retryBackups.set(key, backup)
     console.log('[UI] *** PERSISTENT BACKUP LOADED (hasFullState: false) ***', {
       storyId,
+      branchId,
       entryCountBeforeAction: retryState.entryCountBeforeAction,
       userAction: retryState.userActionContent.substring(0, 50),
       characterSnapshotsCount: backup.characterSnapshots?.length ?? 0,
@@ -1000,20 +1047,22 @@ class UIStore {
    */
   updateRetryBackupContent(newContent: string) {
     const backup = this.retryBackup
-    if (backup && this.currentRetryStoryId) {
+    const scope = this.currentRetryScope
+    if (backup && scope) {
       const updatedBackup: RetryBackup = {
         ...backup,
         userActionContent: newContent,
         rawInput: newContent,
       }
-      this.retryBackups.set(this.currentRetryStoryId, updatedBackup)
+      this.retryBackups.set(branchScopeKey(scope.storyId, scope.branchId), updatedBackup)
 
       // Also persist the updated content to the database
-      const storyId = this.currentRetryStoryId
+      const storyId = scope.storyId
       this.queueRetryStateWrite(
         () =>
           database.saveRetryState(storyId, {
             timestamp: backup.timestamp,
+            branchId: backup.branchId,
             entryCountBeforeAction: backup.entryCountBeforeAction,
             userActionContent: newContent,
             rawInput: newContent,
