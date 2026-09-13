@@ -54,10 +54,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **Popover names were never swept.** (2026-09-13) `Popover` warns in
-  `__DEV__` when it gets neither `ariaLabel` nor `ariaLabelledBy`. The
-  2026-09-13 triage pass named `ImporterMenu`'s; the other consumers
-  were not checked.
 - **Main's strings are English.** (2026-09-13) `electron/app-menu.ts`
   hardcodes the packaged menu's `File` and `View` labels and
   `electron/boot-failure.ts` the failed-boot dialog's title, and main

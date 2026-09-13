@@ -193,6 +193,7 @@ export const OverflowOpensMenu: StoryT = {
     await waitFor(() =>
       expect(screen.getByRole('menuitem', { name: t('storyCard.archive') })).toBeInTheDocument(),
     )
+    expect(screen.getByRole('dialog', { name: t('storyCard.actionsLabel') })).toBeInTheDocument()
     // Overflow tap MUST NOT bubble to body open.
     expect(args.onOpen).not.toHaveBeenCalled()
   },

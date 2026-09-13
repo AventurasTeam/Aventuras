@@ -186,7 +186,7 @@ export function StoryCard({
       </Pressable>
 
       <View className="absolute right-2 top-2" style={POINTER_EVENTS_BOX_NONE}>
-        <Popover>
+        <Popover ariaLabel={t('storyCard.actionsLabel')}>
           <PopoverTrigger ref={overflowTriggerRef} asChild>
             <IconAction icon={MoreHorizontal} label={t('storyCard.actionsLabel')} size="sm" />
           </PopoverTrigger>
