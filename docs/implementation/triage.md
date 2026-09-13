@@ -60,3 +60,14 @@ slice-planning gate forces its resolution before that slice is planned.
   (staged and retired pills, the review pill, the generation error
   pill). Every other theme passes. Theme-token call: darken the tones
   or give them a dark `-fg`.
+- **Spinner's default accessible name is English.** (2026-09-13)
+  `components/ui/spinner.tsx` defaults `accessibilityLabel` to the raw
+  string `'Loading'`, bypassing `t()`, so every Spinner that passes no
+  label announces English.
+- **Popover names were never swept.** (2026-09-13) `Popover` warns in
+  `__DEV__` when it gets neither `ariaLabel` nor `ariaLabelledBy`. The
+  2026-09-13 triage pass named `ImporterMenu`'s; the other consumers
+  were not checked.
+- **The packaged app menu's `View` label is English.** (2026-09-13)
+  `electron/app-menu.ts` hardcodes it, and main has no i18n, so the
+  menu stays English whatever the app locale.

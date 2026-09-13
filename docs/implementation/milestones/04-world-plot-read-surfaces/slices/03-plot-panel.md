@@ -245,6 +245,12 @@ chapters` (deferred by canon), and `retrieval_count` review — M5.
   renders taller than its top bar (~52 / 60 px desktop, ~65 px phone)
   — Plot inherits the same shell. Decide whether to shrink the
   wrapper's padding here or leave it.
+- **Thread status pills in the Plot wireframe.** `plot.html` colours
+  them Active green, Pending neutral, Resolved grey and Failed amber;
+  [`chips.md → Tag — tone vocabulary`](../../../../ui/patterns/chips.md#tag--tone-vocabulary)
+  assigns Active `default`, Pending `warning`, Resolved `success` and
+  Failed `danger`. Settle which one moves when the panel is built.
+  Filed by the 2026-09-13 triage pass.
 - **`ListModule`'s entity-typed home.** The C2 type lives in
   `components/entity/list-module.ts`; its `Signals` parameter defaults
   to `EntityListSignals`, and `RowSignals` ties `collision` to
