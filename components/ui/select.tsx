@@ -263,7 +263,15 @@ function PopoverContent({
       <FullWindowOverlay>
         <SelectBase.Overlay style={Platform.select({ native: StyleSheet.absoluteFill })}>
           <TextClassContext.Provider value="text-fg-primary">
-            <NativeOnlyAnimatedView className="z-[100]" entering={FadeIn} exiting={FadeOut}>
+            {/* Full-size, as in PopoverContent: without a full-size layer between the
+                pressable overlay and the positioned options, Android leaves them out of
+                the accessibility tree. */}
+            <NativeOnlyAnimatedView
+              className="z-[100]"
+              style={StyleSheet.absoluteFill}
+              entering={FadeIn}
+              exiting={FadeOut}
+            >
               <SelectBase.Content
                 style={contentStyle}
                 className={cn(

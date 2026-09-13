@@ -142,7 +142,13 @@ function PopoverContent({
               : (StyleSheet.absoluteFill as ViewStyle)
           }
         >
-          <NativeOnlyAnimatedView entering={FadeIn.duration(200)} exiting={FadeOut}>
+          {/* Full-size: without a full-size layer between the pressable overlay and the
+              positioned content, Android leaves the content out of the accessibility tree. */}
+          <NativeOnlyAnimatedView
+            style={StyleSheet.absoluteFill}
+            entering={FadeIn.duration(200)}
+            exiting={FadeOut}
+          >
             <TextClassContext.Provider value="text-fg-primary">
               <NativeAwareContent
                 align={align}
