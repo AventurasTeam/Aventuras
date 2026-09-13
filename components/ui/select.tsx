@@ -747,6 +747,11 @@ function DropdownBranch({
                   label={opt.label}
                   disabled={opt.disabled}
                   customContent
+                  // The native option names itself from `label` alone, which would hide a
+                  // description the row shows; web names it from the row's content.
+                  {...(Platform.OS !== 'web' && opt.description != null
+                    ? { 'aria-label': `${opt.label}, ${opt.description}` }
+                    : null)}
                 >
                   {renderRow({ option: opt, selected: opt.value === value })}
                 </Item>
