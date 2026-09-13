@@ -71,3 +71,9 @@ slice-planning gate forces its resolution before that slice is planned.
   the story list. A bounded retry for transient bridge errors would
   cover every DB call, not just opens. Needs a call on which errors
   count as transient.
+- **catppuccin-latte's success and warning pairs fail contrast.**
+  (2026-09-13) White on `#40a02b` measures 3.3:1 and on `#df8e1d`
+  2.6:1, under the 4.5:1 that filled Tags' `text-xs` labels need
+  (staged and retired pills, the review pill, the generation error
+  pill). Every other theme passes. Theme-token call: darken the tones
+  or give them a dark `-fg`.

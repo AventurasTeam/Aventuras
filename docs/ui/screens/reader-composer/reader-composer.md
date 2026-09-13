@@ -536,7 +536,7 @@ Sticky errors stay visible between turns; once resolved, the pill
 collapses back to hidden until the next event.
 
 The error-pill is **not a new vocabulary** — it reuses the existing
-gen-pill chrome with error-tinted styling instead of the active
+gen-pill chrome in the `warning` tone instead of the active
 animation. Single slot, multiple states, priority-ordered.
 
 ## Next-turn suggestions

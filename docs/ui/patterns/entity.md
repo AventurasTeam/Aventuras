@@ -89,8 +89,9 @@ absence that makes "nothing shown" ambiguous):
   is `You` in adventure mode, `Protagonist` in creative mode.
 - **Status pill** (always shown, muted when active): on the far
   right. Every row carries one of `active` / `staged` / `retired`.
-  Active renders with muted styling (faint gray); staged = soft
-  green; retired = soft amber.
+  Active takes the muted `default` tone; staged and retired take the
+  filled `success` and `warning` tones per
+  [`chips.md → Tag — tone vocabulary`](./chips.md#tag--tone-vocabulary).
 - **Scene presence** (left-edge stripe): an in-scene row gets a
   3px green accent stripe along the left edge. Steady-state signal —
   "which rows matter right now."

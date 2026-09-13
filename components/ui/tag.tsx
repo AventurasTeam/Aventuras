@@ -61,7 +61,7 @@ type TagProps = {
    * - `success` — filled `bg-success` + `text-success-fg` (staged entity, Resolved thread).
    * - `warning` — filled `bg-warning` + `text-warning-fg` (retired entity, Pending thread, error-pill variant).
    * - `danger` — filled `bg-danger` + `text-danger-fg` (Failed thread).
-   * - `accent` — filled `bg-accent` + `text-accent-fg` (gen pill active phase).
+   * - `accent` — filled `bg-accent` + `text-accent-fg` (gen pill active phase, entity lead badge).
    * - `recently-classified` — tint fill `bg-recently-classified-bg` + `text-fg-primary` (recently classified badge).
    */
   tone?: TagTone
