@@ -64,8 +64,8 @@ describe('orchestrator reverse-replay on abort', () => {
       .from(storyEntries)
       .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'entry_1')))
     expect(rows.length).toBe(0)
-    // the primitive consumes undo_payload; it does not delete delta rows
-    expect((await db.select().from(deltas)).length).toBe(2)
+    // the reversal prunes the deltas it replays, as CTRL-Z does
+    expect((await db.select().from(deltas)).length).toBe(0)
     const [pr] = await db.select().from(pipelineRuns).where(eq(pipelineRuns.runId, result.runId))
     expect(pr.outcome).toBe('failed')
     expect(pr.finishedAt).not.toBeNull()

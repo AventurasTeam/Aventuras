@@ -1,10 +1,8 @@
-import { BookOpen } from 'lucide-react-native'
 import { View } from 'react-native'
 
 import { EntityKindIcon } from '@/components/entity/entity-kind-icon'
 import { DetailPane } from '@/components/shells/detail-pane'
 import { EmptyState } from '@/components/ui/empty-state'
-import { Icon } from '@/components/ui/icon'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
 import type { Entity, Lore } from '@/lib/db'
@@ -36,7 +34,7 @@ export function WorldDetailPlaceholder({
   const head =
     selection.type === 'lore'
       ? {
-          kindIcon: <Icon as={BookOpen} size="sm" />,
+          kindIcon: <EntityKindIcon kind="lore" className="h-4 w-4" />,
           kindName: worldKindName('lore'),
           name: selection.row.title,
           placeholder: t('world:detail.lorePlaceholder'),

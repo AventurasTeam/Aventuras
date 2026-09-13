@@ -1,11 +1,11 @@
-import { and, asc, eq, gte, inArray, ne, notInArray } from 'drizzle-orm'
+import { and, asc, eq, gte, inArray, ne } from 'drizzle-orm'
 
-import { deltas, pipelineRuns, type DbCtx } from '@/lib/db'
+import { deltas, type DbCtx } from '@/lib/db'
 
 import { isLinkTable, LINK_TABLES, resolveLinkOwners, type LinkDeltaRow } from './link-owners'
 import { lastTwoReplies } from './replies'
 import { SIGNAL_TARGET_TABLES } from './types'
-import type { SignalDelta, SignalEntry, TurnBoundaries } from './types'
+import type { ReplyEdit, SignalDelta, SignalEntry, TurnBoundaries } from './types'
 
 /** The last two ai_reply ids, latest first. Entries ascending by position. */
 export function latestReplyIds(entries: readonly SignalEntry[]): string[] {
@@ -43,11 +43,6 @@ export async function readSignalDeltas(
   fromLogPosition: number,
 ): Promise<SignalDelta[]> {
   const rowTables = [...SIGNAL_TARGET_TABLES.keys()]
-  // A reversed run's deltas stay in the log even though its writes are undone.
-  const reversedActionIds = db
-    .select({ actionId: pipelineRuns.actionId })
-    .from(pipelineRuns)
-    .where(inArray(pipelineRuns.outcome, ['aborted', 'failed', 'recovered']))
   const rows = await db
     .select({
       source: deltas.source,
@@ -64,7 +59,6 @@ export async function readSignalDeltas(
         gte(deltas.logPosition, fromLogPosition),
         ne(deltas.source, 'user_edit'),
         inArray(deltas.targetTable, [...rowTables, ...LINK_TABLES]),
-        notInArray(deltas.actionId, reversedActionIds),
       ),
     )
     .orderBy(asc(deltas.logPosition))
@@ -93,4 +87,30 @@ export async function readSignalDeltas(
 
   const linkResolved = await resolveLinkOwners(db, branchId, linkRows)
   return [...passThrough, ...linkResolved].sort((a, b) => a.logPosition - b.logPosition)
+}
+
+/** The given replies' `user_edit` updates, oldest first. */
+export async function readReplyEdits(
+  db: DbCtx['db'],
+  branchId: string,
+  replyIds: readonly string[],
+): Promise<ReplyEdit[]> {
+  if (replyIds.length === 0) return []
+  return db
+    .select({
+      targetId: deltas.targetId,
+      logPosition: deltas.logPosition,
+      undoPayload: deltas.undoPayload,
+    })
+    .from(deltas)
+    .where(
+      and(
+        eq(deltas.branchId, branchId),
+        eq(deltas.targetTable, 'story_entries'),
+        eq(deltas.op, 'update'),
+        eq(deltas.source, 'user_edit'),
+        inArray(deltas.targetId, [...replyIds]),
+      ),
+    )
+    .orderBy(asc(deltas.logPosition))
 }

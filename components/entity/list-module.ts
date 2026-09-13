@@ -1,4 +1,5 @@
-import type { ComponentType } from 'react'
+import type { ComponentType, Ref } from 'react'
+import type { View } from 'react-native'
 
 import type { CollisionListRowProps } from '@/components/compounds/collision-list-row'
 import type { EntityListSignals, ListGrouping, ListQuery } from '@/lib/list-modules'
@@ -25,6 +26,8 @@ export type RowRendererProps<Row> = {
   signals: RowSignals
   /** `compact` drops the description line for the rail's narrower column. */
   density?: RowDensity
+  /** Goes on the row's pressable, so a reveal can move focus to it. */
+  focusRef?: Ref<View>
 }
 
 export type ListCopy<Filter extends string = string> = {

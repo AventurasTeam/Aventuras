@@ -7,17 +7,38 @@ import type { DbCtx } from '../types'
 import { applyUndoPayload, isPayloadMetaKey } from './delta-encoding'
 import { resolveByTable, whereForDelta, type StorePatch } from './registry'
 
+/**
+ * `transaction`: nothing landed. `store-sync`: the DB write landed and the in-memory sync after it
+ * threw.
+ */
+export type ReplayFailureStage = 'transaction' | 'store-sync'
+
 export class DeltaReplayError extends Error {
   readonly actionId: string
-  // True when the DB transaction already committed (deltas pruned) and the failure
-  // is post-commit store sync — callers must not retry it as a rollback failure.
-  readonly committed: boolean
-  constructor(message: string, opts: { cause: unknown; actionId: string; committed?: boolean }) {
+  readonly stage: ReplayFailureStage
+  constructor(
+    message: string,
+    opts: { cause: unknown; actionId: string; stage: ReplayFailureStage },
+  ) {
     super(message, { cause: opts.cause })
     this.name = 'DeltaReplayError'
     this.actionId = opts.actionId
-    this.committed = opts.committed ?? false
+    this.stage = opts.stage
   }
+
+  /** The DB write landed: callers must not retry it as a failed reversal. */
+  get committed(): boolean {
+    return this.stage === 'store-sync'
+  }
+}
+
+/** What the pipeline port needs from a replay failure; `undefined` hands any other error back. */
+export function describeDeltaReplayError(
+  e: unknown,
+): { detail: string; committed: boolean } | undefined {
+  return e instanceof DeltaReplayError
+    ? { detail: String(e.cause), committed: e.committed }
+    : undefined
 }
 
 export type PatchEmission = { table: string; branchId: string; patch: StorePatch }
@@ -28,6 +49,7 @@ export type ReversePlan = { ops: SqlOp[]; pruneOps: SqlOp[]; patches: PatchEmiss
  * The reversal of a delta set, unexecuted — so a caller that owns a transaction of its
  * own can commit it alongside its own work rather than in a second one. Ops and prunes
  * stay separate because their order relative to the caller's ops is the caller's call.
+ * The prunes leave gaps in log_position; that's expected.
  */
 export async function buildReverseAndPrunePlan(rows: Delta[], ctx: DbCtx): Promise<ReversePlan> {
   const built = await buildUndoOps(rows, ctx)
@@ -40,6 +62,18 @@ export async function buildReverseAndPrunePlan(rows: Delta[], ctx: DbCtx): Promi
 
 export function emitPatches(patches: readonly PatchEmission[]): void {
   for (const p of patches) resolveByTable(p.table)?.patcher?.(p.branchId, p.patch)
+}
+
+function emitCommittedPatches(patches: readonly PatchEmission[], actionId: string): void {
+  try {
+    emitPatches(patches)
+  } catch (e) {
+    throw new DeltaReplayError('Post-commit patch sync failed', {
+      cause: e,
+      actionId,
+      stage: 'store-sync',
+    })
+  }
 }
 
 // Membership only, never a value compare: an undo restores a prior value by
@@ -171,9 +205,6 @@ async function buildUndoOps(
   return { ops, patches }
 }
 
-// Rollback path: reverse a pre-selected delta set AND prune those delta rows
-// from the log in one transaction (gaps in log_position are expected). The
-// actionId-scoped reverseReplayDeltas deliberately does not prune; this does.
 export async function reverseAndPruneDeltaRows(
   rows: Delta[],
   ctx: DbCtx,
@@ -187,38 +218,30 @@ export async function reverseAndPruneDeltaRows(
     patches = plan.patches
     await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...extraOps])
   } catch (e) {
-    if (e instanceof DeltaReplayError) throw e
-    throw new DeltaReplayError('Reverse-and-prune failed', { cause: e, actionId })
-  }
-  // Past the transaction the reversal + prune are committed; a patcher throw is a
-  // store-sync failure, not a rollback failure. Flag committed so callers don't retry.
-  try {
-    emitPatches(patches)
-  } catch (e) {
-    throw new DeltaReplayError('Post-commit patch sync failed', {
+    throw new DeltaReplayError('Reverse-and-prune failed', {
       cause: e,
       actionId,
-      committed: true,
+      stage: 'transaction',
     })
   }
+  emitCommittedPatches(patches, actionId)
   return rows.length
 }
 
 /**
- * `settleOps` commits caller ops in the SAME transaction as the reversal, keyed on
- * the delta count so the caller can branch on it. Recovery uses it for the
- * `pipeline_runs` marker: written separately, a failure between the two leaves the
- * deltas reversed but the orphan open, and the next boot's replay is not idempotent
- * — undoing a `create` deletes (repeatable), undoing a `delete` re-inserts (conflicts),
- * so a transient error would harden into a permanent one.
+ * Reverses and prunes in one transaction, as CTRL-Z does: rows left in the log would read as
+ * the undo head and a later rollback's to-do (data-model.md → Entry mutability & rollback).
+ * Ops from `settleOps(deltaCount)` join that transaction, even when `deltaCount` is 0.
  */
 export async function reverseReplayDeltas(
   actionId: string,
   ctx: DbCtx,
   settleOps: (deltaCount: number) => readonly SqlOp[] = () => [],
 ): Promise<number> {
+  let rows: Delta[]
+  let patches: PatchEmission[]
   try {
-    const rows = (await ctx.db
+    rows = (await ctx.db
       .select()
       .from(deltas)
       .where(eq(deltas.actionId, actionId))
@@ -226,13 +249,17 @@ export async function reverseReplayDeltas(
     const settle = settleOps(rows.length)
     if (rows.length === 0 && settle.length === 0) return 0
 
-    const { ops, patches } = await buildUndoOps(rows, ctx)
-    await ctx.runInTransaction([...ops, ...settle])
-    // Action layer owns the patch: invert in the held-branch store after the tx.
-    for (const p of patches) resolveByTable(p.table)?.patcher?.(p.branchId, p.patch)
-    return rows.length
+    const plan = await buildReverseAndPrunePlan(rows, ctx)
+    patches = plan.patches
+    await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...settle])
   } catch (e) {
-    if (e instanceof DeltaReplayError) throw e
-    throw new DeltaReplayError('Reverse-replay failed', { cause: e, actionId })
+    throw new DeltaReplayError('Reverse-replay failed', {
+      cause: e,
+      actionId,
+      stage: 'transaction',
+    })
   }
+  // Action layer owns the patch: invert in the held-branch store after the tx.
+  emitCommittedPatches(patches, actionId)
+  return rows.length
 }

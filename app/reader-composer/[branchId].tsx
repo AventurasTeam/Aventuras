@@ -7,6 +7,7 @@ import { Platform, View } from 'react-native'
 import { type ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
+import { TruncatedText } from '@/components/compounds/truncated-text'
 import { Composer, type ComposerHandle } from '@/components/reader/composer'
 import { isDraftEmpty, planSubmissionHandback } from '@/components/reader/composer-draft'
 import { readerPillPhase } from '@/components/reader/generation-phase'
@@ -649,7 +650,19 @@ export default function ReaderComposerRoute() {
         setLastSubmission(submission)
         const result = await submitTurn({ storyId, branchId }, { content, composerMode }, ctx)
         if (result.outcome === 'failed') await showTurnFailure(result.error, submission)
-        else if (result.outcome === 'rejected')
+        else if (result.outcome === 'rejected' && !result.converged) {
+          // The refused turn's user_action is still in the branch, so a Retry would duplicate
+          // it: the same hazard regenerate's unconverged arm refuses. A failed resync must not
+          // reach the catch below either, since its failure entry offers that Retry.
+          setLastSubmission(null)
+          toast.error(t('reader:submitUnconverged'))
+          await reload().catch((err: unknown) =>
+            logger.error('pipeline.submit_resync_failed', {
+              branchId,
+              error: err instanceof Error ? err.message : String(err),
+            }),
+          )
+        } else if (result.outcome === 'rejected')
           await showTurnFailure(
             {
               kind: 'orchestrator',
@@ -695,6 +708,7 @@ export default function ReaderComposerRoute() {
       beginDispatch,
       endDispatch,
       branchUnchanged,
+      reload,
     ],
   )
 
@@ -1217,7 +1231,11 @@ export default function ReaderComposerRoute() {
   return (
     <ScreenShell
       variant="in-story"
-      title={<Text className="font-semibold">{storyTitle ?? t('reader:placeholderTitle')}</Text>}
+      title={
+        <TruncatedText className="font-semibold" containerClassName="min-h-[44px] justify-center">
+          {storyTitle ?? t('reader:placeholderTitle')}
+        </TruncatedText>
+      }
       chapterProgress={openRegionPct}
       onBack={() => router.back()}
       onOpenStorySettings={() => {

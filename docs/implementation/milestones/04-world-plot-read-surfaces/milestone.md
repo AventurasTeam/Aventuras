@@ -249,7 +249,7 @@ window over the create deltas of the last two `ai_reply` entries
 directly and link-table writes (`happening_awareness`,
 `happening_involvements`, `character_relationships`) by the rows they
 connect; scene-presence transitions tier per reply, kind-aware like
-in-scene; deltas of reversed runs are excluded. See
+in-scene; a reversed run leaves no deltas to read. See
 [`entity.md → Recently-classified row
 accent`](../../../ui/patterns/entity.md#recently-classified-row-accent)
 for the full rule. Decay at two turns resolves the

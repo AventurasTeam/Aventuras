@@ -26,7 +26,7 @@ export function CollisionListRow({ row, collision }: CollisionListRowProps) {
     <View>
       <ListRow {...row} />
       <View
-        accessibilityRole="alert"
+        role="group"
         accessibilityLabel={t('collisionRow.warning')}
         className={cn(
           'relative flex-row items-center gap-3 overflow-hidden border-l-[3px] border-warning px-row-x-md py-row-y-sm',

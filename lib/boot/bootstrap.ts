@@ -1,6 +1,6 @@
 import {
-  DeltaReplayError,
   applyDeltaAction,
+  describeDeltaReplayError,
   normalizeAppSettingsRow,
   readClassifierStatus,
   registerAllDomains,
@@ -51,7 +51,7 @@ export function ensureDeltaActionPort(): void {
   configureDeltaActionPort({
     applyDeltaAction,
     reverseReplayDeltas,
-    describeReplayError: (e) => (e instanceof DeltaReplayError ? String(e.cause) : undefined),
+    describeReplayError: describeDeltaReplayError,
   })
 }
 

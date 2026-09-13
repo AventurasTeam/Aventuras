@@ -131,26 +131,28 @@ const meta: Meta = {
 export default meta
 type Story = StoryObj
 
+function seedCharacterWithFaction() {
+  wizardStore.reset()
+  seedCast([
+    characterRow({ id: 'char-1', name: 'Aria Stoneheart' }),
+    factionRow({ id: 'fact-1', name: 'The Iron Guild' }),
+  ])
+}
+
+// Typed strings stay short and the walkthrough spans two stories: typing dominates these plays,
+// and CI runs them several times slower than local against a 15 s timeout.
 export const Character: Story = {
-  beforeEach: () => {
-    wizardStore.reset()
-    seedCast([
-      characterRow({ id: 'char-1', name: 'Aria Stoneheart' }),
-      factionRow({ id: 'fact-1', name: 'The Iron Guild' }),
-    ])
-  },
+  beforeEach: seedCharacterWithFaction,
   render: () => <CharacterEditorDemo id="char-1" />,
   play: async () => {
     const nameInput = await screen.findByLabelText('Name')
     await userEvent.clear(nameInput)
-    await userEvent.type(nameInput, 'Kael Ashborn')
-    await waitFor(() => expect(castRowById('char-1').name).toBe('Kael Ashborn'))
+    await userEvent.type(nameInput, 'Kael Ash')
+    await waitFor(() => expect(castRowById('char-1').name).toBe('Kael Ash'))
 
-    await userEvent.type(screen.getByLabelText('Description'), 'A wandering smith.')
+    await userEvent.type(screen.getByLabelText('Description'), 'A smith.')
     await waitFor(() =>
-      expect((castRowById('char-1') as WizardCharacterDraft).description).toBe(
-        'A wandering smith.',
-      ),
+      expect((castRowById('char-1') as WizardCharacterDraft).description).toBe('A smith.'),
     )
 
     // Status renders as a two-option radio segment: the group itself carries
@@ -160,38 +162,41 @@ export const Character: Story = {
     expect(screen.getByRole('radio', { name: 'Staged' })).not.toBeChecked()
 
     // Labelled "Speech"; the state key it writes is still `voice`.
-    await userEvent.type(screen.getByLabelText('Speech'), 'clipped, formal')
+    await userEvent.type(screen.getByLabelText('Speech'), 'curt, dry')
     await waitFor(() =>
-      expect((castRowById('char-1') as WizardCharacterDraft).voice).toBe('clipped, formal'),
+      expect((castRowById('char-1') as WizardCharacterDraft).voice).toBe('curt, dry'),
     )
 
     await userEvent.type(screen.getByPlaceholderText(PLACEHOLDER.traits), 'stubborn{Enter}')
-    await userEvent.type(
-      screen.getByPlaceholderText(PLACEHOLDER.drives),
-      'protect the forge{Enter}',
-    )
+    await userEvent.type(screen.getByPlaceholderText(PLACEHOLDER.drives), 'find kin{Enter}')
     await waitFor(() => {
       const row = castRowById('char-1') as WizardCharacterDraft
       expect(row.traits).toEqual(['stubborn'])
-      expect(row.drives).toEqual(['protect the forge'])
+      expect(row.drives).toEqual(['find kin'])
     })
     expect(screen.getByRole('textbox', { name: 'Traits' })).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Drives' })).toBeInTheDocument()
+  },
+}
 
-    await userEvent.click(screen.getByRole('button', { name: 'Visual' }))
-    await userEvent.type(await screen.findByLabelText('Physique'), 'Tall, broad-shouldered')
-    await userEvent.type(screen.getByLabelText('Distinguishing'), 'A burn scar across one forearm')
+export const CharacterVisualAndMoreOptions: Story = {
+  beforeEach: seedCharacterWithFaction,
+  render: () => <CharacterEditorDemo id="char-1" />,
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'Visual' }))
+    await userEvent.type(await screen.findByLabelText('Physique'), 'Tall, lean')
+    await userEvent.type(screen.getByLabelText('Distinguishing'), 'A burn scar')
     await waitFor(() => {
       const row = castRowById('char-1') as WizardCharacterDraft
-      expect(row.visual.physique).toBe('Tall, broad-shouldered')
-      expect(row.visual.distinguishing).toBe('A burn scar across one forearm')
+      expect(row.visual.physique).toBe('Tall, lean')
+      expect(row.visual.distinguishing).toBe('A burn scar')
     })
 
     // More options — Tags + the faction picker.
     await userEvent.click(screen.getByRole('button', { name: 'More options' }))
-    await userEvent.type(await screen.findByPlaceholderText(PLACEHOLDER.tags), 'blacksmith{Enter}')
+    await userEvent.type(await screen.findByPlaceholderText(PLACEHOLDER.tags), 'smith{Enter}')
     await waitFor(() =>
-      expect((castRowById('char-1') as WizardCharacterDraft).tags).toEqual(['blacksmith']),
+      expect((castRowById('char-1') as WizardCharacterDraft).tags).toEqual(['smith']),
     )
     expect(screen.getByRole('textbox', { name: 'Tags' })).toBeInTheDocument()
 

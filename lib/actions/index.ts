@@ -9,7 +9,11 @@ export { applyUndoPayload, computeUndoPayload } from './delta/delta-encoding'
 export { __resetRegistrationGuard, registerAllDomains } from './delta/registrations'
 export { __resetRegistry, type StorePatch } from './delta/registry'
 export { type RedoSnapshot } from './delta/redo'
-export { DeltaReplayError, reverseReplayDeltas } from './delta/reverse-replay'
+export {
+  DeltaReplayError,
+  describeDeltaReplayError,
+  reverseReplayDeltas,
+} from './delta/reverse-replay'
 export {
   addProvider,
   ensureProviderEmbeddingDim,
@@ -81,7 +85,7 @@ export {
   type RegenerateRejectionCode,
   type RegenerateTurnResult,
 } from './turns/regenerate-turn'
-export { submitTurn, type SubmitTurnMeta } from './turns/submit-turn'
+export { submitTurn, type SubmitTurnMeta, type SubmitTurnResult } from './turns/submit-turn'
 export type { DbCtx, DeltaSource, MutationResult, PipelineAction } from './types'
 export {
   clearLiveSession,

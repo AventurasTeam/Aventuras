@@ -35,6 +35,14 @@ describe('deriveCollisions', () => {
     expect([...map.entries()]).toEqual([['new', { otherId: 'old', otherName: 'Brannoc' }]])
   })
 
+  it('pairs namesakes across composed and decomposed spellings', () => {
+    const map = deriveCollisions([
+      entity('old', 'Zoë'),
+      entity('new', 'Zoë', { nameCollisionFlag: 1, createdAt: 2 }),
+    ])
+    expect([...map.entries()]).toEqual([['new', { otherId: 'old', otherName: 'Zoë' }]])
+  })
+
   it('ignores same-name rows of another kind and unflagged rows', () => {
     const map = deriveCollisions([
       entity('loc', 'Brannoc', { kind: 'location' }),

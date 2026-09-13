@@ -1,5 +1,5 @@
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
-import { DeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
+import { describeDeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
 import { __resetBranchQueues } from '@/lib/actions/turns/branch-queue'
 import { branches, stories } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
@@ -41,6 +41,6 @@ export function resetSingletons(): void {
   configureDeltaActionPort({
     applyDeltaAction,
     reverseReplayDeltas,
-    describeReplayError: (e) => (e instanceof DeltaReplayError ? String(e.cause) : undefined),
+    describeReplayError: describeDeltaReplayError,
   })
 }

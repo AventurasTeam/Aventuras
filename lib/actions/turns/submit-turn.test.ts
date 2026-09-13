@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { branches, storyEntries, type StoryEntry } from '@/lib/db'
+import { getDiagnosticsSnapshot } from '@/lib/diagnostics'
 import { startStorySwap } from '@/lib/embedder-swap'
 import { definePipeline, getPipeline, PER_TURN_KIND, type PhaseResult } from '@/lib/pipeline'
 import { runRetrieval } from '@/lib/retrieval'
@@ -79,7 +80,7 @@ describe('submitTurn', () => {
       ctx,
     )
 
-    expect(result).toEqual({ outcome: 'rejected', blockedBy: 'embedder-swap' })
+    expect(result).toEqual({ outcome: 'rejected', blockedBy: 'embedder-swap', converged: true })
     expect(branchEntries('b1')).toEqual([])
     const rows = await db.select().from(storyEntries).where(eq(storyEntries.branchId, 'b1'))
     expect(rows).toEqual([])
@@ -353,7 +354,11 @@ describe('submitTurn', () => {
     })
     releaseTurn()
     expectRan(await first)
-    await expect(second).resolves.toEqual({ outcome: 'rejected', blockedBy: 'embedder-swap' })
+    await expect(second).resolves.toEqual({
+      outcome: 'rejected',
+      blockedBy: 'embedder-swap',
+      converged: true,
+    })
     expect(
       branchEntries('b1')
         .filter((entry) => entry.kind === 'user_action')
@@ -361,17 +366,15 @@ describe('submitTurn', () => {
     ).toEqual(['first'])
   })
 
-  it('reverses the user_action and leaves no orphan when pipeline admission is rejected', async () => {
+  // Self-blocking policy + a gated phase: b1's turn stays reserved and in-flight until
+  // `release`, so a b2 submit's admission is rejected — the path runPipeline can take
+  // before any run reserves, which abortRun's usual delta-reversal never sees.
+  async function holdAdmissionOnB1() {
     const { ctx, db } = await makeHarness()
     await db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'm2', createdAt: 1 })
     entriesStore.hydrate('b1', [])
     entriesStore.hydrate('b2', [])
     await hydrateAppSettings(async () => WORKING_CONFIG)
-
-    // Self-blocking policy + a gated phase: the first submit's run stays
-    // reserved and in-flight, so the second submit's admission is rejected —
-    // exercising the path runPipeline can take before any run reserves,
-    // which abortRun's usual delta-reversal never sees.
     let phaseStarted!: () => void
     const started = new Promise<void>((r) => {
       phaseStarted = r
@@ -396,26 +399,76 @@ describe('submitTurn', () => {
       affordance: 'pill-only',
       gateBehavior: 'hard-gate',
     })
-
     const first = submitTurn(
       { storyId: 's1', branchId: 'b1' },
       { content: 'first', composerMode: 'do' },
       ctx,
     )
     await started
+    return { ctx, db, release, first }
+  }
+
+  it('reverses the user_action and leaves no orphan when pipeline admission is rejected', async () => {
+    const { ctx, release, first } = await holdAdmissionOnB1()
 
     const second = await submitTurn(
       { storyId: 's1', branchId: 'b2' },
       { content: 'second', composerMode: 'do' },
       ctx,
     )
-    expect(second.outcome).toBe('rejected')
-    if (second.outcome === 'rejected') expect(second.blockedBy).toBe(PER_TURN_KIND)
+    expect(second).toEqual({ outcome: 'rejected', blockedBy: PER_TURN_KIND, converged: true })
     expect(branchEntries('b2')).toHaveLength(0)
 
     release()
     expectRan(await first)
   })
+
+  // A refused turn reserved no run, so boot recovery has no marker to retry: an uncommitted
+  // reversal leaves the user_action standing, and `converged` tells the reader not to resubmit it.
+  it.each([
+    { stage: 'before it commits', committed: false, standing: 1, level: 'error' },
+    { stage: 'in the store sync after it commits', committed: true, standing: 0, level: 'warn' },
+  ] as const)(
+    'rejects a refused turn whose reversal fails $stage, converged only once it committed',
+    async ({ committed, standing, level }) => {
+      const { ctx, db, release, first } = await holdAdmissionOnB1()
+      let restorePatch = () => {}
+      // The reversal's prune is the only write in this submit that deletes from the log.
+      const reversalFails = {
+        ...ctx,
+        runInTransaction: async (ops: Parameters<typeof ctx.runInTransaction>[0]) => {
+          const isReversal = ops.some((op) => /^delete from "deltas"/i.test(op.sql))
+          if (isReversal && !committed) throw new Error('database is locked')
+          const result = await ctx.runInTransaction(ops)
+          if (isReversal) {
+            const spy = vi.spyOn(entriesStore, 'patch').mockImplementation(() => {
+              throw new Error('store sync boom')
+            })
+            restorePatch = () => spy.mockRestore()
+          }
+          return result
+        },
+      }
+
+      const second = await submitTurn(
+        { storyId: 's1', branchId: 'b2' },
+        { content: 'second', composerMode: 'do' },
+        reversalFails,
+      ).finally(() => restorePatch())
+
+      expect(second).toMatchObject({ outcome: 'rejected', converged: committed })
+      const rows = await db.select().from(storyEntries).where(eq(storyEntries.branchId, 'b2'))
+      expect(rows).toHaveLength(standing)
+      const log = getDiagnosticsSnapshot().logEntries.find(
+        (e) => e.kind === 'action_layer.submit_rejected_reversal_failed',
+      )
+      expect(log?.fields.committed).toBe(committed)
+      expect(log?.level).toBe(level)
+
+      release()
+      expectRan(await first)
+    },
+  )
 
   it('clears the redo stack on success (a new turn is a new unrelated action)', async () => {
     const { ctx, db } = await makeHarness()

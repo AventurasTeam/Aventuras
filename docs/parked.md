@@ -926,6 +926,65 @@ Parked 2026-08-25 after the boot-recovery work closed the reachable
 half; duplicated happenings observed after a failed reversal are the
 signal to revisit.
 
+#### An abort waits on its phases, except a thrown parallel branch
+
+`runPipeline` reverses a run only once `runPhases` returns, so a cancel
+signals the phases to stop and then waits for them to return, and a
+parallel group waits on every branch. One path does not wait: a branch
+that **throws** (an `ActionRejectedError` out of `handleEvent`, say)
+rejects `Promise.all` at once, and `abortRun` reverses and prunes while
+a sibling can still emit `delta_emitted`. That write lands under the
+run's `actionId` after the reversal read the log, survives the prune,
+and reads as the next undo head.
+
+Latent: no shipped pipeline declares a `parallel:` group, and cancel is
+quick in practice because phases forward the abort signal to their LLM
+calls.
+
+The fix is to stop listening rather than wait: once a run aborts,
+`handleEvent` drops further `delta_emitted`, and `abortRun` reverses as
+soon as the writes already in flight settle, not when the phases
+return. Two catches keep it from being a one-liner. A write in flight
+must still finish before the reversal reads the log, or it escapes the
+prune. And phases also write directly through `ctx.db` (classifier
+status, for one), which dropping events does not stop, so each phase's
+direct writes need auditing first.
+
+Parked 2026-09-13 from the PR #513 review; the first pipeline that
+declares a `parallel:` group, or a cancel that visibly lags, is the
+signal to revisit.
+
+#### A store sync that fails after a committed reversal leaves stores stale
+
+Every reversal commits its database writes first, then patches the
+in-memory stores to match (`emitCommittedPatches`, and redo's own
+loop). If a patch throws, the database is right but the stores are
+not: the sync stops at the first failing patch, and the reader's
+recovery reloads only `entriesStore` (`reload()` reads recent entries),
+so rows the reversed action touched in other stores (entities, lore,
+happenings) stay on screen until the story is reopened. A user cancel
+is also relabelled: `abortRun` records `'aborted'` in
+`pipeline_runs.outcome` inside the transaction, then reports
+`'failed'` on the event bus and in logs, so the reader shows a failure
+entry with Retry instead of handing the draft back. Retry is safe, as
+the reversal already landed.
+
+Unreachable today: patchers are Map updates plus a Zustand `setState`,
+and no patched store has a subscriber that can throw. Zustand runs
+listeners inside `setState` without a try/catch, so one would be
+enough. Nothing reads `pipeline_runs.outcome` either.
+
+The fix is a branch-wide resync on any committed store-sync failure,
+rehydrating every patched store for the loaded branch; a cancel can
+then keep its `'aborted'` outcome. Relabelling the outcome alone is
+the wrong remedy: the reader resyncs only on `'failed'`, so `'aborted'`
+without the resync leaves the stale rows showing.
+
+Parked 2026-09-13 from the PR #513 review; a delta-patched store
+gaining a synchronous subscriber or patch logic that can throw
+(validation, a must-exist invariant), or anything starting to read
+`pipeline_runs.outcome`, is the signal to revisit.
+
 ### Memory pipeline (parked)
 
 Subsystem-scoped deferrals for the memory pipeline (retrieval,
@@ -1779,6 +1838,21 @@ schemes natively; route mapping plus a launch-time deep-link
 handler. Schema cost is also small (URL templates per surface).
 Held parked because v1 doesn't have a consumer that benefits.
 
+**Back on a screen entered without the story list beneath it lands
+with this.** Today the only such entry is a renderer reload, which
+packaged builds no longer bind (dev keeps Electron's default menu, so
+a dev reload still does it); an external `aventuras://` link would do
+the same on Android, since the scheme is registered in every build.
+There, Back does nothing: the reader, World, Story Settings, App
+Settings, Diagnostics and the wizard call `router.back()`, which
+expo-router queues as a `GO_BACK` that the stack router drops at
+index 0. When deep links land, choose between canon's empty-stack exit
+confirm
+([`ui/principles.md → Stack-aware Return`](./ui/principles.md#stack-aware-return))
+and Expo's documented `unstable_settings = { initialRouteName: 'index' }`,
+which seeds the story list under any deep-linked route. Moved here from
+triage 2026-09-13.
+
 #### Observability — file-based persistent logger
 
 The [observability layer](./observability.md) ships in-memory
@@ -2350,6 +2424,13 @@ attributes to stay on our `View`. Neither option is verified. No
 consumer passes `accessibilityRole="menu"`, so every Popover today is
 the same dialog-on-dialog shape.
 
+The two menu-shaped consumers, `ImporterMenu` and the wizard's add-cast
+menu, also put `menuitem` rows inside that dialog with no `menu` owner.
+That is deliberate: Popover has no arrow-key roving, and `role="menu"`
+would switch screen readers into a navigation mode the container does
+not honour. The fix is roving focus plus the role, or plain buttons in
+place of the menu items.
+
 Parked as accepted for v1 rather than dissolved: the degradation is
 real, but it costs announcement quality rather than function. Revisit
 on a deliberate a11y pass, on any report from real assistive-technology
@@ -2485,6 +2566,24 @@ inline write, following
 the three docs disagree and want reconciling when this is picked up.
 Parked until peek editing proves wanted over the `Open in World panel →`
 escalation. Filed at M4 promotion (2026-09-10).
+
+#### A relaunch kills a primary whose main thread stalls
+
+The desktop single-instance lock is Chromium's process singleton: a
+second launch asks the running instance to take over and, when no
+answer comes in time, treats it as hung, kills it and starts fresh.
+Seen in the PR #513 review with the failed-boot error box open, which
+blocks main: the relaunch waited, then SIGKILLed the first process and
+showed its own error box, all within 30 seconds.
+
+Harmless there, since that process had already failed. In normal use
+it needs main blocked for that long, and main shows no other
+synchronous dialog. The realistic case is a very long migration at boot
+on a large database, where a user relaunching an app that looks stuck
+would kill it mid-migration.
+
+Parked 2026-09-13; a migration or other main-thread stall long enough
+to near the timeout is the signal to revisit.
 
 ### Code structure (parked)
 

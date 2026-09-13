@@ -182,6 +182,18 @@ chip, whose tint is the aggregate classifier signal.
   `world:` i18n namespace, so the rail pulls World's namespace into
   the reader — decide whether to move the shared C2 copy to a neutral
   namespace.
+- **World's category-label lowercasing is English-only.**
+  (2026-09-11) The search placeholder and the empty-list title
+  lowercase the category label in code, in the app language, so a
+  translation whose nouns keep their capital (German) can't opt out.
+  A formatter in the string itself (`{{category, lowercase}}`) would
+  hand the choice to translators. i18next ships no `lowercase`
+  formatter, though, and lowercasing fixes capitals but not case —
+  many languages inflect the noun after "No" or "Search". The label is
+  surface-owned per C2 (World's `Locations`, the rail's `Places`), so
+  the rail inherits the same lowercasing; the likelier fix is the
+  surface passing finished copy strings, which pairs with the question
+  above. Only `en` ships today.
 
 ## Implementation notes
 

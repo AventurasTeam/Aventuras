@@ -17,7 +17,7 @@ export const wizard = {
   // so Name is immediately visible with no separate "Expand" click needed.
   addCast: (page: Page): Locator => page.getByRole('button', { name: t('wizard:cast.add') }),
   addCastKind: (page: Page, kind: CastKind): Locator =>
-    page.getByRole('menuitem', { name: t(`wizard:cast.kinds.${kind}`) }),
+    page.getByRole('menuitem', { name: t(`common:kinds.${kind}`) }),
 
   // Rows repeat every field/button name (Name, Status, Set as lead, …), and
   // `useRowExpansion` never auto-collapses a row that's already open, so with

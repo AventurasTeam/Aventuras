@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { type PipelineAction } from '@/lib/actions'
 import { deltas, entities, pipelineRuns, storyEntries } from '@/lib/db'
@@ -11,7 +11,7 @@ import {
   type PhaseContext,
   type PhaseResult,
 } from '@/lib/pipeline'
-import { generationStore } from '@/lib/stores'
+import { entriesStore, generationStore } from '@/lib/stores'
 
 import { expectRan, makeHarness, resetSingletons } from './harness'
 
@@ -226,8 +226,56 @@ describe('orchestrator hardening', () => {
     // Open, not settled — the poison delta survived and boot must still see it.
     const [marker] = await db.select().from(pipelineRuns)
     expect(marker.finishedAt).toBeNull()
+    expect(result.error?.detail).toMatch(/^reverse-replay failed/)
+    expect(
+      getDiagnosticsSnapshot().logEntries.some(
+        (e) => e.kind === 'pipeline.orphan_left_for_recovery',
+      ),
+    ).toBe(true)
     const report = await recoverInFlightRuns(ctx)
     expect(report.failures).toHaveLength(1)
+  })
+
+  // The reversal committed, pruning its deltas and settling the marker in one transaction;
+  // only the store sync after it threw, so boot recovery has nothing left to own.
+  it('does not hand a committed reversal to boot recovery when only its store sync fails', async () => {
+    const { db, ctx } = await makeHarness()
+    definePipeline({
+      kind: 'syncfail',
+      phases: [
+        {
+          name: 'p',
+          run: async function* (): AsyncGenerator<
+            { type: 'delta_emitted'; action: PipelineAction },
+            PhaseResult
+          > {
+            yield { type: 'delta_emitted', action: newEntry('entry_sync') }
+            // Armed after the forward write synced, so only the reversal's sync throws.
+            vi.spyOn(entriesStore, 'patch').mockImplementation(() => {
+              throw new Error('store sync boom')
+            })
+            return {
+              status: 'failed',
+              error: { kind: 'phase-logic', detail: 'fails after writing' },
+            }
+          },
+        },
+      ],
+      ...base,
+    })
+
+    const result = expectRan(await runPipeline('syncfail', ctx).finally(() => vi.restoreAllMocks()))
+
+    expect(result.outcome).toBe('failed')
+    expect(await db.select().from(deltas)).toHaveLength(0)
+    const [marker] = await db.select().from(pipelineRuns)
+    expect(marker.finishedAt).not.toBeNull()
+    expect(
+      getDiagnosticsSnapshot().logEntries.some(
+        (e) => e.kind === 'pipeline.orphan_left_for_recovery',
+      ),
+    ).toBe(false)
+    expect(result.error?.detail).toMatch(/^post-commit store sync failed/)
   })
 
   it('a marker-write failure on abort finishes cleanly without leaking state', async () => {

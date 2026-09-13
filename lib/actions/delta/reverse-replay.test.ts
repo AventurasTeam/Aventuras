@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   branches,
@@ -13,10 +13,15 @@ import {
   type VecTargetKind,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { happeningAwarenessStore, happeningInvolvementsStore } from '@/lib/stores'
+import { entitiesStore, happeningAwarenessStore, happeningInvolvementsStore } from '@/lib/stores'
 
 import { applyDeltaAction } from './apply-delta-action'
-import { reverseAndPruneDeltaRows, reverseReplayDeltas } from './reverse-replay'
+import {
+  DeltaReplayError,
+  describeDeltaReplayError,
+  reverseAndPruneDeltaRows,
+  reverseReplayDeltas,
+} from './reverse-replay'
 import type { PipelineAction } from '../types'
 
 afterEach(() => {
@@ -68,7 +73,7 @@ async function knightRow(db: Awaited<ReturnType<typeof createTestDb>>['db']) {
 }
 
 describe('reverseReplayDeltas', () => {
-  it('reverses create + update in DESC order, returns count', async () => {
+  it('reverses create + update in DESC order, prunes their deltas, returns count', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seed(db)
@@ -123,8 +128,8 @@ describe('reverseReplayDeltas', () => {
       .from(storyEntries)
       .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'entry_1')))
     expect(rows.length).toBe(0)
-    // and no residual deltas applied wrong: assert the deltas still exist (framework consumes the primitive; deletion of delta rows is a data-model decision, not this primitive)
-    expect((await db.select().from(deltas).where(eq(deltas.actionId, 'act_1'))).length).toBe(2)
+    // Reversal prunes the action's deltas from the log, as CTRL-Z does.
+    expect((await db.select().from(deltas).where(eq(deltas.actionId, 'act_1'))).length).toBe(0)
   })
 
   it('restores a schema-backed column that was NULL before the update', async () => {
@@ -205,6 +210,25 @@ describe('reverseReplayDeltas', () => {
     // it, or the next attempt reverses an already-reversed action.
     expect(await knightRow(db)).toBeDefined()
     expect(await db.select().from(deltas).where(eq(deltas.actionId, 'act_rev'))).toHaveLength(1)
+  })
+
+  it('flags a store-sync throw after the commit as committed', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    await createKnight(ctx, 'act_rev')
+    const patchSpy = vi.spyOn(entitiesStore, 'patch').mockImplementation(() => {
+      throw new Error('store sync boom')
+    })
+
+    const error: unknown = await reverseReplayDeltas('act_rev', ctx).catch((e: unknown) => e)
+    patchSpy.mockRestore()
+
+    expect(error).toBeInstanceOf(DeltaReplayError)
+    expect((error as DeltaReplayError).committed).toBe(true)
+    // The reversal and its prune landed before the store sync threw.
+    expect(await knightRow(db)).toBeUndefined()
+    expect(await db.select().from(deltas).where(eq(deltas.actionId, 'act_rev'))).toHaveLength(0)
   })
 
   it('reverses a single update with the row surviving (positive restore)', async () => {
@@ -393,6 +417,49 @@ describe('reverseReplayDeltas', () => {
       .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'entry_1')))
     expect(restored).toBeDefined()
     expect(restored.metadata).toEqual({ sceneEntities: [], currentLocationId: null, worldTime: 5 })
+  })
+})
+
+describe('describeDeltaReplayError', () => {
+  it('reports a store-sync throw after the commit as committed', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    await createKnight(ctx, 'act_rev')
+    const patchSpy = vi.spyOn(entitiesStore, 'patch').mockImplementation(() => {
+      throw new Error('store sync boom')
+    })
+
+    const error: unknown = await reverseReplayDeltas('act_rev', ctx).catch((e: unknown) => e)
+    patchSpy.mockRestore()
+
+    expect(describeDeltaReplayError(error)).toEqual({
+      detail: 'Error: store sync boom',
+      committed: true,
+    })
+  })
+
+  it('reports a transaction that never committed as uncommitted', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await seed(db)
+    await createKnight({ db, runInTransaction }, 'act_rev')
+    const locked = {
+      db,
+      runInTransaction: async () => {
+        throw new Error('database is locked')
+      },
+    }
+
+    const error: unknown = await reverseReplayDeltas('act_rev', locked).catch((e: unknown) => e)
+
+    expect(describeDeltaReplayError(error)).toEqual({
+      detail: 'Error: database is locked',
+      committed: false,
+    })
+  })
+
+  it('leaves an error that is not a replay failure to the caller', () => {
+    expect(describeDeltaReplayError(new Error('unrelated'))).toBeUndefined()
   })
 })
 

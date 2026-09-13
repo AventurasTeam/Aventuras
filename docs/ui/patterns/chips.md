@@ -147,31 +147,31 @@ API (all orthogonal):
 - `tone?: 'default' | 'soft' | 'success' | 'warning' | 'danger' | 'accent' | 'recently-classified'` — see [tone vocabulary](#tag--tone-vocabulary) below.
 - `leading?: React.ReactNode` — optional element rendered before the label, separated by the existing `gap-1`. Stays inside the `TextClassContext` so child text colors continue to cascade. Used by [`GenerationStatusPill`](./generation-status-pill.md) to inject a Spinner during active phases.
 - `dashed?: boolean` — solid border → dashed border. Used for **standalone add-affordance** in pre-existing chip rows ("+ relationship" on entity panes, quick-add UI in chip-only contexts). **Not** the right shape for tag-field entry — that pattern lives in [`forms.md → TagInput pattern`](./forms.md#taginput-pattern), which composes Tag + Input into a single tokenized-input surface. Mutually-exclusive with `removable` in practice (add vs. remove are different use cases).
-- `onPress?: () => void` — optional. Sets `role="button"` when present.
+- `onPress?: () => void` — optional. Sets `role="button"` when present, and pads the tap target with `hitSlop` toward the 44px phone floor. That holds on paper only: RN Web ignores `hitSlop`, and Android clips it at the parent's bounds.
 - `accessibilityLabel?: string` — the accessible name for a pressable Tag whose visible text doesn't say what it does (a glyph and a count). Ignored without `onPress`.
 - `disabled?: boolean` — `opacity-50`.
 
 Visual contract:
 
 - `border-radius: var(--radius-full)` (9999px).
-- `px-2.5 py-0.5`, `text-xs` (no `font-medium`; tags are content, not chrome). **Fixed, not density-scaled** — the `--row-px-*` / `--row-py-*` pair converges on a single step at regular and comfortable (8×8, 10×10), and equal padding on a `rounded-full` shape reads as a square with rounded ends rather than a pill. Tag is excluded from density coupling for the same reason it's excluded from the control-h system: it's content, and the × already carries its own touch target.
+- `px-2.5 py-0.5`, `text-xs` (no `font-medium`; tags are content, not chrome). **Fixed, not density-scaled** — the `--row-px-*` / `--row-py-*` pair converges on a single step at regular and comfortable (8×8, 10×10), and equal padding on a `rounded-full` shape reads as a square with rounded ends rather than a pill. Tag is excluded from density coupling for the same reason it's excluded from the control-h system: it's content, and the × and a pressable body carry their own touch targets.
 - All tones use the same geometry — only color tokens differ. No tone changes padding or radius.
 - Dashed: `border-dashed`.
 - Removable × button: small `text-fg-faint`, hover `text-fg-primary`, separate Pressable for dedicated touch target.
 
 ### Tag — tone vocabulary
 
-| Tone                  | Tokens                                                             | Row + chrome uses                                                                                                                                  |
-| --------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `default`             | `border-border-strong text-fg-muted bg-bg-base`                    | active entity row, Active thread, neutral                                                                                                          |
-| `soft`                | `border-border-strong text-fg-muted bg-bg-raised`                  | inline entity refs, tag chips                                                                                                                      |
-| `success`             | translucent success tint + colored text and border                 | staged entity, Resolved thread                                                                                                                     |
-| `warning`             | `bg-warning` (12% opacity overlay) + `border-warning text-warning` | retired entity, Pending thread, **status-pill error**                                                                                              |
-| `danger`              | translucent danger tint + colored text and border                  | Failed thread                                                                                                                                      |
-| `accent`              | translucent accent tint + colored text and border                  | status-pill **active phase** (paired with `leading`)                                                                                               |
-| `recently-classified` | `bg-recently-classified-bg` fill + `text-fg-primary` label         | recently-classified badge, full strength in both tiers ([`color.md → Recently-classified slot`](../foundations/color.md#recently-classified-slot)) |
+| Tone                  | Tokens                                                     | Row + chrome uses                                                                                                                                  |
+| --------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `default`             | `border-border-strong text-fg-muted bg-bg-base`            | active entity row, Active thread, neutral                                                                                                          |
+| `soft`                | `border-border-strong text-fg-muted bg-bg-raised`          | inline entity refs, tag chips                                                                                                                      |
+| `success`             | `border-success bg-success text-success-fg`                | staged entity, Resolved thread                                                                                                                     |
+| `warning`             | `border-warning bg-warning text-warning-fg`                | retired entity, Pending thread, **status-pill error**                                                                                              |
+| `danger`              | `border-danger bg-danger text-danger-fg`                   | Failed thread                                                                                                                                      |
+| `accent`              | `border-accent bg-accent text-accent-fg`                   | status-pill **active phase** (paired with `leading`), entity lead badge (paired with a `Star` leading)                                             |
+| `recently-classified` | `bg-recently-classified-bg` fill + `text-fg-primary` label | recently-classified badge, full strength in both tiers ([`color.md → Recently-classified slot`](../foundations/color.md#recently-classified-slot)) |
 
-The semantic tones (`success` / `warning` / `danger` / `accent`) mirror the project's overlay-tint pattern established in [`save-bar`](../../../components/compounds/save-bar.tsx). The active gen pill pairs `tone="accent"` with `leading={<Spinner size="sm" />}`; the error pill uses `tone="warning"` with no leading.
+The semantic tones (`success` / `warning` / `danger` / `accent`) are filled: the tone token as background and border, its `-fg` pair as the label. A 12% tint carrying tone-colored `text-xs` reads softer but falls below 4.5:1 in the light themes, while each `-fg` pair is authored against its own tone to clear that bar. catppuccin-latte's `success` and `warning` pairs don't yet. The active gen pill pairs `tone="accent"` with `leading={<Spinner size="sm" />}`; the error pill uses `tone="warning"` with no leading.
 
 ## Implementation
 

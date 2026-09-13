@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type ReactElement } from 'react'
 
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
+import { TruncatedText } from '@/components/compounds/truncated-text'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import { StorySettingsShell } from '@/components/shells/story-settings-shell'
 import { AuthoringAidsPanel } from '@/components/story-settings/authoring-aids-panel'
@@ -28,7 +29,6 @@ import {
   type StorySettingsTabId,
 } from '@/components/story-settings/tabs'
 import { EmptyState } from '@/components/ui/empty-state'
-import { Text } from '@/components/ui/text'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
 import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
 import { useTier } from '@/hooks/use-tier'
@@ -239,11 +239,11 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
     <ScreenShell
       variant="in-story"
       title={
-        <Text className="font-semibold">
+        <TruncatedText className="font-semibold" containerClassName="min-h-[44px] justify-center">
           {storyTitle != null
             ? `${storyTitle} / ${t('storySettings:title')}`
             : t('storySettings:title')}
-        </Text>
+        </TruncatedText>
       }
       chapterProgress={openRegionPct}
       hideSelfReferentialIcon

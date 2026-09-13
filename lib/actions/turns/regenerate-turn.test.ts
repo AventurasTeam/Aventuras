@@ -501,7 +501,7 @@ describe('regenerateTurn', () => {
         throw new DeltaReplayError('Initial sweep failed', {
           cause: new Error('store sync failed'),
           actionId: 'act_t2',
-          committed,
+          stage: committed ? 'store-sync' : 'transaction',
         })
       },
       () => regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx),
@@ -580,6 +580,7 @@ describe('regenerateTurn', () => {
       new DeltaReplayError('Reverse-and-prune failed', {
         cause: new Error('database is locked'),
         actionId: 'act_t2',
+        stage: 'transaction',
       }),
     )
 
@@ -638,7 +639,7 @@ describe('regenerateTurn', () => {
       new DeltaReplayError('Post-commit patch sync failed', {
         cause: new Error('patcher exploded'),
         actionId: 'act_t2',
-        committed: true,
+        stage: 'store-sync',
       }),
     )
 

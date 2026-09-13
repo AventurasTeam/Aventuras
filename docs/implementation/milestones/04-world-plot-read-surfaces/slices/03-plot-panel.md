@@ -245,12 +245,28 @@ chapters` (deferred by canon), and `retrieval_count` review — M5.
   renders taller than its top bar (~52 / 60 px desktop, ~65 px phone)
   — Plot inherits the same shell. Decide whether to shrink the
   wrapper's padding here or leave it.
+- **Thread status pills in the Plot wireframe.** `plot.html` colours
+  them Active green, Pending neutral, Resolved grey and Failed amber;
+  [`chips.md → Tag — tone vocabulary`](../../../../ui/patterns/chips.md#tag--tone-vocabulary)
+  assigns Active `default`, Pending `warning`, Resolved `success` and
+  Failed `danger`. Settle which one moves when the panel is built.
+  Filed by the 2026-09-13 triage pass.
 - **`ListModule`'s entity-typed home.** The C2 type lives in
   `components/entity/list-module.ts`; its `Signals` parameter defaults
   to `EntityListSignals`, and `RowSignals` ties `collision` to
   `CollisionListRowProps`, so Plot's modules would import from the
   entity folder and inherit entity assumptions. Decide when Plot
   lands: move the type to a neutral home, and drop the entity default.
+- **Collapsed-tier state is keyed by tier only, not per kind.**
+  (2026-09-12) `lib/stores/ui/world-list.ts` keys collapse on
+  `EntityTier` alone, so collapsing Staged on Characters also
+  collapses it on Locations. Canon doesn't say whether collapse should
+  be per kind. Needs a design call. There is a third option beside
+  per-kind and global: reset to the defaults on a category switch,
+  which World's `selectCategory` already does for filter and search.
+  The store is typed to `EntityTier`, so Plot's thread tiers and
+  chapter buckets need their own or a generic collapse store — decide
+  once for both panels.
 
 ## Implementation notes
 

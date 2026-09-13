@@ -393,6 +393,11 @@ export const CollapsedWithBadge: Story = {
       () => expect(screen.queryByRole('button', { name: '1 in Active needs review' })).toBeNull(),
       REVEAL_WAIT,
     )
+    // The badge is gone, so focus must land on the revealed row rather than the page body.
+    await waitFor(
+      () => expect(screen.getByRole('button', { name: 'Brannoc' })).toHaveFocus(),
+      REVEAL_WAIT,
+    )
   },
 }
 
@@ -457,6 +462,7 @@ export const JumpToNamesake: Story = {
     }, REVEAL_WAIT)
     expect(within(target).getByText('staged')).toBeInTheDocument()
     await expectScrolledIntoView(target)
+    await waitFor(() => expect(target).toHaveFocus(), REVEAL_WAIT)
   },
 }
 

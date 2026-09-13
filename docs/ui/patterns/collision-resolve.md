@@ -300,9 +300,12 @@ remaining width.
 
 ### Accessibility
 
-The strip is its own region: `accessibilityRole="region"`,
+The strip is a named group: `role="group"`,
 `accessibilityLabel="Collision warning"`. Screen readers announce
-row + region as siblings.
+row + group as siblings. Not `alert`: a collision is a standing state,
+not an event, and an assertive live region on every flagged strip
+would announce them all whenever the list mounts or a tier expands.
+Not `region`: that would make each flagged row its own landmark.
 
 ## Out of scope
 

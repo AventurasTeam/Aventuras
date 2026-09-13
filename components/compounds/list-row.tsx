@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react'
+import { type ReactNode, type Ref } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
 import { Text } from '@/components/ui/text'
@@ -46,6 +46,8 @@ type ListRowProps = {
   onPress?: () => void
   disabled?: boolean
   className?: string
+  /** The row's pressable, e.g. for moving focus to it. */
+  ref?: Ref<View>
 }
 
 export function ListRow({
@@ -60,10 +62,12 @@ export function ListRow({
   onPress,
   disabled,
   className,
+  ref,
 }: ListRowProps) {
   const interactive = !disabled && onPress != null
   return (
     <Pressable
+      ref={ref}
       onPress={interactive ? onPress : undefined}
       disabled={!interactive}
       accessibilityRole={interactive ? 'button' : undefined}

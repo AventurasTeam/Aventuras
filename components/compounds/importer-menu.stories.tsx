@@ -154,6 +154,7 @@ export const OpensOnTriggerClick: Story = {
     const trigger = screen.getByRole('button', { name: /\+ New character/ })
     await userEvent.click(trigger)
     await waitFor(() => expect(screen.getByRole('menuitem', { name: 'Blank' })).toBeInTheDocument())
+    expect(screen.getByRole('dialog', { name: '+ New character' })).toBeInTheDocument()
     expect(args.onOpenChange).toHaveBeenCalledTimes(1)
     expect(args.onOpenChange).toHaveBeenNthCalledWith(1, true)
   },

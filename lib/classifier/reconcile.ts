@@ -1,4 +1,5 @@
 import type { Entity } from '@/lib/db'
+import { normalizeTerm } from '@/lib/keyword-terms'
 
 // Canon's starting ranges (classifier.md -> Disambiguation). Hardcoded: the
 // tuning surface is parked until the M7.5 probe work.
@@ -34,8 +35,8 @@ export function cosine(a: Float32Array, b: Float32Array): number {
   return Math.round((dot / (Math.sqrt(na) * Math.sqrt(nb))) * 1e6) / 1e6
 }
 
-/** Namesake key: case- and whitespace-insensitive. */
-export const normalizeCollisionName = (name: string) => name.trim().toLowerCase()
+/** Namesake key: the keyword-term shape, so accent encoding can't split a namesake pair. */
+export const normalizeCollisionName = normalizeTerm
 
 /**
  * Layer B reconciliation (edge-cases.md -> Layer B). Every namesake is embedded

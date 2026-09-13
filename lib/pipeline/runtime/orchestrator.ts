@@ -307,22 +307,18 @@ async function abortRun(
       .where(eq(pipelineRuns.runId, run.runId))
   let reversalFailed = false
   try {
-    // The marker rides the reversal's transaction: settled separately, a failure
-    // between the two strands an open orphan over reversed deltas, and boot's
-    // replay is not idempotent — undoing a `delete` re-inserts and conflicts.
+    // Marker rides the reversal's transaction: never records an uncommitted reversal.
     await reverseReplayDeltas(run.actionId, ctx, () => [markerOp(outcome).toSQL()])
   } catch (e) {
-    const detail = describeReplayError(e)
-    if (detail === undefined) throw e
-    error = { kind: 'orchestrator', detail: `reverse-replay failed: ${detail}` }
+    const failure = describeReplayError(e)
+    if (failure === undefined) throw e
+    const stage = failure.committed ? 'post-commit store sync' : 'reverse-replay'
+    error = { kind: 'orchestrator', detail: `${stage} failed: ${failure.detail}` }
     outcome = 'failed'
-    reversalFailed = true
+    reversalFailed = !failure.committed
   }
   generationStore.abortRun(run.runId)
-  // A failed reversal leaves its writes on disk, and `finished_at IS NULL` is the
-  // only thing that hands them to boot recovery — settling the marker here would
-  // strand them with no retry at all. Nothing user-facing reads pipeline_runs; the
-  // outcome the user sees rides `run_complete` on the event bus, still 'failed'.
+  // Uncommitted: the marker rolled back with the reversal, so boot recovery still owns the run.
   if (reversalFailed)
     logger.warn(
       'pipeline.orphan_left_for_recovery',

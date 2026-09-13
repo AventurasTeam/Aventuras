@@ -6,7 +6,7 @@ import { generateId } from '@/lib/ids'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
 import { deltaRowOp } from '../delta/delta-row'
-import { reverseAndPruneDeltaRows } from '../delta/reverse-replay'
+import { DeltaReplayError, reverseAndPruneDeltaRows } from '../delta/reverse-replay'
 import type { DbCtx } from '../types'
 import { contentEditUndoPayload, resolveContentEditInvalidation } from './classifier-facts'
 import { bracketProseReversal, classifierWatermarkClampOps } from './prose-reversal'
@@ -16,6 +16,22 @@ export type StoryEntryRejection = {
   status: 'rejected'
   reason: string
   code: StoryEntryRejectionCode
+}
+
+// A second unrelated action clears the redo stack (data-model.md). That holds when only the store
+// sync after the commit throws too: the action landed all the same.
+async function commitNewAction(
+  rows: Delta[],
+  ctx: DbCtx,
+  extraOps: readonly SqlOp[],
+): Promise<void> {
+  try {
+    await reverseAndPruneDeltaRows(rows, ctx, extraOps)
+  } catch (e) {
+    if (e instanceof DeltaReplayError && e.committed) undoRedoStore.clear()
+    throw e
+  }
+  undoRedoStore.clear()
 }
 
 export async function updateStoryEntryContent(
@@ -85,7 +101,7 @@ async function updateStoryEntryContentBracketed(
   // is already behind. One transaction, because a clamp without the reversal re-derives
   // beside the stale facts and a reversal without the clamp deletes them with nothing
   // to replace them.
-  await reverseAndPruneDeltaRows(invalidation.rows, ctx, [
+  await commitNewAction(invalidation.rows, ctx, [
     ctx.db
       .update(storyEntries)
       .set({ content })
@@ -113,8 +129,6 @@ async function updateStoryEntryContentBracketed(
   ])
 
   entriesStore.patch(branchId, { op: 'update', id, columns: { content } })
-  // A second unrelated action clears the redo stack (data-model.md).
-  undoRedoStore.clear()
   return { status: 'ok' }
 }
 
@@ -251,9 +265,7 @@ export async function rollbackToEntry(
     const swept = await resolveSweep(branchId, targetId, ctx)
     if ('status' in swept) return swept
     const counts = countBuckets(swept.rows)
-    await reverseAndPruneDeltaRows(swept.rows, ctx, swept.clampOps)
-    // A second unrelated action clears the redo stack (data-model.md).
-    undoRedoStore.clear()
+    await commitNewAction(swept.rows, ctx, swept.clampOps)
     return { status: 'ok', counts }
   })
 }

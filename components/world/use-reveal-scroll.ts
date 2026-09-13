@@ -1,10 +1,10 @@
 import { useCallback, useLayoutEffect, useRef } from 'react'
-import type { ScrollView, View } from 'react-native'
+import { AccessibilityInfo, Platform, type ScrollView, type View } from 'react-native'
 
 /** A fresh object per request, so revealing the same row twice scrolls twice. */
 export type RevealRequest = { id: string }
 
-type RowRef = (node: View) => () => void
+type NodeRef = (node: View) => () => void
 
 // Two passes seen in practice — Radix cancels and restarts the expand once — plus slack.
 const MAX_SETTLE_PASSES = 4
@@ -28,15 +28,50 @@ async function accordionSettled(node: View): Promise<void> {
   }
 }
 
+// A reveal is a go-to, so focus follows it; the collapsed-tier badge that asks for one unmounts
+// on expand. Web moves keyboard focus (preventScroll leaves the animated scroll in charge);
+// native moves the screen reader's. The move lands only once the accordion settles, so on web it
+// yields to any surface that took focus meanwhile: a menu opened in that gap would close.
+function focusRow(target: View, claimant: Element | null): void {
+  if (Platform.OS === 'web') {
+    const active = document.activeElement
+    if (active != null && active !== claimant && active !== document.body) return
+    ;(target as unknown as Partial<HTMLElement>).focus?.({ preventScroll: true })
+    return
+  }
+  AccessibilityInfo.sendAccessibilityEvent(target, 'focus')
+}
+
+// One callback per id: a fresh one each render would detach and reattach every row.
+function useNodeRefs() {
+  const nodes = useRef(new Map<string, View>())
+  const refs = useRef(new Map<string, NodeRef>())
+  const refFor = useCallback((id: string): NodeRef => {
+    const cached = refs.current.get(id)
+    if (cached != null) return cached
+    const ref: NodeRef = (node) => {
+      nodes.current.set(id, node)
+      return () => {
+        if (nodes.current.get(id) === node) nodes.current.delete(id)
+        if (refs.current.get(id) === ref) refs.current.delete(id)
+      }
+    }
+    refs.current.set(id, ref)
+    return ref
+  }, [])
+  return { nodes, refFor }
+}
+
 /**
- * Scrolls to the row a reveal names, or back to top when `resetKey` changes without one. The
- * caller must mount the row — expanding its group, widening the view — in the same update.
+ * Scrolls to the row a reveal names and moves focus to it, or back to top when `resetKey` changes
+ * without one. The caller must mount the row — expanding its group, widening the view — in the
+ * same update, and hand `focusRef` to the row's pressable.
  */
 export function useRevealScroll(reveal: RevealRequest | null, resetKey: string) {
   const scrollRef = useRef<ScrollView>(null)
   const contentRef = useRef<View>(null)
-  const rowNodes = useRef(new Map<string, View>())
-  const rowRefs = useRef(new Map<string, RowRef>())
+  const { nodes: rowNodes, refFor: rowRef } = useNodeRefs()
+  const { nodes: focusNodes, refFor: focusRef } = useNodeRefs()
   const committed = useRef({ reveal, resetKey })
 
   // A layout effect, so a reset never paints a frame at the old offset. A row
@@ -44,15 +79,19 @@ export function useRevealScroll(reveal: RevealRequest | null, resetKey: string) 
   useLayoutEffect(() => {
     const previous = committed.current
     committed.current = { reveal, resetKey }
-    const row =
-      reveal != null && reveal !== previous.reveal ? rowNodes.current.get(reveal.id) : undefined
+    const revealed = reveal != null && reveal !== previous.reveal ? reveal.id : null
+    const row = revealed != null ? rowNodes.current.get(revealed) : undefined
+    const focusTarget = revealed != null ? focusNodes.current.get(revealed) : undefined
     const content = contentRef.current
     if (row != null && content != null) {
+      const claimant = Platform.OS === 'web' ? document.activeElement : null
       let cancelled = false
       void accordionSettled(content).then(() => {
         if (cancelled) return
         row.measureLayout(content, (_x, y) => {
-          if (!cancelled) scrollRef.current?.scrollTo({ y, animated: true })
+          if (cancelled) return
+          scrollRef.current?.scrollTo({ y, animated: true })
+          if (focusTarget != null) focusRow(focusTarget, claimant)
         })
       })
       return () => {
@@ -61,22 +100,7 @@ export function useRevealScroll(reveal: RevealRequest | null, resetKey: string) 
     }
     if (resetKey !== previous.resetKey) scrollRef.current?.scrollTo({ y: 0, animated: false })
     return undefined
-  }, [reveal, resetKey])
+  }, [reveal, resetKey, rowNodes, focusNodes])
 
-  // One callback per id: a fresh one each render would detach and reattach every row.
-  const rowRef = useCallback((id: string): RowRef => {
-    const cached = rowRefs.current.get(id)
-    if (cached != null) return cached
-    const ref: RowRef = (node) => {
-      rowNodes.current.set(id, node)
-      return () => {
-        if (rowNodes.current.get(id) === node) rowNodes.current.delete(id)
-        if (rowRefs.current.get(id) === ref) rowRefs.current.delete(id)
-      }
-    }
-    rowRefs.current.set(id, ref)
-    return ref
-  }, [])
-
-  return { scrollRef, contentRef, rowRef }
+  return { scrollRef, contentRef, rowRef, focusRef }
 }

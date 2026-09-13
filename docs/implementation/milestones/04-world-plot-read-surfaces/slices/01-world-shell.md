@@ -244,17 +244,20 @@ it should be.
   (`happening_awareness`, `happening_involvements`,
   `character_relationships`) to the rows they connect; per-turn
   retrieval-count bumps are excluded.
-- C1 excludes deltas of reversed runs (`pipeline_runs.outcome`
-  aborted, failed, or recovered) — reversal keeps the log.
+- C1 excluded deltas of reversed runs while reversal kept the log;
+  reversal now prunes them
+  ([`data-model.md → Entry mutability & rollback`](../../../../data-model.md#entry-mutability--rollback)),
+  so the filter is gone.
 - C1 refetch is keyed on a monotonic `generationStore.settleCount`
   (bumped when a run leaves `txState` or a reversal settles), shared
   by every mounted consumer.
-- Known C1 limitations: a manual scene edit on the last two replies
-  reads as a transition and tints (canon says manual edits don't —
-  see [`entity.md → Recently-classified row accent`](../../../../ui/patterns/entity.md#recently-classified-row-accent)
-  and [triage](../../../triage.md)); a classifier happening delete
-  removes its links inside its own delta, so linked characters don't
-  tint.
+- Known C1 limitation: a classifier happening delete removes its
+  links inside its own delta, so linked characters don't tint.
+- **Manual scene edits** (developer, 2026-09-13) — C1 diffs a reply's
+  scene as the classifier left it, rebuilt from the reply's own
+  `user_edit` undo payloads, and `useRowSignals` diffs the entries its
+  window was read against, so a hand edit tints nothing, per
+  [`entity.md → Recently-classified row accent`](../../../../ui/patterns/entity.md#recently-classified-row-accent).
 - **D3** the route is `/world/[branchId]?kind&id&tab`; **D4** the
   contextual `Add entity…` / `Add lore…` entries open the `[+]`
   `ImporterMenu` via a controlled `open` seam (the rn-primitives
@@ -307,10 +310,9 @@ it should be.
   E2E instead.
 - Breadcrumb: every segment shares one vertical box (`py-2` tablet and
   desktop, 44px minimum on phone), so the sub-header holds its height
-  across select and deselect; the root grows to fill its row, so in the
-  sub-header the current segment's 70% cap measures the bar, not itself
-  (the top bar's content-sized title slot doesn't — see
-  [triage](../../../triage.md)).
+  across select and deselect; the root grows to fill its row, and the
+  top bar's title slot grows too unless center extras sit beside it, so
+  the current segment's 70% cap measures the bar, not itself.
 - The sub-header renders taller than the top bar because
   `MasterDetailLayout`'s wrapper pads too — see
   [Slice 4.3](./03-plot-panel.md)'s Open questions.

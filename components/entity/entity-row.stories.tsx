@@ -70,7 +70,11 @@ export const LeadInSceneFresh: Story = {
     signals: { lead: 'you', inScene: true, recentlyClassified: 'fresh' },
   },
   play: async ({ args, canvasElement }) => {
-    expect(screen.getByText('You')).toBeInTheDocument()
+    const lead = screen.getByText('You').parentElement
+    expect(lead).toHaveClass('bg-accent')
+    expect(lead?.querySelector('svg')).not.toBeNull()
+    // The active status pill keeps the default tone, so the two never read alike.
+    expect(screen.getByText('active').parentElement).not.toHaveClass('bg-accent')
     expect(canvasElement.querySelector('.left-0.bg-success')).not.toBeNull()
     expect(screen.getByRole('button', { name: 'Kael' })).toHaveClass('bg-recently-classified-bg')
     await userEvent.click(screen.getByRole('button', { name: 'Kael' }))
