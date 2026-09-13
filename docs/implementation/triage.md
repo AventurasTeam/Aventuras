@@ -69,6 +69,6 @@ slice-planning gate forces its resolution before that slice is planned.
   2026-09-13 triage pass named `ImporterMenu`'s; the other consumers
   were not checked.
 - **Main's strings are English.** (2026-09-13) `electron/app-menu.ts`
-  hardcodes the packaged menu's `View` label and
+  hardcodes the packaged menu's `File` and `View` labels and
   `electron/boot-failure.ts` the failed-boot dialog's title, and main
-  has no i18n, so both stay English whatever the app locale.
+  has no i18n, so they stay English whatever the app locale.

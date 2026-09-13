@@ -15,7 +15,17 @@ export function appMenuTemplate(platform: NodeJS.Platform): MenuItemConstructorO
       { role: 'togglefullscreen' },
     ],
   }
-  // macOS routes ⌘Q through the app menu and text-field ⌘C / ⌘V / ⌘A through Edit.
-  if (platform === 'darwin') return [{ role: 'appMenu' }, { role: 'editMenu' }, view]
-  return [view]
+  // A key combo exists only on its menu item. macOS routes ⌘Q through the app menu, ⌘W through
+  // File, ⌘M through Window and text-field ⌘C / ⌘V / ⌘A through Edit.
+  if (platform === 'darwin') {
+    return [
+      { role: 'appMenu' },
+      { role: 'fileMenu' },
+      { role: 'editMenu' },
+      view,
+      { role: 'windowMenu' },
+    ]
+  }
+  // Ctrl+W and Ctrl+Q; quit takes no accelerator on Windows, where Alt+F4 is native.
+  return [{ label: 'File', submenu: [{ role: 'close' }, { role: 'quit' }] }, view]
 }

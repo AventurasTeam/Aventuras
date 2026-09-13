@@ -39,6 +39,8 @@ test.describe('application menu', () => {
         expect(roles).not.toContain(banned)
       }
       expect(roles).toEqual(expect.arrayContaining(['zoomin', 'zoomout', 'resetzoom']))
+      // Ctrl+W and Ctrl+Q exist only as these items' accelerators.
+      expect(roles).toEqual(expect.arrayContaining(['close', 'quit']))
       expect(autoHide).toBe(true)
     } else {
       expect(roles).toContain('reload')

@@ -16,22 +16,23 @@ describe('appMenuTemplate', () => {
     'binds no reload or devtools on %s, and keeps zoom',
     (platform) => {
       const all = roles(appMenuTemplate(platform))
-      for (const banned of ['reload', 'forceReload', 'toggleDevTools', 'viewMenu', 'windowMenu']) {
+      for (const banned of ['reload', 'forceReload', 'toggleDevTools', 'viewMenu']) {
         expect(all).not.toContain(banned)
       }
       expect(all).toEqual(expect.arrayContaining(['zoomIn', 'zoomOut', 'resetZoom']))
     },
   )
 
-  it('keeps the app and Edit menus on macOS, where ⌘Q and text-field ⌘C / ⌘V live', () => {
+  it('keeps the app, File, Edit and Window menus on macOS, where ⌘Q, ⌘W, ⌘M and ⌘C / ⌘V live', () => {
     expect(roles(appMenuTemplate('darwin'))).toEqual(
-      expect.arrayContaining(['appMenu', 'editMenu']),
+      expect.arrayContaining(['appMenu', 'fileMenu', 'editMenu', 'windowMenu']),
     )
   })
 
-  it('carries only the View menu on Linux and Windows', () => {
+  // Menu accelerators are the only binding: a key combo without its menu item does nothing.
+  it('binds Close and Quit on Linux and Windows, which carry Ctrl+W and Ctrl+Q', () => {
     for (const platform of ['linux', 'win32'] as const) {
-      expect(appMenuTemplate(platform).map((item) => item.label ?? item.role)).toEqual(['View'])
+      expect(roles(appMenuTemplate(platform))).toEqual(expect.arrayContaining(['close', 'quit']))
     }
   })
 })
