@@ -2,7 +2,7 @@
   import { ui } from '$lib/stores/ui.svelte'
   import { story } from '$lib/stores/story.svelte'
   import { syncService } from '$lib/services/sync'
-  import { exportService } from '$lib/services/export'
+  import { importSyncedStory, pushSyncedStory } from '$lib/services/syncActions'
   import { getVersion } from '@tauri-apps/api/app'
   import {
     QrCode,
@@ -38,9 +38,9 @@
   /**
    * Settle which pack the incoming story binds to, before the transfer writes or deletes anything.
    *
-   * This runs ahead of `createPreSyncBackup`/`deleteStory` on purpose. Both receive paths remove
-   * the story they are replacing *before* importing, so a question asked any later would let a
-   * cancel destroy the copy being replaced and put nothing in its place.
+   * This runs ahead of `deleteStory` on purpose. Both receive paths remove the story they are
+   * replacing *before* importing, so a question asked any later would let a cancel destroy the
+   * copy being replaced and put nothing in its place.
    *
    * Sync can ask at all because it is user-driven: the payload is already downloaded and no
    * remote party is waiting. A background sync would need a different answer here.
@@ -226,16 +226,8 @@
     showReceivedConflict = false
 
     try {
-      // If replacing, delete the existing story first
       const existingId = await syncService.findStoryIdByTitle(receivedStoryPreview.title)
-      if (existingId) {
-        await syncService.createPreSyncBackup(existingId)
-        await syncService.deleteStory(existingId)
-      }
-
-      const result = await exportService.importFromContent(receivedStoryJson, true, {
-        resolvePackBinding: async () => packBinding,
-      })
+      const result = await importSyncedStory(receivedStoryJson, existingId, packBinding)
 
       if (result.success) {
         await story.loadAllStories()
@@ -474,18 +466,8 @@
         return
       }
 
-      // If replacing, delete the existing story first
       const existingId = await syncService.findStoryIdByTitle(selectedRemoteStory.title)
-      if (existingId) {
-        await syncService.createPreSyncBackup(existingId)
-        await syncService.deleteStory(existingId)
-      }
-
-      // Import using existing import service
-      // Use skipImportedSuffix=true so synced stories keep their original title
-      const result = await exportService.importFromContent(storyJson, true, {
-        resolvePackBinding: async () => packBinding,
-      })
+      const result = await importSyncedStory(storyJson, existingId, packBinding)
 
       if (result.success) {
         await story.loadAllStories()
@@ -509,14 +491,7 @@
     error = null
 
     try {
-      // Create backup before pushing (on local device)
-      await syncService.createPreSyncBackup(selectedLocalStory.id)
-
-      // Export the story
-      const storyJson = await syncService.exportStoryToJson(selectedLocalStory.id)
-
-      // Push to remote
-      await syncService.pushStory(connection, storyJson)
+      await pushSyncedStory(connection, selectedLocalStory.id)
 
       syncSuccess = true
       syncMessage = `Successfully pushed "${selectedLocalStory.title}"`
@@ -647,8 +622,8 @@
             </div>
             <h3 class="mb-2 text-lg font-semibold">Story Already Exists</h3>
             <p class="text-muted-foreground mb-4">
-              A story named "{receivedStoryPreview.title}" already exists on this device. Replacing
-              it will create a "Pre-sync backup" checkpoint first. Continue?
+              A story named "{receivedStoryPreview.title}" already exists on this device. Replace it
+              with the received story?
             </p>
             <div class="flex gap-3">
               <Button variant="outline" onclick={discardReceivedStory}>Cancel</Button>
@@ -740,7 +715,7 @@
               </div>
               <p class="text-sm">
                 A story named "{conflictStoryTitle}" already exists on this device. Pulling will
-                replace it after creating a "Pre-sync backup" checkpoint.
+                replace it with the remote story.
               </p>
               <div class="mt-3 flex gap-2">
                 <Button variant="secondary" size="sm" onclick={cancelConflict}>Cancel</Button>
