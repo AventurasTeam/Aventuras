@@ -923,8 +923,8 @@ in-progress (currentPhase iterates)
    └── user-initiated cancel ───────────────────► abortRun (reason: user-cancel)
                                                       │  abortController.abort()
                                                       │  drain in-flight phases (return aborted)
-                                                      │  reverse-replay deltas (single SQLite txn)
-                                                      │  UPDATE pipeline_runs SET finished_at, outcome
+                                                      │  reverse-replay deltas and UPDATE pipeline_runs
+                                                      │    SET finished_at, outcome (one SQLite txn)
                                                       │  remove run from txState
                                                       │  emit run_complete (outcome: 'aborted' | 'failed')
 ```
@@ -946,7 +946,10 @@ CREATE TABLE pipeline_runs (
 
 - `beginRun` writes the row with `finished_at = NULL` and populates
   `story_id` from the run's calling context.
-- `commitRun` / `abortRun` set `finished_at` + `outcome`.
+- `commitRun` / `abortRun` set `finished_at` and `outcome`.
+  `abortRun` writes them inside the reversal's own transaction, so a
+  reversal that rolls back leaves the row open for the
+  [startup recovery pass](#startup-recovery-pass) to retry.
 
 Atomicity windows worth being honest about:
 
@@ -1000,28 +1003,30 @@ async function recoverInFlightRuns(): Promise<RecoveryReport> {
 
   for (const orphan of orphans) {
     try {
-      const deltaCount = await reverseReplayDeltas(orphan.action_id)
-      if (deltaCount === 0) {
-        // Pre-first-delta orphan: no diagnostic value in retaining the row.
-        await db.exec('DELETE FROM pipeline_runs WHERE run_id = ?', [orphan.run_id])
-      } else {
-        await db.exec(
-          "UPDATE pipeline_runs SET finished_at = ?, outcome = 'recovered' WHERE run_id = ?",
-          [Date.now(), orphan.run_id],
-        )
-        reversed.push({
-          runId: orphan.run_id,
-          kind: orphan.kind,
-          actionId: orphan.action_id,
-          storyId: orphan.story_id,
-          deltas: deltaCount,
-        })
-        logger.debug('pipeline.recovered', {
-          runId: orphan.run_id,
-          kind: orphan.kind,
-          deltas: deltaCount,
-        })
-      }
+      // The marker write joins the reversal's transaction, so it never claims a
+      // reversal that rolled back. A pre-first-delta orphan's row is deleted
+      // instead: it has no diagnostic value.
+      const deltaCount = await reverseReplayDeltas(orphan.action_id, (count) => [
+        count === 0
+          ? { sql: 'DELETE FROM pipeline_runs WHERE run_id = ?', params: [orphan.run_id] }
+          : {
+              sql: "UPDATE pipeline_runs SET finished_at = ?, outcome = 'recovered' WHERE run_id = ?",
+              params: [Date.now(), orphan.run_id],
+            },
+      ])
+      if (deltaCount === 0) continue
+      reversed.push({
+        runId: orphan.run_id,
+        kind: orphan.kind,
+        actionId: orphan.action_id,
+        storyId: orphan.story_id,
+        deltas: deltaCount,
+      })
+      logger.debug('pipeline.recovered', {
+        runId: orphan.run_id,
+        kind: orphan.kind,
+        deltas: deltaCount,
+      })
     } catch (e) {
       failures.push({ runId: orphan.run_id, kind: orphan.kind, error: e })
       logger.error('pipeline.recovery_failed', {
@@ -1030,7 +1035,8 @@ async function recoverInFlightRuns(): Promise<RecoveryReport> {
         actionId: orphan.action_id,
         error: e,
       })
-      // Orphan row stays with finished_at = NULL; next boot retries.
+      // The marker write rolled back with the reversal, so finished_at stays
+      // NULL and the next boot retries.
     }
   }
   return { reversed, failures }
@@ -1193,37 +1199,64 @@ in tests if a state-library swap ever happens.)
 ### Reverse-replay
 
 ```ts
-async function reverseReplayDeltas(actionId: string): Promise<number> {
+async function reverseReplayDeltas(
+  actionId: string,
+  settleOps: (deltaCount: number) => SqlOp[] = () => [],
+): Promise<number> {
   const deltas = await db.query('SELECT * FROM deltas WHERE action_id = ? ORDER BY seq DESC', [
     actionId,
   ])
-  if (deltas.length === 0) return 0
+  // Called even at zero deltas: the caller may still have a marker to settle.
+  const settle = settleOps(deltas.length)
+  if (deltas.length === 0 && settle.length === 0) return 0
 
   await db.exec('BEGIN')
   try {
     for (const delta of deltas) {
       applyUndo(delta.target_table, delta.target_id, delta.undo_payload)
     }
+    await db.exec('DELETE FROM deltas WHERE action_id = ?', [actionId])
+    for (const op of settle) await db.exec(op.sql, op.params)
     await db.exec('COMMIT')
   } catch (e) {
     await db.exec('ROLLBACK')
     throw new DeltaReplayError('Reverse-replay failed', { cause: e, actionId })
   }
-  return deltas.length
 
-  // Runtime callers re-fetch affected rows into Zustand from the reversed
-  // SQLite state. Startup recovery has no store state to refresh — the
-  // first story-open after boot hydrates fresh.
+  // The action layer patches the held branch's store rows after the commit.
+  // Startup recovery runs before any branch loads; the first story-open
+  // after boot hydrates fresh.
+  try {
+    patchStores(deltas)
+  } catch (e) {
+    // The reversal stands; only the store sync failed.
+    throw new DeltaReplayError('Post-commit patch sync failed', {
+      cause: e,
+      actionId,
+      committed: true,
+    })
+  }
+  return deltas.length
 }
 ```
 
-The primitive is substrate-level and consumed by two callers:
+The primitive is substrate-level and consumed by three callers:
 runtime `abortRun` (re-wraps the thrown `DeltaReplayError` as a
 `PipelineError` so the orchestrator's pipeline-failure path handles
-it) and startup `recoverInFlightRuns` (catches `DeltaReplayError`
-directly and routes to the recovery-failure policy above). The
-return value is the delta count so callers can distinguish a
-pre-first-delta zero-delta case from a real recovery.
+it), startup `recoverInFlightRuns` (catches `DeltaReplayError`
+directly and routes to the recovery-failure policy above), and
+`submitTurn`, which reverses a turn refused at admission since no run
+was reserved to do it. The two pipeline callers pass their
+`pipeline_runs` marker write as `settleOps`, so it commits or rolls
+back with the reversal. The return value is the delta count so
+callers can distinguish a pre-first-delta zero-delta case from a real
+recovery.
+
+`committed: true` on a `DeltaReplayError` means the reversal and its
+prune landed and only the store sync after them failed. `abortRun`
+still reports the run failed, but does not leave it to boot recovery,
+since its marker settled with the reversal. `submitTurn` logs either
+kind and still returns the rejection.
 
 **Undoing a `create` is a bare row delete, and consults no cascade.**
 A domain may register a cascade hook for its child rows, but that hook
