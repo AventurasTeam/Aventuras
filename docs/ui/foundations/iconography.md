@@ -215,12 +215,18 @@ Source scratch in
 Source scratch in
 [`../patterns/entity.md → Entity kind indicators`](../patterns/entity.md#entity-kind-indicators--icons-not-text).
 
-| Kind      | Scratch | Lucide name |
-| --------- | ------- | ----------- |
-| character | `☺`     | `User`      |
-| location  | `⌂`     | `MapPin`    |
-| item      | `◆`     | `Package`   |
-| faction   | `⚑`     | `Flag`      |
+| Kind      | Scratch | Lucide name  |
+| --------- | ------- | ------------ |
+| character | `☺`     | `User`       |
+| location  | `⌂`     | `MapPin`     |
+| item      | `◆`     | `Package`    |
+| faction   | `⚑`     | `Flag`       |
+| lore      | `📜`    | `ScrollText` |
+
+Lore isn't an entity kind, but its rows and detail head sit beside
+entity rows and take their glyph from this set. Not `BookOpen`: that
+is the app logo, and it reads as "story" (see the Story Settings
+rationale above).
 
 ### Common UI affordances
 

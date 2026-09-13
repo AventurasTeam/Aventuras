@@ -66,6 +66,7 @@ Wireframe placeholder glyphs:
 | location  | ⌂     |
 | item      | ◆     |
 | faction   | ⚑     |
+| lore      | 📜    |
 
 Visual identity (session 5) picked the canonical Lucide names for
 this scratch table — see

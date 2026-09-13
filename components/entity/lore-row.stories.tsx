@@ -45,6 +45,8 @@ export const Default: Story = {
   play: async () => {
     const row = screen.getByRole('button', { name: 'The Veil' })
     expect(row).toBeInTheDocument()
+    // The shared lore glyph, named through the locale rather than the raw kind id.
+    expect(screen.getByRole('img', { name: 'Lore' })).toBeInTheDocument()
     expect(screen.getByText('cosmology')).toBeInTheDocument()
     expect(
       screen.getByText(

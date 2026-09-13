@@ -54,10 +54,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **No shared lore kind glyph.** (2026-09-11)
-  [`iconography.md → Entity kind glyphs`](../ui/foundations/iconography.md#entity-kind-glyphs)
-  has no lore glyph; `BookOpen` (the app logo) is inlined in `LoreRow`
-  and `WorldDetailPlaceholder` — needs a shared kind icon covering lore.
 - **catppuccin-latte's success and warning pairs fail contrast.**
   (2026-09-13) White on `#40a02b` measures 3.3:1 and on `#df8e1d`
   2.6:1, under the 4.5:1 that filled Tags' `text-xs` labels need
