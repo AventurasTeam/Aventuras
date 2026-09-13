@@ -652,10 +652,16 @@ export default function ReaderComposerRoute() {
         if (result.outcome === 'failed') await showTurnFailure(result.error, submission)
         else if (result.outcome === 'rejected' && !result.converged) {
           // The refused turn's user_action is still in the branch, so a Retry would duplicate
-          // it: the same hazard regenerate's unconverged arm refuses.
+          // it: the same hazard regenerate's unconverged arm refuses. A failed resync must not
+          // reach the catch below either, since its failure entry offers that Retry.
           setLastSubmission(null)
           toast.error(t('reader:submitUnconverged'))
-          await reload()
+          await reload().catch((err: unknown) =>
+            logger.error('pipeline.submit_resync_failed', {
+              branchId,
+              error: err instanceof Error ? err.message : String(err),
+            }),
+          )
         } else if (result.outcome === 'rejected')
           await showTurnFailure(
             {
