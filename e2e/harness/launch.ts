@@ -225,9 +225,19 @@ export function exitWithin(proc: ChildProcess, ms: number): Promise<ProcessExit 
   })
 }
 
-/** SIGTERM, then SIGKILL past `graceMs`, so no spawned app outlives its test. */
+// SIGKILL can't be caught: a process still up this long after one is stuck in the kernel.
+const SIGKILL_EXIT_MS = 5_000
+
+/**
+ * SIGTERM, then SIGKILL past `graceMs`. Resolves only once the process has exited, so no spawned
+ * app outlives its test; throws if even SIGKILL doesn't end it.
+ */
 export async function stopAppProcess(proc: ChildProcess, graceMs = 10_000): Promise<void> {
   if (proc.pid === undefined || proc.exitCode != null || proc.signalCode != null) return
   proc.kill()
-  if ((await exitWithin(proc, graceMs)) == null) proc.kill('SIGKILL')
+  if ((await exitWithin(proc, graceMs)) != null) return
+  proc.kill('SIGKILL')
+  if ((await exitWithin(proc, SIGKILL_EXIT_MS)) == null) {
+    throw new Error(`the app process (pid ${proc.pid}) was still running after SIGKILL`)
+  }
 }
