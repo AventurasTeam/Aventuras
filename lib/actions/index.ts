@@ -9,7 +9,11 @@ export { applyUndoPayload, computeUndoPayload } from './delta/delta-encoding'
 export { __resetRegistrationGuard, registerAllDomains } from './delta/registrations'
 export { __resetRegistry, type StorePatch } from './delta/registry'
 export { type RedoSnapshot } from './delta/redo'
-export { DeltaReplayError, reverseReplayDeltas } from './delta/reverse-replay'
+export {
+  DeltaReplayError,
+  describeDeltaReplayError,
+  reverseReplayDeltas,
+} from './delta/reverse-replay'
 export {
   addProvider,
   ensureProviderEmbeddingDim,

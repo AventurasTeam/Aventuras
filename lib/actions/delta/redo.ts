@@ -119,9 +119,8 @@ export async function applyRedo(
     ...plan.ops,
     ...invalidation.extraOps,
   ])
-  // Past this point the redo is committed; a patcher throw is a store-sync
-  // failure, not a redo failure. Flag committed so redoLastAction still pops
-  // the (now-applied) snapshot instead of leaving it for a doomed retry.
+  // Past this point the redo is committed, so a patcher throw is a store-sync failure:
+  // redoLastAction still pops the (now-applied) snapshot instead of leaving it for a doomed retry.
   try {
     for (const { delta, rowBeforeUndo } of snapshots) {
       const entry = resolveByTable(delta.targetTable)
@@ -155,7 +154,7 @@ export async function applyRedo(
     throw new DeltaReplayError('Post-commit redo patch sync failed', {
       cause: e,
       actionId: snapshots[0]?.delta.actionId ?? 'redo',
-      committed: true,
+      stage: 'store-sync',
     })
   }
 }

@@ -16,7 +16,12 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { entitiesStore, happeningAwarenessStore, happeningInvolvementsStore } from '@/lib/stores'
 
 import { applyDeltaAction } from './apply-delta-action'
-import { DeltaReplayError, reverseAndPruneDeltaRows, reverseReplayDeltas } from './reverse-replay'
+import {
+  DeltaReplayError,
+  describeDeltaReplayError,
+  reverseAndPruneDeltaRows,
+  reverseReplayDeltas,
+} from './reverse-replay'
 import type { PipelineAction } from '../types'
 
 afterEach(() => {
@@ -412,6 +417,49 @@ describe('reverseReplayDeltas', () => {
       .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'entry_1')))
     expect(restored).toBeDefined()
     expect(restored.metadata).toEqual({ sceneEntities: [], currentLocationId: null, worldTime: 5 })
+  })
+})
+
+describe('describeDeltaReplayError', () => {
+  it('reports a store-sync throw after the commit as committed', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    await createKnight(ctx, 'act_rev')
+    const patchSpy = vi.spyOn(entitiesStore, 'patch').mockImplementation(() => {
+      throw new Error('store sync boom')
+    })
+
+    const error: unknown = await reverseReplayDeltas('act_rev', ctx).catch((e: unknown) => e)
+    patchSpy.mockRestore()
+
+    expect(describeDeltaReplayError(error)).toEqual({
+      detail: 'Error: store sync boom',
+      committed: true,
+    })
+  })
+
+  it('reports a transaction that never committed as uncommitted', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await seed(db)
+    await createKnight({ db, runInTransaction }, 'act_rev')
+    const locked = {
+      db,
+      runInTransaction: async () => {
+        throw new Error('database is locked')
+      },
+    }
+
+    const error: unknown = await reverseReplayDeltas('act_rev', locked).catch((e: unknown) => e)
+
+    expect(describeDeltaReplayError(error)).toEqual({
+      detail: 'Error: database is locked',
+      committed: false,
+    })
+  })
+
+  it('leaves an error that is not a replay failure to the caller', () => {
+    expect(describeDeltaReplayError(new Error('unrelated'))).toBeUndefined()
   })
 })
 
