@@ -954,6 +954,37 @@ Parked 2026-09-13 from the PR #513 review; the first pipeline that
 declares a `parallel:` group, or a cancel that visibly lags, is the
 signal to revisit.
 
+#### A store sync that fails after a committed reversal leaves stores stale
+
+Every reversal commits its database writes first, then patches the
+in-memory stores to match (`emitCommittedPatches`, and redo's own
+loop). If a patch throws, the database is right but the stores are
+not: the sync stops at the first failing patch, and the reader's
+recovery reloads only `entriesStore` (`reload()` reads recent entries),
+so rows the reversed action touched in other stores (entities, lore,
+happenings) stay on screen until the story is reopened. A user cancel
+is also relabelled: `abortRun` records `'aborted'` in
+`pipeline_runs.outcome` inside the transaction, then reports
+`'failed'` on the event bus and in logs, so the reader shows a failure
+entry with Retry instead of handing the draft back. Retry is safe, as
+the reversal already landed.
+
+Unreachable today: patchers are Map updates plus a Zustand `setState`,
+and no patched store has a subscriber that can throw. Zustand runs
+listeners inside `setState` without a try/catch, so one would be
+enough. Nothing reads `pipeline_runs.outcome` either.
+
+The fix is a branch-wide resync on any committed store-sync failure,
+rehydrating every patched store for the loaded branch; a cancel can
+then keep its `'aborted'` outcome. Relabelling the outcome alone is
+the wrong remedy: the reader resyncs only on `'failed'`, so `'aborted'`
+without the resync leaves the stale rows showing.
+
+Parked 2026-09-13 from the PR #513 review; a delta-patched store
+gaining a synchronous subscriber or patch logic that can throw
+(validation, a must-exist invariant), or anything starting to read
+`pipeline_runs.outcome`, is the signal to revisit.
+
 ### Memory pipeline (parked)
 
 Subsystem-scoped deferrals for the memory pipeline (retrieval,
