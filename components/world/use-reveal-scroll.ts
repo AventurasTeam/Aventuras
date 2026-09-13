@@ -30,9 +30,12 @@ async function accordionSettled(node: View): Promise<void> {
 
 // A reveal is a go-to, so focus follows it; the collapsed-tier badge that asks for one unmounts
 // on expand. Web moves keyboard focus (preventScroll leaves the animated scroll in charge);
-// native moves the screen reader's.
-function focusRow(target: View): void {
+// native moves the screen reader's. The move lands only once the accordion settles, so on web it
+// yields to any surface that took focus meanwhile: a menu opened in that gap would close.
+function focusRow(target: View, claimant: Element | null): void {
   if (Platform.OS === 'web') {
+    const active = document.activeElement
+    if (active != null && active !== claimant && active !== document.body) return
     ;(target as unknown as Partial<HTMLElement>).focus?.({ preventScroll: true })
     return
   }
@@ -81,13 +84,14 @@ export function useRevealScroll(reveal: RevealRequest | null, resetKey: string) 
     const focusTarget = revealed != null ? focusNodes.current.get(revealed) : undefined
     const content = contentRef.current
     if (row != null && content != null) {
+      const claimant = Platform.OS === 'web' ? document.activeElement : null
       let cancelled = false
       void accordionSettled(content).then(() => {
         if (cancelled) return
         row.measureLayout(content, (_x, y) => {
           if (cancelled) return
           scrollRef.current?.scrollTo({ y, animated: true })
-          if (focusTarget != null) focusRow(focusTarget)
+          if (focusTarget != null) focusRow(focusTarget, claimant)
         })
       })
       return () => {

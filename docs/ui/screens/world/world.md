@@ -673,6 +673,8 @@ the action surface. The badge is the bridge — keeps signal
 visible when accordions hide rows. Every jump — pill, badge, or
 the strip's `Collides with` link — moves focus to the row it
 lands on: keyboard focus on web, the screen reader's on native.
+On web, a surface that takes focus before the jump lands (a menu
+opened in the meantime) keeps it.
 
 A "Needs review" filter chip was considered and rejected:
 filter chips are for browsing modes, and a collision is an
