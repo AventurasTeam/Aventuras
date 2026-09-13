@@ -181,14 +181,20 @@ export function spawnAppProcess(userDataDir: string): ChildProcess {
   })
 }
 
-/** Resolves with the exit code, or `null` if the process is still running after `ms`. */
+/**
+ * Resolves with the exit code — `-1` when a signal ended it, so a crash never reads as a clean
+ * quit — or `null` if the process is still running after `ms`.
+ */
 export function exitWithin(proc: ChildProcess, ms: number): Promise<number | null> {
-  if (proc.exitCode != null) return Promise.resolve(proc.exitCode)
+  const settled = (code: number | null) => code ?? -1
+  if (proc.exitCode != null || proc.signalCode != null) {
+    return Promise.resolve(settled(proc.exitCode))
+  }
   return new Promise((resolve) => {
     const timer = setTimeout(() => resolve(null), ms)
     proc.once('exit', (code) => {
       clearTimeout(timer)
-      resolve(code ?? 0)
+      resolve(settled(code))
     })
   })
 }
