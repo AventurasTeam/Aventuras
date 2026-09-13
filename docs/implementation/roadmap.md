@@ -1084,6 +1084,18 @@ own.
   [`mobile/platform.md → Accessibility`](../ui/foundations/mobile/platform.md#accessibility)
   already leaves landmark structure to the per-screen passes. Raised
   2026-09-11 by Slice 4.1.
+- **M9.5 — A removable `Tag`'s × likely misses the phone tap floor on
+  Android.** [`chips.md → Tag`](../ui/patterns/chips.md#tag--pill-labeled-content)
+  promises the × its own 44 px target. It is a 20 px circle with
+  `hitSlop={8}`, 36 px on paper, and its parent is the bordered pill
+  (about 22 px tall); React Native never lets slop reach past the
+  parent's bounds, so on Android the target is probably the pill's
+  height. Needs a device check first. If the clip is real, the call is
+  taller removable Tags on phone (the wizard's cast and lore tag
+  fields) or a lower promise in chips.md. Pressable pill bodies took
+  `IconAction`'s visible + 2 × slop rule in the same pass, equally
+  unverified on a device. Raised 2026-09-11 by Slice 4.1; split
+  2026-09-13.
 - **M9.5 — The retrieval pass has never been measured on mobile.** Every
   figure in
   [`retrieval.md → Per-turn cost budget`](../memory/retrieval.md#per-turn-cost-budget)

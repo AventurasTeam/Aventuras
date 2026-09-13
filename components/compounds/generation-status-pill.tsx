@@ -3,7 +3,7 @@ import { useRef, type ComponentRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Spinner } from '@/components/ui/spinner'
-import { Tag, type TagTone } from '@/components/ui/tag'
+import { Tag, TAG_HIT_SLOP, type TagTone } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
 import { t } from '@/lib/i18n'
@@ -144,7 +144,7 @@ export function GenerationStatusPill({
     if (onCancel == null || cancelLabel == null) return tag
     return (
       <Popover ariaLabel={phase}>
-        <PopoverTrigger ref={triggerRef} accessibilityLabel={phase}>
+        <PopoverTrigger ref={triggerRef} accessibilityLabel={phase} hitSlop={TAG_HIT_SLOP}>
           {tag}
         </PopoverTrigger>
         <PopoverContent>

@@ -54,13 +54,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **Pressable `Tag` misses the phone tap floor.** (2026-09-11) A
-  20 dp pill with `hitSlop={8}` reaches only ~36 dp against the
-  [tap-target floor](../ui/foundations/spacing.md#tap-target-on-native)
-  ([`touch.md`](../ui/foundations/mobile/touch.md#touch-target-floor-on-phone)),
-  and Android's `hitSlop` can't extend past the parent anyway. Affects
-  the review pill and the generation pill; fix is visible size, not
-  more slop.
 - **No shared lore kind glyph.** (2026-09-11)
   [`iconography.md → Entity kind glyphs`](../ui/foundations/iconography.md#entity-kind-glyphs)
   has no lore glyph; `BookOpen` (the app logo) is inlined in `LoreRow`

@@ -53,6 +53,10 @@ const TONE_CLASSES: Record<TagTone, { container: string; label: string; filled: 
   },
 }
 
+// A pressable pill is ~22px tall, so 2 × 11 reaches 44 by IconAction's visible + 2 × slop rule
+// (spacing.md); sideways stays small because adjacent pills sit 8px apart.
+export const TAG_HIT_SLOP = { top: 11, bottom: 11, left: 4, right: 4 }
+
 type TagProps = {
   /**
    * Visual tone:
@@ -187,6 +191,7 @@ export function Tag({
       accessibilityLabel={accessibilityLabel}
       disabled={disabled}
       onPress={onPress}
+      hitSlop={TAG_HIT_SLOP}
       className={baseClass}
     >
       {inner}
