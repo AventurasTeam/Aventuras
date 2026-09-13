@@ -60,6 +60,7 @@ import { clearTier3SelectionCache } from '$lib/services/ai'
 import { clearImageMarkerCache } from '$lib/services/image'
 import { GenerationLease } from '$lib/utils/generationLease'
 import { sameBranchScope, type BranchScope } from '$lib/utils/branchScope'
+import { checkpointDeletionBlocker } from '$lib/utils/storyNavigation'
 
 const log = createLogger('StoryStore')
 
@@ -3735,6 +3736,12 @@ class StoryStore {
 
   // Delete a checkpoint
   async deleteCheckpoint(checkpointId: string): Promise<void> {
+    const checkpoint = this.checkpoints.find((candidate) => candidate.id === checkpointId)
+    if (!checkpoint) throw new Error('Checkpoint not found')
+
+    const blockedReason = checkpointDeletionBlocker(checkpointId, this.branches)
+    if (blockedReason) throw new Error(blockedReason)
+
     await database.deleteCheckpoint(checkpointId)
     this.checkpoints = this.checkpoints.filter((cp) => cp.id !== checkpointId)
     log('Checkpoint deleted:', checkpointId)
@@ -4509,7 +4516,7 @@ class StoryStore {
     const checkpointsToDelete = this.checkpoints.filter(
       (checkpoint) => this.getCheckpointBranchId(checkpoint) === branchId,
     )
-    await Promise.all(checkpointsToDelete.map((cp) => database.deleteCheckpoint(cp.id)))
+    await database.deleteCheckpoints(checkpointsToDelete.map((checkpoint) => checkpoint.id))
     this.checkpoints = this.checkpoints.filter(
       (checkpoint) => this.getCheckpointBranchId(checkpoint) !== branchId,
     )

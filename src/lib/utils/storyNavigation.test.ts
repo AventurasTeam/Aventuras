@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import type { Branch, Checkpoint, StoryEntry } from '$lib/types'
-import { buildLandmarks, entryNumber, resolveEntryByNumber } from './storyNavigation'
+import {
+  branchesUsingCheckpoint,
+  buildLandmarks,
+  checkpointDeletionBlocker,
+  entryNumber,
+  resolveEntryByNumber,
+} from './storyNavigation'
 
 function entry(id: string, position: number, branchId: string | null = null): StoryEntry {
   return {
@@ -220,5 +226,41 @@ describe('buildLandmarks', () => {
     expect(row.checkpointId).toBe('cp')
     expect(row.branchId).toBe('br1')
     expect(row.branchName).toBe('Betrayal')
+  })
+})
+
+describe('branchesUsingCheckpoint', () => {
+  it('finds every branch created from the checkpoint', () => {
+    const first = branch('first', 'e1', 'First', 'shared-cp')
+    const second = branch('second', 'e1', 'Second', 'shared-cp')
+    const unrelated = branch('third', 'e2', 'Third', 'other-cp')
+
+    expect(branchesUsingCheckpoint('shared-cp', [first, unrelated, second])).toEqual([
+      first,
+      second,
+    ])
+  })
+
+  it('does not treat inherited visibility as use by a branch', () => {
+    const descendant = branch('descendant', 'later-entry', 'Descendant', 'fork-cp')
+
+    expect(branchesUsingCheckpoint('earlier-inherited-cp', [descendant])).toEqual([])
+  })
+
+  it('describes every branch that blocks deletion', () => {
+    expect(
+      checkpointDeletionBlocker('shared-cp', [
+        branch('first', 'e1', 'First', 'shared-cp'),
+        branch('second', 'e1', 'Second', 'shared-cp'),
+      ]),
+    ).toBe(
+      'Cannot delete this checkpoint because it was used to create branches "First", "Second". Delete those branches first.',
+    )
+  })
+
+  it('returns no blocker for a checkpoint unused in branch creation', () => {
+    expect(
+      checkpointDeletionBlocker('unused-cp', [branch('first', 'e1', 'First', 'other-cp')]),
+    ).toBe(null)
   })
 })

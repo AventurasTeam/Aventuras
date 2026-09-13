@@ -1520,7 +1520,17 @@ class DatabaseService {
 
   async deleteCheckpoint(id: string): Promise<void> {
     const db = await this.getDb()
-    await db.execute('DELETE FROM checkpoints WHERE id = ?', [id])
+    const result = await db.execute(
+      `DELETE FROM checkpoints
+       WHERE id = ?
+         AND NOT EXISTS (SELECT 1 FROM branches WHERE checkpoint_id = ?)`,
+      [id, id],
+    )
+    if ((result.rowsAffected ?? 0) !== 1) {
+      throw new Error(
+        'Checkpoint could not be deleted because it does not exist or was used to create a branch',
+      )
+    }
   }
 
   /**

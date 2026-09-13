@@ -104,7 +104,9 @@ The story is an append-only list of `StoryEntry` rows (`user_action`, `narration
   survive an app restart or a story switch. A checkpoint is anchored to its `lastEntryId` and is
   deleted with that entry - in the same transaction, alongside the chapters and embedded images
   that reference it. It is the fork point a branch would be created from, so an orphaned one
-  yields a branch pointing at an entry the database no longer holds. A retry backup is scoped to
+  yields a branch pointing at an entry the database no longer holds. A reader may delete a
+  checkpoint directly only until it is used to create a branch; the persistence delete repeats
+  that check so stale UI state cannot clear the branch's origin. A retry backup is scoped to
   a **branch** as well as a story: it records the branch it was taken on, is offered only there,
   and is refused on any other. Positions are reused by sibling branches after a fork, so a
   snapshot applied to the wrong branch deletes rows that merely share a number - and the
