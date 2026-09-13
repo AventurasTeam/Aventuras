@@ -1035,8 +1035,8 @@ async function recoverInFlightRuns(): Promise<RecoveryReport> {
         actionId: orphan.action_id,
         error: e,
       })
-      // The marker write rolled back with the reversal, so finished_at stays
-      // NULL and the next boot retries.
+      // An uncommitted failure rolled the marker back with the reversal, so
+      // finished_at stays NULL and the next boot retries.
     }
   }
   return { reversed, failures }
@@ -1092,10 +1092,12 @@ Recovery failures do mount it, under a different title; see
 
 When `reverseReplayDeltas` throws `DeltaReplayError` during startup
 recovery, the loop catches per-orphan and continues; boot is not
-blocked. The orphan row stays with `finished_at = NULL` so the next
-boot retries, and the failure emits `pipeline.recovery_failed` at
-`error` severity via observability — visible in the Diagnostics Hub
-Logs tab.
+blocked. An uncommitted failure leaves the orphan row with
+`finished_at = NULL` so the next boot retries. (A store-sync failure
+after the commit would already have settled it, but boot has no
+branch loaded, so there is no store to sync.) Either way the failure
+emits `pipeline.recovery_failed` at `error` severity via
+observability — visible in the Diagnostics Hub Logs tab.
 
 The modal reports it too. SQLite ROLLBACK undoes the partial
 reverse-replay, not the orphan's own writes: those stay on disk, and
@@ -1203,9 +1205,10 @@ async function reverseReplayDeltas(
   actionId: string,
   settleOps: (deltaCount: number) => SqlOp[] = () => [],
 ): Promise<number> {
-  const deltas = await db.query('SELECT * FROM deltas WHERE action_id = ? ORDER BY seq DESC', [
-    actionId,
-  ])
+  const deltas = await db.query(
+    'SELECT * FROM deltas WHERE action_id = ? ORDER BY log_position DESC',
+    [actionId],
+  )
   // Called even at zero deltas: the caller may still have a marker to settle.
   const settle = settleOps(deltas.length)
   if (deltas.length === 0 && settle.length === 0) return 0
