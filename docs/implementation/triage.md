@@ -61,10 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   and Android's `hitSlop` can't extend past the parent anyway. Affects
   the review pill and the generation pill; fix is visible size, not
   more slop.
-- **Breadcrumb truncation has no tap-to-tooltip.** (2026-09-11)
-  [`principles.md → Breadcrumb tappability`](../ui/principles.md#breadcrumb-tappability)'s
-  tap-to-tooltip for a truncated current breadcrumb segment is not
-  implemented anywhere.
 - **Lead badge looks like the active status pill.** (2026-09-11)
   The lead badge is a default outline `Tag` stand-in (canon: gold
   pill), which looks identical to the `active` status pill; "gold"

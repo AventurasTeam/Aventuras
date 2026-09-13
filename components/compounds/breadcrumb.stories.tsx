@@ -94,6 +94,10 @@ export const CurrentSegmentNeverLink: Story = {
     expect(screen.queryByRole('link', { name: 'Kael' })).toBeNull()
     await userEvent.click(screen.getByText('Kael'))
     expect(args.segments[1].onPress).not.toHaveBeenCalled()
+    // It fits, so it offers no full-text reveal either; two frames let ResizeObserver report.
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.queryByRole('dialog')).toBeNull()
   },
 }
 
@@ -154,6 +158,9 @@ export const LongTitleLongCurrent: Story = {
     const rect = currentEl.getBoundingClientRect()
     expect(Math.round(rect.right)).toBeLessThanOrEqual(Math.round(containerRect.right))
     expect(currentEl.scrollWidth).toBeGreaterThan(currentEl.clientWidth)
+    const full = 'Kael Vex, Warden of the Shattered Eastern Marches and Keeper of the Ninth Gate'
+    await userEvent.click(await screen.findByRole('button', { name: full }))
+    expect(await screen.findByRole('dialog', { name: 'Full text' })).toHaveTextContent(full)
   },
 }
 

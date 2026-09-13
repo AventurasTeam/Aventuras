@@ -1,6 +1,7 @@
 import { Fragment } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
+import { TruncatedText } from '@/components/compounds/truncated-text'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
 import { cn } from '@/lib/utils'
@@ -45,8 +46,7 @@ export function Breadcrumb({ segments, className, testID, size = 'base' }: Bread
             numberOfLines={1}
             size={size}
             className={cn(
-              'shrink',
-              current ? 'font-semibold text-fg-primary' : 'text-fg-muted',
+              'shrink text-fg-muted',
               interactive && Platform.select({ web: 'hover:text-fg-primary hover:underline' }),
             )}
           >
@@ -62,7 +62,15 @@ export function Breadcrumb({ segments, className, testID, size = 'base' }: Bread
                 </Text>
               </View>
             ) : null}
-            {interactive ? (
+            {current ? (
+              <TruncatedText
+                size={size}
+                className="font-semibold text-fg-primary"
+                containerClassName={cn('max-w-[70%] shrink-0', segmentBox)}
+              >
+                {segment.label}
+              </TruncatedText>
+            ) : interactive ? (
               <Pressable
                 accessibilityRole="link"
                 onPress={segment.onPress}
@@ -78,13 +86,7 @@ export function Breadcrumb({ segments, className, testID, size = 'base' }: Bread
                 {label}
               </Pressable>
             ) : (
-              <View
-                className={cn(
-                  'min-w-0',
-                  segmentBox,
-                  current ? 'max-w-[70%] shrink-0' : index === 0 ? 'shrink' : 'shrink-0',
-                )}
-              >
+              <View className={cn('min-w-0', segmentBox, index === 0 ? 'shrink' : 'shrink-0')}>
                 {label}
               </View>
             )}

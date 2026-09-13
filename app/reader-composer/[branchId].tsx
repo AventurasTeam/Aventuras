@@ -7,6 +7,7 @@ import { Platform, View } from 'react-native'
 import { type ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
+import { TruncatedText } from '@/components/compounds/truncated-text'
 import { Composer, type ComposerHandle } from '@/components/reader/composer'
 import { isDraftEmpty, planSubmissionHandback } from '@/components/reader/composer-draft'
 import { readerPillPhase } from '@/components/reader/generation-phase'
@@ -1217,7 +1218,11 @@ export default function ReaderComposerRoute() {
   return (
     <ScreenShell
       variant="in-story"
-      title={<Text className="font-semibold">{storyTitle ?? t('reader:placeholderTitle')}</Text>}
+      title={
+        <TruncatedText className="font-semibold" containerClassName="min-h-[44px] justify-center">
+          {storyTitle ?? t('reader:placeholderTitle')}
+        </TruncatedText>
+      }
       chapterProgress={openRegionPct}
       onBack={() => router.back()}
       onOpenStorySettings={() => {

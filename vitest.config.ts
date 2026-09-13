@@ -50,6 +50,8 @@ export default defineConfig({
         optimizeDeps: { include: ['i18next', 'react-i18next'] },
         test: {
           name: 'storybook',
+          // Headroom for play functions that wait out a real timer, such as a 4 s idle dismiss.
+          testTimeout: 10_000,
           setupFiles: ['./.storybook/vitest.setup.ts'],
           browser: {
             enabled: true,

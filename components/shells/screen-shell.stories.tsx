@@ -1,8 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
-import { expect, screen, waitFor } from 'storybook/test'
+import { expect, screen, userEvent, waitFor } from 'storybook/test'
 
 import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
+import { TruncatedText } from '@/components/compounds/truncated-text'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
 import { themes } from '@/lib/themes'
@@ -171,6 +172,35 @@ export const InStoryReaderPhone: Story = {
       </ScreenShell>
     </View>
   ),
+}
+
+const LONG_TITLE =
+  'The Extraordinarily Long Chronicle of the Veilstone Courier and the Crown of Ash'
+
+/** A title too long for the bar truncates, and the slot still lets it reveal the full string. */
+export const InStoryLongTitle: Story = {
+  render: () => (
+    <View style={{ width: 360 }}>
+      <ScreenShell
+        variant="in-story"
+        title={
+          <TruncatedText className="font-semibold" containerClassName="min-h-[44px] justify-center">
+            {LONG_TITLE}
+          </TruncatedText>
+        }
+        chapterProgress={50}
+        onBack={noop}
+        onOpenStorySettings={noop}
+        onOpenActions={noop}
+      >
+        <BodyPlaceholder label="Long story title in a phone-width bar" />
+      </ScreenShell>
+    </View>
+  ),
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: LONG_TITLE }))
+    expect(await screen.findByRole('dialog', { name: 'Full text' })).toHaveTextContent(LONG_TITLE)
+  },
 }
 
 export const WithBanners: Story = {
