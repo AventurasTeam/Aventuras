@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { applyDeltaAction, type DbCtx } from '@/lib/actions'
+import { applyDeltaAction, DeltaReplayError, type DbCtx } from '@/lib/actions'
 import {
   branches,
   deltas,
@@ -153,6 +153,35 @@ describe('updateStoryEntryContent', () => {
     expect(undoRedoStore.hasRedo()).toBe(true)
 
     await updateStoryEntryContent('b1', 'e1', 'new text', ctx)
+    expect(undoRedoStore.hasRedo()).toBe(false)
+  })
+
+  it('clears the redo stack even when the store patch after the commit throws', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    entriesStore.hydrate('b1', [
+      {
+        id: 'e1',
+        branchId: 'b1',
+        position: 1,
+        kind: 'ai_reply',
+        content: 'old',
+        chapterId: null,
+        metadata: null,
+        createdAt: 1,
+      },
+    ])
+    undoRedoStore.pushRedoGroup([])
+    const patch = vi.spyOn(entriesStore, 'patch').mockImplementation(() => {
+      throw new Error('store sync boom')
+    })
+
+    await expect(updateStoryEntryContent('b1', 'e1', 'new text', ctx)).rejects.toThrow(
+      'store sync boom',
+    )
+    patch.mockRestore()
+
     expect(undoRedoStore.hasRedo()).toBe(false)
   })
 
@@ -441,6 +470,24 @@ describe('rollbackToEntry', () => {
     expect(result.status).toBe('ok')
     expect(undoRedoStore.hasRedo()).toBe(false)
   })
+
+  it('clears the redo stack when the rollback commits but its store sync throws', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    entriesStore.hydrate('b1', [])
+    undoRedoStore.pushRedoGroup([])
+    const patch = vi.spyOn(entriesStore, 'patch').mockImplementation(() => {
+      throw new Error('store sync boom')
+    })
+
+    const error: unknown = await rollbackToEntry('b1', 't2', ctx).catch((e: unknown) => e)
+    patch.mockRestore()
+
+    expect(error).toBeInstanceOf(DeltaReplayError)
+    expect((error as DeltaReplayError).committed).toBe(true)
+    expect(undoRedoStore.hasRedo()).toBe(false)
+  })
 })
 
 // A branch whose classifier has already covered the tail: entry e2 carries a
@@ -633,6 +680,25 @@ async function seedHeadTurnUnderFailure(db: Awaited<ReturnType<typeof createTest
 }
 
 describe('updateStoryEntryContent classifier invalidation', () => {
+  it('clears the redo stack when the edit commits but its reversal store sync throws', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedClassifiedTail(db)
+    undoRedoStore.pushRedoGroup([])
+    const patch = vi.spyOn(happeningsStore, 'patch').mockImplementation(() => {
+      throw new Error('store sync boom')
+    })
+
+    const error: unknown = await updateStoryEntryContent('b1', 'e2', 'new', ctx).catch(
+      (e: unknown) => e,
+    )
+    patch.mockRestore()
+
+    expect(error).toBeInstanceOf(DeltaReplayError)
+    expect((error as DeltaReplayError).committed).toBe(true)
+    expect(undoRedoStore.hasRedo()).toBe(false)
+  })
+
   it('takes link rows anchored to a different entry down with their happening', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
