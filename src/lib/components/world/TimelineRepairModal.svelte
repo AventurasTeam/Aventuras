@@ -51,6 +51,8 @@
   let unfolded = $state<Record<string, boolean>>({})
   /** Bands folded to a summary, by band id. */
   let foldedBands = $state<string[]>([])
+  /** Height of the table view's pinned band, which is where its header comes to rest. */
+  let pinnedHeight = $state(0)
 
   const ranges = $derived(story.timeRanges)
   const range = $derived<SelectableRange | undefined>(ranges[selectedIndex])
@@ -513,42 +515,43 @@
 
 <ResponsiveModal.Root bind:open>
   <ResponsiveModal.Content
-    class={narrow ? 'flex flex-col' : 'flex h-[85vh] max-w-3xl flex-col gap-4'}
+    class={narrow ? 'flex flex-col' : 'flex h-[85vh] max-w-3xl flex-col pb-3'}
   >
-    <ResponsiveModal.Header class={narrow ? 'border-b-0' : ''}>
-      <ResponsiveModal.Title>Reconcile a range</ResponsiveModal.Title>
-      {#if !narrow}
-        <ResponsiveModal.Description>
-          Fits the entries between two boundaries to the time they assert, keeping their relative
-          pacing. Nothing outside the range is touched.
-        </ResponsiveModal.Description>
-      {/if}
-    </ResponsiveModal.Header>
-
     <!--
-      The body stays mounted under the text rather than being swapped out for it: unmounting a
-      scroll container loses where the reader was, and returning to the top of a long ladder
+      The body stays mounted under the full text rather than being swapped out for it: unmounting
+      a scroll container loses where the reader was, and returning to the top of a long ladder
       after reading one entry is the opposite of what the button is for.
     -->
     {#if narrow}
+      <ResponsiveModal.Header class="border-b-0">
+        <ResponsiveModal.Title>Reconcile a range</ResponsiveModal.Title>
+      </ResponsiveModal.Header>
+
       <div class="min-h-0 flex-1 overflow-y-auto">
         {@render mobileBody()}
       </div>
     {:else}
-      <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
-        {@render desktopBody()}
-      </div>
-    {/if}
+      <!-- Title and buttons scroll: neither steers the reading, and the pinned band below does. -->
+      <div class="-mx-6 flex min-h-0 flex-1 flex-col overflow-y-auto px-6">
+        <ResponsiveModal.Header>
+          <ResponsiveModal.Title>Reconcile a range</ResponsiveModal.Title>
+          <ResponsiveModal.Description>
+            Fits the entries between two boundaries to the time they assert, keeping their relative
+            pacing. Nothing outside the range is touched.
+          </ResponsiveModal.Description>
+        </ResponsiveModal.Header>
 
-    {#if !narrow}
-      <ResponsiveModal.Footer>
-        <Button variant="outline" onclick={() => (open = false)}>
-          {appliedMessage ? 'Close' : 'Cancel'}
-        </Button>
-        <Button disabled={preview?.status !== 'ok' || applying} onclick={apply}>
-          {applying ? 'Applying…' : 'Apply repair'}
-        </Button>
-      </ResponsiveModal.Footer>
+        {@render desktopBody()}
+
+        <ResponsiveModal.Footer class="mt-4 py-2">
+          <Button variant="outline" onclick={() => (open = false)}>
+            {appliedMessage ? 'Close' : 'Cancel'}
+          </Button>
+          <Button disabled={preview?.status !== 'ok' || applying} onclick={apply}>
+            {applying ? 'Applying…' : 'Apply repair'}
+          </Button>
+        </ResponsiveModal.Footer>
+      </div>
     {/if}
 
     {#if fullTextEntry}
@@ -693,26 +696,32 @@
   {#if ranges.length === 0}
     {@render emptyRanges()}
   {:else}
-    {@render rangePicker(true)}
+    <div
+      class="bg-background sticky top-0 z-20 flex flex-col gap-3 pt-4 pb-2"
+      bind:clientHeight={pinnedHeight}
+    >
+      {@render rangePicker(true)}
 
-    <!-- Above the table: what the reader still has to settle is the reason to read it. -->
-    {#if !resolved}
-      <p class="text-muted-foreground flex items-start gap-1 text-xs">
-        <TriangleAlert class="mt-0.5 h-3 w-3 shrink-0 text-amber-600" />
-        <span>
-          {unreadable.length}
-          {unreadable.length === 1 ? 'entry needs' : 'entries need'} a length. Nothing is calculated until
-          each is settled.
-        </span>
-      </p>
-    {/if}
+      <!-- What the reader still has to settle is the reason to read the table at all. -->
+      {#if !resolved}
+        <p class="text-muted-foreground flex items-start gap-1 text-xs">
+          <TriangleAlert class="mt-0.5 h-3 w-3 shrink-0 text-amber-600" />
+          <span>
+            {unreadable.length}
+            {unreadable.length === 1 ? 'entry needs' : 'entries need'} a length. Nothing is calculated
+            until each is settled.
+          </span>
+        </p>
+      {/if}
+    </div>
 
     {#if refusal?.status === 'refused'}
       {@render refusalCard(refusal.refusal.reason, refusal.refusal.boundaries)}
     {:else}
       <table class="w-full border-collapse text-xs">
         <thead
-          class="text-muted-foreground bg-background border-border sticky top-0 z-10 border-b text-left"
+          class="text-muted-foreground bg-background border-border sticky z-10 border-b text-left"
+          style="top: {pinnedHeight}px"
         >
           <tr>
             <th class="w-8 py-1 pr-2 font-medium">#</th>
@@ -851,7 +860,10 @@
       </table>
     {/if}
 
-    {@render outcomeNotes()}
+    <!-- Closes the table off: what follows is about the repair, not about a row in it. -->
+    <div class="border-border mt-3 flex flex-col gap-3 border-t pt-3">
+      {@render outcomeNotes()}
+    </div>
   {/if}
 {/snippet}
 
