@@ -80,7 +80,7 @@ describe('submitTurn', () => {
       ctx,
     )
 
-    expect(result).toEqual({ outcome: 'rejected', blockedBy: 'embedder-swap' })
+    expect(result).toEqual({ outcome: 'rejected', blockedBy: 'embedder-swap', converged: true })
     expect(branchEntries('b1')).toEqual([])
     const rows = await db.select().from(storyEntries).where(eq(storyEntries.branchId, 'b1'))
     expect(rows).toEqual([])
@@ -354,7 +354,11 @@ describe('submitTurn', () => {
     })
     releaseTurn()
     expectRan(await first)
-    await expect(second).resolves.toEqual({ outcome: 'rejected', blockedBy: 'embedder-swap' })
+    await expect(second).resolves.toEqual({
+      outcome: 'rejected',
+      blockedBy: 'embedder-swap',
+      converged: true,
+    })
     expect(
       branchEntries('b1')
         .filter((entry) => entry.kind === 'user_action')
@@ -412,22 +416,21 @@ describe('submitTurn', () => {
       { content: 'second', composerMode: 'do' },
       ctx,
     )
-    expect(second.outcome).toBe('rejected')
-    if (second.outcome === 'rejected') expect(second.blockedBy).toBe(PER_TURN_KIND)
+    expect(second).toEqual({ outcome: 'rejected', blockedBy: PER_TURN_KIND, converged: true })
     expect(branchEntries('b2')).toHaveLength(0)
 
     release()
     expectRan(await first)
   })
 
-  // A refused turn reserved no run, so no marker exists for boot recovery to retry:
-  // an uncommitted reversal leaves its user_action standing for good.
+  // A refused turn reserved no run, so boot recovery has no marker to retry: an uncommitted
+  // reversal leaves the user_action standing, and `converged` tells the reader not to resubmit it.
   it.each([
-    { stage: 'before it commits', committed: false, standing: 1 },
-    { stage: 'in the store sync after it commits', committed: true, standing: 0 },
+    { stage: 'before it commits', committed: false, standing: 1, level: 'error' },
+    { stage: 'in the store sync after it commits', committed: true, standing: 0, level: 'warn' },
   ] as const)(
-    'logs a refused turn whose reversal fails $stage and still rejects',
-    async ({ committed, standing }) => {
+    'rejects a refused turn whose reversal fails $stage, converged only once it committed',
+    async ({ committed, standing, level }) => {
       const { ctx, db, release, first } = await holdAdmissionOnB1()
       let restorePatch = () => {}
       // The reversal's prune is the only write in this submit that deletes from the log.
@@ -453,13 +456,14 @@ describe('submitTurn', () => {
         reversalFails,
       ).finally(() => restorePatch())
 
-      expect(second.outcome).toBe('rejected')
+      expect(second).toMatchObject({ outcome: 'rejected', converged: committed })
       const rows = await db.select().from(storyEntries).where(eq(storyEntries.branchId, 'b2'))
       expect(rows).toHaveLength(standing)
       const log = getDiagnosticsSnapshot().logEntries.find(
         (e) => e.kind === 'action_layer.submit_rejected_reversal_failed',
       )
       expect(log?.fields.committed).toBe(committed)
+      expect(log?.level).toBe(level)
 
       release()
       expectRan(await first)

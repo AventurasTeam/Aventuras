@@ -8,7 +8,9 @@ import {
   ensurePerTurnPipelineRegistered,
   PER_TURN_KIND,
   runPipeline,
+  type RejectedStart,
   type RunCtx,
+  type TxResult,
 } from '@/lib/pipeline'
 
 import { applyDeltaAction } from '../delta/apply-delta-action'
@@ -18,13 +20,19 @@ import { withBranchQueue } from './branch-queue'
 
 export type SubmitTurnMeta = { content: string; composerMode: string }
 
-const SWAP_REJECTION = { outcome: 'rejected', blockedBy: 'embedder-swap' } as const
+/**
+ * `converged: false` means the refused turn's user_action is still in the branch, so nothing may
+ * offer its text for resubmission.
+ */
+export type SubmitTurnResult = TxResult | (RejectedStart & { converged: boolean })
+
+const SWAP_REJECTION = { outcome: 'rejected', blockedBy: 'embedder-swap', converged: true } as const
 
 export async function submitTurn(
   ids: { storyId: string; branchId: string },
   meta: SubmitTurnMeta,
   ctx: DbCtx,
-): ReturnType<typeof runPipeline> {
+): Promise<SubmitTurnResult> {
   ensurePerTurnPipelineRegistered()
 
   return withBranchQueue(ids.branchId, async () => {
@@ -101,26 +109,28 @@ export async function submitTurn(
       // narrativePhase (per-turn.ts) does its own MAX(position)+1 read for the
       // ai_reply, which needs the same per-branch exclusion.
       const runResult = await runPipeline(PER_TURN_KIND, runCtx)
-      if (runResult.outcome === 'rejected') {
-        // A rejected admission never reaches abortRun (orchestrator.ts) — no run
-        // was ever reserved — so the user_action committed above is never
-        // reversed the way a failed/aborted run's is (C6). Reverse it here so no
-        // orphaned entry survives a turn that never actually started.
-        try {
-          await reverseReplayDeltas(turnActionId, ctx)
-        } catch (e) {
-          if (!(e instanceof DeltaReplayError)) throw e
-          // The caller still sees the rejection. Uncommitted leaves the user_action
-          // standing with no marker for boot to retry; committed leaves entriesStore stale.
-          logger.warn('action_layer.submit_rejected_reversal_failed', {
-            branchId: ids.branchId,
-            entryId,
-            committed: e.committed,
-            error: String(e.cause),
-          })
+      if (runResult.outcome !== 'rejected') return runResult
+      // A rejected admission never reaches abortRun (orchestrator.ts) — no run
+      // was ever reserved — so the user_action committed above is never
+      // reversed the way a failed/aborted run's is (C6). Reverse it here so no
+      // orphaned entry survives a turn that never actually started.
+      try {
+        await reverseReplayDeltas(turnActionId, ctx)
+        return { ...runResult, converged: true }
+      } catch (e) {
+        if (!(e instanceof DeltaReplayError)) throw e
+        // Uncommitted leaves the user_action standing with no marker for boot to retry;
+        // committed only leaves entriesStore stale, which the caller's reload clears.
+        const fields = {
+          branchId: ids.branchId,
+          entryId,
+          committed: e.committed,
+          error: String(e.cause),
         }
+        if (e.committed) logger.warn('action_layer.submit_rejected_reversal_failed', fields)
+        else logger.error('action_layer.submit_rejected_reversal_failed', fields)
+        return { ...runResult, converged: e.committed }
       }
-      return runResult
     })
     return admission.admitted ? admission.value : SWAP_REJECTION
   })

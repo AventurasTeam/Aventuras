@@ -85,7 +85,7 @@ export {
   type RegenerateRejectionCode,
   type RegenerateTurnResult,
 } from './turns/regenerate-turn'
-export { submitTurn, type SubmitTurnMeta } from './turns/submit-turn'
+export { submitTurn, type SubmitTurnMeta, type SubmitTurnResult } from './turns/submit-turn'
 export type { DbCtx, DeltaSource, MutationResult, PipelineAction } from './types'
 export {
   clearLiveSession,

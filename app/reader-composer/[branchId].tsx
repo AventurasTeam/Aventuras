@@ -650,7 +650,13 @@ export default function ReaderComposerRoute() {
         setLastSubmission(submission)
         const result = await submitTurn({ storyId, branchId }, { content, composerMode }, ctx)
         if (result.outcome === 'failed') await showTurnFailure(result.error, submission)
-        else if (result.outcome === 'rejected')
+        else if (result.outcome === 'rejected' && !result.converged) {
+          // The refused turn's user_action is still in the branch, so a Retry would duplicate
+          // it: the same hazard regenerate's unconverged arm refuses.
+          setLastSubmission(null)
+          toast.error(t('reader:submitUnconverged'))
+          await reload()
+        } else if (result.outcome === 'rejected')
           await showTurnFailure(
             {
               kind: 'orchestrator',
@@ -696,6 +702,7 @@ export default function ReaderComposerRoute() {
       beginDispatch,
       endDispatch,
       branchUnchanged,
+      reload,
     ],
   )
 
