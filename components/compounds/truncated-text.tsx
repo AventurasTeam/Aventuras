@@ -7,6 +7,8 @@ import { Text, type TextProps } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
+// Typography only: `className` also styles native's hidden measuring copy, where a layout class
+// (flex-1, a width) would skew the truncation check. Layout goes on `containerClassName`.
 type TextStyleProps = Pick<TextProps, 'className' | 'size' | 'variant'>
 
 type TruncatedTextProps = TextStyleProps & {
