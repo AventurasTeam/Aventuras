@@ -6,7 +6,7 @@
   import { createIsMobile } from '$lib/hooks/is-mobile.svelte'
   import { timelineLayout } from '$lib/stores/timelineLayout.svelte'
   import { swipe } from '$lib/utils/swipe'
-  import type { Snippet } from 'svelte'
+  import { tick, type Snippet } from 'svelte'
   import {
     TriangleAlert,
     ChevronDown,
@@ -44,6 +44,8 @@
   let openRows = $state<string[]>([])
   let applying = $state(false)
   let staleMessage = $state<string | null>(null)
+  /** A write that threw, which is a different thing from a repair the story moved out from under. */
+  let errorMessage = $state<string | null>(null)
   let appliedMessage = $state<string | null>(null)
   /** The entry whose whole text is being read. Full text is only ever its own surface. */
   let fullTextId = $state<string | null>(null)
@@ -56,16 +58,62 @@
   /** The ladder's scroll container, which is also where focus is parked. */
   let ladderEl = $state<HTMLDivElement | null>(null)
 
-  /**
-   * Take focus before removing whatever holds it.
-   *
-   * The sheet traps focus, so an element unmounting while focused sends focus to the first
-   * tabbable thing in it — the range selector — and focusing that scrolls it into view, throwing
-   * the reader back to the top. Parking focus on the scroll container first leaves the trap
-   * nothing to do, and `preventScroll` keeps the position exactly where it was.
-   */
+  let fullTextBack = $state<HTMLButtonElement | null>(null)
+  let fullTextTrigger: HTMLElement | null = null
+  let viewportHeight = $state<number | null>(null)
+
+  // One owner for keyboard geometry: Vaul's repositioning is disabled below. The last
+  // measurement is held outside the state so that recording one does not invalidate the effect
+  // that took it, which would tear the listeners down and rebuild them on every resize.
+  let measuredHeight: number | null = null
+
+  $effect(() => {
+    if (!open || !isMobile.current) return
+    const viewport = window.visualViewport
+    const resize = async () => {
+      const previousHeight = measuredHeight
+      measuredHeight = viewport?.height ?? window.innerHeight
+      viewportHeight = measuredHeight
+      if (previousHeight !== null && measuredHeight < previousHeight) {
+        await tick()
+        const focused = document.activeElement
+        if (focused instanceof HTMLInputElement && ladderEl?.contains(focused)) {
+          const container = ladderEl.getBoundingClientRect()
+          const field = focused.getBoundingClientRect()
+          // Scroll only the reading area, and only when the keyboard covers the input.
+          if (field.bottom > container.bottom - 12) {
+            ladderEl.scrollTop += field.bottom - container.bottom + 12
+          }
+        }
+      }
+    }
+    resize()
+    viewport?.addEventListener('resize', resize)
+    window.addEventListener('resize', resize)
+    return () => {
+      viewport?.removeEventListener('resize', resize)
+      window.removeEventListener('resize', resize)
+      measuredHeight = null
+    }
+  })
+
   function holdFocus() {
     ladderEl?.focus({ preventScroll: true })
+  }
+
+  async function showFullText(entryId: string, trigger: HTMLElement) {
+    fullTextTrigger = trigger
+    fullTextId = entryId
+    await tick()
+    fullTextBack?.focus({ preventScroll: true })
+  }
+
+  async function closeFullText() {
+    fullTextId = null
+    await tick()
+    if (fullTextTrigger?.isConnected) fullTextTrigger.focus({ preventScroll: true })
+    else holdFocus()
+    fullTextTrigger = null
   }
 
   const ranges = $derived(story.timeRanges)
@@ -157,6 +205,7 @@
   }
 
   function addGap(entryId: string) {
+    holdFocus()
     addedGapIds = [...addedGapIds, entryId]
     gapWeights = { ...gapWeights, [entryId]: '' }
     // The new row opens with its weight already asking, which is the decision that made it.
@@ -165,6 +214,7 @@
   }
 
   function removeGap(entryId: string) {
+    holdFocus()
     addedGapIds = addedGapIds.filter((id) => id !== entryId)
     const { [entryId]: _weight, ...weights } = gapWeights
     gapWeights = weights
@@ -179,7 +229,11 @@
    * Nothing is reconciled until every length is known. An interval needs no decision: left
    * alone it keeps its recorded length and takes its share like any other weight.
    */
-  const resolved = $derived(unreadable.length === 0)
+  const invalidWeights = $derived(
+    Object.values(supplied).some(durationIsInvalid) ||
+      Object.values(gapWeights).some(durationIsInvalid),
+  )
+  const resolved = $derived(unreadable.length === 0 && !invalidWeights)
 
   const refusal = $derived(range ? story.previewTimelineRepair(range, {}, {}) : null)
   const isRefused = $derived(refusal?.status === 'refused')
@@ -315,15 +369,18 @@
   })
 
   function clearOverride(entryId: string) {
+    holdFocus()
     const next = { ...supplied }
     delete next[entryId]
     supplied = next
   }
 
   async function apply() {
-    if (preview?.status !== 'ok') return
+    if (preview?.status !== 'ok' || applying) return
+    holdFocus()
     applying = true
     staleMessage = null
+    errorMessage = null
     appliedMessage = null
     try {
       const outcome = await story.applyTimelineRepair(preview)
@@ -335,6 +392,8 @@
         reset()
         appliedMessage = 'Repair applied. The figures below are the repaired timeline.'
       }
+    } catch {
+      errorMessage = 'Repair could not be applied. Review the timeline and try again.'
     } finally {
       applying = false
     }
@@ -345,6 +404,7 @@
     gapWeights = {}
     addedGapIds = []
     openRows = []
+    errorMessage = null
     staleMessage = null
     appliedMessage = null
     fullTextId = null
@@ -475,6 +535,49 @@
     return band.kind === 'entries' && band.entries.some((entry) => !!requestFor(entry.id))
   }
 
+  type LadderRow =
+    | { kind: 'rung'; key: string; index: number }
+    | { kind: 'summary'; key: string; bandId: string; foldable: boolean; band: Band }
+    | { kind: 'entry'; key: string; bandId: string; foldable: boolean; entry: StoryEntry }
+    | { kind: 'weight'; key: string; bandId: string; foldable: boolean; entryId: string }
+    | { kind: 'interval'; key: string; bandId: string; foldable: boolean; interval: RangeInterval }
+    | { kind: 'gapWeight'; key: string; bandId: string; foldable: boolean; interval: RangeInterval }
+
+  /**
+   * The ladder as one flat keyed list.
+   *
+   * A card is keyed by the entry or interval it shows, never by the band it currently sits in.
+   * Bands split and merge as the preview changes, so a card nested inside a band-keyed block
+   * would be destroyed — along with the focus and caret in its weight field — while the reader
+   * is still typing the weight that caused the change.
+   */
+  const ladderRows = $derived.by(() => {
+    const rows: LadderRow[] = []
+    bands.forEach((band, index) => {
+      const shared = { bandId: band.id, foldable: band.kind === 'entries' }
+      rows.push({ kind: 'rung', key: `rung:${band.id}`, index })
+
+      if (foldedBands.includes(band.id)) {
+        rows.push({ kind: 'summary', key: `sum:${band.id}`, ...shared, band })
+        return
+      }
+      if (band.kind === 'entries') {
+        for (const entry of band.entries) {
+          rows.push({ kind: 'entry', key: `e:${entry.id}`, ...shared, entry })
+          if (entry.type !== 'user_action') {
+            rows.push({ kind: 'weight', key: `w:${entry.id}`, ...shared, entryId: entry.id })
+          }
+        }
+        return
+      }
+      const interval = band.interval
+      rows.push({ kind: 'interval', key: `g:${interval.afterEntryId}`, ...shared, interval })
+      rows.push({ kind: 'gapWeight', key: `wg:${interval.afterEntryId}`, ...shared, interval })
+    })
+    rows.push({ kind: 'rung', key: 'rung:end', index: bands.length })
+    return rows
+  })
+
   function bandLabel(band: Band): string {
     if (band.kind === 'interval') return `Time gap after ${entryNumber(band.interval.afterEntryId)}`
     const numbers = band.entries.map((entry) => entryNumber(entry.id))
@@ -515,8 +618,35 @@
    * The strip steers the reading: to the first band still owed a weight, or to the end when
    * nothing is outstanding and the reader only wants to apply.
    */
-  function jump() {
-    const target = resolved ? 'repair-footer' : `band-${unreadable[0]?.entryId}`
+  /** Open what hides a card, and nothing else: the reader's other folds are their own work. */
+  function revealCard(entryId: string, cardKey: string) {
+    const band = bands.find((candidate) =>
+      candidate.kind === 'entries'
+        ? candidate.entries.some((entry) => entry.id === entryId)
+        : candidate.interval.afterEntryId === entryId,
+    )
+    if (band) foldedBands = foldedBands.filter((id) => id !== band.id)
+    unfolded = { ...unfolded, [cardKey]: true }
+  }
+
+  async function jump() {
+    if (invalidWeights) {
+      for (const [id, value] of Object.entries(supplied)) {
+        if (durationIsInvalid(value)) revealCard(id, `w:${id}`)
+      }
+      for (const [id, value] of Object.entries(gapWeights)) {
+        if (durationIsInvalid(value)) revealCard(id, `wg:${id}`)
+      }
+      await tick()
+      ladderEl?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
+      return
+    }
+    const entryId = unreadable[0]?.entryId
+    if (!resolved && entryId) {
+      revealCard(entryId, `w:${entryId}`)
+      await tick()
+    }
+    const target = resolved ? 'repair-footer' : `band-${entryId}`
     document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
 </script>
@@ -524,16 +654,24 @@
 <svelte:window
   onkeydowncapture={(event) => {
     if (fullTextId && event.key === 'Escape') {
-      event.stopPropagation()
-      fullTextId = null
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      void closeFullText()
     }
   }}
 />
 
-<ResponsiveModal.Root bind:open>
+<ResponsiveModal.Root bind:open repositionInputs={false} shouldScaleBackground={false}>
   <ResponsiveModal.Content
+    onOpenAutoFocus={(event: Event) => {
+      event.preventDefault()
+      holdFocus()
+    }}
+    style={isMobile.current
+      ? `top: var(--safe-top); bottom: auto; height: calc(${viewportHeight === null ? '100dvh' : `${viewportHeight}px`} - var(--safe-top) - var(--safe-bottom));`
+      : undefined}
     class={narrow
-      ? 'mt-0 flex h-[calc(100dvh-var(--safe-bottom))] max-h-none flex-col rounded-none'
+      ? 'mt-0 flex h-[calc(100dvh-var(--safe-top)-var(--safe-bottom))] max-h-none flex-col overflow-hidden rounded-none'
       : 'flex h-[85vh] max-w-3xl flex-col pb-3'}
   >
     <!--
@@ -541,38 +679,48 @@
       a scroll container loses where the reader was, and returning to the top of a long ladder
       after reading one entry is the opposite of what the button is for.
     -->
-    {#if narrow}
-      <ResponsiveModal.Header class="border-b-0">
-        <ResponsiveModal.Title>Reconcile a range</ResponsiveModal.Title>
-      </ResponsiveModal.Header>
-
-      <!-- Focusable so that focus has somewhere harmless to sit; see `holdFocus`. -->
-      <div bind:this={ladderEl} tabindex="-1" class="min-h-0 flex-1 overflow-y-auto outline-none">
-        {@render mobileBody()}
-      </div>
-    {:else}
-      <!-- Title and buttons scroll: neither steers the reading, and the pinned band below does. -->
-      <div class="-mx-6 flex min-h-0 flex-1 flex-col overflow-y-auto px-6">
-        <ResponsiveModal.Header>
+    <div inert={!!fullTextEntry} class="flex min-h-0 flex-1 flex-col">
+      {#if narrow}
+        <ResponsiveModal.Header class="border-b-0">
           <ResponsiveModal.Title>Reconcile a range</ResponsiveModal.Title>
-          <ResponsiveModal.Description>
-            Fits the entries between two boundaries to the time they assert, keeping their relative
-            pacing. Nothing outside the range is touched.
-          </ResponsiveModal.Description>
         </ResponsiveModal.Header>
 
-        {@render desktopBody()}
+        <!-- Focusable so that focus has somewhere harmless to sit; see `holdFocus`. -->
+        <div
+          bind:this={ladderEl}
+          tabindex="-1"
+          class="min-h-0 flex-1 overflow-y-auto overscroll-contain outline-none"
+        >
+          {@render mobileBody()}
+        </div>
+      {:else}
+        <!-- Title and buttons scroll: neither steers the reading, and the pinned band below does. -->
+        <div
+          bind:this={ladderEl}
+          tabindex="-1"
+          class="-mx-6 flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-6 outline-none"
+        >
+          <ResponsiveModal.Header>
+            <ResponsiveModal.Title>Reconcile a range</ResponsiveModal.Title>
+            <ResponsiveModal.Description>
+              Fits the entries between two boundaries to the time they assert, keeping their
+              relative pacing. Nothing outside the range is touched.
+            </ResponsiveModal.Description>
+          </ResponsiveModal.Header>
 
-        <ResponsiveModal.Footer class="mt-4 py-2">
-          <Button variant="outline" onclick={() => (open = false)}>
-            {appliedMessage ? 'Close' : 'Cancel'}
-          </Button>
-          <Button disabled={preview?.status !== 'ok' || applying} onclick={apply}>
-            {applying ? 'Applying…' : 'Apply repair'}
-          </Button>
-        </ResponsiveModal.Footer>
-      </div>
-    {/if}
+          {@render desktopBody()}
+
+          <ResponsiveModal.Footer class="mt-4 py-2">
+            <Button variant="outline" onclick={() => (open = false)}>
+              {appliedMessage ? 'Close' : 'Cancel'}
+            </Button>
+            <Button disabled={preview?.status !== 'ok' || applying} onclick={apply}>
+              {applying ? 'Applying…' : 'Apply repair'}
+            </Button>
+          </ResponsiveModal.Footer>
+        </div>
+      {/if}
+    </div>
 
     {#if fullTextEntry}
       <!--
@@ -587,10 +735,8 @@
           variant="text"
           size="sm"
           class="h-8 w-fit px-1 text-xs"
-          onclick={() => {
-            holdFocus()
-            fullTextId = null
-          }}
+          bind:ref={fullTextBack}
+          onclick={closeFullText}
         >
           <ChevronLeft class="h-4 w-4" />
           Back
@@ -710,6 +856,10 @@
     <p class="text-destructive text-xs">{staleMessage}</p>
   {/if}
 
+  {#if errorMessage}
+    <p class="text-destructive text-xs">{errorMessage}</p>
+  {/if}
+
   {#if appliedMessage}
     <p class="text-xs text-emerald-600 dark:text-emerald-400">{appliedMessage}</p>
   {/if}
@@ -726,7 +876,14 @@
       {@render rangePicker(true)}
 
       <!-- What the reader still has to settle is the reason to read the table at all. -->
-      {#if !resolved}
+      {#if invalidWeights}
+        <p class="text-destructive flex items-start gap-1 text-xs">
+          <TriangleAlert class="mt-0.5 h-3 w-3 shrink-0" />
+          <span>
+            A weight you have typed is not a duration. Nothing is calculated until it reads as one.
+          </span>
+        </p>
+      {:else if unreadable.length > 0}
         <p class="text-muted-foreground flex items-start gap-1 text-xs">
           <TriangleAlert class="mt-0.5 h-3 w-3 shrink-0 text-amber-600" />
           <span>
@@ -894,6 +1051,8 @@
   <div class="flex flex-col gap-3 px-4 pb-2">
     {#if ranges.length === 0}
       {@render emptyRanges()}
+      <!-- The footer carries Close, and there is no footer without a range to apply. -->
+      <Button variant="outline" class="w-fit" onclick={() => (open = false)}>Close</Button>
     {:else}
       <div class="border-border -mx-4 border-b px-4 pt-1 pb-3">
         <ResponsiveModal.Description class="text-muted-foreground text-xs">
@@ -917,19 +1076,33 @@
   {#if ranges.length > 0}
     <!-- The one thing that must not scroll away: it is what the reader steers by. -->
     <div class="bg-background border-border sticky top-0 z-10 border-y px-4 py-2">
-      <button type="button" class="flex w-full items-center gap-2 text-left text-xs" onclick={jump}>
-        {#if resolved}
-          <span class="flex-1">Nothing outstanding</span>
-          <span class="text-muted-foreground shrink-0">Jump to end ›</span>
-        {:else}
-          <TriangleAlert class="h-3.5 w-3.5 shrink-0 text-amber-600" />
-          <span class="flex-1">
-            {unreadable.length}
-            {unreadable.length === 1 ? 'entry still needs' : 'entries still need'} a weight
-          </span>
-          <span class="text-muted-foreground shrink-0">Jump ›</span>
-        {/if}
-      </button>
+      {#if isRefused}
+        <!-- Nothing to steer towards: the range is refused, and no weight changes that. -->
+        <p class="text-destructive flex items-center gap-2 text-xs">
+          <TriangleAlert class="h-3.5 w-3.5 shrink-0" />
+          <span class="flex-1">This range cannot be repaired as it stands</span>
+        </p>
+      {:else}
+        <button
+          type="button"
+          class="flex w-full items-center gap-2 text-left text-xs"
+          onclick={jump}
+        >
+          {#if invalidWeights}
+            <span class="text-destructive flex-1">Correct invalid weights before applying</span>
+          {:else if resolved}
+            <span class="flex-1">Nothing outstanding</span>
+            <span class="text-muted-foreground shrink-0">Jump to end ›</span>
+          {:else}
+            <TriangleAlert class="h-3.5 w-3.5 shrink-0 text-amber-600" />
+            <span class="flex-1">
+              {unreadable.length}
+              {unreadable.length === 1 ? 'entry still needs' : 'entries still need'} a weight
+            </span>
+            <span class="text-muted-foreground shrink-0">Jump ›</span>
+          {/if}
+        </button>
+      {/if}
     </div>
 
     <div class="flex flex-col gap-3 px-4 pt-3 pb-4">
@@ -983,33 +1156,32 @@
         )}
       {/if}
 
-      {#each bands as band, index (band.id)}
-        {@render rung(index)}
-        <div
-          class="pb-1"
-          use:swipe={{
-            threshold: 48,
-            onSwipeLeft: () => band.kind === 'entries' && foldBand(band.id),
-            onSwipeRight: () => openBand(band.id),
-          }}
-        >
-          {#if foldedBands.includes(band.id)}
-            {@render bandSummary(band)}
-          {:else if band.kind === 'entries'}
-            {#each band.entries as entry (entry.id)}
-              {@render entryCard(entry)}
-              {#if entry.type !== 'user_action'}
-                {@render weightCard(entry.id)}
-              {/if}
-            {/each}
-          {:else}
-            {@render intervalCard(band.interval)}
-            {@render gapWeightCard(band.interval)}
-          {/if}
-        </div>
+      {#each ladderRows as row (row.key)}
+        {#if row.kind === 'rung'}
+          {@render rung(row.index)}
+        {:else}
+          <div
+            class="pb-1"
+            use:swipe={{
+              threshold: 48,
+              onSwipeLeft: () => row.foldable && foldBand(row.bandId),
+              onSwipeRight: () => openBand(row.bandId),
+            }}
+          >
+            {#if row.kind === 'summary'}
+              {@render bandSummary(row.band)}
+            {:else if row.kind === 'entry'}
+              {@render entryCard(row.entry)}
+            {:else if row.kind === 'weight'}
+              {@render weightCard(row.entryId)}
+            {:else if row.kind === 'interval'}
+              {@render intervalCard(row.interval)}
+            {:else}
+              {@render gapWeightCard(row.interval)}
+            {/if}
+          </div>
+        {/if}
       {/each}
-
-      {@render rung(bands.length)}
 
       {#if preview?.status === 'ok' && preview.result.trailingJoin && preview.result.trailingJoin.differenceMinutes !== 0}
         {@render joinStub(
@@ -1053,7 +1225,12 @@
 
 {#snippet bandSummary(band: Band)}
   {@const length = bandLength(band)}
-  <div class="border-border bg-muted/30 mb-2 flex items-center gap-2 rounded-md border px-2 py-2">
+  <button
+    type="button"
+    aria-expanded="false"
+    onclick={() => openBand(band.id)}
+    class="border-border bg-muted/30 mb-2 flex w-full items-center gap-2 rounded-md border px-2 py-2 text-left"
+  >
     <span class="flex-1 text-xs">{bandLabel(band)}</span>
     {#if bandUnsettled(band)}
       <span class="flex items-center gap-1 text-xs text-amber-700 dark:text-amber-500">
@@ -1065,7 +1242,7 @@
         {length === null ? '—' : formatDuration(length)}
       </span>
     {/if}
-  </div>
+  </button>
 {/snippet}
 
 {#snippet cardShell(
@@ -1115,7 +1292,12 @@
     </span>
   {/snippet}
   {#snippet controls()}
-    <Button variant="outline" size="sm" class="h-7 text-xs" onclick={() => (fullTextId = entry.id)}>
+    <Button
+      variant="outline"
+      size="sm"
+      class="h-7 text-xs"
+      onclick={(event) => showFullText(entry.id, event.currentTarget)}
+    >
       Show full text
     </Button>
     {#if isAction(entry.id)}
@@ -1225,7 +1407,8 @@
       <span class="flex items-center gap-2">
         <Input
           placeholder="e.g. 90, 2h 30m, 3d"
-          class="h-7 flex-1 text-xs"
+          class="h-10 min-w-0 flex-1 text-base"
+          aria-invalid={durationIsInvalid(supplied[entryId])}
           bind:value={supplied[entryId]}
         />
         {#if supplied[entryId]}
@@ -1280,17 +1463,21 @@
       <span class="text-muted-foreground">Set custom weight (minutes or units y d h m):</span>
       <span class="flex items-center gap-2">
         <Input
+          aria-invalid={durationIsInvalid(gapWeights[interval.afterEntryId])}
           value={gapWeights[interval.afterEntryId] ?? ''}
           oninput={(event) => setGapWeight(interval.afterEntryId, event.currentTarget.value)}
           placeholder="e.g. 90, 2h 30m, 3d"
-          class="h-7 flex-1 text-xs"
+          class="h-10 min-w-0 flex-1 text-base"
         />
         {#if gapWeights[interval.afterEntryId]}
           <Button
             variant="text"
             size="sm"
             class="h-7 shrink-0 px-1 text-xs"
-            onclick={() => setGapWeight(interval.afterEntryId, '')}
+            onclick={() => {
+              holdFocus()
+              setGapWeight(interval.afterEntryId, '')
+            }}
           >
             Clear
           </Button>
@@ -1338,6 +1525,7 @@
       <label class="flex items-center gap-2">
         <span class="text-muted-foreground shrink-0">Set custom weight</span>
         <Input
+          aria-invalid={durationIsInvalid(gapWeights[interval.afterEntryId])}
           value={gapWeights[interval.afterEntryId] ?? ''}
           oninput={(event) => setGapWeight(interval.afterEntryId, event.currentTarget.value)}
           placeholder="e.g. 90, 2h 30m, 3d"
@@ -1350,7 +1538,10 @@
           variant="text"
           size="sm"
           class="h-7 text-xs"
-          onclick={() => setGapWeight(interval.afterEntryId, '')}
+          onclick={() => {
+            holdFocus()
+            setGapWeight(interval.afterEntryId, '')
+          }}
         >
           Clear
         </Button>
@@ -1395,7 +1586,7 @@
       variant="outline"
       size="sm"
       class="mb-2 h-7 text-xs"
-      onclick={() => (fullTextId = entry.id)}
+      onclick={(event) => showFullText(entry.id, event.currentTarget)}
     >
       Show full text
     </Button>
@@ -1439,6 +1630,7 @@
         <label class="flex items-center gap-2">
           <span class="text-muted-foreground shrink-0">Set custom weight</span>
           <Input
+            aria-invalid={durationIsInvalid(supplied[entry.id])}
             placeholder="e.g. 90, 2h 30m, 3d"
             class="h-7 w-48 text-xs"
             bind:value={supplied[entry.id]}
