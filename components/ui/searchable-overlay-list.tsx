@@ -1073,7 +1073,9 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
           // dismisses the popover. FullWindowOverlay is iOS-only modal stacking.
           <FullWindowOverlay>
             <PopoverPrimitive.Overlay style={StyleSheet.absoluteFill}>
-              {content}
+              {/* Full-size layer between the pressable overlay and the positioned content,
+                  or Android leaves the content out of the accessibility tree. */}
+              <View style={StyleSheet.absoluteFill}>{content}</View>
             </PopoverPrimitive.Overlay>
           </FullWindowOverlay>
         )}

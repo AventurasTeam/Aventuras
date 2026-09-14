@@ -263,7 +263,15 @@ function PopoverContent({
       <FullWindowOverlay>
         <SelectBase.Overlay style={Platform.select({ native: StyleSheet.absoluteFill })}>
           <TextClassContext.Provider value="text-fg-primary">
-            <NativeOnlyAnimatedView className="z-[100]" entering={FadeIn} exiting={FadeOut}>
+            {/* Full-size, as in PopoverContent: without a full-size layer between the
+                pressable overlay and the positioned options, Android leaves them out of
+                the accessibility tree. */}
+            <NativeOnlyAnimatedView
+              className="z-[100]"
+              style={StyleSheet.absoluteFill}
+              entering={FadeIn}
+              exiting={FadeOut}
+            >
               <SelectBase.Content
                 style={contentStyle}
                 className={cn(
@@ -747,6 +755,11 @@ function DropdownBranch({
                   label={opt.label}
                   disabled={opt.disabled}
                   customContent
+                  // The native option names itself from `label` alone, which would hide a
+                  // description the row shows; web names it from the row's content.
+                  {...(Platform.OS !== 'web' && opt.description != null
+                    ? { 'aria-label': `${opt.label}, ${opt.description}` }
+                    : null)}
                 >
                   {renderRow({ option: opt, selected: opt.value === value })}
                 </Item>

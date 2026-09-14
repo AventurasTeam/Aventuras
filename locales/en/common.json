@@ -62,6 +62,7 @@
     "chapterProgress": "Chapter progress",
     "onThisScreen": "On this screen",
     "fullText": "Full text",
+    "loading": "Loading",
     "goTo": {
       "header": "Go to",
       "openReader": "Open Reader",
@@ -113,6 +114,10 @@
     "providerPlaceholder": "Pick a provider",
     "noProviders": "No providers configured. Add one in App Settings → Providers.",
     "noMatch": "No models match \"{{query}}\"."
+  },
+  "toolbar": {
+    "searchScope": "Search scope",
+    "searchScopeFields": "Searches: {{fields}}"
   },
   "saveBar": {
     "unsavedChanges_one": "{{count}} unsaved change",

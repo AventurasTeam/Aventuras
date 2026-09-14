@@ -53,22 +53,3 @@ slice-planning gate forces its resolution before that slice is planned.
   to get. Held rather than routed in the 2026-09-09 triage pass, which
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
-
-- **catppuccin-latte's success and warning pairs fail contrast.**
-  (2026-09-13) White on `#40a02b` measures 3.3:1 and on `#df8e1d`
-  2.6:1, under the 4.5:1 that filled Tags' `text-xs` labels need
-  (staged and retired pills, the review pill, the generation error
-  pill). Every other theme passes. Theme-token call: darken the tones
-  or give them a dark `-fg`.
-- **Spinner's default accessible name is English.** (2026-09-13)
-  `components/ui/spinner.tsx` defaults `accessibilityLabel` to the raw
-  string `'Loading'`, bypassing `t()`, so every Spinner that passes no
-  label announces English.
-- **Popover names were never swept.** (2026-09-13) `Popover` warns in
-  `__DEV__` when it gets neither `ariaLabel` nor `ariaLabelledBy`. The
-  2026-09-13 triage pass named `ImporterMenu`'s; the other consumers
-  were not checked.
-- **Main's strings are English.** (2026-09-13) `electron/app-menu.ts`
-  hardcodes the packaged menu's `File` and `View` labels and
-  `electron/boot-failure.ts` the failed-boot dialog's title, and main
-  has no i18n, so they stay English whatever the app locale.

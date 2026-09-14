@@ -8,6 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, type SelectOption } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
+import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 // Container threshold for the desktop-vs-narrow layout switch.
@@ -37,12 +38,12 @@ function ScopeHelpTrigger({ scope, disabled }: { scope: readonly string[]; disab
   const fieldList = scope.join(' · ')
 
   return (
-    <Popover>
+    <Popover ariaLabel={t('toolbar.searchScope')}>
       <PopoverTrigger asChild>
         <Pressable
           disabled={disabled}
           accessibilityRole="button"
-          aria-label="Search scope"
+          aria-label={t('toolbar.searchScope')}
           hitSlop={12}
           className={cn(
             'p-1',
@@ -56,10 +57,10 @@ function ScopeHelpTrigger({ scope, disabled }: { scope: readonly string[]; disab
       <PopoverContent align="end" className="w-72">
         <View className="gap-1">
           <Text size="sm" className="font-medium">
-            Search scope
+            {t('toolbar.searchScope')}
           </Text>
           <Text size="xs" variant="muted">
-            {`Searches: ${fieldList}`}
+            {t('toolbar.searchScopeFields', { fields: fieldList })}
           </Text>
         </View>
       </PopoverContent>

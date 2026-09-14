@@ -5,6 +5,7 @@ import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { Chip } from '@/components/ui/chip'
 import { Text } from '@/components/ui/text'
+import { t } from '@/lib/i18n'
 import { themes } from '@/lib/themes'
 
 import { Toolbar } from './toolbar'
@@ -170,11 +171,14 @@ export const SortForcesDropdownAtThreeOptions: Story = {
 export const ScopeHelpOpensPopover: Story = {
   render: () => <FullHarness />,
   play: async () => {
-    const help = screen.getByRole('button', { name: 'Search scope' })
+    const help = screen.getByRole('button', { name: t('toolbar.searchScope') })
     await userEvent.click(help)
     await waitFor(() => {
-      expect(screen.getByText(/Searches:/)).toBeInTheDocument()
+      expect(screen.getByRole('dialog', { name: t('toolbar.searchScope') })).toBeInTheDocument()
     })
+    expect(
+      screen.getByText(t('toolbar.searchScopeFields', { fields: STORY_LIST_SCOPE.join(' · ') })),
+    ).toBeInTheDocument()
   },
 }
 

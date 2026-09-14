@@ -2424,8 +2424,9 @@ attributes to stay on our `View`. Neither option is verified. No
 consumer passes `accessibilityRole="menu"`, so every Popover today is
 the same dialog-on-dialog shape.
 
-The two menu-shaped consumers, `ImporterMenu` and the wizard's add-cast
-menu, also put `menuitem` rows inside that dialog with no `menu` owner.
+The three menu-shaped consumers, `ImporterMenu`, the wizard's add-cast
+menu and the story card's overflow, also put `menuitem` rows inside
+that dialog with no `menu` owner.
 That is deliberate: Popover has no arrow-key roving, and `role="menu"`
 would switch screen readers into a navigation mode the container does
 not honour. The fix is roving focus plus the role, or plain buttons in

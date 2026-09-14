@@ -104,6 +104,10 @@ slice plans when relevant.
 - [Portaled overlays outlive screen focus](./portaled-overlay-outlives-screen-focus.md)
   — a Stack keeps pushed-under screens mounted, so their portaled
   modals float over the new screen; gate on `useIsFocused()`.
+- [Native overlay content drops out of Android's a11y tree](./native-overlay-content-a11y-tree.md)
+  — without a full-size layer between the pressable overlay and the
+  positioned content, TalkBack can't reach it; wrap it in
+  `StyleSheet.absoluteFill`.
 
 ### Animation / gesture
 

@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
+import { expect, screen } from 'storybook/test'
 
+import { i18n } from '@/lib/i18n'
 import { themes } from '@/lib/themes'
 
 import { Button } from './button'
@@ -26,6 +28,20 @@ type Story = StoryObj<typeof Spinner>
 
 export const Default: Story = {
   args: { size: 'md' },
+}
+
+// cimode makes t() return its key, so only a name routed through t() can match.
+export const DefaultNameIsTranslated: Story = {
+  args: { size: 'md' },
+  beforeEach: async () => {
+    await i18n.changeLanguage('cimode')
+    return () => {
+      void i18n.changeLanguage('en')
+    }
+  },
+  play: async () => {
+    expect(screen.getByRole('progressbar', { name: 'chrome.loading' })).toBeInTheDocument()
+  },
 }
 
 export const Sizes: Story = {

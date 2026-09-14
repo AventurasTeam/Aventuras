@@ -1,6 +1,7 @@
 import { ActivityIndicator, Platform, View } from 'react-native'
 import Svg, { Circle } from 'react-native-svg'
 
+import { t } from '@/lib/i18n'
 import { useTheme, type ThemeColorSlots } from '@/lib/themes'
 
 const SPINNER_PX = {
@@ -32,7 +33,7 @@ export function Spinner({
   size = 'md',
   colorSlot = '--fg-primary',
   className,
-  accessibilityLabel = 'Loading',
+  accessibilityLabel = t('chrome.loading'),
 }: SpinnerProps) {
   const resolved = typeof size === 'number' ? size : SPINNER_PX[size]
   const { theme } = useTheme()
