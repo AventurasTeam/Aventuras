@@ -4512,19 +4512,19 @@ class StoryStore {
       )
     }
 
-    // Delete associated checkpoints first
+    // Delete the branch and all of its owned data in one persistence transaction.
     const checkpointsToDelete = this.checkpoints.filter(
       (checkpoint) => this.getCheckpointBranchId(checkpoint) === branchId,
     )
-    await database.deleteCheckpoints(checkpointsToDelete.map((checkpoint) => checkpoint.id))
+    await database.deleteBranch(
+      branchId,
+      checkpointsToDelete.map((checkpoint) => checkpoint.id),
+    )
+
+    // Update in-memory state only after the persistence transaction commits.
     this.checkpoints = this.checkpoints.filter(
       (checkpoint) => this.getCheckpointBranchId(checkpoint) !== branchId,
     )
-
-    // Delete the branch from database
-    await database.deleteBranch(branchId)
-
-    // Update in-memory state: remove deleted branch
     // Note: We already checked that there are no child branches, so no reparenting needed
     this.branches = this.branches.filter((b) => b.id !== branchId)
 
