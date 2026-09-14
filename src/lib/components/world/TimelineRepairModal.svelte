@@ -2,7 +2,8 @@
   import { story, type TimelineRepairPreview } from '$lib/stores/story.svelte'
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
+  import * as Dialog from '$lib/components/ui/dialog'
+  import { X } from '@lucide/svelte'
   import { createIsMobile } from '$lib/hooks/is-mobile.svelte'
   import { timelineLayout } from '$lib/stores/timelineLayout.svelte'
   import { swipe } from '$lib/utils/swipe'
@@ -60,42 +61,6 @@
 
   let fullTextBack = $state<HTMLButtonElement | null>(null)
   let fullTextTrigger: HTMLElement | null = null
-  let viewportHeight = $state<number | null>(null)
-
-  // One owner for keyboard geometry: Vaul's repositioning is disabled below. The last
-  // measurement is held outside the state so that recording one does not invalidate the effect
-  // that took it, which would tear the listeners down and rebuild them on every resize.
-  let measuredHeight: number | null = null
-
-  $effect(() => {
-    if (!open || !isMobile.current) return
-    const viewport = window.visualViewport
-    const resize = async () => {
-      const previousHeight = measuredHeight
-      measuredHeight = viewport?.height ?? window.innerHeight
-      viewportHeight = measuredHeight
-      if (previousHeight !== null && measuredHeight < previousHeight) {
-        await tick()
-        const focused = document.activeElement
-        if (focused instanceof HTMLInputElement && ladderEl?.contains(focused)) {
-          const container = ladderEl.getBoundingClientRect()
-          const field = focused.getBoundingClientRect()
-          // Scroll only the reading area, and only when the keyboard covers the input.
-          if (field.bottom > container.bottom - 12) {
-            ladderEl.scrollTop += field.bottom - container.bottom + 12
-          }
-        }
-      }
-    }
-    resize()
-    viewport?.addEventListener('resize', resize)
-    window.addEventListener('resize', resize)
-    return () => {
-      viewport?.removeEventListener('resize', resize)
-      window.removeEventListener('resize', resize)
-      measuredHeight = null
-    }
-  })
 
   function holdFocus() {
     ladderEl?.focus({ preventScroll: true })
@@ -661,17 +626,23 @@
   }}
 />
 
-<ResponsiveModal.Root bind:open repositionInputs={false} shouldScaleBackground={false}>
-  <ResponsiveModal.Content
+<Dialog.Root bind:open>
+  <!--
+    A dialog on a phone too, rather than the app's bottom drawer. This screen is a full surface
+    the reader works down, not a panel pulled part-way up: sliding in from the bottom, a grab
+    handle and drag-to-dismiss all say retractable, and a drag that dismisses a half-filled
+    repair is a gesture this screen cannot afford.
+  -->
+  <Dialog.Content
     onOpenAutoFocus={(event: Event) => {
       event.preventDefault()
       holdFocus()
     }}
-    style={isMobile.current
-      ? `top: var(--safe-top); bottom: auto; height: calc(${viewportHeight === null ? '100dvh' : `${viewportHeight}px`} - var(--safe-top) - var(--safe-bottom));`
+    style={narrow
+      ? '--tw-enter-translate-x: 0; --tw-enter-translate-y: 0; --tw-exit-translate-x: 0; --tw-exit-translate-y: 0; --tw-enter-scale: 1; --tw-exit-scale: 1;'
       : undefined}
     class={narrow
-      ? 'mt-0 flex h-[calc(100dvh-var(--safe-top)-var(--safe-bottom))] max-h-none flex-col overflow-hidden rounded-none'
+      ? 'top-0 left-0 flex h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 flex-col rounded-none border-0 p-0 pt-[var(--safe-top)] pb-[var(--safe-bottom)]'
       : 'flex h-[85vh] max-w-3xl flex-col pb-3'}
   >
     <!--
@@ -681,9 +652,9 @@
     -->
     <div inert={!!fullTextEntry} class="flex min-h-0 flex-1 flex-col">
       {#if narrow}
-        <ResponsiveModal.Header class="border-b-0">
-          <ResponsiveModal.Title>Reconcile a range</ResponsiveModal.Title>
-        </ResponsiveModal.Header>
+        <div class="px-4 py-3 text-center">
+          <Dialog.Title class="text-lg font-semibold">Reconcile a range</Dialog.Title>
+        </div>
 
         <!-- Focusable so that focus has somewhere harmless to sit; see `holdFocus`. -->
         <div
@@ -700,24 +671,36 @@
           tabindex="-1"
           class="-mx-6 flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-6 outline-none"
         >
-          <ResponsiveModal.Header>
-            <ResponsiveModal.Title>Reconcile a range</ResponsiveModal.Title>
-            <ResponsiveModal.Description>
-              Fits the entries between two boundaries to the time they assert, keeping their
-              relative pacing. Nothing outside the range is touched.
-            </ResponsiveModal.Description>
-          </ResponsiveModal.Header>
+          <div
+            class="border-border bg-background relative z-10 flex items-center justify-between gap-4 border-b py-4"
+          >
+            <div class="flex flex-col gap-1.5">
+              <Dialog.Title class="text-lg leading-none font-semibold tracking-tight">
+                Reconcile a range
+              </Dialog.Title>
+              <Dialog.Description class="text-muted-foreground text-sm">
+                Fits the entries between two boundaries to the time they assert, keeping their
+                relative pacing. Nothing outside the range is touched.
+              </Dialog.Description>
+            </div>
+            <Dialog.Close>
+              <Button variant="destructive" size="icon">
+                <X class="size-6!" />
+                <span class="sr-only">Close</span>
+              </Button>
+            </Dialog.Close>
+          </div>
 
           {@render desktopBody()}
 
-          <ResponsiveModal.Footer class="mt-4 py-2">
+          <div class="border-border mt-4 flex justify-end gap-2 border-t py-2">
             <Button variant="outline" onclick={() => (open = false)}>
               {appliedMessage ? 'Close' : 'Cancel'}
             </Button>
             <Button disabled={preview?.status !== 'ok' || applying} onclick={apply}>
               {applying ? 'Applying…' : 'Apply repair'}
             </Button>
-          </ResponsiveModal.Footer>
+          </div>
         </div>
       {/if}
     </div>
@@ -747,8 +730,8 @@
         </p>
       </div>
     {/if}
-  </ResponsiveModal.Content>
-</ResponsiveModal.Root>
+  </Dialog.Content>
+</Dialog.Root>
 
 {#snippet emptyRanges()}
   <p class="text-muted-foreground text-sm">
@@ -1055,10 +1038,10 @@
       <Button variant="outline" class="w-fit" onclick={() => (open = false)}>Close</Button>
     {:else}
       <div class="border-border -mx-4 border-b px-4 pt-1 pb-3">
-        <ResponsiveModal.Description class="text-muted-foreground text-xs">
+        <Dialog.Description class="text-muted-foreground text-xs">
           Fits the entries between two boundaries to the time they assert, keeping their relative
           pacing. Nothing outside the range is touched.
-        </ResponsiveModal.Description>
+        </Dialog.Description>
       </div>
       {@render rangePicker(false)}
 
