@@ -185,6 +185,39 @@ describe('reconcileRange', () => {
       expect(toMinutes(first.end) - toMinutes(first.start)).toBe(0)
       expect(toMinutes(second.end) - toMinutes(second.start)).toBe(120)
     })
+
+    it('keeps an action an instant when the whole range weighs nothing', () => {
+      // Every entry recorded at one moment, so there is no pacing to preserve and the span is
+      // shared evenly. The actions must not be among those taking a share.
+      const entries = [
+        entry(t(1), t(1), 'n1'),
+        entry(t(1), t(1), 'a1', 'user_action'),
+        entry(t(1), t(1), 'n2'),
+        entry(t(1), t(1), 'a2', 'user_action'),
+        entry(t(1), t(1), 'n3'),
+      ]
+      const result = ok(reconcileRange({ entries, baseline: t(0), target: t(3) }))
+      const length = (id: string) => {
+        const time = result.times.find((t) => t.entryId === id)!
+        return toMinutes(time.end) - toMinutes(time.start)
+      }
+      expect([length('a1'), length('a2')]).toEqual([0, 0])
+      expect([length('n1'), length('n2'), length('n3')]).toEqual([60, 60, 60])
+      // And the range still lands exactly on the later boundary.
+      expect(toMinutes(result.times[result.times.length - 1].end)).toBe(toMinutes(t(3)))
+    })
+
+    it('leaves an action where the walk has reached, not at the baseline', () => {
+      const entries = [
+        entry(t(1), t(1), 'n1'),
+        entry(t(1), t(1), 'a1', 'user_action'),
+        entry(t(1), t(1), 'n2'),
+      ]
+      const result = ok(reconcileRange({ entries, baseline: t(0), target: t(2) }))
+      const action = result.times.find((time) => time.entryId === 'a1')!
+      expect(toMinutes(action.start)).toBe(toMinutes(t(1)))
+      expect(toMinutes(action.end)).toBe(toMinutes(t(1)))
+    })
   })
 
   describe('durations it cannot read', () => {

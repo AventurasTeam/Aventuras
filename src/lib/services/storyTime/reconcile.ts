@@ -246,15 +246,25 @@ export function reconcileRange(input: ReconcileInput): ReconcileResult {
   const offsetAfter = (index: number) => Math.round((span * cumulative[index]) / total)
 
   const times: RepairedTime[] = []
+  // Nothing to preserve anywhere, so the span is shared evenly — by the entries that can hold
+  // time. A player action stays an instant whatever the arithmetic says: it sits where the walk
+  // has reached, and giving it a share would make the reader's own turn take an hour of story.
+  let sharesTaken = 0
+  const shareHolders = entries.filter((entry) => entry.type !== 'user_action').length
+
   entries.forEach((entry, i) => {
     if (total === 0) {
-      // Nothing to preserve anywhere, so the span is divided evenly across the entries and the
-      // intervals stay closed.
-      const start = Math.round((span * i) / entries.length)
-      const end = Math.round((span * (i + 1)) / entries.length)
+      const at = shareHolders === 0 ? 0 : Math.round((span * sharesTaken) / shareHolders)
+      if (entry.type === 'user_action') {
+        const instant = fromMinutes(baselineMinutes + at)
+        times.push({ entryId: entry.id, start: instant, end: instant })
+        return
+      }
+      sharesTaken += 1
+      const end = shareHolders === 0 ? 0 : Math.round((span * sharesTaken) / shareHolders)
       times.push({
         entryId: entry.id,
-        start: fromMinutes(baselineMinutes + start),
+        start: fromMinutes(baselineMinutes + at),
         end: fromMinutes(baselineMinutes + end),
       })
       return

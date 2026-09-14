@@ -53,6 +53,20 @@
   let foldedBands = $state<string[]>([])
   /** Height of the table view's pinned band, which is where its header comes to rest. */
   let pinnedHeight = $state(0)
+  /** The ladder's scroll container, which is also where focus is parked. */
+  let ladderEl = $state<HTMLDivElement | null>(null)
+
+  /**
+   * Take focus before removing whatever holds it.
+   *
+   * The sheet traps focus, so an element unmounting while focused sends focus to the first
+   * tabbable thing in it — the range selector — and focusing that scrolls it into view, throwing
+   * the reader back to the top. Parking focus on the scroll container first leaves the trap
+   * nothing to do, and `preventScroll` keeps the position exactly where it was.
+   */
+  function holdFocus() {
+    ladderEl?.focus({ preventScroll: true })
+  }
 
   const ranges = $derived(story.timeRanges)
   const range = $derived<SelectableRange | undefined>(ranges[selectedIndex])
@@ -478,10 +492,12 @@
   }
 
   function foldBand(id: string) {
+    holdFocus()
     if (!foldedBands.includes(id)) foldedBands = [...foldedBands, id]
   }
 
   function openBand(id: string) {
+    holdFocus()
     foldedBands = foldedBands.filter((folded) => folded !== id)
   }
 
@@ -491,6 +507,7 @@
   )
 
   function toggleAll() {
+    holdFocus()
     foldedBands = allFolded ? [] : storyBands.map((band) => band.id)
   }
 
@@ -515,7 +532,9 @@
 
 <ResponsiveModal.Root bind:open>
   <ResponsiveModal.Content
-    class={narrow ? 'flex flex-col' : 'flex h-[85vh] max-w-3xl flex-col pb-3'}
+    class={narrow
+      ? 'mt-0 flex h-[calc(100dvh-var(--safe-bottom))] max-h-none flex-col rounded-none'
+      : 'flex h-[85vh] max-w-3xl flex-col pb-3'}
   >
     <!--
       The body stays mounted under the full text rather than being swapped out for it: unmounting
@@ -527,7 +546,8 @@
         <ResponsiveModal.Title>Reconcile a range</ResponsiveModal.Title>
       </ResponsiveModal.Header>
 
-      <div class="min-h-0 flex-1 overflow-y-auto">
+      <!-- Focusable so that focus has somewhere harmless to sit; see `holdFocus`. -->
+      <div bind:this={ladderEl} tabindex="-1" class="min-h-0 flex-1 overflow-y-auto outline-none">
         {@render mobileBody()}
       </div>
     {:else}
@@ -567,7 +587,10 @@
           variant="text"
           size="sm"
           class="h-8 w-fit px-1 text-xs"
-          onclick={() => (fullTextId = null)}
+          onclick={() => {
+            holdFocus()
+            fullTextId = null
+          }}
         >
           <ChevronLeft class="h-4 w-4" />
           Back
