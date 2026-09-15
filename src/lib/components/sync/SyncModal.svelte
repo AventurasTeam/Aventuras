@@ -225,7 +225,14 @@
     // received payload. The poller has already cleared the server's copy, so a cancel that fell
     // through to it would lose the story outright; backing out must leave it pending so the user
     // can go install the pack and click again.
-    const packBinding = await resolveIncomingPack(receivedStoryJson)
+    let packBinding: PackBindingResolution | null | { error: string }
+    try {
+      packBinding = await resolveIncomingPack(pendingStoryJson)
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Could not prepare the received story'
+      receivingStory = false
+      return
+    }
     if (packBinding && 'error' in packBinding) {
       error = packBinding.error
       receivingStory = false
