@@ -62,6 +62,7 @@
   let fullTextBack = $state<HTMLButtonElement | null>(null)
   let fullTextTrigger: HTMLElement | null = null
 
+  /** Take focus before removing whatever holds it: the trap would send it to the range selector. */
   function holdFocus() {
     ladderEl?.focus({ preventScroll: true })
   }
@@ -402,12 +403,8 @@
     openRows = openRows.includes(key) ? openRows.filter((open) => open !== key) : [...openRows, key]
   }
 
-  // ——— The ladder ———
-  //
-  // A band is the space between two rungs. A rung is earned by the clock moving, so everything
-  // sharing a start time shares a band however many entries that is — a run of instants and
-  // zero-length narration is one band, not a stack of rungs all reading the same time. An
-  // interval always takes a band of its own.
+  // A band is the space between two rungs, and a rung is earned by the clock moving: everything
+  // sharing a start time shares a band. An interval always takes a band of its own.
 
   type Band =
     | { kind: 'entries'; id: string; entries: StoryEntry[] }
@@ -508,14 +505,7 @@
     | { kind: 'interval'; key: string; bandId: string; foldable: boolean; interval: RangeInterval }
     | { kind: 'gapWeight'; key: string; bandId: string; foldable: boolean; interval: RangeInterval }
 
-  /**
-   * The ladder as one flat keyed list.
-   *
-   * A card is keyed by the entry or interval it shows, never by the band it currently sits in.
-   * Bands split and merge as the preview changes, so a card nested inside a band-keyed block
-   * would be destroyed — along with the focus and caret in its weight field — while the reader
-   * is still typing the weight that caused the change.
-   */
+  /** Flat, keyed by entry rather than by band: a band splitting must not unmount a field in use. */
   const ladderRows = $derived.by(() => {
     const rows: LadderRow[] = []
     bands.forEach((band, index) => {
