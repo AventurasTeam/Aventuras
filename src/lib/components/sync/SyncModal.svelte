@@ -91,7 +91,8 @@
   let receivedStoryQueue = $state<string[]>([])
   let showReceivedConflict = $state(false)
   let pollingInterval: ReturnType<typeof setInterval> | null = null
-  let receivingStory = false
+  let receivingStory = $state(false)
+  let receivedStoryNeedsPack = $state(false)
 
   // State for version mismatch warning
   let remoteVersion = $state<string | null>(null)
@@ -133,6 +134,7 @@
     receivedStoryQueue = []
     showReceivedConflict = false
     receivingStory = false
+    receivedStoryNeedsPack = false
     remoteVersion = null
     localVersion = null
     showVersionWarning = false
@@ -184,11 +186,21 @@
 
     receivedStoryJson = storyJson
     receivedStoryPreview = preview
-    const exists = await syncService.checkStoryExists(preview.title)
-    if (exists) {
-      showReceivedConflict = true
-    } else {
-      await importReceivedStory()
+    receivedStoryNeedsPack = false
+    receivingStory = true
+
+    try {
+      const exists = await syncService.checkStoryExists(preview.title)
+      if (exists) {
+        receivingStory = false
+        showReceivedConflict = true
+      } else {
+        receivingStory = false
+        await importReceivedStory()
+      }
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Could not prepare the received story'
+      receivingStory = false
     }
   }
 
@@ -204,7 +216,10 @@
 
   async function importReceivedStory() {
     if (!receivedStoryJson || !receivedStoryPreview || receivingStory) return
+    const pendingStoryJson = receivedStoryJson
     receivingStory = true
+    receivedStoryNeedsPack = false
+    error = null
 
     // Pack first — and deliberately outside the block below, whose `finally` discards the
     // received payload. The poller has already cleared the server's copy, so a cancel that fell
@@ -217,6 +232,9 @@
       return
     }
     if (!packBinding) {
+      // A lifecycle reset clears the pending payload before settling the dialog. Only mark a
+      // user-cancelled choice as retryable when the same received story is still active.
+      if (receivedStoryJson === pendingStoryJson) receivedStoryNeedsPack = true
       receivingStory = false
       return
     }
@@ -250,6 +268,7 @@
   function discardReceivedStory() {
     showReceivedConflict = false
     receivingStory = false
+    receivedStoryNeedsPack = false
     receivedStoryJson = null
     receivedStoryPreview = null
     resumeReceivedStories()
@@ -538,7 +557,15 @@
         {#if ui.syncMode === 'select'}
           Local Network Sync
         {:else if ui.syncMode === 'generate'}
-          Waiting for Connection
+          {syncSuccess
+            ? 'Story Received'
+            : receivingStory
+              ? loading
+                ? 'Importing Story'
+                : 'Preparing Import'
+              : receivedStoryPreview
+                ? 'Story Received'
+                : 'Waiting for Connection'}
         {:else if ui.syncMode === 'scan'}
           Scan QR Code
         {:else if ui.syncMode === 'connected'}
@@ -551,7 +578,15 @@
         {#if ui.syncMode === 'select'}
           Sync stories between devices on the same network.
         {:else if ui.syncMode === 'generate'}
-          Show this QR code to another device to connect.
+          {syncSuccess
+            ? 'The received story was imported successfully.'
+            : receivingStory
+              ? loading
+                ? 'Importing the received story.'
+                : 'Preparing the received story for import.'
+              : receivedStoryPreview
+                ? 'Review the story received from the connected device.'
+                : 'Show this QR code to another device to connect.'}
         {:else if ui.syncMode === 'scan'}
           Scan the QR code shown on the other device.
         {:else if ui.syncMode === 'connected'}
@@ -612,7 +647,18 @@
         </div>
       {:else if ui.syncMode === 'generate'}
         <!-- QR Code Display -->
-        {#if showReceivedConflict && receivedStoryPreview}
+        {#if receivingStory || loading}
+          <div class="flex flex-col items-center justify-center py-12">
+            <Loader2 class="text-primary h-8 w-8 animate-spin" />
+            <p class="text-muted-foreground mt-4">
+              {receivingStory
+                ? loading
+                  ? 'Importing story...'
+                  : 'Preparing import...'
+                : 'Starting server...'}
+            </p>
+          </div>
+        {:else if showReceivedConflict && receivedStoryPreview}
           <!-- Conflict warning for received push -->
           <div class="flex flex-col items-center py-4 text-center">
             <div
@@ -625,6 +671,11 @@
               A story named "{receivedStoryPreview.title}" already exists on this device. Replace it
               with the received story?
             </p>
+            {#if receivedStoryNeedsPack}
+              <p class="text-muted-foreground mb-4 text-sm">
+                A prompt pack must still be selected before the received story can be imported.
+              </p>
+            {/if}
             <div class="flex gap-3">
               <Button variant="outline" onclick={discardReceivedStory}>Cancel</Button>
               <Button onclick={importReceivedStory}>Replace</Button>
@@ -633,17 +684,17 @@
         {:else if receivedStoryPreview}
           <div class="flex flex-col items-center py-4 text-center">
             <p class="text-muted-foreground mb-4">
-              Received "{receivedStoryPreview.title}". Choose a prompt pack to continue.
+              {#if receivedStoryNeedsPack}
+                Received "{receivedStoryPreview.title}". A prompt pack must be selected before
+                importing. Import again to choose one, or discard the story.
+              {:else}
+                Received "{receivedStoryPreview.title}". Try importing again, or discard the story.
+              {/if}
             </p>
             <div class="flex gap-3">
               <Button variant="outline" onclick={discardReceivedStory}>Discard</Button>
-              <Button onclick={importReceivedStory}>Continue import</Button>
+              <Button onclick={importReceivedStory}>Import</Button>
             </div>
-          </div>
-        {:else if loading}
-          <div class="flex flex-col items-center justify-center py-12">
-            <Loader2 class="text-primary h-8 w-8 animate-spin" />
-            <p class="text-muted-foreground mt-4">Starting server...</p>
           </div>
         {:else if serverInfo}
           <div class="flex flex-col items-center text-center">

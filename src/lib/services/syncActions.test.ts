@@ -33,6 +33,18 @@ describe('pushSyncedStory', () => {
 })
 
 describe('importSyncedStory', () => {
+  it('imports a fresh story without deleting an existing story', async () => {
+    const result = await importSyncedStory('{"story":{"id":"remote"}}', null, packBinding)
+
+    expect(sync.deleteStory).not.toHaveBeenCalled()
+    expect(importFromContent).toHaveBeenCalledWith(
+      '{"story":{"id":"remote"}}',
+      true,
+      expect.objectContaining({ resolvePackBinding: expect.any(Function) }),
+    )
+    expect(result).toEqual({ success: true, storyId: 'imported-story' })
+  })
+
   it('deletes the replaced story and imports the payload without a checkpoint mutation', async () => {
     const result = await importSyncedStory('{"story":{"id":"remote"}}', 'local-story', packBinding)
 
