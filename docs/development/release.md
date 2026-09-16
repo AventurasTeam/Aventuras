@@ -30,7 +30,7 @@ GitHub Actions workflows in `.github/workflows/`:
   non-publishing run leaves every platform's build downloadable from the run summary.
 - **`ci.yml`** - builds `master` with `publish: false` so the Rust, Gradle and npm caches a
   release restores from are warm, and so every push/schedule leaves downloadable per-platform builds.
-  See [Build caching and speed](#build-caching-and-speed).
+  See [Build caching and speed](#build-caching-and-speed) and [Build version](#build-version).
 
 Both release workflows expect `TAURI_SIGNING_PRIVATE_KEY(_PASSWORD)` and the `ANDROID_KEYSTORE_*` /
 `ANDROID_KEY_*` secrets to be configured on the repository.
@@ -98,6 +98,31 @@ that build: `tauri.conf.json`'s own `features: ["devtools"]` is only meant for `
 plugin is registered under `debug_assertions` in `src-tauri/src/lib.rs`), and on Android the CLI's
 own plugin-init build and Gradle's build used to end up on different feature sets for the same
 target, forcing one target to compile twice.
+
+### Build version
+
+A `publish: false` run (`ci.yml`) never bumped `tauri.conf.json`'s `version`, so without
+intervention every build-validation run would reuse whatever version `master` last shipped —
+indistinguishable bundle filenames and in-app "About" text across every commit since. Both
+build workflows work around this with a `Compute CI build version` / extended `Read app
+version` step, gated on `!inputs.publish`, that writes `ci-version.conf.json` (a
+`{"version": "<base>-<short-sha>"}` override, gitignored, never committed) and passes it as a
+second `--config` to `tauri build`/`tauri android build`, merged on top of
+`tauri.release.conf.json`. `tauri-action` re-resolves the same `--config` list itself to name
+workflow artifacts and set its `appVersion` output, so the desktop and Android legs, the
+bundle filenames, and `getVersion()` inside the running app all agree on one
+`<base>-<short-sha>` string.
+
+The suffix is appended, not substituted, for two reasons that both require a valid `X.Y.Z`
+prefix: Tauri's config deserializer validates `version` as semver (a bare SHA fails to
+parse), and `src/lib/utils/version.ts`'s `isNewerVersion` — the Android update check — expects
+the same `major.minor.patch` shape and silently refuses to compare anything else. A useful
+side effect: since a CI build's version is a semver pre-release of the last release, its
+own update check correctly reports the real release as newer, instead of "up to date".
+
+A real release (`release.yml`/`pre-release.yml`, `publish: true`) never takes this path —
+its version is the one `scripts/release.js` bumped, and it must stay exactly what the pushed
+tag names.
 
 **Deferred: per-ABI parallel Android builds.** The four (now three) Android ABIs are still built one
 after another by a single `tauri android build` invocation. A matrix job per target — each building

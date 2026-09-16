@@ -81,6 +81,19 @@ jobs:
           key: ${{ matrix.target }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
+      # Only for non-publishing (ci.yml) runs: suffixes the app version with the short commit
+      # SHA, so a build-validation run doesn't silently reuse the last release's version number
+      # in its bundle filenames and in-app "About" display. Must stay a valid semver build (the
+      # updater's own version comparator and Tauri's config validation both require the
+      # `X.Y.Z` prefix), so this appends a pre-release identifier rather than replacing it.
+      - name: Compute CI build version
+        if: ${{ !inputs.publish }}
+        shell: bash
+        run: |
+          base_version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          short_sha=$(git rev-parse --short=7 HEAD)
+          printf '{"version":"%s-%s"}' "$base_version" "$short_sha" > ci-version.conf.json
+
       # --config drops the devtools feature for this build (see tauri.release.conf.json),
       # since it's only registered under debug_assertions anyway and compiling it in is pure
       # cost on every platform.
@@ -107,4 +120,4 @@ jobs:
           uploadWorkflowArtifacts: true
           updaterJsonPreferNsis: true
           releaseAssetNamePattern: '[name]_v[version]_[arch][setup][ext]'
-          args: --target ${{ matrix.target }} --config src-tauri/tauri.release.conf.json
+          args: --target ${{ matrix.target }} --config src-tauri/tauri.release.conf.json${{ !inputs.publish && ' --config ci-version.conf.json' || '' }}
