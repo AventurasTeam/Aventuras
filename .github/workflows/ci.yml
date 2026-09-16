@@ -45,7 +45,6 @@ jobs:
     if: "github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore: bump version')"
     uses: ./.github/workflows/build-desktop.yml
     with:
-      prerelease: true
       publish: false
     secrets: inherit
 
@@ -53,6 +52,5 @@ jobs:
     if: "github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore: bump version')"
     uses: ./.github/workflows/build-android.yml
     with:
-      prerelease: true
       publish: false
     secrets: inherit

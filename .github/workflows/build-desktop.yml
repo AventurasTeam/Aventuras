@@ -4,9 +4,10 @@ on:
   workflow_call:
     inputs:
       prerelease:
-        description: 'Publish a pre-release; otherwise a draft release with updater metadata'
+        description: 'Publish a pre-release; otherwise a draft release with updater metadata. Only read when publish is true.'
         type: boolean
-        required: true
+        required: false
+        default: false
       releaseId:
         description: 'ID of the pre-created release to upload assets to (avoids a create-release race across the matrix). Required when publish is true.'
         type: string
@@ -98,7 +99,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          releaseId: ${{ inputs.publish && inputs.releaseId || '' }}
+          releaseId: ${{ inputs.releaseId }}
           tagName: ${{ inputs.publish && 'v__VERSION__' || '' }}
           releaseName: ${{ inputs.publish && 'Aventuras v__VERSION__' || '' }}
           releaseBody: ${{ inputs.prerelease && '**Pre-release build** — a test/preview release. Use at your own risk.' || 'See the assets to download and install this version.' }}

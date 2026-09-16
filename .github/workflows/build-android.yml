@@ -4,9 +4,10 @@ on:
   workflow_call:
     inputs:
       prerelease:
-        description: 'Attach to a pre-release; otherwise to a draft release'
+        description: 'Attach to a pre-release; otherwise to a draft release. Only read when publish is true.'
         type: boolean
-        required: true
+        required: false
+        default: false
       publish:
         description: 'Sign and upload the APK; false to just build and warm caches'
         type: boolean
