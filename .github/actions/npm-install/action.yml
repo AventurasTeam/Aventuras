@@ -20,16 +20,15 @@ runs:
       shell: bash
       run: |
         echo "dir=$(npm config get cache)" >> "$GITHUB_OUTPUT"
-        echo "prefix=npm-${{ runner.os }}-${{ runner.arch }}-" >> "$GITHUB_OUTPUT"
-        echo "key=npm-${{ runner.os }}-${{ runner.arch }}-$(node scripts/ci/lockfile-hash.js)" >> "$GITHUB_OUTPUT"
+        echo "hash=$(node scripts/ci/lockfile-hash.js)" >> "$GITHUB_OUTPUT"
 
     - name: Restore npm cache
       id: restore
       uses: actions/cache/restore@v6
       with:
         path: ${{ steps.cache-vars.outputs.dir }}
-        key: ${{ steps.cache-vars.outputs.key }}
-        restore-keys: ${{ steps.cache-vars.outputs.prefix }}
+        key: npm-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-vars.outputs.hash }}
+        restore-keys: npm-${{ runner.os }}-${{ runner.arch }}-
 
     - name: Install dependencies
       shell: bash
@@ -40,4 +39,4 @@ runs:
       uses: actions/cache/save@v6
       with:
         path: ${{ steps.cache-vars.outputs.dir }}
-        key: ${{ steps.cache-vars.outputs.key }}
+        key: npm-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-vars.outputs.hash }}
