@@ -1,0 +1,53 @@
+name: Warm build caches
+
+# Tag-triggered release runs (release.yml, ci.yml) can only restore caches created on the tag
+# itself or on the default branch (GitHub: caches cannot be restored across different tag
+# names). Nothing else builds on `master`, so without this workflow every release starts
+# cold. This workflow builds on `master` with publish: false — it exercises the exact same
+# build-desktop.yml / build-android.yml jobs a release uses, so the caches it leaves behind
+# (Rust, Gradle, npm) are the ones a release run picks up. See docs/development/release.md.
+on:
+  schedule:
+    # Fridays 06:00 UTC: renews the 7-day cache eviction window, and runs the day after Rust's
+    # ~6-week stable release cadence (Thursdays), so a new rustc's cache key is warm quickly.
+    - cron: '0 6 * * 5'
+  push:
+    branches:
+      - master
+    paths:
+      - 'src-tauri/Cargo.lock'
+      - 'src-tauri/Cargo.toml'
+      - 'package-lock.json'
+      - '.nvmrc'
+      - '.github/workflows/**'
+      - 'src-tauri/gen/android/**/*.gradle*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # scripts/release.js fast-forwards `master` onto a `chore: bump version to X` commit that
+  # touches only version fields. Every cache key here (rust-cache, the Gradle basic provider,
+  # lockfile-hash.js) is already insensitive to that change, so a run triggered by it would
+  # rebuild for nothing; the next scheduled or manual run still warms caches for any real
+  # dependency change made in the same push.
+  build-desktop:
+    if: "github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore: bump version')"
+    uses: ./.github/workflows/build-desktop.yml
+    with:
+      prerelease: true
+      publish: false
+    secrets: inherit
+
+  build-android:
+    if: "github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore: bump version')"
+    uses: ./.github/workflows/build-android.yml
+    with:
+      prerelease: true
+      publish: false
+    secrets: inherit
