@@ -93,6 +93,12 @@
   let pollingInterval: ReturnType<typeof setInterval> | null = null
   let receivingStory = $state(false)
   let receivedStoryNeedsPack = $state(false)
+  /**
+   * Bumped whenever the pending received story changes hands: a new claim, a discard, or a modal
+   * reset. An import that started under an older token must not write to the session that replaced
+   * it, and comparing payloads is not enough — the same story can be pushed twice, byte for byte.
+   */
+  let receivedSession = 0
 
   // State for version mismatch warning
   let remoteVersion = $state<string | null>(null)
@@ -135,6 +141,7 @@
     showReceivedConflict = false
     receivingStory = false
     receivedStoryNeedsPack = false
+    receivedSession++
     remoteVersion = null
     localVersion = null
     showVersionWarning = false
@@ -188,6 +195,7 @@
     receivedStoryPreview = preview
     receivedStoryNeedsPack = false
     receivingStory = true
+    receivedSession++
 
     try {
       const exists = await syncService.checkStoryExists(preview.title)
@@ -218,6 +226,7 @@
     if (!receivedStoryJson || !receivedStoryPreview || receivingStory) return
     const pendingStoryJson = receivedStoryJson
     const pendingStoryPreview = receivedStoryPreview
+    const pendingSession = receivedSession
     receivingStory = true
     receivedStoryNeedsPack = false
     error = null
@@ -240,9 +249,9 @@
       return
     }
     if (!packBinding) {
-      // A lifecycle reset clears the pending payload before settling the dialog. Only mark a
-      // user-cancelled choice as retryable when the same received story is still active.
-      if (receivedStoryJson === pendingStoryJson) receivedStoryNeedsPack = true
+      // A lifecycle reset settles the dialog after it has already dropped the pending payload.
+      // Only mark a user-cancelled choice as retryable when this session is still the live one.
+      if (receivedSession === pendingSession) receivedStoryNeedsPack = true
       receivingStory = false
       return
     }
@@ -250,7 +259,7 @@
     // Everything below writes to the database, so a resolution that arrives after the modal was
     // reset — or after a newer payload took over — must stop before it replaces a story the user
     // is no longer talking about.
-    if (receivedStoryJson !== pendingStoryJson) return
+    if (receivedSession !== pendingSession) return
 
     loading = true
     error = null
@@ -263,27 +272,40 @@
       const result = await importSyncedStory(pendingStoryJson, existingId, packBinding)
       imported = result.success
       if (!result.success) importError = result.error ?? 'Import failed'
+      // Inside the block on purpose: a reload that fails must still fall through to the teardown
+      // below, or the modal is left loading with the queue paused. The story is already imported
+      // either way, so this cannot turn a success into a reported failure.
+      if (imported) {
+        try {
+          await story.loadAllStories()
+        } catch {
+          // The list refreshes on the next load.
+        }
+      }
     } catch (e) {
       importError = e instanceof Error ? e.message : 'Import failed'
     }
 
-    if (imported) await story.loadAllStories()
-
     // Report into, and tear down, only the session this import belongs to. A reset or a newer
     // transfer can take over while the import runs; writing that session's error, clearing its
     // payload, or resuming a queue it already dropped would clobber it.
-    if (receivedStoryJson !== pendingStoryJson) return
+    if (receivedSession !== pendingSession) return
 
     loading = false
     receivingStory = false
+
+    if (importError) {
+      // Keep the payload pending rather than dropping it. The poller already cleared the server's
+      // copy, so this is the only remaining chance to retry, and a replacement import that failed
+      // after deleting the local story makes that retry the user's only way back.
+      error = importError
+      return
+    }
+
     receivedStoryJson = null
     receivedStoryPreview = null
-    if (importError) {
-      error = importError
-    } else {
-      syncSuccess = true
-      syncMessage = `Successfully received "${pendingStoryPreview.title}"`
-    }
+    syncSuccess = true
+    syncMessage = `Successfully received "${pendingStoryPreview.title}"`
     resumeReceivedStories()
   }
 
@@ -291,6 +313,7 @@
     showReceivedConflict = false
     receivingStory = false
     receivedStoryNeedsPack = false
+    receivedSession++
     receivedStoryJson = null
     receivedStoryPreview = null
     resumeReceivedStories()
