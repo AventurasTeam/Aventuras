@@ -1,0 +1,106 @@
+name: Build Android
+
+on:
+  workflow_call:
+    inputs:
+      prerelease:
+        description: 'Attach to a pre-release; otherwise to a draft release'
+        type: boolean
+        required: true
+
+jobs:
+  build:
+    name: Build Android
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r27
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Android APK
+        env:
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: npx tauri android build
+
+      - name: Verify incognito-keyboard injection
+        run: node scripts/check_wry_injection.js
+
+      # Runs after the build: lint needs the Rust libraries and the wry-generated sources.
+      - name: Lint Android
+        id: lint_android
+        working-directory: src-tauri/gen/android
+        run: ./gradlew :app:lintUniversalDebug
+
+      - name: Upload lint report
+        if: failure() && steps.lint_android.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-lint-report
+          path: src-tauri/gen/android/app/build/reports/lint-results-universalDebug.html
+
+      - name: Decode keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > aventura-release.keystore
+
+      - name: Sign APK
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          $ANDROID_HOME/build-tools/34.0.0/apksigner sign \
+            --ks aventura-release.keystore \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass pass:"$KEYSTORE_PASSWORD" \
+            --key-pass pass:"$KEY_PASSWORD" \
+            --out aventura-release.apk \
+            src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: aventura-release.apk
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: ${{ !inputs.prerelease }}
+          prerelease: ${{ inputs.prerelease }}
+          files: aventura-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

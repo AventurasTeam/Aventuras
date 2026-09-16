@@ -16,11 +16,14 @@ GitHub Actions workflows in `.github/workflows/`:
 
 - **`lint-and-typecheck.yml`** - runs `build`, `lint`, and `check` on every pull request targeting
   `master`, `develop`, or `dev`.
-- **`release.yml`** - triggered by pushing a stable version tag (`vX.Y.Z`). Builds signed desktop
-  binaries for Linux, Windows, macOS (Intel + Apple Silicon) via `tauri-apps/tauri-action`, plus a signed
-  Android APK, and publishes them as a draft GitHub release with auto-updater metadata.
-- **`ci.yml`** ("Pre-release") - triggered by pushing a pre-release tag (`vX.Y.Z-pre.N`). Same build
-  matrix as `release.yml`, but publishes a non-draft **pre-release** without updater metadata.
+- **`release.yml`** - triggered by pushing a stable version tag (`vX.Y.Z`). Publishes a draft GitHub
+  release with auto-updater metadata.
+- **`ci.yml`** ("Pre-release") - triggered by pushing a pre-release tag (`vX.Y.Z-pre.N`). Publishes a
+  non-draft **pre-release** without updater metadata.
+- **`build-desktop.yml`** and **`build-android.yml`** - reusable workflows that hold the build jobs for
+  both of the above, switched by a single `prerelease` input. Desktop builds signed binaries for Linux,
+  Windows and macOS (Intel + Apple Silicon) via `tauri-apps/tauri-action`; Android builds, lints and
+  signs the APK.
 
 Both release workflows expect `TAURI_SIGNING_PRIVATE_KEY(_PASSWORD)` and the `ANDROID_KEYSTORE_*` /
 `ANDROID_KEY_*` secrets to be configured on the repository.
@@ -49,8 +52,8 @@ Two things must stay in step, or the platforms will offer different versions to 
 the `RELEASE_REPO` constant in `updater.ts` and the `updater.endpoints` URL in
 `tauri.conf.json`.
 
-**A draft release is invisible to the updater.** `release.yml` publishes with
-`releaseDraft: true`, and both paths resolve `/releases/latest`, which GitHub defines as the
+**A draft release is invisible to the updater.** `release.yml` publishes a draft (a
+non-pre-release run of `build-desktop.yml` sets `releaseDraft`), and both paths resolve `/releases/latest`, which GitHub defines as the
 latest **published, non-pre-release** release. Until the draft is published by hand, the
 desktop endpoint 404s and the API returns the previous release — so the last step of every
 release is publishing the draft on GitHub. Nothing reaches users before that.
@@ -60,7 +63,7 @@ the `no-release` kind ("it may still be a draft"), distinct from `network` and `
 
 **The release notes users read are the GitHub release body, on both platforms.** They are not
 taken from `latest.json`, whose `notes` field is written by `tauri-action` at build time from
-the fixed `releaseBody` string in `release.yml` — which is a placeholder, not a changelog, and
+the fixed `releaseBody` string in `build-desktop.yml` — which is a placeholder, not a changelog, and
 cannot be otherwise, since the notes are written after the build. `releaseNotesFor` therefore
 fetches the release from the API and uses its body, falling back to `latest.json` if the call
 fails; the update installs either way. Two consequences:
@@ -181,7 +184,7 @@ This substitution is undocumented wry internals, not a public API — verified b
 stops appearing in the generated `RustWebView.kt`, that build script — not any docs page — is
 where the renamed placeholder or env var will be found.
 
-`scripts/check_wry_injection.js` runs after `tauri android build` in both Android CI jobs and
+`scripts/check_wry_injection.js` runs after `tauri android build` in `build-android.yml` and
 fails the build if the lines `.cargo/config.toml` injects are absent from the generated
 `RustWebView.kt`, so a wry bump that breaks the substitution stops the release instead of
 shipping a dead setting.
