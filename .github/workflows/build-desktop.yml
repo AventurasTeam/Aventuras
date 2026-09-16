@@ -75,6 +75,10 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      # Verified version-insensitive: rust-cache zeroes package.version in the workspace
+      # Cargo.toml and drops workspace crates from the Cargo.lock hash, so a release bump
+      # reuses this key. Re-check on upgrade — a TOML parse failure or an unsupported
+      # Cargo.lock format falls back to hashing the raw files, warning in the job log.
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
