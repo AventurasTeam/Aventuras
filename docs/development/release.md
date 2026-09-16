@@ -23,7 +23,10 @@ GitHub Actions workflows in `.github/workflows/`:
 - **`build-desktop.yml`** and **`build-android.yml`** - reusable workflows that hold the build jobs for
   both of the above, switched by a single `prerelease` input. Desktop builds signed binaries for Linux,
   Windows and macOS (Intel + Apple Silicon) via `tauri-apps/tauri-action`; Android builds, lints and
-  signs the APK.
+  signs the APK. Both also take a `publish` input (default `true`); `false` builds and signs without
+  uploading anything, which is what `warm-cache.yml` uses.
+- **`warm-cache.yml`** - builds `master` with `publish: false` so the Rust, Gradle and npm caches a
+  release restores from are warm. See [Build caching and speed](#build-caching-and-speed).
 
 Both release workflows expect `TAURI_SIGNING_PRIVATE_KEY(_PASSWORD)` and the `ANDROID_KEYSTORE_*` /
 `ANDROID_KEY_*` secrets to be configured on the repository.
@@ -56,6 +59,49 @@ Android and the lint job stay on `ubuntu-latest`: their output doesn't depend on
 
 Dependabot (`.github/dependabot.yml`) opens one grouped PR a month for `github-actions` updates, so
 action versions don't drift the way the runner pins are meant to prevent.
+
+### Build caching and speed
+
+GitHub Actions caches can only be restored from the current branch, the base branch of a PR, or the
+**default branch** (`master`) — never across different tag names. Since nothing builds on `master`
+by itself, every tag-triggered release would start every cache cold. `warm-cache.yml` exists to
+prevent that: it runs `build-desktop.yml` and `build-android.yml` with `publish: false` on a weekly
+schedule (Fridays, the day after Rust's stable release day), on pushes to `master` that touch
+dependency or workflow files, and on manual dispatch, so the caches those jobs leave behind on
+`master` are the ones a release restores. It skips the push `scripts/release.js` makes when it
+fast-forwards a version bump onto `master`: every cache key below already ignores the app's own
+version, so that push can only rebuild for nothing.
+
+- **Rust** (`swatinem/rust-cache`) sets `save-if: ${{ github.ref == 'refs/heads/master' }}` in both
+  build workflows, so only `warm-cache.yml` (or a run of `release.yml`/`ci.yml` if one is ever
+  dispatched from `master` directly) writes it.
+- **Gradle**, in `build-android.yml`, uses `gradle/actions/setup-gradle` with
+  `cache-provider: basic` — the MIT-licensed provider, not the default proprietary one — which
+  already defaults to read-only off the default branch. It also caches the Gradle wrapper
+  distribution download, which `actions/setup-java`'s `cache: gradle` option did not.
+- **npm**, across all three CI workflows, uses the `.github/actions/npm-install` composite action
+  instead of `actions/setup-node`'s built-in cache. `scripts/release.js` bumps the version in
+  `package.json`/`package-lock.json` on every release, and `setup-node`'s cache key is a plain hash
+  of `package-lock.json` with no fallback — so a release always missed that cache and then saved a
+  fresh entry nothing else could restore. The action keys on `scripts/ci/lockfile-hash.js`, which
+  hashes the lockfile with the version fields removed, and falls back to the newest same-OS/arch
+  entry on a miss; it also only saves on `master`.
+
+`build-android.yml` also builds `--apk` only (the AAB was built and discarded on every run) and
+targets `aarch64`, `armv7` and `x86_64` (32-bit `x86` served only old emulators). Both build
+workflows pass `--config src-tauri/tauri.release.conf.json`, which sets `build.features` to `[]` for
+that build: `tauri.conf.json`'s own `features: ["devtools"]` is only meant for `tauri dev` (the
+plugin is registered under `debug_assertions` in `src-tauri/src/lib.rs`), and on Android the CLI's
+own plugin-init build and Gradle's build used to end up on different feature sets for the same
+target, forcing one target to compile twice.
+
+**Deferred: per-ABI parallel Android builds.** The four (now three) Android ABIs are still built one
+after another by a single `tauri android build` invocation. A matrix job per target — each building
+its Rust `.so` and uploading it plus the tauri/wry-generated Gradle sources, followed by a packaging
+job that runs Gradle with the `rustBuild*Release` tasks excluded — would let them build in parallel.
+It is deferred: it bypasses the CLI's supported build flow, and with a warm cache each target's Rust
+build is already only 1-1.5 minutes, so the likely saving is a few minutes, not worth the added
+maintenance surface yet.
 
 ## The Updater
 
