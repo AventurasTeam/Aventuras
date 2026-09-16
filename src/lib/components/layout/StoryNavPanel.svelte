@@ -3,18 +3,29 @@
   import { ui } from '$lib/stores/ui.svelte'
   import {
     buildLandmarks,
+    checkpointDeletionBlocker,
     entryNumber,
     resolveEntryByNumber,
     type Landmark,
   } from '$lib/utils/storyNavigation'
   import { supportsHover } from '$lib/utils/platform'
+  import { ask } from '@tauri-apps/plugin-dialog'
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
   import { Label } from '$lib/components/ui/label'
   import { RadioGroup, RadioGroupItem } from '$lib/components/ui/radio-group'
   import EmptyState from '$lib/components/ui/empty-state/empty-state.svelte'
   import { swipe } from '$lib/utils/swipe'
-  import { Bookmark, Check, CornerDownLeft, Edit2, GitBranch, Milestone, X } from '@lucide/svelte'
+  import {
+    Bookmark,
+    Check,
+    CornerDownLeft,
+    Edit2,
+    GitBranch,
+    Milestone,
+    Trash2,
+    X,
+  } from '@lucide/svelte'
 
   let numberInput = $state('')
   let renamingCheckpointId = $state<string | null>(null)
@@ -126,6 +137,30 @@
     renamingCheckpointId = null
     renameValue = ''
   }
+
+  async function handleDeleteCheckpoint(
+    checkpointId: string,
+    checkpointName: string,
+    blockedReason: string | null,
+  ) {
+    if (blockedReason) {
+      ui.showToast(blockedReason, 'error')
+      return
+    }
+
+    const confirmed = await ask(
+      `Are you sure you want to delete checkpoint "${checkpointName}"? This cannot be undone.`,
+      { title: 'Delete Checkpoint', kind: 'warning' },
+    )
+    if (!confirmed) return
+
+    try {
+      await story.deleteCheckpoint(checkpointId)
+    } catch (error) {
+      console.error('Failed to delete checkpoint:', error)
+      ui.showToast(error instanceof Error ? error.message : 'Failed to delete checkpoint', 'error')
+    }
+  }
 </script>
 
 <aside
@@ -226,7 +261,7 @@
             {:else}
               <button
                 type="button"
-                class="flex min-h-[40px] w-full items-start gap-2 rounded-lg p-2 pr-10 text-left sm:min-h-0"
+                class="flex min-h-[40px] w-full items-start gap-2 rounded-lg p-2 pr-20 text-left sm:min-h-0 sm:pr-14"
                 onclick={() => void goToLandmark(landmark)}
                 title="Go to entry {landmark.number}:&#10;{landmark.label}"
               >
@@ -247,14 +282,43 @@
                 </span>
               </button>
               {#if landmark.checkpointId}
-                <button
-                  class="text-surface-500 hover:text-surface-200 absolute top-1 right-1 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 transition-opacity sm:min-h-0 sm:min-w-0 sm:p-0.5 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
-                  onclick={() => startRename(landmark.checkpointId!, landmark.label)}
-                  title="Rename"
-                  aria-label="Rename checkpoint"
+                {@const deleteBlockedReason = checkpointDeletionBlocker(
+                  landmark.checkpointId,
+                  story.branches,
+                )}
+                {@const deleteUnavailable = deleteBlockedReason !== null}
+                <div
+                  class="absolute top-1 right-1 flex transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100"
                 >
-                  <Edit2 class="h-4 w-4 sm:h-3 sm:w-3" />
-                </button>
+                  <button
+                    class="text-surface-500 hover:text-surface-200 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 sm:min-h-0 sm:min-w-0 sm:p-0.5"
+                    onclick={() => startRename(landmark.checkpointId!, landmark.label)}
+                    title="Rename"
+                    aria-label="Rename checkpoint"
+                  >
+                    <Edit2 class="h-4 w-4 sm:h-3 sm:w-3" />
+                  </button>
+                  <button
+                    class="flex min-h-[32px] min-w-[32px] items-center justify-center p-1 sm:min-h-0 sm:min-w-0 sm:p-0.5 {deleteUnavailable
+                      ? 'text-surface-600 cursor-not-allowed'
+                      : 'text-surface-500 hover:text-destructive'}"
+                    onclick={() =>
+                      void handleDeleteCheckpoint(
+                        landmark.checkpointId!,
+                        landmark.label,
+                        deleteBlockedReason,
+                      )}
+                    title={deleteUnavailable
+                      ? 'Cannot delete: used to create a branch'
+                      : 'Delete checkpoint'}
+                    aria-label={deleteUnavailable
+                      ? 'Cannot delete checkpoint: used to create a branch'
+                      : 'Delete checkpoint'}
+                    aria-disabled={deleteUnavailable}
+                  >
+                    <Trash2 class="h-4 w-4 sm:h-3 sm:w-3" />
+                  </button>
+                </div>
               {/if}
             {/if}
           </div>

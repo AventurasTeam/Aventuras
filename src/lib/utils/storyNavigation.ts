@@ -60,6 +60,19 @@ export interface Landmark {
   branchName: string
 }
 
+/** Branches created from this checkpoint; inherited visibility alone does not count as use. */
+export function branchesUsingCheckpoint(checkpointId: string, branches: Branch[]): Branch[] {
+  return branches.filter((branch) => branch.checkpointId === checkpointId)
+}
+
+export function checkpointDeletionBlocker(checkpointId: string, branches: Branch[]): string | null {
+  const sharingBranches = branchesUsingCheckpoint(checkpointId, branches)
+  if (sharingBranches.length === 0) return null
+
+  const branchNames = sharingBranches.map((branch) => `"${branch.name}"`).join(', ')
+  return `Cannot delete this checkpoint because it was used to create ${sharingBranches.length === 1 ? 'branch' : 'branches'} ${branchNames}. Delete ${sharingBranches.length === 1 ? 'that branch' : 'those branches'} first.`
+}
+
 /**
  * The places in the branch being read that are worth returning to: where it began, and every
  * checkpoint along the lineage that produced its current state.

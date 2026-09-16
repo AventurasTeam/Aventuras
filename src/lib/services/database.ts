@@ -1520,7 +1520,17 @@ class DatabaseService {
 
   async deleteCheckpoint(id: string): Promise<void> {
     const db = await this.getDb()
-    await db.execute('DELETE FROM checkpoints WHERE id = ?', [id])
+    const result = await db.execute(
+      `DELETE FROM checkpoints
+       WHERE id = ?
+         AND NOT EXISTS (SELECT 1 FROM branches WHERE checkpoint_id = ?)`,
+      [id, id],
+    )
+    if ((result.rowsAffected ?? 0) !== 1) {
+      throw new Error(
+        'Checkpoint could not be deleted because it does not exist or was used to create a branch',
+      )
+    }
   }
 
   /**
@@ -1816,20 +1826,20 @@ class DatabaseService {
     await db.execute(`UPDATE branches SET ${setClauses.join(', ')} WHERE id = ?`, values)
   }
 
-  async deleteBranch(id: string): Promise<void> {
-    const db = await this.getDb()
-    // Delete story entries belonging to this branch
-    await db.execute('DELETE FROM story_entries WHERE branch_id = ?', [id])
-    // Delete chapters belonging to this branch
-    await db.execute('DELETE FROM chapters WHERE branch_id = ?', [id])
-    // Delete world state items belonging to this branch
-    await db.execute('DELETE FROM characters WHERE branch_id = ?', [id])
-    await db.execute('DELETE FROM locations WHERE branch_id = ?', [id])
-    await db.execute('DELETE FROM items WHERE branch_id = ?', [id])
-    await db.execute('DELETE FROM story_beats WHERE branch_id = ?', [id])
-    await db.execute('DELETE FROM entries WHERE branch_id = ?', [id])
-    // Delete the branch itself
-    await db.execute('DELETE FROM branches WHERE id = ?', [id])
+  /** Delete a branch, its checkpoints, and all branch-owned data atomically. */
+  async deleteBranch(id: string, checkpointIds: string[] = []): Promise<void> {
+    await this.transaction([
+      ...deleteInStatements('checkpoints', 'id', checkpointIds),
+      // Chapters reference story entries, so remove them before their branch's entries.
+      { sql: 'DELETE FROM chapters WHERE branch_id = ?', params: [id] },
+      { sql: 'DELETE FROM story_entries WHERE branch_id = ?', params: [id] },
+      { sql: 'DELETE FROM characters WHERE branch_id = ?', params: [id] },
+      { sql: 'DELETE FROM locations WHERE branch_id = ?', params: [id] },
+      { sql: 'DELETE FROM items WHERE branch_id = ?', params: [id] },
+      { sql: 'DELETE FROM story_beats WHERE branch_id = ?', params: [id] },
+      { sql: 'DELETE FROM entries WHERE branch_id = ?', params: [id] },
+      { sql: 'DELETE FROM branches WHERE id = ?', params: [id] },
+    ])
   }
 
   async setStoryCurrentBranch(storyId: string, branchId: string | null): Promise<void> {
