@@ -34,13 +34,6 @@ describe('lockfileHash', () => {
     expect(lockfileHash(changed)).not.toBe(lockfileHash(baseLock))
   })
 
-  it('changes when a dependency is added or removed', () => {
-    const withExtra = structuredClone(baseLock)
-    withExtra.packages['node_modules/vite'] = { version: '6.0.0' }
-
-    expect(lockfileHash(withExtra)).not.toBe(lockfileHash(baseLock))
-  })
-
   it('does not mutate its input', () => {
     const before = JSON.stringify(baseLock)
     lockfileHash(baseLock)

@@ -21,7 +21,5 @@ export function lockfileHash(lock) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const path = process.argv[2] ?? 'package-lock.json'
-  const lock = JSON.parse(readFileSync(path, 'utf8'))
-  console.log(lockfileHash(lock))
+  console.log(lockfileHash(JSON.parse(readFileSync('package-lock.json', 'utf8'))))
 }
