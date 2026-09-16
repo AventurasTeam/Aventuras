@@ -217,6 +217,7 @@
   async function importReceivedStory() {
     if (!receivedStoryJson || !receivedStoryPreview || receivingStory) return
     const pendingStoryJson = receivedStoryJson
+    const pendingStoryPreview = receivedStoryPreview
     receivingStory = true
     receivedStoryNeedsPack = false
     error = null
@@ -246,30 +247,44 @@
       return
     }
 
+    // Everything below writes to the database, so a resolution that arrives after the modal was
+    // reset — or after a newer payload took over — must stop before it replaces a story the user
+    // is no longer talking about.
+    if (receivedStoryJson !== pendingStoryJson) return
+
     loading = true
     error = null
     showReceivedConflict = false
 
+    let importError: string | null = null
+    let imported = false
     try {
-      const existingId = await syncService.findStoryIdByTitle(receivedStoryPreview.title)
-      const result = await importSyncedStory(receivedStoryJson, existingId, packBinding)
-
-      if (result.success) {
-        await story.loadAllStories()
-        syncSuccess = true
-        syncMessage = `Successfully received "${receivedStoryPreview.title}"`
-      } else {
-        error = result.error ?? 'Import failed'
-      }
+      const existingId = await syncService.findStoryIdByTitle(pendingStoryPreview.title)
+      const result = await importSyncedStory(pendingStoryJson, existingId, packBinding)
+      imported = result.success
+      if (!result.success) importError = result.error ?? 'Import failed'
     } catch (e) {
-      error = e instanceof Error ? e.message : 'Import failed'
-    } finally {
-      loading = false
-      receivingStory = false
-      receivedStoryJson = null
-      receivedStoryPreview = null
-      resumeReceivedStories()
+      importError = e instanceof Error ? e.message : 'Import failed'
     }
+
+    if (imported) await story.loadAllStories()
+
+    // Report into, and tear down, only the session this import belongs to. A reset or a newer
+    // transfer can take over while the import runs; writing that session's error, clearing its
+    // payload, or resuming a queue it already dropped would clobber it.
+    if (receivedStoryJson !== pendingStoryJson) return
+
+    loading = false
+    receivingStory = false
+    receivedStoryJson = null
+    receivedStoryPreview = null
+    if (importError) {
+      error = importError
+    } else {
+      syncSuccess = true
+      syncMessage = `Successfully received "${pendingStoryPreview.title}"`
+    }
+    resumeReceivedStories()
   }
 
   function discardReceivedStory() {
