@@ -1713,13 +1713,24 @@ class StoryStore {
    */
   async setEntryTimes(entryId: string, start: TimeTracker, end: TimeTracker): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
-    const entry = this.entries.find((e) => e.id === entryId)
-    if (!entry) throw new Error('Entry not found')
+    const index = this.entries.findIndex((e) => e.id === entryId)
+    if (index === -1) throw new Error('Entry not found')
+
+    // The action before a narration is the instant that narration answers, so it moves with it.
+    // Left where it was, a new start would open time between them that neither entry claims.
+    const previous = this.entries[index - 1]
+    const times =
+      previous?.type === 'user_action'
+        ? [
+            { entryId: previous.id, start, end: start },
+            { entryId, start, end },
+          ]
+        : [{ entryId, start, end }]
 
     const plan = planRepair({
       entries: this.entries,
       chapters: this.chapters,
-      times: [{ entryId, start, end }],
+      times,
       checkpoints: this.checkpoints,
     })
 
