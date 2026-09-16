@@ -18,20 +18,24 @@ GitHub Actions workflows in `.github/workflows/`:
   targeting `master`, `develop`, or `dev`.
 - **`release.yml`** - triggered by pushing a stable version tag (`vX.Y.Z`). Publishes a draft GitHub
   release with auto-updater metadata.
-- **`ci.yml`** ("Pre-release") - triggered by pushing a pre-release tag (`vX.Y.Z-pre.N`). Publishes a
-  non-draft **pre-release** without updater metadata.
+- **`pre-release.yml`** ("Pre-release") - triggered by pushing a pre-release tag (`vX.Y.Z-pre.N`).
+  Publishes a non-draft **pre-release** without updater metadata.
 - **`build-desktop.yml`** and **`build-android.yml`** - reusable workflows that hold the build jobs for
   both of the above, switched by a single `prerelease` input. Desktop builds signed binaries for Linux,
   Windows and macOS (Intel + Apple Silicon) via `tauri-apps/tauri-action`; Android builds, lints and
-  signs the APK. Both also take a `publish` input (default `true`); `false` builds and signs without
-  uploading anything, which is what `warm-cache.yml` uses.
-- **`warm-cache.yml`** - builds `master` with `publish: false` so the Rust, Gradle and npm caches a
-  release restores from are warm. See [Build caching and speed](#build-caching-and-speed).
+  signs the APK. Both also take a `publish` input (default `true`); `false` skips the GitHub Release
+  upload, which is what `ci.yml` uses. Both workflows always upload their build output as a
+  workflow-run Artifact regardless of `publish` — desktop via `tauri-action`'s
+  `uploadWorkflowArtifacts`, Android via its own `actions/upload-artifact` step — so even a
+  non-publishing run leaves every platform's build downloadable from the run summary.
+- **`ci.yml`** - builds `master` with `publish: false` so the Rust, Gradle and npm caches a
+  release restores from are warm, and so every push/schedule leaves downloadable per-platform builds.
+  See [Build caching and speed](#build-caching-and-speed).
 
 Both release workflows expect `TAURI_SIGNING_PRIVATE_KEY(_PASSWORD)` and the `ANDROID_KEYSTORE_*` /
 `ANDROID_KEY_*` secrets to be configured on the repository.
 
-Both `release.yml` and `ci.yml` run a `create-release` job before the build matrix, which creates (or
+Both `release.yml` and `pre-release.yml` run a `create-release` job before the build matrix, which creates (or
 reuses) the GitHub release for the tag and passes its numeric ID to `build-desktop.yml` as `releaseId`.
 Without this, each of the four desktop matrix legs asks `tauri-action` to find-or-create the release
 for the same tag independently; two legs hitting "not found" within the same moment each create a
@@ -64,7 +68,7 @@ action versions don't drift the way the runner pins are meant to prevent.
 
 GitHub Actions caches can only be restored from the current branch, the base branch of a PR, or the
 **default branch** (`master`) — never across different tag names. Since nothing builds on `master`
-by itself, every tag-triggered release would start every cache cold. `warm-cache.yml` exists to
+by itself, every tag-triggered release would start every cache cold. `ci.yml` exists to
 prevent that: it runs `build-desktop.yml` and `build-android.yml` with `publish: false` on a weekly
 schedule (Fridays, the day after Rust's stable release day), on pushes to `master` that touch
 dependency or workflow files, and on manual dispatch, so the caches those jobs leave behind on
@@ -73,7 +77,7 @@ fast-forwards a version bump onto `master`: every cache key below already ignore
 version, so that push can only rebuild for nothing.
 
 - **Rust** (`swatinem/rust-cache`) sets `save-if: ${{ github.ref == 'refs/heads/master' }}` in both
-  build workflows, so only `warm-cache.yml` (or a run of `release.yml`/`ci.yml` if one is ever
+  build workflows, so only `ci.yml` (or a run of `release.yml`/`pre-release.yml` if one is ever
   dispatched from `master` directly) writes it.
 - **Gradle**, in `build-android.yml`, uses `gradle/actions/setup-gradle` with
   `cache-provider: basic` — the MIT-licensed provider, not the default proprietary one — which
@@ -201,7 +205,7 @@ Only `X.Y.Z` and `X.Y.Z-pre.N` are accepted. Other pre-release spellings are val
 neither workflow trigger, so they would tag and build nothing.
 
 Pushing a stable tag (`vX.Y.Z`) triggers `release.yml`; pushing a pre-release tag (`vX.Y.Z-pre.N`, via the
-`prerelease` bump type) triggers `ci.yml`. See [Continuous Integration](#continuous-integration).
+`prerelease` bump type) triggers `pre-release.yml`. See [Continuous Integration](#continuous-integration).
 
 **The script does not finish the release.** `release.yml` publishes a **draft**, and a draft is
 invisible to `/releases/latest` — which is where both the desktop updater and the Android check

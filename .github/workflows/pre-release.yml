@@ -1,0 +1,53 @@
+name: Pre-release
+
+on:
+  push:
+    tags:
+      - 'v*-pre*' # v0.5.5-pre.1
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release-id: ${{ steps.release.outputs.id }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Read app version
+        id: version
+        run: echo "version=$(node -p "require('./src-tauri/tauri.conf.json').version")" >> "$GITHUB_OUTPUT"
+
+      # Created once here so the parallel build jobs upload to a known release
+      # instead of racing each other to find-or-create it (which produces duplicate drafts).
+      - name: Create or reuse pre-release
+        id: release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: 'Aventuras v${{ steps.version.outputs.version }}'
+          draft: false
+          prerelease: true
+
+  build-desktop:
+    needs: create-release
+    uses: ./.github/workflows/build-desktop.yml
+    with:
+      prerelease: true
+      releaseId: ${{ needs.create-release.outputs.release-id }}
+    secrets: inherit
+
+  build-android:
+    needs: create-release
+    uses: ./.github/workflows/build-android.yml
+    with:
+      prerelease: true
+    secrets: inherit

@@ -9,7 +9,7 @@
 /**
  * Versions this project can release. Stricter than semver, because a tag is only worth
  * making if a workflow builds it: `release.yml` triggers on `v[0-9]+.[0-9]+.[0-9]+` and
- * `ci.yml` on `v*-pre*`, so a legal `1.2.3-beta.1` would tag, push and build nothing.
+ * `pre-release.yml` on `v*-pre*`, so a legal `1.2.3-beta.1` would tag, push and build nothing.
  */
 const VERSION_PATTERN = /^(\d+)\.(\d+)\.(\d+)(?:-pre\.(\d+))?$/
 

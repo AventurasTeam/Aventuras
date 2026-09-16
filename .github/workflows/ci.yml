@@ -1,53 +1,58 @@
-name: Pre-release
+name: CI
 
+# Builds every platform on `master` with publish: false — it exercises the exact same
+# build-desktop.yml / build-android.yml jobs a release uses, without publishing anything, so:
+#
+# - The Rust, Gradle and npm caches it leaves behind are the ones a release run picks up.
+#   Tag-triggered release runs (release.yml, pre-release.yml) can only restore caches created
+#   on the tag itself or on the default branch (GitHub: caches cannot be restored across
+#   different tag names), and nothing else builds on `master`, so without this workflow every
+#   release would start cold.
+# - Both build workflows still upload their output as workflow-run Artifacts regardless of
+#   publish, so every run here also leaves a downloadable, signed build for every platform —
+#   grabbable without waiting for a tagged release. See docs/development/release.md.
 on:
+  schedule:
+    # Fridays 06:00 UTC: renews the 7-day cache eviction window, and runs the day after Rust's
+    # ~6-week stable release cadence (Thursdays), so a new rustc's cache key is warm quickly.
+    - cron: '0 6 * * 5'
   push:
-    tags:
-      - 'v*-pre*' # v0.5.5-pre.1
+    branches:
+      - master
+    paths:
+      - 'src-tauri/Cargo.lock'
+      - 'src-tauri/Cargo.toml'
+      - 'package-lock.json'
+      - '.nvmrc'
+      - '.github/workflows/**'
+      - 'src-tauri/gen/android/**/*.gradle*'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
-  create-release:
-    runs-on: ubuntu-latest
-    outputs:
-      release-id: ${{ steps.release.outputs.id }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Read app version
-        id: version
-        run: echo "version=$(node -p "require('./src-tauri/tauri.conf.json').version")" >> "$GITHUB_OUTPUT"
-
-      # Created once here so the parallel build jobs upload to a known release
-      # instead of racing each other to find-or-create it (which produces duplicate drafts).
-      - name: Create or reuse pre-release
-        id: release
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: 'Aventuras v${{ steps.version.outputs.version }}'
-          draft: false
-          prerelease: true
-
+  # scripts/release.js fast-forwards `master` onto a `chore: bump version to X` commit that
+  # touches only version fields. Every cache key here (rust-cache, the Gradle basic provider,
+  # lockfile-hash.js) is already insensitive to that change, so a run triggered by it would
+  # rebuild for nothing; the next scheduled or manual run still warms caches for any real
+  # dependency change made in the same push.
   build-desktop:
-    needs: create-release
+    if: "github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore: bump version')"
     uses: ./.github/workflows/build-desktop.yml
     with:
       prerelease: true
-      releaseId: ${{ needs.create-release.outputs.release-id }}
+      publish: false
     secrets: inherit
 
   build-android:
-    needs: create-release
+    if: "github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore: bump version')"
     uses: ./.github/workflows/build-android.yml
     with:
       prerelease: true
+      publish: false
     secrets: inherit

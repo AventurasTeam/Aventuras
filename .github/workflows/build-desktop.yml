@@ -85,9 +85,11 @@ jobs:
       # since it's only registered under debug_assertions anyway and compiling it in is pure
       # cost on every platform.
       #
-      # When publish is false (the cache-warming workflow), releaseId/tagName/releaseName are
-      # left empty, which puts tauri-action in its documented "build only" mode: it still
-      # builds and signs, it just skips every upload.
+      # When publish is false (the CI build-validation workflow), releaseId/tagName/releaseName
+      # are left empty, which puts tauri-action in its documented "build only" mode for the
+      # release: it still builds and signs, it just skips the GitHub Release upload.
+      # uploadWorkflowArtifacts uploads the built bundles as workflow-run Artifacts regardless
+      # of publish, so every run — including a non-publishing one — leaves a downloadable build.
       - name: Build and release Tauri app
         uses: tauri-apps/tauri-action@v1
         env:
@@ -102,6 +104,7 @@ jobs:
           releaseDraft: ${{ !inputs.prerelease }}
           prerelease: ${{ inputs.prerelease }}
           uploadUpdaterJson: ${{ inputs.publish && !inputs.prerelease }}
+          uploadWorkflowArtifacts: true
           updaterJsonPreferNsis: true
           releaseAssetNamePattern: '[name]_v[version]_[arch][setup][ext]'
           args: --target ${{ matrix.target }} --config src-tauri/tauri.release.conf.json

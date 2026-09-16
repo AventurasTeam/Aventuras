@@ -116,7 +116,7 @@ if (!isValidVersion(newVersion)) {
     `"${inputArg}" is not a bump type or a releasable version.`,
     'Use major, minor, patch, prerelease, or a literal X.Y.Z / X.Y.Z-pre.N. Other pre-release ' +
       'shapes are rejected because no workflow builds them: release.yml triggers on ' +
-      'v[0-9]+.[0-9]+.[0-9]+ and ci.yml on v*-pre*.',
+      'v[0-9]+.[0-9]+.[0-9]+ and pre-release.yml on v*-pre*.',
   )
 }
 

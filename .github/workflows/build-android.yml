@@ -47,7 +47,7 @@ jobs:
       # Caches the Gradle wrapper distribution and dependencies via the 'basic' (MIT,
       # actions/cache-backed) provider. Not combined with actions/setup-java's own
       # 'cache: gradle', which the upstream docs warn interferes with this action's caching.
-      # Defaults to read-only off the default branch, so only warm-cache.yml running on
+      # Defaults to read-only off the default branch, so only ci.yml running on
       # master writes to it.
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
@@ -98,14 +98,12 @@ jobs:
           path: src-tauri/gen/android/app/build/reports/lint-results-universalDebug.html
 
       - name: Decode keystore
-        if: inputs.publish
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/aventura-release.keystore"
 
       - name: Sign APK
-        if: inputs.publish
         env:
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -121,7 +119,6 @@ jobs:
             src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
 
       - name: Upload Android APK
-        if: inputs.publish
         uses: actions/upload-artifact@v7
         with:
           name: android-apk
