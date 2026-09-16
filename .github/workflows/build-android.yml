@@ -97,6 +97,7 @@ jobs:
           name: android-lint-report
           path: src-tauri/gen/android/app/build/reports/lint-results-universalDebug.html
 
+      # Needed so that the APK published as a workflow artifact is signed
       - name: Decode keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -118,6 +119,7 @@ jobs:
             --out "$APK_NAME" \
             src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
 
+      # Deliberately publish workflow artifacts for every build
       - name: Upload Android APK
         uses: actions/upload-artifact@v7
         with:
@@ -125,6 +127,7 @@ jobs:
           path: Aventuras_v${{ steps.version.outputs.version }}.apk
           archive: false
 
+      # Only upload to a GitHub Release when publishing a new version
       - name: Upload to Release
         if: inputs.publish
         uses: softprops/action-gh-release@v3
