@@ -28,6 +28,15 @@ GitHub Actions workflows in `.github/workflows/`:
 Both release workflows expect `TAURI_SIGNING_PRIVATE_KEY(_PASSWORD)` and the `ANDROID_KEYSTORE_*` /
 `ANDROID_KEY_*` secrets to be configured on the repository.
 
+Both `release.yml` and `ci.yml` run a `create-release` job before the build matrix, which creates (or
+reuses) the GitHub release for the tag and passes its numeric ID to `build-desktop.yml` as `releaseId`.
+Without this, each of the four desktop matrix legs asks `tauri-action` to find-or-create the release
+for the same tag independently; two legs hitting "not found" within the same moment each create a
+release, splitting the platform assets across duplicate drafts. Passing a known `releaseId` skips that
+lookup entirely. `build-android.yml` doesn't take a `releaseId` — `action-gh-release` has no such
+input — but its job depends on `create-release` too, so by the time it looks the release up by tag,
+`create-release` has already guaranteed exactly one exists.
+
 ### Runner pinning
 
 Release binaries must not silently start depending on a newer host than the one they were tested
