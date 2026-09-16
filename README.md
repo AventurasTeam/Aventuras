@@ -35,19 +35,19 @@ state — who is present, where you are, what you carry — is tracked turn by t
 
 Pre-built binaries are on the [Releases](https://github.com/AventurasTeam/Aventuras/releases) page:
 
-| Platform | Download                                  |
-| -------- | ----------------------------------------- |
-| Windows  | `aventuras_x.x.x_x64-setup.exe`           |
-| macOS    | `aventuras_x.x.x_x64.dmg`                 |
-| Linux    | `aventuras_x.x.x_amd64.deb` / `.AppImage` |
-| Android  | `aventuras-release.apk`                   |
+| Platform | Download                                                     |
+| -------- | ------------------------------------------------------------ |
+| Windows  | `Aventuras_vX.Y.Z_x64-setup.exe`                             |
+| macOS    | `Aventuras_vX.Y.Z_x64.dmg` / `_aarch64.dmg`                  |
+| Linux    | `Aventuras_vX.Y.Z_amd64.deb` / `.AppImage`, or `_x86_64.rpm` |
+| Android  | `Aventuras_vX.Y.Z.apk`                                       |
 
 No API keys in config files — providers are set up in the app, under Settings → API Settings.
 
 ## Build from source
 
-Requires Node.js 22+, the latest stable Rust, and (for Android) the Android SDK, NDK r27 and
-JDK 17–24.
+Requires Node.js 22+, the latest stable Rust, and (for Android) the Android SDK, NDK r27d and
+JDK 21–24.
 
 ```bash
 git clone https://github.com/AventurasTeam/Aventuras.git
@@ -79,8 +79,8 @@ Harper.js (WASM) · Vitest
 ## Contributing
 
 Start with [docs/](docs/README.md) — the architecture is documented per area, and
-[CLAUDE.md](CLAUDE.md) has the conventions. CI runs build, lint and type-check on every PR
-against `master`, `develop` or `dev`.
+[CLAUDE.md](CLAUDE.md) has the conventions. CI runs lint, type-check, tests and a build on every
+PR against `master`, `develop` or `dev`.
 
 ## Acknowledgments
 

@@ -14,8 +14,8 @@ Managed by [lefthook](https://github.com/evilmartians/lefthook) (`lefthook.yml`)
 
 GitHub Actions workflows in `.github/workflows/`:
 
-- **`lint-and-typecheck.yml`** - runs `build`, `lint`, and `check` on every pull request targeting
-  `master`, `develop`, or `dev`.
+- **`lint-and-typecheck.yml`** - runs `lint`, `check`, `test`, and `build` on every pull request
+  targeting `master`, `develop`, or `dev`.
 - **`release.yml`** - triggered by pushing a stable version tag (`vX.Y.Z`). Publishes a draft GitHub
   release with auto-updater metadata.
 - **`ci.yml`** ("Pre-release") - triggered by pushing a pre-release tag (`vX.Y.Z-pre.N`). Publishes a
@@ -27,6 +27,26 @@ GitHub Actions workflows in `.github/workflows/`:
 
 Both release workflows expect `TAURI_SIGNING_PRIVATE_KEY(_PASSWORD)` and the `ANDROID_KEYSTORE_*` /
 `ANDROID_KEY_*` secrets to be configured on the repository.
+
+### Runner pinning
+
+Release binaries must not silently start depending on a newer host than the one they were tested
+against, so `build-desktop.yml`'s matrix pins its runners rather than tracking `-latest`:
+
+- **Linux** builds on the `ubuntu-latest` host inside an `ubuntu:22.04` container, so the glibc
+  baseline (2.35) stays fixed even after GitHub retires the `ubuntu-22.04` runner image
+  (deprecation begins 2026-09-17, removal 2027-04-17). The container supplies everything but the
+  kernel and Docker itself, both provided by the host.
+- **macOS** builds pin `macos-15` (Xcode 16.4). Tauri sets `MACOSX_DEPLOYMENT_TARGET=10.13` by
+  default, and Xcode 26 (the default on `macos-latest`) only supports macOS 11+ deployment
+  targets — building there would silently raise the minimum supported macOS version.
+- **Windows** builds pin `windows-2025`, the same image `windows-latest` currently resolves to, so
+  a future move to a newer image is a deliberate version bump rather than a silent one.
+
+Android and the lint job stay on `ubuntu-latest`: their output doesn't depend on the host OS.
+
+Dependabot (`.github/dependabot.yml`) opens one grouped PR a month for `github-actions` updates, so
+action versions don't drift the way the runner pins are meant to prevent.
 
 ## The Updater
 

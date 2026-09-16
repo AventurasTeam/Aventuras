@@ -14,31 +14,48 @@ env:
 jobs:
   build:
     name: Build Desktop (${{ matrix.artifact_name }})
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: ubuntu-22.04
+          - runner: ubuntu-latest
+            container: 'ubuntu:22.04'
             target: x86_64-unknown-linux-gnu
             artifact_name: linux
-          - platform: windows-latest
+          - runner: windows-2025
+            container: ''
             target: x86_64-pc-windows-msvc
             artifact_name: windows
-          - platform: macos-latest
+          - runner: macos-15
+            container: ''
             target: x86_64-apple-darwin
             artifact_name: macos-intel
-          - platform: macos-latest
+          - runner: macos-15
+            container: ''
             target: aarch64-apple-darwin
             artifact_name: macos-arm
 
-    runs-on: ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.container }}
 
     steps:
+      - name: Install Linux build dependencies
+        if: matrix.artifact_name == 'linux'
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            git curl wget file build-essential pkg-config \
+            libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev \
+            patchelf xdg-utils gstreamer1.0-plugins-base gstreamer1.0-plugins-good
+
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -52,29 +69,24 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
-
-      - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          key: ${{ matrix.target }}
 
       - name: Install dependencies
         run: npm ci
 
       - name: Build and release Tauri app
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: v__VERSION__
-          releaseName: 'Aventura v__VERSION__'
+          releaseName: 'Aventuras v__VERSION__'
           releaseBody: ${{ inputs.prerelease && '**Pre-release build** — a test/preview release. Use at your own risk.' || 'See the assets to download and install this version.' }}
           releaseDraft: ${{ !inputs.prerelease }}
           prerelease: ${{ inputs.prerelease }}
-          includeUpdaterJson: ${{ !inputs.prerelease }}
+          uploadUpdaterJson: ${{ !inputs.prerelease }}
           updaterJsonPreferNsis: true
-          assetNamePattern: '[name]_${{ github.ref_name }}_[arch][setup][ext]'
+          releaseAssetNamePattern: '[name]_v[version]_[arch][setup][ext]'
           args: --target ${{ matrix.target }}

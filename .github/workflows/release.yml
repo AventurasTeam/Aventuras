@@ -5,14 +5,13 @@ on:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+' # Stable releases only (v1.0.0)
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version tag (e.g., v0.1.0)'
-        required: true
-        default: 'v0.1.0'
 
 permissions:
   contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build-desktop:
