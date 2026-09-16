@@ -14,7 +14,7 @@
     LayerArrowUp,
     Lock,
   } from '@lucide/svelte'
-  import type { Branch, Checkpoint } from '$lib/types'
+  import type { Branch } from '$lib/types'
   import { SvelteSet } from 'svelte/reactivity'
   import { untrack } from 'svelte'
   import { supportsHover } from '$lib/utils/platform'
@@ -129,12 +129,6 @@
     }
   }
 
-  // Get the most recent checkpoint for branching
-  function getCheckpointBranchId(checkpoint: Checkpoint): string | null {
-    const lastEntry = checkpoint.entriesSnapshot.find((e) => e.id === checkpoint.lastEntryId)
-    return lastEntry?.branchId ?? null
-  }
-
   function getLatestCheckpoint() {
     if (story.checkpoints.length === 0) return null
     const currentBranchId = story.currentStory?.currentBranchId ?? null
@@ -143,8 +137,7 @@
     const liveEntryIds = new Set(story.entries.map((e) => e.id))
     const eligible = story.checkpoints.filter(
       (checkpoint) =>
-        getCheckpointBranchId(checkpoint) === currentBranchId &&
-        liveEntryIds.has(checkpoint.lastEntryId),
+        checkpoint.branchId === currentBranchId && liveEntryIds.has(checkpoint.lastEntryId),
     )
     if (eligible.length === 0) return null
     // Sort by createdAt descending and return the most recent
@@ -163,7 +156,7 @@
   const createBranchTitle = $derived.by(() => {
     if (canCreateBranch) return 'Create new branch from latest checkpoint'
     const currentBranchId = story.currentStory?.currentBranchId ?? null
-    const hadOne = story.checkpoints.some((c) => getCheckpointBranchId(c) === currentBranchId)
+    const hadOne = story.checkpoints.some((c) => c.branchId === currentBranchId)
     return hadOne
       ? "This branch's checkpoints aren't usable - their entries aren't loaded yet, or were deleted"
       : 'No checkpoints available - checkpoints are created at chapter boundaries'

@@ -435,8 +435,9 @@ export interface Chapter {
   createdAt: number
 }
 
-// Checkpoint for save/restore functionality
-export interface Checkpoint {
+// Everything a checkpoint carries in both shapes below: identity, snapshot boundaries, and the
+// world state a branch created from it is seeded with.
+interface CheckpointBase {
   id: string
   storyId: string
   name: string
@@ -447,7 +448,6 @@ export interface Checkpoint {
   entryCount: number
 
   // Deep copy of state
-  entriesSnapshot: StoryEntry[]
   charactersSnapshot: Character[]
   locationsSnapshot: Location[]
   itemsSnapshot: Item[]
@@ -459,6 +459,24 @@ export interface Checkpoint {
   lorebookEntriesSnapshot?: Entry[]
 
   createdAt: number
+}
+
+// The whole persisted row: what is written, exported, synced and imported.
+export interface CheckpointRecord extends CheckpointBase {
+  entriesSnapshot: StoryEntry[]
+}
+
+/**
+ * A checkpoint as the store holds it, which is every checkpoint in the open story for the whole
+ * session. `entriesSnapshot` is left on disk: it copies the story up to that point, so the
+ * checkpoints of one story outweigh the story itself several times over, and the only thing read
+ * from it is the anchoring entry's branch — which `branchId` now carries instead.
+ */
+export interface Checkpoint extends CheckpointBase {
+  /** Branch of the anchoring entry; null means main. Meaningless while `anchored` is false. */
+  branchId: string | null
+  /** Whether `lastEntryId` still resolves to an entry. False makes the checkpoint orphaned. */
+  anchored: boolean
 }
 
 // Branch for story branching/alternate timeline support

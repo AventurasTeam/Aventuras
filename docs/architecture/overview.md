@@ -106,7 +106,22 @@ The story is an append-only list of `StoryEntry` rows (`user_action`, `narration
   that reference it. It is the fork point a branch would be created from, so an orphaned one
   yields a branch pointing at an entry the database no longer holds. A reader may delete a
   checkpoint directly only until it is used to create a branch; the persistence delete repeats
-  that check so stale UI state cannot clear the branch's origin. A retry backup is scoped to
+  that check so stale UI state cannot clear the branch's origin.
+
+  **A checkpoint has no branch column**: it is owned by the branch of the entry it is anchored to,
+  which `getCheckpoints` resolves through a LEFT JOIN on `story_entries` and hands to the store as
+  `branchId` plus `anchored`. The join is a left one because a checkpoint whose anchor is gone is
+  still worth showing - `anchored: false` is what the navigation panel lists as orphaned, and it is
+  the only thing distinguishing that from a checkpoint that merely belongs to another branch, since
+  both are absent from the loaded entries. Deleting a branch selects its checkpoints by the same
+  rule, as a subquery inside the deletion transaction rather than from ids the store supplies, so
+  cleanup does not depend on the store's list being complete.
+
+  The store therefore loads every column **except `entries_snapshot`**, which copies the story up
+  to that point and so outweighs the story itself several times over once every checkpoint holds
+  one. Export, sync and backup take the whole row through `getCheckpointRecords`; the two shapes
+  are `Checkpoint` and `CheckpointRecord`, and the split is what stops an export quietly shipping
+  without the snapshots an import expects. A retry backup is scoped to
   a **branch** as well as a story: it records the branch it was taken on, is offered only there,
   and is refused on any other. Positions are reused by sibling branches after a fork, so a
   snapshot applied to the wrong branch deletes rows that merely share a number - and the

@@ -312,22 +312,11 @@
   // Clock for the stuck-image affordance, moved only when that affordance can change.
   let now = $state(Date.now())
 
-  // Helper to get which branch a checkpoint belongs to (by checking its last entry's branchId)
-  function getCheckpointBranchId(checkpoint: {
-    entriesSnapshot: { id: string; branchId?: string | null }[]
-    lastEntryId: string
-  }): string | null {
-    const lastEntry = checkpoint.entriesSnapshot.find((e) => e.id === checkpoint.lastEntryId)
-    return lastEntry?.branchId ?? null
-  }
-
   // Check if this entry has an associated checkpoint (can be branched from)
   // Only show checkpoints that belong to the current branch to prevent incorrect branch lineage
   const currentBranchId = $derived(story.currentStory?.currentBranchId ?? null)
   const entryCheckpoint = $derived(
-    story.checkpoints.find(
-      (cp) => cp.lastEntryId === entry.id && getCheckpointBranchId(cp) === currentBranchId,
-    ),
+    story.checkpoints.find((cp) => cp.lastEntryId === entry.id && cp.branchId === currentBranchId),
   )
   const canBranch = $derived(!!entryCheckpoint)
 

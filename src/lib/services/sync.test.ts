@@ -28,7 +28,7 @@ const db = {
   getStoryBeats: vi.fn(),
   getEntries: vi.fn(),
   getEmbeddedImagesForStory: vi.fn(),
-  getCheckpoints: vi.fn(),
+  getCheckpointRecords: vi.fn(),
   getBranches: vi.fn(),
   getChapters: vi.fn(),
   getStoryPackId: vi.fn(),
@@ -58,7 +58,7 @@ function baseline() {
   db.getStoryBeats.mockResolvedValue([])
   db.getEntries.mockResolvedValue([])
   db.getEmbeddedImagesForStory.mockResolvedValue([])
-  db.getCheckpoints.mockResolvedValue([])
+  db.getCheckpointRecords.mockResolvedValue([])
   db.getBranches.mockResolvedValue([])
   db.getChapters.mockResolvedValue([])
   db.getStoryPackId.mockResolvedValue(null)

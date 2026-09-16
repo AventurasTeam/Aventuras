@@ -19,6 +19,8 @@
   import {
     Bookmark,
     Check,
+    ChevronDown,
+    ChevronRight,
     CornerDownLeft,
     Edit2,
     GitBranch,
@@ -38,9 +40,15 @@
     return story.branches.find((b) => b.id === branchId) ?? null
   })
 
-  const landmarks = $derived(
+  const landmarkList = $derived(
     buildLandmarks(story.entries, story.checkpoints, story.branches, activeBranch),
   )
+  const landmarks = $derived(landmarkList.landmarks)
+  const orphaned = $derived(landmarkList.orphaned)
+
+  // Not persisted with the panel's own state: a reader who opens this to clear one checkpoint out
+  // does not want it open on every story afterwards.
+  let orphansExpanded = $state(false)
 
   const lastNumber = $derived(
     story.entries.length > 0 ? entryNumber(story.entries[story.entries.length - 1]) : 0,
@@ -112,6 +120,14 @@
     }
 
     goTo(landmark.entryId, `Jumped to entry ${landmark.number}`)
+  }
+
+  // The row is inert by design, but a tap that does nothing reads as a broken control where
+  // there is no tooltip to explain it.
+  function reportOrphan() {
+    if (!supportsHover()) {
+      ui.showToast('This checkpoint has no entry left to go to', 'info', 2000)
+    }
   }
 
   function startRename(checkpointId: string, name: string) {
@@ -323,6 +339,116 @@
             {/if}
           </div>
         {/each}
+      </div>
+    {/if}
+
+    {#if orphaned.length > 0}
+      <div class="border-surface-700/60 mt-4 border-t pt-3">
+        <button
+          type="button"
+          class="text-muted-foreground hover:text-surface-200 flex min-h-[32px] w-full items-center gap-2 text-left text-xs font-medium tracking-wider uppercase"
+          onclick={() => (orphansExpanded = !orphansExpanded)}
+          aria-expanded={orphansExpanded}
+          aria-controls="orphaned-checkpoints"
+        >
+          {#if orphansExpanded}
+            <ChevronDown class="h-3.5 w-3.5 shrink-0" />
+          {:else}
+            <ChevronRight class="h-3.5 w-3.5 shrink-0" />
+          {/if}
+          Orphaned ({orphaned.length})
+        </button>
+
+        {#if orphansExpanded}
+          <div id="orphaned-checkpoints" class="mt-2 space-y-1">
+            {#each orphaned as orphan (orphan.checkpointId)}
+              <div
+                class="group hover:bg-surface-700/50 relative min-h-[40px] rounded-lg transition-colors sm:min-h-0"
+              >
+                {#if renamingCheckpointId === orphan.checkpointId}
+                  <div class="flex items-start gap-2 p-2 text-left">
+                    <Bookmark class="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+                    <Input
+                      bind:value={renameValue}
+                      class="h-7 flex-1 text-sm"
+                      aria-label="Checkpoint name"
+                      onkeydown={(e: KeyboardEvent) => {
+                        if (e.key === 'Enter') void confirmRename()
+                        if (e.key === 'Escape') cancelRename()
+                      }}
+                    />
+                    <button
+                      class="text-surface-500 hover:text-surface-200 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 sm:min-h-0 sm:min-w-0 sm:p-0.5"
+                      onclick={() => void confirmRename()}
+                      title="Save checkpoint name"
+                      aria-label="Save checkpoint name"
+                    >
+                      <Check class="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+                    </button>
+                    <button
+                      class="text-surface-500 hover:text-surface-200 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 sm:min-h-0 sm:min-w-0 sm:p-0.5"
+                      onclick={cancelRename}
+                      title="Cancel rename"
+                      aria-label="Cancel checkpoint rename"
+                    >
+                      <X class="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+                    </button>
+                  </div>
+                {:else}
+                  <button
+                    type="button"
+                    class="flex min-h-[40px] w-full items-start gap-2 rounded-lg p-2 pr-20 text-left sm:min-h-0 sm:pr-14"
+                    onclick={reportOrphan}
+                    title="This checkpoint's entry no longer exists, so there is nowhere to go"
+                  >
+                    <Bookmark class="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+                    <span class="min-w-0 flex-1">
+                      <span class="text-surface-200 block text-sm break-words">{orphan.label}</span>
+                      <span class="text-destructive block truncate text-xs">orphaned</span>
+                    </span>
+                  </button>
+                  {@const orphanBlockedReason = checkpointDeletionBlocker(
+                    orphan.checkpointId,
+                    story.branches,
+                  )}
+                  {@const orphanDeleteUnavailable = orphanBlockedReason !== null}
+                  <div
+                    class="absolute top-1 right-1 flex transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100"
+                  >
+                    <button
+                      class="text-surface-500 hover:text-surface-200 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 sm:min-h-0 sm:min-w-0 sm:p-0.5"
+                      onclick={() => startRename(orphan.checkpointId, orphan.label)}
+                      title="Rename"
+                      aria-label="Rename checkpoint"
+                    >
+                      <Edit2 class="h-4 w-4 sm:h-3 sm:w-3" />
+                    </button>
+                    <button
+                      class="flex min-h-[32px] min-w-[32px] items-center justify-center p-1 sm:min-h-0 sm:min-w-0 sm:p-0.5 {orphanDeleteUnavailable
+                        ? 'text-surface-600 cursor-not-allowed'
+                        : 'text-surface-500 hover:text-destructive'}"
+                      onclick={() =>
+                        void handleDeleteCheckpoint(
+                          orphan.checkpointId,
+                          orphan.label,
+                          orphanBlockedReason,
+                        )}
+                      title={orphanDeleteUnavailable
+                        ? 'Cannot delete: used to create a branch'
+                        : 'Delete checkpoint'}
+                      aria-label={orphanDeleteUnavailable
+                        ? 'Cannot delete checkpoint: used to create a branch'
+                        : 'Delete checkpoint'}
+                      aria-disabled={orphanDeleteUnavailable}
+                    >
+                      <Trash2 class="h-4 w-4 sm:h-3 sm:w-3" />
+                    </button>
+                  </div>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        {/if}
       </div>
     {/if}
   </div>
