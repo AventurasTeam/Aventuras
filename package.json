@@ -101,5 +101,12 @@
       "lefthook": true,
       "unrs-resolver": true
     }
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "^24.0.0",
+      "onFail": "error"
+    }
   }
 }
