@@ -65,35 +65,20 @@ jobs:
         with:
           ndk-version: r27d
 
-      # Only for non-publishing (ci.yml) runs: suffixes the app version with the short commit
-      # SHA, so a build-validation run doesn't silently reuse the last release's version number
-      # in its APK filename and in-app "About" display. Must stay a valid semver build (the
-      # updater's own version comparator and Tauri's config validation both require the
-      # `X.Y.Z` prefix), so this appends a pre-release identifier rather than replacing it.
-      - name: Read app version
+      - name: Resolve build version
         id: version
-        run: |
-          base_version=$(node -p "require('./src-tauri/tauri.conf.json').version")
-          if [ "${{ inputs.publish }}" = "true" ]; then
-            echo "version=$base_version" >> "$GITHUB_OUTPUT"
-          else
-            short_sha=$(git rev-parse --short=7 HEAD)
-            echo "version=${base_version}-${short_sha}" >> "$GITHUB_OUTPUT"
-            printf '{"version":"%s-%s"}' "$base_version" "$short_sha" > ci-version.conf.json
-          fi
+        uses: ./.github/actions/build-version
+        with:
+          publish: ${{ inputs.publish }}
 
       # --apk: the AAB is never used, and building it doubles most of the per-target work.
       # --target: 32-bit x86 serves only old emulators; arm64/armv7/x86_64 cover real devices,
       # ChromeOS and current emulators.
-      # --config: drops the devtools feature for this build only (see tauri.release.conf.json),
-      # so this pass and Gradle's own build compile each target under the same feature set
-      # instead of two different ones. A second --config, on non-publishing runs only, applies
-      # the SHA-suffixed version computed above.
       - name: Build Android APK
         env:
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-        run: npx tauri android build --apk --target aarch64 armv7 x86_64 --config src-tauri/tauri.release.conf.json${{ !inputs.publish && ' --config ci-version.conf.json' || '' }}
+        run: npx tauri android build --apk --target aarch64 armv7 x86_64 ${{ steps.version.outputs.config-args }}
 
       - name: Verify incognito-keyboard injection
         run: node scripts/check_wry_injection.js

@@ -1,0 +1,40 @@
+name: 'Resolve build version'
+description: >
+  Resolves the version a build reports and the --config arguments that carry it. A publishing
+  run uses tauri.conf.json's version unchanged, since it must stay exactly what the pushed tag
+  names. A non-publishing (CI) run appends the short commit SHA, so build-validation output is
+  not mistaken for the last release. The suffix is appended rather than substituted because
+  both Tauri's config deserializer and isNewerVersion in src/lib/utils/version.ts require the
+  `X.Y.Z` prefix. See docs/development/release.md#build-version.
+
+inputs:
+  publish:
+    description: 'Whether this build publishes a release; false appends the SHA suffix'
+    required: true
+
+outputs:
+  version:
+    description: 'The version this build reports'
+    value: ${{ steps.resolve.outputs.version }}
+  config-args:
+    description: '--config arguments for tauri build / tauri android build'
+    value: ${{ steps.resolve.outputs.config-args }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve version
+      id: resolve
+      shell: bash
+      run: |
+        base_version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+        config_args='--config src-tauri/tauri.release.conf.json'
+        if [ "${{ inputs.publish }}" = "true" ]; then
+          version="$base_version"
+        else
+          version="${base_version}-$(git rev-parse --short=7 HEAD)"
+          printf '{"version":"%s"}' "$version" > ci-version.conf.json
+          config_args="$config_args --config ci-version.conf.json"
+        fi
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+        echo "config-args=$config_args" >> "$GITHUB_OUTPUT"

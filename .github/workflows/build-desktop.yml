@@ -81,28 +81,16 @@ jobs:
           key: ${{ matrix.target }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
-      # Only for non-publishing (ci.yml) runs: suffixes the app version with the short commit
-      # SHA, so a build-validation run doesn't silently reuse the last release's version number
-      # in its bundle filenames and in-app "About" display. Must stay a valid semver build (the
-      # updater's own version comparator and Tauri's config validation both require the
-      # `X.Y.Z` prefix), so this appends a pre-release identifier rather than replacing it.
-      - name: Compute CI build version
-        if: ${{ !inputs.publish }}
-        shell: bash
-        run: |
-          base_version=$(node -p "require('./src-tauri/tauri.conf.json').version")
-          short_sha=$(git rev-parse --short=7 HEAD)
-          printf '{"version":"%s-%s"}' "$base_version" "$short_sha" > ci-version.conf.json
+      - name: Resolve build version
+        id: version
+        uses: ./.github/actions/build-version
+        with:
+          publish: ${{ inputs.publish }}
 
-      # --config drops the devtools feature for this build (see tauri.release.conf.json),
-      # since it's only registered under debug_assertions anyway and compiling it in is pure
-      # cost on every platform.
-      #
-      # When publish is false (the CI build-validation workflow), releaseId/tagName/releaseName
-      # are left empty, which puts tauri-action in its documented "build only" mode for the
-      # release: it still builds and signs, it just skips the GitHub Release upload.
-      # uploadWorkflowArtifacts uploads the built bundles as workflow-run Artifacts regardless
-      # of publish, so every run — including a non-publishing one — leaves a downloadable build.
+      # When publish is false (the CI build-validation workflow), tagName/releaseName are left
+      # empty, which puts tauri-action in its documented "build only" mode: it still builds and
+      # signs, it just skips the GitHub Release upload. uploadWorkflowArtifacts uploads the
+      # bundles as workflow-run Artifacts either way, so every run leaves a downloadable build.
       - name: Build and release Tauri app
         uses: tauri-apps/tauri-action@v1
         env:
@@ -120,4 +108,4 @@ jobs:
           uploadWorkflowArtifacts: true
           updaterJsonPreferNsis: true
           releaseAssetNamePattern: '[name]_v[version]_[arch][setup][ext]'
-          args: --target ${{ matrix.target }} --config src-tauri/tauri.release.conf.json${{ !inputs.publish && ' --config ci-version.conf.json' || '' }}
+          args: --target ${{ matrix.target }} ${{ steps.version.outputs.config-args }}

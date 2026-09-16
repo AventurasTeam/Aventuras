@@ -104,11 +104,12 @@ target, forcing one target to compile twice.
 A `publish: false` run (`ci.yml`) never bumped `tauri.conf.json`'s `version`, so without
 intervention every build-validation run would reuse whatever version `master` last shipped —
 indistinguishable bundle filenames and in-app "About" text across every commit since. Both
-build workflows work around this with a `Compute CI build version` / extended `Read app
-version` step, gated on `!inputs.publish`, that writes `ci-version.conf.json` (a
-`{"version": "<base>-<short-sha>"}` override, gitignored, never committed) and passes it as a
-second `--config` to `tauri build`/`tauri android build`, merged on top of
-`tauri.release.conf.json`. `tauri-action` re-resolves the same `--config` list itself to name
+build workflows call `.github/actions/build-version`, which on a non-publishing run writes
+`ci-version.conf.json` (a `{"version": "<base>-<short-sha>"}` override, gitignored, never
+committed) and emits the `--config` list that carries it to `tauri build`/`tauri android
+build`, merged on top of `tauri.release.conf.json`. Both workflows take that list from the
+action's `config-args` output, so the rule lives in one place.
+`tauri-action` re-resolves the same `--config` list itself to name
 workflow artifacts and set its `appVersion` output, so the desktop and Android legs, the
 bundle filenames, and `getVersion()` inside the running app all agree on one
 `<base>-<short-sha>` string.
