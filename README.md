@@ -46,8 +46,8 @@ No API keys in config files — providers are set up in the app, under Settings 
 
 ## Build from source
 
-Requires Node.js 22+, the latest stable Rust, and (for Android) the Android SDK, NDK r27d and
-JDK 21–24.
+Requires the Node.js version in [`.nvmrc`](.nvmrc), the latest stable Rust, and (for Android)
+the Android SDK, NDK r27d and JDK 21–24.
 
 ```bash
 git clone https://github.com/AventurasTeam/Aventuras.git
