@@ -2,7 +2,7 @@
   import { ui } from '$lib/stores/ui.svelte'
   import { story } from '$lib/stores/story.svelte'
   import { syncService } from '$lib/services/sync'
-  import { exportService } from '$lib/services/export'
+  import { importSyncedStory, pushSyncedStory } from '$lib/services/syncActions'
   import { getVersion } from '@tauri-apps/api/app'
   import {
     QrCode,
@@ -38,9 +38,9 @@
   /**
    * Settle which pack the incoming story binds to, before the transfer writes or deletes anything.
    *
-   * This runs ahead of `createPreSyncBackup`/`deleteStory` on purpose. Both receive paths remove
-   * the story they are replacing *before* importing, so a question asked any later would let a
-   * cancel destroy the copy being replaced and put nothing in its place.
+   * This runs ahead of `deleteStory` on purpose. Both receive paths remove the story they are
+   * replacing *before* importing, so a question asked any later would let a cancel destroy the
+   * copy being replaced and put nothing in its place.
    *
    * Sync can ask at all because it is user-driven: the payload is already downloaded and no
    * remote party is waiting. A background sync would need a different answer here.
@@ -91,7 +91,14 @@
   let receivedStoryQueue = $state<string[]>([])
   let showReceivedConflict = $state(false)
   let pollingInterval: ReturnType<typeof setInterval> | null = null
-  let receivingStory = false
+  let receivingStory = $state(false)
+  let receivedStoryNeedsPack = $state(false)
+  /**
+   * Bumped whenever the pending received story changes hands: a new claim, a discard, or a modal
+   * reset. An import that started under an older token must not write to the session that replaced
+   * it, and comparing payloads is not enough — the same story can be pushed twice, byte for byte.
+   */
+  let receivedSession = 0
 
   // State for version mismatch warning
   let remoteVersion = $state<string | null>(null)
@@ -133,6 +140,8 @@
     receivedStoryQueue = []
     showReceivedConflict = false
     receivingStory = false
+    receivedStoryNeedsPack = false
+    receivedSession++
     remoteVersion = null
     localVersion = null
     showVersionWarning = false
@@ -184,11 +193,22 @@
 
     receivedStoryJson = storyJson
     receivedStoryPreview = preview
-    const exists = await syncService.checkStoryExists(preview.title)
-    if (exists) {
-      showReceivedConflict = true
-    } else {
-      await importReceivedStory()
+    receivedStoryNeedsPack = false
+    receivingStory = true
+    receivedSession++
+
+    try {
+      const exists = await syncService.checkStoryExists(preview.title)
+      if (exists) {
+        receivingStory = false
+        showReceivedConflict = true
+      } else {
+        receivingStory = false
+        await importReceivedStory()
+      }
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Could not prepare the received story'
+      receivingStory = false
     }
   }
 
@@ -204,60 +224,96 @@
 
   async function importReceivedStory() {
     if (!receivedStoryJson || !receivedStoryPreview || receivingStory) return
+    const pendingStoryJson = receivedStoryJson
+    const pendingStoryPreview = receivedStoryPreview
+    const pendingSession = receivedSession
     receivingStory = true
+    receivedStoryNeedsPack = false
+    error = null
 
     // Pack first — and deliberately outside the block below, whose `finally` discards the
     // received payload. The poller has already cleared the server's copy, so a cancel that fell
     // through to it would lose the story outright; backing out must leave it pending so the user
     // can go install the pack and click again.
-    const packBinding = await resolveIncomingPack(receivedStoryJson)
+    let packBinding: PackBindingResolution | null | { error: string }
+    try {
+      packBinding = await resolveIncomingPack(pendingStoryJson)
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Could not prepare the received story'
+      receivingStory = false
+      return
+    }
     if (packBinding && 'error' in packBinding) {
       error = packBinding.error
       receivingStory = false
       return
     }
     if (!packBinding) {
+      // A lifecycle reset settles the dialog after it has already dropped the pending payload.
+      // Only mark a user-cancelled choice as retryable when this session is still the live one.
+      if (receivedSession === pendingSession) receivedStoryNeedsPack = true
       receivingStory = false
       return
     }
+
+    // Everything below writes to the database, so a resolution that arrives after the modal was
+    // reset — or after a newer payload took over — must stop before it replaces a story the user
+    // is no longer talking about.
+    if (receivedSession !== pendingSession) return
 
     loading = true
     error = null
     showReceivedConflict = false
 
+    let importError: string | null = null
+    let imported = false
     try {
-      // If replacing, delete the existing story first
-      const existingId = await syncService.findStoryIdByTitle(receivedStoryPreview.title)
-      if (existingId) {
-        await syncService.createPreSyncBackup(existingId)
-        await syncService.deleteStory(existingId)
-      }
-
-      const result = await exportService.importFromContent(receivedStoryJson, true, {
-        resolvePackBinding: async () => packBinding,
-      })
-
-      if (result.success) {
-        await story.loadAllStories()
-        syncSuccess = true
-        syncMessage = `Successfully received "${receivedStoryPreview.title}"`
-      } else {
-        error = result.error ?? 'Import failed'
+      const existingId = await syncService.findStoryIdByTitle(pendingStoryPreview.title)
+      const result = await importSyncedStory(pendingStoryJson, existingId, packBinding)
+      imported = result.success
+      if (!result.success) importError = result.error ?? 'Import failed'
+      // Inside the block on purpose: a reload that fails must still fall through to the teardown
+      // below, or the modal is left loading with the queue paused. The story is already imported
+      // either way, so this cannot turn a success into a reported failure.
+      if (imported) {
+        try {
+          await story.loadAllStories()
+        } catch {
+          // The list refreshes on the next load.
+        }
       }
     } catch (e) {
-      error = e instanceof Error ? e.message : 'Import failed'
-    } finally {
-      loading = false
-      receivingStory = false
-      receivedStoryJson = null
-      receivedStoryPreview = null
-      resumeReceivedStories()
+      importError = e instanceof Error ? e.message : 'Import failed'
     }
+
+    // Report into, and tear down, only the session this import belongs to. A reset or a newer
+    // transfer can take over while the import runs; writing that session's error, clearing its
+    // payload, or resuming a queue it already dropped would clobber it.
+    if (receivedSession !== pendingSession) return
+
+    loading = false
+    receivingStory = false
+
+    if (importError) {
+      // Keep the payload pending rather than dropping it. The poller already cleared the server's
+      // copy, so this is the only remaining chance to retry, and a replacement import that failed
+      // after deleting the local story makes that retry the user's only way back.
+      error = importError
+      return
+    }
+
+    receivedStoryJson = null
+    receivedStoryPreview = null
+    syncSuccess = true
+    syncMessage = `Successfully received "${pendingStoryPreview.title}"`
+    resumeReceivedStories()
   }
 
   function discardReceivedStory() {
     showReceivedConflict = false
     receivingStory = false
+    receivedStoryNeedsPack = false
+    receivedSession++
     receivedStoryJson = null
     receivedStoryPreview = null
     resumeReceivedStories()
@@ -474,18 +530,8 @@
         return
       }
 
-      // If replacing, delete the existing story first
       const existingId = await syncService.findStoryIdByTitle(selectedRemoteStory.title)
-      if (existingId) {
-        await syncService.createPreSyncBackup(existingId)
-        await syncService.deleteStory(existingId)
-      }
-
-      // Import using existing import service
-      // Use skipImportedSuffix=true so synced stories keep their original title
-      const result = await exportService.importFromContent(storyJson, true, {
-        resolvePackBinding: async () => packBinding,
-      })
+      const result = await importSyncedStory(storyJson, existingId, packBinding)
 
       if (result.success) {
         await story.loadAllStories()
@@ -509,14 +555,7 @@
     error = null
 
     try {
-      // Create backup before pushing (on local device)
-      await syncService.createPreSyncBackup(selectedLocalStory.id)
-
-      // Export the story
-      const storyJson = await syncService.exportStoryToJson(selectedLocalStory.id)
-
-      // Push to remote
-      await syncService.pushStory(connection, storyJson)
+      await pushSyncedStory(connection, selectedLocalStory.id)
 
       syncSuccess = true
       syncMessage = `Successfully pushed "${selectedLocalStory.title}"`
@@ -563,7 +602,15 @@
         {#if ui.syncMode === 'select'}
           Local Network Sync
         {:else if ui.syncMode === 'generate'}
-          Waiting for Connection
+          {syncSuccess
+            ? 'Story Received'
+            : receivingStory
+              ? loading
+                ? 'Importing Story'
+                : 'Preparing Import'
+              : receivedStoryPreview
+                ? 'Story Received'
+                : 'Waiting for Connection'}
         {:else if ui.syncMode === 'scan'}
           Scan QR Code
         {:else if ui.syncMode === 'connected'}
@@ -576,7 +623,15 @@
         {#if ui.syncMode === 'select'}
           Sync stories between devices on the same network.
         {:else if ui.syncMode === 'generate'}
-          Show this QR code to another device to connect.
+          {syncSuccess
+            ? 'The received story was imported successfully.'
+            : receivingStory
+              ? loading
+                ? 'Importing the received story.'
+                : 'Preparing the received story for import.'
+              : receivedStoryPreview
+                ? 'Review the story received from the connected device.'
+                : 'Show this QR code to another device to connect.'}
         {:else if ui.syncMode === 'scan'}
           Scan the QR code shown on the other device.
         {:else if ui.syncMode === 'connected'}
@@ -637,7 +692,18 @@
         </div>
       {:else if ui.syncMode === 'generate'}
         <!-- QR Code Display -->
-        {#if showReceivedConflict && receivedStoryPreview}
+        {#if receivingStory || loading}
+          <div class="flex flex-col items-center justify-center py-12">
+            <Loader2 class="text-primary h-8 w-8 animate-spin" />
+            <p class="text-muted-foreground mt-4">
+              {receivingStory
+                ? loading
+                  ? 'Importing story...'
+                  : 'Preparing import...'
+                : 'Starting server...'}
+            </p>
+          </div>
+        {:else if showReceivedConflict && receivedStoryPreview}
           <!-- Conflict warning for received push -->
           <div class="flex flex-col items-center py-4 text-center">
             <div
@@ -647,9 +713,14 @@
             </div>
             <h3 class="mb-2 text-lg font-semibold">Story Already Exists</h3>
             <p class="text-muted-foreground mb-4">
-              A story named "{receivedStoryPreview.title}" already exists on this device. Replacing
-              it will create a "Pre-sync backup" checkpoint first. Continue?
+              A story named "{receivedStoryPreview.title}" already exists on this device. Replace it
+              with the received story?
             </p>
+            {#if receivedStoryNeedsPack}
+              <p class="text-muted-foreground mb-4 text-sm">
+                A prompt pack must still be selected before the received story can be imported.
+              </p>
+            {/if}
             <div class="flex gap-3">
               <Button variant="outline" onclick={discardReceivedStory}>Cancel</Button>
               <Button onclick={importReceivedStory}>Replace</Button>
@@ -658,17 +729,17 @@
         {:else if receivedStoryPreview}
           <div class="flex flex-col items-center py-4 text-center">
             <p class="text-muted-foreground mb-4">
-              Received "{receivedStoryPreview.title}". Choose a prompt pack to continue.
+              {#if receivedStoryNeedsPack}
+                Received "{receivedStoryPreview.title}". A prompt pack must be selected before
+                importing. Import again to choose one, or discard the story.
+              {:else}
+                Received "{receivedStoryPreview.title}". Try importing again, or discard the story.
+              {/if}
             </p>
             <div class="flex gap-3">
               <Button variant="outline" onclick={discardReceivedStory}>Discard</Button>
-              <Button onclick={importReceivedStory}>Continue import</Button>
+              <Button onclick={importReceivedStory}>Import</Button>
             </div>
-          </div>
-        {:else if loading}
-          <div class="flex flex-col items-center justify-center py-12">
-            <Loader2 class="text-primary h-8 w-8 animate-spin" />
-            <p class="text-muted-foreground mt-4">Starting server...</p>
           </div>
         {:else if serverInfo}
           <div class="flex flex-col items-center text-center">
@@ -740,7 +811,7 @@
               </div>
               <p class="text-sm">
                 A story named "{conflictStoryTitle}" already exists on this device. Pulling will
-                replace it after creating a "Pre-sync backup" checkpoint.
+                replace it with the remote story.
               </p>
               <div class="mt-3 flex gap-2">
                 <Button variant="secondary" size="sm" onclick={cancelConflict}>Cancel</Button>

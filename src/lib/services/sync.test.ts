@@ -13,11 +13,8 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-// Module-scope Tauri and store imports that must merely resolve under Node.
+// Module-scope Tauri imports that must merely resolve under Node.
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
-vi.mock('$lib/stores/story.svelte', () => ({
-  story: { currentStory: null, loadStory: vi.fn(), createCheckpoint: vi.fn() },
-}))
 
 const db = {
   getStory: vi.fn(),
@@ -169,6 +166,19 @@ describe('exportStoryToJson — pack binding', () => {
 })
 
 describe('exportStoryToJson — known divergences from the .avt path', () => {
+  it('carries checkpoints that already belong to the source story', async () => {
+    const checkpoint = {
+      id: 'checkpoint-1',
+      storyId: 's1',
+      name: 'Before the crossing',
+      lastEntryId: 'e1',
+      entriesSnapshot: [],
+    }
+    db.getCheckpoints.mockResolvedValue([checkpoint])
+
+    expect((await payload()).checkpoints).toEqual([checkpoint])
+  })
+
   it('still stamps 1.7.0, which the shape-driven importer ignores', async () => {
     // Not an endorsement: pinned so that correcting it is deliberate. The importer never
     // compares this value, which is why the binding above is honoured despite it.
