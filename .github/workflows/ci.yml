@@ -24,16 +24,22 @@ on:
       - 'src-tauri/Cargo.toml'
       - 'package-lock.json'
       - '.nvmrc'
-      - '.github/workflows/**'
+      - '.github/workflows/ci.yml'
+      - '.github/workflows/build-*.yml'
+      - '.github/actions/**'
+      - 'scripts/ci/**'
       - 'src-tauri/gen/android/**/*.gradle*'
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# Not cancel-in-progress: a cancelled job never reaches the cache-save post steps, so
+# superseding a run in flight would discard a full multi-platform warm-up and leave the
+# caches exactly as cold as before.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   # scripts/release.js fast-forwards `master` onto a `chore: bump version to X` commit that
