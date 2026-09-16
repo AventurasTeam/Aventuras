@@ -8,9 +8,15 @@ on:
         type: boolean
         required: true
       releaseId:
-        description: 'ID of the pre-created release to upload assets to (avoids a create-release race across the matrix)'
+        description: 'ID of the pre-created release to upload assets to (avoids a create-release race across the matrix). Required when publish is true.'
         type: string
-        required: true
+        required: false
+        default: ''
+      publish:
+        description: 'Upload assets to the release; false to just build and warm caches'
+        type: boolean
+        required: false
+        default: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -44,6 +50,8 @@ jobs:
     container: ${{ matrix.container }}
 
     steps:
+      # zstd isn't in the plain ubuntu:22.04 image (unlike the ubuntu-latest runner image), so
+      # without it actions/cache falls back to a slower gzip compressor for this leg's caches.
       - name: Install Linux build dependencies
         if: matrix.artifact_name == 'linux'
         env:
@@ -51,18 +59,15 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends \
-            ca-certificates git curl wget file build-essential pkg-config \
+            ca-certificates git curl wget file build-essential pkg-config zstd \
             libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev \
             patchelf xdg-utils gstreamer1.0-plugins-base gstreamer1.0-plugins-good
 
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
+      - name: Install npm dependencies
+        uses: ./.github/actions/npm-install
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -74,10 +79,15 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
           key: ${{ matrix.target }}
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
-      - name: Install dependencies
-        run: npm ci
-
+      # --config drops the devtools feature for this build (see tauri.release.conf.json),
+      # since it's only registered under debug_assertions anyway and compiling it in is pure
+      # cost on every platform.
+      #
+      # When publish is false (the cache-warming workflow), releaseId/tagName/releaseName are
+      # left empty, which puts tauri-action in its documented "build only" mode: it still
+      # builds and signs, it just skips every upload.
       - name: Build and release Tauri app
         uses: tauri-apps/tauri-action@v1
         env:
@@ -85,13 +95,13 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          releaseId: ${{ inputs.releaseId }}
-          tagName: v__VERSION__
-          releaseName: 'Aventuras v__VERSION__'
+          releaseId: ${{ inputs.publish && inputs.releaseId || '' }}
+          tagName: ${{ inputs.publish && 'v__VERSION__' || '' }}
+          releaseName: ${{ inputs.publish && 'Aventuras v__VERSION__' || '' }}
           releaseBody: ${{ inputs.prerelease && '**Pre-release build** — a test/preview release. Use at your own risk.' || 'See the assets to download and install this version.' }}
           releaseDraft: ${{ !inputs.prerelease }}
           prerelease: ${{ inputs.prerelease }}
-          uploadUpdaterJson: ${{ !inputs.prerelease }}
+          uploadUpdaterJson: ${{ inputs.publish && !inputs.prerelease }}
           updaterJsonPreferNsis: true
           releaseAssetNamePattern: '[name]_v[version]_[arch][setup][ext]'
-          args: --target ${{ matrix.target }}
+          args: --target ${{ matrix.target }} --config src-tauri/tauri.release.conf.json
