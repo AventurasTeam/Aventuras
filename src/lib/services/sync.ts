@@ -5,7 +5,6 @@ import type { AventuraExport } from './export'
 // is deliberately *not* shared.
 import { gatherPackBinding } from './export'
 import { database } from './database'
-import { story } from '$lib/stores/story.svelte'
 
 /**
  * Service for local network sync functionality
@@ -75,18 +74,6 @@ class SyncService {
       token: connection.token,
       storyJson,
     })
-  }
-
-  /**
-   * Create a pre-sync backup checkpoint for a story
-   */
-  async createPreSyncBackup(storyId: string): Promise<void> {
-    // Load the story if not already loaded
-    if (story.currentStory?.id !== storyId) {
-      await story.loadStory(storyId)
-    }
-    // Create a checkpoint named "Pre-sync backup"
-    await story.createCheckpoint('Pre-sync backup')
   }
 
   /**
