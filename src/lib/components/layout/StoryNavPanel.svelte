@@ -47,8 +47,18 @@
   const orphaned = $derived(landmarkList.orphaned)
 
   // Not persisted with the panel's own state: a reader who opens this to clear one checkpoint out
-  // does not want it open on every story afterwards.
+  // does not want it open on every story afterwards. Closing the panel unmounts this component,
+  // but loading another story does not — it reassigns `currentStory` rather than clearing it — so
+  // the fold is reset against the story it was opened for.
   let orphansExpanded = $state(false)
+  let expandedForStoryId: string | null = null
+
+  $effect(() => {
+    const storyId = story.currentStory?.id ?? null
+    if (storyId === expandedForStoryId) return
+    expandedForStoryId = storyId
+    orphansExpanded = false
+  })
 
   const lastNumber = $derived(
     story.entries.length > 0 ? entryNumber(story.entries[story.entries.length - 1]) : 0,

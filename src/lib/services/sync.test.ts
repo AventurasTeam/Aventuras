@@ -174,7 +174,7 @@ describe('exportStoryToJson — known divergences from the .avt path', () => {
       lastEntryId: 'e1',
       entriesSnapshot: [],
     }
-    db.getCheckpoints.mockResolvedValue([checkpoint])
+    db.getCheckpointRecords.mockResolvedValue([checkpoint])
 
     expect((await payload()).checkpoints).toEqual([checkpoint])
   })
