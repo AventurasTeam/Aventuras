@@ -60,11 +60,15 @@ jobs:
         with:
           packages: 'platform-tools build-tools;36.0.0'
 
-      - name: Setup Android NDK
-        uses: nttld/setup-ndk@v1
-        id: setup-ndk
-        with:
-          ndk-version: r27d
+      # ubuntu-latest preinstalls r27d as its default NDK and exports it as ANDROID_NDK_HOME,
+      # so downloading it again only spent ~700 MB to arrive at the same path. Asserted rather
+      # than assumed, so a runner image that moves its default fails here and not mid-build.
+      - name: Verify Android NDK r27d
+        run: |
+          case "$ANDROID_NDK_HOME" in
+            */27.3.13750724) ;;
+            *) echo "::error::Expected NDK r27d (27.3.13750724), got $ANDROID_NDK_HOME"; exit 1 ;;
+          esac
 
       - name: Resolve build version
         id: version
@@ -75,11 +79,9 @@ jobs:
       # --apk: the AAB is never used, and building it doubles most of the per-target work.
       # --target: 32-bit x86 serves only old emulators; arm64/armv7/x86_64 cover real devices,
       # ChromeOS and current emulators.
+      # NDK_HOME is what the Tauri CLI reads; the image exports only ANDROID_NDK_HOME.
       - name: Build Android APK
-        env:
-          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-        run: npx tauri android build --apk --target aarch64 armv7 x86_64 ${{ steps.version.outputs.config-args }}
+        run: NDK_HOME="$ANDROID_NDK_HOME" npx tauri android build --apk --target aarch64 armv7 x86_64 ${{ steps.version.outputs.config-args }}
 
       - name: Verify incognito-keyboard injection
         run: node scripts/check_wry_injection.js
