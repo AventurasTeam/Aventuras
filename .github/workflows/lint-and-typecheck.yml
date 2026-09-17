@@ -26,6 +26,9 @@ jobs:
       - name: Install npm dependencies
         uses: ./.github/actions/npm-install
 
+      - name: Generate SvelteKit types
+        run: npx svelte-kit sync
+
       - name: Run Lint
         run: npm run lint
 
