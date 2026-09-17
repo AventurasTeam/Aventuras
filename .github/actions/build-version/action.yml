@@ -11,6 +11,10 @@ inputs:
   publish:
     description: 'Whether this build publishes a release; false appends the SHA suffix'
     required: true
+  working-directory:
+    description: 'Project root; ci-version.conf.json is written here and the --config paths are relative to it'
+    required: false
+    default: '.'
 
 outputs:
   version:
@@ -26,6 +30,7 @@ runs:
     - name: Resolve version
       id: resolve
       shell: bash
+      working-directory: ${{ inputs.working-directory }}
       run: |
         base_version=$(node -p "require('./src-tauri/tauri.conf.json').version")
         config_args='--config src-tauri/tauri.release.conf.json'

@@ -38,6 +38,9 @@
     "linux": {
       "appimage": {
         "bundleMediaFramework": true
+      },
+      "rpm": {
+        "compression": { "type": "xz", "level": 6 }
       }
     }
   },

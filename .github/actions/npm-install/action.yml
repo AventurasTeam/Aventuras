@@ -7,6 +7,12 @@ description: >
   cache for the same OS/arch when the exact hash misses; saves only happen on master, so
   branch and PR runs don't fill the repo's cache quota with entries nothing else can read.
 
+inputs:
+  working-directory:
+    description: 'Directory holding package.json and package-lock.json'
+    required: false
+    default: '.'
+
 runs:
   using: composite
   steps:
@@ -18,6 +24,7 @@ runs:
     - name: Resolve npm cache key
       id: cache-vars
       shell: bash
+      working-directory: ${{ inputs.working-directory }}
       run: |
         echo "dir=$(npm config get cache)" >> "$GITHUB_OUTPUT"
         echo "hash=$(node scripts/ci/lockfile-hash.js)" >> "$GITHUB_OUTPUT"
@@ -32,6 +39,7 @@ runs:
 
     - name: Install dependencies
       shell: bash
+      working-directory: ${{ inputs.working-directory }}
       run: npm ci
 
     - name: Save npm cache

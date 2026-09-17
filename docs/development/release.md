@@ -121,6 +121,19 @@ version, so that push can only rebuild for nothing.
   hashes the lockfile with the version fields removed, and falls back to the newest same-OS/arch
   entry on a miss; it also only saves on `master`.
 
+The **Windows** desktop leg builds on a ReFS [Dev Drive](https://learn.microsoft.com/en-us/windows/dev-drive/)
+created by `samypr100/setup-dev-drive` (a dynamic VHDX, recreated every run — the drive itself is
+not cached). The action copies the checkout onto it and exports `DEV_DRIVE_WORKSPACE`; the npm
+install, `build-version`, `rust-cache` and `tauri-action` steps all take that directory (falling
+back to `.` on the other legs, where it is unset), so `node_modules`, `build/` and `target/` live on
+the Dev Drive. `CARGO_HOME` and `npm_config_cache` are pointed there too, so the cache restores land
+on it. The rustup toolchain stays on `C:`. Local actions (`uses: ./.github/actions/...`) and
+`release-guard` still resolve against the original checkout, which has the same contents. The
+Dev Drive is not marked trusted or added to Defender's exclusions: the runner image
+[turns off Defender's real-time monitoring](https://github.com/actions/runner-images/blob/main/images/windows/scripts/build/Configure-WindowsDefender.ps1)
+machine-wide, not just for its `C:\` and `D:\` exclusions, and a run that logged
+`Get-MpComputerStatus` on the Dev Drive leg reported `RealTimeProtectionEnabled: False`.
+
 `build-android.yml` also builds `--apk` only (the AAB was built and discarded on every run) and
 targets `aarch64`, `armv7` and `x86_64` (32-bit `x86` served only old emulators). Both build
 workflows pass `--config src-tauri/tauri.release.conf.json`, which sets `build.features` to `[]` for
@@ -128,6 +141,14 @@ that build: `tauri.conf.json`'s own `features: ["devtools"]` is only meant for `
 plugin is registered under `debug_assertions` in `src-tauri/src/lib.rs`), and on Android the CLI's
 own plugin-init build and Gradle's build used to end up on different feature sets for the same
 target, forcing one target to compile twice.
+
+The `.rpm` payload is compressed with `xz` level 6 (`bundle.linux.rpm.compression` in
+`tauri.conf.json`) instead of Tauri's default `gzip` level 6. `xz` produces the smaller archive, as
+expected, but it also bundles faster on this runner: the `Bundling ... .rpm` step dropped from
+~60s (`gzip`, run 35175189321) to ~14-18s (`xz`, runs 35229623700 and 35230697779), so this isn't a
+size-for-time tradeoff. `flate2`'s pure-Rust deflate is apparently the slower path here, not `xz`'s
+liblzma binding. Any `rpm` from 4.8 on reads `xz` payloads. The other formats have no compression
+setting in Tauri's config except NSIS, whose default is already `lzma`.
 
 ### Build version
 
