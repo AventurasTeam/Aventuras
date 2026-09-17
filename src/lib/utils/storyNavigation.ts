@@ -60,6 +60,18 @@ export interface Landmark {
   branchName: string
 }
 
+/**
+ * The checkpoints a branch owns. An unanchored checkpoint owns nothing — it has no entry left to
+ * take a branch from — and its `branchId` is null whatever branch it was made on, so counting one
+ * would read it as Main's.
+ */
+export function checkpointsOnBranch(
+  checkpoints: Checkpoint[],
+  branchId: string | null,
+): Checkpoint[] {
+  return checkpoints.filter((c) => c.anchored && c.branchId === branchId)
+}
+
 /** Branches created from this checkpoint; inherited visibility alone does not count as use. */
 export function branchesUsingCheckpoint(checkpointId: string, branches: Branch[]): Branch[] {
   return branches.filter((branch) => branch.checkpointId === checkpointId)
@@ -108,6 +120,9 @@ export function buildLandmarks(
     return branchNames.get(branchId) ?? 'Unknown branch'
   }
 
+  /** The checkpoint an origin row was rendered for, which must not be listed a second time. */
+  let originCheckpointId: string | null = null
+
   if (activeBranch) {
     const forkEntry = byId.get(activeBranch.forkEntryId)
     if (forkEntry) {
@@ -116,6 +131,7 @@ export function buildLandmarks(
       // It is not among the checkpoint rows below: it belongs to the parent branch, so nothing
       // here is listed twice.
       const origin = checkpoints.find((c) => c.id === activeBranch.checkpointId)
+      originCheckpointId = origin?.id ?? null
       landmarks.push({
         entryId: forkEntry.id,
         checkpointId: origin?.id ?? null,
@@ -132,6 +148,10 @@ export function buildLandmarks(
 
   for (const checkpoint of checkpoints) {
     if (!checkpoint.anchored) {
+      // An unanchored checkpoint can still be the one an origin row was named after, where a
+      // branch's fork entry and its fork checkpoint disagree. Listing it here as well would put
+      // the same checkpoint in the panel twice.
+      if (checkpoint.id === originCheckpointId) continue
       orphaned.push({
         checkpointId: checkpoint.id,
         label: checkpoint.name,

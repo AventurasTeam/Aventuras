@@ -3,6 +3,7 @@ import type { Branch, Checkpoint, StoryEntry } from '$lib/types'
 import {
   branchesUsingCheckpoint,
   buildLandmarks,
+  checkpointsOnBranch,
   checkpointDeletionBlocker,
   entryNumber,
   resolveEntryByNumber,
@@ -262,6 +263,35 @@ describe('buildLandmarks', () => {
     expect(orphaned.map((o) => o.label)).toEqual(['Older', 'Newer'])
   })
 
+  it('lists the origin checkpoint once when it is itself unanchored', () => {
+    // Import can pair a branch's forkEntryId with a checkpoint anchored somewhere else, so the
+    // origin row can be named after a checkpoint whose own entry is gone. It belongs to the
+    // origin row, not to both that and the orphan list.
+    const forked = branch('br1', 'm1', 'Betrayal', 'cp-origin')
+    const { landmarks, orphaned } = buildLandmarks(
+      branchView,
+      [checkpoint('cp-origin', 'elsewhere', 'Council of five', { anchored: false })],
+      [forked],
+      forked,
+    )
+    expect(landmarks.map((l) => [l.kind, l.label])).toEqual([['origin', 'Council of five']])
+    expect(orphaned).toEqual([])
+  })
+
+  it('still lists an unanchored checkpoint that no origin row was rendered for', () => {
+    // Same disagreement, but the fork entry is not loaded, so there is no origin row to hold it —
+    // dropping it here would hide the orphan the section exists to surface.
+    const forked = branch('br1', 'not-loaded', 'Betrayal', 'cp-origin')
+    const { landmarks, orphaned } = buildLandmarks(
+      branchView,
+      [checkpoint('cp-origin', 'elsewhere', 'Council of five', { anchored: false })],
+      [forked],
+      forked,
+    )
+    expect(landmarks).toEqual([])
+    expect(orphaned.map((o) => o.label)).toEqual(['Council of five'])
+  })
+
   it('reports orphans on a branch with nothing to navigate to', () => {
     const { landmarks, orphaned } = buildLandmarks(
       [entry('m0', 0)],
@@ -281,6 +311,23 @@ describe('buildLandmarks', () => {
     expect(row.checkpointId).toBe('cp')
     expect(row.branchId).toBe('br1')
     expect(row.branchName).toBe('Betrayal')
+  })
+})
+
+describe('checkpointsOnBranch', () => {
+  it('finds the checkpoints anchored on that branch', () => {
+    const own = checkpoint('cp-own', 'b2', 'Own', { branchId: 'br1' })
+    const other = checkpoint('cp-other', 'm1', 'Other', { branchId: null })
+    expect(checkpointsOnBranch([own, other], 'br1').map((c) => c.id)).toEqual(['cp-own'])
+    expect(checkpointsOnBranch([own, other], null).map((c) => c.id)).toEqual(['cp-other'])
+  })
+
+  it('does not count an orphan as one of Main’s', () => {
+    // An orphan's branchId is null whatever branch it was created on, so a bare branchId
+    // comparison would hand every orphan in the story to Main.
+    const orphan = checkpoint('cp-orphan', 'gone', 'Lost', { branchId: null, anchored: false })
+    expect(checkpointsOnBranch([orphan], null)).toEqual([])
+    expect(checkpointsOnBranch([orphan], 'br1')).toEqual([])
   })
 })
 

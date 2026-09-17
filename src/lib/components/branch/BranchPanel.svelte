@@ -19,6 +19,7 @@
   import { untrack } from 'svelte'
   import { supportsHover } from '$lib/utils/platform'
   import { errMessage } from '$lib/utils/error'
+  import { checkpointsOnBranch } from '$lib/utils/storyNavigation'
 
   // Track expanded branches in tree view
   let expandedBranches = $state<Set<string>>(new Set(['main']))
@@ -135,9 +136,8 @@
     // A checkpoint left behind by a story saved before entry deletion pruned them still points
     // at an entry that is gone; branching from it would fail on the missing fork entry.
     const liveEntryIds = new Set(story.entries.map((e) => e.id))
-    const eligible = story.checkpoints.filter(
-      (checkpoint) =>
-        checkpoint.branchId === currentBranchId && liveEntryIds.has(checkpoint.lastEntryId),
+    const eligible = checkpointsOnBranch(story.checkpoints, currentBranchId).filter((checkpoint) =>
+      liveEntryIds.has(checkpoint.lastEntryId),
     )
     if (eligible.length === 0) return null
     // Sort by createdAt descending and return the most recent
@@ -156,7 +156,7 @@
   const createBranchTitle = $derived.by(() => {
     if (canCreateBranch) return 'Create new branch from latest checkpoint'
     const currentBranchId = story.currentStory?.currentBranchId ?? null
-    const hadOne = story.checkpoints.some((c) => c.branchId === currentBranchId)
+    const hadOne = checkpointsOnBranch(story.checkpoints, currentBranchId).length > 0
     return hadOne
       ? "This branch's checkpoints aren't usable - their entries aren't loaded yet, or were deleted"
       : 'No checkpoints available - checkpoints are created at chapter boundaries'
