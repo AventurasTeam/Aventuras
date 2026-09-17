@@ -1343,7 +1343,7 @@
 </script>
 
 <div
-  class="group border-border rounded-lg border border-l-4 px-4 pt-3 pb-4 shadow-sm {styles[
+  class="group border-border @container rounded-lg border border-l-4 px-4 pt-3 pb-4 shadow-sm {styles[
     entry.type
   ]}"
 >
@@ -1371,10 +1371,12 @@
       />
     {/if}
 
-    <!-- Token count badge (shows 0 if no tokens). Hidden on narrow screens, where the toolbar
+    <!-- Token count badge (shows 0 if no tokens). Hidden on a narrow card, where the toolbar
          needs the width. Narration entries keep it under "Response info" in the overflow menu;
          on any other entry type it is not shown there at all. -->
-    <span class="bg-muted hidden rounded px-1.5 py-0.5 text-[11px] tabular-nums sm:inline">
+    <span
+      class="bg-muted hidden rounded px-1.5 py-0.5 text-[11px] tabular-nums @min-[23.7rem]:inline"
+    >
       {#if isReasoningEnabled && reasoningTokens > 0}
         <span class="text-muted-foreground">{reasoningTokens}r</span>
         <span class="text-muted-foreground/50 mx-0.5">+</span>
@@ -1383,12 +1385,13 @@
       <span class="text-muted-foreground ml-0.5">tokens</span>
     </span>
 
-    <!-- How long the turn took, opening its timeline. Hidden on narrow screens for the same
+    <!-- How long the turn took, opening its timeline. Hidden on a narrow card for the same
          reason as the token badge above; the overflow menu carries it there instead. -->
     {#if activityRecord}
+      <Separator orientation="vertical" class="hidden h-4 @min-[37.6rem]:block" />
       <button
         type="button"
-        class="bg-muted text-muted-foreground hover:text-foreground hidden rounded px-1.5 py-0.5 text-[11px] tabular-nums transition-colors sm:inline"
+        class="bg-muted text-muted-foreground hover:text-foreground hidden rounded px-1.5 py-0.5 text-[11px] tabular-nums transition-colors @min-[37.6rem]:inline"
         aria-pressed={showActivityRecord}
         title={showActivityRecord ? 'Hide generation activity' : 'Show generation activity'}
         onclick={() => activity.setReportVisible(entry.id, !showActivityRecord)}
@@ -1397,10 +1400,10 @@
       </button>
     {/if}
 
-    <!-- Rides the header while the token and duration chips are there, and drops to its own
-         row below once they are hidden. -->
+    <!-- Drops to its own row well before the chips and toolbar give way: it is the widest thing
+         on the row, so it runs out of space first. -->
     {#if showEntryMeta}
-      <div class="text-muted-foreground hidden items-center sm:flex">
+      <div class="text-muted-foreground hidden items-center @min-[37.6rem]:flex">
         <!-- mr only: the header row's own gap supplies the space on the left. -->
         <Separator orientation="vertical" class="mr-2 h-4" />
         {@render entryMeta()}
@@ -1427,7 +1430,8 @@
 
     <!-- Right side: Action buttons toolbar (always visible on mobile, hover-only on desktop) -->
     {#if !isEditing && !isDeleting && !isBranching && !isCreatingCheckpoint && entry.type !== 'system'}
-      <div class="flex shrink-0 items-center gap-0.5">
+      <!-- -ml-2 cancels the row's gap, so the leftmost icon keeps the same rhythm as its neighbours. -->
+      <div class="-ml-2 flex shrink-0 items-center gap-0.5">
         {#snippet copyIcon()}
           {#if isCopied}
             <Check class="h-4 w-4 text-green-500" />
@@ -1511,7 +1515,7 @@
                 <Button
                   variant="text"
                   size="icon"
-                  class="text-muted-foreground hover:text-foreground hidden h-7 w-7 sm:flex"
+                  class="text-muted-foreground hover:text-foreground hidden h-7 w-7 @min-[22rem]:flex"
                   title="Response info"
                   {...props}
                 >
@@ -1554,7 +1558,7 @@
             variant="text"
             size="icon"
             onclick={() => (isBranching = true)}
-            class="hidden h-7 w-7 text-amber-500 hover:text-amber-600 sm:flex"
+            class="hidden h-7 w-7 text-amber-500 hover:text-amber-600 @min-[22rem]:flex"
             title="Branch from here"
           >
             <GitBranch class="h-4 w-4" />
@@ -1565,7 +1569,7 @@
             variant="text"
             size="icon"
             onclick={() => (isCreatingCheckpoint = true)}
-            class="hidden h-7 w-7 text-blue-500 hover:text-blue-600 sm:flex"
+            class="hidden h-7 w-7 text-blue-500 hover:text-blue-600 @min-[22rem]:flex"
             title="Create checkpoint"
           >
             <Bookmark class="h-4 w-4" />
@@ -1593,7 +1597,7 @@
             size="icon"
             onclick={handleGenerateStoryImages}
             disabled={ui.isGenerating || isGeneratingStoryImages || hasEmbeddedImages}
-            class="text-muted-foreground hover:text-foreground hidden h-7 w-7 sm:flex"
+            class="text-muted-foreground hover:text-foreground hidden h-7 w-7 @min-[22rem]:flex"
             title={storyImagesLabel}
           >
             {#if isGeneratingStoryImages}
@@ -1607,7 +1611,7 @@
           variant="text"
           size="icon"
           onclick={handleCopyContent}
-          class="text-muted-foreground hover:text-foreground hidden h-7 w-7 sm:flex"
+          class="text-muted-foreground hover:text-foreground hidden h-7 w-7 @min-[22rem]:flex"
           title={copyLabel}
           aria-label={isCopied ? 'Message copied' : copyLabel}
         >
@@ -1639,7 +1643,7 @@
               <Button
                 variant="text"
                 size="icon"
-                class="text-muted-foreground hover:text-foreground h-7 w-7 sm:hidden"
+                class="text-muted-foreground hover:text-foreground h-7 w-7 @min-[22rem]:hidden"
                 title="More actions"
                 aria-label="More actions"
                 {...props}
@@ -1721,7 +1725,7 @@
   {/snippet}
 
   {#if showEntryMeta}
-    <div class="text-muted-foreground mb-2 flex items-center sm:hidden">
+    <div class="text-muted-foreground mb-2 flex items-center @min-[37.6rem]:hidden">
       {@render entryMeta()}
     </div>
   {/if}
