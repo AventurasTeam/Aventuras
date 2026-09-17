@@ -84,19 +84,9 @@ jobs:
         with:
           drive-size: 20GB
           workspace-copy: true
-          trusted-dev-drive: true
           env-mapping: |
             CARGO_HOME,{{ DEV_DRIVE }}/.cargo
             npm_config_cache,{{ DEV_DRIVE }}/.npm
-
-      # The runner image excludes only C:\ and D:\ from Defender; the Dev Drive gets a new letter.
-      - name: Exclude Dev Drive from Defender
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Add-MpPreference -ExclusionPath "$env:DEV_DRIVE\"
-          Get-MpComputerStatus | Format-List AMRunningMode, RealTimeProtectionEnabled, OnAccessProtectionEnabled
-          (Get-MpPreference).ExclusionPath
 
       - name: Install npm dependencies
         uses: ./.github/actions/npm-install
