@@ -6,7 +6,10 @@ import {
   checkpointsOnBranch,
   checkpointDeletionBlocker,
   entryNumber,
+  entryNumberRange,
+  jumpToEntry,
   resolveEntryByNumber,
+  type EntryJumpUi,
 } from './storyNavigation'
 
 function entry(id: string, position: number, branchId: string | null = null): StoryEntry {
@@ -364,5 +367,121 @@ describe('branchesUsingCheckpoint', () => {
     expect(
       checkpointDeletionBlocker('unused-cp', [branch('first', 'e1', 'First', 'other-cp')]),
     ).toBe(null)
+  })
+})
+
+describe('jumpToEntry', () => {
+  function stubUi() {
+    const calls = {
+      scrolled: [] as string[],
+      panels: [] as string[],
+      toasts: [] as { message: string; type?: string }[],
+    }
+    const ui: EntryJumpUi = {
+      requestEntryScroll: (entryId) => calls.scrolled.push(entryId),
+      setActivePanel: (panel) => calls.panels.push(panel),
+      showToast: (message, type) => calls.toasts.push({ message, type }),
+    }
+    return { ui, calls }
+  }
+
+  const entries = [entry('e1', 0), entry('e2', 1), entry('e3', 2)]
+
+  it('files the request and shows the story', () => {
+    const { ui, calls } = stubUi()
+
+    expect(
+      jumpToEntry({ entries, entryId: 'e2', ui, confirmation: 'Jumped', canHover: true }),
+    ).toBe(true)
+
+    expect(calls.scrolled).toEqual(['e2'])
+    expect(calls.panels).toEqual(['story'])
+  })
+
+  it('stays silent where the reader can hover', () => {
+    const { ui, calls } = stubUi()
+
+    jumpToEntry({ entries, entryId: 'e2', ui, confirmation: 'Jumped', canHover: true })
+
+    expect(calls.toasts).toEqual([])
+  })
+
+  it('confirms the jump where the reader cannot hover', () => {
+    const { ui, calls } = stubUi()
+
+    jumpToEntry({ entries, entryId: 'e2', ui, confirmation: 'Jumped to entry 2', canHover: false })
+
+    expect(calls.toasts).toEqual([{ message: 'Jumped to entry 2', type: 'info' }])
+  })
+
+  it('reports an entry absent from the branch instead of confirming', () => {
+    const { ui, calls } = stubUi()
+
+    expect(
+      jumpToEntry({ entries, entryId: 'gone', ui, confirmation: 'Jumped', canHover: false }),
+    ).toBe(false)
+
+    expect(calls.toasts).toEqual([{ message: 'That entry is not in this branch', type: 'error' }])
+  })
+
+  it('reports a miss as not landing even where the reader can hover', () => {
+    const { ui, calls } = stubUi()
+
+    expect(
+      jumpToEntry({ entries, entryId: 'gone', ui, confirmation: 'Jumped', canHover: true }),
+    ).toBe(false)
+
+    expect(calls.toasts).toEqual([])
+  })
+
+  it('runs the dismissal the caller supplied', () => {
+    const { ui } = stubUi()
+    let closed = 0
+
+    jumpToEntry({
+      entries,
+      entryId: 'e2',
+      ui,
+      confirmation: 'Jumped',
+      canHover: true,
+      closeOnMobile: () => (closed += 1),
+    })
+
+    expect(closed).toBe(1)
+  })
+
+  it('needs no dismissal from a caller that has none', () => {
+    const { ui, calls } = stubUi()
+
+    expect(() =>
+      jumpToEntry({ entries, entryId: 'e2', ui, confirmation: 'Jumped', canHover: true }),
+    ).not.toThrow()
+    expect(calls.scrolled).toEqual(['e2'])
+  })
+})
+
+describe('entryNumberRange', () => {
+  it('reports the endpoints of a contiguous run', () => {
+    const entries = [entry('e3', 2), entry('e4', 3), entry('e5', 4)]
+
+    expect(entryNumberRange(entries)).toEqual({ first: 3, last: 5 })
+  })
+
+  it('reports endpoints that disagree with the count where numbering has a gap', () => {
+    // Positions 2..4 and 6..28: 26 entries spanning numbers 3 through 29. An imported or
+    // repaired story looks like this, and the two figures are both correct.
+    const positions = [2, 3, 4, ...Array.from({ length: 23 }, (_, i) => 6 + i)]
+    const entries = positions.map((position) => entry(`e${position}`, position))
+
+    expect(entries.length).toBe(26)
+    expect(entryNumberRange(entries)).toEqual({ first: 3, last: 29 })
+  })
+
+  it('reports a single entry as a range of itself', () => {
+    expect(entryNumberRange([entry('e1', 0)])).toEqual({ first: 1, last: 1 })
+  })
+
+  it('has no range to report for no entries', () => {
+    expect(entryNumberRange([])).toBe(null)
   })
 })

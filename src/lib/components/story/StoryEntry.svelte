@@ -65,6 +65,7 @@
   import { Textarea } from '$lib/components/ui/textarea'
   import { Input } from '$lib/components/ui/input'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
+  import { Separator } from '$lib/components/ui/separator'
   import { SvelteMap, SvelteSet } from 'svelte/reactivity'
   import { escapeHtml } from '$lib/utils/inlineImageParser'
   import { extractSentenceAt, expandRangeBidirectional } from '$lib/utils/text'
@@ -133,6 +134,13 @@
   // turn's last task finishes, hidden by default once it has.
   const showActivityRecord = $derived(
     !!activityRecord && activity.isReportVisible(entry.id, !activityRecord.endedAt),
+  )
+
+  // Narration only: an action is an instant and a system entry is not story, so neither has a
+  // span to show. `retry` is narration in older saves.
+  const showEntryMeta = $derived(
+    settings.uiSettings.showEntryNumberAndTime &&
+      (entry.type === 'narration' || entry.type === 'retry'),
   )
 
   function formatStoryTime(time: TimeTracker | null | undefined): string {
@@ -1389,6 +1397,16 @@
       </button>
     {/if}
 
+    <!-- Rides the header while the token and duration chips are there, and drops to its own
+         row below once they are hidden. -->
+    {#if showEntryMeta}
+      <div class="text-muted-foreground hidden items-center sm:flex">
+        <!-- mr only: the header row's own gap supplies the space on the left. -->
+        <Separator orientation="vertical" class="mr-2 h-4" />
+        {@render entryMeta()}
+      </div>
+    {/if}
+
     <!-- Spacer to push buttons to the right -->
     <div class="flex-1"></div>
 
@@ -1691,6 +1709,22 @@
       </div>
     {/if}
   </div>
+
+  {#snippet entryMeta()}
+    <span class="bg-muted rounded px-1.5 py-0.5 text-[11px] tabular-nums">
+      Entry: {entryNumber(entry)}
+    </span>
+    <Separator orientation="vertical" class="mx-2 h-4" />
+    <span class="bg-muted rounded px-1.5 py-0.5 text-[11px] tabular-nums">
+      Story time: {generationInfo.storyTime || 'not recorded'}
+    </span>
+  {/snippet}
+
+  {#if showEntryMeta}
+    <div class="text-muted-foreground mb-2 flex items-center sm:hidden">
+      {@render entryMeta()}
+    </div>
+  {/if}
 
   <!-- Content area -->
   <div class="min-w-0">

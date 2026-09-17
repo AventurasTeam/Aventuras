@@ -5,6 +5,7 @@
     buildLandmarks,
     checkpointDeletionBlocker,
     entryNumber,
+    jumpToEntry,
     resolveEntryByNumber,
     type Landmark,
   } from '$lib/utils/storyNavigation'
@@ -68,22 +69,14 @@
   // isn't, StoryView is destroyed rather than hidden. The request is left on the ui store for
   // it to pick up on mount, the same way the Branches panel jumps to a fork point.
   function goTo(entryId: string, confirmation: string) {
-    // The story view can only scroll to an entry it can render. Checked here as well so the
-    // confirmation below reports what will actually happen rather than asserting success.
-    const willLand = story.entries.some((e) => e.id === entryId)
-    ui.requestEntryScroll(entryId)
-    ui.setActivePanel('story')
-    ui.closeNavPanelOnMobile()
-
-    // Where the platform can't hover the panel may have just closed over the result, so the
-    // jump confirms itself the way the fork-point jump does.
-    if (!supportsHover()) {
-      if (willLand) {
-        ui.showToast(confirmation, 'info', 2000)
-      } else {
-        ui.showToast('That entry is not in this branch', 'error', 2000)
-      }
-    }
+    jumpToEntry({
+      entries: story.entries,
+      entryId,
+      ui,
+      confirmation,
+      closeOnMobile: () => ui.closeNavPanelOnMobile(),
+      canHover: supportsHover(),
+    })
   }
 
   function goToNumber() {
