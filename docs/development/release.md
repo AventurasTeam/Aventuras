@@ -143,9 +143,12 @@ own plugin-init build and Gradle's build used to end up on different feature set
 target, forcing one target to compile twice.
 
 The `.rpm` payload is compressed with `xz` level 6 (`bundle.linux.rpm.compression` in
-`tauri.conf.json`) instead of Tauri's default `gzip` level 6, trading bundling time for a smaller
-download. Any `rpm` from 4.8 on reads `xz` payloads. The other formats have no compression setting
-in Tauri's config except NSIS, whose default is already `lzma`.
+`tauri.conf.json`) instead of Tauri's default `gzip` level 6. `xz` produces the smaller archive, as
+expected, but it also bundles faster on this runner: the `Bundling ... .rpm` step dropped from
+~60s (`gzip`, run 35175189321) to ~14-18s (`xz`, runs 35229623700 and 35230697779), so this isn't a
+size-for-time tradeoff. `flate2`'s pure-Rust deflate is apparently the slower path here, not `xz`'s
+liblzma binding. Any `rpm` from 4.8 on reads `xz` payloads. The other formats have no compression
+setting in Tauri's config except NSIS, whose default is already `lzma`.
 
 ### Build version
 
