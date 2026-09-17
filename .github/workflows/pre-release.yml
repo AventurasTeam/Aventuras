@@ -1,9 +1,9 @@
-name: Release
+name: Pre-release
 
 on:
   push:
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+' # Stable releases only (v1.0.0)
+      - 'v*-pre*' # v0.5.5-pre.1
   workflow_dispatch:
 
 permissions:
@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       release-id: ${{ steps.release.outputs.id }}
+      version: ${{ steps.guard.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -29,11 +30,11 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       # Created once here so the parallel build jobs upload to a known release instead of
-      # racing each other to find-or-create it (which produces duplicate drafts). body is
-      # left unset on a re-run (state == draft) so softprops keeps whatever notes were
-      # already typed into the draft instead of overwriting them. Publishing the draft
-      # itself is still done by hand — see docs/development/release.md.
-      - name: Create or reuse draft release
+      # racing each other to find-or-create it (which produces duplicate drafts). Stays a
+      # draft — invisible to /releases/latest — until the publish job below confirms every
+      # build succeeded. body is left unset on a re-run (state == draft) so softprops keeps
+      # whatever notes were already typed into the draft instead of overwriting them.
+      - name: Create or reuse pre-release draft
         id: release
         uses: softprops/action-gh-release@v3
         with:
@@ -41,14 +42,14 @@ jobs:
           name: 'Aventuras v${{ steps.guard.outputs.version }}'
           target_commitish: ${{ github.sha }}
           draft: true
-          prerelease: false
-          body: ${{ steps.guard.outputs.state == 'draft' && '' || 'See the assets to download and install this version.' }}
+          prerelease: true
+          body: ${{ steps.guard.outputs.state == 'draft' && '' || '**Pre-release build** — a test/preview release. Use at your own risk.' }}
 
   build-desktop:
     needs: create-release
     uses: ./.github/workflows/build-desktop.yml
     with:
-      prerelease: false
+      prerelease: true
       releaseId: ${{ needs.create-release.outputs.release-id }}
     secrets: inherit
 
@@ -56,5 +57,15 @@ jobs:
     needs: create-release
     uses: ./.github/workflows/build-android.yml
     with:
-      prerelease: false
+      prerelease: true
     secrets: inherit
+
+  publish:
+    needs: [create-release, build-desktop, build-android]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish the pre-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: v${{ needs.create-release.outputs.version }}
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease

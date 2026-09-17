@@ -1,0 +1,42 @@
+name: 'Install npm dependencies'
+description: >
+  Sets up Node.js from .nvmrc and runs npm ci, caching ~/.npm on a hash of package-lock.json
+  that ignores the app's own version field (see scripts/ci/lockfile-hash.js). That keeps the
+  cache key stable across the version-bump commit scripts/release.js makes for every
+  release, so a release build can still hit the cache. Restores fall back to the newest
+  cache for the same OS/arch when the exact hash misses; saves only happen on master, so
+  branch and PR runs don't fill the repo's cache quota with entries nothing else can read.
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v7
+      with:
+        node-version-file: '.nvmrc'
+
+    - name: Resolve npm cache key
+      id: cache-vars
+      shell: bash
+      run: |
+        echo "dir=$(npm config get cache)" >> "$GITHUB_OUTPUT"
+        echo "hash=$(node scripts/ci/lockfile-hash.js)" >> "$GITHUB_OUTPUT"
+
+    - name: Restore npm cache
+      id: restore
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ steps.cache-vars.outputs.dir }}
+        key: npm-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-vars.outputs.hash }}
+        restore-keys: npm-${{ runner.os }}-${{ runner.arch }}-
+
+    - name: Install dependencies
+      shell: bash
+      run: npm ci
+
+    - name: Save npm cache
+      if: github.ref == 'refs/heads/master' && steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ steps.cache-vars.outputs.dir }}
+        key: npm-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-vars.outputs.hash }}

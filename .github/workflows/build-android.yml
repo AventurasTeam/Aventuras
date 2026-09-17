@@ -1,0 +1,154 @@
+name: Build Android
+
+on:
+  workflow_call:
+    inputs:
+      prerelease:
+        description: 'Attach to a pre-release; otherwise to a draft release. Only read when publish is true.'
+        type: boolean
+        required: false
+        default: false
+      publish:
+        description: 'Sign and upload the APK; false to just build and warm caches'
+        type: boolean
+        required: false
+        default: true
+
+jobs:
+  build:
+    name: Build Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install npm dependencies
+        uses: ./.github/actions/npm-install
+
+      # "Re-run failed jobs" skips create-release, so a leg re-run after a release is
+      # published would otherwise overwrite its assets.
+      - name: Refuse a published release
+        if: inputs.publish
+        uses: ./.github/actions/release-guard
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      # Verified version-insensitive: rust-cache zeroes package.version in the workspace
+      # Cargo.toml and drops workspace crates from the Cargo.lock hash, so a release bump
+      # reuses this key. Re-check on upgrade — a TOML parse failure or an unsupported
+      # Cargo.lock format falls back to hashing the raw files, warning in the job log.
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          key: android
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+
+      - name: Setup Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      # Caches the Gradle wrapper distribution and dependencies via the 'basic' (MIT,
+      # actions/cache-backed) provider. Not combined with actions/setup-java's own
+      # 'cache: gradle', which the upstream docs warn interferes with this action's caching.
+      # Defaults to read-only off the default branch, so only ci.yml running on
+      # master writes to it.
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools build-tools;36.0.0'
+
+      # ubuntu-latest preinstalls r27d as its default NDK and exports it as ANDROID_NDK_HOME,
+      # so downloading it again only spent ~700 MB to arrive at the same path. Asserted rather
+      # than assumed, so a runner image that moves its default fails here and not mid-build.
+      - name: Verify Android NDK r27d
+        run: |
+          case "$ANDROID_NDK_HOME" in
+            */27.3.13750724) ;;
+            *) echo "::error::Expected NDK r27d (27.3.13750724), got $ANDROID_NDK_HOME"; exit 1 ;;
+          esac
+
+      - name: Resolve build version
+        id: version
+        uses: ./.github/actions/build-version
+        with:
+          publish: ${{ inputs.publish }}
+
+      # --apk: the AAB is never used, and building it doubles most of the per-target work.
+      # --target: 32-bit x86 serves only old emulators; arm64/armv7/x86_64 cover real devices,
+      # ChromeOS and current emulators.
+      # NDK_HOME is what the Tauri CLI reads; the image exports only ANDROID_NDK_HOME.
+      - name: Build Android APK
+        run: NDK_HOME="$ANDROID_NDK_HOME" npx tauri android build --apk --target aarch64 armv7 x86_64 ${{ steps.version.outputs.config-args }}
+
+      - name: Verify incognito-keyboard injection
+        run: node scripts/check_wry_injection.js
+
+      # Runs after the build: lint needs the Rust libraries and the wry-generated sources.
+      - name: Lint Android
+        id: lint_android
+        working-directory: src-tauri/gen/android
+        run: ./gradlew :app:lintUniversalDebug
+
+      - name: Upload lint report
+        if: failure() && steps.lint_android.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-lint-report
+          path: src-tauri/gen/android/app/build/reports/lint-results-universalDebug.html
+
+      # Needed so that the APK published as a workflow artifact is signed
+      - name: Decode keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/aventura-release.keystore"
+
+      - name: Sign APK
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          APK_NAME: Aventuras_v${{ steps.version.outputs.version }}.apk
+        run: |
+          $ANDROID_HOME/build-tools/36.0.0/apksigner sign \
+            --ks "$RUNNER_TEMP/aventura-release.keystore" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass pass:"$KEYSTORE_PASSWORD" \
+            --key-pass pass:"$KEY_PASSWORD" \
+            --out "$APK_NAME" \
+            src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
+
+      # Deliberately publish workflow artifacts for every build
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-apk
+          path: Aventuras_v${{ steps.version.outputs.version }}.apk
+          archive: false
+
+      # Only upload to a GitHub Release when publishing a new version. draft is always true:
+      # create-release leaves every release (stable and pre-release) as a draft until its own
+      # publish step confirms every build succeeded — see docs/development/release.md.
+      - name: Upload to Release
+        if: inputs.publish
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          draft: true
+          prerelease: ${{ inputs.prerelease }}
+          files: Aventuras_v${{ steps.version.outputs.version }}.apk

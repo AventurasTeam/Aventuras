@@ -1,177 +1,62 @@
-name: Pre-release
+name: CI
 
+# Builds every platform on `master` with publish: false — it exercises the exact same
+# build-desktop.yml / build-android.yml jobs a release uses, without publishing anything, so:
+#
+# - The Rust, Gradle and npm caches it leaves behind are the ones a release run picks up.
+#   Tag-triggered release runs (release.yml, pre-release.yml) can only restore caches created
+#   on the tag itself or on the default branch (GitHub: caches cannot be restored across
+#   different tag names), and nothing else builds on `master`, so without this workflow every
+#   release would start cold.
+# - Both build workflows still upload their output as workflow-run Artifacts regardless of
+#   publish, so every run here also leaves a downloadable, signed build for every platform —
+#   grabbable without waiting for a tagged release. See docs/development/release.md.
 on:
+  schedule:
+    # Fridays 06:00 UTC: renews the 7-day cache eviction window, and runs the day after Rust's
+    # ~6-week stable release cadence (Thursdays), so a new rustc's cache key is warm quickly.
+    - cron: '0 6 * * 5'
   push:
-    tags:
-      - 'v*-pre*'   # v0.5.5-pre.1
+    branches:
+      - master
+    paths:
+      - 'src-tauri/Cargo.lock'
+      - 'src-tauri/Cargo.toml'
+      - 'package-lock.json'
+      - '.nvmrc'
+      - '.github/workflows/ci.yml'
+      - '.github/workflows/build-*.yml'
+      - '.github/actions/**'
+      - 'scripts/ci/**'
+      - 'src-tauri/gen/android/**/*.gradle*'
   workflow_dispatch:
 
-env:
-  CARGO_TERM_COLOR: always
-
 permissions:
-  contents: write
+  contents: read
+
+# Not cancel-in-progress: a cancelled job never reaches the cache-save post steps, so
+# superseding a run in flight would discard a full multi-platform warm-up and leave the
+# caches exactly as cold as before.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
+  # scripts/release.js fast-forwards `master` onto a `chore: bump version to X` commit that
+  # touches only version fields. Every cache key here (rust-cache, the Gradle basic provider,
+  # lockfile-hash.js) is already insensitive to that change, so a run triggered by it would
+  # rebuild for nothing; the next scheduled or manual run still warms caches for any real
+  # dependency change made in the same push.
   build-desktop:
-    name: Build Desktop (${{ matrix.artifact_name }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
-            artifact_name: linux
-          - platform: windows-latest
-            target: x86_64-pc-windows-msvc
-            artifact_name: windows
-          - platform: macos-latest
-            target: x86_64-apple-darwin
-            artifact_name: macos-intel
-          - platform: macos-latest
-            target: aarch64-apple-darwin
-            artifact_name: macos-arm
-
-    runs-on: ${{ matrix.platform }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: './src-tauri -> target'
-
-      - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build and release Tauri app
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        with:
-          tagName: v__VERSION__
-          releaseName: 'Aventura v__VERSION__'
-          releaseBody: |
-            **Pre-release build**
-
-            This is a test/preview release. Use at your own risk.
-          releaseDraft: false
-          prerelease: true
-          includeUpdaterJson: false
-          updaterJsonPreferNsis: true
-          assetNamePattern: '[name]_${{ github.ref_name }}_[arch][setup][ext]'
-          args: --target ${{ matrix.target }}
+    if: "github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore: bump version')"
+    uses: ./.github/workflows/build-desktop.yml
+    with:
+      publish: false
+    secrets: inherit
 
   build-android:
-    name: Build Android
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Setup Android NDK
-        uses: nttld/setup-ndk@v1
-        id: setup-ndk
-        with:
-          ndk-version: r27
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build Android APK
-        env:
-          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-        run: npx tauri android build
-
-      - name: Verify incognito-keyboard injection
-        run: node scripts/check_wry_injection.js
-
-      # Runs after the build: lint needs the Rust libraries and the wry-generated sources.
-      - name: Lint Android
-        id: lint_android
-        working-directory: src-tauri/gen/android
-        run: ./gradlew :app:lintUniversalDebug
-
-      - name: Upload lint report
-        if: failure() && steps.lint_android.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-lint-report
-          path: src-tauri/gen/android/app/build/reports/lint-results-universalDebug.html
-
-      - name: Decode keystore
-        env:
-          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-        run: |
-          echo "$KEYSTORE_BASE64" | base64 -d > aventura-release.keystore
-
-      - name: Sign APK
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: |
-          $ANDROID_HOME/build-tools/34.0.0/apksigner sign \
-            --ks aventura-release.keystore \
-            --ks-key-alias "$KEY_ALIAS" \
-            --ks-pass pass:"$KEYSTORE_PASSWORD" \
-            --key-pass pass:"$KEY_PASSWORD" \
-            --out aventura-release.apk \
-            src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
-
-      - name: Upload Android APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-apk
-          path: aventura-release.apk
-
-      - name: Upload to Release
-        uses: softprops/action-gh-release@v1
-        with:
-          prerelease: true
-          files: aventura-release.apk
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    if: "github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore: bump version')"
+    uses: ./.github/workflows/build-android.yml
+    with:
+      publish: false
+    secrets: inherit

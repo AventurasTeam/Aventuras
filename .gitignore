@@ -48,6 +48,9 @@ src-tauri/gen/schemas/
 src-tauri/WixTools/
 src-tauri/Cargo.lock.bak
 
+# CI-only version override merged in via `tauri build/android build --config` (see ci.yml)
+ci-version.conf.json
+
 # Android: files regenerated at build time (do NOT track)
 # NB: Tauri also writes src-tauri/gen/android/app/.gitignore listing what it regenerates
 # (tauri.properties, proguard-tauri.pro, tauri.build.gradle.kts, ...). Rules there cover this

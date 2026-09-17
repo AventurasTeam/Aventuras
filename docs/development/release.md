@@ -14,16 +14,158 @@ Managed by [lefthook](https://github.com/evilmartians/lefthook) (`lefthook.yml`)
 
 GitHub Actions workflows in `.github/workflows/`:
 
-- **`lint-and-typecheck.yml`** - runs `build`, `lint`, and `check` on every pull request targeting
-  `master`, `develop`, or `dev`.
-- **`release.yml`** - triggered by pushing a stable version tag (`vX.Y.Z`). Builds signed desktop
-  binaries for Linux, Windows, macOS (Intel + Apple Silicon) via `tauri-apps/tauri-action`, plus a signed
-  Android APK, and publishes them as a draft GitHub release with auto-updater metadata.
-- **`ci.yml`** ("Pre-release") - triggered by pushing a pre-release tag (`vX.Y.Z-pre.N`). Same build
-  matrix as `release.yml`, but publishes a non-draft **pre-release** without updater metadata.
+- **`lint-and-typecheck.yml`** - runs `lint`, `check`, `test`, and `build` on every pull request
+  targeting `master`, `develop`, or `dev`.
+- **`release.yml`** - triggered by pushing a stable version tag (`vX.Y.Z`). Leaves a draft GitHub
+  release with auto-updater metadata; publishing it by hand is the step that ships it.
+- **`pre-release.yml`** ("Pre-release") - triggered by pushing a pre-release tag (`vX.Y.Z-pre.N`).
+  Builds as a draft, without updater metadata, and its own `publish` job turns it into a
+  **pre-release** once every build has succeeded.
+- **`build-desktop.yml`** and **`build-android.yml`** - reusable workflows that hold the build jobs for
+  both of the above, switched by a single `prerelease` input. Desktop builds signed binaries for Linux,
+  Windows and macOS (Intel + Apple Silicon) via `tauri-apps/tauri-action`; Android builds, lints and
+  signs the APK. Both also take a `publish` input (default `true`); `false` skips the GitHub Release
+  upload, which is what `ci.yml` uses. Both workflows always upload their build output as a
+  workflow-run Artifact regardless of `publish` — desktop via `tauri-action`'s
+  `uploadWorkflowArtifacts`, Android via its own `actions/upload-artifact` step — so even a
+  non-publishing run leaves every platform's build downloadable from the run summary.
+- **`ci.yml`** - builds `master` with `publish: false` so the Rust, Gradle and npm caches a
+  release restores from are warm, and so every push/schedule leaves downloadable per-platform builds.
+  See [Build caching and speed](#build-caching-and-speed) and [Build version](#build-version).
 
 Both release workflows expect `TAURI_SIGNING_PRIVATE_KEY(_PASSWORD)` and the `ANDROID_KEYSTORE_*` /
 `ANDROID_KEY_*` secrets to be configured on the repository.
+
+Both `release.yml` and `pre-release.yml` run a `create-release` job before the build matrix, which creates (or
+reuses) the GitHub release for the tag and passes its numeric ID to `build-desktop.yml` as `releaseId`.
+Without this, each of the four desktop matrix legs asks `tauri-action` to find-or-create the release
+for the same tag independently; two legs hitting "not found" within the same moment each create a
+release, splitting the platform assets across duplicate drafts. Passing a known `releaseId` skips that
+lookup entirely. `build-android.yml` doesn't take a `releaseId` — `action-gh-release` has no such
+input — but its job depends on `create-release` too, so by the time it looks the release up by tag,
+`create-release` has already guaranteed exactly one exists.
+
+**Nothing ever uploads to an already-published release.** `create-release` starts with
+`.github/actions/release-guard`, which refuses the run when the tag's release is already
+published, or when a pushed tag doesn't match the version in `tauri.conf.json`. `build-desktop.yml`
+and `build-android.yml` each run the same guard again before their own upload step — "Re-run failed
+jobs" skips `create-release`, so a re-run after a release has been published would otherwise
+overwrite live assets or `latest.json` under the old tag. The guard uses `gh api graphql` (its `--jq`
+flag is built into `gh`, not a separate `jq` install) so it needs a current `gh`; the Linux desktop
+leg installs one from GitHub's own apt repository, since `ubuntu:22.04`'s packaged version is 2.4.0
+and too old.
+
+Both workflows now create their release as a **draft** — `release.yml` always did; `pre-release.yml`
+used to publish immediately. A `publish` job in `pre-release.yml`, gated on every build job
+succeeding, turns the draft into a pre-release with `gh release edit --draft=false`. A stable
+release is still published by hand, as before (see [Cutting a New
+Release](#cutting-a-new-release)). Every upload step (`build-desktop.yml`'s `releaseDraft`,
+`build-android.yml`'s `draft`) sets `draft: true` to match, regardless of `prerelease` — only the
+dedicated publish step, or a human, ever flips a release to published.
+
+The release body is set once, in `create-release`, only when the draft is first created — softprops
+keeps the existing body on an empty `body` input, so a re-run never overwrites notes already typed
+into the draft.
+
+The repository should also have **release immutability** turned on (Settings → General →
+Releases): it locks a release's assets and Git tag once published, so GitHub itself refuses an
+asset upload or tag move the guard above might have missed. It does not lock the title, release
+notes, or the `prerelease` flag, all still editable after publishing; the guard above is still what
+stops a stable release from being flipped to a pre-release. A deleted immutable release's tag name
+cannot be reused.
+
+### Runner pinning
+
+Release binaries must not silently start depending on a newer host than the one they were tested
+against, so `build-desktop.yml`'s matrix pins its runners rather than tracking `-latest`:
+
+- **Linux** builds on the `ubuntu-latest` host inside an `ubuntu:22.04` container, so the glibc
+  baseline (2.35) stays fixed even after GitHub retires the `ubuntu-22.04` runner image
+  (deprecation begins 2026-09-17, removal 2027-04-17). The container supplies everything but the
+  kernel and Docker itself, both provided by the host.
+- **macOS** builds pin `macos-15` (Xcode 16.4). Tauri sets `MACOSX_DEPLOYMENT_TARGET=10.13` by
+  default, and Xcode 26 (the default on `macos-latest`) only supports macOS 11+ deployment
+  targets — building there would silently raise the minimum supported macOS version.
+- **Windows** builds pin `windows-2025`, the same image `windows-latest` currently resolves to, so
+  a future move to a newer image is a deliberate version bump rather than a silent one.
+
+Android and the lint job stay on `ubuntu-latest`: their output doesn't depend on the host OS.
+
+Dependabot (`.github/dependabot.yml`) opens one grouped PR a month for `github-actions` updates, so
+action versions don't drift the way the runner pins are meant to prevent.
+
+### Build caching and speed
+
+GitHub Actions caches can only be restored from the current branch, the base branch of a PR, or the
+**default branch** (`master`) — never across different tag names. Since nothing builds on `master`
+by itself, every tag-triggered release would start every cache cold. `ci.yml` exists to
+prevent that: it runs `build-desktop.yml` and `build-android.yml` with `publish: false` on a weekly
+schedule (Fridays, the day after Rust's stable release day), on pushes to `master` that touch
+dependency or workflow files, and on manual dispatch, so the caches those jobs leave behind on
+`master` are the ones a release restores. It skips the push `scripts/release.js` makes when it
+fast-forwards a version bump onto `master`: every cache key below already ignores the app's own
+version, so that push can only rebuild for nothing.
+
+- **Rust** (`swatinem/rust-cache`) sets `save-if: ${{ github.ref == 'refs/heads/master' }}` in both
+  build workflows, so only `ci.yml` (or a run of `release.yml`/`pre-release.yml` if one is ever
+  dispatched from `master` directly) writes it.
+- **Gradle**, in `build-android.yml`, uses `gradle/actions/setup-gradle` with
+  `cache-provider: basic` — the MIT-licensed provider, not the default proprietary one — which
+  already defaults to read-only off the default branch. It also caches the Gradle wrapper
+  distribution download, which `actions/setup-java`'s `cache: gradle` option did not.
+- **npm**, across all three CI workflows, uses the `.github/actions/npm-install` composite action
+  instead of `actions/setup-node`'s built-in cache. `scripts/release.js` bumps the version in
+  `package.json`/`package-lock.json` on every release, and `setup-node`'s cache key is a plain hash
+  of `package-lock.json` with no fallback — so a release always missed that cache and then saved a
+  fresh entry nothing else could restore. The action keys on `scripts/ci/lockfile-hash.js`, which
+  hashes the lockfile with the version fields removed, and falls back to the newest same-OS/arch
+  entry on a miss; it also only saves on `master`.
+
+`build-android.yml` also builds `--apk` only (the AAB was built and discarded on every run) and
+targets `aarch64`, `armv7` and `x86_64` (32-bit `x86` served only old emulators). Both build
+workflows pass `--config src-tauri/tauri.release.conf.json`, which sets `build.features` to `[]` for
+that build: `tauri.conf.json`'s own `features: ["devtools"]` is only meant for `tauri dev` (the
+plugin is registered under `debug_assertions` in `src-tauri/src/lib.rs`), and on Android the CLI's
+own plugin-init build and Gradle's build used to end up on different feature sets for the same
+target, forcing one target to compile twice.
+
+### Build version
+
+A `publish: false` run (`ci.yml`) never bumped `tauri.conf.json`'s `version`, so without
+intervention every build-validation run would reuse whatever version `master` last shipped —
+indistinguishable bundle filenames and in-app "About" text across every commit since. Both
+build workflows call `.github/actions/build-version`, which on a non-publishing run writes
+`ci-version.conf.json` (a `{"version": "<base>-sha<short-sha>"}` override, gitignored, never
+committed) and emits the `--config` list that carries it to `tauri build`/`tauri android
+build`, merged on top of `tauri.release.conf.json`. Both workflows take that list from the
+action's `config-args` output, so the rule lives in one place.
+`tauri-action` re-resolves the same `--config` list itself to name
+workflow artifacts and set its `appVersion` output, so the desktop and Android legs, the
+bundle filenames, and `getVersion()` inside the running app all agree on one
+`<base>-sha<short-sha>` string.
+
+The suffix is appended, not substituted, for two reasons that both require a valid `X.Y.Z`
+prefix: Tauri's config deserializer validates `version` as semver (a bare SHA fails to
+parse), and `src/lib/utils/version.ts`'s `isNewerVersion` — the Android update check — expects
+the same `major.minor.patch` shape and silently refuses to compare anything else. A useful
+side effect: since a CI build's version is a semver pre-release of the last release, its
+own update check correctly reports the real release as newer, instead of "up to date".
+
+The suffix is prefixed with `sha` rather than left bare because a short SHA that happens to
+be all digits with a leading zero (about 0.4% of commits) is not valid semver on its own —
+`sha` makes the identifier alphanumeric, so it always parses.
+
+A real release (`release.yml`/`pre-release.yml`, `publish: true`) never takes this path —
+its version is the one `scripts/release.js` bumped, and it must stay exactly what the pushed
+tag names.
+
+**Deferred: per-ABI parallel Android builds.** The four (now three) Android ABIs are still built one
+after another by a single `tauri android build` invocation. A matrix job per target — each building
+its Rust `.so` and uploading it plus the tauri/wry-generated Gradle sources, followed by a packaging
+job that runs Gradle with the `rustBuild*Release` tasks excluded — would let them build in parallel.
+It is deferred: it bypasses the CLI's supported build flow, and with a warm cache each target's Rust
+build is already only 1-1.5 minutes, so the likely saving is a few minutes, not worth the added
+maintenance surface yet.
 
 ## The Updater
 
@@ -49,8 +191,8 @@ Two things must stay in step, or the platforms will offer different versions to 
 the `RELEASE_REPO` constant in `updater.ts` and the `updater.endpoints` URL in
 `tauri.conf.json`.
 
-**A draft release is invisible to the updater.** `release.yml` publishes with
-`releaseDraft: true`, and both paths resolve `/releases/latest`, which GitHub defines as the
+**A draft release is invisible to the updater.** `release.yml` publishes a draft (a
+non-pre-release run of `build-desktop.yml` sets `releaseDraft`), and both paths resolve `/releases/latest`, which GitHub defines as the
 latest **published, non-pre-release** release. Until the draft is published by hand, the
 desktop endpoint 404s and the API returns the previous release — so the last step of every
 release is publishing the draft on GitHub. Nothing reaches users before that.
@@ -60,7 +202,7 @@ the `no-release` kind ("it may still be a draft"), distinct from `network` and `
 
 **The release notes users read are the GitHub release body, on both platforms.** They are not
 taken from `latest.json`, whose `notes` field is written by `tauri-action` at build time from
-the fixed `releaseBody` string in `release.yml` — which is a placeholder, not a changelog, and
+the fixed `releaseBody` string in `build-desktop.yml` — which is a placeholder, not a changelog, and
 cannot be otherwise, since the notes are written after the build. `releaseNotesFor` therefore
 fetches the release from the API and uses its body, falling back to `latest.json` if the call
 fails; the update installs either way. Two consequences:
@@ -123,7 +265,7 @@ Only `X.Y.Z` and `X.Y.Z-pre.N` are accepted. Other pre-release spellings are val
 neither workflow trigger, so they would tag and build nothing.
 
 Pushing a stable tag (`vX.Y.Z`) triggers `release.yml`; pushing a pre-release tag (`vX.Y.Z-pre.N`, via the
-`prerelease` bump type) triggers `ci.yml`. See [Continuous Integration](#continuous-integration).
+`prerelease` bump type) triggers `pre-release.yml`. See [Continuous Integration](#continuous-integration).
 
 **The script does not finish the release.** `release.yml` publishes a **draft**, and a draft is
 invisible to `/releases/latest` — which is where both the desktop updater and the Android check
@@ -181,7 +323,7 @@ This substitution is undocumented wry internals, not a public API — verified b
 stops appearing in the generated `RustWebView.kt`, that build script — not any docs page — is
 where the renamed placeholder or env var will be found.
 
-`scripts/check_wry_injection.js` runs after `tauri android build` in both Android CI jobs and
+`scripts/check_wry_injection.js` runs after `tauri android build` in `build-android.yml` and
 fails the build if the lines `.cargo/config.toml` injects are absent from the generated
 `RustWebView.kt`, so a wry bump that breaks the substitution stops the release instead of
 shipping a dead setting.

@@ -39,7 +39,7 @@ describe('compareVersions', () => {
   })
 
   it('still orders a pre-release correctly when major or minor decides it', () => {
-    // The project ships pre-release builds (`ci.yml` tags `vX.Y.Z-pre.N`), so files carrying
+    // The project ships pre-release builds (`pre-release.yml` tags `vX.Y.Z-pre.N`), so files carrying
     // such a version do reach the importer. `'1.9.0-pre.1'.split('.').map(Number)` is
     // `[1, 9, NaN, 1]`, but the loop returns at the first differing segment, so the NaN is
     // never reached whenever an earlier segment already answers the question.

@@ -1,0 +1,133 @@
+name: Build Desktop
+
+on:
+  workflow_call:
+    inputs:
+      prerelease:
+        description: 'Publish a pre-release; otherwise a draft release with updater metadata. Only read when publish is true.'
+        type: boolean
+        required: false
+        default: false
+      releaseId:
+        description: 'ID of the pre-created release to upload assets to (avoids a create-release race across the matrix). Required when publish is true.'
+        type: string
+        required: false
+        default: ''
+      publish:
+        description: 'Upload assets to the release; false to just build and warm caches'
+        type: boolean
+        required: false
+        default: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build Desktop (${{ matrix.artifact_name }})
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            container: 'ubuntu:22.04'
+            target: x86_64-unknown-linux-gnu
+            artifact_name: linux
+          - runner: windows-2025
+            container: ''
+            target: x86_64-pc-windows-msvc
+            artifact_name: windows
+          - runner: macos-15
+            container: ''
+            target: x86_64-apple-darwin
+            artifact_name: macos-intel
+          - runner: macos-15
+            container: ''
+            target: aarch64-apple-darwin
+            artifact_name: macos-arm
+
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.container }}
+
+    steps:
+      # zstd isn't in the plain ubuntu:22.04 image (unlike the ubuntu-latest runner image), so
+      # without it actions/cache falls back to a slower gzip compressor for this leg's caches.
+      - name: Install Linux build dependencies
+        if: matrix.artifact_name == 'linux'
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates git curl wget file build-essential pkg-config zstd \
+            libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev \
+            patchelf xdg-utils gstreamer1.0-plugins-base gstreamer1.0-plugins-good
+
+          # Ubuntu 22.04's own gh package is 2.4.0; the release-guard action needs a current one.
+          mkdir -p -m 755 /etc/apt/keyrings
+          wget -nv -O /etc/apt/keyrings/githubcli-archive-keyring.gpg https://cli.github.com/packages/githubcli-archive-keyring.gpg
+          chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+            > /etc/apt/sources.list.d/github-cli.list
+          apt-get update
+          apt-get install -y --no-install-recommends gh
+
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install npm dependencies
+        uses: ./.github/actions/npm-install
+
+      # "Re-run failed jobs" skips create-release, so a leg re-run after a release is
+      # published would otherwise overwrite its assets or latest.json.
+      - name: Refuse a published release
+        if: inputs.publish
+        uses: ./.github/actions/release-guard
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      # Verified version-insensitive: rust-cache zeroes package.version in the workspace
+      # Cargo.toml and drops workspace crates from the Cargo.lock hash, so a release bump
+      # reuses this key. Re-check on upgrade — a TOML parse failure or an unsupported
+      # Cargo.lock format falls back to hashing the raw files, warning in the job log.
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          key: ${{ matrix.target }}
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+
+      - name: Resolve build version
+        id: version
+        uses: ./.github/actions/build-version
+        with:
+          publish: ${{ inputs.publish }}
+
+      # When publish is false (the CI build-validation workflow), tagName/releaseName are left
+      # empty, which puts tauri-action in its documented "build only" mode: it still builds and
+      # signs, it just skips the GitHub Release upload. uploadWorkflowArtifacts uploads the
+      # bundles as workflow-run Artifacts either way, so every run leaves a downloadable build.
+      - name: Build and release Tauri app
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          releaseId: ${{ inputs.releaseId }}
+          tagName: ${{ inputs.publish && 'v__VERSION__' || '' }}
+          releaseName: ${{ inputs.publish && 'Aventuras v__VERSION__' || '' }}
+          releaseBody: ${{ inputs.prerelease && '**Pre-release build** — a test/preview release. Use at your own risk.' || 'See the assets to download and install this version.' }}
+          releaseDraft: true
+          prerelease: ${{ inputs.prerelease }}
+          uploadUpdaterJson: ${{ inputs.publish && !inputs.prerelease }}
+          uploadWorkflowArtifacts: true
+          updaterJsonPreferNsis: true
+          releaseAssetNamePattern: '[name]_v[version]_[arch][setup][ext]'
+          args: --target ${{ matrix.target }} ${{ steps.version.outputs.config-args }}
