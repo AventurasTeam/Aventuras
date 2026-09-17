@@ -35,7 +35,9 @@
     switch (type) {
       case 'user_action':
         return 'ACTION'
+      // `retry` is narration in older saves; nothing creates one now.
       case 'narration':
+      case 'retry':
         return 'NARRATIVE'
       default:
         return 'ENTRY'
