@@ -32,7 +32,7 @@ runs:
         if [ "${{ inputs.publish }}" = "true" ]; then
           version="$base_version"
         else
-          version="${base_version}-${GITHUB_SHA:0:7}"
+          version="${base_version}-sha${GITHUB_SHA:0:7}"
           printf '{"version":"%s"}' "$version" > ci-version.conf.json
           config_args="$config_args --config ci-version.conf.json"
         fi

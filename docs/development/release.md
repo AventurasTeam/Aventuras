@@ -135,14 +135,14 @@ A `publish: false` run (`ci.yml`) never bumped `tauri.conf.json`'s `version`, so
 intervention every build-validation run would reuse whatever version `master` last shipped —
 indistinguishable bundle filenames and in-app "About" text across every commit since. Both
 build workflows call `.github/actions/build-version`, which on a non-publishing run writes
-`ci-version.conf.json` (a `{"version": "<base>-<short-sha>"}` override, gitignored, never
+`ci-version.conf.json` (a `{"version": "<base>-sha<short-sha>"}` override, gitignored, never
 committed) and emits the `--config` list that carries it to `tauri build`/`tauri android
 build`, merged on top of `tauri.release.conf.json`. Both workflows take that list from the
 action's `config-args` output, so the rule lives in one place.
 `tauri-action` re-resolves the same `--config` list itself to name
 workflow artifacts and set its `appVersion` output, so the desktop and Android legs, the
 bundle filenames, and `getVersion()` inside the running app all agree on one
-`<base>-<short-sha>` string.
+`<base>-sha<short-sha>` string.
 
 The suffix is appended, not substituted, for two reasons that both require a valid `X.Y.Z`
 prefix: Tauri's config deserializer validates `version` as semver (a bare SHA fails to
@@ -150,6 +150,10 @@ parse), and `src/lib/utils/version.ts`'s `isNewerVersion` — the Android update
 the same `major.minor.patch` shape and silently refuses to compare anything else. A useful
 side effect: since a CI build's version is a semver pre-release of the last release, its
 own update check correctly reports the real release as newer, instead of "up to date".
+
+The suffix is prefixed with `sha` rather than left bare because a short SHA that happens to
+be all digits with a leading zero (about 0.4% of commits) is not valid semver on its own —
+`sha` makes the identifier alphanumeric, so it always parses.
 
 A real release (`release.yml`/`pre-release.yml`, `publish: true`) never takes this path —
 its version is the one `scripts/release.js` bumped, and it must stay exactly what the pushed
