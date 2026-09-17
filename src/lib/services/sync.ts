@@ -117,7 +117,7 @@ class SyncService {
       database.getStoryBeats(storyId),
       database.getEntries(storyId),
       database.getEmbeddedImagesForStory(storyId),
-      database.getCheckpoints(storyId),
+      database.getCheckpointRecords(storyId),
       database.getBranches(storyId),
       database.getChapters(storyId),
       gatherPackBinding(storyId),

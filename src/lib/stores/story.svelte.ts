@@ -7,6 +7,7 @@ import type {
   StoryBeat,
   Chapter,
   Checkpoint,
+  CheckpointRecord,
   Branch,
   MemoryConfig,
   StoryMode,
@@ -3668,7 +3669,7 @@ class StoryStore {
     const lastEntry = this.entries[this.entries.length - 1]
     if (!lastEntry) throw new Error('No entries to checkpoint')
 
-    const checkpoint: Checkpoint = {
+    const record: CheckpointRecord = {
       id: crypto.randomUUID(),
       storyId: this.currentStory.id,
       name,
@@ -3688,7 +3689,14 @@ class StoryStore {
       createdAt: Date.now(),
     }
 
-    await database.createCheckpoint(checkpoint)
+    await database.createCheckpoint(record)
+
+    const { entriesSnapshot: _entriesSnapshot, ...loaded } = record
+    const checkpoint: Checkpoint = {
+      ...loaded,
+      branchId: lastEntry.branchId,
+      anchored: true,
+    }
     this.checkpoints = [checkpoint, ...this.checkpoints]
 
     // Save current background for this checkpoint
@@ -4083,11 +4091,6 @@ class StoryStore {
       positions.set(lineage[index].id, entry?.position ?? null)
     })
     return positions
-  }
-
-  private getCheckpointBranchId(checkpoint: Checkpoint): string | null {
-    const lastEntry = checkpoint.entriesSnapshot.find((e) => e.id === checkpoint.lastEntryId)
-    return lastEntry?.branchId ?? null
   }
 
   /** Tail of the branch-switch queue — see switchBranch. */
@@ -4512,19 +4515,12 @@ class StoryStore {
       )
     }
 
-    // Delete the branch and all of its owned data in one persistence transaction.
-    const checkpointsToDelete = this.checkpoints.filter(
-      (checkpoint) => this.getCheckpointBranchId(checkpoint) === branchId,
-    )
-    await database.deleteBranch(
-      branchId,
-      checkpointsToDelete.map((checkpoint) => checkpoint.id),
-    )
+    // Delete the branch and all of its owned data in one persistence transaction, which selects
+    // the branch's checkpoints itself rather than trusting this list to be complete.
+    await database.deleteBranch(branchId)
 
     // Update in-memory state only after the persistence transaction commits.
-    this.checkpoints = this.checkpoints.filter(
-      (checkpoint) => this.getCheckpointBranchId(checkpoint) !== branchId,
-    )
+    this.checkpoints = this.checkpoints.filter((checkpoint) => checkpoint.branchId !== branchId)
     // Note: We already checked that there are no child branches, so no reparenting needed
     this.branches = this.branches.filter((b) => b.id !== branchId)
 

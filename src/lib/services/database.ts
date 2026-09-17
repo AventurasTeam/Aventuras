@@ -9,6 +9,7 @@ import type {
   StoryBeat,
   Chapter,
   Checkpoint,
+  CheckpointRecord,
   Branch,
   Entry,
   EntryType,
@@ -1467,10 +1468,25 @@ class DatabaseService {
   }
 
   // Checkpoint operations
+
+  /**
+   * A checkpoint is owned by the branch of the entry it is anchored to, which lives in
+   * `story_entries`, not on the checkpoint row. The join must be a LEFT one: an inner join
+   * silently drops a checkpoint whose entry is gone, and those are exactly the orphans the
+   * landmark list has to surface.
+   */
+  private static readonly CHECKPOINT_SELECT = `
+    SELECT c.id, c.story_id, c.name, c.last_entry_id, c.last_entry_preview, c.entry_count,
+           c.characters_snapshot, c.locations_snapshot, c.items_snapshot, c.story_beats_snapshot,
+           c.chapters_snapshot, c.time_tracker_snapshot, c.lorebook_entries_snapshot,
+           c.created_at, e.branch_id AS anchor_branch_id, e.id IS NOT NULL AS anchored
+    FROM checkpoints c
+    LEFT JOIN story_entries e ON e.id = c.last_entry_id`
+
   async getCheckpoints(storyId: string): Promise<Checkpoint[]> {
     const db = await this.getDb()
     const results = await db.select<any[]>(
-      'SELECT * FROM checkpoints WHERE story_id = ? ORDER BY created_at DESC',
+      `${DatabaseService.CHECKPOINT_SELECT} WHERE c.story_id = ? ORDER BY c.created_at DESC`,
       [storyId],
     )
     return results.map(this.mapCheckpoint)
@@ -1478,11 +1494,23 @@ class DatabaseService {
 
   async getCheckpoint(id: string): Promise<Checkpoint | null> {
     const db = await this.getDb()
-    const results = await db.select<any[]>('SELECT * FROM checkpoints WHERE id = ?', [id])
+    const results = await db.select<any[]>(`${DatabaseService.CHECKPOINT_SELECT} WHERE c.id = ?`, [
+      id,
+    ])
     return results.length > 0 ? this.mapCheckpoint(results[0]) : null
   }
 
-  async createCheckpoint(checkpoint: Checkpoint): Promise<void> {
+  /** The whole row, snapshots included — for export, sync and backup, never for the store. */
+  async getCheckpointRecords(storyId: string): Promise<CheckpointRecord[]> {
+    const db = await this.getDb()
+    const results = await db.select<any[]>(
+      'SELECT * FROM checkpoints WHERE story_id = ? ORDER BY created_at DESC',
+      [storyId],
+    )
+    return results.map(this.mapCheckpointRecord)
+  }
+
+  async createCheckpoint(checkpoint: CheckpointRecord): Promise<void> {
     const db = await this.getDb()
     await db.execute(
       `INSERT INTO checkpoints (
@@ -1530,96 +1558,6 @@ class DatabaseService {
       throw new Error(
         'Checkpoint could not be deleted because it does not exist or was used to create a branch',
       )
-    }
-  }
-
-  /**
-   * @deprecated This method is no longer used. Checkpoint restoration has been
-   * replaced with branching to prevent data loss issues. Use createBranchFromCheckpoint
-   * in the story store instead.
-   */
-  async restoreCheckpoint(checkpoint: Checkpoint, branchId: string | null): Promise<void> {
-    const db = await this.getDb()
-    const storyId = checkpoint.storyId
-
-    const branchClause = branchId === null ? 'branch_id IS NULL' : 'branch_id = ?'
-    const branchParams = branchId === null ? [] : [branchId]
-
-    // Delete current state
-    await db.execute(`DELETE FROM story_entries WHERE story_id = ? AND ${branchClause}`, [
-      storyId,
-      ...branchParams,
-    ])
-    await db.execute(`DELETE FROM characters WHERE story_id = ? AND ${branchClause}`, [
-      storyId,
-      ...branchParams,
-    ])
-    await db.execute(`DELETE FROM locations WHERE story_id = ? AND ${branchClause}`, [
-      storyId,
-      ...branchParams,
-    ])
-    await db.execute(`DELETE FROM items WHERE story_id = ? AND ${branchClause}`, [
-      storyId,
-      ...branchParams,
-    ])
-    await db.execute(`DELETE FROM story_beats WHERE story_id = ? AND ${branchClause}`, [
-      storyId,
-      ...branchParams,
-    ])
-    await db.execute(`DELETE FROM chapters WHERE story_id = ? AND ${branchClause}`, [
-      storyId,
-      ...branchParams,
-    ])
-    // Also delete lorebook entries if we have a snapshot to restore
-    if (checkpoint.lorebookEntriesSnapshot !== undefined) {
-      await db.execute(`DELETE FROM entries WHERE story_id = ? AND ${branchClause}`, [
-        storyId,
-        ...branchParams,
-      ])
-    }
-
-    const matchesBranch = (entryBranchId: string | null | undefined) =>
-      (entryBranchId ?? null) === branchId
-
-    // Restore entries
-    for (const entry of checkpoint.entriesSnapshot.filter((e) => matchesBranch(e.branchId))) {
-      await this.addStoryEntry(entry)
-    }
-
-    // Restore characters
-    for (const character of checkpoint.charactersSnapshot.filter((c) =>
-      matchesBranch(c.branchId),
-    )) {
-      await this.addCharacter(character)
-    }
-
-    // Restore locations
-    for (const location of checkpoint.locationsSnapshot.filter((l) => matchesBranch(l.branchId))) {
-      await this.addLocation(location)
-    }
-
-    // Restore items
-    for (const item of checkpoint.itemsSnapshot.filter((i) => matchesBranch(i.branchId))) {
-      await this.addItem(item)
-    }
-
-    // Restore story beats
-    for (const beat of checkpoint.storyBeatsSnapshot.filter((b) => matchesBranch(b.branchId))) {
-      await this.addStoryBeat(beat)
-    }
-
-    // Restore chapters
-    for (const chapter of checkpoint.chaptersSnapshot.filter((ch) => matchesBranch(ch.branchId))) {
-      await this.addChapter(chapter)
-    }
-
-    // Restore lorebook entries (if snapshot exists - for backwards compatibility)
-    if (checkpoint.lorebookEntriesSnapshot) {
-      for (const entry of checkpoint.lorebookEntriesSnapshot.filter((e) =>
-        matchesBranch(e.branchId),
-      )) {
-        await this.addEntry(entry)
-      }
     }
   }
 
@@ -1711,7 +1649,6 @@ class DatabaseService {
 
   /**
    * Restore story state from a retry backup.
-   * Similar to restoreCheckpoint but designed for the "retry last message" feature.
    * Does NOT touch chapters or lorebook entries (those are more permanent).
    */
   async restoreRetryBackup(
@@ -1827,9 +1764,17 @@ class DatabaseService {
   }
 
   /** Delete a branch, its checkpoints, and all branch-owned data atomically. */
-  async deleteBranch(id: string, checkpointIds: string[] = []): Promise<void> {
+  async deleteBranch(id: string): Promise<void> {
     await this.transaction([
-      ...deleteInStatements('checkpoints', 'id', checkpointIds),
+      // The branch owns a checkpoint when it owns the entry that checkpoint is anchored to, so
+      // this has to read the entries it goes on to delete, and has to run before that delete.
+      {
+        sql: `DELETE FROM checkpoints WHERE id IN (
+                SELECT c.id FROM checkpoints c
+                JOIN story_entries e ON e.id = c.last_entry_id
+                WHERE e.branch_id = ?)`,
+        params: [id],
+      },
       // Chapters reference story entries, so remove them before their branch's entries.
       { sql: 'DELETE FROM chapters WHERE branch_id = ?', params: [id] },
       { sql: 'DELETE FROM story_entries WHERE branch_id = ?', params: [id] },
@@ -2911,13 +2856,27 @@ class DatabaseService {
 
   private mapCheckpoint(row: any): Checkpoint {
     return {
+      ...DatabaseService.mapCheckpointBase(row),
+      branchId: row.anchor_branch_id ?? null,
+      anchored: Boolean(row.anchored),
+    }
+  }
+
+  private mapCheckpointRecord(row: any): CheckpointRecord {
+    return {
+      ...DatabaseService.mapCheckpointBase(row),
+      entriesSnapshot: row.entries_snapshot ? JSON.parse(row.entries_snapshot) : [],
+    }
+  }
+
+  private static mapCheckpointBase(row: any) {
+    return {
       id: row.id,
       storyId: row.story_id,
       name: row.name,
       lastEntryId: row.last_entry_id,
       lastEntryPreview: row.last_entry_preview,
       entryCount: row.entry_count,
-      entriesSnapshot: row.entries_snapshot ? JSON.parse(row.entries_snapshot) : [],
       charactersSnapshot: row.characters_snapshot ? JSON.parse(row.characters_snapshot) : [],
       locationsSnapshot: row.locations_snapshot ? JSON.parse(row.locations_snapshot) : [],
       itemsSnapshot: row.items_snapshot ? JSON.parse(row.items_snapshot) : [],

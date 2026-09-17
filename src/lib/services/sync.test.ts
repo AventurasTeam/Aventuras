@@ -25,7 +25,7 @@ const db = {
   getStoryBeats: vi.fn(),
   getEntries: vi.fn(),
   getEmbeddedImagesForStory: vi.fn(),
-  getCheckpoints: vi.fn(),
+  getCheckpointRecords: vi.fn(),
   getBranches: vi.fn(),
   getChapters: vi.fn(),
   getStoryPackId: vi.fn(),
@@ -55,7 +55,7 @@ function baseline() {
   db.getStoryBeats.mockResolvedValue([])
   db.getEntries.mockResolvedValue([])
   db.getEmbeddedImagesForStory.mockResolvedValue([])
-  db.getCheckpoints.mockResolvedValue([])
+  db.getCheckpointRecords.mockResolvedValue([])
   db.getBranches.mockResolvedValue([])
   db.getChapters.mockResolvedValue([])
   db.getStoryPackId.mockResolvedValue(null)
@@ -174,7 +174,7 @@ describe('exportStoryToJson — known divergences from the .avt path', () => {
       lastEntryId: 'e1',
       entriesSnapshot: [],
     }
-    db.getCheckpoints.mockResolvedValue([checkpoint])
+    db.getCheckpointRecords.mockResolvedValue([checkpoint])
 
     expect((await payload()).checkpoints).toEqual([checkpoint])
   })

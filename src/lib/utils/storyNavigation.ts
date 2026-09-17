@@ -60,6 +60,18 @@ export interface Landmark {
   branchName: string
 }
 
+/**
+ * The checkpoints a branch owns. An unanchored checkpoint owns nothing — it has no entry left to
+ * take a branch from — and its `branchId` is null whatever branch it was made on, so counting one
+ * would read it as Main's.
+ */
+export function checkpointsOnBranch(
+  checkpoints: Checkpoint[],
+  branchId: string | null,
+): Checkpoint[] {
+  return checkpoints.filter((c) => c.anchored && c.branchId === branchId)
+}
+
 /** Branches created from this checkpoint; inherited visibility alone does not count as use. */
 export function branchesUsingCheckpoint(checkpointId: string, branches: Branch[]): Branch[] {
   return branches.filter((branch) => branch.checkpointId === checkpointId)
@@ -73,20 +85,32 @@ export function checkpointDeletionBlocker(checkpointId: string, branches: Branch
   return `Cannot delete this checkpoint because it was used to create ${sharingBranches.length === 1 ? 'branch' : 'branches'} ${branchNames}. Delete ${sharingBranches.length === 1 ? 'that branch' : 'those branches'} first.`
 }
 
+export interface OrphanedCheckpoint {
+  checkpointId: string
+  label: string
+}
+
+export interface Landmarks {
+  /** Rows the reader can navigate to, by ascending entry number. */
+  landmarks: Landmark[]
+  /** Checkpoints with no anchoring entry left, oldest first — the only order they have. */
+  orphaned: OrphanedCheckpoint[]
+}
+
 /**
  * The places in the branch being read that are worth returning to: where it began, and every
  * checkpoint along the lineage that produced its current state.
  *
- * Resolution goes through `entries` rather than each checkpoint's `entriesSnapshot` (a full deep
- * copy of the story). This both includes inherited checkpoints in the visible lineage and drops
- * checkpoints whose entry a rollback has since deleted.
+ * A checkpoint missing from `entries` is two different things, and they are not shown alike: one
+ * anchored elsewhere belongs to another branch and is left out, while one with no anchoring entry
+ * at all is orphaned and is returned separately, since it has no entry to number or navigate to.
  */
 export function buildLandmarks(
   entries: StoryEntry[],
   checkpoints: Checkpoint[],
   branches: Branch[],
   activeBranch: Branch | null,
-): Landmark[] {
+): Landmarks {
   const byId = new Map(entries.map((entry) => [entry.id, entry]))
   const branchNames = new Map(branches.map((branch) => [branch.id, branch.name]))
   const landmarks: Landmark[] = []
@@ -96,6 +120,9 @@ export function buildLandmarks(
     return branchNames.get(branchId) ?? 'Unknown branch'
   }
 
+  /** The checkpoint an origin row was rendered for, which must not be listed a second time. */
+  let originCheckpointId: string | null = null
+
   if (activeBranch) {
     const forkEntry = byId.get(activeBranch.forkEntryId)
     if (forkEntry) {
@@ -104,6 +131,7 @@ export function buildLandmarks(
       // It is not among the checkpoint rows below: it belongs to the parent branch, so nothing
       // here is listed twice.
       const origin = checkpoints.find((c) => c.id === activeBranch.checkpointId)
+      originCheckpointId = origin?.id ?? null
       landmarks.push({
         entryId: forkEntry.id,
         checkpointId: origin?.id ?? null,
@@ -116,7 +144,22 @@ export function buildLandmarks(
     }
   }
 
+  const orphaned: (OrphanedCheckpoint & { createdAt: number })[] = []
+
   for (const checkpoint of checkpoints) {
+    if (!checkpoint.anchored) {
+      // An unanchored checkpoint can still be the one an origin row was named after, where a
+      // branch's fork entry and its fork checkpoint disagree. Listing it here as well would put
+      // the same checkpoint in the panel twice.
+      if (checkpoint.id === originCheckpointId) continue
+      orphaned.push({
+        checkpointId: checkpoint.id,
+        label: checkpoint.name,
+        createdAt: checkpoint.createdAt,
+      })
+      continue
+    }
+
     const entry = byId.get(checkpoint.lastEntryId)
     if (!entry || checkpoint.id === activeBranch?.checkpointId) continue
     landmarks.push({
@@ -130,5 +173,10 @@ export function buildLandmarks(
     })
   }
 
-  return landmarks.sort((a, b) => a.number - b.number)
+  return {
+    landmarks: landmarks.sort((a, b) => a.number - b.number),
+    orphaned: orphaned
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .map(({ checkpointId, label }) => ({ checkpointId, label })),
+  }
 }

@@ -20,7 +20,7 @@ import type {
   StoryBeat,
   Chapter,
   Entry,
-  Checkpoint,
+  CheckpointRecord,
   Branch,
   EmbeddedImageMeta,
 } from '$lib/types'
@@ -36,7 +36,7 @@ class ExportService {
     storyBeats: StoryBeat[],
     lorebookEntries: Entry[] = [],
     embeddedImages: EmbeddedImageMeta[] = [],
-    checkpoints: Checkpoint[] = [],
+    checkpoints: CheckpointRecord[] = [],
     branches: Branch[] = [],
     chapters: Chapter[] = [],
     currentBgImage: string | null = null,

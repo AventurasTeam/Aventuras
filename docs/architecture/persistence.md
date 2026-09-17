@@ -29,7 +29,9 @@ The database, the native layer that moves bytes around it, and the settings blob
 - **A read the batch depends on belongs inside it**, as a subquery. The runtime-variable writes reach
   their rows through `SELECT id FROM stories WHERE pack_id = ?` rather than resolving the ids first:
   the batch is atomic, the round trip that fed it was not, and a story assigned to the pack in
-  between kept a variable the pack no longer had.
+  between kept a variable the pack no longer had. `deleteBranch` does the same for the checkpoints
+  the branch owns, and its subquery reads `story_entries`, which a later statement in the same batch
+  deletes — so that statement's position in the list is load-bearing, not cosmetic.
 - **`stories.retry_state` is a JSON blob**, so fields are added inside it rather than by migration —
   `embeddedImageIds`, `characterSnapshots`, `timeTracker` and now `branchId` all arrived that way.
   `branchId` names the branch the snapshot was taken on, and a restore onto any other branch is

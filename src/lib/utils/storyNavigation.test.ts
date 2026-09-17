@@ -3,6 +3,7 @@ import type { Branch, Checkpoint, StoryEntry } from '$lib/types'
 import {
   branchesUsingCheckpoint,
   buildLandmarks,
+  checkpointsOnBranch,
   checkpointDeletionBlocker,
   entryNumber,
   resolveEntryByNumber,
@@ -22,7 +23,12 @@ function entry(id: string, position: number, branchId: string | null = null): St
   }
 }
 
-function checkpoint(id: string, lastEntryId: string, name = id): Checkpoint {
+function checkpoint(
+  id: string,
+  lastEntryId: string,
+  name = id,
+  { branchId = null, anchored = true, createdAt = 0 }: Partial<Checkpoint> = {},
+): Checkpoint {
   return {
     id,
     storyId: 's1',
@@ -30,13 +36,14 @@ function checkpoint(id: string, lastEntryId: string, name = id): Checkpoint {
     lastEntryId,
     lastEntryPreview: `${name} preview`,
     entryCount: 0,
-    entriesSnapshot: [],
+    branchId,
+    anchored,
     charactersSnapshot: [],
     locationsSnapshot: [],
     itemsSnapshot: [],
     storyBeatsSnapshot: [],
     chaptersSnapshot: [],
-    createdAt: 0,
+    createdAt,
   }
 }
 
@@ -127,7 +134,7 @@ describe('buildLandmarks', () => {
   const br1 = branch('br1', 'm1', 'Betrayal', 'cp-origin')
 
   it('puts the origin first, followed by the branch checkpoints in number order', () => {
-    const landmarks = buildLandmarks(
+    const { landmarks } = buildLandmarks(
       branchView,
       [checkpoint('cp-late', 'b4'), checkpoint('cp-early', 'b2')],
       [br1],
@@ -141,7 +148,7 @@ describe('buildLandmarks', () => {
   })
 
   it('names the origin after the checkpoint the branch was forked from, not the branch', () => {
-    const landmarks = buildLandmarks(
+    const { landmarks } = buildLandmarks(
       branchView,
       [checkpoint('cp-origin', 'm1', 'Council of five')],
       [br1],
@@ -156,24 +163,29 @@ describe('buildLandmarks', () => {
   it('falls back to a generic origin label when that checkpoint is gone', () => {
     // `checkpointId` is nullable for imported and legacy branches, and a checkpoint can be
     // deleted after the branch that came from it.
-    const orphaned = buildLandmarks(
+    const { landmarks } = buildLandmarks(
       branchView,
       [],
       [br1],
       branch('br1', 'm1', 'Betrayal', 'deleted-cp'),
     )
-    expect(orphaned.map((l) => [l.kind, l.label])).toEqual([['origin', 'Branch origin']])
-    expect(orphaned[0].checkpointId).toBeNull()
+    expect(landmarks.map((l) => [l.kind, l.label])).toEqual([['origin', 'Branch origin']])
+    expect(landmarks[0].checkpointId).toBeNull()
   })
 
   it('omits the origin row on the main branch', () => {
     const mainView = [entry('m0', 0), entry('m1', 1)]
-    const landmarks = buildLandmarks(mainView, [checkpoint('cp', 'm1')], [], null)
+    const { landmarks } = buildLandmarks(mainView, [checkpoint('cp', 'm1')], [], null)
     expect(landmarks.map((l) => l.kind)).toEqual(['checkpoint'])
   })
 
   it('omits an origin whose entry is not loaded', () => {
-    const landmarks = buildLandmarks(branchView, [], [br1], branch('br1', 'not-loaded', 'Betrayal'))
+    const { landmarks } = buildLandmarks(
+      branchView,
+      [],
+      [br1],
+      branch('br1', 'not-loaded', 'Betrayal'),
+    )
     expect(landmarks).toEqual([])
   })
 
@@ -186,7 +198,7 @@ describe('buildLandmarks', () => {
       entry('b3', 3, 'br1'),
     ]
     const current = { ...br1, forkEntryId: 'a2', checkpointId: 'cp-origin' }
-    const landmarks = buildLandmarks(
+    const { landmarks } = buildLandmarks(
       lineageView,
       [
         checkpoint('cp-main', 'm0', 'Departure'),
@@ -206,26 +218,116 @@ describe('buildLandmarks', () => {
     ])
   })
 
-  it('excludes a checkpoint whose entry a rollback has deleted', () => {
-    const landmarks = buildLandmarks(branchView, [checkpoint('cp', 'gone')], [br1], br1)
-    expect(landmarks.map((l) => l.kind)).toEqual(['origin'])
-  })
-
   it('returns nothing for a main branch with no checkpoints', () => {
-    expect(buildLandmarks([entry('m0', 0)], [], [], null)).toEqual([])
+    expect(buildLandmarks([entry('m0', 0)], [], [], null)).toEqual({
+      landmarks: [],
+      orphaned: [],
+    })
   })
 
-  it('carries the checkpoint and branch names onto the row', () => {
-    const [, row] = buildLandmarks(
+  it('reports a checkpoint whose entry a rollback deleted as orphaned', () => {
+    const { landmarks, orphaned } = buildLandmarks(
       branchView,
-      [checkpoint('cp', 'b2', 'Before the duel')],
+      [checkpoint('cp', 'gone', 'Lost ground', { anchored: false })],
       [br1],
       br1,
     )
+    expect(landmarks.map((l) => l.kind)).toEqual(['origin'])
+    expect(orphaned).toEqual([{ checkpointId: 'cp', label: 'Lost ground' }])
+  })
+
+  it('leaves a checkpoint from another branch out entirely rather than calling it orphaned', () => {
+    // Its entry exists, it is simply not in this lineage — the distinction the anchored flag
+    // exists to make, since both miss the loaded entries.
+    const { landmarks, orphaned } = buildLandmarks(
+      branchView,
+      [checkpoint('cp-elsewhere', 'z9', 'Elsewhere', { branchId: 'other', anchored: true })],
+      [br1],
+      br1,
+    )
+    expect(landmarks.map((l) => l.kind)).toEqual(['origin'])
+    expect(orphaned).toEqual([])
+  })
+
+  it('orders orphans oldest first, independently of the numbered rows', () => {
+    const { orphaned } = buildLandmarks(
+      branchView,
+      [
+        checkpoint('cp-new', 'gone-2', 'Newer', { anchored: false, createdAt: 200 }),
+        checkpoint('cp-old', 'gone-1', 'Older', { anchored: false, createdAt: 100 }),
+        checkpoint('cp-live', 'b4', 'Still here'),
+      ],
+      [br1],
+      br1,
+    )
+    expect(orphaned.map((o) => o.label)).toEqual(['Older', 'Newer'])
+  })
+
+  it('lists the origin checkpoint once when it is itself unanchored', () => {
+    // Import can pair a branch's forkEntryId with a checkpoint anchored somewhere else, so the
+    // origin row can be named after a checkpoint whose own entry is gone. It belongs to the
+    // origin row, not to both that and the orphan list.
+    const forked = branch('br1', 'm1', 'Betrayal', 'cp-origin')
+    const { landmarks, orphaned } = buildLandmarks(
+      branchView,
+      [checkpoint('cp-origin', 'elsewhere', 'Council of five', { anchored: false })],
+      [forked],
+      forked,
+    )
+    expect(landmarks.map((l) => [l.kind, l.label])).toEqual([['origin', 'Council of five']])
+    expect(orphaned).toEqual([])
+  })
+
+  it('still lists an unanchored checkpoint that no origin row was rendered for', () => {
+    // Same disagreement, but the fork entry is not loaded, so there is no origin row to hold it —
+    // dropping it here would hide the orphan the section exists to surface.
+    const forked = branch('br1', 'not-loaded', 'Betrayal', 'cp-origin')
+    const { landmarks, orphaned } = buildLandmarks(
+      branchView,
+      [checkpoint('cp-origin', 'elsewhere', 'Council of five', { anchored: false })],
+      [forked],
+      forked,
+    )
+    expect(landmarks).toEqual([])
+    expect(orphaned.map((o) => o.label)).toEqual(['Council of five'])
+  })
+
+  it('reports orphans on a branch with nothing to navigate to', () => {
+    const { landmarks, orphaned } = buildLandmarks(
+      [entry('m0', 0)],
+      [checkpoint('cp', 'gone', 'Lost ground', { anchored: false })],
+      [],
+      null,
+    )
+    expect(landmarks).toEqual([])
+    expect(orphaned).toHaveLength(1)
+  })
+
+  it('carries the checkpoint and branch names onto the row', () => {
+    const {
+      landmarks: [, row],
+    } = buildLandmarks(branchView, [checkpoint('cp', 'b2', 'Before the duel')], [br1], br1)
     expect(row.label).toBe('Before the duel')
     expect(row.checkpointId).toBe('cp')
     expect(row.branchId).toBe('br1')
     expect(row.branchName).toBe('Betrayal')
+  })
+})
+
+describe('checkpointsOnBranch', () => {
+  it('finds the checkpoints anchored on that branch', () => {
+    const own = checkpoint('cp-own', 'b2', 'Own', { branchId: 'br1' })
+    const other = checkpoint('cp-other', 'm1', 'Other', { branchId: null })
+    expect(checkpointsOnBranch([own, other], 'br1').map((c) => c.id)).toEqual(['cp-own'])
+    expect(checkpointsOnBranch([own, other], null).map((c) => c.id)).toEqual(['cp-other'])
+  })
+
+  it('does not count an orphan as one of Main’s', () => {
+    // An orphan's branchId is null whatever branch it was created on, so a bare branchId
+    // comparison would hand every orphan in the story to Main.
+    const orphan = checkpoint('cp-orphan', 'gone', 'Lost', { branchId: null, anchored: false })
+    expect(checkpointsOnBranch([orphan], null)).toEqual([])
+    expect(checkpointsOnBranch([orphan], 'br1')).toEqual([])
   })
 })
 

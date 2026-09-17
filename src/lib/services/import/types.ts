@@ -15,7 +15,7 @@ import type {
   StoryBeat,
   Chapter,
   Entry,
-  Checkpoint,
+  CheckpointRecord,
   Branch,
   PersistentStyleReviewState,
   EmbeddedImage,
@@ -85,7 +85,7 @@ export interface AventuraExport {
   styleReviewState?: PersistentStyleReviewState | null // Added in v1.2.0
   // Note: story.timeTracker added in v1.3.0
   embeddedImages?: EmbeddedImage[] // Added in v1.4.0
-  checkpoints?: Checkpoint[] // Added in v1.6.0
+  checkpoints?: CheckpointRecord[] // Added in v1.6.0
   branches?: Branch[] // Added in v1.6.0
   chapters?: Chapter[] // Added in v1.7.0
   currentBgImage?: string | null // Added in v1.8.0
