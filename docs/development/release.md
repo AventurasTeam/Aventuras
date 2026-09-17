@@ -128,9 +128,10 @@ install, `build-version`, `rust-cache` and `tauri-action` steps all take that di
 back to `.` on the other legs, where it is unset), so `node_modules`, `build/` and `target/` live on
 the Dev Drive. `CARGO_HOME` and `npm_config_cache` are pointed there too, so the cache restores land
 on it. The rustup toolchain stays on `C:`. Local actions (`uses: ./.github/actions/...`) and
-`release-guard` still resolve against the original checkout, which has the same contents. Defender
-is already disabled on GitHub's Windows images, so any gain comes from ReFS and the VHDX, not from
-skipping scans.
+`release-guard` still resolve against the original checkout, which has the same contents. The
+runner image turns off Defender's real-time monitoring but excludes only `C:\` and `D:\`, so the
+job marks the Dev Drive trusted and adds its letter to Defender's exclusions as well, then logs
+Defender's status.
 
 `build-android.yml` also builds `--apk` only (the AAB was built and discarded on every run) and
 targets `aarch64`, `armv7` and `x86_64` (32-bit `x86` served only old emulators). Both build
