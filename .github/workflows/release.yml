@@ -22,20 +22,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Read app version
-        id: version
-        run: echo "version=$(node -p "require('./src-tauri/tauri.conf.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Refuse a published release
+        id: guard
+        uses: ./.github/actions/release-guard
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Created once here so the parallel build jobs upload to a known release
-      # instead of racing each other to find-or-create it (which produces duplicate drafts).
+      # Created once here so the parallel build jobs upload to a known release instead of
+      # racing each other to find-or-create it (which produces duplicate drafts). body is
+      # left unset on a re-run (state == draft) so softprops keeps whatever notes were
+      # already typed into the draft instead of overwriting them. Publishing the draft
+      # itself is still done by hand — see docs/development/release.md.
       - name: Create or reuse draft release
         id: release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: 'Aventuras v${{ steps.version.outputs.version }}'
+          tag_name: v${{ steps.guard.outputs.version }}
+          name: 'Aventuras v${{ steps.guard.outputs.version }}'
+          target_commitish: ${{ github.sha }}
           draft: true
           prerelease: false
+          body: ${{ steps.guard.outputs.state == 'draft' && '' || 'See the assets to download and install this version.' }}
 
   build-desktop:
     needs: create-release

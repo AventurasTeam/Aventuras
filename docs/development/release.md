@@ -16,10 +16,11 @@ GitHub Actions workflows in `.github/workflows/`:
 
 - **`lint-and-typecheck.yml`** - runs `lint`, `check`, `test`, and `build` on every pull request
   targeting `master`, `develop`, or `dev`.
-- **`release.yml`** - triggered by pushing a stable version tag (`vX.Y.Z`). Publishes a draft GitHub
-  release with auto-updater metadata.
+- **`release.yml`** - triggered by pushing a stable version tag (`vX.Y.Z`). Leaves a draft GitHub
+  release with auto-updater metadata; publishing it by hand is the step that ships it.
 - **`pre-release.yml`** ("Pre-release") - triggered by pushing a pre-release tag (`vX.Y.Z-pre.N`).
-  Publishes a non-draft **pre-release** without updater metadata.
+  Builds as a draft, without updater metadata, and its own `publish` job turns it into a
+  **pre-release** once every build has succeeded.
 - **`build-desktop.yml`** and **`build-android.yml`** - reusable workflows that hold the build jobs for
   both of the above, switched by a single `prerelease` input. Desktop builds signed binaries for Linux,
   Windows and macOS (Intel + Apple Silicon) via `tauri-apps/tauri-action`; Android builds, lints and
@@ -43,6 +44,35 @@ release, splitting the platform assets across duplicate drafts. Passing a known 
 lookup entirely. `build-android.yml` doesn't take a `releaseId` — `action-gh-release` has no such
 input — but its job depends on `create-release` too, so by the time it looks the release up by tag,
 `create-release` has already guaranteed exactly one exists.
+
+**Nothing ever uploads to an already-published release.** `create-release` starts with
+`.github/actions/release-guard`, which refuses the run when the tag's release is already
+published, or when a pushed tag doesn't match the version in `tauri.conf.json`. `build-desktop.yml`
+and `build-android.yml` each run the same guard again before their own upload step — "Re-run failed
+jobs" skips `create-release`, so a re-run after a release has been published would otherwise
+overwrite live assets or `latest.json` under the old tag. The guard uses `gh api graphql` (its `--jq`
+flag is built into `gh`, not a separate `jq` install) so it needs a current `gh`; the Linux desktop
+leg installs one from GitHub's own apt repository, since `ubuntu:22.04`'s packaged version is 2.4.0
+and too old.
+
+Both workflows now create their release as a **draft** — `release.yml` always did; `pre-release.yml`
+used to publish immediately. A `publish` job in `pre-release.yml`, gated on every build job
+succeeding, turns the draft into a pre-release with `gh release edit --draft=false`. A stable
+release is still published by hand, as before (see [Cutting a New
+Release](#cutting-a-new-release)). Every upload step (`build-desktop.yml`'s `releaseDraft`,
+`build-android.yml`'s `draft`) sets `draft: true` to match, regardless of `prerelease` — only the
+dedicated publish step, or a human, ever flips a release to published.
+
+The release body is set once, in `create-release`, only when the draft is first created — softprops
+keeps the existing body on an empty `body` input, so a re-run never overwrites notes already typed
+into the draft.
+
+The repository should also have **release immutability** turned on (Settings → General →
+Releases): it locks a release's assets and Git tag once published, so GitHub itself refuses an
+asset upload or tag move the guard above might have missed. It does not lock the title, release
+notes, or the `prerelease` flag, all still editable after publishing; the guard above is still what
+stops a stable release from being flipped to a pre-release. A deleted immutable release's tag name
+cannot be reused.
 
 ### Runner pinning
 

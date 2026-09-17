@@ -27,6 +27,14 @@ jobs:
       - name: Install npm dependencies
         uses: ./.github/actions/npm-install
 
+      # "Re-run failed jobs" skips create-release, so a leg re-run after a release is
+      # published would otherwise overwrite its assets.
+      - name: Refuse a published release
+        if: inputs.publish
+        uses: ./.github/actions/release-guard
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -133,12 +141,14 @@ jobs:
           path: Aventuras_v${{ steps.version.outputs.version }}.apk
           archive: false
 
-      # Only upload to a GitHub Release when publishing a new version
+      # Only upload to a GitHub Release when publishing a new version. draft is always true:
+      # create-release leaves every release (stable and pre-release) as a draft until its own
+      # publish step confirms every build succeeded — see docs/development/release.md.
       - name: Upload to Release
         if: inputs.publish
         uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ steps.version.outputs.version }}
-          draft: ${{ !inputs.prerelease }}
+          draft: true
           prerelease: ${{ inputs.prerelease }}
           files: Aventuras_v${{ steps.version.outputs.version }}.apk

@@ -64,11 +64,28 @@ jobs:
             libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev \
             patchelf xdg-utils gstreamer1.0-plugins-base gstreamer1.0-plugins-good
 
+          # Ubuntu 22.04's own gh package is 2.4.0; the release-guard action needs a current one.
+          mkdir -p -m 755 /etc/apt/keyrings
+          wget -nv -O /etc/apt/keyrings/githubcli-archive-keyring.gpg https://cli.github.com/packages/githubcli-archive-keyring.gpg
+          chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+            > /etc/apt/sources.list.d/github-cli.list
+          apt-get update
+          apt-get install -y --no-install-recommends gh
+
       - name: Checkout
         uses: actions/checkout@v7
 
       - name: Install npm dependencies
         uses: ./.github/actions/npm-install
+
+      # "Re-run failed jobs" skips create-release, so a leg re-run after a release is
+      # published would otherwise overwrite its assets or latest.json.
+      - name: Refuse a published release
+        if: inputs.publish
+        uses: ./.github/actions/release-guard
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -107,7 +124,7 @@ jobs:
           tagName: ${{ inputs.publish && 'v__VERSION__' || '' }}
           releaseName: ${{ inputs.publish && 'Aventuras v__VERSION__' || '' }}
           releaseBody: ${{ inputs.prerelease && '**Pre-release build** — a test/preview release. Use at your own risk.' || 'See the assets to download and install this version.' }}
-          releaseDraft: ${{ !inputs.prerelease }}
+          releaseDraft: true
           prerelease: ${{ inputs.prerelease }}
           uploadUpdaterJson: ${{ inputs.publish && !inputs.prerelease }}
           uploadWorkflowArtifacts: true

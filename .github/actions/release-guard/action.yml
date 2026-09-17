@@ -1,0 +1,51 @@
+name: 'Refuse a published release'
+description: >
+  Stops a release workflow from uploading to a release that is already published. Every
+  softprops/action-gh-release step in this repo only ever updates a release by tag, so a
+  re-run that finds the tag's release already published would overwrite live assets or flip
+  its prerelease flag. See docs/development/release.md#continuous-integration.
+
+inputs:
+  token:
+    description: 'A token with repo read access, used to look up the release for this tag'
+    required: true
+
+outputs:
+  version:
+    description: 'The version read from tauri.conf.json'
+    value: ${{ steps.guard.outputs.version }}
+  state:
+    description: 'Release state for this tag: none (no release yet) or draft'
+    value: ${{ steps.guard.outputs.state }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check release state
+      id: guard
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+      run: |
+        version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+        tag="v${version}"
+
+        if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$GITHUB_REF_NAME" != "$tag" ]; then
+          echo "::error::Pushed tag $GITHUB_REF_NAME does not match tauri.conf.json's version ($tag)."
+          exit 1
+        fi
+
+        # release(tagName:) returns drafts as well as published releases, unlike the REST
+        # "get a release by tag" endpoint, which 404s on a draft.
+        state=$(gh api graphql \
+          -F owner="${GITHUB_REPOSITORY%/*}" -F name="${GITHUB_REPOSITORY#*/}" -F tag="$tag" \
+          -f query='query($owner:String!,$name:String!,$tag:String!){repository(owner:$owner,name:$name){release(tagName:$tag){isDraft}}}' \
+          --jq 'if .data.repository.release == null then "none" elif .data.repository.release.isDraft then "draft" else "published" end')
+
+        if [ "$state" = "published" ]; then
+          echo "::error::$tag is already published; its assets are final. Bump the version to release again."
+          exit 1
+        fi
+
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+        echo "state=$state" >> "$GITHUB_OUTPUT"
