@@ -5,7 +5,6 @@
   import * as Dialog from '$lib/components/ui/dialog'
   import { X } from '@lucide/svelte'
   import { createIsMobile } from '$lib/hooks/is-mobile.svelte'
-  import { timelineLayout } from '$lib/stores/timelineLayout.svelte'
   import { swipe } from '$lib/utils/swipe'
   import { tick, untrack, type Snippet } from 'svelte'
   import {
@@ -35,8 +34,8 @@
   let { open = $bindable(false) }: { open?: boolean } = $props()
 
   const isMobile = createIsMobile()
-  /** The ladder, either because the screen is narrow or because the toggle asked for it. */
-  const narrow = $derived(isMobile.current || timelineLayout.mobile)
+  /** The ladder on a narrow screen, the table otherwise. */
+  const narrow = $derived(isMobile.current)
 
   let selectedIndex = $state(0)
   /** What the reader typed into each entry's weight field, by entry id. */
@@ -525,17 +524,17 @@
 
   type LadderRow =
     | { kind: 'rung'; key: string; index: number }
-    | { kind: 'summary'; key: string; bandId: string; foldable: boolean; band: Band }
-    | { kind: 'entry'; key: string; bandId: string; foldable: boolean; entry: StoryEntry }
-    | { kind: 'weight'; key: string; bandId: string; foldable: boolean; entryId: string }
-    | { kind: 'interval'; key: string; bandId: string; foldable: boolean; interval: RangeInterval }
-    | { kind: 'gapWeight'; key: string; bandId: string; foldable: boolean; interval: RangeInterval }
+    | { kind: 'summary'; key: string; bandId: string; band: Band }
+    | { kind: 'entry'; key: string; bandId: string; entry: StoryEntry }
+    | { kind: 'weight'; key: string; bandId: string; entryId: string }
+    | { kind: 'interval'; key: string; bandId: string; interval: RangeInterval }
+    | { kind: 'gapWeight'; key: string; bandId: string; interval: RangeInterval }
 
   /** Flat, keyed by entry rather than by band: a band splitting must not unmount a field in use. */
   const ladderRows = $derived.by(() => {
     const rows: LadderRow[] = []
     bands.forEach((band, index) => {
-      const shared = { bandId: band.id, foldable: band.kind === 'entries' }
+      const shared = { bandId: band.id }
       rows.push({ kind: 'rung', key: `rung:${band.id}`, index })
 
       if (bandFolded(band)) {
@@ -560,7 +559,7 @@
   })
 
   function bandLabel(band: Band): string {
-    if (band.kind === 'interval') return `Time gap after ${entryNumber(band.interval.afterEntryId)}`
+    if (band.kind === 'interval') return 'Time gap'
     const numbers = band.entries.map((entry) => entryNumber(entry.id))
     return numbers.length === 1
       ? `Entry ${numbers[0]}`
@@ -575,35 +574,39 @@
     unfolded = { ...unfolded, [key]: !unfolded[key] }
   }
 
-  function bandFolded(band: Band): boolean {
-    return band.kind === 'entries' && band.entries.every((entry) => folded[entry.id])
+  /** What a band's fold is kept under: its entries, or for an interval its own band id. */
+  function foldKeys(band: Band): string[] {
+    return band.kind === 'entries' ? band.entries.map((entry) => entry.id) : [band.id]
   }
 
-  function unfold(entries: StoryEntry[]) {
+  function bandFolded(band: Band): boolean {
+    return foldKeys(band).every((key) => folded[key])
+  }
+
+  function unfoldBand(band: Band) {
     const next = { ...folded }
-    for (const entry of entries) delete next[entry.id]
+    for (const key of foldKeys(band)) delete next[key]
     folded = next
   }
 
   function foldBand(id: string) {
     holdFocus()
     const band = bands.find((candidate) => candidate.id === id)
-    if (band?.kind !== 'entries') return
-    folded = { ...folded, ...Object.fromEntries(band.entries.map((entry) => [entry.id, true])) }
+    if (!band) return
+    folded = { ...folded, ...Object.fromEntries(foldKeys(band).map((key) => [key, true])) }
   }
 
   function openBand(id: string) {
     holdFocus()
     const band = bands.find((candidate) => candidate.id === id)
-    if (band?.kind === 'entries') unfold(band.entries)
+    if (band) unfoldBand(band)
   }
 
-  const storyBands = $derived(bands.filter((band) => band.kind === 'entries'))
-  const allFolded = $derived(storyBands.length > 0 && storyBands.every(bandFolded))
+  const allFolded = $derived(bands.length > 0 && bands.every(bandFolded))
 
   function toggleAll() {
     holdFocus()
-    folded = allFolded ? {} : Object.fromEntries(rangeEntries.map((entry) => [entry.id, true]))
+    folded = allFolded ? {} : Object.fromEntries(bands.flatMap(foldKeys).map((key) => [key, true]))
   }
 
   /**
@@ -617,7 +620,7 @@
         ? candidate.entries.some((entry) => entry.id === entryId)
         : candidate.interval.afterEntryId === entryId,
     )
-    if (band?.kind === 'entries') unfold(band.entries)
+    if (band) unfoldBand(band)
     unfolded = { ...unfolded, [cardKey]: true }
   }
 
@@ -737,7 +740,7 @@
               <Button onclick={goToNextRange}>Go to next range</Button>
             {:else}
               <Button disabled={preview?.status !== 'ok' || applying} onclick={apply}>
-                {applying ? 'Applying…' : 'Apply repair'}
+                {applying ? 'Applying…' : 'Apply changes'}
               </Button>
             {/if}
           </div>
@@ -1150,7 +1153,7 @@
           <Button class="flex-1" onclick={goToNextRange}>Go to next range</Button>
         {:else}
           <Button class="flex-1" disabled={preview?.status !== 'ok' || applying} onclick={apply}>
-            {applying ? 'Applying…' : 'Apply repair'}
+            {applying ? 'Applying…' : 'Apply changes'}
           </Button>
         {/if}
       </div>
@@ -1196,7 +1199,7 @@
             class="pb-1"
             use:swipe={{
               threshold: 48,
-              onSwipeLeft: () => row.foldable && foldBand(row.bandId),
+              onSwipeLeft: () => foldBand(row.bandId),
               onSwipeRight: () => openBand(row.bandId),
             }}
           >
