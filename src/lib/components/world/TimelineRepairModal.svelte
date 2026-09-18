@@ -52,8 +52,11 @@
   let fullTextId = $state<string | null>(null)
   /** Ladder cards the reader has unfolded, by card key. */
   let unfolded = $state<Record<string, boolean>>({})
-  /** Bands folded to a summary, by band id. */
-  let foldedBands = $state<string[]>([])
+  /**
+   * Entries folded away. A band is folded while every entry in it is, so a fold survives the band
+   * splitting or merging.
+   */
+  let folded = $state<Record<string, boolean>>({})
   /** Height of the table view's pinned band, which is where its header comes to rest. */
   let pinnedHeight = $state(0)
   /** The ladder's scroll container, which is also where focus is parked. */
@@ -62,7 +65,7 @@
   let fullTextBack = $state<HTMLButtonElement | null>(null)
   let fullTextTrigger: HTMLElement | null = null
 
-  /** Take focus before removing whatever holds it: the trap would send it to the range selector. */
+  /** Park focus here before removing whatever holds it, so nothing else chooses where it lands. */
   function holdFocus() {
     ladderEl?.focus({ preventScroll: true })
   }
@@ -373,7 +376,7 @@
       } else {
         // Left open on purpose: the repair usually leads to the next range, and the figures
         // below are now the repaired ones. Reconciling again scales by 1 and changes nothing.
-        reset()
+        resetInputs()
         appliedMessage = 'Repair applied. The figures below are the repaired timeline.'
       }
     } catch {
@@ -383,17 +386,22 @@
     }
   }
 
-  function reset() {
+  /** Clears what the reader typed. What they folded is their reading, and outlives a repair. */
+  function resetInputs() {
     supplied = {}
     gapWeights = {}
     addedGapIds = []
-    openRows = []
     errorMessage = null
     staleMessage = null
     appliedMessage = null
     fullTextId = null
+  }
+
+  function reset() {
+    resetInputs()
+    openRows = []
     unfolded = {}
-    foldedBands = []
+    folded = {}
   }
 
   $effect(() => {
@@ -530,7 +538,7 @@
       const shared = { bandId: band.id, foldable: band.kind === 'entries' }
       rows.push({ kind: 'rung', key: `rung:${band.id}`, index })
 
-      if (foldedBands.includes(band.id)) {
+      if (bandFolded(band)) {
         rows.push({ kind: 'summary', key: `sum:${band.id}`, ...shared, band })
         return
       }
@@ -567,24 +575,35 @@
     unfolded = { ...unfolded, [key]: !unfolded[key] }
   }
 
+  function bandFolded(band: Band): boolean {
+    return band.kind === 'entries' && band.entries.every((entry) => folded[entry.id])
+  }
+
+  function unfold(entries: StoryEntry[]) {
+    const next = { ...folded }
+    for (const entry of entries) delete next[entry.id]
+    folded = next
+  }
+
   function foldBand(id: string) {
     holdFocus()
-    if (!foldedBands.includes(id)) foldedBands = [...foldedBands, id]
+    const band = bands.find((candidate) => candidate.id === id)
+    if (band?.kind !== 'entries') return
+    folded = { ...folded, ...Object.fromEntries(band.entries.map((entry) => [entry.id, true])) }
   }
 
   function openBand(id: string) {
     holdFocus()
-    foldedBands = foldedBands.filter((folded) => folded !== id)
+    const band = bands.find((candidate) => candidate.id === id)
+    if (band?.kind === 'entries') unfold(band.entries)
   }
 
   const storyBands = $derived(bands.filter((band) => band.kind === 'entries'))
-  const allFolded = $derived(
-    storyBands.length > 0 && storyBands.every((band) => foldedBands.includes(band.id)),
-  )
+  const allFolded = $derived(storyBands.length > 0 && storyBands.every(bandFolded))
 
   function toggleAll() {
     holdFocus()
-    foldedBands = allFolded ? [] : storyBands.map((band) => band.id)
+    folded = allFolded ? {} : Object.fromEntries(rangeEntries.map((entry) => [entry.id, true]))
   }
 
   /**
@@ -598,7 +617,7 @@
         ? candidate.entries.some((entry) => entry.id === entryId)
         : candidate.interval.afterEntryId === entryId,
     )
-    if (band) foldedBands = foldedBands.filter((id) => id !== band.id)
+    if (band?.kind === 'entries') unfold(band.entries)
     unfolded = { ...unfolded, [cardKey]: true }
   }
 
@@ -664,19 +683,28 @@
           <Dialog.Title class="text-lg font-semibold">Reconcile a range</Dialog.Title>
         </div>
 
-        <!-- Focusable so that focus has somewhere harmless to sit; see `holdFocus`. -->
+        <!--
+          The first tabbable: when the trap loses the focused element it refocuses the first, and
+          the reading area is the one place that can take focus without scrolling; see `holdFocus`.
+        -->
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
         <div
           bind:this={ladderEl}
-          tabindex="-1"
+          tabindex="0"
+          role="region"
+          aria-label="Range"
           class="min-h-0 flex-1 overflow-y-auto overscroll-contain outline-none"
         >
           {@render mobileBody()}
         </div>
       {:else}
         <!-- Title and buttons scroll: neither steers the reading, and the pinned band below does. -->
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
         <div
           bind:this={ladderEl}
-          tabindex="-1"
+          tabindex="0"
+          role="region"
+          aria-label="Range"
           class="-mx-6 flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-6 outline-none"
         >
           <div
@@ -719,12 +747,15 @@
 
     {#if fullTextEntry}
       <!--
-        Over the whole surface, header and footer included: reading an entry is its own screen, and
-        the only way off it is Back. A stacked dialog could not do this — it is portalled outside
-        this content, so dismissing it reads as a click outside and closes the repair as well.
+        Over the whole surface, header and footer included, but inside the safe areas: reading an
+        entry is its own screen, and the only way off it is Back. A stacked dialog could not do
+        this — it is portalled outside this content, so dismissing it reads as a click outside and
+        closes the repair as well.
       -->
       <div
-        class="bg-background absolute inset-0 z-30 flex flex-col gap-3 rounded-[inherit] px-4 py-3"
+        class="bg-background absolute inset-x-0 z-30 flex flex-col gap-3 rounded-[inherit] px-4 py-3 {narrow
+          ? 'top-[var(--safe-top)] bottom-[var(--safe-bottom)]'
+          : 'inset-y-0'}"
       >
         <Button
           variant="text"
