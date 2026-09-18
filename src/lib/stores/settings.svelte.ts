@@ -1201,6 +1201,7 @@ export function getDefaultUISettings(): UISettings {
     showScrollToTop: false,
     showScrollToBottom: true,
     storyMaxWidth: '3xl',
+    showEntryNumberAndTime: false,
     highlightDialogue: false,
     dialogueColor: '',
     incognitoKeyboard: false,
@@ -1580,6 +1581,9 @@ class SettingsStore {
       if (storyMaxWidth && VALID_STORY_WIDTH_KEYS.includes(storyMaxWidth))
         this.uiSettings.storyMaxWidth = storyMaxWidth as UISettings['storyMaxWidth']
 
+      const showEntryNumberAndTime = await database.getSetting('show_entry_number_and_time')
+      if (showEntryNumberAndTime !== null)
+        this.uiSettings.showEntryNumberAndTime = showEntryNumberAndTime === 'true'
       const highlightDialogue = await database.getSetting('highlight_dialogue')
       if (highlightDialogue !== null)
         this.uiSettings.highlightDialogue = highlightDialogue === 'true'
@@ -2715,6 +2719,11 @@ class SettingsStore {
     }
   }
 
+  async setShowEntryNumberAndTime(enabled: boolean) {
+    this.uiSettings.showEntryNumberAndTime = enabled
+    await database.setSetting('show_entry_number_and_time', enabled.toString())
+  }
+
   async setHighlightDialogue(enabled: boolean) {
     this.uiSettings.highlightDialogue = enabled
     await database.setSetting('highlight_dialogue', enabled.toString())
@@ -3175,6 +3184,10 @@ class SettingsStore {
     await database.setSetting(
       'show_scroll_to_bottom',
       this.uiSettings.showScrollToBottom.toString(),
+    )
+    await database.setSetting(
+      'show_entry_number_and_time',
+      this.uiSettings.showEntryNumberAndTime.toString(),
     )
     await database.setSetting('highlight_dialogue', this.uiSettings.highlightDialogue.toString())
     await database.setSetting('dialogue_color', this.uiSettings.dialogueColor)

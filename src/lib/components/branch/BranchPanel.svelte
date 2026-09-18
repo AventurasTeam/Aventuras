@@ -19,7 +19,7 @@
   import { untrack } from 'svelte'
   import { supportsHover } from '$lib/utils/platform'
   import { errMessage } from '$lib/utils/error'
-  import { checkpointsOnBranch } from '$lib/utils/storyNavigation'
+  import { checkpointsOnBranch, jumpToEntry } from '$lib/utils/storyNavigation'
 
   // Track expanded branches in tree view
   let expandedBranches = $state<Set<string>>(new Set(['main']))
@@ -260,18 +260,14 @@
   function goToForkPoint() {
     if (!canGoToForkPoint || !activeBranch) return
 
-    // Fork points live in the story, which may not be the panel that's up — and while
-    // it isn't, StoryView is destroyed rather than hidden (see AppShell). So the request
-    // is left on the ui store for it to pick up on mount, not emitted at it.
-    ui.requestEntryScroll(activeBranch.forkEntryId)
-    ui.setActivePanel('story')
-    ui.closeSidebarOnMobile()
-
-    // Where the platform can't hover, the button's tooltip can never explain itself and
-    // the panel may have just closed — so confirm the jump the way copying an entry does.
-    if (!supportsHover()) {
-      ui.showToast('Jumped to where this branch began', 'info', 2000)
-    }
+    jumpToEntry({
+      entries: story.entries,
+      entryId: activeBranch.forkEntryId,
+      ui,
+      confirmation: 'Jumped to where this branch began',
+      closeOnMobile: () => ui.closeSidebarOnMobile(),
+      canHover: supportsHover(),
+    })
   }
 </script>
 

@@ -22,6 +22,7 @@
   import { Textarea } from '$lib/components/ui/textarea'
   import { Badge } from '$lib/components/ui/badge'
   import { cn } from '$lib/utils/cn'
+  import { entryNumberRange } from '$lib/utils/storyNavigation'
 
   interface Props {
     chapter: Chapter
@@ -30,6 +31,9 @@
   }
 
   let { chapter, entries, onResummarize }: Props = $props()
+
+  // Endpoints, not a span: on a story with gaps this disagrees with the count, and both are true.
+  const entryRange = $derived(entryNumberRange(entries))
 
   const isExpanded = $derived(ui.memoryExpandedChapterId === chapter.id)
   const isEditing = $derived(ui.memoryEditingChapterId === chapter.id)
@@ -226,7 +230,15 @@
         {:else}
           <ChevronRight class="h-3.5 w-3.5" />
         {/if}
-        <span>{entries.length} entries</span>
+        <span>
+          {entries.length}
+          {entries.length === 1 ? 'entry' : 'entries'}{#if entryRange}<span
+              class="text-muted-foreground/70 ml-1"
+              >({entryRange.first === entryRange.last
+                ? `#${entryRange.first}`
+                : `#${entryRange.first}–#${entryRange.last}`})</span
+            >{/if}
+        </span>
       </Button>
     </div>
 

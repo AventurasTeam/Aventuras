@@ -8,6 +8,25 @@ export function entryNumber(entry: StoryEntry): number {
   return entry.position + 1
 }
 
+export interface EntryNumberRange {
+  first: number
+  last: number
+}
+
+/**
+ * First and last reader-facing numbers in a run of entries, or null when there are none.
+ *
+ * Endpoints only: numbering has gaps in imported or repaired stories, so the span between them
+ * is not a count. `entries` must be sorted by position, which is how the store holds them.
+ */
+export function entryNumberRange(entries: StoryEntry[]): EntryNumberRange | null {
+  if (entries.length === 0) return null
+  return {
+    first: entryNumber(entries[0]),
+    last: entryNumber(entries[entries.length - 1]),
+  }
+}
+
 /** Index of the last entry at or below `position`, or -1 when every entry is above it. */
 function floorIndex(entries: StoryEntry[], position: number): number {
   let lo = 0
@@ -46,6 +65,56 @@ export function resolveEntryByNumber(
 
   const index = floorIndex(entries, parsed - 1)
   return entries[index === -1 ? 0 : index]
+}
+
+/**
+ * The part of the ui store a jump touches. Named as an interface rather than taken as the store
+ * itself so the sequence below can be tested without one.
+ */
+export interface EntryJumpUi {
+  requestEntryScroll(entryId: string): void
+  setActivePanel(panel: 'story'): void
+  showToast(message: string, type?: 'error' | 'warning' | 'info', duration?: number): void
+}
+
+export interface EntryJumpRequest {
+  /** The branch being read; a jump can only land on an entry it contains. */
+  entries: StoryEntry[]
+  entryId: string
+  ui: EntryJumpUi
+  confirmation: string
+  /** Each panel dismisses itself, so the step belongs to the caller. */
+  closeOnMobile?: () => void
+  canHover: boolean
+}
+
+/**
+ * Send the reader to an entry in the story from another panel. Returns whether it will land.
+ *
+ * The presence check runs before the request so the reader is told the truth rather than left
+ * with one that never lands. The request goes on the ui store because AppShell destroys the
+ * story view while another panel is up.
+ */
+export function jumpToEntry(request: EntryJumpRequest): boolean {
+  const { entries, entryId, ui, confirmation, closeOnMobile, canHover } = request
+
+  const willLand = entries.some((entry) => entry.id === entryId)
+
+  ui.requestEntryScroll(entryId)
+  ui.setActivePanel('story')
+  closeOnMobile?.()
+
+  // Without hover there is no tooltip and the panel may have closed over the result, so a
+  // failed jump has to be distinguishable from one that landed.
+  if (!canHover) {
+    if (willLand) {
+      ui.showToast(confirmation, 'info', 2000)
+    } else {
+      ui.showToast('That entry is not in this branch', 'error', 2000)
+    }
+  }
+
+  return willLand
 }
 
 export type LandmarkKind = 'origin' | 'checkpoint'
