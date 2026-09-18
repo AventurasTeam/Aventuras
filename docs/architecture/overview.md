@@ -148,6 +148,36 @@ does not scroll. Two things keep that true, and both are structural:
 `holdFocus` calls remain where a card is about to disappear under an open soft keyboard, so the
 keyboard closes before the card does; they are no longer what stops the scroll.
 
+## The soft keyboard
+
+`MainActivity` calls `enableEdgeToEdge()`, which sets `decorFitsSystemWindows = false` and with it
+gives up the window resizing `adjustResize` would otherwise do on API 30 and later. Nothing then
+shortens the WebView when the keyboard opens, and Chromium is not told either: `innerHeight` and
+`visualViewport.height` both stay at the full screen, so the keyboard simply covers whatever was
+under it, the focused field included.
+
+So `onWebViewCreate` takes the `ime()` inset for itself and sets it as the WebView's bottom
+margin. That shortens the laid-out view, so the layout viewport is shorter, so `vh`, `dvh` and
+every fixed surface end at the keyboard instead of running under it. The margin is load-bearing
+and padding is not a substitute: a padded WebView keeps its measured height and the page never
+relayouts. Below API 30 the window still resizes on its own, the decor consumes the inset before
+it reaches the WebView, and the margin stays at zero; `SOFT_INPUT_ADJUST_RESIZE` is set
+explicitly so that path does not resolve to panning.
+
+`AndroidBridge.getInsets()` reports the bottom inset net of the keyboard. With the keyboard up the
+navigation bar is underneath it and the view already ends at its top edge, so `--sab` goes to zero;
+otherwise every surface padded by `--safe-bottom` keeps a bar-height strip of background above the
+keyboard. `app.html` refreshes the variables on `resize`, which the margin change fires.
+
+Keyboard geometry has that one owner. Nothing in the page listens to `visualViewport`, and the
+bottom drawer's own `repositionInputs` is switched off in `ui/drawer`: it measures the keyboard as
+the difference between `innerHeight` and the visual viewport, which is now always zero.
+
+The page cannot fix this from its own side. `interactive-widget=resizes-content` in the viewport
+meta asks the _browser_ to shrink the layout viewport, and in an embedded WebView that resize can
+only come from the embedder's window, which edge-to-edge has opted out of. It was tried, and
+changed nothing.
+
 ## Data Model
 
 The story is an append-only list of `StoryEntry` rows (`user_action`, `narration`, `system`,
