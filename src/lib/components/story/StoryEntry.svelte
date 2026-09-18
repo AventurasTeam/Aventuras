@@ -65,7 +65,6 @@
   import { Textarea } from '$lib/components/ui/textarea'
   import { Input } from '$lib/components/ui/input'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
-  import { Separator } from '$lib/components/ui/separator'
   import { SvelteMap, SvelteSet } from 'svelte/reactivity'
   import { escapeHtml } from '$lib/utils/inlineImageParser'
   import { extractSentenceAt, expandRangeBidirectional } from '$lib/utils/text'
@@ -135,6 +134,17 @@
   const showActivityRecord = $derived(
     !!activityRecord && activity.isReportVisible(entry.id, !activityRecord.endedAt),
   )
+
+  // The duration chip and its fallback in Response info must never both be absent. The fallback
+  // renders in a portal outside the card, where a container query cannot reach, so one measured
+  // width decides both.
+  const ACTIVITY_CHIP_MIN_REM = 27
+  let cardRect = $state<DOMRectReadOnly>()
+  const activityChipFits = $derived.by(() => {
+    if (!cardRect) return true
+    const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
+    return cardRect.width >= ACTIVITY_CHIP_MIN_REM * rem
+  })
 
   // Narration only: an action is an instant and a system entry is not story, so neither has a
   // span to show. `retry` is narration in older saves.
@@ -1343,6 +1353,7 @@
 </script>
 
 <div
+  bind:contentRect={cardRect}
   class="group border-border @container rounded-lg border border-l-4 px-4 pt-3 pb-4 shadow-sm {styles[
     entry.type
   ]}"
@@ -1375,7 +1386,7 @@
          needs the width. Narration entries keep it under "Response info" in the overflow menu;
          on any other entry type it is not shown there at all. -->
     <span
-      class="bg-muted hidden rounded px-1.5 py-0.5 text-[11px] tabular-nums @min-[23.7rem]:inline"
+      class="bg-muted hidden rounded px-1.5 py-0.5 text-[11px] tabular-nums @min-[25rem]:inline"
     >
       {#if isReasoningEnabled && reasoningTokens > 0}
         <span class="text-muted-foreground">{reasoningTokens}r</span>
@@ -1385,13 +1396,12 @@
       <span class="text-muted-foreground ml-0.5">tokens</span>
     </span>
 
-    <!-- How long the turn took, opening its timeline. Leaves the header with the entry meta;
-         Response info, then the overflow menu, carry the toggle once it has gone. -->
-    {#if activityRecord}
-      <Separator orientation="vertical" class="hidden h-4 @min-[37.6rem]:block" />
+    <!-- How long the turn took, opening its timeline. Below ACTIVITY_CHIP_MIN_REM, Response info
+         and then the overflow menu carry the toggle instead. -->
+    {#if activityRecord && activityChipFits}
       <button
         type="button"
-        class="bg-muted text-muted-foreground hover:text-foreground hidden rounded px-1.5 py-0.5 text-[11px] tabular-nums transition-colors @min-[37.6rem]:inline"
+        class="bg-muted text-muted-foreground hover:text-foreground rounded px-1.5 py-0.5 text-[11px] tabular-nums transition-colors"
         aria-pressed={showActivityRecord}
         title={showActivityRecord ? 'Hide generation activity' : 'Show generation activity'}
         onclick={() => activity.setReportVisible(entry.id, !showActivityRecord)}
@@ -1403,9 +1413,7 @@
     <!-- Drops to its own row well before the chips and toolbar give way: it is the widest thing
          on the row, so it runs out of space first. -->
     {#if showEntryMeta}
-      <div class="text-muted-foreground hidden items-center @min-[37.6rem]:flex">
-        <!-- mr only: the header row's own gap supplies the space on the left. -->
-        <Separator orientation="vertical" class="mr-2 h-4" />
+      <div class="text-muted-foreground hidden items-center gap-2 @min-[40rem]:flex">
         {@render entryMeta()}
       </div>
     {/if}
@@ -1524,25 +1532,25 @@
               {/snippet}
             </Popover.Trigger>
             <Popover.Content class="w-64 p-3 text-xs" align="end">
+              <!-- Action above the info, as in the overflow menu; only once the chip has gone. -->
+              {#if activityRecord && !activityChipFits}
+                <div class="border-border mb-2 border-b pb-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    class="h-7 w-full justify-start gap-2 px-2 text-xs"
+                    onclick={() => activity.setReportVisible(entry.id, !showActivityRecord)}
+                  >
+                    <Clock class="h-3.5 w-3.5" />
+                    {showActivityRecord ? 'Hide' : 'Show'} generation activity
+                  </Button>
+                </div>
+              {/if}
               <div class="border-border mb-2 border-b pb-2">
                 {@render entryNumberRow()}
               </div>
               <p class="text-foreground mb-2 text-sm font-medium">Response info</p>
               {@render responseInfoRows()}
-              <!-- Covers the widths where the duration chip has left the header but the overflow
-                   menu has not yet arrived. Not in responseInfoRows, which the overflow menu also
-                   renders beside its own activity item. -->
-              {#if activityRecord}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  class="mt-2 h-7 w-full justify-start gap-2 px-2 text-xs"
-                  onclick={() => activity.setReportVisible(entry.id, !showActivityRecord)}
-                >
-                  <Clock class="h-3.5 w-3.5" />
-                  {showActivityRecord ? 'Hide' : 'Show'} generation activity
-                </Button>
-              {/if}
             </Popover.Content>
           </Popover.Root>
         {/if}
@@ -1729,17 +1737,19 @@
   </div>
 
   {#snippet entryMeta()}
-    <span class="bg-muted rounded px-1.5 py-0.5 text-[11px] tabular-nums">
-      Entry: {entryNumber(entry)}
-    </span>
-    <Separator orientation="vertical" class="mx-2 h-4" />
-    <span class="bg-muted rounded px-1.5 py-0.5 text-[11px] tabular-nums">
-      Story time: {generationInfo.storyTime || 'not recorded'}
-    </span>
+    <div class="bg-muted flex gap-2 rounded px-1.5 py-0.5 text-[11px] tabular-nums">
+      <span>Entry:</span><span class="text-foreground">{entryNumber(entry)}</span>
+    </div>
+    <div class="bg-muted flex gap-2 rounded px-1.5 py-0.5 text-[11px] tabular-nums">
+      <span>Story time:</span>
+      <span class="text-foreground">{generationInfo.storyTime || 'not recorded'}</span>
+    </div>
   {/snippet}
 
   {#if showEntryMeta}
-    <div class="text-muted-foreground mb-2 flex items-center @min-[37.6rem]:hidden">
+    <div
+      class="text-muted-foreground mb-2 flex items-center justify-between gap-2 @min-[25rem]:justify-start @min-[40rem]:hidden"
+    >
       {@render entryMeta()}
     </div>
   {/if}
