@@ -97,11 +97,11 @@
           <Input type="number" bind:value={editDays} min="1" max="365" class="h-8 text-sm" />
         </div>
         <div class="space-y-1">
-          <Label class="text-xs">Hours</Label>
+          <Label class="text-xs">Hour</Label>
           <Input type="number" bind:value={editHours} min="0" max="23" class="h-8 text-sm" />
         </div>
         <div class="space-y-1">
-          <Label class="text-xs">Minutes</Label>
+          <Label class="text-xs">Minute</Label>
           <Input type="number" bind:value={editMinutes} min="0" max="59" class="h-8 text-sm" />
         </div>
       </div>
@@ -121,35 +121,35 @@
       <!-- Detailed time display -->
       <div class="grid grid-cols-4 gap-2 text-center">
         <div class="bg-muted/50 border-border/50 rounded border p-2">
-          <div class="text-foreground text-lg font-medium">
-            {displayYears}
-          </div>
           <div class="text-muted-foreground text-[10px] font-medium tracking-wider uppercase">
             Year
           </div>
+          <div class="text-foreground text-lg font-medium">
+            {displayYears}
+          </div>
         </div>
         <div class="bg-muted/50 border-border/50 rounded border p-2">
-          <div class="text-foreground text-lg font-medium">
-            {displayDays}
-          </div>
           <div class="text-muted-foreground text-[10px] font-medium tracking-wider uppercase">
             Day
           </div>
+          <div class="text-foreground text-lg font-medium">
+            {displayDays}
+          </div>
         </div>
         <div class="bg-muted/50 border-border/50 rounded border p-2">
+          <div class="text-muted-foreground text-[10px] font-medium tracking-wider uppercase">
+            Hour
+          </div>
           <div class="text-foreground text-lg font-medium">
             {pad(story.timeTracker.hours)}
           </div>
-          <div class="text-muted-foreground text-[10px] font-medium tracking-wider uppercase">
-            Hours
-          </div>
         </div>
         <div class="bg-muted/50 border-border/50 rounded border p-2">
-          <div class="text-foreground text-lg font-medium">
-            {pad(story.timeTracker.minutes)}
-          </div>
           <div class="text-muted-foreground text-[10px] font-medium tracking-wider uppercase">
             Min
+          </div>
+          <div class="text-foreground text-lg font-medium">
+            {pad(story.timeTracker.minutes)}
           </div>
         </div>
       </div>
