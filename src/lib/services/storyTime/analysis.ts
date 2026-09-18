@@ -2,9 +2,8 @@
  * Read-only analysis of a story's recorded chronology.
  *
  * Nothing here writes. Findings carry a severity, and the distinction matters more than the
- * list: a *defect* is provable from the stored data, a *suspected* one rests on a threshold, and
- * a *note* is neither — something real that the reader has to decide about, an interval between
- * two entries being the case that matters. See docs/architecture/story-time.md.
+ * list: a *defect* is provable from the stored data, a *suspected* one is worth a look and may
+ * well be fine. See docs/architecture/story-time.md.
  */
 
 import type { Chapter, StoryEntry, TimeAnchor, TimeTracker } from '$lib/types'
@@ -21,6 +20,7 @@ export type TimelineAnomalyKind =
   | 'suspect-zero'
   | 'backwards'
   | 'overlap'
+  | 'gap'
   | 'implausible-jump'
   | 'flatline'
   | 'chapter-span-disagreement'
@@ -111,8 +111,17 @@ export function analyzeTimeline(input: TimelineAnalysisInput): TimelineAnomaly[]
       })
     }
 
-    // An interval is time the story is entitled to leave unclaimed, so nothing is reported for
-    // it. An entry beginning *before* the previous one ended is wrong.
+    // An interval is a legitimate skip as often as a lost stretch, so it is only suspected. An
+    // entry beginning *before* the previous one ended is wrong.
+    if (previousEnd && start && toMinutes(start) > toMinutes(previousEnd)) {
+      anomalies.push({
+        kind: 'gap',
+        entryIds: [previous.id, entry.id],
+        detail: `${toMinutes(start) - toMinutes(previousEnd)} minutes pass between these two entries, not claimed by either of them.`,
+        severity: 'suspected',
+      })
+    }
+
     if (previousEnd && start && toMinutes(start) < toMinutes(previousEnd)) {
       anomalies.push({
         kind: 'overlap',

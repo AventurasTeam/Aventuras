@@ -59,6 +59,7 @@
   function heading(anomaly: TimelineAnomaly): string {
     const entries = anomaly.entryIds.map((id) => byId.get(id)).filter(Boolean) as StoryEntry[]
     if (entries.length === 0) return 'Unknown entry'
+    if (anomaly.kind === 'gap') return `After entry ${entryNumber(entries[0])}`
     if (anomaly.kind === 'flatline' && entries.length > 1) {
       return `Entries ${entryNumber(entries[0])}–${entryNumber(entries[entries.length - 1])}`
     }
@@ -67,13 +68,20 @@
   }
 
   function marker(anomaly: TimelineAnomaly): { text: string; class: string } {
+    if (anomaly.kind === 'gap') {
+      return { text: 'Time gap', class: 'bg-amber-500/15 text-amber-700 dark:text-amber-500' }
+    }
     const entry = subject(anomaly)
-    if (entry?.type === 'user_action')
-      return { text: 'You', class: 'bg-muted text-muted-foreground' }
-    return { text: 'Story', class: 'bg-primary/10 text-primary' }
+    if (entry?.type === 'user_action') return { text: 'Action', class: 'bg-muted text-foreground' }
+    return { text: 'Narrative', class: 'bg-background text-foreground' }
   }
 
   function recorded(anomaly: TimelineAnomaly): string {
+    if (anomaly.kind === 'gap') {
+      const from = byId.get(anomaly.entryIds[0])?.metadata?.timeEnd
+      const to = byId.get(anomaly.entryIds[1])?.metadata?.timeStart
+      if (from && to) return `${formatStoryTime(from)} → ${formatStoryTime(to)}`
+    }
     const entry = subject(anomaly)
     const start = entry?.metadata?.timeStart
     const end = entry?.metadata?.timeEnd
@@ -139,7 +147,7 @@
 
       {#each ordered as anomaly (anomaly.kind + anomaly.entryIds.join())}
         {@const badge = marker(anomaly)}
-        <div class="border-border rounded-md border p-3 text-xs">
+        <div class="border-border bg-card rounded-md border p-3 text-xs">
           <div class="mb-2 flex flex-wrap items-center gap-2">
             <span class="rounded px-1 text-[10px] tracking-wide uppercase {badge.class}">
               {badge.text}

@@ -67,10 +67,19 @@ describe('analyzeTimeline', () => {
     expect(backwards!.severity).toBe('defect')
   })
 
-  it('reports nothing at all for an interval between two entries', () => {
+  it('suspects an interval between two entries, and does not call it a defect', () => {
     const a = entry({ start: t(0), end: t(5) })
     const b = entry({ start: t(7), end: t(8) })
-    expect(analyzeTimeline({ entries: [a, b] })).toEqual([])
+    const gap = analyzeTimeline({ entries: [a, b] }).find((x) => x.kind === 'gap')
+    expect(gap).toBeDefined()
+    expect(gap!.severity).toBe('suspected')
+    expect(gap!.entryIds).toEqual([a.id, b.id])
+  })
+
+  it('reports no gap between entries that meet', () => {
+    const a = entry({ start: t(0), end: t(5) })
+    const b = entry({ start: t(5), end: t(8) })
+    expect(analyzeTimeline({ entries: [a, b] }).some((x) => x.kind === 'gap')).toBe(false)
   })
 
   it('reports no defect for a timeline whose only feature is an interval', () => {
