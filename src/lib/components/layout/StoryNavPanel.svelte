@@ -65,20 +65,6 @@
     story.entries.length > 0 ? entryNumber(story.entries[story.entries.length - 1]) : 0,
   )
 
-  // Fork points live in the story panel, which may not be the one that is up — and while it
-  // isn't, StoryView is destroyed rather than hidden. The request is left on the ui store for
-  // it to pick up on mount, the same way the Branches panel jumps to a fork point.
-  function goTo(entryId: string, confirmation: string) {
-    jumpToEntry({
-      entries: story.entries,
-      entryId,
-      ui,
-      confirmation,
-      closeOnMobile: () => ui.closeNavPanelOnMobile(),
-      canHover: supportsHover(),
-    })
-  }
-
   function goToNumber() {
     if (!numberInput.trim()) return
     const entry = resolveEntryByNumber(story.entries, numberInput)
@@ -89,7 +75,14 @@
       )
       return
     }
-    goTo(entry.id, `Jumped to entry ${entryNumber(entry)}`)
+    jumpToEntry({
+      entries: story.entries,
+      entryId: entry.id,
+      ui,
+      confirmation: `Jumped to entry ${entryNumber(entry)}`,
+      closeOnMobile: () => ui.closeNavPanelOnMobile(),
+      canHover: supportsHover(),
+    })
   }
 
   function setLandmarkNavigationMode(value: string) {
@@ -122,7 +115,14 @@
       }
     }
 
-    goTo(landmark.entryId, `Jumped to entry ${landmark.number}`)
+    jumpToEntry({
+      entries: story.entries,
+      entryId: landmark.entryId,
+      ui,
+      confirmation: `Jumped to entry ${landmark.number}`,
+      closeOnMobile: () => ui.closeNavPanelOnMobile(),
+      canHover: supportsHover(),
+    })
   }
 
   // The row is inert by design, but a tap that does nothing reads as a broken control where
