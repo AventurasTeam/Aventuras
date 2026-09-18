@@ -231,8 +231,12 @@
           <ChevronRight class="h-3.5 w-3.5" />
         {/if}
         <span>
-          {entries.length} entries{#if entryRange}<span class="text-muted-foreground/70 ml-1"
-              >(#{entryRange.first}–#{entryRange.last})</span
+          {entries.length}
+          {entries.length === 1 ? 'entry' : 'entries'}{#if entryRange}<span
+              class="text-muted-foreground/70 ml-1"
+              >({entryRange.first === entryRange.last
+                ? `#${entryRange.first}`
+                : `#${entryRange.first}–#${entryRange.last}`})</span
             >{/if}
         </span>
       </Button>

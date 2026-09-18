@@ -1385,8 +1385,8 @@
       <span class="text-muted-foreground ml-0.5">tokens</span>
     </span>
 
-    <!-- How long the turn took, opening its timeline. Hidden on a narrow card for the same
-         reason as the token badge above; the overflow menu carries it there instead. -->
+    <!-- How long the turn took, opening its timeline. Leaves the header with the entry meta;
+         Response info, then the overflow menu, carry the toggle once it has gone. -->
     {#if activityRecord}
       <Separator orientation="vertical" class="hidden h-4 @min-[37.6rem]:block" />
       <button
@@ -1529,6 +1529,20 @@
               </div>
               <p class="text-foreground mb-2 text-sm font-medium">Response info</p>
               {@render responseInfoRows()}
+              <!-- Covers the widths where the duration chip has left the header but the overflow
+                   menu has not yet arrived. Not in responseInfoRows, which the overflow menu also
+                   renders beside its own activity item. -->
+              {#if activityRecord}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  class="mt-2 h-7 w-full justify-start gap-2 px-2 text-xs"
+                  onclick={() => activity.setReportVisible(entry.id, !showActivityRecord)}
+                >
+                  <Clock class="h-3.5 w-3.5" />
+                  {showActivityRecord ? 'Hide' : 'Show'} generation activity
+                </Button>
+              {/if}
             </Popover.Content>
           </Popover.Root>
         {/if}
