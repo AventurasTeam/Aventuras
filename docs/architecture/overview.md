@@ -34,6 +34,50 @@ aventuras/
 └── package.json             # Node dependencies and scripts
 ```
 
+## Edge swipes
+
+The edge swipes that open the two side panels live in `AppShell.svelte` and are deliberately
+asymmetric. The right one opens the sidebar whenever it is closed; the left one only while
+_neither_ panel is open, because a right-swipe inside the open sidebar already belongs to that
+sidebar's tab strip and must not also open the panel behind it.
+
+They are read off the shell itself, counting only gestures that _start_ within 30px of an edge (20px
+above the mobile breakpoint), not from invisible strips over the page. A strip takes every tap that
+lands on it, and on a phone the outer halves of the header's panel button and of Send sit within
+that band. Because swipes inside a panel bubble up to the shell, a panel must never reach the
+opposite edge's band. On a phone neither does: the sidebar is capped at 288px and the navigation
+panel at `100vw - 3rem`.
+
+## The soft keyboard
+
+`MainActivity` calls `enableEdgeToEdge()`, which sets `decorFitsSystemWindows = false` and with it
+gives up the window resizing `adjustResize` would otherwise do on API 30 and later. Nothing then
+shortens the WebView when the keyboard opens, and Chromium is not told either: `innerHeight` and
+`visualViewport.height` both stay at the full screen, so the keyboard simply covers whatever was
+under it, the focused field included.
+
+So `onWebViewCreate` takes the `ime()` inset for itself and sets it as the WebView's bottom
+margin. That shortens the laid-out view, so the layout viewport is shorter, so `vh`, `dvh` and
+every fixed surface end at the keyboard instead of running under it. The margin is load-bearing
+and padding is not a substitute: a padded WebView keeps its measured height and the page never
+relayouts. Below API 30 the window still resizes on its own, the decor consumes the inset before
+it reaches the WebView, and the margin stays at zero; `SOFT_INPUT_ADJUST_RESIZE` is set
+explicitly so that path does not resolve to panning.
+
+`AndroidBridge.getInsets()` reports the bottom inset net of the keyboard. With the keyboard up the
+navigation bar is underneath it and the view already ends at its top edge, so `--sab` goes to zero;
+otherwise every surface padded by `--safe-bottom` keeps a bar-height strip of background above the
+keyboard. `app.html` refreshes the variables on `resize`, which the margin change fires.
+
+Keyboard geometry has that one owner. Nothing in the page listens to `visualViewport`, and the
+bottom drawer's own `repositionInputs` is switched off in `ui/drawer`: it measures the keyboard as
+the difference between `innerHeight` and the visual viewport, which is now always zero.
+
+The page cannot fix this from its own side. `interactive-widget=resizes-content` in the viewport
+meta asks the _browser_ to shrink the layout viewport, and in an embedded WebView that resize can
+only come from the embedder's window, which edge-to-edge has opted out of. It was tried, and
+changed nothing.
+
 ## Data Model
 
 The story is an append-only list of `StoryEntry` rows (`user_action`, `narration`, `system`,

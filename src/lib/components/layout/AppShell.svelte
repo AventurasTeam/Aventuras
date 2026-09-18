@@ -19,7 +19,7 @@
   import SyncModal from '$lib/components/sync/SyncModal.svelte'
   import STChatImportModal from '$lib/components/modals/STChatImportModal.svelte'
   import UpdateDialog from '$lib/components/updater/UpdateDialog.svelte'
-  import { swipe } from '$lib/utils/swipe'
+  import { swipe, type SwipeEvent } from '$lib/utils/swipe'
   import { releaseOrphanScrollLock, isBodyLockPresent } from '$lib/utils/scrollLock'
   import { createLogger } from '$lib/log'
   import { Bug } from '@lucide/svelte'
@@ -35,9 +35,21 @@
 
   const log = createLogger('AppShell')
 
-  function handleEdgeSwipeLeft() {
+  const edgeWidth = () => (window.innerWidth <= 768 ? 30 : 20)
+
+  // Read off the shell rather than an overlay strip, which would take the taps of whatever lies under it.
+  function handleEdgeSwipeLeft(event: SwipeEvent) {
+    if (event.startX < window.innerWidth - edgeWidth()) return
     if (story.currentStory && !ui.sidebarOpen) {
       ui.toggleSidebar()
+    }
+  }
+
+  // Only while neither panel is open: a right swipe in the open sidebar belongs to its tabs.
+  function handleEdgeSwipeRight(event: SwipeEvent) {
+    if (event.startX > edgeWidth()) return
+    if (story.currentStory && !ui.sidebarOpen && !ui.navPanelOpen) {
+      ui.toggleNavPanel()
     }
   }
 
@@ -239,7 +251,14 @@
   onresize={handleWindowResize}
 />
 
-<div class="app-shell bg-surface-900 relative flex h-screen w-screen flex-col">
+<div
+  class="app-shell bg-surface-900 relative flex h-screen w-screen flex-col"
+  use:swipe={{
+    onSwipeLeft: handleEdgeSwipeLeft,
+    onSwipeRight: handleEdgeSwipeRight,
+    threshold: 30,
+  }}
+>
   <!-- Profile Warning Banner (shown when API profiles need updating) -->
   <ProfileWarningBanner />
 
@@ -252,25 +271,6 @@
         onclick={() => ui.toggleSidebar()}
         aria-label="Close sidebar"
       ></button>
-    {/if}
-
-    <!-- Right edge swipe zone for opening sidebar (when closed) -->
-    {#if !ui.sidebarOpen && story.currentStory}
-      <div
-        class="swipe-edge-zone"
-        use:swipe={{ onSwipeLeft: handleEdgeSwipeLeft, threshold: 30 }}
-      ></div>
-    {/if}
-
-    <!-- Left edge swipe zone for opening the nav panel — a region-owning gesture, the mirror
-         of the right-edge zone above. Mounted only while neither panel is open, so a
-         right-swipe that belongs to the sidebar's tab strip or to dismissing a panel cannot
-         also open this one. -->
-    {#if !ui.sidebarOpen && !ui.navPanelOpen && story.currentStory}
-      <div
-        class="swipe-edge-zone swipe-edge-zone-left"
-        use:swipe={{ onSwipeRight: () => ui.toggleNavPanel(), threshold: 30 }}
-      ></div>
     {/if}
 
     <!-- Main content area -->
@@ -495,21 +495,6 @@
     cursor: pointer;
   }
 
-  /* Right edge swipe zone */
-  .swipe-edge-zone {
-    position: fixed;
-    right: 0;
-    top: 0;
-    width: 20px;
-    height: 100%;
-    z-index: 30;
-  }
-
-  .swipe-edge-zone-left {
-    right: auto;
-    left: 0;
-  }
-
   /* Mobile styles */
   @media (max-width: 768px) {
     .mobile-sidebar-overlay {
@@ -523,11 +508,6 @@
       top: max(var(--safe-top), 28px);
       bottom: var(--safe-bottom);
       animation: slide-in 0.2s ease-out;
-    }
-
-    .swipe-edge-zone {
-      width: 30px;
-      top: max(var(--safe-top), 28px);
     }
 
     .nav-panel-scrim {

@@ -7,6 +7,8 @@
     activeSnapPoint = $bindable(null),
     handleOnly = true,
     closeThreshold = 0.75,
+    // The keyboard shrinks the layout viewport itself; see overview.md, "The soft keyboard".
+    repositionInputs = false,
     ...restProps
   }: DrawerPrimitive.RootProps = $props()
 </script>
@@ -17,5 +19,6 @@
   bind:activeSnapPoint
   {handleOnly}
   {closeThreshold}
+  {repositionInputs}
   {...restProps}
 />
