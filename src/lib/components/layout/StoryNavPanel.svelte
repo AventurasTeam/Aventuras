@@ -517,35 +517,6 @@
            switch anything. Locking it would hide which mode is set and block the one useful
            response — selecting "stay on current branch". The switch itself is refused in
            goToLandmark. -->
-      <div class="border-border border-t p-3">
-        <p class="text-muted-foreground mb-2 text-xs font-medium tracking-wider uppercase">
-          Landmark navigation
-        </p>
-        <RadioGroup
-          value={landmarkNavigationMode}
-          onValueChange={setLandmarkNavigationMode}
-          class="gap-2"
-          aria-label="Landmark navigation behavior"
-        >
-          <div class="flex items-center gap-2">
-            <RadioGroupItem value="current-branch" id="landmark-current-branch" />
-            <Label for="landmark-current-branch" class="cursor-pointer text-xs font-normal">
-              Stay on current branch
-            </Label>
-          </div>
-          <div class="flex items-center gap-2">
-            <RadioGroupItem value="checkpoint-branch" id="landmark-checkpoint-branch" />
-            <Label for="landmark-checkpoint-branch" class="cursor-pointer text-xs font-normal">
-              Switch to checkpoint branch
-            </Label>
-          </div>
-        </RadioGroup>
-      </div>
-
-      <!-- Not locked during a generation: this chooses what a landmark tap does, it does not
-           switch anything. Locking it would hide which mode is set and block the one useful
-           response — selecting "stay on current branch". The switch itself is refused in
-           goToLandmark. -->
       <div class="border-border shrink-0 border-t p-3">
         <p class="text-muted-foreground mb-2 text-xs font-medium tracking-wider uppercase">
           Landmark navigation
