@@ -31,6 +31,12 @@ export interface SwipeOptions {
   preventDefault?: boolean
 }
 
+/** Text entry owns its own horizontal drags: a caret or a selection is not a swipe. */
+function startsInTextEntry(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false
+  return !!target.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]')
+}
+
 interface TouchState {
   startX: number
   startY: number
@@ -56,6 +62,7 @@ export function swipe(node: HTMLElement, options: SwipeOptions = {}) {
 
   function handleTouchStart(e: TouchEvent) {
     if (e.touches.length !== 1) return
+    if (startsInTextEntry(e.target)) return
 
     const touch = e.touches[0]
     state = {
