@@ -18,6 +18,7 @@ import {
   type LoreSessionInput,
   type LoreSessionResult,
 } from './LoreManagementCoordinator'
+import type { Chapter } from '$lib/types'
 import {
   StyleReviewScheduler,
   type StyleReviewDependencies,
@@ -53,7 +54,7 @@ export interface BackgroundTaskInput {
    * chapter list without the chapter that triggered it, and a "recent story" still holding
    * the entries that chapter had just absorbed.
    */
-  loreSession: () => LoreSessionInput
+  loreSession: (newChapter?: Chapter) => LoreSessionInput
   loreCallbacks: LoreManagementCallbacks
   loreUICallbacks?: LoreManagementUICallbacks
 }
@@ -115,7 +116,7 @@ export class BackgroundTaskCoordinator {
     if (result.chapterCreation.loreManagementTriggered) {
       try {
         result.loreManagement = await this.loreCoordinator.runSession(
-          input.loreSession(),
+          input.loreSession(result.chapterCreation.chapter),
           input.loreCallbacks,
           input.loreUICallbacks,
         )
