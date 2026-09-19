@@ -659,12 +659,23 @@ class AIService {
       .map((m) => `[${m.type === 'user_action' ? 'ACTION' : 'NARRATIVE'}] ${m.content}`)
       .join('\n\n')
 
+    // `null` here means `newChapter.entries` came back empty — `story.getChapterEntries`
+    // does that when it cannot place the chapter's boundary ids. The chapter's summary must
+    // stay in that case: excluding it on a payload with nothing to show would make the
+    // chapter invisible instead of verbatim. So the drop below is keyed off the payload, not
+    // off `newChapter` itself, keeping the two atomic.
+    const newChapterPayload = newChapter
+      ? buildNewChapterPayload(newChapter.chapter, newChapter.entries)
+      : null
+
     // Number, title and summary only, minus the chapter that triggered this run — it goes
     // in below as `newChapter`, in full, and one chapter in two forms would be the same
     // material twice in one prompt.
     // Deep clone to avoid Svelte proxy issues with AI SDK structured cloning
     const chapterInfos = JSON.parse(
-      JSON.stringify(chapterSummariesExcluding(chapters, newChapter?.chapter.id)),
+      JSON.stringify(
+        chapterSummariesExcluding(chapters, newChapterPayload ? newChapter?.chapter.id : undefined),
+      ),
     )
 
     // Create service and run session
@@ -674,9 +685,7 @@ class AIService {
       recentStory,
       existingEntries: entries,
       chapters: chapterInfos,
-      newChapter: newChapter
-        ? buildNewChapterPayload(newChapter.chapter, newChapter.entries)
-        : undefined,
+      newChapter: newChapterPayload ?? undefined,
       queryChapter: callbacks.onQueryChapter,
       keptSeparate: await callbacks.getKeptSeparate?.(),
       onKeepSeparate: callbacks.onKeepSeparate,

@@ -50,7 +50,7 @@ describe('buildNewChapterPayload', () => {
       makeEntry({ type: 'user_action', content: 'I open the gate.' }),
       makeEntry({ type: 'narration', content: 'The gate creaks open.' }),
     ])
-    expect(payload.text).toBe('[ACTION] I open the gate.\n\n[NARRATIVE] The gate creaks open.')
+    expect(payload?.text).toBe('[ACTION] I open the gate.\n\n[NARRATIVE] The gate creaks open.')
   })
 
   it('filters out entries that are not narration or a user action', () => {
@@ -59,15 +59,25 @@ describe('buildNewChapterPayload', () => {
       makeEntry({ type: 'system', content: 'Dropped.' }),
       makeEntry({ type: 'retry', content: 'Also dropped.' }),
     ])
-    expect(payload.text).toBe('[NARRATIVE] Kept.')
+    expect(payload?.text).toBe('[NARRATIVE] Kept.')
   })
 
   it('carries number, title, characters and locations from the chapter', () => {
-    const payload = buildNewChapterPayload(makeChapter(), [])
-    expect(payload.number).toBe(12)
-    expect(payload.title).toBe('The Ashen Gate')
-    expect(payload.characters).toEqual(['Kaelen', "Vor'koth"])
-    expect(payload.locations).toEqual(['The Citadel'])
+    const payload = buildNewChapterPayload(makeChapter(), [makeEntry()])
+    expect(payload?.number).toBe(12)
+    expect(payload?.title).toBe('The Ashen Gate')
+    expect(payload?.characters).toEqual(['Kaelen', "Vor'koth"])
+    expect(payload?.locations).toEqual(['The Citadel'])
+  })
+
+  it('returns null when there is nothing to show', () => {
+    // story.getChapterEntries() returns [] when it cannot place the chapter's boundary
+    // ids. The caller must not drop the chapter's summary on a null payload — see ai/index.ts.
+    expect(buildNewChapterPayload(makeChapter(), [])).toBeNull()
+  })
+
+  it('returns null when every entry is filtered out', () => {
+    expect(buildNewChapterPayload(makeChapter(), [makeEntry({ type: 'system' })])).toBeNull()
   })
 })
 
@@ -76,19 +86,19 @@ describe('formatNewChapterSection', () => {
     const payload = buildNewChapterPayload(makeChapter(), [
       makeEntry({ type: 'user_action', content: 'I open the gate.' }),
     ])
-    expect(formatNewChapterSection(payload)).toBe(
+    expect(formatNewChapterSection(payload!)).toBe(
       "# Chapter 12: The Ashen Gate — just written, in full\n*Characters: Kaelen, Vor'koth | Locations: The Citadel*\n\n[ACTION] I open the gate.\n",
     )
   })
 
   it('omits the header title when the chapter has none', () => {
-    const payload = buildNewChapterPayload(makeChapter({ title: null }), [])
-    expect(formatNewChapterSection(payload)).toContain('# Chapter 12 — just written, in full')
+    const payload = buildNewChapterPayload(makeChapter({ title: null }), [makeEntry()])
+    expect(formatNewChapterSection(payload!)).toContain('# Chapter 12 — just written, in full')
   })
 
   it('prints only the facets that are present', () => {
-    const payload = buildNewChapterPayload(makeChapter({ locations: [] }), [])
-    expect(formatNewChapterSection(payload)).toContain("*Characters: Kaelen, Vor'koth*\n")
+    const payload = buildNewChapterPayload(makeChapter({ locations: [] }), [makeEntry()])
+    expect(formatNewChapterSection(payload!)).toContain("*Characters: Kaelen, Vor'koth*\n")
   })
 
   it('omits the facet line entirely when both are absent', () => {
@@ -98,10 +108,10 @@ describe('formatNewChapterSection', () => {
         characters: undefined as unknown as string[],
         locations: undefined as unknown as string[],
       }),
-      [],
+      [makeEntry()],
     )
-    expect(formatNewChapterSection(payload)).toBe(
-      '# Chapter 12: The Ashen Gate — just written, in full\n\n\n',
+    expect(formatNewChapterSection(payload!)).toBe(
+      '# Chapter 12: The Ashen Gate — just written, in full\n\n[NARRATIVE] The gate creaked open.\n',
     )
   })
 })
