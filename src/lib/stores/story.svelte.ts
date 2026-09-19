@@ -60,6 +60,8 @@ export type TimelineReconciliationPreview =
       rangeEntries: StoryEntry[]
       plan: ReconciliationPlan
       fingerprint: string
+      /** What the reader supplied, so apply can recompute the same preview to revalidate it. */
+      inputs: { durations: Record<string, number>; intervals: Record<string, number> }
     }
 import { settings } from './settings.svelte'
 import { extractInlineCustomVars } from '$lib/services/ai/sdk/schemas/runtime-variables'
@@ -1619,6 +1621,7 @@ class StoryStore {
         assertedEnding: this.assertedEnding(range),
       }),
       fingerprint: this.timelineFingerprint(range, rangeEntries),
+      inputs: { durations: suppliedDurations, intervals: intervalWeights },
     }
   }
 
@@ -1654,7 +1657,13 @@ class StoryStore {
 
     this.assertNotBusy('reconcile the timeline')
 
-    const fresh = this.previewReconciliation(preview.range)
+    // With the same weights: a range whose entries have no recorded time resolves only when the
+    // reader's figures are handed back, and without them every such apply would read as stale.
+    const fresh = this.previewReconciliation(
+      preview.range,
+      preview.inputs.durations,
+      preview.inputs.intervals,
+    )
     if (fresh.status !== 'ok' || fresh.fingerprint !== preview.fingerprint) return 'stale'
 
     await applyReconciliation(preview.plan, this.entries, {
