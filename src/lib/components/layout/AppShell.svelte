@@ -24,6 +24,7 @@
   import { createLogger } from '$lib/log'
   import { Bug } from '@lucide/svelte'
   import {
+    DESKTOP_BREAKPOINT,
     MIN_SIDEBAR_WIDTH,
     MAX_SIDEBAR_WIDTH,
     MAX_SIDEBAR_RATIO,
@@ -35,7 +36,7 @@
 
   const log = createLogger('AppShell')
 
-  const edgeWidth = () => (window.innerWidth <= 768 ? 30 : 20)
+  const edgeWidth = () => (window.innerWidth <= DESKTOP_BREAKPOINT ? 30 : 20)
 
   // Read off the shell rather than an overlay strip, which would take the taps of whatever lies under it.
   function handleEdgeSwipeLeft(event: SwipeEvent) {

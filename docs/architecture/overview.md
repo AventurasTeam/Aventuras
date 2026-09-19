@@ -70,8 +70,9 @@ otherwise every surface padded by `--safe-bottom` keeps a bar-height strip of ba
 keyboard. `app.html` refreshes the variables on `resize`, which the margin change fires.
 
 Keyboard geometry has that one owner. Nothing in the page listens to `visualViewport`, and the
-bottom drawer's own `repositionInputs` is switched off in `ui/drawer`: it measures the keyboard as
-the difference between `innerHeight` and the visual viewport, which is now always zero.
+bottom drawer's own `repositionInputs` is switched off in `ui/drawer` on Android: it measures the
+keyboard as the difference between `innerHeight` and the visual viewport, which there is now always
+zero. Elsewhere it stays on, since nothing else shrinks the layout viewport for the keyboard.
 
 The page cannot fix this from its own side. `interactive-widget=resizes-content` in the viewport
 meta asks the _browser_ to shrink the layout viewport, and in an embedded WebView that resize can
