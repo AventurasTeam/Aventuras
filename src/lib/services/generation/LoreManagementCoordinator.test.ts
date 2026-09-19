@@ -140,6 +140,28 @@ describe('progress reporting', () => {
     expect(progress).toEqual([1, 2, 2])
   })
 
+  it('hands the summary over separately, since progress is wiped seconds later', async () => {
+    const coordinator = new LoreManagementCoordinator({
+      runLoreManagement: async () => ({
+        changes: [],
+        summary: 'merged Vor’koth',
+        sessionId: 's',
+      }),
+    })
+    const onSummary = vi.fn()
+
+    await coordinator.runSession(input({ storyId: 'story-4' }), callbacks(), {
+      onStart: vi.fn(),
+      onProgress: vi.fn(),
+      onSummary,
+      onComplete: vi.fn(),
+    })
+
+    expect(onSummary).toHaveBeenCalledWith('merged Vor’koth', 0)
+  })
+})
+
+describe('newChapter forwarding', () => {
   it('forwards newChapter to runLoreManagement when the caller passes one', async () => {
     const chapter = { id: 'ch-1', number: 3 } as unknown as Chapter
     const deps: LoreManagementDependencies = { runLoreManagement: vi.fn(async () => emptyResult()) }
@@ -162,25 +184,5 @@ describe('progress reporting', () => {
 
     const options = vi.mocked(deps.runLoreManagement).mock.calls[0][6]
     expect(options?.newChapter).toBeUndefined()
-  })
-
-  it('hands the summary over separately, since progress is wiped seconds later', async () => {
-    const coordinator = new LoreManagementCoordinator({
-      runLoreManagement: async () => ({
-        changes: [],
-        summary: 'merged Vor’koth',
-        sessionId: 's',
-      }),
-    })
-    const onSummary = vi.fn()
-
-    await coordinator.runSession(input({ storyId: 'story-4' }), callbacks(), {
-      onStart: vi.fn(),
-      onProgress: vi.fn(),
-      onSummary,
-      onComplete: vi.fn(),
-    })
-
-    expect(onSummary).toHaveBeenCalledWith('merged Vor’koth', 0)
   })
 })
