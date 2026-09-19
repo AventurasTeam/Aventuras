@@ -58,6 +58,7 @@ import type { StreamChunk } from './core/types'
 import { recentStoryBudgetChars } from './core/defaults'
 import { MIN_RECENT_ENTRIES_FOR_LORE, splitRecentTail } from './retrieval/recentTail'
 import { serviceFactory } from './core/factory'
+import { buildNewChapterPayload, chapterSummariesExcluding } from './lorebook'
 import {
   inlineImageService,
   isImageGenerationEnabled as isImageGenerationEnabledUtil,
@@ -632,11 +633,16 @@ class AIService {
     recentMessages: StoryEntry[],
     chapters: Chapter[],
     callbacks: LoreManagementCallbacks,
-    _mode: StoryMode = 'adventure',
-    _pov?: POV,
-    _tense?: Tense,
-    tokenThreshold?: number,
+    options?: {
+      mode?: StoryMode
+      pov?: POV
+      tense?: Tense
+      tokenThreshold?: number
+      /** The chapter that triggered this run, given to the agent in full. */
+      newChapter?: { chapter: Chapter; entries: StoryEntry[] }
+    },
   ): Promise<LoreManagementResult> {
+    const { tokenThreshold, newChapter } = options ?? {}
     // The story since the last chapter — the only unsummarised material the agent has. It
     // used to be the single most recent action and narration, which on a story with no
     // chapters left the agent maintaining a lorebook for a story it could not read.
@@ -653,17 +659,12 @@ class AIService {
       .map((m) => `[${m.type === 'user_action' ? 'ACTION' : 'NARRATIVE'}] ${m.content}`)
       .join('\n\n')
 
-    // Number, title and summary only: the keyword and character facets were read by
-    // `list_chapters`, which no longer exists.
+    // Number, title and summary only, minus the chapter that triggered this run — it goes
+    // in below as `newChapter`, in full, and one chapter in two forms would be the same
+    // material twice in one prompt.
     // Deep clone to avoid Svelte proxy issues with AI SDK structured cloning
     const chapterInfos = JSON.parse(
-      JSON.stringify(
-        chapters.map((c) => ({
-          number: c.number,
-          title: c.title,
-          summary: c.summary,
-        })),
-      ),
+      JSON.stringify(chapterSummariesExcluding(chapters, newChapter?.chapter.id)),
     )
 
     // Create service and run session
@@ -673,6 +674,9 @@ class AIService {
       recentStory,
       existingEntries: entries,
       chapters: chapterInfos,
+      newChapter: newChapter
+        ? buildNewChapterPayload(newChapter.chapter, newChapter.entries)
+        : undefined,
       queryChapter: callbacks.onQueryChapter,
       keptSeparate: await callbacks.getKeptSeparate?.(),
       onKeepSeparate: callbacks.onKeepSeparate,

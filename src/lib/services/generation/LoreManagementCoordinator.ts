@@ -68,6 +68,11 @@ export interface LoreSessionInput {
   tense: Tense
   /** The story's own summarization threshold, which the recent-story budget scales with. */
   tokenThreshold?: number
+  /**
+   * The chapter that triggered this run, given to the agent in full rather than as a
+   * summary. Absent on the batch importer's pass and on a tidy run with no new chapter.
+   */
+  newChapter?: { chapter: Chapter; entries: StoryEntry[] }
 }
 
 export interface LoreManagementDependencies {
@@ -78,10 +83,13 @@ export interface LoreManagementDependencies {
     recentMessages: StoryEntry[],
     chapters: Chapter[],
     callbacks: LoreManagementCallbacks,
-    mode: StoryMode,
-    pov?: POV,
-    tense?: Tense,
-    tokenThreshold?: number,
+    options?: {
+      mode?: StoryMode
+      pov?: POV
+      tense?: Tense
+      tokenThreshold?: number
+      newChapter?: { chapter: Chapter; entries: StoryEntry[] }
+    },
   ) => Promise<LoreManagementResult>
 }
 
@@ -198,10 +206,13 @@ export class LoreManagementCoordinator {
           getKeptSeparate: callbacks.getKeptSeparate,
           onKeepSeparate: callbacks.onKeepSeparate,
         },
-        input.mode,
-        input.pov,
-        input.tense,
-        input.tokenThreshold,
+        {
+          mode: input.mode,
+          pov: input.pov,
+          tense: input.tense,
+          tokenThreshold: input.tokenThreshold,
+          newChapter: input.newChapter,
+        },
       )
 
       log('Lore management complete', {
