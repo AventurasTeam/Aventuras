@@ -28,21 +28,21 @@ export {
   type RangeInterval,
   type ReconcileInput,
   type ReconcileResult,
-  type RepairedTime,
+  type ReconciledTime,
   type DurationRequest,
   type Join,
 } from './reconcile'
 export {
-  planRepair,
+  planReconciliation,
   fingerprintPreview,
-  applyRepair,
-  repairStatements,
-  type RepairPlan,
-  type PlanRepairInput,
+  applyReconciliation,
+  reconciliationStatements,
+  type ReconciliationPlan,
+  type PlanReconciliationInput,
   type ChapterSpanUpdate,
   type DeltaUpdate,
-  type RepairWriteDeps,
-} from './repair'
+  type ReconciliationWriteDeps,
+} from './reconciliation'
 export {
   parseDuration,
   formatDuration,

@@ -2,7 +2,7 @@
 --
 -- Every other timestamp in the database is derived output of the classifier's four-bucket
 -- time progression; an anchor is the only record of what the reader knows to be true, and
--- the only thing a repair measures from.
+-- the only thing a reconciliation measures from.
 --
 -- UNIQUE on entry_id: one assertion per entry, so re-anchoring replaces rather than
 -- accumulates.

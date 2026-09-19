@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { story, type TimelineRepairPreview } from '$lib/stores/story.svelte'
+  import { story, type TimelineReconciliationPreview } from '$lib/stores/story.svelte'
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
   import * as Dialog from '$lib/components/ui/dialog'
@@ -44,7 +44,7 @@
   let openRows = $state<string[]>([])
   let applying = $state(false)
   let staleMessage = $state<string | null>(null)
-  /** A write that threw, which is a different thing from a repair the story moved out from under. */
+  /** A write that threw, which is a different thing from a reconciliation the story moved out from under. */
   let errorMessage = $state<string | null>(null)
   let appliedMessage = $state<string | null>(null)
   /** The entry whose whole text is being read. Full text is only ever its own surface. */
@@ -87,8 +87,8 @@
   const ranges = $derived(story.timeRanges)
 
   // Opens on the story's end. A reader notices the clock has drifted while it is still drifting,
-  // and repairs the range they are living in; walking the whole story is a once-per-story event.
-  // Only on opening, so that applying a repair does not drag the selection back off the range
+  // and reconciles the range they are living in; walking the whole story is a once-per-story
+  // event. Only on opening, so that applying does not drag the selection back off the range
   // the reader moved to.
   let wasOpen = false
   $effect(() => {
@@ -114,14 +114,14 @@
     return toMinutes(end) - toMinutes(start)
   })
 
-  /** What the two reference points say it should occupy. The repair is the ratio between them. */
+  /** What the two reference points say it should occupy. The reconciliation is the ratio between them. */
   const assertedSpan = $derived(
     range?.from.time && range?.to.time
       ? toMinutes(range.to.time) - toMinutes(range.from.time)
       : null,
   )
 
-  /** The story's own last entry, which a repair must include before it may move the clock. */
+  /** The story's own last entry, which a range must include before it may move the clock. */
   const lastEntryNumber = $derived.by(() => {
     const last = story.entries[story.entries.length - 1]
     return last ? entryNumber(last.id) : null
@@ -220,12 +220,12 @@
   )
   const resolved = $derived(unreadable.length === 0 && !invalidWeights)
 
-  const refusal = $derived(range ? story.previewTimelineRepair(range, {}, {}) : null)
+  const refusal = $derived(range ? story.previewReconciliation(range, {}, {}) : null)
   const isRefused = $derived(refusal?.status === 'refused')
 
-  const preview = $derived<TimelineRepairPreview | null>(
+  const preview = $derived<TimelineReconciliationPreview | null>(
     range && resolved && !isRefused
-      ? story.previewTimelineRepair(range, overrides, statedWeights)
+      ? story.previewReconciliation(range, overrides, statedWeights)
       : null,
   )
 
@@ -250,7 +250,7 @@
   }
 
   /**
-   * The weight shown against the repaired one, and whether the reader supplied it.
+   * The weight shown against the reconciled one, and whether the reader supplied it.
    *
    * Narration only. A player action is an instant, so it has no weight to show — and printing
    * one as zero would read as the collapse warning a narration entry's zero really is.
@@ -314,14 +314,14 @@
     return 'This entry is recorded as ending before it began, so its length cannot be read.'
   }
 
-  function repairedTimes(entryId: string) {
+  function reconciledTimes(entryId: string) {
     if (preview?.status !== 'ok') return null
     return preview.result.times.find((time) => time.entryId === entryId) ?? null
   }
 
   function scaledInterval(afterEntryId: string, beforeEntryId: string): number | null {
-    const from = repairedTimes(afterEntryId)
-    const to = repairedTimes(beforeEntryId)
+    const from = reconciledTimes(afterEntryId)
+    const to = reconciledTimes(beforeEntryId)
     if (!from || !to) return null
     return toMinutes(to.start) - toMinutes(from.end)
   }
@@ -369,23 +369,23 @@
     errorMessage = null
     appliedMessage = null
     try {
-      const outcome = await story.applyTimelineRepair(preview)
+      const outcome = await story.applyReconciliation(preview)
       if (outcome === 'stale') {
         staleMessage = 'The story changed while this was open. Review the refreshed figures.'
       } else {
-        // Left open on purpose: the repair usually leads to the next range, and the figures
-        // below are now the repaired ones. Reconciling again scales by 1 and changes nothing.
+        // Left open on purpose: this usually leads to the next range, and the figures below
+        // are now the reconciled ones. Reconciling again scales by 1 and changes nothing.
         resetInputs()
-        appliedMessage = 'Repair applied. The figures below are the repaired timeline.'
+        appliedMessage = 'Reconciled. The figures below are the new timeline.'
       }
     } catch {
-      errorMessage = 'Repair could not be applied. Review the timeline and try again.'
+      errorMessage = 'The changes could not be applied. Review the timeline and try again.'
     } finally {
       applying = false
     }
   }
 
-  /** Clears what the reader typed. What they folded is their reading, and outlives a repair. */
+  /** Clears what the reader typed. What they folded is their reading, and outlives a reconciliation. */
   function resetInputs() {
     supplied = {}
     gapWeights = {}
@@ -463,9 +463,9 @@
 
   /** Whether the clock moved across a run of entries, on either rail. Nothing else earns a rung. */
   function timeMoved(first: StoryEntry, last: StoryEntry): boolean {
-    const repairedFrom = repairedTimes(first.id)?.start
-    const repairedTo = repairedTimes(last.id)?.end
-    if (repairedFrom && repairedTo && !sameInstant(repairedFrom, repairedTo)) return true
+    const reconciledFrom = reconciledTimes(first.id)?.start
+    const reconciledTo = reconciledTimes(last.id)?.end
+    if (reconciledFrom && reconciledTo && !sameInstant(reconciledFrom, reconciledTo)) return true
     return !sameInstant(recordedStart(first), last.metadata?.timeEnd)
   }
 
@@ -476,7 +476,7 @@
 
   interface BandEdges {
     recorded: [TimeTracker | null, TimeTracker | null]
-    repaired: [TimeTracker | null, TimeTracker | null]
+    reconciled: [TimeTracker | null, TimeTracker | null]
   }
 
   function bandEdges(band: Band): BandEdges {
@@ -485,16 +485,19 @@
       const last = band.entries[band.entries.length - 1]
       return {
         recorded: [recordedStart(first), last.metadata?.timeEnd ?? null],
-        repaired: [repairedTimes(first.id)?.start ?? null, repairedTimes(last.id)?.end ?? null],
+        reconciled: [
+          reconciledTimes(first.id)?.start ?? null,
+          reconciledTimes(last.id)?.end ?? null,
+        ],
       }
     }
     const after = byId.get(band.interval.afterEntryId)
     const before = byId.get(band.interval.beforeEntryId)
     return {
       recorded: [after?.metadata?.timeEnd ?? null, before ? recordedStart(before) : null],
-      repaired: [
-        repairedTimes(band.interval.afterEntryId)?.end ?? null,
-        repairedTimes(band.interval.beforeEntryId)?.start ?? null,
+      reconciled: [
+        reconciledTimes(band.interval.afterEntryId)?.end ?? null,
+        reconciledTimes(band.interval.beforeEntryId)?.start ?? null,
       ],
     }
   }
@@ -504,18 +507,18 @@
     if (bands.length === 0) return []
     const first = bandEdges(bands[0])
     return [
-      { recorded: first.recorded[0], repaired: first.repaired[0] },
+      { recorded: first.recorded[0], reconciled: first.reconciled[0] },
       ...bands.map((band) => {
         const edges = bandEdges(band)
-        return { recorded: edges.recorded[1], repaired: edges.repaired[1] }
+        return { recorded: edges.recorded[1], reconciled: edges.reconciled[1] }
       }),
     ]
   })
 
   function bandLength(band: Band): number | null {
-    const { repaired } = bandEdges(band)
-    if (!repaired[0] || !repaired[1]) return null
-    return toMinutes(repaired[1]) - toMinutes(repaired[0])
+    const { reconciled } = bandEdges(band)
+    if (!reconciled[0] || !reconciled[1]) return null
+    return toMinutes(reconciled[1]) - toMinutes(reconciled[0])
   }
 
   function bandUnsettled(band: Band): boolean {
@@ -641,7 +644,7 @@
       revealCard(entryId, `w:${entryId}`)
       await tick()
     }
-    const target = resolved ? 'repair-footer' : `band-${entryId}`
+    const target = resolved ? 'reconcile-footer' : `band-${entryId}`
     document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
 </script>
@@ -661,7 +664,7 @@
     A dialog on a phone too, rather than the app's bottom drawer. This screen is a full surface
     the reader works down, not a panel pulled part-way up: sliding in from the bottom, a grab
     handle and drag-to-dismiss all say retractable, and a drag that dismisses a half-filled
-    repair is a gesture this screen cannot afford.
+    reconciliation is a gesture this screen cannot afford.
   -->
   <Dialog.Content
     onOpenAutoFocus={(event: Event) => {
@@ -753,7 +756,7 @@
         Over the whole surface, header and footer included, but inside the safe areas: reading an
         entry is its own screen, and the only way off it is Back. A stacked dialog could not do
         this — it is portalled outside this content, so dismissing it reads as a click outside and
-        closes the repair as well.
+        closes the whole screen as well.
       -->
       <div
         class="bg-background absolute inset-x-0 z-30 flex flex-col gap-3 rounded-[inherit] px-4 py-3 {narrow
@@ -781,7 +784,7 @@
 
 {#snippet emptyRanges()}
   <p class="text-muted-foreground text-sm">
-    There is nothing to reconcile yet. A repair runs between two boundaries, and this story offers
+    There is nothing to reconcile yet. A range runs between two boundaries, and this story offers
     fewer than two.
   </p>
   <p class="text-muted-foreground text-xs">
@@ -859,7 +862,7 @@
         <p>This range reaches the end of the story, so the current time moves with it.</p>
       {:else}
         <p>
-          The story's current time is unchanged: this repair ends at entry
+          The story's current time is unchanged: this range ends at entry
           {entryNumber(preview.range.to.entryId)}, and the story ends at entry
           {lastEntryNumber ?? '?'}. Widen the range to the end of the story to move the clock with
           it.
@@ -944,7 +947,7 @@
           <tbody>
             {#each rangeEntries as entry (entry.id)}
               {@const request = requestFor(entry.id)}
-              {@const repaired = repairedTimes(entry.id)}
+              {@const reconciled = reconciledTimes(entry.id)}
               {@const interval = intervals.find((i) => i.afterEntryId === entry.id)}
               {@const was = wasWeight(entry.id)}
               <tr
@@ -985,19 +988,19 @@
                   </div>
                 </td>
                 <td class="py-1 align-top whitespace-nowrap">
-                  {#if repaired}
+                  {#if reconciled}
                     <div class="grid grid-cols-[auto_1fr] gap-x-2">
                       {#if isAction(entry.id)}
-                        <span>At:</span><span>{stamp(repaired.end)}</span>
+                        <span>At:</span><span>{stamp(reconciled.end)}</span>
                       {:else}
-                        <span>Start:</span><span>{stamp(repaired.start)}</span>
-                        <span>End:</span><span>{stamp(repaired.end)}</span>
+                        <span>Start:</span><span>{stamp(reconciled.start)}</span>
+                        <span>End:</span><span>{stamp(reconciled.end)}</span>
                         <span>Weight:</span>
                         <span class="flex items-center gap-1">
                           {#if collapsed.includes(entry.id)}
                             <TriangleAlert class="h-3 w-3 shrink-0 text-amber-600" />
                           {/if}
-                          {formatDuration(toMinutes(repaired.end) - toMinutes(repaired.start))}
+                          {formatDuration(toMinutes(reconciled.end) - toMinutes(reconciled.start))}
                         </span>
                       {/if}
                     </div>
@@ -1071,7 +1074,7 @@
       </div>
     {/if}
 
-    <!-- Closes the table off: what follows is about the repair, not about a row in it. -->
+    <!-- Closes the table off: what follows is about the range, not about a row in it. -->
     <div class="border-border mt-3 flex flex-col gap-3 border-t pt-3">
       {@render outcomeNotes()}
     </div>
@@ -1111,7 +1114,7 @@
         <!-- Nothing to steer towards: the range is refused, and no weight changes that. -->
         <p class="text-destructive flex items-center gap-2 text-xs">
           <TriangleAlert class="h-3.5 w-3.5 shrink-0" />
-          <span class="flex-1">This range cannot be repaired as it stands</span>
+          <span class="flex-1">This range cannot be reconciled as it stands</span>
         </p>
       {:else}
         <button
@@ -1145,7 +1148,7 @@
 
       {@render outcomeNotes()}
 
-      <div id="repair-footer" class="flex gap-2 pt-2">
+      <div id="reconcile-footer" class="flex gap-2 pt-2">
         <Button variant="outline" class="flex-1" onclick={() => (open = false)}>
           {appliedMessage ? 'Close' : 'Cancel'}
         </Button>
@@ -1235,7 +1238,7 @@
   {@const point = rungs[index]}
   {#if point}
     {@const before = stampParts(point.recorded)}
-    {@const after = stampParts(point.repaired)}
+    {@const after = stampParts(point.reconciled)}
     <div class="relative flex items-center gap-1 py-1.5 font-mono text-[10px]">
       <!-- The dots sit on the rails, which run behind them unbroken. -->
       <span
@@ -1243,7 +1246,7 @@
       ></span>
       <span class="flex shrink-0 gap-1">
         {#each before as part, i (i)}
-          <!-- The record lights only where it disagrees: the eye tracks what the repair moves. -->
+          <!-- The record lights only where it disagrees: the eye tracks what moves. -->
           <span class={after[i] === part ? 'text-muted-foreground/60' : 'text-foreground'}>
             {part}
           </span>
@@ -1390,7 +1393,7 @@
 
 {#snippet weightCard(entryId: string)}
   {@const was = wasWeight(entryId)}
-  {@const repaired = repairedTimes(entryId)}
+  {@const reconciled = reconciledTimes(entryId)}
   {@const request = requestFor(entryId)}
   {#snippet header()}
     <span class="text-muted-foreground flex-1 tracking-wide uppercase">Weight</span>
@@ -1414,7 +1417,7 @@
   {#snippet body()}
     {@render weightPair(
       was.text,
-      repaired ? formatDuration(toMinutes(repaired.end) - toMinutes(repaired.start)) : '—',
+      reconciled ? formatDuration(toMinutes(reconciled.end) - toMinutes(reconciled.start)) : '—',
       was.supplied,
     )}
   {/snippet}

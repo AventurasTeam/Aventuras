@@ -1,14 +1,14 @@
 /**
  * Turning a reconciliation into the writes that commit with it.
  *
- * A repair is not only entry times: chapter spans covering those entries are copies that go
- * stale, a delta's recorded clock would otherwise restore a pre-repair value on rollback, and
- * a repair reaching the end of the branch moves the story clock. All of it lands together or
+ * Reconciling is not only entry times: chapter spans covering those entries are copies that go
+ * stale, a delta's recorded clock would otherwise restore an earlier value on rollback, and a
+ * range reaching the end of the branch moves the story clock. All of it lands together or
  * not at all.
  */
 
 import type { Chapter, Checkpoint, StoryEntry, TimeTracker, WorldStateDelta } from '$lib/types'
-import type { RepairedTime } from './reconcile'
+import type { ReconciledTime } from './reconcile'
 import type { Boundary } from './boundaries'
 import { toMinutes } from './minutes'
 
@@ -28,14 +28,14 @@ export interface CheckpointClockUpdate {
   timeTracker: TimeTracker
 }
 
-export interface RepairPlan {
-  times: RepairedTime[]
+export interface ReconciliationPlan {
+  times: ReconciledTime[]
   chapterSpans: ChapterSpanUpdate[]
   deltas: DeltaUpdate[]
   /**
-   * The story clock after the repair, or null to leave it alone.
+   * The story clock afterwards, or null to leave it alone.
    *
-   * Only a repair that reaches the branch's last entry moves it. An interior repair makes no
+   * Only a range that reaches the branch's last entry moves it. An interior range makes no
    * claim about where the story now stands, and writing the clock anyway would discard a
    * clock-only adjustment the reader had not yet committed by continuing the story.
    */
@@ -44,11 +44,11 @@ export interface RepairPlan {
    * Checkpoints at the range's asserted ending, reseeded with that assertion.
    *
    * A checkpoint holds the clock a branch forked there will be seeded with, read at the fork
-   * rather than at the repair, so leaving it would open that branch on a pre-repair time.
+   * rather than at the range, so leaving it would open that branch on the old time.
    */
   checkpointClocks: CheckpointClockUpdate[]
   /**
-   * Entries whose automatic world-state keyframes this repair invalidates.
+   * Entries whose automatic world-state keyframes this reconciliation invalidates.
    *
    * A keyframe is a cache taken wherever the snapshot interval fell, so it can be neither
    * pinned nor rewritten with confidence, and is discarded the way a rollback discards it.
@@ -56,39 +56,39 @@ export interface RepairPlan {
   keyframeEntryIds: string[]
 }
 
-export interface PlanRepairInput {
+export interface PlanReconciliationInput {
   /** Every entry on the branch, in story order. */
   entries: StoryEntry[]
   chapters: Chapter[]
   /** The reconciliation's output for the entries inside the range. */
-  times: RepairedTime[]
+  times: ReconciledTime[]
   checkpoints?: Checkpoint[]
   /** The assertion at the range's later boundary, when that boundary carries one. */
   assertedEnding?: { entryId: string; time: TimeTracker } | null
 }
 
-export function planRepair(input: PlanRepairInput): RepairPlan {
+export function planReconciliation(input: PlanReconciliationInput): ReconciliationPlan {
   const { entries, chapters, times, checkpoints = [], assertedEnding = null } = input
-  const repaired = new Map(times.map((time) => [time.entryId, time]))
+  const reconciled = new Map(times.map((time) => [time.entryId, time]))
 
   const startOf = (entry: StoryEntry) =>
-    repaired.get(entry.id)?.start ?? entry.metadata?.timeStart ?? null
+    reconciled.get(entry.id)?.start ?? entry.metadata?.timeStart ?? null
   const endOf = (entry: StoryEntry) =>
-    repaired.get(entry.id)?.end ?? entry.metadata?.timeEnd ?? null
+    reconciled.get(entry.id)?.end ?? entry.metadata?.timeEnd ?? null
 
   const indexById = new Map(entries.map((entry, index) => [entry.id, index]))
-  const repairedIndices = times
+  const reconciledIndices = times
     .map((time) => indexById.get(time.entryId))
     .filter((index): index is number => index !== undefined)
-  const firstRepaired = Math.min(...repairedIndices)
-  const lastRepaired = Math.max(...repairedIndices)
+  const firstReconciled = Math.min(...reconciledIndices)
+  const lastReconciled = Math.max(...reconciledIndices)
 
   const chapterSpans: ChapterSpanUpdate[] = []
   for (const chapter of chapters) {
     const from = indexById.get(chapter.startEntryId)
     const to = indexById.get(chapter.endEntryId)
     if (from === undefined || to === undefined) continue
-    if (to < firstRepaired || from > lastRepaired) continue
+    if (to < firstReconciled || from > lastReconciled) continue
 
     chapterSpans.push({
       chapterId: chapter.id,
@@ -112,11 +112,11 @@ export function planRepair(input: PlanRepairInput): RepairPlan {
     })
   }
 
-  const reachesEnd = lastRepaired === entries.length - 1
+  const reachesEnd = lastReconciled === entries.length - 1
   const clock = reachesEnd ? (times[times.length - 1]?.end ?? null) : null
 
   // Only an asserted ending overrides a checkpoint's clock. Without an assertion the boundary
-  // resolves to the entry's own recorded ending, which the repair leaves where it was, so a
+  // resolves to the entry's own recorded ending, which reconciling leaves where it was, so a
   // snapshot that differs is holding something no reading can supply.
   const checkpointClocks: CheckpointClockUpdate[] = assertedEnding
     ? checkpoints
@@ -138,7 +138,7 @@ export function planRepair(input: PlanRepairInput): RepairPlan {
  * What a preview was computed from.
  *
  * Compared before applying, so generation, a deletion, an anchor edit or a branch switch
- * cannot land a repair against figures that have moved. The boundary ids inside the range are
+ * cannot land a reconciliation against figures that have moved. The boundary ids inside the range are
  * part of it: a boundary appearing there makes the selection invalid even though both endpoints
  * still resolve unchanged, because a range may not span one.
  */
@@ -166,16 +166,16 @@ export function fingerprintPreview(input: {
   })
 }
 
-export interface RepairWriteDeps {
+export interface ReconciliationWriteDeps {
   /** Runs every statement as one unit, or none of them. */
   transaction: (statements: { sql: string; params?: unknown[] }[]) => Promise<unknown>
   /** In-memory state, published only after the commit succeeds. */
-  publish: (plan: RepairPlan) => void
+  publish: (plan: ReconciliationPlan) => void
 }
 
 /** The statements a plan writes, in the order they are applied. */
-export function repairStatements(
-  plan: RepairPlan,
+export function reconciliationStatements(
+  plan: ReconciliationPlan,
   entries: StoryEntry[],
 ): { sql: string; params?: unknown[] }[] {
   const metadataById = new Map(entries.map((entry) => [entry.id, entry.metadata ?? {}]))
@@ -234,11 +234,11 @@ export function repairStatements(
 }
 
 /** Commit a plan. Nothing is published unless every statement lands. */
-export async function applyRepair(
-  plan: RepairPlan,
+export async function applyReconciliation(
+  plan: ReconciliationPlan,
   entries: StoryEntry[],
-  deps: RepairWriteDeps,
+  deps: ReconciliationWriteDeps,
 ): Promise<void> {
-  await deps.transaction(repairStatements(plan, entries))
+  await deps.transaction(reconciliationStatements(plan, entries))
   deps.publish(plan)
 }

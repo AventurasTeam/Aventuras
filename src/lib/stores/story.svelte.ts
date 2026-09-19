@@ -30,12 +30,12 @@ import { rollbackService } from '$lib/services/rollbackService'
 import { ui } from './ui.svelte'
 import {
   analyzeTimeline,
-  applyRepair,
+  applyReconciliation,
   fingerprintPreview,
   latestAssertedBoundary,
   listBoundaries,
   normalizeTime,
-  planRepair,
+  planReconciliation,
   reconcileRange,
   refuseRange,
   selectableRanges,
@@ -44,13 +44,13 @@ import {
   type DurationRequest,
   type RangeRefusal,
   type ReconcileResult,
-  type RepairPlan,
+  type ReconciliationPlan,
   type SelectableRange,
   type TimelineAnomaly,
 } from '$lib/services/storyTime'
 
-/** What a previewed repair carries: the refusal, the outstanding requests, or the plan. */
-export type TimelineRepairPreview =
+/** What a previewed reconciliation carries: the refusal, the outstanding requests, or the plan. */
+export type TimelineReconciliationPreview =
   | { status: 'refused'; refusal: RangeRefusal; range?: SelectableRange }
   | { status: 'needs-durations'; requests: DurationRequest[]; range: SelectableRange }
   | {
@@ -58,7 +58,7 @@ export type TimelineRepairPreview =
       result: Extract<ReconcileResult, { status: 'ok' }>
       range: SelectableRange
       rangeEntries: StoryEntry[]
-      plan: RepairPlan
+      plan: ReconciliationPlan
       fingerprint: string
     }
 import { settings } from './settings.svelte'
@@ -1506,7 +1506,7 @@ class StoryStore {
    * Delete all entries from a given position onward.
    * Used for entry-only retry restore (persistent retry).
    */
-  // ===== Time anchors and timeline repair =====
+  // ===== Time anchors and reconciliation =====
 
   /** Assert when an entry ended. Replaces any anchor the entry already carries. */
   async setTimeAnchor(entryId: string, assertedTime: TimeTracker, note: string | null = null) {
@@ -1543,7 +1543,7 @@ class StoryStore {
    *
    * Times on an inherited entry are writable from here — it is the same row every branch reads,
    * so a wrong stamp is one wrong fact. This says only that the entry is shared, which is worth
-   * telling the reader before they repair it.
+   * telling the reader before they reconcile it.
    */
   ownsEntry(entryId: string): boolean {
     const branchId = this.currentStory?.currentBranchId ?? null
@@ -1551,7 +1551,7 @@ class StoryStore {
     return (entry?.branchId ?? null) === branchId
   }
 
-  /** The points a repair may be selected between, on the branch in view. */
+  /** The points a range may be selected between, on the branch in view. */
   get timeBoundaries(): Boundary[] {
     return listBoundaries({
       entries: this.entries,
@@ -1569,11 +1569,11 @@ class StoryStore {
   }
 
   /** Everything the review needs, and the fingerprint apply revalidates against. */
-  previewTimelineRepair(
+  previewReconciliation(
     range: SelectableRange,
     suppliedDurations: Record<string, number> = {},
     intervalWeights: Record<string, number> = {},
-  ): TimelineRepairPreview {
+  ): TimelineReconciliationPreview {
     const refusal = refuseRange(range.from, range.to)
     if (refusal) return { status: 'refused', refusal }
 
@@ -1611,7 +1611,7 @@ class StoryStore {
       result,
       range,
       rangeEntries,
-      plan: planRepair({
+      plan: planReconciliation({
         entries: this.entries,
         chapters: this.chapters,
         times: result.times,
@@ -1642,27 +1642,27 @@ class StoryStore {
   }
 
   /**
-   * Commit a previewed repair.
+   * Commit a previewed reconciliation.
    *
    * Refuses when anything the preview was computed from has moved — generation, a deletion, an
    * anchor edit, a branch switch, or an anchor appearing inside the range, which invalidates the
    * selection even though both endpoints still resolve.
    */
-  async applyTimelineRepair(preview: TimelineRepairPreview): Promise<'applied' | 'stale'> {
+  async applyReconciliation(preview: TimelineReconciliationPreview): Promise<'applied' | 'stale'> {
     if (!this.currentStory) throw new Error('No story loaded')
     if (preview.status !== 'ok') return 'stale'
 
-    this.assertNotBusy('repair the timeline')
+    this.assertNotBusy('reconcile the timeline')
 
-    const fresh = this.previewTimelineRepair(preview.range)
+    const fresh = this.previewReconciliation(preview.range)
     if (fresh.status !== 'ok' || fresh.fingerprint !== preview.fingerprint) return 'stale'
 
-    await applyRepair(preview.plan, this.entries, {
+    await applyReconciliation(preview.plan, this.entries, {
       transaction: (statements) => database.transaction(statements),
-      publish: (plan) => this.publishRepair(plan),
+      publish: (plan) => this.publishReconciliation(plan),
     })
 
-    log('Timeline repaired', {
+    log('Timeline reconciled', {
       entries: preview.plan.times.length,
       chapters: preview.plan.chapterSpans.length,
       clockMoved: !!preview.plan.clock,
@@ -1670,8 +1670,8 @@ class StoryStore {
     return 'applied'
   }
 
-  /** In-memory state after a repair commits, shared by every path that plans one. */
-  private publishRepair(plan: RepairPlan): void {
+  /** In-memory state after a reconciliation commits, shared by every path that plans one. */
+  private publishReconciliation(plan: ReconciliationPlan): void {
     const times = new Map(plan.times.map((time) => [time.entryId, time]))
     this.entries = this.entries.map((entry) => {
       const time = times.get(entry.id)
@@ -1706,7 +1706,7 @@ class StoryStore {
   /**
    * Write one entry's own beginning and ending.
    *
-   * Planned as a one-entry repair rather than a bare metadata write, so it carries the same
+   * Planned as a one-entry reconciliation rather than a bare metadata write, so it carries the same
    * guarantees: chapter spans covering it are recomputed, the clock inside its delta follows,
    * the keyframe it invalidates is discarded, and the story clock moves only when the entry is
    * the last one. All of it commits together.
@@ -1727,16 +1727,16 @@ class StoryStore {
           ]
         : [{ entryId, start, end }]
 
-    const plan = planRepair({
+    const plan = planReconciliation({
       entries: this.entries,
       chapters: this.chapters,
       times,
       checkpoints: this.checkpoints,
     })
 
-    await applyRepair(plan, this.entries, {
+    await applyReconciliation(plan, this.entries, {
       transaction: (statements) => database.transaction(statements),
-      publish: (applied) => this.publishRepair(applied),
+      publish: (applied) => this.publishReconciliation(applied),
     })
 
     log('Entry times set', { entryId, clockMoved: !!plan.clock })

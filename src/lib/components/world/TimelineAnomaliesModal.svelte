@@ -34,8 +34,8 @@
   const suspectedCount = $derived(all.filter((a) => a.severity === 'suspected').length)
 
   /**
-   * An anomaly on an inherited entry can be repaired from here, but that entry is one row every
-   * branch descending through it reads, so the repair lands on all of them.
+   * An anomaly on an inherited entry can be settled from here, but that entry is one row every
+   * branch descending through it reads, so the change lands on all of them.
    */
   const sharedCount = $derived(all.filter((anomaly) => !story.ownsEntry(subjectId(anomaly))).length)
 
@@ -126,7 +126,7 @@
         {sharedCount === 1 ? 'sits' : 'sit'} in history shared with other branches. {sharedCount ===
         1
           ? 'It'
-          : 'They'} can be repaired from here, and the repair will be seen by every branch reading those
+          : 'They'} can be reconciled from here, and the change will be seen by every branch reading those
         entries.
       </p>
     {/if}
@@ -157,7 +157,7 @@
             {#if !story.ownsEntry(subjectId(anomaly))}
               <span
                 class="bg-muted text-muted-foreground rounded px-1 text-[10px] tracking-wide uppercase"
-                title="This entry is shared with other branches. Repairing it here repairs it for all of them."
+                title="This entry is shared with other branches. Reconciling it here changes it for all of them."
               >
                 Shared
               </span>

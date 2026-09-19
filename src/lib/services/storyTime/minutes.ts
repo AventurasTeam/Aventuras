@@ -2,7 +2,7 @@
  * The one place the in-story calendar is defined: 60-minute hours, 24-hour days, 365-day
  * years.
  *
- * Repair scales durations. Doing that across four independent integer fields compounds
+ * Reconciling scales durations. Doing that across four independent integer fields compounds
  * rounding at every unit, so everything converts to whole minutes, is scaled there, and
  * converts back once.
  */

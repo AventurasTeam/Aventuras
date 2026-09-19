@@ -1,8 +1,13 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { Chapter, StoryEntry, TimeTracker, WorldStateDelta } from '$lib/types'
 import type { Checkpoint } from '$lib/types'
-import { planRepair, fingerprintPreview, applyRepair, repairStatements } from './repair'
-import type { RepairedTime } from './reconcile'
+import {
+  planReconciliation,
+  fingerprintPreview,
+  applyReconciliation,
+  reconciliationStatements,
+} from './reconciliation'
+import type { ReconciledTime } from './reconcile'
 import type { Boundary } from './boundaries'
 
 function t(hours: number, minutes = 0): TimeTracker {
@@ -48,11 +53,11 @@ function delta(before: TimeTracker | null): WorldStateDelta {
   } as unknown as WorldStateDelta
 }
 
-function repaired(id: string, start: TimeTracker, end: TimeTracker): RepairedTime {
+function reconciled(id: string, start: TimeTracker, end: TimeTracker): ReconciledTime {
   return { entryId: id, start, end }
 }
 
-describe('planRepair', () => {
+describe('planReconciliation', () => {
   const entries = [
     entry('A', t(0), t(1)),
     entry('B', t(1), t(2)),
@@ -61,19 +66,19 @@ describe('planRepair', () => {
   ]
 
   it('moves the clock when the range reaches the last entry', () => {
-    const plan = planRepair({
+    const plan = planReconciliation({
       entries,
       chapters: [],
-      times: [repaired('C', t(1), t(5)), repaired('D', t(5), t(9))],
+      times: [reconciled('C', t(1), t(5)), reconciled('D', t(5), t(9))],
     })
     expect(plan.clock).toEqual(t(9))
   })
 
-  it('leaves the clock alone for an interior repair', () => {
-    const plan = planRepair({
+  it('leaves the clock alone for an interior range', () => {
+    const plan = planReconciliation({
       entries,
       chapters: [],
-      times: [repaired('B', t(1), t(2)), repaired('C', t(2), t(6))],
+      times: [reconciled('B', t(1), t(2)), reconciled('C', t(2), t(6))],
     })
     expect(plan.clock).toBeNull()
   })
@@ -87,30 +92,30 @@ describe('planRepair', () => {
       startTime: t(1),
       endTime: t(3),
     } as Chapter
-    const plan = planRepair({
+    const plan = planReconciliation({
       entries,
       chapters: [chapter],
-      times: [repaired('B', t(1), t(4)), repaired('C', t(4), t(6))],
+      times: [reconciled('B', t(1), t(4)), reconciled('C', t(4), t(6))],
     })
     expect(plan.chapterSpans).toEqual([{ chapterId: 'ch1', startTime: t(1), endTime: t(6) }])
   })
 
-  it('leaves a chapter outside the repaired range alone', () => {
+  it('leaves a chapter outside the reconciled range alone', () => {
     const chapter = { id: 'ch0', number: 1, startEntryId: 'A', endEntryId: 'A' } as Chapter
-    const plan = planRepair({
+    const plan = planReconciliation({
       entries,
       chapters: [chapter],
-      times: [repaired('C', t(2), t(6)), repaired('D', t(6), t(9))],
+      times: [reconciled('C', t(2), t(6)), reconciled('D', t(6), t(9))],
     })
     expect(plan.chapterSpans).toEqual([])
   })
 
-  it('rewrites the clock inside a delta to the entry repaired beginning', () => {
+  it('rewrites the clock inside a delta to the reconciled beginning of its entry', () => {
     const withDelta = [entries[0], entry('B', t(1), t(2), delta(t(1))), entries[2], entries[3]]
-    const plan = planRepair({
+    const plan = planReconciliation({
       entries: withDelta,
       chapters: [],
-      times: [repaired('B', t(4), t(5))],
+      times: [reconciled('B', t(4), t(5))],
     })
     expect(plan.deltas).toHaveLength(1)
     expect(plan.deltas[0].delta.previousState.timeTracker).toEqual(t(4))
@@ -119,10 +124,10 @@ describe('planRepair', () => {
   it('preserves everything in a delta except its in-story time', () => {
     const original = delta(t(1))
     const withDelta = [entries[0], entry('B', t(1), t(2), original), entries[2], entries[3]]
-    const plan = planRepair({
+    const plan = planReconciliation({
       entries: withDelta,
       chapters: [],
-      times: [repaired('B', t(4), t(5))],
+      times: [reconciled('B', t(4), t(5))],
     })
 
     const before = JSON.parse(JSON.stringify(original))
@@ -133,8 +138,8 @@ describe('planRepair', () => {
   })
 
   // The rollback guarantee is scoped to the range. An entry after it keeps the clock recorded
-  // in its own delta, so a rollback starting there restores a pre-repair value -- the outer
-  // join the repair deliberately leaves open, not a defect.
+  // in its own delta, so a rollback starting there restores the old value -- the outer join
+  // a reconciliation deliberately leaves open, not a defect.
   it('leaves the delta of the entry after the range untouched', () => {
     const withDeltas = [
       entry('A', t(0), t(1)),
@@ -142,10 +147,10 @@ describe('planRepair', () => {
       entry('C', t(2), t(3), delta(t(2))),
       entry('D', t(3), t(4)),
     ]
-    const plan = planRepair({
+    const plan = planReconciliation({
       entries: withDeltas,
       chapters: [],
-      times: [repaired('B', t(1), t(6))],
+      times: [reconciled('B', t(1), t(6))],
     })
     expect(plan.deltas.map((d) => d.entryId)).toEqual(['B'])
     expect(withDeltas[2].worldStateDelta!.previousState.timeTracker).toEqual(t(2))
@@ -154,18 +159,18 @@ describe('planRepair', () => {
   it('does not mutate the entry it read the delta from', () => {
     const original = delta(t(1))
     const withDelta = [entry('B', t(1), t(2), original)]
-    planRepair({ entries: withDelta, chapters: [], times: [repaired('B', t(4), t(5))] })
+    planReconciliation({ entries: withDelta, chapters: [], times: [reconciled('B', t(4), t(5))] })
     expect(original.previousState.timeTracker).toEqual(t(1))
   })
 })
 
-describe('applyRepair', () => {
+describe('applyReconciliation', () => {
   const entries = [entry('A', t(0), t(1)), entry('B', t(1), t(2))]
 
   it('publishes only after the transaction commits', async () => {
     const order: string[] = []
-    const plan = planRepair({ entries, chapters: [], times: [repaired('B', t(1), t(5))] })
-    await applyRepair(plan, entries, {
+    const plan = planReconciliation({ entries, chapters: [], times: [reconciled('B', t(1), t(5))] })
+    await applyReconciliation(plan, entries, {
       transaction: async () => void order.push('commit'),
       publish: () => void order.push('publish'),
     })
@@ -174,9 +179,9 @@ describe('applyRepair', () => {
 
   it('publishes nothing when a write fails part-way', async () => {
     const publish = vi.fn()
-    const plan = planRepair({ entries, chapters: [], times: [repaired('B', t(1), t(5))] })
+    const plan = planReconciliation({ entries, chapters: [], times: [reconciled('B', t(1), t(5))] })
     await expect(
-      applyRepair(plan, entries, {
+      applyReconciliation(plan, entries, {
         transaction: async () => {
           throw new Error('constraint failed on statement 2')
         },
@@ -196,12 +201,12 @@ describe('applyRepair', () => {
       startTime: t(1),
       endTime: t(2),
     } as Chapter
-    const plan = planRepair({
+    const plan = planReconciliation({
       entries: withDelta,
       chapters: [chapter],
-      times: [repaired('B', t(1), t(5))],
+      times: [reconciled('B', t(1), t(5))],
     })
-    const statements = repairStatements(plan, withDelta)
+    const statements = reconciliationStatements(plan, withDelta)
     expect(statements.map((s) => s.sql.split(' ').slice(0, 2).join(' '))).toEqual([
       'UPDATE story_entries',
       'UPDATE chapters',
@@ -212,8 +217,8 @@ describe('applyRepair', () => {
   })
 
   it('keeps the rest of an entry metadata when it rewrites the times', () => {
-    const plan = planRepair({ entries, chapters: [], times: [repaired('B', t(1), t(5))] })
-    const written = JSON.parse(String(repairStatements(plan, entries)[0].params![0]))
+    const plan = planReconciliation({ entries, chapters: [], times: [reconciled('B', t(1), t(5))] })
+    const written = JSON.parse(String(reconciliationStatements(plan, entries)[0].params![0]))
     expect(written.tokenCount).toBe(7)
     expect(written.timeEnd).toEqual(t(5))
   })
@@ -261,14 +266,14 @@ describe('fingerprintPreview', () => {
   })
 })
 
-describe('planRepair: the records at an asserted ending', () => {
+describe('planReconciliation: the records at an asserted ending', () => {
   const entries = [entry('A', t(0), t(1)), entry('B', t(1), t(2)), entry('C', t(2), t(3))]
 
   it('reseeds a checkpoint taken at the anchored ending', () => {
-    const plan = planRepair({
+    const plan = planReconciliation({
       entries,
       chapters: [],
-      times: [repaired('B', t(1), t(9))],
+      times: [reconciled('B', t(1), t(9))],
       checkpoints: [checkpoint('cp1', 'B', t(2))],
       assertedEnding: { entryId: 'B', time: t(9) },
     })
@@ -276,20 +281,20 @@ describe('planRepair: the records at an asserted ending', () => {
   })
 
   it('leaves a checkpoint alone when the ending carries no assertion', () => {
-    const plan = planRepair({
+    const plan = planReconciliation({
       entries,
       chapters: [],
-      times: [repaired('B', t(1), t(2))],
+      times: [reconciled('B', t(1), t(2))],
       checkpoints: [checkpoint('cp1', 'B', t(7))],
     })
     expect(plan.checkpointClocks).toEqual([])
   })
 
   it('does not touch a checkpoint outside the asserted ending', () => {
-    const plan = planRepair({
+    const plan = planReconciliation({
       entries,
       chapters: [],
-      times: [repaired('B', t(1), t(9))],
+      times: [reconciled('B', t(1), t(9))],
       checkpoints: [checkpoint('cp-elsewhere', 'A', t(1))],
       assertedEnding: { entryId: 'B', time: t(9) },
     })
@@ -297,14 +302,14 @@ describe('planRepair: the records at an asserted ending', () => {
   })
 
   it('writes the assertion to the checkpoint row', () => {
-    const plan = planRepair({
+    const plan = planReconciliation({
       entries,
       chapters: [],
-      times: [repaired('B', t(1), t(9))],
+      times: [reconciled('B', t(1), t(9))],
       checkpoints: [checkpoint('cp1', 'B', t(2))],
       assertedEnding: { entryId: 'B', time: t(9) },
     })
-    const written = repairStatements(plan, entries).find((s) =>
+    const written = reconciliationStatements(plan, entries).find((s) =>
       s.sql.startsWith('UPDATE checkpoints'),
     )
     expect(written).toBeDefined()
@@ -313,23 +318,25 @@ describe('planRepair: the records at an asserted ending', () => {
   })
 })
 
-describe('planRepair: keyframes', () => {
+describe('planReconciliation: keyframes', () => {
   const entries = [entry('A', t(0), t(1)), entry('B', t(1), t(2)), entry('C', t(2), t(3))]
 
-  it('invalidates the keyframes of every repaired entry', () => {
-    const plan = planRepair({
+  it('invalidates the keyframes of every reconciled entry', () => {
+    const plan = planReconciliation({
       entries,
       chapters: [],
-      times: [repaired('B', t(1), t(4)), repaired('C', t(4), t(6))],
+      times: [reconciled('B', t(1), t(4)), reconciled('C', t(4), t(6))],
     })
     expect(plan.keyframeEntryIds).toEqual(['B', 'C'])
-    const del = repairStatements(plan, entries).find((s) => s.sql.startsWith('DELETE FROM'))
+    const del = reconciliationStatements(plan, entries).find((s) => s.sql.startsWith('DELETE FROM'))
     expect(del!.sql).toContain('world_state_snapshots')
     expect(del!.params).toEqual(['B', 'C'])
   })
 
-  it('writes no delete when nothing was repaired', () => {
-    const plan = planRepair({ entries, chapters: [], times: [] })
-    expect(repairStatements(plan, entries).some((s) => s.sql.startsWith('DELETE FROM'))).toBe(false)
+  it('writes no delete when nothing was reconciled', () => {
+    const plan = planReconciliation({ entries, chapters: [], times: [] })
+    expect(
+      reconciliationStatements(plan, entries).some((s) => s.sql.startsWith('DELETE FROM')),
+    ).toBe(false)
   })
 })

@@ -68,8 +68,8 @@ describe('reconcileRange', () => {
   it('produces the same result when applied a second time', () => {
     const entries = chained([t(10), t(11), t(12)])
     const first = ok(reconcileRange({ entries, baseline: t(9), target: t(11) }))
-    const repaired = first.times.map((time, i) => entry(time.start, time.end, `r${i}`))
-    const second = ok(reconcileRange({ entries: repaired, baseline: t(9), target: t(11) }))
+    const reconciled = first.times.map((time, i) => entry(time.start, time.end, `r${i}`))
+    const second = ok(reconcileRange({ entries: reconciled, baseline: t(9), target: t(11) }))
     expect(second.times.map((x) => [toMinutes(x.start), toMinutes(x.end)])).toEqual(
       first.times.map((x) => [toMinutes(x.start), toMinutes(x.end)]),
     )
@@ -79,8 +79,8 @@ describe('reconcileRange', () => {
     // The round-2 review's fixture, which the old baseline-relative weighting got wrong.
     const entries = chained([t(10), t(11), t(12)])
     const first = ok(reconcileRange({ entries, baseline: t(9), target: t(11) }))
-    const repaired = first.times.map((time, i) => entry(time.start, time.end, `s${i}`))
-    const second = ok(reconcileRange({ entries: repaired, baseline: t(9), target: t(11) }))
+    const reconciled = first.times.map((time, i) => entry(time.start, time.end, `s${i}`))
+    const second = ok(reconcileRange({ entries: reconciled, baseline: t(9), target: t(11) }))
     expect(spans(second)).toEqual(spans(first))
   })
 
@@ -364,7 +364,7 @@ describe('a user action weighs nothing, whatever the record says', () => {
   })
 })
 
-describe('what the review can ask before a repair is run', () => {
+describe('what the review can ask before a range is reconciled', () => {
   it('reports the entries whose length cannot be read', () => {
     const entries = [
       entry(t(0), t(1), 'fine'),

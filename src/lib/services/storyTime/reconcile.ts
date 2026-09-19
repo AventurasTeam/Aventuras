@@ -1,7 +1,7 @@
 /**
  * Fitting a selected range between its two boundaries.
  *
- * Pure: entries and boundaries in, new times out. Persistence, chapter repair and the clock
+ * Pure: entries and boundaries in, new times out. Persistence, chapter spans and the clock
  * are the caller's job, which is what lets the preview and the apply path share one
  * calculation — the preview *is* this output, and applying writes exactly it.
  *
@@ -14,7 +14,7 @@
 import type { StoryEntry, TimeTracker } from '$lib/types'
 import { toMinutes, fromMinutes } from './minutes'
 
-export interface RepairedTime {
+export interface ReconciledTime {
   entryId: string
   start: TimeTracker
   end: TimeTracker
@@ -31,7 +31,7 @@ export interface DurationRequest {
 export interface Join {
   /** The unchanged time on the far side of the join. */
   neighbourTime: TimeTracker | null
-  /** The range's edge after the repair. */
+  /** The range's edge afterwards. */
   edgeTime: TimeTracker
   /** Positive when the neighbour runs past the edge, negative when a gap is left. */
   differenceMinutes: number
@@ -66,7 +66,7 @@ export type ReconcileResult =
   | { status: 'refused'; reason: 'backwards-span' }
   | {
       status: 'ok'
-      times: RepairedTime[]
+      times: ReconciledTime[]
       leadingJoin: Join
       trailingJoin: Join | null
     }
@@ -82,7 +82,7 @@ function isValidSupplied(value: unknown): value is number {
  *
  * Measured inside the entry rather than against its neighbour or the baseline. Against the
  * baseline, an assertion far from the record — which is the whole reason to anchor — turns
- * every first weight negative. Against the neighbour, a repair mixes rewritten times with
+ * every first weight negative. Against the neighbour, a reconciliation mixes rewritten times with
  * unrewritten ones and a second run gives a different answer.
  *
  * It also means a missing time costs one weight rather than two: nothing is measured *through*
@@ -173,7 +173,7 @@ function recordedGaps(entries: StoryEntry[]): number[] {
  * what is recorded.
  */
 /**
- * What the range cannot weigh yet, without attempting a repair.
+ * What the range cannot weigh yet, without attempting to reconcile it.
  *
  * The review needs this to mark rows while the Becomes column is still blank: nothing is
  * reconciled until every entry has a length and every interval a decision.
@@ -206,7 +206,7 @@ export function rangeIntervals(
 /**
  * Fit the range to its boundaries.
  *
- * Repeating a repair with unchanged boundaries changes nothing: afterwards every duration and
+ * Reconciling again with unchanged boundaries changes nothing: afterwards every duration and
  * every interval is exactly the share it was given, and those sum to the span, so the next run
  * scales by one.
  */
@@ -245,7 +245,7 @@ export function reconcileRange(input: ReconcileInput): ReconcileResult {
   // and the range lands exactly on the later boundary.
   const offsetAfter = (index: number) => Math.round((span * cumulative[index]) / total)
 
-  const times: RepairedTime[] = []
+  const times: ReconciledTime[] = []
   // Nothing to preserve anywhere, so the span is shared evenly — by the entries that can hold
   // time. A player action stays an instant whatever the arithmetic says: it sits where the walk
   // has reached, and giving it a share would make the reader's own turn take an hour of story.

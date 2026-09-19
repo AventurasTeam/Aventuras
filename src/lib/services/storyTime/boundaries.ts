@@ -1,5 +1,5 @@
 /**
- * The points a repair may be selected between.
+ * The points a range may be selected between.
  *
  * One rule resolves them all: a boundary names an entry and stands for that entry's ending —
  * the assertion when it is anchored, the recorded ending otherwise. An anchored natural
@@ -113,7 +113,7 @@ export type RangeRefusal = {
   boundaries: Boundary[]
 }
 
-/** Null when the range can be repaired; the refusal otherwise. Equal times are allowed. */
+/** Null when the range can be reconciled; the refusal otherwise. Equal times are allowed. */
 export function refuseRange(from: Boundary, to: Boundary): RangeRefusal | null {
   if (!from.time || !to.time) {
     return {

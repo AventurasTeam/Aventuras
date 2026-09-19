@@ -17,11 +17,11 @@
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
   import { entryNumber } from '$lib/utils/storyNavigation'
   import { supportsHover } from '$lib/utils/platform'
-  import TimelineRepairModal from './TimelineRepairModal.svelte'
+  import TimelineReconciliationModal from './TimelineReconciliationModal.svelte'
   import TimelineAnomaliesModal from './TimelineAnomaliesModal.svelte'
   import TimeAnchorModal from './TimeAnchorModal.svelte'
 
-  let repairOpen = $state(false)
+  let reconcileOpen = $state(false)
   let anomaliesOpen = $state(false)
   let anchorModalOpen = $state(false)
   /** Null when adding: the modal then asks which entry to anchor. */
@@ -178,7 +178,7 @@
   {/if}
 </div>
 
-<!-- Anchors: the reader's own assertions, and the only thing a repair measures from -->
+<!-- Anchors: the reader's own assertions, and the only thing a reconciliation measures from -->
 <div class="border-border bg-card mt-3 rounded-lg border p-3 shadow-sm">
   <div class="mb-2 flex items-center justify-between">
     <h4 class="text-foreground text-sm font-semibold">Reference points</h4>
@@ -230,7 +230,7 @@
     <p class="text-muted-foreground text-xs">
       {#if filterAnchors}
         Nothing is anchored yet. A natural boundary resolves to a recorded ending, which is what a
-        repair measures from until you assert otherwise.
+        reconciliation measures from until you assert otherwise.
       {:else}
         Every reference point here is an anchor of your own.
       {/if}
@@ -358,11 +358,11 @@
 </div>
 
 <!-- Last, not first: reconciling is where this panel leads, once a reference point is in place -->
-<Button variant="outline" size="sm" class="mt-3 w-full" onclick={() => (repairOpen = true)}>
+<Button variant="outline" size="sm" class="mt-3 w-full" onclick={() => (reconcileOpen = true)}>
   <Wrench class="h-3.5 w-3.5" />
   Reconcile
 </Button>
 
-<TimelineRepairModal bind:open={repairOpen} />
+<TimelineReconciliationModal bind:open={reconcileOpen} />
 <TimelineAnomaliesModal bind:open={anomaliesOpen} />
 <TimeAnchorModal bind:open={anchorModalOpen} entryId={anchorModalEntryId} />
