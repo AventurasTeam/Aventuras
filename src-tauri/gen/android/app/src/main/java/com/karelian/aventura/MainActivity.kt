@@ -3,6 +3,8 @@ package com.karelian.aventura
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.view.ViewGroup
+import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
@@ -31,6 +33,9 @@ class MainActivity : TauriActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)
+    // Honoured below API 30, where the window still resizes for the keyboard. From API 30
+    // edge-to-edge ignores it and the margin set in onWebViewCreate does the same job.
+    window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
 
     onBackPressedDispatcher.addCallback(this, backCallback)
   }
@@ -48,6 +53,19 @@ class MainActivity : TauriActivity() {
 
     // Expose the bridge so JS can start/stop the foreground service
     webView.addJavascriptInterface(AndroidBridgeInterface(), "AndroidBridge")
+
+    // Edge-to-edge gives up the window resizing adjustResize would do, so the keyboard inset is
+    // ours to spend. A bottom margin shortens the laid-out view, which is what shrinks the page's
+    // layout viewport; padding would not. See docs/architecture/overview.md, "The soft keyboard".
+    ViewCompat.setOnApplyWindowInsetsListener(webView) { view, insets ->
+      val ime = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+      val lp = view.layoutParams as? ViewGroup.MarginLayoutParams
+      if (lp != null && lp.bottomMargin != ime) {
+        lp.bottomMargin = ime
+        view.layoutParams = lp
+      }
+      ViewCompat.onApplyWindowInsets(view, insets)
+    }
   }
 
   /**
@@ -87,9 +105,11 @@ class MainActivity : TauriActivity() {
           or WindowInsetsCompat.Type.displayCutout()
           or WindowInsetsCompat.Type.mandatorySystemGestures()
       )
+      // The keyboard covers the navigation bar, and the view already ends at the keyboard.
+      val ime = raw.getInsets(WindowInsetsCompat.Type.ime())
       val d = resources.displayMetrics.density
       val t = kotlin.math.ceil(bars.top / d).toInt()
-      val b = kotlin.math.ceil(bars.bottom / d).toInt()
+      val b = kotlin.math.ceil(maxOf(bars.bottom - ime.bottom, 0) / d).toInt()
       val l = kotlin.math.ceil(bars.left / d).toInt()
       val r = kotlin.math.ceil(bars.right / d).toInt()
       return """{"top":$t,"bottom":$b,"left":$l,"right":$r}"""
