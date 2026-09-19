@@ -140,12 +140,13 @@ An entry is pulled into the narrator's prompt when its **name**, one of its **al
 
 ## Tools
 
-- **The two lists below are complete.** Every chapter is there with its full summary, and every lorebook entry is there with the index the tools take. There is no tool that lists either of them: what you have is all there is, and \`read_entry\` gives you one entry's full text when its one-line summary is not enough.
+- **The two lists below are complete.** {% if hasNewChapter %}The chapter you just wrote is given below in full, and every earlier chapter is there with its full summary.{% else %}Every chapter is there with its full summary.{% endif %} Every lorebook entry is there with the index the tools take. There is no tool that lists either of them: what you have is all there is, and \`read_entry\` gives you one entry's full text when its one-line summary is not enough.
 - **Your own results tell you where things moved.** A merge reports the index its result landed at and which indices it consumed; a creation reports its index too. An index you have already merged or deleted is refused by every tool, and that refusal is not a reason to look for the entry elsewhere — it means that work is done.
-{% if hasChapters %}- Use query_chapter when a summary is not enough, and ask a specific question ("What did [character] reveal?", never "Give me the full content"). Each call reads a whole chapter with a second model, there are a few per session, and asking the same question twice returns the first answer rather than reading again.
+{% if hasChapters %}- Use query_chapter when an earlier chapter's summary is not enough{% if hasNewChapter %} — the chapter you just wrote needs no query, since it is already given in full above{% endif %}, and ask a specific question ("What did [character] reveal?", never "Give me the full content"). Each call reads a whole chapter with a second model, there are a few per session, and asking the same question twice returns the first answer rather than reading again.
+{% elsif hasNewChapter %}- The only chapter is the one given below in full, so query_chapter has nothing to add.
 {% else %}- There are no chapters, so query_chapter has nothing to read. Do not spend steps on it.
 {% endif %}
-**Consolidating is the first step, not the whole job.**{% if hasStoryMaterial %} Once the groups are closed, go back over the chapter summaries and the recent story: entries the events have outdated are step 2, a subject that matters and has no entry at all is step 3. That is what those two lists are in front of you for, and a session that only merged duplicates has done a third of its work.{% endif %} Call finish_lore_management with a summary of what you changed when all of it is done.`,
+**Consolidating is the first step, not the whole job.**{% if hasStoryMaterial %} Once the groups are closed, go back over {% if hasNewChapter %}the chapter you just wrote and the earlier chapter summaries{% else %}the chapter summaries{% endif %} and the recent story: entries the events have outdated are step 2, a subject that matters and has no entry at all is step 3. That is what those two lists are in front of you for, and a session that only merged duplicates has done a third of its work.{% endif %} Call finish_lore_management with a summary of what you changed when all of it is done.`,
   // Stable material first, volatile material last: with prefix KV caching everything up to
   // the first differing token is reused. The chapter summaries change only when a chapter
   // is written, the entry list only when the lorebook changes, and the duplicate worklist
@@ -161,7 +162,7 @@ An entry is pulled into the narrator's prompt when its **name**, one of its **al
 # Possible Duplicates
 Each line is one group. Close every one with \`merge_entries\`, \`keep_separate\`, or \`delete_entry\` where a member is simply erroneous.
 {{ duplicateSummary }}
-{% endif %}{{ recentStorySection }}`,
+{% endif %}{{ newChapterSection }}{{ recentStorySection }}`,
 }
 
 const interactiveLorebookPromptTemplate: PromptTemplate = {

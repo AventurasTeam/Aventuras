@@ -30,6 +30,7 @@ import {
 import { LoreSessionLedger, type LoreMergeResult } from './sessionChanges'
 import { ChapterQueryBudget, MAX_CHAPTER_QUERIES_LORE } from '../sdk/tools/chapterQueries'
 import { LORE_MANAGEMENT_DEFAULTS } from '../core/defaults'
+import { formatNewChapterSection, type LoreNewChapter } from './newChapter'
 
 const log = createLogger('LoreManagement')
 
@@ -77,6 +78,8 @@ export interface LoreManagementContext {
   keptSeparate?: ReadonlySet<string>
   /** Persist a `keep_separate` decision, so it outlives the session. */
   onKeepSeparate?: (names: string[]) => Promise<void>
+  /** The chapter that triggered this run, given in full rather than as a summary. */
+  newChapter?: LoreNewChapter
 }
 
 /**
@@ -255,6 +258,10 @@ export class LoreManagementService extends BaseAIService {
       : ''
 
     const hasChapters = Boolean(context.chapters && context.chapters.length > 0)
+    const hasNewChapter = Boolean(context.newChapter)
+
+    // Left out entirely rather than printed empty, like `recentStorySection` above.
+    const newChapterSection = context.newChapter ? formatNewChapterSection(context.newChapter) : ''
 
     // The agent's only view of the chapter index — there is no list_chapters tool, so the
     // summaries never exist in two places for it to reconcile.
@@ -270,7 +277,9 @@ export class LoreManagementService extends BaseAIService {
             (ch) => `- Chapter ${ch.number}${ch.title ? `: ${ch.title}` : ''}\n  ${ch.summary}`,
           )
           .join('\n')
-      : 'No chapters have been written yet.'
+      : hasNewChapter
+        ? 'No earlier chapters — the one below is the first.'
+        : 'No chapters have been written yet.'
 
     // Render prompts through unified pipeline
     const ctx = await ContextBuilder.forPack(context.storyId)
@@ -280,10 +289,12 @@ export class LoreManagementService extends BaseAIService {
       recentStorySection,
       chapterSummary,
       hasChapters,
-      // With neither chapters nor recent text the agent has only the entry list. It can
-      // still consolidate; anything it "identifies as missing" would be invented, so the
-      // prompt says so rather than leaving it to judgement.
-      hasStoryMaterial: hasChapters || Boolean(context.recentStory),
+      newChapterSection,
+      hasNewChapter,
+      // With neither chapters, a new chapter nor recent text the agent has only the entry
+      // list. It can still consolidate; anything it "identifies as missing" would be
+      // invented, so the prompt says so rather than leaving it to judgement.
+      hasStoryMaterial: hasChapters || hasNewChapter || Boolean(context.recentStory),
       requireDuplicateResolution: this.requireDuplicateResolution,
     })
     const { system: systemPrompt, user: userPrompt } = await ctx.render('lore-management')
