@@ -9,6 +9,7 @@
 import { story } from '$lib/stores/story.svelte'
 import { aiService } from '$lib/services/ai'
 import { createLogger } from '$lib/log'
+import type { Chapter } from '$lib/types'
 import {
   LoreManagementCoordinator,
   isLoreManagementRunning,
@@ -29,17 +30,22 @@ const log = createLogger('ManualLoreManagement')
  * **It never rejects.** Both callers are fire-and-forget — a button's `onclick` and the
  * step after a manual chapter — so a rejection here has nowhere to go but the console, as
  * an unhandled one. Reporting null is the same answer they already handle.
+ *
+ * @param newChapter The chapter just created by hand, if this run follows one. Given to the
+ * agent in full; absent for the Tidy lorebook button, which has no new chapter.
  */
-export async function runManualLoreManagement(): Promise<LoreSessionResult | null> {
+export async function runManualLoreManagement(
+  newChapter?: Chapter,
+): Promise<LoreSessionResult | null> {
   try {
-    return await startManualLoreManagement()
+    return await startManualLoreManagement(newChapter)
   } catch (error) {
     log('Manual lore management failed', error)
     return null
   }
 }
 
-async function startManualLoreManagement(): Promise<LoreSessionResult | null> {
+async function startManualLoreManagement(newChapter?: Chapter): Promise<LoreSessionResult | null> {
   if (
     !story.currentStory ||
     isLoreManagementRunning(story.currentStory.id, story.currentStory.currentBranchId)
@@ -70,6 +76,9 @@ async function startManualLoreManagement(): Promise<LoreSessionResult | null> {
       pov: story.pov,
       tense: story.tense,
       tokenThreshold: story.memoryConfig.tokenThreshold,
+      newChapter: newChapter
+        ? { chapter: newChapter, entries: story.getChapterEntries(newChapter) }
+        : undefined,
     },
     buildLoreManagementCallbacks({
       storyId: currentStory.id,
