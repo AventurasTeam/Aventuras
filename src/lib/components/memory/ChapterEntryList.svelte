@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { StoryEntry } from '$lib/types'
   import { slide } from 'svelte/transition'
-  import { MessageSquare, Scroll } from '@lucide/svelte'
+  import { MessageSquare, Scroll, CornerDownLeft, MilestoneIcon } from '@lucide/svelte'
   import { Badge } from '$lib/components/ui/badge'
   import { story } from '$lib/stores/story.svelte'
   import { ui } from '$lib/stores/ui.svelte'
@@ -73,12 +73,14 @@
           </Badge>
           <button
             type="button"
-            class="text-muted-foreground focus-visible:ring-ring hover:text-primary rounded px-1 tabular-nums underline-offset-2 transition-opacity hover:underline focus-visible:ring-2 focus-visible:outline-none"
+            class="text-muted-foreground focus-visible:ring-ring hover:text-primary flex rounded px-1 tabular-nums underline-offset-2 transition-opacity hover:underline focus-visible:ring-2 focus-visible:outline-none"
             aria-label="Go to entry {number}"
             title="Go to entry {number}"
             onclick={() => goToEntry(entry)}
           >
-            Entry {number}
+            <MilestoneIcon class="h-4 w-4" />
+            {number}
+            <CornerDownLeft class="text-accent-500 mt-0.5 h-3 w-3" />
           </button>
         </div>
         <span class="text-muted-foreground mt-0.5 leading-relaxed">

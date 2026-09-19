@@ -21,6 +21,7 @@
     Copy,
     Clock,
     MoreVertical,
+    MilestoneIcon,
   } from '@lucide/svelte'
   import { aiService } from '$lib/services/ai'
   import { aiTTSService } from '$lib/services/ai/utils/TTSService'
@@ -138,7 +139,7 @@
   // The duration chip and its fallback in Response info must never both be absent. The fallback
   // renders in a portal outside the card, where a container query cannot reach, so one measured
   // width decides both.
-  const ACTIVITY_CHIP_MIN_REM = 27
+  const ACTIVITY_CHIP_MIN_REM = 29
   let cardRect = $state<DOMRectReadOnly>()
   const activityChipFits = $derived.by(() => {
     if (!cardRect) return true
@@ -1369,7 +1370,7 @@
         <span class="text-xs font-medium tracking-wider uppercase">System</span>
       </div>
     {:else}
-      <Icon class="text-muted-foreground h-4 w-4 shrink-0 translate-y-px" />
+      <Icon class="text-muted-foreground h-4 w-4 shrink-0" />
     {/if}
 
     <!-- Reasoning toggle (inline icon in header) - only show if reasoning is enabled -->
@@ -1386,7 +1387,7 @@
          needs the width. Narration entries keep it under "Response info" in the overflow menu;
          on any other entry type it is not shown there at all. -->
     <span
-      class="bg-muted hidden rounded px-1.5 py-0.5 text-[11px] tabular-nums @min-[25rem]:inline"
+      class="bg-muted hidden rounded px-1.5 py-0.5 text-[11px] tabular-nums @min-[27rem]:inline"
     >
       {#if isReasoningEnabled && reasoningTokens > 0}
         <span class="text-muted-foreground">{reasoningTokens}r</span>
@@ -1410,11 +1411,18 @@
       </button>
     {/if}
 
-    <!-- Drops to its own row well before the chips and toolbar give way: it is the widest thing
-         on the row, so it runs out of space first. -->
+    <!-- Stays at every width; the chips after it give way instead. -->
     {#if showEntryMeta}
-      <div class="text-muted-foreground hidden items-center gap-2 @min-[40rem]:flex">
-        {@render entryMeta()}
+      <div class="flex shrink-0 items-center gap-1 text-[12px] leading-4 tabular-nums">
+        <MilestoneIcon class="text-muted-foreground h-4 w-4 shrink-0" />
+        <span class="text-foreground">{entryNumber(entry)}</span>
+      </div>
+    {/if}
+
+    <!-- Drops to its own row below 40rem: it is the widest thing on the row. -->
+    {#if showEntryMeta}
+      <div class="hidden @min-[40rem]:flex">
+        {@render storyTimeChip()}
       </div>
     {/if}
 
@@ -1736,21 +1744,16 @@
     {/if}
   </div>
 
-  {#snippet entryMeta()}
-    <div class="bg-muted flex gap-2 rounded px-1.5 py-0.5 text-[11px] tabular-nums">
-      <span>Entry:</span><span class="text-foreground">{entryNumber(entry)}</span>
-    </div>
-    <div class="bg-muted flex gap-2 rounded px-1.5 py-0.5 text-[11px] tabular-nums">
-      <span>Story time:</span>
+  {#snippet storyTimeChip()}
+    <div class="flex items-center gap-1 text-right text-[12px] leading-4 tabular-nums">
+      <Clock class="text-muted-foreground h-4 w-4 shrink-0" />
       <span class="text-foreground">{generationInfo.storyTime || 'not recorded'}</span>
     </div>
   {/snippet}
 
   {#if showEntryMeta}
-    <div
-      class="text-muted-foreground mb-2 flex items-center justify-between gap-2 @min-[25rem]:justify-start @min-[40rem]:hidden"
-    >
-      {@render entryMeta()}
+    <div class="mb-2 flex justify-end @min-[40rem]:hidden">
+      {@render storyTimeChip()}
     </div>
   {/if}
 
