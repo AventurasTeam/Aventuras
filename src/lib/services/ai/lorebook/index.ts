@@ -20,3 +20,10 @@ export {
   type CleanedField,
   type DroppedTerm,
 } from './entryFields'
+
+export {
+  buildNewChapterPayload,
+  formatNewChapterSection,
+  chapterSummariesExcluding,
+  type LoreNewChapter,
+} from './newChapter'
