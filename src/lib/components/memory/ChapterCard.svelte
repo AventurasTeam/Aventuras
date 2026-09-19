@@ -15,6 +15,7 @@
     Clock,
     Save,
     X,
+    MilestoneIcon,
   } from '@lucide/svelte'
   import { ask } from '@tauri-apps/plugin-dialog'
   import { Button } from '$lib/components/ui/button'
@@ -233,10 +234,10 @@
         <span>
           {entries.length}
           {entries.length === 1 ? 'entry' : 'entries'}{#if entryRange}<span
-              class="text-muted-foreground/70 ml-1"
-              >({entryRange.first === entryRange.last
-                ? `#${entryRange.first}`
-                : `#${entryRange.first}–#${entryRange.last}`})</span
+              class="text-muted-foreground/70 ml-1 inline-flex items-center gap-0.5"
+              >(<MilestoneIcon class="h-3.5 w-3.5" />{entryRange.first === entryRange.last
+                ? `${entryRange.first}`
+                : `${entryRange.first} → ${entryRange.last}`})</span
             >{/if}
         </span>
       </Button>
