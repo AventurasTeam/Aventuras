@@ -1,3 +1,16 @@
+<script lang="ts" module>
+  // Read once. The font-size setting scales `.story-text`, not the root, so this never changes,
+  // and the reader below runs on every resize tick.
+  let rootFontPx = 0
+
+  function remToPx(rem: number): number {
+    if (!rootFontPx) {
+      rootFontPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
+    }
+    return rem * rootFontPx
+  }
+</script>
+
 <script lang="ts">
   import type { StoryEntry, EmbeddedImage, TimeTracker } from '$lib/types'
   import { story } from '$lib/stores/story.svelte'
@@ -119,13 +132,17 @@
   // Check if Visual Prose mode is enabled for this story
   const visualProseMode = $derived(story.currentStory?.settings?.visualProseMode ?? false)
 
+  // `retry` is narration in older saves; nothing creates one now, and every other reader in the
+  // tree treats one as narration.
+  const isNarrationLike = $derived(entry.type === 'narration' || entry.type === 'retry')
+
   // Generation info shown in the "info" popover (model/profile/effort/timestamp)
-  const showInfo = $derived(entry.type === 'narration')
+  const showInfo = $derived(isNarrationLike)
 
   // Only while this turn's record is still retained; an evicted one offers nothing rather
   // than an empty panel. See RETAINED_TURNS.
   const activityRecord = $derived(
-    settings.uiSettings.activityReporting !== 'off' && entry.type === 'narration'
+    settings.uiSettings.activityReporting !== 'off' && isNarrationLike
       ? activity.recordFor(entry.id)
       : null,
   )
@@ -143,16 +160,11 @@
   let cardRect = $state<DOMRectReadOnly>()
   const activityChipFits = $derived.by(() => {
     if (!cardRect) return true
-    const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
-    return cardRect.width >= ACTIVITY_CHIP_MIN_REM * rem
+    return cardRect.width >= remToPx(ACTIVITY_CHIP_MIN_REM)
   })
 
-  // Narration only: an action is an instant and a system entry is not story, so neither has a
-  // span to show. `retry` is narration in older saves.
-  const showEntryMeta = $derived(
-    settings.uiSettings.showEntryNumberAndTime &&
-      (entry.type === 'narration' || entry.type === 'retry'),
-  )
+  // An action is an instant and a system entry is not story, so neither has a span to show.
+  const showEntryMeta = $derived(settings.uiSettings.showEntryNumberAndTime && isNarrationLike)
 
   function formatStoryTime(time: TimeTracker | null | undefined): string {
     if (!time) return ''
@@ -1366,7 +1378,7 @@
       <span class="user-action text-primary text-sm font-semibold tracking-wide">You</span>
     {:else if entry.type === 'system'}
       <div class="text-muted-foreground flex items-center gap-1.5">
-        <Icon class="h-4 w-4 shrink-0 translate-y-px" />
+        <Icon class="h-4 w-4 shrink-0" />
         <span class="text-xs font-medium tracking-wider uppercase">System</span>
       </div>
     {:else}
