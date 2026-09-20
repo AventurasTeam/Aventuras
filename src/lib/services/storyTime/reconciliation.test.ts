@@ -266,48 +266,45 @@ describe('fingerprintPreview', () => {
   })
 })
 
-describe('planReconciliation: the records at an asserted ending', () => {
+describe('planReconciliation: the checkpoints on rewritten entries', () => {
   const entries = [entry('A', t(0), t(1)), entry('B', t(1), t(2)), entry('C', t(2), t(3))]
 
-  it('reseeds a checkpoint taken at the anchored ending', () => {
+  it('reseeds a checkpoint taken at a rewritten entry', () => {
     const plan = planReconciliation({
       entries,
       chapters: [],
       times: [reconciled('B', t(1), t(9))],
       checkpoints: [checkpoint('cp1', 'B', t(2))],
-      assertedEnding: { entryId: 'B', time: t(9) },
     })
     expect(plan.checkpointClocks).toEqual([{ checkpointId: 'cp1', timeTracker: t(9) }])
   })
 
-  it('leaves a checkpoint alone when the ending carries no assertion', () => {
+  it('reseeds one sitting inside the range, not only at its ending', () => {
     const plan = planReconciliation({
       entries,
       chapters: [],
-      times: [reconciled('B', t(1), t(2))],
-      checkpoints: [checkpoint('cp1', 'B', t(7))],
+      times: [reconciled('B', t(1), t(4)), reconciled('C', t(4), t(9))],
+      checkpoints: [checkpoint('cp1', 'B', t(2))],
     })
-    expect(plan.checkpointClocks).toEqual([])
+    expect(plan.checkpointClocks).toEqual([{ checkpointId: 'cp1', timeTracker: t(4) }])
   })
 
-  it('does not touch a checkpoint outside the asserted ending', () => {
+  it('does not touch a checkpoint on an entry the range leaves alone', () => {
     const plan = planReconciliation({
       entries,
       chapters: [],
       times: [reconciled('B', t(1), t(9))],
       checkpoints: [checkpoint('cp-elsewhere', 'A', t(1))],
-      assertedEnding: { entryId: 'B', time: t(9) },
     })
     expect(plan.checkpointClocks).toEqual([])
   })
 
-  it('writes the assertion to the checkpoint row', () => {
+  it('writes the new ending to the checkpoint row', () => {
     const plan = planReconciliation({
       entries,
       chapters: [],
       times: [reconciled('B', t(1), t(9))],
       checkpoints: [checkpoint('cp1', 'B', t(2))],
-      assertedEnding: { entryId: 'B', time: t(9) },
     })
     const written = reconciliationStatements(plan, entries).find((s) =>
       s.sql.startsWith('UPDATE checkpoints'),

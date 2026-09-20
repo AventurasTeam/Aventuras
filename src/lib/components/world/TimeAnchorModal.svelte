@@ -4,6 +4,7 @@
   import { Input } from '$lib/components/ui/input'
   import { Textarea } from '$lib/components/ui/textarea'
   import * as Dialog from '$lib/components/ui/dialog'
+  import { Trash2 } from '@lucide/svelte'
   import { parseStoryTime, formatStoryTime, storyTimeIsInvalid } from '$lib/services/storyTime'
   import { entryNumber, resolveEntryByNumber } from '$lib/utils/storyNavigation'
   import type { StoryEntry } from '$lib/types'
@@ -78,6 +79,17 @@
       return from === to ? from : `${from} → ${to}`
     }
     return formatStoryTime(start ?? end!)
+  }
+
+  async function remove() {
+    if (!usableEntry) return
+    saving = true
+    try {
+      await story.removeTimeAnchor(usableEntry.id)
+      open = false
+    } finally {
+      saving = false
+    }
   }
 
   async function save() {
@@ -180,9 +192,21 @@
       </label>
     </div>
 
-    <Dialog.Footer class="mt-2">
-      <Button variant="outline" onclick={() => (open = false)}>Cancel</Button>
-      <Button disabled={!canSave} onclick={save}>{saving ? 'Saving…' : 'Save'}</Button>
+    <Dialog.Footer class="mt-2 sm:justify-between">
+      <!-- Removal lives with the thing being removed: the lists that used to carry it now offer
+           editing instead, and an anchor is read here before it is discarded. -->
+      {#if existing}
+        <Button variant="outline" class="text-destructive" disabled={saving} onclick={remove}>
+          <Trash2 class="h-4 w-4" />
+          Remove anchor
+        </Button>
+      {:else}
+        <span></span>
+      {/if}
+      <span class="flex gap-2">
+        <Button variant="outline" onclick={() => (open = false)}>Cancel</Button>
+        <Button disabled={!canSave} onclick={save}>{saving ? 'Saving…' : 'Save'}</Button>
+      </span>
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>

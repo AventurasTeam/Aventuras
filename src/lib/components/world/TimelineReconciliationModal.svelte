@@ -10,7 +10,7 @@
   import {
     TriangleAlert,
     Anchor,
-    Bookmark,
+    GitBranch,
     ChevronDown,
     ChevronRight,
     ChevronLeft,
@@ -122,12 +122,17 @@
   const byId = $derived(new Map(story.entries.map((entry) => [entry.id, entry])))
 
   const ANCHOR_NOTE_LIMIT = 140
-  /** Which of the range's two boundaries is being anchored, if either. */
-  let anchorEditing = $state<'from' | 'to' | null>(null)
+  /** Which of the range's two boundaries is open for editing, and as what. */
+  let editing = $state<'from' | 'to' | null>(null)
+  let editingKind = $state<'anchor' | 'entry'>('anchor')
   let anchorTimeText = $state('')
   let anchorNote = $state('')
+  let entryStartText = $state('')
+  let entryEndText = $state('')
   let anchorSaving = $state(false)
   const anchorTime = $derived(parseStoryTime(anchorTimeText))
+  const entryStart = $derived(parseStoryTime(entryStartText))
+  const entryEnd = $derived(parseStoryTime(entryEndText))
 
   function boundaryOf(which: 'from' | 'to'): Boundary | undefined {
     return which === 'from' ? range?.from : range?.to
@@ -146,12 +151,23 @@
     const seed = anchor?.assertedTime ?? byId.get(boundary.entryId)?.metadata?.timeEnd ?? null
     anchorTimeText = seed ? formatStoryTime(seed) : ''
     anchorNote = anchor?.note ?? ''
-    anchorEditing = which
+    editingKind = 'anchor'
+    editing = which
+  }
+
+  function editEntryTime(which: 'from' | 'to') {
+    const boundary = boundaryOf(which)
+    if (!boundary) return
+    const metadata = byId.get(boundary.entryId)?.metadata
+    entryStartText = metadata?.timeStart ? formatStoryTime(metadata.timeStart) : ''
+    entryEndText = metadata?.timeEnd ? formatStoryTime(metadata.timeEnd) : ''
+    editingKind = 'entry'
+    editing = which
   }
 
   function closeAnchorEditor() {
     holdFocus()
-    anchorEditing = null
+    editing = null
   }
 
   // An open editor belongs to the boundary it was opened on, not to whatever is selected now.
@@ -163,8 +179,20 @@
     untrack(() => closeAnchorEditor())
   })
 
+  async function saveEntryTime() {
+    const boundary = editing ? boundaryOf(editing) : undefined
+    if (!boundary || !entryStart || !entryEnd) return
+    anchorSaving = true
+    try {
+      await story.setEntryTimes(boundary.entryId, entryStart, entryEnd)
+      closeAnchorEditor()
+    } finally {
+      anchorSaving = false
+    }
+  }
+
   async function saveAnchor() {
-    const boundary = anchorEditing ? boundaryOf(anchorEditing) : undefined
+    const boundary = editing ? boundaryOf(editing) : undefined
     if (!boundary || !anchorTime) return
     anchorSaving = true
     try {
@@ -919,7 +947,7 @@
         {#if anchor}
           <Anchor class="h-3 w-3" aria-label="Anchored" />
         {:else}
-          <Bookmark class="h-3 w-3" aria-label="Natural boundary" />
+          <GitBranch class="h-3 w-3" aria-label="Natural boundary" />
         {/if}
         Entry {entryNumber(boundary.entryId)}
       </span>
@@ -934,24 +962,25 @@
           >
         {/if}
       </span>
-      {#if anchorable(which)}
-        <!-- Inert rather than gone while its own editor is open: a control that closes what it
-             opened would take the reader's typing with it. -->
+      <!-- Inert rather than gone while its own editor is open: a control that closes what it
+           opened would take the reader's typing with it. What it opens follows what is there — an
+           anchor is edited as an anchor, a boundary without one as the entry's own times. -->
+      {#if anchor || anchorable(which)}
         <Button
           variant="outline"
           size="sm"
           class="h-6 w-16 shrink-0 text-[11px]"
-          disabled={anchorEditing === which}
-          onclick={() => editAnchor(which)}
+          disabled={editing === which}
+          onclick={() => (anchor ? editAnchor(which) : editEntryTime(which))}
         >
-          {anchor ? 'Edit' : 'Assert'}
+          Edit
         </Button>
       {:else}
         <span class="text-muted-foreground shrink-0">an action has no ending to anchor</span>
       {/if}
     </div>
 
-    {#if anchorEditing === which}
+    {#if editing === which}
       <div class="border-border bg-card mt-1 mb-1.5 flex flex-col gap-2 rounded-md border p-2">
         <Button
           variant="outline"
@@ -962,43 +991,84 @@
         >
           Show full text
         </Button>
-        <label class="flex flex-wrap items-center gap-2">
-          <span class="text-muted-foreground shrink-0">Asserted time</span>
-          <Input
-            placeholder="e.g. Y1 D4 14:30"
-            class="h-7 w-36 text-xs"
-            bind:value={anchorTimeText}
-          />
-          <span class="text-muted-foreground shrink-0">
-            {anchorTime ? `= ${formatStoryTime(anchorTime)}` : 'year, day, clock'}
-          </span>
-        </label>
-        {#if storyTimeIsInvalid(anchorTimeText)}
-          <p class="text-destructive">Not a story time. Try 14:30, D4 14:30, or Y1 D4 14:30.</p>
+
+        {#if editingKind === 'anchor'}
+          <label class="flex flex-wrap items-center gap-2">
+            <span class="text-muted-foreground shrink-0">Asserted time</span>
+            <Input
+              placeholder="e.g. Y1 D4 14:30"
+              class="h-7 w-36 text-xs"
+              bind:value={anchorTimeText}
+            />
+            <span class="text-muted-foreground shrink-0">
+              {anchorTime ? `= ${formatStoryTime(anchorTime)}` : 'year, day, clock'}
+            </span>
+          </label>
+          {#if storyTimeIsInvalid(anchorTimeText)}
+            <p class="text-destructive">Not a story time. Try 14:30, D4 14:30, or Y1 D4 14:30.</p>
+          {/if}
+          <label class="flex flex-col gap-1">
+            <span class="text-muted-foreground">Note</span>
+            <Textarea
+              rows={2}
+              autosize={false}
+              maxlength={ANCHOR_NOTE_LIMIT}
+              placeholder="optional"
+              class="h-12 w-full resize-none text-xs"
+              bind:value={anchorNote}
+            />
+          </label>
+        {:else}
+          <p class="text-muted-foreground">
+            What this entry records for itself. Chapter spans, the clock kept for rollback and any
+            checkpoint taken here follow it.
+          </p>
+          <label class="flex flex-wrap items-center gap-2">
+            <span class="text-muted-foreground w-12 shrink-0">Begins</span>
+            <Input
+              placeholder="e.g. Y1 D4 14:30"
+              class="h-7 w-36 text-xs"
+              bind:value={entryStartText}
+            />
+          </label>
+          <label class="flex flex-wrap items-center gap-2">
+            <span class="text-muted-foreground w-12 shrink-0">Ends</span>
+            <Input
+              placeholder="e.g. Y1 D4 16:00"
+              class="h-7 w-36 text-xs"
+              bind:value={entryEndText}
+            />
+          </label>
+          {#if storyTimeIsInvalid(entryStartText) || storyTimeIsInvalid(entryEndText)}
+            <p class="text-destructive">
+              Give both as Y1 D4 14:30. An unreadable time is left as it was.
+            </p>
+          {/if}
         {/if}
-        <label class="flex flex-col gap-1">
-          <span class="text-muted-foreground">Note</span>
-          <Textarea
-            rows={2}
-            autosize={false}
-            maxlength={ANCHOR_NOTE_LIMIT}
-            placeholder="optional"
-            class="h-12 w-full resize-none text-xs"
-            bind:value={anchorNote}
-          />
-        </label>
+
         <div class="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" class="h-6 text-[11px]" onclick={closeAnchorEditor}>
             Cancel
           </Button>
-          <Button
-            size="sm"
-            class="h-6 text-[11px]"
-            disabled={!anchorTime || anchorSaving}
-            onclick={saveAnchor}
-          >
-            {anchorSaving ? 'Saving…' : 'Save'}
-          </Button>
+          {#if editingKind === 'anchor'}
+            <Button
+              size="sm"
+              class="h-6 text-[11px]"
+              disabled={!anchorTime || anchorSaving}
+              onclick={saveAnchor}
+            >
+              {anchorSaving ? 'Saving…' : 'Save'}
+            </Button>
+          {:else}
+            <Button
+              size="sm"
+              class="h-6 text-[11px]"
+              disabled={!entryStart || !entryEnd || anchorSaving}
+              onclick={saveEntryTime}
+            >
+              {anchorSaving ? 'Saving…' : 'Save'}
+            </Button>
+          {/if}
         </div>
       </div>
     {/if}

@@ -3,7 +3,6 @@
   import { ui } from '$lib/stores/ui.svelte'
   import {
     Anchor,
-    Trash2,
     Wrench,
     ListChecks,
     Plus,
@@ -20,6 +19,9 @@
   import TimelineReconciliationModal from './TimelineReconciliationModal.svelte'
   import TimelineAnomaliesModal from './TimelineAnomaliesModal.svelte'
   import TimeAnchorModal from './TimeAnchorModal.svelte'
+  import EntryTimeModal from './EntryTimeModal.svelte'
+  import { toMinutes } from '$lib/services/storyTime'
+  import type { TimeTracker } from '$lib/types'
 
   let reconcileOpen = $state(false)
   /** Set when the reader arrives from an anomaly, which decides the range opened on. */
@@ -28,11 +30,14 @@
   let anchorModalOpen = $state(false)
   /** Null when adding: the modal then asks which entry to anchor. */
   let anchorModalEntryId = $state<string | null>(null)
+  let entryTimeOpen = $state(false)
+  let entryTimeEntryId = $state<string | null>(null)
   /** Reference points whose recorded times are unfolded. An array, not a Set: runes want one. */
   let expanded = $state<string[]>([])
   // Opt-in: nothing ticked is no filter at all, rather than a filter that hides everything.
   let filterAnchors = $state(false)
   let filterNatural = $state(false)
+  let showCheckpoints = $state(false)
 
   function toggleTimes(entryId: string) {
     expanded = expanded.includes(entryId)
@@ -43,6 +48,11 @@
   function openAnchorModal(entryId: string | null) {
     anchorModalEntryId = entryId
     anchorModalOpen = true
+  }
+
+  function openEntryTimeModal(entryId: string) {
+    entryTimeEntryId = entryId
+    entryTimeOpen = true
   }
 
   function goToEntry(entryId: string) {
@@ -69,45 +79,81 @@
     return branchNames.get(branchId) ?? 'Unknown branch'
   }
 
+  function describe(entryId: string, index: number) {
+    const entry = story.entries.find((e) => e.id === entryId)
+    const checkpoint = story.checkpoints.find((c) => c.lastEntryId === entryId) ?? null
+    const isFork = forkEntryIds.has(entryId)
+    const anchor = story.timeAnchorFor(entryId) ?? null
+    // One moment, read from as many places as have copied it: the entry's own ending, the
+    // checkpoint's snapshot, the assertion. A single reading agrees with itself.
+    const readings = [
+      entry?.metadata?.timeEnd ?? null,
+      checkpoint?.timeTrackerSnapshot ?? null,
+      anchor?.assertedTime ?? null,
+    ].filter((time): time is TimeTracker => time !== null)
+    return {
+      anchor,
+      coherent: readings.every((time) => toMinutes(time) === toMinutes(readings[0])),
+      checkpoint,
+      /** Only where nothing forked from it: the Fork point chip already says there is one. */
+      checkpointChip: !!checkpoint && !isFork,
+      // Independent of the anchor: asserting a time does not stop the entry being where the
+      // story opens, ends, or forks.
+      natural: index === 0 || index === story.entries.length - 1 || isFork,
+      entryEnd: entry?.metadata?.timeEnd ?? null,
+      roles: [
+        index === 0 ? 'Beginning' : null,
+        index === story.entries.length - 1 ? 'Current end' : null,
+        // Supersedes the checkpoint chip: a fork always has one, and the wall is the branch.
+        isFork ? 'Fork point' : null,
+      ].filter((role): role is string => role !== null),
+      branch: branchName(entry?.branchId ?? null),
+    }
+  }
+
   // Boundaries arrive in story order, one per entry. Their roles are read back from the story
   // rather than from `Boundary.kind`, which names only the one that won the tie: an anchored
   // fork point is both, and the list is where that has to show.
   const rows = $derived(
-    story.timeBoundaries.map((boundary) => {
-      const entry = story.entries.find((e) => e.id === boundary.entryId)
-      const anchor = story.timeAnchorFor(boundary.entryId) ?? null
-      const checkpoint = story.checkpoints.find((c) => c.lastEntryId === boundary.entryId) ?? null
-      return {
-        boundary,
-        anchor,
-        checkpoint,
-        // Independent of the anchor: asserting a time does not stop the entry being where the
-        // story opens, ends, forks, or was checkpointed.
-        natural:
-          boundary.index === 0 ||
-          boundary.index === story.entries.length - 1 ||
-          forkEntryIds.has(boundary.entryId) ||
-          checkpoint !== null,
-        entryEnd: entry?.metadata?.timeEnd ?? null,
-        roles: [
-          boundary.index === 0 ? 'Beginning' : null,
-          boundary.index === story.entries.length - 1 ? 'Current end' : null,
-          // A branch can only be forked from a checkpoint, so naming both repeats one fact.
-          // Worth saying only when the checkpoint is gone and nothing else explains the wall.
-          !checkpoint && forkEntryIds.has(boundary.entryId) ? 'Branch point' : null,
-        ].filter((role): role is string => role !== null),
-        branch: branchName(entry?.branchId ?? null),
-      }
-    }),
+    story.timeBoundaries.map((boundary) => ({
+      boundary,
+      index: boundary.index,
+      entryId: boundary.entryId,
+      time: boundary.time,
+      ...describe(boundary.entryId, boundary.index),
+    })),
   )
+
+  // A checkpoint bounds nothing on its own, so it is listed as context rather than as a point a
+  // range can run to. Anchoring one is what makes it a boundary.
+  const checkpointRows = $derived.by(() => {
+    const bounded = new Set(story.timeBoundaries.map((boundary) => boundary.entryId))
+    const rowsForCheckpoints = []
+    for (const [index, entry] of story.entries.entries()) {
+      if (bounded.has(entry.id)) continue
+      if (!story.checkpoints.some((checkpoint) => checkpoint.lastEntryId === entry.id)) continue
+      rowsForCheckpoints.push({
+        boundary: null,
+        index,
+        entryId: entry.id,
+        time: entry.metadata?.timeEnd ?? null,
+        ...describe(entry.id, index),
+      })
+    }
+    return rowsForCheckpoints
+  })
 
   const filtered = $derived(filterAnchors || filterNatural)
   // Either qualifies, so a point that is both stays visible while either box is ticked.
-  const shown = $derived(
-    filtered
+  const shown = $derived.by(() => {
+    const points = filtered
       ? rows.filter((row) => (row.anchor && filterAnchors) || (row.natural && filterNatural))
-      : rows,
-  )
+      : rows
+    // Adds rather than filters: the checkpoints are not reference points, and the boxes above
+    // say which of the reference points to keep.
+    if (!showCheckpoints) return points
+    return [...points, ...checkpointRows].sort((a, b) => a.index - b.index)
+  })
 
   const report = $derived(story.timelineReport)
   const defects = $derived(report.anomalies.filter((a) => a.severity === 'defect').length)
@@ -211,6 +257,12 @@
           <DropdownMenu.CheckboxItem bind:checked={filterNatural} closeOnSelect={false}>
             Natural boundaries
           </DropdownMenu.CheckboxItem>
+          <!-- Below the line because it is not one of them: the boxes above narrow the reference
+               points, this one adds rows that are not reference points at all. -->
+          <DropdownMenu.Separator />
+          <DropdownMenu.CheckboxItem bind:checked={showCheckpoints} closeOnSelect={false}>
+            Show checkpoints
+          </DropdownMenu.CheckboxItem>
         </DropdownMenu.Content>
       </DropdownMenu.Root>
       <Button
@@ -241,34 +293,38 @@
     </p>
   {:else}
     <ul class="space-y-3">
-      {#each shown as row (row.boundary.entryId)}
+      {#each shown as row (row.entryId)}
         <li class="text-xs">
           <div class="flex items-center justify-between gap-2">
             <span class="text-foreground font-medium">
-              Entry {anchorEntryNumber(row.boundary.entryId)}:
-              {row.boundary.time ? stamp(row.boundary.time) : 'no recorded ending'}
+              Entry {anchorEntryNumber(row.entryId)}:
+              {row.time ? stamp(row.time) : 'no recorded ending'}
             </span>
+            <!-- One control per row. An anchor supersedes what is under it, so its own editor is
+                 the only way in; without one, a boundary is edited directly and a checkpoint,
+                 which bounds nothing, is offered the anchor that would make it a boundary. -->
             <span class="flex shrink-0 items-center gap-1">
               {#if row.anchor}
                 <Button
                   variant="text"
                   size="icon"
-                  class="h-6 w-6"
+                  class="h-6 w-6 text-amber-500 hover:text-amber-600"
                   aria-label="Edit time anchor"
                   title="Edit time anchor"
-                  onclick={() => openAnchorModal(row.boundary.entryId)}
+                  onclick={() => openAnchorModal(row.entryId)}
                 >
-                  <Edit class="h-3.5 w-3.5" />
+                  <Anchor class="h-3.5 w-3.5" />
                 </Button>
+              {:else if row.boundary}
                 <Button
                   variant="text"
                   size="icon"
-                  class="text-destructive h-6 w-6"
-                  aria-label="Delete time anchor"
-                  title="Delete time anchor"
-                  onclick={() => story.removeTimeAnchor(row.boundary.entryId)}
+                  class="h-6 w-6"
+                  aria-label="Edit the recorded time"
+                  title="Edit the recorded time"
+                  onclick={() => openEntryTimeModal(row.entryId)}
                 >
-                  <Trash2 class="h-3.5 w-3.5" />
+                  <Edit class="h-3.5 w-3.5" />
                 </Button>
               {:else}
                 <Button
@@ -277,7 +333,7 @@
                   class="h-6 w-6"
                   aria-label="Create a time anchor"
                   title="Create a time anchor"
-                  onclick={() => openAnchorModal(row.boundary.entryId)}
+                  onclick={() => openAnchorModal(row.entryId)}
                 >
                   <Anchor class="h-3.5 w-3.5" />
                 </Button>
@@ -299,7 +355,7 @@
                 {role}
               </span>
             {/each}
-            {#if row.checkpoint}
+            {#if row.checkpointChip}
               <span
                 class="bg-muted text-muted-foreground rounded px-1 text-[10px] tracking-wide uppercase"
               >
@@ -310,17 +366,17 @@
           <button
             type="button"
             class="text-muted-foreground hover:text-foreground flex items-center gap-1"
-            aria-expanded={expanded.includes(row.boundary.entryId)}
-            onclick={() => toggleTimes(row.boundary.entryId)}
+            aria-expanded={expanded.includes(row.entryId)}
+            onclick={() => toggleTimes(row.entryId)}
           >
-            {#if expanded.includes(row.boundary.entryId)}
+            {#if expanded.includes(row.entryId)}
               <ChevronDown class="h-3 w-3" />
             {:else}
               <ChevronRight class="h-3 w-3" />
             {/if}
-            Asserted: {row.anchor ? 'Yes' : 'No'}
+            Coherence: {row.coherent ? 'Yes' : 'No'}
           </button>
-          {#if expanded.includes(row.boundary.entryId)}
+          {#if expanded.includes(row.entryId)}
             <dl class="text-muted-foreground border-border/60 ml-4 border-l pl-2">
               {#if row.anchor}
                 <div class="flex justify-between gap-2">
@@ -350,7 +406,7 @@
           <button
             type="button"
             class="text-accent-500 hover:text-accent-600 mt-0.5 flex items-center gap-1"
-            onclick={() => goToEntry(row.boundary.entryId)}
+            onclick={() => goToEntry(row.entryId)}
           >
             <CornerDownLeft class="h-3 w-3" />
             Go to entry
@@ -384,3 +440,6 @@
   }}
 />
 <TimeAnchorModal bind:open={anchorModalOpen} entryId={anchorModalEntryId} />
+{#if entryTimeEntryId}
+  <EntryTimeModal bind:open={entryTimeOpen} entryId={entryTimeEntryId} />
+{/if}

@@ -41,7 +41,7 @@ export interface ReconciliationPlan {
    */
   clock: TimeTracker | null
   /**
-   * Checkpoints at the range's asserted ending, reseeded with that assertion.
+   * Checkpoints taken at a rewritten entry, reseeded with that entry's new ending.
    *
    * A checkpoint holds the clock a branch forked there will be seeded with, read at the fork
    * rather than at the range, so leaving it would open that branch on the old time.
@@ -63,12 +63,10 @@ export interface PlanReconciliationInput {
   /** The reconciliation's output for the entries inside the range. */
   times: ReconciledTime[]
   checkpoints?: Checkpoint[]
-  /** The assertion at the range's later boundary, when that boundary carries one. */
-  assertedEnding?: { entryId: string; time: TimeTracker } | null
 }
 
 export function planReconciliation(input: PlanReconciliationInput): ReconciliationPlan {
-  const { entries, chapters, times, checkpoints = [], assertedEnding = null } = input
+  const { entries, chapters, times, checkpoints = [] } = input
   const reconciled = new Map(times.map((time) => [time.entryId, time]))
 
   const startOf = (entry: StoryEntry) =>
@@ -115,14 +113,14 @@ export function planReconciliation(input: PlanReconciliationInput): Reconciliati
   const reachesEnd = lastReconciled === entries.length - 1
   const clock = reachesEnd ? (times[times.length - 1]?.end ?? null) : null
 
-  // Only an asserted ending overrides a checkpoint's clock. Without an assertion the boundary
-  // resolves to the entry's own recorded ending, which reconciling leaves where it was, so a
-  // snapshot that differs is holding something no reading can supply.
-  const checkpointClocks: CheckpointClockUpdate[] = assertedEnding
-    ? checkpoints
-        .filter((checkpoint) => checkpoint.lastEntryId === assertedEnding.entryId)
-        .map((checkpoint) => ({ checkpointId: checkpoint.id, timeTracker: assertedEnding.time }))
-    : []
+  // A checkpoint's clock is a copy of the ending of the entry it was taken at, so every rewritten
+  // entry takes its checkpoints with it. A copy left behind is what a branch forked there opens on.
+  const checkpointClocks: CheckpointClockUpdate[] = checkpoints
+    .filter((checkpoint) => reconciled.has(checkpoint.lastEntryId))
+    .map((checkpoint) => ({
+      checkpointId: checkpoint.id,
+      timeTracker: reconciled.get(checkpoint.lastEntryId)!.end,
+    }))
 
   return {
     times,

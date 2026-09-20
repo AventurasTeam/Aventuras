@@ -9,7 +9,7 @@
 import type { StoryEntry, TimeAnchor, TimeTracker } from '$lib/types'
 import { toMinutes } from './minutes'
 
-export type BoundaryKind = 'anchor' | 'story-start' | 'story-end' | 'fork' | 'checkpoint'
+export type BoundaryKind = 'anchor' | 'story-start' | 'story-end' | 'fork'
 
 export interface Boundary {
   entryId: string
@@ -26,26 +26,25 @@ export interface BoundaryInput {
   anchors: TimeAnchor[]
   /** Entries any branch in the story forked from, not only the branch in view. */
   forkEntryIds?: Iterable<string>
-  /** Entries any checkpoint in the story was taken at. */
-  checkpointEntryIds?: Iterable<string>
 }
 
 /**
  * Every boundary on the branch, in story order.
  *
- * The first entry opens the list and the last closes it; between them sit the anchors, the
- * entries some branch forked from, and the entries a checkpoint was taken at. A natural
- * boundary is a seam rather than a claim about the time: something else has already copied
- * that moment, so the ending recorded there may not move. An entry that is both anchored and
- * natural is one boundary, and resolves to the assertion either way.
+ * The first entry opens the list and the last closes it; between them sit the anchors and the
+ * entries some branch forked from. A natural boundary is a seam rather than a claim about the
+ * time: another branch opens on that moment, so the ending recorded there may not move. An entry
+ * that is both anchored and natural is one boundary, and resolves to the assertion either way.
+ *
+ * A checkpoint is not one of them. It copies the clock, but nothing reads that copy until a branch
+ * is taken from it, and reconciling through it rewrites the copy along with the entry.
  */
 export function listBoundaries(input: BoundaryInput): Boundary[] {
-  const { entries, anchors, forkEntryIds = [], checkpointEntryIds = [] } = input
+  const { entries, anchors, forkEntryIds = [] } = input
   if (entries.length === 0) return []
 
   const anchorByEntry = new Map(anchors.map((anchor) => [anchor.entryId, anchor]))
   const forks = new Set(forkEntryIds)
-  const checkpoints = new Set(checkpointEntryIds)
 
   const indices = new Map<number, BoundaryKind>()
   indices.set(0, 'story-start')
@@ -59,9 +58,7 @@ export function listBoundaries(input: BoundaryInput): Boundary[] {
       ? 'anchor'
       : forks.has(id)
         ? 'fork'
-        : checkpoints.has(id)
-          ? 'checkpoint'
-          : null
+        : null
     if (kind) indices.set(i, kind)
   }
 

@@ -81,17 +81,17 @@ describe('listBoundaries', () => {
       entries,
       anchors: [],
       forkEntryIds: ['elsewhere'],
-      checkpointEntryIds: ['also-elsewhere'],
     })
     expect(boundaries.map((b) => b.entryId)).toEqual(['A', 'B'])
   })
 
-  it('makes a checkpoint a boundary', () => {
+  // A checkpoint copies the clock, but nothing reads the copy until a branch is taken from it,
+  // and that branch's fork entry is a boundary in its own right.
+  it('leaves a checkpoint nothing was forked from out of the boundaries', () => {
     const entries = [entry('A', t(1)), entry('B', t(2)), entry('C', t(3))]
-    const boundaries = listBoundaries({ entries, anchors: [], checkpointEntryIds: ['B'] })
+    const boundaries = listBoundaries({ entries, anchors: [] })
     expect(boundaries.map((b) => [b.entryId, b.kind])).toEqual([
       ['A', 'story-start'],
-      ['B', 'checkpoint'],
       ['C', 'story-end'],
     ])
   })
@@ -101,7 +101,6 @@ describe('listBoundaries', () => {
     const boundaries = listBoundaries({
       entries,
       anchors: [anchor('B', t(9))],
-      checkpointEntryIds: ['B'],
       forkEntryIds: ['B'],
     })
     expect(boundaries).toHaveLength(3)

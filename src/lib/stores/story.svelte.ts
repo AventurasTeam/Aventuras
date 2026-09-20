@@ -1558,11 +1558,10 @@ class StoryStore {
     return listBoundaries({
       entries: this.entries,
       anchors: this.timeAnchors,
-      // Every fork and every checkpoint in the story, not just this branch's: a range that
-      // spanned another branch's fork would slide that branch's opening out from under it.
-      // `listBoundaries` keeps only the ones whose entry is visible here.
+      // Every fork in the story, not just this branch's: a range that spanned another branch's
+      // fork would slide that branch's opening out from under it. `listBoundaries` keeps only the
+      // ones whose entry is visible here.
       forkEntryIds: this.branches.map((branch) => branch.forkEntryId),
-      checkpointEntryIds: this.checkpoints.map((checkpoint) => checkpoint.lastEntryId),
     })
   }
 
@@ -1618,17 +1617,10 @@ class StoryStore {
         chapters: this.chapters,
         times: result.times,
         checkpoints: this.checkpoints,
-        assertedEnding: this.assertedEnding(range),
       }),
       fingerprint: this.timelineFingerprint(range, rangeEntries),
       inputs: { durations: suppliedDurations, intervals: intervalWeights },
     }
-  }
-
-  /** The assertion at a range's later boundary, when that boundary carries one. */
-  private assertedEnding(range: SelectableRange): { entryId: string; time: TimeTracker } | null {
-    const anchor = this.timeAnchorFor(range.to.entryId)
-    return anchor ? { entryId: range.to.entryId, time: anchor.assertedTime } : null
   }
 
   private timelineFingerprint(range: SelectableRange, rangeEntries: StoryEntry[]): string {
@@ -1736,18 +1728,11 @@ class StoryStore {
           ]
         : [{ entryId, start, end }]
 
-    // A checkpoint's clock is a copy of the ending of the entry it was taken at, so it follows the
-    // edit — including where a branch was forked from it, whose start is that same copy.
-    const checkpointsHere = this.checkpoints.filter(
-      (checkpoint) => checkpoint.lastEntryId === entryId,
-    )
-
     const plan = planReconciliation({
       entries: this.entries,
       chapters: this.chapters,
       times,
-      checkpoints: checkpointsHere,
-      assertedEnding: checkpointsHere.length > 0 ? { entryId, time: end } : null,
+      checkpoints: this.checkpoints,
     })
 
     await applyReconciliation(plan, this.entries, {
