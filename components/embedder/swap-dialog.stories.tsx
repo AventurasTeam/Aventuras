@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { useState } from 'react'
+import { StrictMode, useState } from 'react'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
@@ -140,6 +140,81 @@ export const RelabelShowsDisclaimer: Story = {
   },
 }
 
+export const InitialTargetOpensOnOptions: Story = {
+  args: {
+    open: true,
+    candidates,
+    ...handlers,
+    onTargetSelected: fn(),
+    initialTargetKey: 'local:bge-small',
+  },
+  play: async ({ args }) => {
+    await waitFor(() => expect(screen.getByTestId('swap-reindex')).toBeInTheDocument())
+    expect(screen.getByText('Switch to BGE-small-en-v1.5')).toBeInTheDocument()
+    expect(args.onTargetSelected).toHaveBeenCalledTimes(1)
+    expect(args.onTargetSelected).toHaveBeenCalledWith({ modelId: 'bge-small', backend: 'local' })
+  },
+}
+
+export const InitialTargetOnCurrentIsIgnored: Story = {
+  args: {
+    open: true,
+    candidates,
+    ...handlers,
+    onTargetSelected: fn(),
+    initialTargetKey: 'local:minilm-l6',
+  },
+  play: async ({ args }) => {
+    expect(await screen.findByTestId('swap-candidate-local:minilm-l6')).toBeInTheDocument()
+    expect(screen.queryByTestId('swap-reindex')).not.toBeInTheDocument()
+    // A pre-seat onto the current row would already have announced it before this pick.
+    await userEvent.click(screen.getByTestId('swap-candidate-local:bge-small'))
+    expect(args.onTargetSelected).toHaveBeenCalledTimes(1)
+    expect(args.onTargetSelected).toHaveBeenCalledWith({ modelId: 'bge-small', backend: 'local' })
+  },
+}
+
+// StrictMode double-runs mount effects only for a subtree placed inside it, and the
+// story's first commit places Storybook's own wrappers; so the strict subtree mounts later.
+function StrictMountHarness(props: SwapDialogProps) {
+  const [mounted, setMounted] = useState(false)
+  return (
+    <View className="gap-3">
+      <Button testID="mount-strict" onPress={() => setMounted(true)}>
+        <Text>Mount</Text>
+      </Button>
+      {mounted ? (
+        <StrictMode>
+          <SwapDialog {...props} />
+        </StrictMode>
+      ) : null}
+    </View>
+  )
+}
+
+// The second mount pass re-runs the reset; the pre-seat must still be free to re-seat.
+export const InitialTargetSurvivesStrictMode: Story = {
+  args: {
+    open: true,
+    candidates,
+    ...handlers,
+    onTargetSelected: fn(),
+    initialTargetKey: 'local:bge-small',
+  },
+  render: (args) => <StrictMountHarness {...args} />,
+  play: async ({ args }) => {
+    await userEvent.click(screen.getByTestId('mount-strict'))
+    expect(await screen.findByTestId('swap-reindex')).toBeInTheDocument()
+    expect(screen.getByText('Switch to BGE-small-en-v1.5')).toBeInTheDocument()
+    // Once per mount pass.
+    expect(args.onTargetSelected).toHaveBeenCalledTimes(2)
+    expect(args.onTargetSelected).toHaveBeenLastCalledWith({
+      modelId: 'bge-small',
+      backend: 'local',
+    })
+  },
+}
+
 export const BackReturnsToPickPane: Story = {
   args: { open: true, candidates, ...handlers },
   play: async () => {
@@ -200,6 +275,55 @@ export const ReopenResetsPickPane: Story = {
       ).toHaveAttribute('aria-checked', 'false')
     }
     expect(screen.getByRole('button', { name: t('storySettings:swap.next') })).toBeDisabled()
+  },
+}
+
+const PROVIDER_KEY = 'provider:prov-openai-compat:text-embedding-3-small'
+
+// Owns `candidates` so a play can land the provider row after the dialog has opened.
+function CandidatesHarness(props: Omit<SwapDialogProps, 'open' | 'onDismiss' | 'candidates'>) {
+  const [list, setList] = useState(() => candidates.slice(0, 2))
+  return (
+    <View className="gap-3">
+      <Button testID="add-target" onPress={() => setList(candidates)}>
+        <Text>Add target</Text>
+      </Button>
+      <SwapDialog {...props} open candidates={list} onDismiss={() => {}} />
+    </View>
+  )
+}
+
+// Stands in for an async list refresh, which the modal's pointer-events block can't stop.
+const addTarget = () => userEvent.click(screen.getByTestId('add-target'), { pointerEventsCheck: 0 })
+
+export const LateTargetKeepsTheUsersPick: Story = {
+  args: { ...handlers, onTargetSelected: fn(), initialTargetKey: PROVIDER_KEY },
+  render: (args) => <CandidatesHarness {...args} />,
+  play: async ({ args }) => {
+    await userEvent.click(screen.getByTestId('swap-candidate-local:bge-small'))
+    await addTarget()
+
+    expect(screen.getByTestId(`swap-candidate-${PROVIDER_KEY}`)).toBeInTheDocument()
+    expect(args.onTargetSelected).toHaveBeenCalledTimes(1)
+    expect(args.onTargetSelected).toHaveBeenCalledWith({ modelId: 'bge-small', backend: 'local' })
+    expect(screen.getByTestId('swap-candidate-local:bge-small')).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+  },
+}
+
+export const RefreshAfterBackStaysOnPick: Story = {
+  args: { ...handlers, onTargetSelected: fn(), initialTargetKey: 'local:bge-small' },
+  render: (args) => <CandidatesHarness {...args} />,
+  play: async ({ args }) => {
+    await screen.findByTestId('swap-reindex')
+    await userEvent.click(screen.getByRole('button', { name: t('storySettings:swap.back') }))
+    await addTarget()
+
+    expect(args.onTargetSelected).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId(`swap-candidate-${PROVIDER_KEY}`)).toBeInTheDocument()
+    expect(screen.queryByTestId('swap-reindex')).not.toBeInTheDocument()
   },
 }
 

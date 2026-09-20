@@ -6,9 +6,10 @@ gate that must interrupt the user's flow.
 
 Distinct from Sheet ([`overlays.md → Sheet`](./overlays.md#sheet--api-surface)):
 Sheet is a navigation surface (dismissible, slidable); AlertDialog
-is a consent gate (centered, ceremonial, Esc / click-outside
-cancels). Use AlertDialog when the user must explicitly choose to
-proceed, not when they're just opening a side surface.
+is a consent gate (centered, ceremonial; Esc or hardware back
+cancels, an outside click does not). Use AlertDialog when the user
+must explicitly choose to proceed, not when they're just opening a
+side surface.
 
 Used by:
 
@@ -92,7 +93,7 @@ No `tone` / `severity` prop on AlertDialog itself — the variant axis would dup
 - **Title ends with `?`** — consent-gate signal. `Delete from entry <N>?`, `Switch calendar to <name>?`.
 - **Body** — one-sentence framing + optional impact list (bulleted) or structured sub-warning blocks.
 - **Buttons** — `Cancel` (left, `secondary` Button variant) + verb-shaped action (right, `destructive` or `primary`). Verbs: `Delete entries`, `Switch calendar`, `Delete branch`. Avoid generic `OK` / `Confirm`.
-- **Esc + click-outside = Cancel.** Radix default. Don't override.
+- **Esc (web) or hardware back (native) = Cancel; an outside click does nothing** (Radix AlertDialog blocks it). Don't override.
 
 ## Animation
 

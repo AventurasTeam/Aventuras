@@ -7,6 +7,8 @@
   "unavailableBody": "Something went wrong loading this device's story list. Go back and try again.",
   "uninitialized": "This story has no settings yet",
   "uninitializedBody": "Settings are written when a story finishes setup. Finish the wizard for this story, or reset its settings to defaults.",
+  "corrupt": "This story's settings can't be read",
+  "corruptBody": "Nothing here can be edited safely. Open this story from your library to reset its settings to defaults.",
   "groups": {
     "story": "Story",
     "settings": "Settings"
@@ -25,10 +27,21 @@
     "saved": "Saved.",
     "failed": "Couldn't save your changes. They're still here — try again.",
     "stale": "Saved, but this screen is out of date. Reload to see the current values.",
+    "unreadable": "Saved, but this story's settings can no longer be read. Reset them from your library to keep editing.",
     "unsavedTitle": "Unsaved changes",
     "unsavedBody": "You have unsaved changes on this screen. Save them, discard them, or stay here.",
     "unsavedSave": "Save",
-    "unsavedDiscard": "Discard"
+    "unsavedDiscard": "Discard",
+    "invalidOnTab": "{{tab}}: {{reason}}"
+  },
+  "confirm": {
+    "title": "Changes to how the story is written",
+    "body": "These take effect from the next turn.",
+    "saveAnyway": "Save anyway",
+    "fieldSeparator": ": ",
+    "consequence": {
+      "composerWrapPov": "Affects how new user input in Do / Say / Think modes is rendered. Existing entries stay as-saved."
+    }
   },
   "missingStory": "This story could not be loaded.",
   "swap": {
@@ -62,6 +75,47 @@
     "cancelSemantics": "You can cancel while it runs. Cancelling keeps the entries already rebuilt and queues the rest.",
     "confirm": "Re-index"
   },
+  "upgrade": {
+    "title": "Newer embedding model available",
+    "body": "This story embeds with {{current}}. The app default is now {{target}}. Upgrading re-indexes this story on the new model.",
+    "upgrade": "Upgrade",
+    "keep": "Keep on the current model",
+    "later": "Later",
+    "keepFailed": "Couldn't record that choice while generation is running. It will ask again next time.",
+    "keepError": "Couldn't record that choice. It will ask again next time."
+  },
+  "about": {
+    "heading": "About",
+    "intro": "What the story is — identity and metadata.",
+    "title": "Title",
+    "description": "Description",
+    "descriptionHint": "Shown on the library card. Never sent to the AI.",
+    "tags": "Tags",
+    "tagsPlaceholder": "Add a tag",
+    "appearance": "Appearance",
+    "accentColor": "Accent color",
+    "accentNone": "None (mode default)",
+    "library": "Library",
+    "status": "Library status",
+    "statusActive": "Active",
+    "statusArchived": "Archived",
+    "statusDraft": "Drafts finish in the wizard; the library status can't change here.",
+    "favorite": "Favorite",
+    "favoriteHint": "Favorites float to the top of the library.",
+    "invalid": {
+      "emptyTitle": "The title can't be empty",
+      "accentColor": "The accent color isn't a valid hex value",
+      "draftStory": "Drafts finish in the wizard, so these changes can't be saved here"
+    },
+    "field": {
+      "title": "title",
+      "description": "description",
+      "tags": "tags",
+      "accentColor": "accent color",
+      "status": "library status",
+      "favorite": "favorite"
+    }
+  },
   "generation": {
     "authoringAids": "Authoring aids",
     "suggestions": "Suggestions",
@@ -82,6 +136,20 @@
     "deleteTitle": "Delete this category?",
     "deleteBody": "Chips already suggested under this category keep rendering, labelled (removed).",
     "deleteConfirm": "Delete",
+    "composerModes": "Composer modes",
+    "composerModesHint": "Offer Do / Say / Think / Free wrapping in the composer.",
+    "composerModesCreative": "Composer modes are hidden in creative mode — you write prose directly.",
+    "composerModesUnavailable": {
+      "missing": "Composer modes are adventure-only, and this story has no mode recorded yet.",
+      "unrecognized": "Composer modes are adventure-only, and this story's mode isn't one this version recognises."
+    },
+    "composerWrapPov": "Wrap point of view",
+    "composerWrapPovHint": "How Do / Say / Think wrap what you type. Independent of the narration voice.",
+    "composerWrapPovNeedsModes": "Applies only when the composer offers Do / Say / Think.",
+    "wrapPov": {
+      "first": "1st person",
+      "third": "3rd person"
+    },
     "invalid": {
       "empty-list": "At least one category is required",
       "empty-label": "A category has no label",
@@ -90,11 +158,49 @@
     "field": {
       "suggestions": "suggestions",
       "suggestionCount": "suggestion count",
-      "suggestionCategories": "suggestion categories"
+      "suggestionCategories": "suggestion categories",
+      "composerModes": "composer modes",
+      "composerWrapPov": "wrap point of view"
+    }
+  },
+  "models": {
+    "heading": "Models",
+    "intro": "Overrides pin a model for this story. Anything not overridden follows App Settings › Profiles.",
+    "narrative": "Narrative",
+    "appDefault": "App default: {{model}} ({{profile}})",
+    "appDefaultNoProfile": "App default: {{model}}",
+    "broken": {
+      "no-profile-assigned": "App default: no profile assigned in App Settings",
+      "profile-missing": "App default: the assigned profile was deleted",
+      "provider-missing": "App default: the profile's provider is missing",
+      "override-provider-missing": "This override's provider is missing"
+    },
+    "overrideProviderMissing": "This override's provider was removed. Clear it or pick again.",
+    "pickModel": "Pin a model…",
+    "clearOverride": "Clear the {{target}} override",
+    "removeRow": "Remove the {{target}} row",
+    "addOverride": "Add override",
+    "addOverrideLabel": "Agent to override",
+    "noProviders": "Add a provider in App Settings to pin models.",
+    "providerWriteFailed": "Couldn't save that to the provider. Try again.",
+    "agent": {
+      "classifier": "Classifier",
+      "translation": "Translation",
+      "suggestion": "Suggestion",
+      "lore-mgmt": "Lore management",
+      "retrieval": "Retrieval"
+    },
+    "field": {
+      "narrative": "narrative model",
+      "classifier": "classifier model",
+      "translation": "translation model",
+      "suggestion": "suggestion model",
+      "lore-mgmt": "lore management model",
+      "retrieval": "retrieval model"
     }
   },
   "memory": {
-    "heading": "Memory",
+    "heading": "Embedder",
     "staleCount_one": "{{count}} row pending re-embed.",
     "staleCount_other": "{{count}} rows pending re-embed.",
     "reason": {
@@ -114,6 +220,89 @@
     "swapPendingTitle": "Embedder switch paused",
     "swapPendingBody": "Switching this story to {{model}} was interrupted. Nothing is being embedded until you resume or cancel.",
     "cancelTooLate": "The switch finished before it could be cancelled.",
-    "relabelDimMismatch": "These vectors are stored at a different size than that model reads. Re-index this story instead — relabelling would leave every embedding unreadable."
+    "relabelDimMismatch": "These vectors are stored at a different size than that model reads. Re-index this story instead — relabelling would leave every embedding unreadable.",
+    "knobs": {
+      "chapterClose": "Chapter close",
+      "threshold": "Chapter threshold",
+      "thresholdHint": "Tokens of prose per chapter before it closes.",
+      "thresholdTokens": "Chapter threshold in tokens",
+      "preset": {
+        "short": "Short (8k)",
+        "balanced": "Balanced (24k)",
+        "long": "Long (48k)",
+        "custom": "Custom…"
+      },
+      "autoClose": "Auto-close chapters",
+      "autoCloseHint": "Off: the threshold is guidance only and you close chapters yourself.",
+      "promptContext": "Prompt context",
+      "fullChapter": "Full chapter in buffer",
+      "fullChapterHint": "Send the whole current chapter verbatim. At the threshold that is about {{tokens}} tokens per turn.",
+      "fullChapterHintPlain": "Send the whole current chapter verbatim.",
+      "partialBuffer": "Partial chapter buffer",
+      "partialBufferHint": "Entries of the current chapter sent in partial mode.",
+      "partialBufferIgnored": "Ignored while the full chapter is in the buffer.",
+      "protectedBuffer": "Protected buffer",
+      "protectedBufferHint": "Floor of recent entries; a fresh chapter fills from earlier ones to reach it.",
+      "classifierContext": "Classifier context",
+      "classifierContextHint": "Trailing entries the fallback classifier sees. Minimum 2 — the action and reply it reads.",
+      "contextDecrement": "Fewer classifier context entries",
+      "contextIncrement": "More classifier context entries",
+      "classifier": "Classifier",
+      "cadence": "Classifier cadence",
+      "cadenceHint": "Turns between periodic classifier runs.",
+      "cadenceOverlap_one": "{{count}} turn of coverage overlap with the partial buffer.",
+      "cadenceOverlap_other": "{{count}} turns of coverage overlap with the partial buffer.",
+      "cadenceWarning": "Cadence exceeds the partial buffer — turns can leave the window unclassified.",
+      "cadenceWarningChip": "Coverage gap",
+      "budgets": "Retrieval budgets",
+      "budgetsHint": "Token budgets per type. Hard partitions — unused tokens don't spill over.",
+      "budget": {
+        "entities": "Entities",
+        "lore": "Lore",
+        "happenings": "Happenings",
+        "threads": "Threads",
+        "chapters": "Chapter summaries"
+      },
+      "budgetTotal": "Total: {{tokens}} tokens",
+      "keyword": "Keyword retrieval",
+      "keywordMode": "Mode",
+      "keywordModeOption": {
+        "boost": "Boost",
+        "inject": "Inject"
+      },
+      "keywordModeHint": {
+        "boost": "A keyword match raises the row's score; the ranker still decides.",
+        "inject": "A keyword match seats the lore or entity directly, within a budget."
+      },
+      "budgetShare": "Budget share",
+      "budgetShareHint": "Largest share of each type's budget keyword matches may fill (0 to 1).",
+      "scanEntries": "Scan depth",
+      "scanEntriesHint": "Trailing entries scanned besides the current action.",
+      "cascade": "Cascade",
+      "cascadeHint": "Rescan injected rows for further matches.",
+      "cascadeMaxDepth": "Max cascade depth",
+      "cascadeMaxDepthNeedsCascade": "Turn on Cascade to set a depth.",
+      "invalid": {
+        "threshold": "Chapter threshold must be a whole number of at least 1",
+        "partialBuffer": "Partial chapter buffer must be a whole number of at least 0",
+        "protectedBuffer": "Protected buffer must be a whole number of at least 0",
+        "cadence": "Classifier cadence must be a whole number of at least 1",
+        "budget": "Every retrieval budget must be a whole number of at least 0",
+        "budgetShare": "Budget share must be a number between 0 and 1",
+        "scanEntries": "Scan depth must be a whole number of at least 1",
+        "cascadeDepth": "Max cascade depth must be a whole number of at least 1"
+      },
+      "field": {
+        "chapterTokenThreshold": "chapter threshold",
+        "chapterAutoClose": "auto-close chapters",
+        "fullChapterInBuffer": "chapter buffer mode",
+        "partialChapterBuffer": "partial chapter buffer",
+        "protectedBuffer": "protected buffer",
+        "classifierContextEntries": "classifier context",
+        "classifierCadence": "classifier cadence",
+        "retrievalBudgets": "retrieval budgets",
+        "keywordRetrieval": "keyword retrieval"
+      }
+    }
   }
 }

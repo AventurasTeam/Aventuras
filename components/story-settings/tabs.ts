@@ -36,10 +36,24 @@ function isStorySettingsTabId(value: string | undefined): value is StorySettings
   return STORY_SETTINGS_TAB_IDS.includes(value as StorySettingsTabId)
 }
 
+/** The open tab, and the `?tab=` value it was last synced from. */
+type TabParamState = { selected: StorySettingsTabId | null; param: string | undefined }
+
+/**
+ * Folds a `?tab=` value into the selection. Only a changed param moves it: the
+ * param mirrors the selection, so an unchanged one never overrides the user. An
+ * unchanged param returns `state` itself, so a render-time sync settles.
+ */
+function syncTabParam(state: TabParamState, param: string | undefined): TabParamState {
+  if (param === state.param) return state
+  return { param, selected: isStorySettingsTabId(param) ? param : state.selected }
+}
+
 export {
   isStorySettingsTabId,
   STORY_SETTINGS_TAB_GROUPS,
   STORY_SETTINGS_TAB_IDS,
   storySettingsTabOrder,
+  syncTabParam,
 }
-export type { StorySettingsGroupId, StorySettingsTabId }
+export type { StorySettingsGroupId, StorySettingsTabId, TabParamState }

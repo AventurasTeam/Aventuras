@@ -129,7 +129,8 @@ card `⋯ → Edit info` routes to `About` directly.
 
 ## Models tab — overrides only
 
-Story-level overrides are direct **model id** overrides. App-level
+Story-level overrides pin a provider-qualified model — a
+`{ providerId, modelId }` ref, not a profile. App-level
 profile architecture (App Settings · Profiles) provides the resolution
 chain; this tab lets the story bypass the chain for specific features.
 
@@ -141,8 +142,8 @@ its slot is always rendered:
 - **App default sentinel** resolves the chain and shows what's
   currently in effect:
   `App default: claude-sonnet-4-7 (Narrative profile)`.
-- Picking a model pins that model id for this story regardless of
-  changes to App Settings · Profiles · Narrative.
+- Picking a model pins that provider and model for this story
+  regardless of changes to App Settings · Profiles · Narrative.
 - `×` on the row removes the override; reverts to the App default
   sentinel.
 
@@ -156,8 +157,10 @@ their currently-resolved chain:
 - `suggestion` — Fast tasks → gpt-4o-mini
 - `lore-mgmt` — Heavy reasoning → claude-opus-4-7
 - `retrieval` — Fast tasks → gpt-4o-mini (when designed)
-- `wizard-assist` — Fast tasks → gpt-4o-mini (powers the AI-assist
-  calls inside the [story-creation wizard](../wizard/wizard.md))
+
+`wizard-assist` is a global agent with no story slot — it powers the
+[story-creation wizard](../wizard/wizard.md) outside any story, so it
+resolves through App Settings only.
 
 (Image generation is deferred — see
 [`parked.md → Image generation`](../../../parked.md#image-generation).)
@@ -169,10 +172,16 @@ default.
 Most stories override 0-1 agents — empty default keeps noise
 proportional to actual overrides.
 
+Favoriting a model or adding a custom model id in the picker writes
+that provider's list in App Settings at once: it is app-level data,
+outside this screen's save session. Discard rolls back the override
+being picked, but neither the favorite nor the added model id goes
+with it.
+
 ### Insulation from profile changes
 
-Story-level overrides are model ids, not profile ids — they bypass
-the profile chain entirely:
+Story-level overrides name a provider and a model, not a profile —
+they bypass the profile chain entirely:
 
 - Profile renamed / model changed / temperature changed → stories
   with override unaffected.
@@ -182,6 +191,11 @@ the profile chain entirely:
   profile are unset; the affected agents surface broken-reference
   errors at next pipeline use. Story-level overrides survive
   unchanged — they don't reference the profile id.
+- Provider deleted → overrides naming it stay in place and fail
+  `override-provider-missing` at the next pipeline use; the Models tab
+  renders the row broken with `×` to clear it. Its own kind, not the
+  chain's `provider-missing`: the App Settings chain is healthy here, so
+  the reader's fix action has to point at this tab instead.
 - Model removed from provider catalog → triggers the global
   broken-config banner (rendered at the top of every screen — see
   [App Settings](../app-settings/app-settings.md) for the surface
@@ -204,13 +218,12 @@ Tracked as granular per-story controls in
 
 ```ts
 stories.settings.models: {
-  narrative?: string;
-  classifier?: string;
-  translation?: string;
-  suggestion?: string;
-  'lore-mgmt'?: string;
-  retrieval?: string;
-  'wizard-assist'?: string;
+  narrative?: { providerId: string; modelId: string };
+  classifier?: { providerId: string; modelId: string };
+  translation?: { providerId: string; modelId: string };
+  suggestion?: { providerId: string; modelId: string };
+  'lore-mgmt'?: { providerId: string; modelId: string };
+  retrieval?: { providerId: string; modelId: string };
 }
 ```
 
@@ -218,7 +231,8 @@ stories.settings.models: {
 feature lands.)
 
 All fields optional; absent = resolve through the App Settings
-profile chain at render time. See
+profile chain at render time. A present override runs on its own
+`providerId`. See
 [principles.md → Models are override-only](../../principles.md#models-are-override-only-per-story)
 for the cross-cutting pattern.
 
@@ -234,7 +248,9 @@ Houses three groupings, each with its own sub-section:
    generation.
 3. **Authoring aids** — composer modes toggle + wrap POV
    (first/third) + suggestions toggle + `suggestionCount` stepper +
-   [Suggestion categories](#suggestion-categories) editor.
+   [Suggestion categories](#suggestion-categories) editor. Wrap POV is
+   disabled while composer modes are off, and so whenever the modes
+   toggle itself is unavailable (creative or unknown mode).
 
 ### Orthogonal axes
 
@@ -548,8 +564,9 @@ for the post-v1 spillover question.
 ### Keyword retrieval
 
 How keyword matches behave (`stories.settings.keywordRetrieval`). One
-select plus four controls, the latter disclosed only while the mode is
-`Inject`:
+select and a scan-depth input shown in both modes, plus three controls
+— budget share, cascade and its max depth — disclosed only while the
+mode is `Inject`:
 
 - **Mode** (enum select with explanation): `Boost` (default) /
   `Inject`.
@@ -559,12 +576,15 @@ select plus four controls, the latter disclosed only while the mode is
     within a budget. The deterministic "I wrote the name, the entry
     appeared" behaviour, and the one users arriving from other tools
     of this kind expect. Applies to lore and entities only.
+- **Scan depth** (integer input; default `1`): trailing entries
+  scanned for matches in addition to the current user action. Shown in
+  both modes: the keyword scan surface is the same under `Boost` and
+  `Inject` (see
+  [`memory/retrieval.md → Keyword scan surface`](../../../memory/retrieval.md#keyword-scan-surface)).
 - **Budget share** (number input, `0..1`; default `0.5`): the largest share
   of each per-type budget keyword-injected rows may fill before ranked
   candidates take the remainder. The control that keeps a scene naming
   many keyworded rows from consuming the whole window.
-- **Scan depth** (integer input; default `1`): trailing entries
-  scanned for matches in addition to the current user action.
 - **Cascade** (SwitchRow, default off) with a **max depth** integer
   (default `2`) enabled beneath it: whether an injected row's own text
   is rescanned for further matches.
@@ -918,9 +938,10 @@ Two layers, different audiences:
 
 ### When the story is empty
 
-No entries yet (story just created from the wizard) → no modal. The
-flagged fields can be freely retuned; first turn locks them in
-operationally.
+_Empty_ here means no turn taken on any branch → no modal. A turn is a
+user action or an AI reply: every story carries the wizard's opening,
+and a system failure notice is transient, so neither counts. The flagged
+fields can be freely retuned; first turn locks them in operationally.
 
 ## Save session
 
@@ -939,11 +960,12 @@ Story Settings icon is absent on this surface (see
 App Settings is reachable via the Actions menu.
 
 **Contextual Return.** When Story Settings is reached via the
-story-list card overflow (`⋯ → Edit info`), the
-[stack-aware Return](../../principles.md#stack-aware-return)
-goes back to the story list on the first ←. If the user navigates
-beyond Story Settings (e.g., forward into the reader), the one-shot
-is consumed and subsequent Returns follow the default stack pop.
+story-list card overflow (`⋯ → Edit info`), it is pushed over the
+story list, so the first ← is a plain
+[stack-aware Return](../../principles.md#stack-aware-return) back to
+the list. Navigating forward — e.g. into the reader through the
+breadcrumb's story segment — pushes on top, so each ← retraces the
+stack.
 
 ## Mobile expression
 
@@ -1022,24 +1044,29 @@ anywhere` to break long monospace strings cleanly when 2-col
 - **Chapter token threshold uses a chip-row preset+custom
   hybrid** (Short / Balanced / Long / Custom…) — `.chip-row`
   with `.add-chip` cells, wrapping naturally at narrow tiers.
-  Selecting `Custom…` reveals the numeric input below. Pattern
-  is shared with App Settings's matching threshold control. Sits
-  outside Select's three render modes (segment / dropdown /
-  radio) because preset-plus-numeric isn't pure cardinality —
-  per
+  The numeric input is always visible beside them; a preset chip
+  sets it, and `Custom…` reads selected when the value matches no
+  preset. Pattern is shared with App Settings's matching threshold
+  control. Sits outside Select's three render modes (segment /
+  dropdown / radio) because preset-plus-numeric isn't pure
+  cardinality — per
   [`forms.md → Select primitive`](../../patterns/forms.md#select-primitive)'s
   preset+custom note.
 - **Diagnostics row** in the Advanced tab uses the same
   chip-row pattern for `Export story as JSON` and
   `View raw settings JSON` — chips wrap left-aligned on narrow
   tiers.
-- **Save bar on phone** stays at the bottom edge of the
-  detail-route's scroll region per
-  [`patterns/save-sessions.md`](../../patterns/save-sessions.md);
-  hides while keyboard is open per
+- **Save bar on phone** is lifted to the surface level: it sits at
+  the bottom edge below whichever pane the phone shows, so a dirty
+  session collapsed back to the tab list still shows Save / Discard
+  without re-entering a tab (the desktop bar stays inside the detail
+  pane per
+  [`patterns/save-sessions.md`](../../patterns/save-sessions.md#save-bar--the-visible-ui));
+  stays above the soft keyboard per
   [`mobile/touch.md → Save bar on phone`](../../foundations/mobile/touch.md#save-bar-on-phone),
-  reappears on field blur. Navigate-away guard stays active
-  throughout including during keyboard-open.
+  with the panes compressing to make room, so a field edit is
+  committable without dismissing the keyboard first. Navigate-away
+  guard stays active throughout including during keyboard-open.
 - **Stack-aware Return.** The chrome `←`, Android `BackHandler`,
   and iOS swipe-back all bind to stack-aware Return per
   [`mobile/navigation.md → Stack-aware Return`](../../foundations/mobile/navigation.md#stack-aware-return-on-mobile).

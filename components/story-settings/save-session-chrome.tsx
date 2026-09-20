@@ -1,7 +1,27 @@
-import { SaveBar } from '@/components/compounds/save-bar'
+import { View } from 'react-native'
 
+import { SaveBar } from '@/components/compounds/save-bar'
+import { t } from '@/lib/i18n'
+
+import { DefinitionalChangeDialog } from './definitional-change-dialog'
 import { useStorySettingsSaveSession } from './save-session'
+import type { SaveSessionSnapshot } from './save-session-state'
 import { UnsavedChangesDialog } from './unsaved-changes-dialog'
+
+type DialogGateProps = {
+  blocked?: boolean
+  disabledReason?: string
+}
+
+/** Tab-prefixed: the refusing section may sit on a tab the user isn't viewing. */
+function qualifiedReason(snapshot: SaveSessionSnapshot): string | undefined {
+  if (snapshot.invalidReason == null) return undefined
+  if (snapshot.invalidTab == null) return snapshot.invalidReason
+  return t('storySettings:save.invalidOnTab', {
+    tab: t(`storySettings:tabs.${snapshot.invalidTab}`),
+    reason: snapshot.invalidReason,
+  })
+}
 
 /** The surface's save bar, mounted only while the session is dirty. */
 export function StorySettingsSaveBar({
@@ -14,7 +34,8 @@ export function StorySettingsSaveBar({
   disabledReason?: string
 }) {
   const session = useStorySettingsSaveSession()
-  const { dirtyFields, invalidReason } = session.snapshot
+  const { dirtyFields } = session.snapshot
+  const invalidReason = qualifiedReason(session.snapshot)
   if (dirtyFields.length === 0) return null
   return (
     <SaveBar
@@ -32,23 +53,16 @@ export function StorySettingsSaveBar({
 }
 
 /**
- * No focus gate: every `requestLeave` caller can only fire while the surface is
- * focused, so a pending leave while unfocused means the user is closing the
- * window — exactly when the dialog must show. Gating it there holds the close
- * open with nothing on screen to answer it, leaving the window unclosable.
+ * No focus gate: `requestLeave` only fires while focused, so a pending leave while unfocused is
+ * a window close — gating there holds that close open with nothing to answer it, unclosable.
+ * Hidden while a confirmation is pending: the two never stack.
  */
-export function StorySettingsLeaveDialog({
-  blocked = false,
-  disabledReason,
-}: {
-  blocked?: boolean
-  disabledReason?: string
-}) {
+function StorySettingsLeaveDialog({ blocked = false, disabledReason }: DialogGateProps) {
   const session = useStorySettingsSaveSession()
-  const { invalidReason } = session.snapshot
+  const invalidReason = qualifiedReason(session.snapshot)
   return (
     <UnsavedChangesDialog
-      open={session.pendingLeave}
+      open={session.pendingLeave && !session.pendingConfirmation}
       saving={session.saving}
       saveDisabled={blocked || invalidReason != null}
       saveDisabledReason={blocked ? disabledReason : invalidReason}
@@ -57,5 +71,29 @@ export function StorySettingsLeaveDialog({
       onDiscard={() => session.resolveLeave('discard')}
       onCancel={() => session.resolveLeave('cancel')}
     />
+  )
+}
+
+function StorySettingsConfirmDialog() {
+  const session = useStorySettingsSaveSession()
+  return (
+    <DefinitionalChangeDialog
+      open={session.pendingConfirmation}
+      fields={session.snapshot.flaggedFields}
+      saving={session.saving}
+      onCancel={() => session.resolveConfirmation('cancel')}
+      onConfirm={() => session.resolveConfirmation('save')}
+    />
+  )
+}
+
+/** Paired: the leave dialog yields to the confirmation, so alone it can strand a window close. */
+export function StorySettingsDialogs({ blocked, disabledReason }: DialogGateProps) {
+  // One element: a Fragment would leak each dialog root's View into the host's layout as siblings.
+  return (
+    <View>
+      <StorySettingsLeaveDialog blocked={blocked} disabledReason={disabledReason} />
+      <StorySettingsConfirmDialog />
+    </View>
   )
 }

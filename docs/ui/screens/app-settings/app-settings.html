@@ -282,7 +282,12 @@
         .err-banner .err-action { margin-left: 0; }
 
         .md-layout { grid-template-columns: 1fr; }
-        body[data-md-state="list"] .settings-pane { display: none; }
+        /* Save bar lifts to surface level on phone (mobile/touch.md -> Save
+           bar on phone): it sits below whichever pane shows, so a dirty
+           session collapsed to the list stays saveable. The pane stays in
+           flow and empties instead, landing the one save-bar element there. */
+        body[data-md-state="list"] .settings-pane > *:not(.save-bar) { display: none; }
+        body[data-md-state="list"] .md-layout { grid-template-rows: minmax(0, 1fr) auto; }
         body[data-md-state="detail"] .settings-rail { display: none; }
 
         /* List-state nav rows: 44 px tap-target floor, sentence-case sans
@@ -1339,7 +1344,7 @@
           </div>
           <div class="field-row">
             <div class="field-label">wrap POV
-              <span class="hint">how composer modes wrap user input</span>
+              <span class="hint">how composer modes wrap user input &middot; new adventure stories only; creative starts third-person</span>
             </div>
             <div class="segment"><span class="seg active">first-person</span><span class="seg">third-person</span></div>
           </div>

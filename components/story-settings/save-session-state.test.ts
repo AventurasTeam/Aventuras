@@ -22,7 +22,7 @@ const generation: SectionDirtyState = {
 
 describe('computeSnapshot', () => {
   it('reports a clean session for no sections', () => {
-    expect(computeSnapshot([])).toEqual({ dirtyFields: [] })
+    expect(computeSnapshot([])).toEqual({ dirtyFields: [], flaggedFields: [] })
   })
 
   it('reports a clean session when every section is clean', () => {
@@ -30,12 +30,15 @@ describe('computeSnapshot', () => {
       { id: 'a', tab: 'about', dirtyFields: [] },
       { id: 'b', tab: 'memory', dirtyFields: [] },
     ])
-    expect(snapshot).toEqual({ dirtyFields: [] })
+    expect(snapshot).toEqual({ dirtyFields: [], flaggedFields: [] })
   })
 
   it('flattens dirty fields in ascending rail order', () => {
     const snapshot = computeSnapshot([memory, generation])
-    expect(snapshot).toEqual({ dirtyFields: ['suggestions', 'suggestion count', 'embedder'] })
+    expect(snapshot).toEqual({
+      dirtyFields: ['suggestions', 'suggestion count', 'embedder'],
+      flaggedFields: [],
+    })
   })
 
   it('ranks a section by its tab, not its registration order', () => {
@@ -63,6 +66,29 @@ describe('computeSnapshot', () => {
   it('ignores clean sections when others are dirty', () => {
     const snapshot = computeSnapshot([generation, { id: 'quiet', tab: 'pack', dirtyFields: [] }])
     expect(snapshot.dirtyFields).toEqual(['suggestions', 'suggestion count'])
+  })
+
+  it('names the tab of the first dirty-and-invalid section', () => {
+    const snapshot = computeSnapshot([
+      { ...generation, invalidReason: 'dup labels' },
+      { ...memory, invalidReason: 'bad cadence' },
+    ])
+    expect(snapshot).toMatchObject({
+      invalidReason: 'dup labels',
+      invalidSectionId: 'authoring-aids',
+      invalidTab: 'generation',
+    })
+  })
+
+  it('collects flagged fields from dirty sections only, in rail order', () => {
+    const wrap = { key: 'composerWrapPov', label: 'wrap point of view', consequence: 'c1' }
+    const mode = { key: 'mode', label: 'mode', consequence: 'c2' }
+    const snapshot = computeSnapshot([
+      { ...memory, flaggedFields: [mode] },
+      { ...generation, flaggedFields: [wrap] },
+      { id: 'clean', tab: 'about', dirtyFields: [], flaggedFields: [mode] },
+    ])
+    expect(snapshot.flaggedFields).toEqual([wrap, mode])
   })
 })
 
@@ -101,6 +127,26 @@ describe('upsertSection', () => {
       dirtyFields: ['suggestions', 'suggestion count'],
     }
     expect(upsertSection(list, republished)).toBe(list)
+  })
+
+  it('treats a changed flagged-field list as a change', () => {
+    const flagged = { key: 'composerWrapPov', label: 'wrap', consequence: 'c' }
+    const sections = upsertSection([], generation)
+    expect(upsertSection(sections, { ...generation, flaggedFields: [flagged] })).not.toBe(sections)
+    const withFlag = upsertSection(sections, { ...generation, flaggedFields: [flagged] })
+    expect(upsertSection(withFlag, { ...generation, flaggedFields: [{ ...flagged }] })).toBe(
+      withFlag,
+    )
+  })
+
+  // Label and consequence are translated copy: a locale change must replace them.
+  it('treats reworded flagged-field copy as a change', () => {
+    const flagged = { key: 'composerWrapPov', label: 'wrap', consequence: 'c' }
+    const withFlag = upsertSection([], { ...generation, flaggedFields: [flagged] })
+    const relabelled = { ...generation, flaggedFields: [{ ...flagged, label: 'other' }] }
+    const reworded = { ...generation, flaggedFields: [{ ...flagged, consequence: 'other' }] }
+    expect(upsertSection(withFlag, relabelled)).not.toBe(withFlag)
+    expect(upsertSection(withFlag, reworded)).not.toBe(withFlag)
   })
 })
 
@@ -141,10 +187,18 @@ describe('computeSnapshot — validity', () => {
       { id: 'a', tab: 'generation', dirtyFields: ['y'], invalidReason: 'generation-problem' },
     ])
     expect(snapshot.invalidSectionId).toBe('a')
+    expect(snapshot.invalidTab).toBe('generation')
   })
 
-  it('leaves the section id unset when nothing is invalid', () => {
-    expect(computeSnapshot([generation]).invalidSectionId).toBeUndefined()
+  it('takes the tab from the invalid section, not the first dirty one', () => {
+    const snapshot = computeSnapshot([generation, { ...memory, invalidReason: 'bad cadence' }])
+    expect(snapshot).toMatchObject({ invalidSectionId: 'embedding-status', invalidTab: 'memory' })
+  })
+
+  it('leaves the section id and tab unset when nothing is invalid', () => {
+    const snapshot = computeSnapshot([generation])
+    expect(snapshot.invalidSectionId).toBeUndefined()
+    expect(snapshot.invalidTab).toBeUndefined()
   })
 })
 
@@ -174,9 +228,8 @@ describe('removeSection', () => {
 })
 
 describe('sameDraft', () => {
-  // JSON.stringify collapses this pair. Harmless while `updateStorySettings`
-  // also strips undefined — the point is that the reset decision no longer
-  // rests on the two modules happening to agree.
+  // JSON.stringify collapses this pair. Harmless while `saveStorySettingsSession`
+  // also strips undefined — the reset decision must not rest on that agreement.
   it('separates a cleared key from an absent one', () => {
     expect(sameDraft({ embedding_swap_target: undefined }, {})).toBe(false)
     expect(sameDraft({}, { embedding_swap_target: undefined })).toBe(false)

@@ -203,7 +203,14 @@
     /* settings layout collapses to single-column; rail or pane visible
        per body[data-md-state] */
     .settings-layout { grid-template-columns: 1fr; }
-    body[data-md-state="list"] main.pane { display: none; }
+    /* Save bar lifts to surface level on phone (story-settings.md ->
+       Mobile expression): it sits below whichever pane shows, the tab-list
+       state included, so a dirty session collapsed to the list stays
+       saveable. Production renders the bar outside the two-pane layout;
+       the wireframe keeps one element and empties the pane in list state
+       instead, which lands it in the same place. */
+    body[data-md-state="list"] main.pane > *:not(.save-bar) { display: none; }
+    body[data-md-state="list"] .settings-layout { grid-template-rows: minmax(0, 1fr) auto; }
     body[data-md-state="detail"] aside.nav { display: none; }
 
     /* List-state nav rows: 44 px tap-target floor, sentence-case sans
@@ -558,7 +565,7 @@
         <div class="tab-section">
           <div class="tab-section-title">Authoring aids</div>
           <div style="font-size: 11px; color: var(--ink-muted); margin-bottom: 10px;">
-            Per-story opt-in for composer affordances. Always hidden in creative mode regardless.
+            Per-story toggle for composer affordances, on by default. Always hidden in creative mode regardless.
           </div>
         </div>
 
@@ -897,8 +904,9 @@
           <div><input class="input-text" value="600" style="width: 90px;"> <span style="font-size: 10px; color: var(--ink-faint);">tokens</span></div>
         </div>
 
-        <!-- KEYWORD RETRIEVAL — stories.settings.keywordRetrieval. Mode select always
-             visible; the three tuning fields disclose only under Inject. -->
+        <!-- KEYWORD RETRIEVAL — stories.settings.keywordRetrieval. Mode select and scan
+             depth always visible; the three tuning fields (budget share, cascade, max
+             depth) disclose only under Inject. -->
         <div class="tab-section">
           <div class="tab-section-title">Keyword retrieval <span style="font-size: 10px; color: var(--ink-faint); font-weight: 400;">&middot; what a keyword match does &middot; lore + entities only</span></div>
         </div>
@@ -914,14 +922,14 @@
             </div>
           </div>
         </div>
+        <div class="field-row">
+          <div class="field-label">scan depth</div>
+          <div><input class="input-text" value="1" style="width: 90px;"> <span style="font-size: 10px; color: var(--ink-faint);">trailing entries, plus the user action</span></div>
+        </div>
         <div id="kw-inject-fields" style="display: none;">
           <div class="field-row">
             <div class="field-label">budget share</div>
             <div><input class="input-text" value="0.5" style="width: 90px;"> <span style="font-size: 10px; color: var(--ink-faint);">of each per-type budget, max</span></div>
-          </div>
-          <div class="field-row">
-            <div class="field-label">scan depth</div>
-            <div><input class="input-text" value="1" style="width: 90px;"> <span style="font-size: 10px; color: var(--ink-faint);">trailing entries, plus the user action</span></div>
           </div>
           <div class="switch-row">
             <div class="switch-row-label">cascade <span style="font-size: 10px; color: var(--ink-faint);">&middot; rescan injected rows for further matches</span></div>

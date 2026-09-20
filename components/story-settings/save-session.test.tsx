@@ -3,17 +3,18 @@ import { act, cleanup, render } from '@testing-library/react'
 import { type ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
 
-import { StorySettingsStaleStoreError } from '@/lib/actions'
-import { STORY_SETTINGS_DEFAULTS, type StorySettings } from '@/lib/db'
+import { StorySettingsStaleStoreError, StorySettingsUnreadableError } from '@/lib/actions'
+import { STORY_SETTINGS_DEFAULTS, type StoryInfoPatch, type StorySettings } from '@/lib/db'
 
 import {
+  reportKeyCollision,
   StorySettingsSaveSessionProvider,
   useStorySettingsSaveSession,
   useStorySettingsSection,
   type SaveOutcome,
   type SaveSessionApi,
 } from './save-session'
-import { type SectionDirtyState } from './save-session-state'
+import { type FlaggedField, type SectionDirtyState } from './save-session-state'
 import { type StorySettingsTabId } from './tabs'
 
 // The publish loop has two independent guards: the effect's serialized dirty
@@ -51,8 +52,10 @@ type SectionFixture = {
   tab: StorySettingsTabId
   dirtyFields: readonly string[]
   getPatch: Mock<() => Partial<StorySettings>>
+  getColumnPatch?: Mock<() => StoryInfoPatch>
   reset: Mock<() => void>
   invalidReason?: string
+  flaggedFields?: readonly FlaggedField[]
 }
 
 function makeSection(
@@ -60,8 +63,16 @@ function makeSection(
   tab: StorySettingsTabId,
   dirtyFields: readonly string[],
   patch: Partial<StorySettings> = {},
+  columns?: StoryInfoPatch,
 ): SectionFixture {
-  return { id, tab, dirtyFields, getPatch: vi.fn(() => patch), reset: vi.fn() }
+  return {
+    id,
+    tab,
+    dirtyFields,
+    getPatch: vi.fn(() => patch),
+    ...(columns ? { getColumnPatch: vi.fn(() => columns) } : {}),
+    reset: vi.fn(),
+  }
 }
 
 function Section({ fixture }: { fixture: SectionFixture }) {
@@ -70,8 +81,10 @@ function Section({ fixture }: { fixture: SectionFixture }) {
     tab: fixture.tab,
     dirtyFields: fixture.dirtyFields,
     getPatch: fixture.getPatch,
+    getColumnPatch: fixture.getColumnPatch,
     reset: fixture.reset,
     invalidReason: fixture.invalidReason,
+    flaggedFields: fixture.flaggedFields,
   })
   return null
 }
@@ -86,6 +99,7 @@ type MountOptions = {
   onCommit?: Mock<() => Promise<unknown>>
   onSaved?: Mock<() => void>
   onSaveFailed?: Mock<(error: unknown) => void>
+  confirmFlagged?: boolean
 }
 
 function mountSession(options: MountOptions = {}) {
@@ -99,6 +113,7 @@ function mountSession(options: MountOptions = {}) {
       onCommit={onCommit}
       onSaved={onSaved}
       onSaveFailed={onSaveFailed}
+      confirmFlagged={options.confirmFlagged ?? false}
     >
       {children}
       <Capture held={held} />
@@ -160,9 +175,11 @@ describe('StorySettingsSaveSessionProvider — save', () => {
 
     expect(session.onCommit).toHaveBeenCalledTimes(1)
     expect(session.onCommit).toHaveBeenCalledWith({
-      suggestionsEnabled: true,
-      embedding_model_id: 'Xenova/all-MiniLM-L6-v2',
-      chapterTokenThreshold: 9000,
+      settings: {
+        suggestionsEnabled: true,
+        embedding_model_id: 'Xenova/all-MiniLM-L6-v2',
+        chapterTokenThreshold: 9000,
+      },
     })
   })
 
@@ -242,6 +259,35 @@ describe('StorySettingsSaveSessionProvider — save', () => {
     expect(session.onSaved).not.toHaveBeenCalled()
   })
 
+  // Also on disk, and the store is current. Reporting `rejected` tells the user their
+  // changes are "still here — try again", which every retry reproduces, and refuses a
+  // leave over a write that already landed.
+  it('treats an unreadable read-back as a landed write and settles a waiting leave', async () => {
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
+    const unreadable = new StorySettingsUnreadableError()
+    const session = mountSession({
+      children: sectionsOf(aids),
+      onCommit: vi.fn(() => Promise.reject(unreadable)),
+    })
+    const proceed = vi.fn()
+
+    act(() => session.api().requestLeave(proceed))
+    await act(async () => {
+      await expect(session.api().save()).resolves.toMatchObject({
+        status: 'committed',
+        stillDirty: false,
+        storeStale: false,
+      })
+    })
+
+    expect(session.onSaveFailed).toHaveBeenCalledWith(unreadable)
+    expect(proceed).toHaveBeenCalledTimes(1)
+    expect(session.api().pendingLeave).toBe(false)
+    expect(session.onSaved).not.toHaveBeenCalled()
+  })
+
   it('skips a clean section rather than trusting it to return an empty patch', async () => {
     const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
       suggestionsEnabled: true,
@@ -256,7 +302,9 @@ describe('StorySettingsSaveSessionProvider — save', () => {
     })
 
     expect(memory.getPatch).not.toHaveBeenCalled()
-    expect(session.onCommit).toHaveBeenCalledExactlyOnceWith({ suggestionsEnabled: true })
+    expect(session.onCommit).toHaveBeenCalledExactlyOnceWith({
+      settings: { suggestionsEnabled: true },
+    })
   })
 
   it('commits the newest getPatch and reset closures, not the ones from mount', async () => {
@@ -281,7 +329,7 @@ describe('StorySettingsSaveSessionProvider — save', () => {
       await session.api().save()
     })
 
-    expect(session.onCommit).toHaveBeenCalledExactlyOnceWith({ suggestionCount: 5 })
+    expect(session.onCommit).toHaveBeenCalledExactlyOnceWith({ settings: { suggestionCount: 5 } })
     expect(resets).toEqual([5])
   })
 
@@ -416,7 +464,9 @@ describe('StorySettingsSaveSessionProvider — save', () => {
       await inFlight
     })
 
-    expect(session.onCommit).toHaveBeenCalledExactlyOnceWith({ suggestionsEnabled: true })
+    expect(session.onCommit).toHaveBeenCalledExactlyOnceWith({
+      settings: { suggestionsEnabled: true },
+    })
     expect(aids.reset).toHaveBeenCalledTimes(1)
     // Neither committed nor reset: the edit landed after getPatch ran, so it
     // survives to the next save instead of being re-derived away.
@@ -462,7 +512,7 @@ describe('StorySettingsSaveSessionProvider — save', () => {
       await inFlight
     })
 
-    expect(session.onCommit).toHaveBeenCalledExactlyOnceWith({ suggestionCount: 3 })
+    expect(session.onCommit).toHaveBeenCalledExactlyOnceWith({ settings: { suggestionCount: 3 } })
     expect(reset).not.toHaveBeenCalled()
     // The session is not clean, so a leave waiting on this save must not run.
     expect(proceed).not.toHaveBeenCalled()
@@ -486,6 +536,26 @@ describe('StorySettingsSaveSessionProvider — save', () => {
     expect(session.onCommit).toHaveBeenCalledTimes(1)
     expect(outcome?.status).toBe('committed')
     expect(session.onSaveFailed).not.toHaveBeenCalled()
+  })
+
+  it('resolves as rejected even when onSaveFailed throws', async () => {
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
+    const session = mountSession({
+      children: sectionsOf(aids),
+      onCommit: vi.fn(() => Promise.reject(new Error('write failed'))),
+      onSaveFailed: vi.fn(() => {
+        throw new Error('toast blew up')
+      }),
+    })
+
+    let outcome: SaveOutcome | undefined
+    await act(async () => {
+      outcome = await session.api().save()
+    })
+
+    expect(outcome?.status).toBe('rejected')
   })
 
   it('resets the remaining sections when one section’s reset throws', async () => {
@@ -550,7 +620,7 @@ describe('StorySettingsSaveSessionProvider — discard', () => {
 describe('StorySettingsSaveSessionProvider — snapshot', () => {
   it('is clean with no registered sections', () => {
     const session = mountSession()
-    expect(session.api().snapshot).toEqual({ dirtyFields: [] })
+    expect(session.api().snapshot).toEqual({ dirtyFields: [], flaggedFields: [] })
   })
 
   it('is clean while every registered section is clean', () => {
@@ -558,7 +628,7 @@ describe('StorySettingsSaveSessionProvider — snapshot', () => {
     const memory = makeSection('embedding-status', 'memory', [])
     const session = mountSession({ children: sectionsOf(aids, memory) })
 
-    expect(session.api().snapshot).toEqual({ dirtyFields: [] })
+    expect(session.api().snapshot).toEqual({ dirtyFields: [], flaggedFields: [] })
   })
 
   it('aggregates dirty fields across sections in rail order, not mount order', () => {
@@ -568,6 +638,7 @@ describe('StorySettingsSaveSessionProvider — snapshot', () => {
 
     expect(session.api().snapshot).toEqual({
       dirtyFields: ['suggestions', 'suggestion count', 'embedder'],
+      flaggedFields: [],
     })
   })
 
@@ -593,6 +664,7 @@ describe('StorySettingsSaveSessionProvider — snapshot', () => {
 
     expect(session.api().snapshot).toEqual({
       dirtyFields: ['suggestions'],
+      flaggedFields: [],
     })
   })
 })
@@ -614,6 +686,7 @@ describe('StorySettingsSaveSessionProvider — unmount', () => {
 
     expect(session.api().snapshot).toEqual({
       dirtyFields: ['suggestions'],
+      flaggedFields: [],
     })
 
     await act(async () => {
@@ -622,7 +695,9 @@ describe('StorySettingsSaveSessionProvider — unmount', () => {
 
     expect(memory.getPatch).not.toHaveBeenCalled()
     expect(memory.reset).not.toHaveBeenCalled()
-    expect(session.onCommit).toHaveBeenCalledExactlyOnceWith({ suggestionsEnabled: true })
+    expect(session.onCommit).toHaveBeenCalledExactlyOnceWith({
+      settings: { suggestionsEnabled: true },
+    })
   })
 
   it('refuses two live sections registering the same id', () => {
@@ -792,7 +867,9 @@ describe('StorySettingsSaveSessionProvider — leave guard', () => {
       session.api().resolveLeave('save')
     })
 
-    expect(session.onCommit).toHaveBeenCalledExactlyOnceWith({ suggestionsEnabled: true })
+    expect(session.onCommit).toHaveBeenCalledExactlyOnceWith({
+      settings: { suggestionsEnabled: true },
+    })
     expect(proceed).toHaveBeenCalledTimes(1)
     expect(session.api().pendingLeave).toBe(false)
   })
@@ -1007,7 +1084,9 @@ describe('StorySettingsSaveSessionProvider — leave guard', () => {
       for (const release of releases) release()
     })
 
-    expect(session.onCommit).toHaveBeenCalledExactlyOnceWith({ suggestionsEnabled: true })
+    expect(session.onCommit).toHaveBeenCalledExactlyOnceWith({
+      settings: { suggestionsEnabled: true },
+    })
   })
 })
 
@@ -1119,5 +1198,464 @@ describe('StorySettingsSaveSessionProvider — validity', () => {
     })
 
     expect(session.onCommit).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('StorySettingsSaveSessionProvider — column patch', () => {
+  it('merges column patches beside the settings patch in one commit', async () => {
+    const about = makeSection('about', 'about', ['title'], {}, { title: 'Renamed' })
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
+    const session = mountSession({ children: sectionsOf(about, aids) })
+
+    await act(async () => {
+      await session.api().save()
+    })
+
+    expect(session.onCommit).toHaveBeenCalledExactlyOnceWith({
+      settings: { suggestionsEnabled: true },
+      columns: { title: 'Renamed' },
+    })
+    expect(about.reset).toHaveBeenCalledTimes(1)
+  })
+
+  it('omits the settings key when only columns changed', async () => {
+    const about = makeSection('about', 'about', ['title'], {}, { title: 'Renamed' })
+    const session = mountSession({ children: sectionsOf(about) })
+
+    await act(async () => {
+      await session.api().save()
+    })
+
+    expect(session.onCommit).toHaveBeenCalledExactlyOnceWith({ columns: { title: 'Renamed' } })
+  })
+
+  it('refuses two sections patching the same column key', async () => {
+    const a = makeSection('about', 'about', ['title'], {}, { title: 'A' })
+    const b = makeSection('other', 'advanced', ['title'], {}, { title: 'B' })
+    const session = mountSession({ children: sectionsOf(a, b) })
+
+    let outcome: SaveOutcome | undefined
+    await act(async () => {
+      outcome = await session.api().save()
+    })
+
+    expect(outcome?.status).toBe('rejected')
+    expect(session.onSaveFailed.mock.calls[0]?.[0]).toMatchObject({
+      message: expect.stringContaining(COLLISION),
+    })
+    expect(session.onCommit).not.toHaveBeenCalled()
+  })
+
+  it('leaves a section whose column draft moved during its own commit dirty', async () => {
+    const releases: (() => void)[] = []
+    const draft = { current: 'A' }
+    const reset = vi.fn()
+    function AboutSection() {
+      useStorySettingsSection({
+        id: 'about',
+        tab: 'about',
+        dirtyFields: ['title'],
+        getPatch: () => ({}),
+        getColumnPatch: () => ({ title: draft.current }),
+        reset,
+      })
+      return null
+    }
+    const session = mountSession({
+      children: <AboutSection />,
+      onCommit: vi.fn(() => new Promise<void>((resolve) => releases.push(resolve))),
+    })
+
+    let inFlight: Promise<SaveOutcome> | undefined
+    await act(async () => {
+      inFlight = session.api().save()
+    })
+    draft.current = 'B'
+    await act(async () => {
+      releases.forEach((release) => release())
+      await inFlight
+    })
+
+    expect(session.onCommit).toHaveBeenCalledExactlyOnceWith({ columns: { title: 'A' } })
+    expect(reset).not.toHaveBeenCalled()
+  })
+})
+
+describe('StorySettingsSaveSessionProvider — definitional confirmation', () => {
+  const wrap: FlaggedField = {
+    key: 'composerWrapPov',
+    label: 'wrap point of view',
+    consequence: 'c',
+  }
+
+  it('asks for confirmation instead of committing when a flagged field is dirty', async () => {
+    const aids = makeSection('authoring-aids', 'generation', ['wrap point of view'], {
+      composerWrapPov: 'first',
+    })
+    aids.flaggedFields = [wrap]
+    const session = mountSession({ children: sectionsOf(aids), confirmFlagged: true })
+
+    let outcome: SaveOutcome | undefined
+    await act(async () => {
+      outcome = await session.api().save()
+    })
+
+    expect(outcome).toEqual({ status: 'confirm' })
+    expect(session.api().pendingConfirmation).toBe(true)
+    expect(session.onCommit).not.toHaveBeenCalled()
+  })
+
+  it('commits once the confirmation is accepted, and settles a waiting leave', async () => {
+    const aids = makeSection('authoring-aids', 'generation', ['wrap point of view'], {
+      composerWrapPov: 'first',
+    })
+    aids.flaggedFields = [wrap]
+    const session = mountSession({ children: sectionsOf(aids), confirmFlagged: true })
+    const proceed = vi.fn()
+
+    act(() => session.api().requestLeave(proceed))
+    act(() => session.api().resolveLeave('save'))
+    await act(async () => {})
+    expect(session.api().pendingConfirmation).toBe(true)
+    expect(proceed).not.toHaveBeenCalled()
+
+    await act(async () => {
+      session.api().resolveConfirmation('save')
+    })
+
+    expect(session.onCommit).toHaveBeenCalledExactlyOnceWith({
+      settings: { composerWrapPov: 'first' },
+    })
+    expect(session.api().pendingConfirmation).toBe(false)
+    expect(proceed).toHaveBeenCalledTimes(1)
+  })
+
+  it('cancelling the confirmation returns to the editor and drops a queued leave', async () => {
+    const aids = makeSection('authoring-aids', 'generation', ['wrap point of view'], {
+      composerWrapPov: 'first',
+    })
+    aids.flaggedFields = [wrap]
+    const session = mountSession({ children: sectionsOf(aids), confirmFlagged: true })
+    const proceed = vi.fn()
+
+    act(() => session.api().requestLeave(proceed))
+    act(() => session.api().resolveLeave('save'))
+    await act(async () => {})
+    act(() => session.api().resolveConfirmation('cancel'))
+
+    expect(session.api().pendingConfirmation).toBe(false)
+    expect(session.api().pendingLeave).toBe(false)
+    expect(proceed).not.toHaveBeenCalled()
+    expect(session.onCommit).not.toHaveBeenCalled()
+    expect(aids.reset).not.toHaveBeenCalled()
+  })
+
+  it('does not ask when the story has no turns yet', async () => {
+    const aids = makeSection('authoring-aids', 'generation', ['wrap point of view'], {
+      composerWrapPov: 'first',
+    })
+    aids.flaggedFields = [wrap]
+    const session = mountSession({ children: sectionsOf(aids), confirmFlagged: false })
+
+    await act(async () => {
+      await session.api().save()
+    })
+
+    expect(session.onCommit).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads confirmFlagged at save time, not at mount', async () => {
+    const aids = makeSection('authoring-aids', 'generation', ['wrap point of view'], {
+      composerWrapPov: 'first',
+    })
+    aids.flaggedFields = [wrap]
+    const options: MountOptions = { children: sectionsOf(aids), confirmFlagged: false }
+    const session = mountSession(options)
+
+    options.confirmFlagged = true
+    act(() => session.rerenderWith(sectionsOf(aids)))
+
+    let outcome: SaveOutcome | undefined
+    await act(async () => {
+      outcome = await session.api().save()
+    })
+
+    expect(outcome).toEqual({ status: 'confirm' })
+    expect(session.onCommit).not.toHaveBeenCalled()
+  })
+
+  it('does not ask when the dirty fields are not flagged', async () => {
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
+    const session = mountSession({ children: sectionsOf(aids), confirmFlagged: true })
+
+    await act(async () => {
+      await session.api().save()
+    })
+
+    expect(session.onCommit).toHaveBeenCalledTimes(1)
+  })
+
+  it('holds the confirmation through its commit, then lets a queued leave through once', async () => {
+    const releases: (() => void)[] = []
+    const aids = makeSection('authoring-aids', 'generation', ['wrap point of view'], {
+      composerWrapPov: 'first',
+    })
+    aids.flaggedFields = [wrap]
+    const session = mountSession({
+      children: sectionsOf(aids),
+      confirmFlagged: true,
+      onCommit: vi.fn(() => new Promise<void>((resolve) => releases.push(resolve))),
+    })
+    const proceed = vi.fn()
+
+    act(() => session.api().requestLeave(proceed))
+    act(() => session.api().resolveLeave('save'))
+    await act(async () => {
+      session.api().resolveConfirmation('save')
+    })
+
+    expect(session.api().saving).toBe(true)
+    expect(session.api().pendingConfirmation).toBe(true)
+    expect(proceed).not.toHaveBeenCalled()
+
+    await act(async () => {
+      releases.forEach((release) => release())
+    })
+
+    expect(session.api().saving).toBe(false)
+    expect(session.api().pendingConfirmation).toBe(false)
+    expect(session.api().pendingLeave).toBe(false)
+    expect(proceed).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses a cancel that arrives while the confirmed commit is in flight', async () => {
+    const releases: (() => void)[] = []
+    const aids = makeSection('authoring-aids', 'generation', ['wrap point of view'], {
+      composerWrapPov: 'first',
+    })
+    aids.flaggedFields = [wrap]
+    const session = mountSession({
+      children: sectionsOf(aids),
+      confirmFlagged: true,
+      onCommit: vi.fn(() => new Promise<void>((resolve) => releases.push(resolve))),
+    })
+    const proceed = vi.fn()
+
+    act(() => session.api().requestLeave(proceed))
+    act(() => session.api().resolveLeave('save'))
+    await act(async () => {
+      session.api().resolveConfirmation('save')
+    })
+    act(() => session.api().resolveConfirmation('cancel'))
+
+    expect(session.api().pendingConfirmation).toBe(true)
+    expect(session.api().pendingLeave).toBe(true)
+
+    await act(async () => {
+      releases.forEach((release) => release())
+    })
+
+    expect(session.onCommit).toHaveBeenCalledTimes(1)
+    expect(proceed).toHaveBeenCalledTimes(1)
+  })
+
+  it.each<[string, Partial<SectionFixture>]>([
+    ['nothing to write', { dirtyFields: [], flaggedFields: undefined }],
+    ['a draft it cannot write', { invalidReason: 'dup' }],
+  ])('closes the confirmation when the accepted save finds %s', async (_situation, change) => {
+    const aids = makeSection('authoring-aids', 'generation', ['wrap point of view'], {
+      composerWrapPov: 'first',
+    })
+    aids.flaggedFields = [wrap]
+    const session = mountSession({ children: sectionsOf(aids), confirmFlagged: true })
+    await act(async () => {
+      await session.api().save()
+    })
+    expect(session.api().pendingConfirmation).toBe(true)
+
+    act(() => session.rerenderWith(sectionsOf({ ...aids, ...change })))
+    await act(async () => {
+      session.api().resolveConfirmation('save')
+    })
+
+    expect(session.api().pendingConfirmation).toBe(false)
+    expect(session.onCommit).not.toHaveBeenCalled()
+  })
+
+  it('drops a pending confirmation when the drafts are discarded', async () => {
+    const aids = makeSection('authoring-aids', 'generation', ['wrap point of view'], {
+      composerWrapPov: 'first',
+    })
+    aids.flaggedFields = [wrap]
+    const session = mountSession({ children: sectionsOf(aids), confirmFlagged: true })
+    await act(async () => {
+      await session.api().save()
+    })
+
+    act(() => session.api().discard())
+
+    expect(aids.reset).toHaveBeenCalledTimes(1)
+    expect(session.api().pendingConfirmation).toBe(false)
+  })
+
+  it('ignores an accept when no confirmation is pending', async () => {
+    const aids = makeSection('authoring-aids', 'generation', ['wrap point of view'], {
+      composerWrapPov: 'first',
+    })
+    aids.flaggedFields = [wrap]
+    const session = mountSession({ children: sectionsOf(aids), confirmFlagged: true })
+
+    await act(async () => {
+      session.api().resolveConfirmation('save')
+    })
+
+    expect(session.onCommit).not.toHaveBeenCalled()
+  })
+
+  it('ignores a cancel when no confirmation is pending, keeping a queued leave', () => {
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
+    const session = mountSession({ children: sectionsOf(aids), confirmFlagged: true })
+    const proceed = vi.fn()
+
+    act(() => session.api().requestLeave(proceed))
+    act(() => session.api().resolveConfirmation('cancel'))
+
+    expect(session.api().pendingLeave).toBe(true)
+  })
+
+  it('republishes a section whose flagged fields change under the same dirty labels', async () => {
+    const aids = makeSection('authoring-aids', 'generation', ['wrap point of view'], {
+      composerWrapPov: 'first',
+    })
+    const session = mountSession({ children: sectionsOf(aids), confirmFlagged: true })
+    act(() => session.rerenderWith(sectionsOf({ ...aids, flaggedFields: [wrap] })))
+
+    let outcome: SaveOutcome | undefined
+    await act(async () => {
+      outcome = await session.api().save()
+    })
+
+    expect(outcome).toEqual({ status: 'confirm' })
+    expect(session.onCommit).not.toHaveBeenCalled()
+  })
+
+  it('clears the confirmation when onSaveFailed throws during the confirmed commit', async () => {
+    const aids = makeSection('authoring-aids', 'generation', ['wrap point of view'], {
+      composerWrapPov: 'first',
+    })
+    aids.flaggedFields = [wrap]
+    const session = mountSession({
+      children: sectionsOf(aids),
+      confirmFlagged: true,
+      onCommit: vi.fn(() => Promise.reject(new Error('write failed'))),
+      onSaveFailed: vi.fn(() => {
+        throw new Error('toast blew up')
+      }),
+    })
+    await act(async () => {
+      await session.api().save()
+    })
+
+    await act(async () => {
+      session.api().resolveConfirmation('save')
+    })
+
+    expect(session.onSaveFailed).toHaveBeenCalledTimes(1)
+    expect(session.api().pendingConfirmation).toBe(false)
+    expect(session.api().saving).toBe(false)
+  })
+
+  it('refuses a discard that arrives while the confirmed commit is in flight', async () => {
+    const releases: (() => void)[] = []
+    const aids = makeSection('authoring-aids', 'generation', ['wrap point of view'], {
+      composerWrapPov: 'first',
+    })
+    aids.flaggedFields = [wrap]
+    const session = mountSession({
+      children: sectionsOf(aids),
+      confirmFlagged: true,
+      onCommit: vi.fn(() => new Promise<void>((resolve) => releases.push(resolve))),
+    })
+    await act(async () => {
+      await session.api().save()
+    })
+    await act(async () => {
+      session.api().resolveConfirmation('save')
+    })
+
+    act(() => session.api().discard())
+
+    expect(aids.reset).not.toHaveBeenCalled()
+    expect(session.api().pendingConfirmation).toBe(true)
+
+    await act(async () => {
+      releases.forEach((release) => release())
+    })
+
+    expect(session.onCommit).toHaveBeenCalledTimes(1)
+    expect(session.api().pendingConfirmation).toBe(false)
+  })
+
+  it('keeps a parked save parked when confirmFlagged drops before the next save', async () => {
+    const aids = makeSection('authoring-aids', 'generation', ['wrap point of view'], {
+      composerWrapPov: 'first',
+    })
+    aids.flaggedFields = [wrap]
+    const options: MountOptions = { children: sectionsOf(aids), confirmFlagged: true }
+    const session = mountSession(options)
+    await act(async () => {
+      await session.api().save()
+    })
+
+    options.confirmFlagged = false
+    act(() => session.rerenderWith(sectionsOf(aids)))
+    let outcome: SaveOutcome | undefined
+    await act(async () => {
+      outcome = await session.api().save()
+    })
+
+    expect(outcome).toEqual({ status: 'confirm' })
+    expect(session.onCommit).not.toHaveBeenCalled()
+    expect(session.api().pendingConfirmation).toBe(true)
+  })
+})
+
+// `__DEV__` is false in production and in both E2E launch modes, so the logging
+// branch is the one users actually run — and the dev throw above is the only arm
+// the suite reached. The shallow merge here is deliberate (the screen doc assigns
+// each top-level key to one tab, and `stories` carries no delta to undo a clobber),
+// so this pins that choice rather than arguing with it.
+describe('reportKeyCollision in production', () => {
+  it('records the first owner of every key without complaining', () => {
+    const owners = new Map<string, string>()
+
+    expect(() =>
+      reportKeyCollision(owners, 'authoring-aids', { suggestionsEnabled: true }, false),
+    ).not.toThrow()
+
+    expect(owners.get('suggestionsEnabled')).toBe('authoring-aids')
+  })
+
+  it('merges rather than refusing when a second section claims the same key', () => {
+    const owners = new Map<string, string>([['translation', 'composer']])
+
+    expect(() => reportKeyCollision(owners, 'languages', { translation: {} }, false)).not.toThrow()
+
+    // The first owner stands, so a third section collides against it too.
+    expect(owners.get('translation')).toBe('composer')
+  })
+
+  it('still throws under dev checks, which is what refuses the save', () => {
+    const owners = new Map<string, string>([['translation', 'composer']])
+
+    expect(() => reportKeyCollision(owners, 'languages', { translation: {} }, true)).toThrow(
+      COLLISION,
+    )
   })
 })

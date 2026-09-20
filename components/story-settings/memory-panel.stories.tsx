@@ -1,7 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
-import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
+import { expect, fn, mocked, screen, userEvent, waitFor, within } from 'storybook/test'
 
+import { Toaster } from '@/components/ui/toast'
+import type { InstalledModelInfo } from '@/hooks/use-installed-models'
+import {
+  StorySettingsStaleStoreError,
+  type DeclineEmbeddingUpgradeFn,
+  type UpdateStorySettingsResult,
+} from '@/lib/actions'
 import {
   APP_SETTINGS_DEFAULTS,
   STORY_SETTINGS_DEFAULTS,
@@ -18,12 +25,15 @@ import {
   isUserEditBlocked,
   openEmbedderSwapDialog,
 } from '@/lib/stores'
+import { toastStore, type ToastItem } from '@/lib/toast'
 
 import { MemoryPanel, type MemoryPanelProps } from './memory-panel'
 
 const STORY_ID = 'story-1'
 const MINILM = 'Xenova/all-MiniLM-L6-v2'
 const GEMMA = 'onnx-community/embeddinggemma-300m-ONNX'
+const GEMMA_LABEL = 'EmbeddingGemma 300m (multilingual)'
+const APP_DEFAULT = 'text-embedding-3-small'
 
 function buildSettings(overrides: Partial<StorySettings> = {}): StorySettings {
   return storySettingsSchema.parse({
@@ -58,26 +68,75 @@ function buildSettings(overrides: Partial<StorySettings> = {}): StorySettings {
   })
 }
 
-const listInstalled = async () => [
+const INSTALLED: InstalledModelInfo[] = [
   { id: MINILM, sizeBytes: 90_000_000 },
   { id: GEMMA, sizeBytes: 300_000_000 },
 ]
+
+const listInstalled = async () => INSTALLED
+
+// Held open until the play releases it, so the dialog opens before any candidate exists.
+let releaseInstalled: (() => void) | null = null
+const lateListInstalled = () =>
+  new Promise<InstalledModelInfo[]>((resolve) => {
+    releaseInstalled = () => resolve(INSTALLED)
+  })
+
+const failingListInstalled = async (): Promise<InstalledModelInfo[]> => {
+  throw new Error('listing failed')
+}
+
+async function seedEmbeddingDefault(
+  embeddingModelId: string | null,
+  embeddingBackend: 'local' | 'provider' = 'provider',
+) {
+  const result = await hydrateAppSettings(async () => ({
+    ...APP_SETTINGS_DEFAULTS,
+    providers: [
+      {
+        id: 'prov_local',
+        type: 'openai-compatible',
+        displayName: 'Local',
+        apiKey: '',
+        endpoint: 'http://localhost:1234/v1',
+        favoriteModelIds: [],
+        // A cached dim short-circuits ensureProviderEmbeddingDim, which would otherwise probe
+        // this endpoint for real whenever a provider row is selected.
+        cachedModels:
+          embeddingModelId == null
+            ? []
+            : [{ id: embeddingModelId, capabilities: { embeddingDim: 384 } }],
+      },
+    ],
+    embeddingProviderId: 'prov_local',
+    embeddingModelId,
+    defaultStorySettings: {
+      ...APP_SETTINGS_DEFAULTS.defaultStorySettings,
+      embeddingBackend,
+    },
+  }))
+  if (result.status !== 'ok') throw new Error(`App settings seed rejected: ${result.error}`)
+}
 
 function resetStores() {
   embedderSwapStore.__reset()
   embeddingStatusStore.__reset()
   appSettingsStore.__reset()
   generationStore.__reset()
+  toastStore.__reset()
 }
 
 function Harness(props: MemoryPanelProps) {
   const disabled = generationStore.useGeneration((state) => isUserEditBlocked(state.txState))
   return (
-    <MemoryPanel
-      {...props}
-      disabled={disabled}
-      disabledReason={disabled ? t('generationGate.inFlight') : undefined}
-    />
+    <>
+      <MemoryPanel
+        {...props}
+        disabled={disabled}
+        disabledReason={disabled ? t('generationGate.inFlight') : undefined}
+      />
+      <Toaster />
+    </>
   )
 }
 
@@ -399,21 +458,7 @@ export const SharedModelIdOffersBothSources: Story = {
   beforeEach: async () => {
     resetStores()
     embeddingStatusStore.setStatus(STORY_ID, 0)
-    await hydrateAppSettings(async () => ({
-      ...APP_SETTINGS_DEFAULTS,
-      providers: [
-        {
-          id: 'prov_local',
-          type: 'openai-compatible',
-          displayName: 'Local',
-          apiKey: '',
-          endpoint: 'http://localhost:1234/v1',
-          favoriteModelIds: [],
-        },
-      ],
-      embeddingProviderId: 'prov_local',
-      embeddingModelId: MINILM,
-    }))
+    await seedEmbeddingDefault(MINILM)
     openEmbedderSwapDialog(STORY_ID)
   },
   play: async () => {
@@ -447,5 +492,277 @@ export const TargetPickerVisible: Story = {
     await userEvent.click(gemmaRow)
     await userEvent.click(screen.getByRole('button', { name: t('storySettings:swap.next') }))
     await waitFor(() => expect(screen.getByTestId('swap-reindex')).toBeInTheDocument())
+  },
+}
+
+export const PreseatedDialogOpensOnOptions: Story = {
+  args: { storyId: STORY_ID, settings: buildSettings(), listInstalled },
+  beforeEach: () => {
+    resetStores()
+    embeddingStatusStore.setStatus(STORY_ID, 0)
+    openEmbedderSwapDialog(STORY_ID, GEMMA)
+  },
+  play: async () => {
+    const dialog = await screen.findByRole('alertdialog')
+    await waitFor(() =>
+      expect(dialog).toHaveTextContent(
+        t('storySettings:swap.optionsTitle', { model: GEMMA_LABEL }),
+      ),
+    )
+    expect(screen.getByTestId('swap-keep')).toBeInTheDocument()
+  },
+}
+
+export const PreseatWaitsForLateCandidates: Story = {
+  args: { storyId: STORY_ID, settings: buildSettings(), listInstalled: lateListInstalled },
+  beforeEach: () => {
+    resetStores()
+    releaseInstalled = null
+    embeddingStatusStore.setStatus(STORY_ID, 0)
+    openEmbedderSwapDialog(STORY_ID, GEMMA)
+  },
+  play: async () => {
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog).toHaveTextContent(t('storySettings:swap.title'))
+    expect(screen.queryByTestId(`swap-candidate-local:${GEMMA}`)).not.toBeInTheDocument()
+
+    await waitFor(() => expect(releaseInstalled).not.toBeNull())
+    releaseInstalled?.()
+
+    await waitFor(() => expect(screen.getByTestId('swap-keep')).toBeInTheDocument())
+    expect(screen.getByRole('alertdialog')).toHaveTextContent(
+      t('storySettings:swap.optionsTitle', { model: GEMMA_LABEL }),
+    )
+  },
+}
+
+export const PreseatBackSurvivesCandidateRefresh: Story = {
+  args: { storyId: STORY_ID, settings: buildSettings(), listInstalled },
+  beforeEach: () => {
+    resetStores()
+    embeddingStatusStore.setStatus(STORY_ID, 0)
+    openEmbedderSwapDialog(STORY_ID, GEMMA)
+  },
+  play: async () => {
+    await screen.findByTestId('swap-keep')
+    await userEvent.click(screen.getByRole('button', { name: t('storySettings:swap.back') }))
+    expect(await screen.findByTestId(`swap-candidate-local:${GEMMA}`)).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+
+    // A fresh candidates array re-runs the pre-seat effect; only its latch stops a re-seat.
+    await seedEmbeddingDefault(APP_DEFAULT)
+    // The act-wrapped click drains any pending re-seat before the DOM is read.
+    const providerRow = await screen.findByTestId(
+      `swap-candidate-provider:prov_local:${APP_DEFAULT}`,
+    )
+    await userEvent.click(providerRow)
+    expect(providerRow).toHaveAttribute('aria-checked', 'true')
+    expect(screen.queryByTestId('swap-keep')).not.toBeInTheDocument()
+  },
+}
+
+export const PreseatPrefersTheAppDefaultsOwnCopy: Story = {
+  // MiniLM is installed locally and is also the provider default; with the story on Gemma
+  // both copies are eligible, and only the app default's backend tells them apart.
+  args: {
+    storyId: STORY_ID,
+    settings: buildSettings({ embedding_model_id: GEMMA }),
+    listInstalled,
+  },
+  beforeEach: async () => {
+    resetStores()
+    embeddingStatusStore.setStatus(STORY_ID, 0)
+    await seedEmbeddingDefault(MINILM)
+    openEmbedderSwapDialog(STORY_ID, MINILM)
+  },
+  play: async () => {
+    await screen.findByTestId('swap-keep')
+    await userEvent.click(screen.getByRole('button', { name: t('storySettings:swap.back') }))
+    expect(
+      await screen.findByTestId(`swap-candidate-provider:prov_local:${MINILM}`),
+    ).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByTestId(`swap-candidate-local:${MINILM}`)).toHaveAttribute(
+      'aria-checked',
+      'false',
+    )
+  },
+}
+
+export const PreseatPrefersALocalDefaultOverTheProviderCopy: Story = {
+  // The provider row exists before the installed list lands; seating on it then would
+  // latch the wrong copy of a local default.
+  args: {
+    storyId: STORY_ID,
+    settings: buildSettings({ embedding_model_id: GEMMA }),
+    listInstalled,
+  },
+  beforeEach: async () => {
+    resetStores()
+    embeddingStatusStore.setStatus(STORY_ID, 0)
+    await seedEmbeddingDefault(MINILM, 'local')
+    openEmbedderSwapDialog(STORY_ID, MINILM)
+  },
+  play: async () => {
+    await screen.findByTestId('swap-keep')
+    await userEvent.click(screen.getByRole('button', { name: t('storySettings:swap.back') }))
+    expect(await screen.findByTestId(`swap-candidate-local:${MINILM}`)).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+    expect(screen.getByTestId(`swap-candidate-provider:prov_local:${MINILM}`)).toHaveAttribute(
+      'aria-checked',
+      'false',
+    )
+  },
+}
+
+export const PreseatNeverSeatsTheProviderCopyOfALocalDefault: Story = {
+  // The listing fails, so the local default's own row never lands; the provider copy shares
+  // its id and label, and seating on it would re-index the story off-device.
+  args: {
+    storyId: STORY_ID,
+    settings: buildSettings({ embedding_model_id: GEMMA }),
+    listInstalled: failingListInstalled,
+  },
+  beforeEach: async () => {
+    resetStores()
+    embeddingStatusStore.setStatus(STORY_ID, 0)
+    await seedEmbeddingDefault(MINILM, 'local')
+    openEmbedderSwapDialog(STORY_ID, MINILM)
+  },
+  play: async () => {
+    // A seat always selects a row and leaves the pick stage; neither happened.
+    const providerRow = await screen.findByTestId(`swap-candidate-provider:prov_local:${MINILM}`)
+    expect(providerRow).toHaveAttribute('aria-checked', 'false')
+    expect(screen.queryByTestId('swap-reindex')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: t('storySettings:swap.next') })).toBeDisabled()
+  },
+}
+
+const declineOk = () =>
+  fn(async (): Promise<UpdateStorySettingsResult> => ({ status: 'ok', settings: buildSettings() }))
+
+function keepStory(
+  declineUpgrade: DeclineEmbeddingUpgradeFn,
+  appDefault: string | null,
+  settings: StorySettings = buildSettings(),
+): Pick<Story, 'args' | 'beforeEach'> {
+  return {
+    args: { storyId: STORY_ID, settings, listInstalled, declineUpgrade },
+    beforeEach: async () => {
+      resetStores()
+      embeddingStatusStore.setStatus(STORY_ID, 0)
+      await seedEmbeddingDefault(appDefault)
+    },
+  }
+}
+
+function declineSpy(declineUpgrade: DeclineEmbeddingUpgradeFn | undefined) {
+  if (declineUpgrade == null) throw new Error('Keep stories inject declineUpgrade')
+  return mocked(declineUpgrade)
+}
+
+// subscribe hands the listener the current queue synchronously.
+function currentToasts(): readonly ToastItem[] {
+  let items: readonly ToastItem[] = []
+  toastStore.subscribe((next) => {
+    items = next
+  })()
+  return items
+}
+
+// GEMMA is neither the story's model nor the app default, so the recorded value tells them apart.
+async function keepAfterPickingGemma() {
+  await userEvent.click(
+    await screen.findByRole('button', { name: t('storySettings:memory.switchEmbedder') }),
+  )
+  await userEvent.click(await screen.findByTestId(`swap-candidate-local:${GEMMA}`))
+  await userEvent.click(screen.getByRole('button', { name: t('storySettings:swap.next') }))
+  await userEvent.click(await screen.findByTestId('swap-keep'))
+  await waitFor(() => expect(screen.queryByTestId('swap-keep')).not.toBeInTheDocument())
+}
+
+export const KeepDeclinesTheAppDefault: Story = {
+  ...keepStory(declineOk(), APP_DEFAULT),
+  play: async ({ args }) => {
+    await keepAfterPickingGemma()
+    const decline = declineSpy(args.declineUpgrade)
+    expect(decline).toHaveBeenCalledTimes(1)
+    expect(decline).toHaveBeenCalledWith(STORY_ID, APP_DEFAULT)
+    // The panel's `.then` was attached first, so it has run once this settles.
+    await decline.mock.results[0]?.value
+    expect(currentToasts()).toEqual([])
+  },
+}
+
+const keepWritesNothing: Story['play'] = async ({ args }) => {
+  // The dialog closing proves Keep ran; with no default there is nothing to decline.
+  await keepAfterPickingGemma()
+  expect(args.declineUpgrade).not.toHaveBeenCalled()
+}
+
+export const KeepWithNoAppDefaultWritesNothing: Story = {
+  ...keepStory(declineOk(), null),
+  play: keepWritesNothing,
+}
+
+export const KeepWithBlankAppDefaultWritesNothing: Story = {
+  ...keepStory(declineOk(), '   '),
+  play: keepWritesNothing,
+}
+
+export const KeepWithTheAppDefaultAlreadyDeclinedWritesNothing: Story = {
+  ...keepStory(
+    declineOk(),
+    APP_DEFAULT,
+    buildSettings({ embedding_upgrade_declined: APP_DEFAULT }),
+  ),
+  play: keepWritesNothing,
+}
+
+export const KeepRejectedShowsToast: Story = {
+  ...keepStory(
+    fn(
+      async (): Promise<UpdateStorySettingsResult> => ({
+        status: 'rejected',
+        reason: 'generation in flight',
+      }),
+    ),
+    APP_DEFAULT,
+  ),
+  play: async ({ args }) => {
+    await keepAfterPickingGemma()
+    expect(args.declineUpgrade).toHaveBeenCalledWith(STORY_ID, APP_DEFAULT)
+    expect(await screen.findByText(t('storySettings:upgrade.keepFailed'))).toBeInTheDocument()
+  },
+}
+
+export const KeepFailureReportsEngineError: Story = {
+  ...keepStory(
+    fn(async (): Promise<UpdateStorySettingsResult> => {
+      throw new Error('database unavailable')
+    }),
+    APP_DEFAULT,
+  ),
+  play: async () => {
+    await keepAfterPickingGemma()
+    expect(await screen.findByText(t('storySettings:memory.actionFailed'))).toBeInTheDocument()
+  },
+}
+
+export const KeepStaleStoreIsNotAFailure: Story = {
+  // The decline landed and only the store re-read failed.
+  ...keepStory(
+    fn(async (): Promise<UpdateStorySettingsResult> => {
+      throw new StorySettingsStaleStoreError()
+    }),
+    APP_DEFAULT,
+  ),
+  play: async () => {
+    await keepAfterPickingGemma()
+    expect(await screen.findByText(t('storySettings:save.stale'))).toBeInTheDocument()
+    expect(screen.queryByText(t('storySettings:memory.actionFailed'))).not.toBeInTheDocument()
   },
 }

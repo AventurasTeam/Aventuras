@@ -86,7 +86,7 @@ a column patch beside the settings patch.
   sentinel renders.
 - [`patterns/provider-model-picker.md → API`](../../../../ui/patterns/provider-model-picker.md#api).
 - [`story-list.md → Story card`](../../../../ui/screens/story-list/story-list.md#story-card--text-first)
-  — the `Edit info` entry and its one-shot Return.
+  — the `Edit info` entry and its stack-aware Return.
 - [`data-model.md → Story settings shape`](../../../../data-model.md#story-settings-shape)
   and [`Story identity fields`](../../../../data-model.md#story-identity-fields).
 - [Slice 3.11 → Implementation notes](../../03-memory-floor/slices/11-story-settings-shell.md#implementation-notes),
@@ -108,17 +108,22 @@ a column patch beside the settings patch.
   a section joining the save session owning `models`; the
   `story-settings.md → Agent overrides` line naming `wizard-assist`
   corrected in this PR.
+- **Provider-qualified overrides:** `settings.models[target]` becomes
+  `{ providerId, modelId }` (schema, migration `0014` adopting the
+  current default provider for stored bare ids, `resolveModel`
+  resolving on the override's own provider, `defaultProviderId` dropped
+  from the resolver config); canon amended in `data-model.md`,
+  `story-settings.md` and `architecture.md` in this PR.
 - **About tab:** `title`, `description`, `tags` (`TagInput`), accent
   color (`ColorPicker`, `(none)` = mode-derived, stored as null),
   library status segment (`active` / `archived`), favorite `SwitchRow`
-  with star; cover **deferred** (asset gallery); a new
-  `updateStoryInfo` arm for the `stories` columns beside the M2.4
-  setters; the section joins the save session and the provider's
-  commit gains an optional **column patch** written in the same
-  transaction as the settings patch.
+  with star; cover **deferred** (asset gallery); a new column arm for
+  the `stories` fields beside the M2.4 setters; the section joins the
+  save session and the provider's commit gains an optional **column
+  patch** written in the same transaction as the settings patch.
 - **`Edit info` routing:** the story card's `onEditInfo` boots the
-  story and lands on About; the first `←` returns to the library via
-  the navigation store's one-shot target.
+  story and lands on About, pushed over the library, so the first `←`
+  is an ordinary stack pop back to it.
 - **Authoring aids completion:** `composerModesEnabled` `SwitchRow`
   (adventure-only — disabled with a hint in creative mode) and
   `composerWrapPov` segment (`1st` / `3rd`) added to the M3.7b section;
@@ -139,14 +144,16 @@ a column patch beside the settings patch.
   `cascade` and `cascadeMaxDepth` disclosed only under `Inject`).
 - **Story-open upgrade prompt:** an app-level host beside
   `SwapResumeHost`, keyed on the open story and mounted after the
-  crash-recovery and swap-resume hosts so only one modal ever portals,
-  gated on no swap marker, the story's `embedding_model_id` differing
-  from the app default, the app default set, and
-  `embedding_upgrade_declined` not naming that default; three actions
-  — `Upgrade` fires the shipped `SwapDialog`; Keep (canon copy: Keep on the current model) writes the declined key; `Later` defers for the session
-  (overlay tap and hardware back map to it). The shipped
-  `SwapDialog`'s own `Keep` (the Memory-panel path) writes the same
-  key — the second write site.
+  crash-recovery and swap-resume hosts. Its **gate** is what keeps it
+  from portaling beside either — mount order alone does not — and it
+  refuses on a swap marker, a running swap or a pending recovery
+  report, and unless the story's `embedding_model_id` differs from a
+  set app default that `embedding_upgrade_declined` does not already
+  name. Three actions: `Upgrade` fires the shipped `SwapDialog`; Keep
+  (canon copy: Keep on the current model) writes the declined key;
+  `Later` defers for the session, and is what Esc and hardware back
+  map to. The shipped `SwapDialog`'s own `Keep` (the Memory-panel
+  path) writes the same key — the second write site.
 - **Phone save bar:** the one-line deliverable is that a dirty session
   is visible from the phone rail state; the placement decision is an
   [open question](#open-questions) below and lands with its canon
@@ -203,10 +210,11 @@ a column patch beside the settings patch.
 - Cadence 12 with partial buffer 10 shows the warning chip; switching
   to full mode hides it; `classifierContextEntries` cannot go below 2
   (component test).
-- Setting keyword mode to `Inject` discloses the four controls; the
-  saved `keywordRetrieval` patch matches the schema; a keyworded lore
-  row is seated in the next turn's prompt (E2E via the probe capture,
-  over a lore row seeded with keywords).
+- Setting keyword mode to `Inject` discloses the three inject-only
+  controls (scan depth shows in both modes); the saved
+  `keywordRetrieval` patch matches the schema; a keyworded lore row is
+  seated in the next turn's prompt (E2E via the probe capture, over a
+  lore row seeded with keywords).
 - Opening a story whose `embedding_model_id` differs from the app
   default shows the prompt once; `Keep` writes
   `embedding_upgrade_declined` and the prompt stays away on reopen;
@@ -236,33 +244,171 @@ a column patch beside the settings patch.
 
 ## Open questions
 
-- **Phone save-bar placement.** Canon puts the bar inside the detail
-  route, so a dirty session collapsed back to the phone rail shows no
-  bar. Default: lift the bar to the surface level on phone, amending
-  `story-settings.md → Mobile expression` and
-  `save-sessions.md → Save bar` in this PR; alternative: keep canon and
-  add a dirty indicator on the rail rows. Record the call in
-  Implementation notes.
-- **About's column patch through the settings session.** The
-  provider merges `Partial<StorySettings>`; About needs
-  `Partial<Story>` columns. Default: extend the section contract with
-  an optional column patch — one save bar, one commit, per the
-  one-session-per-surface rule — rather than a second session.
-- **Upgrade prompt vs the other app-level hosts.** Recovery modal,
-  swap-resume prompt and upgrade prompt all key on boot or open; the
-  order above (recovery, resume, upgrade) is the default — confirm the
-  three never portal together.
-- **Story Settings title isn't `Breadcrumb`.** (2026-09-11) World's
-  top-bar title converted to `Breadcrumb`; Story Settings' has not. It
-  renders one `<title> / Story Settings` string, so the story segment
-  isn't the tappable parent
-  [`principles.md → Breadcrumb tappability`](../../../../ui/principles.md#breadcrumb-tappability)
-  asks for, and the phone detail route has no `/ <tab>` segment
-  ([`story-settings.md → Mobile expression`](../../../../ui/screens/story-settings/story-settings.md#mobile-expression)).
-  The story segment has to go through the unsaved-changes guard, as
-  the Actions menu there already does with `beforeNavigate`.
+- **Phone save-bar placement** — **Resolved during execution:** the
+  bar lifts to surface level on phone; see
+  [Implementation notes](#implementation-notes).
+- **About's column patch through the settings session** — **Resolved
+  during execution:** the section contract gained an optional column
+  patch; see [Implementation notes](#implementation-notes).
+- **Upgrade prompt vs the other app-level hosts** — **Resolved during
+  execution:** the upgrade prompt never portals with the other two;
+  the resume and recovery pair still can, which predates this slice
+  and is triaged. See
+  [Implementation notes](#implementation-notes).
+- **Story Settings title isn't `Breadcrumb`** (2026-09-11) —
+  **Resolved during execution:** the title converted to `Breadcrumb`,
+  with the story segment going through the unsaved-changes guard and
+  the phone detail route appending its tab segment; see
+  [Implementation notes](#implementation-notes).
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved
-developer decisions._
+Resolved developer decisions and deviations worth carrying forward. The
+cross-cutting findings went elsewhere and are the bigger artefact:
+sixteen items in [triage](../../../triage.md), three entries under
+[lessons-learned](../../../lessons-learned/README.md) (the save-session
+story harness, the renamed disabled `IconAction`, and the React Compiler
+suppression), and four deferrals routed straight into
+[the roadmap's M7](../../../roadmap.md#m7--app-settings--diagnostics--onboarding)
+because a named slice will own them.
+
+- **One PR, and it outgrew the review cap.** The slice was sized at
+  roughly 65-75 files across four E2E specs and shipped whole rather
+  than split. It landed at 99 source files before the documentation
+  commits, and 123 with them, so CodeRabbit's 100-file review limit —
+  carried as a monitor item rather than a gate — is exceeded. A slice
+  this shape wants splitting into stacked PRs by module layer next
+  time; commits stay focused per task so a human review can still walk
+  them.
+
+- **Model overrides became provider-qualified.** The picker always
+  yielded a `{ providerId, modelId }` pair while `settings.models`
+  stored a bare id that `resolveModel` ran on the app's default
+  provider — so an override could silently resolve on the wrong
+  provider. The override is now the pair end to end, with three
+  consequences worth naming: migration `0014` rewrites stored bare ids
+  onto the current default provider and drops the key when no default
+  is set; `resolveModel` looks the override's own provider up and
+  returns `override-provider-missing` when it is gone, so a deleted
+  provider leaves story overrides in place rather than silently
+  re-pointing them, and the reader's fix action routes to the story's
+  Models tab instead of a healthy App Settings chain; and
+  `ResolveModelConfig.defaultProviderId` is removed, since
+  nothing resolves against an ambient default any more. `.avts` export
+  already strips `settings.models`, so no export travels a provider id.
+  Canon amended in `data-model.md`, `story-settings.md`,
+  `architecture.md`, `generation-pipeline.md`, `app-settings.md` and
+  `reader-composer.md`.
+
+- **The phone save bar lifts to surface level.** Canon put the bar
+  inside the detail pane, which on phone means a dirty session
+  collapsed back to the tab list shows no bar at all. It now renders
+  below whichever pane the phone shows, list state included. The lift
+  lives in `StorySettingsShell`, which reads `useTier()` a second time
+  to know when `MasterDetailLayout` has collapsed — a seam worth
+  closing with a `footer` slot on the layout, triaged rather than done
+  here because App Settings needs the same treatment.
+
+- **About commits through the settings session, not a second one.**
+  `SectionRegistration` gained an optional `getColumnPatch`, `onCommit`
+  receives `{ settings?, columns? }`, and a new
+  `saveStorySettingsSession` action runs both op sets in one
+  transaction with `updateStorySettings` kept as a thin wrapper. One
+  save bar, one commit, no churn for the sections that predate it. The
+  plan's standalone `updateStoryInfo` action was dropped during
+  execution: nothing called it once About commits through the session,
+  so the column arm is just `setStoryInfoOps` in
+  `lib/db/stories/story-info-ops.ts`.
+
+- **"Story is empty" means no turn on any branch.** The literal
+  no-entries rule was unreachable — every wizard story carries an
+  opening entry — so the definitional-change modal fires on
+  `storyHasTurns`, which counts entries whose kind is neither
+  `opening` nor `system`. Refined during execution: a transient system
+  failure notice does not count either, since it is cleared before the
+  next submit. The check is a denylist, so an entry kind added later
+  counts as a turn until it is listed. It lives in
+  `lib/actions/story-entries/has-turns.ts` as an entry read rather than
+  in the stories actions, because that is the table it reads.
+
+- **The title converted to `Breadcrumb`.** It rendered one flat
+  `<title> / Story Settings` string, so the story segment was not the
+  tappable parent
+  [`principles.md → Breadcrumb tappability`](../../../../ui/principles.md#breadcrumb-tappability)
+  asks for, and the phone detail route carried no `/ <tab>` segment.
+  The story segment now routes to the reader through
+  `session.requestLeave` so the unsaved-changes guard still fires; on
+  phone the `Story Settings` segment collapses detail back to the
+  list, and the detail route appends the tab label.
+
+- **`Edit info` is a plain stack push — no one-shot Return slot.** The
+  story card pushes `/story-settings/<id>?tab=about` over the library
+  after booting the story, so the first back is an ordinary stack pop
+  and the navigation store gained no one-shot target. Draft cards get
+  no `Edit info` (a draft has no branch to boot). On phone the sequence
+  is About → tab list → library. The Contextual Return paragraph in
+  `story-settings.md` is corrected to match.
+
+- **The Memory tab is one section, not five.** A single `memory-knobs`
+  registration owns `chapterTokenThreshold`, `chapterAutoClose`,
+  `fullChapterInBuffer`, `partialChapterBuffer`, `protectedBuffer`,
+  `classifierContextEntries`, `classifierCadence`, `retrievalBudgets`
+  and `keywordRetrieval` over one draft, rendered as five
+  presentational sub-sections — sections must own disjoint top-level
+  keys, and splitting them would have split one draft five ways for no
+  gain. `classifierContextEntries` renders under Prompt context only,
+  where the user reasoning about buffer sizes will look for it.
+
+- **The classifier-context stepper has a UI ceiling of 20.** The floor
+  of 2 is real — the action and the reply the classifier reads — while
+  the ceiling is a UI convenience with no schema counterpart, declared
+  as `CLASSIFIER_CONTEXT_MAX` beside the knob rules.
+
+- **The retrieval-budget hint canon asks for is skipped.** Canon wants
+  each budget shown as a share "of remaining tokens after structural
+  inject"; this surface has no per-turn estimate to compute that from,
+  so the budgets render as five plain inputs plus a total line. The
+  window-level accounting that would make the hint meaningful is
+  already routed to M7.2 in the roadmap.
+
+- **`resolveModel`'s success result carries `profileId`.** The Models
+  tab's sentinel needs the profile's _name_, which the resolver has no
+  business formatting. It now returns the id it landed on — set on the
+  profile path, absent on the override path, which is also how the
+  panel tells the two apart — and the panel looks the name up in
+  `appSettingsStore.profiles`.
+
+- **Both `Keep` write sites record the app default.** The plan said the
+  Memory panel's `SwapDialog` would record the selected candidate's id;
+  canon (`retrieval.md` → Keep on the current model) says the
+  suppression describes the model the user turned _down_, which is the
+  app default in both places. Corrected during execution; the prompt
+  and the dialog now write the same key.
+
+- **The upgrade prompt latches per story open.** The gate is a pure
+  function in `lib/embedder-swap` read once per `openStory` event, not
+  continuously, so an app default moved mid-session waits for the next
+  open. `Later` defers through a session-scoped per-story set on
+  `embedderSwapStore`; any answer — `Upgrade` included — ends the
+  prompt for that open, so cancelling the swap dialog does not re-raise
+  it. The gate refuses while a swap marker, a running swap or an
+  unacknowledged recovery report exists, so the prompt never portals
+  beside the other two app-level hosts. The resume and recovery hosts
+  can still stack with each other; that predates this slice and is
+  triaged.
+
+- **Composer defaults decided (2026-09-14).** Composer modes are on by
+  default — a per-story opt-out, not an opt-in — and the wrap POV
+  default follows the story's mode at creation: `first` for adventure,
+  `third` for creative. App Settings' wrap POV default seeds new
+  adventure stories only, since modes never run in creative and the
+  value only matters if the story later switches. Existing stories keep
+  their stored values: both fields are required in the stored settings,
+  so nothing migrates. Landed in `buildStorySettings`; canon amended in
+  `principles.md`, `app-settings.md` and `data-model.md`, with both
+  wireframes.
+
+- **Scan depth shows in both keyword modes (2026-09-14).**
+  `keywordRetrieval.scanEntries` sizes the keyword scan surface under
+  `Boost` as well as `Inject`, so the control shows in both modes;
+  canon's inject-only disclosure is amended in this PR.

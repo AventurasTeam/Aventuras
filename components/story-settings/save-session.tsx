@@ -9,8 +9,12 @@ import {
   type ReactNode,
 } from 'react'
 
-import { StorySettingsStaleStoreError } from '@/lib/actions'
-import type { StorySettings } from '@/lib/db'
+import {
+  StorySettingsStaleStoreError,
+  StorySettingsUnreadableError,
+  type StorySettingsSessionPatch,
+} from '@/lib/actions'
+import type { StoryInfoPatch, StorySettings } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 
 import {
@@ -19,6 +23,7 @@ import {
   removeSection,
   sameDraft,
   upsertSection,
+  type FlaggedField,
   type SaveSessionSnapshot,
   type SectionDirtyState,
 } from './save-session-state'
@@ -29,6 +34,7 @@ const DEV_CHECKS = typeof __DEV__ === 'undefined' || __DEV__
 
 type SectionCallbacks = {
   getPatch: () => Partial<StorySettings>
+  getColumnPatch?: () => StoryInfoPatch
   reset: () => void
 }
 
@@ -42,6 +48,8 @@ type SaveOutcome =
   | { status: 'busy' }
   /** A dirty section's draft cannot be written. Nothing was attempted. */
   | { status: 'invalid'; reason: string }
+  /** A flagged field is dirty on a story with turns; the confirmation dialog owns the next step. */
+  | { status: 'confirm' }
   | { status: 'committed'; stillDirty: boolean; storeStale: boolean }
   | { status: 'rejected'; error: unknown }
 
@@ -54,6 +62,11 @@ type SessionState = {
   sections: readonly SectionDirtyState[]
   committing: boolean
   /**
+   * The definitional-change confirmation is up: a save parked behind it, then
+   * the commit it confirmed, until that commit settles.
+   */
+  confirming: boolean
+  /**
    * Leave intents waiting on the session, oldest first. A list, not one slot:
    * a window close and a back-navigation can both be outstanding, and dropping
    * the earlier one strands whoever queued it — the main process keeps holding
@@ -62,7 +75,12 @@ type SessionState = {
   intents: readonly (() => void)[]
 }
 
-const EMPTY_STATE: SessionState = { sections: [], committing: false, intents: [] }
+const EMPTY_STATE: SessionState = {
+  sections: [],
+  committing: false,
+  confirming: false,
+  intents: [],
+}
 
 type SaveSessionApi = {
   snapshot: SaveSessionSnapshot
@@ -72,6 +90,8 @@ type SaveSessionApi = {
   requestLeave: (proceed: () => void) => void
   pendingLeave: boolean
   resolveLeave: (outcome: 'save' | 'discard' | 'cancel') => void
+  pendingConfirmation: boolean
+  resolveConfirmation: (outcome: 'save' | 'cancel') => void
 }
 
 /** Section-only wiring. Split off `SaveSessionApi` so a consumer of the
@@ -93,10 +113,12 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function reportKeyCollision(
+/** `devChecks` is an injectable seam: production takes the logging branch, never the throw. */
+export function reportKeyCollision(
   owners: Map<string, string>,
   id: string,
-  patch: Partial<StorySettings>,
+  patch: Record<string, unknown>,
+  devChecks: boolean = DEV_CHECKS,
 ): void {
   for (const key of Object.keys(patch)) {
     const owner = owners.get(key)
@@ -109,20 +131,30 @@ function reportKeyCollision(
     // top-level key to exactly one tab. Dev throws, which refuses the save
     // rather than clobbering; prod logs and merges, since refusing every save
     // is worse than a shallow one when `stories` carries no delta to undo.
-    if (DEV_CHECKS) throw new Error(message)
+    if (devChecks) throw new Error(message)
     logger.error('action_layer.story_settings_key_collision', { owner, sectionId: id, key })
   }
 }
 
+type SectionDraft = { settings: Partial<StorySettings>; columns: StoryInfoPatch }
+
+function readDraft(entry: SectionCallbacks): SectionDraft {
+  return { settings: entry.getPatch(), columns: entry.getColumnPatch?.() ?? {} }
+}
+
 type ProviderProps = {
   /**
-   * Commits the merged patch from every dirty section as ONE write. The
-   * provider never calls this more than once per save, and never with an empty
-   * patch.
+   * Commits every dirty section's merged patch as ONE write. Called at most once
+   * per save, never with an empty patch; a key is absent when no section set it.
    */
-  onCommit: (patch: Partial<StorySettings>) => Promise<unknown>
+  onCommit: (patch: StorySettingsSessionPatch) => Promise<unknown>
   onSaved?: () => void
   onSaveFailed?: (error: unknown) => void
+  /**
+   * Whether a dirty flagged field needs confirming before the commit. Fails closed:
+   * true unless `storyHasTurns` reported none, so a pending or failed read keeps asking.
+   */
+  confirmFlagged: boolean
   children: ReactNode
 }
 
@@ -130,6 +162,7 @@ export function StorySettingsSaveSessionProvider({
   onCommit,
   onSaved,
   onSaveFailed,
+  confirmFlagged,
   children,
 }: ProviderProps) {
   const [state, setState] = useState<SessionState>(EMPTY_STATE)
@@ -138,6 +171,8 @@ export function StorySettingsSaveSessionProvider({
   // instead — Cmd-S can race the leave guard's own save. Writing both through
   // `update` is what keeps the two from disagreeing.
   const stateRef = useRef(state)
+  const confirmFlaggedRef = useRef(confirmFlagged)
+  confirmFlaggedRef.current = confirmFlagged
 
   const update = useCallback((fn: (prev: SessionState) => SessionState) => {
     const next = fn(stateRef.current)
@@ -225,109 +260,142 @@ export function StorySettingsSaveSessionProvider({
     }
   }, [update])
 
-  const save = useCallback(async (): Promise<SaveOutcome> => {
-    if (stateRef.current.committing) return { status: 'busy' }
+  // `confirmed` is the user's consent; only `resolveConfirmation` passes true.
+  const commit = useCallback(
+    async (confirmed: boolean): Promise<SaveOutcome> => {
+      if (stateRef.current.committing) return { status: 'busy' }
+      // A parked session moves only through resolveConfirmation or discard.
+      if (!confirmed && stateRef.current.confirming) return { status: 'confirm' }
 
-    // Clean sections are skipped rather than trusted to return `{}`: every
-    // panel stays mounted so a draft survives a tab switch, so an
-    // unconditional getPatch would write a never-visited tab's mount-time
-    // values over whatever changed them since.
-    const dirty = dirtyIds(stateRef.current.sections)
-    // Nothing to write. A leave waiting on this is already satisfied — the
-    // session is clean — so proceed rather than stranding it.
-    if (dirty.size === 0) {
-      settleIntents()
-      return { status: 'noop' }
-    }
+      // Clean sections are skipped rather than trusted to return `{}`: every panel
+      // stays mounted, so an unconditional getPatch would write a never-visited tab's
+      // mount-time values over whatever changed them since.
+      const dirty = dirtyIds(stateRef.current.sections)
+      // Nothing to write. A leave waiting on this is already satisfied — the
+      // session is clean — so proceed rather than stranding it.
+      if (dirty.size === 0) {
+        settleIntents()
+        return { status: 'noop' }
+      }
 
-    // Refused, not failed: nothing was attempted, so a waiting leave stays
-    // queued rather than being settled or dropped — the user still has Discard
-    // and Cancel, and Save re-arms the moment the section reports itself valid.
-    const { invalidReason, invalidSectionId } = computeSnapshot(stateRef.current.sections)
-    if (invalidReason != null) {
-      // The section id, not the reason: the reason is translated UI copy, so it
-      // changes meaning per locale and never names which section refused.
-      logger.warn('action_layer.story_settings_save_blocked', { sectionId: invalidSectionId })
-      return { status: 'invalid', reason: invalidReason }
-    }
+      // Refused, not failed: nothing was attempted, so a waiting leave stays queued rather
+      // than settled or dropped — Discard and Cancel remain, and Save re-arms once valid.
+      const current = computeSnapshot(stateRef.current.sections)
+      if (current.invalidReason != null) {
+        // The section id, not the reason: the reason is translated UI copy, so it
+        // changes meaning per locale and never names which section refused.
+        logger.warn('action_layer.story_settings_save_blocked', {
+          sectionId: current.invalidSectionId,
+        })
+        return { status: 'invalid', reason: current.invalidReason }
+      }
 
-    // What each section's draft looked like when its patch was read, so an
-    // edit made while the write was in flight isn't re-derived away after it.
-    const committed = new Map<string, unknown>()
+      // Parked, not refused: the dialog re-enters through resolveConfirmation,
+      // and a leave waiting on this save keeps waiting with it.
+      if (confirmFlaggedRef.current && !confirmed && current.flaggedFields.length > 0) {
+        update((prev) => ({ ...prev, confirming: true }))
+        return { status: 'confirm' }
+      }
 
-    update((prev) => ({ ...prev, committing: true }))
-    try {
-      // One merged write, not a commit per section: `stories` carries no delta,
-      // so a mid-way failure across N writes would strand earlier sections
-      // persisted with no way to undo them.
-      let merged: Partial<StorySettings> = {}
-      const owners = new Map<string, string>()
-      for (const [id, entry] of callbacksRef.current.entries()) {
-        if (!dirty.has(id)) continue
-        let patch: Partial<StorySettings>
+      // What each section's draft looked like when its patch was read, so an
+      // edit made while the write was in flight isn't re-derived away after it.
+      const committed = new Map<string, unknown>()
+
+      update((prev) => ({ ...prev, committing: true }))
+      try {
+        // One merged write, not a commit per section: `stories` carries no delta, so a
+        // mid-way failure across N writes would strand earlier sections with no undo.
+        let settings: Partial<StorySettings> = {}
+        let columns: StoryInfoPatch = {}
+        const settingsOwners = new Map<string, string>()
+        const columnOwners = new Map<string, string>()
+        for (const [id, entry] of callbacksRef.current.entries()) {
+          if (!dirty.has(id)) continue
+          let draft: SectionDraft
+          try {
+            draft = readDraft(entry.current)
+          } catch (error) {
+            // Name the offender: otherwise a section's serialization bug is
+            // indistinguishable from a DB failure.
+            throw new Error(`Story Settings section "${id}" failed to build its patch`, {
+              cause: error,
+            })
+          }
+          reportKeyCollision(settingsOwners, id, draft.settings)
+          reportKeyCollision(columnOwners, id, draft.columns)
+          committed.set(id, cloneDraft(draft))
+          settings = { ...settings, ...draft.settings }
+          columns = { ...columns, ...draft.columns }
+        }
+        const merged: StorySettingsSessionPatch = {
+          ...(Object.keys(settings).length > 0 ? { settings } : {}),
+          ...(Object.keys(columns).length > 0 ? { columns } : {}),
+        }
+        await onCommit(merged)
+      } catch (error) {
         try {
-          patch = entry.current.getPatch()
-        } catch (error) {
-          // Name the offender: otherwise a section's serialization bug is
-          // indistinguishable from a DB failure.
-          throw new Error(`Story Settings section "${id}" failed to build its patch`, {
-            cause: error,
+          onSaveFailed?.(error)
+        } catch (handlerError) {
+          // Isolated so commit never rejects: every caller fires it with `void`.
+          logger.error('action_layer.story_settings_save_failed_handler_failed', {
+            error: errorMessage(handlerError),
+            saveError: errorMessage(error),
           })
         }
-        reportKeyCollision(owners, id, patch)
-        committed.set(id, cloneDraft(patch))
-        merged = { ...merged, ...patch }
+        // The write landed and only the store re-read failed, so this is not a save failure.
+        // Sections keep their drafts — a reset would re-derive them from a store still holding
+        // pre-save values — but the data is on disk, so a waiting leave must not be refused.
+        if (error instanceof StorySettingsStaleStoreError) {
+          settleIntents()
+          return { status: 'committed', stillDirty: true, storeStale: true }
+        }
+        // Also on disk, and the store is current — the blob just no longer parses, so
+        // the surface drops to its corrupt state and there is nothing left to re-save.
+        if (error instanceof StorySettingsUnreadableError) {
+          settleIntents()
+          return { status: 'committed', stillDirty: false, storeStale: false }
+        }
+        return { status: 'rejected', error }
+      } finally {
+        update((prev) => ({ ...prev, committing: false }))
       }
-      await onCommit(merged)
-    } catch (error) {
-      onSaveFailed?.(error)
-      // The write landed and only the store re-read failed, so this is not a
-      // save failure. Sections keep their drafts — resetting would re-derive
-      // them from a store still holding pre-save values — but the data is on
-      // disk, so a leave waiting on this save must not be refused.
-      if (error instanceof StorySettingsStaleStoreError) {
-        settleIntents()
-        return { status: 'committed', stillDirty: true, storeStale: true }
-      }
-      return { status: 'rejected', error }
-    } finally {
-      update((prev) => ({ ...prev, committing: false }))
-    }
 
-    // Past the commit — the write is on disk, so nothing below may report a
-    // save failure, and each step is isolated so one failure can't strand the
-    // rest. A section that didn't move re-derives its draft from the
-    // now-updated store, so it lands clean without tracking a save baseline.
-    const persisted = new Set<string>()
-    for (const [id, entry] of callbacksRef.current.entries()) {
-      if (!committed.has(id)) continue
+      // Past the commit — the write is on disk, so nothing below may report a save failure,
+      // and each step is isolated so one failure can't strand the rest. A section that didn't
+      // move re-derives from the now-updated store, landing clean with no save baseline.
+      const persisted = new Set<string>()
+      for (const [id, entry] of callbacksRef.current.entries()) {
+        if (!committed.has(id)) continue
+        try {
+          if (sameDraft(readDraft(entry.current), committed.get(id))) persisted.add(id)
+        } catch (error) {
+          // Treat an unreadable draft as changed: skipping a reset costs a stale
+          // save bar, resetting one the user has moved on from costs their edit.
+          logger.error('action_layer.story_settings_reset_check_failed', {
+            sectionId: id,
+            error: errorMessage(error),
+          })
+        }
+      }
+      resetSections(persisted)
       try {
-        if (sameDraft(entry.current.getPatch(), committed.get(id))) persisted.add(id)
+        onSaved?.()
       } catch (error) {
-        // Treat an unreadable draft as changed: skipping a reset costs a stale
-        // save bar, resetting one the user has moved on from costs their edit.
-        logger.error('action_layer.story_settings_reset_check_failed', {
-          sectionId: id,
+        logger.error('action_layer.story_settings_post_commit_failed', {
           error: errorMessage(error),
         })
       }
-    }
-    resetSections(persisted)
-    try {
-      onSaved?.()
-    } catch (error) {
-      logger.error('action_layer.story_settings_post_commit_failed', {
-        error: errorMessage(error),
-      })
-    }
-    // Any save satisfies a waiting leave, not just the one the guard started —
-    // the back arrow stays live during a commit. Only once the session is
-    // actually clean, though: an edit that landed mid-write is still unsaved,
-    // and proceeding would drop it.
-    const stillDirty = [...dirtyIds(stateRef.current.sections)].some((id) => !persisted.has(id))
-    if (!stillDirty) settleIntents()
-    return { status: 'committed', stillDirty, storeStale: false }
-  }, [onCommit, onSaved, onSaveFailed, resetSections, settleIntents, update])
+      // Any save satisfies a waiting leave, not just the one the guard started — the back
+      // arrow stays live during a commit. Only once the session is actually clean, though:
+      // an edit that landed mid-write is still unsaved, and proceeding would drop it.
+      const stillDirty = [...dirtyIds(stateRef.current.sections)].some((id) => !persisted.has(id))
+      if (!stillDirty) settleIntents()
+      return { status: 'committed', stillDirty, storeStale: false }
+    },
+    [onCommit, onSaved, onSaveFailed, resetSections, settleIntents, update],
+  )
+
+  const save = useCallback(() => commit(false), [commit])
 
   const discard = useCallback(() => {
     // A commit in flight owns the outcome, same as `resolveLeave`: the write
@@ -338,7 +406,9 @@ export function StorySettingsSaveSessionProvider({
       return
     }
     resetSections()
-  }, [resetSections])
+    // A parked save has nothing left to confirm once its drafts are gone.
+    update((prev) => (prev.confirming ? { ...prev, confirming: false } : prev))
+  }, [resetSections, update])
 
   const requestLeave = useCallback(
     (proceed: () => void) => {
@@ -379,6 +449,29 @@ export function StorySettingsSaveSessionProvider({
     [discard, save, settleIntents, update],
   )
 
+  const resolveConfirmation = useCallback(
+    (outcome: 'save' | 'cancel') => {
+      if (!stateRef.current.confirming) return
+      // The confirmed commit owns the outcome, same as `resolveLeave`.
+      if (stateRef.current.committing) {
+        logger.warn('action_layer.story_settings_confirmation_ignored', { outcome })
+        return
+      }
+      if (outcome === 'cancel') {
+        // Back to the editor: the user did not consent, so a leave that was
+        // waiting on this save must not fire later either.
+        update((prev) => ({ ...prev, confirming: false, intents: [] }))
+        return
+      }
+      // Held until the commit settles, however it ends: the dialog shows its
+      // saving state, and a queued leave's dialog can't open over the write.
+      void commit(true).finally(() =>
+        update((prev) => (prev.confirming ? { ...prev, confirming: false } : prev)),
+      )
+    },
+    [commit, update],
+  )
+
   const api = useMemo<SaveSessionApi>(
     () => ({
       snapshot,
@@ -388,8 +481,20 @@ export function StorySettingsSaveSessionProvider({
       requestLeave,
       pendingLeave: state.intents.length > 0,
       resolveLeave,
+      pendingConfirmation: state.confirming,
+      resolveConfirmation,
     }),
-    [snapshot, state.committing, state.intents, save, discard, requestLeave, resolveLeave],
+    [
+      snapshot,
+      state.committing,
+      state.confirming,
+      state.intents,
+      save,
+      discard,
+      requestLeave,
+      resolveLeave,
+      resolveConfirmation,
+    ],
   )
 
   const registry = useMemo<SectionRegistry>(
@@ -424,20 +529,24 @@ type SectionRegistration = {
    */
   dirtyFields: readonly string[]
   /**
-   * This section's contribution to the surface's single save. Called only
-   * during a save, so it may close over draft state freely, but called
-   * **twice** per save — once to build the write, once after it lands to check
-   * whether the draft moved while it was in flight. Keep it free of side
-   * effects. The provider skips sections whose `dirtyFields` is empty, so this
-   * never runs while clean — return this section's whole slice,
-   * unconditionally.
+   * This section's contribution to the surface's single save. Called only during a
+   * save, so it may close over draft state freely, but **twice** — once to build the
+   * write, once after it lands to check whether the draft moved in flight — so keep it
+   * free of side effects. Never called while clean: return the whole slice always.
    *
-   * Sections must own disjoint **top-level** `StorySettings` keys. Every value
-   * is replaced wholesale — nested objects and arrays included — so two
-   * sections contributing different parts of one key clobber each other. A
-   * collision is logged in every build.
+   * Sections must own disjoint **top-level** `StorySettings` keys. Every value is
+   * replaced wholesale, nested objects and arrays included, so two sections splitting
+   * one key clobber each other; a collision refuses the save in dev and logs in prod.
    */
   getPatch: () => Partial<StorySettings>
+  /**
+   * This section's `stories` column patch, written in the same transaction as the
+   * settings keys. Same contract as `getPatch`, except it may carry only the changed
+   * columns — then diff against the section's own baseline, never the live row: the
+   * second call runs after the store refresh, where a live-row diff comes back empty
+   * and the section's reset is skipped. Omit when the section edits no columns.
+   */
+  getColumnPatch?: () => StoryInfoPatch
   /**
    * Non-null while this section is dirty but cannot be written — a
    * user-facing reason (e.g. "Two categories share a label"). The provider
@@ -446,17 +555,19 @@ type SectionRegistration = {
    */
   invalidReason?: string
   /**
-   * Drop this section's local draft so it re-derives from the `settings` the
-   * surface passes down. Fires on Discard, and after a save for each section
-   * whose draft still matches what that save wrote — a section the user kept
-   * editing during the commit is left alone and stays dirty.
+   * The definitional fields among this section's dirty ones. When the story
+   * has turns, a save listing any raises the confirmation modal first.
+   */
+  flaggedFields?: readonly FlaggedField[]
+  /**
+   * Drop this section's local draft so it re-derives from the `settings` the surface
+   * passes down. Fires on Discard, and after a save for each section whose draft still
+   * matches what that save wrote — one the user kept editing mid-commit stays dirty.
    *
-   * Reading the `settings` prop here is correct: `updateStorySettings`
-   * refreshes `storiesStore` inside the awaited commit, and React flushes that
-   * store-driven re-render before this runs, so the closure held here is
-   * already the post-save one. That ordering is why the callback ref below is
-   * written during render — moving it into an effect would leave this reading
-   * pre-save values.
+   * Reading the `settings` prop here is correct: `saveStorySettingsSession` refreshes
+   * `storiesStore` inside the awaited commit and React flushes that re-render first, so
+   * the closure held here is already the post-save one. That is why the callback ref
+   * below is written during render — an effect would leave this reading pre-save values.
    */
   reset: () => void
 }
@@ -470,7 +581,9 @@ export function useStorySettingsSection({
   tab,
   dirtyFields,
   getPatch,
+  getColumnPatch,
   invalidReason,
+  flaggedFields,
   reset,
 }: SectionRegistration): void {
   const registry = useContext(SectionRegistryContext)
@@ -479,8 +592,8 @@ export function useStorySettingsSection({
   }
   const { publish, unpublish, attach } = registry
 
-  const callbacksRef = useRef<SectionCallbacks>({ getPatch, reset })
-  callbacksRef.current = { getPatch, reset }
+  const callbacksRef = useRef<SectionCallbacks>({ getPatch, getColumnPatch, reset })
+  callbacksRef.current = { getPatch, getColumnPatch, reset }
 
   useEffect(() => attach(id, callbacksRef), [attach, id])
 
@@ -489,7 +602,10 @@ export function useStorySettingsSection({
   // round-trip: upsertSection already does the per-field comparison.
   const fieldsRef = useRef(dirtyFields)
   fieldsRef.current = dirtyFields
+  const flaggedRef = useRef(flaggedFields)
+  flaggedRef.current = flaggedFields
   const dirtyKey = JSON.stringify(dirtyFields)
+  const flaggedKey = JSON.stringify(flaggedFields ?? [])
   useEffect(() => {
     // Empty string still satisfies `!= null`, so publishing it verbatim would
     // refuse every save with a blank reason and leave Discard the only exit.
@@ -497,8 +613,14 @@ export function useStorySettingsSection({
     if (DEV_CHECKS && invalidReason === '') {
       throw new Error(`Story Settings section "${id}" published an empty invalidReason.`)
     }
-    publish({ id, tab, dirtyFields: fieldsRef.current, invalidReason: invalidReason || undefined })
-  }, [publish, id, tab, dirtyKey, invalidReason])
+    publish({
+      id,
+      tab,
+      dirtyFields: fieldsRef.current,
+      invalidReason: invalidReason || undefined,
+      flaggedFields: flaggedRef.current,
+    })
+  }, [publish, id, tab, dirtyKey, flaggedKey, invalidReason])
 
   useEffect(() => () => unpublish(id), [unpublish, id])
 }

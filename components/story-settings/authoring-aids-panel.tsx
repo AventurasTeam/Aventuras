@@ -2,6 +2,7 @@ import { MoreVertical } from 'lucide-react-native'
 import { useEffect, useRef, useState, type ComponentRef } from 'react'
 import { View } from 'react-native'
 
+import { FormRow } from '@/components/compounds/form-row'
 import { SuggestionCategoriesEditor } from '@/components/compounds/suggestion-categories-editor'
 import { SwitchRow } from '@/components/compounds/switch-row'
 import {
@@ -16,6 +17,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { IconAction } from '@/components/ui/icon-action'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Select } from '@/components/ui/select'
 import { Stepper } from '@/components/ui/stepper'
 import { Text } from '@/components/ui/text'
 import {
@@ -31,6 +33,7 @@ import { t } from '@/lib/i18n'
 import { appSettingsStore } from '@/lib/stores'
 import { NEUTRAL_ACCENT } from '@/lib/themes'
 
+import { flaggedFieldsFor } from './flagged-fields'
 import { useStorySettingsSection } from './save-session'
 import {
   SUGGESTION_SWATCHES,
@@ -60,6 +63,8 @@ export function AuthoringAidsPanel({
   const [draft, setDraft] = useState(() => toDraft(settings.suggestionCategories))
   const [enabled, setEnabled] = useState(settings.suggestionsEnabled)
   const [count, setCount] = useState(settings.suggestionCount)
+  const [modesEnabled, setModesEnabled] = useState(settings.composerModesEnabled)
+  const [wrapPov, setWrapPov] = useState(settings.composerWrapPov)
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
   // rn-primitives' Popover Root is uncontrolled; closing it is the trigger's
@@ -75,7 +80,15 @@ export function AuthoringAidsPanel({
   const baseline = toStored(toDraft(settings.suggestionCategories))
   const categoriesDirty = !sameStoredCategories(toStored(draft), baseline)
 
+  const wrapPovDirty = wrapPov !== settings.composerWrapPov
+
   const dirtyFields: string[] = []
+  if (modesEnabled !== settings.composerModesEnabled) {
+    dirtyFields.push(t('storySettings:generation.field.composerModes'))
+  }
+  if (wrapPovDirty) {
+    dirtyFields.push(t('storySettings:generation.field.composerWrapPov'))
+  }
   if (enabled !== settings.suggestionsEnabled) {
     dirtyFields.push(t('storySettings:generation.field.suggestions'))
   }
@@ -99,7 +112,10 @@ export function AuthoringAidsPanel({
     tab: 'generation',
     dirtyFields,
     invalidReason,
+    flaggedFields: wrapPovDirty ? flaggedFieldsFor(['composerWrapPov']) : undefined,
     getPatch: () => ({
+      composerModesEnabled: modesEnabled,
+      composerWrapPov: wrapPov,
       suggestionsEnabled: enabled,
       suggestionCount: count,
       suggestionCategories: toStored(draft),
@@ -110,6 +126,8 @@ export function AuthoringAidsPanel({
       setDraft(toDraft(settings.suggestionCategories))
       setEnabled(settings.suggestionsEnabled)
       setCount(settings.suggestionCount)
+      setModesEnabled(settings.composerModesEnabled)
+      setWrapPov(settings.composerWrapPov)
     },
   })
 
@@ -125,6 +143,19 @@ export function AuthoringAidsPanel({
     if (modeProblem !== 'unrecognized') return
     logger.error('action_layer.unrecognized_story_mode', { mode: String(rawMode) })
   }, [modeProblem, rawMode])
+
+  // principles.md → Composer mode: adventure-only. Creative hides the picker
+  // whatever the toggle holds, so outside adventure the toggle would be inert.
+  const modesGateHint =
+    mode === 'adventure'
+      ? undefined
+      : modeProblem != null
+        ? t(`storySettings:generation.composerModesUnavailable.${modeProblem}`)
+        : t('storySettings:generation.composerModesCreative')
+
+  // Wrap POV only shapes Do / Say / Think, so it goes inert with them. Disabled,
+  // not discarded: an edit made while modes were on stays in the session.
+  const wrapPovNeedsModes = !modesEnabled || modesGateHint != null
 
   const confirmReset = () => {
     if (disabled) return
@@ -181,6 +212,36 @@ export function AuthoringAidsPanel({
           </PopoverContent>
         </Popover>
       </View>
+
+      <SwitchRow
+        label={t('storySettings:generation.composerModes')}
+        hint={modesGateHint ?? t('storySettings:generation.composerModesHint')}
+        checked={modesEnabled}
+        onCheckedChange={setModesEnabled}
+        disabled={disabled || modesGateHint != null}
+        disabledReason={disabled ? disabledReason : modesGateHint}
+      />
+
+      <FormRow
+        label={t('storySettings:generation.composerWrapPov')}
+        hint={
+          wrapPovNeedsModes
+            ? t('storySettings:generation.composerWrapPovNeedsModes')
+            : t('storySettings:generation.composerWrapPovHint')
+        }
+      >
+        <Select
+          mode="segment"
+          label={t('storySettings:generation.composerWrapPov')}
+          options={[
+            { value: 'first', label: t('storySettings:generation.wrapPov.first') },
+            { value: 'third', label: t('storySettings:generation.wrapPov.third') },
+          ]}
+          value={wrapPov}
+          onValueChange={(value) => setWrapPov(value === 'first' ? 'first' : 'third')}
+          disabled={disabled || wrapPovNeedsModes}
+        />
+      </FormRow>
 
       <SwitchRow
         label={t('storySettings:generation.suggestions')}

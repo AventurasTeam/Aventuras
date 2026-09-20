@@ -7,9 +7,16 @@ import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import { useInstalledModels, type InstalledModelInfo } from '@/hooks/use-installed-models'
 import { useSwapResumeActions } from '@/hooks/use-swap-resume-actions'
-import { ensureProviderEmbeddingDim } from '@/lib/actions'
+import {
+  declineEmbeddingUpgrade,
+  ensureProviderEmbeddingDim,
+  StorySettingsStaleStoreError,
+  StorySettingsUnreadableError,
+  type DeclineEmbeddingUpgradeFn,
+} from '@/lib/actions'
 import {
   db,
+  embeddingTargetKey,
   runInTransaction,
   sameEmbeddingTarget,
   type EmbeddingTarget,
@@ -42,6 +49,9 @@ import { toast } from '@/lib/toast'
 
 const ctx = { db, runInTransaction }
 
+const declineStoryUpgrade: DeclineEmbeddingUpgradeFn = (storyId, modelId) =>
+  declineEmbeddingUpgrade(storyId, modelId, ctx)
+
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error)
 
@@ -58,6 +68,8 @@ type MemoryPanelProps = {
   settings: StorySettings
   /** Injectable seam for stories/tests — defaults to lib/embedder's listInstalledLocal. */
   listInstalled?: () => Promise<InstalledModelInfo[]>
+  /** Injectable seam for stories/tests — defaults to lib/actions' declineEmbeddingUpgrade. */
+  declineUpgrade?: DeclineEmbeddingUpgradeFn
   disabled?: boolean
   disabledReason?: string
 }
@@ -72,6 +84,7 @@ export function MemoryPanel({
   storyId,
   settings,
   listInstalled,
+  declineUpgrade = declineStoryUpgrade,
   disabled = false,
   disabledReason,
 }: MemoryPanelProps) {
@@ -86,6 +99,9 @@ export function MemoryPanel({
   const { installed } = useInstalledModels(listInstalled)
   const appEmbeddingProviderId = appSettingsStore.useAppSettings((s) => s.embeddingProviderId)
   const appEmbeddingModelId = appSettingsStore.useAppSettings((s) => s.embeddingModelId)
+  const appEmbeddingBackend = appSettingsStore.useAppSettings(
+    (s) => s.defaultStorySettings.embeddingBackend,
+  )
   const providers = appSettingsStore.useAppSettings((s) => s.providers)
 
   useEffect(() => {
@@ -139,6 +155,33 @@ export function MemoryPanel({
       ),
     ]
   }, [installed, providers, appEmbeddingProviderId, appEmbeddingModelId, storyTarget])
+
+  const preselectModelId = embedderSwapStore.useSwap((s) =>
+    s.dialog?.storyId === storyId ? s.dialog.preselectModelId : undefined,
+  )
+  const initialTargetKey = useMemo(() => {
+    if (preselectModelId == null) return undefined
+    const matches = candidates.filter((c) => c.target.modelId === preselectModelId && !c.isCurrent)
+    const appDefaultKey = embeddingTargetKey({
+      modelId: preselectModelId,
+      backend: appEmbeddingBackend ?? 'local',
+      providerId: appEmbeddingProviderId,
+    })
+    // The app default seats on its exact target or not at all: its other backend's copy
+    // shares the label, and a provider copy would re-index the story off-device. A local
+    // default waits for its own row; if that never lands, the pick list shows each source.
+    const candidate =
+      preselectModelId === appEmbeddingModelId
+        ? matches.find((c) => embeddingTargetKey(c.target) === appDefaultKey)
+        : matches[0]
+    return candidate == null ? undefined : embeddingTargetKey(candidate.target)
+  }, [
+    candidates,
+    preselectModelId,
+    appEmbeddingModelId,
+    appEmbeddingBackend,
+    appEmbeddingProviderId,
+  ])
 
   const reasonLine = useMemo(() => {
     // resolveEmbedderConfig reads `settings` (the panel's own prop) directly rather
@@ -225,10 +268,37 @@ export function MemoryPanel({
   )
 
   const handleKeep = useCallback(() => {
-    // Nag-suppression persistence is the deferred upgrade-prompt surface (post-v1);
-    // nothing to persist here — dismissing the dialog is the whole action.
     embedderSwapStore.closeDialog()
-  }, [])
+    // retrieval.md → Keep on the current model: what's declined is the app default, not this pick.
+    if (appEmbeddingModelId == null || appEmbeddingModelId.trim() === '') return
+    if (settings.embedding_upgrade_declined === appEmbeddingModelId) return
+    void declineUpgrade(storyId, appEmbeddingModelId)
+      .then((result) => {
+        if (result.status === 'rejected') toast.error(t('storySettings:upgrade.keepFailed'))
+      })
+      .catch((error: unknown) => {
+        // The write landed in both cases; "that didn't work" would be false.
+        const stale = error instanceof StorySettingsStaleStoreError
+        const unreadable = error instanceof StorySettingsUnreadableError
+        if (stale || unreadable) {
+          logger.error('embedder.decline_upgrade_failed', {
+            storyId,
+            stale,
+            unreadable,
+            error: error instanceof Error ? error.message : String(error),
+          })
+          toast.error(t(stale ? 'storySettings:save.stale' : 'storySettings:save.unreadable'))
+          return
+        }
+        reportEngineFailure('decline_upgrade', error)
+      })
+  }, [
+    storyId,
+    appEmbeddingModelId,
+    settings.embedding_upgrade_declined,
+    declineUpgrade,
+    reportEngineFailure,
+  ])
 
   const handleRelabel = useCallback(
     async (target: EmbeddingTarget) => {
@@ -325,6 +395,7 @@ export function MemoryPanel({
       <SwapDialog
         open={dialogOpen}
         candidates={candidates}
+        initialTargetKey={initialTargetKey}
         onTargetSelected={handleTargetSelected}
         onReindex={(target) => void handleReindexTarget(target)}
         onKeep={handleKeep}

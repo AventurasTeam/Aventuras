@@ -292,9 +292,12 @@ because provider error strings aren't standardized.
     references provider types not instance ids, and has nothing to
     dangle. No story-side query — per-story embedder usage is
     provably nonexistent (blocker dialog would have fired) and
-    per-story model overrides are pure model id strings that don't
-    reference providers. Destructive CTA, cancel default. After
-    confirm: references stay as data and surface as warning-Tag
+    per-story model overrides naming the provider are not counted.
+    They stay as data exactly as the counted profiles do, and surface
+    as a broken row on Story Settings → Models and as
+    `provider-missing` at the next pre-flight. Destructive CTA, cancel
+    default. After confirm:
+    references stay as data and surface as warning-Tag
     indicators on this surface + system-entry errors at next pipeline
     use. No auto-delete of dependent profiles, no fallback re-pointing.
 
@@ -634,7 +637,13 @@ stories keep their current picks.`
 
 Same form as Story Settings · Generation · Authoring aids — composer
 modes enabled, wrap POV (first / third), suggestions enabled,
-`suggestionCount` (1-6, default 3).
+`suggestionCount` (1-6, default 3). The wrap POV default applies to
+new adventure stories only; a new creative story always starts on
+third person, since composer modes never run in creative and the
+value only matters if the story later switches mode (see
+[`principles.md → Composer mode`](../../principles.md#composer-mode--send-time-transform-narration-aware)).
+With no saved default, the control shows first person, the adventure
+default.
 
 ### Suggestion categories
 

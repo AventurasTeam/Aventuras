@@ -1,15 +1,14 @@
 import type { Locator, Page } from '@playwright/test'
 
+import type { StoryOverrideTarget } from '@/lib/ai'
 import { embeddingTargetKey, type EmbeddingTarget } from '@/lib/db'
 
 import { t } from '../harness/i18n'
 
 // Story Settings + the embedder swap surfaces (components/story-settings/memory-panel.tsx,
-// components/embedder/swap-dialog.tsx). Every control resolves through the app's
-// own i18n keys (docs/testing.md → Selector strategy, Tier 2). The two testIDs
-// are the documented Tier-3 exceptions: the panel container carries no role or
-// accessible name, and a candidate row's only name is the model's display label,
-// which repeats across rows and isn't stable copy.
+// components/embedder/swap-dialog.tsx). Controls resolve through the app's own i18n keys
+// (docs/testing.md → Selector strategy, Tier 2); the testIDs are Tier-3 exceptions, naming
+// panel containers or rows whose only name repeats across siblings.
 export const storySettings = {
   // Chrome gear on an in-story screen (e.g. the reader) — routes to
   // /story-settings/[storyId].
@@ -20,6 +19,16 @@ export const storySettings = {
     page.getByRole('tab', { name: t('storySettings:tabs.memory') }),
 
   memoryPanel: (page: Page): Locator => page.getByTestId('memory-panel'),
+
+  // The knob groups HOST the embedder panel (`memoryPanel` above) as a slot between the
+  // Classifier and Retrieval-budgets groups — the two are nested, not siblings.
+  memoryKnobsPanel: (page: Page): Locator => page.getByTestId('memory-knobs-panel'),
+
+  // A radio Select (memory-knob-sections.tsx): the row carries the press handler, not its label
+  // Text, so this queries the radio. Its name is the label plus the mode hint and matches as a
+  // substring — the sibling Boost row's hint carries no "Inject", which keeps this to one match.
+  keywordInjectOption: (page: Page): Locator =>
+    page.getByRole('radio', { name: t('storySettings:memory.knobs.keywordModeOption.inject') }),
 
   switchEmbedder: (page: Page): Locator =>
     page.getByRole('button', { name: t('storySettings:memory.switchEmbedder') }),
@@ -48,6 +57,12 @@ export const storySettings = {
   swapNext: (page: Page): Locator =>
     page.getByRole('button', { name: t('storySettings:swap.next') }),
 
+  // The options pane REPLACES the pick pane inside the same dialog, so `swapDialogTitle` above
+  // is absent once a candidate is seated. It names the candidate — what tells a pre-seated
+  // dialog from a merely open one.
+  swapOptionsTitle: (page: Page, modelLabel: string): Locator =>
+    page.getByText(t('storySettings:swap.optionsTitle', { model: modelLabel })),
+
   // Only the options-pane action the suite drives. Re-index, Keep and the resume
   // dialog's controls are deliberately absent: nothing reaches them yet, and a
   // locator for an uncovered control reads as coverage.
@@ -60,6 +75,17 @@ export const storySettings = {
 
   resumeLater: (page: Page): Locator =>
     page.getByRole('button', { name: t('storySettings:swap.resumeLater') }),
+
+  // The story-open upgrade prompt (components/embedder/embedding-upgrade-host.tsx),
+  // mounted app-wide beside the resume prompt above.
+  upgradePrompt: (page: Page): Locator => page.getByText(t('storySettings:upgrade.title')),
+
+  // Tier 3: two of the three labels are verbatim the copy of the surfaces this prompt hands off
+  // to — "Keep on the current model" is also the swap dialog's, "Later" the resume prompt's — so
+  // a role+name query would stop resolving one element the moment either is in the tree.
+  upgradeKeep: (page: Page): Locator => page.getByTestId('upgrade-keep'),
+  upgradeLater: (page: Page): Locator => page.getByTestId('upgrade-later'),
+  upgradeUpgrade: (page: Page): Locator => page.getByTestId('upgrade-upgrade'),
 
   generationTab: (page: Page): Locator =>
     page.getByRole('tab', { name: t('storySettings:tabs.generation') }),
@@ -76,6 +102,40 @@ export const storySettings = {
 
   countIncrement: (page: Page): Locator =>
     page.getByRole('button', { name: t('storySettings:generation.countIncrement') }),
+
+  modelsTab: (page: Page): Locator =>
+    page.getByRole('tab', { name: t('storySettings:tabs.models') }),
+
+  modelsPanel: (page: Page): Locator => page.getByTestId('models-panel'),
+
+  // Scope anchor: the row View carries no role or name, and its picker trigger is named by the
+  // shared `pickModel` placeholder every sibling row repeats. Typed, so a renamed target fails
+  // the typecheck rather than resolving to an empty locator mid-run.
+  modelRow: (page: Page, target: StoryOverrideTarget): Locator =>
+    page.getByTestId(`model-row-${target}`),
+
+  // Named by the placeholder only while the row is empty; once pinned the name becomes
+  // t('modelPicker.selectedModel'). Nothing reopens a pinned row — clearing uses `clearOverride`.
+  modelPickerTrigger: (row: Locator): Locator =>
+    row.getByRole('button', { name: t('storySettings:models.pickModel') }),
+
+  // Not getByRole('combobox'): the panel's own `Add override` Select trigger carries that role
+  // too (rn-primitives), so a role query matches two elements. Page-scoped, not row-scoped,
+  // because SearchableOverlayList portals the whole overlay out of the row.
+  modelPickerSearch: (page: Page): Locator =>
+    page.getByPlaceholder(t('modelPicker.searchPlaceholder')),
+
+  // Page-scoped for the same reason as the search field. Each option renders the
+  // model id as its own text, so no testID is needed to name one.
+  modelPickerOption: (page: Page, modelId: string): Locator =>
+    page.getByRole('option').filter({ hasText: modelId }),
+
+  // The row's `×`. The label interpolates the target's display copy, which the
+  // caller has to pass: narrative and the agents read it from different keys.
+  clearOverride: (row: Locator, targetLabel: string): Locator =>
+    row.getByRole('button', {
+      name: t('storySettings:models.clearOverride', { target: targetLabel }),
+    }),
 
   // The save button's accessible name carries a platform shortcut hint
   // (`Save Ctrl+S`), so it anchors rather than matching exactly.
@@ -127,4 +187,27 @@ export const storySettings = {
   // storySettings-namespaced key.
   unsavedCancel: (page: Page): Locator =>
     storySettings.unsavedDialog(page).getByRole('button', { name: t('cancel') }),
+
+  aboutTab: (page: Page): Locator => page.getByRole('tab', { name: t('storySettings:tabs.about') }),
+
+  aboutPanel: (page: Page): Locator => page.getByTestId('about-panel'),
+
+  aboutTitle: (page: Page): Locator => page.getByTestId('about-title'),
+
+  breadcrumb: (page: Page): Locator => page.getByTestId('story-settings-breadcrumb'),
+
+  // Parent segments render with accessibilityRole="link", the current one as plain text — the
+  // role is what separates the segment that leaves the surface from the one that is it.
+  breadcrumbStory: (page: Page, title: string): Locator =>
+    storySettings.breadcrumb(page).getByRole('link', { name: title }),
+
+  // Wrap point of view is a segmented Select, so each option is a radio. Named,
+  // not indexed: the two labels are the only thing distinguishing them.
+  wrapPovOption: (page: Page, pov: 'first' | 'third'): Locator =>
+    page.getByRole('radio', { name: t(`storySettings:generation.wrapPov.${pov}`) }),
+
+  // Tier 3: its label ("Save anyway") starts with the save bar's own "Save", which `save` above
+  // matches as an anchored regex — a role query for either resolves both while this dialog is
+  // open, since the save bar stays in the tree behind it.
+  confirmSaveAnyway: (page: Page): Locator => page.getByTestId('confirm-save-anyway'),
 }

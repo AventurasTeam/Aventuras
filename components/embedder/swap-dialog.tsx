@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
 import {
@@ -34,6 +34,11 @@ type SwapCandidate = {
 type SwapDialogProps = {
   open: boolean
   candidates: readonly SwapCandidate[]
+  /**
+   * Opens on the options pane for this candidate; ignored until a non-current one matches,
+   * and dropped once the user picks a row.
+   */
+  initialTargetKey?: string
   onReindex: (target: EmbeddingTarget) => void
   onTargetSelected?: (target: EmbeddingTarget) => void
   onKeep: () => void
@@ -48,6 +53,7 @@ type Stage = 'pick' | 'options'
 export function SwapDialog({
   open,
   candidates,
+  initialTargetKey,
   onReindex,
   onTargetSelected,
   onKeep,
@@ -58,15 +64,33 @@ export function SwapDialog({
 }: SwapDialogProps) {
   const [stage, setStage] = useState<Stage>('pick')
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  // One pre-seat per open, retried until its target lands (candidates can arrive late).
+  // Armed by the seat or by the user's own pick, so a later refresh overrides neither.
+  const seatedRef = useRef(false)
 
   // Reopening must not resurrect a selection from a prior pass at the
   // dialog — the caller may reuse one `open` state across candidates.
   useEffect(() => {
     if (open) {
+      // Cleared with the reset, not on close: a re-run mount effect must be free to re-seat.
+      seatedRef.current = false
       setStage('pick')
       setSelectedKey(null)
     }
   }, [open])
+
+  useEffect(() => {
+    if (!open || seatedRef.current || initialTargetKey == null) return
+    const initial = candidates.find(
+      (candidate) =>
+        embeddingTargetKey(candidate.target) === initialTargetKey && !candidate.isCurrent,
+    )
+    if (initial == null) return
+    seatedRef.current = true
+    setSelectedKey(initialTargetKey)
+    setStage('options')
+    onTargetSelected?.(initial.target)
+  }, [open, initialTargetKey, candidates, onTargetSelected])
 
   function handleOpenChange(next: boolean) {
     if (!next) onDismiss()
@@ -74,6 +98,7 @@ export function SwapDialog({
 
   const selected = candidates.find((c) => embeddingTargetKey(c.target) === selectedKey) ?? null
   const selectTarget = (key: string) => {
+    seatedRef.current = true
     setSelectedKey(key)
     const candidate = candidates.find((item) => embeddingTargetKey(item.target) === key)
     if (candidate != null) onTargetSelected?.(candidate.target)

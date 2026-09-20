@@ -2,7 +2,9 @@ import { type ReactElement, type ReactNode } from 'react'
 import { Platform, Pressable, ScrollView, View } from 'react-native'
 
 import { MasterDetailLayout } from '@/components/shells/master-detail-layout'
+import { KeyboardInsetColumn } from '@/components/ui/keyboard-inset-column'
 import { Text } from '@/components/ui/text'
+import { useTier } from '@/hooks/use-tier'
 import { cn } from '@/lib/utils'
 
 const STORY_SETTINGS_RAIL_WIDTH = 240
@@ -37,7 +39,7 @@ type StorySettingsShellProps<TId extends string, TPanelData> = {
    * misses a case would otherwise return `undefined` and compile.
    */
   renderPanel: (id: TId, data: TPanelData) => ReactElement
-  /** Rendered at the bottom of the detail pane, outside the panel scroller. */
+  /** Below the panel scroller in the detail pane; on phone, below whichever pane shows. */
   saveBar?: ReactNode
 }
 
@@ -50,12 +52,18 @@ export function StorySettingsShell<TId extends string, TPanelData>({
   saveBar,
 }: StorySettingsShellProps<TId, TPanelData>) {
   const tabIds = groups.flatMap((group) => group.tabs.map((tab) => tab.id))
+  // Phone shows one pane at a time: a bar inside the detail pane would vanish
+  // once a dirty session collapses to the tab list, so there it sits below both.
+  const isPhone = useTier() === 'phone'
 
   const rail = (
     <ScrollView
       accessibilityRole="tablist"
       className="flex-1"
       contentContainerClassName="gap-3 p-3"
+      // Without this the first tap after typing is eaten closing the keyboard,
+      // so every knob reads as dead until it is tapped twice.
+      keyboardShouldPersistTaps="handled"
     >
       {groups.map((group) => (
         <View key={group.id} className="gap-1">
@@ -90,26 +98,35 @@ export function StorySettingsShell<TId extends string, TPanelData>({
   )
 
   const detailPane = (
-    <View className="min-h-0 flex-1">
+    <View testID="story-settings-detail-pane" className="min-h-0 flex-1">
       {tabIds.map((id) => (
         <View key={id} className={cn('min-h-0 flex-1', id !== activeTab && 'hidden')}>
-          <ScrollView className="flex-1" contentContainerClassName="gap-4 p-4">
+          <ScrollView
+            className="flex-1"
+            contentContainerClassName="gap-4 p-4"
+            keyboardShouldPersistTaps="handled"
+          >
             {renderPanel(id, panelData)}
           </ScrollView>
         </View>
       ))}
       {/* Outside the scroller — see docs/ui/patterns/save-sessions.md#visual. */}
-      {saveBar}
+      {isPhone ? null : saveBar}
     </View>
   )
 
   return (
-    <MasterDetailLayout
-      isRowSelected={activeTab != null}
-      listPaneWidth={STORY_SETTINGS_RAIL_WIDTH}
-      listPane={rail}
-      detailPane={detailPane}
-    />
+    // The phone bar sits at the window's bottom edge, so an open keyboard would
+    // bury it; the inset column compresses the panes instead. No-op on web.
+    <KeyboardInsetColumn className="min-h-0">
+      <MasterDetailLayout
+        isRowSelected={activeTab != null}
+        listPaneWidth={STORY_SETTINGS_RAIL_WIDTH}
+        listPane={rail}
+        detailPane={detailPane}
+      />
+      {isPhone ? saveBar : null}
+    </KeyboardInsetColumn>
   )
 }
 

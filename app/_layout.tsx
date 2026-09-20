@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { KeyboardProvider, useResizeMode } from 'react-native-keyboard-controller'
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context'
 
+import { EmbeddingUpgradeHost } from '@/components/embedder/embedding-upgrade-host'
 import { SwapResumeHost } from '@/components/embedder/swap-resume-host'
 import { SettingsRecoveryScreen } from '@/components/shells/settings-recovery-screen'
 import { CrashRecoveryModalHost } from '@/components/story/crash-recovery-modal-host'
@@ -100,6 +101,7 @@ export default function RootLayout() {
                     <Stack screenOptions={{ headerShown: false }} />
                     <CrashRecoveryModalHost />
                     <SwapResumeHost />
+                    <EmbeddingUpgradeHost />
                     <Toaster />
                     <PortalHost />
                     <DrizzleStudioDevTools />

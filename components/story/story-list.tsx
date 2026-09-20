@@ -28,6 +28,8 @@ export type StoryCardHandlers = {
   onOpen: () => void
   onToggleFavorite: () => void
   onArchiveToggle: () => void
+  /** Absent on drafts: there is no branch to boot, and the wizard owns their identity. */
+  onEditInfo?: () => void
   onDelete: () => void
 }
 

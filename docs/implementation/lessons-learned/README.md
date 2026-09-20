@@ -200,6 +200,10 @@ slice plans when relevant.
 - [Vite-built targets never read `babel.config.js` — wire worklets yourself](./vite-targets-dont-read-babel-config.md)
   — the rnw preset hardcodes `babelrc: false`; Storybook now declares the
   plugin itself, and any new Vite target must too.
+- [One `exhaustive-deps` suppression opts the whole component out of React Compiler](./exhaustive-deps-suppression-disables-the-compiler.md)
+  — the compiler skips the entire component, silently, and lint has no
+  rule for it; find the bail-outs lint cannot see by running the plugin
+  with `panicThreshold: 'all_errors'`.
 - [Failed Storybook files with zero failed tests](./storybook-load-flake-zero-failed-tests.md)
   — a file-load flake, not a test failure; contention is ruled out
   empirically and serializing the project breaks isolation, so check
@@ -208,6 +212,14 @@ slice plans when relevant.
   — the viewport control lands before RN-Web's `Dimensions` cache
   updates, so a tier-dependent play assertion made synchronously
   after mount can still see the desktop tier; wrap it in `waitFor`.
+- [A save-session story harness must refresh its data synchronously](./save-session-harness-sync-refresh.md)
+  — the provider re-reads each section's patch after `onCommit`, so a
+  `useState` harness updates too late and correct code reads as
+  "edited mid-save"; model the store with `useSyncExternalStore`.
+- [A disabled `IconAction` renames itself](./disabled-iconaction-renames-itself.md)
+  — while gated, its accessible name is the disabled reason, so a
+  role-and-name query for the enabled label finds nothing; wait for the
+  global `isUserEditBlocked` gate to clear before driving it.
 
 ### Native deps / install ritual
 

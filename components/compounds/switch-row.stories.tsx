@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
 import { View } from 'react-native'
+import { expect, screen } from 'storybook/test'
 
 import { Text } from '@/components/ui/text'
 import { themes } from '@/lib/themes'
@@ -85,6 +86,30 @@ export const Disabled: Story = {
       />
     </View>
   ),
+}
+
+/** A reason gives the row a tooltip box on web; the row must still span its column. */
+export const DisabledWithReason: Story = {
+  render: () => (
+    <View style={{ width: 360 }} className="gap-2">
+      <SwitchRow label="Enabled" checked={false} onCheckedChange={noop} />
+      <SwitchRow
+        label="Disabled with reason"
+        checked={false}
+        onCheckedChange={noop}
+        disabled
+        disabledReason="Hidden in creative mode."
+      />
+    </View>
+  ),
+  play: async () => {
+    const enabled = screen.getByRole('switch', { name: 'Enabled' })
+    const withReason = screen.getByRole('switch', { name: 'Disabled with reason' })
+    expect(withReason.parentElement?.getAttribute('title')).toBe('Hidden in creative mode.')
+    expect(Math.round(withReason.getBoundingClientRect().width)).toBe(
+      Math.round(enabled.getBoundingClientRect().width),
+    )
+  },
 }
 
 export const WithLeading: Story = {

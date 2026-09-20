@@ -18,13 +18,15 @@ type ReasonTooltipProps = {
  * the control, dropping focus at the moment the state flips.
  *
  * `contents` generates no layout box, so over a `pointer-events: none` control
- * nothing catches the pointer — hence `inline-flex` while a reason exists. The
- * class-only change keeps the element, so the remount hazard above does not apply.
+ * nothing catches the pointer — hence a real box while a reason exists. It takes
+ * the parent's direction so the child stretches across as it would unwrapped; a
+ * child that grows along a row parent's main axis still sizes to its content.
+ * The class-only change keeps the element, so the remount hazard above does not apply.
  */
 function ReasonTooltip({ reason, children }: ReasonTooltipProps) {
   if (Platform.OS !== 'web') return children
   return (
-    <div title={reason} className={reason ? 'inline-flex' : 'contents'}>
+    <div title={reason} className={reason ? 'flex [flex-direction:inherit]' : 'contents'}>
       {children}
     </div>
   )

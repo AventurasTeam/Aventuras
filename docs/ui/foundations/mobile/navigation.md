@@ -204,7 +204,7 @@ unchanged. The existing rule already covers:
 - In-session-only stack, reset on app restart.
 - Pop semantics: Return = pop one level (whichever sibling /
   parent the user came from).
-- One-shot return targets (e.g. `Edit info` from story-list).
+- One-shot return targets (a provision; no entry path registers one).
 - **Empty stack: confirm dialog before terminating** — directly
   resolves the old-app pain of "system back from library exited
   the app silently."
@@ -232,7 +232,8 @@ unchanged.
   Absent on Story Settings itself (self-reference).
 - **App Settings from in-story** — Actions menu entry.
 - **Story Settings from story-list** — `⋯ → Edit info` boots
-  the story and routes (per the existing one-shot return rule).
+  the story and pushes Story Settings over the list, so the first
+  Return is an ordinary stack pop back to the library.
 
 Glyphs (`⚙` / `⛭`) need to be glance-distinguishable per the
 existing visual-identity constraint. At phone-tier 24 px icon size

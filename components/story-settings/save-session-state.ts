@@ -1,11 +1,16 @@
 import { storySettingsTabOrder, type StorySettingsTabId } from './tabs'
 
+/** A definitional field the save-time confirmation lists (story-settings.md → Flagged fields). */
+export type FlaggedField = { key: string; label: string; consequence: string }
+
 export type SectionDirtyState = {
   id: string
   tab: StorySettingsTabId
   dirtyFields: readonly string[]
   /** Non-null when the section is dirty but its draft cannot be written. */
   invalidReason?: string
+  /** The flagged fields among this section's dirty ones. */
+  flaggedFields?: readonly FlaggedField[]
 }
 
 /**
@@ -19,12 +24,33 @@ export type SaveSessionSnapshot = {
   readonly invalidReason?: string
   /** Which section `invalidReason` came from. Logged instead of the translated copy. */
   readonly invalidSectionId?: string
+  /** That section's tab, so the bar can say where the problem is. */
+  readonly invalidTab?: StorySettingsTabId
+  /** Dirty flagged fields across every section, in rail order. Empty when none. */
+  readonly flaggedFields: readonly FlaggedField[]
 }
 
-const CLEAN_SNAPSHOT: SaveSessionSnapshot = { dirtyFields: [] }
+const CLEAN_SNAPSHOT: SaveSessionSnapshot = { dirtyFields: [], flaggedFields: [] }
 
 function sameFields(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((field, i) => field === b[i])
+}
+
+function sameFlagged(
+  a: readonly FlaggedField[] | undefined,
+  b: readonly FlaggedField[] | undefined,
+): boolean {
+  const left = a ?? []
+  const right = b ?? []
+  return (
+    left.length === right.length &&
+    left.every(
+      (field, i) =>
+        field.key === right[i]?.key &&
+        field.label === right[i]?.label &&
+        field.consequence === right[i]?.consequence,
+    )
+  )
 }
 
 /** Returns a fresh snapshot per dirty call — derive it (useMemo), never store it in state. */
@@ -36,15 +62,21 @@ export function computeSnapshot(sections: readonly SectionDirtyState[]): SaveSes
     (a, b) =>
       storySettingsTabOrder(a.tab) - storySettingsTabOrder(b.tab) || a.id.localeCompare(b.id),
   )
-  const dirtyFields = ordered.flatMap((section) => section.dirtyFields)
+  const dirty = ordered.filter((section) => section.dirtyFields.length > 0)
+  const dirtyFields = dirty.flatMap((section) => section.dirtyFields)
   if (dirtyFields.length === 0) return CLEAN_SNAPSHOT
+  const flaggedFields = dirty.flatMap((section) => section.flaggedFields ?? [])
   // Gated on the section being dirty: the save skips clean sections entirely,
   // so an invalid draft the user never touched must not refuse the write.
-  const invalid = ordered.find(
-    (section) => section.dirtyFields.length > 0 && section.invalidReason != null,
-  )
-  if (invalid?.invalidReason == null) return { dirtyFields }
-  return { dirtyFields, invalidReason: invalid.invalidReason, invalidSectionId: invalid.id }
+  const invalid = dirty.find((section) => section.invalidReason != null)
+  if (invalid?.invalidReason == null) return { dirtyFields, flaggedFields }
+  return {
+    dirtyFields,
+    flaggedFields,
+    invalidReason: invalid.invalidReason,
+    invalidSectionId: invalid.id,
+    invalidTab: invalid.tab,
+  }
 }
 
 // Returns the SAME array reference when nothing changed, so the provider's
@@ -59,7 +91,8 @@ export function upsertSection(
   if (
     current.tab === next.tab &&
     current.invalidReason === next.invalidReason &&
-    sameFields(current.dirtyFields, next.dirtyFields)
+    sameFields(current.dirtyFields, next.dirtyFields) &&
+    sameFlagged(current.flaggedFields, next.flaggedFields)
   ) {
     return sections
   }
@@ -98,14 +131,10 @@ export function cloneDraft(value: unknown, depth = 0): unknown {
 }
 
 /**
- * Whether two reads of a section's draft are the same edit.
- *
- * Compares key *presence*, so `{ k: undefined }` and `{}` differ — unlike
- * `JSON.stringify` equality, which drops `undefined`-valued keys. That
- * difference is currently invisible, because `updateStorySettings` strips
- * `undefined` the same way, so a stringify-equal pair also writes equal. This
- * exists so the reset decision stops depending on that coincidence: nothing
- * enforces that the two modules keep agreeing on what `undefined` means.
+ * Whether two reads of a section's draft are the same edit. Compares key *presence*, so
+ * `{ k: undefined }` and `{}` differ. Don't swap in `JSON.stringify` equality, which drops
+ * `undefined`-valued keys: it agrees today only because `saveStorySettingsSession` strips them
+ * the same way, and nothing enforces that the two modules keep agreeing on that.
  */
 export function sameDraft(a: unknown, b: unknown, depth = 0): boolean {
   // Only reached by a cycle or a draft deeper than the cap; both fall to
