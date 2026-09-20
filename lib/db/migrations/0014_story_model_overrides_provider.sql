@@ -1,10 +1,13 @@
 -- stories.settings.models[target] becomes { providerId, modelId }. Every bare-id
 -- override written before this ran on app_settings.default_provider_id, so that
 -- provider is the honest one to record; with no default the override was already
--- unresolvable and is dropped. A blank id names nothing and is dropped the same
--- way: adopting it would mint a modelId the schema refuses, so the story's whole
--- blob would stop parsing. json_valid guards keep one corrupt blob from aborting
--- the whole statement (see 0013 for the rationale).
+-- unresolvable and is dropped. An empty or space-only id names nothing and is
+-- dropped the same way: adopting it would mint a modelId the schema refuses, so
+-- the story's whole blob would stop parsing. SQLite's trim() takes spaces only and
+-- no SQL predicate matches JS trim()'s Unicode class, so an exotic-whitespace id
+-- still lands in the schema's recoverable corrupt state rather than here.
+-- json_valid guards keep one corrupt blob from aborting the whole statement
+-- (see 0013 for the rationale).
 UPDATE stories
 SET settings = json_set(settings, '$.models.narrative', json_object(
 	'providerId', (SELECT default_provider_id FROM app_settings WHERE id = 'singleton'),
