@@ -5,6 +5,7 @@
     buildLandmarks,
     checkpointDeletionBlocker,
     entryNumber,
+    jumpToEntry,
     resolveEntryByNumber,
     type Landmark,
   } from '$lib/utils/storyNavigation'
@@ -64,28 +65,6 @@
     story.entries.length > 0 ? entryNumber(story.entries[story.entries.length - 1]) : 0,
   )
 
-  // Fork points live in the story panel, which may not be the one that is up — and while it
-  // isn't, StoryView is destroyed rather than hidden. The request is left on the ui store for
-  // it to pick up on mount, the same way the Branches panel jumps to a fork point.
-  function goTo(entryId: string, confirmation: string) {
-    // The story view can only scroll to an entry it can render. Checked here as well so the
-    // confirmation below reports what will actually happen rather than asserting success.
-    const willLand = story.entries.some((e) => e.id === entryId)
-    ui.requestEntryScroll(entryId)
-    ui.setActivePanel('story')
-    ui.closeNavPanelOnMobile()
-
-    // Where the platform can't hover the panel may have just closed over the result, so the
-    // jump confirms itself the way the fork-point jump does.
-    if (!supportsHover()) {
-      if (willLand) {
-        ui.showToast(confirmation, 'info', 2000)
-      } else {
-        ui.showToast('That entry is not in this branch', 'error', 2000)
-      }
-    }
-  }
-
   function goToNumber() {
     if (!numberInput.trim()) return
     const entry = resolveEntryByNumber(story.entries, numberInput)
@@ -96,7 +75,14 @@
       )
       return
     }
-    goTo(entry.id, `Jumped to entry ${entryNumber(entry)}`)
+    jumpToEntry({
+      entries: story.entries,
+      entryId: entry.id,
+      ui,
+      confirmation: `Jumped to entry ${entryNumber(entry)}`,
+      closeOnMobile: () => ui.closeNavPanelOnMobile(),
+      canHover: supportsHover(),
+    })
   }
 
   function setLandmarkNavigationMode(value: string) {
@@ -129,7 +115,14 @@
       }
     }
 
-    goTo(landmark.entryId, `Jumped to entry ${landmark.number}`)
+    jumpToEntry({
+      entries: story.entries,
+      entryId: landmark.entryId,
+      ui,
+      confirmation: `Jumped to entry ${landmark.number}`,
+      closeOnMobile: () => ui.closeNavPanelOnMobile(),
+      canHover: supportsHover(),
+    })
   }
 
   // The row is inert by design, but a tap that does nothing reads as a broken control where

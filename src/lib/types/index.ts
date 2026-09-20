@@ -762,6 +762,8 @@ export interface UISettings {
   showScrollToTop: boolean
   showScrollToBottom: boolean
   storyMaxWidth: '2xl' | '3xl' | '4xl' | '5xl' | '7xl' | '9xl'
+  /** Show each entry's number and in-story time in the story view. */
+  showEntryNumberAndTime: boolean
   /** Colour quoted speech in story text. Has no effect on Visual Prose stories. */
   highlightDialogue: boolean
   /**

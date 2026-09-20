@@ -280,6 +280,20 @@
     />
   </div>
 
+  <!-- Entry Number and Time -->
+  <div class="flex items-center justify-between">
+    <div>
+      <Label>Show Entry Number and Time</Label>
+      <p class="text-muted-foreground text-xs">
+        Show each entry's number and in-story time in the story
+      </p>
+    </div>
+    <Switch
+      checked={settings.uiSettings.showEntryNumberAndTime}
+      onCheckedChange={(v) => settings.setShowEntryNumberAndTime(v)}
+    />
+  </div>
+
   <!-- Dialogue Highlighting -->
   <div class="space-y-3">
     <div class="flex items-center justify-between">

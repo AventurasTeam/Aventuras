@@ -1,3 +1,16 @@
+<script lang="ts" module>
+  // Read once. The font-size setting scales `.story-text`, not the root, so this never changes,
+  // and the reader below runs on every resize tick.
+  let rootFontPx = 0
+
+  function remToPx(rem: number): number {
+    if (!rootFontPx) {
+      rootFontPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
+    }
+    return rem * rootFontPx
+  }
+</script>
+
 <script lang="ts">
   import type { StoryEntry, EmbeddedImage, TimeTracker } from '$lib/types'
   import { story } from '$lib/stores/story.svelte'
@@ -21,6 +34,7 @@
     Copy,
     Clock,
     MoreVertical,
+    MilestoneIcon,
   } from '@lucide/svelte'
   import { aiService } from '$lib/services/ai'
   import { aiTTSService } from '$lib/services/ai/utils/TTSService'
@@ -118,13 +132,17 @@
   // Check if Visual Prose mode is enabled for this story
   const visualProseMode = $derived(story.currentStory?.settings?.visualProseMode ?? false)
 
+  // `retry` is narration in older saves; nothing creates one now, and every other reader in the
+  // tree treats one as narration.
+  const isNarrationLike = $derived(entry.type === 'narration' || entry.type === 'retry')
+
   // Generation info shown in the "info" popover (model/profile/effort/timestamp)
-  const showInfo = $derived(entry.type === 'narration')
+  const showInfo = $derived(isNarrationLike)
 
   // Only while this turn's record is still retained; an evicted one offers nothing rather
   // than an empty panel. See RETAINED_TURNS.
   const activityRecord = $derived(
-    settings.uiSettings.activityReporting !== 'off' && entry.type === 'narration'
+    settings.uiSettings.activityReporting !== 'off' && isNarrationLike
       ? activity.recordFor(entry.id)
       : null,
   )
@@ -134,6 +152,19 @@
   const showActivityRecord = $derived(
     !!activityRecord && activity.isReportVisible(entry.id, !activityRecord.endedAt),
   )
+
+  // The duration chip and its fallback in Response info must never both be absent. The fallback
+  // renders in a portal outside the card, where a container query cannot reach, so one measured
+  // width decides both.
+  const ACTIVITY_CHIP_MIN_REM = 29
+  let cardRect = $state<DOMRectReadOnly>()
+  const activityChipFits = $derived.by(() => {
+    if (!cardRect) return true
+    return cardRect.width >= remToPx(ACTIVITY_CHIP_MIN_REM)
+  })
+
+  // An action is an instant and a system entry is not story, so neither has a span to show.
+  const showEntryMeta = $derived(settings.uiSettings.showEntryNumberAndTime && isNarrationLike)
 
   function formatStoryTime(time: TimeTracker | null | undefined): string {
     if (!time) return ''
@@ -1335,7 +1366,8 @@
 </script>
 
 <div
-  class="group border-border rounded-lg border border-l-4 px-4 pt-3 pb-4 shadow-sm {styles[
+  bind:contentRect={cardRect}
+  class="group border-border @container rounded-lg border border-l-4 px-4 pt-3 pb-4 shadow-sm {styles[
     entry.type
   ]}"
 >
@@ -1346,11 +1378,11 @@
       <span class="user-action text-primary text-sm font-semibold tracking-wide">You</span>
     {:else if entry.type === 'system'}
       <div class="text-muted-foreground flex items-center gap-1.5">
-        <Icon class="h-4 w-4 shrink-0 translate-y-px" />
+        <Icon class="h-4 w-4 shrink-0" />
         <span class="text-xs font-medium tracking-wider uppercase">System</span>
       </div>
     {:else}
-      <Icon class="text-muted-foreground h-4 w-4 shrink-0 translate-y-px" />
+      <Icon class="text-muted-foreground h-4 w-4 shrink-0" />
     {/if}
 
     <!-- Reasoning toggle (inline icon in header) - only show if reasoning is enabled -->
@@ -1363,10 +1395,12 @@
       />
     {/if}
 
-    <!-- Token count badge (shows 0 if no tokens). Hidden on narrow screens, where the toolbar
+    <!-- Token count badge (shows 0 if no tokens). Hidden on a narrow card, where the toolbar
          needs the width. Narration entries keep it under "Response info" in the overflow menu;
          on any other entry type it is not shown there at all. -->
-    <span class="bg-muted hidden rounded px-1.5 py-0.5 text-[11px] tabular-nums sm:inline">
+    <span
+      class="bg-muted hidden rounded px-1.5 py-0.5 text-[11px] tabular-nums @min-[27rem]:inline"
+    >
       {#if isReasoningEnabled && reasoningTokens > 0}
         <span class="text-muted-foreground">{reasoningTokens}r</span>
         <span class="text-muted-foreground/50 mx-0.5">+</span>
@@ -1375,18 +1409,33 @@
       <span class="text-muted-foreground ml-0.5">tokens</span>
     </span>
 
-    <!-- How long the turn took, opening its timeline. Hidden on narrow screens for the same
-         reason as the token badge above; the overflow menu carries it there instead. -->
-    {#if activityRecord}
+    <!-- How long the turn took, opening its timeline. Below ACTIVITY_CHIP_MIN_REM, Response info
+         and then the overflow menu carry the toggle instead. -->
+    {#if activityRecord && activityChipFits}
       <button
         type="button"
-        class="bg-muted text-muted-foreground hover:text-foreground hidden rounded px-1.5 py-0.5 text-[11px] tabular-nums transition-colors sm:inline"
+        class="bg-muted text-muted-foreground hover:text-foreground rounded px-1.5 py-0.5 text-[11px] tabular-nums transition-colors"
         aria-pressed={showActivityRecord}
         title={showActivityRecord ? 'Hide generation activity' : 'Show generation activity'}
         onclick={() => activity.setReportVisible(entry.id, !showActivityRecord)}
       >
         {formatDuration(turnDuration(activityRecord, activity.now))}
       </button>
+    {/if}
+
+    <!-- Stays at every width; the chips after it give way instead. -->
+    {#if showEntryMeta}
+      <div class="flex shrink-0 items-center gap-1 text-[12px] leading-4 tabular-nums">
+        <MilestoneIcon class="text-muted-foreground h-4 w-4 shrink-0" />
+        <span class="text-foreground">{entryNumber(entry)}</span>
+      </div>
+    {/if}
+
+    <!-- Drops to its own row below 40rem: it is the widest thing on the row. -->
+    {#if showEntryMeta}
+      <div class="hidden @min-[40rem]:flex">
+        {@render storyTimeChip()}
+      </div>
     {/if}
 
     <!-- Spacer to push buttons to the right -->
@@ -1409,7 +1458,8 @@
 
     <!-- Right side: Action buttons toolbar (always visible on mobile, hover-only on desktop) -->
     {#if !isEditing && !isDeleting && !isBranching && !isCreatingCheckpoint && entry.type !== 'system'}
-      <div class="flex shrink-0 items-center gap-0.5">
+      <!-- -ml-2 cancels the row's gap, so the leftmost icon keeps the same rhythm as its neighbours. -->
+      <div class="-ml-2 flex shrink-0 items-center gap-0.5">
         {#snippet copyIcon()}
           {#if isCopied}
             <Check class="h-4 w-4 text-green-500" />
@@ -1493,7 +1543,7 @@
                 <Button
                   variant="text"
                   size="icon"
-                  class="text-muted-foreground hover:text-foreground hidden h-7 w-7 sm:flex"
+                  class="text-muted-foreground hover:text-foreground hidden h-7 w-7 @min-[22rem]:flex"
                   title="Response info"
                   {...props}
                 >
@@ -1502,6 +1552,20 @@
               {/snippet}
             </Popover.Trigger>
             <Popover.Content class="w-64 p-3 text-xs" align="end">
+              <!-- Action above the info, as in the overflow menu; only once the chip has gone. -->
+              {#if activityRecord && !activityChipFits}
+                <div class="border-border mb-2 border-b pb-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    class="h-7 w-full justify-start gap-2 px-2 text-xs"
+                    onclick={() => activity.setReportVisible(entry.id, !showActivityRecord)}
+                  >
+                    <Clock class="h-3.5 w-3.5" />
+                    {showActivityRecord ? 'Hide' : 'Show'} generation activity
+                  </Button>
+                </div>
+              {/if}
               <div class="border-border mb-2 border-b pb-2">
                 {@render entryNumberRow()}
               </div>
@@ -1536,7 +1600,7 @@
             variant="text"
             size="icon"
             onclick={() => (isBranching = true)}
-            class="hidden h-7 w-7 text-amber-500 hover:text-amber-600 sm:flex"
+            class="hidden h-7 w-7 text-amber-500 hover:text-amber-600 @min-[22rem]:flex"
             title="Branch from here"
           >
             <GitBranch class="h-4 w-4" />
@@ -1547,7 +1611,7 @@
             variant="text"
             size="icon"
             onclick={() => (isCreatingCheckpoint = true)}
-            class="hidden h-7 w-7 text-blue-500 hover:text-blue-600 sm:flex"
+            class="hidden h-7 w-7 text-blue-500 hover:text-blue-600 @min-[22rem]:flex"
             title="Create checkpoint"
           >
             <Bookmark class="h-4 w-4" />
@@ -1575,7 +1639,7 @@
             size="icon"
             onclick={handleGenerateStoryImages}
             disabled={ui.isGenerating || isGeneratingStoryImages || hasEmbeddedImages}
-            class="text-muted-foreground hover:text-foreground hidden h-7 w-7 sm:flex"
+            class="text-muted-foreground hover:text-foreground hidden h-7 w-7 @min-[22rem]:flex"
             title={storyImagesLabel}
           >
             {#if isGeneratingStoryImages}
@@ -1589,7 +1653,7 @@
           variant="text"
           size="icon"
           onclick={handleCopyContent}
-          class="text-muted-foreground hover:text-foreground hidden h-7 w-7 sm:flex"
+          class="text-muted-foreground hover:text-foreground hidden h-7 w-7 @min-[22rem]:flex"
           title={copyLabel}
           aria-label={isCopied ? 'Message copied' : copyLabel}
         >
@@ -1621,7 +1685,7 @@
               <Button
                 variant="text"
                 size="icon"
-                class="text-muted-foreground hover:text-foreground h-7 w-7 sm:hidden"
+                class="text-muted-foreground hover:text-foreground h-7 w-7 @min-[22rem]:hidden"
                 title="More actions"
                 aria-label="More actions"
                 {...props}
@@ -1691,6 +1755,19 @@
       </div>
     {/if}
   </div>
+
+  {#snippet storyTimeChip()}
+    <div class="flex items-center gap-1 text-right text-[12px] leading-4 tabular-nums">
+      <Clock class="text-muted-foreground h-4 w-4 shrink-0" />
+      <span class="text-foreground">{generationInfo.storyTime || 'not recorded'}</span>
+    </div>
+  {/snippet}
+
+  {#if showEntryMeta}
+    <div class="mb-2 flex justify-end @min-[40rem]:hidden">
+      {@render storyTimeChip()}
+    </div>
+  {/if}
 
   <!-- Content area -->
   <div class="min-w-0">
