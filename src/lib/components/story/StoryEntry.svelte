@@ -14,6 +14,7 @@
 <script lang="ts">
   import type { StoryEntry, EmbeddedImage, TimeTracker } from '$lib/types'
   import TimeAnchorModal from '$lib/components/world/TimeAnchorModal.svelte'
+  import EntryTimeModal from '$lib/components/world/EntryTimeModal.svelte'
   import { story } from '$lib/stores/story.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { settings } from '$lib/stores/settings.svelte'
@@ -80,7 +81,6 @@
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
   import { Textarea } from '$lib/components/ui/textarea'
   import { Input } from '$lib/components/ui/input'
-  import { formatStoryTime, parseStoryTime, storyTimeIsInvalid } from '$lib/services/storyTime'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { SvelteMap, SvelteSet } from 'svelte/reactivity'
   import { escapeHtml } from '$lib/utils/inlineImageParser'
@@ -322,12 +322,6 @@
 
   let isEditing = $state(false)
   let editContent = $state('')
-  let editingTimes = $state(false)
-  let editStart = $state('')
-  let editEnd = $state('')
-
-  const startInvalid = $derived(storyTimeIsInvalid(editStart))
-  const endInvalid = $derived(storyTimeIsInvalid(editEnd))
   let isDeleting = $state(false)
 
   // Embedded images state
@@ -396,6 +390,7 @@
   // Checkpoint creation state
   let isCreatingCheckpoint = $state(false)
   let isAnchoringTime = $state(false)
+  let isEditingEntryTime = $state(false)
   let checkpointName = $state('')
 
   // Check if this is the latest entry (checkpoints can only be created at the latest entry)
@@ -1228,40 +1223,21 @@
 
   function startEdit() {
     editContent = entry.content
-    editStart = entry.metadata?.timeStart ? formatStoryTime(entry.metadata.timeStart) : ''
-    editEnd = entry.metadata?.timeEnd ? formatStoryTime(entry.metadata.timeEnd) : ''
-    editingTimes = false
     isEditing = true
   }
 
   async function saveEdit() {
     const newContent = editContent.trim()
-    const start = editingTimes ? parseStoryTime(editStart) : null
-    const end = editingTimes ? parseStoryTime(editEnd) : null
-    const timesChanged =
-      !!start &&
-      !!end &&
-      (formatStoryTime(start) !==
-        formatStoryTime(entry.metadata?.timeStart ?? { years: 0, days: 0, hours: 0, minutes: 0 }) ||
-        formatStoryTime(end) !==
-          formatStoryTime(entry.metadata?.timeEnd ?? { years: 0, days: 0, hours: 0, minutes: 0 }))
-    const contentChanged = !!newContent && newContent !== entry.content
-
-    if (!contentChanged && !timesChanged) {
+    if (!newContent || newContent === entry.content) {
       isEditing = false
       return
     }
 
     try {
-      if (contentChanged) {
-        await story.updateEntry(entry.id, newContent)
-        // Keep retry backup in sync so a subsequent Retry uses the updated text
-        if (canSaveAndRegenerate) {
-          ui.updateRetryBackupContent(newContent)
-        }
-      }
-      if (timesChanged) {
-        await story.setEntryTimes(entry.id, start!, end!)
+      await story.updateEntry(entry.id, newContent)
+      // Keep retry backup in sync so a subsequent Retry uses the updated text
+      if (canSaveAndRegenerate) {
+        ui.updateRetryBackupContent(newContent)
       }
       isEditing = false
     } catch (error) {
@@ -1469,21 +1445,6 @@
       </div>
     {/if}
 
-    {#if isEditing && entry.type !== 'user_action'}
-      <Button
-        variant="text"
-        size="icon"
-        class="h-7 w-7 {editingTimes
-          ? 'text-amber-500'
-          : 'text-muted-foreground hover:text-foreground'}"
-        onclick={() => (editingTimes = !editingTimes)}
-        title={editingTimes ? 'Hide the entry times' : 'Edit the entry times'}
-        aria-label={editingTimes ? 'Hide the entry times' : 'Edit the entry times'}
-      >
-        <Clock class="h-4 w-4" />
-      </Button>
-    {/if}
-
     <!-- Spacer to push buttons to the right -->
     <div class="flex-1"></div>
 
@@ -1663,18 +1624,29 @@
             <Bookmark class="h-4 w-4" />
           </Button>
         {/if}
+        <!-- Both ways of moving this entry in time, under one control: they were a dialog and a
+             field hidden inside the text editor, which read as unrelated. -->
         {#if entry.type !== 'user_action'}
-          <Button
-            variant="text"
-            size="icon"
-            onclick={() => (isAnchoringTime = true)}
-            class="hidden h-7 w-7 sm:flex {story.timeAnchorFor(entry.id)
-              ? 'text-amber-500 hover:text-amber-600'
-              : 'text-muted-foreground hover:text-foreground'}"
-            title={story.timeAnchorFor(entry.id) ? 'Edit time anchor' : 'Create a time anchor'}
-          >
-            <Anchor class="h-4 w-4" />
-          </Button>
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger>
+              {#snippet child({ props })}
+                <Button
+                  {...props}
+                  variant="text"
+                  size="icon"
+                  class="hidden h-7 w-7 sm:flex {story.timeAnchorFor(entry.id)
+                    ? 'text-amber-500 hover:text-amber-600'
+                    : 'text-muted-foreground hover:text-foreground'}"
+                  title="Timeline adjustments"
+                >
+                  <Clock class="h-4 w-4" />
+                </Button>
+              {/snippet}
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="end">
+              {@render timelineAdjustments()}
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
         {/if}
         <Button
           variant="text"
@@ -1767,10 +1739,15 @@
               </DropdownMenu.Item>
             {/if}
             {#if entry.type !== 'user_action'}
-              <DropdownMenu.Item onclick={() => (isAnchoringTime = true)}>
-                <Anchor class="h-4 w-4" />
-                {story.timeAnchorFor(entry.id) ? 'Edit time anchor' : 'Create a time anchor'}
-              </DropdownMenu.Item>
+              <DropdownMenu.Sub>
+                <DropdownMenu.SubTrigger>
+                  <Clock class="h-4 w-4" />
+                  Timeline adjustments
+                </DropdownMenu.SubTrigger>
+                <DropdownMenu.SubContent>
+                  {@render timelineAdjustments()}
+                </DropdownMenu.SubContent>
+              </DropdownMenu.Sub>
             {/if}
             <!-- Static label and icon: selecting an item closes the menu, so the "Copied!"
                  state would never be on screen. The toast is the feedback here. -->
@@ -1838,35 +1815,6 @@
   <div class="min-w-0">
     {#if isEditing}
       <div class="space-y-2">
-        {#if editingTimes}
-          <div class="border-border grid gap-2 rounded-md border p-2 sm:grid-cols-2">
-            <label class="text-xs">
-              Begins
-              <Input
-                bind:value={editStart}
-                placeholder="Y1 D4 14:30"
-                class="mt-1 h-8 text-sm {startInvalid ? 'border-destructive' : ''}"
-              />
-            </label>
-            <label class="text-xs">
-              Ends
-              <Input
-                bind:value={editEnd}
-                placeholder="Y1 D4 16:00"
-                class="mt-1 h-8 text-sm {endInvalid ? 'border-destructive' : ''}"
-              />
-            </label>
-            {#if startInvalid || endInvalid}
-              <p class="text-destructive text-xs sm:col-span-2">
-                Give both as Y1 D4 14:30. An unreadable time is left as it was.
-              </p>
-            {:else if isLastEntry}
-              <p class="text-muted-foreground text-xs sm:col-span-2">
-                This is the last entry, so the story's current time moves to its ending.
-              </p>
-            {/if}
-          </div>
-        {/if}
         <Textarea
           bind:value={editContent}
           onkeydown={handleKeydown}
@@ -2171,6 +2119,21 @@
 </div>
 
 <TimeAnchorModal bind:open={isAnchoringTime} entryId={entry.id} />
+<EntryTimeModal bind:open={isEditingEntryTime} entryId={entry.id} />
+
+<!-- One list, rendered in the toolbar menu and in the overflow menu: the two must not drift. -->
+{#snippet timelineAdjustments()}
+  <DropdownMenu.Item onclick={() => (isEditingEntryTime = true)}>
+    <Clock class="h-4 w-4" />
+    Edit in place
+  </DropdownMenu.Item>
+  <DropdownMenu.Item onclick={() => (isAnchoringTime = true)}>
+    <Anchor class="h-4 w-4" />
+    {story.timeAnchorFor(entry.id)
+      ? 'Edit the reconciliation anchor'
+      : 'Create a reconciliation anchor'}
+  </DropdownMenu.Item>
+{/snippet}
 
 <!-- View/Edit Image Modal -->
 <ResponsiveModal.Root bind:open={isViewingImage}>
