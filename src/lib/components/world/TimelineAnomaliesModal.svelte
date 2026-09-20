@@ -3,14 +3,17 @@
   import { ui } from '$lib/stores/ui.svelte'
   import { Button } from '$lib/components/ui/button'
   import * as Dialog from '$lib/components/ui/dialog'
-  import { TriangleAlert, Info, CornerDownLeft } from '@lucide/svelte'
+  import { TriangleAlert, Info, CornerDownLeft, Wrench } from '@lucide/svelte'
   import { formatStoryTime } from '$lib/services/storyTime'
   import type { TimelineAnomaly } from '$lib/services/storyTime'
   import { entryNumber } from '$lib/utils/storyNavigation'
   import { supportsHover } from '$lib/utils/platform'
   import type { StoryEntry } from '$lib/types'
 
-  let { open = $bindable(false) }: { open?: boolean } = $props()
+  let {
+    open = $bindable(false),
+    onReconcile,
+  }: { open?: boolean; onReconcile?: (entryId: string) => void } = $props()
 
   let hideSuspected = $state(false)
 
@@ -99,6 +102,17 @@
     return entry.content.trim().replace(/\s+/g, ' ')
   }
 
+  /** Only where a range covers the entry: otherwise the screen would open on some other range. */
+  function rangeHolding(anomaly: TimelineAnomaly): boolean {
+    const id = subjectId(anomaly)
+    return story.timeRanges.some((range) => range.entryIds.includes(id))
+  }
+
+  function reconcile(anomaly: TimelineAnomaly) {
+    open = false
+    onReconcile?.(subjectId(anomaly))
+  }
+
   function goTo(anomaly: TimelineAnomaly) {
     const entry = subject(anomaly)
     if (!entry) return
@@ -185,10 +199,23 @@
             <span>{anomaly.detail}</span>
           </p>
 
-          <Button variant="outline" size="sm" class="h-7 text-xs" onclick={() => goTo(anomaly)}>
-            <CornerDownLeft class="h-3 w-3" />
-            Go to entry
-          </Button>
+          <div class="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" class="h-7 text-xs" onclick={() => goTo(anomaly)}>
+              <CornerDownLeft class="h-3 w-3" />
+              Go to entry
+            </Button>
+            {#if rangeHolding(anomaly)}
+              <Button
+                variant="outline"
+                size="sm"
+                class="h-7 text-xs"
+                onclick={() => reconcile(anomaly)}
+              >
+                <Wrench class="h-3 w-3" />
+                Reconcile
+              </Button>
+            {/if}
+          </div>
         </div>
       {/each}
     </div>

@@ -22,6 +22,8 @@
   import TimeAnchorModal from './TimeAnchorModal.svelte'
 
   let reconcileOpen = $state(false)
+  /** Set when the reader arrives from an anomaly, which decides the range opened on. */
+  let reconcileEntryId = $state<string | null>(null)
   let anomaliesOpen = $state(false)
   let anchorModalOpen = $state(false)
   /** Null when adding: the modal then asks which entry to anchor. */
@@ -358,11 +360,25 @@
 </div>
 
 <!-- Last, not first: reconciling is where this panel leads, once a reference point is in place -->
-<Button variant="outline" size="sm" class="mt-3 w-full" onclick={() => (reconcileOpen = true)}>
+<Button
+  variant="outline"
+  size="sm"
+  class="mt-3 w-full"
+  onclick={() => {
+    reconcileEntryId = null
+    reconcileOpen = true
+  }}
+>
   <Wrench class="h-3.5 w-3.5" />
   Reconcile
 </Button>
 
-<TimelineReconciliationModal bind:open={reconcileOpen} />
-<TimelineAnomaliesModal bind:open={anomaliesOpen} />
+<TimelineReconciliationModal bind:open={reconcileOpen} focusEntryId={reconcileEntryId} />
+<TimelineAnomaliesModal
+  bind:open={anomaliesOpen}
+  onReconcile={(entryId) => {
+    reconcileEntryId = entryId
+    reconcileOpen = true
+  }}
+/>
 <TimeAnchorModal bind:open={anchorModalOpen} entryId={anchorModalEntryId} />

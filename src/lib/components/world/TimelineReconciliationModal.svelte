@@ -31,7 +31,11 @@
   } from '$lib/services/storyTime'
   import type { StoryEntry, TimeTracker } from '$lib/types'
 
-  let { open = $bindable(false) }: { open?: boolean } = $props()
+  let {
+    open = $bindable(false),
+    /** Opens on the range holding this entry, for a reader arriving from a particular anomaly. */
+    focusEntryId = null,
+  }: { open?: boolean; focusEntryId?: string | null } = $props()
 
   const isMobile = createIsMobile()
   /** The ladder on a narrow screen, the table otherwise. */
@@ -94,7 +98,11 @@
   $effect(() => {
     if (open === wasOpen) return
     wasOpen = open
-    if (open) selectedIndex = Math.max(0, untrack(() => ranges).length - 1)
+    if (!open) return
+    const list = untrack(() => ranges)
+    const asked = untrack(() => focusEntryId)
+    const holding = asked ? list.findIndex((candidate) => candidate.entryIds.includes(asked)) : -1
+    selectedIndex = holding === -1 ? Math.max(0, list.length - 1) : holding
   })
   const range = $derived<SelectableRange | undefined>(ranges[selectedIndex])
   const hasNextRange = $derived(selectedIndex + 1 < ranges.length)
