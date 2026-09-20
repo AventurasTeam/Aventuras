@@ -348,9 +348,12 @@
                 Anchor
               </span>
             {/if}
+            <!-- The fork reads as a wall, like the anchor: both are why a range stops here. -->
             {#each row.roles as role (role)}
               <span
-                class="bg-muted text-muted-foreground rounded px-1 text-[10px] tracking-wide uppercase"
+                class="rounded px-1 text-[10px] tracking-wide uppercase {role === 'Fork point'
+                  ? 'bg-amber-500/15 text-amber-700 dark:text-amber-500'
+                  : 'bg-muted text-muted-foreground'}"
               >
                 {role}
               </span>

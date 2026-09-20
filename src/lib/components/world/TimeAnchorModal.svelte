@@ -198,7 +198,7 @@
       {#if existing}
         <Button variant="outline" class="text-destructive" disabled={saving} onclick={remove}>
           <Trash2 class="h-4 w-4" />
-          Remove anchor
+          Delete anchor
         </Button>
       {:else}
         <span></span>
