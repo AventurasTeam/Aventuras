@@ -14,8 +14,10 @@ import {
 describe('story-settings tabs', () => {
   // Written out rather than re-derived from the groups: this is the rail order the
   // user reads and the order the save bar lists dirty fields in, so a regroup has to
-  // fail here instead of quietly renumbering both.
-  it('registers the eight tabs in rail order, under two groups', () => {
+  // fail here instead of quietly renumbering both. Membership is asserted whole, not
+  // as a list of group ids: moving a tab across the boundary leaves the flat order
+  // untouched and only shows up as a tab sitting under the wrong rail header.
+  it('registers the eight tabs in rail order, under the two groups that head them', () => {
     expect(STORY_SETTINGS_TAB_IDS).toEqual([
       'about',
       'generation',
@@ -26,7 +28,10 @@ describe('story-settings tabs', () => {
       'calendar',
       'advanced',
     ])
-    expect(STORY_SETTINGS_TAB_GROUPS.map((group) => group.id)).toEqual(['story', 'settings'])
+    expect(STORY_SETTINGS_TAB_GROUPS).toEqual([
+      { id: 'story', tabs: ['about', 'generation'] },
+      { id: 'settings', tabs: ['models', 'memory', 'translation', 'pack', 'calendar', 'advanced'] },
+    ])
     expect(new Set(STORY_SETTINGS_TAB_IDS).size).toBe(STORY_SETTINGS_TAB_IDS.length)
   })
 

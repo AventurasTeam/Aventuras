@@ -27,26 +27,35 @@ export type MemoryKnobsKey = keyof MemoryKnobsDraft
 
 export type MemoryKnobsPatch = Pick<StorySettings, MemoryKnobsKey>
 
-/** Tab order — drives the save bar's label order within the section. */
-export const MEMORY_KNOBS_KEYS: readonly MemoryKnobsKey[] = [
-  'chapterTokenThreshold',
-  'chapterAutoClose',
-  'fullChapterInBuffer',
-  'partialChapterBuffer',
-  'protectedBuffer',
-  'classifierContextEntries',
-  'classifierCadence',
-  'retrievalBudgets',
-  'keywordRetrieval',
-]
+// Records rather than plain arrays: both key sets are derived from a type declared
+// elsewhere, so a bare array is an unchecked subset. A knob missing from the order
+// below never reports dirty, so the section would silently never save it.
+const MEMORY_KNOBS_ORDER = {
+  chapterTokenThreshold: true,
+  chapterAutoClose: true,
+  fullChapterInBuffer: true,
+  partialChapterBuffer: true,
+  protectedBuffer: true,
+  classifierContextEntries: true,
+  classifierCadence: true,
+  retrievalBudgets: true,
+  keywordRetrieval: true,
+} satisfies Record<MemoryKnobsKey, true>
 
-export const BUDGET_KEYS: readonly BudgetKey[] = [
-  'entities',
-  'lore',
-  'happenings',
-  'threads',
-  'chapters',
-]
+const BUDGET_ORDER = {
+  entities: true,
+  lore: true,
+  happenings: true,
+  threads: true,
+  chapters: true,
+} satisfies Record<BudgetKey, true>
+
+/** Tab order — drives the save bar's label order within the section. */
+export const MEMORY_KNOBS_KEYS: readonly MemoryKnobsKey[] = Object.keys(
+  MEMORY_KNOBS_ORDER,
+) as MemoryKnobsKey[]
+
+export const BUDGET_KEYS: readonly BudgetKey[] = Object.keys(BUDGET_ORDER) as BudgetKey[]
 
 export const CHAPTER_THRESHOLD_PRESETS = [
   { id: 'short', tokens: 8000 },
