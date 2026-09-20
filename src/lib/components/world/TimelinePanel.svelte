@@ -15,7 +15,7 @@
   } from '@lucide/svelte'
   import { Button } from '$lib/components/ui/button'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
-  import { entryNumber } from '$lib/utils/storyNavigation'
+  import { entryNumber, jumpToEntry } from '$lib/utils/storyNavigation'
   import { supportsHover } from '$lib/utils/platform'
   import TimelineReconciliationModal from './TimelineReconciliationModal.svelte'
   import TimelineAnomaliesModal from './TimelineAnomaliesModal.svelte'
@@ -46,12 +46,14 @@
   }
 
   function goToEntry(entryId: string) {
-    const entry = story.entries.find((e) => e.id === entryId)
-    if (!entry) return
-    ui.requestEntryScroll(entryId)
-    ui.setActivePanel('story')
-    ui.closeNavPanelOnMobile()
-    if (!supportsHover()) ui.showToast(`Jumped to entry ${entryNumber(entry)}`, 'info', 2000)
+    jumpToEntry({
+      entries: story.entries,
+      entryId,
+      ui,
+      confirmation: `Jumped to entry ${anchorEntryNumber(entryId)}`,
+      closeOnMobile: () => ui.closeNavPanelOnMobile(),
+      canHover: supportsHover(),
+    })
   }
 
   function anchorEntryNumber(entryId: string): string {

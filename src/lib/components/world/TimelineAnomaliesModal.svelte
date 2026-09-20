@@ -6,7 +6,7 @@
   import { TriangleAlert, Info, CornerDownLeft, Wrench } from '@lucide/svelte'
   import { formatStoryTime } from '$lib/services/storyTime'
   import type { TimelineAnomaly } from '$lib/services/storyTime'
-  import { entryNumber } from '$lib/utils/storyNavigation'
+  import { entryNumber, jumpToEntry } from '$lib/utils/storyNavigation'
   import { supportsHover } from '$lib/utils/platform'
   import type { StoryEntry } from '$lib/types'
 
@@ -115,12 +115,15 @@
 
   function goTo(anomaly: TimelineAnomaly) {
     const entry = subject(anomaly)
-    if (!entry) return
-    ui.requestEntryScroll(entry.id)
-    ui.setActivePanel('story')
-    ui.closeNavPanelOnMobile()
     open = false
-    if (!supportsHover()) ui.showToast(`Jumped to entry ${entryNumber(entry)}`, 'info', 2000)
+    jumpToEntry({
+      entries: story.entries,
+      entryId: subjectId(anomaly),
+      ui,
+      confirmation: `Jumped to entry ${entry ? entryNumber(entry) : '?'}`,
+      closeOnMobile: () => ui.closeNavPanelOnMobile(),
+      canHover: supportsHover(),
+    })
   }
 </script>
 
