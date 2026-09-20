@@ -1,7 +1,7 @@
 import { useStore } from 'zustand'
 import { createStore } from 'zustand/vanilla'
 
-type SwapDialogState = { storyId: string } | null
+type SwapDialogState = { storyId: string; preselectModelId?: string } | null
 
 /**
  * `cancelRequested` lives INSIDE the progress entry, not beside it: a cancel is
@@ -26,15 +26,24 @@ type EmbedderSwapState = {
    * condition.
    */
   resumeDeferredFor: string | null
+  /** Session-scoped per retrieval.md; `deleteStory` prunes a deleted story's entry. */
+  upgradeDeferred: ReadonlySet<string>
 }
 
-const INITIAL: EmbedderSwapState = { dialog: null, progress: {}, resumeDeferredFor: null }
+const INITIAL: EmbedderSwapState = {
+  dialog: null,
+  progress: {},
+  resumeDeferredFor: null,
+  upgradeDeferred: new Set<string>(),
+}
 
 const store = createStore<EmbedderSwapState>()(() => INITIAL)
 
 /** The single named action that opens the model-swap dialog for a story. */
-export function openEmbedderSwapDialog(storyId: string): void {
-  store.setState({ dialog: { storyId } })
+export function openEmbedderSwapDialog(storyId: string, preselectModelId?: string): void {
+  store.setState({
+    dialog: preselectModelId == null ? { storyId } : { storyId, preselectModelId },
+  })
 }
 
 export const embedderSwapStore = {
@@ -96,6 +105,20 @@ export const embedderSwapStore = {
           ? null
           : s.resumeDeferredFor,
     })),
+  /** "Later" on the upgrade prompt. */
+  deferUpgrade: (storyId: string): void =>
+    store.setState((s) =>
+      s.upgradeDeferred.has(storyId)
+        ? s
+        : { upgradeDeferred: new Set(s.upgradeDeferred).add(storyId) },
+    ),
+  clearDeferredUpgradeFor: (storyId: string): void =>
+    store.setState((s) => {
+      if (!s.upgradeDeferred.has(storyId)) return s
+      const next = new Set(s.upgradeDeferred)
+      next.delete(storyId)
+      return { upgradeDeferred: next }
+    }),
   __reset: (): void => store.setState(INITIAL),
 }
 

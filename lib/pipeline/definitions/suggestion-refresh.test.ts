@@ -458,7 +458,7 @@ describe('suggestion-refresh emission phase', () => {
   })
 
   it('calls the dedicated suggestion agent with the refresh template and story model overrides', async () => {
-    openStory({ models: { suggestion: 'story-model' } })
+    openStory({ models: { suggestion: { providerId: 'prov-1', modelId: 'story-model' } } })
     hydrate()
     wireAppSettings()
     generateStructuredMock.mockResolvedValue(okChips([{ categoryRef: 'cat1', text: 'Draw.' }]))
@@ -469,7 +469,9 @@ describe('suggestion-refresh emission phase', () => {
       'suggestion',
       expect.any(String),
       suggestionRefreshSchema,
-      expect.objectContaining({ storyModels: { suggestion: 'story-model' } }),
+      expect.objectContaining({
+        storyModels: { suggestion: { providerId: 'prov-1', modelId: 'story-model' } },
+      }),
       expect.anything(),
     )
     const prompt = generateStructuredMock.mock.calls[0]?.[1] as string

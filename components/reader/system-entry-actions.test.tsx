@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { entryMetadataSchema, type SystemFailureMeta } from '@/lib/db'
 import { t } from '@/lib/i18n'
+import { hasCopy } from '@/lib/i18n/__tests__/locale-keys'
 import type { PipelineError } from '@/lib/pipeline'
 import { embedderSwapStore } from '@/lib/stores'
 
@@ -11,6 +12,7 @@ import {
   describeTurnFailure,
   dismissSystemEntry,
   toSystemFailureMeta,
+  useConfigFixAction,
   useEmbedderFixAction,
   useSystemEntryActions,
 } from './system-entry-actions'
@@ -91,6 +93,23 @@ describe('describeTurnFailure', () => {
   it('falls back to the generic message for an unrecognised kind', () => {
     const out = describeTurnFailure({ kind: 'orchestrator', detail: 'blocked by per-turn' })
     expect(out.content).toBe(t('reader:systemEntry.failureMessage'))
+  })
+
+  // The app-default chain is healthy in this state; copy naming it sends the user
+  // to App Settings to look for a fault that is on the story.
+  it('names the story override, not the app default, when the override provider is gone', () => {
+    const out = describeTurnFailure({
+      kind: 'config-resolver',
+      failure: 'override-provider-missing',
+      target: 'narrative',
+      phaseName: 'narrative',
+      detail: 'narrative',
+    })
+    const key = 'reader:systemEntry.failure.overrideProviderMissing'
+    expect(out.content).toBe(t(key))
+    // `t` echoes a missing key, which would make the line above pass vacuously.
+    expect(hasCopy(key)).toBe(true)
+    expect(out.content).not.toBe(t('reader:systemEntry.failure.providerMissing'))
   })
 })
 
@@ -200,6 +219,40 @@ describe('useEmbedderFixAction', () => {
   })
 })
 
+describe('useConfigFixAction', () => {
+  it("sends a broken override to that story's Models tab, where the row can be cleared", () => {
+    const { result } = renderHook(() => useConfigFixAction('override-provider-missing', 'story_1'))
+    expect(result.current?.label).toBe(t('reader:systemEntry.fixOverride'))
+
+    act(() => result.current?.onPress())
+
+    expect(router.navigate).toHaveBeenCalledWith('/story-settings/story_1?tab=models')
+    expect(router.push).not.toHaveBeenCalled()
+  })
+
+  it('still sends an app-chain provider failure to App Settings', () => {
+    const { result } = renderHook(() => useConfigFixAction('provider-missing', 'story_1'))
+    expect(result.current?.label).toBe(t('reader:systemEntry.fixDefault'))
+
+    act(() => result.current?.onPress())
+
+    expect(router.push).toHaveBeenCalledWith('/settings?tab=providers')
+    expect(router.navigate).not.toHaveBeenCalled()
+  })
+
+  it('drops the override action when no story is resolved', () => {
+    const { result } = renderHook(() => useConfigFixAction('override-provider-missing', null))
+    expect(result.current).toBeUndefined()
+  })
+
+  // The bubble reads a persisted open string, so a kind written by a newer build
+  // must keep an affordance rather than lose one.
+  it('lands an unrecognised persisted failure on the generic default fix', () => {
+    const { result } = renderHook(() => useConfigFixAction('from-a-newer-build', 'story_1'))
+    expect(result.current?.label).toBe(t('reader:systemEntry.fixDefault'))
+  })
+})
+
 describe('useSystemEntryActions', () => {
   const onRetry = () => {}
 
@@ -225,5 +278,15 @@ describe('useSystemEntryActions', () => {
 
   it('offers no fix action for an embedder failure with no story resolved', () => {
     expect(actionsFor({ kind: 'embedder' }, null).fixAction).toBeUndefined()
+  })
+
+  it('threads the story through so an override failure can offer its own fix', () => {
+    expect(
+      actionsFor({ kind: 'config-resolver', failure: 'override-provider-missing' }).fixAction
+        ?.label,
+    ).toBe(t('reader:systemEntry.fixOverride'))
+    expect(
+      actionsFor({ kind: 'config-resolver', failure: 'override-provider-missing' }, null).fixAction,
+    ).toBeUndefined()
   })
 })

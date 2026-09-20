@@ -1,10 +1,22 @@
-import { AGENT_IDS, GLOBAL_AGENT_IDS, type AgentId, type StoryAgentId } from '@/lib/db'
+import {
+  AGENT_IDS,
+  GLOBAL_AGENT_IDS,
+  STORY_AGENT_IDS,
+  type AgentId,
+  type StoryAgentId,
+} from '@/lib/db'
 
 export type ResolveTarget = AgentId | 'narrative'
 
 // Targets that carry a per-story model override: narrative + the story-scoped
 // agents. Mirrors stories.settings.models; both derive from the registry split.
 export type StoryOverrideTarget = StoryAgentId | 'narrative'
+
+/** Every target that carries a per-story override, narrative first — the Models tab's row order. */
+export const STORY_OVERRIDE_TARGETS = [
+  'narrative',
+  ...STORY_AGENT_IDS,
+] as const satisfies readonly StoryOverrideTarget[]
 
 const GLOBAL_TARGET_IDS: ReadonlySet<string> = new Set(GLOBAL_AGENT_IDS)
 

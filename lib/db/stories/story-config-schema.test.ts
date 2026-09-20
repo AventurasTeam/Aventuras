@@ -197,7 +197,10 @@ describe('storySettingsSchema spec-pinned defaults', () => {
       embedding_swap_target_dim: 768,
       embedding_provider_id: 'p1',
       effectiveDim: 256,
-      models: { narrative: 'prof1', 'lore-mgmt': 'prof2' },
+      models: {
+        narrative: { providerId: 'prov-1', modelId: 'prof1' },
+        'lore-mgmt': { providerId: 'prov-1', modelId: 'prof2' },
+      },
     })
     expect(r.success).toBe(true)
   })
@@ -350,5 +353,129 @@ describe('storySettingsSchema backfill obligations', () => {
       .map(([key]) => key)
       .sort()
     expect(required).toEqual([...REQUIRED_SETTINGS_KEYS].sort())
+  })
+})
+
+describe('models overrides are provider-qualified', () => {
+  const base = {
+    classifierCadence: 5,
+    classifierContextEntries: 4,
+    piggybackMode: 'off',
+    embeddingBackend: 'local',
+    embedding_model_id: 'm',
+    retrievalBudgets: { entities: 1, lore: 1, happenings: 1, threads: 1, chapters: 1 },
+    keywordRetrieval: {
+      mode: 'boost',
+      budgetShare: 0.5,
+      scanEntries: 1,
+      cascade: false,
+      cascadeMaxDepth: 2,
+    },
+    composerModesEnabled: true,
+    composerWrapPov: 'first',
+    suggestionsEnabled: false,
+    suggestionCategories: [],
+    translation: {
+      enabled: false,
+      targetLanguage: null,
+      granularToggles: {
+        narrative: false,
+        entityNames: false,
+        entityDescriptions: false,
+        lore: false,
+        threads: false,
+        happenings: false,
+        chapterMeta: false,
+      },
+    },
+    activePackId: null,
+    packVariables: {},
+  }
+
+  it('accepts a { providerId, modelId } override per story target', () => {
+    const parsed = storySettingsSchema.parse({
+      ...base,
+      models: {
+        narrative: { providerId: 'prov-1', modelId: 'm-narr' },
+        'lore-mgmt': { providerId: 'prov-2', modelId: 'm-lore' },
+      },
+    })
+    expect(parsed.models).toEqual({
+      narrative: { providerId: 'prov-1', modelId: 'm-narr' },
+      'lore-mgmt': { providerId: 'prov-2', modelId: 'm-lore' },
+    })
+  })
+
+  it('rejects a bare model-id string override', () => {
+    expect(() => storySettingsSchema.parse({ ...base, models: { narrative: 'bare-id' } })).toThrow()
+  })
+
+  it('has no slot for the global wizard-assist agent', () => {
+    const parsed = storySettingsSchema.parse({
+      ...base,
+      models: { 'wizard-assist': { providerId: 'p', modelId: 'm' } },
+    })
+    expect(parsed.models).toEqual({})
+  })
+
+  // `resolveModel` reports `ok` for a ref whose modelId is blank, pre-flight passes
+  // it, and the provider call fires with no model — so the ref has to refuse it.
+  it('rejects a ref whose halves do not name anything', () => {
+    for (const models of [
+      { narrative: { providerId: 'prov-1', modelId: '' } },
+      { narrative: { providerId: 'prov-1', modelId: '   ' } },
+      { narrative: { providerId: '', modelId: 'm-narr' } },
+    ]) {
+      expect(() => storySettingsSchema.parse({ ...base, models })).toThrow()
+    }
+  })
+
+  it('stores a padded model id trimmed, the form it was validated in', () => {
+    const parsed = storySettingsSchema.parse({
+      ...base,
+      models: { narrative: { providerId: 'prov-1', modelId: '  m-narr  ' } },
+    })
+    expect(parsed.models.narrative).toEqual({ providerId: 'prov-1', modelId: 'm-narr' })
+  })
+})
+
+describe('storySettingsSchema — knob bounds', () => {
+  // The Memory tab holds both of these to a whole number of at least 1, and no
+  // surface writes them any other way, so a stored 0 or fraction is unreachable
+  // and unrepairable: the panel would refuse every save naming an untouched field.
+  it('rejects a zero or fractional chapter threshold and classifier cadence', () => {
+    for (const patch of [
+      { chapterTokenThreshold: 0 },
+      { chapterTokenThreshold: 12000.5 },
+      { chapterTokenThreshold: -1 },
+      { classifierCadence: 0 },
+      { classifierCadence: 4.5 },
+      { classifierCadence: -2 },
+    ]) {
+      expect(() => storySettingsSchema.parse({ ...VALID_SETTINGS, ...patch })).toThrow()
+    }
+  })
+
+  it('keeps accepting the values the knobs can produce', () => {
+    const parsed = storySettingsSchema.parse({
+      ...VALID_SETTINGS,
+      chapterTokenThreshold: 1,
+      classifierCadence: 1,
+      partialChapterBuffer: 0,
+      protectedBuffer: 0,
+    })
+    expect(parsed.chapterTokenThreshold).toBe(1)
+    expect(parsed.classifierCadence).toBe(1)
+    expect(parsed.partialChapterBuffer).toBe(0)
+  })
+
+  // Deliberately looser than its neighbours: a hand-edited 0 degrades at read time
+  // rather than refusing to open the story.
+  it('still tolerates a zero classifier context window', () => {
+    expect(
+      storySettingsSchema.parse({ ...VALID_SETTINGS, classifierContextEntries: 0 }),
+    ).toMatchObject({
+      classifierContextEntries: 0,
+    })
   })
 })

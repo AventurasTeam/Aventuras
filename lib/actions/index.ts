@@ -37,10 +37,17 @@ export {
   type WizardCastEntityInput,
 } from './stories/create-story'
 export { deleteStory } from './stories/delete-story'
+export {
+  declineEmbeddingUpgrade,
+  type DeclineEmbeddingUpgradeFn,
+} from './stories/embedding-upgrade'
 export { resetStorySettings } from './stories/reset-settings'
 export {
+  saveStorySettingsSession,
   StorySettingsStaleStoreError,
+  StorySettingsUnreadableError,
   updateStorySettings,
+  type StorySettingsSessionPatch,
   type UpdateStorySettingsResult,
 } from './stories/update-story-settings'
 export {
@@ -52,6 +59,7 @@ export {
   type LoadOpenStoryResult,
   type OpenStoryResult,
 } from './stories/operational'
+export { storyHasTurns } from './story-entries/has-turns'
 export {
   getRollbackCounts,
   rollbackToEntry,

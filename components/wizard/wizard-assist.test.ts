@@ -35,13 +35,11 @@ const CONFIGURED: ResolveModelConfig = {
     { id: 'prof', kind: 'agent', name: 'Wizard', modelRef: { providerId: 'p', modelId: MODEL_ID } },
   ],
   assignments: { 'wizard-assist': 'prof' },
-  defaultProviderId: 'p',
 }
 const UNCONFIGURED: ResolveModelConfig = {
   providers: [],
   profiles: [],
   assignments: {},
-  defaultProviderId: null,
 }
 
 const signal = new AbortController().signal

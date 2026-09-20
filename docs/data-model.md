@@ -39,7 +39,7 @@ erDiagram
         text description
         json tags "string[]; search/filter only, not shown on cards"
         text cover_asset_id FK "optional; references assets"
-        text accent_color "optional hex/HSL; falls back to mode-derived"
+        text accent_color "optional hex; falls back to mode-derived"
         text status "draft | active | archived (lifecycle; mutually exclusive)"
         integer favorite "0 | 1; orthogonal to status"
         integer last_opened_at "distinct from updated_at; drives last-opened sort"
@@ -1061,7 +1061,7 @@ queries.
 - `cover_asset_id text FK → assets.id` — optional. Cards are
   text-first; covers are a power-user enhancement, rendered in a
   future visual-identity pass.
-- `accent_color text` — optional hex/HSL. Falls back to mode-derived
+- `accent_color text` — optional hex. Falls back to mode-derived
   default (Adventure blue, Creative purple) when null.
 - `status text` — lifecycle enum `draft | active | archived`,
   mutually exclusive.
@@ -1214,8 +1214,8 @@ stories.settings: {
   probe_mode_active: boolean        // per-story activation of the memory probe. No-op while app_settings.diagnostics.enabled is off. Default false. See docs/memory/probe.md and docs/observability.md → Gating model
 
   // Composer
-  composerModesEnabled: boolean     // adventure-only; creative ignores
-  composerWrapPov: 'first' | 'third' // how composer modes wrap user input (NOT narration)
+  composerModesEnabled: boolean     // adventure-only; creative ignores; default true
+  composerWrapPov: 'first' | 'third' // how composer modes wrap user input (NOT narration); default set by mode at creation — 'first' adventure, 'third' creative
   suggestionsEnabled: boolean       // gates next-turn suggestion pane
 
   // Next-turn suggestions — user-customizable category palette + literal count
@@ -1246,17 +1246,20 @@ stories.settings: {
 
   // Models — override-at-render pattern. Keys are agent ids drawn from the
   // assignments registry (single source of truth, evolves over time);
-  // narrative is the always-present storyteller slot. Image generation is
-  // deferred past v1 — `imageGen` returns when the feature lands.
-  // `memory-compaction` was dropped — chapter-close lore-mgmt subsumes its
-  // role per the cadence stratification; see docs/memory/chapter-close.md.
+  // narrative is the always-present storyteller slot. Each override is a
+  // provider-qualified ref: a bare model id cannot say which provider serves
+  // it, and running it on the app's default provider silently picked the wrong
+  // one. Image generation is deferred past v1 — `imageGen` returns when the
+  // feature lands. `memory-compaction` was dropped — chapter-close lore-mgmt
+  // subsumes its role per the cadence stratification; see
+  // docs/memory/chapter-close.md.
   models: {
-    narrative?: string              // optional override; absent = resolve through assignments[agentId] → profile.modelRef
-    classifier?: string
-    translation?: string
-    suggestion?: string
-    'lore-mgmt'?: string             // kebab-case agent ids match the UI labels in app-settings + story-settings Models tabs
-    retrieval?: string               // auto-mode injection fallback consumer — LLM call to resolve marginal embedding+keyword candidates with injection_mode='auto'
+    narrative?: { providerId: string; modelId: string }   // optional override; absent = resolve through assignments[agentId] → profile.modelRef
+    classifier?: { providerId: string; modelId: string }
+    translation?: { providerId: string; modelId: string }
+    suggestion?: { providerId: string; modelId: string }
+    'lore-mgmt'?: { providerId: string; modelId: string }  // kebab-case agent ids match the UI labels in app-settings + story-settings Models tabs
+    retrieval?: { providerId: string; modelId: string }    // auto-mode injection fallback consumer — LLM call to resolve marginal embedding+keyword candidates with injection_mode='auto'
   }
 
   // Pack
@@ -1336,7 +1339,10 @@ disentangles them and matches the UI's two-section structure.
    un-overridden story. The UX difference (Models' dashed-italic "App
    default: X" sentinel vs copy-at-creation fields showing a concrete
    value) derives directly from this pattern split. Unresolved
-   agents pre-flight-error at generation time.
+   agents pre-flight-error at generation time. An override names its
+   provider; deleting that provider leaves the override in place and it
+   fails `override-provider-missing` at pre-flight until cleared or
+   re-picked on the Models tab.
 
 Most operational fields seed from `app_settings.default_story_settings`;
 a few — `default_provider_id`, `default_calendar_id` — sit as
@@ -1479,8 +1485,9 @@ const PROVIDER_DEFAULTS: Partial<Record<ProviderType, ProviderTypeDefaults>>
 ```
 
 Runtime resolution for an agent's model never consults this
-constant — it walks `stories.settings.models[agentId]` (override,
-modelId string) → `profile.modelRef` via `assignments[agentId]`.
+constant — it walks `stories.settings.models[agentId]` (override, a
+provider-qualified ref) → `profile.modelRef` via
+`assignments[agentId]`.
 For narrative the chain is just `narrative_profile.modelRef`. The
 constant only fires at seed-time and on user-triggered `Reset to
 defaults` — it has no presence in the hot render path.
@@ -1629,11 +1636,14 @@ to its id stay intact:
   unassigned explicitly and gets to see the agent is unconfigured.
 
 Per-story model overrides (`stories.settings.models[agentId]`) are
-direct model id strings (not `{providerId, modelId}` composites)
-and don't reference providers — they have nothing to dangle from
-provider/profile deletion. Model-catalog freshness is handled by
-the pre-existing global broken-config banner, separate from this
-design.
+provider-qualified `{ providerId, modelId }` refs. Deleting the
+provider one names leaves the override in place: it fails
+`override-provider-missing` at pre-flight and shows as a broken row on
+the Models tab until the user clears or re-picks it. The kind is
+distinct from the chain's `provider-missing` so the reader's fix action
+can route to the story rather than to a healthy App Settings chain. Model-catalog
+freshness is handled by the pre-existing global broken-config
+banner, separate from this design.
 
 Resolver-time failure shape and the pre-flight validation that
 catches these before any LLM call fires are documented in

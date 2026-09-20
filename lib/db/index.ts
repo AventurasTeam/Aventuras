@@ -53,6 +53,7 @@ export type { ClassifierLifecycleState, ClassifierStatus } from './world-json-ty
 export type {
   StoryDefinition,
   StoryMode,
+  StoryModelRef,
   StorySettings,
   SuggestionCategory,
   TierTuple,
@@ -61,13 +62,18 @@ export {
   isStoryMode,
   STORY_MODES,
   storyDefinitionSchema,
+  storyModelRefSchema,
   storySettingsPartialSchema,
   storySettingsSchema,
   SUGGESTION_COUNT_MAX,
   SUGGESTION_COUNT_MIN,
   suggestionCategorySchema,
 } from './stories/story-config-schema'
-export { buildStorySettings, STORY_SETTINGS_DEFAULTS } from './stories/story-settings-defaults'
+export {
+  buildStorySettings,
+  defaultComposerWrapPov,
+  STORY_SETTINGS_DEFAULTS,
+} from './stories/story-settings-defaults'
 export { DEFAULT_SUGGESTION_CATEGORIES } from './stories/default-suggestion-categories'
 export {
   assertKnownSettingsKeys,
@@ -81,6 +87,13 @@ export {
   type EmbeddingTarget,
   type SwapDimensions,
 } from './stories/settings-ops'
+export {
+  setStoryInfoOps,
+  STORY_ACCENT_HEX,
+  storyInfoPatchSchema,
+  type StoryInfo,
+  type StoryInfoPatch,
+} from './stories/story-info-ops'
 export {
   appearanceSchema,
   appSettingsConfigSchema,

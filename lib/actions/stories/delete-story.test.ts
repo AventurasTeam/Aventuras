@@ -27,7 +27,7 @@ import {
   vaultCalendars,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { rehydrateStories, storiesStore } from '@/lib/stores'
+import { embedderSwapStore, rehydrateStories, storiesStore } from '@/lib/stores'
 
 import { BRANCH_SCOPED, deleteStory } from './delete-story'
 
@@ -76,6 +76,7 @@ async function setup() {
     .insert(vaultCalendars)
     .values({ id: 'cal_1', name: 'Earth', favorite: 0, createdAt: 1, updatedAt: 1 })
   storiesStore.__reset() // deleteStory re-hydrates at the end; this clears cross-test state
+  embedderSwapStore.__reset()
   const listTables = async (): Promise<string[]> =>
     (
       sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as {
@@ -125,6 +126,26 @@ describe('deleteStory', () => {
     expect(storiesStore.getStories().openFailures).toEqual({
       survivor: 'definition-corrupt',
     })
+  })
+
+  it('prunes the deleted story upgrade deferral and keeps the survivor one', async () => {
+    const { listTables, ctx } = await setup()
+    embedderSwapStore.deferUpgrade('victim')
+    embedderSwapStore.deferUpgrade('survivor')
+
+    await deleteStory('victim', ctx, listTables)
+
+    expect(embedderSwapStore.getState().upgradeDeferred).toEqual(new Set(['survivor']))
+  })
+
+  it('keeps the upgrade deferral when the delete does not commit', async () => {
+    const { listTables, ctx } = await setup()
+    embedderSwapStore.deferUpgrade('victim')
+    const failingCtx = { ...ctx, runInTransaction: () => Promise.reject(new Error('write failed')) }
+
+    await expect(deleteStory('victim', failingCtx, listTables)).rejects.toThrow('write failed')
+
+    expect(embedderSwapStore.getState().upgradeDeferred).toEqual(new Set(['victim']))
   })
 
   it('is a no-op-safe full sweep across every owned table (empty tables included)', async () => {

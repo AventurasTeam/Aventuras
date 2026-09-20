@@ -437,14 +437,15 @@ and action buttons. Rationale: these errors need to be visible,
 actionable, and part of the narrative log as context, not a silent
 chrome blip.
 
-| Failure                                                                                                                                                                                                                | Action buttons                                |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| **LLM call failed**                                                                                                                                                                                                    | `Retry` · `View details` · `Dismiss`          |
-| **Embed call failed** mid-turn (blocking per [`memory/retrieval.md → Compute lifecycle`](../../../memory/retrieval.md#compute-lifecycle); the composer is not gated — a resubmit re-runs the same blocking sync stage) | `Switch embedder` · `Retry` · `Dismiss`       |
-| **Narrative profile's provider missing** (pre-flight or resolver-time)                                                                                                                                                 | `Fix profile` · `View details` · `Dismiss`    |
-| **Assigned agent profile's provider missing** (pre-flight or resolver-time)                                                                                                                                            | `Fix profile` · `View details` · `Dismiss`    |
-| **Agent has no profile assigned** (`assignments[agentId]` unset)                                                                                                                                                       | `Assign profile` · `View details` · `Dismiss` |
-| **Agent default model's provider missing**                                                                                                                                                                             | `Fix default` · `View details` · `Dismiss`    |
+| Failure                                                                                                                                                                                                                | Action buttons                                    |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| **LLM call failed**                                                                                                                                                                                                    | `Retry` · `View details` · `Dismiss`              |
+| **Embed call failed** mid-turn (blocking per [`memory/retrieval.md → Compute lifecycle`](../../../memory/retrieval.md#compute-lifecycle); the composer is not gated — a resubmit re-runs the same blocking sync stage) | `Switch embedder` · `Retry` · `Dismiss`           |
+| **Narrative profile's provider missing** (pre-flight or resolver-time)                                                                                                                                                 | `Fix profile` · `View details` · `Dismiss`        |
+| **Assigned agent profile's provider missing** (pre-flight or resolver-time)                                                                                                                                            | `Fix profile` · `View details` · `Dismiss`        |
+| **Agent has no profile assigned** (`assignments[agentId]` unset)                                                                                                                                                       | `Assign profile` · `View details` · `Dismiss`     |
+| **Agent default model's provider missing**                                                                                                                                                                             | `Fix default` · `View details` · `Dismiss`        |
+| **Story override's provider missing** (pre-flight or resolver-time)                                                                                                                                                    | `Fix story override` · `View details` · `Dismiss` |
 
 The embed-failure system entry follows the same visual shape as the
 LLM-failure entry — the contract is "transient pipeline failure
@@ -467,7 +468,7 @@ _succeeded_ sync wrote sit outside the delta log by design — they
 repaired rows dirtied by earlier turns, so reversing them would
 discard correct work.
 
-The four **broken-reference** variants come from the pipeline's
+The five **broken-reference** variants come from the pipeline's
 [config pre-flight validation](../../../generation-pipeline.md#config-pre-flight-validation)
 (caught before phase 0 fires — no deltas written at all), or, in the
 race case, from a resolver-time failure mid-turn. The user can't
@@ -475,11 +476,13 @@ distinguish which layer caught it — same vocabulary either way. The
 [deletion-semantics design](../../../data-model.md#app-settings-storage)
 is what makes these resolver inputs go missing in the first place.
 Action buttons route to the relevant settings surface: profile /
-default / assignment. Per-story model overrides don't appear in
-this table — they're pure model id strings per
-[`story-settings.md → Models tab`](../story-settings/story-settings.md#models-tab--overrides-only),
-and broken-model-catalog cases surface via the existing global
-broken-config banner instead.
+default / assignment, and — for a per-story override — that story's
+Models tab. An override whose provider is gone fails pre-flight as
+`override-provider-missing` rather than the chain's `provider-missing`,
+because App Settings has nothing to repair in that state;
+[`story-settings.md → Models tab`](../story-settings/story-settings.md#models-tab--overrides-only)
+is where the broken row and its `×` live. Broken-model-catalog cases
+surface via the existing global broken-config banner instead.
 
 #### Custody of the turn's text
 
