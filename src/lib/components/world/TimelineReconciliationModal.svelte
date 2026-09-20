@@ -9,14 +9,20 @@
   import { tick, untrack, type Snippet } from 'svelte'
   import {
     TriangleAlert,
+    Anchor,
+    Bookmark,
     ChevronDown,
     ChevronRight,
     ChevronLeft,
     Pencil,
     Plus,
   } from '@lucide/svelte'
+  import { Textarea } from '$lib/components/ui/textarea'
   import {
     toMinutes,
+    parseStoryTime,
+    formatStoryTime,
+    storyTimeIsInvalid,
     parseDuration,
     formatDuration,
     durationIsInvalid,
@@ -60,7 +66,8 @@
    * splitting or merging.
    */
   let folded = $state<Record<string, boolean>>({})
-  /** Height of the table view's pinned band, which is where its header comes to rest. */
+  /** Height of the table view's pinned bands: the picker, then the band the header rests under. */
+  let pickerHeight = $state(0)
   let pinnedHeight = $state(0)
   /** The ladder's scroll container, which is also where focus is parked. */
   let ladderEl = $state<HTMLDivElement | null>(null)
@@ -113,6 +120,60 @@
   }
 
   const byId = $derived(new Map(story.entries.map((entry) => [entry.id, entry])))
+
+  const ANCHOR_NOTE_LIMIT = 140
+  /** Which of the range's two boundaries is being anchored, if either. */
+  let anchorEditing = $state<'from' | 'to' | null>(null)
+  let anchorTimeText = $state('')
+  let anchorNote = $state('')
+  let anchorSaving = $state(false)
+  const anchorTime = $derived(parseStoryTime(anchorTimeText))
+
+  function boundaryOf(which: 'from' | 'to'): Boundary | undefined {
+    return which === 'from' ? range?.from : range?.to
+  }
+
+  /** An anchor asserts an ending, and a player action has none. */
+  function anchorable(which: 'from' | 'to'): boolean {
+    const boundary = boundaryOf(which)
+    return !!boundary && byId.get(boundary.entryId)?.type !== 'user_action'
+  }
+
+  function editAnchor(which: 'from' | 'to') {
+    const boundary = boundaryOf(which)
+    if (!boundary) return
+    const anchor = story.timeAnchorFor(boundary.entryId)
+    const seed = anchor?.assertedTime ?? byId.get(boundary.entryId)?.metadata?.timeEnd ?? null
+    anchorTimeText = seed ? formatStoryTime(seed) : ''
+    anchorNote = anchor?.note ?? ''
+    anchorEditing = which
+  }
+
+  function closeAnchorEditor() {
+    holdFocus()
+    anchorEditing = null
+  }
+
+  // An open editor belongs to the boundary it was opened on, not to whatever is selected now.
+  let editorRangeKey = ''
+  $effect(() => {
+    const key = range ? `${range.from.entryId}:${range.to.entryId}` : ''
+    if (key === editorRangeKey) return
+    editorRangeKey = key
+    untrack(() => closeAnchorEditor())
+  })
+
+  async function saveAnchor() {
+    const boundary = anchorEditing ? boundaryOf(anchorEditing) : undefined
+    if (!boundary || !anchorTime) return
+    anchorSaving = true
+    try {
+      await story.setTimeAnchor(boundary.entryId, anchorTime, anchorNote.trim() || null)
+      closeAnchorEditor()
+    } finally {
+      anchorSaving = false
+    }
+  }
 
   /** What the range's entries record for themselves, first beginning to last ending. */
   const recordedSpan = $derived.by(() => {
@@ -239,6 +300,15 @@
 
   function pad(n: number): string {
     return String(n ?? 0).padStart(2, '0')
+  }
+
+  /** What the record holds for an entry, as one instant or a span. */
+  function recordedText(entry: StoryEntry): string {
+    const start = recordedStart(entry)
+    const end = entry.metadata?.timeEnd ?? null
+    if (!start && !end) return 'no time recorded'
+    if (!start || !end || sameInstant(start, end)) return stamp(start ?? end)
+    return `${stamp(start)} → ${stamp(end)}`
   }
 
   function stamp(time: TimeTracker | null | undefined): string {
@@ -781,7 +851,10 @@
           <ChevronLeft class="h-4 w-4" />
           Back
         </Button>
-        <p class="text-sm font-medium">Entry {entryNumber(fullTextEntry.id)}</p>
+        <p class="text-sm font-medium">
+          Entry {entryNumber(fullTextEntry.id)}
+          <span class="text-muted-foreground font-normal">· {recordedText(fullTextEntry)}</span>
+        </p>
         <p class="min-h-0 flex-1 overflow-y-auto text-sm whitespace-pre-wrap">
           {fullTextEntry.content}
         </p>
@@ -803,7 +876,7 @@
   </p>
 {/snippet}
 
-{#snippet rangePicker(withSpans: boolean)}
+{#snippet rangePicker()}
   <label class="text-sm">
     Range
     <select
@@ -815,12 +888,120 @@
       {/each}
     </select>
   </label>
+{/snippet}
 
-  {#if withSpans}
-    <div class="text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 text-xs">
-      <span>Was <span class="text-foreground">{spanText(recordedSpan)}</span></span>
-      <span>Becomes <span class="text-foreground">{spanText(assertedSpan)}</span></span>
+<!-- What the range is measured from, editable where it is read: an unanchored boundary resolves
+     to a recorded ending, and only the reader can say otherwise. -->
+{#snippet anchors(edgeToEdge: boolean)}
+  {#if range}
+    <!-- Rules across the surface, but the rows held to a readable width so the controls stay
+         beside what they act on. The narrow body pads its children, so the rules reach the
+         edges only by cancelling that padding, as the description above it does. -->
+    <div class="border-border border-y py-1.5 text-xs {edgeToEdge ? '-mx-4 px-4' : ''}">
+      <div class="max-w-md">
+        <p class="text-foreground">Reference points</p>
+        <div class="border-border/60 my-1 border-t"></div>
+        {@render anchorRow('Start', 'from')}
+        <div class="border-border/60 my-1 border-t"></div>
+        {@render anchorRow('End', 'to')}
+      </div>
     </div>
+  {/if}
+{/snippet}
+
+{#snippet anchorRow(label: string, which: 'from' | 'to')}
+  {@const boundary = boundaryOf(which)}
+  {#if boundary}
+    {@const anchor = story.timeAnchorFor(boundary.entryId)}
+    <div class="flex flex-wrap items-center gap-x-2 gap-y-1 py-0.5">
+      <span class="text-muted-foreground w-6 shrink-0">{label}</span>
+      <span class="text-muted-foreground flex shrink-0 items-center gap-1">
+        {#if anchor}
+          <Anchor class="h-3 w-3" aria-label="Anchored" />
+        {:else}
+          <Bookmark class="h-3 w-3" aria-label="Natural boundary" />
+        {/if}
+        Entry {entryNumber(boundary.entryId)}
+      </span>
+      <!-- A natural boundary resolves to its recorded ending, which is a reading rather than an
+           assertion: it is shown, dimmed, exactly as an unset one is. -->
+      <span class="flex-1 truncate">
+        {#if anchor}
+          <span class="text-foreground font-medium">{stamp(anchor.assertedTime)}</span>
+        {:else}
+          <span class="text-muted-foreground"
+            >{boundary.time ? stamp(boundary.time) : 'Not set'}</span
+          >
+        {/if}
+      </span>
+      {#if anchorable(which)}
+        <!-- Inert rather than gone while its own editor is open: a control that closes what it
+             opened would take the reader's typing with it. -->
+        <Button
+          variant="outline"
+          size="sm"
+          class="h-6 w-16 shrink-0 text-[11px]"
+          disabled={anchorEditing === which}
+          onclick={() => editAnchor(which)}
+        >
+          {anchor ? 'Edit' : 'Assert'}
+        </Button>
+      {:else}
+        <span class="text-muted-foreground shrink-0">an action has no ending to anchor</span>
+      {/if}
+    </div>
+
+    {#if anchorEditing === which}
+      <div class="border-border bg-card mt-1 mb-1.5 flex flex-col gap-2 rounded-md border p-2">
+        <Button
+          variant="outline"
+          size="sm"
+          class="h-6 w-fit text-[11px]"
+          onclick={(event: MouseEvent) =>
+            showFullText(boundary.entryId, event.currentTarget as HTMLElement)}
+        >
+          Show full text
+        </Button>
+        <label class="flex flex-wrap items-center gap-2">
+          <span class="text-muted-foreground shrink-0">Asserted time</span>
+          <Input
+            placeholder="e.g. Y1 D4 14:30"
+            class="h-7 w-36 text-xs"
+            bind:value={anchorTimeText}
+          />
+          <span class="text-muted-foreground shrink-0">
+            {anchorTime ? `= ${formatStoryTime(anchorTime)}` : 'year, day, clock'}
+          </span>
+        </label>
+        {#if storyTimeIsInvalid(anchorTimeText)}
+          <p class="text-destructive">Not a story time. Try 14:30, D4 14:30, or Y1 D4 14:30.</p>
+        {/if}
+        <label class="flex flex-col gap-1">
+          <span class="text-muted-foreground">Note</span>
+          <Textarea
+            rows={2}
+            autosize={false}
+            maxlength={ANCHOR_NOTE_LIMIT}
+            placeholder="optional"
+            class="h-12 w-full resize-none text-xs"
+            bind:value={anchorNote}
+          />
+        </label>
+        <div class="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" class="h-6 text-[11px]" onclick={closeAnchorEditor}>
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            class="h-6 text-[11px]"
+            disabled={!anchorTime || anchorSaving}
+            onclick={saveAnchor}
+          >
+            {anchorSaving ? 'Saving…' : 'Save'}
+          </Button>
+        </div>
+      </div>
+    {/if}
   {/if}
 {/snippet}
 
@@ -909,11 +1090,25 @@
   {#if ranges.length === 0}
     {@render emptyRanges()}
   {:else}
+    <!-- Two pinned bands, not one: the anchors scroll away between them, so what the range is
+         measured from is read once while what it comes to stays in view. -->
+    <div class="bg-background sticky top-0 z-30 pt-4 pb-2" bind:clientHeight={pickerHeight}>
+      {@render rangePicker()}
+    </div>
+
+    <div class="mb-3">
+      {@render anchors(false)}
+    </div>
+
     <div
-      class="bg-background sticky top-0 z-20 flex flex-col gap-3 pt-4 pb-2"
+      class="bg-background sticky z-20 flex flex-col gap-3 pb-2"
+      style="top: {pickerHeight}px"
       bind:clientHeight={pinnedHeight}
     >
-      {@render rangePicker(true)}
+      <div class="text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 text-xs">
+        <span>Was <span class="text-foreground">{spanText(recordedSpan)}</span></span>
+        <span>Becomes <span class="text-foreground">{spanText(assertedSpan)}</span></span>
+      </div>
 
       <!-- What the reader still has to settle is the reason to read the table at all. -->
       {#if invalidWeights}
@@ -942,7 +1137,7 @@
         <table class="w-full border-collapse text-xs">
           <thead
             class="text-muted-foreground bg-card border-border sticky z-10 border-b text-left"
-            style="top: {pinnedHeight}px"
+            style="top: {pickerHeight + pinnedHeight}px"
           >
             <tr>
               <th class="w-8 py-1 pr-2 font-medium">#</th>
@@ -1102,7 +1297,8 @@
           pacing. Nothing outside the range is touched.
         </Dialog.Description>
       </div>
-      {@render rangePicker(false)}
+      {@render rangePicker()}
+      {@render anchors(true)}
 
       {#if bands.length > 1}
         <div class="text-muted-foreground flex items-center gap-2 text-[11px]">
