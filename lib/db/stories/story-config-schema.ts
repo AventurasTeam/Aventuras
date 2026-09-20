@@ -103,7 +103,7 @@ const translationSchema = z.object({
 // Both halves are required to name something: `resolveModel` returns `ok` for an
 // empty modelId, which pre-flight passes and the provider call then fires blank.
 export const storyModelRefSchema = z.object({
-  providerId: z.string().min(1),
+  providerId: z.string().trim().min(1),
   modelId: z.string().trim().min(1),
 })
 export type StoryModelRef = z.infer<typeof storyModelRefSchema>
