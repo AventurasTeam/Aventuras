@@ -1736,11 +1736,18 @@ class StoryStore {
           ]
         : [{ entryId, start, end }]
 
+    // A checkpoint's clock is a copy of the ending of the entry it was taken at, so it follows the
+    // edit — including where a branch was forked from it, whose start is that same copy.
+    const checkpointsHere = this.checkpoints.filter(
+      (checkpoint) => checkpoint.lastEntryId === entryId,
+    )
+
     const plan = planReconciliation({
       entries: this.entries,
       chapters: this.chapters,
       times,
-      checkpoints: this.checkpoints,
+      checkpoints: checkpointsHere,
+      assertedEnding: checkpointsHere.length > 0 ? { entryId, time: end } : null,
     })
 
     await applyReconciliation(plan, this.entries, {
@@ -1749,6 +1756,15 @@ class StoryStore {
     })
 
     log('Entry times set', { entryId, clockMoved: !!plan.clock })
+  }
+
+  /** How many branches were created from this checkpoint, or forked at the entry holding it. */
+  branchesForkedFrom(checkpointId: string | null, entryId: string): number {
+    return this.branches.filter(
+      (branch) =>
+        (checkpointId !== null && branch.checkpointId === checkpointId) ||
+        branch.forkEntryId === entryId,
+    ).length
   }
 
   /** Anomalies and the latest asserted boundary, for the Time panel. */

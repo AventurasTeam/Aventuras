@@ -36,6 +36,7 @@
     Image as ImageIcon,
     Copy,
     Clock,
+    Metronome,
     MoreVertical,
     MilestoneIcon,
   } from '@lucide/svelte'
@@ -159,7 +160,7 @@
   // The duration chip and its fallback in Response info must never both be absent. The fallback
   // renders in a portal outside the card, where a container query cannot reach, so one measured
   // width decides both.
-  const ACTIVITY_CHIP_MIN_REM = 29
+  const ACTIVITY_CHIP_MIN_REM = 30
   let cardRect = $state<DOMRectReadOnly>()
   const activityChipFits = $derived.by(() => {
     if (!cardRect) return true
@@ -1406,7 +1407,7 @@
          needs the width. Narration entries keep it under "Response info" in the overflow menu;
          on any other entry type it is not shown there at all. -->
     <span
-      class="bg-muted hidden rounded px-1.5 py-0.5 text-[11px] tabular-nums @min-[27rem]:inline"
+      class="bg-muted hidden rounded px-1.5 py-0.5 text-[11px] tabular-nums @min-[28rem]:inline"
     >
       {#if isReasoningEnabled && reasoningTokens > 0}
         <span class="text-muted-foreground">{reasoningTokens}r</span>
@@ -1438,9 +1439,9 @@
       </div>
     {/if}
 
-    <!-- Drops to its own row below 40rem: it is the widest thing on the row. -->
+    <!-- Drops to its own row below 41rem: it is the widest thing on the row. -->
     {#if showEntryMeta}
-      <div class="hidden @min-[40rem]:flex">
+      <div class="hidden @min-[41rem]:flex">
         {@render storyTimeChip()}
       </div>
     {/if}
@@ -1550,7 +1551,7 @@
                 <Button
                   variant="text"
                   size="icon"
-                  class="text-muted-foreground hover:text-foreground hidden h-7 w-7 @min-[22rem]:flex"
+                  class="text-muted-foreground hover:text-foreground hidden h-7 w-7 @min-[23rem]:flex"
                   title="Response info"
                   {...props}
                 >
@@ -1607,7 +1608,7 @@
             variant="text"
             size="icon"
             onclick={() => (isBranching = true)}
-            class="hidden h-7 w-7 text-amber-500 hover:text-amber-600 @min-[22rem]:flex"
+            class="hidden h-7 w-7 text-amber-500 hover:text-amber-600 @min-[23rem]:flex"
             title="Branch from here"
           >
             <GitBranch class="h-4 w-4" />
@@ -1618,7 +1619,7 @@
             variant="text"
             size="icon"
             onclick={() => (isCreatingCheckpoint = true)}
-            class="hidden h-7 w-7 text-blue-500 hover:text-blue-600 @min-[22rem]:flex"
+            class="hidden h-7 w-7 text-blue-500 hover:text-blue-600 @min-[23rem]:flex"
             title="Create checkpoint"
           >
             <Bookmark class="h-4 w-4" />
@@ -1634,12 +1635,12 @@
                   {...props}
                   variant="text"
                   size="icon"
-                  class="hidden h-7 w-7 sm:flex {story.timeAnchorFor(entry.id)
+                  class="hidden h-7 w-7 @min-[23rem]:flex {story.timeAnchorFor(entry.id)
                     ? 'text-amber-500 hover:text-amber-600'
                     : 'text-muted-foreground hover:text-foreground'}"
                   title="Timeline adjustments"
                 >
-                  <Clock class="h-4 w-4" />
+                  <Metronome class="h-4 w-4" />
                 </Button>
               {/snippet}
             </DropdownMenu.Trigger>
@@ -1670,7 +1671,7 @@
             size="icon"
             onclick={handleGenerateStoryImages}
             disabled={ui.isGenerating || isGeneratingStoryImages || hasEmbeddedImages}
-            class="text-muted-foreground hover:text-foreground hidden h-7 w-7 @min-[22rem]:flex"
+            class="text-muted-foreground hover:text-foreground hidden h-7 w-7 @min-[23rem]:flex"
             title={storyImagesLabel}
           >
             {#if isGeneratingStoryImages}
@@ -1684,7 +1685,7 @@
           variant="text"
           size="icon"
           onclick={handleCopyContent}
-          class="text-muted-foreground hover:text-foreground hidden h-7 w-7 @min-[22rem]:flex"
+          class="text-muted-foreground hover:text-foreground hidden h-7 w-7 @min-[23rem]:flex"
           title={copyLabel}
           aria-label={isCopied ? 'Message copied' : copyLabel}
         >
@@ -1716,7 +1717,7 @@
               <Button
                 variant="text"
                 size="icon"
-                class="text-muted-foreground hover:text-foreground h-7 w-7 @min-[22rem]:hidden"
+                class="text-muted-foreground hover:text-foreground h-7 w-7 @min-[23rem]:hidden"
                 title="More actions"
                 aria-label="More actions"
                 {...props}
@@ -1741,7 +1742,7 @@
             {#if entry.type !== 'user_action'}
               <DropdownMenu.Sub>
                 <DropdownMenu.SubTrigger>
-                  <Clock class="h-4 w-4" />
+                  <Metronome class="h-4 w-4" />
                   Timeline adjustments
                 </DropdownMenu.SubTrigger>
                 <DropdownMenu.SubContent>
@@ -1806,7 +1807,7 @@
   {/snippet}
 
   {#if showEntryMeta}
-    <div class="mb-2 flex justify-end @min-[40rem]:hidden">
+    <div class="mb-2 flex justify-end @min-[41rem]:hidden">
       {@render storyTimeChip()}
     </div>
   {/if}

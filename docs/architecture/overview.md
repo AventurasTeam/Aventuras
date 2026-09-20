@@ -156,6 +156,22 @@ The story is an append-only list of `StoryEntry` rows (`user_action`, `narration
 - **Branches** fork at a `forkEntryId`. `story.entries` is the current branch's view, assembled
   from the branch's own rows plus everything inherited from its ancestors; `visibleEntries` is
   that list minus what has been folded into chapters.
+
+  **Editing an entry from before a fork changes that entry for every branch below it — but only
+  its text.** Say a branch was forked at entry 30, and entry 12 is then rewritten. Entries are one
+  set of rows that branches point into, never copies, so the new branch shows the new wording
+  immediately. What it does _not_ show is any consequence of the rewrite: the world state it was
+  given when it forked, the per-entry `worldStateDelta` a rollback would restore, and the clock
+  stored on the fork's checkpoint were all derived from the old text and are left as they were. So
+  the branch can be reading a passage that no longer mentions a knife while its world state still
+  holds one. Nothing detects or reports this.
+
+  `updateEntry` guards the wrong thing here. Its one rule is that the entry must belong to the
+  branch you are on, which allows the rewrite above (entry 12 belongs to the branch you are
+  standing on) and refuses the reverse case, where you stand on the new branch and edit entry 12
+  — the edit that would have had the same effect, from the branch that cares about it. That is
+  known, and left alone until we decide what editing shared history should mean.
+
 - **Entry numbers** are what a reader sees and types: `position + 1`, every entry type counted,
   so the last entry's number equals the branch's entry count. Numbering is per branch view â€” a
   branch continues its parent's positions from the fork, so shared history keeps its numbers and
