@@ -105,10 +105,14 @@ single-row across surfaces.
 **Positioning** — the save bar is a flex item at the bottom of the
 editable pane, a **sibling of the pane's scroller rather than a
 child of it**. It stays anchored to the pane's bottom edge no
-matter how long the form is, and it spans the editable pane only —
-never the rail or the surrounding chrome. Pinned by layout — the
-scroller is the flex sibling that shrinks — not by
-`position: sticky`.
+matter how long the form is. On tablet and desktop it spans the
+editable pane only — never the rail or the surrounding chrome. On
+phone, where a two-pane surface collapses to one pane at a time, the
+bar sits below whichever pane is showing — list or detail — so the
+session stays saveable from the list state; see
+[`story-settings.md → Mobile expression`](../screens/story-settings/story-settings.md#mobile-expression).
+Pinned by layout — the scroller is the flex sibling that shrinks —
+not by `position: sticky`.
 
 **Save success → toast.** On a successful save the bar disappears
 and a `toast.success` fires (`Saved.` or surface-specific copy).

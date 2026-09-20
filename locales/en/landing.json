@@ -57,6 +57,7 @@
   },
   "errors": {
     "openFailed": "Couldn't open the story. Please try again.",
+    "editInfoFailed": "Couldn't open the story for editing. Please try again.",
     "favoriteFailed": "Couldn't update favorite. Please try again.",
     "archiveFailed": "Couldn't update the story. Please try again.",
     "deleteFailed": "Couldn't delete the story. Please try again.",

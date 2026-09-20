@@ -29,7 +29,7 @@ type StoryCardProps = {
   className?: string
 }
 
-const MODE_DEFAULT_COLOR: Record<StoryMode, string> = {
+export const MODE_DEFAULT_COLOR: Record<StoryMode, string> = {
   adventure: '#3b82f6',
   creative: '#a855f7',
 }

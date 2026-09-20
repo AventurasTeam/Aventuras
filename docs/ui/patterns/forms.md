@@ -349,10 +349,12 @@ for the cross-primitive size landscape.
   [Story Settings → Memory](../screens/story-settings/story-settings.md#mobile-expression)
   and
   [App Settings → Memory](../screens/app-settings/app-settings.md#mobile-expression):
-  three preset chips plus a `Custom…` chip that reveals a
-  numeric input below. Doesn't fit Select's three render modes
-  cleanly (cardinality 4 would route to dropdown, but the user
-  needs to compare presets at a glance). Implemented as
+  three preset chips plus a `Custom…` chip, with the numeric input
+  always visible alongside them. A preset chip sets the input;
+  `Custom…` carries no value of its own and reads selected whenever
+  the current value matches no preset. Doesn't fit Select's three
+  render modes cleanly (cardinality 4 would route to dropdown, but
+  the user needs to compare presets at a glance). Implemented as
   `.chip-row` with `.add-chip` cells — wraps naturally at narrow
   tiers. Not yet abstracted into its own primitive; if more
   preset+custom hybrids surface (e.g., protected buffer size,

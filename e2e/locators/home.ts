@@ -17,4 +17,16 @@ export const home = {
 
   // Starts the wizard (goes straight to /wizard when no live session exists).
   newStory: (page: Page): Locator => page.getByRole('button', { name: t('landing:list.newStory') }),
+
+  // The per-card overflow trigger: its own label repeats on every card, so it is reached
+  // through the open button — the only per-card unique name — and a hop to their shared parent.
+  storyActions: (page: Page, title: string): Locator =>
+    page
+      .getByRole('button', { name: t('storyCard.open', { title }) })
+      .locator('..')
+      .getByRole('button', { name: t('storyCard.actionsLabel') }),
+
+  // The card's overflow entries are menu items, not plain text: the press
+  // handler is on the row and its accessible name is the label.
+  editInfo: (page: Page): Locator => page.getByRole('menuitem', { name: t('storyCard.editInfo') }),
 }

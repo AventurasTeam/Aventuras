@@ -425,15 +425,16 @@ describe('models overrides are provider-qualified', () => {
       { narrative: { providerId: 'prov-1', modelId: '' } },
       { narrative: { providerId: 'prov-1', modelId: '   ' } },
       { narrative: { providerId: '', modelId: 'm-narr' } },
+      { narrative: { providerId: '   ', modelId: 'm-narr' } },
     ]) {
       expect(() => storySettingsSchema.parse({ ...base, models })).toThrow()
     }
   })
 
-  it('stores a padded model id trimmed, the form it was validated in', () => {
+  it('stores a padded ref trimmed, the form it was validated in', () => {
     const parsed = storySettingsSchema.parse({
       ...base,
-      models: { narrative: { providerId: 'prov-1', modelId: '  m-narr  ' } },
+      models: { narrative: { providerId: '  prov-1  ', modelId: '  m-narr  ' } },
     })
     expect(parsed.models.narrative).toEqual({ providerId: 'prov-1', modelId: 'm-narr' })
   })

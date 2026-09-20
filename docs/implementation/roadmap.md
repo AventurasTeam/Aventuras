@@ -792,22 +792,78 @@ moved; resolve with the slice it names.
   describes.** Routed from the Slice 3.12 split (2026-08-19).
   [`retrieval.md → Structural floor takes budget first`](../memory/retrieval.md#structural-floor-takes-budget-first)
   wants floor-then-reservation-then-budgets over a tracked context
-  window; verified absent on all three counts — no window figure
-  exists anywhere (model profiles carry no input-window field), no
-  prompt-overhead reservation exists (`promptBufferTokens` is
-  computed only for probe captures), and the budget sliders the
-  original entry described do not ship at all (the Memory tab's
-  retrieval-budgets section is unbuilt). Everyone runs on the
-  conservative 5,500-token defaults, so the failure mode — budgets
-  with no relationship to the model's window overflowing the prompt —
-  arrives with the budget editor, which is why this lands with
-  M7.2's Memory tab rather than sooner. It is also an ordering
-  problem, not just arithmetic: retrieval runs before the prompt is
-  assembled, so overhead has to be estimated ahead of assembly or a
-  pre-pass has to render the scaffolding; and changing what budgets
-  mean moves Slice 3.5's parity test, since captures echo the
-  pre-derivation values. Surfaced by M3.4 Task 17 review
-  (2026-08-02); verified 2026-08-19.
+  window; absent on two of the three counts — no window figure exists
+  anywhere (model profiles carry no input-window field) and no
+  prompt-overhead reservation exists (`promptBufferTokens` is computed
+  only for probe captures). The third has changed: the budget editor
+  the original entry described ships since Slice 4.4 as five plain
+  number inputs with no relationship to any window. Most stories still
+  run on the conservative 5,500-token defaults, but the editor shipping
+  makes
+  the failure mode — budgets with no relationship to the model's
+  window overflowing the prompt — reachable by hand today. It lands
+  with M7.2's Memory tab rather than sooner because the accounting
+  needs a per-model input window that no settings surface carries yet.
+  It is also an ordering problem, not just arithmetic: retrieval runs
+  before the prompt is assembled, so overhead has to be estimated ahead
+  of assembly or a pre-pass has to render the scaffolding; and changing
+  what budgets mean moves Slice 3.5's parity test, since captures echo
+  the pre-derivation values. Surfaced by M3.4 Task 17 review
+  (2026-08-02); verified 2026-08-19; re-scoped by Slice 4.4
+  (2026-09-15).
+- **M7.1 — Provider deletion must decide how it treats story model
+  overrides.** Story overrides are provider-qualified since Slice 4.4,
+  and deleting the provider one names leaves the override in place,
+  failing `provider-missing` at pre-flight
+  ([`story-settings.md → Models tab`](../ui/screens/story-settings/story-settings.md#models-tab--overrides-only)).
+  The deletion slice must settle two things: whether the
+  confirm-with-impact dialog counts stories whose overrides name the
+  provider (canon currently says it does not — see
+  [`app-settings.md → Provider menu`](../ui/screens/app-settings/app-settings.md#provider-menu-)),
+  and which fix the reader's failure entry offers — every
+  provider-missing row in the
+  [reader-composer failure table](../ui/screens/reader-composer/reader-composer.md#error-surface--system-entries-vs-persistent-state-pill)
+  routes to `Fix profile` or `Fix default`, but a broken override is
+  fixed on Story Settings → Models, and `resolveModel`'s failure
+  result does not say which path failed. Unreachable until deletion
+  ships. Surfaced by Slice 4.4 execution (2026-09-14).
+- **M7.2 — The Authoring aids gates read the stored `definition.mode`.**
+  Slice 4.4 reads the story's SAVED mode in two places: the composer
+  gates (the modes toggle is adventure-only; wrap POV follows it) and
+  Reset to mode defaults
+  ([`story-settings.md → Generation tab`](../ui/screens/story-settings/story-settings.md#generation-tab--definitional-fields--authoring-aids)).
+  When M7.2 puts a mode editor in the same Story Settings save
+  session, add one draft-definition read that both use, or they lag
+  the user's in-session change until save. The mode editor must also
+  decide whether a mode switch re-seeds the composer defaults: since
+  Slice 4.4 seeds wrap POV per mode only at creation (`first`
+  adventure, `third` creative), a creative story switched to adventure
+  keeps `third`. Surfaced by Slice 4.4 execution (2026-09-14).
+- **M7.1 — Provider list writes are whole-array, and one of them can
+  list a model twice.** `components/compounds/provider-setup-form.tsx`
+  and Story Settings → Models
+  (`components/story-settings/models-panel.tsx`) both compute a new
+  `favoriteModelIds` / `customModelIds` array from render-time state
+  and write it whole through `updateProvider`; the store only refreshes
+  after `persistConfig`'s DB round trip, so a second write inside that
+  window overwrites the first. The setup form additionally joins
+  `cachedModels` ids and `customModelIds` without de-duplicating and
+  appends a custom id without checking for an existing one, so an id a
+  later catalog refresh also lists renders twice. Two fixes, one owner:
+  SQL-side add and remove, as `upsertCachedModelCapabilities`
+  (`lib/actions/settings/providers.ts`) already does for cached
+  capabilities, plus the render-time de-dupe Slice 4.4's
+  `providerSources` already performs, keeping the catalog entry. Surfaced by Slice 4.4 execution
+  (2026-09-14), routed 2026-09-16.
+- **M7.1 — `ProviderModelPicker` can't be force-closed.**
+  [`provider-model-picker.md`](../ui/patterns/provider-model-picker.md)
+  has the host drive the substrate's controlled `open` to `false` when
+  a pipeline begins while the picker is open, but the component exposes
+  no `open` prop, so no host can. On Story Settings → Models the save
+  stays gated by the generation run, so a pick made meanwhile cannot
+  commit; the gap is the canon promise, and the picker's full surface
+  lands with this slice's providers tab. Surfaced by Slice 4.4
+  execution (2026-09-14), routed 2026-09-16.
 
 **Gates.** M6 (settings should reflect real branching + multi-
 story behavior; diagnostics should inspect real branch-aware

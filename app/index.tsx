@@ -56,7 +56,12 @@ const ctx = { db, runInTransaction }
 const revealDatabaseFile = getDatabaseFileRevealAction()
 
 type PromptState = { trigger: 'new-story' | 'draft'; storyId?: string }
-type PendingStoryRecovery = { storyId: string; kind: OpenFailureKind }
+type PendingStoryRecovery = {
+  storyId: string
+  kind: OpenFailureKind
+  navigate: (branchId: string) => void
+  failureMessage: string
+}
 
 export default function Index() {
   const router = useRouter()
@@ -90,6 +95,9 @@ export default function Index() {
     router.push((draftId ? `/wizard?draftId=${draftId}` : '/wizard') as Href)
 
   const navigateToStory = (branchId: string) => router.push(`/reader-composer/${branchId}`)
+
+  const navigateToAbout = (storyId: string) => () =>
+    router.push(`/story-settings/${storyId}?tab=about`)
 
   const showStoryRecovery = (recovery: PendingStoryRecovery) => {
     recoveryCoordinator.invalidate()
@@ -139,24 +147,27 @@ export default function Index() {
     )
   }
 
-  const attemptOpenStory = (storyId: string) => {
+  const attemptOpenStory = (
+    storyId: string,
+    navigate: (branchId: string) => void = navigateToStory,
+    failureMessage: string = t('landing:errors.openFailed'),
+  ) => {
     const knownFailure = openFailures[storyId]
     if (knownFailure) {
-      showStoryRecovery({ storyId, kind: knownFailure })
+      showStoryRecovery({ storyId, kind: knownFailure, navigate, failureMessage })
       return
     }
 
     setStoryRecovery(null)
     runAction(
       recoveryCoordinator.attemptOpen({
-        open: (navigate, isCurrentRequest) =>
-          openStory(storyId, ctx, navigate, undefined, isCurrentRequest),
-        navigate: navigateToStory,
-        onOpenFailed: (kind) => showStoryRecovery({ storyId, kind }),
+        open: (nav, isCurrentRequest) => openStory(storyId, ctx, nav, undefined, isCurrentRequest),
+        navigate,
+        onOpenFailed: (kind) => showStoryRecovery({ storyId, kind, navigate, failureMessage }),
       }),
       {
         event: 'action_layer.story_open_failed',
-        toastMessage: t('landing:errors.openFailed'),
+        toastMessage: failureMessage,
         context: { storyId },
       },
     )
@@ -187,6 +198,10 @@ export default function Index() {
           context: { storyId },
         })
       },
+      onEditInfo: isDraft
+        ? undefined
+        : () =>
+            attemptOpenStory(storyId, navigateToAbout(storyId), t('landing:errors.editInfoFailed')),
       onDelete: () => setPendingDelete(storyId),
     }
   }
@@ -288,15 +303,15 @@ export default function Index() {
               : undefined
           }
           onReset={() => {
-            const storyId = storyRecovery.storyId
+            const { storyId, navigate, failureMessage } = storyRecovery
             const operation = recoveryCoordinator.startReset({
               storyId,
               reset: () => resetStorySettings(storyId, ctx),
-              open: (navigate, isCurrentRequest) =>
-                openStory(storyId, ctx, navigate, undefined, isCurrentRequest),
-              navigate: navigateToStory,
+              open: (nav, isCurrentRequest) =>
+                openStory(storyId, ctx, nav, undefined, isCurrentRequest),
+              navigate,
               onOpened: () => setStoryRecovery(null),
-              onOpenFailed: (kind) => showStoryRecovery({ storyId, kind }),
+              onOpenFailed: (kind) => showStoryRecovery({ ...storyRecovery, kind }),
             })
             if (operation) {
               void operation.then((outcome) => {
@@ -319,7 +334,7 @@ export default function Index() {
                     dismissStoryRecovery()
                     runAction(Promise.reject(error), {
                       event: 'action_layer.story_open_failed',
-                      toastMessage: t('landing:errors.openFailed'),
+                      toastMessage: failureMessage,
                       context: { storyId },
                     })
                   },

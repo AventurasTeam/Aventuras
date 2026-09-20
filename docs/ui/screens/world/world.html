@@ -448,7 +448,12 @@
 
     /* master-detail collapses to single column; one pane visible at a time */
     .md-layout { grid-template-columns: 1fr; }
-    body[data-md-state="list"] .detail-pane { display: none; }
+    /* Save bar lifts to surface level on phone (mobile/touch.md -> Save
+       bar on phone): it sits below whichever pane shows, so a dirty
+       session collapsed to the list stays saveable. The pane stays in
+       flow and empties instead, landing the one save-bar element there. */
+    body[data-md-state="list"] .detail-pane > *:not(.save-bar) { display: none; }
+    body[data-md-state="list"] .md-layout { grid-template-rows: minmax(0, 1fr) auto; }
     body[data-md-state="detail"] .list-pane { display: none; }
 
     /* tab strip → Select dropdown chip (visual placeholder for Sheet-short trigger) */

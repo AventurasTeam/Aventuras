@@ -52,6 +52,52 @@ export function setProviderEndpoint(dbPath: string, url: string): void {
   }
 }
 
+// Add a custom model id to every openai-compatible provider, so the Models tab offers a second id
+// that can't be confused with the one the seeded profile resolves to. `providerSources` merges
+// customModelIds into the picker catalog, so no cachedModels entry is needed. Runs before launch.
+export function addProviderCustomModel(dbPath: string, modelId: string): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    const row = db.prepare(`SELECT providers FROM app_settings WHERE id = 'singleton'`).get() as {
+      providers: string
+    }
+    const providers = JSON.parse(row.providers) as { type: string; customModelIds?: string[] }[]
+    const targets = providers.filter((provider) => provider.type === 'openai-compatible')
+    // Writing the providers back untouched would surface much later as a timeout
+    // on the picker option, reading as a selector bug rather than a seed gap.
+    if (targets.length === 0) {
+      throw new Error(`cannot add ${modelId}: the fixture has no openai-compatible provider`)
+    }
+    for (const provider of targets) {
+      provider.customModelIds = [...(provider.customModelIds ?? []), modelId]
+    }
+    db.prepare(`UPDATE app_settings SET providers = ? WHERE id = 'singleton'`).run(
+      JSON.stringify(providers),
+    )
+  } finally {
+    db.close()
+  }
+}
+
+// Move the app-level embedding default off the seeded stories' model, which is
+// the only difference the story-open upgrade prompt asks about. Runs before launch.
+export function setAppEmbeddingModelId(dbPath: string, modelId: string): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    const { changes } = db
+      .prepare(`UPDATE app_settings SET embedding_model_id = ? WHERE id = 'singleton'`)
+      .run(modelId)
+    // A zero-row update leaves the default equal to every seeded story's model,
+    // where the prompt correctly never fires — a seed gap that would surface much
+    // later as a prompt that never appeared, reading as a broken product gate.
+    if (changes !== 1) {
+      throw new Error(`cannot set the app embedding default: expected 1 row, updated ${changes}`)
+    }
+  } finally {
+    db.close()
+  }
+}
+
 // Turn the diagnostics gate on. Off in the defaults, and the Actions menu drops
 // capability-gated entries rather than disabling them, so the Diagnostics Hub
 // row — the only route jump that menu owns — is absent without this.
@@ -489,6 +535,35 @@ export function corruptAppSettings(dbPath: string): void {
     if (changes !== 1) {
       throw new Error(`cannot corrupt app_settings: expected 1 row, updated ${changes}`)
     }
+  } finally {
+    db.close()
+  }
+}
+
+// Break ONE story's settings so `openStory` fails its schema parse and the landing screen
+// raises StoryConfigRecoveryDialog. Valid JSON with a wrong-typed key, never malformed text:
+// `stories.settings` is a drizzle `mode: 'json'` column, so unparseable text throws inside
+// rehydrateStories, which swallows the error and leaves the whole story list empty — the card
+// this drives would never render. The embedder keys are left intact so the repair carries the
+// story's embedder forward instead of relabelling it and flagging every branch stale.
+export function corruptStorySettings(dbPath: string, storyId: string): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    db.exec('PRAGMA busy_timeout = 10000')
+    const row = db.prepare(`SELECT settings FROM stories WHERE id = ?`).get(storyId) as
+      | { settings: string }
+      | undefined
+    // Without this the UPDATE below would touch no rows, the fixture would stay healthy, and
+    // the spec depending on it would open the story fine and assert nothing.
+    if (!row) {
+      throw new Error(`cannot corrupt story settings: ${storyId} is missing from the fixture`)
+    }
+    const settings = JSON.parse(row.settings) as Record<string, unknown>
+    settings.classifierCadence = 'not a number'
+    db.prepare(`UPDATE stories SET settings = ? WHERE id = ?`).run(
+      JSON.stringify(settings),
+      storyId,
+    )
   } finally {
     db.close()
   }

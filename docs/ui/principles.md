@@ -246,13 +246,12 @@ to a fixed parent.
 - **Pop semantics**: Return = pop one level. The previous screen
   is whatever the user came from, even if that's a sibling rather
   than a hierarchical parent.
-- **One-shot return targets**: certain entry paths register an
-  override consumed by the next Return. `Edit info` on a story-list
-  card boots the target story and routes to its Story Settings;
-  the first Return goes back to story-list. If the user navigates
-  beyond Story Settings (e.g., forward into the reader), the
-  one-shot is consumed and subsequent Returns follow the default
-  stack pop.
+- **One-shot return targets**: certain entry paths may register an
+  override consumed by the next Return. **None is registered today.**
+  `Edit info` on a story-list card — the case this provision was
+  written for — boots the target story and _pushes_ its Story Settings
+  over the list, so the first Return is an ordinary pop and every
+  Return after it retraces the stack.
 - **Empty stack (root state)**: a Return action with no previous
   page — fresh session before any navigation, or a deep-link entry
   that bypassed normal flow — is interpreted as "exit the app" and
@@ -706,11 +705,14 @@ the `user-action-translation` phase fed clean monolingual input
 **Wrapping POV is its own setting**, distinct from narration.
 Narration governs AI prose; wrap POV governs how the user's lazy-mode
 input is rendered. Field:
-`stories.settings.composerWrapPov: 'first' | 'third'`. Default
-`first` (most natural for adventure-style play where the user types
-as the character). Second-person isn't offered — "you reach for the
-blade" makes no sense as user-composed input (the user isn't the
-narrator addressing themselves).
+`stories.settings.composerWrapPov: 'first' | 'third'`. The default
+follows the story's mode: `first` for adventure (most natural where
+the user types as the character), `third` for creative (the user
+writes as a director; the value only takes effect if the story later
+switches to adventure, since modes are adventure-only).
+Second-person isn't offered — "you reach for the blade" makes no
+sense as user-composed input (the user isn't the narrator addressing
+themselves).
 
 Examples (adventure mode, lead = Aria):
 
@@ -733,11 +735,11 @@ the narrator and the actor have different perspectives. Users who
 want voice-matched entries can pick a wrap POV that aligns or use
 `Free` mode and write it themselves.
 
-**Modes are opt-in, adventure-only.** Two settings gate them:
+**Modes are on by default, adventure-only.** Two settings gate them:
 
 - `stories.settings.composerModesEnabled: boolean` (default `true`)
-  — per-story toggle. When off, the composer has no mode picker;
-  user text is sent verbatim.
+  — per-story toggle; the user opts out per story. When off, the
+  composer has no mode picker; user text is sent verbatim.
 - In creative mode, modes are **always hidden** regardless of the
   toggle. User is a director writing prose directly — no shorthand
   to expand.

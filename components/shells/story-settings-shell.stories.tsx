@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
 import { View } from 'react-native'
-import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { SaveBar } from '@/components/compounds/save-bar'
 import { SwitchRow } from '@/components/compounds/switch-row'
@@ -104,7 +104,7 @@ const meta: Meta<typeof StorySettingsShell<TabId, null>> = {
   parameters: { layout: 'fullscreen' },
   decorators: [
     (Story) => (
-      <View style={{ height: 620 }}>
+      <View testID="shell-frame" style={{ height: 620 }}>
         <Story />
       </View>
     ),
@@ -218,5 +218,93 @@ export const DraftSurvivesTabSwitch: Story = {
     )
     expect(screen.getByPlaceholderText('Story title')).toBe(input)
     expect(input).toHaveValue('Aria')
+  },
+}
+
+const DETAIL_PANE_ID = 'story-settings-detail-pane'
+
+/**
+ * Phone, dirty session collapsed to the tab list: the bar is lifted out of the
+ * hidden detail pane and sits below the list, so the session stays saveable.
+ */
+export const PhoneListStateShowsSaveBar: Story = {
+  globals: { viewport: { value: 'mobile2' } },
+  render: () => (
+    <StorySettingsShell<TabId, null>
+      groups={GROUPS}
+      activeTab={null}
+      onSelectTab={noop}
+      panelData={null}
+      renderPanel={() => <Placeholder />}
+      saveBar={<SaveBar dirtyFields={['title']} onSave={noop} onDiscard={noop} />}
+    />
+  ),
+  play: async () => {
+    // RN-Web's Dimensions reaches the phone tier on an async resize after mount.
+    await waitFor(() => expect(screen.getByTestId(DETAIL_PANE_ID)).not.toBeVisible())
+    const bar = screen.getByTestId('save-bar')
+    expect(bar).toBeVisible()
+    expect(screen.getByTestId(DETAIL_PANE_ID)).not.toContainElement(bar)
+    expect(screen.getByRole('tab', { name: 'About' })).toBeVisible()
+    const barRect = bar.getBoundingClientRect()
+    expect(barRect.top).toBeGreaterThanOrEqual(
+      screen.getByRole('tablist').getBoundingClientRect().bottom,
+    )
+    expect(barRect.bottom).toBeCloseTo(
+      screen.getByTestId('shell-frame').getBoundingClientRect().bottom,
+      0,
+    )
+  },
+}
+
+/**
+ * Phone, tab open: exactly one bar, at the foot of the screen. Where it mounts
+ * is not pinned — lifted and in-pane look the same here.
+ */
+export const PhoneTabOpenShowsSaveBar: Story = {
+  globals: { viewport: { value: 'mobile2' } },
+  render: () => (
+    <StorySettingsShell<TabId, null>
+      groups={GROUPS}
+      activeTab="about"
+      onSelectTab={noop}
+      panelData={null}
+      renderPanel={() => <Placeholder />}
+      saveBar={<SaveBar dirtyFields={['title']} onSave={noop} onDiscard={noop} />}
+    />
+  ),
+  play: async () => {
+    // The rail hides only on phone with a tab open; `hidden` keeps it queryable.
+    await waitFor(() => expect(screen.getByRole('tablist', { hidden: true })).not.toBeVisible())
+    const bars = screen.getAllByTestId('save-bar')
+    expect(bars).toHaveLength(1)
+    expect(bars[0]).toBeVisible()
+    expect(bars[0].getBoundingClientRect().bottom).toBeCloseTo(
+      screen.getByTestId('shell-frame').getBoundingClientRect().bottom,
+      0,
+    )
+  },
+}
+
+/** Desktop keeps the bar inside the detail pane, spanning the editable pane only. */
+export const DesktopKeepsSaveBarInDetailPane: Story = {
+  render: () => (
+    <StorySettingsShell<TabId, null>
+      groups={GROUPS}
+      activeTab="about"
+      onSelectTab={noop}
+      panelData={null}
+      renderPanel={() => <Placeholder />}
+      saveBar={<SaveBar dirtyFields={['title']} onSave={noop} onDiscard={noop} />}
+    />
+  ),
+  play: async () => {
+    const detailPane = await screen.findByTestId(DETAIL_PANE_ID)
+    await waitFor(() => expect(within(detailPane).getByTestId('save-bar')).toBeVisible())
+    // The shell still fills its host: the bar is the detail pane's footer.
+    expect(within(detailPane).getByTestId('save-bar').getBoundingClientRect().bottom).toBeCloseTo(
+      screen.getByTestId('shell-frame').getBoundingClientRect().bottom,
+      0,
+    )
   },
 }

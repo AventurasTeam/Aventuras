@@ -5,30 +5,39 @@ import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
+import { type StorySettingsSessionPatch } from '@/lib/actions'
 import type { StorySettings } from '@/lib/db'
 import { t } from '@/lib/i18n'
 
+import { flaggedFieldsFor } from './flagged-fields'
 import {
   StorySettingsSaveSessionProvider,
   useStorySettingsSaveSession,
   useStorySettingsSection,
 } from './save-session'
-import { StorySettingsLeaveDialog, StorySettingsSaveBar } from './save-session-chrome'
+import { StorySettingsDialogs, StorySettingsSaveBar } from './save-session-chrome'
+
+const DUP_LABELS_ON_TAB = t('storySettings:save.invalidOnTab', {
+  tab: t('storySettings:tabs.generation'),
+  reason: 'dup labels',
+})
 
 /**
- * `useStorySettingsSection` fixture with two visible controls in place of a
- * real settings field, so a play function can drive the surface dirty or
- * invalid without reaching into React state.
+ * `useStorySettingsSection` fixture: visible controls in place of a real settings field, so
+ * a play function can drive the surface dirty, invalid or flagged without touching state.
  */
 function FixtureSection() {
-  const [state, setState] = useState<{ dirtyFields: string[]; invalidReason?: string }>({
-    dirtyFields: [],
-  })
+  const [state, setState] = useState<{
+    dirtyFields: string[]
+    invalidReason?: string
+    flagged?: boolean
+  }>({ dirtyFields: [] })
   useStorySettingsSection({
     id: 'fixture',
     tab: 'generation',
     dirtyFields: state.dirtyFields,
     invalidReason: state.invalidReason,
+    flaggedFields: state.flagged ? flaggedFieldsFor(['composerWrapPov']) : undefined,
     getPatch: (): Partial<StorySettings> =>
       state.invalidReason != null ? { suggestionCategories: [] } : { suggestionCount: 5 },
     reset: () => setState({ dirtyFields: [] }),
@@ -51,6 +60,13 @@ function FixtureSection() {
       >
         <Text>Make invalid</Text>
       </Button>
+      <Button
+        variant="secondary"
+        size="sm"
+        onPress={() => setState({ dirtyFields: ['wrap point of view'], flagged: true })}
+      >
+        <Text>Make flagged</Text>
+      </Button>
     </View>
   )
 }
@@ -69,21 +85,28 @@ function RequestLeaveButton({ onProceed }: { onProceed: () => void }) {
 }
 
 type HarnessProps = {
-  onCommit: (patch: Partial<StorySettings>) => Promise<unknown>
+  onCommit: (patch: StorySettingsSessionPatch) => Promise<unknown>
   onProceed: () => void
   enabled?: boolean
   blocked?: boolean
+  confirmFlagged?: boolean
 }
 
-function Harness({ onCommit, onProceed, enabled = true, blocked = false }: HarnessProps) {
+function Harness({
+  onCommit,
+  onProceed,
+  enabled = true,
+  blocked = false,
+  confirmFlagged = false,
+}: HarnessProps) {
   const disabledReason = blocked ? t('generationGate.inFlight') : undefined
   return (
     <View className="rounded-md border border-border bg-bg-base" style={{ width: 720 }}>
-      <StorySettingsSaveSessionProvider onCommit={onCommit}>
+      <StorySettingsSaveSessionProvider onCommit={onCommit} confirmFlagged={confirmFlagged}>
         <FixtureSection />
         <RequestLeaveButton onProceed={onProceed} />
         <StorySettingsSaveBar enabled={enabled} blocked={blocked} disabledReason={disabledReason} />
-        <StorySettingsLeaveDialog blocked={blocked} disabledReason={disabledReason} />
+        <StorySettingsDialogs blocked={blocked} disabledReason={disabledReason} />
       </StorySettingsSaveSessionProvider>
     </View>
   )
@@ -120,7 +143,7 @@ export const InvalidDisablesSaveBarSave: Story = {
   args: { onCommit: fn(), onProceed: fn() },
   play: async () => {
     await userEvent.click(screen.getByRole('button', { name: 'Make invalid' }))
-    expect(await screen.findByLabelText('dup labels')).toBeInTheDocument()
+    expect(await screen.findByLabelText(DUP_LABELS_ON_TAB)).toBeInTheDocument()
     const save = screen.getByRole('button', { name: /^Save/ })
     expect(save).toBeDisabled()
   },
@@ -132,7 +155,9 @@ export const ValidCommitsThroughSaveBar: Story = {
     await userEvent.click(screen.getByRole('button', { name: 'Make dirty' }))
     const save = await screen.findByRole('button', { name: /^Save/ })
     await userEvent.click(save)
-    await waitFor(() => expect(args.onCommit).toHaveBeenCalledWith({ suggestionCount: 5 }))
+    await waitFor(() =>
+      expect(args.onCommit).toHaveBeenCalledWith({ settings: { suggestionCount: 5 } }),
+    )
   },
 }
 
@@ -168,7 +193,7 @@ export const HardGateDisablesEverySavePath: Story = {
   play: async ({ args }) => {
     await userEvent.click(screen.getByRole('button', { name: 'Make dirty' }))
     expect(await screen.findByRole('button', { name: /^Save/ })).toBeDisabled()
-    expect(screen.getByLabelText('Generation is in flight. Cancel to edit.')).toBeInTheDocument()
+    expect(screen.getByLabelText(t('generationGate.inFlight'))).toBeInTheDocument()
 
     await userEvent.keyboard('{Meta>}s{/Meta}')
     expect(args.onCommit).not.toHaveBeenCalled()
@@ -177,6 +202,7 @@ export const HardGateDisablesEverySavePath: Story = {
     const dialog = await screen.findByRole('alertdialog')
     expect(within(dialog).getByRole('button', { name: 'Save' })).toBeDisabled()
     expect(within(dialog).getByRole('button', { name: 'Discard' })).not.toBeDisabled()
+    expect(dialog).toHaveTextContent(t('generationGate.inFlight'))
   },
 }
 
@@ -247,7 +273,9 @@ export const SaveCommitsAndProceeds: Story = {
 
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
 
-    await waitFor(() => expect(args.onCommit).toHaveBeenCalledWith({ suggestionCount: 5 }))
+    await waitFor(() =>
+      expect(args.onCommit).toHaveBeenCalledWith({ settings: { suggestionCount: 5 } }),
+    )
     expect(args.onProceed).toHaveBeenCalledTimes(1)
   },
 }
@@ -266,7 +294,7 @@ export const InvalidDisablesDialogSaveAndShowsReason: Story = {
     const save = within(dialog).getByRole('button', { name: 'Save' })
     expect(save).toBeDisabled()
 
-    const reasonText = within(dialog).getByText('dup labels')
+    const reasonText = within(dialog).getByText(DUP_LABELS_ON_TAB)
     expect(reasonText).toBeInTheDocument()
     const describedById = dialog.getAttribute('aria-describedby')
     expect(describedById).toBeTruthy()
@@ -304,6 +332,103 @@ export const InvalidStillLetsCancelProceed: Story = {
     expect(args.onProceed).not.toHaveBeenCalled()
     expect(args.onCommit).not.toHaveBeenCalled()
     // Still dirty and still invalid — cancel didn't touch the draft.
-    expect(screen.getByLabelText('dup labels')).toBeInTheDocument()
+    expect(screen.getByLabelText(DUP_LABELS_ON_TAB)).toBeInTheDocument()
+  },
+}
+
+export const InvalidReasonNamesTheTab: Story = {
+  args: { onCommit: fn(async () => {}), onProceed: fn() },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'Make invalid' }))
+    const bar = await screen.findByTestId('save-bar')
+    await waitFor(() => expect(within(bar).getByLabelText(DUP_LABELS_ON_TAB)).toBeInTheDocument())
+    expect(DUP_LABELS_ON_TAB).toContain(t('storySettings:tabs.generation'))
+  },
+}
+
+export const FlaggedFieldAsksBeforeCommit: Story = {
+  args: { onCommit: fn(async () => {}), onProceed: fn(), confirmFlagged: true },
+  play: async ({ args }) => {
+    await userEvent.click(await screen.findByRole('button', { name: 'Make flagged' }))
+    const bar = await screen.findByTestId('save-bar')
+    await userEvent.click(within(bar).getByRole('button', { name: /^Save/ }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog).toHaveTextContent(t('storySettings:confirm.title'))
+    expect(args.onCommit).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByTestId('confirm-save-anyway'))
+    await waitFor(() => expect(args.onCommit).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument())
+  },
+}
+
+export const LeaveSaveHandsOffToTheConfirmation: Story = {
+  args: { onCommit: fn(async () => {}), onProceed: fn(), confirmFlagged: true },
+  play: async ({ args }) => {
+    await userEvent.click(await screen.findByRole('button', { name: 'Make flagged' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Request leave' }))
+    const leave = await screen.findByRole('alertdialog')
+    await userEvent.click(within(leave).getByRole('button', { name: 'Save' }))
+
+    // `hidden`: an open modal marks the rest aria-hidden, so a stacked leave
+    // dialog would drop out of the default query and pass unseen.
+    await waitFor(() => {
+      const dialogs = screen.getAllByRole('alertdialog', { hidden: true })
+      expect(dialogs).toHaveLength(1)
+      expect(dialogs[0]).toHaveTextContent(t('storySettings:confirm.title'))
+    })
+    expect(args.onCommit).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByTestId('confirm-save-anyway'))
+    await waitFor(() => expect(args.onProceed).toHaveBeenCalledTimes(1))
+    expect(args.onCommit).toHaveBeenCalledTimes(1)
+  },
+}
+
+let releaseCommit: (() => void) | undefined
+
+export const ConfirmationHoldsThroughTheCommit: Story = {
+  args: {
+    onCommit: fn(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseCommit = resolve
+        }),
+    ),
+    onProceed: fn(),
+    confirmFlagged: true,
+  },
+  play: async ({ args }) => {
+    await userEvent.click(await screen.findByRole('button', { name: 'Make flagged' }))
+    const bar = await screen.findByTestId('save-bar')
+    await userEvent.click(within(bar).getByRole('button', { name: /^Save/ }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog).toHaveTextContent(t('storySettings:generation.field.composerWrapPov'))
+    expect(dialog).toHaveTextContent(t('storySettings:confirm.consequence.composerWrapPov'))
+    await userEvent.click(screen.getByTestId('confirm-save-anyway'))
+    await waitFor(() => expect(args.onCommit).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.getByTestId('confirm-save-anyway')).toBeDisabled())
+    expect(screen.getByRole('button', { name: t('cancel') })).toBeDisabled()
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+    releaseCommit?.()
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument())
+  },
+}
+
+export const ConfirmationCancelKeepsTheDraft: Story = {
+  args: { onCommit: fn(async () => {}), onProceed: fn(), confirmFlagged: true },
+  play: async ({ args }) => {
+    await userEvent.click(await screen.findByRole('button', { name: 'Make flagged' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Request leave' }))
+    const leave = await screen.findByRole('alertdialog')
+    await userEvent.click(within(leave).getByRole('button', { name: 'Save' }))
+    await screen.findByTestId('confirm-save-anyway')
+    await userEvent.click(screen.getByRole('button', { name: t('cancel') }))
+    await waitFor(() =>
+      expect(screen.queryByRole('alertdialog', { hidden: true })).not.toBeInTheDocument(),
+    )
+    expect(args.onCommit).not.toHaveBeenCalled()
+    expect(args.onProceed).not.toHaveBeenCalled()
+    expect(screen.getByTestId('save-bar')).toBeInTheDocument()
   },
 }

@@ -14,9 +14,8 @@ type SwitchRowProps = {
   /**
    * Optional content placed before the label/hint stack (e.g. a status icon).
    * Sits inside the row's tap surface, so taps on it still toggle. When
-   * present the row aligns top so the leading element, label baseline, and
-   * switch line up rather than the switch floating to the text-body's
-   * vertical center.
+   * present the row aligns top so the leading element sits on the label's
+   * line; the switch stays centred, as it is in every row without one.
    */
   leading?: ReactNode
   checked: boolean
@@ -69,7 +68,7 @@ export function SwitchRow({
         <SwitchVisual
           checked={checked}
           disabled={disabled}
-          className={hasLeading ? 'mt-0.5' : ''}
+          className={hasLeading ? 'self-center' : ''}
         />
       </Pressable>
     </ReasonTooltip>

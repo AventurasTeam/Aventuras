@@ -101,7 +101,9 @@ files produced.
    (open to additive triggers post-v1 if usage signal surfaces).
    Drag uses explicit handles, not long-press-to-grab. Save bar
    on phone **hides while keyboard is open**, reappears on field
-   blur (navigate-away guard remains active throughout). Status
+   blur (navigate-away guard remains active throughout) —
+   **superseded 2026-09-19**: the bar now stays above the keyboard,
+   see [`touch.md → Save bar on phone`](./touch.md#save-bar-on-phone). Status
    pill on phone is icon-only, tap reveals phase plus cancel in a
    Popover (not Sheet — content fits the tiny-popover threshold).
    Chip-strip ~16 px left padding doubles as iOS-swipe-back safe

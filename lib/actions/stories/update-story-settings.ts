@@ -103,6 +103,9 @@ export async function saveStorySettingsSession(
   const stored = storySettingsSchema.safeParse(row.settings)
   if (!stored.success) {
     // The write committed regardless, so the store must not keep pre-save columns.
+    // A failed refresh logs and is deliberately not raised as the stale-store error
+    // below: that copy sends the user to reload, which lands back on the unreadable
+    // blob, where this path's error names the reset that actually repairs it.
     await rehydrateStories(ctx.db)
     // Surfaces the repair affordance `resetStorySettings` clears, rather than
     // dead-ending on a generic save error every retry reproduces.

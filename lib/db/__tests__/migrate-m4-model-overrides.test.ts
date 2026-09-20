@@ -103,6 +103,22 @@ describe(TAG, () => {
     expect(settingsOf(db, 's1')).toEqual({ ...LEGACY_SETTINGS, models: {} })
   })
 
+  // Adopting a blank id would mint a modelId the schema refuses, so the story's
+  // whole blob would stop parsing — a recovery dialog instead of one lost override.
+  it('drops a blank bare-id override even with a default provider set', () => {
+    insertAppSettings(db, 'prov_default')
+    insertStory(db, 's1', {
+      ...LEGACY_SETTINGS,
+      models: { narrative: '', classifier: '   ', translation: 'm-tr' },
+    })
+
+    applyMigration(db, TAG)
+
+    expect(settingsOf(db, 's1')?.models).toEqual({
+      translation: { providerId: 'prov_default', modelId: 'm-tr' },
+    })
+  })
+
   it('leaves an already-qualified override and every sibling key untouched', () => {
     insertAppSettings(db, 'prov_default')
     const qualified = {
