@@ -5,7 +5,6 @@ export type ResolveModelConfig = {
   providers: readonly ProviderInstance[]
   profiles: readonly ModelProfile[]
   assignments: Readonly<Record<string, string>>
-  defaultProviderId: string | null
   storyModels?: StorySettings['models']
 }
 
@@ -18,10 +17,22 @@ export type ResolvedParams = {
   customJson?: Record<string, unknown>
 }
 
-export type ResolveFailureKind = 'no-profile-assigned' | 'profile-missing' | 'provider-missing'
+/** Breakage in the App Settings chain: assignment → profile → the profile's provider. */
+export type AppChainFailureKind = 'no-profile-assigned' | 'profile-missing' | 'provider-missing'
+
+// A story override carries its own provider, so its breakage is repaired on that
+// story's Models tab — App Settings has nothing to fix.
+export type ResolveFailureKind = AppChainFailureKind | 'override-provider-missing'
 
 export type ResolveModelResult =
-  | { ok: true; providerId: string; modelId: string; params: ResolvedParams }
+  | {
+      ok: true
+      providerId: string
+      modelId: string
+      params: ResolvedParams
+      /** The profile the chain landed on. Absent when a story override short-circuited it. */
+      profileId?: string
+    }
   | { ok: false; kind: ResolveFailureKind; target: ResolveTarget }
 
 function paramsOf(profile: ModelProfile): ResolvedParams {
@@ -49,6 +60,7 @@ function fromProfile(
     providerId: provider.id,
     modelId: profile.modelRef.modelId,
     params: paramsOf(profile),
+    profileId: profile.id,
   }
 }
 
@@ -59,10 +71,9 @@ export function resolveModel(
   // Global agents run outside any story, so they never read story overrides.
   const override = isStoryOverrideTarget(target) ? config.storyModels?.[target] : undefined
   if (override !== undefined) {
-    // Bare model id, no provider component → runs on the default provider.
-    const provider = config.providers.find((p) => p.id === config.defaultProviderId)
-    if (provider === undefined) return { ok: false, kind: 'provider-missing', target }
-    return { ok: true, providerId: provider.id, modelId: override, params: {} }
+    const provider = config.providers.find((p) => p.id === override.providerId)
+    if (provider === undefined) return { ok: false, kind: 'override-provider-missing', target }
+    return { ok: true, providerId: provider.id, modelId: override.modelId, params: {} }
   }
 
   if (target === 'narrative') {

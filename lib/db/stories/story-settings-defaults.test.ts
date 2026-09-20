@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest'
 
 import { DEFAULT_SUGGESTION_CATEGORIES } from './default-suggestion-categories'
 import { storySettingsSchema, type SuggestionCategory } from './story-config-schema'
-import { STORY_SETTINGS_DEFAULTS, buildStorySettings } from './story-settings-defaults'
+import {
+  STORY_SETTINGS_DEFAULTS,
+  buildStorySettings,
+  defaultComposerWrapPov,
+} from './story-settings-defaults'
 
 type BuildStorySettingsApp = Parameters<typeof buildStorySettings>[1]
 
@@ -35,8 +39,14 @@ describe('STORY_SETTINGS_DEFAULTS', () => {
   })
   it('has all M2-inert features off', () => {
     expect(STORY_SETTINGS_DEFAULTS.translation.enabled).toBe(false)
-    expect(STORY_SETTINGS_DEFAULTS.composerModesEnabled).toBe(false)
     expect(STORY_SETTINGS_DEFAULTS.models).toEqual({})
+  })
+})
+
+describe('defaultComposerWrapPov', () => {
+  it('is first person for adventure and third for creative', () => {
+    expect(defaultComposerWrapPov('adventure')).toBe('first')
+    expect(defaultComposerWrapPov('creative')).toBe('third')
   })
 })
 
@@ -168,5 +178,33 @@ describe('buildStorySettings — suggestion palette', () => {
 
   it('enables suggestions by default', () => {
     expect(buildStorySettings('adventure', app()).suggestionsEnabled).toBe(true)
+  })
+})
+
+describe('buildStorySettings — composer', () => {
+  it('turns composer modes on for every new story', () => {
+    expect(buildStorySettings('adventure', app()).composerModesEnabled).toBe(true)
+    expect(buildStorySettings('creative', app()).composerModesEnabled).toBe(true)
+  })
+  it('lets the app template turn composer modes off in either mode', () => {
+    const modesOff = app({ defaultStorySettings: { composerModesEnabled: false } })
+    expect(buildStorySettings('adventure', modesOff).composerModesEnabled).toBe(false)
+    expect(buildStorySettings('creative', modesOff).composerModesEnabled).toBe(false)
+  })
+  it('wraps adventure in first person and creative in third', () => {
+    expect(buildStorySettings('adventure', app()).composerWrapPov).toBe('first')
+    expect(buildStorySettings('creative', app()).composerWrapPov).toBe('third')
+  })
+  it('seeds an adventure story from the app wrap POV default', () => {
+    expect(
+      buildStorySettings('adventure', app({ defaultStorySettings: { composerWrapPov: 'third' } }))
+        .composerWrapPov,
+    ).toBe('third')
+  })
+  it('keeps a creative story on third person whatever the app default says', () => {
+    expect(
+      buildStorySettings('creative', app({ defaultStorySettings: { composerWrapPov: 'first' } }))
+        .composerWrapPov,
+    ).toBe('third')
   })
 })

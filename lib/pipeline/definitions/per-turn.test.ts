@@ -154,7 +154,10 @@ describe('per-turn pipeline declaration', () => {
       storyId: 's1',
       branchId: 'b1',
       definition,
-      settings: baseSettings({ partialChapterBuffer: 3, models: { narrative: 'story-model' } }),
+      settings: baseSettings({
+        partialChapterBuffer: 3,
+        models: { narrative: { providerId: 'prov-1', modelId: 'story-model' } },
+      }),
     })
     hydrateEntries(phaseDb, 'b1', [])
     entitiesStore.hydrate('b1', [])
@@ -178,7 +181,9 @@ describe('per-turn pipeline declaration', () => {
       'narrative',
       expect.objectContaining({
         actionId: 'act_1',
-        config: expect.objectContaining({ storyModels: { narrative: 'story-model' } }),
+        config: expect.objectContaining({
+          storyModels: { narrative: { providerId: 'prov-1', modelId: 'story-model' } },
+        }),
       }),
     )
   })

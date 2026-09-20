@@ -511,9 +511,10 @@ enum-union dedup that drizzle `$inferSelect` will own is tracked in
 **The models resolver is the one deliberate exception** to "no `??` at
 read sites" — because models use override-at-render, the context
 getter calls a named `resolveModel(agentId)` function that walks
-`stories.settings.models[agentId]` (per-story override, a model id
-string) → `app_settings.assignments[agentId]` (the assigned profile)
-→ `profile.modelRef` (the profile's `(providerId, modelId)`). No
+`stories.settings.models[agentId]` (per-story override, a
+`{ providerId, modelId }` ref that runs on its own provider) →
+`app_settings.assignments[agentId]` (the assigned profile) →
+`profile.modelRef` (the profile's `(providerId, modelId)`). No
 fallback constant: the absence of a valid model at any step is an
 error state, not a recoverable case. Pre-flight halt — the
 orchestrator validates resolver inputs before phase 0 fires, so no

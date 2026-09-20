@@ -186,7 +186,10 @@ describe('runPreflight', () => {
       failure: 'no-profile-assigned',
     })
 
-    snap.storySettings = { ...STORY_SETTINGS_DEFAULTS, models: { classifier: 'm' } }
+    snap.storySettings = {
+      ...STORY_SETTINGS_DEFAULTS,
+      models: { classifier: { providerId: 'prov-1', modelId: 'm' } },
+    }
     expect(runPreflight(pipeline, snap)).toBeNull()
   })
 
@@ -196,12 +199,14 @@ describe('runPreflight', () => {
     // Assignments alone resolve, which is what pre-flight used to check.
     expect(runPreflight(pipeline, snap)).toBeNull()
 
-    // The override runs on the default provider, and there is none.
-    snap.appSettings.defaultProviderId = null
-    snap.storySettings = { ...STORY_SETTINGS_DEFAULTS, models: { classifier: 'm' } }
+    // The override's provider is gone; the default provider does not stand in for it.
+    snap.storySettings = {
+      ...STORY_SETTINGS_DEFAULTS,
+      models: { classifier: { providerId: 'prov-deleted', modelId: 'm' } },
+    }
     expect(runPreflight(pipeline, snap)).toMatchObject({
       kind: 'config-resolver',
-      failure: 'provider-missing',
+      failure: 'override-provider-missing',
       target: 'classifier',
     })
   })

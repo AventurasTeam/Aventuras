@@ -35,3 +35,13 @@ export {
   type TurnAdmissionResult,
   type SwapCancelOutcome,
 } from './app-deps'
+
+export {
+  dismissUpgradePrompt,
+  embeddingUpgradePromptOpen,
+  latchUpgradePrompt,
+  UPGRADE_PROMPT_LATCH_INITIAL,
+  upgradePromptShown,
+  type EmbeddingUpgradePromptInput,
+  type UpgradePromptLatch,
+} from './upgrade-prompt'

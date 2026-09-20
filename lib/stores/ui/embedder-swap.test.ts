@@ -7,7 +7,7 @@ describe('embedderSwapStore', () => {
 
   it('openEmbedderSwapDialog stores the story id and opens the dialog', () => {
     openEmbedderSwapDialog('story-1')
-    expect(embedderSwapStore.getState().dialog).toEqual({ storyId: 'story-1' })
+    expect(embedderSwapStore.getState().dialog).toStrictEqual({ storyId: 'story-1' })
   })
 
   it('closeDialog clears dialog state but not progress', () => {
@@ -118,5 +118,30 @@ describe('embedderSwapStore', () => {
     // is no slot for a cancel to sit in while nothing is running.
     expect(embedderSwapStore.isCancelRequested('story-1')).toBe(false)
     expect(embedderSwapStore.getState().dialog).toEqual({ storyId: 'story-2' })
+  })
+
+  it('openEmbedderSwapDialog carries a preselected model id when given one', () => {
+    openEmbedderSwapDialog('story-1', 'onnx-community/embeddinggemma-300m-ONNX')
+    expect(embedderSwapStore.getState().dialog).toEqual({
+      storyId: 'story-1',
+      preselectModelId: 'onnx-community/embeddinggemma-300m-ONNX',
+    })
+  })
+
+  it('upgrade deferrals hold per story for the session, each cleared only for itself', () => {
+    embedderSwapStore.deferUpgrade('story-1')
+    embedderSwapStore.deferUpgrade('story-2')
+    // Unlike the resume slot, deferring B must not re-arm A: Later holds until next launch.
+    expect(embedderSwapStore.getState().upgradeDeferred).toEqual(new Set(['story-1', 'story-2']))
+    embedderSwapStore.clearDeferredUpgradeFor('story-2')
+    expect(embedderSwapStore.getState().upgradeDeferred).toEqual(new Set(['story-1']))
+  })
+
+  it('re-deferring or clearing an absent id leaves the state untouched', () => {
+    embedderSwapStore.deferUpgrade('story-1')
+    const before = embedderSwapStore.getState()
+    embedderSwapStore.deferUpgrade('story-1')
+    embedderSwapStore.clearDeferredUpgradeFor('story-2')
+    expect(embedderSwapStore.getState()).toBe(before)
   })
 })

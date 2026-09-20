@@ -22,8 +22,9 @@ This file is session 5 of the mobile-foundations multi-session pass
   rule.
 - **No long-press for actions, no swipe-on-row, no
   pull-to-refresh.** Gesture vocabulary stays small.
-- **Save bar on phone hides while keyboard is open**, reappears on
-  field blur. Navigate-away guard remains active throughout.
+- **Save bar on phone stays above the keyboard**, with the panes
+  compressing to make room. Navigate-away guard remains active
+  throughout.
 - **Touch-target floor on phone is 44 px**, enforced as
   `min-height` on phone-tier interactive rows independent of the
   user's density override. Form-row layout for narrow containers
@@ -105,38 +106,51 @@ minimal-vocabulary default is the simpler starting point.
 
 The save bar (per
 [`patterns/save-sessions.md`](../../patterns/save-sessions.md))
-sits at the bottom of detail panes on desktop. On phone, the
-detail is a full-screen route per
-[`./collapse.md → Two-pane navigation surfaces (World, Plot, Settings)`](./collapse.md#two-pane-navigation-surfaces-world-plot-settings).
+sits at the bottom of the editable pane on desktop. On phone a
+two-pane surface collapses to one pane at a time per
+[`./collapse.md → Two-pane navigation surfaces (World, Plot, Settings)`](./collapse.md#two-pane-navigation-surfaces-world-plot-settings),
+so there is no one pane to anchor it to.
 
 Behavior contract on phone:
 
-- **Save bar sticky at bottom of detail-route content area** when
-  no keyboard is active.
-- **Save bar hides** when the soft keyboard opens (any field in
-  the route gains focus). Animation: slide down off-screen.
-- **Save bar reappears** when the keyboard dismisses (field blur,
-  keyboard's return-key dismiss, tap-outside-field). Animation:
-  slide up into place.
+- **Save bar sits at the surface's bottom edge, below whichever
+  pane the phone shows** — the tab-list state included — when no
+  keyboard is active. A dirty session collapsed back to the list
+  therefore stays saveable without re-entering a detail route.
+- **Save bar stays visible when the soft keyboard opens**, riding
+  directly above it. The surface reserves the keyboard's height and
+  the panes compress; the bar never slides away and never sits under
+  the IME.
+- **Save is reachable while typing** — no dismiss-the-keyboard-first
+  tap. A field edit can be committed from the keyboard-open state.
 - **Navigate-away guard remains active** during keyboard-open
   state. If the user attempts back / system-back while dirty, the
   guard's confirm modal fires regardless of save-bar visibility.
-- **Save action requires dismissing the keyboard first** (one
-  extra tap), then tapping the now-visible save button.
-  Save-during-typing isn't a typical workflow; the natural
-  sequence is type → done → save.
 
-Why hide rather than float-above:
+Why float above rather than hide:
 
-- **Screen space.** Keyboard takes ~290 px on iPhone, ~250–300 px
-  on Android. With chrome (top bar, sub-header, tabs ~112 px),
-  plus a 48 px save bar, plus the keyboard, remaining content
-  area shrinks below ~350 px on a 6.1" iPhone. Hiding the bar
-  buys back ~48 px for the field being edited.
-- **Workflow alignment.** The save bar's purpose is to commit the
-  form; while typing, no commit is needed.
-- **Safety preserved.** The navigate-away guard handles the
+- **A hidden bar is indistinguishable from a buried one.** Before
+  this rule was implemented, nothing reserved the keyboard's height,
+  so the bar sat under the IME: on an SM-F966B the keyboard covered
+  everything below ~y=1640 while the bar rendered at y=2350–2455, and
+  a tap on it went to the keyboard. "Hides and reappears" and "is
+  silently unreachable" look identical to the user, and only the
+  second one ships by default. Floating above is the state that is
+  self-evidently correct on sight.
+- **Screen space is the real cost, and it is affordable.** The
+  keyboard already takes ~250–300 px; the bar's ~48 px on top of that
+  is a small further squeeze on the field being edited, and it buys a
+  visible, tappable commit.
+- **Safety preserved.** The navigate-away guard still handles the
   "leave with dirty state" case independently.
+
+Implementation: `components/ui/keyboard-inset-column.native.tsx`
+reserves the keyboard's height off `useReanimatedKeyboardAnimation`
+and is a no-op on web; wrap the surface's root in it. Scroll
+containers on the surface must also set
+`keyboardShouldPersistTaps="handled"`, or the first tap on any
+control while a field holds focus is consumed dismissing the
+keyboard instead of reaching the control.
 
 The platform mechanism (RN's `KeyboardAvoidingView` modes, iOS
 interactive-dismiss vs Android adjust-resize) is **session 6

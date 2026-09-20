@@ -62,7 +62,6 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     providers: cfg.providers,
     profiles: cfg.profiles,
     assignments: cfg.assignments,
-    defaultProviderId: cfg.defaultProviderId,
     storyModels: open.settings.models,
   })
   const narrativeCapabilities = resolvedNarrativeModel.ok
@@ -104,7 +103,6 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
       providers: cfg.providers,
       profiles: cfg.profiles,
       assignments: cfg.assignments,
-      defaultProviderId: cfg.defaultProviderId,
       storyModels: open.settings.models,
     },
     abortSignal: ctx.abortSignal,

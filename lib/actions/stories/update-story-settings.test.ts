@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   branches,
@@ -13,12 +13,18 @@ import { PER_TURN_KIND, SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
 import {
   currentStoryStore,
   generationStore,
+  rehydrateStories,
   resetAllStores,
   storiesStore,
   type RunState,
 } from '@/lib/stores'
 
-import { StorySettingsStaleStoreError, updateStorySettings } from './update-story-settings'
+import {
+  saveStorySettingsSession,
+  StorySettingsStaleStoreError,
+  StorySettingsUnreadableError,
+  updateStorySettings,
+} from './update-story-settings'
 
 const STORY_DEFINITION = storyDefinitionSchema.parse({
   mode: 'adventure',
@@ -47,7 +53,10 @@ async function seed() {
       // Pinned false so the currentStoryStore test below can observe a real
       // false→true transition; the new story-creation default is true.
       suggestionsEnabled: false,
-      models: { narrative: 'model-a', classifier: 'model-b' },
+      models: {
+        narrative: { providerId: 'prov-1', modelId: 'model-a' },
+        classifier: { providerId: 'prov-1', modelId: 'model-b' },
+      },
     },
     embeddingModelId: 'embed-a',
     embeddingProviderId: null,
@@ -148,18 +157,23 @@ describe('updateStorySettings', () => {
 
   it('replaces nested objects wholesale rather than merging them', async () => {
     const { db, runInTransaction, settings } = await seed()
-    expect(settings.models).toEqual({ narrative: 'model-a', classifier: 'model-b' })
+    expect(settings.models).toEqual({
+      narrative: { providerId: 'prov-1', modelId: 'model-a' },
+      classifier: { providerId: 'prov-1', modelId: 'model-b' },
+    })
 
     const next = await updateStorySettings(
       'story_1',
-      { models: { narrative: 'model-c' } },
+      { models: { narrative: { providerId: 'prov-1', modelId: 'model-c' } } },
       { db, runInTransaction },
       99,
     )
 
     expect(next).toMatchObject({ status: 'ok' })
     if (next.status !== 'ok') throw new Error('expected the settings write to succeed')
-    expect(next.settings.models).toEqual({ narrative: 'model-c' })
+    expect(next.settings.models).toEqual({
+      narrative: { providerId: 'prov-1', modelId: 'model-c' },
+    })
   })
 
   it('a save landing mid-swap leaves the swap marker keys intact', async () => {
@@ -291,7 +305,7 @@ describe('updateStorySettings', () => {
 
     await expect(
       updateStorySettings('story_1', { suggestionCount: 5 }, { db, runInTransaction }, 99),
-    ).rejects.toThrow()
+    ).rejects.toThrow(StorySettingsUnreadableError)
 
     // The corrupt key is outside the patch, so it must survive rather than be
     // rebuilt from defaults by a save that reports failure.
@@ -309,7 +323,7 @@ describe('updateStorySettings', () => {
 
     await expect(
       updateStorySettings('story_1', { suggestionCount: 5 }, { db, runInTransaction }, 99),
-    ).rejects.toThrow()
+    ).rejects.toThrow(StorySettingsUnreadableError)
     expect(storiesStore.getStories().openFailures.story_1).toBe('settings-corrupt')
 
     const next = await updateStorySettings(
@@ -420,5 +434,165 @@ describe('updateStorySettings', () => {
     expect(row.settings?.suggestionCount).toBe(2)
     expect(row.updatedAt).toBe(99)
     expect(settings.suggestionCount).toBe(6)
+  })
+})
+
+describe('saveStorySettingsSession', () => {
+  it('writes the settings patch and the column patch in ONE transaction', async () => {
+    const { db, runInTransaction } = await seed()
+    const tx = vi.fn(runInTransaction)
+
+    const result = await saveStorySettingsSession(
+      'story_1',
+      { settings: { suggestionCount: 2 }, columns: { title: 'Renamed', favorite: true } },
+      { db, runInTransaction: tx },
+      99,
+    )
+
+    expect(result.status).toBe('ok')
+    expect(tx).toHaveBeenCalledTimes(1)
+    const ops = tx.mock.calls[0]?.[0] ?? []
+    expect(ops.map((op) => op.sql.slice(0, 30))).toEqual([
+      'UPDATE stories SET settings = ',
+      'UPDATE stories SET title = ?, ',
+    ])
+    const [row] = await db
+      .select({ title: stories.title, favorite: stories.favorite, settings: stories.settings })
+      .from(stories)
+      .where(eq(stories.id, 'story_1'))
+    expect(row).toMatchObject({ title: 'Renamed', favorite: 1 })
+    expect(row?.settings?.suggestionCount).toBe(2)
+    expect(storiesStore.getStories().rows[0]?.title).toBe('Renamed')
+  })
+
+  it('rolls the settings patch back when the transaction fails after it', async () => {
+    const { db, runInTransaction, settings } = await seed()
+    // Only the batch carrying the column write fails, so a settings UPDATE
+    // committed in a separate transaction would survive it.
+    const failing = (ops: { sql: string; params: unknown[] }[]) =>
+      runInTransaction(
+        ops.some((op) => op.sql.startsWith('UPDATE stories SET title'))
+          ? [...ops, { sql: 'INSERT INTO stories (id) VALUES (NULL)', params: [] }]
+          : ops,
+      )
+
+    await expect(
+      saveStorySettingsSession(
+        'story_1',
+        { settings: { suggestionCount: 2 }, columns: { title: 'Renamed' } },
+        { db, runInTransaction: failing },
+        99,
+      ),
+    ).rejects.toThrow('NOT NULL constraint failed: stories.id')
+
+    const [row] = await db
+      .select({ title: stories.title, settings: stories.settings })
+      .from(stories)
+      .where(eq(stories.id, 'story_1'))
+    expect(row?.title).toBe('Aria')
+    expect(row?.settings?.suggestionCount).toBe(settings.suggestionCount)
+  })
+
+  it('refuses a column patch on a draft story without touching settings', async () => {
+    const { db, runInTransaction, settings } = await seed()
+    await db.update(stories).set({ status: 'draft' }).where(eq(stories.id, 'story_1'))
+
+    const result = await saveStorySettingsSession(
+      'story_1',
+      { settings: { suggestionCount: 2 }, columns: { status: 'archived' } },
+      { db, runInTransaction },
+      99,
+    )
+
+    expect(result).toEqual({ status: 'rejected', reason: 'draft story' })
+    const [row] = await db
+      .select({ settings: stories.settings, updatedAt: stories.updatedAt })
+      .from(stories)
+      .where(eq(stories.id, 'story_1'))
+    expect(row?.settings?.suggestionCount).toBe(settings.suggestionCount)
+    expect(row?.updatedAt).toBe(1)
+  })
+
+  it('updateStorySettings is the settings-only form of the same commit', async () => {
+    const { db, runInTransaction } = await seed()
+    const result = await updateStorySettings(
+      'story_1',
+      { suggestionCount: 4 },
+      { db, runInTransaction },
+      99,
+    )
+    expect(result.status).toBe('ok')
+    expect(storiesStore.getStories().rows[0]?.settings?.suggestionCount).toBe(4)
+  })
+
+  it('refuses a save when a run starts while the status is being read', async () => {
+    const { db, runInTransaction } = await seed()
+    // Starts the run inside the status read, after a gate checked up front would have passed.
+    const racingDb = new Proxy(db, {
+      get(target, prop) {
+        const value = Reflect.get(target, prop) as unknown
+        if (prop !== 'select' || typeof value !== 'function') {
+          return typeof value === 'function' ? value.bind(target) : value
+        }
+        return (...args: unknown[]) => {
+          startRun(PER_TURN_KIND, 'hard-gate')
+          return (value as (...a: unknown[]) => unknown).apply(target, args)
+        }
+      },
+    })
+
+    const result = await saveStorySettingsSession(
+      'story_1',
+      { settings: { suggestionCount: 2 }, columns: { title: 'Renamed' } },
+      { db: racingDb, runInTransaction },
+      99,
+    )
+
+    expect(result).toEqual({ status: 'rejected', reason: 'generation in flight' })
+    const [row] = await db.select().from(stories).where(eq(stories.id, 'story_1'))
+    expect(row.title).toBe('Aria')
+    expect(row.updatedAt).toBe(1)
+  })
+
+  it('writes nothing when the column patch fails validation', async () => {
+    const { db, runInTransaction, settings } = await seed()
+
+    await expect(
+      saveStorySettingsSession(
+        'story_1',
+        { settings: { suggestionCount: 2 }, columns: { title: '   ' } },
+        { db, runInTransaction },
+        99,
+      ),
+    ).rejects.toThrow(/title/)
+
+    const [row] = await db.select().from(stories).where(eq(stories.id, 'story_1'))
+    expect(row.settings?.suggestionCount).toBe(settings.suggestionCount)
+    expect(row.updatedAt).toBe(1)
+  })
+
+  // The surface keys its copy off the class: a plain Error here reads as a lost
+  // save, and the columns below prove that claim false.
+  it('rehydrates the committed columns before throwing on a corrupt read-back', async () => {
+    const { db, sqlite, runInTransaction, settings } = await seed()
+    const corrupt = JSON.stringify({ ...settings, classifierCadence: 'broken' })
+    sqlite.exec(`UPDATE stories SET settings = '${corrupt}' WHERE id = 'story_1'`)
+    await rehydrateStories(db)
+
+    const error = await saveStorySettingsSession(
+      'story_1',
+      { columns: { title: 'Renamed' } },
+      { db, runInTransaction },
+      99,
+    ).catch((thrown: unknown) => thrown)
+
+    expect(error).toBeInstanceOf(StorySettingsUnreadableError)
+    expect(error).not.toBeInstanceOf(StorySettingsStaleStoreError)
+
+    const [row] = await db.select().from(stories).where(eq(stories.id, 'story_1'))
+    expect(row.title).toBe('Renamed')
+    const mirrored = storiesStore.getStories().rows.find((r) => r.id === 'story_1')
+    expect(mirrored?.title).toBe('Renamed')
+    expect(storiesStore.getStories().openFailures.story_1).toBe('settings-corrupt')
   })
 })

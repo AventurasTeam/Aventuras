@@ -569,18 +569,27 @@ AlertDialog surfaces three options:
 
 #### The story-open upgrade prompt
 
-Fires on story open when three conditions hold together: no
+Fires on story open when all of the following hold: no
 `embedding_swap_target` marker is set — the resume prompt owns that
 case, and model changes are already disabled while it stands — the
 story's `embedding_model_id` differs from
 `app_settings.embedding_model_id`, and `embedding_upgrade_declined`
 is not that same app default. One app-level mount keyed on the open
 story, beside the resume prompt's, because two hosts reading the
-same condition portal duplicate modals onto one body. No prompt when
+same condition portal duplicate modals onto one body. It is the last
+of the three app-level hosts, and its gate — not the mount order — is
+what keeps it from portaling beside either: no prompt while a swap is
+already running, and none while an unacknowledged crash-recovery
+report is pending. No prompt when
 the app default is unset, and the comparison is on model id alone —
 not on backend or provider — because model id is what the vec0 pk and
 the KNN filter already treat as vector-space identity. The same model
 served locally and by a provider is not a swap worth asking about.
+
+**A story open is an explicit open** — from the library, the landing,
+`Edit info`, the wizard's finish or a recovery reopen. Route hydration
+after a reload, a deep link or a branch switch is not one, and an app
+default changed mid-session waits for the next open.
 
 Three actions, mirroring the resume prompt rather than inventing a
 shape for this one surface:
@@ -589,9 +598,10 @@ shape for this one surface:
 - **Keep on the current model** — writes the declined key, exactly
   as the swap dialog's identically named option does. It is that
   option surfaced one step early, not a second concept.
-- **Later** — dismisses without deciding, and is what an overlay tap
-  or a hardware back maps to. Session-scoped: the prompt fires again
-  next launch, because a dismissal is not a decision.
+- **Later** — dismisses without deciding, and is what Esc on web and
+  a hardware back on native map to. An overlay tap does nothing, as
+  for every alert dialog. Session-scoped: the prompt fires again next
+  launch, because a dismissal is not a decision.
 
 **Suppression is scoped to the model declined, not to time.** The
 prompt returns as soon as the app default moves to a model the user

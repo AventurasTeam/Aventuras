@@ -31,7 +31,6 @@ const STRUCTURED_CFG = {
   providers: [],
   profiles: [],
   assignments: { 'wizard-assist': 'prof' },
-  defaultProviderId: 'p',
 }
 
 const provider = {
@@ -57,7 +56,6 @@ const STREAM_CFG = {
     },
   ],
   assignments: {},
-  defaultProviderId: provider.id,
 }
 
 describe('buildCallSettings', () => {

@@ -11,7 +11,6 @@ import { TruncatedText } from '@/components/compounds/truncated-text'
 import { Composer, type ComposerHandle } from '@/components/reader/composer'
 import { isDraftEmpty, planSubmissionHandback } from '@/components/reader/composer-draft'
 import { readerPillPhase } from '@/components/reader/generation-phase'
-import { KeyboardInsetColumn } from '@/components/reader/keyboard-inset-column'
 import ReaderDocument, { type ReaderDocumentRef } from '@/components/reader/reader-document'
 import {
   type EditResult,
@@ -42,6 +41,7 @@ import { useWorldTimeEditing } from '@/components/reader/world-time-editing'
 import { WorldTimeEditSheet } from '@/components/reader/worldtime-edit-sheet'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import { EmptyState } from '@/components/ui/empty-state'
+import { KeyboardInsetColumn } from '@/components/ui/keyboard-inset-column'
 import { Text } from '@/components/ui/text'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
 import { useLeaveFailedStoryOpen } from '@/hooks/use-leave-failed-story-open'
@@ -327,6 +327,7 @@ export default function ReaderComposerRoute() {
   const stripErrorMessage = describeSuggestionFailure(stripError)
   const stripErrorFix = useConfigFixAction(
     stripError?.kind === 'config-resolver' ? stripError.failure : undefined,
+    storyId,
   )
 
   // The failure belongs to the entry it was fired on; a turn, a rollback or a

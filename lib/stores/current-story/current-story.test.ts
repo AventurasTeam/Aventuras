@@ -68,4 +68,27 @@ describe('currentStoryStore', () => {
     currentStoryStore.clear()
     expect(currentStoryStore.getCurrentStory()).toBeNull()
   })
+
+  it('open publishes the story and marks an open', () => {
+    const story = { storyId: 's1', branchId: 'b1', definition, settings }
+    currentStoryStore.open(story)
+    expect(currentStoryStore.getCurrentStory()).toEqual(story)
+    expect(currentStoryStore.getOpenSeq()).toBe(1)
+    currentStoryStore.open(story)
+    expect(currentStoryStore.getOpenSeq()).toBe(2)
+  })
+
+  it('set refreshes the open story without marking an open', () => {
+    currentStoryStore.open({ storyId: 's1', branchId: 'b1', definition, settings })
+    currentStoryStore.set({ storyId: 's1', branchId: 'b1', definition, settings: { ...settings } })
+    expect(currentStoryStore.getOpenSeq()).toBe(1)
+  })
+
+  it('clear keeps the open count and __reset zeroes it', () => {
+    currentStoryStore.open({ storyId: 's1', branchId: 'b1', definition, settings })
+    currentStoryStore.clear()
+    expect(currentStoryStore.getOpenSeq()).toBe(1)
+    currentStoryStore.__reset()
+    expect(currentStoryStore.getOpenSeq()).toBe(0)
+  })
 })

@@ -204,7 +204,6 @@ export async function* piggybackFallbackClassifierPhase(
     providers: appSettings.providers,
     profiles: appSettings.profiles,
     assignments: appSettings.assignments,
-    defaultProviderId: appSettings.defaultProviderId,
     storyModels: open.settings.models,
   }
   const result = askForSuggestions
@@ -378,7 +377,6 @@ function resolveNarrativeCapabilities(snapshot: PreflightSnapshot): ModelCapabil
     providers: snapshot.appSettings.providers,
     profiles: snapshot.appSettings.profiles,
     assignments: snapshot.appSettings.assignments,
-    defaultProviderId: snapshot.appSettings.defaultProviderId,
     storyModels: snapshot.storySettings?.models,
   })
   if (!resolved.ok) return undefined

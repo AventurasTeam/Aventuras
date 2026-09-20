@@ -19,6 +19,7 @@ import {
   rehydrateStories,
   storiesStore,
   type OpenFailureKind,
+  type OpenStory,
 } from '@/lib/stores'
 
 import { readRecentEntries } from '../story-entries/recent-window'
@@ -81,10 +82,11 @@ const alwaysCurrent: IsCurrentRequest = () => true
 
 // Single place that parses story config JSON, hydrates entries/entities/lore, and sets
 // currentStoryStore — every story-open path (landing, wizard, deep link) shares these guarantees.
-export async function loadOpenStory(
+async function loadAndPublish(
   branchId: string,
   ctx: DbCtx,
-  isCurrentRequest: IsCurrentRequest = alwaysCurrent,
+  isCurrentRequest: IsCurrentRequest,
+  publish: (open: OpenStory) => void,
 ): Promise<LoadOpenStoryResult> {
   const [row] = await ctx.db
     .select({ storyId: stories.id, definition: stories.definition, settings: stories.settings })
@@ -132,11 +134,20 @@ export async function loadOpenStory(
   entriesStore.hydrate(branchId, entryRows)
   entitiesStore.hydrate(branchId, entityRows)
   loreStore.hydrate(branchId, loreRows)
-  currentStoryStore.set({ storyId: row.storyId, branchId, definition, settings })
+  publish({ storyId: row.storyId, branchId, definition, settings })
   // Warm the vec cache for a story opened with pre-existing stale rows; no-op
   // until boot wires the drain controller, and the sync stage owns correctness.
   kickStoryDrain(row.storyId)
   return { status: 'ok', storyId: row.storyId, branchId }
+}
+
+// Route hydration (reload, deep link, branch switch): re-publishes without marking an open.
+export function loadOpenStory(
+  branchId: string,
+  ctx: DbCtx,
+  isCurrentRequest: IsCurrentRequest = alwaysCurrent,
+): Promise<LoadOpenStoryResult> {
+  return loadAndPublish(branchId, ctx, isCurrentRequest, currentStoryStore.set)
 }
 
 export async function openStory(
@@ -154,7 +165,7 @@ export async function openStory(
   const branchId = row?.branchId ?? null
   if (branchId == null) return { status: 'no-branch' }
 
-  const load = await loadOpenStory(branchId, ctx, isCurrentRequest)
+  const load = await loadAndPublish(branchId, ctx, isCurrentRequest, currentStoryStore.open)
   if (load.status === 'cancelled') return load
   if (load.status === 'failed') return { status: 'open-failed', kind: load.kind }
   if (load.status !== 'ok') return { status: 'no-branch' }

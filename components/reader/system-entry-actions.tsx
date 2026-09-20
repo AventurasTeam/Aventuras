@@ -42,7 +42,9 @@ export function describeTurnFailure(error: PipelineError | undefined): {
         ? 'reader:systemEntry.failure.noProfileAssigned'
         : error.failure === 'profile-missing'
           ? 'reader:systemEntry.failure.profileMissing'
-          : 'reader:systemEntry.failure.providerMissing'
+          : error.failure === 'override-provider-missing'
+            ? 'reader:systemEntry.failure.overrideProviderMissing'
+            : 'reader:systemEntry.failure.providerMissing'
     return { content: t(contentKey), detail: error.detail }
   }
   if (error?.kind === 'embedder') {
@@ -80,9 +82,19 @@ export function toSystemFailureMeta(
 // lands on the generic "Fix default" rather than dropping the affordance.
 export function useConfigFixAction(
   failure: ResolveFailureKind | (string & {}) | undefined,
+  storyId: string | null,
 ): SystemEntryFixAction {
   const router = useRouter()
   if (failure === undefined) return undefined
+  // The override carries its own provider, so App Settings shows a healthy chain
+  // and nothing to repair; the row with the `×` is on this story's Models tab.
+  if (failure === 'override-provider-missing') {
+    if (storyId === null) return undefined
+    return {
+      label: t('reader:systemEntry.fixOverride'),
+      onPress: () => router.navigate(`/story-settings/${storyId}?tab=models`),
+    }
+  }
   const labelKey =
     failure === 'no-profile-assigned'
       ? 'reader:systemEntry.assignProfile'
@@ -114,6 +126,7 @@ export function useSystemEntryActions(
 ): { onRetry: () => void; fixAction: SystemEntryFixAction } {
   const configFix = useConfigFixAction(
     failure?.kind === 'config-resolver' ? failure.failure : undefined,
+    storyId,
   )
   const embedderFix = useEmbedderFixAction(failure?.kind === 'embedder' ? storyId : null)
   // The two gates are kind-exclusive, so the `??` order carries no meaning.

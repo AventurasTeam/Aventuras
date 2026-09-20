@@ -24,7 +24,7 @@ import {
   wizardSessions,
   type SqlOp,
 } from '@/lib/db'
-import { rehydrateStories } from '@/lib/stores'
+import { embedderSwapStore, rehydrateStories } from '@/lib/stores'
 
 import type { DbCtx } from '../types'
 
@@ -78,5 +78,7 @@ export async function deleteStory(
   ops.push(ctx.db.delete(stories).where(eq(stories.id, storyId)).toSQL())
 
   await ctx.runInTransaction(ops)
+  // A future importer that keeps source ids would otherwise inherit this story's stale Later.
+  embedderSwapStore.clearDeferredUpgradeFor(storyId)
   await rehydrateStories(ctx.db)
 }

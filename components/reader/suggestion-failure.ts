@@ -14,7 +14,9 @@ export function describeSuggestionFailure(error: PipelineError | null | undefine
         ? 'reader:suggestions.failure.noProfileAssigned'
         : error.failure === 'profile-missing'
           ? 'reader:suggestions.failure.profileMissing'
-          : 'reader:suggestions.failure.providerMissing',
+          : error.failure === 'override-provider-missing'
+            ? 'reader:suggestions.failure.overrideProviderMissing'
+            : 'reader:suggestions.failure.providerMissing',
     )
   return t('reader:suggestions.errorBody')
 }

@@ -173,7 +173,6 @@ export async function* periodicClassifierPhase(
         providers: cfg.providers,
         profiles: cfg.profiles,
         assignments: cfg.assignments,
-        defaultProviderId: cfg.defaultProviderId,
         storyModels: open.settings.models,
       },
       bounded.signal,

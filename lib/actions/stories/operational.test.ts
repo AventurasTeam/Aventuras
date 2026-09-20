@@ -150,6 +150,23 @@ describe('stories column writes', () => {
     })
   })
 
+  it('openStory marks each explicit open, the same story twice included', async () => {
+    const { ctx } = await setup()
+    await openStory('story_1', ctx, vi.fn(), 999)
+    expect(currentStoryStore.getOpenSeq()).toBe(1)
+    await openStory('story_1', ctx, vi.fn(), 1000)
+    expect(currentStoryStore.getOpenSeq()).toBe(2)
+  })
+
+  it('loadOpenStory alone publishes the story without marking an open', async () => {
+    // The reader and World hydrate through it after a reload, deep link or branch switch.
+    const { ctx } = await setup()
+    const result = await loadOpenStory('br_1', ctx)
+    expect(result).toEqual({ status: 'ok', storyId: 'story_1', branchId: 'br_1' })
+    expect(currentStoryStore.getCurrentStory()?.storyId).toBe('story_1')
+    expect(currentStoryStore.getOpenSeq()).toBe(0)
+  })
+
   it('openStory returns no-branch when currentBranchId is null', async () => {
     const { ctx } = await setup()
     const result = await openStory('draft_1', ctx, vi.fn(), 999)
@@ -312,6 +329,7 @@ describe('stories column writes', () => {
 
     expect(result).toEqual({ status: 'cancelled' })
     expect(currentStoryStore.getCurrentStory()).toBeNull()
+    expect(currentStoryStore.getOpenSeq()).toBe(0)
     expect(entriesStore.getLoadedBranch()).toBeNull()
     expect(entriesStore.getEntries().size).toBe(0)
     expect(entitiesStore.getLoadedBranch()).toBeNull()

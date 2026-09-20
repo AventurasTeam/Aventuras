@@ -72,7 +72,9 @@ the modal carries the consequence in numeric form, not visual:
 - **Foot** — `Cancel` (secondary) + `Delete entries` (danger
   primary, warn-coloured per the inline-delete convention in
   [branch navigator](../branch-navigator/branch-navigator.md#inline-delete-confirm)).
-  Esc and click-outside both behave as Cancel.
+  Esc (web) and hardware back (native) behave as Cancel; an outside
+  click does nothing, per
+  [`alert-dialog.md → Copy contract`](../../../patterns/alert-dialog.md#copy-contract).
 
 ## Counts
 

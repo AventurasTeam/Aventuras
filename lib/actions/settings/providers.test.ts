@@ -59,7 +59,6 @@ describe('provider mutators', () => {
       providers: cfg.providers,
       profiles: cfg.profiles,
       assignments: cfg.assignments,
-      defaultProviderId: cfg.defaultProviderId,
     }
     expect(resolveModel('narrative', config)).toMatchObject({ ok: true, modelId: 'm-1' })
     expect(resolveModel('wizard-assist', config)).toMatchObject({ ok: true, modelId: 'm-1' })

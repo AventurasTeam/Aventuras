@@ -3,10 +3,12 @@ import { eq } from 'drizzle-orm'
 import {
   assertKnownSettingsKeys,
   setSettingsKeysOps,
+  setStoryInfoOps,
   stories,
   storySettingsPartialSchema,
   storySettingsSchema,
   type DbCtx,
+  type StoryInfoPatch,
   type StorySettings,
 } from '@/lib/db'
 import { currentStoryStore, generationStore, rehydrateStories, storiesStore } from '@/lib/stores'
@@ -23,33 +25,29 @@ export class StorySettingsStaleStoreError extends Error {
   }
 }
 
+/**
+ * The write landed and the store is current, but the resulting blob fails the
+ * schema, so the surface cannot render it. Also distinct from a failed save:
+ * retrying reproduces it, and the columns the same save wrote are on disk.
+ */
+export class StorySettingsUnreadableError extends Error {
+  constructor(options?: { cause?: unknown }) {
+    super('Story settings were saved but can no longer be read', options)
+    this.name = 'StorySettingsUnreadableError'
+  }
+}
+
 export type UpdateStorySettingsResult =
   | { status: 'ok'; settings: StorySettings }
-  | { status: 'rejected'; reason: 'generation in flight' }
+  | { status: 'rejected'; reason: 'generation in flight' | 'draft story' }
 
-// `stories` is absent from deltas.target_table, so a settings save is a direct
-// write: no delta row, no CTRL-Z reversal.
-// See docs/data-model.md#diagram (deltas).
-/**
- * @param patch - Shallow-merged onto the stored settings. Every value is
- * replaced wholesale, nested objects and arrays included; a key whose value is
- * `undefined` is left untouched. Pass only the changed keys — the write touches
- * exactly the keys passed, so an unchanged key spread in is still written and
- * can lose a concurrent edit to it. Unknown keys reject rather than being
- * silently dropped. Corruption is detected on the read-back _after_ the write:
- * a save whose own keys make the blob readable again succeeds, and one whose
- * keys do not still persists its write and bumps `updated_at` before throwing —
- * so the caller reports a failed save for a write that actually landed.
- */
-export async function updateStorySettings(
-  storyId: string,
-  patch: Partial<StorySettings>,
-  ctx: DbCtx,
-  nowMs: number = Date.now(),
-): Promise<UpdateStorySettingsResult> {
-  if (generationStore.isUserEditBlocked()) {
-    return { status: 'rejected', reason: 'generation in flight' }
-  }
+/** One Story Settings save: the settings JSON keys and the `stories` columns it touches. */
+export type StorySettingsSessionPatch = {
+  settings?: Partial<StorySettings>
+  columns?: StoryInfoPatch
+}
+
+function settingsOps(storyId: string, patch: Partial<StorySettings>, nowMs: number) {
   // Explicit `undefined` typechecks without exactOptionalPropertyTypes and survives
   // the partial parse as a key with no bindable SQL form, so it must be dropped here.
   const changed = Object.fromEntries(
@@ -58,9 +56,43 @@ export async function updateStorySettings(
   // `Partial<StorySettings>` is a compile-time claim only, and must run before the
   // parse below, which strips unknown keys so the builder's own guard never sees them.
   assertKnownSettingsKeys(Object.keys(changed))
-  const validated = storySettingsPartialSchema.parse(changed)
+  return setSettingsKeysOps(storyId, storySettingsPartialSchema.parse(changed), nowMs)
+}
 
-  await ctx.runInTransaction(setSettingsKeysOps(storyId, validated, nowMs))
+// `stories` is absent from deltas.target_table, so a settings save is a direct
+// write: no delta row, no CTRL-Z reversal.
+// See docs/data-model.md#diagram (deltas).
+/**
+ * Commits the settings keys and the column patch as ONE transaction. Every
+ * settings value is replaced wholesale; a key whose value is `undefined` is left
+ * untouched; unknown keys reject rather than being silently dropped. Pass only
+ * the changed keys and columns: an unchanged value spread in is still written
+ * and can lose a concurrent edit to it. A column patch on a draft story is
+ * refused; a settings-only patch goes through. Corruption is detected on the
+ * read-back _after_ the write: a save whose own keys make the blob readable
+ * again succeeds, and otherwise the write, column patch included, still commits
+ * and bumps `updated_at` before the call throws.
+ */
+export async function saveStorySettingsSession(
+  storyId: string,
+  patch: StorySettingsSessionPatch,
+  ctx: DbCtx,
+  nowMs: number = Date.now(),
+): Promise<UpdateStorySettingsResult> {
+  const columnOps = patch.columns ? setStoryInfoOps(storyId, patch.columns, nowMs) : []
+  if (columnOps.length > 0) {
+    const [row] = await ctx.db
+      .select({ status: stories.status })
+      .from(stories)
+      .where(eq(stories.id, storyId))
+    if (!row) throw new Error('Story not found')
+    if (row.status === 'draft') return { status: 'rejected', reason: 'draft story' }
+  }
+  // No await between this gate and the write, so a run starting mid-read cannot slip past.
+  if (generationStore.isUserEditBlocked()) {
+    return { status: 'rejected', reason: 'generation in flight' }
+  }
+  await ctx.runInTransaction([...settingsOps(storyId, patch.settings ?? {}, nowMs), ...columnOps])
 
   const [row] = await ctx.db
     .select({ settings: stories.settings })
@@ -70,10 +102,12 @@ export async function updateStorySettings(
 
   const stored = storySettingsSchema.safeParse(row.settings)
   if (!stored.success) {
+    // The write committed regardless, so the store must not keep pre-save columns.
+    await rehydrateStories(ctx.db)
     // Surfaces the repair affordance `resetStorySettings` clears, rather than
     // dead-ending on a generic save error every retry reproduces.
     storiesStore.setOpenFailure({ storyId, kind: 'settings-corrupt' })
-    throw new Error('Story settings could not be read', { cause: stored.error })
+    throw new StorySettingsUnreadableError({ cause: stored.error })
   }
   const settings = stored.data
 
@@ -86,4 +120,14 @@ export async function updateStorySettings(
   const open = currentStoryStore.getCurrentStory()
   if (open?.storyId === storyId) currentStoryStore.set({ ...open, settings })
   return { status: 'ok', settings }
+}
+
+/** Settings-only form of `saveStorySettingsSession`. */
+export function updateStorySettings(
+  storyId: string,
+  patch: Partial<StorySettings>,
+  ctx: DbCtx,
+  nowMs: number = Date.now(),
+): Promise<UpdateStorySettingsResult> {
+  return saveStorySettingsSession(storyId, { settings: patch }, ctx, nowMs)
 }

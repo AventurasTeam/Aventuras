@@ -38,7 +38,8 @@
       "unusable": "The model returned no usable suggestions.",
       "noProfileAssigned": "The suggestion agent has no profile assigned.",
       "profileMissing": "The suggestion agent's assigned profile is missing.",
-      "providerMissing": "The suggestion model's provider is missing."
+      "providerMissing": "The suggestion model's provider is missing.",
+      "overrideProviderMissing": "This story's suggestion model override names a provider that no longer exists."
     }
   },
   "editFailed": "Couldn't save your edit. Please try again.",
@@ -129,6 +130,7 @@
     "assignProfile": "Assign profile",
     "fixProfile": "Fix profile",
     "fixDefault": "Fix default",
+    "fixOverride": "Fix story override",
     "switchEmbedder": "Switch embedder",
     "failureMessage": "Generation failed. Retry to try again.",
     "blockedDetail": "blocked by another operation ({{reason}})",
@@ -137,7 +139,8 @@
       "embed": "The embedder failed, so memory retrieval couldn't run.",
       "noProfileAssigned": "The narrative agent has no profile assigned.",
       "profileMissing": "The narrative agent's assigned profile is missing.",
-      "providerMissing": "The narrative model's provider is missing."
+      "providerMissing": "The narrative model's provider is missing.",
+      "overrideProviderMissing": "This story's narrative model override names a provider that no longer exists."
     }
   },
   "actions": {

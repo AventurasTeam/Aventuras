@@ -100,12 +100,22 @@ const translationSchema = z.object({
   }),
 })
 
-const storyAgentModelShape = Object.fromEntries(
-  STORY_AGENT_IDS.map((id) => [id, z.string().optional()]),
-) as Record<StoryAgentId, z.ZodOptional<z.ZodString>>
+// Both halves are required to name something: `resolveModel` returns `ok` for an
+// empty modelId, which pre-flight passes and the provider call then fires blank.
+export const storyModelRefSchema = z.object({
+  providerId: z.string().min(1),
+  modelId: z.string().trim().min(1),
+})
+export type StoryModelRef = z.infer<typeof storyModelRefSchema>
 
+const storyAgentModelShape = Object.fromEntries(
+  STORY_AGENT_IDS.map((id) => [id, storyModelRefSchema.optional()]),
+) as Record<StoryAgentId, z.ZodOptional<typeof storyModelRefSchema>>
+
+// Override-at-render: an absent key resolves through App Settings' profile chain.
+// Provider-qualified because a bare id cannot say which provider serves it.
 const modelsSchema = z.object({
-  narrative: z.string().optional(),
+  narrative: storyModelRefSchema.optional(),
   ...storyAgentModelShape,
 })
 
@@ -116,12 +126,14 @@ const modelsSchema = z.object({
  * an un-backfilled story won't parse or open — `REQUIRED_SETTINGS_KEYS` pins that set.
  */
 export const storySettingsSchema = z.object({
-  chapterTokenThreshold: z.number().default(24000),
+  chapterTokenThreshold: z.number().int().positive().default(24000),
   chapterAutoClose: z.boolean().default(true),
   fullChapterInBuffer: z.boolean().default(false),
   partialChapterBuffer: z.number().int().nonnegative().default(10),
   protectedBuffer: z.number().int().nonnegative().default(10),
-  classifierCadence: z.number(),
+  // Integral and ≥ 1 to match the knob rules the Memory tab enforces: a stored 0 or
+  // fraction is a value no surface can produce and none can repair.
+  classifierCadence: z.number().int().positive(),
   // cadence.md → User-tunable knobs. No `.min(2)`: a hand-edited 0 degrades at read time rather
   // than failing story load. No `.default()` either — matches classifierCadence (migration 0013).
   classifierContextEntries: z.number(),

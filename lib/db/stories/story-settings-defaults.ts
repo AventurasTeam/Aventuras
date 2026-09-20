@@ -3,9 +3,20 @@ import { BUNDLED_PACK_ID } from '@/lib/prompts'
 import { DEFAULT_SUGGESTION_CATEGORIES } from './default-suggestion-categories'
 import {
   storySettingsSchema,
+  type StoryMode,
   type StorySettings,
   type SuggestionCategory,
 } from './story-config-schema'
+
+// principles.md → Composer mode.
+const DEFAULT_COMPOSER_WRAP_POV: Record<StoryMode, StorySettings['composerWrapPov']> = {
+  adventure: 'first',
+  creative: 'third',
+}
+
+export function defaultComposerWrapPov(mode: StoryMode): StorySettings['composerWrapPov'] {
+  return DEFAULT_COMPOSER_WRAP_POV[mode]
+}
 
 export const STORY_SETTINGS_DEFAULTS: StorySettings = {
   chapterTokenThreshold: 24000,
@@ -31,7 +42,8 @@ export const STORY_SETTINGS_DEFAULTS: StorySettings = {
     cascadeMaxDepth: 2,
   },
   probe_mode_active: false,
-  composerModesEnabled: false,
+  composerModesEnabled: true,
+  /** Mode-agnostic stand-in; the per-mode default is {@link defaultComposerWrapPov}. */
   composerWrapPov: 'third',
   // The toggle on beside an empty palette is deliberate, and this constant is
   // the ONLY source of suggestionsEnabled for a new story (app-level
@@ -85,6 +97,10 @@ export function buildStorySettings(
   const settings = storySettingsSchema.parse({
     ...STORY_SETTINGS_DEFAULTS,
     ...app.defaultStorySettings,
+    // The template's wrap POV is the adventure default; creative keeps its own.
+    composerWrapPov:
+      (mode === 'adventure' ? app.defaultStorySettings.composerWrapPov : undefined) ??
+      defaultComposerWrapPov(mode),
     // An empty app palette means "not configured", not "the user wants none" —
     // the column carries no separate unset marker — so substitute the built-in
     // per-mode set rather than freezing emptiness into the story.

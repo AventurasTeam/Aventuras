@@ -31,7 +31,6 @@ const base: ResolveModelConfig = {
   providers: [provider],
   profiles: [narrativeProfile, agentProfile],
   assignments: { 'wizard-assist': 'prof-agent', classifier: 'prof-agent' },
-  defaultProviderId: 'prov-1',
 }
 
 describe('resolveModel', () => {
@@ -41,6 +40,7 @@ describe('resolveModel', () => {
       providerId: 'prov-1',
       modelId: 'm-narr',
       params: { temperature: 0.8 },
+      profileId: 'prof-narr',
     })
   })
 
@@ -50,6 +50,7 @@ describe('resolveModel', () => {
       providerId: 'prov-1',
       modelId: 'm-agent',
       params: { structuredOutput: 'auto' },
+      profileId: 'prof-agent',
     })
   })
 
@@ -78,11 +79,16 @@ describe('resolveModel', () => {
     ).toEqual({ ok: false, kind: 'provider-missing', target: 'classifier' })
   })
 
-  it('story override short-circuits to the default provider, skipping the walk', () => {
-    const cfg: ResolveModelConfig = { ...base, storyModels: { classifier: 'override-model' } }
+  it("story override resolves on the override's own provider, skipping the walk", () => {
+    const other: ProviderInstance = { ...provider, id: 'prov-2', displayName: 'Other' }
+    const cfg: ResolveModelConfig = {
+      ...base,
+      providers: [provider, other],
+      storyModels: { classifier: { providerId: 'prov-2', modelId: 'override-model' } },
+    }
     expect(resolveModel('classifier', cfg)).toEqual({
       ok: true,
-      providerId: 'prov-1',
+      providerId: 'prov-2',
       modelId: 'override-model',
       params: {},
     })
@@ -97,25 +103,30 @@ describe('resolveModel', () => {
   })
 
   it('rejects a wizard-assist story override at the type level and ignores it at runtime', () => {
-    // @ts-expect-error wizard-assist has no per-story override slot (modelsSchema).
-    const cfg: ResolveModelConfig = { ...base, storyModels: { 'wizard-assist': 'override-model' } }
+    const cfg: ResolveModelConfig = {
+      ...base,
+      // @ts-expect-error wizard-assist has no per-story override slot (modelsSchema).
+      storyModels: { 'wizard-assist': { providerId: 'prov-1', modelId: 'override-model' } },
+    }
     expect(resolveModel('wizard-assist', cfg)).toEqual({
       ok: true,
       providerId: 'prov-1',
       modelId: 'm-agent',
       params: { structuredOutput: 'auto' },
+      profileId: 'prof-agent',
     })
   })
 
-  it('override fails provider-missing when there is no default provider', () => {
+  it('names the override, not the app chain, when the override provider was deleted', () => {
     const cfg: ResolveModelConfig = {
       ...base,
-      defaultProviderId: null,
-      storyModels: { classifier: 'override-model' },
+      storyModels: { classifier: { providerId: 'gone', modelId: 'override-model' } },
     }
+    // Distinct from 'provider-missing': that one is repaired in App Settings,
+    // this one only on the story's Models tab.
     expect(resolveModel('classifier', cfg)).toEqual({
       ok: false,
-      kind: 'provider-missing',
+      kind: 'override-provider-missing',
       target: 'classifier',
     })
   })

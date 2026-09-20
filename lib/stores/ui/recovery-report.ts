@@ -1,3 +1,4 @@
+import { useStore } from 'zustand'
 import { createStore } from 'zustand/vanilla'
 
 import type { RecoveryReport } from '@/lib/pipeline'
@@ -32,5 +33,7 @@ export const recoveryReportStore = {
   },
   acknowledge: (): void => store.setState({ activeRecoveryReport: null }),
   getSnapshot: (): RecoveryReportSnapshot => store.getState(),
+  useRecoveryReport: <T>(selector: (s: RecoveryReportSnapshot) => T): T =>
+    useStore(store, selector),
   __reset: (): void => store.setState(INITIAL_SNAPSHOT, true),
 }
