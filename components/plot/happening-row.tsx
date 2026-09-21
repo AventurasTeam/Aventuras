@@ -4,25 +4,13 @@ import { View } from 'react-native'
 import { ListRow } from '@/components/compounds/list-row'
 import type { RowRendererProps } from '@/components/list/list-module'
 import { Icon } from '@/components/ui/icon'
-import { Tag, type TagTone } from '@/components/ui/tag'
+import { Tag } from '@/components/ui/tag'
+import { Text } from '@/components/ui/text'
 import type { Happening } from '@/lib/db'
-import { formatEntryRef, type EntryIndex } from '@/lib/entry-refs'
-import { t } from '@/lib/i18n'
 import type { PlotListSignals } from '@/lib/list-modules'
 
 import { PlotIcon } from './plot-icon'
-
-/** The when-marker: an `entry #n` chip, the dangling state, or the free-text `temporal`. */
-export function whenMarker(
-  row: Happening,
-  entries: EntryIndex,
-): { tone: TagTone; label: string } | null {
-  if (row.temporal != null) return { tone: 'soft', label: row.temporal }
-  if (row.occurredAtEntryId == null) return null
-  const entry = entries.get(row.occurredAtEntryId)
-  if (entry == null) return { tone: 'warning', label: t('entryRefDangling') }
-  return { tone: 'soft', label: formatEntryRef(entry.position) }
-}
+import { whenMarker } from './when-marker'
 
 // plot.md → Happenings side → Row composition: glyph, title, when-marker, category, ⊙ slot.
 export function HappeningRow({
@@ -42,7 +30,16 @@ export function HappeningRow({
       label={row.title}
       description={density === 'default' && category ? category : undefined}
       leading={<PlotIcon kind="happening" icon={row.icon} />}
-      meta={marker != null ? <Tag tone={marker.tone}>{marker.label}</Tag> : undefined}
+      // `temporal` is unbounded model text: cap and ellipsize so it can't squash the title.
+      meta={
+        marker != null ? (
+          <Tag tone={marker.tone} className="shrink">
+            <Text numberOfLines={1} className="max-w-36">
+              {marker.label}
+            </Text>
+          </Tag>
+        ) : undefined
+      }
       // The slot stays when CK is off so every row keeps one layout (plot.md → Row indicators).
       trailing={
         <View className="w-5 items-center">
