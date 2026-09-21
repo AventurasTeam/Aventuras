@@ -108,6 +108,7 @@ export function EntityPicker({
       open={open}
       onOpenChange={setOpen}
       selectedRowIds={value == null ? undefined : [value]}
+      initialScrollRowId={value ?? undefined}
       sheetSize="medium"
       matchTriggerWidth
       ariaLabel={label}

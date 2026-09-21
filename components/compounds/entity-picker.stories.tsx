@@ -55,6 +55,11 @@ const STATUS_ENTITIES = [
   entity('char_active', 'character', 'Active Ace', 'active'),
 ]
 
+// Zero-padded so name order matches index order.
+const MANY_CHARACTERS = Array.from({ length: 60 }, (_, i) =>
+  entity(`char_${i}`, 'character', `Character ${String(i).padStart(2, '0')}`),
+)
+
 const LONG_NAME = 'Kaelthorne Windrider of the Nine Hollow Vales and the Salt-Ash Coastline'
 const LONG_NAME_ENTITIES = [entity('char_long', 'character', LONG_NAME)]
 
@@ -214,6 +219,25 @@ export const SearchFilters: Story = {
     await waitFor(async () => {
       await expect(screen.getByText(t('picker.entityNoResults'))).toBeInTheDocument()
     })
+  },
+}
+
+// The current value opens scrolled into view, not at the top of a long list.
+export const OpensScrolledToValue: Story = {
+  args: { kinds: ['character'], entities: MANY_CHARACTERS, initialValue: 'char_50' },
+  play: async () => {
+    await userEvent.click(screen.getByTestId('picker'))
+    await waitFor(
+      async () => {
+        const listbox = screen.getByRole('listbox')
+        const row = screen.getByRole('option', { name: /Character 50/ })
+        const box = listbox.getBoundingClientRect()
+        const rect = row.getBoundingClientRect()
+        await expect(rect.top).toBeGreaterThanOrEqual(box.top)
+        await expect(rect.bottom).toBeLessThanOrEqual(box.bottom)
+      },
+      { timeout: 5000 },
+    )
   },
 }
 
