@@ -311,8 +311,9 @@ cursor, empty on open), and _initial scroll_. The scroll happens once
 per open, after the rows lay out, and re-arms on the next open. It is
 never re-applied while open, so a query that re-shapes `sections`
 doesn't snap the list back, and typing before a deferred scroll lands
-drops it. A row absent from `sections` at open is a no-op. The phone
-Sheet on native defers the scroll until the sheet settles at its
+drops it — as does the keystroke that opens an `as-trigger` combobox,
+so a combobox opened by typing never jumps to the row. A row absent
+from `sections` at open is a no-op. The phone Sheet on native defers the scroll until the sheet settles at its
 detent, then keeps the row centered as the list resizes (keyboard,
 the sheet's own settling) until the user drags the list or types.
 

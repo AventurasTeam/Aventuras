@@ -302,6 +302,55 @@ export const InitialScrollRowAbsent: Story = {
   },
 }
 
+function AsTriggerInitialScrollDemo() {
+  const [query, setQuery] = useState('')
+  const sections = useMemo(() => filterLong(query), [query])
+  const tier = useTier()
+
+  return (
+    <View className="min-h-screen w-80 flex-col items-stretch gap-3 p-8">
+      <SearchableOverlayList<Item>
+        searchPlacement="as-trigger"
+        ariaLabel="Item combobox"
+        searchPlaceholder="Type an item…"
+        sections={sections}
+        onQueryChange={setQuery}
+        selectedRowIds={SCROLL_TARGET_SELECTED}
+        initialScrollRowId={SCROLL_TARGET_ID}
+        renderRow={(row) => <Text size="sm">{row.data.label}</Text>}
+        onActivate={() => undefined}
+      />
+      <Text testID="tier" variant="muted" size="xs">
+        {tier}
+      </Text>
+    </View>
+  )
+}
+
+// The combobox opens on typing, so a keystroke that opens it must not arm the
+// initial scroll: deleting the query reopens on the full list at the top. "x"
+// matches nothing, leaving no highlight whose scroll would mask a re-armed one.
+export const InitialScrollRowAsTriggerTypingDrops: Story = {
+  render: () => <AsTriggerInitialScrollDemo />,
+  play: async () => {
+    await waitFor(() => expect(screen.getByTestId('tier')).toHaveTextContent('desktop'))
+    const input = screen.getByRole('combobox')
+    await userEvent.click(input)
+    await expectRowCentered(SCROLL_TARGET_NAME)
+
+    await userEvent.type(input, 'x')
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(input).toHaveAttribute('aria-expanded', 'false'))
+
+    await userEvent.keyboard('{Backspace}')
+    await waitFor(() => expect(input).toHaveAttribute('aria-expanded', 'true'))
+    await expect(await screen.findByRole('option', { name: 'Item 0' })).toBeVisible()
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    await expect(screen.getByRole('listbox').scrollTop).toBe(0)
+    await expect(screen.queryByRole('option', { name: SCROLL_TARGET_NAME })).toBeNull()
+  },
+}
+
 export const Default: Story = { render: () => <InOverlayDemo /> }
 export const AsTrigger: Story = { render: () => <AsTriggerDemo /> }
 export const WithStickyFooter: Story = { render: () => <InOverlayDemo withFooter /> }

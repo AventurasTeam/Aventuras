@@ -223,21 +223,25 @@ function findRowSection<T>(
 }
 
 // Latched on each closed → open transition, and only when the row is listed then, so a
-// query that re-shapes `sections` while open never re-fires it. The row list clears the
-// latch once it has scrolled.
+// query that re-shapes `sections` while open never re-fires it. The row list clears it
+// once it has scrolled; `vetoOpening` blocks the open landing in the same batch.
 function useInitialScrollTarget<T>(
   open: boolean,
   rowId: string | undefined,
   sections: Section<T>[],
-): [string | null, () => void] {
+): { target: string | null; clear: () => void; vetoOpening: () => void } {
   const [latchedOpen, setLatchedOpen] = useState(false)
   const [target, setTarget] = useState<string | null>(null)
+  const [vetoed, setVetoed] = useState(false)
   if (open !== latchedOpen) {
     setLatchedOpen(open)
-    setTarget(open && rowId != null && findRowSection(sections, rowId) != null ? rowId : null)
+    setVetoed(false)
+    const listed = rowId != null && findRowSection(sections, rowId) != null
+    setTarget(open && !vetoed && listed ? rowId : null)
   }
   const clear = useCallback(() => setTarget(null), [])
-  return [target, clear]
+  const vetoOpening = useCallback(() => setVetoed(true), [])
+  return { target, clear, vetoOpening }
 }
 
 // Centralised query + highlight state shared across the two shapes.
@@ -1100,7 +1104,7 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
 
   const list = useSearchableList(props)
   const selectedRowIdsSet = useSelectedSet(props.selectedRowIds)
-  const [initialScrollRowId, clearInitialScroll] = useInitialScrollTarget(
+  const { target: initialScrollRowId, clear: clearInitialScroll } = useInitialScrollTarget(
     open,
     props.initialScrollRowId,
     sections,
@@ -1374,11 +1378,11 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
   // whole-object reference (which is new every render) — preserves Input focus across renders.
   const { setQuery, moveHighlight, query: currentQuery, highlightedId } = list
   const [open, setOpen] = useState(false)
-  const [initialScrollRowId, clearInitialScroll] = useInitialScrollTarget(
-    open,
-    props.initialScrollRowId,
-    sections,
-  )
+  const {
+    target: initialScrollRowId,
+    clear: clearInitialScroll,
+    vetoOpening: vetoInitialScroll,
+  } = useInitialScrollTarget(open, props.initialScrollRowId, sections)
   const wrapperRef = useRef<View>(null)
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const portalName = useId()
@@ -1570,6 +1574,9 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
       <SearchInput
         query={list.query}
         onQueryChange={(v) => {
+          // Typing supersedes the initial scroll, including the keystroke that opens.
+          if (open) clearInitialScroll()
+          else vetoInitialScroll()
           list.setQuery(v)
           if (!disabled) setOpen(true)
         }}
