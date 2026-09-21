@@ -17,3 +17,5 @@ export type {
   ListQuery,
   WorldCategory,
 } from './types'
+export { isPlotKind, PLOT_KINDS } from './plot'
+export type { PlotKind, PlotListSignals } from './plot'

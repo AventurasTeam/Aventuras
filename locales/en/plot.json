@@ -1,0 +1,171 @@
+{
+  "title": "Plot",
+  "kindSelect": "Ledger",
+  "kinds": {
+    "thread": "Threads",
+    "happening": "Happenings"
+  },
+  "kindName": {
+    "thread": "thread",
+    "happening": "happening"
+  },
+  "add": {
+    "thread": "New thread",
+    "happening": "New happening"
+  },
+  "addMenu": {
+    "blank": "Blank",
+    "fromJson": "From JSON file…",
+    "fromJsonReason": "Lands in Slice 4.6",
+    "fromVault": "From Vault…",
+    "fromVaultReason": "Vault lands in M8"
+  },
+  "actions": {
+    "addThread": "Add thread…",
+    "addHappening": "Add happening…"
+  },
+  "filters": {
+    "all": "All",
+    "active": "Active",
+    "pending": "Pending",
+    "resolved": "Resolved",
+    "failed": "Failed",
+    "this-chapter": "This chapter",
+    "common-knowledge": "Common knowledge",
+    "out-of-narrative": "Out-of-narrative"
+  },
+  "tiers": {
+    "active": "Active",
+    "pending": "Pending",
+    "resolved": "Resolved",
+    "failed": "Failed"
+  },
+  "buckets": {
+    "current": "Current chapter",
+    "earlier": "Earlier chapters",
+    "out-of-narrative": "Out of narrative"
+  },
+  "status": {
+    "active": "active",
+    "pending": "pending",
+    "resolved": "resolved",
+    "failed": "failed"
+  },
+  "commonKnowledgeMarker": "Common knowledge",
+  "search": {
+    "placeholder": "Search {{category}}…",
+    "scope": {
+      "title": "title",
+      "description": "description",
+      "category": "category"
+    }
+  },
+  "empty": {
+    "thread": "No threads on this branch yet.",
+    "happening": "No happenings on this branch yet.",
+    "classifierBody": "The classifier writes most rows automatically as the story progresses. You can also add them manually with +."
+  },
+  "noResults": "No results.",
+  "noResultsHint": "Try clearing the search or another filter.",
+  "entryIndexFailed": "Couldn't read this branch's entries.",
+  "entryIndexFailedBody": "Plot retries after the next turn.",
+  "detail": {
+    "selectRow": "Select a row",
+    "selectRowBody": "Pick a thread or happening from the list to see it here.",
+    "recentlyClassified": "Recently classified",
+    "newThread": "New thread",
+    "newHappening": "New happening",
+    "namePlaceholder": "Untitled",
+    "tabs": {
+      "overview": "Overview",
+      "involvements": "Involvements",
+      "awareness": "Awareness",
+      "history": "History"
+    },
+    "tabSelect": "Section",
+    "historyPlaceholder": "History lands in Slice 4.2b",
+    "historyPlaceholderBody": "Edits and rollbacks will appear here as they happen.",
+    "menu": {
+      "label": "More actions",
+      "exportThread": "Export thread as JSON",
+      "exportHappening": "Export happening as JSON",
+      "exportReason": "Lands in Slice 4.6",
+      "viewJson": "View raw JSON",
+      "deleteThread": "Delete thread",
+      "deleteHappening": "Delete happening",
+      "deleteReason": "Lands in Slice 4.2b"
+    }
+  },
+  "fields": {
+    "title": "Title",
+    "description": "Description",
+    "category": "Category",
+    "categoryPlaceholder": "e.g. mystery, goal, conflict",
+    "icon": "Icon",
+    "iconNone": "No icon",
+    "status": "Status",
+    "injectionMode": "Injection",
+    "injection": {
+      "always": "Always",
+      "alwaysHelp": "Included in every prompt.",
+      "auto": "Auto",
+      "autoHelp": "Retrieval decides per turn — keywords, similarity, then the model.",
+      "disabled": "Disabled",
+      "disabledHelp": "Never injected automatically."
+    },
+    "triggeredAt": "Triggered at",
+    "resolvedAt": "Resolved at",
+    "notRecorded": "not recorded",
+    "commonKnowledge": "Common knowledge",
+    "commonKnowledgeHelp": "Every character knows this; per-character awareness rows are skipped.",
+    "occurredAt": "Occurred at",
+    "occurredAtPlaceholder": "Pick the entry it happened at",
+    "temporal": "Out-of-narrative time",
+    "temporalPlaceholder": "e.g. years past, next spring",
+    "temporalHint": "Only for happenings with no narrative entry to anchor to.",
+    "entity": "Entity",
+    "entityPlaceholder": "Pick an entity",
+    "role": "Role",
+    "rolePlaceholder": "e.g. actor, target, site",
+    "character": "Character",
+    "characterPlaceholder": "Pick a character",
+    "learnedAt": "Learned at",
+    "learnedAtPlaceholder": "Pick the entry they learned it at",
+    "decayResistance": "Decay resistance",
+    "decayResistanceHint": "0 decays like any memory; 1 never decays.",
+    "decayPreset": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High"
+    },
+    "source": "Source",
+    "sourcePlaceholder": "e.g. witnessed, told by Jorin"
+  },
+  "involvements": {
+    "add": "Add involvement",
+    "remove": "Remove involvement",
+    "empty": "No involvements yet.",
+    "emptyBody": "The classifier writes most rows automatically. You can also add them with Add involvement.",
+    "openInWorld": "Open in World"
+  },
+  "awareness": {
+    "add": "Add awareness",
+    "remove": "Remove awareness",
+    "empty": "No awareness rows yet.",
+    "emptyBody": "The classifier writes most rows automatically. You can also add them with Add awareness.",
+    "ckTitle": "Common knowledge",
+    "ckBody": "Every character is aware of this happening; per-character awareness rows are skipped. Turn the toggle off on Overview to edit rows.",
+    "openInWorld": "Open in World"
+  },
+  "validation": {
+    "titleRequired": "A title is required.",
+    "timeAnchorExclusive": "Choose a narrative entry or an out-of-narrative time, not both.",
+    "duplicateEntity": "This entity is already involved.",
+    "duplicateCharacter": "This character already has an awareness row.",
+    "entityRequired": "Pick an entity.",
+    "characterRequired": "Pick a character."
+  },
+  "save": {
+    "saved": "Saved."
+  }
+}
