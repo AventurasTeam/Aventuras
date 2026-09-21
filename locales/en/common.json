@@ -161,8 +161,11 @@
   },
   "picker": {
     "clear": "Clear selection",
+    "fieldLabel": "{{label}}: {{value}}",
     "entitySearch": "Search entities…",
     "entityNoResults": "No matching entities.",
+    "entityNone": "No entities to pick.",
+    "entityMissing": "Missing entity",
     "entrySearch": "Search entries or #n…",
     "entryNoResults": "No matching entries."
   },

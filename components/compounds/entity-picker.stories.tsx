@@ -1,21 +1,27 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
 import { View } from 'react-native'
-import { expect, screen, userEvent, waitFor } from 'storybook/test'
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { Text } from '@/components/ui/text'
 import type { Entity } from '@/lib/db'
+import { t } from '@/lib/i18n'
 
 import { EntityPicker } from './entity-picker'
 
-function entity(id: string, kind: Entity['kind'], name: string): Entity {
+function entity(
+  id: string,
+  kind: Entity['kind'],
+  name: string,
+  status: Entity['status'] = 'active',
+): Entity {
   return {
     id,
     branchId: 'br_1',
     kind,
     name,
     description: null,
-    status: 'active',
+    status,
     retiredReason: null,
     injectionMode: 'auto',
     nameCollisionFlag: 0,
@@ -42,6 +48,15 @@ const SAME_NAME_ENTITIES = [
   entity('char_kael_a', 'character', 'Kael'),
   entity('char_kael_b', 'character', 'Kael'),
 ]
+
+const STATUS_ENTITIES = [
+  entity('char_staged', 'character', 'Staged Kid', 'staged'),
+  entity('char_retired', 'character', 'Retired Vet', 'retired'),
+  entity('char_active', 'character', 'Active Ace', 'active'),
+]
+
+const LONG_NAME = 'Kaelthorne Windrider of the Nine Hollow Vales and the Salt-Ash Coastline'
+const LONG_NAME_ENTITIES = [entity('char_long', 'character', LONG_NAME)]
 
 function Harness(props: {
   kinds: Entity['kind'][]
@@ -84,13 +99,19 @@ type Story = StoryObj<typeof Harness>
 export const AllKinds: Story = {
   play: async () => {
     await userEvent.click(screen.getByTestId('picker'))
-    await expect(screen.getByRole('option', { name: /Night Market/ })).toBeVisible()
+    await expect(await screen.findByRole('option', { name: /Night Market/ })).toBeVisible()
     await userEvent.click(screen.getByRole('option', { name: /Mira/ }))
     await waitFor(async () => {
       await expect(screen.getByTestId('picker')).toHaveTextContent('Mira')
     })
-    await userEvent.click(screen.getByRole('button', { name: 'Clear selection' }))
+    // The trigger's accessible name folds the value in — a screen reader hears
+    // more than just "Entity" once a value is set.
+    await expect(screen.getByTestId('picker')).toHaveAccessibleName(
+      t('picker.fieldLabel', { label: 'Entity', value: 'Mira' }),
+    )
+    await userEvent.click(screen.getByRole('button', { name: t('picker.clear') }))
     await expect(screen.getByTestId('picker')).toHaveTextContent('Pick an entity')
+    await expect(screen.getByTestId('picker')).toHaveAccessibleName('Entity')
   },
 }
 
@@ -98,7 +119,7 @@ export const CharactersOnlyExcluding: Story = {
   args: { kinds: ['character'], excludeIds: ['char_kael'] },
   play: async () => {
     await userEvent.click(screen.getByTestId('picker'))
-    await expect(screen.getByRole('option', { name: /Mira/ })).toBeVisible()
+    await expect(await screen.findByRole('option', { name: /Mira/ })).toBeVisible()
     await expect(screen.queryByRole('option', { name: /Kael/ })).not.toBeInTheDocument()
     await expect(screen.queryByRole('option', { name: /Night Market/ })).not.toBeInTheDocument()
   },
@@ -112,7 +133,7 @@ export const ExcludedIdIsCurrentValueStaysListed: Story = {
   play: async () => {
     await expect(screen.getByTestId('picker')).toHaveTextContent('Kael')
     await userEvent.click(screen.getByTestId('picker'))
-    await expect(screen.getByRole('option', { name: /Kael/ })).toBeVisible()
+    await expect(await screen.findByRole('option', { name: /Kael/ })).toBeVisible()
   },
 }
 
@@ -120,9 +141,9 @@ export const SameNameDistinctIds: Story = {
   args: { kinds: ['character'], entities: SAME_NAME_ENTITIES },
   play: async () => {
     await userEvent.click(screen.getByTestId('picker'))
-    const rows = screen.getAllByRole('option', { name: /Kael/ })
+    const rows = await screen.findAllByRole('option', { name: /Kael/ })
     await expect(rows).toHaveLength(2)
-    // Sort is stable — the second listed row is `char_kael_b`.
+    // collate/createdAt tie, then id order — the second listed row is `char_kael_b`.
     await userEvent.click(rows[1]!)
     await waitFor(async () => {
       await expect(screen.getByTestId('picker-value')).toHaveTextContent('char_kael_b')
@@ -131,9 +152,115 @@ export const SameNameDistinctIds: Story = {
   },
 }
 
+// The asChild Slot on the substrate's Popover.Trigger composes its own ref/handlers onto
+// PickerField's top-level props; a broken composition manifests as an unanchored popover,
+// a trigger click that no longer toggles, and focus stranded off the trigger after a pick.
+export const TriggerAnchoringFocusAndToggle: Story = {
+  play: async () => {
+    const trigger = screen.getByTestId('picker')
+    await userEvent.click(trigger)
+    // Named: the substrate nests a second, unlabeled `role="dialog"` (the Radix
+    // positioning wrapper) around SOL's own labeled one.
+    const dialog = await screen.findByRole('dialog', { name: 'Entity' })
+    const triggerRect = trigger.getBoundingClientRect()
+    const dialogRect = dialog.getBoundingClientRect()
+    await expect(dialogRect.top).toBeGreaterThanOrEqual(triggerRect.bottom)
+
+    await userEvent.click(await screen.findByRole('option', { name: /Mira/ }))
+    await waitFor(async () => {
+      await expect(trigger).toHaveTextContent('Mira')
+    })
+    await waitFor(async () => {
+      await expect(trigger).toHaveFocus()
+    })
+
+    await userEvent.click(trigger)
+    await screen.findByRole('dialog', { name: 'Entity' })
+    await userEvent.click(trigger)
+    await waitFor(async () => {
+      await expect(screen.queryByRole('dialog', { name: 'Entity' })).not.toBeInTheDocument()
+    })
+  },
+}
+
+export const SearchFilters: Story = {
+  play: async () => {
+    await userEvent.click(screen.getByTestId('picker'))
+    await screen.findAllByRole('option')
+    const search = screen.getByPlaceholderText(t('picker.entitySearch'))
+
+    await userEvent.type(search, '  NIGHT')
+    await waitFor(async () => {
+      await expect(screen.getAllByRole('option')).toHaveLength(1)
+    })
+    await expect(screen.getByRole('option', { name: /Night Market/ })).toBeVisible()
+
+    await userEvent.clear(search)
+    await userEvent.type(search, 'zzz-no-such-entity')
+    await waitFor(async () => {
+      await expect(screen.getByText(t('picker.entityNoResults'))).toBeInTheDocument()
+    })
+  },
+}
+
+export const NoEntitiesAvailable: Story = {
+  args: { kinds: ['character'], entities: [] },
+  play: async () => {
+    await userEvent.click(screen.getByTestId('picker'))
+    await expect(await screen.findByText(t('picker.entityNone'))).toBeInTheDocument()
+  },
+}
+
+export const LongNameStaysWithinField: Story = {
+  args: { kinds: ['character'], entities: LONG_NAME_ENTITIES, initialValue: 'char_long' },
+  play: async () => {
+    const trigger = screen.getByTestId('picker')
+    const triggerRect = trigger.getBoundingClientRect()
+    const valueRect = screen.getByText(LONG_NAME).getBoundingClientRect()
+    await expect(valueRect.right).toBeLessThanOrEqual(triggerRect.right)
+  },
+}
+
+export const DanglingValueShowsMissingEntity: Story = {
+  args: { kinds: ['character'], initialValue: 'char_ghost' },
+  play: async () => {
+    const trigger = screen.getByTestId('picker')
+    await expect(trigger).toHaveTextContent(t('picker.entityMissing'))
+    const clearButton = screen.getByRole('button', { name: t('picker.clear') })
+    await expect(clearButton).toBeEnabled()
+    await userEvent.click(clearButton)
+    await waitFor(async () => {
+      await expect(trigger).toHaveTextContent('Pick an entity')
+    })
+    // The × stays mounted (hidden, not unmounted) precisely so this keeps working —
+    // an unmount-on-clear would strand focus on document.body.
+    await waitFor(async () => {
+      await expect(trigger).toHaveFocus()
+    })
+  },
+}
+
+export const NonActiveStatusTags: Story = {
+  args: { kinds: ['character'], entities: STATUS_ENTITIES },
+  play: async () => {
+    await userEvent.click(screen.getByTestId('picker'))
+    await screen.findAllByRole('option')
+    const staged = screen.getByRole('option', { name: /Staged Kid/ })
+    const retired = screen.getByRole('option', { name: /Retired Vet/ })
+    const active = screen.getByRole('option', { name: /Active Ace/ })
+    await expect(within(staged).getByText(t('world:status.staged'))).toBeInTheDocument()
+    await expect(within(retired).getByText(t('world:status.retired'))).toBeInTheDocument()
+    await expect(within(active).queryByText(t('world:status.active'))).not.toBeInTheDocument()
+  },
+}
+
 export const Disabled: Story = {
   args: { kinds: ['character'], disabled: true },
   play: async () => {
+    const trigger = screen.getByTestId('picker')
+    await expect(trigger).toBeDisabled()
     await expect(screen.getByTitle('Generation is in flight. Cancel to edit.')).toBeInTheDocument()
+    await userEvent.click(trigger, { pointerEventsCheck: 0 })
+    await expect(screen.queryByRole('dialog', { name: 'Entity' })).not.toBeInTheDocument()
   },
 }

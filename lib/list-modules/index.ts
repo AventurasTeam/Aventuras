@@ -1,4 +1,5 @@
 export { entitySearchScope, entityTier, groupEntitiesByTier, queryEntities } from './entity-list'
+export { collate, compareId } from './collate'
 export { LORE_SEARCH_SCOPE, queryLore } from './lore-list'
 export {
   ENTITY_FILTERS,

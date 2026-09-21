@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
 
 import { EntityKindIcon } from '@/components/entity/entity-kind-icon'
@@ -7,11 +7,12 @@ import {
   type Row,
   type Section,
 } from '@/components/ui/searchable-overlay-list'
-import { Tag } from '@/components/ui/tag'
+import { Tag, type TagTone } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
 import type { Entity, EntityKind } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { normalizeTerm } from '@/lib/keyword-terms'
+import { collate, compareId } from '@/lib/list-modules'
 
 import { PickerField } from './picker-field'
 
@@ -34,9 +35,23 @@ type EntityPickerProps = {
 
 const KIND_ORDER: readonly EntityKind[] = ['character', 'location', 'item', 'faction']
 
+// world:status tones, mirrors entity-row.tsx — 'active' is intentionally unused here:
+// the row/trigger only surface a status tag for the non-default statuses.
+const STATUS_TONE: Record<Entity['status'], TagTone> = {
+  active: 'default',
+  staged: 'success',
+  retired: 'warning',
+}
+
+function compareEntityRows(a: Entity, b: Entity): number {
+  return collate(a.name, b.name) || a.createdAt - b.createdAt || compareId(a.id, b.id)
+}
+
 /**
  * A kind-aware picker over the branch's entities returning an entity id — two rows can
- * share a name, so a string Autocomplete cannot carry the value.
+ * share a name, so a string Autocomplete cannot carry the value. A `value` absent from
+ * `entities` (no FK on the link tables that hold entity ids) renders a missing-entity
+ * warning instead of silently falling back to the placeholder.
  */
 export function EntityPicker({
   value,
@@ -53,7 +68,16 @@ export function EntityPicker({
   testID,
 }: EntityPickerProps) {
   const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (disabled) setOpen(false)
+  }, [disabled])
+
   const selected = useMemo(() => entities.find((e) => e.id === value) ?? null, [entities, value])
+  const hasValue = value != null
+  const missing = hasValue && selected == null
+
   const sections = useMemo<Section<Entity>[]>(() => {
     const needle = normalizeTerm(query)
     const excluded = new Set(excludeIds ?? [])
@@ -74,11 +98,13 @@ export function EntityPicker({
           ) : undefined,
         rows: eligible
           .filter((e) => e.kind === kind)
-          .sort((a, b) => a.name.localeCompare(b.name))
+          .sort(compareEntityRows)
           .map<Row<Entity>>((e) => ({ id: e.id, data: e })),
       }))
       .filter((section) => section.rows.length > 0)
   }, [entities, kinds, excludeIds, query, value])
+
+  const handleActivate = useCallback((row: Row<Entity>) => onChange(row.data.id), [onChange])
 
   return (
     <SearchableOverlayList<Entity>
@@ -86,13 +112,17 @@ export function EntityPicker({
       searchPlaceholder={t('picker.entitySearch')}
       onQueryChange={setQuery}
       sections={sections}
+      open={open}
+      onOpenChange={setOpen}
       selectedRowIds={value == null ? undefined : [value]}
       sheetSize="medium"
       matchTriggerWidth
       ariaLabel={label}
       renderTrigger={(trigger) => (
         <PickerField
-          trigger={trigger}
+          {...trigger}
+          hasValue={hasValue}
+          valueText={selected?.name ?? (missing ? t('picker.entityMissing') : undefined)}
           placeholder={placeholder}
           label={label}
           disabled={disabled}
@@ -101,29 +131,47 @@ export function EntityPicker({
           testID={testID}
           onClear={clearable ? () => onChange(null) : undefined}
         >
-          {selected == null ? null : (
-            <View className="min-w-0 flex-row items-center gap-2">
-              <EntityKindIcon kind={selected.kind} className="h-4 w-4" />
-              <Text numberOfLines={1}>{selected.name}</Text>
+          {!hasValue ? null : selected != null ? (
+            <View className="min-w-0 flex-1 flex-row items-center gap-2">
+              <View className="shrink-0">
+                <EntityKindIcon kind={selected.kind} className="h-4 w-4" />
+              </View>
+              <Text size="sm" numberOfLines={1} className="shrink">
+                {selected.name}
+              </Text>
+            </View>
+          ) : (
+            <View className="min-w-0 flex-1 flex-row items-center">
+              <Tag tone="warning">
+                <Text size="xs">⚠ {t('picker.entityMissing')}</Text>
+              </Tag>
             </View>
           )}
         </PickerField>
       )}
       renderRow={(row) => (
-        <View className="w-full flex-row items-center gap-2 px-3 py-2">
-          <EntityKindIcon kind={row.data.kind} />
-          <Text className="flex-1" numberOfLines={1}>
-            {row.data.name}
-          </Text>
-          <Tag tone="soft">{t(`world:status.${row.data.status}`)}</Tag>
+        <View className="w-full flex-row items-center gap-2">
+          <View className="shrink-0">
+            <EntityKindIcon kind={row.data.kind} />
+          </View>
+          <View className="min-w-0 flex-1">
+            <Text size="sm" className="shrink" numberOfLines={1}>
+              {row.data.name}
+            </Text>
+          </View>
+          {row.data.status !== 'active' ? (
+            <View className="shrink-0">
+              <Tag tone={STATUS_TONE[row.data.status]}>{t(`world:status.${row.data.status}`)}</Tag>
+            </View>
+          ) : null}
         </View>
       )}
-      renderEmpty={() => (
+      renderEmpty={(activeQuery) => (
         <Text size="sm" variant="muted" className="p-3">
-          {t('picker.entityNoResults')}
+          {activeQuery ? t('picker.entityNoResults') : t('picker.entityNone')}
         </Text>
       )}
-      onActivate={(row) => onChange(row.data.id)}
+      onActivate={handleActivate}
     />
   )
 }

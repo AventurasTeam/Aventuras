@@ -1,5 +1,5 @@
 import { X } from 'lucide-react-native'
-import type { ReactNode, Ref } from 'react'
+import { useCallback, useMemo, useRef, type ReactElement, type Ref, type RefCallback } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
 import { IconAction } from '@/components/ui/icon-action'
@@ -9,11 +9,17 @@ import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
-type PickerFieldProps = {
-  /** From `SearchableOverlayList`'s `renderTrigger`; spread onto the pressable so the overlay anchors. */
-  trigger: TriggerProps
-  /** The committed value's rendering; null shows `placeholder`. */
-  children: ReactNode | null
+type PickerFieldProps = TriggerProps & {
+  /** The committed value's rendering; shown only while `hasValue`. */
+  children: ReactElement | null
+  /**
+   * Drives the placeholder/children switch and the clear button — distinct from
+   * `children` so a dangling value (id with no matching row) still renders content
+   * while counting as "set".
+   */
+  hasValue: boolean
+  /** Plain-text form of the value, folded into the accessible name alongside `label`. */
+  valueText?: string
   placeholder: string
   label: string
   /** Renders a `×` beside a set value that clears without opening the overlay. */
@@ -25,10 +31,26 @@ type PickerFieldProps = {
   className?: string
 }
 
+// `renderTrigger`'s result is the direct child of the substrate's `PopoverPrimitive.Trigger
+// asChild`, which composes its own ref/handlers onto this component's own top-level props
+// (docs/implementation/lessons-learned/aschild-slot-props.md) — hence the internal ref merge.
+function mergeRefs<T>(...refs: (Ref<T> | undefined)[]): RefCallback<T> {
+  return (node) => {
+    for (const ref of refs) {
+      if (typeof ref === 'function') ref(node)
+      else if (ref != null) (ref as { current: T | null }).current = node
+    }
+  }
+}
+
 /** The Input-sized trigger the in-overlay pickers share: value or placeholder, optional clear. */
 export function PickerField({
-  trigger,
+  ref,
+  onPress,
+  open,
   children,
+  hasValue,
+  valueText,
   placeholder,
   label,
   onClear,
@@ -37,52 +59,67 @@ export function PickerField({
   'aria-invalid': ariaInvalid,
   testID,
   className,
+  ...rest
 }: PickerFieldProps) {
-  const { ref, onPress, open, ...aria } = trigger
+  const innerRef = useRef<View>(null)
+  const setRef = useMemo(() => mergeRefs<View>(innerRef, ref as Ref<View>), [ref])
   const invalid = ariaInvalid === true || ariaInvalid === 'true'
+  const accessibleLabel =
+    hasValue && valueText ? t('picker.fieldLabel', { label, value: valueText }) : label
+
+  const handleClear = useCallback(() => {
+    onClear?.()
+    innerRef.current?.focus?.()
+  }, [onClear])
+
   const field = (
     <View className={cn('flex-row items-center', className)}>
       <Pressable
-        ref={ref as Ref<View>}
+        ref={setRef}
         onPress={onPress}
+        {...rest}
         disabled={disabled}
         accessibilityRole="button"
-        aria-label={label}
+        aria-label={accessibleLabel}
         aria-invalid={ariaInvalid}
-        {...aria}
         testID={testID}
         className={cn(
-          'min-h-control-md flex-1 flex-row items-center gap-2 rounded-md border bg-bg-base px-3 py-1',
-          invalid ? 'border-danger' : open ? 'border-focus-ring' : 'border-border',
+          'min-h-control-md min-w-0 flex-1 flex-row items-center gap-2 rounded-md border bg-bg-base px-3 py-1',
+          invalid ? 'border-danger' : open ? 'border-accent' : 'border-border',
           disabled && 'opacity-50',
           Platform.select({
-            web: 'cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
+            web: cn(
+              'cursor-pointer outline-none',
+              invalid
+                ? 'focus-visible:ring-danger/20 focus-visible:border-danger focus-visible:ring-[3px]'
+                : 'focus-visible:ring-focus-ring/50 focus-visible:border-accent focus-visible:ring-[3px]',
+            ),
           }),
         )}
       >
-        {children ?? (
-          <Text variant="muted" numberOfLines={1}>
+        {hasValue ? (
+          children
+        ) : (
+          <Text size="sm" variant="muted" numberOfLines={1}>
             {placeholder}
           </Text>
         )}
       </Pressable>
-      {onClear != null && children != null ? (
+      {onClear != null ? (
         <IconAction
           icon={X}
           label={t('picker.clear')}
           size="sm"
-          disabled={disabled}
-          onPress={onClear}
-          className="ml-1"
+          disabled={disabled || !hasValue}
+          accessibilityElementsHidden={!hasValue}
+          importantForAccessibility={hasValue ? 'auto' : 'no-hide-descendants'}
+          onPress={handleClear}
+          className={cn('ml-1', !hasValue && 'opacity-0')}
         />
       ) : null}
     </View>
   )
-  return disabled && disabledReason ? (
-    <ReasonTooltip reason={disabledReason}>{field}</ReasonTooltip>
-  ) : (
-    field
-  )
+  return <ReasonTooltip reason={disabled ? disabledReason : undefined}>{field}</ReasonTooltip>
 }
 
 export type { PickerFieldProps }
