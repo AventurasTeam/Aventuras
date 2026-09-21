@@ -46,22 +46,23 @@ export const Default: Story = {
     const viewJson = await screen.findByRole('menuitem', { name: 'View raw JSON' })
     await waitFor(() => expect(viewJson).toBeVisible())
 
-    // A disabled entry's accessible name is its reason; its label stays visible.
-    const exportItem = screen.getByRole('menuitem', { name: 'Export not available yet' })
+    // WCAG 2.5.3: the accessible name leads with the visible label, then the reason.
+    const exportItem = screen.getByRole('menuitem', {
+      name: 'Export thread as JSON, Export not available yet',
+    })
     await expect(exportItem).toBeVisible()
     await expect(exportItem).toHaveAttribute('aria-disabled', 'true')
     await expect(screen.getByText('Export thread as JSON')).toBeVisible()
     await expect(screen.getByTitle('Export not available yet')).toBeInTheDocument()
 
-    // userEvent refuses a click on a `pointer-events: none` target; fireEvent
-    // bypasses that check, so this pins the Pressable's own `disabled` prop —
-    // not the inline style — as what actually blocks the entry from firing.
+    // RN-Web's own Pressable applies pointer-events blocking when `disabled`, which
+    // userEvent's click respects; fireEvent bypasses that so this pins the `onPress`
+    // guard itself, not a CSS accident, as what blocks a disabled entry from firing.
     fireEvent.click(exportItem)
     expect(args.entries[0].onPress).not.toHaveBeenCalled()
 
     await userEvent.click(viewJson)
     await waitFor(() => expect(args.entries[1].onPress).toHaveBeenCalledTimes(1))
-    // Selecting an entry closes the popover.
     await waitFor(() =>
       expect(screen.queryByRole('menuitem', { name: 'View raw JSON' })).not.toBeInTheDocument(),
     )
@@ -73,6 +74,8 @@ export const AllEnabled: Story = {
   play: async ({ args }) => {
     await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
     const deleteItem = await screen.findByRole('menuitem', { name: 'Delete thread' })
+    await expect(screen.getByText('Delete thread')).toHaveClass('text-danger')
+
     await userEvent.click(deleteItem)
     await waitFor(() => expect(args.entries[2].onPress).toHaveBeenCalledTimes(1))
   },
@@ -81,12 +84,25 @@ export const AllEnabled: Story = {
 export const Phone: Story = {
   globals: { viewport: { value: 'mobile1' } },
   play: async () => {
+    // The Popover branch always wraps its trigger in a `title`-bearing ReasonTooltip;
+    // the Sheet branch never does — a real, structural phone-tier discriminator that
+    // beats a synchronous click racing RN-Web's Dimensions cache (see lessons-learned).
+    await waitFor(() => expect(screen.queryByTitle('More actions')).toBeNull())
+
     await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
     // The bottom Sheet's presentation is deferred a tick past the click (gorhom
     // registers with its provider before `present()` can succeed).
-    await waitFor(async () => {
-      await expect(screen.getByRole('menuitem', { name: 'View raw JSON' })).toBeVisible()
-    })
-    await expect(screen.getByRole('menuitem', { name: 'Export not available yet' })).toBeVisible()
+    const viewJson = await waitFor(() => screen.getByRole('menuitem', { name: 'View raw JSON' }))
+    await waitFor(() => expect(viewJson).toBeVisible())
+
+    // The Sheet content carries no dialog role; a match here means the Popover
+    // branch rendered instead of the Sheet.
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    expect(viewJson.getBoundingClientRect().height).toBeGreaterThanOrEqual(44)
+
+    await expect(
+      screen.getByRole('menuitem', { name: 'Export thread as JSON, Export not available yet' }),
+    ).toBeVisible()
   },
 }

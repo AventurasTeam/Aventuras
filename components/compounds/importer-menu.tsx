@@ -13,7 +13,7 @@ import { useTier } from '@/hooks/use-tier'
 import { cn } from '@/lib/utils'
 
 type ImporterMenuOption = {
-  /** Stable identifier — used for the React key and as `accessibilityValue.text`. */
+  /** Stable identifier — used for the React key. */
   key: string
   /** Visible label, e.g. `Blank`, `From JSON file…`, `From Vault…`. */
   label: string

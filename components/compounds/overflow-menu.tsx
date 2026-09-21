@@ -1,5 +1,5 @@
 import { MoreHorizontal } from 'lucide-react-native'
-import { useRef, useState, type ComponentRef } from 'react'
+import { useEffect, useRef, useState, type ComponentRef } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
 import { IconAction } from '@/components/ui/icon-action'
@@ -7,12 +7,11 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
-import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useTier } from '@/hooks/use-tier'
 import { cn } from '@/lib/utils'
 
 type OverflowMenuEntry = {
-  /** Stable identifier — React key and `accessibilityValue.text`. */
+  /** Stable identifier — the React key. */
   key: string
   label: string
   disabled?: boolean
@@ -23,7 +22,7 @@ type OverflowMenuEntry = {
 }
 
 type OverflowMenuProps = {
-  /** The trigger's accessible name and the phone Sheet title, e.g. `More actions`. */
+  /** The trigger's accessible name and the phone Sheet's aria label, e.g. `More actions`. */
   label: string
   entries: readonly OverflowMenuEntry[]
   disabled?: boolean
@@ -31,9 +30,8 @@ type OverflowMenuProps = {
 }
 
 /**
- * The detail-head `⋯`: Popover on desktop and tablet, Sheet (short) on phone.
- * An entry's disabled-with-reason state is how a not-yet-built action (export,
- * delete) renders until that capability lands.
+ * The detail-head `⋯`. Popover on desktop and tablet, a short (content-fit)
+ * bottom Sheet on phone. Entries may be disabled with a reason or marked destructive.
  */
 export function OverflowMenu(props: OverflowMenuProps) {
   const isPhone = useTier() === 'phone'
@@ -42,6 +40,11 @@ export function OverflowMenu(props: OverflowMenuProps) {
 
 function PopoverMenu({ label, entries, disabled, className }: OverflowMenuProps) {
   const triggerRef = useRef<ComponentRef<typeof PopoverTrigger>>(null)
+
+  useEffect(() => {
+    if (disabled) triggerRef.current?.close()
+  }, [disabled])
+
   return (
     <Popover ariaLabel={label}>
       <ReasonTooltip reason={label}>
@@ -61,6 +64,7 @@ function PopoverMenu({ label, entries, disabled, className }: OverflowMenuProps)
             <MenuItem
               key={entry.key}
               entry={entry}
+              isPhone={false}
               onSelect={() => {
                 triggerRef.current?.close()
                 entry.onPress()
@@ -75,6 +79,11 @@ function PopoverMenu({ label, entries, disabled, className }: OverflowMenuProps)
 
 function SheetMenu({ label, entries, disabled, className }: OverflowMenuProps) {
   const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (disabled) setOpen(false)
+  }, [disabled])
+
   return (
     <Sheet open={open} onOpenChange={setOpen} ariaLabel={label}>
       <SheetTrigger asChild>
@@ -86,12 +95,13 @@ function SheetMenu({ label, entries, disabled, className }: OverflowMenuProps) {
           className={className}
         />
       </SheetTrigger>
-      <SheetContent size="short" title={label}>
+      <SheetContent size="auto">
         <View className="flex-col py-1">
           {entries.map((entry) => (
             <MenuItem
               key={entry.key}
               entry={entry}
+              isPhone
               onSelect={() => {
                 setOpen(false)
                 entry.onPress()
@@ -104,57 +114,56 @@ function SheetMenu({ label, entries, disabled, className }: OverflowMenuProps) {
   )
 }
 
-function MenuItem({ entry, onSelect }: { entry: OverflowMenuEntry; onSelect: () => void }) {
-  const isPhone = useTier() === 'phone'
+function MenuItem({
+  entry,
+  isPhone,
+  onSelect,
+}: {
+  entry: OverflowMenuEntry
+  isPhone: boolean
+  onSelect: () => void
+}) {
   const isDisabled = entry.disabled === true
-  // Same convention as ImporterMenu: a disabled entry's accessible name is its reason.
-  const accessibleLabel = isDisabled && entry.disabledReason ? entry.disabledReason : entry.label
-  const row = (
-    <Pressable
-      accessibilityRole="menuitem"
-      accessibilityLabel={accessibleLabel}
-      accessibilityState={{ disabled: isDisabled }}
-      accessibilityValue={{ text: entry.key }}
-      disabled={isDisabled}
-      onPress={onSelect}
-      // rn-primitives wrappers don't gate disabled clicks on web.
-      style={isDisabled ? POINTER_EVENTS_NONE : undefined}
-      className={cn(
-        'justify-center rounded-sm px-row-x-md py-row-y-md',
-        isPhone ? 'min-h-control-lg' : 'min-h-control-md',
-        !isDisabled &&
-          cn(
-            'active:bg-tint-press',
-            Platform.select({ web: 'cursor-pointer hover:bg-tint-hover' }) ?? '',
-          ),
-        isDisabled && 'opacity-50',
-      )}
-    >
-      <Text
-        size="sm"
+  // WCAG 2.5.3: the accessible name must still contain the visible label.
+  const accessibleLabel =
+    isDisabled && entry.disabledReason ? `${entry.label}, ${entry.disabledReason}` : entry.label
+  return (
+    <ReasonTooltip reason={isDisabled ? entry.disabledReason : undefined}>
+      <Pressable
+        accessibilityRole="menuitem"
+        accessibilityLabel={accessibleLabel}
+        accessibilityState={{ disabled: isDisabled }}
+        disabled={isDisabled}
+        onPress={onSelect}
         className={cn(
-          'font-medium',
-          isDisabled && 'text-fg-muted',
-          !isDisabled && entry.destructive && 'text-danger',
+          'justify-center rounded-sm px-row-x-md py-row-y-md',
+          isPhone ? 'min-h-control-lg' : 'min-h-control-md',
+          !isDisabled &&
+            cn(
+              'active:bg-tint-press',
+              Platform.select({ web: 'cursor-pointer hover:bg-tint-hover' }) ?? '',
+            ),
+          isDisabled && 'opacity-50',
         )}
       >
-        {entry.label}
-      </Text>
-      {isDisabled && entry.disabledReason && Platform.OS !== 'web' ? (
-        <Text size="xs" variant="muted" className="mt-0.5">
-          {entry.disabledReason}
+        <Text
+          size="sm"
+          className={cn(
+            'font-medium',
+            isDisabled && 'text-fg-muted',
+            !isDisabled && entry.destructive && 'text-danger',
+          )}
+        >
+          {entry.label}
         </Text>
-      ) : null}
-    </Pressable>
+        {isDisabled && entry.disabledReason && Platform.OS !== 'web' ? (
+          <Text size="xs" variant="muted" className="mt-0.5">
+            {entry.disabledReason}
+          </Text>
+        ) : null}
+      </Pressable>
+    </ReasonTooltip>
   )
-  if (isDisabled && entry.disabledReason && Platform.OS === 'web') {
-    return (
-      <div title={entry.disabledReason} className="flex">
-        {row}
-      </div>
-    )
-  }
-  return row
 }
 
 export type { OverflowMenuEntry, OverflowMenuProps }
