@@ -1,6 +1,5 @@
-import { type ReactNode, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import {
-  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -12,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
+import { useKeyboardShown } from '@/hooks/use-keyboard-shown'
 import { useTier } from '@/hooks/use-tier'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
@@ -118,19 +118,9 @@ export function WizardShell({
   const tier = useTier()
   const isPhone = tier === 'phone'
 
-  // Save bar on phone lesson (touch.md): the footer competes with composer
-  // real estate while the soft keyboard is open, so it hides and reappears
-  // with the keyboard rather than floating above it.
-  const [keyboardVisible, setKeyboardVisible] = useState(false)
-  useEffect(() => {
-    if (Platform.OS === 'web') return
-    const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true))
-    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false))
-    return () => {
-      showSub.remove()
-      hideSub.remove()
-    }
-  }, [])
+  // The footer competes with field real estate while the soft keyboard is
+  // open on phone, so it hides and reappears with the keyboard.
+  const keyboardVisible = useKeyboardShown()
 
   const showFooter = !(isPhone && keyboardVisible)
 
