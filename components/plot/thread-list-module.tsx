@@ -24,6 +24,6 @@ export const threadListModule: ThreadListModule = {
     group: (rows) => groupThreadsByTier(rows),
     label: (key) => t(`plot:tiers.${key}`),
   },
-  copy: plotListCopy<ThreadFilter>('thread', THREAD_SEARCH_SCOPE),
+  copy: plotListCopy('thread', THREAD_SEARCH_SCOPE),
   Row: ThreadRow,
 }

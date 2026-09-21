@@ -29,6 +29,6 @@ export const happeningListModule: HappeningListModule = {
     group: groupHappeningsByBucket,
     label: (key) => t(`plot:buckets.${key}`),
   },
-  copy: plotListCopy<HappeningFilter>('happening', HAPPENING_SEARCH_SCOPE),
+  copy: plotListCopy('happening', HAPPENING_SEARCH_SCOPE),
   Row: HappeningRow,
 }

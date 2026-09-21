@@ -4,14 +4,18 @@ import type { HappeningFilter, PlotKind, ThreadFilter } from '@/lib/list-modules
 
 type PlotScopeKey = 'title' | 'description' | 'category'
 
+// Ties each kind to its own filter type, so a mismatched kind/Filter pairing (e.g. a thread's
+// filters handed to the happening module) fails to typecheck instead of drifting silently.
+type PlotFilterOf = { thread: ThreadFilter; happening: HappeningFilter }
+
 /**
  * Plot's list copy for a kind. Scope keys translate inside the callback, not at module load,
  * so the strings follow the current language (the lore module's pattern).
  */
-export function plotListCopy<Filter extends ThreadFilter | HappeningFilter>(
-  kind: PlotKind,
+export function plotListCopy<K extends PlotKind>(
+  kind: K,
   scopeKeys: readonly PlotScopeKey[],
-): (categoryLabel: string) => ListCopy<Filter> {
+): (categoryLabel: string) => ListCopy<PlotFilterOf[K]> {
   return (categoryLabel) => {
     // The app language, not the host locale: a Turkish host lowercases "I" to a dotless "ı".
     const category = categoryLabel.toLocaleLowerCase(i18n.language)
