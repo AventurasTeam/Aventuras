@@ -45,9 +45,9 @@ export function UnsavedChangesDialog({
     <AlertDialog open={open} onOpenChange={handleOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{t('storySettings:save.unsavedTitle')}</AlertDialogTitle>
+          <AlertDialogTitle>{t('unsavedChanges.title')}</AlertDialogTitle>
           <AlertDialogDescription>
-            {t('storySettings:save.unsavedBody')}
+            {t('unsavedChanges.body')}
             {reason != null ? (
               <Text size="sm" variant="muted">
                 {'\n\n'}
@@ -66,7 +66,7 @@ export function UnsavedChangesDialog({
               close, firing onCancel alongside the chosen action. The owner
               closes this once the pending leave resolves. */}
           <Button variant="secondary" onPress={onDiscard} disabled={saving}>
-            <Text>{t('storySettings:save.unsavedDiscard')}</Text>
+            <Text>{t('unsavedChanges.discard')}</Text>
           </Button>
           <Button
             variant="primary"
@@ -74,7 +74,7 @@ export function UnsavedChangesDialog({
             disabled={saving || saveDisabled}
             disabledReason={saveDisabled ? saveDisabledReason : undefined}
           >
-            <Text>{t('storySettings:save.unsavedSave')}</Text>
+            <Text>{t('unsavedChanges.save')}</Text>
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>

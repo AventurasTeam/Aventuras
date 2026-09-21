@@ -138,6 +138,12 @@
     "discard": "Discard",
     "save": "Save"
   },
+  "unsavedChanges": {
+    "title": "Unsaved changes",
+    "body": "You have unsaved changes on this screen. Save them, discard them, or stay here.",
+    "discard": "Discard",
+    "save": "Save"
+  },
   "storyCard": {
     "genreNotSet": "Genre not set",
     "noDescription": "(no description yet)",

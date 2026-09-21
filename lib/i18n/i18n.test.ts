@@ -26,12 +26,20 @@ describe('lib/i18n', () => {
     expect(t('settings:diagnosticsHub.comingSoon')).toBe('Diagnostics Hub — coming soon')
     expect(t('storySettings:title')).toBe('Story Settings')
     expect(t('storySettings:tabs.memory')).toBe('Memory')
-    expect(t('storySettings:save.unsavedTitle')).toBe('Unsaved changes')
   })
 
   it('resolves the shared chrome keys from the common namespace', () => {
     expect(t('chrome.appSettings')).toBe('App Settings')
     expect(t('chrome.back')).toBe('Back')
+  })
+
+  it('resolves the shared unsaved-changes-dialog keys from the common namespace', () => {
+    expect(t('unsavedChanges.title')).toBe('Unsaved changes')
+    expect(t('unsavedChanges.body')).toBe(
+      'You have unsaved changes on this screen. Save them, discard them, or stay here.',
+    )
+    expect(t('unsavedChanges.discard')).toBe('Discard')
+    expect(t('unsavedChanges.save')).toBe('Save')
   })
 
   it('resolves the shared list-module keys from the common namespace', () => {

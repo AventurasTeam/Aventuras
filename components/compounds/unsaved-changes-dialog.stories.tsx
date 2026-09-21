@@ -4,7 +4,7 @@ import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 import { UnsavedChangesDialog } from './unsaved-changes-dialog'
 
 const meta: Meta<typeof UnsavedChangesDialog> = {
-  title: 'Compounds/StorySettings/UnsavedChangesDialog',
+  title: 'Compounds/UnsavedChangesDialog',
   component: UnsavedChangesDialog,
   parameters: { layout: 'centered' },
   tags: ['autodocs'],
