@@ -542,6 +542,8 @@ function ProviderModelPicker({
         searchPlaceholder={t('modelPicker.searchPlaceholder')}
         sections={sections}
         selectedRowIds={selectedRowIds}
+        // The provider-section twin: the Favorites strip already sits at the top.
+        initialScrollRowId={value ? rowId('provider', value) : undefined}
         matchTriggerWidth
         onQueryChange={setQuery}
         renderTrigger={renderTrigger}
