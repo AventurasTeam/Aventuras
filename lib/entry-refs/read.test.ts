@@ -141,4 +141,29 @@ describe('readEntryIndex', () => {
     const [row] = await readEntryIndex('br_1', db)
     expect(row?.excerpt).toBe('ABCDEFGHIJKLMNOPQRSTUVWXYZ MORE TEXT THAT…')
   })
+
+  it('backs off to a whole word when the 200-char cut lands mid-word', async () => {
+    const { db } = await createTestDb()
+    await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values({ id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 })
+    // First 200 chars: 184 spaces + "quay again " + "unbel" — the cut lands inside
+    // "unbelievable", 5 letters in. Without a word-boundary back-off the forced ellipsis
+    // would follow the fragment ("…quay again unbel…").
+    const content =
+      ' '.repeat(184) +
+      'quay again ' +
+      'unbelievable stuff that continues well past the two hundred character mark and further'
+    await db.insert(storyEntries).values({
+      id: 'e_midword',
+      branchId: 'br_1',
+      position: 1,
+      kind: 'opening',
+      content,
+      chapterId: null,
+      createdAt: 1,
+    })
+
+    const [row] = await readEntryIndex('br_1', db)
+    expect(row?.excerpt).toBe('quay again…')
+  })
 })

@@ -59,8 +59,10 @@ export function useEntryIndex(branchId: string): EntryIndexSnapshot {
     enabled: branchId !== '',
     // Local DB read, not a flaky network call — a failure is worth surfacing, not retried.
     retry: false,
-    // Every key is used at most once (settleCount/tailId only move forward), so there is no
-    // reason to hold a whole branch's rows in cache for the client's default 5-minute gc.
+    // A key goes dead once superseded by the next settle or tail move; a revisit (a branch
+    // switch back, tailId walking backward after a reversal or a system-entry clear) is rare
+    // and still correct under the write invariant above — no reason to hold a whole branch's
+    // rows for the client's default 5-minute gc.
     gcTime: 30_000,
     queryFn: () => readEntryIndex(branchId, db),
   })
