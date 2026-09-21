@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useEffect, useState } from 'react'
 import { View } from 'react-native'
-import { expect, screen, userEvent, waitFor } from 'storybook/test'
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import type { EntryRef } from '@/lib/entry-refs'
 import { t } from '@/lib/i18n'
@@ -21,6 +21,45 @@ const ENTRIES: EntryRef[] = Array.from({ length: 40 }, (_, i) => {
         : `Entry ${position} — the lantern gutters as you press deeper.`,
   }
 })
+
+// `#12` prefix-matches #12 and #120…#129 — enough 3-digit entries to reproduce the
+// auto-highlight bug (newest-first would put #129 first without exact-match ordering).
+const MANY_ENTRIES: EntryRef[] = Array.from({ length: 200 }, (_, i) => {
+  const position = 200 - i
+  return {
+    id: `e_${position}`,
+    position,
+    kind: position % 2 === 0 ? 'user_action' : 'ai_reply',
+    chapterId: null,
+    excerpt: `Entry ${position} — the lantern gutters as you press deeper.`,
+  }
+})
+
+// Bare digits union position and excerpt matches — `e_5`'s excerpt only contains "12"
+// as prose, `e_9`'s excerpt has no "12" anywhere.
+const UNION_ENTRIES: EntryRef[] = [
+  {
+    id: 'e_12',
+    position: 12,
+    kind: 'ai_reply',
+    chapterId: null,
+    excerpt: 'The vault door creaks open.',
+  },
+  {
+    id: 'e_5',
+    position: 5,
+    kind: 'user_action',
+    chapterId: null,
+    excerpt: 'You count all 12 coins twice.',
+  },
+  {
+    id: 'e_9',
+    position: 9,
+    kind: 'ai_reply',
+    chapterId: null,
+    excerpt: 'Nothing relevant happens here.',
+  },
+]
 
 const LONG_EXCERPT =
   'The broker counts the coin twice before speaking, and even then the words come slow, weighed against the risk of saying too much in a place where every wall has ears.'
@@ -64,6 +103,28 @@ export const Empty: Story = {
       await expect(screen.getByTestId('picker')).toHaveTextContent('entry #12')
     })
     await expect(screen.getByTestId('picker')).toHaveTextContent('The broker is waiting')
+    // The resolved value folds into the accessible name too, not just the dangling one.
+    await expect(screen.getByTestId('picker')).toHaveAccessibleName(
+      t('picker.fieldLabel', { label: 'Occurred at', value: 'entry #12' }),
+    )
+  },
+}
+
+// A bare `#12` search over 200+ entries prefix-matches #12 and #120…#129 — newest-first
+// would auto-highlight #129, and Enter would then commit the wrong entry.
+export const PositionSearchExactMatchCommitsOnEnter: Story = {
+  args: { entries: MANY_ENTRIES },
+  play: async () => {
+    await userEvent.click(screen.getByTestId('picker'))
+    const search = await screen.findByRole('combobox')
+    await userEvent.type(search, '#12')
+    await screen.findByRole('option', { name: /entry #12\b/ })
+    await userEvent.keyboard('{Enter}')
+    await waitFor(async () => {
+      // Raw textContent has no inserted whitespace between the field's adjacent elements
+      // (unlike an accessible name), so a trailing digit — not `\b` — rules out #120…#129.
+      await expect(screen.getByTestId('picker')).toHaveTextContent(/entry #12(?!\d)/)
+    })
   },
 }
 
@@ -86,6 +147,39 @@ export const SearchByExcerpt: Story = {
 }
 
 export const Selected: Story = { args: { initial: 'e_40' } }
+
+// Position matches (exact-match ordering) come first, then excerpt-only matches, newest
+// first — never a match against the localized `entry #n` label itself.
+export const BareDigitsUnionPositionAndExcerpt: Story = {
+  args: { entries: UNION_ENTRIES },
+  play: async () => {
+    await userEvent.click(screen.getByTestId('picker'))
+    const search = await screen.findByRole('combobox')
+    await userEvent.type(search, '12')
+    await waitFor(async () => {
+      const options = screen.getAllByRole('option')
+      await expect(options).toHaveLength(2)
+      await expect(options[0]).toHaveAccessibleName(/entry #12(?!\d)/)
+      await expect(options[1]).toHaveAccessibleName(/entry #5(?!\d)/)
+    })
+  },
+}
+
+// `#` alone must not empty the list — it's position mode with no digits yet. The overlay
+// virtualizes rows, so the visible option count is a viewport window, not the full 40 —
+// compare it against the unfiltered baseline rather than against `ENTRIES.length`.
+export const HashAloneMatchesEverything: Story = {
+  play: async () => {
+    await userEvent.click(screen.getByTestId('picker'))
+    const baseline = (await screen.findAllByRole('option')).length
+    const search = screen.getByRole('combobox')
+    await userEvent.type(search, '#')
+    await waitFor(async () => {
+      await expect(screen.getAllByRole('option')).toHaveLength(baseline)
+    })
+    await expect(screen.queryByText(t('picker.entryNoResults'))).not.toBeInTheDocument()
+  },
+}
 
 export const NoEntriesAvailable: Story = {
   args: { entries: [] },
@@ -124,6 +218,10 @@ export const Disabled: Story = {
     await expect(trigger).toBeDisabled()
     await expect(screen.getByTitle('Generation is in flight. Cancel to edit.')).toBeInTheDocument()
     await userEvent.click(trigger, { pointerEventsCheck: 0 })
+    // A negative check needs a settle window — asserting immediately after the click
+    // would pass even if the disabled click handling were broken and the overlay's own
+    // (async) open logic just hadn't run yet.
+    await new Promise((resolve) => setTimeout(resolve, 150))
     await expect(screen.queryByRole('dialog', { name: 'Occurred at' })).not.toBeInTheDocument()
   },
 }
@@ -187,6 +285,7 @@ export const OpensScrolledToValue: Story = {
         const rect = row.getBoundingClientRect()
         await expect(rect.top).toBeGreaterThanOrEqual(box.top)
         await expect(rect.bottom).toBeLessThanOrEqual(box.bottom)
+        await expect(row).toHaveAttribute('aria-selected', 'true')
       },
       { timeout: 5000 },
     )
@@ -209,11 +308,36 @@ export const LongExcerptStaysWithinField: Story = {
   },
 }
 
+// Same single-line truncation, but inside a row of the open overlay rather than the field.
+export const RowExcerptTruncates: Story = {
+  args: { entries: LONG_EXCERPT_ENTRIES },
+  play: async () => {
+    await userEvent.click(screen.getByTestId('picker'))
+    const row = await screen.findByRole('option')
+    const excerptText = within(row).getByText(LONG_EXCERPT)
+    const excerptRect = excerptText.getBoundingClientRect()
+    await expect(excerptRect.right).toBeLessThanOrEqual(row.getBoundingClientRect().right)
+    const lineHeight = parseFloat(getComputedStyle(excerptText).lineHeight)
+    await expect(excerptRect.height).toBeLessThanOrEqual(lineHeight * 1.2)
+  },
+}
+
 export const ReadOnlyText: StoryObj = {
   render: () => (
-    <View className="gap-2 p-4">
+    <View testID="readonly-column" style={{ width: 400 }} className="gap-2 p-4">
       <EntryRefText entry={ENTRIES[0]!} />
       <EntryRefText entry={null} />
     </View>
   ),
+  play: async () => {
+    // A bare `Tag` under a column parent's `align-items: stretch` would size the pill
+    // to the container's full width instead of hugging its own content.
+    const container = screen.getByTestId('readonly-column')
+    const containerWidth = container.getBoundingClientRect().width
+    const danglingLabel = screen.getByText(/Entry no longer exists/)
+    const pill = danglingLabel.parentElement
+    if (pill == null) throw new Error('Expected the dangling label to have a parent element.')
+    const pillWidth = pill.getBoundingClientRect().width
+    await expect(pillWidth).toBeLessThan(containerWidth * 0.7)
+  },
 }
