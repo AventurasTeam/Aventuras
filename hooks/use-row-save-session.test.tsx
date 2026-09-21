@@ -791,4 +791,43 @@ describe('useRowSaveSession', () => {
     expect(proceed).toHaveBeenCalledTimes(1)
     expect(hook.result.current.pendingLeave).toBe(false)
   })
+
+  it('keeps a revert to the original value typed while the commit ran', async () => {
+    const held = heldCommit()
+    const hook = setup(held.commit)
+    const proceed = vi.fn()
+    act(() => hook.result.current.form.setValue('note', 'edited', { shouldDirty: true }))
+    act(() => hook.result.current.requestLeave(proceed))
+    let saving: Promise<RowSaveOutcome> | undefined
+    await act(async () => {
+      saving = hook.result.current.save()
+    })
+    act(() => hook.result.current.form.setValue('note', '', { shouldDirty: true }))
+    await act(async () => {
+      held.settle({ status: 'ok' })
+      await saving
+    })
+    expect(hook.result.current.form.getValues('note')).toBe('')
+    expect(hook.result.current.dirtyFields).toEqual(['label:note'])
+    expect(proceed).not.toHaveBeenCalled()
+    expect(hook.result.current.pendingLeave).toBe(true)
+  })
+
+  it('resolves the save even when onRejected throws', async () => {
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const commit = vi.fn<Commit>(async () => ({ status: 'rejected', reason: 'blocked' }))
+    const onRejected = () => {
+      throw new Error('toast unavailable')
+    }
+    const hook = setup(commit, undefined, { onRejected })
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    let outcome: RowSaveOutcome | undefined
+    await act(async () => {
+      outcome = await hook.result.current.save()
+    })
+    expect(outcome).toEqual({ status: 'rejected', reason: 'blocked' })
+    expect(hook.result.current.saveError).toBe('blocked')
+    expect(hook.result.current.saving).toBe(false)
+    expect(error).toHaveBeenCalledTimes(1)
+  })
 })

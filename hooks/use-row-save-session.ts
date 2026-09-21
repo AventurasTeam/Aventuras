@@ -270,13 +270,16 @@ export function useRowSaveSession<Draft extends FieldValues>({
     (draft: Draft, valuesAtStart: Draft): boolean => {
       const stored = appliedRef.current.values
       // A store row that landed mid-commit is a truer baseline than the draft that was sent.
-      const baseline = sameValue(stored, valuesAtStart) ? draft : stored
+      const refreshed = !sameValue(stored, valuesAtStart)
+      const baseline = refreshed ? stored : draft
       const current: Record<string, unknown> = form.getValues()
       const touched: Record<string, unknown> = form.formState.dirtyFields
       const sent: Record<string, unknown> = draft
-      // Only touched fields can hold a mid-commit edit; a refresh moves the untouched ones.
+      // Any move off the draft is a mid-commit edit, a revert to the original included; only after
+      // a refresh must it also be touched, since the refresh moved the untouched fields itself.
       const typed = Object.keys(current).filter(
-        (field) => hasDirty(touched[field]) && !sameValue(current[field], sent[field]),
+        (field) =>
+          (!refreshed || hasDirty(touched[field])) && !sameValue(current[field], sent[field]),
       )
       form.reset(baseline, { keepErrors: typed.length > 0 })
       if (typed.length === 0) return true
