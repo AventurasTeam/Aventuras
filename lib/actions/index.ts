@@ -4,7 +4,11 @@ export {
   unprocessedTurnCount,
 } from './classifier/deps'
 export { runClassifierNow } from './classifier/run-now'
-export { applyDeltaAction } from './delta/apply-delta-action'
+export {
+  applyDeltaAction,
+  applyDeltaActionGroup,
+  type DeltaGroupResult,
+} from './delta/apply-delta-action'
 export { applyUndoPayload, computeUndoPayload } from './delta/delta-encoding'
 export { __resetRegistrationGuard, registerAllDomains } from './delta/registrations'
 export { __resetRegistry, type StorePatch } from './delta/registry'

@@ -7,7 +7,7 @@ import { happeningAwarenessStore } from '@/lib/stores'
 
 import { nullifyRef } from '../coerce'
 import { register, type ActionHandler } from '../delta/registry'
-import type { DeltaSource } from '../types'
+import { isUserOriginatedSource, type DeltaSource } from '../types'
 
 type AwarenessUpsertPayload = {
   branchId: string
@@ -73,6 +73,12 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx) => {
     if (decayResistance !== undefined) {
       set.decayResistance = decayResistance
       undoPayload.decayResistance = current.decayResistance
+    }
+    // Only a user edit re-anchors learned_at in place; a classifier re-emit of an
+    // already-known pair must not drift the anchor decay is measured from.
+    if (learnedAtEntryId !== undefined && isUserOriginatedSource(action.source)) {
+      set.learnedAtEntryId = nullifyRef(learnedAtEntryId)
+      undoPayload.learnedAtEntryId = current.learnedAtEntryId
     }
     // Update-only reject: a create with no authored fields is a valid awareness-only
     // record (the character knows the happening; source/decay simply unrecorded).

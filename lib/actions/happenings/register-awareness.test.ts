@@ -269,6 +269,53 @@ describe('happening_awareness upsert', () => {
     expect(rows.length).toBe(1)
     expect(rows[0].source).toBeNull()
   })
+
+  it('merges learnedAtEntryId on an existing row and reverse-replay restores it', async () => {
+    const { db, ctx } = await setup([
+      {
+        id: 'haw_1',
+        branchId: 'br_1',
+        happeningId: 'hap_1',
+        characterId: 'char_a',
+        learnedAtEntryId: 'entry_3',
+        decayResistance: 0.2,
+        retrievalCount: 0,
+        source: 'told',
+      },
+    ])
+    const result = await applyDeltaAction(
+      {
+        action: {
+          kind: 'upsertHappeningAwareness',
+          source: 'user_edit',
+          payload: {
+            branchId: 'br_1',
+            characterId: 'char_a',
+            happeningId: 'hap_1',
+            learnedAtEntryId: 'entry_9',
+          },
+        },
+        actionId: 'act_learned',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect(result.status).toBe('ok')
+    const [row] = await awarenessRows(db, 'char_a', 'hap_1')
+    expect(row.learnedAtEntryId).toBe('entry_9')
+    expect(happeningAwarenessStore.getById('haw_1')?.learnedAtEntryId).toBe('entry_9')
+
+    const [delta] = (await db
+      .select()
+      .from(deltas)
+      .where(eq(deltas.actionId, 'act_learned'))) as Delta[]
+    expect(delta.op).toBe('update')
+    expect(delta.undoPayload).toEqual({ learnedAtEntryId: 'entry_3' })
+
+    await reverseReplayDeltas('act_learned', ctx)
+    const [restored] = await awarenessRows(db, 'char_a', 'hap_1')
+    expect(restored.learnedAtEntryId).toBe('entry_3')
+  })
 })
 
 function awarenessRow(
