@@ -20,7 +20,7 @@ type EntryRefPickerProps = {
   /**
    * The branch's entries, newest first — `useEntryIndex(branchId)`'s `entries`, passed
    * only once `ready` is true. Never the trailing-window `entriesStore`: an unready or
-   * partial index would mark every existing value dangling that isn't.
+   * partial index would render live values as dangling.
    */
   entries: readonly EntryRef[]
   label: string
@@ -105,6 +105,11 @@ export function EntryRefPicker({
 }: EntryRefPickerProps) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
+  // Latches true on the render where `open` first flips true, and never resets — gorhom
+  // keeps the phone Sheet's children mounted through its close animation, so gating the
+  // search index on `open` itself would flash the empty-state copy for that whole window.
+  const [hasOpened, setHasOpened] = useState(false)
+  if (open && !hasOpened) setHasOpened(true)
 
   useEffect(() => {
     if (disabled) setOpen(false)
@@ -112,8 +117,11 @@ export function EntryRefPicker({
 
   const index = useMemo(() => indexEntryRefs(entries), [entries])
   const indexedEntries = useMemo<IndexedEntry[]>(
-    () => entries.map((entry) => ({ entry, normalizedExcerpt: normalizeTerm(entry.excerpt) })),
-    [entries],
+    () =>
+      hasOpened
+        ? entries.map((entry) => ({ entry, normalizedExcerpt: normalizeTerm(entry.excerpt) }))
+        : [],
+    [hasOpened, entries],
   )
   const selected = useMemo(
     () => (value == null ? null : (index.get(value) ?? null)),
@@ -128,16 +136,17 @@ export function EntryRefPicker({
         ? t('entryRefDangling')
         : undefined
 
-  // Filtering/sorting only matters while the overlay is open — `open` flips synchronously
-  // on click, so the render that opens it still computes the full, current sections.
+  // Gated on `hasOpened`, not `open`: a picker that's never been opened pays nothing to
+  // build the search index, and closing never drops the rows back to empty while the
+  // overlay is still (asynchronously) animating out — they keep filtering by `query`.
   const sections = useMemo<Section<EntryRef>[]>(() => {
-    if (!open) return []
+    if (!hasOpened) return []
     const rows = matchAndSort(indexedEntries, parseQuery(query)).map<Row<EntryRef>>((entry) => ({
       id: entry.id,
       data: entry,
     }))
     return [{ id: 'entries', rows }]
-  }, [open, indexedEntries, query])
+  }, [hasOpened, indexedEntries, query])
 
   const handleActivate = useCallback((row: Row<EntryRef>) => onChange(row.data.id), [onChange])
 

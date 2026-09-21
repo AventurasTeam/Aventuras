@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import { View } from 'react-native'
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
 
+import { Text } from '@/components/ui/text'
+import { useTier } from '@/hooks/use-tier'
 import type { EntryRef } from '@/lib/entry-refs'
 import { t } from '@/lib/i18n'
 
@@ -61,6 +63,28 @@ const UNION_ENTRIES: EntryRef[] = [
   },
 ]
 
+// Small enough that every row renders unvirtualized — the exact count is assertable.
+const SMALL_ENTRIES: EntryRef[] = Array.from({ length: 5 }, (_, i) => {
+  const position = 5 - i
+  return {
+    id: `e_${position}`,
+    position,
+    kind: position % 2 === 0 ? 'user_action' : 'ai_reply',
+    chapterId: null,
+    excerpt: `Entry ${position} — the lantern gutters as you press deeper.`,
+  }
+})
+
+// No entry's position equals "5" exactly — isolates the length-ordering rule from the
+// exact-match rule already covered by `PositionSearchExactMatchCommitsOnEnter`.
+const LENGTH_ORDER_ENTRIES: EntryRef[] = [57, 578, 5789].map((position) => ({
+  id: `e_${position}`,
+  position,
+  kind: 'ai_reply' as const,
+  chapterId: null,
+  excerpt: `Entry ${position} — the lantern gutters as you press deeper.`,
+}))
+
 const LONG_EXCERPT =
   'The broker counts the coin twice before speaking, and even then the words come slow, weighed against the risk of saying too much in a place where every wall has ears.'
 const LONG_EXCERPT_ENTRIES: EntryRef[] = [
@@ -110,7 +134,7 @@ export const Empty: Story = {
   },
 }
 
-// A bare `#12` search over 200+ entries prefix-matches #12 and #120…#129 — newest-first
+// A `#12` search over 200+ entries prefix-matches #12 and #120…#129 — newest-first
 // would auto-highlight #129, and Enter would then commit the wrong entry.
 export const PositionSearchExactMatchCommitsOnEnter: Story = {
   args: { entries: MANY_ENTRIES },
@@ -165,19 +189,64 @@ export const BareDigitsUnionPositionAndExcerpt: Story = {
   },
 }
 
-// `#` alone must not empty the list — it's position mode with no digits yet. The overlay
-// virtualizes rows, so the visible option count is a viewport window, not the full 40 —
-// compare it against the unfiltered baseline rather than against `ENTRIES.length`.
-export const HashAloneMatchesEverything: Story = {
+// A leading `#` with inner whitespace is still position mode — `# 12` must strip that
+// whitespace and match only #12, not union in `e_5`'s excerpt-only "12" the way bare
+// digits would (`BareDigitsUnionPositionAndExcerpt`).
+export const HashWithInnerSpaceIsPositionOnly: Story = {
+  args: { entries: UNION_ENTRIES },
   play: async () => {
     await userEvent.click(screen.getByTestId('picker'))
-    const baseline = (await screen.findAllByRole('option')).length
-    const search = screen.getByRole('combobox')
+    const search = await screen.findByRole('combobox')
+    await userEvent.type(search, '# 12')
+    await waitFor(async () => {
+      const options = screen.getAllByRole('option')
+      await expect(options).toHaveLength(1)
+      await expect(options[0]).toHaveAccessibleName(/entry #12(?!\d)/)
+    })
+  },
+}
+
+// `#` alone must not empty the list — it's position mode with no digits yet. A 5-entry
+// fixture keeps every row unvirtualized so the count is exactly assertable.
+export const HashAloneMatchesEverything: Story = {
+  args: { entries: SMALL_ENTRIES },
+  play: async () => {
+    await userEvent.click(screen.getByTestId('picker'))
+    const search = await screen.findByRole('combobox')
     await userEvent.type(search, '#')
     await waitFor(async () => {
-      await expect(screen.getAllByRole('option')).toHaveLength(baseline)
+      await expect(screen.getAllByRole('option')).toHaveLength(5)
     })
     await expect(screen.queryByText(t('picker.entryNoResults'))).not.toBeInTheDocument()
+  },
+}
+
+// Isolates the "shorter position string first" ordering rule with no exact match present.
+export const PositionSearchOrdersShorterMatchesFirst: Story = {
+  args: { entries: LENGTH_ORDER_ENTRIES },
+  play: async () => {
+    await userEvent.click(screen.getByTestId('picker'))
+    const search = await screen.findByRole('combobox')
+    await userEvent.type(search, '#5')
+    await waitFor(async () => {
+      const options = screen.getAllByRole('option')
+      await expect(options).toHaveLength(3)
+      await expect(options[0]).toHaveAccessibleName(/entry #57(?!\d)/)
+      await expect(options[1]).toHaveAccessibleName(/entry #578(?!\d)/)
+      await expect(options[2]).toHaveAccessibleName(/entry #5789(?!\d)/)
+    })
+  },
+}
+
+export const ExcerptSearchIsCaseInsensitive: Story = {
+  play: async () => {
+    await userEvent.click(screen.getByTestId('picker'))
+    const search = await screen.findByRole('combobox')
+    await userEvent.type(search, 'BROKER')
+    await waitFor(async () => {
+      await expect(screen.getAllByRole('option')).toHaveLength(1)
+    })
+    await expect(screen.getByRole('option', { name: /entry #12/ })).toBeVisible()
   },
 }
 
@@ -319,6 +388,54 @@ export const RowExcerptTruncates: Story = {
     await expect(excerptRect.right).toBeLessThanOrEqual(row.getBoundingClientRect().right)
     const lineHeight = parseFloat(getComputedStyle(excerptText).lineHeight)
     await expect(excerptRect.height).toBeLessThanOrEqual(lineHeight * 1.2)
+  },
+}
+
+// gorhom keeps the phone Sheet's children mounted through its ~700ms slide-out —
+// `min-h-screen` gives it real height to animate within (SOL's own stories do the same).
+function PhoneHarness() {
+  const [value, setValue] = useState<string | null>(null)
+  const tier = useTier()
+  return (
+    <View className="min-h-screen w-80 flex-col items-stretch gap-3 p-8">
+      <EntryRefPicker
+        value={value}
+        onChange={setValue}
+        entries={ENTRIES}
+        label="Occurred at"
+        placeholder="Pick the entry it happened at"
+        testID="picker"
+      />
+      <Text testID="tier" variant="muted" size="xs">
+        {tier}
+      </Text>
+    </View>
+  )
+}
+
+export const ClosePhoneNeverFlashesEmptyState: Story = {
+  globals: { viewport: { value: 'mobile1' } },
+  render: () => <PhoneHarness />,
+  play: async () => {
+    // Tier-dependent assertion needs a wait: `useTier()` reads a cached window width for
+    // at least one commit before the viewport's resize event lands (lessons-learned/
+    // storybook-viewport-usetier-async.md).
+    await waitFor(() => expect(screen.getByTestId('tier')).toHaveTextContent('phone'))
+    await userEvent.click(screen.getByTestId('picker'))
+    const options = await screen.findAllByRole('option')
+    await userEvent.click(options[0]!)
+    await waitFor(async () => {
+      await expect(screen.getByTestId('picker')).toHaveTextContent(/entry #40(?!\d)/)
+    })
+
+    // The regression this guards (sections gated on `open`) showed the empty copy for
+    // the whole close animation, not just its first frame — poll through that window.
+    const deadline = Date.now() + 800
+    while (Date.now() < deadline) {
+      await expect(screen.queryByText(t('picker.entryNoResults'))).not.toBeInTheDocument()
+      await expect(screen.queryByText(t('picker.entryNone'))).not.toBeInTheDocument()
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
   },
 }
 
