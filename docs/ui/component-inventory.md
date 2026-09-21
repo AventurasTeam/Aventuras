@@ -43,10 +43,7 @@ wrappers.
 
 ### Primitives — needs revision
 
-- **SearchableOverlayList** — add `initialScrollRowId`
-  (open-time scroll-into-view) per the
-  [substrate spec](./patterns/searchable-overlay-list.md#implementation-notes).
-  Parked in [`parked.md`](../parked.md#searchableoverlaylist--initialscrollrowid).
+_Empty — every shipped primitive matches its spec._
 
 ### Primitives — build-ready
 

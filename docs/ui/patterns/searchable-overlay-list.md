@@ -307,7 +307,14 @@ opens empty too.
 into view, mid-viewport. This keeps three concepts separate:
 _selection_ (the consumer's committed value, surfaced via
 `selectedRowIds` — see below), _highlight_ (the substrate's keyboard
-cursor, empty on open), and _initial scroll_.
+cursor, empty on open), and _initial scroll_. The scroll happens once
+per open, after the rows lay out, and re-arms on the next open. It is
+never re-applied while open, so a query that re-shapes `sections`
+doesn't snap the list back, and typing before a deferred scroll lands
+drops it. A row absent from `sections` at open is a no-op. The phone
+Sheet on native defers the scroll until the sheet settles at its
+detent, then keeps the row centered as the list resizes (keyboard,
+the sheet's own settling) until the user drags the list or types.
 
 **`renderRow` width convention.** The substrate's row Pressable is
 `w-full flex-row`; a consumer's row root needs `w-full` (or
@@ -397,7 +404,9 @@ Per the [`components.md` axes-driven rule](../components.md#storybook-story-conv
   (Shape 2).
 - **States** — closed · open · no-results (`renderEmpty`) ·
   with-sticky-footer · disabled (`as-trigger`) ·
-  long-list-virtualized (200+ rows, sticky headers).
+  long-list-virtualized (200+ rows, sticky headers) · initial-scroll
+  (a long list opening on a mid-list row, desktop and phone; an
+  absent row id opening at the top).
 - **ThemeMatrix**.
 
 The MDX page cites this file as canonical and embeds the component
