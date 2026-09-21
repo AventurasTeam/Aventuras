@@ -33,7 +33,7 @@ export function HappeningRow({
       // `temporal` is unbounded model text: cap and ellipsize so it can't squash the title.
       meta={
         marker != null ? (
-          <Tag tone={marker.tone} className="shrink">
+          <Tag tone={marker.tone}>
             <Text numberOfLines={1} className="max-w-36">
               {marker.label}
             </Text>

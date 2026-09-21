@@ -27,6 +27,11 @@ export function happeningFilters(signals: PlotListSignals): readonly HappeningFi
   return signals.hasClosedChapters ? HAPPENING_FILTERS : HAPPENING_FILTERS_NO_CHAPTER
 }
 
+// `temporal` is model-authored free text: whitespace-only reads as unset, not "has a time".
+function isOutOfNarrative(row: Happening): boolean {
+  return (row.temporal?.trim() ?? '') !== '' || row.occurredAtEntryId == null
+}
+
 /**
  * plot.md → Happenings side. `temporal` set, or no narrative anchor at all
  * (data-model.md: a null `occurred_at_entry_id` is "outside narrative"), buckets to Out of
@@ -36,8 +41,8 @@ export function happeningFilters(signals: PlotListSignals): readonly HappeningFi
  * Current: nothing older can claim it.
  */
 export function happeningBucket(row: Happening, entries: EntryIndex): HappeningBucket {
-  if (row.temporal != null || row.occurredAtEntryId == null) return 'out-of-narrative'
-  const entry = entries.get(row.occurredAtEntryId)
+  if (isOutOfNarrative(row)) return 'out-of-narrative'
+  const entry = row.occurredAtEntryId == null ? undefined : entries.get(row.occurredAtEntryId)
   return entry?.chapterId != null ? 'earlier' : 'current'
 }
 
@@ -74,7 +79,7 @@ function matchesHappeningFilter(
     case 'common-knowledge':
       return row.commonKnowledge === 1
     case 'out-of-narrative':
-      return happeningBucket(row, entries) === 'out-of-narrative'
+      return isOutOfNarrative(row)
   }
 }
 
@@ -84,12 +89,10 @@ function anchorPosition(row: Happening, entries: EntryIndex): number {
   return entries.get(row.occurredAtEntryId)?.position ?? -1
 }
 
-// plot.md → Happenings side → Sort: entry position DESC; the out-of-narrative block (the
-// same rule `happeningBucket` uses) sorts last, by title — reusing the bucket rule keeps the
-// sort's trailing block and the `out-of-narrative` chip/group from drifting apart.
+// plot.md → Happenings side → Sort: entry position DESC; out-of-narrative rows sort last, by title.
 export function compareHappenings(a: Happening, b: Happening, entries: EntryIndex): number {
-  const aOut = happeningBucket(a, entries) === 'out-of-narrative' ? 1 : 0
-  const bOut = happeningBucket(b, entries) === 'out-of-narrative' ? 1 : 0
+  const aOut = isOutOfNarrative(a) ? 1 : 0
+  const bOut = isOutOfNarrative(b) ? 1 : 0
   if (aOut !== bOut) return aOut - bOut
   if (aOut === 0) {
     const positionDiff = anchorPosition(b, entries) - anchorPosition(a, entries)

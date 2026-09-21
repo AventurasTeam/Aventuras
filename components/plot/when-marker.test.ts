@@ -44,10 +44,10 @@ describe('whenMarker', () => {
     expect(whenMarker(happening({ temporal: '   ' }), ENTRIES)).toBeNull()
   })
 
-  it('falls through a blank temporal to the anchor when both are readable', () => {
-    expect(whenMarker(happening({ temporal: '  ', occurredAtEntryId: 'e1' }), ENTRIES)).toEqual({
+  it('trims the temporal label', () => {
+    expect(whenMarker(happening({ temporal: ' years past ' }), ENTRIES)).toEqual({
       tone: 'soft',
-      label: formatEntryRef(1),
+      label: 'years past',
     })
   })
 
