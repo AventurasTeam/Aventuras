@@ -1,9 +1,8 @@
-import { useCallback, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   useForm,
   type DefaultValues,
   type FieldValues,
-  type Path,
   type Resolver,
   type UseFormReturn,
 } from 'react-hook-form'
@@ -27,8 +26,8 @@ export type RowSaveSessionOptions<Draft extends FieldValues> = {
   rowKey: string
   /**
    * The committed values, which Discard restores. A same-row change refreshes every untouched
-   * field and keeps the touched ones. Memoize on the row: identity is the fast path, and a
-   * fresh but equal object is only deep-compared, never re-applied.
+   * top-level field and keeps the touched ones. Memoize on the row: identity is the fast path,
+   * and a fresh but equal object is only deep-compared, never re-applied.
    */
   values: Draft
   resolver: Resolver<Draft>
@@ -36,11 +35,18 @@ export type RowSaveSessionOptions<Draft extends FieldValues> = {
   fieldLabel: (field: string) => string
   /** A validation issue message (a key) → its translated text for the bar's notice. */
   issueText: (message: string) => string
+  /** Translated generic failure for a throw in validation or the commit; raw errors are logged. */
+  failureText: () => string
   /**
-   * Writes the draft as one delta action group. Expected refusals resolve `rejected` with a
-   * translated reason; a throw is logged and surfaced the same way.
+   * Writes the draft as one delta action group. Receives the raw form values, not the resolver's
+   * parsed output. Expected refusals resolve `rejected` with a translated reason.
    */
   commit: (draft: Draft) => Promise<RowCommitResult>
+  /**
+   * A save failed, with its translated reason — also when the form has since moved to another
+   * row, which keeps no `saveError` for it. The bar's notice is tooltip-only on phone; toast this.
+   */
+  onRejected?: (reason: string) => void
 }
 
 export type RowSaveSession<Draft extends FieldValues> = {
@@ -50,8 +56,9 @@ export type RowSaveSession<Draft extends FieldValues> = {
   dirtyFields: readonly string[]
   /** The first validation issue, translated; null while the draft is writable. */
   invalidReason: string | null
+  /** From validation until the commit settles; Discard and leave choices are ignored meanwhile. */
   saving: boolean
-  /** The last commit rejection; cleared by the next save, a discard, or a row switch. */
+  /** This row's last failed save; cleared as a retry starts writing, on discard, on row switch. */
   saveError: string | null
   save: () => Promise<RowSaveOutcome>
   discard: () => void
@@ -65,6 +72,11 @@ export type RowSaveSession<Draft extends FieldValues> = {
 export type RowSessionHandle = { dirty: boolean; requestLeave: (proceed: () => void) => void }
 
 type Attempt = { outcome: RowSaveOutcome; clean: boolean }
+
+type Written<Draft> =
+  | { status: 'invalid'; reason: string }
+  | { status: 'rejected'; reason: string }
+  | { status: 'ok'; draft: Draft }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== 'object') return false
@@ -136,7 +148,9 @@ export function useRowSaveSession<Draft extends FieldValues>({
   resolver,
   fieldLabel,
   issueText,
+  failureText,
   commit,
+  onRejected,
 }: RowSaveSessionOptions<Draft>): RowSaveSession<Draft> {
   // react-hook-form mutates formState in place; compiled memos keyed on it would go stale.
   'use no memo'
@@ -145,18 +159,32 @@ export function useRowSaveSession<Draft extends FieldValues>({
     resolver,
     mode: 'onChange',
   })
-  // Read in render so the formState proxy subscribes. Dirty derives from `dirtyFields`, not
-  // `isDirty`: a keepDirtyValues reset reports `isDirty: false` for a render with a draft held.
+  // Read in render so the formState proxy subscribes. `dirty` derives from `dirtyFields`, not
+  // `isDirty`, so it can never disagree with the labels the bar lists.
   const { dirtyFields: dirtyMap, errors } = form.formState
 
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [pendingLeave, setPendingLeave] = useState(false)
-  // Synchronous mirrors: Cmd-S can race the leave dialog's own save within one tick.
+  // Callbacks decide on refs: state renders late, and Cmd-S can race the dialog's Save.
   const busyRef = useRef(false)
   // Oldest first: a window close and a back can both be outstanding.
   const intentsRef = useRef<(() => void)[]>([])
   const appliedRef = useRef({ rowKey, values })
+  // The render snapshot trails a trigger() by a render; the subscription sees every emission.
+  const errorsRef = useRef<object>(errors)
+
+  // Passive, after react-hook-form's own mount effect: subscribing flags the form mounted.
+  useEffect(
+    () =>
+      form.subscribe({
+        formState: { errors: true },
+        callback: (state) => {
+          if (state.errors != null) errorsRef.current = state.errors
+        },
+      }),
+    [form],
+  )
 
   // Layout, not passive: the new row must never paint with the previous row's draft.
   useLayoutEffect(() => {
@@ -168,12 +196,25 @@ export function useRowSaveSession<Draft extends FieldValues>({
       return
     }
     if (sameValue(applied.values, values)) return
-    // A store patch to this row (a classifier pass, an undo) refreshes every untouched field —
-    // else a later save writes the stale value back. Errors survive, re-checked against the
-    // refreshed values, so an invalid draft never looks writable.
-    const errored = Object.keys(form.formState.errors) as Path<Draft>[]
-    form.reset(values, { keepDirtyValues: true, keepErrors: true })
-    if (errored.length > 0) void form.trigger(errored)
+    // A store patch to this row (a classifier pass, an undo) refreshes every untouched field, else
+    // a later save writes the stale value back. Per top-level field: a path-wise merge grafts a
+    // patch onto whichever array row shifted into its index.
+    const current: Record<string, unknown> = form.getValues()
+    const touched: Record<string, unknown> = form.formState.dirtyFields
+    const merged: Record<string, unknown> = { ...values }
+    for (const field of Object.keys(current)) {
+      if (hasDirty(touched[field])) merged[field] = current[field]
+    }
+    const hadIssues = Object.keys(errorsRef.current).length > 0
+    // Two resets rebase the draft on the refreshed row, so a patch matching the draft reads clean.
+    form.reset(values, { keepErrors: true })
+    form.reset(merged as Draft, { keepDefaultValues: true, keepErrors: true })
+    // Re-checked against the refreshed values, so an invalid draft never looks writable.
+    if (hadIssues) {
+      void form.trigger().catch((error: unknown) => {
+        logger.error('app.row_save_validate_failed', { error: errorMessage(error) })
+      })
+    }
   }, [rowKey, values, form])
 
   const settleIntents = useCallback(() => {
@@ -196,46 +237,73 @@ export function useRowSaveSession<Draft extends FieldValues>({
     setPendingLeave(false)
   }, [])
 
-  const attempt = useCallback(async (): Promise<Attempt> => {
-    if (!(await form.trigger())) {
-      // The render snapshot predates this trigger, so read the errors off the form itself.
-      const tree = Object.fromEntries(
-        Object.keys(form.getValues()).map((name) => [
-          name,
-          form.getFieldState(name as Path<Draft>).error,
-        ]),
-      )
-      const issue = firstIssue(tree)
-      return {
-        outcome: { status: 'invalid', reason: issue == null ? '' : issueText(issue) },
-        clean: false,
+  const reportRejection = useCallback(
+    (reason: string) => {
+      try {
+        onRejected?.(reason)
+      } catch (error) {
+        logger.error('app.row_save_rejected_handler_failed', { error: errorMessage(error) })
       }
-    }
-    setSaving(true)
-    setSaveError(null)
-    const key = appliedRef.current.rowKey
-    const draft = cloneValue(form.getValues())
-    let result: RowCommitResult
+    },
+    [onRejected],
+  )
+
+  const write = useCallback(async (): Promise<Written<Draft>> => {
     try {
-      result = await commit(draft)
+      if (!(await form.trigger())) {
+        const issue = firstIssue(errorsRef.current)
+        return { status: 'invalid', reason: issue == null ? '' : issueText(issue) }
+      }
+      setSaveError(null)
+      const draft = cloneValue(form.getValues())
+      const result = await commit(draft)
+      return result.status === 'ok' ? { status: 'ok', draft } : result
     } catch (error) {
-      const reason = errorMessage(error)
-      logger.error('app.row_save_commit_failed', { error: reason })
-      result = { status: 'rejected', reason }
+      // Raw errors (SQLITE_BUSY, a resolver bug) are for the log, not the user.
+      logger.error('app.row_save_failed', { error: errorMessage(error) })
+      return { status: 'rejected', reason: failureText() }
     }
-    if (result.status === 'rejected') {
-      setSaveError(result.reason)
-      return { outcome: result, clean: false }
+  }, [form, commit, issueText, failureText])
+
+  // Clean at the saved values unless an edit was typed while the write ran; returns whether clean.
+  const rebase = useCallback(
+    (draft: Draft, valuesAtStart: Draft): boolean => {
+      const stored = appliedRef.current.values
+      // A store row that landed mid-commit is a truer baseline than the draft that was sent.
+      const baseline = sameValue(stored, valuesAtStart) ? draft : stored
+      const current: Record<string, unknown> = form.getValues()
+      const touched: Record<string, unknown> = form.formState.dirtyFields
+      const sent: Record<string, unknown> = draft
+      // Only touched fields can hold a mid-commit edit; a refresh moves the untouched ones.
+      const typed = Object.keys(current).filter(
+        (field) => hasDirty(touched[field]) && !sameValue(current[field], sent[field]),
+      )
+      form.reset(baseline, { keepErrors: typed.length > 0 })
+      if (typed.length === 0) return true
+      const kept = Object.fromEntries(typed.map((field) => [field, current[field]]))
+      form.reset({ ...baseline, ...kept }, { keepDefaultValues: true, keepErrors: true })
+      return false
+    },
+    [form],
+  )
+
+  const attempt = useCallback(async (): Promise<Attempt> => {
+    const { rowKey: key, values: valuesAtStart } = appliedRef.current
+    const written = await write()
+    if (written.status === 'invalid') return { outcome: written, clean: false }
+    if (written.status === 'rejected') reportRejection(written.reason)
+    const outcome: RowSaveOutcome = written.status === 'ok' ? { status: 'committed' } : written
+    // The form moved to another row mid-write: nothing here is that row's to carry, and a queued
+    // leave waits only on an edit of its own (a clean session satisfies it, as a noop save does).
+    if (appliedRef.current.rowKey !== key) {
+      return { outcome, clean: !hasDirty(form.formState.dirtyFields) }
     }
-    // A row switch while the write ran already reset the form to the new row.
-    if (appliedRef.current.rowKey !== key) return { outcome: { status: 'committed' }, clean: true }
-    const current = form.getValues()
-    form.reset(draft)
-    if (sameValue(current, draft)) return { outcome: { status: 'committed' }, clean: true }
-    // Typed while the write ran: keep it, dirty against what was just saved.
-    form.reset(current, { keepDefaultValues: true, keepErrors: true })
-    return { outcome: { status: 'committed' }, clean: false }
-  }, [form, commit, issueText])
+    if (written.status === 'rejected') {
+      setSaveError(written.reason)
+      return { outcome, clean: false }
+    }
+    return { outcome, clean: rebase(written.draft, valuesAtStart) }
+  }, [form, write, rebase, reportRejection])
 
   const save = useCallback(async (): Promise<RowSaveOutcome> => {
     if (busyRef.current) return { status: 'busy' }
@@ -245,6 +313,7 @@ export function useRowSaveSession<Draft extends FieldValues>({
       return { status: 'noop' }
     }
     busyRef.current = true
+    setSaving(true)
     let result: Attempt
     try {
       result = await attempt()
@@ -258,7 +327,7 @@ export function useRowSaveSession<Draft extends FieldValues>({
   }, [form, attempt, settleIntents])
 
   const discard = useCallback(() => {
-    // A commit in flight owns the outcome; the bar's disabled buttons are presentation.
+    // A save in flight owns the outcome; the bar's disabled buttons are presentation.
     if (busyRef.current) return
     setSaveError(null)
     form.reset(values)

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { zodResolver } from '@hookform/resolvers/zod'
 import { act, cleanup, renderHook } from '@testing-library/react'
+import type { Resolver } from 'react-hook-form'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
@@ -11,6 +12,7 @@ import {
   type RowCommitResult,
   type RowSaveOutcome,
   type RowSaveSession,
+  type RowSaveSessionOptions,
 } from './use-row-save-session'
 
 const schema = z.object({ title: z.string().min(1, 'titleRequired'), note: z.string() })
@@ -23,6 +25,7 @@ const LINKED = { title: 'Heist', links: [{ role: 'bystander' }] }
 const fieldLabel = (field: string) => `label:${field}`
 const issueText = (message: string) => `text:${message}`
 const bareText = (text: string) => text
+const failureText = () => 'text:failed'
 
 type Commit = (draft: Draft) => Promise<RowCommitResult>
 type Props = { rowKey: string; values: Draft }
@@ -31,32 +34,44 @@ function okCommit() {
   return vi.fn<Commit>(async () => ({ status: 'ok' }))
 }
 
-/** A commit that stays in flight until the test settles it. */
+/** A commit that stays in flight until the test settles or fails it. */
 function heldCommit() {
   let settle: (result: RowCommitResult) => void = () => {}
+  let fail: (error: Error) => void = () => {}
   const commit = vi.fn<Commit>(
     () =>
-      new Promise<RowCommitResult>((resolve) => {
+      new Promise<RowCommitResult>((resolve, reject) => {
         settle = resolve
+        fail = reject
       }),
   )
-  return { commit, settle: (result: RowCommitResult) => settle(result) }
+  return {
+    commit,
+    settle: (result: RowCommitResult) => settle(result),
+    fail: (error: Error) => fail(error),
+  }
+}
+
+type Extras = Partial<Pick<RowSaveSessionOptions<Draft>, 'resolver' | 'onRejected'>> & {
+  onRender?: (session: RowSaveSession<Draft>) => void
 }
 
 function setup(
   commit: Commit = okCommit(),
   initial: Props = { rowKey: 'row_1', values: VALUES },
-  onRender?: (session: RowSaveSession<Draft>) => void,
+  { onRender, resolver = zodResolver(schema), onRejected }: Extras = {},
 ) {
   const hook = renderHook(
     ({ rowKey, values }: Props) => {
       const session = useRowSaveSession<Draft>({
         rowKey,
         values,
-        resolver: zodResolver(schema),
+        resolver,
         fieldLabel,
         issueText,
+        failureText,
         commit,
+        onRejected,
       })
       onRender?.(session)
       return session
@@ -220,7 +235,8 @@ describe('useRowSaveSession', () => {
       status: 'rejected',
       reason: 'generation in flight',
     }))
-    const hook = setup(commit)
+    const onRejected = vi.fn()
+    const hook = setup(commit, undefined, { onRejected })
     const proceed = vi.fn()
     act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
     act(() => hook.result.current.requestLeave(proceed))
@@ -228,6 +244,7 @@ describe('useRowSaveSession', () => {
       hook.result.current.resolveLeave('save')
     })
     await vi.waitFor(() => expect(hook.result.current.saveError).toBe('generation in flight'))
+    expect(onRejected).toHaveBeenCalledWith('generation in flight')
     expect(proceed).not.toHaveBeenCalled()
     expect(hook.result.current.pendingLeave).toBe(true)
     expect(hook.result.current.dirty).toBe(true)
@@ -239,12 +256,13 @@ describe('useRowSaveSession', () => {
     expect(hook.result.current.form.getValues()).toEqual(VALUES)
   })
 
-  it('treats a thrown commit as a rejection instead of rejecting the save', async () => {
+  it('treats a thrown commit as a translated rejection instead of rejecting the save', async () => {
     const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
     const commit = vi.fn<Commit>(async () => {
-      throw new Error('disk full')
+      throw new Error('SQLITE_BUSY: database is locked')
     })
-    const hook = setup(commit)
+    const onRejected = vi.fn()
+    const hook = setup(commit, undefined, { onRejected })
     const proceed = vi.fn()
     act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
     act(() => hook.result.current.requestLeave(proceed))
@@ -252,11 +270,13 @@ describe('useRowSaveSession', () => {
     await act(async () => {
       outcome = await hook.result.current.save()
     })
-    expect(outcome).toEqual({ status: 'rejected', reason: 'disk full' })
-    expect(hook.result.current.saveError).toBe('disk full')
+    expect(outcome).toEqual({ status: 'rejected', reason: 'text:failed' })
+    expect(hook.result.current.saveError).toBe('text:failed')
+    expect(onRejected).toHaveBeenCalledWith('text:failed')
     expect(hook.result.current.pendingLeave).toBe(true)
     expect(proceed).not.toHaveBeenCalled()
     expect(error).toHaveBeenCalledTimes(1)
+    expect(JSON.stringify(error.mock.calls[0])).toContain('SQLITE_BUSY')
   })
 
   it('ignores leave resolutions and discard while the commit is in flight', async () => {
@@ -369,7 +389,7 @@ describe('useRowSaveSession', () => {
 
   it('never reports clean mid-refresh while a draft is held', () => {
     const seen: boolean[] = []
-    const hook = setup(okCommit(), undefined, (session) => seen.push(session.dirty))
+    const hook = setup(okCommit(), undefined, { onRender: (session) => seen.push(session.dirty) })
     act(() => hook.result.current.form.setValue('note', 'draft', { shouldDirty: true }))
     seen.length = 0
     hook.rerender({ rowKey: 'row_1', values: { title: 'Amulet (patched)', note: '' } })
@@ -403,6 +423,7 @@ describe('useRowSaveSession', () => {
           resolver: zodResolver(distinct),
           fieldLabel,
           issueText,
+          failureText,
           commit: okCommit(),
         }),
       { initialProps: { values: VALUES } },
@@ -500,6 +521,7 @@ describe('useRowSaveSession', () => {
         resolver: zodResolver(linked),
         fieldLabel: bareText,
         issueText: bareText,
+        failureText,
         commit,
       }),
     )
@@ -530,6 +552,7 @@ describe('useRowSaveSession', () => {
           resolver: zodResolver(schema),
           fieldLabel: (field) => field,
           issueText: (message) => message,
+          failureText: () => 'failed',
           commit: okCommit(),
         })
       },
@@ -541,5 +564,231 @@ describe('useRowSaveSession', () => {
     expect(renders - before).toBeLessThan(4)
     expect(hook.result.current.form.getValues('note')).toBe('draft')
     expect(hook.result.current.dirty).toBe(true)
+  })
+
+  it('clears the previous rejection as soon as a retry starts writing', async () => {
+    const held = heldCommit()
+    held.commit.mockResolvedValueOnce({ status: 'rejected', reason: 'blocked' })
+    const hook = setup(held.commit)
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    await act(async () => {
+      await hook.result.current.save()
+    })
+    expect(hook.result.current.saveError).toBe('blocked')
+    let saving: Promise<RowSaveOutcome> | undefined
+    await act(async () => {
+      saving = hook.result.current.save()
+    })
+    expect(hook.result.current.saveError).toBeNull()
+    await act(async () => {
+      held.settle({ status: 'ok' })
+      await saving
+    })
+    expect(hook.result.current.saveError).toBeNull()
+  })
+
+  it('resolves a throwing resolver as a translated rejection', async () => {
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const onRejected = vi.fn()
+    const commit = okCommit()
+    const resolver: Resolver<Draft> = async () => {
+      throw new Error('refine bug')
+    }
+    const hook = setup(commit, undefined, { resolver, onRejected })
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    let outcome: RowSaveOutcome | undefined
+    await act(async () => {
+      outcome = await hook.result.current.save()
+    })
+    expect(outcome).toEqual({ status: 'rejected', reason: 'text:failed' })
+    expect(commit).not.toHaveBeenCalled()
+    expect(hook.result.current.saveError).toBe('text:failed')
+    expect(onRejected).toHaveBeenCalledWith('text:failed')
+    expect(hook.result.current.saving).toBe(false)
+    expect(error).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads as saving from the start of validation, matching the ignored discard', async () => {
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const inner = zodResolver(schema)
+    const resolver: Resolver<Draft> = async (values, context, options) => {
+      await gate
+      return inner(values, context, options)
+    }
+    const hook = setup(okCommit(), undefined, { resolver })
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    let saving: Promise<RowSaveOutcome> | undefined
+    await act(async () => {
+      saving = hook.result.current.save()
+    })
+    expect(hook.result.current.saving).toBe(true)
+    act(() => hook.result.current.discard())
+    expect(hook.result.current.form.getValues('note')).toBe('x')
+    await act(async () => {
+      release()
+      await saving
+    })
+    expect(hook.result.current.saving).toBe(false)
+  })
+
+  it('names a form-level issue the same way the bar does', async () => {
+    const formLevel = schema.refine((draft) => draft.note !== draft.title, {
+      message: 'sameAsTitle',
+    })
+    const commit = okCommit()
+    const hook = setup(commit, undefined, { resolver: zodResolver(formLevel) })
+    act(() => hook.result.current.form.setValue('note', 'Amulet', { shouldDirty: true }))
+    let outcome: RowSaveOutcome | undefined
+    await act(async () => {
+      outcome = await hook.result.current.save()
+    })
+    expect(hook.result.current.invalidReason).toBe('text:sameAsTitle')
+    expect(outcome).toEqual({ status: 'invalid', reason: 'text:sameAsTitle' })
+    expect(commit).not.toHaveBeenCalled()
+  })
+
+  it('keeps a rejection that lands after a row switch off the new row', async () => {
+    const held = heldCommit()
+    const onRejected = vi.fn()
+    const hook = setup(held.commit, undefined, { onRejected })
+    const proceed = vi.fn()
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    act(() => hook.result.current.requestLeave(proceed))
+    await act(async () => {
+      hook.result.current.resolveLeave('save')
+    })
+    hook.rerender({ rowKey: 'row_2', values: { title: 'Trust', note: '' } })
+    await act(async () => held.settle({ status: 'rejected', reason: 'blocked' }))
+    expect(hook.result.current.saveError).toBeNull()
+    expect(onRejected).toHaveBeenCalledWith('blocked')
+    expect(hook.result.current.pendingLeave).toBe(false)
+    expect(proceed).toHaveBeenCalledTimes(1)
+    expect(hook.result.current.saving).toBe(false)
+  })
+
+  it('keeps a throw that lands after a row switch off the new row', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const held = heldCommit()
+    const onRejected = vi.fn()
+    const hook = setup(held.commit, undefined, { onRejected })
+    const proceed = vi.fn()
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    act(() => hook.result.current.requestLeave(proceed))
+    await act(async () => {
+      hook.result.current.resolveLeave('save')
+    })
+    hook.rerender({ rowKey: 'row_2', values: { title: 'Trust', note: '' } })
+    await act(async () => held.fail(new Error('SQLITE_BUSY')))
+    expect(hook.result.current.saveError).toBeNull()
+    expect(onRejected).toHaveBeenCalledWith('text:failed')
+    expect(hook.result.current.pendingLeave).toBe(false)
+    expect(proceed).toHaveBeenCalledTimes(1)
+  })
+
+  it('holds the leave for an edit typed on the new row after a mid-commit switch', async () => {
+    const held = heldCommit()
+    const hook = setup(held.commit)
+    const proceed = vi.fn()
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    act(() => hook.result.current.requestLeave(proceed))
+    let saving: Promise<RowSaveOutcome> | undefined
+    await act(async () => {
+      saving = hook.result.current.save()
+    })
+    hook.rerender({ rowKey: 'row_2', values: { title: 'Trust', note: '' } })
+    act(() => hook.result.current.form.setValue('note', 'typed on row 2', { shouldDirty: true }))
+    await act(async () => {
+      held.settle({ status: 'ok' })
+      await saving
+    })
+    expect(proceed).not.toHaveBeenCalled()
+    expect(hook.result.current.pendingLeave).toBe(true)
+    expect(hook.result.current.form.getValues()).toEqual({ title: 'Trust', note: 'typed on row 2' })
+    expect(hook.result.current.dirty).toBe(true)
+  })
+
+  it('refreshes a shifted link row without grafting the patch onto its neighbour', () => {
+    const linkRows = z.object({
+      title: z.string(),
+      links: z.array(z.object({ id: z.string(), role: z.string() })),
+    })
+    type Links = z.infer<typeof linkRows>
+    const initial: Links = {
+      title: 'Heist',
+      links: [
+        { id: 'A', role: 'witness' },
+        { id: 'B', role: 'witness' },
+      ],
+    }
+    const hook = renderHook(
+      ({ values }: { values: Links }) =>
+        useRowSaveSession<Links>({
+          rowKey: 'happening_1',
+          values,
+          resolver: zodResolver(linkRows),
+          fieldLabel: bareText,
+          issueText: bareText,
+          failureText,
+          commit: async () => ({ status: 'ok' }),
+        }),
+      { initialProps: { values: initial } },
+    )
+    // What each row's role Controller registers on mount.
+    act(() => {
+      hook.result.current.form.register('links.0.role')
+      hook.result.current.form.register('links.1.role')
+    })
+    act(() =>
+      hook.result.current.form.setValue('links', [{ id: 'B', role: 'witness' }], {
+        shouldDirty: true,
+      }),
+    )
+    hook.rerender({
+      values: {
+        title: 'Heist (classified)',
+        links: [
+          { id: 'A', role: 'culprit' },
+          { id: 'B', role: 'witness' },
+        ],
+      },
+    })
+    expect(hook.result.current.form.getValues()).toEqual({
+      title: 'Heist (classified)',
+      links: [{ id: 'B', role: 'witness' }],
+    })
+  })
+
+  it('drops a field from the dirty list once a refresh matches the draft', () => {
+    const hook = setup()
+    act(() => hook.result.current.form.setValue('note', 'draft', { shouldDirty: true }))
+    act(() => hook.result.current.form.setValue('title', 'Amulet 2', { shouldDirty: true }))
+    hook.rerender({ rowKey: 'row_1', values: { title: 'Amulet', note: 'draft' } })
+    expect(hook.result.current.dirtyFields).toEqual(['label:title'])
+    expect(hook.result.current.form.getValues()).toEqual({ title: 'Amulet 2', note: 'draft' })
+  })
+
+  it('rebases on the store row when it lands mid-commit, releasing the waiting leave', async () => {
+    const held = heldCommit()
+    const hook = setup(held.commit)
+    const proceed = vi.fn()
+    act(() => hook.result.current.form.setValue('note', 'edited', { shouldDirty: true }))
+    act(() => hook.result.current.requestLeave(proceed))
+    let saving: Promise<RowSaveOutcome> | undefined
+    await act(async () => {
+      saving = hook.result.current.save()
+    })
+    const stored = { title: 'Amulet (classified)', note: 'edited, normalized' }
+    hook.rerender({ rowKey: 'row_1', values: stored })
+    await act(async () => {
+      held.settle({ status: 'ok' })
+      await saving
+    })
+    expect(hook.result.current.form.getValues()).toEqual(stored)
+    expect(hook.result.current.dirty).toBe(false)
+    expect(proceed).toHaveBeenCalledTimes(1)
+    expect(hook.result.current.pendingLeave).toBe(false)
   })
 })
