@@ -19,3 +19,11 @@ export type {
 } from './types'
 export { isPlotKind, PLOT_KINDS } from './plot'
 export type { PlotKind, PlotListSignals } from './plot'
+export {
+  groupThreadsByTier,
+  queryThreads,
+  THREAD_FILTERS,
+  THREAD_SEARCH_SCOPE,
+  THREAD_TIERS,
+} from './thread-list'
+export type { ThreadFilter, ThreadTier } from './thread-list'
