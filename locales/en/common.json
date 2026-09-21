@@ -159,6 +159,13 @@
     "draft": "Draft",
     "archived": "Archived"
   },
+  "picker": {
+    "clear": "Clear selection",
+    "entitySearch": "Search entities…",
+    "entityNoResults": "No matching entities.",
+    "entrySearch": "Search entries or #n…",
+    "entryNoResults": "No matching entries."
+  },
   "suggestionCategories": {
     "add": "+ Add category",
     "addAria": "Add category",
