@@ -1,6 +1,5 @@
 import {
   BookOpen,
-  CircleDot,
   Coins,
   Crown,
   Diamond,
@@ -17,6 +16,7 @@ import {
   Sparkles,
   Swords,
   VenetianMask,
+  Zap,
   type LucideIcon,
 } from 'lucide-react-native'
 import { View } from 'react-native'
@@ -51,8 +51,8 @@ export const PLOT_ICONS: Readonly<Record<string, LucideIcon>> = {
 
 export const PLOT_ICON_KEYS: readonly string[] = Object.keys(PLOT_ICONS)
 
-// detail-pane.tsx names ◇ for threads; ⊙-adjacent dot for happenings.
-const FALLBACK: Record<PlotKind, LucideIcon> = { thread: Diamond, happening: CircleDot }
+// detail-pane.tsx names ◇ for threads; Zap keeps happenings distinct from the CK ⊙ marker.
+const FALLBACK: Record<PlotKind, LucideIcon> = { thread: Diamond, happening: Zap }
 
 export function plotIconGlyph(kind: PlotKind, icon: string | null | undefined): LucideIcon {
   // Own keys only: a stored key such as `constructor` must fall back, not resolve to Object's.
