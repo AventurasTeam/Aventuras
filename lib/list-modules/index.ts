@@ -29,11 +29,7 @@ export {
 export type { ThreadFilter, ThreadTier } from './thread-list'
 export {
   groupHappeningsByBucket,
-  HAPPENING_BUCKETS,
-  HAPPENING_FILTERS,
-  HAPPENING_FILTERS_NO_CHAPTER,
   HAPPENING_SEARCH_SCOPE,
-  happeningBucket,
   happeningFilters,
   queryHappenings,
 } from './happening-list'

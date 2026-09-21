@@ -16,11 +16,9 @@ export const HAPPENING_FILTERS = [
 export type HappeningFilter = (typeof HAPPENING_FILTERS)[number]
 
 // Until a chapter closes, `This chapter` equals All minus Out of narrative — hidden.
-export const HAPPENING_FILTERS_NO_CHAPTER = [
-  'all',
-  'common-knowledge',
-  'out-of-narrative',
-] as const satisfies readonly HappeningFilter[]
+export const HAPPENING_FILTERS_NO_CHAPTER: readonly HappeningFilter[] = HAPPENING_FILTERS.filter(
+  (filter) => filter !== 'this-chapter',
+)
 
 export const HAPPENING_BUCKETS = ['current', 'earlier', 'out-of-narrative'] as const
 export type HappeningBucket = (typeof HAPPENING_BUCKETS)[number]
@@ -30,14 +28,16 @@ export function happeningFilters(signals: PlotListSignals): readonly HappeningFi
 }
 
 /**
- * plot.md → Happenings side. An open chapter has no row (data-model.md → Chapters), so
- * Current chapter is the open region: the anchor entry's `chapter_id` is null. A closed
- * chapter's entries are Earlier; `temporal` rows are Out of narrative. A dangling anchor
- * lands in Current — its entry was rolled away, and nothing older can claim it.
+ * plot.md → Happenings side. `temporal` set, or no narrative anchor at all
+ * (data-model.md: a null `occurred_at_entry_id` is "outside narrative"), buckets to Out of
+ * narrative. Otherwise: an open chapter has no row (data-model.md → Chapters), so Current
+ * chapter is the open region — the anchor entry's `chapter_id` is null; a closed chapter's
+ * entries are Earlier. A dangling anchor — set, but its entry no longer exists — stays in
+ * Current: nothing older can claim it.
  */
 export function happeningBucket(row: Happening, entries: EntryIndex): HappeningBucket {
-  if (row.temporal != null) return 'out-of-narrative'
-  const entry = row.occurredAtEntryId == null ? undefined : entries.get(row.occurredAtEntryId)
+  if (row.temporal != null || row.occurredAtEntryId == null) return 'out-of-narrative'
+  const entry = entries.get(row.occurredAtEntryId)
   return entry?.chapterId != null ? 'earlier' : 'current'
 }
 
@@ -74,7 +74,7 @@ function matchesHappeningFilter(
     case 'common-knowledge':
       return row.commonKnowledge === 1
     case 'out-of-narrative':
-      return row.temporal != null
+      return happeningBucket(row, entries) === 'out-of-narrative'
   }
 }
 
@@ -84,12 +84,14 @@ function anchorPosition(row: Happening, entries: EntryIndex): number {
   return entries.get(row.occurredAtEntryId)?.position ?? -1
 }
 
-// plot.md → Happenings side → Sort: entry position DESC; `temporal` rows last in their own block.
+// plot.md → Happenings side → Sort: entry position DESC; the out-of-narrative block (the
+// same rule `happeningBucket` uses) sorts last, by title — reusing the bucket rule keeps the
+// sort's trailing block and the `out-of-narrative` chip/group from drifting apart.
 export function compareHappenings(a: Happening, b: Happening, entries: EntryIndex): number {
-  const aTemporal = a.temporal != null ? 1 : 0
-  const bTemporal = b.temporal != null ? 1 : 0
-  if (aTemporal !== bTemporal) return aTemporal - bTemporal
-  if (aTemporal === 0) {
+  const aOut = happeningBucket(a, entries) === 'out-of-narrative' ? 1 : 0
+  const bOut = happeningBucket(b, entries) === 'out-of-narrative' ? 1 : 0
+  if (aOut !== bOut) return aOut - bOut
+  if (aOut === 0) {
     const positionDiff = anchorPosition(b, entries) - anchorPosition(a, entries)
     if (positionDiff !== 0) return positionDiff
     const createdDiff = b.createdAt - a.createdAt

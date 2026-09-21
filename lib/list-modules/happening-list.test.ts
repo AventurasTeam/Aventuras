@@ -42,15 +42,21 @@ function happening(id: string, title: string, extra: Partial<Happening> = {}): H
   }
 }
 
+// Both fields null: the classifier writes this when a turn handle doesn't resolve
+// (lib/classifier/plan.ts). data-model.md treats a null `occurred_at_entry_id` as
+// "outside narrative", so it belongs in the trailing block, not Current.
+const NONE_ROW = happening('h_none', 'Vanished entirely')
+
 const ROWS = [
   happening('h_e3', 'Ambush', { occurredAtEntryId: 'e3' }),
-  happening('h_e1', 'Arrival', { occurredAtEntryId: 'e1' }),
+  happening('h_e1', 'Arrival', { occurredAtEntryId: 'e1', category: 'omen' }),
   happening('h_temporal', 'Old betrayal', {
     temporal: 'years past',
     description: 'Sage sold them.',
   }),
   happening('h_e4', 'Market fire', { occurredAtEntryId: 'e4', commonKnowledge: 1 }),
   happening('h_dangling', 'Rolled away', { occurredAtEntryId: 'gone' }),
+  NONE_ROW,
 ]
 
 const WITH_CHAPTERS: PlotListSignals = { entries: ENTRIES, hasClosedChapters: true }
@@ -66,13 +72,44 @@ describe('happeningBucket', () => {
     expect(happeningBucket(ROWS[2], ENTRIES)).toBe('out-of-narrative')
     expect(happeningBucket(ROWS[4], ENTRIES)).toBe('current')
   })
+
+  it('buckets a both-null row (no anchor, no temporal) to Out of narrative', () => {
+    expect(happeningBucket(NONE_ROW, ENTRIES)).toBe('out-of-narrative')
+  })
 })
 
 describe('queryHappenings', () => {
   it('sorts by entry position DESC, dangling after anchored, temporal in a last block', () => {
     expect(
       queryHappenings(ROWS, { search: '', filter: 'all' }, WITH_CHAPTERS).map((r) => r.id),
-    ).toEqual(['h_e4', 'h_e3', 'h_e1', 'h_dangling', 'h_temporal'])
+    ).toEqual(['h_e4', 'h_e3', 'h_e1', 'h_dangling', 'h_temporal', 'h_none'])
+  })
+
+  it('breaks a shared anchor position by createdAt DESC, not title order', () => {
+    // Title order (Alpha < Zephyr) would put the older row first if the createdAt
+    // tie-break were dropped — proves the tie-break fires, not title collate.
+    const older = happening('h_e4_old', 'Alpha', { occurredAtEntryId: 'e4', createdAt: 5 })
+    const newer = happening('h_e4_new', 'Zephyr', { occurredAtEntryId: 'e4', createdAt: 9 })
+    expect(
+      queryHappenings([older, newer], { search: '', filter: 'all' }, WITH_CHAPTERS).map(
+        (r) => r.id,
+      ),
+    ).toEqual(['h_e4_new', 'h_e4_old'])
+  })
+
+  it('orders two out-of-narrative rows by title, not createdAt or insertion order', () => {
+    // Passed in reverse-title order with createdAt disagreeing with title order too, so
+    // neither insertion order nor a stray createdAt tie-break can pass this by accident.
+    const zenith = happening('h_out_z', 'Zenith fall', {
+      temporal: 'even longer ago',
+      createdAt: 20,
+    })
+    const amber = happening('h_out_a', 'Amber dusk', { temporal: 'long ago', createdAt: 1 })
+    expect(
+      queryHappenings([zenith, amber], { search: '', filter: 'all' }, WITH_CHAPTERS).map(
+        (r) => r.id,
+      ),
+    ).toEqual(['h_out_a', 'h_out_z'])
   })
 
   it('narrows per chip', () => {
@@ -80,13 +117,19 @@ describe('queryHappenings', () => {
       queryHappenings(ROWS, { search: '', filter }, WITH_CHAPTERS).map((r) => r.id)
     expect(ids('this-chapter')).toEqual(['h_e4', 'h_e3', 'h_dangling'])
     expect(ids('common-knowledge')).toEqual(['h_e4'])
-    expect(ids('out-of-narrative')).toEqual(['h_temporal'])
+    expect(ids('out-of-narrative')).toEqual(['h_temporal', 'h_none'])
   })
 
   it('searches title, description and category', () => {
     expect(
       queryHappenings(ROWS, { search: 'sold', filter: 'all' }, WITH_CHAPTERS).map((r) => r.id),
     ).toEqual(['h_temporal'])
+    expect(
+      queryHappenings(ROWS, { search: 'market', filter: 'all' }, WITH_CHAPTERS).map((r) => r.id),
+    ).toEqual(['h_e4'])
+    expect(
+      queryHappenings(ROWS, { search: 'omen', filter: 'all' }, WITH_CHAPTERS).map((r) => r.id),
+    ).toEqual(['h_e1'])
   })
 })
 
@@ -101,7 +144,7 @@ describe('groupHappeningsByBucket', () => {
     ).toEqual([
       ['current', ['h_e4', 'h_e3', 'h_dangling']],
       ['earlier', ['h_e1']],
-      ['out-of-narrative', ['h_temporal']],
+      ['out-of-narrative', ['h_temporal', 'h_none']],
     ])
   })
 
