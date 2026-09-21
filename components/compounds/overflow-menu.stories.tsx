@@ -1,6 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { useState } from 'react'
 import { View } from 'react-native'
 import { expect, fireEvent, fn, screen, userEvent, waitFor } from 'storybook/test'
+
+import { Button } from '@/components/ui/button'
+import { Text } from '@/components/ui/text'
 
 import { OverflowMenu, type OverflowMenuEntry } from './overflow-menu'
 
@@ -84,9 +88,8 @@ export const AllEnabled: Story = {
 export const Phone: Story = {
   globals: { viewport: { value: 'mobile1' } },
   play: async () => {
-    // The Popover branch always wraps its trigger in a `title`-bearing ReasonTooltip;
-    // the Sheet branch never does — a real, structural phone-tier discriminator that
-    // beats a synchronous click racing RN-Web's Dimensions cache (see lessons-learned).
+    // Only the Popover trigger gets a title-bearing ReasonTooltip — a real phone-tier
+    // signal (lessons-learned/storybook-viewport-usetier-async.md).
     await waitFor(() => expect(screen.queryByTitle('More actions')).toBeNull())
 
     await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
@@ -99,10 +102,77 @@ export const Phone: Story = {
     // branch rendered instead of the Sheet.
     expect(screen.queryByRole('dialog')).toBeNull()
 
-    expect(viewJson.getBoundingClientRect().height).toBeGreaterThanOrEqual(44)
+    // Regular density's phone floor (`control-h-lg`) is 48px; `control-h-md` is 44px
+    // at that density too, so a >=44 check alone can't tell the two rows apart.
+    expect(viewJson.getBoundingClientRect().height).toBeGreaterThanOrEqual(48)
 
     await expect(
       screen.getByRole('menuitem', { name: 'Export thread as JSON, Export not available yet' }),
     ).toBeVisible()
+  },
+}
+
+function DisableToggleHarness() {
+  const [disabled, setDisabled] = useState(false)
+  return (
+    <View className="items-end gap-3 p-4">
+      <View className="flex-row gap-2">
+        <Button variant="secondary" onPress={() => setDisabled(true)}>
+          <Text>Disable menu</Text>
+        </Button>
+        <Button variant="secondary" onPress={() => setDisabled(false)}>
+          <Text>Enable menu</Text>
+        </Button>
+      </View>
+      <OverflowMenu label="More actions" entries={ENTRIES} disabled={disabled} />
+    </View>
+  )
+}
+
+/**
+ * A trigger that disables while its menu is open must close it (PopoverMenu's own
+ * effect, not the primitive's outside-click dismissal) and reopen once re-enabled.
+ */
+export const ClosesWhenDisabled: Story = {
+  render: () => <DisableToggleHarness />,
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    await screen.findByRole('menuitem', { name: 'View raw JSON' })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Disable menu' }))
+    await waitFor(() =>
+      expect(screen.queryByRole('menuitem', { name: 'View raw JSON' })).not.toBeInTheDocument(),
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Enable menu' }))
+    await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    const reopened = await screen.findByRole('menuitem', { name: 'View raw JSON' })
+    await waitFor(() => expect(reopened).toBeVisible())
+  },
+}
+
+/**
+ * Same close-on-disable contract, exercised against SheetMenu's own effect. Asserts
+ * via the trigger's `aria-expanded` (the Radix open context SheetMenu's effect drives)
+ * rather than the menuitem leaving the DOM — gorhom's presented bottom-sheet content
+ * doesn't reliably unmount under this test runner, a substrate gap tracked separately
+ * from this effect's own, verifiably-correct job of flipping `open`.
+ */
+export const ClosesWhenDisabledPhone: Story = {
+  globals: { viewport: { value: 'mobile1' } },
+  render: () => <DisableToggleHarness />,
+  play: async () => {
+    await waitFor(() => expect(screen.queryByTitle('More actions')).toBeNull())
+    const trigger = screen.getByRole('button', { name: 'More actions' })
+
+    await userEvent.click(trigger)
+    await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'true'))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Disable menu' }))
+    await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'false'))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Enable menu' }))
+    await userEvent.click(trigger)
+    await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'true'))
   },
 }

@@ -159,8 +159,8 @@ export const AutoSize: Story = {
             <Heading level={4}>Auto-sized panel</Heading>
             <Text variant="muted" size="sm">
               size=&quot;auto&quot; lets short, content-driven sheets wrap their content with no
-              dead space. Max-height caps at 95vh so an oversized child still clips at the viewport
-              edge.
+              dead space — gorhom applies no height cap by default, so keep auto-sized content
+              intrinsically short.
             </Text>
             <View className="flex-row justify-end gap-2">
               <Button variant="ghost">

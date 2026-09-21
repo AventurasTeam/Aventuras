@@ -8,6 +8,7 @@ import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
+import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 type OverflowMenuEntry = {
@@ -126,7 +127,9 @@ function MenuItem({
   const isDisabled = entry.disabled === true
   // WCAG 2.5.3: the accessible name must still contain the visible label.
   const accessibleLabel =
-    isDisabled && entry.disabledReason ? `${entry.label}, ${entry.disabledReason}` : entry.label
+    isDisabled && entry.disabledReason
+      ? t('common:disabledWithReason', { label: entry.label, reason: entry.disabledReason })
+      : entry.label
   return (
     <ReasonTooltip reason={isDisabled ? entry.disabledReason : undefined}>
       <Pressable

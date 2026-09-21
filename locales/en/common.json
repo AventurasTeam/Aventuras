@@ -1,6 +1,7 @@
 {
   "cancel": "Cancel",
   "save": "Save",
+  "disabledWithReason": "{{label}}, {{reason}}",
   "entryRef": "entry #{{n}}",
   "entryRefDangling": "Entry no longer exists",
   "entryKind": {
