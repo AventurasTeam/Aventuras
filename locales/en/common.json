@@ -1,6 +1,8 @@
 {
   "cancel": "Cancel",
   "save": "Save",
+  "entryRef": "entry #{{n}}",
+  "entryRefDangling": "Entry no longer exists",
   "calendarPicker": {
     "ariaLabel": "Calendars",
     "searchPlaceholder": "Search calendars",
