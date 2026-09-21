@@ -9,7 +9,7 @@ import { Text } from '@/components/ui/text'
 import type { RowSignalsSnapshot } from '@/hooks/use-row-signals'
 import { emptyEntityState, type Entity, type Lore } from '@/lib/db'
 import type { EntityFilter, WorldCategory } from '@/lib/list-modules'
-import { worldListStore } from '@/lib/stores'
+import { listCollapseStore } from '@/lib/stores'
 
 import { deriveCollisions } from './collisions'
 import { worldAddOptions } from './world-add-options'
@@ -269,7 +269,7 @@ const meta: Meta<typeof Harness> = {
   parameters: { layout: 'padded' },
   // Session-scoped module state: reset before render so no story inherits the last one's tiers.
   beforeEach: () => {
-    worldListStore.__reset()
+    listCollapseStore.__reset()
   },
 }
 
@@ -328,12 +328,16 @@ export const ToggleTiers: Story = {
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: /^Staged\s*\d+$/ }))
     expect(await screen.findByRole('button', { name: 'The Ashen Sage' })).toBeInTheDocument()
-    expect(worldListStore.getCollapsedTiers().has('staged')).toBe(false)
+    expect(
+      listCollapseStore.getCollapsed('character', new Set(['staged', 'retired'])).has('staged'),
+    ).toBe(false)
     await userEvent.click(screen.getByRole('button', { name: /^Active\s*\d+$/ }))
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Mira' })).toBeNull())
     // The pinned lead sits outside every tier, so collapsing Active leaves it listed.
     expect(screen.getByRole('button', { name: 'Kael' })).toBeInTheDocument()
-    expect(worldListStore.getCollapsedTiers().has('active')).toBe(true)
+    expect(
+      listCollapseStore.getCollapsed('character', new Set(['staged', 'retired'])).has('active'),
+    ).toBe(true)
   },
 }
 
@@ -381,7 +385,7 @@ export const FlaggedRow: Story = {
 export const CollapsedWithBadge: Story = {
   args: { fillers: 'active' },
   beforeEach: () => {
-    worldListStore.setCollapsed('active', true)
+    listCollapseStore.setCollapsed('character', 'active', true, new Set(['staged', 'retired']))
   },
   play: async () => {
     const badge = await screen.findByRole('button', { name: '1 in Active needs review' })
@@ -405,7 +409,7 @@ export const CollapsedWithBadge: Story = {
 export const RevealFromOutside: Story = {
   args: { fillers: 'active', showRevealButton: true },
   beforeEach: () => {
-    worldListStore.setCollapsed('active', true)
+    listCollapseStore.setCollapsed('character', 'active', true, new Set(['staged', 'retired']))
   },
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Reveal row' }))
@@ -441,7 +445,9 @@ export const RevealPinnedLeadKeepsTier: Story = {
       'aria-expanded',
       'false',
     )
-    expect(worldListStore.getCollapsedTiers().has('staged')).toBe(true)
+    expect(
+      listCollapseStore.getCollapsed('character', new Set(['staged', 'retired'])).has('staged'),
+    ).toBe(true)
   },
 }
 
@@ -513,7 +519,7 @@ export const Phone: Story = {
 export const RevealKeepsSearchThatShowsRow: Story = {
   args: { search: 'Brannoc', fillers: 'active' },
   beforeEach: () => {
-    worldListStore.setCollapsed('active', true)
+    listCollapseStore.setCollapsed('character', 'active', true, new Set(['staged', 'retired']))
   },
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: '1 in Active needs review' }))
@@ -566,7 +572,7 @@ export const PillSwitchesCategoryAndReveals: Story = {
 export const PillFromNarrowChipOpensCollapsedTier: Story = {
   args: { category: 'location', filter: 'active', fillers: 'active', showPillButton: true },
   beforeEach: () => {
-    worldListStore.setCollapsed('active', true)
+    listCollapseStore.setCollapsed('character', 'active', true, new Set(['staged', 'retired']))
   },
   play: async () => {
     expect(await screen.findByRole('button', { name: "Veil's Hollow" })).toBeInTheDocument()
@@ -574,7 +580,9 @@ export const PillFromNarrowChipOpensCollapsedTier: Story = {
     expect(await screen.findByRole('link', { name: '⚠ Collides with Brannoc' })).toBeInTheDocument()
     await expectScrolledIntoView(screen.getByRole('button', { name: 'Brannoc' }))
     expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true')
-    expect(worldListStore.getCollapsedTiers().has('active')).toBe(false)
+    expect(
+      listCollapseStore.getCollapsed('character', new Set(['staged', 'retired'])).has('active'),
+    ).toBe(false)
   },
 }
 
@@ -614,13 +622,15 @@ export const UnrelatedRowAnimationDoesNotDelayReveal: Story = {
 export const RevealInFlatViewKeepsCollapse: Story = {
   args: { filter: 'active', fillers: 'active', showRevealButton: true },
   beforeEach: () => {
-    worldListStore.setCollapsed('active', true)
+    listCollapseStore.setCollapsed('character', 'active', true, new Set(['staged', 'retired']))
   },
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Reveal row' }))
     await expectScrolledIntoView(screen.getByRole('button', { name: 'Brannoc' }))
     expect(screen.getByRole('button', { name: 'Active' })).toHaveAttribute('aria-pressed', 'true')
-    expect(worldListStore.getCollapsedTiers().has('active')).toBe(true)
+    expect(
+      listCollapseStore.getCollapsed('character', new Set(['staged', 'retired'])).has('active'),
+    ).toBe(true)
   },
 }
 

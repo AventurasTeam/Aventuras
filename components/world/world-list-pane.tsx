@@ -15,7 +15,6 @@ import type { RowSignalsSnapshot } from '@/hooks/use-row-signals'
 import type { Entity, Lore } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import {
-  ENTITY_TIERS,
   isEntityCategory,
   isWorldCategory,
   WORLD_CATEGORIES,
@@ -24,7 +23,7 @@ import {
   type EntityTier,
   type WorldCategory,
 } from '@/lib/list-modules'
-import { worldListStore } from '@/lib/stores'
+import { listCollapseStore } from '@/lib/stores'
 
 import type { CollisionTarget } from './collisions'
 import { ModuleList } from './module-list'
@@ -62,14 +61,8 @@ export type WorldListPaneProps = {
   ref?: Ref<WorldListPaneHandle>
 }
 
-function isEntityTier(key: string): key is EntityTier {
-  return (ENTITY_TIERS as readonly string[]).includes(key)
-}
-
-// The collapse store holds entity tiers only; other group keys have nowhere to persist.
-function setGroupCollapsed(key: string, collapsed: boolean) {
-  if (isEntityTier(key)) worldListStore.setCollapsed(key, collapsed)
-}
+// patterns/entity.md → Accordion grouping: the working tier starts open, the rest closed.
+const WORLD_COLLAPSED_DEFAULTS: ReadonlySet<string> = new Set<EntityTier>(['staged', 'retired'])
 
 // Where the row lands on the All view: the pinned slot sits outside every tier.
 function tierToExpand(entity: Entity, signals: EntityListSignals): EntityTier | null {
@@ -99,7 +92,12 @@ export function WorldListPane({
   addSlot,
   ref,
 }: WorldListPaneProps) {
-  const collapsed = worldListStore.useCollapsedTiers()
+  const collapsed = listCollapseStore.useCollapsed(category, WORLD_COLLAPSED_DEFAULTS)
+  const setGroupCollapsed = useCallback(
+    (key: string, value: boolean) =>
+      listCollapseStore.setCollapsed(category, key, value, WORLD_COLLAPSED_DEFAULTS),
+    [category],
+  )
   const [reveal, setReveal] = useState<RevealRequest | null>(null)
   const listSignals = useMemo<EntityListSignals>(
     () => ({ leadId, inScene: signals.inScene }),
@@ -135,7 +133,10 @@ export function WorldListPane({
       // Under a narrowing chip the list is flat; only the All view's tiers can hide a listed row.
       const tier =
         entity != null && (!listed || filter === 'all') ? tierToExpand(entity, listSignals) : null
-      if (tier != null) worldListStore.setCollapsed(tier, false)
+      // Key by the entity's own kind, not the (possibly stale, pre-switch) `category` closure:
+      // tierToExpand already groups by entity.kind, and a pill jump reveals before re-render.
+      if (tier != null && entity != null)
+        listCollapseStore.setCollapsed(entity.kind, tier, false, WORLD_COLLAPSED_DEFAULTS)
       setReveal({ id })
     },
     [entities, lore, category, search, filter, listSignals, onFilterChange, onSearchChange],
