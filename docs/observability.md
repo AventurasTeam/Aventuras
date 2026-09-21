@@ -196,8 +196,9 @@ convention, and the expectation that subsystems route through
   recorded regardless of the master gate — see Console mirroring,
   below: `unhandled_rejection`, `rejection_handled_late`,
   `rejection_tracker_unavailable`. `row_signals_read_failed`
-  (`hooks/use-row-signals.ts`, a bounded-read failure) and
-  `world_story_load_failed` (the World route's cold-mount
+  (`hooks/use-row-signals.ts`, a bounded-read failure),
+  `entry_index_read_failed` (`hooks/use-entry-index.ts`, same shape)
+  and `world_story_load_failed` (the World route's cold-mount
   `loadOpenStory` rejection) are gated by the master gate like any
   other kind
 - `reader.*` — reader-composer dispatches routed through `runAction`

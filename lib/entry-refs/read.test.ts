@@ -33,6 +33,15 @@ async function setup() {
       createdAt: 2,
     },
     {
+      id: 'e_sys',
+      branchId: 'br_1',
+      position: 3,
+      kind: 'system',
+      content: 'Diagnostic note.',
+      chapterId: null,
+      createdAt: 3,
+    },
+    {
       id: 'e_x',
       branchId: 'br_2',
       position: 1,
@@ -60,5 +69,76 @@ describe('readEntryIndex', () => {
     const index = indexEntryRefs(await readEntryIndex('br_1', db))
     expect(index.get('e_1')?.position).toBe(1)
     expect(index.has('e_x')).toBe(false)
+  })
+
+  it('excludes system entries — nothing may anchor to a diagnostic row', async () => {
+    const db = await setup()
+    const rows = await readEntryIndex('br_1', db)
+    expect(rows.some((r) => r.id === 'e_sys')).toBe(false)
+    expect(rows.some((r) => r.kind === 'system')).toBe(false)
+  })
+
+  it('truncates long content at the excerpt cap with a trailing ellipsis', async () => {
+    const { db } = await createTestDb()
+    await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values({ id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 })
+    const words = Array.from({ length: 40 }, (_, i) => `word${i}`).join(' ')
+    await db.insert(storyEntries).values({
+      id: 'e_long',
+      branchId: 'br_1',
+      position: 1,
+      kind: 'opening',
+      content: words,
+      chapterId: null,
+      createdAt: 1,
+    })
+
+    const [row] = await readEntryIndex('br_1', db)
+    expect(row?.excerpt.endsWith('…')).toBe(true)
+    expect(Array.from(row?.excerpt ?? '').length).toBeLessThanOrEqual(121)
+  })
+
+  it('returns an empty excerpt for whitespace-only content', async () => {
+    const { db } = await createTestDb()
+    await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values({ id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 })
+    await db.insert(storyEntries).values({
+      id: 'e_blank',
+      branchId: 'br_1',
+      position: 1,
+      kind: 'opening',
+      content: '   \n\t  \n  ',
+      chapterId: null,
+      createdAt: 1,
+    })
+
+    const [row] = await readEntryIndex('br_1', db)
+    expect(row?.excerpt).toBe('')
+  })
+
+  it('adds an ellipsis for a truncated entry whose 200-char head collapses under the excerpt cap', async () => {
+    const { db } = await createTestDb()
+    await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values({ id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 })
+    // First 200 chars: 150 spaces + 26 letters + 10 spaces + 14 chars of the tail below —
+    // collapses to well under the 120-char excerpt cap, so excerpt() alone would see no
+    // reason to add an ellipsis, even though real content continues past char 200.
+    const content =
+      ' '.repeat(150) +
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZ' +
+      ' '.repeat(10) +
+      'MORE TEXT THAT WILL BE CUT OFF COMPLETELY BEYOND CHAR 200 BOUNDARY AND NEVER APPEARS'
+    await db.insert(storyEntries).values({
+      id: 'e_edge',
+      branchId: 'br_1',
+      position: 1,
+      kind: 'opening',
+      content,
+      chapterId: null,
+      createdAt: 1,
+    })
+
+    const [row] = await readEntryIndex('br_1', db)
+    expect(row?.excerpt).toBe('ABCDEFGHIJKLMNOPQRSTUVWXYZ MORE TEXT THAT…')
   })
 })
