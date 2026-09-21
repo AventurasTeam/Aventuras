@@ -167,7 +167,8 @@
     "entityNone": "No entities to pick.",
     "entityMissing": "Missing entity",
     "entrySearch": "Search entries or #n…",
-    "entryNoResults": "No matching entries."
+    "entryNoResults": "No matching entries.",
+    "entryNone": "No entries yet."
   },
   "suggestionCategories": {
     "add": "+ Add category",
