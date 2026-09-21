@@ -11,7 +11,7 @@ import { entityListModule } from '@/components/entity/entity-list-module'
 import { LORE_FILTER, loreListModule } from '@/components/entity/lore-list-module'
 import type { LeadLabel, RowSignals } from '@/components/list/list-module'
 import { ModuleList } from '@/components/list/module-list'
-import { planReveal } from '@/components/list/reveal-plan'
+import { planReveal, type RevealPlan } from '@/components/list/reveal-plan'
 import type { RevealRequest } from '@/components/list/use-reveal-scroll'
 import { Select } from '@/components/ui/select'
 import type { RowSignalsSnapshot } from '@/hooks/use-row-signals'
@@ -106,36 +106,34 @@ export function WorldListPane({
   const revealRow = useCallback(
     (id: string) => {
       const entity = entities.find((e) => e.id === id)
-      const loreRow = entity == null ? lore.find((l) => l.id === id) : undefined
-      if (entity == null && loreRow == null) return
-      // Another category's row is planned against the view its switch lands on —
-      // the caller resets chip and search in the same update.
+      // A pill jump switches category in the same update as calling this, so `category` here is
+      // the pre-switch closure: the view below is planned against where the switch lands, and
+      // the collapse write further down keys by the row's own kind rather than this closure.
       const inCategory = entity != null ? entity.kind === category : category === 'lore'
-      const plan =
-        entity != null
-          ? planReveal({
-              listModule: entityListModule(entity.kind),
-              row: entity,
-              view: inCategory ? { search, filter } : { search: '', filter: 'all' },
-              allFilter: 'all',
-              signals: listSignals,
-            })
-          : loreRow != null
-            ? planReveal({
-                listModule: loreListModule,
-                row: loreRow,
-                view: { search: inCategory ? search : '', filter: LORE_FILTER },
-                allFilter: LORE_FILTER,
-                signals: listSignals,
-              })
-            : null
-      if (plan == null) return
+      let plan: RevealPlan<string>
+      if (entity != null) {
+        plan = planReveal({
+          listModule: entityListModule(entity.kind),
+          row: entity,
+          view: inCategory ? { search, filter } : { search: '', filter: 'all' },
+          allFilter: 'all',
+          signals: listSignals,
+        })
+      } else {
+        const loreRow = lore.find((l) => l.id === id)
+        if (loreRow == null) return
+        plan = planReveal({
+          listModule: loreListModule,
+          row: loreRow,
+          view: { search: inCategory ? search : '', filter: LORE_FILTER },
+          allFilter: LORE_FILTER,
+          signals: listSignals,
+        })
+      }
       if (!inCategory || plan.widen) {
         onFilterChange('all')
         onSearchChange('')
       }
-      // Key by the row's own kind: a pill jump calls this against the pre-switch `category`
-      // closure (the caller switches category in the same update).
       const targetKind = entity != null ? entity.kind : 'lore'
       if (plan.expandGroup != null)
         listCollapseStore.setCollapsed(

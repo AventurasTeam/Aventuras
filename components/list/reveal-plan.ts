@@ -9,7 +9,7 @@ export type RevealPlan<Key extends string> = {
   expandGroup: Key | null
 }
 
-/** What the owner changes before it scrolls to `row` (world.md → Surfacing; Plot deep links). */
+/** What the owner changes before it scrolls to `row` (world.md → Surfacing). */
 export function planReveal<
   Row extends { id: string },
   Filter extends string,
@@ -19,7 +19,8 @@ export function planReveal<
   listModule: ListModule<Row, Filter, Signals, Key>
   row: Row
   view: ListQuery<Filter>
-  allFilter: Filter
+  /** Must be the value `arrangeRows` treats as the All view — its check is hardcoded to `'all'`. */
+  allFilter: Extract<Filter, 'all'>
   signals: Signals
 }): RevealPlan<Key> {
   const { listModule, row, view, allFilter, signals } = args

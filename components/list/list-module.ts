@@ -24,7 +24,7 @@ export type RowRendererProps<Row, Signals = unknown> = {
   selected: boolean
   onPress: () => void
   signals: RowSignals
-  /** The module's list-level signals — a happening row derives its when-marker from the entry index. */
+  /** The module's list-level signals, for a row whose rendering depends on list-wide state. */
   listSignals: Signals
   /** `compact` drops the description line for the rail's narrower column. */
   density?: RowDensity
@@ -57,6 +57,10 @@ export type ListModule<
    * consumers may key effects on it. Empty hides the chip row.
    */
   filters: (signals: Signals) => readonly Filter[]
+  /**
+   * A row's inclusion, group key and pin status depend only on that row — `planReveal` plans
+   * against a single row.
+   */
   query: (rows: readonly Row[], input: ListQuery<Filter>, signals: Signals) => Row[]
   /**
    * Groups `query`'s result into the All view's ordered, non-empty groups, plus an optional row
