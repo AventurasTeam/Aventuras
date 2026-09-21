@@ -119,6 +119,10 @@
     "searchScope": "Search scope",
     "searchScopeFields": "Searches: {{fields}}"
   },
+  "list": {
+    "groupNeedReview_one": "{{count}} in {{group}} needs review",
+    "groupNeedReview_other": "{{count}} in {{group}} need review"
+  },
   "saveBar": {
     "unsavedChanges_one": "{{count}} unsaved change",
     "unsavedChanges_other": "{{count}} unsaved changes",

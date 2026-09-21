@@ -2,7 +2,7 @@ import type { ComponentType, Ref } from 'react'
 import type { View } from 'react-native'
 
 import type { CollisionListRowProps } from '@/components/compounds/collision-list-row'
-import type { EntityListSignals, ListGrouping, ListQuery } from '@/lib/list-modules'
+import type { ListGrouping, ListQuery } from '@/lib/list-modules'
 import type { RecentlyClassified } from '@/lib/row-signals'
 
 export type LeadLabel = 'you' | 'protagonist'
@@ -19,11 +19,13 @@ export type RowSignals = {
 
 export type RowDensity = 'default' | 'compact'
 
-export type RowRendererProps<Row> = {
+export type RowRendererProps<Row, Signals = unknown> = {
   row: Row
   selected: boolean
   onPress: () => void
   signals: RowSignals
+  /** The module's list-level signals — a happening row derives its when-marker from the entry index. */
+  listSignals: Signals
   /** `compact` drops the description line for the rail's narrower column. */
   density?: RowDensity
   /** Goes on the row's pressable, so a reveal can move focus to it. */
@@ -47,7 +49,7 @@ export type ListCopy<Filter extends string = string> = {
 export type ListModule<
   Row extends { id: string },
   Filter extends string,
-  Signals = EntityListSignals,
+  Signals,
   GroupKey extends string = string,
 > = {
   /**
@@ -65,7 +67,7 @@ export type ListModule<
     label: (key: GroupKey) => string
   } | null
   copy: (categoryLabel: string) => ListCopy<Filter>
-  Row: ComponentType<RowRendererProps<Row>>
+  Row: ComponentType<RowRendererProps<Row, Signals>>
 }
 
 export type ArrangedRows<Row, GroupKey extends string> = {

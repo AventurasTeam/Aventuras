@@ -1,3 +1,4 @@
+import type { ListModule } from '@/components/list/list-module'
 import type { Entity, EntityKind } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import {
@@ -11,7 +12,6 @@ import {
 } from '@/lib/list-modules'
 
 import { EntityRow } from './entity-row'
-import type { ListModule } from './list-module'
 import { worldListCopy } from './world-list-copy'
 
 export type EntityListModule = ListModule<Entity, EntityFilter, EntityListSignals, EntityTier>

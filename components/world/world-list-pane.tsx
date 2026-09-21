@@ -8,8 +8,11 @@ import {
 } from 'react'
 
 import { entityListModule } from '@/components/entity/entity-list-module'
-import type { LeadLabel, RowSignals } from '@/components/entity/list-module'
 import { LORE_FILTER, loreListModule } from '@/components/entity/lore-list-module'
+import type { LeadLabel, RowSignals } from '@/components/list/list-module'
+import { ModuleList } from '@/components/list/module-list'
+import { planReveal } from '@/components/list/reveal-plan'
+import type { RevealRequest } from '@/components/list/use-reveal-scroll'
 import { Select } from '@/components/ui/select'
 import type { RowSignalsSnapshot } from '@/hooks/use-row-signals'
 import type { Entity, Lore } from '@/lib/db'
@@ -26,8 +29,6 @@ import {
 import { listCollapseStore } from '@/lib/stores'
 
 import type { CollisionTarget } from './collisions'
-import { ModuleList } from './module-list'
-import type { RevealRequest } from './use-reveal-scroll'
 import { worldCategoryLabel } from './world-selection'
 
 export type WorldListPaneHandle = {
@@ -63,14 +64,6 @@ export type WorldListPaneProps = {
 
 // patterns/entity.md → Accordion grouping: the working tier starts open, the rest closed.
 const WORLD_COLLAPSED_DEFAULTS: ReadonlySet<string> = new Set<EntityTier>(['staged', 'retired'])
-
-// Where the row lands on the All view: the pinned slot sits outside every tier.
-function tierToExpand(entity: Entity, signals: EntityListSignals): EntityTier | null {
-  const grouping = entityListModule(entity.kind).grouping
-  if (grouping == null) return null
-  const { pinned, groups } = grouping.group([entity], signals)
-  return pinned == null ? (groups[0]?.key ?? null) : null
-}
 
 export function WorldListPane({
   category,
@@ -115,28 +108,42 @@ export function WorldListPane({
       const entity = entities.find((e) => e.id === id)
       const loreRow = entity == null ? lore.find((l) => l.id === id) : undefined
       if (entity == null && loreRow == null) return
-      // Another category's row is never listed: this closure still holds the old
-      // category's chip and search, which the caller's switch discards in the same update.
+      // Another category's row is planned against the view its switch lands on —
+      // the caller resets chip and search in the same update.
       const inCategory = entity != null ? entity.kind === category : category === 'lore'
-      const input = { search, filter }
-      const listed =
-        inCategory &&
-        (entity != null
-          ? entityListModule(entity.kind).query([entity], input, listSignals).length > 0
-          : loreRow != null &&
-            loreListModule.query([loreRow], { search, filter: LORE_FILTER }, listSignals).length >
-              0)
-      if (!listed) {
+      const plan =
+        entity != null
+          ? planReveal({
+              listModule: entityListModule(entity.kind),
+              row: entity,
+              view: inCategory ? { search, filter } : { search: '', filter: 'all' },
+              allFilter: 'all',
+              signals: listSignals,
+            })
+          : loreRow != null
+            ? planReveal({
+                listModule: loreListModule,
+                row: loreRow,
+                view: { search: inCategory ? search : '', filter: LORE_FILTER },
+                allFilter: LORE_FILTER,
+                signals: listSignals,
+              })
+            : null
+      if (plan == null) return
+      if (!inCategory || plan.widen) {
         onFilterChange('all')
         onSearchChange('')
       }
-      // Under a narrowing chip the list is flat; only the All view's tiers can hide a listed row.
-      const tier =
-        entity != null && (!listed || filter === 'all') ? tierToExpand(entity, listSignals) : null
-      // Key by the entity's own kind, not the (possibly stale, pre-switch) `category` closure:
-      // tierToExpand already groups by entity.kind, and a pill jump reveals before re-render.
-      if (tier != null && entity != null)
-        listCollapseStore.setCollapsed(entity.kind, tier, false, WORLD_COLLAPSED_DEFAULTS)
+      // Key by the row's own kind: a pill jump calls this against the pre-switch `category`
+      // closure (the caller switches category in the same update).
+      const targetKind = entity != null ? entity.kind : 'lore'
+      if (plan.expandGroup != null)
+        listCollapseStore.setCollapsed(
+          targetKind,
+          plan.expandGroup,
+          false,
+          WORLD_COLLAPSED_DEFAULTS,
+        )
       setReveal({ id })
     },
     [entities, lore, category, search, filter, listSignals, onFilterChange, onSearchChange],

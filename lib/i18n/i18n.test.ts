@@ -34,18 +34,19 @@ describe('lib/i18n', () => {
     expect(t('chrome.back')).toBe('Back')
   })
 
+  it('resolves the shared list-module keys from the common namespace', () => {
+    expect(t('list.groupNeedReview', { count: 1, group: 'Active' })).toBe(
+      '1 in Active needs review',
+    )
+    expect(t('list.groupNeedReview', { count: 2, group: 'Active' })).toBe('2 in Active need review')
+  })
+
   it('resolves the world namespace and the shared GO TO / collision-row keys', () => {
     expect(t('world:title')).toBe('World')
     expect(t('world:categories.location')).toBe('Locations')
     expect(t('world:search.placeholder', { category: 'characters' })).toBe('Search characters…')
     expect(t('world:collision.needReview', { count: 1 })).toBe('1 needs review')
     expect(t('world:collision.needReview', { count: 3 })).toBe('3 need review')
-    expect(t('world:collision.groupNeedReview', { count: 1, group: 'Active' })).toBe(
-      '1 in Active needs review',
-    )
-    expect(t('world:collision.groupNeedReview', { count: 2, group: 'Active' })).toBe(
-      '2 in Active need review',
-    )
     expect(t('world:addMenu.blankEntityReason')).toBe('Lands in Slice 4.2a')
     expect(t('chrome.goTo.header')).toBe('Go to')
     expect(t('chrome.goTo.openWorld')).toBe('Open World')

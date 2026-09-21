@@ -1,9 +1,9 @@
 import { ListRow } from '@/components/compounds/list-row'
+import type { RowRendererProps } from '@/components/list/list-module'
 import { Tag } from '@/components/ui/tag'
 import type { Lore } from '@/lib/db'
 
 import { EntityKindIcon } from './entity-kind-icon'
-import type { RowRendererProps } from './list-module'
 
 const EXCERPT_CHARS = 120
 
