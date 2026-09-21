@@ -236,6 +236,21 @@ async function expectRowCentered(name: string) {
   )
 }
 
+// The phone Sheet's padding settles over several frames after the row centers; a
+// manual scroll before then races the virtualizer's own re-targeting.
+async function waitForStableHeight(el: HTMLElement) {
+  const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve))
+  await waitFor(
+    async () => {
+      const before = el.clientHeight
+      await nextFrame()
+      await nextFrame()
+      await expect(el.clientHeight).toBe(before)
+    },
+    { timeout: 5000 },
+  )
+}
+
 async function playInitialScroll({ phone }: { phone: boolean }) {
   // A tier-specific render has to land before the trigger is pressed
   // (lessons-learned/storybook-viewport-usetier-async.md).
@@ -257,6 +272,7 @@ async function playInitialScroll({ phone }: { phone: boolean }) {
   // The user scrolls away, then `sections` change: a re-fired initial scroll would drag
   // the list back. A negative check needs a settle window.
   const listbox = screen.getByRole('listbox')
+  await waitForStableHeight(listbox)
   listbox.scrollTop = 0
   await waitFor(() => expect(screen.getByRole('option', { name: 'Item 0' })).toBeVisible())
   await userEvent.keyboard('{F2}')
@@ -330,6 +346,7 @@ function AsTriggerInitialScrollDemo() {
 // The combobox opens on typing, so a keystroke that opens it must not arm the
 // initial scroll: deleting the query reopens on the full list at the top. "x"
 // matches nothing, leaving no highlight whose scroll would mask a re-armed one.
+// The veto covers that one open only — a later focus-open centers again.
 export const InitialScrollRowAsTriggerTypingDrops: Story = {
   render: () => <AsTriggerInitialScrollDemo />,
   play: async () => {
@@ -348,6 +365,15 @@ export const InitialScrollRowAsTriggerTypingDrops: Story = {
     await new Promise((resolve) => setTimeout(resolve, 300))
     await expect(screen.getByRole('listbox').scrollTop).toBe(0)
     await expect(screen.queryByRole('option', { name: SCROLL_TARGET_NAME })).toBeNull()
+
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(input).toHaveAttribute('aria-expanded', 'false'))
+    await expect(input).toHaveValue('')
+    await userEvent.tab()
+    await waitFor(() => expect(input).not.toHaveFocus())
+    await userEvent.click(input)
+    await waitFor(() => expect(input).toHaveAttribute('aria-expanded', 'true'))
+    await expectRowCentered(SCROLL_TARGET_NAME)
   },
 }
 
