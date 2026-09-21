@@ -1,6 +1,6 @@
 import type { ListCopy } from '@/components/list/list-module'
 import { i18n, t } from '@/lib/i18n'
-import type { PlotKind, ThreadFilter } from '@/lib/list-modules'
+import type { HappeningFilter, PlotKind, ThreadFilter } from '@/lib/list-modules'
 
 type PlotScopeKey = 'title' | 'description' | 'category'
 
@@ -8,7 +8,7 @@ type PlotScopeKey = 'title' | 'description' | 'category'
  * Plot's list copy for a kind. Scope keys translate inside the callback, not at module load,
  * so the strings follow the current language (the lore module's pattern).
  */
-export function plotListCopy<Filter extends ThreadFilter>(
+export function plotListCopy<Filter extends ThreadFilter | HappeningFilter>(
   kind: PlotKind,
   scopeKeys: readonly PlotScopeKey[],
 ): (categoryLabel: string) => ListCopy<Filter> {

@@ -3,6 +3,12 @@
   "save": "Save",
   "entryRef": "entry #{{n}}",
   "entryRefDangling": "Entry no longer exists",
+  "entryKind": {
+    "opening": "opening",
+    "user_action": "action",
+    "ai_reply": "reply",
+    "system": "system"
+  },
   "calendarPicker": {
     "ariaLabel": "Calendars",
     "searchPlaceholder": "Search calendars",
