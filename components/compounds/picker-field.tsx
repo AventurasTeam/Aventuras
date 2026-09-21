@@ -1,5 +1,5 @@
 import { X } from 'lucide-react-native'
-import { useCallback, useMemo, useRef, type ReactElement, type Ref, type RefCallback } from 'react'
+import { useCallback, useRef, type ReactElement, type Ref, type RefCallback } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
 import { IconAction } from '@/components/ui/icon-action'
@@ -62,7 +62,7 @@ export function PickerField({
   ...rest
 }: PickerFieldProps) {
   const innerRef = useRef<View>(null)
-  const setRef = useMemo(() => mergeRefs<View>(innerRef, ref as Ref<View>), [ref])
+  const setRef = mergeRefs<View>(innerRef, ref as Ref<View>)
   const invalid = ariaInvalid === true || ariaInvalid === 'true'
   const accessibleLabel =
     hasValue && valueText ? t('picker.fieldLabel', { label, value: valueText }) : label
@@ -111,8 +111,7 @@ export function PickerField({
           label={t('picker.clear')}
           size="sm"
           disabled={disabled || !hasValue}
-          accessibilityElementsHidden={!hasValue}
-          importantForAccessibility={hasValue ? 'auto' : 'no-hide-descendants'}
+          aria-hidden={!hasValue}
           onPress={handleClear}
           className={cn('ml-1', !hasValue && 'opacity-0')}
         />

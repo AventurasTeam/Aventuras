@@ -1,10 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { View } from 'react-native'
 import { expect, fireEvent, fn, screen, userEvent, waitFor } from 'storybook/test'
-
-import { Button } from '@/components/ui/button'
-import { Text } from '@/components/ui/text'
 
 import { OverflowMenu, type OverflowMenuEntry } from './overflow-menu'
 
@@ -112,18 +109,21 @@ export const Phone: Story = {
   },
 }
 
+// F2 flips `disabled` from a capture-phase document listener — not a button click,
+// which sits outside the popover/sheet and would dismiss it on its own (Radix's
+// outside-click / gorhom's backdrop press), passing the assertion regardless of
+// whether PopoverMenu's or SheetMenu's own disabled-while-open effect runs at all.
 function DisableToggleHarness() {
   const [disabled, setDisabled] = useState(false)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F2') setDisabled((prev) => !prev)
+    }
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => document.removeEventListener('keydown', onKeyDown, true)
+  }, [])
   return (
-    <View className="items-end gap-3 p-4">
-      <View className="flex-row gap-2">
-        <Button variant="secondary" onPress={() => setDisabled(true)}>
-          <Text>Disable menu</Text>
-        </Button>
-        <Button variant="secondary" onPress={() => setDisabled(false)}>
-          <Text>Enable menu</Text>
-        </Button>
-      </View>
+    <View className="items-end p-4">
       <OverflowMenu label="More actions" entries={ENTRIES} disabled={disabled} />
     </View>
   )
@@ -139,12 +139,12 @@ export const ClosesWhenDisabled: Story = {
     await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
     await screen.findByRole('menuitem', { name: 'View raw JSON' })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Disable menu' }))
+    await userEvent.keyboard('{F2}')
     await waitFor(() =>
       expect(screen.queryByRole('menuitem', { name: 'View raw JSON' })).not.toBeInTheDocument(),
     )
 
-    await userEvent.click(screen.getByRole('button', { name: 'Enable menu' }))
+    await userEvent.keyboard('{F2}')
     await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
     const reopened = await screen.findByRole('menuitem', { name: 'View raw JSON' })
     await waitFor(() => expect(reopened).toBeVisible())
@@ -168,10 +168,10 @@ export const ClosesWhenDisabledPhone: Story = {
     await userEvent.click(trigger)
     await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'true'))
 
-    await userEvent.click(screen.getByRole('button', { name: 'Disable menu' }))
+    await userEvent.keyboard('{F2}')
     await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'false'))
 
-    await userEvent.click(screen.getByRole('button', { name: 'Enable menu' }))
+    await userEvent.keyboard('{F2}')
     await userEvent.click(trigger)
     await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'true'))
   },

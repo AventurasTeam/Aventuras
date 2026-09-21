@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { View } from 'react-native'
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
 
@@ -98,6 +98,10 @@ type Story = StoryObj<typeof Harness>
 
 export const AllKinds: Story = {
   play: async () => {
+    // The clear button stays mounted but must leave the accessibility tree
+    // entirely while there's nothing to clear — not just visually hidden.
+    await expect(screen.queryAllByRole('button', { name: t('picker.clear') })).toHaveLength(0)
+
     await userEvent.click(screen.getByTestId('picker'))
     await expect(await screen.findByRole('option', { name: /Night Market/ })).toBeVisible()
     await userEvent.click(screen.getByRole('option', { name: /Mira/ }))
@@ -159,6 +163,13 @@ export const TriggerAnchoringFocusAndToggle: Story = {
   play: async () => {
     const trigger = screen.getByTestId('picker')
     await userEvent.click(trigger)
+    // aria-haspopup/aria-expanded live in PickerField's `...rest` spread, not its
+    // explicitly named props — a dropped spread leaves every other assertion in
+    // this play green while these silently vanish.
+    await waitFor(async () => {
+      await expect(trigger).toHaveAttribute('aria-haspopup', 'dialog')
+      await expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    })
     // Named: the substrate nests a second, unlabeled `role="dialog"` (the Radix
     // positioning wrapper) around SOL's own labeled one.
     const dialog = await screen.findByRole('dialog', { name: 'Entity' })
@@ -179,6 +190,9 @@ export const TriggerAnchoringFocusAndToggle: Story = {
     await userEvent.click(trigger)
     await waitFor(async () => {
       await expect(screen.queryByRole('dialog', { name: 'Entity' })).not.toBeInTheDocument()
+    })
+    await waitFor(async () => {
+      await expect(trigger).toHaveAttribute('aria-expanded', 'false')
     })
   },
 }
@@ -251,6 +265,14 @@ export const NonActiveStatusTags: Story = {
     await expect(within(staged).getByText(t('world:status.staged'))).toBeInTheDocument()
     await expect(within(retired).getByText(t('world:status.retired'))).toBeInTheDocument()
     await expect(within(active).queryByText(t('world:status.active'))).not.toBeInTheDocument()
+
+    // data-model.md → Lifecycle on retirement: the trigger badges a non-active
+    // selection too, not just the row it was picked from.
+    await userEvent.click(staged)
+    const trigger = screen.getByTestId('picker')
+    await waitFor(async () => {
+      await expect(within(trigger).getByText(t('world:status.staged'))).toBeInTheDocument()
+    })
   },
 }
 
@@ -262,5 +284,51 @@ export const Disabled: Story = {
     await expect(screen.getByTitle('Generation is in flight. Cancel to edit.')).toBeInTheDocument()
     await userEvent.click(trigger, { pointerEventsCheck: 0 })
     await expect(screen.queryByRole('dialog', { name: 'Entity' })).not.toBeInTheDocument()
+  },
+}
+
+// F2 flips `disabled` from a capture-phase document listener — not a button click, which
+// Radix's own outside-click dismissal would also close the popover for, making the
+// assertion pass regardless of whether EntityPicker's own disabled-while-open effect runs.
+function DisableToggleHarness() {
+  const [disabled, setDisabled] = useState(false)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F2') setDisabled((prev) => !prev)
+    }
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => document.removeEventListener('keydown', onKeyDown, true)
+  }, [])
+  return (
+    <View style={{ width: 360 }} className="p-4">
+      <EntityPicker
+        value={null}
+        onChange={() => undefined}
+        entities={ENTITIES}
+        kinds={['character']}
+        label="Entity"
+        placeholder="Pick an entity"
+        disabled={disabled}
+        disabledReason={disabled ? 'Generation is in flight. Cancel to edit.' : undefined}
+        testID="picker"
+      />
+    </View>
+  )
+}
+
+export const ClosesWhenDisabled: Story = {
+  render: () => <DisableToggleHarness />,
+  play: async () => {
+    await userEvent.click(screen.getByTestId('picker'))
+    await screen.findByRole('dialog', { name: 'Entity' })
+
+    await userEvent.keyboard('{F2}')
+    await waitFor(async () => {
+      await expect(screen.queryByRole('dialog', { name: 'Entity' })).not.toBeInTheDocument()
+    })
+
+    await userEvent.keyboard('{F2}')
+    await userEvent.click(screen.getByTestId('picker'))
+    await expect(await screen.findByRole('dialog', { name: 'Entity' })).toBeVisible()
   },
 }

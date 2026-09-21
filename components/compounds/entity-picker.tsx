@@ -2,12 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
 
 import { EntityKindIcon } from '@/components/entity/entity-kind-icon'
+import { ENTITY_STATUS_TONE } from '@/components/entity/entity-row'
 import {
   SearchableOverlayList,
   type Row,
   type Section,
 } from '@/components/ui/searchable-overlay-list'
-import { Tag, type TagTone } from '@/components/ui/tag'
+import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
 import type { Entity, EntityKind } from '@/lib/db'
 import { t } from '@/lib/i18n'
@@ -34,14 +35,6 @@ type EntityPickerProps = {
 }
 
 const KIND_ORDER: readonly EntityKind[] = ['character', 'location', 'item', 'faction']
-
-// world:status tones, mirrors entity-row.tsx — 'active' is intentionally unused here:
-// the row/trigger only surface a status tag for the non-default statuses.
-const STATUS_TONE: Record<Entity['status'], TagTone> = {
-  active: 'default',
-  staged: 'success',
-  retired: 'warning',
-}
 
 function compareEntityRows(a: Entity, b: Entity): number {
   return collate(a.name, b.name) || a.createdAt - b.createdAt || compareId(a.id, b.id)
@@ -139,6 +132,14 @@ export function EntityPicker({
               <Text size="sm" numberOfLines={1} className="shrink">
                 {selected.name}
               </Text>
+              {/* data-model.md → Lifecycle on retirement: UI badges retired participants. */}
+              {selected.status !== 'active' ? (
+                <View className="shrink-0">
+                  <Tag tone={ENTITY_STATUS_TONE[selected.status]}>
+                    {t(`world:status.${selected.status}`)}
+                  </Tag>
+                </View>
+              ) : null}
             </View>
           ) : (
             <View className="min-w-0 flex-1 flex-row items-center">
@@ -161,7 +162,9 @@ export function EntityPicker({
           </View>
           {row.data.status !== 'active' ? (
             <View className="shrink-0">
-              <Tag tone={STATUS_TONE[row.data.status]}>{t(`world:status.${row.data.status}`)}</Tag>
+              <Tag tone={ENTITY_STATUS_TONE[row.data.status]}>
+                {t(`world:status.${row.data.status}`)}
+              </Tag>
             </View>
           ) : null}
         </View>
