@@ -19,7 +19,7 @@ export function parsePlotSelection(params: {
   return tab == null ? { kind, id } : { kind, id, tab }
 }
 
-/** The deep link's tab belongs to its row alone; any other row's pane opens on its default. */
+/** A deep link's tab, for its own row only. */
 export function deepLinkTab(
   selection: PlotSelection | null,
   kind: PlotKind,

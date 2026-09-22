@@ -17,8 +17,10 @@ import {
   parsePlotSelection,
   plotAddLabel,
   plotKindLabel,
+  type PlotSelection,
 } from '@/components/plot/plot-selection'
 import { ThreadDetailPane } from '@/components/plot/thread-detail-pane'
+import { usePlotDeepLink } from '@/components/plot/use-plot-deep-link'
 import { usePlotSelection } from '@/components/plot/use-plot-selection'
 import { MasterDetailLayout } from '@/components/shells/master-detail-layout'
 import { ScreenShell } from '@/components/shells/screen-shell'
@@ -213,14 +215,12 @@ export default function PlotRoute() {
   // the guard intercepts.
   useMasterDetailBack(true, handleBack)
 
-  // One-shot deep-link reveal. Story open hydrates every Plot store before it publishes
-  // `open`, so a row the pane can't find here doesn't exist; that reveal no-ops.
-  const revealedRef = useRef(false)
-  useEffect(() => {
-    if (revealedRef.current || initialSelection == null || !panesReady) return
-    revealedRef.current = true
-    listRef.current?.revealRow(initialSelection.kind, initialSelection.id)
-  }, [initialSelection, panesReady])
+  // Story open hydrates every Plot store before it publishes `open`, so a linked row the pane
+  // can't find doesn't exist, and its reveal no-ops.
+  const revealLink = useCallback((link: PlotSelection) => {
+    listRef.current?.revealRow(link.kind, link.id)
+  }, [])
+  const pendingLink = usePlotDeepLink(initialSelection, panesReady, revealLink)
 
   // The popover measures its trigger on open, and phone hides the list (and its `[+]`) while
   // a row is selected. Opening the menu alone drops nothing, so only a switch is guarded.
@@ -322,7 +322,7 @@ export default function PlotRoute() {
         blockedReason={gateReason}
         initialTab={
           selection.type === 'happening'
-            ? deepLinkTab(initialSelection, 'happening', selection.row.id)
+            ? deepLinkTab(pendingLink, 'happening', selection.row.id)
             : undefined
         }
         onSave={(draft) =>
@@ -356,7 +356,7 @@ export default function PlotRoute() {
         blockedReason={gateReason}
         initialTab={
           selection.type === 'thread'
-            ? deepLinkTab(initialSelection, 'thread', selection.row.id)
+            ? deepLinkTab(pendingLink, 'thread', selection.row.id)
             : undefined
         }
         onSave={(draft) =>
