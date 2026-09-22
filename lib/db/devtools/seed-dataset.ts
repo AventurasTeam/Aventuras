@@ -879,9 +879,12 @@ const heroHappenings: NewHappening[] = [
     category: 'conflict',
     icon: 'scroll',
     temporal: null,
-    // Anchored in the open region (past CHAP2_END): every other seeded happening sits inside a
-    // closed chapter, so without this the `Current chapter` bucket is always empty and omitted.
-    occurredAtEntryId: entryId('hero', 60),
+    // Entry 59: `ai_reply` (not `system` — readEntryIndex excludes that kind, so a system-kind
+    // anchor takes happeningBucket's dangling-entry fallback, which also resolves to `current`
+    // and would mask this) and past CHAP2_END, so its chapter_id is null. Every other seeded
+    // happening sits inside a closed chapter, so without a live open-region anchor the `Current
+    // chapter` bucket is always empty and omitted.
+    occurredAtEntryId: entryId('hero', 59),
     commonKnowledge: 0,
     embeddingStale: 1,
     createdAt: BASE + 48 * MIN,
