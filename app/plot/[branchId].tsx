@@ -296,7 +296,6 @@ export default function PlotRoute() {
       onPress: () => guard(() => surfaceNavigate(`/reader-composer/${branchId}`)),
     },
     { key: 'plot', label: t('plot:title'), onPress: () => guard(() => select(null)) },
-    ...(detailOpen ? [{ key: 'kind', label: plotKindLabel(kind) }] : []),
   ]
   const subHeaderSegments: BreadcrumbSegment[] = [
     { key: 'kind', label: plotKindLabel(kind), onPress: () => guard(() => select(null)) },
