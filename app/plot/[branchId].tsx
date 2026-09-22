@@ -206,13 +206,15 @@ export default function PlotRoute() {
   )
 
   // Phone is list-first: an open detail collapses to the list; any other back leaves, and
-  // leaving is guarded by useUnsavedChangesGuard, which replays the exact pop.
+  // useUnsavedChangesGuard holds the pop or replace behind the dialog while dirty.
   const handleBack = useCallback(() => {
     if (detailOpen) guard(() => select(null))
-    else router.back()
-  }, [detailOpen, guard, router, select])
-  // Constant true: every Android back goes through handleBack, so leaving is always the JS pop
-  // the guard intercepts.
+    else if (router.canGoBack()) router.back()
+    // A cold deep link or a reload leaves nothing beneath; the reader is the story's root.
+    else router.replace(`/reader-composer/${branchId}`)
+  }, [detailOpen, guard, router, select, branchId])
+  // Constant true: the route owns every Android back, including at the bottom of the stack,
+  // where the default would leave the app instead of reaching the reader fallback.
   useMasterDetailBack(true, handleBack)
 
   // Story open hydrates every Plot store before it publishes `open`, so a linked row the pane
