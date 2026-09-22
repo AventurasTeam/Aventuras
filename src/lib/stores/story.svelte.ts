@@ -4814,22 +4814,57 @@ class StoryStore {
     }
   }
 
-  // Rename a story
-  async renameStory(storyId: string, title: string): Promise<void> {
-    const trimmed = title.trim()
-    if (!trimmed) return
+  /**
+   * Save the library card's edit dialog: title, genre, description and the genre badge colour,
+   * in one write. Blank genre or description clears it; a blank title is refused. Nothing is
+   * written when nothing changed, so opening and saving the dialog does not bump the story up
+   * the library.
+   */
+  async updateStoryDetails(
+    storyId: string,
+    details: {
+      title: string
+      genre: string | null
+      description: string | null
+      genreColor: string | null
+    },
+  ): Promise<void> {
+    const title = details.title.trim()
+    if (!title) return
+    const genre = details.genre?.trim() || null
+    const description = details.description?.trim() || null
+    const genreColor = details.genreColor || null
 
-    await database.updateStory(storyId, { title: trimmed })
+    // The loaded story is the freshest copy of the settings — `updateStorySettings` writes there
+    // without touching the library list — so it is preferred when it is the one being edited.
+    const stored =
+      (this.currentStory?.id === storyId ? this.currentStory : null) ??
+      this.allStories.find((s) => s.id === storyId) ??
+      (await database.getStory(storyId))
+    if (!stored) throw new Error('Story not found')
+
+    const updates: Partial<Story> = {}
+    if (title !== stored.title) updates.title = title
+    if (genre !== (stored.genre || null)) updates.genre = genre
+    if (description !== (stored.description || null)) updates.description = description
+    if (genreColor !== (stored.settings?.genreColor || null)) {
+      // updateStory replaces the settings JSON whole, so merge rather than send the one key.
+      const { genreColor: _previous, ...rest } = stored.settings ?? {}
+      updates.settings = genreColor ? { ...rest, genreColor } : rest
+    }
+    if (Object.keys(updates).length === 0) return
+
+    await database.updateStory(storyId, updates)
 
     // updateStory always stamps updated_at, so mirror that onto both in-memory copies
     // rather than letting the library card and the open story disagree about it.
     const updatedAt = Date.now()
     this.allStories = this.allStories.map((s) =>
-      s.id === storyId ? { ...s, title: trimmed, updatedAt } : s,
+      s.id === storyId ? { ...s, ...updates, updatedAt } : s,
     )
 
     if (this.currentStory?.id === storyId) {
-      this.currentStory = { ...this.currentStory, title: trimmed, updatedAt }
+      this.currentStory = { ...this.currentStory, ...updates, updatedAt }
     }
   }
 

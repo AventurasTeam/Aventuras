@@ -27,8 +27,17 @@ export function autosize(node: HTMLTextAreaElement, params: AutosizeParams) {
         ? parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth)
         : 0
 
+    // Collapsing to `auto` to measure can clamp a scrolled ancestor, which would jump on every
+    // keystroke once the textarea is taller than the container it grows in.
+    const scrolled: [Element, number][] = []
+    for (let el = node.parentElement; el; el = el.parentElement) {
+      if (el.scrollTop > 0) scrolled.push([el, el.scrollTop])
+    }
+
     node.style.height = 'auto'
     node.style.height = `${node.scrollHeight + border}px`
+
+    for (const [el, top] of scrolled) el.scrollTop = top
   }
 
   // Only width matters: it rewraps the text. Height changes are this action's own doing.

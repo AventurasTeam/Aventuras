@@ -15,6 +15,8 @@
   import { Button } from '$lib/components/ui/button'
   import EmptyState from '$lib/components/ui/empty-state/empty-state.svelte'
   import StoryCard from '$lib/components/story/StoryCard.svelte'
+  import StoryEditDialog, { type StoryDetails } from '$lib/components/story/StoryEditDialog.svelte'
+  import type { Story } from '$lib/types'
 
   let isImporting = $state(false)
   /** Non-null only while the import is waiting on the user's pack choice. */
@@ -28,6 +30,8 @@
   let setupWizardKey = $state(0)
   let showSTImportWizard = $state(false)
   let stImportWizardKey = $state(0)
+  /** The story whose edit dialog is open, as it was when opened. */
+  let editingStory = $state<Story | null>(null)
 
   // Load stories on mount
   $effect(() => {
@@ -70,11 +74,12 @@
     }
   }
 
-  async function renameStory(storyId: string, title: string) {
+  async function saveStoryDetails(storyId: string, details: StoryDetails) {
     try {
-      await story.renameStory(storyId, title)
+      await story.updateStoryDetails(storyId, details)
     } catch (error) {
       ui.showToast(errMessage(error), 'error')
+      throw error
     }
   }
 
@@ -196,7 +201,12 @@
     {:else}
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {#each story.allStories as s (s.id)}
-          <StoryCard story={s} onOpen={openStory} onDelete={deleteStory} onRename={renameStory} />
+          <StoryCard
+            story={s}
+            onOpen={openStory}
+            onDelete={deleteStory}
+            onEdit={(s) => (editingStory = s)}
+          />
         {/each}
       </div>
     {/if}
@@ -241,4 +251,15 @@
     onlyVariables={packMapping.onlyVariables}
     onResolve={packMapping.resolve}
   />
+{/if}
+
+<!-- One edit dialog for the whole library, mounted fresh per edit -->
+{#if editingStory}
+  {#key editingStory.id}
+    <StoryEditDialog
+      story={editingStory}
+      onSave={(details) => saveStoryDetails(editingStory!.id, details)}
+      onClose={() => (editingStory = null)}
+    />
+  {/key}
 {/if}
