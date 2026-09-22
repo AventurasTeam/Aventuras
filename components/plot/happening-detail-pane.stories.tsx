@@ -770,6 +770,7 @@ export const Menu: Story = {
           characterId: mira.characterId,
           learnedAtEntryId: mira.learnedAtEntryId,
           decayResistance: mira.decayResistance,
+          retrievalCount: mira.retrievalCount,
           source: mira.source,
         },
       ],

@@ -66,11 +66,12 @@ function rawHappening(row: Happening, links: HappeningLinks) {
     ...row,
     involvements: links.involvements.map(({ id, entityId, role }) => ({ id, entityId, role })),
     awareness: links.awareness.map(
-      ({ id, characterId, learnedAtEntryId, decayResistance, source }) => ({
+      ({ id, characterId, learnedAtEntryId, decayResistance, retrievalCount, source }) => ({
         id,
         characterId,
         learnedAtEntryId,
         decayResistance,
+        retrievalCount,
         source,
       }),
     ),
