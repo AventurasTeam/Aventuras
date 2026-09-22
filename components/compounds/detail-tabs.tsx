@@ -41,8 +41,7 @@ export function DetailTabs({ tabs, value, onValueChange, selectLabel }: DetailTa
         size="sm"
         value={value}
         onValueChange={onValueChange}
-        // Parenthesised: the strip renders the count as its own muted glyph, but here it is part
-        // of a plain label string, where a bare trailing number reads as part of the name.
+        // A plain label string can't style the count, and a bare trailing number reads as name.
         options={tabs.map((tab) => ({
           value: tab.value,
           label: tab.count != null ? `${tab.label} (${tab.count})` : tab.label,

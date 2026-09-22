@@ -126,9 +126,8 @@ function AccordionContent({
         )}
         {...props}
       >
-        {/* Only a collapse animates out. Torn down while still expanded — the host swapped
-            lists — FadeOutUp would paint these rows over the incoming ones for 200ms
-            (LayoutAnimationConfig skipExiting does not reach here). */}
+        {/* Only a collapse animates out: torn down while still expanded (the host swapped lists)
+            FadeOutUp paints these rows over the incoming ones. skipExiting does not reach here. */}
         <Animated.View
           exiting={isExpanded ? undefined : Platform.select({ native: FadeOutUp.duration(200) })}
         >
