@@ -158,10 +158,8 @@ export const storySettings = {
   diagnosticsHubRow: (page: Page): Locator =>
     page.getByText(t('settings:diagnosticsHub.actionLabel'), { exact: true }),
 
-  // Shared row-save-session chrome (save-session.ts). Confirmed by an actual run
-  // that Radix's background-hiding doesn't remove the panel's own save bar from
-  // the a11y tree while the dialog is open — the dialog-scoped query is what
-  // keeps these from also matching the save bar's own "Discard" / "Save".
+  // Shared row-save-session chrome (save-session.ts). Radix's background-hiding doesn't remove
+  // the panel's own save bar from the a11y tree while open, so these stay dialog-scoped.
   unsavedDialog: saveSession.unsavedDialog,
   unsavedDiscard: saveSession.unsavedDiscard,
   unsavedSave: saveSession.unsavedSave,

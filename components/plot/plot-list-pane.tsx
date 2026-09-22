@@ -34,9 +34,8 @@ import { threadListModule } from './thread-list-module'
 
 export type PlotListPaneHandle = {
   /**
-   * Scrolls to the row, widening a chip or search that hides it and expanding its group.
-   * No-ops when `kind` doesn't match the pane's current kind — a caller reveals across kinds
-   * by switching `kind` first, then calling again once the pane re-renders under it.
+   * Scrolls to the row, widening the filter/search hiding it and expanding its group. No-ops on
+   * a kind mismatch — switch `kind` first, then call again once the pane re-renders under it.
    */
   revealRow: (kind: PlotKind, id: string) => void
 }

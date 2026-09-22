@@ -3,9 +3,8 @@ import { useEffect, useState } from 'react'
 import type { PlotSelection } from './plot-selection'
 
 /**
- * A deep link's one-shot effects. `reveal` runs once, after the first commit with `ready`
- * (the panes mounted); the link is returned until then, so only the linked row's first pane
- * mount can open on its tab.
+ * A deep link's one-shot effect: `reveal` fires once, on the first commit where `ready` is true
+ * (panes mounted). Until then the link is returned, so only that mount can open on its tab.
  */
 export function usePlotDeepLink(
   link: PlotSelection | null,

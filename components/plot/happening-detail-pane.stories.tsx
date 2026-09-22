@@ -183,10 +183,8 @@ type HarnessProps = {
 }
 
 /**
- * Mimics the route: an update's row and link patches land while the save is in flight; a
- * create's new row is selected from `onSaved`, which switches the pane's row mid-commit.
- * Capture-phase keys stand in for the route (a button click would be an outside click): F2
- * flips `blocked`, as a run starting mid-edit would; F3 requests a leave through the handle.
+ * Mimics the route: an update's row/link patches land mid-save; a create's new row is selected
+ * from `onSaved`. Capture-phase F2 flips `blocked` (mid-edit run); F3 requests a leave.
  */
 function Harness({
   row: initialRow,
@@ -249,8 +247,8 @@ function Harness({
   )
 
   return (
-    // Past FormRow's 640 px threshold, like the desktop detail pane: its first-frame two-column
-    // guess holds, so no control remounts under a play (lessons-learned/formrow-narrow-story-remount.md).
+    // Width clears FormRow's 640px breakpoint so the two-column layout holds from frame 1 — no
+    // control remounts under a play (lessons-learned/formrow-narrow-story-remount.md).
     <View
       testID="harness"
       style={{ width: 860, maxWidth: '100%', height: 760 }}
@@ -486,7 +484,7 @@ export const CommonKnowledgeHidesInvalidRow: Story = {
   },
 }
 
-/** One Save carries the row's link edits; the store patch lands mid-commit and the pane settles clean. */
+/** One Save carries the row's link edits; the patch lands mid-commit and the pane settles clean. */
 export const SaveCommitsLinks: Story = {
   play: async ({ args }) => {
     await openTab('Involvements')
@@ -624,7 +622,8 @@ export const Blocked: Story = {
       'true',
     )
     expect(within(involvement).getByRole('textbox', { name: 'Role' })).toHaveAttribute('readonly')
-    // A disabled IconAction takes its reason as its name (lessons-learned/disabled-iconaction-renames-itself.md).
+    // A disabled IconAction takes its reason as its name
+    // (lessons-learned/disabled-iconaction-renames-itself.md).
     expect(within(involvement).getByRole('button', { name: BLOCKED_REASON })).toHaveAttribute(
       'aria-disabled',
       'true',

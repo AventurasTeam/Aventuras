@@ -2,11 +2,8 @@ import type { Locator, Page } from '@playwright/test'
 
 import { t } from '../harness/i18n'
 
-// The shared row-save-session chrome (components/compounds/{save-bar,unsaved-changes-dialog}.tsx),
-// hosted by both Story Settings (components/story-settings/save-session-chrome.tsx) and Plot
-// (components/compounds/row-save-session-chrome.tsx). Every surface that mounts a save session
-// resolves through the same i18n keys, so this is the one query set both specs share — see
-// docs/testing.md → Selector strategy (Tier 2).
+// Shared row-save-session chrome (save-bar / unsaved-changes-dialog), mounted by both Story
+// Settings and Plot — the one query set both specs share (testing.md → Selector strategy, Tier 2).
 export const saveSession = {
   // The save button's accessible name carries a platform shortcut hint
   // (`Save Ctrl+S`), so it anchors rather than matching exactly.
@@ -15,17 +12,13 @@ export const saveSession = {
 
   saveBarDiscard: (page: Page): Locator => page.getByRole('button', { name: t('saveBar.discard') }),
 
-  // getByText alone is ambiguous here: the dialog body's copy also contains
-  // the substring "unsaved changes" (getByText is a case-insensitive
-  // substring match), so it resolves both the title and the description.
-  // Anchoring on the alertdialog role stays unambiguous even with other
-  // AlertDialogs in the tree.
+  // getByText is ambiguous here: the dialog body's copy also contains "unsaved changes" (case-
+  // insensitive substring), matching both title and description — anchor on the alertdialog role.
   unsavedDialog: (page: Page): Locator =>
     page.getByRole('alertdialog').filter({ hasText: t('unsavedChanges.title') }),
 
-  // Scoped inside the dialog, not a bare role+name query: the save bar behind
-  // it stays in the accessibility tree while the dialog is open, so an
-  // unscoped query would resolve both this button and the save bar's own.
+  // Scoped inside the dialog, not a bare role+name query: the save bar stays in the a11y tree
+  // while open, so an unscoped query would resolve both this button and the save bar's own.
   unsavedDiscard: (page: Page): Locator =>
     saveSession.unsavedDialog(page).getByRole('button', { name: t('unsavedChanges.discard') }),
 

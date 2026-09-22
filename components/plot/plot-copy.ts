@@ -79,10 +79,7 @@ const LINK_ISSUE_TAB: Partial<Record<ValidationKey, 'involvements' | 'awareness'
   decayRange: 'awareness',
 }
 
-/**
- * The happening save bar's reason. A link-row issue names its tab: the row may sit on a tab the
- * user isn't viewing, or behind the common-knowledge notice.
- */
+/** A link-row issue names its tab: it may sit elsewhere or behind the common-knowledge notice. */
 export function happeningIssueText(message: string): string {
   const text = validationText(message)
   const tab = isValidationKey(message) ? LINK_ISSUE_TAB[message] : undefined

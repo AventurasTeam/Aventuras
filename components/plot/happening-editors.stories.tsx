@@ -174,8 +174,7 @@ const DUPLICATE_INVOLVEMENTS: HappeningDraft = {
   ],
 }
 
-// Two rows already point at the same entity (classifier/import data) — the picker's own
-// `excludeIds` prevents creating a fresh duplicate by clicking, so this loads one instead.
+// excludeIds blocks a fresh on-screen duplicate — this harness pre-loads one (classifier shape).
 function DuplicateInvolvementsHarness() {
   const form = useHappeningForm(DUPLICATE_INVOLVEMENTS)
   return (
@@ -230,9 +229,8 @@ function BlockedHarness() {
   )
 }
 
-// role '' and source '' (a committed null normalizes through `happeningDraftFrom`), an unset
-// decay field, and an entity id absent from `entities` — the shape a classifier-authored row
-// loads as before anyone has touched it.
+// role/source '' (a committed null normalizes via `happeningDraftFrom`), unset decay, and an
+// entity id absent from `entities` — the shape a classifier-authored row loads as, untouched.
 const CLASSIFIER_SHAPED: HappeningDraft = {
   ...DEFAULT_VALUES,
   involvements: [{ id: 'hinv_ghost', entityId: 'char_ghost', role: '' }],
@@ -293,8 +291,8 @@ const meta: Meta = {
   parameters: { layout: 'padded' },
   decorators: [
     (Story) => (
-      // Past FormRow's 640 px threshold, like the happening detail pane, so no control
-      // remounts under a play (lessons-learned/formrow-narrow-story-remount.md).
+      // Past FormRow's 640px threshold (matches the happening detail pane) — avoids remount
+      // under a play (lessons-learned/formrow-narrow-story-remount.md).
       <View style={{ width: 860, maxWidth: '100%' }} className="gap-4 border border-border p-4">
         <Story />
       </View>
@@ -395,9 +393,8 @@ export const Awareness: Story = {
   },
 }
 
-// Duplicate errors go stale in `onChange` mode: a resolver rerun after a leaf change only
-// patches that leaf's own error slot, so a different row's stale `duplicateEntity` survives
-// a fix unless the whole array is re-validated (`rules: { deps }`).
+// Duplicate errors go stale in `onChange` mode: a leaf-only resolver rerun patches just that
+// leaf's error slot, so a fix needs `rules: { deps }` to re-validate the whole array.
 export const CrossRowDuplicateRevalidatesOnFix: Story = {
   render: () => <DuplicateInvolvementsHarness />,
   play: async () => {
@@ -413,8 +410,8 @@ export const CrossRowDuplicateRevalidatesOnFix: Story = {
       within(row('involvement-0')).queryByText(t('plot:validation.duplicateEntity')),
     ).not.toBeInTheDocument()
 
-    // Row 0's own exclude list is empty here (its only taken twin is its own current value),
-    // so this fix goes through the real picker rather than bypassing it.
+    // Row 0's exclude list is empty here (its only taken twin is its own value), so this fix
+    // goes through the real picker rather than bypassing it.
     await userEvent.click(within(row('involvement-0')).getByRole('button', { name: /Entity/ }))
     await userEvent.click(await screen.findByRole('option', { name: /Night Market/ }))
     await waitFor(
@@ -427,9 +424,8 @@ export const CrossRowDuplicateRevalidatesOnFix: Story = {
   },
 }
 
-// `useFieldArray`'s own post-remove revalidation only compares the array path's root error
-// type/message — a no-op for a nested per-index error tree, so removing the FLAGGED row left
-// the survivor's error stale without an explicit `trigger()` after `remove()`.
+// `useFieldArray`'s post-remove revalidation only compares the array path's root error
+// type/message (a no-op for per-index errors) — needs explicit `trigger()` after `remove()`.
 export const DuplicateEntityClearsOnRemove: Story = {
   render: () => <DuplicateInvolvementsHarness />,
   play: async () => {
@@ -535,8 +531,8 @@ export const Blocked: Story = {
       'true',
     )
 
-    // Both remove buttons share the blocked reason as their accessible name while disabled
-    // (lessons-learned/disabled-iconaction-renames-itself.md), not their normal label.
+    // Remove buttons share the blocked reason as their accessible name while disabled — not
+    // their normal label (lessons-learned/disabled-iconaction-renames-itself.md).
     expect(within(involvementRow).getByRole('button', { name: BLOCKED_REASON })).toHaveAttribute(
       'aria-disabled',
       'true',
@@ -575,8 +571,8 @@ export const ClassifierShapedRow: Story = {
     const involvementRow = row('involvement-0')
     const awarenessRow = row('awareness-0')
 
-    // An entity id absent from `entities` shows the picker's missing-entity state, and no
-    // Open in World for a row with nothing to open.
+    // An entity id absent from `entities` shows the picker's missing-entity state — and no
+    // Open in World, since there's nothing to open.
     expect(within(involvementRow).getByRole('button', { name: /Entity/ })).toHaveTextContent(
       t('picker.entityMissing'),
     )
@@ -611,9 +607,8 @@ export const ClassifierShapedRow: Story = {
   },
 }
 
-// react-hook-form regenerates every `field.id` on a full `reset()` (the shape
-// `useRowSaveSession`'s post-save rebase uses) — keying cards by the draft's own row id
-// instead keeps the same DOM node across a same-values reset, so focus and scroll survive.
+// react-hook-form regenerates every `field.id` on a full `reset()` (useRowSaveSession's
+// post-save rebase) — keying by the draft's row id keeps DOM identity; focus/scroll survive.
 export const CardIdentitySurvivesReset: Story = {
   render: () => <ResetIdentityHarness />,
   play: async () => {

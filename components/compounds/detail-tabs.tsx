@@ -15,9 +15,8 @@ type DetailTabsProps = {
 }
 
 /**
- * tabs.md → Tab-strip overflow rule: strip on desktop at every count, on tablet up to three;
- * otherwise the tab list goes to the Select primitive, whose cascade picks segment vs dropdown.
- * Renders inside the consumer's `<Tabs>` root, in DetailPane's `tabs` slot.
+ * tabs.md → Tab-strip overflow rule: strip on desktop, and on tablet up to 3 tabs; beyond that
+ * it renders the Select instead. Expects the consumer's `<Tabs>` root already mounted around it.
  */
 export function DetailTabs({ tabs, value, onValueChange, selectLabel }: DetailTabsProps) {
   const tier = useTier()

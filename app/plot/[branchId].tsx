@@ -212,8 +212,8 @@ export default function PlotRoute() {
     else router.back()
   }, [detailOpen, guard, router, select])
   // Constant true: Android back always runs handleBack, so it can't leave the app past a dirty
-  // pane. At the bottom of the stack Back is inert, as parked.md → "Back on a screen entered
-  // without the story list beneath it" records.
+  // pane. Bottom-of-stack Back is inert (parked.md → "Back on a screen entered without the
+  // story list beneath it").
   useMasterDetailBack(true, handleBack)
 
   // Story open hydrates every Plot store before it publishes `open`, so a linked row the pane

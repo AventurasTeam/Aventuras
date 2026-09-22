@@ -14,13 +14,10 @@ import { world } from '../locators/world'
 const HERO_STORY = 'story_hero'
 const HERO_TITLE = 'The Veilstone Courier'
 
-// Serial suite, one shared app: later tests build on earlier ones' selection and collapse state.
-// GO TO (useSurfaceNavigate) matches stack entries on path only and either pops back onto an
-// existing match or pushes a new instance — a pop DISMISSES whatever it pops past, unmounting
-// it for good, so returning to a screen that was popped past means a fresh instance, not a
-// resumed one. Test 6 depends on this: test 5's cold-mount reload leaves Plot as the stack's
-// sole entry, so the reader trip at test 5's end pushes a NEW reader on top rather than
-// dismissing Plot, and test 6's GO TO back to Plot resumes that same, still-mounted instance.
+// Serial suite, one shared app: tests build on earlier ones' state. GO TO (useSurfaceNavigate)
+// matches stack entries by path; popping past an instance DISMISSES it (unmounts for good). Test
+// 5's cold-mount reload leaves Plot as the stack's sole entry, so its reader trip PUSHES a new
+// reader rather than dismissing Plot — test 6's GO TO back then resumes that same instance.
 test.describe.serial('Plot panel', () => {
   let app: LaunchedApp
   let userDataDir: string
@@ -54,9 +51,8 @@ test.describe.serial('Plot panel', () => {
     await expect(plot.row(page, 'Expose the Syndicate broker')).toBeVisible()
 
     await plot.segmentCell(page, 'happening').click()
-    // Two closed chapters (entries 1-58) plus the open region from 59: all three buckets.
-    // hap_pact anchors on entry 59 (lib/db/devtools/seed-dataset.ts), a real open-region entry,
-    // so Current isn't empty.
+    // Two closed chapters (entries 1-58) plus open region from 59 — all three buckets exercised.
+    // hap_pact anchors entry 59 (seed-dataset.ts), a real open-region row — Current isn't empty.
     await expect(plot.tierHeader(page, t('plot:buckets.current'))).toHaveAttribute(
       'aria-expanded',
       'true',
@@ -137,14 +133,11 @@ test.describe.serial('Plot panel', () => {
       .toBeNull()
   })
 
-  // The headline invariant (save-happening.ts: "row plus involvement and awareness changes as
-  // one action_id; undo reverses the whole Save") needs a draft that dirties BOTH the row and a
-  // link, and a link edit that a row-id-keyed diff would resolve differently than the natural-key
-  // diff happening-draft.ts actually uses. Retargeting an EXISTING row's character (Mira -> Vorne)
-  // is that case: natural-key diffing reads it as a delete of Mira's committed row plus a create
-  // for Vorne (awarenessByCharacter is keyed on characterId, with no id fallback), where an
-  // id-keyed diff would instead patch Mira's row in place. Kael's row is left untouched as a
-  // control — a diff that force-nulls every baseline would wrongly emit a create for it too.
+  // Test-intent: exercises save-happening.ts's invariant that row + link edits share one
+  // action_id (undo reverses all). Mira -> Vorne retargets an EXISTING row — natural-key
+  // diffing (keyed on characterId, no id fallback) reads this as delete-Mira and create-Vorne,
+  // not patch-in-place, unlike a row-id-keyed diff. Kael's row is an untouched control — a
+  // diff that force-nulls every baseline would wrongly emit a create for it too.
   test('one Save carries an Overview edit and awareness link changes under one action_id; undo reverses all of it', async () => {
     const page = app.window
     await reader.actionsTrigger(page).click()
@@ -240,14 +233,11 @@ test.describe.serial('Plot panel', () => {
       ),
     ).toEqual([[1]])
 
-    // Open in World (cross-route seam), before the reader trip below: the happening pane's
-    // row-scoped icon action, on Kael's row — the one left untouched (Mira's row is retargeted
-    // away above, so it no longer names her). World isn't already lower in the stack — this
-    // spec has never visited it before — so the known kind/id-dropping pop
-    // (05b-peek-drawer.md:145) can't fire here. GO TO pops back onto this SAME Plot instance
-    // (only World was pushed on top of it), which is why this round trip runs before the
-    // reader trip: going to the reader dismisses Plot outright (a stack pop unmounts what it
-    // pops past), so anything after that needs a fresh selection rather than a resumed one.
+    // Open in World on Kael's untouched row (Mira was retargeted above) before the reader trip:
+    // World hasn't been visited in this spec yet, so the kind/id-dropping pop
+    // (05b-peek-drawer.md:145) can't fire — GO TO resumes this same Plot instance. Runs before
+    // the reader trip because that dismisses Plot outright (a pop unmounts what it pops past),
+    // so anything after needs a fresh selection, not a resumed one.
     await plot.openInWorldAwareness(page, 'Kael').click()
     await page.waitForURL(new RegExp(`/world/${branchId}\\?kind=character&id=${kaelId}`))
     await expect(world.detailName(page)).toHaveText('Kael')
@@ -288,14 +278,12 @@ test.describe.serial('Plot panel', () => {
 
   test('a cold-mount deep link preselects the row', async () => {
     const page = app.window
-    // The previous test ends on the reader (its own undo trip dismisses Plot outright), so
-    // this starts with a fresh Plot instance rather than assuming one survived.
+    // Prior test's undo dismissed Plot outright — fresh instance here, not a resumed one.
     await reader.actionsTrigger(page).click()
     await plot.goToPlotRow(page).click()
     await page.waitForURL(/\/plot\//)
 
-    // Entity/happening ids are UUID-substituted too (lib/ids/prefixes.ts) — read fresh, not
-    // hard-coded.
+    // IDs are UUID-substituted too (lib/ids/prefixes.ts) — read fresh here, not hard-coded.
     const [[ambushId]] = await queryApp(
       page,
       `SELECT id FROM happenings WHERE branch_id = ? AND title = ?`,

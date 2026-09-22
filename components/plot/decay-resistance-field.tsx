@@ -22,9 +22,8 @@ type DecayResistanceFieldProps = {
 }
 
 /**
- * A chip lights only on an exact match, so a continuous classifier value (severity clamped
- * to 0..1) displays with none lit. Unreadable text reports `null` from `NumberInput`, same as
- * empty — it saves as "not recorded" while the field still shows the invalid border.
+ * A chip lights only on an exact preset match — a continuous value shows none lit. `NumberInput`
+ * reports `null` for unreadable text too, saving as "not recorded" while the invalid border shows.
  */
 export function DecayResistanceField({
   value,
@@ -36,8 +35,7 @@ export function DecayResistanceField({
 }: DecayResistanceFieldProps) {
   return (
     <View className="gap-2">
-      {/* Named, not just "Low / Medium / High" — a bare chip-row label is ambiguous with
-          more than one decay field on a card-heavy screen. */}
+      {/* Named — a bare chip-row label is ambiguous with multiple decay fields on one card. */}
       <View role="group" aria-label={label} className="flex-row flex-wrap gap-2">
         {PRESETS.map((preset) => (
           <Chip

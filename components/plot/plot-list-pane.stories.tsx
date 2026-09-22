@@ -184,8 +184,8 @@ const header = (label: string) =>
 // CI runs plays several times slower than local; every post-interaction wait uses this.
 const INTERACTION_WAIT = { timeout: 3000 }
 
-// Toolbar first renders from useTier()'s window guess (one row), then remounts search and
-// chips in its narrow branch once onLayout reports the 360 px harness; only that branch stacks them.
+// Toolbar first renders from useTier()'s window guess (one row), then remounts once
+// onLayout reports the 360px harness and only the narrow branch stacks search/chips.
 async function toolbarSettled() {
   await waitFor(() => {
     const search = screen.getByRole('textbox').getBoundingClientRect()
@@ -300,7 +300,7 @@ export const SearchNarrows: Story = {
   },
 }
 
-/** The imperative handle: a narrowing chip and search widen back to All before the row scrolls in. */
+/** Imperative handle: a narrowing chip and search widen back to All before scrolling to the row. */
 export const Reveal: Story = {
   args: { showRevealButton: true, initialThreadFilter: 'failed', initialSearch: 'zzz' },
   play: async () => {

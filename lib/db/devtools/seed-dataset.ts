@@ -879,11 +879,9 @@ const heroHappenings: NewHappening[] = [
     category: 'conflict',
     icon: 'scroll',
     temporal: null,
-    // Entry 59: `ai_reply` (not `system` — readEntryIndex excludes that kind, so a system-kind
-    // anchor takes happeningBucket's dangling-entry fallback, which also resolves to `current`
-    // and would mask this) and past CHAP2_END, so its chapter_id is null. Every other seeded
-    // happening sits inside a closed chapter, so without a live open-region anchor the `Current
-    // chapter` bucket is always empty and omitted.
+    // Entry 59 (`ai_reply`, past CHAP2_END → chapter_id null): the only live open-region anchor —
+    // every other happening sits in a closed chapter, so without it `Current chapter` is always
+    // empty/omitted. Not `system`: excluded by readEntryIndex, which would mask this via fallback.
     occurredAtEntryId: entryId('hero', 59),
     commonKnowledge: 0,
     embeddingStale: 1,

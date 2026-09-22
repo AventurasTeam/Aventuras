@@ -61,9 +61,8 @@ export function InvolvementsEditor({
             ? t('plot:involvements.removeNamed', { name: entity.name })
             : t('plot:involvements.remove')
         return (
-          // Keyed by the draft's own row id, not the field-array's `field.id`: a session
-          // reset (Save's rebase, a classifier patch) regenerates every `field.id`, which
-          // would remount every card and drop focus mid-edit.
+          // Keyed by the draft's own row id, not `field.id` — a reset (Save's rebase, a
+          // classifier patch) regenerates every `field.id`, remounting cards and dropping focus.
           <View
             key={rows[index]?.id ?? field.id}
             className="gap-2 rounded-md border border-border p-3"
@@ -72,8 +71,8 @@ export function InvolvementsEditor({
             <Controller
               control={control}
               name={`involvements.${index}.entityId`}
-              // Cross-row duplicates are a whole-array schema issue; a plain onChange revalidates
-              // only this leaf, leaving another row's stale `duplicateEntity` error in place.
+              // Cross-row duplicates are whole-array; plain onChange revalidates only this
+              // leaf, leaving another row's stale `duplicateEntity` error in place.
               rules={{ deps: ['involvements'] }}
               render={({ field: f, fieldState }) => (
                 <FormRow
@@ -130,9 +129,8 @@ export function InvolvementsEditor({
                 disabledReason={blockedReason}
                 onPress={() => {
                   remove(index)
-                  // `useFieldArray`'s own post-remove revalidation only compares the array
-                  // path's root error type/message, which is a no-op for a nested per-index
-                  // error tree — a surviving duplicate row's stale error needs this.
+                  // `useFieldArray`'s post-remove revalidation only compares the array's root
+                  // error type/message (no-op for per-index errors) — stale survivors need this.
                   void trigger('involvements')
                 }}
               />

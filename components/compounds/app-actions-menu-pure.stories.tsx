@@ -64,8 +64,7 @@ export const HotkeyDisabledStillOpensFromTheTrigger: Story = {
   },
 }
 
-// In-story on World: GO TO renders, `Open World` self-omits, `Open Plot` and
-// `Open Reader` both navigate.
+// On World: GO TO renders; `Open World` self-omits, `Open Plot`/`Open Reader` navigate.
 const navigateFromWorld = fn()
 
 export const InStoryWorld: Story = {

@@ -36,7 +36,7 @@ export type AwarenessEditorProps = {
   onOpenEntity: (entity: Entity) => void
 }
 
-// plot.md → Happenings side → Awareness: character picker, learned-at, decay resistance, source.
+// plot.md → Happenings side → Awareness.
 export function AwarenessEditor({
   control,
   trigger,
@@ -62,9 +62,8 @@ export function AwarenessEditor({
             ? t('plot:awareness.removeNamed', { name: entity.name })
             : t('plot:awareness.remove')
         return (
-          // Keyed by the draft's own row id, not the field-array's `field.id`: a session
-          // reset (Save's rebase, a classifier patch) regenerates every `field.id`, which
-          // would remount every card and drop focus mid-edit.
+          // Keyed by the draft's row id, not field-array's `field.id`: a session reset (Save's
+          // rebase, classifier patch) regenerates `field.id`, remounting cards and losing focus.
           <View
             key={rows[index]?.id ?? field.id}
             className="gap-2 rounded-md border border-border p-3"
@@ -168,9 +167,8 @@ export function AwarenessEditor({
                 disabledReason={blockedReason}
                 onPress={() => {
                   remove(index)
-                  // `useFieldArray`'s own post-remove revalidation only compares the array
-                  // path's root error type/message, which is a no-op for a nested per-index
-                  // error tree — a surviving duplicate row's stale error needs this.
+                  // `useFieldArray`'s post-remove check only compares the root error type/message —
+                  // a no-op for a nested per-index tree, so a stale duplicate needs this trigger.
                   void trigger('awareness')
                 }}
               />
