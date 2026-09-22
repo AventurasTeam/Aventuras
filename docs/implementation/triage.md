@@ -404,3 +404,19 @@ slice-planning gate forces its resolution before that slice is planned.
   (`lib/classifier/plan.ts`) with no normalization —
   `role: involvement.role ?? null` only catches `undefined`, not
   `''`. Normalize both to `NULL` at write time. Surfaced 2026-09-22.
+
+- **Story Settings' save session may share the row-save-session
+  re-entry bug.** `hooks/use-row-save-session.ts` guards against a
+  `usePreventRemove` re-fire reopening the leave dialog mid-drain
+  (react-hook-form's `dirtyFields` lags a `reset` call) with a
+  `drainingRef` latch. `components/story-settings/save-session-*`
+  predates that fix and carries its own, differently-shaped session —
+  check it against a pop-back navigation for the same class of bug.
+  Surfaced 2026-09-22.
+
+- **A failed entry-index read has no Retry.** `useEntryIndex`
+  (`hooks/use-entry-index.ts`) disables react-query's retry on a local
+  DB read failure and blocks every Plot pane until the next turn
+  settles (`generationStore.settleCount` bumps) — but a turn can't be
+  started from Plot, so a failed read has no in-surface recovery path.
+  Consider a Retry action on the error state. Surfaced 2026-09-22.
