@@ -192,8 +192,7 @@ function InitialScrollDemo({ initialScrollRowId }: { initialScrollRowId: string 
     return () => document.removeEventListener('keydown', onKeyDown, true)
   }, [])
 
-  // min-h-screen: the phone Sheet sizes against the story root, which would otherwise
-  // be only as tall as the trigger — leaving the list a few pixels high.
+  // min-h-screen: the phone Sheet sizes against the story root, else only as tall as the trigger.
   return (
     <View className="min-h-screen w-80 flex-col items-stretch gap-3 p-8">
       <SearchableOverlayList<Item>
@@ -343,10 +342,8 @@ function AsTriggerInitialScrollDemo() {
   )
 }
 
-// The combobox opens on typing, so a keystroke that opens it must not arm the
-// initial scroll: deleting the query reopens on the full list at the top. "x"
-// matches nothing, leaving no highlight whose scroll would mask a re-armed one.
-// The veto covers that one open only — a later focus-open centers again.
+// Opening via typing must not arm the initial scroll — "x" matches nothing, so no highlight
+// would mask a re-arm; the veto covers that keystroke-open only, not a later focus-open.
 export const InitialScrollRowAsTriggerTypingDrops: Story = {
   render: () => <AsTriggerInitialScrollDemo />,
   play: async () => {

@@ -134,9 +134,8 @@ export const CharactersOnlyExcluding: Story = {
   },
 }
 
-// `excludeIds` hides a row everywhere except when it's the field's own committed
-// value — otherwise setting the field, then reopening the overlay, would make the
-// current value look unrecoverable (present in the trigger, absent from the list).
+// `excludeIds` hides a row everywhere except when it's the field's own committed value —
+// otherwise the value would look unrecoverable: present in the trigger, absent from the list.
 export const ExcludedIdIsCurrentValueStaysListed: Story = {
   args: { kinds: ['character'], excludeIds: ['char_kael'], initialValue: 'char_kael' },
   play: async () => {
@@ -161,16 +160,14 @@ export const SameNameDistinctIds: Story = {
   },
 }
 
-// The asChild Slot on the substrate's Popover.Trigger composes its own ref/handlers onto
-// PickerField's top-level props; a broken composition manifests as an unanchored popover,
-// a trigger click that no longer toggles, and focus stranded off the trigger after a pick.
+// The asChild Slot composes ref/handlers onto PickerField's top-level props — a broken
+// composition shows as an unanchored popover, a dead trigger click, or stranded focus after a pick.
 export const TriggerAnchoringFocusAndToggle: Story = {
   play: async () => {
     const trigger = screen.getByTestId('picker')
     await userEvent.click(trigger)
-    // aria-haspopup/aria-expanded live in PickerField's `...rest` spread, not its
-    // explicitly named props — a dropped spread leaves every other assertion in
-    // this play green while these silently vanish.
+    // aria-haspopup/aria-expanded live in PickerField's `...rest` spread, not named props —
+    // a dropped spread leaves every other assertion in this play green while these vanish.
     await waitFor(async () => {
       await expect(trigger).toHaveAttribute('aria-haspopup', 'dialog')
       await expect(trigger).toHaveAttribute('aria-expanded', 'true')
@@ -311,9 +308,8 @@ export const Disabled: Story = {
   },
 }
 
-// F2 flips `disabled` from a capture-phase document listener — not a button click, which
-// Radix's own outside-click dismissal would also close the popover for, making the
-// assertion pass regardless of whether EntityPicker's own disabled-while-open effect runs.
+// F2 flips `disabled` via a capture-phase document listener, not a button click — Radix's
+// outside-click dismissal would also close the popover, masking whether the disabled effect ran.
 function DisableToggleHarness() {
   const [disabled, setDisabled] = useState(false)
   useEffect(() => {

@@ -20,8 +20,7 @@ type Draft = z.infer<typeof schema>
 const VALUES: Draft = { title: 'Amulet', note: '' }
 const LINKED = { title: 'Heist', links: [{ role: 'bystander' }] }
 
-// Module-level, as consumers pass them: an inline arrow re-creates every render and would
-// mask a memo keyed on react-hook-form's in-place-mutated state.
+// Module-level: an inline arrow would mask a memo keyed on react-hook-form's mutated state.
 const fieldLabel = (field: string) => `label:${field}`
 const issueText = (message: string) => `text:${message}`
 const bareText = (text: string) => text

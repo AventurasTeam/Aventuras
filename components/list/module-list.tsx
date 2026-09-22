@@ -49,10 +49,7 @@ export type ModuleListProps<
   resetKey: string
 }
 
-/**
- * A module's list inside the list-pane shell: chips, search, the All view's
- * group accordion with its pinned row and `⚠ N` badges, empty and no-results.
- */
+/** List-pane shell's row list: chips, search, All view's grouped accordion with `⚠ N` badges. */
 export function ModuleList<
   Row extends { id: string },
   Filter extends string,

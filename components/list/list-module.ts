@@ -60,10 +60,9 @@ export type ListModule<
   /** A row's inclusion never depends on the other rows. */
   query: (rows: readonly Row[], input: ListQuery<Filter>, signals: Signals) => Row[]
   /**
-   * Groups `query`'s result into the All view's ordered, non-empty groups, plus an optional row
-   * pinned above them; names each group key for display. Null when the kind has no grouping.
-   * A row's group key and pin status never depend on the other rows, and a pinned row is left
-   * out of every group (`renderOrder` assumes it); `planReveal` plans against a single row.
+   * The All view's ordered, non-empty groups plus an optional pinned row; null when ungrouped.
+   * A row's group key/pin never depends on the others; a pinned row is excluded from every
+   * group (`renderOrder` assumes it), and `planReveal` targets one row.
    */
   grouping: {
     group: (rows: readonly Row[], signals: Signals) => ListGrouping<Row, GroupKey>

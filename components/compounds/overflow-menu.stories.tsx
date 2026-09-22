@@ -56,9 +56,8 @@ export const Default: Story = {
     await expect(screen.getByText('Export thread as JSON')).toBeVisible()
     await expect(screen.getByTitle('Export not available yet')).toBeInTheDocument()
 
-    // RN-Web's own Pressable applies pointer-events blocking when `disabled`, which
-    // userEvent's click respects; fireEvent bypasses that so this pins the `onPress`
-    // guard itself, not a CSS accident, as what blocks a disabled entry from firing.
+    // RN-Web's Pressable blocks pointer-events when `disabled`; userEvent respects that, fireEvent
+    // bypasses it — pins the `onPress` guard itself, not a CSS accident, as what blocks the entry.
     fireEvent.click(exportItem)
     expect(args.entries[0].onPress).not.toHaveBeenCalled()
 
@@ -95,8 +94,7 @@ export const Phone: Story = {
     const viewJson = await waitFor(() => screen.getByRole('menuitem', { name: 'View raw JSON' }))
     await waitFor(() => expect(viewJson).toBeVisible())
 
-    // The Sheet content carries no dialog role; a match here means the Popover
-    // branch rendered instead of the Sheet.
+    // No dialog role on Sheet content; a match here means Popover rendered, not Sheet.
     expect(screen.queryByRole('dialog')).toBeNull()
 
     // Regular density's phone floor (`control-h-lg`) is 48px; `control-h-md` is 44px
@@ -109,10 +107,8 @@ export const Phone: Story = {
   },
 }
 
-// F2 flips `disabled` from a capture-phase document listener — not a button click,
-// which sits outside the popover/sheet and would dismiss it on its own (Radix's
-// outside-click / gorhom's backdrop press), passing the assertion regardless of
-// whether PopoverMenu's or SheetMenu's own disabled-while-open effect runs at all.
+// F2 flips `disabled` via a capture-phase listener; a button click would itself dismiss the
+// popover/sheet (Radix outside-click / gorhom backdrop), passing vacuously either way.
 function DisableToggleHarness() {
   const [disabled, setDisabled] = useState(false)
   useEffect(() => {
@@ -152,11 +148,9 @@ export const ClosesWhenDisabled: Story = {
 }
 
 /**
- * Same close-on-disable contract, exercised against SheetMenu's own effect. Asserts
- * via the trigger's `aria-expanded` (the Radix open context SheetMenu's effect drives)
- * rather than the menuitem leaving the DOM — gorhom's presented bottom-sheet content
- * doesn't reliably unmount under this test runner, a substrate gap tracked separately
- * from this effect's own, verifiably-correct job of flipping `open`.
+ * Same close-on-disable contract, run against SheetMenu's own effect. Asserts via
+ * `aria-expanded` (Radix's open context) rather than the menuitem leaving the DOM — gorhom's
+ * Sheet content doesn't reliably unmount here, a tracked substrate gap, not this effect's bug.
  */
 export const ClosesWhenDisabledPhone: Story = {
   globals: { viewport: { value: 'mobile1' } },

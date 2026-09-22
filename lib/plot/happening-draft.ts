@@ -126,9 +126,8 @@ type HappeningPatch = Partial<{
 }>
 
 /**
- * Compares normalized-to-normalized — a committed row can carry untrimmed free text
- * or a `''` field (classifier writes verbatim) that would otherwise diff against a
- * merely-loaded draft.
+ * Compares normalized-to-normalized — a committed row can carry untrimmed text or a `''`
+ * field (classifier writes verbatim) that would otherwise misdiff against a loaded draft.
  */
 export function happeningPatch(row: Happening, draft: HappeningDraft): HappeningPatch {
   const patch: HappeningPatch = {}
@@ -197,10 +196,9 @@ function awarenessUpsert(
 }
 
 /**
- * Prefers the committed row with the draft row's id and entity, else the first unmatched
- * row for that entity — a re-added row carries `id: null` and an entity change leaves a
- * stale id. Avoids double-writing one committed row on a swap and arbitrarily deleting
- * one twin of a duplicate pair.
+ * Prefers the committed row matching both id and entity, else the first unmatched row for
+ * that entity — a re-added row carries `id: null`, an entity change leaves a stale id.
+ * Avoids double-writing one row on a swap or arbitrarily deleting a duplicate-pair twin.
  */
 function matchInvolvement(
   committed: readonly HappeningInvolvement[],
@@ -303,10 +301,8 @@ export function happeningActions({
     }
   }
 
-  // Awareness diffs by character (`haw_natural_uniq`), not by draft row id: an
-  // id-keyed diff could pair a delete with an upsert that resolves to the same row
-  // from the pre-group snapshot — DELETE then an UPDATE matching nothing silently
-  // drops the row.
+  // Diffs by character (`haw_natural_uniq`), not draft row id: an id-keyed diff could pair
+  // a delete with an upsert resolving to the same pre-group row, silently dropping it.
   const awarenessByCharacter = new Map(baseline.awareness.map((l) => [l.characterId, l]))
   for (const d of draft.awareness) {
     const payload = awarenessUpsert(

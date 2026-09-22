@@ -100,10 +100,9 @@ type SearchableOverlayListProps<T> = {
   // both the Favorites strip and its provider section.
   selectedRowIds?: readonly string[]
   /**
-   * Row scrolled to mid-viewport once per open, after the rows lay out. Not re-applied
-   * while open — a query that re-shapes `sections` never snaps the list back — and a
-   * no-op when the row is absent from `sections` at open. Independent of
-   * `selectedRowIds` and of the keyboard highlight, which still opens empty.
+   * Scrolls to mid-viewport once per open, after rows lay out — not re-applied on query
+   * changes, no-op if the row is absent from `sections`. Independent of `selectedRowIds`
+   * and of the keyboard highlight, which still opens empty.
    */
   initialScrollRowId?: string
 
@@ -222,9 +221,8 @@ function findRowSection<T>(
   return null
 }
 
-// Latched on each closed → open transition, and only when the row is listed then, so a
-// query that re-shapes `sections` while open never re-fires it. The row list clears it
-// once it has scrolled; `vetoOpening` blocks the open landing in the same batch.
+// Latches on each closed → open transition (only if the row is listed then) — a query
+// that re-shapes `sections` while open never re-fires it; `vetoOpening` blocks an open landing.
 function useInitialScrollTarget<T>(
   open: boolean,
   rowId: string | undefined,
@@ -371,12 +369,9 @@ type NativeListProps<T> = {
   style?: ViewStyle
 }
 
-// Inline variant (Shape1Inline's anchored popover, Shape2's tablet popover) eagerly
-// renders rows inside a gesture-handler ScrollView. SectionList would warn here because
-// it's nested under the consumer's page ScrollView (same orientation, breaks
-// VirtualizedList windowing). Autocomplete-shaped lists are bounded enough that
-// virtualization isn't a real loss; sticky-header support is dropped on this branch
-// (Shape1Inline consumers don't request sticky sections).
+// Plain ScrollView, not SectionList: nested under the consumer's ScrollView (same
+// orientation) breaks VirtualizedList windowing. Bounded lists skip virtualization fine;
+// sticky headers are dropped (Shape1Inline consumers don't request them).
 function InlineNativeList<T>({
   sections,
   renderItem,
@@ -454,9 +449,8 @@ function InlineNativeList<T>({
 const SCROLL_TO_ROW_RETRIES = 10
 const SCROLL_TO_ROW_RETRY_MS = 50
 
-// Sheet variant — gorhom's BottomSheetSectionList registers with the sheet's gesture /
-// keyboard system; a plain SectionList renders but its touches conflict with the
-// sheet's drag and its scroll region doesn't shrink for the keyboard.
+// Sheet variant: gorhom's BottomSheetSectionList registers with the sheet's gesture/keyboard
+// system — a plain SectionList's touches conflict with the drag and won't shrink for the keyboard.
 function SheetNativeList<T>({
   sections,
   renderItem,
@@ -471,10 +465,8 @@ function SheetNativeList<T>({
   const listRef = useRef<SectionList<Row<T>>>(null)
   const { animatedScrollableStatus } = useBottomSheetInternal()
 
-  // Centering state lives in refs so a list with nothing to center never re-renders on
-  // layout or lock changes. The anchor is re-centered on each resize — the open
-  // animation's padding and the keyboard both land after the first scroll — until the
-  // user drags or types.
+  // Centering state lives in refs so a list with nothing to center never re-renders. Re-centered
+  // on each resize (open-animation padding and keyboard land late) until the user drags or types.
   const sectionsRef = useRef(sections)
   const anchorRowIdRef = useRef<string | null>(null)
   const viewportHeightRef = useRef(0)
@@ -505,9 +497,8 @@ function SheetNativeList<T>({
     })
   }, [])
 
-  // gorhom snaps its scrollable back to the top on any scroll event while the sheet is
-  // short of its detent (scrollable LOCKED) — e.g. mid open-animation — so nothing
-  // scrolls until UNLOCKED.
+  // gorhom snaps the scrollable back to top on any scroll while short of its detent (LOCKED,
+  // e.g. mid open-animation) — nothing scrolls until UNLOCKED.
   const centerAnchor = useCallback(() => {
     const rowId = anchorRowIdRef.current
     if (rowId == null || !unlockedRef.current || !viewportHeightRef.current) return

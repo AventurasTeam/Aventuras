@@ -13,9 +13,8 @@ type PickerFieldProps = TriggerProps & {
   /** The committed value's rendering; shown only while `hasValue`. */
   children: ReactElement | null
   /**
-   * Drives the placeholder/children switch and the clear button — distinct from
-   * `children` so a dangling value (id with no matching row) still renders content
-   * while counting as "set".
+   * Distinct from `children`: a dangling value (id with no matching row) still counts
+   * as "set" and renders content, not the placeholder.
    */
   hasValue: boolean
   /** Plain-text form of the value, folded into the accessible name alongside `label`. */
@@ -31,9 +30,8 @@ type PickerFieldProps = TriggerProps & {
   className?: string
 }
 
-// `renderTrigger`'s result is the direct child of the substrate's `PopoverPrimitive.Trigger
-// asChild`, which composes its own ref/handlers onto this component's own top-level props
-// (docs/implementation/lessons-learned/aschild-slot-props.md) — hence the internal ref merge.
+// `renderTrigger`'s child sits under `PopoverPrimitive.Trigger asChild`, which composes its
+// own ref/handlers onto top-level props (lessons-learned/aschild-slot-props.md) — hence the merge.
 function mergeRefs<T>(...refs: (Ref<T> | undefined)[]): RefCallback<T> {
   return (node) => {
     for (const ref of refs) {

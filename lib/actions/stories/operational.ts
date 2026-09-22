@@ -90,9 +90,8 @@ type IsCurrentRequest = () => boolean
 
 const alwaysCurrent: IsCurrentRequest = () => true
 
-// Single place that parses story config JSON, hydrates entries, entities, lore, threads,
-// happenings, happening involvements, happening awareness and chapters, and sets
-// currentStoryStore — every story-open path (landing, wizard, deep link) shares these guarantees.
+// Single place every story-open path (landing, wizard, deep link) shares, so hydration and
+// currentStoryStore updates stay in lockstep across them.
 async function loadAndPublish(
   branchId: string,
   ctx: DbCtx,

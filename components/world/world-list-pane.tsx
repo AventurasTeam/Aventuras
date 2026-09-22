@@ -106,9 +106,8 @@ export function WorldListPane({
   const revealRow = useCallback(
     (id: string) => {
       const entity = entities.find((e) => e.id === id)
-      // A pill jump switches category in the same update as calling this, so `category` here is
-      // the pre-switch closure: the view below is planned against where the switch lands, and
-      // the collapse write further down keys by the row's own kind rather than this closure.
+      // Category switches in this same update, so `category` here is stale (pre-switch); the
+      // plan targets where the switch lands, and the collapse write keys by row kind instead.
       const inCategory = entity != null ? entity.kind === category : category === 'lore'
       let plan: RevealPlan<string>
       if (entity != null) {

@@ -9,9 +9,8 @@ import type { EntryIndex, EntryRef } from './types'
 const EXCERPT_SOURCE_CHARS = 200
 const ENTRY_EXCERPT_CHARS = 120
 
-// Drops a trailing partial word so a forced ellipsis (below) follows a whole word. Only
-// meaningful when the cut is known to have landed mid-word (see afterCut below) — a head
-// already ending in whitespace has no partial word to drop.
+// Drops a trailing partial word so the forced ellipsis follows a whole word. Only meaningful
+// when the cut landed mid-word (see afterCut) — a head ending in whitespace has none to drop.
 function dropTrailingPartialWord(head: string): string {
   if (head === '' || /\s$/.test(head)) return head
   const lastBreak = head.search(/\s\S*$/)
@@ -19,10 +18,9 @@ function dropTrailingPartialWord(head: string): string {
 }
 
 /**
- * Every non-system entry of the branch, newest first. System entries are diagnostic,
- * carry no delta, and are hard-deleted (their position reused) at the next submit — nothing
- * may anchor to one. The entries store is a trailing window (recent-window.ts), so anchors
- * older than it need this read.
+ * Every non-system entry of the branch, newest first. System entries are deleted at the next
+ * submit, so nothing may anchor to one. Bypasses the entries store's trailing window
+ * (recent-window.ts) — older anchors still need this full read.
  */
 export async function readEntryIndex(branchId: string, database: DbCtx['db']): Promise<EntryRef[]> {
   const rows = await database
@@ -45,9 +43,8 @@ export async function readEntryIndex(branchId: string, database: DbCtx['db']): P
     const cutMidWord = truncated && r.afterCut !== '' && !/\s/.test(r.afterCut)
     const head = cutMidWord ? dropTrailingPartialWord(r.head) : r.head
     const text = excerpt(head, ENTRY_EXCERPT_CHARS) ?? ''
-    // The head is cut to EXCERPT_SOURCE_CHARS before excerpt() collapses whitespace, so a
-    // short collapsed result doesn't mean the source was short — force the ellipsis excerpt()
-    // had no way to know it owed.
+    // excerpt() collapses whitespace after the truncation cut, so a short result doesn't prove a
+    // short source — force the ellipsis excerpt() has no way to know it owes.
     const needsEllipsis = truncated && text !== '' && !text.endsWith('…')
     return {
       id: r.id,

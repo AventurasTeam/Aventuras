@@ -41,10 +41,8 @@ function compareEntityRows(a: Entity, b: Entity): number {
 }
 
 /**
- * A kind-aware picker over the branch's entities returning an entity id — two rows can
- * share a name, so a string Autocomplete cannot carry the value. A `value` absent from
- * `entities` (no FK on the link tables that hold entity ids) renders a missing-entity
- * warning instead of silently falling back to the placeholder.
+ * Returns an entity id, not a name — two rows can share a name. A `value` absent from
+ * `entities` (no FK on the link tables) renders a missing-entity warning, not a placeholder.
  */
 export function EntityPicker({
   value,

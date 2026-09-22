@@ -74,8 +74,7 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx) => {
       set.decayResistance = decayResistance
       undoPayload.decayResistance = current.decayResistance
     }
-    // Only a user edit re-anchors learned_at in place; a classifier re-emit of an
-    // already-known pair must not drift the anchor decay is measured from.
+    // Only a user edit re-anchors learned_at; a classifier re-emit must not drift the decay anchor.
     if (learnedAtEntryId !== undefined && isUserOriginatedSource(action.source)) {
       set.learnedAtEntryId = nullifyRef(learnedAtEntryId)
       undoPayload.learnedAtEntryId = current.learnedAtEntryId

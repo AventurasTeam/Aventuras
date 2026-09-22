@@ -25,9 +25,8 @@ export type RowSaveSessionOptions<Draft extends FieldValues> = {
   /** Identity of the row under edit (`create:<kind>` in create mode); a change resets the form. */
   rowKey: string
   /**
-   * The committed values, which Discard restores. A same-row change refreshes every untouched
-   * top-level field and keeps the touched ones. Memoize on the row: identity is the fast path,
-   * and a fresh but equal object is only deep-compared, never re-applied.
+   * The committed values, which Discard restores. A same-row change refreshes untouched
+   * fields, keeps touched ones; memoize by row identity to skip the deep-compare fallback.
    */
   values: Draft
   resolver: Resolver<Draft>
@@ -138,9 +137,8 @@ function errorMessage(error: unknown): string {
 }
 
 /**
- * The per-row save session (save-sessions.md): one form per selected row, explicit Save and
- * Discard, and a leave queue the surface routes every in-surface transition through. Not the
- * Story Settings session — that one aggregates sections into a single settings write.
+ * save-sessions.md: one form per row, explicit Save/Discard, a leave queue transitions route
+ * through. Not the Story Settings session — that one aggregates sections into one write.
  */
 export function useRowSaveSession<Draft extends FieldValues>({
   rowKey,
@@ -196,9 +194,9 @@ export function useRowSaveSession<Draft extends FieldValues>({
       return
     }
     if (sameValue(applied.values, values)) return
-    // A store patch to this row (a classifier pass, an undo) refreshes every untouched field, else
-    // a later save writes the stale value back. Per top-level field: a path-wise merge grafts a
-    // patch onto whichever array row shifted into its index.
+    // Refreshes untouched fields on a store patch (classifier, undo), else a later save writes
+    // stale values back. Per top-level field: a path-wise merge would graft a patch onto whichever
+    // array row shifted into its index.
     const current: Record<string, unknown> = form.getValues()
     const touched: Record<string, unknown> = form.formState.dirtyFields
     const merged: Record<string, unknown> = { ...values }

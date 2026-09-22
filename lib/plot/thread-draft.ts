@@ -46,9 +46,8 @@ type ThreadPatch = Partial<
 >
 
 /**
- * The columns whose committed value differs from the draft; empty when nothing changed.
- * Compares normalized-to-normalized — a committed row can carry untrimmed free text
- * (classifier writes verbatim) that would otherwise diff against a merely-loaded draft.
+ * Columns whose committed value differs from the draft; empty when nothing changed. Compares
+ * normalized-to-normalized — the classifier writes untrimmed free text into committed rows.
  */
 export function threadPatch(row: Thread, draft: ThreadDraft): ThreadPatch {
   const patch: ThreadPatch = {}

@@ -26,9 +26,8 @@ import type { PlotKind } from '@/lib/list-modules'
 import { cn } from '@/lib/utils'
 
 /**
- * The "preset catalog" `threads.icon` / `happenings.icon` key into (data-model.md → threads).
- * Keys are stable strings, not Lucide names: the seed already carries `door` and `mask`.
- * Visual identity revises the set; unknown keys fall back per kind and are preserved on save.
+ * The preset catalog `threads.icon` / `happenings.icon` key into (data-model.md → threads):
+ * stable strings, not Lucide names; unknown keys fall back per kind and survive a save.
  */
 export const PLOT_ICONS: Readonly<Record<string, LucideIcon>> = {
   sparkles: Sparkles,

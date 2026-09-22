@@ -18,9 +18,8 @@ type EntryRefPickerProps = {
   value: string | null
   onChange: (id: string | null) => void
   /**
-   * The branch's entries, newest first — `useEntryIndex(branchId)`'s `entries`, passed
-   * only once `ready` is true. Never the trailing-window `entriesStore`: an unready or
-   * partial index would render live values as dangling.
+   * The branch's entries, newest first — `useEntryIndex(branchId)`'s `entries`, passed once
+   * `ready` is true. Never `entriesStore`: an unready/partial index renders values as dangling.
    */
   entries: readonly EntryRef[]
   label: string
@@ -37,10 +36,8 @@ type QueryMode =
   | { kind: 'positionOrExcerpt'; digits: string }
   | { kind: 'excerpt'; needle: string }
 
-// A leading `#` (optional inner whitespace) is position-only, even with no digits yet —
-// `#` alone must match everything, not empty the list. Bare digits union position and
-// excerpt matches (a position can appear inside an excerpt's own prose). Anything else
-// searches the excerpt; the localized `entry #n` label itself is never a match target.
+// A leading `#` means position-only (bare `#` matches all, not empty). Bare digits union
+// position and excerpt — a position can appear in excerpt prose; the label itself never matches.
 function parseQuery(raw: string): QueryMode {
   const trimmed = raw.trim()
   if (trimmed === '') return { kind: 'all' }
@@ -49,9 +46,8 @@ function parseQuery(raw: string): QueryMode {
   return { kind: 'excerpt', needle: normalizeTerm(trimmed) }
 }
 
-// Exact position match first, then shorter position strings, then newest within a tied
-// length — `#12` over hundreds of entries must rank #12 above #120…#129, which all share
-// the "12" prefix and would otherwise auto-highlight the wrong row for Enter to commit.
+// Exact match first, then shorter strings, then newest for ties — `#12` over hundreds of entries
+// must rank above #120…#129 (shared "12" prefix), or Enter would commit the wrong row.
 function comparePositionMatches(digits: string) {
   return (a: EntryRef, b: EntryRef) => {
     const aStr = String(a.position)
@@ -87,10 +83,8 @@ function matchAndSort(indexed: readonly IndexedEntry[], mode: QueryMode): EntryR
 }
 
 /**
- * Picks a branch entry id, rendering `entry #n` plus an excerpt or the dangling state.
- * Entry refs are FK-less ids (data-model.md → Entry references are IDs) that dangle
- * detectably once their target entry is rolled away — a `value` absent from `entries`
- * renders the dangling state instead of silently falling back to the placeholder.
+ * Picks a branch entry id, rendering `entry #n` + excerpt or the dangling state — entry refs are
+ * FK-less ids (data-model.md); a `value` absent from `entries` dangles, never a silent fallback.
  */
 export function EntryRefPicker({
   value,
@@ -105,9 +99,8 @@ export function EntryRefPicker({
 }: EntryRefPickerProps) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
-  // Latches true on the render where `open` first flips true, and never resets — gorhom
-  // keeps the phone Sheet's children mounted through its close animation, so gating the
-  // search index on `open` itself would flash the empty-state copy for that whole window.
+  // Latches true on `open`'s first flip, never resets — gorhom keeps the phone Sheet's children
+  // mounted through close animation, so gating on `open` itself would flash the empty state.
   const [hasOpened, setHasOpened] = useState(false)
   if (open && !hasOpened) setHasOpened(true)
 
@@ -136,9 +129,8 @@ export function EntryRefPicker({
         ? t('entryRefDangling')
         : undefined
 
-  // Gated on `hasOpened`, not `open`: a picker that's never been opened pays nothing to
-  // build the search index, and closing never drops the rows back to empty while the
-  // overlay is still (asynchronously) animating out — they keep filtering by `query`.
+  // Gated on `hasOpened`, not `open`: an unopened picker builds no search index, and closing never
+  // empties rows while the overlay is still animating out — filtering by `query` continues.
   const sections = useMemo<Section<EntryRef>[]>(() => {
     if (!hasOpened) return []
     const rows = matchAndSort(indexedEntries, parseQuery(query)).map<Row<EntryRef>>((entry) => ({
@@ -210,9 +202,8 @@ type EntryRefTextProps = {
 /** `entry #n` plus excerpt, or the dangling state — shared by the picker and read-only refs. */
 export function EntryRefText({ entry }: EntryRefTextProps) {
   if (entry == null) {
-    // A row-shaped wrapper, not a bare Tag: RN-Web's column `align-items: stretch` would
-    // otherwise stretch the pill itself to the parent's full width (a column parent, e.g.
-    // FormRow, is the common host for this read-only state).
+    // A row-shaped wrapper, not a bare Tag: RN-Web's column `align-items: stretch` would otherwise
+    // stretch the pill full-width — a column parent (e.g. FormRow) is the common host here.
     return (
       <View className="min-w-0 flex-1 flex-row items-center">
         <Tag tone="warning">

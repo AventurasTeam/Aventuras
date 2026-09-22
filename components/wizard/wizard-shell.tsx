@@ -118,8 +118,7 @@ export function WizardShell({
   const tier = useTier()
   const isPhone = tier === 'phone'
 
-  // The footer competes with field real estate while the soft keyboard is
-  // open on phone, so it hides and reappears with the keyboard.
+  // Footer hides while the soft keyboard is open on phone — the two compete for field real estate.
   const keyboardVisible = useKeyboardShown()
 
   const showFooter = !(isPhone && keyboardVisible)

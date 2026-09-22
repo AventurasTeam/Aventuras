@@ -33,12 +33,9 @@ function isOutOfNarrative(row: Happening): boolean {
 }
 
 /**
- * plot.md → Happenings side. `temporal` set, or no narrative anchor at all
- * (data-model.md: a null `occurred_at_entry_id` is "outside narrative"), buckets to Out of
- * narrative. Otherwise: an open chapter has no row (data-model.md → Chapters), so Current
- * chapter is the open region — the anchor entry's `chapter_id` is null; a closed chapter's
- * entries are Earlier. A dangling anchor — set, but its entry no longer exists — stays in
- * Current: nothing older can claim it.
+ * plot.md → Happenings side; data-model.md → Chapters. `temporal` set or no anchor → Out
+ * of narrative; open chapter (anchor's `chapter_id` null) → Current; closed → Earlier. A
+ * dangling anchor (entry deleted) stays Current — nothing older can claim it.
  */
 export function happeningBucket(row: Happening, entries: EntryIndex): HappeningBucket {
   if (isOutOfNarrative(row)) return 'out-of-narrative'

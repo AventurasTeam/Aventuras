@@ -188,9 +188,8 @@ describe('loadOpenStory', () => {
       updatedAt: 1,
     })
 
-    // Spy attached right before the call: only sees loadOpenStory's own reads —
-    // join + entries + entities + lore + threads + happenings + involvements +
-    // awareness + chapters = 9. More would mean an extra N+1-shaped read.
+    // Counts only loadOpenStory's own reads: join + entries + entities + lore + threads +
+    // happenings + involvements + awareness + chapters = 9; more would mean an N+1 read.
     const selectSpy = vi.spyOn(ctx.db, 'select')
 
     const result = await loadOpenStory('br_1', ctx)

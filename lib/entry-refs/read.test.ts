@@ -120,9 +120,8 @@ describe('readEntryIndex', () => {
     const { db } = await createTestDb()
     await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
     await db.insert(branches).values({ id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 })
-    // First 200 chars: 150 spaces + 26 letters + 10 spaces + 14 chars of the tail below —
-    // collapses to well under the 120-char excerpt cap, so excerpt() alone would see no
-    // reason to add an ellipsis, even though real content continues past char 200.
+    // 150 spaces + 26 letters + 10 spaces + 14-char tail: the 200-char head collapses well
+    // under the 120-char cap, so excerpt() alone wouldn't add '…' — the read must still add it.
     const content =
       ' '.repeat(150) +
       'ABCDEFGHIJKLMNOPQRSTUVWXYZ' +
@@ -146,9 +145,8 @@ describe('readEntryIndex', () => {
     const { db } = await createTestDb()
     await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
     await db.insert(branches).values({ id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 })
-    // First 200 chars: 184 spaces + "quay again " + "unbel" — the cut lands inside
-    // "unbelievable", 5 letters in. Without a word-boundary back-off the forced ellipsis
-    // would follow the fragment ("…quay again unbel…").
+    // 184 spaces + "quay again " + "unbel": the 200-char cut lands 5 letters into
+    // "unbelievable" — without the word-boundary back-off, the ellipsis would follow "…unbel…".
     const content =
       ' '.repeat(184) +
       'quay again ' +

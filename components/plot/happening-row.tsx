@@ -12,7 +12,7 @@ import type { PlotListSignals } from '@/lib/list-modules'
 import { PlotIcon } from './plot-icon'
 import { whenMarker } from './when-marker'
 
-// plot.md → Happenings side → Row composition: glyph, title, when-marker, category, ⊙ slot.
+// plot.md → Happenings side → Row composition.
 export function HappeningRow({
   row,
   selected,

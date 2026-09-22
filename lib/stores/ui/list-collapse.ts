@@ -1,9 +1,8 @@
 import { useStore } from 'zustand'
 import { createStore } from 'zustand/vanilla'
 
-// Session-scoped, never persisted (patterns/entity.md → Accordion grouping on "All" view).
-// Keyed per kind: collapsing Staged on Characters must not collapse it on Locations, and
-// `active` is both an entity tier and a thread status.
+// Session-scoped, never persisted (patterns/entity.md → Accordion grouping). Keyed per kind:
+// collapsing Staged on Characters must not affect Locations; `active` is both a tier and status.
 type ListCollapseState = {
   byKind: ReadonlyMap<string, ReadonlySet<string>>
   setCollapsed: (

@@ -7,10 +7,8 @@ import { indexEntryRefs, readEntryIndex, type EntryIndex, type EntryRef } from '
 import { entriesStore, generationStore } from '@/lib/stores'
 
 /**
- * `ready` is a neutral "not read yet" marker, not a negative result — while `!ready`,
- * consumers must not treat any id as dangling; nothing has been read yet, or the read
- * failed with no prior data. `failed` distinguishes the latter so a caller can show an
- * error state instead of mistaking an unread branch for an empty one.
+ * `ready` is a neutral "not read yet" marker — while `!ready`, no id counts as dangling.
+ * `failed` distinguishes "read failed" from "not read yet" for an error-state caller.
  */
 export type EntryIndexSnapshot = {
   /** Newest first — the picker's list order. */
@@ -33,12 +31,10 @@ const EMPTY: EntryIndexSnapshot = {
 const FAILED: EntryIndexSnapshot = { ...EMPTY, failed: true }
 
 /**
- * The branch's entries for `entry #n` labels, chapter buckets and the entry-ref picker.
- * Every story_entries write either settles a run or reversal (settleCount) or moves the
- * tail (tailId) — a user_action insert before the run starts, an ai_reply commit mid-phase,
- * a system-entry write or clear, a rejected-admission reversal — so the two keys together
- * cover every write. Labels resolve by id, so a stale index shows an anchor as falsely
- * live or falsely dangling, never re-pointed to a different entry.
+ * Branch entries for `entry #n` labels, chapter buckets and the entry-ref picker.
+ * settleCount + tailId together cover every story_entries write: a new write path must settle
+ * a run/reversal or move the tail, or the index goes stale. Stale only shows an anchor as
+ * falsely live/dangling — never re-pointed to a different entry.
  */
 export function useEntryIndex(branchId: string): EntryIndexSnapshot {
   const settleCount = generationStore.useGeneration((s) => s.settleCount)
@@ -59,10 +55,8 @@ export function useEntryIndex(branchId: string): EntryIndexSnapshot {
     enabled: branchId !== '',
     // Local DB read, not a flaky network call — a failure is worth surfacing, not retried.
     retry: false,
-    // A key goes dead once superseded by the next settle or tail move; a revisit (a branch
-    // switch back, tailId walking backward after a reversal or a system-entry clear) is rare
-    // and still correct under the write invariant above — no reason to hold a whole branch's
-    // rows for the client's default 5-minute gc.
+    // A revisited key (branch switch back, tailId walking backward) is rare but still
+    // correct — no reason to hold a whole branch's rows for the default 5-minute gc.
     gcTime: 30_000,
     queryFn: () => readEntryIndex(branchId, db),
   })
@@ -72,8 +66,7 @@ export function useEntryIndex(branchId: string): EntryIndexSnapshot {
   const [lastGood, setLastGood] = useState<{ branchId: string; window: LoadedWindow } | null>(null)
   let good = lastGood
   if (good?.branchId !== branchId) good = null
-  // Compare against the wrapped window's rows (not a fresh wrapper) to avoid re-rendering
-  // every render.
+  // Compare against the wrapped window's rows (not a fresh wrapper) to avoid re-rendering.
   if (data != null && data !== good?.window.entries) {
     good = { branchId, window: { entries: data, index: indexEntryRefs(data) } }
   }

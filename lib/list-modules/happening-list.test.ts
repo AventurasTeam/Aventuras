@@ -42,9 +42,8 @@ function happening(id: string, title: string, extra: Partial<Happening> = {}): H
   }
 }
 
-// Both fields null: the classifier writes this when a turn handle doesn't resolve
-// (lib/classifier/plan.ts). data-model.md treats a null `occurred_at_entry_id` as
-// "outside narrative", so it belongs in the trailing block, not Current.
+// Both fields null: classifier writes this when a turn handle doesn't resolve (plan.ts).
+// data-model.md: null occurredAtEntryId = outside narrative → trailing block, not Current.
 const NONE_ROW = happening('h_none', 'Vanished entirely')
 
 const ROWS = [

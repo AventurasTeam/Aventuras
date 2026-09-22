@@ -189,9 +189,8 @@ export const BareDigitsUnionPositionAndExcerpt: Story = {
   },
 }
 
-// A leading `#` with inner whitespace is still position mode — `# 12` must strip that
-// whitespace and match only #12, not union in `e_5`'s excerpt-only "12" the way bare
-// digits would (`BareDigitsUnionPositionAndExcerpt`).
+// A leading `#` with inner whitespace is still position mode — `# 12` strips the space,
+// matches only #12; bare digits would also union `e_5`'s excerpt-only "12".
 export const HashWithInnerSpaceIsPositionOnly: Story = {
   args: { entries: UNION_ENTRIES },
   play: async () => {
@@ -287,17 +286,15 @@ export const Disabled: Story = {
     await expect(trigger).toBeDisabled()
     await expect(screen.getByTitle('Generation is in flight. Cancel to edit.')).toBeInTheDocument()
     await userEvent.click(trigger, { pointerEventsCheck: 0 })
-    // A negative check needs a settle window — asserting immediately after the click
-    // would pass even if the disabled click handling were broken and the overlay's own
-    // (async) open logic just hadn't run yet.
+    // A negative check needs a settle window: asserting immediately after the click would pass
+    // even if disabled-click handling were broken and the overlay's async open logic hasn't run.
     await new Promise((resolve) => setTimeout(resolve, 150))
     await expect(screen.queryByRole('dialog', { name: 'Occurred at' })).not.toBeInTheDocument()
   },
 }
 
-// F2 flips `disabled` from a capture-phase document listener — not a button click, which
-// Radix's own outside-click dismissal would also close the popover for, making the
-// assertion pass regardless of whether EntryRefPicker's own disabled-while-open effect runs.
+// F2 flips `disabled` via a capture-phase document listener, not a button click — Radix's
+// outside-click dismissal would also close the popover, masking whether the disabled effect ran.
 function DisableToggleHarness() {
   const [disabled, setDisabled] = useState(false)
   useEffect(() => {
@@ -369,9 +366,8 @@ export const LongExcerptStaysWithinField: Story = {
     const excerptText = screen.getByText(LONG_EXCERPT)
     const excerptRect = excerptText.getBoundingClientRect()
     await expect(excerptRect.right).toBeLessThanOrEqual(triggerRect.right)
-    // `numberOfLines={1}` keeps it to a single line — a dropped truncation class
-    // would wrap onto a second line instead of overflowing horizontally, since
-    // the browser wraps at word boundaries by default.
+    // `numberOfLines={1}` keeps it to one line — a dropped truncation class would wrap onto a
+    // second line instead of overflowing horizontally (browser default: wrap at word boundaries).
     const lineHeight = parseFloat(getComputedStyle(excerptText).lineHeight)
     await expect(excerptRect.height).toBeLessThanOrEqual(lineHeight * 1.2)
   },
@@ -417,9 +413,8 @@ export const ClosePhoneNeverFlashesEmptyState: Story = {
   globals: { viewport: { value: 'mobile1' } },
   render: () => <PhoneHarness />,
   play: async () => {
-    // Tier-dependent assertion needs a wait: `useTier()` reads a cached window width for
-    // at least one commit before the viewport's resize event lands (lessons-learned/
-    // storybook-viewport-usetier-async.md).
+    // Tier-dependent assertion needs a wait — useTier() reads a stale window width for at
+    // least one commit (lessons-learned/storybook-viewport-usetier-async.md).
     await waitFor(() => expect(screen.getByTestId('tier')).toHaveTextContent('phone'))
     await userEvent.click(screen.getByTestId('picker'))
     const options = await screen.findAllByRole('option')
