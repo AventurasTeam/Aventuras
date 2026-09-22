@@ -98,6 +98,9 @@ type HarnessProps = {
   revealId?: string
   /** Flips `listSignals` between WITH_CHAPTERS and NO_CHAPTERS, mid-session. */
   showChapterToggle?: boolean
+  initialSearch?: string
+  initialThreadFilter?: ThreadFilter
+  initialHappeningFilter?: HappeningFilter
 }
 
 function Harness({
@@ -109,16 +112,19 @@ function Harness({
   revealKind = 'thread',
   revealId = 't_syndicate',
   showChapterToggle = false,
+  initialSearch = '',
+  initialThreadFilter = 'all',
+  initialHappeningFilter = 'all',
 }: HarnessProps) {
   const [kind, setKind] = useState<PlotKind>(initialKind)
-  const [threadFilter, setThreadFilter] = useState<ThreadFilter>('all')
-  const [happeningFilter, setHappeningFilter] = useState<HappeningFilter>('all')
-  const [search, setSearch] = useState('')
+  const [threadFilter, setThreadFilter] = useState<ThreadFilter>(initialThreadFilter)
+  const [happeningFilter, setHappeningFilter] = useState<HappeningFilter>(initialHappeningFilter)
+  const [search, setSearch] = useState(initialSearch)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [listSignals, setListSignals] = useState<PlotListSignals>(signals)
   const ref = useRef<PlotListPaneHandle>(null)
   return (
-    <View style={{ width: 360, height: 600 }} className="border border-border">
+    <View style={{ width: 360, maxWidth: '100%', height: 600 }} className="border border-border">
       {showRevealButton ? (
         <Button variant="secondary" onPress={() => ref.current?.revealRow(revealKind, revealId)}>
           <Text>Reveal row</Text>
@@ -178,10 +184,14 @@ const header = (label: string) =>
 // CI runs plays several times slower than local; every post-interaction wait uses this.
 const INTERACTION_WAIT = { timeout: 3000 }
 
-// Toolbar measures its own width via onLayout and switches wide/narrow after that first
-// commit; an interaction dispatched before it settles can land on a row that has since moved.
-async function settleLayout() {
-  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+// Toolbar first renders from useTier()'s window guess (one row), then remounts search and
+// chips in its narrow branch once onLayout reports the 360 px harness; only that branch stacks them.
+async function toolbarSettled() {
+  await waitFor(() => {
+    const search = screen.getByRole('textbox').getBoundingClientRect()
+    const chip = screen.getByRole('button', { name: 'All' }).getBoundingClientRect()
+    expect(chip.top).toBeGreaterThanOrEqual(search.bottom)
+  }, INTERACTION_WAIT)
 }
 
 /** Threads: Active starts open, the rest collapsed; a header click and a chip both work. */
@@ -190,14 +200,16 @@ export const Threads: Story = {
     expect(await screen.findByRole('button', { name: 'What the amulet wants' })).toBeVisible()
     expect(header('Active')).toHaveAttribute('aria-expanded', 'true')
     expect(header('Pending')).toHaveAttribute('aria-expanded', 'false')
+    expect(header('Resolved')).toHaveAttribute('aria-expanded', 'false')
+    expect(header('Failed')).toHaveAttribute('aria-expanded', 'false')
     expect(
       screen.queryByRole('button', { name: 'Expose the Syndicate broker' }),
     ).not.toBeInTheDocument()
-    await settleLayout()
     await userEvent.click(header('Pending'))
     expect(
       await screen.findByRole('button', { name: 'Expose the Syndicate broker' }, INTERACTION_WAIT),
     ).toBeInTheDocument()
+    await toolbarSettled()
     await userEvent.click(screen.getByRole('button', { name: 'Failed', pressed: false }))
     expect(
       await screen.findByRole('button', { name: 'Escape the River Keep' }, INTERACTION_WAIT),
@@ -219,7 +231,7 @@ export const HappeningsWithChapters: Story = {
     expect(header('Earlier chapters')).toHaveAttribute('aria-expanded', 'false')
     expect(header('Out of narrative')).toHaveAttribute('aria-expanded', 'false')
     expect(screen.getByRole('button', { name: 'This chapter', pressed: false })).toBeVisible()
-    await settleLayout()
+    await toolbarSettled()
     await userEvent.click(screen.getByRole('button', { name: 'Out-of-narrative', pressed: false }))
     expect(
       await screen.findByRole('button', { name: 'The old betrayal' }, INTERACTION_WAIT),
@@ -233,6 +245,9 @@ export const HappeningsChapterless: Story = {
   args: { initialKind: 'happening', signals: NO_CHAPTERS },
   play: async () => {
     expect(await screen.findByRole('button', { name: "Vorne's pact" })).toBeVisible()
+    // Anchored at entry 10, inside the closed chapter under WITH_CHAPTERS — only landing here
+    // because no chapter is closed proves the bucket logic, not just its label.
+    expect(screen.getByRole('button', { name: 'The alley ambush' })).toBeVisible()
     expect(header('Current chapter')).toHaveAttribute('aria-expanded', 'true')
     expect(screen.queryByRole('button', { name: /^Earlier chapters/ })).not.toBeInTheDocument()
     expect(header('Out of narrative')).toBeVisible()
@@ -245,7 +260,6 @@ export const HappeningsChapterless: Story = {
 export const SegmentSwitch: Story = {
   play: async () => {
     expect(await screen.findByRole('button', { name: 'What the amulet wants' })).toBeVisible()
-    await settleLayout()
     await userEvent.click(screen.getByText('Happenings'))
     // Vorne's pact sits in the Current bucket, open by default; the alley ambush sits in the
     // collapsed Earlier bucket and would never mount.
@@ -263,26 +277,19 @@ export const EmptyThreads: Story = {
 }
 
 export const NoResults: Story = {
+  args: { initialSearch: 'zzz' },
   play: async () => {
-    await screen.findByPlaceholderText('Search threads…')
-    // The toolbar remeasures itself via onLayout right after mount and re-renders its
-    // wide/narrow branch, replacing the search input's DOM node — re-query past that point.
-    await settleLayout()
-    await userEvent.type(screen.getByPlaceholderText('Search threads…'), 'zzz')
-    await waitFor(() => {
-      expect(screen.getByText('No results.')).toBeVisible()
-    }, INTERACTION_WAIT)
+    expect(await screen.findByText('No results.')).toBeVisible()
   },
 }
 
 /** The imperative handle: a narrowing chip and search widen back to All before the row scrolls in. */
 export const Reveal: Story = {
-  args: { showRevealButton: true },
+  args: { showRevealButton: true, initialThreadFilter: 'failed', initialSearch: 'zzz' },
   play: async () => {
-    await screen.findByRole('button', { name: 'Failed', pressed: false })
-    await settleLayout()
-    await userEvent.click(screen.getByRole('button', { name: 'Failed', pressed: false }))
-    await userEvent.type(screen.getByPlaceholderText('Search threads…'), 'zzz')
+    expect(await screen.findByRole('button', { name: 'Failed', pressed: true })).toBeVisible()
+    expect(screen.getByPlaceholderText('Search threads…')).toHaveValue('zzz')
+    expect(screen.getByText('No results.')).toBeVisible()
     expect(
       screen.queryByRole('button', { name: 'Expose the Syndicate broker' }),
     ).not.toBeInTheDocument()
@@ -298,7 +305,45 @@ export const Reveal: Story = {
   },
 }
 
-/** The handle reaches into a collapsed bucket on the other kind. */
+/** A reveal request for the other kind never reaches this pane: no widen, no collapse write. */
+export const RevealCrossKindIsNoop: Story = {
+  args: { initialKind: 'happening', initialSearch: 'zzz', showRevealButton: true },
+  play: async () => {
+    expect(await screen.findByPlaceholderText('Search happenings…')).toHaveValue('zzz')
+    await userEvent.click(screen.getByRole('button', { name: 'Reveal row' }))
+    expect(screen.getByPlaceholderText('Search happenings…')).toHaveValue('zzz')
+    expect(
+      listCollapseStore.getCollapsed('thread', new Set(['pending', 'resolved', 'failed'])),
+    ).toEqual(new Set(['pending', 'resolved', 'failed']))
+  },
+}
+
+/** A happening-kind reveal widens its own chip and search, never the thread ones. */
+export const RevealHappeningWidensOwnFilter: Story = {
+  args: {
+    initialKind: 'happening',
+    initialHappeningFilter: 'this-chapter',
+    initialSearch: 'zzz',
+    showRevealButton: true,
+    revealKind: 'happening',
+    revealId: 'h_betrayal',
+  },
+  play: async () => {
+    expect(await screen.findByRole('button', { name: 'This chapter', pressed: true })).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'The old betrayal' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Reveal row' }))
+    expect(
+      await screen.findByRole('button', { name: 'The old betrayal' }, INTERACTION_WAIT),
+    ).toBeVisible()
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'All', pressed: true })).toBeVisible()
+      expect(screen.getByPlaceholderText('Search happenings…')).toHaveValue('')
+      expect(header('Out of narrative')).toHaveAttribute('aria-expanded', 'true')
+    }, INTERACTION_WAIT)
+  },
+}
+
+/** The handle expands a collapsed happening bucket before scrolling to the row. */
 export const RevealHappeningInCollapsedBucket: Story = {
   args: {
     initialKind: 'happening',
@@ -309,7 +354,6 @@ export const RevealHappeningInCollapsedBucket: Story = {
   play: async () => {
     expect(await screen.findByRole('button', { name: "Vorne's pact" })).toBeVisible()
     expect(screen.queryByRole('button', { name: 'The market fire' })).not.toBeInTheDocument()
-    await settleLayout()
     await userEvent.click(screen.getByRole('button', { name: 'Reveal row' }))
     expect(
       await screen.findByRole('button', { name: 'The market fire' }, INTERACTION_WAIT),
@@ -322,14 +366,13 @@ export const RevealHappeningInCollapsedBucket: Story = {
 
 /** `This chapter` leaves the vocabulary mid-session when the branch's chapters change under it. */
 export const FilterShrink: Story = {
-  args: { initialKind: 'happening', showChapterToggle: true },
+  args: {
+    initialKind: 'happening',
+    initialHappeningFilter: 'this-chapter',
+    showChapterToggle: true,
+  },
   play: async () => {
-    await screen.findByRole('button', { name: 'This chapter', pressed: false })
-    await settleLayout()
-    await userEvent.click(screen.getByRole('button', { name: 'This chapter', pressed: false }))
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'This chapter', pressed: true })).toBeVisible()
-    }, INTERACTION_WAIT)
+    expect(await screen.findByRole('button', { name: 'This chapter', pressed: true })).toBeVisible()
     await userEvent.click(screen.getByRole('button', { name: 'Toggle chapters' }))
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: 'This chapter' })).not.toBeInTheDocument()
@@ -338,18 +381,8 @@ export const FilterShrink: Story = {
   },
 }
 
-/** Phone tier: `useTier` settles after the viewport resize, so wait before asserting. */
+/** A visual render at phone width; on web the pane has no phone-specific behavior to assert. */
 export const Phone: Story = {
   globals: { viewport: { value: 'mobile1' } },
   args: { initialKind: 'happening' },
-  play: async () => {
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: "Vorne's pact" })).toBeVisible()
-    }, INTERACTION_WAIT)
-    await settleLayout()
-    await userEvent.click(screen.getByText('Threads'))
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'What the amulet wants' })).toBeVisible()
-    }, INTERACTION_WAIT)
-  },
 }

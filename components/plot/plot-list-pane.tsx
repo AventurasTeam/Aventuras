@@ -1,7 +1,7 @@
 import {
   useCallback,
-  useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useState,
   type ReactNode,
   type Ref,
@@ -98,7 +98,8 @@ export function PlotListPane({
 
   // Filter-set shrinkage: `This chapter` leaves the vocabulary when no chapter is closed.
   const offered = happeningListModule.filters(listSignals)
-  useEffect(() => {
+  // useLayoutEffect: land the reset before paint, or the chip row briefly shows nothing selected.
+  useLayoutEffect(() => {
     if (!offered.includes(happeningFilter)) onHappeningFilterChange('all')
   }, [offered, happeningFilter, onHappeningFilterChange])
 
