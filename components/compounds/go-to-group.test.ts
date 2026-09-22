@@ -28,15 +28,19 @@ describe('buildGoToGroup', () => {
     expect(navigate).toHaveBeenCalledExactlyOnceWith('/world/br_1')
   })
 
+  it('routes Plot by branch', () => {
+    const navigate = vi.fn()
+    const group = buildGoToGroup({ ...STORY, surface: 'reader' }, navigate)
+    const plot = group.entries.find((e) => e.id === 'open-plot')
+    plot?.onActivate()
+    expect(navigate).toHaveBeenCalledWith('/plot/br_1')
+    expect(plot?.disabled).toBeUndefined()
+  })
+
   it('renders unbuilt surfaces present-but-disabled with their lands-later reason', () => {
     const navigate = vi.fn()
     const group = buildGoToGroup({ ...STORY, surface: 'reader' }, navigate)
     expect(group.entries.map((e) => e.id)).not.toContain('open-reader')
-    const plot = group.entries.find((e) => e.id === 'open-plot')
-    expect(plot?.disabled).toBe(true)
-    expect(plot?.disabledReason).toBe('Plot lands in Slice 4.3')
     expect(group.entries.find((e) => e.id === 'open-chapter-timeline')?.disabled).toBe(true)
-    plot?.onActivate()
-    expect(navigate).not.toHaveBeenCalled()
   })
 })

@@ -58,7 +58,7 @@ describe('lib/i18n', () => {
     expect(t('world:addMenu.blankEntityReason')).toBe('Lands in Slice 4.2a')
     expect(t('chrome.goTo.header')).toBe('Go to')
     expect(t('chrome.goTo.openWorld')).toBe('Open World')
-    expect(t('chrome.goTo.plotLandsLater')).toBe('Plot lands in Slice 4.3')
+    expect(t('chrome.goTo.openPlot')).toBe('Open Plot')
     expect(t('collisionRow.collidesWith', { name: 'Kael' })).toBe('⚠ Collides with Kael')
     expect(t('collisionRow.resolve')).toBe('Resolve →')
   })

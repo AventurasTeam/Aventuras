@@ -34,7 +34,7 @@ const ENTRY: Record<InStorySurface, SurfaceEntry> = {
   plot: {
     id: 'open-plot',
     label: () => t('chrome.goTo.openPlot'),
-    landsLater: () => t('chrome.goTo.plotLandsLater'),
+    route: (story) => `/plot/${story.branchId}`,
   },
   'chapter-timeline': {
     id: 'open-chapter-timeline',
