@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { CircleDot } from 'lucide-react-native'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Controller, useWatch, type Control } from 'react-hook-form'
 import { View } from 'react-native'
 
@@ -20,14 +20,9 @@ import { Select } from '@/components/ui/select'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
 import { Tag } from '@/components/ui/tag'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  useRowSaveSession,
-  type RowCommitResult,
-  type RowSessionHandle,
-} from '@/hooks/use-row-save-session'
+import type { RowSessionHandle } from '@/hooks/use-row-save-session'
 import type { PlotSaveResult } from '@/lib/actions'
 import type { Entity, Happening } from '@/lib/db'
-import { logger } from '@/lib/diagnostics'
 import type { EntryRef } from '@/lib/entry-refs'
 import { t } from '@/lib/i18n'
 import {
@@ -42,6 +37,7 @@ import { AwarenessEditor } from './awareness-editor'
 import { CommonKnowledgeNotice } from './common-knowledge-notice'
 import { InvolvementsEditor } from './involvements-editor'
 import {
+  categoryTailLabel,
   happeningFieldLabel,
   happeningIssueText,
   iconFromOption,
@@ -49,12 +45,11 @@ import {
   issueLabel,
   plotIconOptions,
   plotMenuEntries,
-  saveFailureText,
-  saveRejectionText,
 } from './plot-copy'
 import { PlotHistoryPlaceholder } from './plot-history-placeholder'
 import { PlotIcon } from './plot-icon'
 import { plotKindName } from './plot-selection'
+import { usePlotRowSession } from './use-plot-row-session'
 
 const TABS = ['overview', 'involvements', 'awareness', 'history'] as const
 type HappeningTab = (typeof TABS)[number]
@@ -64,10 +59,6 @@ function isHappeningTab(value: string | undefined): value is HappeningTab {
 }
 
 const resolver = zodResolver(happeningDraftSchema)
-
-function categoryTailLabel(value: string): string {
-  return t('plot:fields.categoryAdd', { value })
-}
 
 // plot.md → Raw JSON viewer: a happening shows its committed link rows inline.
 function rawHappening(row: Happening, links: HappeningLinks) {
@@ -133,45 +124,20 @@ export function HappeningDetailPane({
   onOpenEntity,
   hotkeysEnabled = true,
 }: HappeningDetailPaneProps) {
-  const rowKey = row?.id ?? 'create:happening'
   const values = useMemo(() => happeningDraftFrom(row, links), [row, links])
-  const commit = useCallback(
-    async (draft: HappeningDraft): Promise<RowCommitResult> => {
-      const result = await onSave(draft)
-      if (result.status === 'rejected') {
-        return { status: 'rejected', reason: saveRejectionText(result.code) }
-      }
-      // The write landed: a throwing handler must not read as a failed save, or a retry
-      // would create the happening and its links twice.
-      try {
-        onSaved(result.id)
-      } catch (error) {
-        logger.error('app.plot_saved_handler_failed', {
-          kind: 'happening',
-          id: result.id,
-          error: error instanceof Error ? error.message : String(error),
-        })
-      }
-      return { status: 'ok' }
-    },
-    [onSave, onSaved],
-  )
-  const session = useRowSaveSession<HappeningDraft>({
-    rowKey,
+  const session = usePlotRowSession<HappeningDraft>({
+    kind: 'happening',
+    rowId: row?.id ?? null,
     values,
     resolver,
     fieldLabel: happeningFieldLabel,
     issueText: happeningIssueText,
-    failureText: saveFailureText,
-    commit,
+    onSave,
+    onSaved,
     onRejected,
+    onSession,
   })
   const { control, trigger } = session.form
-  const { dirty, requestLeave } = session
-  useEffect(() => {
-    onSession({ dirty, requestLeave })
-    return () => onSession(null)
-  }, [onSession, dirty, requestLeave])
 
   const [tab, setTab] = useState<string>(isHappeningTab(initialTab) ? initialTab : 'overview')
   const [jsonOpen, setJsonOpen] = useState(false)

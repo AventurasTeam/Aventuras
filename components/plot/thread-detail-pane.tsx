@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Controller, useWatch, type Control } from 'react-hook-form'
 import { View } from 'react-native'
 
@@ -15,14 +15,9 @@ import { Select } from '@/components/ui/select'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
 import { Tag } from '@/components/ui/tag'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  useRowSaveSession,
-  type RowCommitResult,
-  type RowSessionHandle,
-} from '@/hooks/use-row-save-session'
+import type { RowSessionHandle } from '@/hooks/use-row-save-session'
 import type { PlotSaveResult } from '@/lib/actions'
 import { INJECTION_MODES, type Thread } from '@/lib/db'
-import { logger } from '@/lib/diagnostics'
 import type { EntryIndex } from '@/lib/entry-refs'
 import { t } from '@/lib/i18n'
 import { THREAD_TIERS } from '@/lib/list-modules'
@@ -31,18 +26,18 @@ import type { RecentlyClassified } from '@/lib/row-signals'
 
 import { EntryRefField } from './entry-ref-field'
 import {
+  categoryTailLabel,
   iconFromOption,
   iconOptionValue,
   plotIconOptions,
   plotMenuEntries,
-  saveFailureText,
-  saveRejectionText,
   threadFieldLabel,
   validationText,
 } from './plot-copy'
 import { PlotHistoryPlaceholder } from './plot-history-placeholder'
 import { PlotIcon } from './plot-icon'
 import { plotKindName } from './plot-selection'
+import { usePlotRowSession } from './use-plot-row-session'
 
 const TABS = ['overview', 'history'] as const
 type ThreadTab = (typeof TABS)[number]
@@ -52,10 +47,6 @@ function isThreadTab(value: string | undefined): value is ThreadTab {
 }
 
 const resolver = zodResolver(threadDraftSchema)
-
-function categoryTailLabel(value: string): string {
-  return t('plot:fields.categoryAdd', { value })
-}
 
 export type ThreadDetailPaneProps = {
   /** Null in create mode (`[+] Blank`). */
@@ -95,45 +86,20 @@ export function ThreadDetailPane({
   onSession,
   hotkeysEnabled = true,
 }: ThreadDetailPaneProps) {
-  const rowKey = row?.id ?? 'create:thread'
   const values = useMemo(() => threadDraftFrom(row), [row])
-  const commit = useCallback(
-    async (draft: ThreadDraft): Promise<RowCommitResult> => {
-      const result = await onSave(draft)
-      if (result.status === 'rejected') {
-        return { status: 'rejected', reason: saveRejectionText(result.code) }
-      }
-      // The write landed: a throwing handler must not read as a failed save, or a retry
-      // would create the thread twice.
-      try {
-        onSaved(result.id)
-      } catch (error) {
-        logger.error('app.plot_saved_handler_failed', {
-          kind: 'thread',
-          id: result.id,
-          error: error instanceof Error ? error.message : String(error),
-        })
-      }
-      return { status: 'ok' }
-    },
-    [onSave, onSaved],
-  )
-  const session = useRowSaveSession<ThreadDraft>({
-    rowKey,
+  const session = usePlotRowSession<ThreadDraft>({
+    kind: 'thread',
+    rowId: row?.id ?? null,
     values,
     resolver,
     fieldLabel: threadFieldLabel,
     issueText: validationText,
-    failureText: saveFailureText,
-    commit,
+    onSave,
+    onSaved,
     onRejected,
+    onSession,
   })
   const { control } = session.form
-  const { dirty, requestLeave } = session
-  useEffect(() => {
-    onSession({ dirty, requestLeave })
-    return () => onSession(null)
-  }, [onSession, dirty, requestLeave])
 
   const [tab, setTab] = useState<string>(isThreadTab(initialTab) ? initialTab : 'overview')
   const [jsonOpen, setJsonOpen] = useState(false)

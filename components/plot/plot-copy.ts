@@ -39,6 +39,11 @@ export function saveFailureText(): string {
   return t('plot:save.failed')
 }
 
+/** The category Autocomplete's create-tail row. */
+export function categoryTailLabel(value: string): string {
+  return t('plot:fields.categoryAdd', { value })
+}
+
 const THREAD_FIELD_LABEL: Record<string, () => string> = {
   title: () => t('plot:fields.title'),
   description: () => t('plot:fields.description'),
