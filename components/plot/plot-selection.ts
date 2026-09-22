@@ -19,6 +19,15 @@ export function parsePlotSelection(params: {
   return tab == null ? { kind, id } : { kind, id, tab }
 }
 
+/** The deep link's tab belongs to its row alone; any other row's pane opens on its default. */
+export function deepLinkTab(
+  selection: PlotSelection | null,
+  kind: PlotKind,
+  id: string,
+): string | undefined {
+  return selection?.kind === kind && selection.id === id ? selection.tab : undefined
+}
+
 export function plotKindLabel(kind: PlotKind): string {
   return t(`plot:kinds.${kind}`)
 }
