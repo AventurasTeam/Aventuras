@@ -490,3 +490,24 @@ slice-planning gate forces its resolution before that slice is planned.
   field by placeholder rather than label. Affects every `Autocomplete`
   consumer rendered on web or native tablet/desktop. Surfaced
   2026-09-22.
+
+- **A list row's `meta` slot is a touch dead zone on Android.** Pressing
+  the `Tag` inside a `ListRow` does nothing; pressing the title or any
+  clear part of the row opens it. Reproduced on all three Plot happening
+  rows (`entry #22`, `entry #10`, `years past`) and on World's Kael row
+  (`You`, `active`), so it is substrate, not Plot's. It bites Plot
+  hardest because the when-marker sits beside the title near the row's
+  horizontal centre (`years past` spans x=400..578 of a 28..1052 row) —
+  exactly where a thumb lands — while World's chips sit at the edges.
+  Mechanism unknown: `Tag` and `Chip` both render a plain `View` when
+  non-interactive, yet uiautomator reports those nodes `clickable=true`.
+  Verified with injected `adb input` touches, though the same injection
+  opens the row 250 px to the left, so it is not an injection artifact.
+  Surfaced 2026-09-22.
+
+- **`EntityPicker`'s tablet popover anchors to the screen, not its
+  field.** At tablet tier (`wm density 200` on the phone AVD) the
+  inline-list popover renders full-bleed from x=0 and overlaps the list
+  pane, rather than under the `Character` field that opened it. Cosmetic
+  and tablet-only; the phone Sheet and the desktop popover are both
+  correct. Surfaced 2026-09-22.

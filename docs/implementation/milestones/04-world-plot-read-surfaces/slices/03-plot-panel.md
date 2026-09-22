@@ -312,3 +312,30 @@ chapters` (deferred by canon), and `retrieval_count` review — M5.
   filter-set shrinkage (a selected filter that disappears resets to
   All), and sizing (two stacked PRs by module layer, the 4.1 / 4.4
   shape).
+- **The detail head no longer carries a kind line.** The developer cut
+  the `[icon] kind` strip above the name as redundant against the
+  breadcrumbs, and
+  [`world.md → Detail head structure`](../../../../ui/screens/world/world.md#detail-head-structure)
+  was amended with it — it had listed that strip as the head's first
+  element. `DetailPane` no longer accepts `kindIcon` / `kindName`, so
+  **4.2a's real World panes must not reintroduce it**; both wireframes
+  and the `kindName` locale keys went too.
+- **The top-bar breadcrumb is screen-level on every tier.** Phone used
+  to append the kind (`Story / Plot / Happenings`) while the sub-header
+  already led with it, duplicating the label; removed, per
+  [`principles.md → Master-detail sub-header`](../../../../ui/principles.md#master-detail-sub-header).
+  Desktop was already correct.
+- **Tab counts are parenthesised** in both the strip and its Select
+  form. An inactive tab's label is already `fg-muted`, so a bare
+  trailing number had no contrast against it and read as part of the
+  name; the Select's rows can't style it at all without losing the
+  primitive's selected checkmark.
+- **`AccordionContent`'s exit animation is gated on `isExpanded`.** It
+  exists for a collapsing group, but a kind swap tears down every
+  `AccordionItem` at once and painted the outgoing rows over the
+  incoming list for ~230 ms. See
+  [lessons-learned](../../../lessons-learned/layoutanimationconfig-skipexiting-gap.md)
+  — `LayoutAnimationConfig skipExiting` does not suppress it.
+- **Seed anchors avoid multiples of 12.** Those hero entries are
+  `system`, which the entry index excludes by design, so five awareness
+  rows and one `lastSeenAt` were rendering as "Entry no longer exists".

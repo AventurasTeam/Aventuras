@@ -523,6 +523,12 @@ convention) and 4.6 (`Export …`) later flip. Doc-as-contract between
 `components/compounds/overflow-menu.tsx`; see
 [Slice 4.3 → Implementation notes](./slices/03-plot-panel.md#implementation-notes).
 
+4.3 also **removed the detail head's kind line** (`[icon] kind` above
+the name) as redundant against the breadcrumbs, amending
+[`world.md → Detail head structure`](../../../ui/screens/world/world.md#detail-head-structure)
+and both wireframes. `DetailPane` no longer accepts `kindIcon` /
+`kindName`, so 4.2a builds against a head of name + badges + `⋯` only.
+
 ### C12 — Keyword normalizer
 
 Every user-authored write to a `keywords` column — 4.2a's entity
