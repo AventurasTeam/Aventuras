@@ -1,4 +1,5 @@
 import type { Happening } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { happeningActions, type HappeningDraft, type HappeningLinks } from '@/lib/plot'
 import { generationStore } from '@/lib/stores'
@@ -19,8 +20,14 @@ export async function saveHappening(
   { branchId, row, links, draft }: SaveHappeningArgs,
   ctx: DbCtx,
 ): Promise<PlotSaveResult> {
-  if (generationStore.isUserEditBlocked())
+  if (generationStore.isUserEditBlocked()) {
+    logger.debug('action_layer.happening_save_rejected', {
+      branchId,
+      id: row?.id ?? null,
+      code: PLOT_REJECTION.inFlight,
+    })
     return { status: 'rejected', reason: 'generation in flight', code: PLOT_REJECTION.inFlight }
+  }
   const id = row?.id ?? generateId('hap')
   const actions = happeningActions({
     branchId,
@@ -37,5 +44,14 @@ export async function saveHappening(
     { actionId: generateId('act'), branchId },
     ctx,
   )
-  return result.status === 'ok' ? { status: 'ok', id } : result
+  if (result.status !== 'ok') {
+    logger.warn('action_layer.happening_save_rejected', {
+      branchId,
+      id,
+      reason: result.reason,
+      code: result.code,
+    })
+    return result
+  }
+  return { status: 'ok', id }
 }

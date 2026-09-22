@@ -22,7 +22,6 @@ import {
 } from '@/hooks/use-row-save-session'
 import type { PlotSaveResult } from '@/lib/actions'
 import { INJECTION_MODES, type Thread } from '@/lib/db'
-import { logger } from '@/lib/diagnostics'
 import type { EntryIndex } from '@/lib/entry-refs'
 import { t } from '@/lib/i18n'
 import { THREAD_TIERS } from '@/lib/list-modules'
@@ -101,11 +100,6 @@ export function ThreadDetailPane({
     async (draft: ThreadDraft): Promise<RowCommitResult> => {
       const result = await onSave(draft)
       if (result.status === 'rejected') {
-        logger.warn('app.plot_save_rejected', {
-          kind: 'thread',
-          reason: result.reason,
-          code: result.code,
-        })
         return { status: 'rejected', reason: saveRejectionText(result.code) }
       }
       onSaved(result.id)

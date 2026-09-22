@@ -1,4 +1,5 @@
 import type { Thread } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { threadActions, type ThreadDraft } from '@/lib/plot'
 import { generationStore } from '@/lib/stores'
@@ -19,9 +20,15 @@ export async function saveThread(
   { branchId, row, draft }: SaveThreadArgs,
   ctx: DbCtx,
 ): Promise<PlotSaveResult> {
-  // The UI disables while generation is in flight; the arm refuses too.
-  if (generationStore.isUserEditBlocked())
+  // The UI disables while generation is in flight; the arm refuses too. Routine, so debug.
+  if (generationStore.isUserEditBlocked()) {
+    logger.debug('action_layer.thread_save_rejected', {
+      branchId,
+      id: row?.id ?? null,
+      code: PLOT_REJECTION.inFlight,
+    })
     return { status: 'rejected', reason: 'generation in flight', code: PLOT_REJECTION.inFlight }
+  }
   const id = row?.id ?? generateId('thr')
   const actions = threadActions({ branchId, row, draft, id, now: Date.now() })
   if (actions.length === 0) return { status: 'ok', id }
@@ -30,5 +37,14 @@ export async function saveThread(
     { actionId: generateId('act'), branchId },
     ctx,
   )
-  return result.status === 'ok' ? { status: 'ok', id } : result
+  if (result.status !== 'ok') {
+    logger.warn('action_layer.thread_save_rejected', {
+      branchId,
+      id,
+      reason: result.reason,
+      code: result.code,
+    })
+    return result
+  }
+  return { status: 'ok', id }
 }
