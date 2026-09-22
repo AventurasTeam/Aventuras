@@ -85,6 +85,9 @@ export function isGenreColorKey(key: string | null | undefined): key is GenreCol
  */
 export function resolveGenreColor(genre: string | null | undefined, key?: string | null): string {
   if (isGenreColorKey(key)) return GENRE_COLORS[key].badge
-  const preset = genre ? PRESET_GENRE_COLORS[genre] : undefined
+  // Own properties only: a genre is free text, and `toString` would otherwise resolve to
+  // `Object.prototype`'s method and take the badge lookup with it.
+  const preset =
+    genre && Object.hasOwn(PRESET_GENRE_COLORS, genre) ? PRESET_GENRE_COLORS[genre] : undefined
   return preset ? GENRE_COLORS[preset].badge : NEUTRAL_GENRE_BADGE
 }

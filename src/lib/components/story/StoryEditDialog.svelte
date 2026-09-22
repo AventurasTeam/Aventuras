@@ -143,10 +143,11 @@
   function singleLine(e: Event & { currentTarget: HTMLTextAreaElement }, set: (v: string) => void) {
     const el = e.currentTarget
     if (!/[\r\n]/.test(el.value)) return
-    // One character for one, so the caret can go back exactly where it was.
-    const start = el.selectionStart
-    const end = el.selectionEnd
-    el.value = el.value.replace(/[\r\n]/g, ' ')
+    // A CRLF is one break, so the caret is recounted from the collapsed text ahead of it.
+    const collapse = (text: string) => text.replace(/\r\n|[\r\n]/g, ' ')
+    const start = collapse(el.value.slice(0, el.selectionStart)).length
+    const end = collapse(el.value.slice(0, el.selectionEnd)).length
+    el.value = collapse(el.value)
     el.setSelectionRange(start, end)
     set(el.value)
   }

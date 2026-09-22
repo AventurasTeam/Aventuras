@@ -54,4 +54,10 @@ describe('resolveGenreColor', () => {
   it('does not treat inherited object keys as colours', () => {
     expect(resolveGenreColor('Noir', 'toString')).toBe(NEUTRAL_GENRE_BADGE)
   })
+
+  it('does not treat an inherited property name as a preset genre', () => {
+    expect(resolveGenreColor('toString')).toBe(NEUTRAL_GENRE_BADGE)
+    expect(resolveGenreColor('constructor')).toBe(NEUTRAL_GENRE_BADGE)
+    expect(resolveGenreColor('constructor', 'blue')).toBe(GENRE_COLORS.blue.badge)
+  })
 })
