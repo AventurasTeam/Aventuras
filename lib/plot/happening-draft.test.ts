@@ -334,6 +334,27 @@ describe('happeningActions', () => {
     ])
   })
 
+  it('clears a blank-but-non-null committed temporal when the draft sets an entry anchor', () => {
+    const blankTemporalRow: Happening = { ...ROW, temporal: '  ', occurredAtEntryId: null }
+    const draft = { ...happeningDraftFrom(blankTemporalRow, LINKS), occurredAtEntryId: 'e_5' }
+    expect(build(draft, blankTemporalRow, LINKS)).toEqual([
+      {
+        kind: 'updateHappening',
+        source: 'user_edit',
+        payload: {
+          branchId: 'br_1',
+          id: 'hap_1',
+          patch: { temporal: null, occurredAtEntryId: 'e_5' },
+        },
+      },
+    ])
+  })
+
+  it('treats a whitespace-only committed temporal with no anchor change as unchanged', () => {
+    const blankTemporalRow: Happening = { ...ROW, temporal: '  ', occurredAtEntryId: null }
+    expect(build(happeningDraftFrom(blankTemporalRow, LINKS), blankTemporalRow, LINKS)).toEqual([])
+  })
+
   it('treats a committed involvement with a null role as equal to its unchanged draft', () => {
     const nullRoleInv: HappeningInvolvement = { ...INV_KAEL, id: 'hinv_null', role: null }
     const links: HappeningLinks = { involvements: [nullRoleInv], awareness: [] }
@@ -386,5 +407,12 @@ describe('happeningActions', () => {
       newId,
     })
     expect(actions.map((a) => a.kind)).toEqual(['createHappening'])
+  })
+
+  it('maps a commonKnowledge: 1 row to true and round-trips as unchanged', () => {
+    const ckRow: Happening = { ...ROW, commonKnowledge: 1 }
+    const draft = happeningDraftFrom(ckRow, LINKS)
+    expect(draft.commonKnowledge).toBe(true)
+    expect(build(draft, ckRow, LINKS)).toEqual([])
   })
 })

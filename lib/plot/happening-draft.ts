@@ -140,7 +140,11 @@ export function happeningPatch(row: Happening, draft: HappeningDraft): Happening
   if (category !== blankToNull(row.category ?? '')) patch.category = category
   if (draft.icon !== row.icon) patch.icon = draft.icon
   const temporal = blankToNull(draft.temporal)
-  if (temporal !== blankToNull(row.temporal ?? '')) patch.temporal = temporal
+  // A blank-but-non-null committed temporal (classifier writes verbatim) still trips
+  // the handler's mutual-exclusion check once an entry ref is set, unless cleared here.
+  const clearsBlankTemporal =
+    temporal == null && row.temporal != null && draft.occurredAtEntryId != null
+  if (temporal !== blankToNull(row.temporal ?? '') || clearsBlankTemporal) patch.temporal = temporal
   if (draft.occurredAtEntryId !== row.occurredAtEntryId)
     patch.occurredAtEntryId = draft.occurredAtEntryId
   const commonKnowledge: 0 | 1 = draft.commonKnowledge ? 1 : 0
@@ -193,11 +197,10 @@ function awarenessUpsert(
 }
 
 /**
- * No unique index on involvements, so duplicates for one entity can exist. Prefers the
- * committed row sharing the draft row's id (a preference, not a requirement — react-hook-form
- * can reorder or drop a row's id), else the first unmatched row for that entity. Avoids
- * double-writing one committed row on a swap and avoids arbitrarily deleting one twin of
- * a duplicate pair.
+ * Prefers the committed row with the draft row's id and entity, else the first unmatched
+ * row for that entity — a re-added row carries `id: null` and an entity change leaves a
+ * stale id. Avoids double-writing one committed row on a swap and arbitrarily deleting
+ * one twin of a duplicate pair.
  */
 function matchInvolvement(
   committed: readonly HappeningInvolvement[],

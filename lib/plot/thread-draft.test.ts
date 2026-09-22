@@ -77,8 +77,13 @@ describe('threadActions', () => {
     ).toEqual([])
   })
 
-  it('emits nothing when the committed title and description carry whitespace the draft trims away', () => {
-    const untrimmedRow: Thread = { ...ROW, title: '  Amulet  ', description: '  It hums.  \n' }
+  it('emits nothing when the committed title, description and category carry whitespace the draft trims away', () => {
+    const untrimmedRow: Thread = {
+      ...ROW,
+      title: '  Amulet  ',
+      description: '  It hums.  \n',
+      category: '  mystery  ',
+    }
     expect(
       threadActions({
         branchId: 'br_1',
