@@ -31,6 +31,7 @@ import { LoreSessionLedger, type LoreMergeResult } from './sessionChanges'
 import { ChapterQueryBudget, MAX_CHAPTER_QUERIES_LORE } from '../sdk/tools/chapterQueries'
 import { LORE_MANAGEMENT_DEFAULTS } from '../core/defaults'
 import { formatNewChapterSection, type LoreNewChapter } from './newChapter'
+import type { POV, StoryMode, Tense } from '$lib/types'
 
 const log = createLogger('LoreManagement')
 
@@ -69,6 +70,9 @@ export interface LoreManagementContext {
   existingEntries: Entry[]
   /** Available chapters for querying */
   chapters?: LoreManagementChapter[]
+  mode?: StoryMode
+  pov?: POV
+  tense?: Tense
   /** Callback to query a chapter with a question */
   queryChapter?: (chapterNumber: number, question: string) => Promise<string>
   /**
@@ -284,6 +288,9 @@ export class LoreManagementService extends BaseAIService {
     // Render prompts through unified pipeline
     const ctx = await ContextBuilder.forPack(context.storyId)
     ctx.add({
+      mode: context.mode ?? 'adventure',
+      pov: context.pov ?? 'second',
+      tense: context.tense ?? 'present',
       entrySummary,
       duplicateSummary,
       recentStorySection,

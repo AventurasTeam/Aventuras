@@ -642,7 +642,7 @@ class AIService {
       newChapter?: { chapter: Chapter; entries: StoryEntry[] }
     },
   ): Promise<LoreManagementResult> {
-    const { tokenThreshold, newChapter } = options ?? {}
+    const { mode, pov, tense, tokenThreshold, newChapter } = options ?? {}
     // The story since the last chapter — the only unsummarised material the agent has. It
     // used to be the single most recent action and narration, which on a story with no
     // chapters left the agent maintaining a lorebook for a story it could not read.
@@ -685,6 +685,9 @@ class AIService {
       recentStory,
       existingEntries: entries,
       chapters: chapterInfos,
+      mode,
+      pov,
+      tense,
       newChapter: newChapterPayload ?? undefined,
       queryChapter: callbacks.onQueryChapter,
       keptSeparate: await callbacks.getKeptSeparate?.(),
