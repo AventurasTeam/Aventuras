@@ -79,7 +79,6 @@ updating as the user clicks list rows.
 Status selector is NOT chrome on the detail head; it's a typed form
 field inside the Overview tab. The detail head carries only:
 
-- A small breadcrumb strip: kind-icon + kind-name
 - The entity name (inline-editable with pencil)
 - A `Recently classified` badge — per
   [patterns → Recently-classified row accent](../../patterns/entity.md#recently-classified-row-accent).

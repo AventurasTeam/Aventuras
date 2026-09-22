@@ -5,10 +5,6 @@
     "thread": "Threads",
     "happening": "Happenings"
   },
-  "kindName": {
-    "thread": "thread",
-    "happening": "happening"
-  },
   "add": {
     "thread": "New thread",
     "happening": "New happening"

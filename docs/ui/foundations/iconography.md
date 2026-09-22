@@ -223,8 +223,8 @@ Source scratch in
 | faction   | `⚑`     | `Flag`       |
 | lore      | `📜`    | `ScrollText` |
 
-Lore isn't an entity kind, but its rows and detail head sit beside
-entity rows and take their glyph from this set. Not `BookOpen`: that
+Lore isn't an entity kind, but its rows sit beside entity rows and
+take their glyph from this set. Not `BookOpen`: that
 is the app logo, and it reads as "story" (see
 [Story Settings glyph rationale](#story-settings-glyph-rationale)).
 

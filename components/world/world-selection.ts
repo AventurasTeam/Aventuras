@@ -27,10 +27,6 @@ export function worldCategoryLabel(category: WorldCategory): string {
   return t(`world:categories.${category}`)
 }
 
-export function worldKindName(category: WorldCategory): string {
-  return t(`world:kindName.${category}`)
-}
-
 export function worldAddLabel(category: WorldCategory): string {
   return t(`world:add.${category}`)
 }

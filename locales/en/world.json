@@ -8,13 +8,6 @@
     "faction": "Factions",
     "lore": "Lore"
   },
-  "kindName": {
-    "character": "character",
-    "location": "location",
-    "item": "item",
-    "faction": "faction",
-    "lore": "lore"
-  },
   "add": {
     "character": "New character",
     "location": "New location",

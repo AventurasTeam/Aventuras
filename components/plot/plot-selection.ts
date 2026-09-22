@@ -32,10 +32,6 @@ export function plotKindLabel(kind: PlotKind): string {
   return t(`plot:kinds.${kind}`)
 }
 
-export function plotKindName(kind: PlotKind): string {
-  return t(`plot:kindName.${kind}`)
-}
-
 export function plotAddLabel(kind: PlotKind): string {
   return t(`plot:add.${kind}`)
 }

@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMemo, useState } from 'react'
-import { Controller, useWatch, type Control } from 'react-hook-form'
+import { Controller, type Control } from 'react-hook-form'
 import { View } from 'react-native'
 
 import { DetailTabs } from '@/components/compounds/detail-tabs'
@@ -35,8 +35,6 @@ import {
   validationText,
 } from './plot-copy'
 import { PlotHistoryPlaceholder } from './plot-history-placeholder'
-import { PlotIcon } from './plot-icon'
-import { plotKindName } from './plot-selection'
 import { usePlotRowSession } from './use-plot-row-session'
 
 const TABS = ['overview', 'history'] as const
@@ -103,14 +101,11 @@ export function ThreadDetailPane({
 
   const [tab, setTab] = useState<string>(isThreadTab(initialTab) ? initialTab : 'overview')
   const [jsonOpen, setJsonOpen] = useState(false)
-  const icon = useWatch({ control, name: 'icon' })
 
   return (
     <View className="flex-1">
       <Tabs value={tab} onValueChange={setTab} className="flex-1 gap-0">
         <DetailPane
-          kindIcon={<PlotIcon kind="thread" icon={icon} className="h-4 w-4" />}
-          kindName={plotKindName('thread')}
           nameSlot={
             <Controller
               control={control}

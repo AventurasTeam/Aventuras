@@ -47,8 +47,6 @@ import {
   plotMenuEntries,
 } from './plot-copy'
 import { PlotHistoryPlaceholder } from './plot-history-placeholder'
-import { PlotIcon } from './plot-icon'
-import { plotKindName } from './plot-selection'
 import { usePlotRowSession } from './use-plot-row-session'
 
 const TABS = ['overview', 'involvements', 'awareness', 'history'] as const
@@ -142,7 +140,6 @@ export function HappeningDetailPane({
 
   const [tab, setTab] = useState<string>(isHappeningTab(initialTab) ? initialTab : 'overview')
   const [jsonOpen, setJsonOpen] = useState(false)
-  const icon = useWatch({ control, name: 'icon' })
   const commonKnowledge = useWatch({ control, name: 'commonKnowledge' })
   // Lengths only, so typing in a link row doesn't re-render the whole pane.
   const involvementCount = useWatch({ control, name: 'involvements', compute: (r) => r.length })
@@ -152,8 +149,6 @@ export function HappeningDetailPane({
     <View className="flex-1">
       <Tabs value={tab} onValueChange={setTab} className="flex-1 gap-0">
         <DetailPane
-          kindIcon={<PlotIcon kind="happening" icon={icon} className="h-4 w-4" />}
-          kindName={plotKindName('happening')}
           nameSlot={
             <Controller
               control={control}

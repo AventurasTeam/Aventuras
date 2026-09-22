@@ -252,8 +252,7 @@ Each indicator is mirrored in the detail pane so users learn the
 mapping by clicking around, not by reading docs:
 
 - **Recently-classified accent on the row → `Recently classified`
-  badge in the detail head** — sits inline next to the breadcrumb
-  /name row, per
+  badge in the detail head** — sits inline next to the name row, per
   [patterns → Recently-classified row accent](../../patterns/entity.md#recently-classified-row-accent).
   Same shape as
   [World panel's detail-head badge](../world/world.md#detail-head-structure).

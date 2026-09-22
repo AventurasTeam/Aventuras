@@ -2,7 +2,7 @@ import { assertType, describe, it } from 'vitest'
 
 import type { DetailPaneProps } from './detail-pane'
 
-const HEAD = { kindIcon: null, kindName: 'character', nameSlot: null, children: null }
+const HEAD = { nameSlot: null, children: null }
 
 // Pinned at typecheck: an unused @ts-expect-error fails `tsc`, so a loosened slot fails the build.
 describe('DetailPaneProps', () => {
