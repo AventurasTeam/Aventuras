@@ -285,3 +285,122 @@ slice-planning gate forces its resolution before that slice is planned.
   them on a phone settings surface. `ScreenShell`'s own Back and
   Actions buttons measure 32 dp and are the same gap in `IconAction`.
   Surfaced 2026-09-19.
+
+- **Entry-ref excerpts render raw markdown / rich-HTML markup.**
+  `EntryRefPicker` and its shared `EntryRefText`
+  (`components/compounds/entry-ref-picker.tsx`) print an entry's
+  excerpt as plain text, but an entry body can carry markdown or
+  sanitized rich HTML; `lib/markdown` has no plain-text-strip helper
+  to derive a display excerpt from either. Until one exists, a picker
+  row can show literal `**bold**` markers or stray tags instead of
+  prose. Surfaced 2026-09-22.
+
+- **`ListRow`'s `aria-label` drops its status pill, when-marker, and
+  ⊙ state from screen readers.** `components/compounds/list-row.tsx`
+  sets `aria-label={label}` on the row's Pressable, which replaces
+  the accessible content of every child instead of composing with
+  it — a screen reader announces only the title, never the status
+  pill, when-marker, or common-knowledge glyph a sighted user sees
+  (World's rows carry the same gap). Compose the row's accessible
+  name from its rendered slots instead of overriding with the bare
+  label. Surfaced 2026-09-22.
+
+- **Bottom-anchored `Sheet` exposes no container role on web.**
+  `components/ui/sheet.tsx`'s `BottomSheetContent` (gorhom's
+  `BottomSheetModal`) renders with no `role="dialog"`, unlike
+  `RightSheetContent`'s `DialogPrimitive.Content`, which sets one — a
+  screen reader gets no landmark for the phone-tier sheet surface.
+  Surfaced 2026-09-22.
+
+- **A presented bottom Sheet may not leave the DOM after close in the
+  vitest-browser runner.** Closing a phone bottom Sheet didn't
+  reliably remove it from the DOM under `vitest-browser` during this
+  slice's story work, so a play should assert dismissal through the
+  trigger's `aria-expanded` rather than the sheet's absence. Likely a
+  runner artifact rather than real behavior; unverified on a narrow
+  Electron window or Android. Surfaced 2026-09-22.
+
+- **Four hand-copied menu-item rows have drifted from each other.**
+  `ImporterMenuItem` (`components/compounds/importer-menu.tsx`),
+  `OverflowMenu`'s `MenuItem` (`components/compounds/overflow-menu.tsx`),
+  `StoryCard`'s `OverflowItem` (`components/story/story-card.tsx`), and
+  the cast-list inline row (`components/wizard/step-cast.tsx`) each
+  reimplement the same pressable-row shape. They've already drifted on
+  disabled accessible naming: `OverflowMenu` composes `label, reason`;
+  `ImporterMenuItem` replaces the label with the reason outright.
+  Extract one shared `MenuItem` and align `ImporterMenu` to the
+  `label, reason` pattern. Surfaced 2026-09-22.
+
+- **Close-on-disable is copied into three components instead of
+  living in the substrate.** `OverflowMenu`
+  (`components/compounds/overflow-menu.tsx`), `EntityPicker`, and
+  `EntryRefPicker` (`components/compounds/`) each carry their own
+  effect closing the overlay when `disabled` flips true.
+  `SearchableOverlayList` already threads a `disabled` prop through
+  its as-trigger mode
+  ([Shape 2](../ui/patterns/searchable-overlay-list.md#shape-2--dialog-wrapping-a-combobox-and-listbox)),
+  which is the one consumer of that mode — moving close-on-disable
+  there would drop all three copies. Surfaced 2026-09-22.
+
+- **`ProviderModelPicker`'s broken-state scroll promises aren't
+  implemented.** The
+  [Trigger](../ui/patterns/provider-model-picker.md#trigger) section
+  promises the picker opens scrolled to the first existing provider's
+  section when the value's provider is missing, and scoped to that
+  provider's section when the model isn't in the catalog.
+  `components/compounds/provider-model-picker.tsx` always passes
+  `initialScrollRowId={value ? rowId('provider', value) : undefined}`
+  — a row id for the broken value itself, which exists in neither
+  broken state, so neither promise fires and the picker opens
+  unscrolled. Surfaced 2026-09-22.
+
+- **Duplicated clone/compare helpers across the save-session hooks.**
+  `hooks/use-row-save-session.ts`'s `cloneValue` and
+  `components/story-settings/save-session-state.ts`'s `cloneDraft` do
+  the same job under different names, and each keeps its own
+  `deepEqual`-shaped comparison; two more standalone `deepEqual`
+  implementations live in `lib/actions/delta/delta-encoding.ts` and
+  `components/compounds/collision-resolve-diff.ts`. One shared
+  clone/compare helper would stop the four from drifting further.
+  Surfaced 2026-09-22.
+
+- **`searchable-overlay-list.tsx` is ~1650 lines, and its
+  [Implementation notes](../ui/patterns/searchable-overlay-list.md#implementation-notes)
+  overstate native virtualization.** The doc says virtualization is
+  always on, via `SectionList` on native, but the inline
+  (popover-hosted) native branch, `InlineNativeList`, renders through
+  a plain gesture-handler `ScrollView` with no virtualization — only
+  `SheetNativeList` (the phone-Sheet branch) uses `SectionList`.
+  Moving `InlineNativeList` / `SheetNativeList` into a sibling module
+  would also shrink the file. Surfaced 2026-09-22.
+
+- **Native initial-scroll-to-value has three residual gaps.**
+  `SearchableOverlayList`'s scroll-to-selection anchor releases only
+  on `onScrollBeginDrag` (`components/ui/searchable-overlay-list.tsx`),
+  so a non-drag scroll — TalkBack, or wheel / trackpad on DeX /
+  ChromeOS — never lets go of it; a quick close-then-reopen that
+  interrupts gorhom's dismiss animation can carry a stale anchor into
+  the next open (the list isn't keyed per open to force a reset); and
+  sticky section headers land the target row about one header-height
+  below center instead of centered. Surfaced 2026-09-22.
+
+- **A dirty links array on Save overwrites concurrent link changes to
+  the same row.** `useRowSaveSession`'s same-row refresh
+  (`hooks/use-row-save-session.ts`) merges a store patch per
+  top-level field, so a dirty `involvements` / `awareness` array
+  keeps the user's whole array rather than grafting the patch in; the
+  natural-key builder in `lib/plot/happening-draft.ts` then reads
+  that stale array as the truth and deletes or reverts the rows a
+  concurrent write added. Unreachable in M4 — turns hard-gate the
+  pane, and the classifier only links happenings it creates — but
+  live once chapter-close writes links onto existing happenings
+  through a path with no such gate. Surfaced 2026-09-22.
+
+- **Classifier free text is stored verbatim, including empty
+  strings.** `awareness.source` (`lib/classifier/schema.ts`, a
+  required `z.string()`) and involvement `role` (an optional
+  `z.string()`) pass straight from the model's structured output into
+  `createHappeningInvolvement` / `upsertHappeningAwareness`
+  (`lib/classifier/plan.ts`) with no normalization —
+  `role: involvement.role ?? null` only catches `undefined`, not
+  `''`. Normalize both to `NULL` at write time. Surfaced 2026-09-22.
