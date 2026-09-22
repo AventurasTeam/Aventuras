@@ -47,7 +47,11 @@ export default defineConfig({
             tags: { exclude: ['no-vitest'] },
           }),
         ],
-        optimizeDeps: { include: ['i18next', 'react-i18next'] },
+        // Pre-bundled up front: a dep first discovered mid-run reloads the browser and fails
+        // whichever story file was importing it.
+        optimizeDeps: {
+          include: ['i18next', 'react-i18next', 'react-hook-form', '@hookform/resolvers/zod'],
+        },
         test: {
           name: 'storybook',
           setupFiles: ['./.storybook/vitest.setup.ts'],
