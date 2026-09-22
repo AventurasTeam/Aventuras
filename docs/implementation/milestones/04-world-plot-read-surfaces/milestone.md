@@ -433,7 +433,11 @@ sections into a single settings write with no delta; this one is
 per-row and delta-logged. Consumers: 4.2b (lore pane), 4.2c (the
 relationship re-keying shape), 4.3 (thread and happening panes — a
 doc-as-contract pair with 4.2a; whichever lands first creates the hook
-and the other adopts it). Name fixed in the first commit to land.
+and the other adopts it). Name fixed in the first commit to land. 4.3
+landed first, shipping the hook as `useRowSaveSession`
+(`hooks/use-row-save-session.ts`) with its `SaveBar` chrome in
+`components/compounds/row-save-session-chrome.tsx`; see
+[Slice 4.3 → Implementation notes](./slices/03-plot-panel.md#implementation-notes).
 
 ### C8 — Picker primitives: entity picker and entry-ref picker
 
@@ -458,7 +462,10 @@ entry-ref picker's UX is a
 [canonical open question](../../../ui/screens/plot/plot.md#screen-specific-open-questions)
 4.3 resolves at planning (see [Open questions](#open-questions)).
 Doc-as-contract between 4.2a and 4.3: whichever lands first creates
-the entity picker at this shape.
+the entity picker at this shape. 4.3 landed first, shipping both
+pickers as `components/compounds/entity-picker.tsx`,
+`entry-ref-picker.tsx` and `picker-field.tsx`; see
+[Slice 4.3 → Implementation notes](./slices/03-plot-panel.md#implementation-notes).
 
 ### C9 — Per-row `.avts` envelope kinds and payload schemas
 
@@ -512,6 +519,9 @@ Sheet (short) on phone, showing a disabled entry's reason as a tooltip
 4.2b (`Delete`), 4.2c (`Resolve →` is list-side but shares the
 convention) and 4.6 (`Export …`) later flip. Doc-as-contract between
 4.2a and 4.3: whichever lands first creates it; the other consumes.
+4.3 landed first, shipping the compound as
+`components/compounds/overflow-menu.tsx`; see
+[Slice 4.3 → Implementation notes](./slices/03-plot-panel.md#implementation-notes).
 
 ### C12 — Keyword normalizer
 

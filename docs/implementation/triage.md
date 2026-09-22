@@ -420,3 +420,73 @@ slice-planning gate forces its resolution before that slice is planned.
   settles (`generationStore.settleCount` bumps) — but a turn can't be
   started from Plot, so a failed read has no in-surface recovery path.
   Consider a Retry action on the error state. Surfaced 2026-09-22.
+
+- **`Toolbar` diverges from its own spec.**
+  `docs/ui/patterns/toolbar.md → Mechanism` prescribes a CSS container
+  query on web (`@container (max-width: 1023px)`, the FormRow
+  dual-mechanism) with `useTier()` only on native;
+  `components/compounds/toolbar.tsx` (166–212) instead uses `onLayout`
+  plus a `useTier()` first-frame guess on every platform and renders
+  two structurally different trees. Every desktop `EntityListPane`
+  sits in a 340 px list pane (`MasterDetailLayout`'s
+  `DEFAULT_LIST_PANE_WIDTH`), so it mounts wide off `useTier()`'s
+  viewport-width guess and remounts the search input and chips into
+  the narrow tree a commit later, once `onLayout` reports the actual
+  container width (one-frame flash; focus loss if a container crosses
+  the threshold — inferred, not observed). Storybook plays that click
+  a chip right after mount silently no-op against the pre-swap node;
+  Plot's own list-pane stories had to add a wait for the narrow
+  branch's geometry (`toolbarSettled()` in
+  `components/plot/plot-list-pane.stories.tsx`). Direction: one tree
+  keyed by the container query on web, or have `EntityListPane` pin
+  the narrow layout (the `TierTupleInput` / FormRow-lesson precedent).
+  Surfaced 2026-09-22.
+
+- **`InlineEditableName` commits only on blur or Enter.** A
+  title-only edit shows no save bar until then, and Cmd/Ctrl-S while
+  still typing the name either skips the typed title or does nothing:
+  `onChange` fires only from `commit()`
+  (`components/ui/inline-editable-name.tsx`'s `onBlur` /
+  `onSubmitEditing`), and `RowSaveBar`
+  (`components/compounds/row-save-session-chrome.tsx`) mounts
+  `SaveBar`, and with it the Cmd/Ctrl-S hotkey, only once
+  `session.dirty` is true. Affects every save-session host with an
+  inline name — Plot now
+  (`components/plot/thread-detail-pane.tsx`,
+  `happening-detail-pane.tsx`), World's entity detail head from slice
+  4.2a (named in
+  `docs/implementation/milestones/04-world-plot-read-surfaces/slices/02a-entity-detail.md`).
+  Surfaced 2026-09-22.
+
+- **The save bar's invalid-draft reason is tooltip-only on phone.**
+  Rejections get a toast — `app/plot/[branchId].tsx`'s `onRejected`
+  calls `toast.error`, with the comment "the save bar's notice is
+  tooltip-only on phone, so a refused save surfaces here too" — but an
+  invalid draft doesn't: `session.invalidReason` only reaches
+  `SaveBar`'s `notice` slot, wrapped by `ReasonTooltip`, which no-ops
+  to an `aria-label` on native
+  (`components/ui/reason-tooltip.tsx`). So on phone the reason a
+  disabled Save gives is unreachable by touch.
+  `docs/ui/patterns/save-sessions.md` (`Invalid draft`) already flags
+  that the slot "reaches phone users, who get no tooltip" for
+  field-level consequences and routes those elsewhere, but assigns the
+  invalid-draft reason itself to that same slot — check that doc for
+  the intended phone surface before deciding the fix. Surfaced
+  2026-09-22.
+
+- **`Autocomplete`'s `label` never reaches its input.**
+  `Autocomplete` (`components/ui/autocomplete.tsx`) does forward
+  `label` as `ariaLabel` to `SearchableOverlayList`, but
+  `SearchableOverlayList` only wires `ariaLabel` into `Shape2Dialog`'s
+  trigger and dialog; `Shape1Inline` — the branch used for
+  `searchPlacement="as-trigger"` on web and on native tablet/desktop —
+  never destructures `ariaLabel`, and its `SearchInputProps` type
+  doesn't carry the prop at all, so the rendered input gets no
+  accessible name. `FormRow` doesn't fill the gap either — its label
+  is a plain `Text`, not associated with the control. Plot's category
+  field hits this; its own story admits it: "The Autocomplete's input
+  carries no accessible name yet; its placeholder is unique here"
+  (`components/plot/thread-detail-pane.stories.tsx`), and finds the
+  field by placeholder rather than label. Affects every `Autocomplete`
+  consumer rendered on web or native tablet/desktop. Surfaced
+  2026-09-22.
