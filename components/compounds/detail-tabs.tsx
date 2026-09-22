@@ -33,15 +33,19 @@ export function DetailTabs({ tabs, value, onValueChange, selectLabel }: DetailTa
     )
   }
   return (
-    <View className="pb-2">
+    // flex-1 fills the shell's horizontal tabs ScrollView, which otherwise sizes the Select to
+    // its content; py-2 keeps it off the header divider the strip variant sits flush against.
+    <View className="flex-1 py-2">
       <Select
         label={selectLabel}
         size="sm"
         value={value}
         onValueChange={onValueChange}
+        // Parenthesised: the strip renders the count as its own muted glyph, but here it is part
+        // of a plain label string, where a bare trailing number reads as part of the name.
         options={tabs.map((tab) => ({
           value: tab.value,
-          label: tab.count != null ? `${tab.label} ${tab.count}` : tab.label,
+          label: tab.count != null ? `${tab.label} (${tab.count})` : tab.label,
         }))}
       />
     </View>

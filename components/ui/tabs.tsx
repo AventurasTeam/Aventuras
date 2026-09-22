@@ -25,9 +25,11 @@ function TabsList({ className, ...props }: ComponentProps<typeof TabsPrimitive.L
 
 type TabsTriggerProps = ComponentProps<typeof TabsPrimitive.Trigger> & {
   /**
-   * Optional count rendered as muted small text after the label
-   * (e.g. `Connections 3`). Consumers format `99+` themselves if
-   * they want clamping; the primitive renders the value as-is.
+   * Optional count rendered in parentheses after the label
+   * (e.g. `Connections (3)`). Parenthesised because an inactive tab's
+   * label is already `fg-muted`, leaving a bare number no contrast
+   * against it. Consumers format `99+` themselves if they want
+   * clamping; the primitive renders the value as-is.
    */
   count?: number
   children?: ReactNode
@@ -63,7 +65,7 @@ function TabsTrigger({ className, count, children, ...props }: TabsTriggerProps)
         {typeof children === 'string' ? <Text>{children}</Text> : children}
         {count != null ? (
           <Text size="xs" className="font-normal">
-            {count}
+            {`(${count})`}
           </Text>
         ) : null}
       </TabsPrimitive.Trigger>

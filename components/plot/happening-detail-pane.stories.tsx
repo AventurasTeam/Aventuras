@@ -331,8 +331,8 @@ export const Anchored: Story = {
     expect(temporal()).toHaveValue('')
     expect(ckSwitch()).toHaveAttribute('aria-checked', 'false')
     expect(pane().getByRole('tablist')).toBeInTheDocument()
-    expect(tab('Involvements')).toHaveTextContent(/^Involvements\s*1$/)
-    expect(tab('Awareness')).toHaveTextContent(/^Awareness\s*1$/)
+    expect(tab('Involvements')).toHaveTextContent(/^Involvements\s*\(1\)$/)
+    expect(tab('Awareness')).toHaveTextContent(/^Awareness\s*\(1\)$/)
     expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument()
   },
 }
@@ -397,7 +397,7 @@ export const Temporal: Story = {
     expect(pane().getByRole('button', { name: 'Occurred at' })).toHaveTextContent(
       'Pick the entry it happened at',
     )
-    expect(tab('Involvements')).toHaveTextContent(/^Involvements\s*0$/)
+    expect(tab('Involvements')).toHaveTextContent(/^Involvements\s*\(0\)$/)
 
     await userEvent.click(pane().getByRole('button', { name: 'Occurred at' }))
     // The category Autocomplete is a combobox too; the overlay's search is the one with this hint.
@@ -437,7 +437,7 @@ export const CommonKnowledgeToggle: Story = {
     await setCommonKnowledge(false)
     expect(ckMarkerColor()).toBe(offColor)
     await waitFor(() => expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument(), WAIT)
-    expect(tab('Awareness')).toHaveTextContent(/^Awareness\s*1$/)
+    expect(tab('Awareness')).toHaveTextContent(/^Awareness\s*\(1\)$/)
 
     await openTab('Awareness')
     expect(await pane().findByRole('button', { name: 'Add awareness' }, WAIT)).toBeVisible()
@@ -522,8 +522,8 @@ export const SaveCommitsLinks: Story = {
     )
     expect(args.onRejected).not.toHaveBeenCalled()
     expect(pane().getByText('No awareness rows yet.')).toBeVisible()
-    expect(tab('Awareness')).toHaveTextContent(/^Awareness\s*0$/)
-    expect(tab('Involvements')).toHaveTextContent(/^Involvements\s*2$/)
+    expect(tab('Awareness')).toHaveTextContent(/^Awareness\s*\(0\)$/)
+    expect(tab('Involvements')).toHaveTextContent(/^Involvements\s*\(2\)$/)
 
     await openTab('Involvements')
     const market = await pane().findByTestId('involvement-1', {}, WAIT)
@@ -585,7 +585,7 @@ export const Create: Story = {
     const saved = pane().getByTestId('involvement-0')
     expect(within(saved).getByText('Kael')).toBeVisible()
     expect(within(saved).getByRole('textbox', { name: 'Role' })).toHaveValue('actor')
-    expect(tab('Involvements')).toHaveTextContent(/^Involvements\s*1$/)
+    expect(tab('Involvements')).toHaveTextContent(/^Involvements\s*\(1\)$/)
     expect(pane().getByRole('button', { name: 'More actions' })).toBeEnabled()
   },
 }
@@ -799,12 +799,12 @@ async function pickSectionFromSelect() {
   expect(pane().queryByRole('tablist')).not.toBeInTheDocument()
   expect(section).toHaveTextContent('Overview')
   await userEvent.click(section)
-  await userEvent.click(await screen.findByRole('option', { name: /Awareness 1/ }, WAIT))
+  await userEvent.click(await screen.findByRole('option', { name: /Awareness \(1\)/ }, WAIT))
   await waitFor(
     () => expect(within(pane().getByTestId('awareness-0')).getByText('Mira')).toBeVisible(),
     WAIT,
   )
-  expect(pane().getByRole('button', { name: 'Section' })).toHaveTextContent('Awareness 1')
+  expect(pane().getByRole('button', { name: 'Section' })).toHaveTextContent('Awareness (1)')
 }
 
 /** Tablet: four tabs overflow the strip (> 3), so the tab list goes to a Select dropdown. */
