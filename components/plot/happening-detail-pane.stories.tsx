@@ -371,6 +371,24 @@ export const TimeAnchorConflict: Story = {
   },
 }
 
+/** A stored icon key outside the catalog still shows, and stays pickable after picking another. */
+export const UnknownIconKey: Story = {
+  args: { row: { ...AMBUSH, icon: 'lantern' } },
+  play: async () => {
+    const icon = () => pane().getByRole('button', { name: 'Icon' })
+    await waitFor(() => expect(icon()).toHaveTextContent('lantern'), WAIT)
+
+    await userEvent.click(icon())
+    await userEvent.click(await screen.findByRole('option', { name: /eye/ }, WAIT))
+    await waitFor(() => expect(saveBar()).toHaveTextContent('Icon'), WAIT)
+
+    await userEvent.click(icon())
+    await userEvent.click(await screen.findByRole('option', { name: /lantern/ }, WAIT))
+    await waitFor(() => expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument(), WAIT)
+    expect(icon()).toHaveTextContent('lantern')
+  },
+}
+
 /** Out of narrative; picking an entry flags the double anchor, clearing `temporal` resolves it. */
 export const Temporal: Story = {
   args: { row: BETRAYAL, links: NO_LINKS },
