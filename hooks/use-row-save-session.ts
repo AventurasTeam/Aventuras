@@ -168,6 +168,9 @@ export function useRowSaveSession<Draft extends FieldValues>({
   const busyRef = useRef(false)
   // Oldest first: a window close and a back can both be outstanding.
   const intentsRef = useRef<(() => void)[]>([])
+  // Drains run only on a clean session, which formState reports a render late: a leave raised
+  // from inside one (a pop re-entering the navigator's guard) would otherwise queue again.
+  const drainingRef = useRef(false)
   const appliedRef = useRef({ rowKey, values })
   // The render snapshot trails a trigger() by a render; the subscription sees every emission.
   const errorsRef = useRef<object>(errors)
@@ -221,12 +224,17 @@ export function useRowSaveSession<Draft extends FieldValues>({
     // Cleared first so an intent that unmounts the surface can't see itself still queued.
     intentsRef.current = []
     setPendingLeave(false)
-    for (const proceed of queued) {
-      try {
-        proceed()
-      } catch (error) {
-        logger.error('app.row_save_leave_failed', { error: errorMessage(error) })
+    drainingRef.current = true
+    try {
+      for (const proceed of queued) {
+        try {
+          proceed()
+        } catch (error) {
+          logger.error('app.row_save_leave_failed', { error: errorMessage(error) })
+        }
       }
+    } finally {
+      drainingRef.current = false
     }
   }, [])
 
@@ -336,7 +344,7 @@ export function useRowSaveSession<Draft extends FieldValues>({
 
   const requestLeave = useCallback(
     (proceed: () => void) => {
-      if (!hasDirty(form.formState.dirtyFields)) {
+      if (drainingRef.current || !hasDirty(form.formState.dirtyFields)) {
         proceed()
         return
       }

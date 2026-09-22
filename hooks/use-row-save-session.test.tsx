@@ -201,6 +201,41 @@ describe('useRowSaveSession', () => {
     expect(order).toEqual(['close', 'back'])
   })
 
+  // A guarded pop: the navigator's own dirty guard asks again from inside the confirmed leave.
+  it('runs a leave raised from inside a discarded leave instead of asking again', () => {
+    const hook = setup()
+    const pop = vi.fn()
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    act(() => hook.result.current.requestLeave(() => hook.result.current.requestLeave(pop)))
+    act(() => hook.result.current.resolveLeave('discard'))
+    expect(pop).toHaveBeenCalledTimes(1)
+    expect(hook.result.current.pendingLeave).toBe(false)
+  })
+
+  it('runs a leave raised from inside a saved leave instead of asking again', async () => {
+    const hook = setup()
+    const pop = vi.fn()
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    act(() => hook.result.current.requestLeave(() => hook.result.current.requestLeave(pop)))
+    await act(async () => {
+      hook.result.current.resolveLeave('save')
+    })
+    expect(pop).toHaveBeenCalledTimes(1)
+    expect(hook.result.current.pendingLeave).toBe(false)
+  })
+
+  it('still queues a leave raised after the drain, once the draft is dirty again', () => {
+    const hook = setup()
+    const later = vi.fn()
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    act(() => hook.result.current.requestLeave(() => {}))
+    act(() => hook.result.current.resolveLeave('discard'))
+    act(() => hook.result.current.form.setValue('note', 'y', { shouldDirty: true }))
+    act(() => hook.result.current.requestLeave(later))
+    expect(later).not.toHaveBeenCalled()
+    expect(hook.result.current.pendingLeave).toBe(true)
+  })
+
   it('drops every queued leave on cancel, not just the newest', () => {
     const hook = setup()
     const first = vi.fn()
