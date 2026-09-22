@@ -1,5 +1,6 @@
 import type { OverflowMenuEntry } from '@/components/compounds/overflow-menu'
 import type { SelectOption } from '@/components/ui/select'
+import { PLOT_REJECTION } from '@/lib/actions'
 import { t } from '@/lib/i18n'
 import type { PlotKind } from '@/lib/list-modules'
 
@@ -26,6 +27,15 @@ export function validationText(message: string): string {
 
 export function issueLabel(message: string | undefined): string | undefined {
   return message == null ? undefined : validationText(message)
+}
+
+/** A refused save's user-facing text; the actions' own reasons are developer strings. */
+export function saveRejectionText(code: string | undefined): string {
+  return code === PLOT_REJECTION.inFlight ? t('plot:save.inFlight') : t('plot:save.failed')
+}
+
+export function saveFailureText(): string {
+  return t('plot:save.failed')
 }
 
 const THREAD_FIELD_LABEL: Record<string, () => string> = {

@@ -101,6 +101,7 @@
     "description": "Description",
     "category": "Category",
     "categoryPlaceholder": "e.g. mystery, goal, conflict",
+    "categoryAdd": "+ Add new: \"{{value}}\"",
     "icon": "Icon",
     "iconNone": "No icon",
     "status": "Status",
@@ -166,6 +167,8 @@
     "characterRequired": "Pick a character."
   },
   "save": {
-    "saved": "Saved."
+    "saved": "Saved.",
+    "failed": "Couldn't save your changes. They're still here — try again.",
+    "inFlight": "Couldn't save while generation is in flight. Your changes are still here."
   }
 }

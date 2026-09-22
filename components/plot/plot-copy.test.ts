@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { iconFromOption, iconOptionValue, plotIconOptions } from './plot-copy'
+import { iconFromOption, iconOptionValue, plotIconOptions, saveRejectionText } from './plot-copy'
 
 // The real catalog pulls lucide-react-native, which node can't parse.
 vi.mock('./plot-icon', () => ({ PLOT_ICON_KEYS: ['sparkles', 'eye'] }))
@@ -37,5 +37,16 @@ describe('plot icon options', () => {
     expect(iconOptionValue('')).toBe(none.value)
     expect(iconFromOption(none.value)).toBeNull()
     expect(iconFromOption(iconOptionValue('eye'))).toBe('eye')
+  })
+})
+
+describe('saveRejectionText', () => {
+  it('names generation in flight, otherwise the generic failure', () => {
+    expect(saveRejectionText('in-flight')).toBe(
+      "Couldn't save while generation is in flight. Your changes are still here.",
+    )
+    expect(saveRejectionText(undefined)).toBe(
+      "Couldn't save your changes. They're still here — try again.",
+    )
   })
 })
