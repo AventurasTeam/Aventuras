@@ -174,7 +174,9 @@ convention, and the expectation that subsystems route through
 - `pipeline.*` — `phase_failed`, `run_aborted`, `recovered`
 - `action_layer.*` — `user_write_rejected`, `constraint_violation`,
   `story_settings_repaired` (the corrupt-blob repair: carries the failing
-  key paths, since the blob it describes is overwritten in the same call)
+  key paths, since the blob it describes is overwritten in the same call),
+  `thread_save_rejected` / `happening_save_rejected` (debug for the
+  in-flight refusal, warn for a rejected write)
 - `classifier.*` — `delta_clamped`, `schema_repair`, `empty_output`
 - `retrieval.*` — `row_skipped_stale`, `empty_pool`, `knn_error`
 - `provider.*` — `retry_succeeded`, `rate_limited`,
@@ -197,10 +199,13 @@ convention, and the expectation that subsystems route through
   below: `unhandled_rejection`, `rejection_handled_late`,
   `rejection_tracker_unavailable`. `row_signals_read_failed`
   (`hooks/use-row-signals.ts`, a bounded-read failure),
-  `entry_index_read_failed` (`hooks/use-entry-index.ts`, same shape)
-  and `world_story_load_failed` (the World route's cold-mount
-  `loadOpenStory` rejection) are gated by the master gate like any
-  other kind
+  `entry_index_read_failed` (`hooks/use-entry-index.ts`, same shape),
+  `world_story_load_failed` (the World route's cold-mount
+  `loadOpenStory` rejection), `plot_story_load_failed` (the same
+  rejection on the Plot route's cold mount) and
+  `plot_saved_handler_failed` (`components/plot/use-plot-row-session.ts`
+  — a `PlotRowSessionOptions.onSaved` that throws after the write
+  already landed) are gated by the master gate like any other kind
 - `reader.*` — reader-composer dispatches routed through `runAction`
   (`lib/utils.ts`) instead of a bare `void`: `story_id_load_failed`,
   `undo_failed`, `redo_failed`, `rollback_failed`, `regenerate_failed`

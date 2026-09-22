@@ -490,25 +490,21 @@
         background: var(--bg);
         color: var(--ink-faint);
       }
-      .row-status-pill.active {
+      /* .active takes the base .row-status-pill colors — no override. */
+      .row-status-pill.pending {
+        color: #963;
+        border-color: #ecb;
+        background: #fef7e8;
+      }
+      .row-status-pill.resolved {
         color: #386;
         border-color: #cdb;
         background: #f1faf2;
       }
-      .row-status-pill.pending {
-        color: var(--ink-faint);
-        border-color: var(--line-soft);
-        background: var(--bg);
-      }
-      .row-status-pill.resolved {
-        color: var(--ink-muted);
-        border-color: var(--line-soft);
-        background: #f4f4f4;
-      }
       .row-status-pill.failed {
-        color: #963;
-        border-color: #ecb;
-        background: #fef7e8;
+        color: #a33;
+        border-color: #ecc;
+        background: #fdf0f0;
       }
 
       /* accordion groups (All filter) */
@@ -2048,15 +2044,8 @@
             </div>
           </div>
 
-          <div class="field-row">
-            <div class="field-label">
-              resolved_at_entry_id
-              <span class="type-hint">EntryRef &middot; only when resolved/failed</span>
-            </div>
-            <div class="input-select read-only" style="opacity: 0.45">
-              <span class="placeholder-text">(disabled &mdash; status is "active")</span>
-            </div>
-          </div>
+          <!-- resolved_at_entry_id is omitted entirely while status is
+               "active" — shipped only renders the row for resolved/failed. -->
 
           <div class="field-row">
             <div class="field-label">

@@ -100,11 +100,12 @@ real only against seed fixtures in this milestone.
   `temporal` rows pinned last, chapter-bucket accordion (Current
   expanded; Earlier flat; Out of narrative), search; per-side empty
   states with the classifier explainer.
-- **Chapterless fallback:** while the branch has no open chapter —
-  every real M4 story — the happenings All view renders one implicit
-  narrative bucket plus Out of narrative, and the `This chapter` chip
-  is hidden; the chapter-keyed shape engages when an open chapter
-  exists (seed fixtures now, M5 later).
+- **Chapter rule:** Current chapter is the open region (anchor entry
+  `chapter_id IS NULL`), Earlier chapters are closed-chapter anchors,
+  Out of narrative is `temporal` or no anchor at all; empty buckets
+  are omitted and `This chapter` is offered only once a chapter has
+  closed — every real M4 story therefore shows Current chapter plus
+  Out of narrative.
 - **C2 modules — threads and happenings:** `ListModule` instances
   with queries, grouping keys, chip vocabularies, search-scope copy,
   empty and no-results copy, `ThreadRow` / `HappeningRow` renderers
@@ -112,20 +113,19 @@ real only against seed fixtures in this milestone.
 - **Thread pane** on the C7 host: Overview (status, category, icon
   from the preset catalog, description, `injection_mode` with
   explanation, `triggered_at_entry_id` and `resolved_at_entry_id`
-  read-only — the latter only when resolved / failed, tags); History
+  read-only — the latter only when resolved / failed); History
   as a placeholder until C4 merges, then the shared `HistoryTab`.
   Tabs: strip on desktop and tablet, Select segment on phone.
 - **Happening pane:** Overview (title, description, category, icon,
   `common_knowledge` toggle with its `⊙`, the mutually exclusive time
   anchor — entry-ref picker **or** `temporal`, refined at the form
-  boundary, tags); **Involvements** (rows with the C8 entity picker,
+  boundary); **Involvements** (rows with the C8 entity picker,
   kind-aware over all four kinds, free-form `role`; add / remove
   through the M1.5 arms); **Awareness** (rows with a character-only
   picker, `learned_at` entry-ref picker, `decay_resistance` `0..1`,
   free-form `source`; add / remove; the UNIQUE upsert through the M1.5
   arm; the common-knowledge notice replacing the body when the toggle
-  is on); History as above. Link rows route to World via C6, inert
-  with a "lands in Slice 4.1" reason until that route exists. Tabs:
+  is on); History as above. Link rows route to World via C6. Tabs:
   strip on desktop, Select dropdown on tablet and phone.
 - **Entry-ref picker (C8 half):** the controlled primitive returning
   an entry id, rendering `entry #n` plus an excerpt, Popover / Sheet
@@ -163,13 +163,14 @@ chapters` (deferred by canon), and `retrieval_count` review — M5.
 
 ## Acceptance criteria
 
-- Over fixtures with one open and one closed chapter, happenings group
-  into Current chapter (the open chapter's entry range), Earlier
-  chapters, and Out of narrative (`temporal` set); `This chapter`
-  flattens to the first group; `Out-of-narrative` to the third; with
-  no open chapter the view collapses to the implicit narrative bucket
-  plus Out of narrative and the `This chapter` chip is absent (vitest
-  on the query and grouping; component test on the chip).
+- Over fixtures with closed chapters and an open region (the seed),
+  happenings group into Current chapter (the open region's entry
+  range), Earlier chapters, and Out of narrative (`temporal` set, or
+  no anchor); `This chapter` flattens to the first group;
+  `Out-of-narrative` to the third; with no closed chapter the view
+  shows Current chapter plus Out of narrative and the `This chapter`
+  chip is absent (vitest on the query and grouping; component test on
+  the chip).
 - Setting both `occurred_at_entry_id` and `temporal` on a happening
   is refused at the form (inline error) and, if forced through the
   arm, by the CHECK constraint (vitest on the schema refine and DB).
@@ -191,8 +192,8 @@ chapters` (deferred by canon), and `retrieval_count` review — M5.
   one `updateThread` delta under one `action_id` and CTRL-Z reverses
   it (E2E).
 - The History tab, `Delete …`, `Export …` and the World links render
-  present, disabled or placeholder, each with its deferral reason
-  (component test).
+  present, disabled or placeholder, each with its deferral reason; the
+  World links navigate (4.1 merged; component test).
 - On phone, switching the segment with a dirty pane raises the guard;
   the happening pane's four tabs render through the Select dropdown
   (manual on Android; Storybook viewport).

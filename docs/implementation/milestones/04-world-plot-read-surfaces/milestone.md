@@ -424,10 +424,10 @@ writes to one row's column in a group. Discard resets; success fires
 the `Saved.` toast; an invalid draft disables Save and renders its
 reason in the bar's `notice` slot; every control disables with the
 principle-owned tooltip while `isUserEditBlocked(txState)` holds; and
-on phone the bar hides while the keyboard is open and returns on blur
-(per
-[`touch.md → Save bar on phone`](../../../ui/foundations/mobile/touch.md#save-bar-on-phone)
-— a `SaveBar` change 4.2a owns, which Story Settings inherits). This
+on phone the bar stays visible above the keyboard — the surface
+reserves the keyboard's height with `KeyboardInsetColumn` (per
+[`touch.md → Save bar on phone`](../../../ui/foundations/mobile/touch.md#save-bar-on-phone),
+reversed in M4.4; Story Settings and Plot do this). This
 is **not** the Story Settings session from M3.11 — that one aggregates
 sections into a single settings write with no delta; this one is
 per-row and delta-logged. Consumers: 4.2b (lore pane), 4.2c (the
@@ -603,6 +603,13 @@ use.
   [Slice 4.3](./slices/03-plot-panel.md) planning and amend `plot.md`
   in the same PR. If the picker wants more than a `SearchableOverlayList`
   over entries with an excerpt, stop and run the design route.
+  Resolved in 4.3 planning (2026-09-20): a `SearchableOverlayList`
+  behind a field-shaped trigger for the picker, and an always-visible
+  numeric field with low / medium / high preset chips for
+  `decay_resistance` — see
+  [`plot.md → Entry-ref picker`](../../../ui/screens/plot/plot.md#entry-ref-picker)
+  and
+  [`plot.md → Happenings side`](../../../ui/screens/plot/plot.md#happenings-side).
 - **Entity Assets tab and portrait slot have no schema.**
   [`world.md`](../../../ui/screens/world/world.md#assets-involvements-history)
   and [`entity.md`](../../../ui/patterns/entity.md#why-portrait-lives-only-on-overview)
@@ -621,10 +628,17 @@ use.
   the chapter-keyed grouping is seed-only. Default: one implicit bucket
   and a hidden `This chapter` chip while the branch has no open
   chapter; confirm in [Slice 4.3](./slices/03-plot-panel.md) planning.
+  Resolved in 4.3 planning (2026-09-20): no separate fallback shape —
+  the bucket rule keys on the anchor entry's `chapter_id`, so a story
+  with no closed chapter simply shows Current chapter plus Out of
+  narrative under the one rule — see
+  [`plot.md → Happenings side`](../../../ui/screens/plot/plot.md#happenings-side).
 - **Plot detail `⋯` menu contents.** Canon names only `View raw JSON`
   for threads and happenings. Default assumption: mirror World minus
   `Set as lead` (`Export … as JSON`, `View raw JSON`, `Delete …`);
-  confirm in 4.3 planning and amend `plot.md`.
+  confirm in 4.3 planning and amend `plot.md`. Resolved in 4.3 planning
+  (2026-09-20): shipped exactly as defaulted — see
+  [`plot.md → Detail-head overflow menu`](../../../ui/screens/plot/plot.md#detail-head-overflow-menu).
 - **Category label divergence.**
   [`world.md → Top-bar`](../../../ui/screens/world/world.md#top-bar)
   says `Locations`; [`principles.md → World / Plot split`](../../../ui/principles.md#world--plot-split--unified-panels-by-purpose)

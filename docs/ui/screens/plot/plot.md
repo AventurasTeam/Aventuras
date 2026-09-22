@@ -109,16 +109,20 @@ different grouping key. Groups: Active (default expanded), Pending,
 Resolved, Failed (all collapsed by default). Picking a non-All filter
 flattens to that single tier.
 
-**Search.** Scope: `title`, `description`, `category`, `tags`.
-Affordances per the
+**Search.** Scope: `title`, `description`, `category`. The schema
+carries no `tags` column on threads or happenings. Affordances per
+the
 [search-bar-scope pattern](../../patterns/lists.md#search-bar-scope).
 
 **Detail tabs:**
 
 - **Overview** — status, category, icon, description,
-  `injection_mode` dropdown, `triggered_at_entry_id` (read-only entry
-  ref), `resolved_at_entry_id` (read-only entry ref, only when status is
-  resolved/failed), tags.
+  `injection_mode` (a `Select` rendering as a vertical radio list,
+  since each option carries help text — see
+  [`forms.md → Select primitive`](../../patterns/forms.md#select-primitive)
+  for the cascade), `triggered_at_entry_id` (read-only entry ref),
+  `resolved_at_entry_id` (read-only entry ref, only when status is
+  resolved/failed).
 - **History** — delta log filtered to this thread; structured search
   over field-path / op / change-summary text per
   [patterns → Search bar scope](../../patterns/lists.md#search-bar-scope).
@@ -142,24 +146,41 @@ set; placeholder slot kept when unset so the row layout stays
 identical).
 
 **Sort.** Chronological — by `occurred_at_entry_id`'s entry position DESC
-first; `temporal`-only rows pinned at the bottom in their own block.
+first; out-of-narrative rows (`temporal` set, or no anchor) pinned at
+the bottom in their own block.
 
 **Filter chips** (single-select). All / This chapter / Common
 knowledge / Out-of-narrative.
 
 `This chapter` filters to happenings whose `occurred_at_entry_id` falls
 within the currently-open chapter's range. `Out-of-narrative` filters
-to rows with `temporal` set (and null `occurred_at_entry_id`).
+to the Out of narrative bucket (`temporal` set, or no anchor).
 
 **All view — accordion grouping by chapter bucket.** Same accordion
 pattern as World, different grouping key. Buckets:
 **Current chapter** (default expanded), **Earlier chapters**
 (collapsed; chapter-numbered sub-grouping deferred — flat list
 within for v1), **Out of narrative** (collapsed; rows with `temporal`
-set). Picking a non-All filter flattens to just the matching subset.
+set or no anchor). Picking a non-All filter flattens to just the
+matching subset.
 
-**Search.** Scope: `title`, `description`, `category`, `tags`.
-Affordances per the
+**Bucket rule.** An open chapter has no row
+([`data-model.md → Chapters`](../../../data-model.md#chapters--memory-system)):
+`Current chapter` is the open region — the anchor entry's
+`chapter_id` is null — and `Earlier chapters` are anchors inside a
+closed chapter. A dangling anchor (set, but its entry no longer
+exists) sits in `Current chapter`; a happening with neither an
+anchor nor `temporal` is outside the narrative (a null
+`occurred_at_entry_id` means outside narrative,
+[`data-model.md`](../../../data-model.md)) and sits in
+`Out of narrative`, which the `Out-of-narrative` chip matches too.
+Happening rows carry their category as the description line (the
+meta slot holds the when-marker). Empty buckets are omitted, and
+`This chapter` is offered only once a chapter has closed; until then
+it would duplicate All minus Out of narrative.
+
+**Search.** Scope: `title`, `description`, `category`. Affordances
+per the
 [search-bar-scope pattern](../../patterns/lists.md#search-bar-scope).
 
 **Detail tabs:**
@@ -168,15 +189,37 @@ Affordances per the
   toggle, time anchor (mutually exclusive form — entry-ref picker OR
   `temporal` string field; both the SQLite CHECK constraint and the
   Zod schema at the form/import boundary enforce that only one is
-  set), tags.
+  set).
 - **Involvements** — `happening_involvements` rows: entity picker
   (kind-aware, character / location / item / faction) + role
   (free-form text). Add / remove rows.
 - **Awareness** — `happening_awareness` rows: character picker (kind
   = character only) + `learned_at_entry_id` (entry-ref picker) +
-  `decay_resistance` (0-1 numeric — scales recency decay) +
+  `decay_resistance` (0-1 numeric — scales recency decay — an
+  always-visible numeric field with `low / medium / high` preset
+  chips at 0.2 / 0.5 / 0.8; a chip reads selected only on an exact
+  match, so classifier-written values display with none lit) +
   `source` (free-form text descriptor). Add / remove rows.
 - **History** — delta log filtered to this happening.
+
+### Entry-ref picker
+
+The controlled primitive behind `triggered_at_entry_id`,
+`resolved_at_entry_id`, `occurred_at_entry_id` and
+`learned_at_entry_id`: an in-overlay `SearchableOverlayList` behind a
+field-shaped trigger (`PickerField`) showing an `entry #n` chip plus a
+one-line excerpt, a dangling state ("Entry no longer exists") when the
+id no longer resolves, a placeholder when null, and a `×` that clears
+to null. The overlay lists the branch's entries newest first, one flat
+section, row `#n · kind · excerpt`, search over the excerpt and `#n`;
+the current row is selected and scrolled into view on open. Popover on
+desktop / tablet, tall Sheet on phone, per
+[`forms.md → Select primitive`](../../patterns/forms.md#select-primitive)'s
+tier rules. Two fields are editable through it — `occurred_at_entry_id`
+and `learned_at_entry_id`; the two thread refs
+(`triggered_at_entry_id`, `resolved_at_entry_id`) render read-only
+through the same `EntryRefText` label component the picker's trigger
+uses.
 
 **Common-knowledge interaction with Awareness tab.** When the
 `common_knowledge` toggle on Overview is on, the Awareness tab body
@@ -215,10 +258,17 @@ mapping by clicking around, not by reading docs:
   Same shape as
   [World panel's detail-head badge](../world/world.md#detail-head-structure).
 - **Common-knowledge ⊙ on the row → ⊙ icon next to the toggle on
-  Overview**. Same glyph, same on/off behavior. Toggling the detail
-  flips the row icon at the same time.
+  Overview**. Same glyph, same on/off behavior; the icon sits on the
+  Overview `SwitchRow` (per
+  [`forms.md → SwitchRow pattern`](../../patterns/forms.md#switchrow-pattern)),
+  not as a separate detail-head badge — the head carries no CK badge,
+  same as threads carry no head status pill (see
+  [`world.md → Detail head structure`](../world/world.md#detail-head-structure)).
+  The row reads committed data, so its icon flips once Save lands,
+  not while the toggle is mid-edit.
 - **Status pill on the row → status field on Overview**. Already the
-  same wording.
+  same wording; the detail head carries no status pill (see
+  [`world.md → Detail head structure`](../world/world.md#detail-head-structure)).
 
 Gives the Plot panel an "audit" feel without adding a full debug
 surface — at-a-glance the user sees what the classifier just wrote,
@@ -262,6 +312,20 @@ The `⋯ → View raw JSON` action opens the shared
 drawer. Plot-specific deviation: for happenings the JSON includes
 the row + its involvements + awareness summary inline; for threads
 just the row.
+
+## Detail-head overflow menu
+
+Same compound and menu order as
+[World's detail-head `⋯`](../world/world.md#detail-head-structure),
+minus `Set as lead` (threads and happenings have no lead concept):
+
+- `Export thread as JSON` / `Export happening as JSON` — disabled,
+  reason "Lands in Slice 4.6".
+- `View raw JSON` — live; a happening's viewer merges its
+  involvements and awareness rows, per
+  [Detail pane — raw JSON viewer](#detail-pane--raw-json-viewer) above.
+- `Delete thread` / `Delete happening` — disabled, reason "Lands in
+  Slice 4.2b".
 
 ## Save session
 
@@ -362,14 +426,6 @@ inherit unchanged.
 
 - **Visual icon set for thread / happening categories** — placeholder
   glyphs only; finalize with the visual identity session.
-- **Entry-ref picker UX** — picking a `triggered_at_entry_id`,
-  `resolved_at_entry_id`, `occurred_at_entry_id`, or `learned_at_entry_id`
-  needs a picker. Inline mini-list of recent entries? Searchable
-  popover keyed on entry content? Deferred — same pattern likely
-  reused across other entry-ref fields.
-- **Awareness `decay_resistance` UI** — numeric 0-1 input, slider, or
-  stepped preset (low / medium / high)? Defer to typed-state design
-  pass.
 - **Empty states** — list pane uses the cross-cutting
   [empty list-pane state pattern](../../patterns/lists.md#empty-list--table-state).
   Per-kind shape: "No threads on this branch yet." / "No
