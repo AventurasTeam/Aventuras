@@ -283,6 +283,23 @@ export const NoResults: Story = {
   },
 }
 
+/** Typing into the search narrows the list to rows matching the query. */
+export const SearchNarrows: Story = {
+  play: async () => {
+    expect(await screen.findByRole('button', { name: 'What the amulet wants' })).toBeVisible()
+    await userEvent.click(header('Pending'))
+    expect(
+      await screen.findByRole('button', { name: 'Expose the Syndicate broker' }, INTERACTION_WAIT),
+    ).toBeVisible()
+    await toolbarSettled()
+    await userEvent.type(screen.getByPlaceholderText('Search threads…'), 'syndicate')
+    expect(
+      await screen.findByRole('button', { name: 'Expose the Syndicate broker' }, INTERACTION_WAIT),
+    ).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'What the amulet wants' })).not.toBeInTheDocument()
+  },
+}
+
 /** The imperative handle: a narrowing chip and search widen back to All before the row scrolls in. */
 export const Reveal: Story = {
   args: { showRevealButton: true, initialThreadFilter: 'failed', initialSearch: 'zzz' },
@@ -305,20 +322,19 @@ export const Reveal: Story = {
   },
 }
 
-/** A reveal request for the other kind never reaches this pane: no widen, no collapse write. */
+/** A reveal request for the other kind is ignored: no widen, no collapse write. */
 export const RevealCrossKindIsNoop: Story = {
   args: { initialKind: 'happening', initialSearch: 'zzz', showRevealButton: true },
   play: async () => {
     expect(await screen.findByPlaceholderText('Search happenings…')).toHaveValue('zzz')
     await userEvent.click(screen.getByRole('button', { name: 'Reveal row' }))
     expect(screen.getByPlaceholderText('Search happenings…')).toHaveValue('zzz')
-    expect(
-      listCollapseStore.getCollapsed('thread', new Set(['pending', 'resolved', 'failed'])),
-    ).toEqual(new Set(['pending', 'resolved', 'failed']))
+    const untouched = new Set<string>()
+    expect(listCollapseStore.getCollapsed('thread', untouched)).toBe(untouched)
   },
 }
 
-/** A happening-kind reveal widens its own chip and search, never the thread ones. */
+/** A happening-kind reveal widens its own chip and search. */
 export const RevealHappeningWidensOwnFilter: Story = {
   args: {
     initialKind: 'happening',
@@ -385,4 +401,12 @@ export const FilterShrink: Story = {
 export const Phone: Story = {
   globals: { viewport: { value: 'mobile1' } },
   args: { initialKind: 'happening' },
+  play: async () => {
+    expect(await screen.findByRole('button', { name: "Vorne's pact" })).toBeVisible()
+    await userEvent.click(screen.getByText('Threads'))
+    expect(
+      await screen.findByRole('button', { name: 'What the amulet wants' }, INTERACTION_WAIT),
+    ).toBeVisible()
+    expect(screen.queryByRole('button', { name: "Vorne's pact" })).not.toBeInTheDocument()
+  },
 }
