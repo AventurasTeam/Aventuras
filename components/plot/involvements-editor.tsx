@@ -1,5 +1,11 @@
 import { ExternalLink, Trash2 } from 'lucide-react-native'
-import { Controller, useFieldArray, useWatch, type Control } from 'react-hook-form'
+import {
+  Controller,
+  useFieldArray,
+  useWatch,
+  type Control,
+  type UseFormTrigger,
+} from 'react-hook-form'
 import { View } from 'react-native'
 
 import { EntityPicker } from '@/components/compounds/entity-picker'
@@ -19,16 +25,18 @@ const ALL_KINDS: readonly EntityKind[] = ['character', 'location', 'item', 'fact
 
 export type InvolvementsEditorProps = {
   control: Control<HappeningDraft>
+  trigger: UseFormTrigger<HappeningDraft>
   entities: readonly Entity[]
   blocked: boolean
   blockedReason?: string
-  /** The row's entity opens in World; the pane routes it through the session's leave guard. */
+  /** The row's entity opens in World. */
   onOpenEntity: (entity: Entity) => void
 }
 
 // plot.md → Happenings side → Involvements: kind-aware entity picker plus free-form role.
 export function InvolvementsEditor({
   control,
+  trigger,
   entities,
   blocked,
   blockedReason,
@@ -48,9 +56,16 @@ export function InvolvementsEditor({
       ) : null}
       {fields.map((field, index) => {
         const entity = entities.find((e) => e.id === rows[index]?.entityId)
+        const removeLabel =
+          entity != null
+            ? t('plot:involvements.removeNamed', { name: entity.name })
+            : t('plot:involvements.remove')
         return (
+          // Keyed by the draft's own row id, not the field-array's `field.id`: a session
+          // reset (Save's rebase, a classifier patch) regenerates every `field.id`, which
+          // would remount every card and drop focus mid-edit.
           <View
-            key={field.id}
+            key={rows[index]?.id ?? field.id}
             className="gap-2 rounded-md border border-border p-3"
             testID={`involvement-${index}`}
           >
@@ -91,6 +106,7 @@ export function InvolvementsEditor({
                     onChangeText={f.onChange}
                     placeholder={t('plot:fields.rolePlaceholder')}
                     editable={!blocked}
+                    accessibilityHint={blocked ? blockedReason : undefined}
                     aria-label={t('plot:fields.role')}
                   />
                 </FormRow>
@@ -100,18 +116,25 @@ export function InvolvementsEditor({
               {entity != null ? (
                 <IconAction
                   icon={ExternalLink}
-                  label={t('plot:involvements.openInWorld')}
+                  label={t('plot:involvements.openInWorld', { name: entity.name })}
                   size="sm"
                   onPress={() => onOpenEntity(entity)}
                 />
               ) : null}
               <IconAction
                 icon={Trash2}
-                label={t('plot:involvements.remove')}
+                label={removeLabel}
                 size="sm"
+                variant="destructive"
                 disabled={blocked}
                 disabledReason={blockedReason}
-                onPress={() => remove(index)}
+                onPress={() => {
+                  remove(index)
+                  // `useFieldArray`'s own post-remove revalidation only compares the array
+                  // path's root error type/message, which is a no-op for a nested per-index
+                  // error tree — a surviving duplicate row's stale error needs this.
+                  void trigger('involvements')
+                }}
               />
             </View>
           </View>

@@ -19,7 +19,6 @@ type DecayResistanceFieldProps = {
   disabledReason?: string
   /** From the owning Controller's `fieldState.invalid` — out of the 0..1 draft range. */
   invalid?: boolean
-  testID?: string
 }
 
 /**
@@ -34,11 +33,12 @@ export function DecayResistanceField({
   disabled,
   disabledReason,
   invalid,
-  testID,
 }: DecayResistanceFieldProps) {
   return (
     <View className="gap-2">
-      <View className="flex-row flex-wrap gap-2">
+      {/* Named, not just "Low / Medium / High" — a bare chip-row label is ambiguous with
+          more than one decay field on a card-heavy screen. */}
+      <View role="group" aria-label={label} className="flex-row flex-wrap gap-2">
         {PRESETS.map((preset) => (
           <Chip
             key={preset.id}
@@ -58,7 +58,6 @@ export function DecayResistanceField({
         disabled={disabled}
         disabledReason={disabledReason}
         invalid={invalid}
-        testID={testID}
         className="w-28"
       />
     </View>

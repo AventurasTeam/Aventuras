@@ -78,11 +78,13 @@ const DEFAULT_VALUES: HappeningDraft = {
   ],
 }
 
+const BLOCKED_REASON = 'Generation is in flight. Cancel to edit.'
+
 const onOpenEntity = fn()
 
-function useHappeningForm() {
+function useHappeningForm(defaultValues: HappeningDraft = DEFAULT_VALUES) {
   return useForm<HappeningDraft>({
-    defaultValues: DEFAULT_VALUES,
+    defaultValues,
     resolver: zodResolver(happeningDraftSchema),
     mode: 'onChange',
   })
@@ -95,6 +97,7 @@ function InvolvementsHarness() {
     <View className="gap-4">
       <InvolvementsEditor
         control={form.control}
+        trigger={form.trigger}
         entities={ENTITIES}
         blocked={false}
         onOpenEntity={onOpenEntity}
@@ -114,6 +117,7 @@ function AwarenessHarness() {
     <View className="gap-4">
       <AwarenessEditor
         control={form.control}
+        trigger={form.trigger}
         entities={ENTITIES}
         entries={ENTRIES}
         blocked={false}
@@ -151,6 +155,7 @@ function CommonKnowledgeHarness() {
       ) : (
         <AwarenessEditor
           control={form.control}
+          trigger={form.trigger}
           entities={ENTITIES}
           entries={ENTRIES}
           blocked={false}
@@ -172,15 +177,12 @@ const DUPLICATE_INVOLVEMENTS: HappeningDraft = {
 // Two rows already point at the same entity (classifier/import data) — the picker's own
 // `excludeIds` prevents creating a fresh duplicate by clicking, so this loads one instead.
 function DuplicateInvolvementsHarness() {
-  const form = useForm<HappeningDraft>({
-    defaultValues: DUPLICATE_INVOLVEMENTS,
-    resolver: zodResolver(happeningDraftSchema),
-    mode: 'onChange',
-  })
+  const form = useHappeningForm(DUPLICATE_INVOLVEMENTS)
   return (
     <View className="gap-4">
       <InvolvementsEditor
         control={form.control}
+        trigger={form.trigger}
         entities={ENTITIES}
         blocked={false}
         onOpenEntity={onOpenEntity}
@@ -200,6 +202,89 @@ function DecayPresetsHarness() {
       onChange={setValue}
       label={t('plot:fields.decayResistance')}
     />
+  )
+}
+
+function BlockedHarness() {
+  const form = useHappeningForm()
+  return (
+    <View className="gap-4">
+      <InvolvementsEditor
+        control={form.control}
+        trigger={form.trigger}
+        entities={ENTITIES}
+        blocked
+        blockedReason={BLOCKED_REASON}
+        onOpenEntity={onOpenEntity}
+      />
+      <AwarenessEditor
+        control={form.control}
+        trigger={form.trigger}
+        entities={ENTITIES}
+        entries={ENTRIES}
+        blocked
+        blockedReason={BLOCKED_REASON}
+        onOpenEntity={onOpenEntity}
+      />
+    </View>
+  )
+}
+
+// role '' and source '' (a committed null normalizes through `happeningDraftFrom`), an unset
+// decay field, and an entity id absent from `entities` — the shape a classifier-authored row
+// loads as before anyone has touched it.
+const CLASSIFIER_SHAPED: HappeningDraft = {
+  ...DEFAULT_VALUES,
+  involvements: [{ id: 'hinv_ghost', entityId: 'char_ghost', role: '' }],
+  awareness: [
+    {
+      id: 'haw_ghost',
+      characterId: 'char_ghost',
+      learnedAtEntryId: null,
+      decayResistance: null,
+      source: '',
+    },
+  ],
+}
+
+function ClassifierShapedHarness() {
+  const form = useHappeningForm(CLASSIFIER_SHAPED)
+  return (
+    <View className="gap-4">
+      <InvolvementsEditor
+        control={form.control}
+        trigger={form.trigger}
+        entities={ENTITIES}
+        blocked={false}
+        onOpenEntity={onOpenEntity}
+      />
+      <AwarenessEditor
+        control={form.control}
+        trigger={form.trigger}
+        entities={ENTITIES}
+        entries={ENTRIES}
+        blocked={false}
+        onOpenEntity={onOpenEntity}
+      />
+    </View>
+  )
+}
+
+function ResetIdentityHarness() {
+  const form = useHappeningForm()
+  return (
+    <View className="gap-4">
+      <InvolvementsEditor
+        control={form.control}
+        trigger={form.trigger}
+        entities={ENTITIES}
+        blocked={false}
+        onOpenEntity={onOpenEntity}
+      />
+      <Button variant="secondary" size="sm" onPress={() => form.reset(form.getValues())}>
+        <Text>Reset</Text>
+      </Button>
+    </View>
   )
 }
 
@@ -223,10 +308,21 @@ type Story = StoryObj
 const WAIT = { timeout: 3000 }
 const valuesText = () => screen.getByTestId('values')
 const row = (testId: string) => screen.getByTestId(testId)
+const lowLabel = t('plot:fields.decayPreset.low')
+const mediumLabel = t('plot:fields.decayPreset.medium')
+const highLabel = t('plot:fields.decayPreset.high')
 
 export const Involvements: Story = {
   render: () => <InvolvementsHarness />,
   play: async () => {
+    onOpenEntity.mockClear()
+    await userEvent.click(
+      within(row('involvement-0')).getByRole('button', {
+        name: t('plot:involvements.openInWorld', { name: 'Kael' }),
+      }),
+    )
+    expect(onOpenEntity).toHaveBeenCalledWith(ENTITIES[0])
+
     await userEvent.click(screen.getByRole('button', { name: t('plot:involvements.add') }))
     const newRow = row('involvement-1')
     await userEvent.click(within(newRow).getByRole('button', { name: t('plot:fields.entity') }))
@@ -242,9 +338,16 @@ export const Involvements: Story = {
     expect(valuesText()).toHaveTextContent('"role":"site"')
 
     await userEvent.click(
-      within(row('involvement-0')).getByRole('button', { name: t('plot:involvements.remove') }),
+      within(row('involvement-0')).getByRole('button', {
+        name: t('plot:involvements.removeNamed', { name: 'Kael' }),
+      }),
     )
     await waitFor(() => expect(valuesText()).not.toHaveTextContent('char_kael'), WAIT)
+    // The survivor shifted down to index 0 and kept its own picked entity and typed role.
+    expect(within(row('involvement-0')).getByText('Night Market')).toBeVisible()
+    expect(
+      within(row('involvement-0')).getByRole('textbox', { name: t('plot:fields.role') }),
+    ).toHaveValue('site')
   },
 }
 
@@ -259,7 +362,7 @@ export const Awareness: Story = {
     expect(screen.queryByRole('option', { name: /Night Market/ })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('option', { name: /Ashen Sage/ }))
-    await userEvent.click(within(newRow).getByRole('button', { name: 'High' }))
+    await userEvent.click(within(newRow).getByRole('button', { name: highLabel }))
     await waitFor(() => expect(valuesText()).toHaveTextContent('"decayResistance":0.8'), WAIT)
 
     const decayInput = within(newRow).getByRole('textbox', {
@@ -279,7 +382,7 @@ export const Awareness: Story = {
         expect(within(newRow).queryByText(t('plot:validation.decayRange'))).not.toBeInTheDocument(),
       WAIT,
     )
-    expect(within(newRow).getByRole('button', { name: 'High' })).toHaveAttribute(
+    expect(within(newRow).getByRole('button', { name: highLabel })).toHaveAttribute(
       'aria-pressed',
       'false',
     )
@@ -324,16 +427,47 @@ export const CrossRowDuplicateRevalidatesOnFix: Story = {
   },
 }
 
+// `useFieldArray`'s own post-remove revalidation only compares the array path's root error
+// type/message — a no-op for a nested per-index error tree, so removing the FLAGGED row left
+// the survivor's error stale without an explicit `trigger()` after `remove()`.
+export const DuplicateEntityClearsOnRemove: Story = {
+  render: () => <DuplicateInvolvementsHarness />,
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Trigger' }))
+    await waitFor(
+      () =>
+        expect(
+          within(row('involvement-1')).getByText(t('plot:validation.duplicateEntity')),
+        ).toBeVisible(),
+      WAIT,
+    )
+
+    await userEvent.click(
+      within(row('involvement-0')).getByRole('button', {
+        name: t('plot:involvements.removeNamed', { name: 'Kael' }),
+      }),
+    )
+    // The survivor shifted down to index 0; its stale error must not follow it.
+    await waitFor(
+      () =>
+        expect(
+          within(row('involvement-0')).queryByText(t('plot:validation.duplicateEntity')),
+        ).not.toBeInTheDocument(),
+      WAIT,
+    )
+  },
+}
+
 export const DecayPresetsExactMatch: Story = {
   render: () => <DecayPresetsHarness />,
   play: async () => {
-    for (const name of ['Low', 'Medium', 'High']) {
+    for (const name of [lowLabel, mediumLabel, highLabel]) {
       expect(screen.getByRole('button', { name })).toHaveAttribute('aria-pressed', 'false')
     }
-    await userEvent.click(screen.getByRole('button', { name: 'Medium' }))
+    await userEvent.click(screen.getByRole('button', { name: mediumLabel }))
     await waitFor(
       () =>
-        expect(screen.getByRole('button', { name: 'Medium' })).toHaveAttribute(
+        expect(screen.getByRole('button', { name: mediumLabel })).toHaveAttribute(
           'aria-pressed',
           'true',
         ),
@@ -356,5 +490,139 @@ export const CommonKnowledgeSwap: Story = {
 
     await userEvent.click(screen.getByRole('switch', { name: t('plot:fields.commonKnowledge') }))
     await waitFor(() => expect(within(row('awareness-0')).getByText('Mira')).toBeVisible(), WAIT)
+  },
+}
+
+/** save-sessions.md: fields, source and destination inputs gate; navigation does not. */
+export const Blocked: Story = {
+  render: () => <BlockedHarness />,
+  play: async () => {
+    const involvementRow = row('involvement-0')
+    const awarenessRow = row('awareness-0')
+
+    expect(within(involvementRow).getByRole('button', { name: /^Entity/ })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+    expect(within(awarenessRow).getByRole('button', { name: /^Character/ })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+    expect(within(awarenessRow).getByRole('button', { name: /^Learned at/ })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+
+    expect(
+      within(involvementRow).getByRole('textbox', { name: t('plot:fields.role') }),
+    ).toHaveAttribute('readonly')
+    expect(
+      within(awarenessRow).getByRole('textbox', { name: t('plot:fields.source') }),
+    ).toHaveAttribute('readonly')
+    expect(
+      within(awarenessRow).getByRole('textbox', { name: t('plot:fields.decayResistance') }),
+    ).toHaveAttribute('readonly')
+
+    for (const name of [lowLabel, mediumLabel, highLabel]) {
+      expect(within(awarenessRow).getByRole('button', { name })).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      )
+    }
+
+    expect(within(awarenessRow).getByRole('button', { name: t('picker.clear') })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+
+    // Both remove buttons share the blocked reason as their accessible name while disabled
+    // (lessons-learned/disabled-iconaction-renames-itself.md), not their normal label.
+    expect(within(involvementRow).getByRole('button', { name: BLOCKED_REASON })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+    expect(within(awarenessRow).getByRole('button', { name: BLOCKED_REASON })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+
+    expect(screen.getByRole('button', { name: t('plot:involvements.add') })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+    expect(screen.getByRole('button', { name: t('plot:awareness.add') })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+
+    // Open in World navigates through the leave guard, not this gate — stays enabled.
+    expect(
+      within(involvementRow).getByRole('button', {
+        name: t('plot:involvements.openInWorld', { name: 'Kael' }),
+      }),
+    ).not.toHaveAttribute('aria-disabled', 'true')
+    expect(
+      within(awarenessRow).getByRole('button', {
+        name: t('plot:awareness.openInWorld', { name: 'Mira' }),
+      }),
+    ).not.toHaveAttribute('aria-disabled', 'true')
+  },
+}
+
+export const ClassifierShapedRow: Story = {
+  render: () => <ClassifierShapedHarness />,
+  play: async () => {
+    const involvementRow = row('involvement-0')
+    const awarenessRow = row('awareness-0')
+
+    // An entity id absent from `entities` shows the picker's missing-entity state, and no
+    // Open in World for a row with nothing to open.
+    expect(within(involvementRow).getByRole('button', { name: /Entity/ })).toHaveTextContent(
+      t('picker.entityMissing'),
+    )
+    expect(within(involvementRow).queryByRole('button', { name: /^Open/ })).not.toBeInTheDocument()
+    expect(
+      within(involvementRow).getByRole('textbox', { name: t('plot:fields.role') }),
+    ).toHaveValue('')
+    expect(
+      within(involvementRow).getByPlaceholderText(t('plot:fields.rolePlaceholder')),
+    ).toBeVisible()
+
+    expect(within(awarenessRow).getByRole('button', { name: /Character/ })).toHaveTextContent(
+      t('picker.entityMissing'),
+    )
+    expect(within(awarenessRow).queryByRole('button', { name: /^Open/ })).not.toBeInTheDocument()
+    for (const name of [lowLabel, mediumLabel, highLabel]) {
+      expect(within(awarenessRow).getByRole('button', { name })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      )
+    }
+    expect(
+      within(awarenessRow).getByRole('textbox', { name: t('plot:fields.decayResistance') }),
+    ).toHaveValue('')
+    expect(
+      within(awarenessRow).getByRole('textbox', { name: t('plot:fields.source') }),
+    ).toHaveValue('')
+    expect(
+      within(awarenessRow).getByPlaceholderText(t('plot:fields.sourcePlaceholder')),
+    ).toBeVisible()
+    expect(within(awarenessRow).getByText(t('plot:fields.learnedAtPlaceholder'))).toBeVisible()
+  },
+}
+
+// react-hook-form regenerates every `field.id` on a full `reset()` (the shape
+// `useRowSaveSession`'s post-save rebase uses) — keying cards by the draft's own row id
+// instead keeps the same DOM node across a same-values reset, so focus and scroll survive.
+export const CardIdentitySurvivesReset: Story = {
+  render: () => <ResetIdentityHarness />,
+  play: async () => {
+    const before = row('involvement-0')
+    await userEvent.type(
+      within(before).getByRole('textbox', { name: t('plot:fields.role') }),
+      ' extra',
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Reset' }))
+    expect(row('involvement-0')).toBe(before)
   },
 }

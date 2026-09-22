@@ -145,18 +145,20 @@
   "involvements": {
     "add": "Add involvement",
     "remove": "Remove involvement",
+    "removeNamed": "Remove {{name}}",
     "empty": "No involvements yet.",
     "emptyBody": "The classifier writes most rows automatically. You can also add them with Add involvement.",
-    "openInWorld": "Open in World"
+    "openInWorld": "Open {{name}} in World"
   },
   "awareness": {
     "add": "Add awareness",
     "remove": "Remove awareness",
+    "removeNamed": "Remove {{name}}",
     "empty": "No awareness rows yet.",
     "emptyBody": "The classifier writes most rows automatically. You can also add them with Add awareness.",
     "ckTitle": "Common knowledge",
     "ckBody": "Every character is aware of this happening; per-character awareness rows are skipped. Turn the toggle off on Overview to edit rows.",
-    "openInWorld": "Open in World"
+    "openInWorld": "Open {{name}} in World"
   },
   "validation": {
     "titleRequired": "A title is required.",

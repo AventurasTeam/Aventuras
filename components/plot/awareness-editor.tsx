@@ -1,5 +1,11 @@
 import { ExternalLink, Trash2 } from 'lucide-react-native'
-import { Controller, useFieldArray, useWatch, type Control } from 'react-hook-form'
+import {
+  Controller,
+  useFieldArray,
+  useWatch,
+  type Control,
+  type UseFormTrigger,
+} from 'react-hook-form'
 import { View } from 'react-native'
 
 import { EntityPicker } from '@/components/compounds/entity-picker'
@@ -20,18 +26,20 @@ import { issueLabel } from './plot-copy'
 
 export type AwarenessEditorProps = {
   control: Control<HappeningDraft>
+  trigger: UseFormTrigger<HappeningDraft>
   entities: readonly Entity[]
   /** A ready index — the pane mounts no editor before it is. */
   entries: readonly EntryRef[]
   blocked: boolean
   blockedReason?: string
-  /** The row's character opens in World; the pane routes it through the session's leave guard. */
+  /** The row's character opens in World. */
   onOpenEntity: (entity: Entity) => void
 }
 
 // plot.md → Happenings side → Awareness: character picker, learned-at, decay resistance, source.
 export function AwarenessEditor({
   control,
+  trigger,
   entities,
   entries,
   blocked,
@@ -49,9 +57,16 @@ export function AwarenessEditor({
       ) : null}
       {fields.map((field, index) => {
         const entity = entities.find((e) => e.id === rows[index]?.characterId)
+        const removeLabel =
+          entity != null
+            ? t('plot:awareness.removeNamed', { name: entity.name })
+            : t('plot:awareness.remove')
         return (
+          // Keyed by the draft's own row id, not the field-array's `field.id`: a session
+          // reset (Save's rebase, a classifier patch) regenerates every `field.id`, which
+          // would remount every card and drop focus mid-edit.
           <View
-            key={field.id}
+            key={rows[index]?.id ?? field.id}
             className="gap-2 rounded-md border border-border p-3"
             testID={`awareness-${index}`}
           >
@@ -129,6 +144,7 @@ export function AwarenessEditor({
                     onChangeText={f.onChange}
                     placeholder={t('plot:fields.sourcePlaceholder')}
                     editable={!blocked}
+                    accessibilityHint={blocked ? blockedReason : undefined}
                     aria-label={t('plot:fields.source')}
                   />
                 </FormRow>
@@ -138,18 +154,25 @@ export function AwarenessEditor({
               {entity != null ? (
                 <IconAction
                   icon={ExternalLink}
-                  label={t('plot:awareness.openInWorld')}
+                  label={t('plot:awareness.openInWorld', { name: entity.name })}
                   size="sm"
                   onPress={() => onOpenEntity(entity)}
                 />
               ) : null}
               <IconAction
                 icon={Trash2}
-                label={t('plot:awareness.remove')}
+                label={removeLabel}
                 size="sm"
+                variant="destructive"
                 disabled={blocked}
                 disabledReason={blockedReason}
-                onPress={() => remove(index)}
+                onPress={() => {
+                  remove(index)
+                  // `useFieldArray`'s own post-remove revalidation only compares the array
+                  // path's root error type/message, which is a no-op for a nested per-index
+                  // error tree — a surviving duplicate row's stale error needs this.
+                  void trigger('awareness')
+                }}
               />
             </View>
           </View>
