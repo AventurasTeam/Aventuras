@@ -126,7 +126,12 @@ function AccordionContent({
         )}
         {...props}
       >
-        <Animated.View exiting={Platform.select({ native: FadeOutUp.duration(200) })}>
+        {/* Only a collapse animates out. Torn down while still expanded — the host swapped
+            lists — FadeOutUp would paint these rows over the incoming ones for 200ms
+            (LayoutAnimationConfig skipExiting does not reach here). */}
+        <Animated.View
+          exiting={isExpanded ? undefined : Platform.select({ native: FadeOutUp.duration(200) })}
+        >
           {/* NativeWind registers cssInterop for RN core components only, so
               className on a Reanimated Animated.* is dropped, not applied. */}
           <View className={cn('pb-row-y-lg', className)}>{children}</View>
