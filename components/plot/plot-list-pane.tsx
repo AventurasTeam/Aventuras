@@ -173,7 +173,7 @@ export function PlotListPane({
 
   // plot.md → Layout: a two-cell segment at every tier (forms.md → Select primitive).
   const kindSelector = (
-    <View className="flex-1" testID="plot-segment">
+    <View testID="plot-segment">
       <Select
         mode="segment"
         size="sm"
