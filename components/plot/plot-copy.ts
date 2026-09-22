@@ -83,14 +83,27 @@ export function plotMenuEntries(kind: PlotKind, onViewJson: () => void): Overflo
   ]
 }
 
+// Radix Select throws on an empty-string item value, so "no icon" needs a key of its own.
+const NO_ICON = '__none__'
+
 /** The icon dropdown: none, the catalog, and the row's own key when it is not in the catalog. */
 export function plotIconOptions(current: string | null): SelectOption[] {
   const keys =
-    current != null && !PLOT_ICON_KEYS.includes(current)
+    current != null && current !== '' && !PLOT_ICON_KEYS.includes(current)
       ? [current, ...PLOT_ICON_KEYS]
       : PLOT_ICON_KEYS
   return [
-    { value: '', label: t('plot:fields.iconNone') },
+    { value: NO_ICON, label: t('plot:fields.iconNone') },
     ...keys.map((key) => ({ value: key, label: key })),
   ]
+}
+
+/** A draft `icon` → the dropdown's value. */
+export function iconOptionValue(icon: string | null): string {
+  return icon == null || icon === '' ? NO_ICON : icon
+}
+
+/** The dropdown's value → a draft `icon`. */
+export function iconFromOption(value: string): string | null {
+  return value === NO_ICON ? null : value
 }
