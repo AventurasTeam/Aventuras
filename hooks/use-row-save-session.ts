@@ -168,8 +168,8 @@ export function useRowSaveSession<Draft extends FieldValues>({
   const busyRef = useRef(false)
   // Oldest first: a window close and a back can both be outstanding.
   const intentsRef = useRef<(() => void)[]>([])
-  // Drains run only on a clean session, which formState reports a render late: a leave raised
-  // from inside one (a pop re-entering the navigator's guard) would otherwise queue again.
+  // A drain runs on a clean session, but formState reads dirty until the next render: a proceed
+  // that synchronously requests another leave must run it, not queue it.
   const drainingRef = useRef(false)
   const appliedRef = useRef({ rowKey, values })
   // The render snapshot trails a trigger() by a render; the subscription sees every emission.
