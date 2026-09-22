@@ -879,7 +879,9 @@ const heroHappenings: NewHappening[] = [
     category: 'conflict',
     icon: 'scroll',
     temporal: null,
-    occurredAtEntryId: entryId('hero', 48),
+    // Anchored in the open region (past CHAP2_END): every other seeded happening sits inside a
+    // closed chapter, so without this the `Current chapter` bucket is always empty and omitted.
+    occurredAtEntryId: entryId('hero', 60),
     commonKnowledge: 0,
     embeddingStale: 1,
     createdAt: BASE + 48 * MIN,
