@@ -164,7 +164,8 @@
     "duplicateEntity": "This entity is already involved.",
     "duplicateCharacter": "This character already has an awareness row.",
     "entityRequired": "Pick an entity.",
-    "characterRequired": "Pick a character."
+    "characterRequired": "Pick a character.",
+    "decayRange": "Enter a value from 0 to 1."
   },
   "save": {
     "saved": "Saved.",

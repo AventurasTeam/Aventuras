@@ -13,6 +13,7 @@ const VALIDATION_KEYS = [
   'duplicateCharacter',
   'entityRequired',
   'characterRequired',
+  'decayRange',
 ] as const
 type ValidationKey = (typeof VALIDATION_KEYS)[number]
 

@@ -22,7 +22,7 @@ export const awarenessDraftSchema = z.object({
   id: z.string().nullable(),
   characterId: z.string().min(1, 'characterRequired'),
   learnedAtEntryId: z.string().nullable(),
-  decayResistance: z.number().min(0).max(1).nullable(),
+  decayResistance: z.number().min(0, 'decayRange').max(1, 'decayRange').nullable(),
   source: z.string(),
 })
 

@@ -101,6 +101,22 @@ describe('happeningDraftSchema', () => {
     })
     expect(dupEntity.success).toBe(false)
   })
+
+  it('refuses an out-of-range decay resistance', () => {
+    const base = happeningDraftFrom(ROW, LINKS)
+    const result = happeningDraftSchema.safeParse({
+      ...base,
+      awareness: [{ ...base.awareness[0], decayResistance: 1.5 }],
+    })
+    expect(result.success).toBe(false)
+    if (!result.success)
+      expect(result.error.issues).toContainEqual(
+        expect.objectContaining({
+          path: ['awareness', 0, 'decayResistance'],
+          message: 'decayRange',
+        }),
+      )
+  })
 })
 
 describe('happeningActions', () => {
