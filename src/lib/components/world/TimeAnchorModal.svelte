@@ -5,6 +5,7 @@
   import { Textarea } from '$lib/components/ui/textarea'
   import * as Dialog from '$lib/components/ui/dialog'
   import { Trash2 } from '@lucide/svelte'
+  import { ask } from '@tauri-apps/plugin-dialog'
   import { parseStoryTime, formatStoryTime, storyTimeIsInvalid } from '$lib/services/storyTime'
   import { entryNumber, resolveEntryByNumber } from '$lib/utils/storyNavigation'
   import type { StoryEntry } from '$lib/types'
@@ -83,6 +84,11 @@
 
   async function remove() {
     if (!usableEntry) return
+    const confirmed = await ask(
+      `Delete the anchor on entry ${entryNumber(usableEntry)}? The time you asserted there is not recorded anywhere else.`,
+      { title: 'Delete Anchor', kind: 'warning' },
+    )
+    if (!confirmed) return
     saving = true
     try {
       await story.removeTimeAnchor(usableEntry.id)
@@ -107,10 +113,14 @@
 <Dialog.Root bind:open>
   <Dialog.Content class="max-w-lg gap-4">
     <Dialog.Header>
-      <Dialog.Title>{existing ? 'Edit an anchor' : 'Create an anchor'}</Dialog.Title>
+      <Dialog.Title
+        >{existing
+          ? 'Edit a reconciliation anchor'
+          : 'Create a reconciliation anchor'}</Dialog.Title
+      >
       <Dialog.Description>
-        A staple for the time reconciliation. Asserts when the entry ended. Does not change the
-        recorded time.
+        A point of reference for the time reconciliation. Asserts when the entry ended. Does not
+        change the recorded time.
       </Dialog.Description>
     </Dialog.Header>
 
@@ -192,20 +202,32 @@
       </label>
     </div>
 
-    <Dialog.Footer class="mt-2 sm:justify-between">
+    <!-- Stacked on a phone, the delete on its own row below the pair it would otherwise crowd. -->
+    <Dialog.Footer class="mt-2 gap-2 sm:justify-between">
       <!-- Removal lives with the thing being removed: the lists that used to carry it now offer
            editing instead, and an anchor is read here before it is discarded. -->
       {#if existing}
-        <Button variant="outline" class="text-destructive" disabled={saving} onclick={remove}>
+        <!-- As the story's own delete markers read: plain until hovered, red when it is. A touch
+             screen has no hover to reveal it, so there it is red from the start. -->
+        <Button
+          variant="outline"
+          class="[@media(hover:hover)]:text-foreground w-full text-red-500 hover:text-red-500 sm:w-auto [@media(hover:hover)]:hover:text-red-500"
+          disabled={saving}
+          onclick={remove}
+        >
           <Trash2 class="h-4 w-4" />
           Delete anchor
         </Button>
       {:else}
-        <span></span>
+        <span class="hidden sm:block"></span>
       {/if}
-      <span class="flex gap-2">
-        <Button variant="outline" onclick={() => (open = false)}>Cancel</Button>
-        <Button disabled={!canSave} onclick={save}>{saving ? 'Saving…' : 'Save'}</Button>
+      <span class="flex w-full gap-2 sm:w-auto">
+        <Button variant="outline" class="flex-1 sm:flex-none" onclick={() => (open = false)}>
+          Cancel
+        </Button>
+        <Button class="flex-1 sm:flex-none" disabled={!canSave} onclick={save}>
+          {saving ? 'Saving…' : 'Save'}
+        </Button>
       </span>
     </Dialog.Footer>
   </Dialog.Content>

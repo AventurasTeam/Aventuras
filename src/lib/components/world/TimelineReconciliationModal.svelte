@@ -1372,7 +1372,12 @@
 
       {#if bands.length > 1}
         <div class="text-muted-foreground flex items-center gap-2 text-[11px]">
-          <Button variant="outline" size="sm" class="h-7 shrink-0 text-xs" onclick={toggleAll}>
+          <Button
+            variant="outline"
+            size="sm"
+            class="text-foreground h-7 shrink-0 text-xs"
+            onclick={toggleAll}
+          >
             {allFolded ? 'Expand all' : 'Collapse all'}
           </Button>
           <span>swipe a band ◂ to fold, ▸ a summary to open</span>

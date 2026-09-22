@@ -38,6 +38,8 @@
     Clock,
     Metronome,
     MoreVertical,
+    ChevronLeft,
+    ChevronRight,
     MilestoneIcon,
   } from '@lucide/svelte'
   import { aiService } from '$lib/services/ai'
@@ -392,6 +394,8 @@
   let isCreatingCheckpoint = $state(false)
   let isAnchoringTime = $state(false)
   let isEditingEntryTime = $state(false)
+  /** The overflow menu showing only the timeline adjustments, reset whenever the menu closes. */
+  let adjustmentsDrilled = $state(false)
   let checkpointName = $state('')
 
   // Check if this is the latest entry (checkpoints can only be created at the latest entry)
@@ -1711,7 +1715,7 @@
         >
           <Trash2 class="h-4 w-4" />
         </Button>
-        <DropdownMenu.Root>
+        <DropdownMenu.Root onOpenChange={(isOpen) => !isOpen && (adjustmentsDrilled = false)}>
           <DropdownMenu.Trigger>
             {#snippet child({ props })}
               <Button
@@ -1727,71 +1731,81 @@
             {/snippet}
           </DropdownMenu.Trigger>
           <DropdownMenu.Content align="end" class="max-h-[70vh] overflow-y-auto">
-            {#if canBranch}
-              <DropdownMenu.Item onclick={() => (isBranching = true)}>
-                <GitBranch class="h-4 w-4" />
-                Branch from here
+            {#if adjustmentsDrilled}
+              {@render timelineAdjustments()}
+              <DropdownMenu.Separator />
+              <DropdownMenu.Item closeOnSelect={false} onclick={() => (adjustmentsDrilled = false)}>
+                <ChevronLeft class="h-4 w-4" />
+                Back
               </DropdownMenu.Item>
-            {/if}
-            {#if canCreateCheckpoint}
-              <DropdownMenu.Item onclick={() => (isCreatingCheckpoint = true)}>
-                <Bookmark class="h-4 w-4" />
-                Create checkpoint
-              </DropdownMenu.Item>
-            {/if}
-            {#if entry.type !== 'user_action'}
-              <DropdownMenu.Sub>
-                <DropdownMenu.SubTrigger>
+            {:else}
+              {#if canBranch}
+                <DropdownMenu.Item onclick={() => (isBranching = true)}>
+                  <GitBranch class="h-4 w-4" />
+                  Branch from here
+                </DropdownMenu.Item>
+              {/if}
+              {#if canCreateCheckpoint}
+                <DropdownMenu.Item onclick={() => (isCreatingCheckpoint = true)}>
+                  <Bookmark class="h-4 w-4" />
+                  Create checkpoint
+                </DropdownMenu.Item>
+              {/if}
+              <!-- Drills in rather than opening a submenu: this menu hugs the card's right edge,
+                   so anything opening beside it leaves a phone. -->
+              {#if entry.type !== 'user_action'}
+                <DropdownMenu.Item
+                  closeOnSelect={false}
+                  onclick={() => (adjustmentsDrilled = true)}
+                >
                   <Metronome class="h-4 w-4" />
                   Timeline adjustments
-                </DropdownMenu.SubTrigger>
-                <DropdownMenu.SubContent>
-                  {@render timelineAdjustments()}
-                </DropdownMenu.SubContent>
-              </DropdownMenu.Sub>
-            {/if}
-            <!-- Static label and icon: selecting an item closes the menu, so the "Copied!"
+                  <ChevronRight class="ml-auto h-4 w-4" />
+                </DropdownMenu.Item>
+              {/if}
+              <!-- Static label and icon: selecting an item closes the menu, so the "Copied!"
                  state would never be on screen. The toast is the feedback here. -->
-            <DropdownMenu.Item onclick={handleCopyContent}>
-              <Copy class="h-4 w-4" />
-              Copy message text
-            </DropdownMenu.Item>
-            {#if canGenerateStoryImages}
-              <DropdownMenu.Item
-                onclick={handleGenerateStoryImages}
-                disabled={ui.isGenerating || isGeneratingStoryImages || hasEmbeddedImages}
-              >
-                {#if isGeneratingStoryImages}
-                  <Loader2 class="h-4 w-4 animate-spin" />
-                {:else}
-                  <ImageIcon class="h-4 w-4" />
-                {/if}
-                {storyImagesLabel}
+              <DropdownMenu.Item onclick={handleCopyContent}>
+                <Copy class="h-4 w-4" />
+                Copy message text
               </DropdownMenu.Item>
-            {/if}
-            {#if activityRecord}
-              <DropdownMenu.Item
-                onclick={() => activity.setReportVisible(entry.id, !showActivityRecord)}
-              >
-                <Clock class="h-4 w-4" />
-                {showActivityRecord ? 'Hide' : 'Show'} generation activity
-              </DropdownMenu.Item>
-            {/if}
-            <!-- Rendered inline rather than behind an item: selecting an item closes the
+              {#if canGenerateStoryImages}
+                <DropdownMenu.Item
+                  onclick={handleGenerateStoryImages}
+                  disabled={ui.isGenerating || isGeneratingStoryImages || hasEmbeddedImages}
+                >
+                  {#if isGeneratingStoryImages}
+                    <Loader2 class="h-4 w-4 animate-spin" />
+                  {:else}
+                    <ImageIcon class="h-4 w-4" />
+                  {/if}
+                  {storyImagesLabel}
+                </DropdownMenu.Item>
+              {/if}
+              {#if activityRecord}
+                <DropdownMenu.Item
+                  onclick={() => activity.setReportVisible(entry.id, !showActivityRecord)}
+                >
+                  <Clock class="h-4 w-4" />
+                  {showActivityRecord ? 'Hide' : 'Show'} generation activity
+                </DropdownMenu.Item>
+              {/if}
+              <!-- Rendered inline rather than behind an item: selecting an item closes the
                  menu, which would unmount any popover anchored to it. -->
-            {#if showInfo}
-              <DropdownMenu.Separator />
-              <div class="w-56 px-2 pb-1.5 text-xs">
-                {@render entryNumberRow()}
-              </div>
-              <DropdownMenu.Group>
-                <DropdownMenu.GroupHeading class="px-2 py-1.5 text-sm font-medium">
-                  Response info
-                </DropdownMenu.GroupHeading>
+              {#if showInfo}
+                <DropdownMenu.Separator />
                 <div class="w-56 px-2 pb-1.5 text-xs">
-                  {@render responseInfoRows()}
+                  {@render entryNumberRow()}
                 </div>
-              </DropdownMenu.Group>
+                <DropdownMenu.Group>
+                  <DropdownMenu.GroupHeading class="px-2 py-1.5 text-sm font-medium">
+                    Response info
+                  </DropdownMenu.GroupHeading>
+                  <div class="w-56 px-2 pb-1.5 text-xs">
+                    {@render responseInfoRows()}
+                  </div>
+                </DropdownMenu.Group>
+              {/if}
             {/if}
           </DropdownMenu.Content>
         </DropdownMenu.Root>
@@ -2130,9 +2144,7 @@
   </DropdownMenu.Item>
   <DropdownMenu.Item onclick={() => (isAnchoringTime = true)}>
     <Anchor class="h-4 w-4" />
-    {story.timeAnchorFor(entry.id)
-      ? 'Edit the reconciliation anchor'
-      : 'Create a reconciliation anchor'}
+    {story.timeAnchorFor(entry.id) ? 'Edit the anchor' : 'Create an anchor'}
   </DropdownMenu.Item>
 {/snippet}
 
