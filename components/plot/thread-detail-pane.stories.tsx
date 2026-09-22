@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
+import type { RowSessionHandle } from '@/hooks/use-row-save-session'
 import type { PlotSaveResult } from '@/lib/actions'
 import type { Thread } from '@/lib/db'
 import type { EntryIndex, EntryRef } from '@/lib/entry-refs'
@@ -94,16 +95,20 @@ type HarnessProps = {
   saveResult?: PlotSaveResult
   /** Every save throws instead, as a failed transaction would. */
   saveThrows?: boolean
-  /** A capture-phase F2 flips `blocked`, as a run starting mid-edit would. */
-  blockToggle?: boolean
+  /** `onSaved` throws after the row is selected, as a failing success toast would. */
+  savedThrows?: boolean
   initialTab?: string
   onSave: (draft: ThreadDraft) => void
   onRejected: (reason: string) => void
+  /** What a leave requested through the pane's session handle runs once released. */
+  onLeave: () => void
 }
 
 /**
  * Mimics the route: an update's store patch lands while the save is in flight; a create's new
- * row is selected from `onSaved`, which switches the pane's row mid-commit.
+ * row is selected from `onSaved`, which switches the pane's row mid-commit. Capture-phase keys
+ * stand in for the route (a button click would be an outside click): F2 flips `blocked`, as a
+ * run starting mid-edit would; F3 requests a leave through the handle from `onSession`.
  */
 function Harness({
   row: initialRow,
@@ -111,23 +116,28 @@ function Harness({
   recentlyClassified,
   saveResult,
   saveThrows = false,
-  blockToggle = false,
+  savedThrows = false,
   initialTab,
   onSave,
   onRejected,
+  onLeave,
 }: HarnessProps) {
   const [row, setRow] = useState(initialRow)
   const [blocked, setBlocked] = useState(initialBlocked)
   const created = useRef(new Map<string, ThreadDraft>())
+  const session = useRef<RowSessionHandle | null>(null)
+  const onSession = useCallback((handle: RowSessionHandle | null) => {
+    session.current = handle
+  }, [])
 
   useEffect(() => {
-    if (!blockToggle) return
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'F2') setBlocked((prev) => !prev)
+      if (e.key === 'F3') session.current?.requestLeave(onLeave)
     }
     document.addEventListener('keydown', onKeyDown, true)
     return () => document.removeEventListener('keydown', onKeyDown, true)
-  }, [blockToggle])
+  }, [onLeave])
 
   const save = useCallback(
     async (draft: ThreadDraft): Promise<PlotSaveResult> => {
@@ -146,17 +156,19 @@ function Harness({
     [onSave, saveResult, saveThrows, row],
   )
 
-  const onSaved = useCallback((id: string) => {
-    const draft = created.current.get(id)
-    if (draft != null) setRow(savedRow(null, id, draft))
-  }, [])
+  const onSaved = useCallback(
+    (id: string) => {
+      const draft = created.current.get(id)
+      if (draft != null) setRow(savedRow(null, id, draft))
+      if (savedThrows) throw new Error('toast failed')
+    },
+    [savedThrows],
+  )
 
   return (
-    <View
-      testID="thread-pane-harness"
-      style={{ width: 560, maxWidth: '100%', height: 720 }}
-      className="border border-border"
-    >
+    // Past FormRow's 640 px threshold, like the desktop detail pane: its first-frame two-column
+    // guess holds, so no control remounts under a play (lessons-learned/formrow-narrow-story-remount.md).
+    <View style={{ width: 860, maxWidth: '100%', height: 720 }} className="border border-border">
       <ThreadDetailPane
         row={row}
         entryIndex={ENTRY_INDEX}
@@ -168,7 +180,7 @@ function Harness({
         onSave={save}
         onSaved={onSaved}
         onRejected={onRejected}
-        onSession={() => {}}
+        onSession={onSession}
       />
     </View>
   )
@@ -178,7 +190,7 @@ const meta: Meta<typeof Harness> = {
   title: 'Compounds/Plot/ThreadDetailPane',
   component: Harness,
   parameters: { layout: 'padded' },
-  args: { row: AMULET, onSave: fn(), onRejected: fn() },
+  args: { row: AMULET, onSave: fn(), onRejected: fn(), onLeave: fn() },
 }
 export default meta
 type Story = StoryObj<typeof Harness>
@@ -186,20 +198,8 @@ type Story = StoryObj<typeof Harness>
 const description = () => screen.getByRole('textbox', { name: 'Description' })
 const saveBar = () => screen.getByTestId('save-bar')
 
-// FormRow first renders 2-col from the tier guess, then remounts its control stacked once onLayout
-// reports the 560 px harness; an interaction before that lands on the detached node.
-async function formSettled() {
-  await waitFor(() => {
-    // Scoped: Storybook's hidden args-table skeleton also has a `Description` header.
-    const harness = within(screen.getByTestId('thread-pane-harness'))
-    const label = harness.getByText('Description').getBoundingClientRect()
-    expect(description().getBoundingClientRect().top).toBeGreaterThanOrEqual(label.bottom)
-  }, WAIT)
-}
-
 async function editDescription(text: string) {
-  await formSettled()
-  await userEvent.type(description(), text)
+  await userEvent.type(await screen.findByRole('textbox', { name: 'Description' }), text)
   return await screen.findByTestId('save-bar', {}, WAIT)
 }
 
@@ -315,7 +315,16 @@ export const Blocked: Story = {
     expect(await screen.findByText('What the amulet wants')).toBeVisible()
     expect(screen.queryByRole('button', { name: /^Edit / })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Status' })).toBeDisabled()
-    await formSettled()
+    expect(screen.getByRole('button', { name: 'Icon' })).toBeDisabled()
+    const injection = within(screen.getByRole('radiogroup', { name: 'Injection' })).getAllByRole(
+      'radio',
+    )
+    expect(injection).toHaveLength(3)
+    for (const radio of injection) expect(radio).toHaveAttribute('aria-disabled', 'true')
+    // The Autocomplete's input carries no accessible name yet; its placeholder is unique here.
+    const category = screen.getByPlaceholderText('e.g. mystery, goal, conflict')
+    expect(category).toHaveAttribute('readonly')
+    expect(category).toHaveValue('mystery')
     expect(description()).toHaveAttribute('readonly')
     await userEvent.type(description(), 'x')
     expect(description()).toHaveValue(AMULET.description)
@@ -325,7 +334,6 @@ export const Blocked: Story = {
 
 /** A run starting mid-edit disables Save with the gate's reason; Discard stays live. */
 export const BlockedWhileDirty: Story = {
-  args: { blockToggle: true },
   play: async ({ args }) => {
     const bar = await editDescription(' Soon.')
     expect(within(bar).getByRole('button', { name: /^Save/ })).toBeEnabled()
@@ -403,6 +411,46 @@ export const SaveThrows: Story = {
     await waitFor(() => expect(args.onRejected).toHaveBeenCalledWith(FAILED_TEXT), WAIT)
     await waitFor(() => expect(within(saveBar()).getByLabelText(FAILED_TEXT)).toBeVisible(), WAIT)
     expect(screen.queryByLabelText(/SQLITE_BUSY/)).not.toBeInTheDocument()
+  },
+}
+
+/** A throwing `onSaved` after the write landed is not a failed save: no error, the bar clears. */
+export const SavedHandlerThrows: Story = {
+  args: { savedThrows: true },
+  play: async ({ args }) => {
+    const bar = await editDescription(' Soon.')
+    await userEvent.click(within(bar).getByRole('button', { name: /^Save/ }))
+    await waitFor(() => expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument(), WAIT)
+    expect(args.onSave).toHaveBeenCalledTimes(1)
+    expect(args.onRejected).not.toHaveBeenCalled()
+    expect(screen.queryByLabelText(FAILED_TEXT)).not.toBeInTheDocument()
+    expect(description()).toHaveValue(`${AMULET.description} Soon.`)
+  },
+}
+
+/**
+ * A leave requested through the session handle waits on the dialog; the gate disables its Save
+ * with the gate's reason, and Discard releases the leave.
+ */
+export const LeaveGuard: Story = {
+  play: async ({ args }) => {
+    await editDescription(' Soon.')
+    await userEvent.keyboard('{F3}')
+    const dialog = await screen.findByRole('alertdialog', { name: 'Unsaved changes' }, WAIT)
+    expect(args.onLeave).not.toHaveBeenCalled()
+    expect(within(dialog).getByRole('button', { name: 'Save' })).toBeEnabled()
+
+    await userEvent.keyboard('{F2}')
+    await waitFor(
+      () => expect(within(dialog).getByRole('button', { name: 'Save' })).toBeDisabled(),
+      WAIT,
+    )
+    expect(within(dialog).getByText(BLOCKED_REASON)).toBeVisible()
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Discard' }))
+    await waitFor(() => expect(args.onLeave).toHaveBeenCalledTimes(1), WAIT)
+    await waitFor(() => expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument(), WAIT)
+    expect(description()).toHaveValue(AMULET.description)
   },
 }
 

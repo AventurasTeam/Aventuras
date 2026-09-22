@@ -22,6 +22,7 @@ import {
 } from '@/hooks/use-row-save-session'
 import type { PlotSaveResult } from '@/lib/actions'
 import { INJECTION_MODES, type Thread } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import type { EntryIndex } from '@/lib/entry-refs'
 import { t } from '@/lib/i18n'
 import { THREAD_TIERS } from '@/lib/list-modules'
@@ -102,7 +103,17 @@ export function ThreadDetailPane({
       if (result.status === 'rejected') {
         return { status: 'rejected', reason: saveRejectionText(result.code) }
       }
-      onSaved(result.id)
+      // The write landed: a throwing handler must not read as a failed save, or a retry
+      // would create the thread twice.
+      try {
+        onSaved(result.id)
+      } catch (error) {
+        logger.error('app.plot_saved_handler_failed', {
+          kind: 'thread',
+          id: result.id,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
       return { status: 'ok' }
     },
     [onSave, onSaved],
@@ -283,6 +294,7 @@ function ThreadOverviewForm({
               onChangeText={field.onChange}
               rows={4}
               editable={!blocked}
+              accessibilityHint={blocked ? blockedReason : undefined}
               aria-label={t('plot:fields.description')}
             />
           </FormRow>
