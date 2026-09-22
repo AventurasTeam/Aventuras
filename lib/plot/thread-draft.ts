@@ -35,7 +35,7 @@ export function threadDraftFrom(row: Thread | null): ThreadDraft {
   }
 }
 
-/** Absent text is `NULL`, never `''` (data-model.md → Entry references are IDs). */
+/** Free text is stored as `NULL` when blank, never `''`. */
 export function blankToNull(value: string): string | null {
   const trimmed = value.trim()
   return trimmed === '' ? null : trimmed
@@ -45,15 +45,19 @@ type ThreadPatch = Partial<
   Pick<Thread, 'title' | 'description' | 'category' | 'icon' | 'status' | 'injectionMode'>
 >
 
-/** The columns whose committed value differs from the draft; empty when nothing changed. */
+/**
+ * The columns whose committed value differs from the draft; empty when nothing changed.
+ * Compares normalized-to-normalized — a committed row can carry untrimmed free text
+ * (classifier writes verbatim) that would otherwise diff against a merely-loaded draft.
+ */
 export function threadPatch(row: Thread, draft: ThreadDraft): ThreadPatch {
   const patch: ThreadPatch = {}
   const title = draft.title.trim()
-  if (title !== row.title) patch.title = title
+  if (title !== row.title.trim()) patch.title = title
   const description = blankToNull(draft.description)
-  if (description !== row.description) patch.description = description
+  if (description !== blankToNull(row.description ?? '')) patch.description = description
   const category = blankToNull(draft.category)
-  if (category !== row.category) patch.category = category
+  if (category !== blankToNull(row.category ?? '')) patch.category = category
   if (draft.icon !== row.icon) patch.icon = draft.icon
   if (draft.status !== row.status) patch.status = draft.status
   if (draft.injectionMode !== row.injectionMode) patch.injectionMode = draft.injectionMode

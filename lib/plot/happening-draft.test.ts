@@ -279,4 +279,112 @@ describe('happeningActions', () => {
       },
     ])
   })
+
+  it('treats a classifier-shaped committed row as equal to its unchanged draft', () => {
+    const rawRow: Happening = {
+      ...ROW,
+      title: '  The alley ambush  ',
+      description: '  It happened fast.\n',
+      category: '  conflict  ',
+      occurredAtEntryId: null,
+      temporal: '  years ago  \n',
+    }
+    const rawInvolvement: HappeningInvolvement = { ...INV_KAEL, role: '' }
+    const rawAwareness: HappeningAwareness = { ...AW_MIRA, source: '' }
+    const rawLinks: HappeningLinks = { involvements: [rawInvolvement], awareness: [rawAwareness] }
+    expect(build(happeningDraftFrom(rawRow, rawLinks), rawRow, rawLinks)).toEqual([])
+  })
+
+  it('switches the anchor from an entry ref to free text as one patch', () => {
+    const draft = {
+      ...happeningDraftFrom(ROW, LINKS),
+      temporal: 'years past',
+      occurredAtEntryId: null,
+    }
+    expect(build(draft)).toEqual([
+      {
+        kind: 'updateHappening',
+        source: 'user_edit',
+        payload: {
+          branchId: 'br_1',
+          id: 'hap_1',
+          patch: { temporal: 'years past', occurredAtEntryId: null },
+        },
+      },
+    ])
+  })
+
+  it('switches the anchor from free text to an entry ref as one patch', () => {
+    const temporalRow: Happening = { ...ROW, temporal: 'long ago', occurredAtEntryId: null }
+    const draft = {
+      ...happeningDraftFrom(temporalRow, LINKS),
+      temporal: '',
+      occurredAtEntryId: 'e_20',
+    }
+    expect(build(draft, temporalRow, LINKS)).toEqual([
+      {
+        kind: 'updateHappening',
+        source: 'user_edit',
+        payload: {
+          branchId: 'br_1',
+          id: 'hap_1',
+          patch: { temporal: null, occurredAtEntryId: 'e_20' },
+        },
+      },
+    ])
+  })
+
+  it('treats a committed involvement with a null role as equal to its unchanged draft', () => {
+    const nullRoleInv: HappeningInvolvement = { ...INV_KAEL, id: 'hinv_null', role: null }
+    const links: HappeningLinks = { involvements: [nullRoleInv], awareness: [] }
+    expect(build(happeningDraftFrom(ROW, links), ROW, links)).toEqual([])
+  })
+
+  it('keeps the duplicate committed involvement the draft row id points to, deletes its twin', () => {
+    const I1: HappeningInvolvement = {
+      id: 'hinv_dup1',
+      branchId: 'br_1',
+      happeningId: 'hap_1',
+      entityId: 'char_x',
+      role: 'a',
+    }
+    const I2: HappeningInvolvement = { ...I1, id: 'hinv_dup2', role: 'b' }
+    const links: HappeningLinks = { involvements: [I1, I2], awareness: [] }
+    const keepFirst = {
+      ...happeningDraftFrom(ROW, links),
+      involvements: [{ id: I1.id, entityId: I1.entityId, role: I1.role ?? '' }],
+    }
+    expect(build(keepFirst, ROW, links)).toEqual([
+      {
+        kind: 'deleteHappeningInvolvement',
+        source: 'user_edit',
+        payload: { branchId: 'br_1', id: 'hinv_dup2' },
+      },
+    ])
+
+    const keepSecond = {
+      ...happeningDraftFrom(ROW, links),
+      involvements: [{ id: I2.id, entityId: I2.entityId, role: I2.role ?? '' }],
+    }
+    expect(build(keepSecond, ROW, links)).toEqual([
+      {
+        kind: 'deleteHappeningInvolvement',
+        source: 'user_edit',
+        payload: { branchId: 'br_1', id: 'hinv_dup1' },
+      },
+    ])
+  })
+
+  it('ignores a stray links value in create mode', () => {
+    const actions = happeningActions({
+      branchId: 'br_1',
+      row: null,
+      links: LINKS,
+      draft: happeningDraftFrom(null, { involvements: [], awareness: [] }),
+      id: 'hap_new',
+      now: 7,
+      newId,
+    })
+    expect(actions.map((a) => a.kind)).toEqual(['createHappening'])
+  })
 })

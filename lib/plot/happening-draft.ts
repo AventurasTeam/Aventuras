@@ -125,17 +125,22 @@ type HappeningPatch = Partial<{
   commonKnowledge: 0 | 1
 }>
 
+/**
+ * Compares normalized-to-normalized — a committed row can carry untrimmed free text
+ * or a `''` field (classifier writes verbatim) that would otherwise diff against a
+ * merely-loaded draft.
+ */
 export function happeningPatch(row: Happening, draft: HappeningDraft): HappeningPatch {
   const patch: HappeningPatch = {}
   const title = draft.title.trim()
-  if (title !== row.title) patch.title = title
+  if (title !== row.title.trim()) patch.title = title
   const description = blankToNull(draft.description)
-  if (description !== row.description) patch.description = description
+  if (description !== blankToNull(row.description ?? '')) patch.description = description
   const category = blankToNull(draft.category)
-  if (category !== row.category) patch.category = category
+  if (category !== blankToNull(row.category ?? '')) patch.category = category
   if (draft.icon !== row.icon) patch.icon = draft.icon
   const temporal = blankToNull(draft.temporal)
-  if (temporal !== row.temporal) patch.temporal = temporal
+  if (temporal !== blankToNull(row.temporal ?? '')) patch.temporal = temporal
   if (draft.occurredAtEntryId !== row.occurredAtEntryId)
     patch.occurredAtEntryId = draft.occurredAtEntryId
   const commonKnowledge: 0 | 1 = draft.commonKnowledge ? 1 : 0
@@ -180,11 +185,30 @@ function awarenessUpsert(
     payload.decayResistance = draft.decayResistance
     changed = true
   }
-  if (source !== baseline.source) {
+  if (source !== blankToNull(baseline.source ?? '')) {
     payload.source = source
     changed = true
   }
   return changed ? payload : null
+}
+
+/**
+ * No unique index on involvements, so duplicates for one entity can exist. Prefers the
+ * committed row sharing the draft row's id (a preference, not a requirement — react-hook-form
+ * can reorder or drop a row's id), else the first unmatched row for that entity. Avoids
+ * double-writing one committed row on a swap and avoids arbitrarily deleting one twin of
+ * a duplicate pair.
+ */
+function matchInvolvement(
+  committed: readonly HappeningInvolvement[],
+  matched: ReadonlySet<string>,
+  draftRow: InvolvementDraft,
+): HappeningInvolvement | null {
+  const byId = committed.find(
+    (l) => l.id === draftRow.id && l.entityId === draftRow.entityId && !matched.has(l.id),
+  )
+  if (byId != null) return byId
+  return committed.find((l) => l.entityId === draftRow.entityId && !matched.has(l.id)) ?? null
 }
 
 type HappeningActionArgs = {
@@ -233,19 +257,19 @@ export function happeningActions({
       actions.push({
         kind: 'updateHappening',
         source: 'user_edit',
-        payload: { branchId, id, patch },
+        payload: { branchId, id: row.id, patch },
       })
     }
   }
 
-  // Links match on their natural key — the entity (involvements) or the character
-  // (awareness, `haw_natural_uniq`) — never on the draft row's id, so a remove-then-re-add
-  // or a swap between two rows becomes updates: the runner rejects two writes to one row.
-  // The draft refine guarantees one draft row per key.
-  const involvementsByEntity = new Map(links.involvements.map((l) => [l.entityId, l]))
+  // A new happening has no committed links yet; a caller-supplied `links` for a
+  // different happening must never leak into this diff as rows to delete.
+  const baseline: HappeningLinks = row == null ? { involvements: [], awareness: [] } : links
+
+  const matchedInvolvementIds = new Set<string>()
   for (const d of draft.involvements) {
     const role = blankToNull(d.role)
-    const original = involvementsByEntity.get(d.entityId)
+    const original = matchInvolvement(baseline.involvements, matchedInvolvementIds, d)
     if (original == null) {
       const entry: NewHappeningInvolvement = {
         id: newId('hinv'),
@@ -255,7 +279,10 @@ export function happeningActions({
         role,
       }
       actions.push({ kind: 'createHappeningInvolvement', source: 'user_edit', payload: { entry } })
-    } else if (original.role !== role) {
+      continue
+    }
+    matchedInvolvementIds.add(original.id)
+    if (blankToNull(original.role ?? '') !== role) {
       actions.push({
         kind: 'updateHappeningInvolvement',
         source: 'user_edit',
@@ -263,10 +290,8 @@ export function happeningActions({
       })
     }
   }
-  const draftEntities = new Set(draft.involvements.map((d) => d.entityId))
-  for (const l of links.involvements) {
-    // A second committed row for one entity (no unique index) is dropped with its twin kept.
-    if (!draftEntities.has(l.entityId) || involvementsByEntity.get(l.entityId) !== l) {
+  for (const l of baseline.involvements) {
+    if (!matchedInvolvementIds.has(l.id)) {
       actions.push({
         kind: 'deleteHappeningInvolvement',
         source: 'user_edit',
@@ -275,7 +300,11 @@ export function happeningActions({
     }
   }
 
-  const awarenessByCharacter = new Map(links.awareness.map((l) => [l.characterId, l]))
+  // Awareness diffs by character (`haw_natural_uniq`), not by draft row id: an
+  // id-keyed diff could pair a delete with an upsert that resolves to the same row
+  // from the pre-group snapshot — DELETE then an UPDATE matching nothing silently
+  // drops the row.
+  const awarenessByCharacter = new Map(baseline.awareness.map((l) => [l.characterId, l]))
   for (const d of draft.awareness) {
     const payload = awarenessUpsert(
       branchId,
@@ -287,7 +316,7 @@ export function happeningActions({
       actions.push({ kind: 'upsertHappeningAwareness', source: 'user_edit', payload })
   }
   const draftCharacters = new Set(draft.awareness.map((d) => d.characterId))
-  for (const l of links.awareness) {
+  for (const l of baseline.awareness) {
     if (!draftCharacters.has(l.characterId)) {
       actions.push({
         kind: 'deleteHappeningAwareness',
