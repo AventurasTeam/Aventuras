@@ -8,6 +8,7 @@ import { aiService } from '$lib/services/ai'
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
 import { settings } from '$lib/stores/settings.svelte'
 import type {
+  TimeTracker,
   StoryMode,
   POV,
   TargetLength,
@@ -17,6 +18,12 @@ import type {
 } from '$lib/types'
 import type { ImportedLorebookItem } from '$lib/components/wizard/wizardTypes'
 import type { GeneratedOpening } from '$lib/services/ai/sdk'
+import { ContextBuilder } from '$lib/services/context'
+import {
+  formatStoryTime,
+  parseStoryTime,
+  templateReceivesStartingTime,
+} from '$lib/services/storyTime'
 
 export class NarrativeStore {
   // Step 1: Mode
@@ -53,6 +60,21 @@ export class NarrativeStore {
   openingDraft = $state('')
   manualOpeningText = $state('')
 
+  /**
+   * A start per opening, not one for the step: each belongs to the opening beside it, and only
+   * the one whose opening is used seeds the story.
+   */
+  /** Beside the imported opening. Prefilled and locked where the scenario stated one. */
+  importedStartText = $state('')
+  /** Beside the opening the reader writes. Never prefilled. */
+  manualStartText = $state('')
+  /** What generation is told the opening starts at; the one the prompt warning is about. */
+  guidanceStartText = $state('')
+  /** What generation came back with, or the guidance when it returned none. */
+  resultStartText = $state('')
+  /** Whether the selected pack's opening template renders the start; null until checked. */
+  openingReceivesStart = $state<boolean | null>(null)
+
   // Card Import Integration (for Opening)
   cardImportedFirstMessage = $state<string | null>(null)
   cardImportedAlternateGreetings = $state<string[]>([])
@@ -62,6 +84,23 @@ export class NarrativeStore {
   importedEntries = $derived(this.importedLorebooks.flatMap((lb) => lb.entries))
 
   generatedOpeningDisplay = $derived(this.generatedOpeningTranslated ?? this.generatedOpening)
+
+  importedStart = $derived(parseStoryTime(this.importedStartText))
+  manualStart = $derived(parseStoryTime(this.manualStartText))
+  guidanceStart = $derived(parseStoryTime(this.guidanceStartText))
+  resultStart = $derived(parseStoryTime(this.resultStartText))
+
+  /**
+   * The start that seeds the story: the one belonging to the opening that will be used, in the
+   * order `createStory` picks an opening — generated, then written, then imported.
+   */
+  startingTime = $derived(
+    this.generatedOpening
+      ? this.resultStart
+      : this.manualOpeningText.trim()
+        ? this.manualStart
+        : this.importedStart,
+  )
 
   /** The pack the wizard has selected; read live, since the user can change it mid-wizard. */
   private packId: () => string | undefined
@@ -154,6 +193,38 @@ export class NarrativeStore {
     this.importError = null
   }
 
+  // Starting time
+
+  /** A scenario's own start fills the field beside its opening, and locks it. */
+  setImportedStart(start: TimeTracker | null | undefined) {
+    this.importedStartText = start ? formatStoryTime(start) : ''
+  }
+
+  /**
+   * Resolve the opening template this pack will run for the mode and ask whether it renders the
+   * start, in either half. Rechecked before each generation, since the pack can change.
+   */
+  async checkOpeningReceivesStart(kind: 'generation' | 'refinement' = 'generation') {
+    const style = this.selectedMode === 'creative-writing' ? 'creative' : 'adventure'
+    const templateId = `opening-${kind}-${style}`
+    const builder = new ContextBuilder(this.packId())
+    const [system, user] = await Promise.all([
+      builder.resolveTemplate(templateId),
+      builder.resolveTemplate(`${templateId}-user`),
+    ])
+    const receives =
+      templateReceivesStartingTime(system?.content) || templateReceivesStartingTime(user?.content)
+    if (kind === 'generation') this.openingReceivesStart = receives
+    return receives
+  }
+
+  /** The result's own start: what the model returned, or the guidance it was given. */
+  private applyReturnedStart(opening: GeneratedOpening) {
+    const returned = parseStoryTime(opening.startingTime ?? '')
+    const start = returned ?? this.guidanceStart
+    this.resultStartText = start ? formatStoryTime(start) : ''
+  }
+
   // Opening Actions
   async generateOpeningScene(wizardData: WizardData) {
     if (this.isGeneratingOpening) return
@@ -174,12 +245,14 @@ export class NarrativeStore {
         : undefined
 
     try {
+      await this.checkOpeningReceivesStart('generation')
       this.generatedOpening = await scenarioService.generateOpening(
         this.packId(),
         wizardData,
         settings.servicePresetAssignments['wizard:openingGeneration'],
         lorebookContext,
       )
+      this.applyReturnedStart(this.generatedOpening)
 
       await this.translateOpening()
     } catch (error) {
@@ -218,6 +291,7 @@ export class NarrativeStore {
         settings.servicePresetAssignments['wizard:openingRefinement'],
         lorebookContext,
       )
+      this.applyReturnedStart(this.generatedOpening)
       this.clearOpeningEditState()
       await this.translateOpening()
     } catch (error) {

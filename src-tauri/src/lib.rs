@@ -251,6 +251,12 @@ pub fn run() {
             sql: include_str!("../migrations/038_time_anchors.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 39,
+            description: "scenario_starting_time",
+            sql: include_str!("../migrations/039_scenario_starting_time.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     #[cfg_attr(not(all(debug_assertions, feature = "devtools")), allow(unused_mut))]

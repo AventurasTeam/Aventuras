@@ -9,7 +9,14 @@
   import * as ScrollArea from '$lib/components/ui/scroll-area'
   import { Badge } from '$lib/components/ui/badge'
 
-  import type { StoryMode, POV, Tense } from '$lib/types'
+  import type { StoryMode, POV, Tense, TimeTracker } from '$lib/types'
+  import {
+    formatStoryTime,
+    normalizeTime,
+    parseStoryTime,
+    storyTimeIsInvalid,
+    STARTING_TIME_VAR,
+  } from '$lib/services/storyTime'
   import type {
     ExpandedSetting,
     GeneratedOpening,
@@ -30,9 +37,18 @@
     openingDraft: string
     openingError: string | null
     manualOpeningText: string
+    /** One start per opening: each belongs to the one beside it. */
+    importedStartText: string
+    manualStartText: string
+    guidanceStartText: string
+    resultStartText: string
+    /** Null until checked; false when the pack's opening template cannot receive the start. */
+    openingReceivesStart: boolean | null
 
     // Card import
     cardImportedFirstMessage: string | null
+    /** The start a vault scenario carried, applied by Use This Opening. */
+    cardImportedStartingTime: TimeTracker | null
     cardImportedAlternateGreetings: string[]
     selectedGreetingIndex: number
 
@@ -48,6 +64,11 @@
 
     // Handlers
     onTitleChange: (value: string) => void
+    onImportedStartChange: (value: string) => void
+    onManualStartChange: (value: string) => void
+    onGuidanceStartChange: (value: string) => void
+    onResultStartChange: (value: string) => void
+    onCheckStartReception: () => void
     onGuidanceChange: (value: string) => void
     onSelectedGreetingChange: (index: number) => void
     onGenerateOpening: () => void
@@ -72,7 +93,13 @@
     openingDraft,
     openingError,
     manualOpeningText,
+    importedStartText,
+    manualStartText,
+    guidanceStartText,
+    resultStartText,
+    openingReceivesStart,
     cardImportedFirstMessage,
+    cardImportedStartingTime,
     cardImportedAlternateGreetings,
     selectedGreetingIndex,
     selectedMode,
@@ -84,6 +111,11 @@
     protagonist,
     importedEntriesCount,
     onTitleChange,
+    onImportedStartChange,
+    onManualStartChange,
+    onGuidanceStartChange,
+    onResultStartChange,
+    onCheckStartReception,
     onGuidanceChange,
     onSelectedGreetingChange,
     onGenerateOpening,
@@ -100,6 +132,18 @@
 
   let showExpandOptions = $state(false)
 
+  // Rechecked with the mode, which picks the template; the pack cannot change on this step.
+  $effect(() => {
+    void selectedMode
+    onCheckStartReception()
+  })
+
+  /** What a typed value comes to once days roll into years: `Y1 D400` is a year and 35 days. */
+  function normalized(text: string): string | null {
+    const parsed = parseStoryTime(text)
+    return parsed ? formatStoryTime(normalizeTime(parsed)) : null
+  }
+
   // POV options for summary
   const povOptions: POVOption[] = [
     { id: 'first', label: '1st Person', example: '' },
@@ -107,6 +151,40 @@
     { id: 'third', label: '3rd Person', example: '' },
   ]
 </script>
+
+<!-- One field, four uses: each start belongs to the opening it sits beside, and only the one whose
+     opening is used seeds the story. -->
+{#snippet startField(
+  id: string,
+  text: string,
+  onChange: (value: string) => void,
+  hint: string,
+  disabled: boolean = false,
+)}
+  <div class="space-y-1.5">
+    <Label for={id} class="text-xs">Starting Time</Label>
+    <div class="flex items-center gap-2">
+      <Input
+        {id}
+        type="text"
+        {disabled}
+        fullWidth={false}
+        value={text}
+        oninput={(e) => onChange(e.currentTarget.value)}
+        placeholder="e.g. Y1 D1 19:00"
+        class="h-8 w-44 text-sm {storyTimeIsInvalid(text) ? 'border-destructive' : ''}"
+      />
+      <span class="text-muted-foreground shrink-0 text-xs">
+        {normalized(text) ? `= ${normalized(text)}` : 'year, day, clock'}
+      </span>
+    </div>
+    {#if storyTimeIsInvalid(text)}
+      <p class="text-destructive text-xs">Not a story time. Try 19:00, D2 19:00, or Y1 D2 19:00.</p>
+    {:else}
+      <p class="text-muted-foreground text-xs">{hint}</p>
+    {/if}
+  </div>
+{/snippet}
 
 <div class="space-y-4 p-1">
   <p class="text-muted-foreground">
@@ -198,6 +276,19 @@
           </p>
         {/if}
 
+        <!-- The scenario's start describes its first message; an alternate greeting arrives with
+             none, so it is stated here like any other opening. -->
+        {@const scenarioStated = !!cardImportedStartingTime && selectedGreetingIndex === 0}
+        {@render startField(
+          'imported-start',
+          importedStartText,
+          onImportedStartChange,
+          scenarioStated
+            ? 'Stated by the scenario. Used if you take this opening.'
+            : 'Needed if you take this opening.',
+          scenarioStated,
+        )}
+
         <Button size="sm" class="gap-2" onclick={onUseCardOpening}>
           <Check class="h-3 w-3" />
           Use This Opening
@@ -235,6 +326,13 @@
           {/if}
         </div>
 
+        {@render startField(
+          'manual-start',
+          manualStartText,
+          onManualStartChange,
+          'When the opening you write happens. Needed if you use it.',
+        )}
+
         <!-- Expand with AI -->
         <div class="flex items-center gap-2 pt-1">
           <Button
@@ -267,6 +365,22 @@
                 class="mt-1 h-16 resize-none text-sm"
               />
             </div>
+
+            {@render startField(
+              'guidance-start',
+              guidanceStartText,
+              onGuidanceStartChange,
+              'What generation is told the scene opens at. Left empty, it suggests one.',
+            )}
+
+            {#if openingReceivesStart === false}
+              <p class="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs">
+                The active prompt pack's opening template does not use
+                <code>{`{{ ${STARTING_TIME_VAR} }}`}</code>, so this time does not reach the model.
+                Add a <code>STARTS AT: {`{{ ${STARTING_TIME_VAR} }}`}</code> line beside the title in
+                the pack's opening templates, or choose a pack that has it.
+              </p>
+            {/if}
             <div class="flex gap-2">
               <Button
                 variant="secondary"
@@ -373,6 +487,17 @@
             </div>
           </ScrollArea.Root>
         {/if}
+
+        <!-- What the generator said this opening starts at, editable only while it is. -->
+        {@render startField(
+          'result-start',
+          resultStartText,
+          onResultStartChange,
+          isEditingOpening
+            ? 'What this opening starts at. Saved with the story when you use it.'
+            : 'Returned with this opening, or the time generation was given. Edit to change it.',
+          !isEditingOpening,
+        )}
       </Card.Content>
     </Card.Root>
   {/if}

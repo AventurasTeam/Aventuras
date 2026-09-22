@@ -37,6 +37,7 @@ export const QUICK_START_SEEDS: QuickStartSeed[] = [
         description:
           'A weathered tavern where travelers share tales of distant lands and rumors of adventure.',
       },
+      startingTime: { years: 0, days: 0, hours: 19, minutes: 0 },
     },
   },
   {
@@ -57,6 +58,7 @@ export const QUICK_START_SEEDS: QuickStartSeed[] = [
         description:
           'A bustling space station at the intersection of major trade routes, home to traders, mercenaries, and those seeking to disappear.',
       },
+      startingTime: { years: 0, days: 0, hours: 8, minutes: 0 },
     },
   },
   {
@@ -75,6 +77,7 @@ export const QUICK_START_SEEDS: QuickStartSeed[] = [
         name: 'The Crime Scene',
         description: 'An elegant study in a wealthy estate, now cordoned off with police tape.',
       },
+      startingTime: { years: 0, days: 0, hours: 7, minutes: 0 },
     },
   },
   {
@@ -94,6 +97,7 @@ export const QUICK_START_SEEDS: QuickStartSeed[] = [
         description:
           'A decrepit Victorian mansion on the outskirts of town, long abandoned -until tonight.',
       },
+      startingTime: { years: 0, days: 0, hours: 23, minutes: 0 },
     },
   },
   {
@@ -113,6 +117,7 @@ export const QUICK_START_SEEDS: QuickStartSeed[] = [
         description:
           'A small but cozy apartment in a new city, boxes still waiting to be unpacked.',
       },
+      startingTime: { years: 0, days: 0, hours: 16, minutes: 0 },
     },
   },
   {
@@ -132,6 +137,7 @@ export const QUICK_START_SEEDS: QuickStartSeed[] = [
         description:
           'A grand palace filled with whispered schemes and dangerous alliances, where every smile hides a dagger.',
       },
+      startingTime: { years: 0, days: 0, hours: 11, minutes: 0 },
     },
   },
 ]

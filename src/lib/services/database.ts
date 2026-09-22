@@ -3189,9 +3189,9 @@ class DatabaseService {
     await db.execute(
       `INSERT INTO scenario_vault (
         id, name, description, setting_seed, npcs, primary_character_name,
-        first_message, alternate_greetings, tags, favorite, source,
+        first_message, alternate_greetings, starting_time, tags, favorite, source,
         original_filename, metadata, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         scenario.id,
         scenario.name,
@@ -3201,6 +3201,7 @@ class DatabaseService {
         scenario.primaryCharacterName,
         scenario.firstMessage,
         JSON.stringify(scenario.alternateGreetings),
+        scenario.startingTime ? JSON.stringify(scenario.startingTime) : null,
         JSON.stringify(scenario.tags),
         scenario.favorite ? 1 : 0,
         scenario.source,
@@ -3244,6 +3245,10 @@ class DatabaseService {
     if (updates.alternateGreetings !== undefined) {
       setClauses.push('alternate_greetings = ?')
       values.push(JSON.stringify(updates.alternateGreetings))
+    }
+    if (updates.startingTime !== undefined) {
+      setClauses.push('starting_time = ?')
+      values.push(updates.startingTime ? JSON.stringify(updates.startingTime) : null)
     }
     if (updates.tags !== undefined) {
       setClauses.push('tags = ?')
@@ -4366,6 +4371,7 @@ class DatabaseService {
       primaryCharacterName: row.primary_character_name || '',
       firstMessage: row.first_message,
       alternateGreetings: row.alternate_greetings ? JSON.parse(row.alternate_greetings) : [],
+      startingTime: row.starting_time ? JSON.parse(row.starting_time) : null,
       tags: row.tags ? JSON.parse(row.tags) : [],
       favorite: row.favorite === 1,
       source: row.source || 'import',

@@ -9,6 +9,7 @@ import {
 import { scenarioService, type WizardData } from '$lib/services/ai/wizard/ScenarioService'
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
 import { QUICK_START_SEEDS } from '$lib/services/templates'
+import { formatStoryTime } from '$lib/services/storyTime'
 import { replaceUserPlaceholders } from '$lib/components/wizard/wizardTypes'
 import type { VaultScenario } from '$lib/types'
 import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
@@ -72,8 +73,8 @@ export class WizardStore {
         return true
       case 8: // Writing Style
         return true
-      case 9: // Opening
-        return this.narrative.storyTitle.trim().length > 0
+      case 9: // Opening â€” a new story's clock starts at the chosen time, never at a null one
+        return this.narrative.storyTitle.trim().length > 0 && this.narrative.startingTime !== null
       default:
         return false
     }
@@ -163,6 +164,21 @@ export class WizardStore {
       this.character.showManualInput = true
       this.character.useManualCharacter()
     }
+
+    // A seed brings no opening of its own, so its start is what generation is told.
+    const seedStart = scenario.initialState.startingTime
+    if (seedStart) this.narrative.guidanceStartText = formatStoryTime(seedStart)
+  }
+
+  /**
+   * An alternate greeting is a different opening, and the scenario's start describes the first
+   * message only, so switching to one leaves its start to be stated like any other.
+   */
+  selectGreeting(index: number) {
+    this.character.selectedGreetingIndex = index
+    const scenarioStart = this.character.cardImportedStartingTime
+    if (!scenarioStart) return
+    this.narrative.importedStartText = index === 0 ? formatStoryTime(scenarioStart) : ''
   }
 
   selectScenarioFromVault(scenario: VaultScenario) {
@@ -196,15 +212,18 @@ export class WizardStore {
       this.character.cardImportedTitle = scenario.name
       this.narrative.storyTitle = scenario.name
     }
+    this.narrative.setImportedStart(scenario.startingTime)
 
     // 4. Opening (Character/Narrative Store Integration)
     if (scenario.firstMessage) {
       this.character.cardImportedFirstMessage = scenario.firstMessage
       this.character.cardImportedAlternateGreetings = scenario.alternateGreetings || []
+      this.character.cardImportedStartingTime = scenario.startingTime ?? null
       this.character.selectedGreetingIndex = 0
     } else {
       this.character.cardImportedFirstMessage = null
       this.character.cardImportedAlternateGreetings = []
+      this.character.cardImportedStartingTime = null
     }
 
     // 5. Auto-link embedded lorebook if available
@@ -275,6 +294,7 @@ export class WizardStore {
         tone: this.narrative.tone,
       },
       title: this.narrative.storyTitle,
+      startingTime: this.narrative.guidanceStart,
       openingGuidance: this.narrative.openingGuidance.trim() || undefined,
     }
 
@@ -300,6 +320,7 @@ export class WizardStore {
         tone: this.narrative.tone,
       },
       title: this.narrative.storyTitle,
+      startingTime: this.narrative.guidanceStart,
       openingGuidance: this.narrative.openingGuidance.trim() || undefined,
     }
 
@@ -310,6 +331,10 @@ export class WizardStore {
   async createStory() {
     if (this.isCreatingStory) return
     if (!this.narrative.storyTitle.trim()) return
+    if (!this.narrative.startingTime) {
+      this.narrative.openingError = 'Please enter a starting time for the story'
+      return
+    }
 
     this.isCreatingStory = true
     try {
@@ -420,6 +445,7 @@ export class WizardStore {
           narratorReinforcement: this.narrative.narratorReinforcement,
         },
         title: this.narrative.storyTitle,
+        startingTime: this.narrative.startingTime,
         openingGuidance: this.narrative.openingGuidance.trim() || undefined,
       }
 
@@ -579,6 +605,7 @@ export class WizardStore {
 
       const newStory = await story.createStoryFromWizard({
         ...storyData,
+        startingTime: this.narrative.startingTime,
         importedEntries: processedEntries.length > 0 ? processedEntries : undefined,
         translations,
       })

@@ -5183,6 +5183,8 @@ class StoryStore {
     startingLocation: Partial<Location>
     initialItems: Partial<Item>[]
     openingScene: string
+    /** Where the clock and the opening start. Absent on paths with no opening step. */
+    startingTime?: TimeTracker | null
     characters: Partial<Character>[]
     importedEntries?: LorebookImportExport.ImportedEntry[]
     // Translation data (optional)
@@ -5239,7 +5241,7 @@ class StoryStore {
       memoryConfig: DEFAULT_MEMORY_CONFIG,
       retryState: null,
       styleReviewState: null,
-      timeTracker: null,
+      timeTracker: data.startingTime ?? null,
       currentBranchId: null,
       currentBgImage: null,
     })

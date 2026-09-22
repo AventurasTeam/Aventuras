@@ -352,6 +352,8 @@ export interface VaultScenario {
   // Opening scene data
   firstMessage: string | null
   alternateGreetings: string[]
+  /** The in-story time a story created from this scenario starts at. Absent or null: no view. */
+  startingTime?: TimeTracker | null
 
   // Organization
   tags: string[]
@@ -426,6 +428,8 @@ export interface StoryBeat {
 export interface TemplateInitialState {
   protagonist?: Partial<Character>
   startingLocation?: Partial<Location>
+  /** The in-story time a story created from it starts at. */
+  startingTime?: TimeTracker
 }
 
 // Chapter for memory system

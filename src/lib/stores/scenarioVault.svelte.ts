@@ -93,6 +93,7 @@ class ScenarioVaultStore {
       primaryCharacterName: original.primaryCharacterName,
       firstMessage: original.firstMessage,
       alternateGreetings: [...(original.alternateGreetings || [])],
+      startingTime: original.startingTime ? { ...original.startingTime } : null,
       tags: [...original.tags],
       favorite: false,
       source: original.source,

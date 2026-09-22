@@ -3,7 +3,7 @@ import { aiService } from '$lib/services/ai'
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
 import { settings } from '$lib/stores/settings.svelte'
 import { characterVault } from '$lib/stores/characterVault.svelte'
-import type { StoryMode, POV, VaultCharacter } from '$lib/types'
+import type { StoryMode, POV, TimeTracker, VaultCharacter } from '$lib/types'
 import { descriptorsToString, stringToDescriptors } from '$lib/utils/visualDescriptors'
 import { CharacterCardImport } from '$lib/services/characterCardImport'
 import type {
@@ -70,6 +70,8 @@ export class CharacterStore {
   cardImportedFirstMessage = $state<string | null>(null)
   cardImportedAlternateGreetings = $state<string[]>([])
   selectedGreetingIndex = $state<number>(0)
+  /** A vault scenario's own start, kept beside its opening until the reader takes that opening. */
+  cardImportedStartingTime = $state<TimeTracker | null>(null)
 
   // Also setting seed from card import
   importedSettingSeed = $state<string | null>(null)
@@ -629,6 +631,7 @@ export class CharacterStore {
     this.cardImportedTitle = null
     this.cardImportedFirstMessage = null
     this.cardImportedAlternateGreetings = []
+    this.cardImportedStartingTime = null
     this.selectedGreetingIndex = 0
     this.importedSettingSeed = null
 

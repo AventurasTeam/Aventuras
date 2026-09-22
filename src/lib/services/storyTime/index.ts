@@ -42,6 +42,12 @@ export {
   type ReconciliationWriteDeps,
 } from './reconciliation'
 export {
+  startingTimePromptValue,
+  templateReceivesStartingTime,
+  STARTING_TIME_VAR,
+  SUGGEST_ONE,
+} from './startingTime'
+export {
   parseDuration,
   formatDuration,
   durationIsInvalid,
