@@ -17,6 +17,7 @@ const NAMESPACES = [
   'common',
   'embedder',
   'landing',
+  'plot',
   'reader',
   'settings',
   'storySettings',
