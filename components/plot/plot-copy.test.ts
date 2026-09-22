@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { iconFromOption, iconOptionValue, plotIconOptions, saveRejectionText } from './plot-copy'
+import {
+  happeningIssueText,
+  iconFromOption,
+  iconOptionValue,
+  plotIconOptions,
+  saveRejectionText,
+} from './plot-copy'
 
 // The real catalog pulls lucide-react-native, which node can't parse.
 vi.mock('./plot-icon', () => ({ PLOT_ICON_KEYS: ['sparkles', 'eye'] }))
@@ -48,5 +54,27 @@ describe('saveRejectionText', () => {
     expect(saveRejectionText(undefined)).toBe(
       "Couldn't save your changes. They're still here — try again.",
     )
+  })
+})
+
+describe('happeningIssueText', () => {
+  it('names the tab a link-row issue sits on', () => {
+    expect(happeningIssueText('decayRange')).toBe('Awareness: Enter a value from 0 to 1.')
+    expect(happeningIssueText('duplicateCharacter')).toBe(
+      'Awareness: This character already has an awareness row.',
+    )
+    expect(happeningIssueText('characterRequired')).toBe('Awareness: Pick a character.')
+    expect(happeningIssueText('duplicateEntity')).toBe(
+      'Involvements: This entity is already involved.',
+    )
+    expect(happeningIssueText('entityRequired')).toBe('Involvements: Pick an entity.')
+  })
+
+  it('leaves Overview issues and unknown messages as they are', () => {
+    expect(happeningIssueText('titleRequired')).toBe('A title is required.')
+    expect(happeningIssueText('timeAnchorExclusive')).toBe(
+      'Choose a narrative entry or an out-of-narrative time, not both.',
+    )
+    expect(happeningIssueText('Expected number')).toBe('Expected number')
   })
 })

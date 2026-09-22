@@ -167,7 +167,8 @@
     "duplicateCharacter": "This character already has an awareness row.",
     "entityRequired": "Pick an entity.",
     "characterRequired": "Pick a character.",
-    "decayRange": "Enter a value from 0 to 1."
+    "decayRange": "Enter a value from 0 to 1.",
+    "inTab": "{{tab}}: {{issue}}"
   },
   "save": {
     "saved": "Saved.",

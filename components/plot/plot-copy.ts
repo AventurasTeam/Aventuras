@@ -66,6 +66,26 @@ export function happeningFieldLabel(field: string): string {
   return HAPPENING_FIELD_LABEL[field]?.() ?? field
 }
 
+const LINK_ISSUE_TAB: Partial<Record<ValidationKey, 'involvements' | 'awareness'>> = {
+  duplicateEntity: 'involvements',
+  entityRequired: 'involvements',
+  duplicateCharacter: 'awareness',
+  characterRequired: 'awareness',
+  decayRange: 'awareness',
+}
+
+/**
+ * The happening save bar's reason. A link-row issue names its tab: the row may sit on a tab the
+ * user isn't viewing, or behind the common-knowledge notice.
+ */
+export function happeningIssueText(message: string): string {
+  const text = validationText(message)
+  const tab = isValidationKey(message) ? LINK_ISSUE_TAB[message] : undefined
+  return tab == null
+    ? text
+    : t('plot:validation.inTab', { tab: happeningFieldLabel(tab), issue: text })
+}
+
 /** Plot's detail-head `⋯` menu: export (disabled), view raw JSON (live), delete (disabled). */
 export function plotMenuEntries(kind: PlotKind, onViewJson: () => void): OverflowMenuEntry[] {
   return [
