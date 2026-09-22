@@ -357,7 +357,9 @@
                 fullWidth={false}
                 bind:value={startingTimeText}
                 placeholder="e.g. Y1 D1 19:00"
-                class="w-40 h-8 \{storyTimeIsInvalid(startingTimeText) ? 'border-destructive' : ''}"
+                class="h-8 w-40 text-sm {storyTimeIsInvalid(startingTimeText)
+                  ? 'border-destructive'
+                  : ''}"
               />
               <span class="text-muted-foreground shrink-0 text-xs">
                 {startNormalized ? `= ${startNormalized}` : 'year, day, clock'}
