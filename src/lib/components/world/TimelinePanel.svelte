@@ -170,36 +170,9 @@
 
 <h3 class="text-foreground mb-2 text-xl font-bold tracking-tight">Timeline</h3>
 
-<!-- What the recorded timeline looks like, and what has been asserted about it -->
+<!-- What the recorded timeline looks like -->
 <div class="border-border bg-card rounded-lg border p-3 shadow-sm">
   <dl class="text-xs">
-    <div class="flex justify-between gap-3 py-0.5">
-      <dt class="text-muted-foreground">Asserted through</dt>
-      <dd class="text-right">
-        {#if report.asserted.assertedTime}
-          {stamp(report.asserted.assertedTime)}
-          {#if report.asserted.agrees === false}
-            <span class="text-amber-600 dark:text-amber-500"> (disagrees with record)</span>
-          {/if}
-        {:else}
-          <span class="text-muted-foreground">nothing asserted</span>
-        {/if}
-      </dd>
-    </div>
-    {#if report.asserted.entryId}
-      <div class="flex justify-between gap-3 py-0.5">
-        <dt class="text-muted-foreground">Since then</dt>
-        <dd class="text-right">
-          {report.asserted.entriesAfter}
-          {report.asserted.entriesAfter === 1 ? 'entry' : 'entries'},
-          {#if report.asserted.elapsedAfter}
-            {stamp(report.asserted.elapsedAfter)}
-          {:else}
-            elapsed time unavailable
-          {/if}
-        </dd>
-      </div>
-    {/if}
     <div class="flex justify-between gap-3 py-0.5">
       <dt class="text-muted-foreground">Anomalies</dt>
       <dd class="text-right">

@@ -1,14 +1,12 @@
 export { toMinutes, fromMinutes, normalizeTime } from './minutes'
 export {
   analyzeTimeline,
-  latestAssertedBoundary,
   IMPLAUSIBLE_JUMP_MINUTES,
   IMPLAUSIBLE_JUMP_MAX_WORDS,
   FLATLINE_RUN_LENGTH,
   type TimelineAnomaly,
   type TimelineAnomalyKind,
   type TimelineAnalysisInput,
-  type AssertedBoundaryReport,
   type TimelineSeverity,
 } from './analysis'
 export {

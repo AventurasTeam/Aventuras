@@ -32,14 +32,12 @@ import {
   analyzeTimeline,
   applyReconciliation,
   fingerprintPreview,
-  latestAssertedBoundary,
   listBoundaries,
   normalizeTime,
   planReconciliation,
   reconcileRange,
   refuseRange,
   selectableRanges,
-  type AssertedBoundaryReport,
   type Boundary,
   type DurationRequest,
   type RangeRefusal,
@@ -1752,11 +1750,10 @@ class StoryStore {
     ).length
   }
 
-  /** Anomalies and the latest asserted boundary, for the Time panel. */
-  get timelineReport(): { anomalies: TimelineAnomaly[]; asserted: AssertedBoundaryReport } {
+  /** Anomalies, for the Timeline panel. */
+  get timelineReport(): { anomalies: TimelineAnomaly[] } {
     return {
       anomalies: analyzeTimeline({ entries: this.entries, chapters: this.chapters }),
-      asserted: latestAssertedBoundary(this.entries, this.timeAnchors),
     }
   }
 

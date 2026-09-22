@@ -6,8 +6,8 @@
  * well be fine. See docs/architecture/story-time.md.
  */
 
-import type { Chapter, StoryEntry, TimeAnchor, TimeTracker } from '$lib/types'
-import { toMinutes, fromMinutes } from './minutes'
+import type { Chapter, StoryEntry, TimeTracker } from '$lib/types'
+import { toMinutes } from './minutes'
 
 /** An entry shorter than this whose clock jumps a day or more is worth a look. */
 export const IMPLAUSIBLE_JUMP_MINUTES = 24 * 60
@@ -219,80 +219,4 @@ function chapterSpanDisagreements(entries: StoryEntry[], chapters: Chapter[]): T
   }
 
   return found
-}
-
-export interface AssertedBoundaryReport {
-  /** The latest anchored entry, or null when nothing has been asserted. */
-  entryId: string | null
-  assertedTime: TimeTracker | null
-  recordedTime: TimeTracker | null
-  /** Whether the recorded ending agrees with the assertion. Null when there is nothing to compare. */
-  agrees: boolean | null
-  entriesAfter: number
-  /** Time accumulated after the boundary, or null when the tail's stamps cannot support the sum. */
-  elapsedAfter: TimeTracker | null
-}
-
-/**
- * How far the timeline has been asserted, and what lies past it.
- *
- * Deliberately not called "verified": an anchor can disagree with the stored time, two
- * anchors can contradict each other, and endpoints that agree say nothing about the pacing
- * interpolated between them.
- */
-export function latestAssertedBoundary(
-  entries: StoryEntry[],
-  anchors: TimeAnchor[],
-): AssertedBoundaryReport {
-  const empty: AssertedBoundaryReport = {
-    entryId: null,
-    assertedTime: null,
-    recordedTime: null,
-    agrees: null,
-    entriesAfter: 0,
-    elapsedAfter: null,
-  }
-  if (anchors.length === 0) return empty
-
-  const anchorByEntry = new Map(anchors.map((anchor) => [anchor.entryId, anchor]))
-  let latestIndex = -1
-  for (let i = entries.length - 1; i >= 0; i--) {
-    if (anchorByEntry.has(entries[i].id)) {
-      latestIndex = i
-      break
-    }
-  }
-  if (latestIndex === -1) return empty
-
-  const boundaryEntry = entries[latestIndex]
-  const anchor = anchorByEntry.get(boundaryEntry.id)!
-  const recorded = ending(boundaryEntry)
-  const tail = entries.slice(latestIndex + 1)
-
-  return {
-    entryId: boundaryEntry.id,
-    assertedTime: anchor.assertedTime,
-    recordedTime: recorded,
-    agrees: recorded ? toMinutes(recorded) === toMinutes(anchor.assertedTime) : null,
-    entriesAfter: tail.length,
-    elapsedAfter: tailElapsed(anchor.assertedTime, tail),
-  }
-}
-
-/** Null rather than a negative or invented duration: an unusable tail is reported as unusable. */
-function tailElapsed(from: TimeTracker, tail: StoryEntry[]): TimeTracker | null {
-  if (tail.length === 0) return fromMinutes(0)
-
-  const lastEnd = ending(tail[tail.length - 1])
-  if (!lastEnd) return null
-  if (tail.some((entry) => !ending(entry))) return null
-
-  let previous = toMinutes(from)
-  for (const entry of tail) {
-    const end = toMinutes(ending(entry)!)
-    if (end < previous) return null
-    previous = end
-  }
-
-  return fromMinutes(toMinutes(lastEnd) - toMinutes(from))
 }

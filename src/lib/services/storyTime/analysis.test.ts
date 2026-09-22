@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import type { Chapter, StoryEntry, TimeAnchor, TimeTracker } from '$lib/types'
-import { analyzeTimeline, latestAssertedBoundary, FLATLINE_RUN_LENGTH } from './analysis'
+import type { Chapter, StoryEntry, TimeTracker } from '$lib/types'
+import { analyzeTimeline, FLATLINE_RUN_LENGTH } from './analysis'
 
 function t(hours: number, minutes = 0): TimeTracker {
   return { years: 0, days: 0, hours, minutes }
@@ -164,57 +164,5 @@ describe('analyzeTimeline', () => {
     const before = JSON.stringify(entries)
     analyzeTimeline({ entries })
     expect(JSON.stringify(entries)).toBe(before)
-  })
-})
-
-function anchor(entryId: string, assertedTime: TimeTracker): TimeAnchor {
-  return { id: `a-${entryId}`, storyId: 's1', entryId, assertedTime, note: null, createdAt: 0 }
-}
-
-describe('latestAssertedBoundary', () => {
-  it('reports nothing asserted when there are no anchors', () => {
-    const report = latestAssertedBoundary([entry({ start: t(0), end: t(1) })], [])
-    expect(report.entryId).toBeNull()
-    expect(report.assertedTime).toBeNull()
-  })
-
-  it('names the latest anchored entry and what follows it', () => {
-    const a = entry({ start: t(0), end: t(1) })
-    const b = entry({ start: t(1), end: t(2) })
-    const c = entry({ start: t(2), end: t(5) })
-    const report = latestAssertedBoundary([a, b, c], [anchor(a.id, t(1)), anchor(b.id, t(2))])
-    expect(report.entryId).toBe(b.id)
-    expect(report.entriesAfter).toBe(1)
-    expect(report.elapsedAfter).toEqual(t(3))
-  })
-
-  it('says whether the recorded time agrees with the assertion', () => {
-    const a = entry({ start: t(0), end: t(1) })
-    expect(latestAssertedBoundary([a], [anchor(a.id, t(1))]).agrees).toBe(true)
-    expect(latestAssertedBoundary([a], [anchor(a.id, t(9))]).agrees).toBe(false)
-  })
-
-  it('uses the latest anchor even when two anchors contradict each other', () => {
-    const a = entry({ start: t(0), end: t(1) })
-    const b = entry({ start: t(1), end: t(2) })
-    const report = latestAssertedBoundary([a, b], [anchor(a.id, t(8)), anchor(b.id, t(2))])
-    expect(report.entryId).toBe(b.id)
-    expect(report.agrees).toBe(true)
-  })
-
-  it('reports an unusable tail as unavailable rather than as a duration', () => {
-    const a = entry({ start: t(0), end: t(5) })
-    const missing = entry({})
-    expect(latestAssertedBoundary([a, missing], [anchor(a.id, t(5))]).elapsedAfter).toBeNull()
-
-    const backwards = entry({ start: t(5), end: t(1) })
-    expect(latestAssertedBoundary([a, backwards], [anchor(a.id, t(5))]).elapsedAfter).toBeNull()
-  })
-
-  it('reports a zero tail when the anchor is on the final entry', () => {
-    const a = entry({ start: t(0), end: t(5) })
-    const report = latestAssertedBoundary([a], [anchor(a.id, t(5))])
-    expect(report.entriesAfter).toBe(0)
-    expect(report.elapsedAfter).toEqual(t(0))
   })
 })
