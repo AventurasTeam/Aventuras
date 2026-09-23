@@ -49,6 +49,8 @@ const resolver = zodResolver(threadDraftSchema)
 export type ThreadDetailPaneProps = {
   /** Null in create mode (`[+] Blank`). */
   row: Thread | null
+  /** The create selection's `seq`; a new value resets the create draft. */
+  createSeq?: number
   /** A ready index — the route mounts no pane before it is. */
   entryIndex: EntryIndex
   /** Distinct categories on the branch, for the Autocomplete's suggestions. */
@@ -72,6 +74,7 @@ export type ThreadDetailPaneProps = {
 
 export function ThreadDetailPane({
   row,
+  createSeq,
   entryIndex,
   categories,
   recentlyClassified,
@@ -88,6 +91,7 @@ export function ThreadDetailPane({
   const session = usePlotRowSession<ThreadDraft>({
     kind: 'thread',
     rowId: row?.id ?? null,
+    createSeq,
     values,
     resolver,
     fieldLabel: threadFieldLabel,

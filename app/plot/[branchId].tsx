@@ -309,6 +309,7 @@ export default function PlotRoute() {
       (selection.type === 'create' && selection.kind === 'happening') ? (
       <HappeningDetailPane
         row={selection.type === 'happening' ? selection.row : null}
+        createSeq={selection.type === 'create' ? selection.seq : undefined}
         links={links}
         entities={entities}
         entries={entryIndex.entries}
@@ -345,6 +346,7 @@ export default function PlotRoute() {
     ) : (
       <ThreadDetailPane
         row={selection.type === 'thread' ? selection.row : null}
+        createSeq={selection.type === 'create' ? selection.seq : undefined}
         entryIndex={entryIndex.index}
         categories={threadCategories}
         recentlyClassified={

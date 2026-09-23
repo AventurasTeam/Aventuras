@@ -6,7 +6,8 @@ import type { PlotKind } from '@/lib/list-modules'
 export type PlotDetailSelection =
   | { type: 'thread'; row: Thread }
   | { type: 'happening'; row: Happening }
-  | { type: 'create'; kind: PlotKind }
+  /** `seq` changes on every `[+] Blank`, so a repeat create resets a draft already in create mode. */
+  | { type: 'create'; kind: PlotKind; seq: number }
 
 type PlotSelectionInput = {
   initialId: string | null
@@ -27,9 +28,10 @@ export function usePlotSelection({
 }: PlotSelectionInput) {
   const [selectedId, setSelectedId] = useState<string | null>(initialId)
   const [creating, setCreating] = useState(false)
+  const [createSeq, setCreateSeq] = useState(0)
 
   const selection = useMemo<PlotDetailSelection | null>(() => {
-    if (creating) return { type: 'create', kind }
+    if (creating) return { type: 'create', kind, seq: createSeq }
     if (selectedId == null) return null
     if (kind === 'thread') {
       const row = threads.find((r) => r.id === selectedId)
@@ -37,7 +39,7 @@ export function usePlotSelection({
     }
     const row = happenings.find((r) => r.id === selectedId)
     return row == null ? null : { type: 'happening', row }
-  }, [creating, selectedId, kind, threads, happenings])
+  }, [creating, createSeq, selectedId, kind, threads, happenings])
 
   useEffect(() => {
     if (ready && !creating && selectedId != null && selection == null) setSelectedId(null)
@@ -50,6 +52,7 @@ export function usePlotSelection({
   const startCreate = useCallback(() => {
     setSelectedId(null)
     setCreating(true)
+    setCreateSeq((n) => n + 1)
   }, [])
 
   return { selectedId, creating, selection, select, startCreate }

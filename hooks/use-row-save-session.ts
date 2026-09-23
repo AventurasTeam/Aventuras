@@ -22,7 +22,7 @@ export type RowSaveOutcome =
   | { status: 'rejected'; reason: string }
 
 export type RowSaveSessionOptions<Draft extends FieldValues> = {
-  /** Identity of the row under edit (`create:<kind>` in create mode); a change resets the form. */
+  /** Identity of the row under edit (a `create:` key in create mode); a change resets the form. */
   rowKey: string
   /**
    * The committed values, which Discard restores. A same-row change refreshes untouched

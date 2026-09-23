@@ -79,6 +79,8 @@ function rawHappening(row: Happening, links: HappeningLinks) {
 export type HappeningDetailPaneProps = {
   /** Null in create mode (`[+] Blank`). */
   row: Happening | null
+  /** The create selection's `seq`; a new value resets the create draft. */
+  createSeq?: number
   /** The row's committed involvement and awareness rows; memoize by identity. */
   links: HappeningLinks
   /** The branch's entities, for the Involvements and Awareness pickers. */
@@ -108,6 +110,7 @@ export type HappeningDetailPaneProps = {
 
 export function HappeningDetailPane({
   row,
+  createSeq,
   links,
   entities,
   entries,
@@ -127,6 +130,7 @@ export function HappeningDetailPane({
   const session = usePlotRowSession<HappeningDraft>({
     kind: 'happening',
     rowId: row?.id ?? null,
+    createSeq,
     values,
     resolver,
     fieldLabel: happeningFieldLabel,

@@ -283,7 +283,7 @@ chapters` (deferred by canon), and `retrieval_count` review — M5.
   violates this today; a future chapter-create or a direct entry delete
   outside a run would need to.
 - **Create-mode edits typed during the save are dropped.** The row
-  save session's row key switches from `create:<kind>` to the new id
+  save session's row key switches from `create:<kind>:<seq>` to the new id
   once the create write resolves, which resets the form — a keystroke
   landing in that window is lost. Milliseconds for a thread, longer for
   a happening's grouped link write. The same limit applies to any

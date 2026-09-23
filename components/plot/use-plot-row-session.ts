@@ -17,6 +17,8 @@ type PlotRowSessionOptions<Draft extends FieldValues> = {
   kind: PlotKind
   /** Null in create mode. */
   rowId: string | null
+  /** Create mode's `seq`: a new value is a fresh draft, even while already creating. */
+  createSeq?: number
   /** The committed values; memoize by row identity. */
   values: Draft
   resolver: Resolver<Draft>
@@ -35,6 +37,7 @@ type PlotRowSessionOptions<Draft extends FieldValues> = {
 export function usePlotRowSession<Draft extends FieldValues>({
   kind,
   rowId,
+  createSeq = 0,
   values,
   resolver,
   fieldLabel,
@@ -66,7 +69,7 @@ export function usePlotRowSession<Draft extends FieldValues>({
     [kind, onSave, onSaved],
   )
   const session = useRowSaveSession<Draft>({
-    rowKey: rowId ?? `create:${kind}`,
+    rowKey: rowId ?? `create:${kind}:${createSeq}`,
     values,
     resolver,
     fieldLabel,

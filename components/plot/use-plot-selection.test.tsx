@@ -112,8 +112,21 @@ describe('usePlotSelection', () => {
       ready: true,
     })
     act(() => hook.result.current.startCreate())
-    expect(hook.result.current.selection).toEqual({ type: 'create', kind: 'thread' })
+    expect(hook.result.current.selection).toEqual({ type: 'create', kind: 'thread', seq: 1 })
     expect(hook.result.current.selectedId).toBeNull()
+  })
+
+  it('gives a repeat startCreate a fresh create identity', () => {
+    const hook = setup({
+      initialId: null,
+      kind: 'thread',
+      threads: THREADS,
+      happenings: HAPPENINGS,
+      ready: true,
+    })
+    act(() => hook.result.current.startCreate())
+    act(() => hook.result.current.startCreate())
+    expect(hook.result.current.selection).toEqual({ type: 'create', kind: 'thread', seq: 2 })
   })
 
   it('select leaves create mode', () => {
