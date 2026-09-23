@@ -1129,7 +1129,13 @@ own.
   missing. Dropping the label also breaks the E2E row locators, which
   match it as the exact accessible name. `ListRow` is pan-domain and
   canon never says what a row announces, so this wants a
-  shared-contract design pass. Raised 2026-09-11 by Slice 4.1.
+  shared-contract design pass. Raised 2026-09-11 by Slice 4.1. Plot's
+  rows add the same two classes: the when-marker and a thread's status
+  and category are text `Tag`s the label hides, and a happening's ⊙
+  common-knowledge glyph is text-less, so it joins in-scene and
+  recently-classified in needing the hidden-text primitive. The row's
+  `description` line (a happening's category, a lore excerpt) is hidden
+  too. Widened 2026-09-22 by Slice 4.3.
 - **M9.5 — No navigation landmark anywhere.** No `navigation` landmark
   role exists in the app. Breadcrumb is the natural first one, but
   World renders two (the top-bar title and the sub-header), so a role

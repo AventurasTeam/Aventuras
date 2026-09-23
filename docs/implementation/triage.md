@@ -149,16 +149,6 @@ slice-planning gate forces its resolution before that slice is planned.
   yet" from "written but wrong" — their own comments admit the
   coupling. Surfaced 2026-09-16.
 
-- **`ListRow`'s `aria-label` drops its status pill, when-marker, and
-  ⊙ state from screen readers.** `components/compounds/list-row.tsx`
-  sets `aria-label={label}` on the row's Pressable, which replaces
-  the accessible content of every child instead of composing with
-  it — a screen reader announces only the title, never the status
-  pill, when-marker, or common-knowledge glyph a sighted user sees
-  (World's rows carry the same gap). Compose the row's accessible
-  name from its rendered slots instead of overriding with the bare
-  label. Surfaced 2026-09-22.
-
 - **A presented bottom Sheet may not leave the DOM after close in the
   vitest-browser runner.** Closing a phone bottom Sheet didn't
   reliably remove it from the DOM under `vitest-browser` during this
