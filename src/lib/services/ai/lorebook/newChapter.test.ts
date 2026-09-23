@@ -79,6 +79,14 @@ describe('buildNewChapterPayload', () => {
   it('returns null when every entry is filtered out', () => {
     expect(buildNewChapterPayload(makeChapter(), [makeEntry({ type: 'system' })])).toBeNull()
   })
+
+  it('drops blank entries, so a chapter of only whitespace is null', () => {
+    const blank = [makeEntry({ content: '  \n ' }), makeEntry({ type: 'user_action', content: '' })]
+    expect(buildNewChapterPayload(makeChapter(), blank)).toBeNull()
+    expect(buildNewChapterPayload(makeChapter(), [...blank, makeEntry()])?.text).toBe(
+      '[NARRATIVE] The gate creaked open.',
+    )
+  })
 })
 
 describe('formatNewChapterSection', () => {

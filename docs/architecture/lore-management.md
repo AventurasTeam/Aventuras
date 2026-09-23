@@ -69,7 +69,8 @@ the names and proper nouns a lorebook is built from — the agent's only recours
 `newChapter.ts` owns both rules (the render and the drop) and is covered by a unit test; the
 automatic path (`BackgroundTaskCoordinator`) and the manual one (`MemoryView` after a hand-built
 chapter) both supply it. The automatic path passes the entries `ChapterService` summarized,
-not a later read of the store, so a story switch before the session starts cannot swap them.**The batch importer is the exception** — `chapterizeFromBeginning`
+not a later read of the store, so a story switch before the session starts cannot swap them.
+Blank entries are dropped, and a chapter with no prose left keeps its summary instead.**The batch importer is the exception** — `chapterizeFromBeginning`
 writes many chapters in one pass, so its single lore session keeps summaries only, as does a
 Tidy-lorebook run with no new chapter to speak of.
 

@@ -23,8 +23,9 @@ export interface LoreNewChapter {
  * Renders `entries` with the same `[ACTION]` / `[NARRATIVE]` shape `runLoreManagement` already
  * uses for `recentStory`, so the two look like one voice in the prompt.
  *
- * Returns `null` when there is nothing to show — `entries` came back empty, which
- * `story.getChapterEntries` does when it cannot place the chapter's boundary ids. The caller
+ * Returns `null` when there is nothing to show — `entries` is empty (which
+ * `story.getChapterEntries` returns when it cannot place the chapter's boundary ids) or holds
+ * only blank or non-prose entries. The caller
  * must not drop the chapter's summary in that case: doing so on a `null` here would make the
  * chapter invisible instead of verbatim.
  */
@@ -34,6 +35,7 @@ export function buildNewChapterPayload(
 ): LoreNewChapter | null {
   const text = entries
     .filter((e) => e.type === 'narration' || e.type === 'user_action')
+    .filter((e) => e.content.trim().length > 0)
     .map((e) => `[${e.type === 'user_action' ? 'ACTION' : 'NARRATIVE'}] ${e.content}`)
     .join('\n\n')
 

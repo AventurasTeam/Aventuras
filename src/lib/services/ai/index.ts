@@ -659,8 +659,7 @@ class AIService {
       .map((m) => `[${m.type === 'user_action' ? 'ACTION' : 'NARRATIVE'}] ${m.content}`)
       .join('\n\n')
 
-    // `null` here means `newChapter.entries` came back empty — `story.getChapterEntries`
-    // does that when it cannot place the chapter's boundary ids. The chapter's summary must
+    // `null` here means `newChapter.entries` had no prose to show. The chapter's summary must
     // stay in that case: excluding it on a payload with nothing to show would make the
     // chapter invisible instead of verbatim. So the drop below is keyed off the payload, not
     // off `newChapter` itself, keeping the two atomic.
