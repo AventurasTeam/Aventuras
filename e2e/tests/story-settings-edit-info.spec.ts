@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { storySettingsSchema, type StorySettings } from '@/lib/db'
 
 import { createAdventureStory } from '../flows/create-story'
+import { waitForTurnTerminal } from '../flows/turn'
 import { queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
@@ -78,15 +79,6 @@ async function openEditInfo(page: Page, title: string): Promise<void> {
   await home.editInfo(page).click()
   await expect(storySettings.aboutPanel(page)).toBeVisible({ timeout: 20_000 })
   await expect(page).toHaveURL(/\/story-settings\/[^?]+\?tab=about/)
-}
-
-// The reply is not the run's terminal: the composer swaps Send → Cancel while the turn's
-// pipeline holds a phase, and a settings save during a hard-gate run is rejected.
-// Sufficient only because nothing auto-starts a suggestion-refresh run — hard-gate too,
-// but isGenerating ignores it, so Send would come back with the save still gated. If a
-// turn ever queues one, wait on the gate.
-async function waitForTurnTerminal(app: LaunchedApp): Promise<void> {
-  await expect(reader.send(app.window)).toBeVisible({ timeout: 30_000 })
 }
 
 test.describe('story settings — the Edit info route', () => {
@@ -329,7 +321,7 @@ test.describe('story settings — consent on a story with no turns yet', () => {
     await expect(page.getByText('E2E-EDITINFO-REPLY', { exact: false })).toBeVisible({
       timeout: 30_000,
     })
-    await waitForTurnTerminal(app)
+    await waitForTurnTerminal(app.window)
 
     // Back onto the surface the reader was pushed over. It re-reads storyHasTurns
     // on every focus precisely because a reader above it can add one.

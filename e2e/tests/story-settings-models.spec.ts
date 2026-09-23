@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 
 import type { StorySettings } from '@/lib/db'
 
+import { waitForTurnTerminal } from '../flows/turn'
 import { queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { t } from '../harness/i18n'
@@ -45,16 +46,6 @@ async function readModels(app: LaunchedApp): Promise<StorySettings['models']> {
 function lastNarrativeModel(mock: MockLlm): string | undefined {
   const streamed = mock.requests.filter((r) => r.streamed)
   return streamed[streamed.length - 1]?.body.model as string | undefined
-}
-
-// The reply rendering is not the run's terminal: the composer swaps Send →
-// Cancel while the turn's pipeline holds a phase, and a settings save landing
-// during a hard-gate run is rejected with `generation in flight`. Sufficient
-// only because nothing auto-starts a suggestion-refresh run — that one is
-// hard-gate too but isGenerating deliberately ignores it, so Send would come
-// back with the save still gated. If a turn ever queues one, wait on the gate.
-async function waitForTurnTerminal(app: LaunchedApp): Promise<void> {
-  await expect(reader.send(app.window)).toBeVisible({ timeout: 30_000 })
 }
 
 test.describe('story settings — narrative override reaches the wire', () => {
@@ -119,7 +110,7 @@ test.describe('story settings — narrative override reaches the wire', () => {
     await expect(app.window.getByText('E2E-MODELS-REPLY', { exact: false })).toBeVisible({
       timeout: 30_000,
     })
-    await waitForTurnTerminal(app)
+    await waitForTurnTerminal(app.window)
     expect(lastNarrativeModel(mock)).toBe(OVERRIDE_MODEL)
 
     mock.setNarrative(REPLY_CLEARED)
@@ -147,7 +138,7 @@ test.describe('story settings — narrative override reaches the wire', () => {
     await expect(app.window.getByText('E2E-MODELS-REPLY-2', { exact: false })).toBeVisible({
       timeout: 30_000,
     })
-    await waitForTurnTerminal(app)
+    await waitForTurnTerminal(app.window)
     expect(lastNarrativeModel(mock)).toBe(SEED_MODEL)
   })
 })

@@ -79,21 +79,6 @@ slice-planning gate forces its resolution before that slice is planned.
   [the compiler-suppression lesson](lessons-learned/exhaustive-deps-suppression-disables-the-compiler.md).
   Surfaced 2026-09-14.
 
-- **E2E turn helpers are copied per spec, and one invariant is
-  justified two different ways.** `waitForTurnTerminal` is duplicated
-  in `e2e/tests/story-settings-models.spec.ts` and
-  `story-settings-edit-info.spec.ts`, while `takeTurn` and
-  `captureForTurn` are local to `story-settings-keyword-inject.spec.ts`;
-  `waitForTurnTerminal` and `takeTurn` hang the same "Send visible is
-  the turn's terminal" invariant on different evidence (isGenerating
-  excludes suggestion-refresh, versus refreshSuggestions having one
-  call site), so the copies will drift. Lifting both into
-  `e2e/harness/` would also fix `retrieval-q4.spec.ts` and
-  `retrieval-q4-fallback.spec.ts`, which poll a capture on a content
-  predicate (five query slots) and so cannot tell "no capture written
-  yet" from "written but wrong" — their own comments admit the
-  coupling. Surfaced 2026-09-16.
-
 - **A presented bottom Sheet may not leave the DOM after close in the
   vitest-browser runner.** Closing a phone bottom Sheet didn't
   reliably remove it from the DOM under `vitest-browser` during this
