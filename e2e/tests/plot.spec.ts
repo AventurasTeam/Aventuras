@@ -15,9 +15,8 @@ const HERO_STORY = 'story_hero'
 const HERO_TITLE = 'The Veilstone Courier'
 
 // Serial suite, one shared app: tests build on earlier ones' state. GO TO (useSurfaceNavigate)
-// matches stack entries by path; popping past an instance DISMISSES it (unmounts for good). Test
-// 5's cold-mount reload leaves Plot as the stack's sole entry, so its reader trip PUSHES a new
-// reader rather than dismissing Plot — test 6's GO TO back then resumes that same instance.
+// matches stack entries by path: it pops to a screen already in the stack, which DISMISSES the
+// instances above it, and pushes one that isn't. Each test selects the row it edits.
 test.describe.serial('Plot panel', () => {
   let app: LaunchedApp
   let userDataDir: string
@@ -91,7 +90,11 @@ test.describe.serial('Plot panel', () => {
       [branchId, 'E2E thread'],
     )
     expect(rows).toEqual([['pending']])
-    // Pending was expanded in the first test, so the new row is mounted under it.
+    // Active stays expanded too, so only collapsing Pending proves the row sits under it.
+    await expect(plot.row(page, 'E2E thread')).toBeVisible()
+    await plot.tierHeader(page, t('plot:tiers.pending')).click()
+    await expect(plot.row(page, 'E2E thread')).toHaveCount(0)
+    await plot.tierHeader(page, t('plot:tiers.pending')).click()
     await expect(plot.row(page, 'E2E thread')).toBeVisible()
   })
 
@@ -133,11 +136,8 @@ test.describe.serial('Plot panel', () => {
       .toBeNull()
   })
 
-  // Test-intent: exercises save-happening.ts's invariant that row + link edits share one
-  // action_id (undo reverses all). Mira -> Vorne retargets an EXISTING row — natural-key
-  // diffing (keyed on characterId, no id fallback) reads this as delete-Mira and create-Vorne,
-  // not patch-in-place, unlike a row-id-keyed diff. Kael's row is an untouched control — a
-  // diff that force-nulls every baseline would wrongly emit a create for it too.
+  // Row + link edits share one action_id. Awareness diffs by characterId, so retargeting
+  // Mira -> Vorne is a delete plus a create; Kael's untouched row is the control.
   test('one Save carries an Overview edit and awareness link changes under one action_id; undo reverses all of it', async () => {
     const page = app.window
     await reader.actionsTrigger(page).click()
@@ -189,7 +189,6 @@ test.describe.serial('Plot panel', () => {
     await plot.characterPicker(page).click()
     await plot.pickerOption(page, 'The Ashen Sage').click()
 
-    // Retargets Mira's EXISTING row to Vorne — the divergent, swap-between-rows case.
     await plot.characterPickerSet(page, 'Mira').click()
     await plot.pickerOption(page, 'Vorne').click()
 
@@ -233,11 +232,8 @@ test.describe.serial('Plot panel', () => {
       ),
     ).toEqual([[1]])
 
-    // Open in World on Kael's untouched row (Mira was retargeted above) before the reader trip:
-    // World hasn't been visited in this spec yet, so the kind/id-dropping pop
-    // (05b-peek-drawer.md:145) can't fire — GO TO resumes this same Plot instance. Runs before
-    // the reader trip because that dismisses Plot outright (a pop unmounts what it pops past),
-    // so anything after needs a fresh selection, not a resumed one.
+    // World isn't in the stack yet, so Open in World pushes it with its params and GO TO back
+    // resumes this Plot instance.
     await plot.openInWorldAwareness(page, 'Kael').click()
     await page.waitForURL(new RegExp(`/world/${branchId}\\?kind=character&id=${kaelId}`))
     await expect(world.detailName(page)).toHaveText('Kael')
@@ -276,9 +272,74 @@ test.describe.serial('Plot panel', () => {
       .toEqual([originalDescription, miraAwarenessId, 0])
   })
 
-  test('a cold-mount deep link preselects the row', async () => {
+  test('a dirty pane guards a row switch, the chrome back and a GO TO push; Cancel keeps the draft', async () => {
     const page = app.window
-    // Prior test's undo dismissed Plot outright — fresh instance here, not a resumed one.
+    await reader.actionsTrigger(page).click()
+    await plot.goToPlotRow(page).click()
+    await page.waitForURL(/\/plot\//)
+    const description = async (title: string) =>
+      (
+        await queryApp(page, `SELECT description FROM threads WHERE branch_id = ? AND title = ?`, [
+          branchId,
+          title,
+        ])
+      )[0][0]
+    const committed = await description('What the amulet wants')
+
+    await plot.segmentCell(page, 'thread').click()
+    await plot.row(page, 'What the amulet wants').click()
+    await plot.description(page).fill('E2E dirty draft')
+    // The collapse store is session-scoped: an earlier test may have left Pending open.
+    const pending = plot.tierHeader(page, t('plot:tiers.pending'))
+    if ((await pending.getAttribute('aria-expanded')) !== 'true') await pending.click()
+
+    const cancelKeepsDraft = async () => {
+      await expect(saveSession.unsavedDialog(page)).toBeVisible()
+      await saveSession.unsavedCancel(page).click()
+      await expect(saveSession.unsavedDialog(page)).toHaveCount(0)
+      await expect(page).toHaveURL(/\/plot\//)
+      await expect(plot.subHeader(page)).toContainText('What the amulet wants')
+      await expect(plot.description(page)).toHaveValue('E2E dirty draft')
+    }
+    await plot.row(page, 'Expose the Syndicate broker').click()
+    await cancelKeepsDraft()
+    // A pop: only the route's usePreventRemove sees it.
+    await plot.back(page).click()
+    await cancelKeepsDraft()
+    // World left the stack in an earlier test, so this pushes: only beforeNavigate sees it.
+    await plot.actionsTrigger(page).click()
+    await world.goToWorldRow(page).click()
+    await cancelKeepsDraft()
+    expect(await description('What the amulet wants')).toBe(committed)
+  })
+
+  // The chrome back pops through usePreventRemove: Discard must replay that pop, in one click.
+  test("a dirty pane's back to the reader discards in one click", async () => {
+    const page = app.window
+    await expect(plot.description(page)).toHaveValue('E2E dirty draft')
+
+    await plot.back(page).click()
+    await expect(saveSession.unsavedDialog(page)).toBeVisible()
+    const navigated = expect(
+      page,
+      'a second prompt or a stuck guard keeps us off the reader',
+    ).toHaveURL(/\/reader-composer\//, { timeout: 15_000 })
+    await saveSession.unsavedDiscard(page).click()
+    await navigated
+
+    await expect(saveSession.unsavedDialog(page)).toHaveCount(0)
+    await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
+    const [[description]] = await queryApp(
+      page,
+      `SELECT description FROM threads WHERE branch_id = ? AND title = ?`,
+      [branchId, 'What the amulet wants'],
+    )
+    expect(description).not.toBe('E2E dirty draft')
+  })
+
+  test('a cold-mount deep link preselects the row, and its tab opens that mount only', async () => {
+    const page = app.window
+    // The prior test ended on the reader, which dismissed Plot: this is a fresh instance.
     await reader.actionsTrigger(page).click()
     await plot.goToPlotRow(page).click()
     await page.waitForURL(/\/plot\//)
@@ -311,6 +372,13 @@ test.describe.serial('Plot panel', () => {
     // The row sits in the collapsed Earlier bucket: visible proves the reveal expanded it.
     await expect(plot.row(page, 'The alley ambush')).toBeVisible()
 
+    // Reopening the row mounts a new pane, which the spent link no longer steers.
+    await plot.tab(page, 'overview').click()
+    await plot.subHeaderKind(page, 'happening').click()
+    await expect(plot.subHeader(page)).not.toContainText('The alley ambush')
+    await plot.row(page, 'The alley ambush').click()
+    await expect(plot.tab(page, 'overview')).toHaveAttribute('aria-selected', 'true')
+
     // Known screen for anything appended after this test.
     await plot.actionsTrigger(page).click()
     await plot.goToReaderRow(page).click()
@@ -323,12 +391,13 @@ test.describe.serial('Plot panel', () => {
     await plot.goToPlotRow(page).click()
     await page.waitForURL(/\/plot\//)
 
-    await plot.tab(page, 'overview').click()
-    await plot.description(page).fill('dirty')
     await plot.segmentCell(page, 'thread').click()
+    await plot.row(page, 'What the amulet wants').click()
+    await plot.description(page).fill('dirty')
+    await plot.segmentCell(page, 'happening').click()
     await expect(saveSession.unsavedDialog(page)).toBeVisible()
     await saveSession.unsavedDiscard(page).click()
     await expect(saveSession.unsavedDialog(page)).toHaveCount(0)
-    await expect(plot.row(page, 'What the amulet wants')).toBeVisible()
+    await expect(plot.row(page, 'Vorne’s pact')).toBeVisible()
   })
 })

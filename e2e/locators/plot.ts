@@ -26,11 +26,22 @@ export const plot = {
   chip: (page: Page, filter: HappeningFilter | ThreadFilter): Locator =>
     page.getByRole('button', { name: t(`plot:filters.${filter}`), exact: true }),
 
-  // All-view group header (module-list.tsx), matched via aria-expanded like World's tierHeader.
+  // All-view group header (module-list.tsx). Its name folds in the row count, which keeps it
+  // apart from the filter chip and the detail pane's Status select that share its label.
   tierHeader: (page: Page, label: string): Locator =>
-    page.locator('[aria-expanded]').filter({ hasText: label }),
+    page.getByRole('button', { name: new RegExp(`^${label} \\d+$`) }),
 
   subHeader: (page: Page): Locator => page.getByTestId('plot-sub-header'),
+  // The sub-header's kind segment: a link only while a row follows it (breadcrumb.tsx).
+  subHeaderKind: (page: Page, kind: 'thread' | 'happening'): Locator =>
+    plot.subHeader(page).getByRole('link', { name: t(`plot:kinds.${kind}`), exact: true }),
+
+  // The top bar's story segment: a Breadcrumb parent renders as a link named by its label.
+  storyCrumb: (page: Page, title: string): Locator =>
+    page.getByRole('link', { name: title, exact: true }),
+
+  // ScreenShell's chrome back arrow, an IconAction named t('chrome.back').
+  back: (page: Page): Locator => page.getByRole('button', { name: t('chrome.back') }),
 
   addTrigger: (page: Page, kind: 'thread' | 'happening'): Locator =>
     page.getByRole('button', { name: t(`plot:add.${kind}`), exact: true }),
