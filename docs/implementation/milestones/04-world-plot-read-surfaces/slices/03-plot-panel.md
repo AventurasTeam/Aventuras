@@ -321,9 +321,10 @@ chapters` (deferred by canon), and `retrieval_count` review — M5.
   **4.2a's real World panes must not reintroduce it**; both wireframes
   and the `kindName` locale keys went too.
 - **The top-bar breadcrumb is screen-level on every tier**, on Plot
-  and World alike. Phone used to append the kind (`Story / Plot /
-Happenings`) while the sub-header already led with it, duplicating
-  the label; removed from both routes and both screen docs, per
+  and World alike. Phone used to append the kind
+  (`Story / Plot / Happenings`) while the sub-header already led with
+  it, duplicating the label; removed from both routes and both screen
+  docs, per
   [`principles.md → Master-detail sub-header`](../../../../ui/principles.md#master-detail-sub-header).
   Desktop was already correct.
 - **Tab counts are parenthesised** in both the strip and its Select
