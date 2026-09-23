@@ -43,8 +43,10 @@ export async function readEntryIndex(branchId: string, database: DbCtx['db']): P
   return rows.map((r) => {
     const truncated = Boolean(r.truncated)
     const cutMidWord = truncated && r.afterCut !== '' && !/\s/.test(r.afterCut)
-    const head = cutMidWord ? dropTrailingPartialWord(r.head) : r.head
-    const text = excerpt(stripMarkup(head), ENTRY_EXCERPT_CHARS) ?? ''
+    // Stripped first: a tag is a word break the raw head doesn't show as whitespace.
+    const prose = stripMarkup(r.head)
+    const head = cutMidWord ? dropTrailingPartialWord(prose) : prose
+    const text = excerpt(head, ENTRY_EXCERPT_CHARS) ?? ''
     // excerpt() collapses whitespace after the truncation cut, so a short result doesn't prove a
     // short source — force the ellipsis excerpt() has no way to know it owes.
     const needsEllipsis = truncated && text !== '' && !text.endsWith('…')

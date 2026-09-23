@@ -141,6 +141,26 @@ describe('readEntryIndex', () => {
     expect(index.get('e_2')?.excerpt).toBe('The room hums.…')
   })
 
+  it('keeps the last word whole when the window cuts right after a closing tag', async () => {
+    const { db } = await createTestDb()
+    await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values({ id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 })
+    // Exactly 200 chars, so the next character (`<`) reads as a mid-word cut.
+    const head = `<p style="${'x'.repeat(170)}">The room hums.</p>`
+    expect(head).toHaveLength(200)
+    await db.insert(storyEntries).values({
+      id: 'e_1',
+      branchId: 'br_1',
+      position: 1,
+      kind: 'ai_reply',
+      content: `${head}<p>More.</p>`,
+      createdAt: 1,
+    })
+
+    const index = indexEntryRefs(await readEntryIndex('br_1', db))
+    expect(index.get('e_1')?.excerpt).toBe('The room hums.…')
+  })
+
   it('adds an ellipsis for a truncated entry whose 200-char head collapses under the excerpt cap', async () => {
     const { db } = await createTestDb()
     await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
