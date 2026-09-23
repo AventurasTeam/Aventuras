@@ -36,12 +36,11 @@ Cross-cutting principles that govern this panel are in
 ├─────────────────────┬───────────────────────────────────────┤
 │ LIST PANE (~340px)  │ DETAIL PANE                           │
 │                     │                                       │
-│ [ Threads|Happ. ][+]│ breadcrumb: ◇ thread                  │ ← [+] tooltip tracks active side
-│ search              │ Name: Crown's bargain ✎         [⋯]  │
-│ filter chips        │ ─────                                 │
-│                     │ tabs: Overview | History              │
-│ list (rows)         │                                       │
-│                     │ (selected tab content, scrolls)       │
+│ [ Threads|Happ. ][+]│ Name: Crown's bargain ✎         [⋯]  │ ← [+] tooltip tracks active side
+│ search              │ ─────                                 │
+│ filter chips        │ tabs: Overview | History              │
+│                     │                                       │
+│ list (rows)         │ (selected tab content, scrolls)       │
 │                     │                                       │
 │                     │ ───                                   │
 │                     │ save bar (when dirty)                 │
@@ -70,7 +69,7 @@ Plot reuses the same shell decomposition as the World panel:
   filter chips, optional sort) + virtualized list + EmptyState.
   Row rendering composable per kind.
 - [`DetailPane`](../../component-inventory.md#shells--build-ready)
-  — breadcrumb + name (via `InlineEditableName`) + ⋯ menu +
+  — name (via `InlineEditableName`) + ⋯ menu +
   [tab strip](../../patterns/tabs.md) + scrollable content + optional
   SaveBar slot.
 - [`SaveBar`](../../component-inventory.md#compounds--shipped) —

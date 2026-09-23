@@ -49,13 +49,12 @@ Cross-cutting principles that govern this panel are in
 ├─────────────────────┬───────────────────────────────────────┤
 │ LIST PANE (~340px)  │ DETAIL PANE                           │
 │                     │                                       │
-│ [Characters ▾]  [+] │ breadcrumb: ☺ character               │ ← [+] tooltip tracks active kind
-│ search              │ Name: Kael ✎                    [⋯]  │
-│ filter chips        │ ─────                                 │
-│                     │ tabs: Overview | Identity | Carrying  │
-│ list (accordion     │       | Connections | Settings |      │
-│ on All filter)      │       Assets | Involvements | History │
-│                     │                                       │
+│ [Characters ▾]  [+] │ Name: Kael ✎                    [⋯]  │ ← [+] tooltip tracks active kind
+│ search              │ ─────                                 │
+│ filter chips        │ tabs: Overview | Identity | Carrying  │
+│                     │       | Connections | Settings |      │
+│ list (accordion     │       Assets | Involvements | History │
+│ on All filter)      │                                       │
 │                     │ (selected tab content, scrolls)       │
 │                     │                                       │
 │                     │ ───                                   │

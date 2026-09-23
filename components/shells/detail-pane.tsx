@@ -26,9 +26,9 @@ type DetailPaneProps = {
   overflowMenu: ReactNode
 
   /**
-   * Tabs primitive **strip** — consumer renders a `<TabsList>` of
-   * `<TabsTrigger>` children from `components/ui/tabs.tsx`; `null` while the
-   * pane has no tabs (a read-only placeholder).
+   * Tabs primitive **strip** — a `<TabsList>` of `<TabsTrigger>`s from
+   * `components/ui/tabs.tsx`, or `DetailTabs` for the tier-aware strip / Select; `null` while
+   * the pane has no tabs (a read-only placeholder).
    *
    * **Integration pattern.** The Tabs primitive's
    * `TabsList` / `TabsContent` read state from a shared `<Tabs>`
@@ -86,6 +86,7 @@ export function DetailPane({
 
       <View className="h-px bg-border" />
       {tabs != null ? (
+        // `grow` lets a flex-1 tab control (DetailTabs' Select) span the pane.
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
