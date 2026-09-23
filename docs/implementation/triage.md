@@ -324,12 +324,21 @@ slice-planning gate forces its resolution before that slice is planned.
   `ImporterMenuItem` (`components/compounds/importer-menu.tsx`),
   `OverflowMenu`'s `MenuItem` (`components/compounds/overflow-menu.tsx`),
   `StoryCard`'s `OverflowItem` (`components/story/story-card.tsx`), and
-  the cast-list inline row (`components/wizard/step-cast.tsx`) each
+  the cast-list inline row (`components/wizard/cast-list.tsx`) each
   reimplement the same pressable-row shape. They've already drifted on
   disabled accessible naming: `OverflowMenu` composes `label, reason`;
   `ImporterMenuItem` replaces the label with the reason outright.
   Extract one shared `MenuItem` and align `ImporterMenu` to the
   `label, reason` pattern. Surfaced 2026-09-22.
+
+  The extraction also settles the rows' role. All four put
+  `role="menuitem"` rows inside a Popover left on its default
+  `role="dialog"`, which is not a valid ARIA parent for them. Setting
+  the Popover to `"menu"` alone is no fix:
+  [Popover — ARIA contract](../ui/patterns/overlays.md#popover--aria-contract)
+  ties that role to arrow-key navigation, which none of the four
+  implement. Either build that navigation or make the rows buttons.
+  Surfaced 2026-09-23.
 
 - **Close-on-disable is copied into three components instead of
   living in the substrate.** `OverflowMenu`
