@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
+import { expect, screen } from 'storybook/test'
 
+import { i18n } from '@/lib/i18n'
 import { themes } from '@/lib/themes'
 
 import { Skeleton } from './skeleton'
@@ -18,6 +20,20 @@ type Story = StoryObj<typeof Skeleton>
 
 export const Default: Story = {
   render: () => <Skeleton className="h-4 w-48" />,
+}
+
+// cimode makes t() return its key, so only a name routed through t() can match.
+export const NameIsTranslated: Story = {
+  render: () => <Skeleton className="h-4 w-48" />,
+  beforeEach: async () => {
+    await i18n.changeLanguage('cimode')
+    return () => {
+      void i18n.changeLanguage('en')
+    }
+  },
+  play: async () => {
+    expect(screen.getByRole('progressbar', { name: 'chrome.loading' })).toBeInTheDocument()
+  },
 }
 
 export const Shapes: Story = {

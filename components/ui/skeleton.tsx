@@ -8,6 +8,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated'
 
+import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 type SkeletonProps = ViewProps & {
@@ -23,7 +24,7 @@ export function Skeleton({ className, ...props }: SkeletonProps) {
     return (
       <View
         accessibilityRole="progressbar"
-        accessibilityLabel="Loading"
+        accessibilityLabel={t('chrome.loading')}
         className={cn('animate-pulse rounded-md bg-fg-muted', className)}
         {...props}
       />
@@ -45,7 +46,7 @@ function NativeSkeleton({ className, ...props }: SkeletonProps) {
   return (
     <Animated.View
       accessibilityRole="progressbar"
-      accessibilityLabel="Loading"
+      accessibilityLabel={t('chrome.loading')}
       className={cn('rounded-md bg-fg-muted', className)}
       style={animatedStyle}
       {...props}
