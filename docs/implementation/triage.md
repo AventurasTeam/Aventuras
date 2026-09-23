@@ -461,23 +461,6 @@ slice-planning gate forces its resolution before that slice is planned.
   the intended phone surface before deciding the fix. Surfaced
   2026-09-22.
 
-- **`Autocomplete`'s `label` never reaches its input.**
-  `Autocomplete` (`components/ui/autocomplete.tsx`) does forward
-  `label` as `ariaLabel` to `SearchableOverlayList`, but
-  `SearchableOverlayList` only wires `ariaLabel` into `Shape2Dialog`'s
-  trigger and dialog; `Shape1Inline` — the branch used for
-  `searchPlacement="as-trigger"` on web and on native tablet/desktop —
-  never destructures `ariaLabel`, and its `SearchInputProps` type
-  doesn't carry the prop at all, so the rendered input gets no
-  accessible name. `FormRow` doesn't fill the gap either — its label
-  is a plain `Text`, not associated with the control. Plot's category
-  field hits this; its own story admits it: "The Autocomplete's input
-  carries no accessible name yet; its placeholder is unique here"
-  (`components/plot/thread-detail-pane.stories.tsx`), and finds the
-  field by placeholder rather than label. Affects every `Autocomplete`
-  consumer rendered on web or native tablet/desktop. Surfaced
-  2026-09-22.
-
 - **`EntityPicker`'s tablet popover anchors to the screen, not its
   field.** At tablet tier (`wm density 200` on the phone AVD) the
   inline-list popover renders full-bleed from x=0 and overlaps the list

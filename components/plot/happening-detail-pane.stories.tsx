@@ -646,7 +646,7 @@ export const Blocked: Story = {
     expect(await pane().findByText('The alley ambush')).toBeVisible()
     expect(pane().queryByRole('button', { name: /^Edit / })).not.toBeInTheDocument()
     expect(description()).toHaveAttribute('readonly')
-    const category = pane().getByPlaceholderText('e.g. mystery, goal, conflict')
+    const category = pane().getByRole('combobox', { name: 'Category' })
     expect(category).toHaveAttribute('readonly')
     expect(category).toHaveValue('encounter')
     expect(pane().getByRole('button', { name: 'Icon' })).toBeDisabled()

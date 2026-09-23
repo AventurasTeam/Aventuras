@@ -335,8 +335,7 @@ export const Blocked: Story = {
     )
     expect(injection).toHaveLength(3)
     for (const radio of injection) expect(radio).toHaveAttribute('aria-disabled', 'true')
-    // The Autocomplete's input carries no accessible name yet; its placeholder is unique here.
-    const category = screen.getByPlaceholderText('e.g. mystery, goal, conflict')
+    const category = screen.getByRole('combobox', { name: 'Category' })
     expect(category).toHaveAttribute('readonly')
     expect(category).toHaveValue('mystery')
     expect(description()).toHaveAttribute('readonly')

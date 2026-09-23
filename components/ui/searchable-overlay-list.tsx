@@ -965,6 +965,8 @@ type SearchInputProps = {
   highlightedRowId?: string
   rowIdPrefix: string
   ariaInvalid?: boolean | 'true' | 'false'
+  ariaLabel?: string
+  ariaLabelledBy?: string
   className?: string
 }
 
@@ -1006,6 +1008,8 @@ function SearchInput({
   highlightedRowId,
   rowIdPrefix,
   ariaInvalid,
+  ariaLabel,
+  ariaLabelledBy,
   className,
 }: SearchInputProps) {
   // aria-activedescendant must reference a DOM-mounted element — the listbox only
@@ -1026,6 +1030,8 @@ function SearchInput({
       onFocus={onFocus}
       onBlur={onBlur}
       aria-invalid={ariaInvalid}
+      aria-label={ariaLabel}
+      aria-labelledby={ariaLabelledBy}
       role="combobox"
       aria-expanded={expanded}
       aria-autocomplete="list"
@@ -1239,6 +1245,8 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
         highlightedRowId={list.highlightedId ?? undefined}
         rowIdPrefix={rowIdPrefix}
         ariaInvalid={ariaInvalid}
+        ariaLabel={ariaLabel}
+        ariaLabelledBy={ariaLabelledBy}
         className="mb-3"
       />
       <RowList
@@ -1364,6 +1372,8 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
     disabled,
     disabledReason,
     'aria-invalid': ariaInvalid,
+    ariaLabel,
+    ariaLabelledBy,
     escClearsQueryFirst = false,
     className,
   } = props
@@ -1591,6 +1601,8 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
         highlightedRowId={list.highlightedId ?? undefined}
         rowIdPrefix={rowIdPrefix}
         ariaInvalid={ariaInvalid}
+        ariaLabel={ariaLabel}
+        ariaLabelledBy={ariaLabelledBy}
       />
       {open ? (
         Platform.OS === 'web' ? (
