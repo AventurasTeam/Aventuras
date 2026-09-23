@@ -109,6 +109,7 @@ class SyncService {
       branches,
       chapters,
       packBinding,
+      timeAnchors,
     ] = await Promise.all([
       database.getStoryEntries(storyId),
       database.getCharacters(storyId),
@@ -121,6 +122,7 @@ class SyncService {
       database.getBranches(storyId),
       database.getChapters(storyId),
       gatherPackBinding(storyId),
+      database.getTimeAnchors(storyId),
     ])
 
     const exportData: AventuraExport = {
@@ -142,6 +144,8 @@ class SyncService {
       checkpoints,
       branches,
       chapters,
+      // Omitted when empty, as `exportToAventura` does.
+      ...(timeAnchors.length > 0 ? { timeAnchors } : {}),
       // Omitted rather than written as null, so a story with no pack keeps the shape that takes
       // the legacy import path — matching what `exportToAventura` produces.
       ...(packBinding ? { packBinding } : {}),

@@ -50,6 +50,7 @@
   $effect(() => {
     if (!open) {
       seededFor = null
+      numberText = ''
       return
     }
     const target = usableEntry

@@ -1,10 +1,16 @@
 <script lang="ts">
   import { story } from '$lib/stores/story.svelte'
+  import { ui } from '$lib/stores/ui.svelte'
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
   import * as Dialog from '$lib/components/ui/dialog'
   import { ChevronDown, ChevronRight } from '@lucide/svelte'
-  import { parseStoryTime, formatStoryTime, storyTimeIsInvalid } from '$lib/services/storyTime'
+  import {
+    parseStoryTime,
+    formatStoryTime,
+    storyTimeIsInvalid,
+    toMinutes,
+  } from '$lib/services/storyTime'
   import { entryNumber } from '$lib/utils/storyNavigation'
 
   const DESCRIPTION_FOLD_KEY = 'aventuras.entryTime.descriptionFolded'
@@ -19,7 +25,8 @@
   const start = $derived(parseStoryTime(startText))
   const end = $derived(parseStoryTime(endText))
   const isLastEntry = $derived(!!entry && story.entries[story.entries.length - 1]?.id === entry.id)
-  const canSave = $derived(!!start && !!end && !saving)
+  const backwards = $derived(!!start && !!end && toMinutes(end) < toMinutes(start))
+  const canSave = $derived(!!start && !!end && !backwards && !saving)
 
   /** `setEntryTimes` carries it along: an action is the instant the narration after it answers. */
   const precedingAction = $derived.by(() => {
@@ -72,6 +79,8 @@
     try {
       await story.setEntryTimes(entryId, start, end)
       open = false
+    } catch (error) {
+      ui.showToast(error instanceof Error ? error.message : 'The time could not be saved', 'error')
     } finally {
       saving = false
     }
@@ -165,6 +174,8 @@
         <p class="text-destructive text-xs sm:col-span-2">
           Give both as Y1 D4 14:30. An unreadable time is left as it was.
         </p>
+      {:else if backwards}
+        <p class="text-destructive text-xs sm:col-span-2">The entry cannot end before it begins.</p>
       {:else if isLastEntry}
         <p class="text-muted-foreground text-xs sm:col-span-2">
           This is the last entry, so the story's current time moves to its ending.

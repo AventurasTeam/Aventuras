@@ -832,10 +832,12 @@
               </Dialog.Description>
             </div>
             <Dialog.Close>
-              <Button variant="destructive" size="icon">
-                <X class="size-6!" />
-                <span class="sr-only">Close</span>
-              </Button>
+              {#snippet child({ props })}
+                <Button variant="destructive" size="icon" {...props}>
+                  <X class="size-6!" />
+                  <span class="sr-only">Close</span>
+                </Button>
+              {/snippet}
             </Dialog.Close>
           </div>
 

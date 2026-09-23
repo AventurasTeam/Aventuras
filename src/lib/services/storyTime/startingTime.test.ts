@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import type { TimeTracker } from '$lib/types'
-import { startingTimePromptValue, templateReceivesStartingTime, SUGGEST_ONE } from './startingTime'
+import {
+  returnedStart,
+  startingTimePromptValue,
+  templateReceivesStartingTime,
+  SUGGEST_ONE,
+} from './startingTime'
 
 function t(hours: number, minutes = 0): TimeTracker {
   return { years: 0, days: 0, hours, minutes }
@@ -24,5 +29,26 @@ describe('templateReceivesStartingTime', () => {
     expect(templateReceivesStartingTime('TIME: opening ends at {{ startingTime }}')).toBe(false)
     expect(templateReceivesStartingTime('TITLE: {{ title }}')).toBe(false)
     expect(templateReceivesStartingTime(null)).toBe(false)
+  })
+})
+
+describe('returnedStart', () => {
+  it('takes the time the model returned, normalized', () => {
+    expect(returnedStart('Y1 D400 10:00', t(8))).toEqual({
+      text: 'Y2 D35 10:00',
+      source: 'returned',
+    })
+  })
+
+  it('falls back to the guidance when the model returned nothing readable', () => {
+    expect(returnedStart(undefined, t(19, 30))).toEqual({ text: 'Y1 D1 19:30', source: 'guidance' })
+    expect(returnedStart('sometime at dusk', t(19, 30))).toEqual({
+      text: 'Y1 D1 19:30',
+      source: 'guidance',
+    })
+  })
+
+  it('leaves the start empty when neither is there', () => {
+    expect(returnedStart('', null)).toEqual({ text: '', source: null })
   })
 })

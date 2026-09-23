@@ -7,7 +7,8 @@
  */
 
 import type { TimeTracker } from '$lib/types'
-import { formatStoryTime } from './duration'
+import { formatStoryTime, parseStoryTime } from './duration'
+import { normalizeTime } from './minutes'
 
 export const STARTING_TIME_VAR = 'storyStartingTime'
 
@@ -17,6 +18,24 @@ export const SUGGEST_ONE = '(suggest one)'
 /** Whether a template body would render the start at all. */
 export function templateReceivesStartingTime(content: string | null | undefined): boolean {
   return !!content && new RegExp(`{{\\s*${STARTING_TIME_VAR}\\b`).test(content)
+}
+
+export type ResultStartSource = 'returned' | 'guidance' | 'edited'
+
+/**
+ * The generated opening's own start: what the model returned, or the guidance it was given when
+ * it returned nothing readable. Normalized, so an untouched value never reads as an edit later.
+ */
+export function returnedStart(
+  returned: string | null | undefined,
+  guidance: TimeTracker | null,
+): { text: string; source: ResultStartSource | null } {
+  const parsed = parseStoryTime(returned ?? '')
+  const start = parsed ?? guidance
+  return {
+    text: start ? formatStoryTime(normalizeTime(start)) : '',
+    source: parsed ? 'returned' : start ? 'guidance' : null,
+  }
 }
 
 /** The value the opening prompts are given for the start. */

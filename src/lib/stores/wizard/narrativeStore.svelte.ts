@@ -23,7 +23,9 @@ import {
   formatStoryTime,
   normalizeTime,
   parseStoryTime,
+  returnedStart,
   templateReceivesStartingTime,
+  type ResultStartSource,
 } from '$lib/services/storyTime'
 
 export class NarrativeStore {
@@ -73,7 +75,7 @@ export class NarrativeStore {
   guidanceStartText = $state('')
   /** What generation came back with, or the guidance when it returned none. */
   resultStartText = $state('')
-  resultStartSource = $state<'returned' | 'guidance' | 'edited' | null>(null)
+  resultStartSource = $state<ResultStartSource | null>(null)
   private startBeforeEdit = { text: '', source: null as typeof this.resultStartSource }
   /** Whether the selected pack's opening template renders the start; null until checked. */
   openingReceivesStart = $state<boolean | null>(null)
@@ -224,12 +226,10 @@ export class NarrativeStore {
     return receives
   }
 
-  /** The result's own start: what the model returned, or the guidance it was given. */
   private applyReturnedStart(opening: GeneratedOpening) {
-    const returned = parseStoryTime(opening.startingTime ?? '')
-    const start = returned ?? this.guidanceStart
-    this.resultStartText = start ? formatStoryTime(normalizeTime(start)) : ''
-    this.resultStartSource = returned ? 'returned' : start ? 'guidance' : null
+    const { text, source } = returnedStart(opening.startingTime, this.guidanceStart)
+    this.resultStartText = text
+    this.resultStartSource = source
   }
 
   // Opening Actions

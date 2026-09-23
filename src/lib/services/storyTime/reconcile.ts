@@ -7,8 +7,8 @@
  *
  * The range is weighed as an alternating sequence of entry durations and the intervals
  * between them. What an interval means is not in the record — a deliberate skip, an entry that
- * ran longer than it says, or a nudged clock — so each carries a policy the reader chooses, and
- * only the default preserves it as recorded.
+ * ran longer than it says, or a nudged clock — so the reader may state its weight, and one left
+ * unstated keeps its recorded length.
  */
 
 import type { StoryEntry, TimeTracker } from '$lib/types'
@@ -50,7 +50,6 @@ export interface ReconcileInput {
   nextStart?: TimeTracker | null
   /** Reader-supplied entry durations in whole minutes, by entry id. */
   suppliedDurations?: Record<string, number>
-  /** What to do with the interval after each entry, keyed by that entry's id. Defaults to `keep`. */
   /**
    * Interval lengths the reader states, in minutes, keyed by the entry each follows.
    *
@@ -138,6 +137,11 @@ function weighEntries(
   return { durations, requests }
 }
 
+/** Interval lengths, one per adjacent pair, the reader's own standing in where given. */
+function gapsOf(entries: StoryEntry[], stated: Record<string, number>): number[] {
+  return recordedGaps(entries).map((minutes, i) => stated[entries[i].id] ?? minutes)
+}
+
 /**
  * The interval each pair of neighbouring entries has between them, as the record holds it.
  *
@@ -145,11 +149,6 @@ function weighEntries(
  * interval reads as zero. That is two records disagreeing rather than time passing, and
  * detection reports it.
  */
-/** Interval lengths, one per adjacent pair, the reader's own standing in where given. */
-function gapsOf(entries: StoryEntry[], stated: Record<string, number>): number[] {
-  return recordedGaps(entries).map((minutes, i) => stated[entries[i].id] ?? minutes)
-}
-
 function recordedGaps(entries: StoryEntry[]): number[] {
   const gaps: number[] = []
   for (let i = 0; i < entries.length - 1; i++) {
@@ -164,14 +163,6 @@ function recordedGaps(entries: StoryEntry[]): number[] {
   return gaps
 }
 
-/**
- * Apply the reader's decision about each interval.
- *
- * An interval is time the story did not narrate, and what it means is not in the record: a
- * deliberate skip, an entry that really ran longer than it says, or a clock that was nudged.
- * Only the reader knows which, so each one carries a policy and the default merely preserves
- * what is recorded.
- */
 /**
  * What the range cannot weigh yet, without attempting to reconcile it.
  *

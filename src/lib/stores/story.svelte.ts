@@ -1647,24 +1647,33 @@ class StoryStore {
 
     this.assertNotBusy('reconcile the timeline')
 
+    // Re-resolved, not reused: the preview's boundaries carry the times they had when it was
+    // built, so an endpoint's anchor edited since would otherwise compare equal to itself.
+    const range = this.timeRanges.find(
+      (candidate) =>
+        candidate.from.entryId === preview.range.from.entryId &&
+        candidate.to.entryId === preview.range.to.entryId,
+    )
+    if (!range) return 'stale'
+
     // With the same weights: a range whose entries have no recorded time resolves only when the
     // reader's figures are handed back, and without them every such apply would read as stale.
     const fresh = this.previewReconciliation(
-      preview.range,
+      range,
       preview.inputs.durations,
       preview.inputs.intervals,
     )
     if (fresh.status !== 'ok' || fresh.fingerprint !== preview.fingerprint) return 'stale'
 
-    await applyReconciliation(preview.plan, this.entries, {
+    await applyReconciliation(fresh.plan, this.entries, {
       transaction: (statements) => database.transaction(statements),
       publish: (plan) => this.publishReconciliation(plan),
     })
 
     log('Timeline reconciled', {
-      entries: preview.plan.times.length,
-      chapters: preview.plan.chapterSpans.length,
-      clockMoved: !!preview.plan.clock,
+      entries: fresh.plan.times.length,
+      chapters: fresh.plan.chapterSpans.length,
+      clockMoved: !!fresh.plan.clock,
     })
     return 'applied'
   }
@@ -1672,12 +1681,15 @@ class StoryStore {
   /** In-memory state after a reconciliation commits, shared by every path that plans one. */
   private publishReconciliation(plan: ReconciliationPlan): void {
     const times = new Map(plan.times.map((time) => [time.entryId, time]))
+    const deltas = new Map(plan.deltas.map((update) => [update.entryId, update.delta]))
     this.entries = this.entries.map((entry) => {
       const time = times.get(entry.id)
       if (!time) return entry
+      const delta = deltas.get(entry.id)
       return {
         ...entry,
         metadata: { ...entry.metadata, timeStart: time.start, timeEnd: time.end },
+        ...(delta ? { worldStateDelta: delta } : {}),
       }
     })
 
@@ -1712,6 +1724,10 @@ class StoryStore {
    */
   async setEntryTimes(entryId: string, start: TimeTracker, end: TimeTracker): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
+    // A generation still running would classify this entry and overwrite its ending afterwards.
+    this.assertNotBusy('edit entry times')
+    start = normalizeTime(start)
+    end = normalizeTime(end)
     const index = this.entries.findIndex((e) => e.id === entryId)
     if (index === -1) throw new Error('Entry not found')
 

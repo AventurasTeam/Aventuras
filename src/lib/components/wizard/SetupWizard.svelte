@@ -227,10 +227,7 @@
           onEditSetting={() => wizard.setting.editSetting()}
           onCancelEdit={() => wizard.setting.cancelSettingEdit()}
           onSelectScenario={(id) => wizard.selectScenario(id)}
-          onClearCardImport={() => {
-            wizard.clearScenarioLinkedLorebook()
-            wizard.character.clearCardImport()
-          }}
+          onClearCardImport={() => wizard.clearCardImport()}
           onSaveToVault={() =>
             wizard.setting.saveScenarioToVault(
               wizard.narrative.storyTitle,
@@ -492,10 +489,7 @@
           onSaveEdit={() => wizard.narrative.saveOpeningEdit()}
           onDraftChange={(v) => (wizard.narrative.openingDraft = v)}
           onUseCardOpening={() => wizard.narrative.useCardOpening()}
-          onClearCardOpening={() => {
-            wizard.clearScenarioLinkedLorebook()
-            wizard.character.clearCardImport()
-          }}
+          onClearCardOpening={() => wizard.clearCardImport()}
           onManualOpeningChange={(v) => (wizard.narrative.manualOpeningText = v)}
           onClearGenerated={() => wizard.narrative.clearGeneratedOpening()}
         />

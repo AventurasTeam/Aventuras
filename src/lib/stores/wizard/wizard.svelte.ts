@@ -177,8 +177,15 @@ export class WizardStore {
   selectGreeting(index: number) {
     this.character.selectedGreetingIndex = index
     const scenarioStart = this.character.cardImportedStartingTime
-    if (!scenarioStart) return
-    this.narrative.importedStartText = index === 0 ? formatStoryTime(scenarioStart) : ''
+    this.narrative.importedStartText =
+      index === 0 && scenarioStart ? formatStoryTime(scenarioStart) : ''
+  }
+
+  /** The imported opening goes, and the start that belonged to it with it. */
+  clearCardImport() {
+    this.clearScenarioLinkedLorebook()
+    this.character.clearCardImport()
+    this.narrative.setImportedStart(null)
   }
 
   selectScenarioFromVault(scenario: VaultScenario) {
@@ -331,7 +338,10 @@ export class WizardStore {
   async createStory() {
     if (this.isCreatingStory) return
     if (!this.narrative.storyTitle.trim()) return
-    if (!this.narrative.startingTime) {
+    // Taken now: turning a written or imported opening into the used one below would make the
+    // generated opening's start the one read.
+    const startingTime = this.narrative.startingTime
+    if (!startingTime) {
       this.narrative.openingError = 'Please enter a starting time for the story'
       return
     }
@@ -445,7 +455,7 @@ export class WizardStore {
           narratorReinforcement: this.narrative.narratorReinforcement,
         },
         title: this.narrative.storyTitle,
-        startingTime: this.narrative.startingTime,
+        startingTime,
         openingGuidance: this.narrative.openingGuidance.trim() || undefined,
       }
 
@@ -605,7 +615,7 @@ export class WizardStore {
 
       const newStory = await story.createStoryFromWizard({
         ...storyData,
-        startingTime: this.narrative.startingTime,
+        startingTime,
         importedEntries: processedEntries.length > 0 ? processedEntries : undefined,
         translations,
       })
