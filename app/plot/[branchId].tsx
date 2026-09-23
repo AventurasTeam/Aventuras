@@ -13,10 +13,11 @@ import { PlotDetailEmpty } from '@/components/plot/plot-detail-empty'
 import { PlotListPane, type PlotListPaneHandle } from '@/components/plot/plot-list-pane'
 import { distinctCategories, happeningLinksFor } from '@/components/plot/plot-route-data'
 import {
-  deepLinkTab,
+  happeningLinkTab,
   parsePlotSelection,
   plotAddLabel,
   plotKindLabel,
+  threadLinkTab,
   type PlotSelection,
 } from '@/components/plot/plot-selection'
 import { ThreadDetailPane } from '@/components/plot/thread-detail-pane'
@@ -323,7 +324,7 @@ export default function PlotRoute() {
         blockedReason={gateReason}
         initialTab={
           selection.type === 'happening'
-            ? deepLinkTab(pendingLink, 'happening', selection.row.id)
+            ? happeningLinkTab(pendingLink, selection.row.id)
             : undefined
         }
         onSave={(draft) =>
@@ -357,9 +358,7 @@ export default function PlotRoute() {
         blocked={editBlocked}
         blockedReason={gateReason}
         initialTab={
-          selection.type === 'thread'
-            ? deepLinkTab(pendingLink, 'thread', selection.row.id)
-            : undefined
+          selection.type === 'thread' ? threadLinkTab(pendingLink, selection.row.id) : undefined
         }
         onSave={(draft) =>
           saveThread(

@@ -3,9 +3,10 @@ import { z } from 'zod'
 import type { PipelineAction } from '@/lib/actions'
 import { INJECTION_MODES, THREAD_STATUSES, type NewThread, type Thread } from '@/lib/db'
 
-// Issue messages are `plot:validation.*` keys; the pane translates them.
+import { PLOT_ISSUE } from './issues'
+
 export const threadDraftSchema = z.object({
-  title: z.string().trim().min(1, 'titleRequired'),
+  title: z.string().trim().min(1, PLOT_ISSUE.titleRequired),
   description: z.string(),
   category: z.string(),
   icon: z.string().nullable(),

@@ -4,9 +4,23 @@ import { isPlotKind, type PlotKind } from '@/lib/list-modules'
 
 type RawParam = string | string[] | undefined
 
-export type PlotSelection = { kind: PlotKind; id: string; tab?: string }
+export const THREAD_TABS = ['overview', 'history'] as const
+export const HAPPENING_TABS = ['overview', 'involvements', 'awareness', 'history'] as const
+export type ThreadTab = (typeof THREAD_TABS)[number]
+export type HappeningTab = (typeof HAPPENING_TABS)[number]
 
-/** `/plot/[branchId]?kind&id&tab` — mirrors World's param names (parseWorldSelection). */
+export type PlotSelection =
+  | { kind: 'thread'; id: string; tab?: ThreadTab }
+  | { kind: 'happening'; id: string; tab?: HappeningTab }
+
+function tabOf<Tab extends string>(tabs: readonly Tab[], value: string | undefined) {
+  return tabs.find((tab) => tab === value)
+}
+
+/**
+ * `/plot/[branchId]?kind&id&tab` — mirrors World's param names (parseWorldSelection). A tab the
+ * kind doesn't have is dropped, so the pane opens on Overview.
+ */
 export function parsePlotSelection(params: {
   kind?: RawParam
   id?: RawParam
@@ -15,17 +29,22 @@ export function parsePlotSelection(params: {
   const kind = single(params.kind)
   const id = single(params.id)
   if (!isPlotKind(kind) || id == null) return null
-  const tab = single(params.tab)
+  const raw = single(params.tab)
+  if (kind === 'thread') {
+    const tab = tabOf(THREAD_TABS, raw)
+    return tab == null ? { kind, id } : { kind, id, tab }
+  }
+  const tab = tabOf(HAPPENING_TABS, raw)
   return tab == null ? { kind, id } : { kind, id, tab }
 }
 
 /** A deep link's tab, for its own row only. */
-export function deepLinkTab(
-  selection: PlotSelection | null,
-  kind: PlotKind,
-  id: string,
-): string | undefined {
-  return selection?.kind === kind && selection.id === id ? selection.tab : undefined
+export function threadLinkTab(link: PlotSelection | null, id: string): ThreadTab | undefined {
+  return link?.kind === 'thread' && link.id === id ? link.tab : undefined
+}
+
+export function happeningLinkTab(link: PlotSelection | null, id: string): HappeningTab | undefined {
+  return link?.kind === 'happening' && link.id === id ? link.tab : undefined
 }
 
 export function plotKindLabel(kind: PlotKind): string {

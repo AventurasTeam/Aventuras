@@ -3,27 +3,13 @@ import type { SelectOption } from '@/components/ui/select'
 import { PLOT_REJECTION } from '@/lib/actions'
 import { t } from '@/lib/i18n'
 import type { PlotKind } from '@/lib/list-modules'
+import { isPlotIssue, type HappeningDraft, type PlotIssue, type ThreadDraft } from '@/lib/plot'
 
 import { PLOT_ICON_KEYS } from './plot-icon'
 
-const VALIDATION_KEYS = [
-  'titleRequired',
-  'timeAnchorExclusive',
-  'duplicateEntity',
-  'duplicateCharacter',
-  'entityRequired',
-  'characterRequired',
-  'decayRange',
-] as const
-type ValidationKey = (typeof VALIDATION_KEYS)[number]
-
-function isValidationKey(message: string): message is ValidationKey {
-  return (VALIDATION_KEYS as readonly string[]).includes(message)
-}
-
 /** A draft-schema issue message (a key) → its text; unknown messages pass through. */
 export function validationText(message: string): string {
-  return isValidationKey(message) ? t(`plot:validation.${message}`) : message
+  return isPlotIssue(message) ? t(`plot:validation.${message}`) : message
 }
 
 export function issueLabel(message: string | undefined): string | undefined {
@@ -44,17 +30,22 @@ export function categoryTailLabel(value: string): string {
   return t('plot:fields.categoryAdd', { value })
 }
 
-const THREAD_FIELD_LABEL: Record<string, () => string> = {
+const SHARED_FIELD_LABEL = {
   title: () => t('plot:fields.title'),
   description: () => t('plot:fields.description'),
   category: () => t('plot:fields.category'),
   icon: () => t('plot:fields.icon'),
+}
+
+// Exhaustive per draft: a new draft field fails typecheck until it has a label.
+const THREAD_FIELD_LABEL: Record<keyof ThreadDraft, () => string> = {
+  ...SHARED_FIELD_LABEL,
   status: () => t('plot:fields.status'),
   injectionMode: () => t('plot:fields.injectionMode'),
 }
 
-const HAPPENING_FIELD_LABEL: Record<string, () => string> = {
-  ...THREAD_FIELD_LABEL,
+const HAPPENING_FIELD_LABEL: Record<keyof HappeningDraft, () => string> = {
+  ...SHARED_FIELD_LABEL,
   commonKnowledge: () => t('plot:fields.commonKnowledge'),
   occurredAtEntryId: () => t('plot:fields.occurredAt'),
   temporal: () => t('plot:fields.temporal'),
@@ -62,16 +53,20 @@ const HAPPENING_FIELD_LABEL: Record<string, () => string> = {
   awareness: () => t('plot:detail.tabs.awareness'),
 }
 
+function labelFrom(labels: Record<string, () => string>, field: string): string {
+  return Object.hasOwn(labels, field) ? labels[field]() : field
+}
+
 /** Save-bar labels are user-recognizable field names (save-sessions.md → Save bar). */
 export function threadFieldLabel(field: string): string {
-  return THREAD_FIELD_LABEL[field]?.() ?? field
+  return labelFrom(THREAD_FIELD_LABEL, field)
 }
 
 export function happeningFieldLabel(field: string): string {
-  return HAPPENING_FIELD_LABEL[field]?.() ?? field
+  return labelFrom(HAPPENING_FIELD_LABEL, field)
 }
 
-const LINK_ISSUE_TAB: Partial<Record<ValidationKey, 'involvements' | 'awareness'>> = {
+const LINK_ISSUE_TAB: Partial<Record<PlotIssue, 'involvements' | 'awareness'>> = {
   duplicateEntity: 'involvements',
   entityRequired: 'involvements',
   duplicateCharacter: 'awareness',
@@ -82,7 +77,7 @@ const LINK_ISSUE_TAB: Partial<Record<ValidationKey, 'involvements' | 'awareness'
 /** A link-row issue names its tab: it may sit elsewhere or behind the common-knowledge notice. */
 export function happeningIssueText(message: string): string {
   const text = validationText(message)
-  const tab = isValidationKey(message) ? LINK_ISSUE_TAB[message] : undefined
+  const tab = isPlotIssue(message) ? LINK_ISSUE_TAB[message] : undefined
   return tab == null
     ? text
     : t('plot:validation.inTab', { tab: happeningFieldLabel(tab), issue: text })

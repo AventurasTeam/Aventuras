@@ -12,6 +12,7 @@ import type { HappeningDraft, HappeningLinks } from '@/lib/plot'
 import type { RecentlyClassified } from '@/lib/row-signals'
 
 import { HappeningDetailPane } from './happening-detail-pane'
+import type { HappeningTab } from './plot-selection'
 
 function happening(overrides: Partial<Happening> & Pick<Happening, 'id'>): Happening {
   return {
@@ -174,7 +175,7 @@ type HarnessProps = {
   saveResult?: PlotSaveResult
   /** `onSaved` throws after the row is selected, as a failing success toast would. */
   savedThrows?: boolean
-  initialTab?: string
+  initialTab?: HappeningTab
   onSave: (draft: HappeningDraft) => void
   onRejected: (reason: string) => void
   onOpenEntity: (entity: Entity) => void
@@ -804,20 +805,12 @@ export const Menu: Story = {
   },
 }
 
-/** A deep link's `tab` opens that tab; an unknown one falls back to Overview. */
+/** A deep link's `tab` opens that tab. */
 export const DeepLinkTab: Story = {
   args: { initialTab: 'awareness' },
   play: async () => {
     expect(await pane().findByRole('tab', { name: /^Awareness/, selected: true })).toBeVisible()
     expect(within(pane().getByTestId('awareness-0')).getByText('Mira')).toBeVisible()
-  },
-}
-
-export const UnknownInitialTab: Story = {
-  args: { initialTab: 'connections' },
-  play: async () => {
-    expect(await pane().findByRole('tab', { name: 'Overview', selected: true })).toBeVisible()
-    expect(description()).toBeVisible()
   },
 }
 

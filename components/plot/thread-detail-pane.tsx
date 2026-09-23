@@ -35,14 +35,8 @@ import {
   validationText,
 } from './plot-copy'
 import { PlotHistoryPlaceholder } from './plot-history-placeholder'
+import { THREAD_TABS, type ThreadTab } from './plot-selection'
 import { usePlotRowSession } from './use-plot-row-session'
-
-const TABS = ['overview', 'history'] as const
-type ThreadTab = (typeof TABS)[number]
-
-function isThreadTab(value: string | undefined): value is ThreadTab {
-  return (TABS as readonly (string | undefined)[]).includes(value)
-}
 
 const resolver = zodResolver(threadDraftSchema)
 
@@ -59,8 +53,8 @@ export type ThreadDetailPaneProps = {
   /** `isUserEditBlocked`: fields and Save disable with `blockedReason`. */
   blocked: boolean
   blockedReason?: string
-  /** A deep link's `tab`; an unknown value opens Overview. */
-  initialTab?: string
+  /** A deep link's `tab`. */
+  initialTab?: ThreadTab
   onSave: (draft: ThreadDraft) => Promise<PlotSaveResult>
   /** After a successful save; the route selects the row (a create's new id). */
   onSaved: (id: string) => void
@@ -103,7 +97,7 @@ export function ThreadDetailPane({
   })
   const { control } = session.form
 
-  const [tab, setTab] = useState<string>(isThreadTab(initialTab) ? initialTab : 'overview')
+  const [tab, setTab] = useState<string>(initialTab ?? 'overview')
   const [jsonOpen, setJsonOpen] = useState(false)
 
   return (
@@ -140,7 +134,7 @@ export function ThreadDetailPane({
           }
           tabs={
             <DetailTabs
-              tabs={TABS.map((value) => ({ value, label: t(`plot:detail.tabs.${value}`) }))}
+              tabs={THREAD_TABS.map((value) => ({ value, label: t(`plot:detail.tabs.${value}`) }))}
               value={tab}
               onValueChange={setTab}
               selectLabel={t('plot:detail.tabSelect')}

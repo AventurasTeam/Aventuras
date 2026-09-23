@@ -47,14 +47,8 @@ import {
   plotMenuEntries,
 } from './plot-copy'
 import { PlotHistoryPlaceholder } from './plot-history-placeholder'
+import { HAPPENING_TABS, type HappeningTab } from './plot-selection'
 import { usePlotRowSession } from './use-plot-row-session'
-
-const TABS = ['overview', 'involvements', 'awareness', 'history'] as const
-type HappeningTab = (typeof TABS)[number]
-
-function isHappeningTab(value: string | undefined): value is HappeningTab {
-  return (TABS as readonly (string | undefined)[]).includes(value)
-}
 
 const resolver = zodResolver(happeningDraftSchema)
 
@@ -93,8 +87,8 @@ export type HappeningDetailPaneProps = {
   /** `isUserEditBlocked`: fields and Save disable with `blockedReason`. */
   blocked: boolean
   blockedReason?: string
-  /** A deep link's `tab`; an unknown value opens Overview. */
-  initialTab?: string
+  /** A deep link's `tab`. */
+  initialTab?: HappeningTab
   onSave: (draft: HappeningDraft) => Promise<PlotSaveResult>
   /** After a successful save; the route selects the row (a create's new id). */
   onSaved: (id: string) => void
@@ -142,12 +136,17 @@ export function HappeningDetailPane({
   })
   const { control, trigger } = session.form
 
-  const [tab, setTab] = useState<string>(isHappeningTab(initialTab) ? initialTab : 'overview')
+  const [tab, setTab] = useState<string>(initialTab ?? 'overview')
   const [jsonOpen, setJsonOpen] = useState(false)
   const commonKnowledge = useWatch({ control, name: 'commonKnowledge' })
   // Lengths only, so typing in a link row doesn't re-render the whole pane.
   const involvementCount = useWatch({ control, name: 'involvements', compute: (r) => r.length })
   const awarenessCount = useWatch({ control, name: 'awareness', compute: (r) => r.length })
+  const tabCounts: Partial<Record<HappeningTab, number>> = {
+    involvements: involvementCount,
+    // Common knowledge makes every character aware, so the rows don't count.
+    awareness: commonKnowledge ? undefined : awarenessCount,
+  }
 
   return (
     <View className="flex-1">
@@ -183,21 +182,11 @@ export function HappeningDetailPane({
           }
           tabs={
             <DetailTabs
-              tabs={[
-                { value: 'overview', label: t('plot:detail.tabs.overview') },
-                {
-                  value: 'involvements',
-                  label: t('plot:detail.tabs.involvements'),
-                  count: involvementCount,
-                },
-                {
-                  value: 'awareness',
-                  label: t('plot:detail.tabs.awareness'),
-                  // The rows are skipped while common knowledge is on, so they don't count.
-                  count: commonKnowledge ? undefined : awarenessCount,
-                },
-                { value: 'history', label: t('plot:detail.tabs.history') },
-              ]}
+              tabs={HAPPENING_TABS.map((value) => ({
+                value,
+                label: t(`plot:detail.tabs.${value}`),
+                count: tabCounts[value],
+              }))}
               value={tab}
               onValueChange={setTab}
               selectLabel={t('plot:detail.tabSelect')}

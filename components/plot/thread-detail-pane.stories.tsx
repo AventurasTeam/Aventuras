@@ -10,6 +10,7 @@ import type { EntryIndex, EntryRef } from '@/lib/entry-refs'
 import type { ThreadDraft } from '@/lib/plot'
 import type { RecentlyClassified } from '@/lib/row-signals'
 
+import type { ThreadTab } from './plot-selection'
 import { ThreadDetailPane } from './thread-detail-pane'
 
 function thread(overrides: Partial<Thread> & Pick<Thread, 'id'>): Thread {
@@ -97,7 +98,7 @@ type HarnessProps = {
   saveThrows?: boolean
   /** `onSaved` throws after the row is selected, as a failing success toast would. */
   savedThrows?: boolean
-  initialTab?: string
+  initialTab?: ThreadTab
   onSave: (draft: ThreadDraft) => void
   onRejected: (reason: string) => void
   /** What a leave requested through the pane's session handle runs once released. */
@@ -472,13 +473,6 @@ export const Menu: Story = {
 }
 
 /** A deep link's unknown `tab` falls back to Overview rather than an empty pane. */
-export const UnknownInitialTab: Story = {
-  args: { initialTab: 'awareness' },
-  play: async () => {
-    expect(await screen.findByRole('tab', { name: 'Overview', selected: true })).toBeVisible()
-    expect(screen.getByRole('textbox', { name: 'Description' })).toBeVisible()
-  },
-}
 
 /** Phone: two tabs go to the Select's segment, not a tab strip. */
 export const Phone: Story = {
