@@ -155,16 +155,6 @@ slice-planning gate forces its resolution before that slice is planned.
   broken state, so neither promise fires and the picker opens
   unscrolled. Surfaced 2026-09-22.
 
-- **Duplicated clone/compare helpers across the save-session hooks.**
-  `hooks/use-row-save-session.ts`'s `cloneValue` and
-  `components/story-settings/save-session-state.ts`'s `cloneDraft` do
-  the same job under different names, and each keeps its own
-  `deepEqual`-shaped comparison; two more standalone `deepEqual`
-  implementations live in `lib/actions/delta/delta-encoding.ts` and
-  `components/compounds/collision-resolve-diff.ts`. One shared
-  clone/compare helper would stop the four from drifting further.
-  Surfaced 2026-09-22.
-
 - **`searchable-overlay-list.tsx` is ~1650 lines, and its
   [Implementation notes](../ui/patterns/searchable-overlay-list.md#implementation-notes)
   overstate native virtualization.** The doc says virtualization is
