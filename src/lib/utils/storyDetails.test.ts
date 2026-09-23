@@ -36,6 +36,14 @@ describe('storyDetailsUpdate', () => {
     expect(storyDetailsUpdate(story(), details({ title: '   ' }))).toBeNull()
   })
 
+  it('leaves a stored value alone when only its surrounding whitespace differs', () => {
+    const stored = story({ description: '  A kingdom without an heir.  ' })
+
+    expect(storyDetailsUpdate(stored, details({ title: 'The Hollow Throne' }))).toEqual({
+      title: 'The Hollow Throne',
+    })
+  })
+
   it('sends only the changed columns', () => {
     expect(storyDetailsUpdate(story(), details({ title: 'The Hollow Throne' }))).toEqual({
       title: 'The Hollow Throne',

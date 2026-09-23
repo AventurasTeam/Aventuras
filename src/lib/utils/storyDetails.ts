@@ -15,10 +15,12 @@ export function storyDetailsUpdate(stored: Story, details: StoryDetails): Partia
   const description = details.description?.trim() || null
   const genreColor = details.genreColor || null
 
+  // Both sides trimmed: the dialog calls a value unchanged when only surrounding whitespace
+  // differs, and a save it considers empty must not rewrite a column and move the card.
   const updates: Partial<Story> = {}
-  if (title !== stored.title) updates.title = title
-  if (genre !== (stored.genre || null)) updates.genre = genre
-  if (description !== (stored.description || null)) updates.description = description
+  if (title !== stored.title.trim()) updates.title = title
+  if (genre !== (stored.genre?.trim() || null)) updates.genre = genre
+  if (description !== (stored.description?.trim() || null)) updates.description = description
   if (genreColor !== (stored.settings?.genreColor || null)) {
     // `updateStory` replaces the settings JSON whole, so the rest of it is carried over here.
     const { genreColor: _previous, ...rest } = stored.settings ?? {}
