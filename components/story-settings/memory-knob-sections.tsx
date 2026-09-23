@@ -5,6 +5,7 @@ import { FormRow } from '@/components/compounds/form-row'
 import { NumberInput } from '@/components/compounds/number-input'
 import { SwitchRow } from '@/components/compounds/switch-row'
 import { Chip } from '@/components/ui/chip'
+import { Heading } from '@/components/ui/heading'
 import { Select } from '@/components/ui/select'
 import { Stepper } from '@/components/ui/stepper'
 import { Tag } from '@/components/ui/tag'
@@ -35,7 +36,7 @@ type MemoryKnobSectionProps = {
 }
 
 function SectionTitle({ children }: { children: string }) {
-  return <Text className="font-semibold">{children}</Text>
+  return <Heading level={3}>{children}</Heading>
 }
 
 function invalidCopy(problem: MemoryKnobsProblem) {

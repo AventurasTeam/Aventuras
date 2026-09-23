@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import { View } from 'react-native'
 
 import { ProviderModelPicker, type ModelRef } from '@/components/compounds/provider-model-picker'
+import { Heading } from '@/components/ui/heading'
 import { IconAction } from '@/components/ui/icon-action'
 import { Select } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
@@ -139,7 +140,7 @@ export function ModelsPanel({ settings, disabled = false, disabledReason }: Mode
   return (
     <View testID="models-panel" className="gap-4">
       <View className="gap-0.5">
-        <Text className="font-semibold">{t('storySettings:models.heading')}</Text>
+        <Heading level={3}>{t('storySettings:models.heading')}</Heading>
         <Text size="sm" variant="muted">
           {t('storySettings:models.intro')}
         </Text>

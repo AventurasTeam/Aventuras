@@ -113,15 +113,6 @@ slice-planning gate forces its resolution before that slice is planned.
   covers the same hook for World and Plot links, so resolve the two
   together.
 
-- **Story Settings panel section titles aren't headings.** Every Story
-  Settings panel renders its section titles as plain `Text` — inline in
-  About, Authoring aids, Models and Memory, and through a local
-  `SectionTitle` helper in
-  `components/story-settings/memory-knob-sections.tsx` — so screen
-  readers get no `role="heading"` structure to navigate by;
-  `components/ui/heading.tsx` exists to supply it. Convert in one pass
-  across the panels. Surfaced 2026-09-14.
-
 - **Story Settings → Memory shows embedding status inside the Embedder
   block.** Canon (`story-settings.md` → Memory tab) lists Embedding
   status as its own conditional section after Keyword retrieval,

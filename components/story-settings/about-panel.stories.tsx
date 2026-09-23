@@ -108,6 +108,9 @@ type Story = StoryObj<typeof Harness>
 
 export const Populated: Story = {
   play: async () => {
+    expect(
+      await screen.findByRole('heading', { name: t('storySettings:about.heading') }),
+    ).toBeVisible()
     expect(await screen.findByTestId('about-title')).toHaveValue(STORY.title)
     expect(screen.getByTestId('about-description')).toHaveValue(STORY.description)
     expect(screen.getByText('noir')).toBeInTheDocument()

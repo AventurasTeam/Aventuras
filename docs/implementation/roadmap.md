@@ -1140,6 +1140,19 @@ own.
   [`mobile/platform.md → Accessibility`](../ui/foundations/mobile/platform.md#accessibility)
   already leaves landmark structure to the per-screen passes. Raised
   2026-09-11 by Slice 4.1.
+- **M9.5 — Titles outside Story Settings aren't headings, and no rule
+  sets their level.** Story Settings' panel and section titles became
+  `Heading` level 3 on 2026-09-23 — a stand-in level, since the screen
+  title above them is not a heading either. Elsewhere titles are plain
+  `Text`: the screen titles in `app/settings/index.tsx`, `app/index.tsx`
+  and `app/diagnostics/index.tsx`, `EmbedderDefaultCard`, `StoryList`,
+  `SuggestionStrip`, `SettingsRecoveryScreen`, `WorldDetailPlaceholder`,
+  and the Story Settings shell's rail group headers.
+  [`mobile/platform.md → Accessibility`](../ui/foundations/mobile/platform.md#accessibility)
+  says headings get the `header` role but no doc says which level a
+  screen, panel or section title takes; settle that with the landmark
+  entry above, then sweep. Raised 2026-09-14 for Story Settings;
+  widened 2026-09-23.
 - **M9.5 — A removable `Tag`'s × likely misses the phone tap floor on
   Android.** [`chips.md → Tag`](../ui/patterns/chips.md#tag--pill-labeled-content)
   promises the × its own 44 px target. It is a 20 px circle with

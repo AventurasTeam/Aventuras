@@ -121,6 +121,13 @@ type Story = StoryObj<typeof Harness>
 export const Populated: Story = {
   play: async () => {
     await screen.findByTestId('memory-knobs-panel')
+    // Section titles are headings, so a screen reader can jump between them.
+    const headings = screen.getAllByRole('heading').map((h) => h.textContent)
+    expect(headings).toEqual(
+      (['chapterClose', 'promptContext', 'classifier', 'budgets', 'keyword'] as const).map((key) =>
+        t(`storySettings:memory.knobs.${key}`),
+      ),
+    )
     expect(screen.getByTestId('memory-budget-total')).toHaveTextContent(
       t('storySettings:memory.knobs.budgetTotal', { tokens: 5500 }),
     )
