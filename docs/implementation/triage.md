@@ -464,12 +464,11 @@ slice-planning gate forces its resolution before that slice is planned.
 
 - **The save bar's invalid-draft reason is tooltip-only on phone.**
   Rejections get a toast — `app/plot/[branchId].tsx`'s `onRejected`
-  calls `toast.error`, with the comment "the save bar's notice is
-  tooltip-only on phone, so a refused save surfaces here too" — but an
-  invalid draft doesn't: `session.invalidReason` only reaches
-  `SaveBar`'s `notice` slot, wrapped by `ReasonTooltip`, which no-ops
-  to an `aria-label` on native
-  (`components/ui/reason-tooltip.tsx`). So on phone the reason a
+  is `toast.error`, because the save bar's notice is an icon with no
+  visible text — but an invalid draft doesn't: `session.invalidReason`
+  only reaches `SaveBar`'s `notice` slot, which is a `title` tooltip on
+  web and a bare `aria-label` on native
+  (`components/compounds/save-bar.tsx`). So on phone the reason a
   disabled Save gives is unreachable by touch.
   `docs/ui/patterns/save-sessions.md` (`Invalid draft`) already flags
   that the slot "reaches phone users, who get no tooltip" for
