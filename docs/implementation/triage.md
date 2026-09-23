@@ -175,16 +175,6 @@ slice-planning gate forces its resolution before that slice is planned.
   Moving `InlineNativeList` / `SheetNativeList` into a sibling module
   would also shrink the file. Surfaced 2026-09-22.
 
-- **Native initial-scroll-to-value has three residual gaps.**
-  `SearchableOverlayList`'s scroll-to-selection anchor releases only
-  on `onScrollBeginDrag` (`components/ui/searchable-overlay-list.tsx`),
-  so a non-drag scroll — TalkBack, or wheel / trackpad on DeX /
-  ChromeOS — never lets go of it; a quick close-then-reopen that
-  interrupts gorhom's dismiss animation can carry a stale anchor into
-  the next open (the list isn't keyed per open to force a reset); and
-  sticky section headers land the target row about one header-height
-  below center instead of centered. Surfaced 2026-09-22.
-
 - **A dirty links array on Save overwrites concurrent link changes to
   the same row.** `useRowSaveSession`'s same-row refresh
   (`hooks/use-row-save-session.ts`) merges a store patch per
@@ -232,10 +222,3 @@ slice-planning gate forces its resolution before that slice is planned.
   invalid-draft reason itself to that same slot — check that doc for
   the intended phone surface before deciding the fix. Surfaced
   2026-09-22.
-
-- **`EntityPicker`'s tablet popover anchors to the screen, not its
-  field.** At tablet tier (`wm density 200` on the phone AVD) the
-  inline-list popover renders full-bleed from x=0 and overlaps the list
-  pane, rather than under the `Character` field that opened it. Cosmetic
-  and tablet-only; the phone Sheet and the desktop popover are both
-  correct. Surfaced 2026-09-22.

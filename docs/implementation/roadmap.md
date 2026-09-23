@@ -1187,6 +1187,39 @@ own.
   `h-control-sm`, 40 px at `regular`, with no slop. Measure a
   single-line World and Plot row on a phone before choosing a fix.
   Raised 2026-09-19 by Slice 4.4; split 2026-09-23.
+- **M9.5 — Native initial-scroll-to-value has three residual gaps.**
+  `SearchableOverlayList` (`components/ui/searchable-overlay-list.tsx`)
+  holds its scroll-to-selection anchor until the user drags the list or
+  types, as
+  [its pattern doc](../ui/patterns/searchable-overlay-list.md) says. A
+  wheel or trackpad scroll (DeX, ChromeOS) or a TalkBack scroll action
+  never fires `onScrollBeginDrag` — React Native's `ReactScrollView`
+  scrolls those without it — so the anchor survives and snaps the list
+  back at the next viewport-height change, a keyboard show / hide or a
+  resize. A close-then-reopen inside gorhom's dismiss animation carries
+  the old anchor over only when the value was cleared or moved to an
+  unlisted id in that window; otherwise the next open overwrites it. On
+  a phone sheet with sticky section headers (`ProviderModelPicker`
+  only), the target lands one header height, about 24 px, below centre:
+  `VirtualizedSectionList` adds the header's height to `viewOffset`.
+  Each fix is 5–15 lines; no Storybook play (web) or desktop E2E can
+  reach them, so they want a device pass. Raised 2026-09-22 by Slice
+  4.3; corrected 2026-09-23.
+- **M9.5 — Native tablet pickers' popovers render screen-wide, not under
+  their field.** Seen on `EntityPicker` at tablet tier (`wm density 200`
+  on the phone AVD): the popover starts at x=0 and covers the list pane.
+  Anchoring is not the cause — the rn-primitives native `Portal` renders
+  nothing until the trigger is measured. The likely cause is width:
+  native `matchTriggerWidth` sets only `minWidth`, so the auto-width
+  content grows to its `w-full` rows and search input, which resolve
+  against the window, and rn-primitives then clamps `left` to 0. If so,
+  every `matchTriggerWidth` consumer shows it on native tablet
+  (`EntityPicker`, `EntryRefPicker`, `ProviderModelPicker`,
+  `CalendarPicker`) while fixed-width menus (`ActionsMenu`,
+  `PresetBrowser`) don't; comparing the two on the AVD settles it. The
+  fix is likely a `width` equal to the measured trigger floored as on
+  web, about three lines. Cosmetic: the phone Sheet and desktop are
+  correct. Raised 2026-09-22 by Slice 4.3; reframed 2026-09-23.
 - **M9.5 — The retrieval pass has never been measured on mobile.** Every
   figure in
   [`retrieval.md → Per-turn cost budget`](../memory/retrieval.md#per-turn-cost-budget)
