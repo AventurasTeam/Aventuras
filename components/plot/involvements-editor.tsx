@@ -1,4 +1,3 @@
-import { ExternalLink, Trash2 } from 'lucide-react-native'
 import {
   Controller,
   useFieldArray,
@@ -12,13 +11,13 @@ import { EntityPicker } from '@/components/compounds/entity-picker'
 import { FormRow } from '@/components/compounds/form-row'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
-import { IconAction } from '@/components/ui/icon-action'
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
 import type { Entity, EntityKind } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import type { HappeningDraft } from '@/lib/plot'
 
+import { LinkCard, revalidateLinks } from './link-card'
 import { issueLabel } from './plot-copy'
 
 const ALL_KINDS: readonly EntityKind[] = ['character', 'location', 'item', 'faction']
@@ -56,17 +55,21 @@ export function InvolvementsEditor({
       ) : null}
       {fields.map((field, index) => {
         const entity = entities.find((e) => e.id === rows[index]?.entityId)
-        const removeLabel =
-          entity != null
-            ? t('plot:involvements.removeNamed', { name: entity.name })
-            : t('plot:involvements.remove')
         return (
-          // Keyed by the draft's own row id, not `field.id` — a reset (Save's rebase, a
+          // A committed row keys by its own id, not `field.id` — a reset (Save's rebase, a
           // classifier patch) regenerates every `field.id`, remounting cards and dropping focus.
-          <View
+          <LinkCard
             key={rows[index]?.id ?? field.id}
-            className="gap-2 rounded-md border border-border p-3"
+            list="involvements"
             testID={`involvement-${index}`}
+            entity={entity}
+            blocked={blocked}
+            blockedReason={blockedReason}
+            onOpenEntity={onOpenEntity}
+            onRemove={() => {
+              remove(index)
+              revalidateLinks(trigger, 'involvements')
+            }}
           >
             <Controller
               control={control}
@@ -111,31 +114,7 @@ export function InvolvementsEditor({
                 </FormRow>
               )}
             />
-            <View className="flex-row justify-end gap-2">
-              {entity != null ? (
-                <IconAction
-                  icon={ExternalLink}
-                  label={t('plot:involvements.openInWorld', { name: entity.name })}
-                  size="sm"
-                  onPress={() => onOpenEntity(entity)}
-                />
-              ) : null}
-              <IconAction
-                icon={Trash2}
-                label={removeLabel}
-                size="sm"
-                variant="destructive"
-                disabled={blocked}
-                disabledReason={blockedReason}
-                onPress={() => {
-                  remove(index)
-                  // `useFieldArray`'s post-remove revalidation only compares the array's root
-                  // error type/message (no-op for per-index errors) — stale survivors need this.
-                  void trigger('involvements')
-                }}
-              />
-            </View>
-          </View>
+          </LinkCard>
         )
       })}
       <Button

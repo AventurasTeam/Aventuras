@@ -1,4 +1,3 @@
-import { ExternalLink, Trash2 } from 'lucide-react-native'
 import {
   Controller,
   useFieldArray,
@@ -13,7 +12,6 @@ import { EntryRefPicker } from '@/components/compounds/entry-ref-picker'
 import { FormRow } from '@/components/compounds/form-row'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
-import { IconAction } from '@/components/ui/icon-action'
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
 import type { Entity } from '@/lib/db'
@@ -22,6 +20,7 @@ import { t } from '@/lib/i18n'
 import type { HappeningDraft } from '@/lib/plot'
 
 import { DecayResistanceField } from './decay-resistance-field'
+import { LinkCard, revalidateLinks } from './link-card'
 import { issueLabel } from './plot-copy'
 
 export type AwarenessEditorProps = {
@@ -57,17 +56,20 @@ export function AwarenessEditor({
       ) : null}
       {fields.map((field, index) => {
         const entity = entities.find((e) => e.id === rows[index]?.characterId)
-        const removeLabel =
-          entity != null
-            ? t('plot:awareness.removeNamed', { name: entity.name })
-            : t('plot:awareness.remove')
         return (
-          // Keyed by the draft's row id, not field-array's `field.id`: a session reset (Save's
-          // rebase, classifier patch) regenerates `field.id`, remounting cards and losing focus.
-          <View
+          // A committed row keys by its own id, not `field.id` — see InvolvementsEditor.
+          <LinkCard
             key={rows[index]?.id ?? field.id}
-            className="gap-2 rounded-md border border-border p-3"
+            list="awareness"
             testID={`awareness-${index}`}
+            entity={entity}
+            blocked={blocked}
+            blockedReason={blockedReason}
+            onOpenEntity={onOpenEntity}
+            onRemove={() => {
+              remove(index)
+              revalidateLinks(trigger, 'awareness')
+            }}
           >
             <Controller
               control={control}
@@ -149,31 +151,7 @@ export function AwarenessEditor({
                 </FormRow>
               )}
             />
-            <View className="flex-row justify-end gap-2">
-              {entity != null ? (
-                <IconAction
-                  icon={ExternalLink}
-                  label={t('plot:awareness.openInWorld', { name: entity.name })}
-                  size="sm"
-                  onPress={() => onOpenEntity(entity)}
-                />
-              ) : null}
-              <IconAction
-                icon={Trash2}
-                label={removeLabel}
-                size="sm"
-                variant="destructive"
-                disabled={blocked}
-                disabledReason={blockedReason}
-                onPress={() => {
-                  remove(index)
-                  // `useFieldArray`'s post-remove check only compares the root error type/message —
-                  // a no-op for a nested per-index tree, so a stale duplicate needs this trigger.
-                  void trigger('awareness')
-                }}
-              />
-            </View>
-          </View>
+          </LinkCard>
         )
       })}
       <Button

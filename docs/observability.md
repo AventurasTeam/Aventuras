@@ -208,7 +208,10 @@ convention, and the expectation that subsystems route through
   rejection on the Plot route's cold mount) and
   `plot_saved_handler_failed` (`components/plot/use-plot-row-session.ts`
   — a `PlotRowSessionOptions.onSaved` that throws after the write
-  already landed) are gated by the master gate like any other kind
+  already landed) and `plot_link_revalidate_failed`
+  (`components/plot/link-card.tsx` — the revalidation after a link row's
+  removal rejected, leaving a stale duplicate error blocking Save) are
+  gated by the master gate like any other kind
 - `reader.*` — reader-composer dispatches routed through `runAction`
   (`lib/utils.ts`) instead of a bare `void`: `story_id_load_failed`,
   `undo_failed`, `redo_failed`, `rollback_failed`, `regenerate_failed`
