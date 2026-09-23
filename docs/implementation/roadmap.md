@@ -551,8 +551,8 @@ tab is the canonical _don't_ — M3.1's implementation will refine
 its spec.
 
 Carried deferrals, routed out of [`triage.md`](./triage.md)
-2026-08-18 and 2026-08-20. Each was verified against the code before it
-moved; resolve with the slice it names.
+2026-08-18, 2026-08-20 and later passes. Each was verified against the
+code before it moved; resolve with the slice it names.
 
 - **M7.3 — Electron main has no unhandled-rejection handler.**
   Slice 3.12a installed one in the renderer (`lib/boot/rejection-handler.ts`),
@@ -827,6 +827,23 @@ moved; resolve with the slice it names.
   fixed on Story Settings → Models, and `resolveModel`'s failure
   result does not say which path failed. Unreachable until deletion
   ships. Surfaced by Slice 4.4 execution (2026-09-14).
+- **M7.2 — Story Settings → Memory's embedder block departs from
+  canon.** [`story-settings.md → Memory tab`](../ui/screens/story-settings/story-settings.md#memory-tab)
+  puts [Embedding status](../ui/screens/story-settings/story-settings.md#embedding-status)
+  in its own section after Keyword retrieval, rendered only while the
+  active branch has stale rows. The shipped `MemoryPanel`
+  (`components/story-settings/memory-panel.tsx`), seated in the
+  Embedder slot by Slice 4.4, shows the stale count unconditionally —
+  "0 rows pending re-embed." included — beside the current model, with
+  `Reindex now` under it. The [Embedder](../ui/screens/story-settings/story-settings.md#embedder)
+  section differs too: canon lists the backend, model id and display
+  name, the resolved execution provider and, where it applies, the
+  effective dimension; the panel shows only the raw model id.
+  `Reindex now` is in no canon doc, only the M3.1b slice doc. Decide
+  each: split status out and gate it, or amend canon to keep it beside
+  the model it describes; add the display fields or trim the list;
+  write `Reindex now` into canon or drop it. The tab's Probe section is
+  M7.5's. Raised 2026-09-15 by Slice 4.4; widened 2026-09-23.
 - **M7.2 — The Authoring aids gates read the stored `definition.mode`.**
   Slice 4.4 reads the story's SAVED mode in two places: the composer
   gates (the modes toggle is adventure-only; wrap POV follows it) and
@@ -864,6 +881,24 @@ moved; resolve with the slice it names.
   commit; the gap is the canon promise, and the picker's full surface
   lands with this slice's providers tab. Surfaced by Slice 4.4
   execution (2026-09-14), routed 2026-09-16.
+- **M7.1 — `ProviderModelPicker`'s broken-state scroll promises aren't
+  implemented.** The
+  [Trigger](../ui/patterns/provider-model-picker.md#trigger) section
+  promises the picker opens scrolled to the first existing provider's
+  section when the value's provider is missing, and scoped to that
+  provider's section when the model isn't in the catalog. The picker
+  passes `initialScrollRowId={value ? rowId('provider', value) : undefined}`
+  — the broken value's own row id, which exists in neither state — and
+  `SearchableOverlayList` latches a scroll target only for a row it
+  finds, so both open unscrolled. The happy path is right. The
+  provider-missing promise is nearly empty: with no Favorites the first
+  provider's section is already at the top, and the substrate centres
+  a row rather than top-aligning a section. "Scoped to" is ambiguous
+  between filtered and scrolled. Provider-missing is unreachable until
+  provider deletion (above) ships; model-not-in-catalog is reachable
+  after a catalog refresh drops a model. Settle the wording with the
+  providers tab, then fix (about 8 lines) with a play on a
+  non-first-provider story. Raised 2026-09-22 by Slice 4.3.
 
 **Gates.** M6 (settings should reflect real branching + multi-
 story behavior; diagnostics should inspect real branch-aware
@@ -1060,7 +1095,7 @@ author it as 2–3 slices so the audit spreads across contributors
 instead of serializing on one.
 
 Carried deferrals, routed out of [`triage.md`](./triage.md)
-(2026-08-18 and 2026-09-13), verified against the code first. Several
+(2026-08-18, 2026-09-13 and 2026-09-23), verified against the code first. Several
 are a11y-contract rather than visual, so M9.2's audit has to widen
 past glyphs and spacing to own them — or they need a slice of their
 own.

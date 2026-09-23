@@ -88,16 +88,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `MasterDetailLayout` — in the detail pane on tablet and desktop,
   below both panes on phone — would hold it once. Surfaced 2026-09-14.
 
-- **Story Settings → Memory shows embedding status inside the Embedder
-  block.** Canon (`story-settings.md` → Memory tab) lists Embedding
-  status as its own conditional section after Keyword retrieval,
-  rendered only while the active branch has stale rows. The shipped
-  `MemoryPanel` (`components/story-settings/memory-panel.tsx`) renders
-  the stale count unconditionally — zero included — beside the current
-  model, with `Reindex now` under it, and Slice 4.4 seats that panel
-  where canon's Embedder sits. Either split the panel or amend canon to
-  keep status with the model it describes. Surfaced 2026-09-15.
-
 - **`ScreenShell`'s chrome is addressed through screen-specific locator
   namespaces.** The back arrow and the Actions menu belong to
   `ScreenShell` (`components/shells/screen-shell.tsx`), not to any one
@@ -131,18 +121,6 @@ slice-planning gate forces its resolution before that slice is planned.
   trigger's `aria-expanded` rather than the sheet's absence. Likely a
   runner artifact rather than real behavior; unverified on a narrow
   Electron window or Android. Surfaced 2026-09-22.
-
-- **`ProviderModelPicker`'s broken-state scroll promises aren't
-  implemented.** The
-  [Trigger](../ui/patterns/provider-model-picker.md#trigger) section
-  promises the picker opens scrolled to the first existing provider's
-  section when the value's provider is missing, and scoped to that
-  provider's section when the model isn't in the catalog.
-  `components/compounds/provider-model-picker.tsx` always passes
-  `initialScrollRowId={value ? rowId('provider', value) : undefined}`
-  — a row id for the broken value itself, which exists in neither
-  broken state, so neither promise fires and the picker opens
-  unscrolled. Surfaced 2026-09-22.
 
 - **`searchable-overlay-list.tsx` is ~1650 lines, and its
   [Implementation notes](../ui/patterns/searchable-overlay-list.md#implementation-notes)
