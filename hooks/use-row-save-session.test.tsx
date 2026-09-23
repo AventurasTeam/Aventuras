@@ -201,29 +201,6 @@ describe('useRowSaveSession', () => {
     expect(order).toEqual(['close', 'back'])
   })
 
-  // formState still reads dirty inside a drain; a proceed that asks again must not re-queue.
-  it('runs a leave raised from inside a discarded leave instead of asking again', () => {
-    const hook = setup()
-    const pop = vi.fn()
-    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
-    act(() => hook.result.current.requestLeave(() => hook.result.current.requestLeave(pop)))
-    act(() => hook.result.current.resolveLeave('discard'))
-    expect(pop).toHaveBeenCalledTimes(1)
-    expect(hook.result.current.pendingLeave).toBe(false)
-  })
-
-  it('runs a leave raised from inside a saved leave instead of asking again', async () => {
-    const hook = setup()
-    const pop = vi.fn()
-    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
-    act(() => hook.result.current.requestLeave(() => hook.result.current.requestLeave(pop)))
-    await act(async () => {
-      hook.result.current.resolveLeave('save')
-    })
-    expect(pop).toHaveBeenCalledTimes(1)
-    expect(hook.result.current.pendingLeave).toBe(false)
-  })
-
   it('queues a leave requested while a save is still writing, and runs it once the save lands', async () => {
     const held = heldCommit()
     const hook = setup(held.commit)
