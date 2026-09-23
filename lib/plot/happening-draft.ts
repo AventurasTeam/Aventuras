@@ -9,27 +9,31 @@ import type {
   NewHappeningInvolvement,
 } from '@/lib/db'
 
+import { PLOT_ISSUE } from './issues'
 import { blankToNull } from './thread-draft'
 
 export const involvementDraftSchema = z.object({
   /** Null for a row added this session. */
   id: z.string().nullable(),
-  entityId: z.string().min(1, 'entityRequired'),
+  entityId: z.string().min(1, PLOT_ISSUE.entityRequired),
   role: z.string(),
 })
 
 export const awarenessDraftSchema = z.object({
   id: z.string().nullable(),
-  characterId: z.string().min(1, 'characterRequired'),
+  characterId: z.string().min(1, PLOT_ISSUE.characterRequired),
   learnedAtEntryId: z.string().nullable(),
-  decayResistance: z.number().min(0).max(1).nullable(),
+  decayResistance: z
+    .number({ error: PLOT_ISSUE.decayRange })
+    .min(0, PLOT_ISSUE.decayRange)
+    .max(1, PLOT_ISSUE.decayRange)
+    .nullable(),
   source: z.string(),
 })
 
-// Issue messages are `plot:validation.*` keys; the pane translates them.
 export const happeningDraftSchema = z
   .object({
-    title: z.string().trim().min(1, 'titleRequired'),
+    title: z.string().trim().min(1, PLOT_ISSUE.titleRequired),
     description: z.string(),
     category: z.string(),
     icon: z.string().nullable(),
@@ -42,7 +46,7 @@ export const happeningDraftSchema = z
   .superRefine((draft, ctx) => {
     // data-model.md → the two time fields are mutually exclusive; the CHECK is the floor.
     if (draft.occurredAtEntryId != null && draft.temporal.trim() !== '') {
-      ctx.addIssue({ code: 'custom', path: ['temporal'], message: 'timeAnchorExclusive' })
+      ctx.addIssue({ code: 'custom', path: ['temporal'], message: PLOT_ISSUE.timeAnchorExclusive })
     }
     const seenEntities = new Set<string>()
     draft.involvements.forEach((row, index) => {
@@ -50,7 +54,7 @@ export const happeningDraftSchema = z
         ctx.addIssue({
           code: 'custom',
           path: ['involvements', index, 'entityId'],
-          message: 'duplicateEntity',
+          message: PLOT_ISSUE.duplicateEntity,
         })
       }
       seenEntities.add(row.entityId)
@@ -62,7 +66,7 @@ export const happeningDraftSchema = z
         ctx.addIssue({
           code: 'custom',
           path: ['awareness', index, 'characterId'],
-          message: 'duplicateCharacter',
+          message: PLOT_ISSUE.duplicateCharacter,
         })
       }
       seenCharacters.add(row.characterId)

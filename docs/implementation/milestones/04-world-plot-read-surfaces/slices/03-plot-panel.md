@@ -100,11 +100,12 @@ real only against seed fixtures in this milestone.
   `temporal` rows pinned last, chapter-bucket accordion (Current
   expanded; Earlier flat; Out of narrative), search; per-side empty
   states with the classifier explainer.
-- **Chapterless fallback:** while the branch has no open chapter —
-  every real M4 story — the happenings All view renders one implicit
-  narrative bucket plus Out of narrative, and the `This chapter` chip
-  is hidden; the chapter-keyed shape engages when an open chapter
-  exists (seed fixtures now, M5 later).
+- **Chapter rule:** Current chapter is the open region (anchor entry
+  `chapter_id IS NULL`), Earlier chapters are closed-chapter anchors,
+  Out of narrative is `temporal` or no anchor at all; empty buckets
+  are omitted and `This chapter` is offered only once a chapter has
+  closed — every real M4 story therefore shows Current chapter plus
+  Out of narrative.
 - **C2 modules — threads and happenings:** `ListModule` instances
   with queries, grouping keys, chip vocabularies, search-scope copy,
   empty and no-results copy, `ThreadRow` / `HappeningRow` renderers
@@ -112,20 +113,19 @@ real only against seed fixtures in this milestone.
 - **Thread pane** on the C7 host: Overview (status, category, icon
   from the preset catalog, description, `injection_mode` with
   explanation, `triggered_at_entry_id` and `resolved_at_entry_id`
-  read-only — the latter only when resolved / failed, tags); History
+  read-only — the latter only when resolved / failed); History
   as a placeholder until C4 merges, then the shared `HistoryTab`.
   Tabs: strip on desktop and tablet, Select segment on phone.
 - **Happening pane:** Overview (title, description, category, icon,
   `common_knowledge` toggle with its `⊙`, the mutually exclusive time
   anchor — entry-ref picker **or** `temporal`, refined at the form
-  boundary, tags); **Involvements** (rows with the C8 entity picker,
+  boundary); **Involvements** (rows with the C8 entity picker,
   kind-aware over all four kinds, free-form `role`; add / remove
   through the M1.5 arms); **Awareness** (rows with a character-only
   picker, `learned_at` entry-ref picker, `decay_resistance` `0..1`,
   free-form `source`; add / remove; the UNIQUE upsert through the M1.5
   arm; the common-knowledge notice replacing the body when the toggle
-  is on); History as above. Link rows route to World via C6, inert
-  with a "lands in Slice 4.1" reason until that route exists. Tabs:
+  is on); History as above. Link rows route to World via C6. Tabs:
   strip on desktop, Select dropdown on tablet and phone.
 - **Entry-ref picker (C8 half):** the controlled primitive returning
   an entry id, rendering `entry #n` plus an excerpt, Popover / Sheet
@@ -163,13 +163,14 @@ chapters` (deferred by canon), and `retrieval_count` review — M5.
 
 ## Acceptance criteria
 
-- Over fixtures with one open and one closed chapter, happenings group
-  into Current chapter (the open chapter's entry range), Earlier
-  chapters, and Out of narrative (`temporal` set); `This chapter`
-  flattens to the first group; `Out-of-narrative` to the third; with
-  no open chapter the view collapses to the implicit narrative bucket
-  plus Out of narrative and the `This chapter` chip is absent (vitest
-  on the query and grouping; component test on the chip).
+- Over fixtures with closed chapters and an open region (the seed),
+  happenings group into Current chapter (the open region's entry
+  range), Earlier chapters, and Out of narrative (`temporal` set, or
+  no anchor); `This chapter` flattens to the first group;
+  `Out-of-narrative` to the third; with no closed chapter the view
+  shows Current chapter plus Out of narrative and the `This chapter`
+  chip is absent (vitest on the query and grouping; component test on
+  the chip).
 - Setting both `occurred_at_entry_id` and `temporal` on a happening
   is refused at the form (inline error) and, if forced through the
   arm, by the CHECK constraint (vitest on the schema refine and DB).
@@ -191,8 +192,8 @@ chapters` (deferred by canon), and `retrieval_count` review — M5.
   one `updateThread` delta under one `action_id` and CTRL-Z reverses
   it (E2E).
 - The History tab, `Delete …`, `Export …` and the World links render
-  present, disabled or placeholder, each with its deferral reason
-  (component test).
+  present, disabled or placeholder, each with its deferral reason; the
+  World links navigate (4.1 merged; component test).
 - On phone, switching the segment with a dirty pane raises the guard;
   the happening pane's four tabs render through the Select dropdown
   (manual on Android; Storybook viewport).
@@ -208,67 +209,138 @@ chapters` (deferred by canon), and `retrieval_count` review — M5.
 - Storybook: the matrix above.
 - E2E (desktop): create thread, edit happening awareness, undo.
 
-## Open questions
-
-- **Entry-ref picker UX** — canonical open question. Default
-  assumption: `SearchableOverlayList` over the branch's entries,
-  newest first, row = `entry #n · kind · first ~80 chars`, search over
-  content; amend `plot.md` with the choice, and reconcile its
-  open-question wording (four picker fields) with `Threads side` (two
-  thread refs read-only) in the same PR.
-- **`decay_resistance` control** — canonical open question. Default
-  assumption: numeric `0..1` input with three preset chips (low /
-  medium / high → 0.2 / 0.5 / 0.8) above it; amend `plot.md`.
-- **Plot `⋯` Delete and Export entries** — canon silent; default
-  mirrors World minus `Set as lead` (milestone open question).
-- **Chapterless fallback** — confirm the single-bucket shape at
-  planning and note it in `plot.md` beside the chapter-bucket rule.
-- **Sizing.** If planning runs long, split at the segment boundary:
-  4.3a shell and threads (with the entry-ref picker), 4.3b happenings.
-- **Thread `icon` catalog.** The "string key from a preset catalog"
-  has no shipped catalog; pick the smallest honest set (a few Lucide
-  names) and let visual identity revise.
-- **`ModuleList` / `useRevealScroll` reuse.** Both (`components/world/`)
-  are reusable as-is for Threads and Happenings; the reveal planning
-  inside World's `revealRow` (is the row visible, which group to
-  expand, whether to widen) is entity/World-typed — lift it into a
-  generic helper next to `ModuleList` if Plot needs deep-link reveal.
-  API edges to settle then: `flagged` is required (Plot would pass an
-  empty set), `ModuleList` hard-codes `'all'` as the unfiltered value,
-  and the `⚠ N` collision badge lives inside the generic list.
-- **Filter-set shrinkage.** A kind's `filters(signals)` set can shrink
-  (e.g. `This chapter` hidden when no chapter is open) — the surface
-  must reset a selected filter that is no longer offered; return
-  stable module-level arrays.
-- **World sub-header height.** `MasterDetailLayout`'s sub-header
-  wrapper pads on top of Breadcrumb's own box, so World's sub-header
-  renders taller than its top bar (~52 / 60 px desktop, ~65 px phone)
-  — Plot inherits the same shell. Decide whether to shrink the
-  wrapper's padding here or leave it.
-- **Thread status pills in the Plot wireframe.** `plot.html` colours
-  them Active green, Pending neutral, Resolved grey and Failed amber;
-  [`chips.md → Tag — tone vocabulary`](../../../../ui/patterns/chips.md#tag--tone-vocabulary)
-  assigns Active `default`, Pending `warning`, Resolved `success` and
-  Failed `danger`. Settle which one moves when the panel is built.
-  Filed by the 2026-09-13 triage pass.
-- **`ListModule`'s entity-typed home.** The C2 type lives in
-  `components/entity/list-module.ts`; its `Signals` parameter defaults
-  to `EntityListSignals`, and `RowSignals` ties `collision` to
-  `CollisionListRowProps`, so Plot's modules would import from the
-  entity folder and inherit entity assumptions. Decide when Plot
-  lands: move the type to a neutral home, and drop the entity default.
-- **Collapsed-tier state is keyed by tier only, not per kind.**
-  (2026-09-12) `lib/stores/ui/world-list.ts` keys collapse on
-  `EntityTier` alone, so collapsing Staged on Characters also
-  collapses it on Locations. Canon doesn't say whether collapse should
-  be per kind. Needs a design call. There is a third option beside
-  per-kind and global: reset to the defaults on a category switch,
-  which World's `selectCategory` already does for filter and search.
-  The store is typed to `EntityTier`, so Plot's thread tiers and
-  chapter buckets need their own or a generic collapse store — decide
-  once for both panels.
-
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved
-developer decisions._
+- **Chapter bucket rule.** No separate chapterless-fallback shape: the
+  rule keys entirely on the anchor entry's `chapter_id`, so a story
+  with no closed chapter simply shows Current chapter plus Out of
+  narrative under the one rule (now in Scope: in). Two edge cases the
+  rule text doesn't spell out: a **dangling** anchor (a live id whose
+  entry no longer resolves) stays in Current chapter; a happening with
+  **neither** an anchor nor `temporal` — the classifier writes these
+  when a turn handle doesn't resolve — buckets as Out of narrative,
+  per
+  [`data-model.md → Happenings & character knowledge`](../../../../data-model.md#happenings--character-knowledge)'s
+  null-anchor-means-outside-narrative rule.
+- **Store hydration.** Story open now hydrates threads, happenings,
+  involvements, awareness and chapters alongside entities and lore —
+  previously none of the five was hydrated outside tests, so
+  classifier patches to them were silent no-ops. One working set now
+  serves Plot and [Slice 4.5a](./05a-browse-rail.md). Awareness volume
+  is a v1 projection, not an M4 reality; revisit with a lazy path if
+  story open measurably slows.
+- **Generic collapse store.** `lib/stores/ui/world-list.ts` (keyed on
+  entity tier alone, so collapsing Staged on Characters also collapsed
+  it on Locations) is gone. `lib/stores/ui/list-collapse.ts` replaces
+  it: session-scoped, keyed `(kind, groupKey)`; World migrated onto it
+  in this slice's PR 1.
+- **Neutral list home.** `components/list/` (`list-module.ts`,
+  `module-list.tsx`, `use-reveal-scroll.ts`, `reveal-plan.ts`) replaces
+  the World-only home the C2 modules used to live in; `Signals` lost
+  its entity default and `flagged` is optional. `reveal-plan.ts` lifts
+  World's reveal planning unchanged. Plot's own `revealRow` handle only
+  reveals within the current kind (an early return when the target
+  row's kind doesn't match the pane's active side) — a rail reveal
+  spanning World and Plot categories in
+  [Slice 4.5a](./05a-browse-rail.md) needs to switch kind itself before
+  calling it.
+- **C7 / C8 / C11 shipped from this slice's PR 1, not from 4.2a.** 4.2a
+  was unmerged when planning started, so PR 1 authored
+  `useRowSaveSession` (`hooks/use-row-save-session.ts`), `PickerField` /
+  `EntityPicker` (`components/compounds/`) and `OverflowMenu`
+  (`components/compounds/overflow-menu.tsx`) at the milestone's pinned
+  shapes. [Slice 4.2a](./02a-entity-detail.md) now adopts these shipped
+  shapes rather than authoring them — see its Open questions.
+- **Entity picker built on `SearchableOverlayList`, not
+  `Autocomplete`.** The milestone's C8 text names an Autocomplete, but
+  `Autocomplete` resolves by string and the branch can hold two
+  identically-named entities; the shipped `EntityPicker` is the same
+  field-trigger `SearchableOverlayList` shape as the entry-ref picker
+  and returns an id.
+- **`SearchableOverlayList.initialScrollRowId` implemented and
+  unparked** (previously specified but parked) — both the entity and
+  entry-ref pickers need scroll-into-view on open; see
+  [`searchable-overlay-list.md → Filter, keyboard, focus & lifecycle`](../../../../ui/patterns/searchable-overlay-list.md#filter-keyboard-focus--lifecycle).
+- **Awareness `learnedAtEntryId` merges on update only for
+  user-originated sources.** The classifier resends it on every
+  re-emit of an existing awareness row, and the first-learned anchor is
+  what decay is measured from — merging on a classifier write would
+  silently move it. A user edit merges normally.
+- **Links diffed by natural key.** Involvement and awareness rows are
+  diffed by entity / character id, not by draft row id, so a
+  remove-then-re-add or a swap between two rows becomes an update
+  rather than two writes to one row (the action-group runner rejects
+  that). A stale dirty links array on Save can still overwrite a
+  concurrent link write to the same row — filed to
+  [`triage.md`](../../../triage.md), unreachable in M4 because turns
+  hard-gate the pane.
+- **Entry index cache-key invariant.** `useEntryIndex`
+  (`hooks/use-entry-index.ts`) keys its refetch on
+  `generationStore.settleCount` plus the branch's tail entry id — every
+  `story_entries` write path must settle a run/reversal or move the
+  tail, or the index goes stale (an anchor then only shows falsely live
+  or dangling, never re-points to a different entry). No write path
+  violates this today; a future chapter-create or a direct entry delete
+  outside a run would need to.
+- **Create-mode edits typed during the save are dropped.** The row
+  save session's row key switches from `create:<kind>:<seq>` to the new id
+  once the create write resolves, which resets the form — a keystroke
+  landing in that window is lost. Milliseconds for a thread, longer for
+  a happening's grouped link write. The same limit applies to any
+  future pane built on `useRowSaveSession`'s create path.
+- **Save bar rides above the phone keyboard.**
+  [`touch.md → Save bar on phone`](../../../../ui/foundations/mobile/touch.md#save-bar-on-phone)'s
+  hide-while-open rule was reversed in M4.4; the Plot route wraps its
+  layout in `KeyboardInsetColumn` (the Story Settings precedent) rather
+  than changing `SaveBar` itself.
+- **`plot.md`'s `tags` mentions were drift.** `threads` and
+  `happenings` have no `tags` column in the frozen schema; removed from
+  `plot.md` and this doc's Scope.
+- **Icon catalog.** `components/plot/plot-icon.tsx` is a fixed
+  string-keyed catalog; a key it doesn't recognize (a future catalog
+  addition, or hand-authored data) is preserved on save and falls back
+  to a per-kind glyph for display (`Diamond` thread, `Zap` happening —
+  not `CircleDot`, which is the common-knowledge `⊙`).
+- **Remaining canonical and implementer open questions resolved exactly
+  as this slice's planning defaulted**, and are now specified in
+  `plot.md` or shipped as described: entry-ref picker UX
+  (`SearchableOverlayList` field trigger), `decay_resistance` control
+  (numeric field with low / medium / high preset chips), the Plot `⋯`
+  menu (mirrors World minus `Set as lead`), thread status pill tones
+  ([`chips.md → Tag — tone vocabulary`](../../../../ui/patterns/chips.md#tag--tone-vocabulary)),
+  the sub-header height (dropped `MasterDetailLayout`'s extra padding),
+  filter-set shrinkage (a selected filter that disappears resets to
+  All), and sizing (two stacked PRs by module layer, the 4.1 / 4.4
+  shape).
+- **The detail head no longer carries a kind line.** The developer cut
+  the `[icon] kind` strip above the name as redundant against the
+  breadcrumbs, and
+  [`world.md → Detail head structure`](../../../../ui/screens/world/world.md#detail-head-structure)
+  was amended with it — it had listed that strip as the head's first
+  element. `DetailPane` no longer accepts `kindIcon` / `kindName`, so
+  **4.2a's real World panes must not reintroduce it**; both wireframes
+  and the `kindName` locale keys went too.
+- **The top-bar breadcrumb is screen-level on every tier**, on Plot
+  and World alike. Phone used to append the kind
+  (`Story / Plot / Happenings`) while the sub-header already led with
+  it, duplicating the label; removed from both routes and both screen
+  docs, per
+  [`principles.md → Master-detail sub-header`](../../../../ui/principles.md#master-detail-sub-header).
+  Desktop was already correct.
+- **Tab counts are parenthesised** in both the strip and its Select
+  form. An inactive tab's label is already `fg-muted`, so a bare
+  trailing number had no contrast against it and read as part of the
+  name; the Select's rows can't style it at all without losing the
+  primitive's selected checkmark.
+- **`AccordionContent` has no exit animation.** It existed for a
+  collapsing group but never showed on native, while a kind swap tore
+  down every `AccordionItem` at once and painted the outgoing rows over
+  the incoming list for ~230 ms. See
+  [lessons-learned](../../../lessons-learned/layoutanimationconfig-skipexiting-gap.md)
+  — `LayoutAnimationConfig skipExiting` does not suppress it. The
+  item's animated frame now clips its content, so an expanding group
+  no longer paints over the one below.
+- **Seed anchors avoid multiples of 12.** Those hero entries are
+  `system`, which the entry index excludes by design, so five awareness
+  rows and two `lastSeenAt` were rendering as "Entry no longer exists".
+  `seed-dataset.test.ts` now fails on any entry ref landing on one.

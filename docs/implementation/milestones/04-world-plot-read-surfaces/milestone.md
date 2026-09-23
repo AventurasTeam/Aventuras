@@ -424,16 +424,20 @@ writes to one row's column in a group. Discard resets; success fires
 the `Saved.` toast; an invalid draft disables Save and renders its
 reason in the bar's `notice` slot; every control disables with the
 principle-owned tooltip while `isUserEditBlocked(txState)` holds; and
-on phone the bar hides while the keyboard is open and returns on blur
-(per
-[`touch.md → Save bar on phone`](../../../ui/foundations/mobile/touch.md#save-bar-on-phone)
-— a `SaveBar` change 4.2a owns, which Story Settings inherits). This
+on phone the bar stays visible above the keyboard — the surface
+reserves the keyboard's height with `KeyboardInsetColumn` (per
+[`touch.md → Save bar on phone`](../../../ui/foundations/mobile/touch.md#save-bar-on-phone),
+reversed in M4.4; Story Settings and Plot do this). This
 is **not** the Story Settings session from M3.11 — that one aggregates
 sections into a single settings write with no delta; this one is
 per-row and delta-logged. Consumers: 4.2b (lore pane), 4.2c (the
 relationship re-keying shape), 4.3 (thread and happening panes — a
 doc-as-contract pair with 4.2a; whichever lands first creates the hook
-and the other adopts it). Name fixed in the first commit to land.
+and the other adopts it). Name fixed in the first commit to land. 4.3
+landed first, shipping the hook as `useRowSaveSession`
+(`hooks/use-row-save-session.ts`) with its `SaveBar` chrome in
+`components/compounds/row-save-session-chrome.tsx`; see
+[Slice 4.3 → Implementation notes](./slices/03-plot-panel.md#implementation-notes).
 
 ### C8 — Picker primitives: entity picker and entry-ref picker
 
@@ -458,7 +462,10 @@ entry-ref picker's UX is a
 [canonical open question](../../../ui/screens/plot/plot.md#screen-specific-open-questions)
 4.3 resolves at planning (see [Open questions](#open-questions)).
 Doc-as-contract between 4.2a and 4.3: whichever lands first creates
-the entity picker at this shape.
+the entity picker at this shape. 4.3 landed first, shipping both
+pickers as `components/compounds/entity-picker.tsx`,
+`entry-ref-picker.tsx` and `picker-field.tsx`; see
+[Slice 4.3 → Implementation notes](./slices/03-plot-panel.md#implementation-notes).
 
 ### C9 — Per-row `.avts` envelope kinds and payload schemas
 
@@ -512,6 +519,15 @@ Sheet (short) on phone, showing a disabled entry's reason as a tooltip
 4.2b (`Delete`), 4.2c (`Resolve →` is list-side but shares the
 convention) and 4.6 (`Export …`) later flip. Doc-as-contract between
 4.2a and 4.3: whichever lands first creates it; the other consumes.
+4.3 landed first, shipping the compound as
+`components/compounds/overflow-menu.tsx`; see
+[Slice 4.3 → Implementation notes](./slices/03-plot-panel.md#implementation-notes).
+
+4.3 also **removed the detail head's kind line** (`[icon] kind` above
+the name) as redundant against the breadcrumbs, amending
+[`world.md → Detail head structure`](../../../ui/screens/world/world.md#detail-head-structure)
+and both wireframes. `DetailPane` no longer accepts `kindIcon` /
+`kindName`, so 4.2a builds against a head of name + badges + `⋯` only.
 
 ### C12 — Keyword normalizer
 
@@ -603,6 +619,13 @@ use.
   [Slice 4.3](./slices/03-plot-panel.md) planning and amend `plot.md`
   in the same PR. If the picker wants more than a `SearchableOverlayList`
   over entries with an excerpt, stop and run the design route.
+  Resolved in 4.3 planning (2026-09-20): a `SearchableOverlayList`
+  behind a field-shaped trigger for the picker, and an always-visible
+  numeric field with low / medium / high preset chips for
+  `decay_resistance` — see
+  [`plot.md → Entry-ref picker`](../../../ui/screens/plot/plot.md#entry-ref-picker)
+  and
+  [`plot.md → Happenings side`](../../../ui/screens/plot/plot.md#happenings-side).
 - **Entity Assets tab and portrait slot have no schema.**
   [`world.md`](../../../ui/screens/world/world.md#assets-involvements-history)
   and [`entity.md`](../../../ui/patterns/entity.md#why-portrait-lives-only-on-overview)
@@ -621,10 +644,17 @@ use.
   the chapter-keyed grouping is seed-only. Default: one implicit bucket
   and a hidden `This chapter` chip while the branch has no open
   chapter; confirm in [Slice 4.3](./slices/03-plot-panel.md) planning.
+  Resolved in 4.3 planning (2026-09-20): no separate fallback shape —
+  the bucket rule keys on the anchor entry's `chapter_id`, so a story
+  with no closed chapter simply shows Current chapter plus Out of
+  narrative under the one rule — see
+  [`plot.md → Happenings side`](../../../ui/screens/plot/plot.md#happenings-side).
 - **Plot detail `⋯` menu contents.** Canon names only `View raw JSON`
   for threads and happenings. Default assumption: mirror World minus
   `Set as lead` (`Export … as JSON`, `View raw JSON`, `Delete …`);
-  confirm in 4.3 planning and amend `plot.md`.
+  confirm in 4.3 planning and amend `plot.md`. Resolved in 4.3 planning
+  (2026-09-20): shipped exactly as defaulted — see
+  [`plot.md → Detail-head overflow menu`](../../../ui/screens/plot/plot.md#detail-head-overflow-menu).
 - **Category label divergence.**
   [`world.md → Top-bar`](../../../ui/screens/world/world.md#top-bar)
   says `Locations`; [`principles.md → World / Plot split`](../../../ui/principles.md#world--plot-split--unified-panels-by-purpose)

@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { View } from 'react-native'
 
 import { SaveBar } from '@/components/compounds/save-bar'
-import { EntityKindIcon } from '@/components/entity/entity-kind-icon'
 import { Icon } from '@/components/ui/icon'
 import { IconAction } from '@/components/ui/icon-action'
 import { InlineEditableName } from '@/components/ui/inline-editable-name'
@@ -86,8 +85,6 @@ function WorldCharacterHarness() {
     <View style={{ width: 560, height: 560 }} className="rounded-md border border-border">
       <Tabs value={tab} onValueChange={setTab}>
         <DetailPane
-          kindIcon={<EntityKindIcon kind="character" />}
-          kindName="character"
           nameSlot={<InlineEditableName value={name} onChange={setName} size="lg" />}
           badges={<Tag tone="recently-classified">Recently classified</Tag>}
           overflowMenu={<OverflowTrigger />}
@@ -163,14 +160,6 @@ function WorldLoreHarness() {
           // World concept, not an Entity), so the consumer would
           // typically render a custom glyph here. For the story, a
           // bare placeholder text glyph stands in.
-          kindIcon={
-            <View className="h-[22px] w-[22px] items-center justify-center">
-              <Text size="sm" variant="muted">
-                §
-              </Text>
-            </View>
-          }
-          kindName="lore"
           nameSlot={<InlineEditableName value={name} onChange={setName} size="lg" />}
           badges={<Tag tone="warning">ALWAYS INJECTED</Tag>}
           overflowMenu={<OverflowTrigger />}
@@ -221,14 +210,6 @@ function PlotThreadHarness() {
           // Plot's thread glyph isn't in EntityKindIcon either — it's
           // an open-diamond placeholder per iconography.md drafts.
           // Stand-in for the story: a small ◇ in a muted box.
-          kindIcon={
-            <View className="h-[22px] w-[22px] items-center justify-center">
-              <Text size="sm" variant="muted">
-                ◇
-              </Text>
-            </View>
-          }
-          kindName="thread"
           nameSlot={<InlineEditableName value={name} onChange={setName} size="lg" />}
           badges={<Tag tone="success">Active</Tag>}
           overflowMenu={<OverflowTrigger />}
@@ -268,8 +249,6 @@ function DirtyHarness() {
     <View style={{ width: 560, height: 560 }} className="rounded-md border border-border">
       <Tabs value={tab} onValueChange={setTab}>
         <DetailPane
-          kindIcon={<EntityKindIcon kind="character" />}
-          kindName="character"
           nameSlot={<InlineEditableName value={name} onChange={setName} size="lg" />}
           badges={<Tag tone="recently-classified">Recently classified</Tag>}
           overflowMenu={<OverflowTrigger />}
@@ -328,8 +307,6 @@ function LongBodyHarness() {
     <View style={{ width: 560, height: 400 }} className="rounded-md border border-border">
       <Tabs value={tab} onValueChange={setTab}>
         <DetailPane
-          kindIcon={<EntityKindIcon kind="character" />}
-          kindName="character"
           nameSlot={<InlineEditableName value={name} onChange={setName} size="lg" />}
           overflowMenu={<OverflowTrigger />}
           tabs={
@@ -366,8 +343,6 @@ function ThemeDetailSample() {
   return (
     <Tabs value={tab} onValueChange={setTab}>
       <DetailPane
-        kindIcon={<EntityKindIcon kind="character" />}
-        kindName="character"
         nameSlot={<InlineEditableName value="Kael Vex" onChange={noop} size="lg" />}
         badges={
           <Tag tone="accent" leading={<Icon as={Sparkles} size="sm" />}>

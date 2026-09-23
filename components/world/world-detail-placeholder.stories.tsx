@@ -67,7 +67,6 @@ export const EntitySelected: Story = {
   args: { selection: { type: 'entity', row: KAEL }, recentlyClassified: 'fresh' },
   play: async ({ canvasElement }) => {
     expect(screen.getByText('Kael')).toBeInTheDocument()
-    expect(screen.getByText('character')).toBeInTheDocument()
     expect(screen.getByText('Recently classified')).toBeInTheDocument()
     expect(canvasElement.querySelector('.bg-recently-classified-bg.opacity-50')).toBeNull()
     expect(screen.getByText('Details land in Slice 4.2a')).toBeInTheDocument()
@@ -78,7 +77,6 @@ export const LoreSelected: Story = {
   args: { selection: { type: 'lore', row: VEIL } },
   play: async () => {
     expect(screen.getByText('The Veil')).toBeInTheDocument()
-    expect(screen.getByText('lore')).toBeInTheDocument()
     expect(screen.queryByText('Recently classified')).toBeNull()
     expect(
       screen.getByText("Tabs and editors for this row aren't available yet."),

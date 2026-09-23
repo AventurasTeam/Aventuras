@@ -64,8 +64,7 @@ export const HotkeyDisabledStillOpensFromTheTrigger: Story = {
   },
 }
 
-// In-story on World: GO TO renders, `Open World` self-omits, `Open Plot` is
-// present-but-disabled with its lands-later reason, `Open Reader` navigates.
+// On World: GO TO renders; `Open World` self-omits, `Open Plot`/`Open Reader` navigate.
 const navigateFromWorld = fn()
 
 export const InStoryWorld: Story = {
@@ -78,10 +77,16 @@ export const InStoryWorld: Story = {
     ),
   },
   play: async () => {
-    await userEvent.click(screen.getByRole('button', { name: /Actions/ }))
+    const trigger = screen.getByRole('button', { name: /Actions/ })
+
+    await userEvent.click(trigger)
     await screen.findByPlaceholderText('Search actions…')
     expect(screen.queryByRole('option', { name: 'Open World' })).toBeNull()
-    expect(screen.getByTitle('Plot lands in Slice 4.3')).toBeInTheDocument()
+    await userEvent.click(await screen.findByRole('option', { name: 'Open Plot' }))
+    await waitFor(() => expect(navigateFromWorld).toHaveBeenCalledWith('/plot/br_1'))
+
+    // The overlay auto-closes on activation — reopen it to check the other entry too.
+    await userEvent.click(trigger)
     await userEvent.click(await screen.findByRole('option', { name: 'Open Reader' }))
     await waitFor(() => expect(navigateFromWorld).toHaveBeenCalledWith('/reader-composer/br_1'))
   },

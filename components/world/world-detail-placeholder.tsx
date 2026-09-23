@@ -1,6 +1,5 @@
 import { View } from 'react-native'
 
-import { EntityKindIcon } from '@/components/entity/entity-kind-icon'
 import { DetailPane } from '@/components/shells/detail-pane'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Tag } from '@/components/ui/tag'
@@ -8,8 +7,6 @@ import { Text } from '@/components/ui/text'
 import type { Entity, Lore } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import type { RecentlyClassified } from '@/lib/row-signals'
-
-import { worldKindName } from './world-selection'
 
 /** An entity's kind lives only on its row, so no copy of it can disagree. */
 export type WorldDetailSelection = { type: 'entity'; row: Entity } | { type: 'lore'; row: Lore }
@@ -34,21 +31,15 @@ export function WorldDetailPlaceholder({
   const head =
     selection.type === 'lore'
       ? {
-          kindIcon: <EntityKindIcon kind="lore" className="h-4 w-4" />,
-          kindName: worldKindName('lore'),
           name: selection.row.title,
           placeholder: t('world:detail.lorePlaceholder'),
         }
       : {
-          kindIcon: <EntityKindIcon kind={selection.row.kind} className="h-4 w-4" />,
-          kindName: worldKindName(selection.row.kind),
           name: selection.row.name,
           placeholder: t('world:detail.entityPlaceholder'),
         }
   return (
     <DetailPane
-      kindIcon={head.kindIcon}
-      kindName={head.kindName}
       nameSlot={
         <Text testID="world-detail-name" size="lg" className="font-semibold" numberOfLines={1}>
           {head.name}

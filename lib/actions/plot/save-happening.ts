@@ -1,11 +1,9 @@
 import type { Happening } from '@/lib/db'
 import { generateId } from '@/lib/ids'
 import { happeningActions, type HappeningDraft, type HappeningLinks } from '@/lib/plot'
-import { generationStore } from '@/lib/stores'
 
-import { applyDeltaActionGroup } from '../delta/apply-delta-action'
 import type { DbCtx } from '../types'
-import { PLOT_REJECTION, type PlotSaveResult } from './save-thread'
+import { commitPlotSave, type PlotSaveResult } from './commit-plot-save'
 
 type SaveHappeningArgs = {
   branchId: string
@@ -15,27 +13,26 @@ type SaveHappeningArgs = {
 }
 
 /** Row plus involvement and awareness changes as one `action_id`; undo reverses the whole Save. */
-export async function saveHappening(
+export function saveHappening(
   { branchId, row, links, draft }: SaveHappeningArgs,
   ctx: DbCtx,
 ): Promise<PlotSaveResult> {
-  if (generationStore.isUserEditBlocked())
-    return { status: 'rejected', reason: 'generation in flight', code: PLOT_REJECTION.inFlight }
-  const id = row?.id ?? generateId('hap')
-  const actions = happeningActions({
-    branchId,
-    row,
-    links,
-    draft,
-    id,
-    now: Date.now(),
-    newId: generateId,
-  })
-  if (actions.length === 0) return { status: 'ok', id }
-  const result = await applyDeltaActionGroup(
-    actions,
-    { actionId: generateId('act'), branchId },
+  return commitPlotSave(
+    'happening',
+    {
+      branchId,
+      rowId: row?.id ?? null,
+      build: (id) =>
+        happeningActions({
+          branchId,
+          row,
+          links,
+          draft,
+          id,
+          now: Date.now(),
+          newId: generateId,
+        }),
+    },
     ctx,
   )
-  return result.status === 'ok' ? { status: 'ok', id } : result
 }

@@ -4,6 +4,7 @@ import { Platform } from 'react-native'
 
 import { Text, TextClassContext } from '@/components/ui/text'
 import { POINTER_EVENTS_NONE } from '@/constants/styles'
+import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 function Tabs({ className, ...props }: ComponentProps<typeof TabsPrimitive.Root>) {
@@ -25,9 +26,9 @@ function TabsList({ className, ...props }: ComponentProps<typeof TabsPrimitive.L
 
 type TabsTriggerProps = ComponentProps<typeof TabsPrimitive.Trigger> & {
   /**
-   * Optional count rendered as muted small text after the label
-   * (e.g. `Connections 3`). Consumers format `99+` themselves if
-   * they want clamping; the primitive renders the value as-is.
+   * Optional count rendered in parentheses after the label (e.g. `Connections (3)`) —
+   * an inactive tab's label is already `fg-muted`, so a bare number has no contrast.
+   * The primitive renders the value unclamped.
    */
   count?: number
   children?: ReactNode
@@ -63,7 +64,7 @@ function TabsTrigger({ className, count, children, ...props }: TabsTriggerProps)
         {typeof children === 'string' ? <Text>{children}</Text> : children}
         {count != null ? (
           <Text size="xs" className="font-normal">
-            {count}
+            {t('countSuffix', { value: count })}
           </Text>
         ) : null}
       </TabsPrimitive.Trigger>

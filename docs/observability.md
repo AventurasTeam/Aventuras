@@ -174,7 +174,12 @@ convention, and the expectation that subsystems route through
 - `pipeline.*` — `phase_failed`, `run_aborted`, `recovered`
 - `action_layer.*` — `user_write_rejected`, `constraint_violation`,
   `story_settings_repaired` (the corrupt-blob repair: carries the failing
-  key paths, since the blob it describes is overwritten in the same call)
+  key paths, since the blob it describes is overwritten in the same call),
+  `thread_save_rejected` / `happening_save_rejected` (warn: the
+  in-flight refusal, which the disabled UI should make unreachable, or
+  a rejected write), `thread_save_failed` / `happening_save_failed`
+  (error: a thrown write, logged with the Save's action kinds, then
+  rethrown)
 - `classifier.*` — `delta_clamped`, `schema_repair`, `empty_output`
 - `retrieval.*` — `row_skipped_stale`, `empty_pool`, `knn_error`
 - `provider.*` — `retry_succeeded`, `rate_limited`,
@@ -197,10 +202,18 @@ convention, and the expectation that subsystems route through
   below: `unhandled_rejection`, `rejection_handled_late`,
   `rejection_tracker_unavailable`. `row_signals_read_failed`
   (`hooks/use-row-signals.ts`, a bounded-read failure),
-  `entry_index_read_failed` (`hooks/use-entry-index.ts`, same shape)
-  and `world_story_load_failed` (the World route's cold-mount
-  `loadOpenStory` rejection) are gated by the master gate like any
-  other kind
+  `entry_index_read_failed` (`hooks/use-entry-index.ts`, same shape),
+  `world_story_load_failed` / `plot_story_load_failed` (a cold
+  mount's `loadOpenStory` rejection, `hooks/use-cold-open-story.ts`),
+  `world_story_not_found` / `plot_story_not_found` (warn: the same
+  cold mount on a branch with no story, which leaves for the story
+  list) and
+  `plot_saved_handler_failed` (`components/plot/use-plot-row-session.ts`
+  — a `PlotRowSessionOptions.onSaved` that throws after the write
+  already landed) and `plot_link_revalidate_failed`
+  (`components/plot/link-card.tsx` — the revalidation after a link row's
+  removal rejected, leaving a stale duplicate error blocking Save) are
+  gated by the master gate like any other kind
 - `reader.*` — reader-composer dispatches routed through `runAction`
   (`lib/utils.ts`) instead of a bare `void`: `story_id_load_failed`,
   `undo_failed`, `redo_failed`, `rollback_failed`, `regenerate_failed`

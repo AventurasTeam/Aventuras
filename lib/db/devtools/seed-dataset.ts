@@ -374,10 +374,11 @@ const heroEntities: NewEntity[] = [
       equipped_items: [ID.blade],
       inventory: [ID.amulet],
       faction_id: ID.watch,
+      // The last entry is a multiple of 12 (`system`); the one before it is a reply.
       lastSeenAt: {
-        entryId: entryId('hero', N_HERO),
+        entryId: entryId('hero', N_HERO - 1),
         locationId: ID.hollow,
-        worldTime: (N_HERO - 1) * 3,
+        worldTime: (N_HERO - 2) * 3,
       },
     }),
     embeddingStale: 1,
@@ -429,7 +430,7 @@ const heroEntities: NewEntity[] = [
       equipped_items: [],
       inventory: [],
       faction_id: ID.syndicate,
-      lastSeenAt: { entryId: entryId('hero', 48), locationId: ID.keep, worldTime: 141 },
+      lastSeenAt: { entryId: entryId('hero', 47), locationId: ID.keep, worldTime: 138 },
     }),
     embeddingStale: 1,
     createdAt: BASE + 2 * MIN,
@@ -879,11 +880,14 @@ const heroHappenings: NewHappening[] = [
     category: 'conflict',
     icon: 'scroll',
     temporal: null,
-    occurredAtEntryId: entryId('hero', 48),
+    // Entry 59 (`ai_reply`, past CHAP2_END → chapter_id null): the only live open-region anchor —
+    // every other anchored happening sits in a closed chapter, so without it `Current chapter` is
+    // empty/omitted. Not `system`: excluded by readEntryIndex, which would mask this via fallback.
+    occurredAtEntryId: entryId('hero', 59),
     commonKnowledge: 0,
     embeddingStale: 1,
-    createdAt: BASE + 48 * MIN,
-    updatedAt: BASE + 48 * MIN,
+    createdAt: BASE + 59 * MIN,
+    updatedAt: BASE + 59 * MIN,
   },
 ]
 
@@ -940,6 +944,8 @@ const heroInvolvements: NewHappeningInvolvement[] = [
 ]
 
 // characterId must be a character entity; the natural key is (branch, character, happening).
+// No anchor may land on a multiple of 12: those hero entries are `system`, which the entry
+// index excludes, and the picker would render them as "Entry no longer exists".
 const heroAwareness: NewHappeningAwareness[] = [
   {
     id: 'haw_ambush_kael',
@@ -956,7 +962,7 @@ const heroAwareness: NewHappeningAwareness[] = [
     branchId: MAIN,
     happeningId: 'hap_ambush',
     characterId: ID.mira,
-    learnedAtEntryId: entryId('hero', 12),
+    learnedAtEntryId: entryId('hero', 13),
     decayResistance: 0.6,
     retrievalCount: 1,
     source: 'told',
@@ -976,7 +982,7 @@ const heroAwareness: NewHappeningAwareness[] = [
     branchId: MAIN,
     happeningId: 'hap_fire',
     characterId: ID.kael,
-    learnedAtEntryId: entryId('hero', 24),
+    learnedAtEntryId: entryId('hero', 25),
     decayResistance: 0.5,
     retrievalCount: 1,
     source: 'told',
@@ -986,7 +992,7 @@ const heroAwareness: NewHappeningAwareness[] = [
     branchId: MAIN,
     happeningId: 'hap_betrayal',
     characterId: ID.kael,
-    learnedAtEntryId: entryId('hero', 36),
+    learnedAtEntryId: entryId('hero', 37),
     decayResistance: 0.4,
     retrievalCount: 0,
     source: 'discovered',
@@ -996,7 +1002,7 @@ const heroAwareness: NewHappeningAwareness[] = [
     branchId: MAIN,
     happeningId: 'hap_pact',
     characterId: ID.kael,
-    learnedAtEntryId: entryId('hero', 48),
+    learnedAtEntryId: entryId('hero', 59),
     decayResistance: 1,
     retrievalCount: 2,
     source: 'witnessed',
@@ -1006,7 +1012,7 @@ const heroAwareness: NewHappeningAwareness[] = [
     branchId: MAIN,
     happeningId: 'hap_pact',
     characterId: ID.vorne,
-    learnedAtEntryId: entryId('hero', 48),
+    learnedAtEntryId: entryId('hero', 59),
     decayResistance: 1,
     retrievalCount: 2,
     source: 'witnessed',

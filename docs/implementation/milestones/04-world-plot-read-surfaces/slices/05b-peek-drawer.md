@@ -151,9 +151,15 @@ Sheet.
   route must also react to changed params — today it reads `kind`,
   `id` and `tab` once, at mount — and Story Settings' `?tab=` has the
   same limit (World's pill tap to `?tab=memory` pops back to an open
-  Story Settings on whatever tab it shows). Pair the fix with a
-  `worldHref()` builder beside `parseWorldSelection`, so producers
-  stop hand-writing the URL.
+  Story Settings on whatever tab it shows). Plot has the same limit
+  at both ends: its route also reads `kind`, `id` and `tab` once, at
+  mount, so this slice's `Open in Plot panel →` hits it; and the
+  `Open <name> in World` links on a happening's Involvements and
+  Awareness tabs (`app/plot/[branchId].tsx`) already hand-write the
+  World URL — reachable as Reader → World → Plot → tap an involved
+  entity. Pair the fix with a `worldHref()` builder beside
+  `parseWorldSelection` and a `plotHref()` beside
+  `parsePlotSelection`, so producers stop hand-writing the URL.
 - **Deep-linked selection isn't revealed.** A row selected via the
   deep link is selected but not revealed in the list (its tier stays
   collapsed, the list sits at the top) — call the list's `revealRow`

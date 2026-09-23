@@ -2,6 +2,8 @@
   "cancel": "Cancel",
   "save": "Save",
   "disabledWithReason": "{{label}}, {{reason}}",
+  "countSuffix": "({{value}})",
+  "labelWithCount": "{{label}} ({{value}})",
   "entryRef": "entry #{{n}}",
   "entryRefDangling": "Entry no longer exists",
   "entryKind": {
@@ -79,7 +81,6 @@
       "openPlot": "Open Plot",
       "openChapterTimeline": "Open Chapter Timeline",
       "openStorySettings": "Open Story Settings",
-      "plotLandsLater": "Plot lands in Slice 4.3",
       "chapterTimelineLandsLater": "Chapter Timeline lands in a later milestone"
     },
     "generationStatusPill": {

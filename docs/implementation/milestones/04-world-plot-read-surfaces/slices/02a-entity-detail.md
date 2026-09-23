@@ -248,6 +248,17 @@ the asset gallery pass` / `lands in Slice 4.2b`).
   ([`data-model.md → CharacterState shape`](../../../../data-model.md#characterstate-shape))
   has it as a single string. Fix the Identity-tab treatment to the
   string shape and amend `world.md`.
+- **C7 / C8 / C11 now ship from 4.3, not 4.2a.** The doc-as-contract
+  pairing said whichever slice landed first would fix the names;
+  [Slice 4.3](./03-plot-panel.md) landed first and authored
+  `useRowSaveSession`, `PickerField` / `EntityPicker` and
+  `OverflowMenu` at the milestone's pinned shapes (see
+  [its Implementation notes](./03-plot-panel.md#implementation-notes)).
+  4.2a's panes build against those shipped APIs — including the
+  `failureText` / `onRejected` session options and `PickerField`'s
+  trigger-spread shape, both reworked mid-build — rather than
+  authoring them; read the shipped files before wiring the entity
+  panes.
 
 ## Implementation notes
 

@@ -3,6 +3,7 @@ import type { Locator, Page } from '@playwright/test'
 import type { StoryOverrideTarget } from '@/lib/ai'
 import { embeddingTargetKey, type EmbeddingTarget } from '@/lib/db'
 
+import { saveSession } from './save-session'
 import { t } from '../harness/i18n'
 
 // Story Settings + the embedder swap surfaces (components/story-settings/memory-panel.tsx,
@@ -137,12 +138,10 @@ export const storySettings = {
       name: t('storySettings:models.clearOverride', { target: targetLabel }),
     }),
 
-  // The save button's accessible name carries a platform shortcut hint
-  // (`Save Ctrl+S`), so it anchors rather than matching exactly.
-  save: (page: Page): Locator =>
-    page.getByRole('button', { name: new RegExp(`^${t('saveBar.save')}`) }),
+  // Shared row-save-session chrome (save-session.ts).
+  save: saveSession.saveBarSave,
 
-  discard: (page: Page): Locator => page.getByRole('button', { name: t('saveBar.discard') }),
+  discard: saveSession.saveBarDiscard,
 
   // ScreenShell's chrome back arrow, an IconAction whose accessible name is t('chrome.back').
   back: (page: Page): Locator => page.getByRole('button', { name: t('chrome.back') }),
@@ -158,31 +157,11 @@ export const storySettings = {
   diagnosticsHubRow: (page: Page): Locator =>
     page.getByText(t('settings:diagnosticsHub.actionLabel'), { exact: true }),
 
-  // getByText alone is ambiguous here: the dialog body's copy also contains
-  // the substring "unsaved changes" (getByText is a case-insensitive
-  // substring match), so it resolves both the title and the description.
-  // Anchoring on the alertdialog role stays unambiguous even with the
-  // panel's other two AlertDialogs (delete/reset confirm) in the tree.
-  unsavedDialog: (page: Page): Locator =>
-    page.getByRole('alertdialog').filter({ hasText: t('unsavedChanges.title') }),
-
-  // Scoped inside the dialog, not a bare role+name query: the save bar behind
-  // it stays in the accessibility tree while the dialog is open (confirmed by
-  // an actual run — Radix's background-hiding doesn't reach this DOM shape),
-  // so an unscoped query resolves both this button and the save bar's own
-  // "Discard".
-  unsavedDiscard: (page: Page): Locator =>
-    storySettings.unsavedDialog(page).getByRole('button', { name: t('unsavedChanges.discard') }),
-
-  // Scoped inside the dialog for the same reason as unsavedDiscard: the save
-  // bar behind it also renders a "Save" button, and stays in the a11y tree.
-  unsavedSave: (page: Page): Locator =>
-    storySettings.unsavedDialog(page).getByRole('button', { name: t('unsavedChanges.save') }),
-
-  // The dialog's AlertDialogCancel uses the shared `common:cancel`, not a
-  // storySettings-namespaced key.
-  unsavedCancel: (page: Page): Locator =>
-    storySettings.unsavedDialog(page).getByRole('button', { name: t('cancel') }),
+  // Shared row-save-session chrome (save-session.ts).
+  unsavedDialog: saveSession.unsavedDialog,
+  unsavedDiscard: saveSession.unsavedDiscard,
+  unsavedSave: saveSession.unsavedSave,
+  unsavedCancel: saveSession.unsavedCancel,
 
   aboutTab: (page: Page): Locator => page.getByRole('tab', { name: t('storySettings:tabs.about') }),
 

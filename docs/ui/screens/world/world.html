@@ -133,8 +133,6 @@
   /* DETAIL PANE */
   .detail-pane { display: flex; flex-direction: column; min-width: 0; background: var(--bg); overflow: hidden; }
   .detail-head { padding: 14px 20px 10px; background: var(--bg-region); border-bottom: 1px solid var(--line-soft); }
-  .detail-crumb { font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
-  .detail-crumb .kind-icon { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border: 1px solid var(--line-soft); border-radius: 2px; font-size: 12px; background: var(--bg); color: var(--ink-muted); }
   .detail-name-row { display: flex; align-items: center; gap: 10px; }
   .detail-name { font-size: 22px; font-weight: 600; color: var(--ink); border-bottom: 1px dotted var(--line-soft); display: inline-block; padding-bottom: 2px; cursor: text; }
   .detail-name::after { content: "  ✎"; color: var(--ink-faint); font-size: 11px; font-weight: 400; }
@@ -781,10 +779,6 @@
   <section class="detail-pane">
 
     <div class="detail-head">
-      <div class="detail-crumb">
-        <span class="kind-icon" title="character">☺</span>
-        <span>character</span>
-      </div>
       <div class="detail-name-row">
         <div class="detail-name">Kael</div>
         <span class="recent-badge" title="Touched by classifier this turn">Recently classified</span>

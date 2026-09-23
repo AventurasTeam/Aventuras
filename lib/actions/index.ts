@@ -18,8 +18,9 @@ export {
   describeDeltaReplayError,
   reverseReplayDeltas,
 } from './delta/reverse-replay'
+export { PLOT_REJECTION, type PlotSaveResult } from './plot/commit-plot-save'
 export { saveHappening } from './plot/save-happening'
-export { PLOT_REJECTION, saveThread, type PlotSaveResult } from './plot/save-thread'
+export { saveThread } from './plot/save-thread'
 export {
   addProvider,
   ensureProviderEmbeddingDim,

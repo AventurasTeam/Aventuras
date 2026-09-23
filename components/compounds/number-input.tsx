@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input'
 import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 
 type NumberInputProps = {
-  /** `null` while the field is empty or holds text that is not a plain decimal number. */
+  /** `null` while the field is empty, `NaN` while it holds text that is not a plain decimal number. */
   value: number | null
   onChange: (next: number | null) => void
   /** Accessible name; pair with a visible `FormRow` label. */
@@ -29,21 +29,22 @@ const COMMA_DECIMAL = /^(-?\d*),(\d*)$/
 
 function parseNumberText(text: string, integer: boolean): number | null {
   const trimmed = text.trim()
+  if (trimmed === '') return null
   const candidate = integer ? trimmed : trimmed.replace(COMMA_DECIMAL, '$1.$2')
-  if (!(integer ? INTEGER_TEXT : DECIMAL_TEXT).test(candidate)) return null
+  if (!(integer ? INTEGER_TEXT : DECIMAL_TEXT).test(candidate)) return Number.NaN
   const parsed = Number(candidate)
-  return Number.isFinite(parsed) ? parsed : null
+  return Number.isFinite(parsed) ? parsed : Number.NaN
 }
 
 function formatNumber(value: number | null): string {
-  return value == null ? '' : String(value)
+  return value == null || Number.isNaN(value) ? '' : String(value)
 }
 
 /**
- * A numeric text field that reports `null` for empty or unparseable text so the
- * owner can refuse the save, rather than clamping silently. The text is local
- * state: a prop change that disagrees with what is typed (Discard, a post-save
- * reset) replaces it, an in-flight edit that still parses to the prop does not.
+ * A numeric text field that reports `null` for empty text and `NaN` for unparseable text, so
+ * an owner whose value is nullable can still refuse the save rather than clamping silently.
+ * The text is local state: a prop change that disagrees with what is typed (Discard, a
+ * post-save reset) replaces it, an in-flight edit that still parses to the prop does not.
  */
 export function NumberInput({
   value,
@@ -63,10 +64,10 @@ export function NumberInput({
   const [syncedValue, setSyncedValue] = useState(value)
   if (!Object.is(value, syncedValue)) {
     setSyncedValue(value)
-    if (parseNumberText(text, integer) !== value) setText(formatNumber(value))
+    if (!Object.is(parseNumberText(text, integer), value)) setText(formatNumber(value))
   }
 
-  const unreadable = text.trim() !== '' && parseNumberText(text, integer) == null
+  const unreadable = Number.isNaN(parseNumberText(text, integer))
 
   return (
     <ReasonTooltip reason={disabled ? disabledReason : undefined}>

@@ -5,10 +5,6 @@
     "thread": "Threads",
     "happening": "Happenings"
   },
-  "kindName": {
-    "thread": "thread",
-    "happening": "happening"
-  },
   "add": {
     "thread": "New thread",
     "happening": "New happening"
@@ -101,6 +97,7 @@
     "description": "Description",
     "category": "Category",
     "categoryPlaceholder": "e.g. mystery, goal, conflict",
+    "categoryAdd": "+ Add new: \"{{value}}\"",
     "icon": "Icon",
     "iconNone": "No icon",
     "status": "Status",
@@ -144,18 +141,20 @@
   "involvements": {
     "add": "Add involvement",
     "remove": "Remove involvement",
+    "removeNamed": "Remove {{name}}",
     "empty": "No involvements yet.",
     "emptyBody": "The classifier writes most rows automatically. You can also add them with Add involvement.",
-    "openInWorld": "Open in World"
+    "openInWorld": "Open {{name}} in World"
   },
   "awareness": {
     "add": "Add awareness",
     "remove": "Remove awareness",
+    "removeNamed": "Remove {{name}}",
     "empty": "No awareness rows yet.",
     "emptyBody": "The classifier writes most rows automatically. You can also add them with Add awareness.",
     "ckTitle": "Common knowledge",
     "ckBody": "Every character is aware of this happening; per-character awareness rows are skipped. Turn the toggle off on Overview to edit rows.",
-    "openInWorld": "Open in World"
+    "openInWorld": "Open {{name}} in World"
   },
   "validation": {
     "titleRequired": "A title is required.",
@@ -163,9 +162,13 @@
     "duplicateEntity": "This entity is already involved.",
     "duplicateCharacter": "This character already has an awareness row.",
     "entityRequired": "Pick an entity.",
-    "characterRequired": "Pick a character."
+    "characterRequired": "Pick a character.",
+    "decayRange": "Enter a value from 0 to 1.",
+    "inTab": "{{tab}}: {{issue}}"
   },
   "save": {
-    "saved": "Saved."
+    "saved": "Saved.",
+    "failed": "Couldn't save your changes. They're still here — try again.",
+    "inFlight": "Couldn't save while generation is in flight. Your changes are still here."
   }
 }

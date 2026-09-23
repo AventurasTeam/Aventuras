@@ -201,6 +201,40 @@ describe('useRowSaveSession', () => {
     expect(order).toEqual(['close', 'back'])
   })
 
+  it('queues a leave requested while a save is still writing, and runs it once the save lands', async () => {
+    const held = heldCommit()
+    const hook = setup(held.commit)
+    const pop = vi.fn()
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    let saved: Promise<RowSaveOutcome> | undefined
+    await act(async () => {
+      saved = hook.result.current.save()
+    })
+    expect(hook.result.current.saving).toBe(true)
+    act(() => hook.result.current.requestLeave(pop))
+    expect(pop).not.toHaveBeenCalled()
+    expect(hook.result.current.pendingLeave).toBe(true)
+
+    await act(async () => {
+      held.settle({ status: 'ok' })
+      await saved
+    })
+    expect(pop).toHaveBeenCalledTimes(1)
+    expect(hook.result.current.pendingLeave).toBe(false)
+  })
+
+  it('still queues a leave raised after the drain, once the draft is dirty again', () => {
+    const hook = setup()
+    const later = vi.fn()
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    act(() => hook.result.current.requestLeave(() => {}))
+    act(() => hook.result.current.resolveLeave('discard'))
+    act(() => hook.result.current.form.setValue('note', 'y', { shouldDirty: true }))
+    act(() => hook.result.current.requestLeave(later))
+    expect(later).not.toHaveBeenCalled()
+    expect(hook.result.current.pendingLeave).toBe(true)
+  })
+
   it('drops every queued leave on cancel, not just the newest', () => {
     const hook = setup()
     const first = vi.fn()

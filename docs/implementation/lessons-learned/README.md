@@ -128,6 +128,10 @@ slice plans when relevant.
   — `react-native-keyboard-controller` KAV measures once;
   Reanimated-entry containers drive `paddingBottom` off
   `useReanimatedKeyboardAnimation` directly.
+- [`LayoutAnimationConfig skipExiting` doesn't reach the Accordion](./layoutanimationconfig-skipexiting-gap.md)
+  — it does not suppress `AccordionContent`'s `FadeOutUp` when the
+  whole list swaps. The collapse fade never showed on native, so the
+  prop is gone; pin a culprit animation by deleting its prop.
 
 ### State / data discipline
 

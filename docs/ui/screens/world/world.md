@@ -49,13 +49,12 @@ Cross-cutting principles that govern this panel are in
 ├─────────────────────┬───────────────────────────────────────┤
 │ LIST PANE (~340px)  │ DETAIL PANE                           │
 │                     │                                       │
-│ [Characters ▾]  [+] │ breadcrumb: ☺ character               │ ← [+] tooltip tracks active kind
-│ search              │ Name: Kael ✎                    [⋯]  │
-│ filter chips        │ ─────                                 │
-│                     │ tabs: Overview | Identity | Carrying  │
-│ list (accordion     │       | Connections | Settings |      │
-│ on All filter)      │       Assets | Involvements | History │
-│                     │                                       │
+│ [Characters ▾]  [+] │ Name: Kael ✎                    [⋯]  │ ← [+] tooltip tracks active kind
+│ search              │ ─────                                 │
+│ filter chips        │ tabs: Overview | Identity | Carrying  │
+│                     │       | Connections | Settings |      │
+│ list (accordion     │       Assets | Involvements | History │
+│ on All filter)      │                                       │
 │                     │ (selected tab content, scrolls)       │
 │                     │                                       │
 │                     │ ───                                   │
@@ -79,7 +78,6 @@ updating as the user clicks list rows.
 Status selector is NOT chrome on the detail head; it's a typed form
 field inside the Overview tab. The detail head carries only:
 
-- A small breadcrumb strip: kind-icon + kind-name
 - The entity name (inline-editable with pencil)
 - A `Recently classified` badge — per
   [patterns → Recently-classified row accent](../../patterns/entity.md#recently-classified-row-accent).
@@ -894,11 +892,13 @@ overflows.
   the slim phone top bar at the route level.
 - **Top-bar shape on phone** per
   [`mobile/navigation.md → Phone`](../../foundations/mobile/navigation.md#phone--640-px):
-  slim single-row `[←] [<title> / World] [pill] [⛭] [⚲]`. List
-  state breadcrumb is `<title> / World`; detail-route extends to
-  `<title> / World / <kind>` (parent segments tappable per the
-  breadcrumb-tappability amendment, current segment inert with
-  tap-to-tooltip on truncation per
+  slim single-row `[←] [<title> / World] [pill] [⛭] [⚲]`. The
+  breadcrumb stays `<title> / World` on the detail route too — the
+  sub-header already leads with the kind, per
+  [`principles.md → Master-detail sub-header`](../../principles.md#master-detail-sub-header)
+  (parent segments tappable per the breadcrumb-tappability
+  amendment, current segment inert with tap-to-tooltip on truncation
+  per
   [`mobile/touch.md`](../../foundations/mobile/touch.md#tap-to-tooltip-on-inert-chrome-text)).
 - **Detail-pane tab navigation reroutes on narrow widths.** Tab
   strip is the desktop primitive; on tablet detail panes that

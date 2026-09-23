@@ -33,7 +33,7 @@ Card chrome is purely visual — adding a variant would mix presentation with be
 
 The explicit `border` + `rounded-md` + `bg-bg-raised` make each item card-shaped; the baseline's `border-b border-border` doubles up with consumer-side `border` to produce a uniform 1px outline on all four sides. `mb-3.5` provides the gap between cards.
 
-> **Web only today.** `AccordionItem` sets `asChild` on native, which routes both its own `border-b border-border` and any consumer `className` onto a Reanimated `Animated.View` — a component NativeWind does not register, so the classes are dropped rather than applied. Card styling therefore renders on web and silently no-ops on Android. See [`nativewind-classname-on-animated-view.md`](../../implementation/lessons-learned/nativewind-classname-on-animated-view.md); closing it needs the same plain-`View` wrapper `AccordionContent` already uses.
+On native, `AccordionItem` sets `asChild`, so its `className` would land on a Reanimated `Animated.View`, where NativeWind drops it ([`nativewind-classname-on-animated-view.md`](../../implementation/lessons-learned/nativewind-classname-on-animated-view.md)). Both the baseline border and the consumer's classes therefore sit on a plain `View` inside it, and card styling renders on both platforms.
 
 ## Single vs multi-open
 
@@ -70,7 +70,7 @@ This inverts the rn-reusables baseline's 0° collapsed → 180° expanded rotati
 }
 ```
 
-200ms duration, `var(--easing-standard)`. Native side handles expand/collapse via reanimated `LinearTransition.duration(200)` on the wrapper plus `FadeOutUp` on content exit — already wired in the baseline.
+200ms duration, `var(--easing-standard)`. Native has no height animation: `AccordionContent` mounts and unmounts outright, and `LinearTransition.duration(200)` on each item's animated frame slides the sections below. That frame clips its children, so expanding content is revealed as the frame grows instead of painting over the next item. Collapse has no animation of its own; the content goes and the space closes. The content deliberately has no `exiting`: it never showed on collapse, and a list swap painted the outgoing rows over the incoming ones ([lesson](../../implementation/lessons-learned/layoutanimationconfig-skipexiting-gap.md)). A measured-height animation is [parked](../../parked.md#accordion-measured-height-animation-on-native).
 
 ## API
 
