@@ -38,6 +38,17 @@ export function returnedStart(
   }
 }
 
+/**
+ * A vault scenario's start, when it has an opening for the start to belong to. Without one it
+ * would satisfy the wizard's starting-time guard for an opening never chosen.
+ */
+export function scenarioOpeningStart(scenario: {
+  firstMessage?: string | null
+  startingTime?: TimeTracker | null
+}): TimeTracker | null {
+  return scenario.firstMessage ? (scenario.startingTime ?? null) : null
+}
+
 /** The start shown beside an imported greeting: the scenario's describes its first message only. */
 export function greetingStart(index: number, scenarioStart: TimeTracker | null): string {
   return index === 0 && scenarioStart ? formatStoryTime(scenarioStart) : ''

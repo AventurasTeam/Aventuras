@@ -3,6 +3,7 @@ import type { TimeTracker } from '$lib/types'
 import {
   greetingStart,
   returnedStart,
+  scenarioOpeningStart,
   startingTimePromptValue,
   templateReceivesStartingTime,
   SUGGEST_ONE,
@@ -66,5 +67,22 @@ describe('greetingStart', () => {
   it('leaves every greeting empty when the scenario states none', () => {
     expect(greetingStart(0, null)).toBe('')
     expect(greetingStart(1, null)).toBe('')
+  })
+})
+
+describe('scenarioOpeningStart', () => {
+  it('takes the scenario’s start when it has a first message for it to belong to', () => {
+    expect(
+      scenarioOpeningStart({ firstMessage: 'Rain on the docks.', startingTime: t(23) }),
+    ).toEqual(t(23))
+  })
+
+  it('drops the start of a scenario with no first message', () => {
+    expect(scenarioOpeningStart({ firstMessage: '', startingTime: t(23) })).toBeNull()
+    expect(scenarioOpeningStart({ startingTime: t(23) })).toBeNull()
+  })
+
+  it('is empty when the scenario states no start', () => {
+    expect(scenarioOpeningStart({ firstMessage: 'Rain on the docks.' })).toBeNull()
   })
 })

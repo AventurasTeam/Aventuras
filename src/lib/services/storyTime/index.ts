@@ -44,6 +44,7 @@ export {
 export {
   greetingStart,
   returnedStart,
+  scenarioOpeningStart,
   startingTimePromptValue,
   templateReceivesStartingTime,
   type ResultStartSource,

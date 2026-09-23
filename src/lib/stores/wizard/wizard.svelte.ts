@@ -9,7 +9,7 @@ import {
 import { scenarioService, type WizardData } from '$lib/services/ai/wizard/ScenarioService'
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
 import { QUICK_START_SEEDS } from '$lib/services/templates'
-import { formatStoryTime, greetingStart } from '$lib/services/storyTime'
+import { formatStoryTime, greetingStart, scenarioOpeningStart } from '$lib/services/storyTime'
 import { replaceUserPlaceholders } from '$lib/components/wizard/wizardTypes'
 import type { VaultScenario } from '$lib/types'
 import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
@@ -218,18 +218,16 @@ export class WizardStore {
       this.narrative.storyTitle = scenario.name
     }
     // 4. Opening (Character/Narrative Store Integration)
+    const openingStart = scenarioOpeningStart(scenario)
+    this.character.cardImportedStartingTime = openingStart
+    this.narrative.setImportedStart(openingStart)
     if (scenario.firstMessage) {
       this.character.cardImportedFirstMessage = scenario.firstMessage
       this.character.cardImportedAlternateGreetings = scenario.alternateGreetings || []
-      this.character.cardImportedStartingTime = scenario.startingTime ?? null
       this.character.selectedGreetingIndex = 0
-      this.narrative.setImportedStart(scenario.startingTime)
     } else {
       this.character.cardImportedFirstMessage = null
       this.character.cardImportedAlternateGreetings = []
-      this.character.cardImportedStartingTime = null
-      // A start with no opening to belong to would satisfy the guard for an opening never chosen.
-      this.narrative.setImportedStart(null)
     }
 
     // 5. Auto-link embedded lorebook if available
