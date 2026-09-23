@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { branches, storyEntries, stories } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
@@ -54,6 +54,27 @@ async function setup() {
   return db
 }
 
+async function seedEntry(content: string) {
+  const { db } = await createTestDb()
+  await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
+  await db.insert(branches).values({ id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 })
+  await db.insert(storyEntries).values({
+    id: 'e_1',
+    branchId: 'br_1',
+    position: 1,
+    kind: 'opening',
+    content,
+    chapterId: null,
+    createdAt: 1,
+  })
+  return db
+}
+
+async function readExcerpt(content: string): Promise<string | undefined> {
+  const [row] = await readEntryIndex('br_1', await seedEntry(content))
+  return row?.excerpt
+}
+
 describe('readEntryIndex', () => {
   it('lists the branch newest first with a collapsed excerpt and the chapter id', async () => {
     const db = await setup()
@@ -79,41 +100,14 @@ describe('readEntryIndex', () => {
   })
 
   it('truncates long content at the excerpt cap with a trailing ellipsis', async () => {
-    const { db } = await createTestDb()
-    await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
-    await db.insert(branches).values({ id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 })
     const words = Array.from({ length: 40 }, (_, i) => `word${i}`).join(' ')
-    await db.insert(storyEntries).values({
-      id: 'e_long',
-      branchId: 'br_1',
-      position: 1,
-      kind: 'opening',
-      content: words,
-      chapterId: null,
-      createdAt: 1,
-    })
-
-    const [row] = await readEntryIndex('br_1', db)
-    expect(row?.excerpt.endsWith('…')).toBe(true)
-    expect(Array.from(row?.excerpt ?? '').length).toBeLessThanOrEqual(121)
+    const excerpt = await readExcerpt(words)
+    expect(excerpt?.endsWith('…')).toBe(true)
+    expect(Array.from(excerpt ?? '').length).toBeLessThanOrEqual(121)
   })
 
   it('returns an empty excerpt for whitespace-only content', async () => {
-    const { db } = await createTestDb()
-    await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
-    await db.insert(branches).values({ id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 })
-    await db.insert(storyEntries).values({
-      id: 'e_blank',
-      branchId: 'br_1',
-      position: 1,
-      kind: 'opening',
-      content: '   \n\t  \n  ',
-      chapterId: null,
-      createdAt: 1,
-    })
-
-    const [row] = await readEntryIndex('br_1', db)
-    expect(row?.excerpt).toBe('')
+    expect(await readExcerpt('   \n\t  \n  ')).toBe('')
   })
 
   it('previews the prose of a rich entry, not its markup, even when the window cuts a tag', async () => {
@@ -136,100 +130,69 @@ describe('readEntryIndex', () => {
       },
     ])
 
-    const index = indexEntryRefs(await readEntryIndex('br_1', db))
+    const rows = await readEntryIndex('br_1', db)
+    expect(rows.map((r) => r.id)).toEqual(['e_2', 'e_1'])
+    const index = indexEntryRefs(rows)
     expect(index.get('e_1')?.excerpt).toBe('Something in here pulses. It glows.')
-    expect(index.get('e_2')?.excerpt).toBe('The room hums.…')
+    // The style block is all that follows, so the reader shows nothing more: no ellipsis owed.
+    expect(index.get('e_2')?.excerpt).toBe('The room hums.')
   })
 
-  it('keeps the last word whole when the window cuts right after a closing tag', async () => {
-    const { db } = await createTestDb()
-    await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
-    await db.insert(branches).values({ id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 })
-    // Exactly 200 chars, so the next character (`<`) reads as a mid-word cut.
-    const head = `<p style="${'x'.repeat(170)}">The room hums.</p>`
-    expect(head).toHaveLength(200)
-    await db.insert(storyEntries).values({
-      id: 'e_1',
-      branchId: 'br_1',
-      position: 1,
-      kind: 'ai_reply',
-      content: `${head}<p>More.</p>`,
-      createdAt: 1,
-    })
-
-    const index = indexEntryRefs(await readEntryIndex('br_1', db))
-    expect(index.get('e_1')?.excerpt).toBe('The room hums.…')
+  it('reads past a leading style block longer than the first window', async () => {
+    const style = `<style>.seed-resp { ${'padding: 10px; '.repeat(20)}}</style>\n\n`
+    expect(style.length).toBeGreaterThan(300)
+    expect(await readExcerpt(`${style}The lamps gutter out one by one.`)).toBe(
+      'The lamps gutter out one by one.',
+    )
   })
 
-  it('adds an ellipsis for a truncated entry whose 200-char head collapses under the excerpt cap', async () => {
-    const { db } = await createTestDb()
-    await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
-    await db.insert(branches).values({ id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 })
-    // 150 spaces + 26 letters + 10 spaces + 14-char tail: the 200-char head collapses well
+  it('reads on when the first window cuts a tag open ahead of the prose', async () => {
+    const content = `The door opens.\n<p style="${'color: red; '.repeat(20)}">A cold draft follows her in.</p>`
+    expect(await readExcerpt(content)).toBe('The door opens. A cold draft follows her in.')
+  })
+
+  it('reads once when the first window fills every preview', async () => {
+    const db = await seedEntry('The rain has not stopped for three days. '.repeat(10))
+    const select = vi.spyOn(db, 'select')
+    await readEntryIndex('br_1', db)
+    expect(select).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the last word whole when the wider window cuts right after a closing tag', async () => {
+    // Exactly 8000 chars, so the next character (`<`) reads as a mid-word cut.
+    const head = `<p style="${'x'.repeat(7970)}">The room hums.</p>`
+    expect(head).toHaveLength(8000)
+    expect(await readExcerpt(`${head}<p>More.</p>`)).toBe('The room hums.…')
+  })
+
+  it('adds an ellipsis for a truncated entry whose wider head collapses under the excerpt cap', async () => {
+    // 7950 spaces + 26 letters + 10 spaces + 14-char tail: the 8000-char head collapses well
     // under the 120-char cap, so excerpt() alone wouldn't add '…' — the read must still add it.
     const content =
-      ' '.repeat(150) +
+      ' '.repeat(7950) +
       'ABCDEFGHIJKLMNOPQRSTUVWXYZ' +
       ' '.repeat(10) +
-      'MORE TEXT THAT WILL BE CUT OFF COMPLETELY BEYOND CHAR 200 BOUNDARY AND NEVER APPEARS'
-    await db.insert(storyEntries).values({
-      id: 'e_edge',
-      branchId: 'br_1',
-      position: 1,
-      kind: 'opening',
-      content,
-      chapterId: null,
-      createdAt: 1,
-    })
-
-    const [row] = await readEntryIndex('br_1', db)
-    expect(row?.excerpt).toBe('ABCDEFGHIJKLMNOPQRSTUVWXYZ MORE TEXT THAT…')
+      'MORE TEXT THAT WILL BE CUT OFF COMPLETELY BEYOND CHAR 8000 BOUNDARY AND NEVER APPEARS'
+    expect(await readExcerpt(content)).toBe('ABCDEFGHIJKLMNOPQRSTUVWXYZ MORE TEXT THAT…')
   })
 
-  it('backs off to a whole word when the 200-char cut lands mid-word', async () => {
-    const { db } = await createTestDb()
-    await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
-    await db.insert(branches).values({ id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 })
-    // 184 spaces + "quay again " + "unbel": the 200-char cut lands 5 letters into
+  it('backs off to a whole word when the wider cut lands mid-word', async () => {
+    // 7984 spaces + "quay again " + "unbel": the 8000-char cut lands 5 letters into
     // "unbelievable" — without the word-boundary back-off, the ellipsis would follow "…unbel…".
     const content =
-      ' '.repeat(184) +
+      ' '.repeat(7984) +
       'quay again ' +
-      'unbelievable stuff that continues well past the two hundred character mark and further'
-    await db.insert(storyEntries).values({
-      id: 'e_midword',
-      branchId: 'br_1',
-      position: 1,
-      kind: 'opening',
-      content,
-      chapterId: null,
-      createdAt: 1,
-    })
-
-    const [row] = await readEntryIndex('br_1', db)
-    expect(row?.excerpt).toBe('quay again…')
+      'unbelievable stuff that continues well past the eight thousand character mark and further'
+    expect(await readExcerpt(content)).toBe('quay again…')
   })
 
-  // Unspaced scripts (Chinese, Japanese) have no word to back off to.
+  // Unspaced scripts (Chinese, Japanese) have no word to back off to. Longer than the wider
+  // window, so a head emptied by the back-off can't be rescued by the second read.
   const unspaced = '一二三四五六七八九十'
   it.each([
-    ['no whitespace at all', unspaced.repeat(25)],
-    ['only leading whitespace', `\n  ${unspaced.repeat(25)}`],
+    ['no whitespace at all', unspaced.repeat(801)],
+    ['only leading whitespace', `\n  ${unspaced.repeat(801)}`],
   ])('hard-cuts a mid-word head with %s instead of emptying it', async (_, content) => {
-    const { db } = await createTestDb()
-    await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
-    await db.insert(branches).values({ id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 })
-    await db.insert(storyEntries).values({
-      id: 'e_unspaced',
-      branchId: 'br_1',
-      position: 1,
-      kind: 'opening',
-      content,
-      chapterId: null,
-      createdAt: 1,
-    })
-
-    const [row] = await readEntryIndex('br_1', db)
-    expect(row?.excerpt).toBe(`${unspaced.repeat(12)}…`)
+    expect(await readExcerpt(content)).toBe(`${unspaced.repeat(12)}…`)
   })
 })
