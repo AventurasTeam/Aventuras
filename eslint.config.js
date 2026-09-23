@@ -64,13 +64,13 @@ module.exports = defineConfig([
         // keyboard. Kept in this array: a second no-restricted-syntax entry would replace it.
         {
           selector:
-            'JSXOpeningElement[name.name=/^(GH)?(ScrollView|FlatList|SectionList)$|^BottomSheet(ScrollView|FlatList|SectionList)$|^KeyboardAwareScrollView$/]:not(:has(JSXAttribute[name.name="keyboardShouldPersistTaps"])):not(:has(JSXSpreadAttribute))',
+            'JSXOpeningElement[name.name=/^(GH)?(ScrollView|FlatList|SectionList)$|^BottomSheet(ScrollView|FlatList|SectionList)$|^KeyboardAwareScrollView$/]:not(:has(> JSXAttribute[name.name="keyboardShouldPersistTaps"])):not(:has(> JSXSpreadAttribute))',
           message:
             'Set keyboardShouldPersistTaps (usually "handled"): the default spends the first tap on dismissing the keyboard. See docs/ui/foundations/mobile/touch.md.',
         },
         {
           selector:
-            'JSXOpeningElement[name.property.name=/^(ScrollView|FlatList|SectionList)$/]:not(:has(JSXAttribute[name.name="keyboardShouldPersistTaps"])):not(:has(JSXSpreadAttribute))',
+            'JSXOpeningElement[name.property.name=/^(ScrollView|FlatList|SectionList)$/]:not(:has(> JSXAttribute[name.name="keyboardShouldPersistTaps"])):not(:has(> JSXSpreadAttribute))',
           message:
             'Set keyboardShouldPersistTaps (usually "handled"): the default spends the first tap on dismissing the keyboard. See docs/ui/foundations/mobile/touch.md.',
         },
