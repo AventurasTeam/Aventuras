@@ -204,18 +204,6 @@ slice-planning gate forces its resolution before that slice is planned.
   One generic `externalCell<T>()` in a shared story helper would hold
   it once. Surfaced 2026-09-15.
 
-- **The swap-resume prompt and the crash-recovery modal can portal
-  together.** `components/embedder/swap-resume-host.tsx` opens whenever
-  the open story carries a swap marker and never checks
-  `recoveryReportStore`, while
-  `components/story/crash-recovery-modal-host.tsx` opens whenever a
-  report is pending — so a crash that also left a swap marker stacks
-  two alert dialogs. Slice 4.4's upgrade prompt is exclusive with both
-  (its gate refuses while a swap marker or a recovery report exists);
-  this pair predates it. Order them — recovery first, as the slice
-  doc's host order says — with one guard in the resume host. Surfaced
-  2026-09-15.
-
 - **Android hardware back can skip an app-level alert dialog.** The
   story-open upgrade prompt (and `SwapResumeHost`) register their
   `hardwareBackPress` handler when their content mounts, which on the
