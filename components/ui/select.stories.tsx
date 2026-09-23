@@ -10,7 +10,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState, type ComponentProps } from 'react'
 import { View } from 'react-native'
-import { expect, screen } from 'storybook/test'
+import { expect, screen, spyOn, userEvent, waitFor } from 'storybook/test'
 
 import { themes } from '@/lib/themes'
 
@@ -147,6 +147,34 @@ export const States: Story = {
 // value, so the control an assistive-tech user hears renames itself on every
 // pick. One assertion per branch: each render mode carries its own
 // `aria-label`, and nothing downstream pins them.
+/** A pick the parent never commits leaves the trigger on its muted placeholder, still controlled. */
+export const EmptyDropdownStaysControlled: Story = {
+  render: () => (
+    <View className="w-72 p-4">
+      <Select
+        mode="dropdown"
+        label="Add agent"
+        placeholder="Pick one…"
+        value={undefined}
+        options={SHORT_OPTIONS}
+        onValueChange={() => {}}
+      />
+    </View>
+  ),
+  play: async () => {
+    const warn = spyOn(console, 'warn')
+    const trigger = await screen.findByRole('button', { name: 'Add agent' })
+    await userEvent.click(trigger)
+    await userEvent.click(await screen.findByRole('option', { name: 'Two' }))
+    await waitFor(() => expect(screen.queryByRole('option')).not.toBeInTheDocument())
+
+    expect(trigger).toHaveTextContent('Pick one…')
+    expect(screen.getByText('Pick one…')).toHaveClass('text-fg-muted')
+    expect(warn).not.toHaveBeenCalledWith(expect.stringMatching(/uncontrolled to controlled/))
+    warn.mockRestore()
+  },
+}
+
 export const LabelNamesEveryRenderMode: Story = {
   render: () => (
     <View className="w-72 flex-col gap-6 p-4">

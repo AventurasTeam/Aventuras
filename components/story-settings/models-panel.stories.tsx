@@ -288,6 +288,8 @@ export const AddOverrideOffersStoryAgentsOnly: Story = {
         COPY.addOverride,
       ),
     )
+    // The same trigger, not a remount: focus stays for the next add.
+    expect(screen.getByRole('button', { name: COPY.addOverrideLabel })).toHaveFocus()
     // A row with no model yet is not an override, so nothing is unsaved.
     expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument()
   },

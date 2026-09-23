@@ -47,8 +47,8 @@ function Value({
   children?: ReactNode
 }) {
   const { value } = SelectBase.useRootContext()
-  const display = value?.label ?? children ?? placeholder ?? ''
-  const empty = !value
+  const empty = !value?.value
+  const display = empty ? (children ?? placeholder ?? '') : value.label
   return (
     <Text
       size="sm"
@@ -701,6 +701,10 @@ function RadioBranch({ options, value, onValueChange, disabled, className, label
   )
 }
 
+// The Root must stay controlled: `undefined` flips it uncontrolled, so it keeps its own pick
+// (shown as the raw option value on web) and Radix warns. Radix renders '' as the placeholder.
+const EMPTY_VALUE = { value: '', label: '' }
+
 function DropdownBranch({
   options,
   value,
@@ -720,7 +724,7 @@ function DropdownBranch({
     sheetSize === undefined || sheetSize === 'auto' ? autoSheetSize(options) : sheetSize
   return (
     <Root
-      value={selected ? { value: selected.value, label: selected.label } : undefined}
+      value={selected ? { value: selected.value, label: selected.label } : EMPTY_VALUE}
       onValueChange={(opt) => {
         if (opt) onValueChange(opt.value)
       }}

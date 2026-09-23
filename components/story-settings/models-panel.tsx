@@ -210,8 +210,6 @@ export function ModelsPanel({ settings, disabled = false, disabledReason }: Mode
       })}
 
       <Select
-        // Select can't hold a controlled empty value, so it keeps its own pick; remount per offer.
-        key={addable.join(' ')}
         mode="dropdown"
         label={t('storySettings:models.addOverrideLabel')}
         placeholder={t('storySettings:models.addOverride')}
