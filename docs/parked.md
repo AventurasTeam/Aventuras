@@ -2608,6 +2608,37 @@ Parked 2026-09-23; device use showing the collapse reading as abrupt,
 or the expand-time divider / card-border gap proving noticeable, is
 the signal to revisit.
 
+#### Select's dropdown popover is pinned to its trigger's width
+
+The popper Viewport in `components/ui/select.tsx` gets
+`w-[var(--radix-select-trigger-width)]`; upstream shadcn uses
+`w-full min-w-[var(--radix-select-trigger-width)]`, so its popover
+grows to fit content while ours cannot. **Latent — no current
+victim.** Slice 4.4's Add override Select hit it and was fixed at the
+call site by dropping a `self-start` hug that deviated from
+[`forms.md → Input width within form rows`](./ui/patterns/forms.md#input-width-within-form-rows)
+anyway; the only other narrow-trigger dropdown, the reader composer's
+mode picker, measures 115 px under a 123 px trigger and the developer
+judged it fine there — its rows are short. So this bites only a
+future dropdown whose rows are wider than its trigger, and the fix
+rewidens every Select in the app, which is why the primitive was left
+alone. Note that `resolveMode` routes description-bearing options to
+`radio` by default, so any `mode="dropdown"` caller with descriptions
+has opted out of that and lands on the pinned path.
+
+The pin was deliberate: `cbd9725b` (2026-05-06) switched `min-w` to
+`w` so rich rows — the calendar picker's at the time — could not
+overflow past the anchor and overlap adjacent layout. That caller has
+since moved to `SearchableOverlayList`, whose `matchTriggerWidth` is a
+floor. `min-w` changes only a Select whose rows are wider than its
+trigger, so it rewidens fewer Selects than the paragraph above says.
+Toolbar's sort trigger carries a label prefix, and World's and Plot's
+kind selectors stretch across the list pane, so none is a victim
+today (checked 2026-09-23).
+
+Parked 2026-09-23; the first dropdown whose rows are wider than its
+trigger is the signal to revisit.
+
 ### Code structure (parked)
 
 #### Unsaved-changes guard folder placement

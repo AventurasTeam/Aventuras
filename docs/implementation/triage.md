@@ -113,46 +113,6 @@ slice-planning gate forces its resolution before that slice is planned.
   covers the same hook for World and Plot links, so resolve the two
   together.
 
-- **Three gaps in `components/ui/select.tsx`, one of them shared with
-  `Chip`.** (1) **No `disabledReason`.** SwitchRow, Stepper, Button and
-  IconAction take one (SwitchRow also sets `accessibilityHint` for
-  screen readers; TagInput only sets a web `title`); `Select` has
-  neither, so a segment disabled by a generation run explains nothing
-  (seen on Story Settings → Authoring aids → wrap POV). `Chip` has the
-  same gap — Story Settings → Memory's threshold preset chips go inert
-  with no reason — so add it to both primitives rather than wrapping
-  call sites: a `ReasonTooltip` around a chip row breaks its
-  `flex-wrap` on web. (2) **The dropdown branch can't hold a controlled
-  empty value.** With no matching option, `DropdownBranch` passes
-  `value={undefined}` to the rn-primitives `Root`, which then runs
-  uncontrolled: it keeps its own pick (on web the trigger shows the raw
-  option value, since `onStrValueChange` sets the label to the value),
-  and Radix logs "changing from uncontrolled to controlled" on the
-  first pick of any dropdown that starts empty, production builds
-  included. Story Settings → Models works around it with a `key`
-  remount on its Add override dropdown, which also drops keyboard focus
-  to the page body after each add. Fix in the primitive: always pass
-  `Root` a controlled value, using `{ value: '', label: '' }` for the
-  empty case (Radix treats an empty string as the placeholder), and
-  render `value?.label || placeholder`; then remove the remount.
-  (3) **The popover is pinned to the trigger's width, not floored by
-  it.** The popper Viewport gets
-  `w-[var(--radix-select-trigger-width)]`; upstream shadcn uses
-  `w-full min-w-[var(--radix-select-trigger-width)]`, so its popover
-  grows to fit content while ours cannot. **Latent — no current
-  victim.** Slice 4.4's Add override Select hit it and was fixed at the
-  call site by dropping a `self-start` hug that deviated from
-  [`forms.md → Input width within form rows`](../ui/patterns/forms.md#input-width-within-form-rows)
-  anyway; the only other narrow-trigger dropdown, the reader composer's
-  mode picker, measures 115 px under a 123 px trigger and the developer
-  judged it fine there — its rows are short. So this bites only a
-  future dropdown whose rows are wider than its trigger, and the fix
-  rewidens every Select in the app, which is why the primitive was left
-  alone. Note that `resolveMode` routes description-bearing options to
-  `radio` by default, so any `mode="dropdown"` caller with descriptions
-  has opted out of that and lands on the pinned path.
-  Surfaced 2026-09-14, (3) 2026-09-19.
-
 - **Story Settings panel section titles aren't headings.** Every Story
   Settings panel renders its section titles as plain `Text` — inline in
   About, Authoring aids, Models and Memory, and through a local
