@@ -34,7 +34,8 @@ export async function compilerBailout(source: string, filename: string): Promise
       filename,
       babelrc: false,
       configFile: false,
-      presets: [[presetTypescript, { isTSX: true, allExtensions: true }]],
+      // TSX only for .tsx: parsed as TSX, a .ts angle-bracket assertion `<T>value` is a syntax error.
+      presets: [[presetTypescript, { isTSX: filename.endsWith('.tsx'), allExtensions: true }]],
       plugins: [[reactCompiler, { panicThreshold: 'all_errors' }]],
     })
     return null

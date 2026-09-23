@@ -37,6 +37,11 @@ describe('compilerBailout', () => {
     `
     expect(await compilerBailout(source, 'use-latest.ts')).toMatch(/refs during render/)
   })
+
+  it('parses a .ts file as TypeScript, not TSX', async () => {
+    const source = `export const asNumber = (value: unknown) => <number>value\n`
+    expect(await compilerBailout(source, 'as-number.ts')).toBeNull()
+  })
 })
 
 describe('compareToBaseline', () => {
