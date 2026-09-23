@@ -37,6 +37,12 @@ const SOURCE = 'periodic_classifier' as const
 const MAX_EMBEDDED_NAME = 120
 const MAX_EMBEDDED_BODY = 1200
 
+// Model free text can come back blank instead of omitted; a blank never reaches a row.
+function nonBlank(text: string | undefined): string | undefined {
+  const trimmed = text?.trim()
+  return trimmed ? trimmed : undefined
+}
+
 // Past the embedder's window the tail is absent from the vector while `sourceHash` still
 // covers the whole string, so nothing re-embeds or reports it. Not a schema `.max()` —
 // a violation is a parse failure and the retry re-reads the same prose (cf. schema.ts).
@@ -225,6 +231,7 @@ export function buildClassifierActions(
       if (resolved.fellBack) unresolvedRefs.push(happening.occurredAtTurn)
       else occurredAtEntryId = resolved.entryId
     }
+    const description = nonBlank(happening.description)
     planned.push({
       action: {
         kind: 'createHappening',
@@ -234,12 +241,9 @@ export function buildClassifierActions(
             id: happeningId,
             branchId,
             title: clampEmbedded(happening.title, MAX_EMBEDDED_NAME),
-            description:
-              happening.description == null
-                ? null
-                : clampEmbedded(happening.description, MAX_EMBEDDED_BODY),
+            description: description == null ? null : clampEmbedded(description, MAX_EMBEDDED_BODY),
             // Mutually exclusive per the table CHECK: an entry ref wins.
-            temporal: occurredAtEntryId == null ? (happening.temporal ?? null) : null,
+            temporal: occurredAtEntryId == null ? (nonBlank(happening.temporal) ?? null) : null,
             occurredAtEntryId,
             embeddingStale: 1,
             createdAt: timestamp,
@@ -265,7 +269,7 @@ export function buildClassifierActions(
               branchId,
               happeningId,
               entityId,
-              role: involvement.role ?? null,
+              role: nonBlank(involvement.role) ?? null,
             },
           },
         },
@@ -292,7 +296,8 @@ export function buildClassifierActions(
             // Clamped here, not in the schema: the wire contract must stay
             // JSON-Schema-representable, so it carries the raw number.
             decayResistance: Math.min(1, Math.max(0, row.severity)),
-            source: row.source,
+            // Undefined, not null: a blank re-emit must leave an existing source alone.
+            source: nonBlank(row.source),
           },
         },
         entryId: learnedEntryId,
@@ -335,7 +340,7 @@ export function buildClassifierActions(
           id,
           patch:
             flip.to === 'retired'
-              ? { status: 'retired', retiredReason: flip.reason ?? null }
+              ? { status: 'retired', retiredReason: nonBlank(flip.reason) ?? null }
               : { status: 'active' },
         },
       },

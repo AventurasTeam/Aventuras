@@ -366,15 +366,6 @@ slice-planning gate forces its resolution before that slice is planned.
   live once chapter-close writes links onto existing happenings
   through a path with no such gate. Surfaced 2026-09-22.
 
-- **Classifier free text is stored verbatim, including empty
-  strings.** `awareness.source` (`lib/classifier/schema.ts`, a
-  required `z.string()`) and involvement `role` (an optional
-  `z.string()`) pass straight from the model's structured output into
-  `createHappeningInvolvement` / `upsertHappeningAwareness`
-  (`lib/classifier/plan.ts`) with no normalization —
-  `role: involvement.role ?? null` only catches `undefined`, not
-  `''`. Normalize both to `NULL` at write time. Surfaced 2026-09-22.
-
 - **A failed entry-index read has no Retry.** `useEntryIndex`
   (`hooks/use-entry-index.ts`) disables react-query's retry on a local
   DB read failure and blocks every Plot pane until the next turn
