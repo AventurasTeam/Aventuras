@@ -9,12 +9,15 @@ import Header from './drawer-header.svelte'
 import Title from './drawer-title.svelte'
 import Handle from './drawer-handle.svelte'
 import NestedRoot from './drawer-nested.svelte'
+import { DRAWER_CLOSE_THRESHOLD, createDrawerSwipeGuard } from './swipe-guard'
 
 const Trigger: typeof DrawerPrimitive.Trigger = DrawerPrimitive.Trigger
 const Portal: typeof DrawerPrimitive.Portal = DrawerPrimitive.Portal
 const Close: typeof DrawerPrimitive.Close = DrawerPrimitive.Close
 
 export {
+  DRAWER_CLOSE_THRESHOLD,
+  createDrawerSwipeGuard,
   Root,
   NestedRoot,
   Content,

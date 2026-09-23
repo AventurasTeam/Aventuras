@@ -5,11 +5,18 @@
   interface Props {
     open: boolean
     title?: string
+    description?: string
     onCancel: () => void
     onDiscard: () => void
   }
 
-  let { open, title = 'Discard this story?', onCancel, onDiscard }: Props = $props()
+  let {
+    open,
+    title = 'Discard this story?',
+    description = 'Everything you have filled in so far will be lost.',
+    onCancel,
+    onDiscard,
+  }: Props = $props()
 
   const uid = $props.id()
 
@@ -43,7 +50,7 @@
         <div class="min-w-0">
           <h2 id="{uid}-title" class="font-semibold">{title}</h2>
           <p id="{uid}-description" class="text-muted-foreground mt-1 text-sm">
-            Everything you have filled in so far will be lost.
+            {description}
           </p>
         </div>
       </div>

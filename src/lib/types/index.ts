@@ -140,6 +140,15 @@ export interface StorySettings {
   targetLength?: TargetLength
   narratorReinforcement?: NarratorReinforcement
   customSystemPrompt?: string // Per-story Liquid template override; bypasses pack template when set
+  genreColor?: string // Library badge colour: a key of GENRE_COLORS; absent = colour by genre name
+}
+
+/** The fields a story's library card edits. */
+export interface StoryDetails {
+  title: string
+  genre: string | null
+  description: string | null
+  genreColor: string | null
 }
 
 export interface StoryEntry {

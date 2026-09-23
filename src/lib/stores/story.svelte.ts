@@ -12,6 +12,7 @@ import type {
   MemoryConfig,
   StoryMode,
   StorySettings,
+  StoryDetails,
   Entry,
   TimeTracker,
   PersistentCharacterSnapshot,
@@ -56,6 +57,7 @@ import {
 } from '$lib/services/generation'
 import { createLogger } from '$lib/log'
 import { sameEntityName } from '$lib/utils/text'
+import { storyDetailsUpdate } from '$lib/utils/storyDetails'
 import { grammarService } from '$lib/services/grammar'
 import { clearTier3SelectionCache } from '$lib/services/ai'
 import { clearImageMarkerCache } from '$lib/services/image'
@@ -4814,22 +4816,32 @@ class StoryStore {
     }
   }
 
-  // Rename a story
-  async renameStory(storyId: string, title: string): Promise<void> {
-    const trimmed = title.trim()
-    if (!trimmed) return
+  /**
+   * Save the library card's edit dialog: title, genre, description and the genre badge colour,
+   * in one write. Blank genre or description clears it; a blank title is refused. Nothing is
+   * written when nothing changed, so opening and saving the dialog does not bump the story up
+   * the library.
+   */
+  async updateStoryDetails(storyId: string, details: StoryDetails): Promise<void> {
+    // Read back rather than merging into an in-memory copy: the settings JSON is replaced whole,
+    // and `updateStorySettings` writes keys the library list never sees.
+    const stored = await database.getStory(storyId)
+    if (!stored) throw new Error('Story not found')
 
-    await database.updateStory(storyId, { title: trimmed })
+    const updates = storyDetailsUpdate(stored, details)
+    if (!updates) return
+
+    await database.updateStory(storyId, updates)
 
     // updateStory always stamps updated_at, so mirror that onto both in-memory copies
     // rather than letting the library card and the open story disagree about it.
     const updatedAt = Date.now()
     this.allStories = this.allStories.map((s) =>
-      s.id === storyId ? { ...s, title: trimmed, updatedAt } : s,
+      s.id === storyId ? { ...s, ...updates, updatedAt } : s,
     )
 
     if (this.currentStory?.id === storyId) {
-      this.currentStory = { ...this.currentStory, title: trimmed, updatedAt }
+      this.currentStory = { ...this.currentStory, ...updates, updatedAt }
     }
   }
 

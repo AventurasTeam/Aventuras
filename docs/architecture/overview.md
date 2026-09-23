@@ -49,6 +49,31 @@ text in the action input cannot open a panel. Because swipes inside a panel bubb
 opposite edge's band. On a phone neither does: the sidebar is capped at 288px and the navigation
 panel at `100vw - 3rem`.
 
+## Drawer swipes, and the one place we reach into `vaul`
+
+A drawer that holds unsaved work has to answer a swipe with a question rather than a close, and
+`vaul` offers no veto: it decides inside its own release handler. `createDrawerSwipeGuard`
+(`ui/drawer/swipe-guard.ts`) takes the one seam there is — `vaul` calls the content's
+`onpointerup` just before it measures the swipe — and, when the caller says the drawer is dirty,
+puts the sheet back at rest so that measurement finds nothing to act on, then animates the settle
+itself.
+
+**On upgrading `vaul-svelte`**, check three things against the new version, because the guard
+copies them rather than importing them (they are internal):
+
+- the release callback still runs before the swipe is measured (`use-drawer-content.svelte.js`),
+- `VELOCITY_THRESHOLD` and the settle transition in `internal/constants.js`, mirrored in the
+  guard, and
+- `closeThreshold`, which the guard reads from `DRAWER_CLOSE_THRESHOLD` and `drawer.svelte`
+  passes to `vaul`; the two must stay one constant.
+
+If the seam closes, the fallback still holds: a dirty drawer that closes anyway comes back as a
+fresh sheet once the old one has released its scroll lock — slower, but not broken.
+
+Two other `vaul` behaviours the callers have to know: it closes a non-dismissible drawer when its
+handle is tapped, and a close driven from our side never reaches its restore, so the scroll lock
+is released by hand (see `utils/scrollLock`).
+
 ## The soft keyboard
 
 `MainActivity` calls `enableEdgeToEdge()`, which sets `decorFitsSystemWindows = false` and with it

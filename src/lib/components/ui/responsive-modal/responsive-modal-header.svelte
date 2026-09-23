@@ -9,11 +9,13 @@
 
   type Props = {
     title?: string
+    /** Desktop only: `false` drops the X, for a dialog whose own Cancel is the way out. */
+    closeButton?: boolean
     class?: string
     children?: Snippet
   } & any
 
-  let { title, class: className, children, ...props }: Props = $props()
+  let { title, closeButton = true, class: className, children, ...props }: Props = $props()
   const { isMobile } = getResponsiveModalContext()
 </script>
 
@@ -39,11 +41,13 @@
         {@render children?.()}
       {/if}
     </Dialog.Header>
-    <Dialog.Close>
-      <Button variant="destructive" size="icon">
-        <X class="size-6!" />
-        <span class="sr-only">Close</span>
-      </Button>
-    </Dialog.Close>
+    {#if closeButton}
+      <Dialog.Close>
+        <Button variant="destructive" size="icon">
+          <X class="size-6!" />
+          <span class="sr-only">Close</span>
+        </Button>
+      </Dialog.Close>
+    {/if}
   </div>
 {/if}
