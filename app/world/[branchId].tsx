@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { View } from 'react-native'
 
 import type { ActionGroup } from '@/components/compounds/actions-menu'
@@ -27,27 +27,15 @@ import {
   worldAddLabel,
   worldCategoryLabel,
 } from '@/components/world/world-selection'
-import { useLeaveFailedStoryOpen } from '@/hooks/use-leave-failed-story-open'
+import { useColdOpenStory } from '@/hooks/use-cold-open-story'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
 import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
 import { useRowSignals } from '@/hooks/use-row-signals'
 import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
 import { useTier } from '@/hooks/use-tier'
-import { loadOpenStory } from '@/lib/actions'
-import { db, runInTransaction } from '@/lib/db'
-import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { isEntityCategory, type EntityFilter, type WorldCategory } from '@/lib/list-modules'
-import {
-  awaitRunTerminal,
-  currentStoryStore,
-  entitiesStore,
-  loreStore,
-  rehydrateStories,
-  storiesStore,
-} from '@/lib/stores'
-
-const ctx = { db, runInTransaction }
+import { awaitRunTerminal, entitiesStore, loreStore, storiesStore } from '@/lib/stores'
 
 export default function WorldRoute() {
   const router = useRouter()
@@ -70,37 +58,8 @@ export default function WorldRoute() {
   const [search, setSearch] = useState('')
   const [addOpen, setAddOpen] = useState(false)
   const listRef = useRef<WorldListPaneHandle>(null)
-  const leaveFailedOpen = useLeaveFailedStoryOpen()
 
-  // A cold mount (reload, deep link) hydrates the working set the way the reader does.
-  useEffect(() => {
-    if (branchId === '') {
-      leaveFailedOpen()
-      return
-    }
-    if (currentStoryStore.getCurrentStory()?.branchId === branchId) return
-    let current = true
-    void loadOpenStory(branchId, ctx, () => current)
-      .then((result) => {
-        if (current && result.status !== 'ok') leaveFailedOpen()
-      })
-      .catch((err: unknown) => {
-        logger.error('app.world_story_load_failed', {
-          branchId,
-          error: err instanceof Error ? err.message : String(err),
-        })
-        if (current) leaveFailedOpen()
-      })
-    return () => {
-      current = false
-    }
-  }, [branchId, leaveFailedOpen])
-  useEffect(() => {
-    // Never rejects: internally try/caught, logs bootstrap.stories_hydrate_failed on its own.
-    void rehydrateStories(db)
-  }, [])
-
-  const open = currentStoryStore.useCurrentStory((o) => (o?.branchId === branchId ? o : null))
+  const open = useColdOpenStory(branchId, 'world')
   const storyId = open?.storyId ?? null
   const storyTitle = storiesStore.useStories((s) => s.rows.find((r) => r.id === storyId)?.title)
 

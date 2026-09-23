@@ -203,9 +203,11 @@ convention, and the expectation that subsystems route through
   `rejection_tracker_unavailable`. `row_signals_read_failed`
   (`hooks/use-row-signals.ts`, a bounded-read failure),
   `entry_index_read_failed` (`hooks/use-entry-index.ts`, same shape),
-  `world_story_load_failed` (the World route's cold-mount
-  `loadOpenStory` rejection), `plot_story_load_failed` (the same
-  rejection on the Plot route's cold mount) and
+  `world_story_load_failed` / `plot_story_load_failed` (a cold
+  mount's `loadOpenStory` rejection, `hooks/use-cold-open-story.ts`),
+  `world_story_not_found` / `plot_story_not_found` (warn: the same
+  cold mount on a branch with no story, which leaves for the story
+  list) and
   `plot_saved_handler_failed` (`components/plot/use-plot-row-session.ts`
   — a `PlotRowSessionOptions.onSaved` that throws after the write
   already landed) and `plot_link_revalidate_failed`
