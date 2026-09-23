@@ -330,12 +330,14 @@ chapters` (deferred by canon), and `retrieval_count` review — M5.
   trailing number had no contrast against it and read as part of the
   name; the Select's rows can't style it at all without losing the
   primitive's selected checkmark.
-- **`AccordionContent`'s exit animation is gated on `isExpanded`.** It
-  exists for a collapsing group, but a kind swap tears down every
-  `AccordionItem` at once and painted the outgoing rows over the
-  incoming list for ~230 ms. See
+- **`AccordionContent` has no exit animation.** It existed for a
+  collapsing group but never showed on native, while a kind swap tore
+  down every `AccordionItem` at once and painted the outgoing rows over
+  the incoming list for ~230 ms. See
   [lessons-learned](../../../lessons-learned/layoutanimationconfig-skipexiting-gap.md)
-  — `LayoutAnimationConfig skipExiting` does not suppress it.
+  — `LayoutAnimationConfig skipExiting` does not suppress it. The
+  item's animated frame now clips its content, so an expanding group
+  no longer paints over the one below.
 - **Seed anchors avoid multiples of 12.** Those hero entries are
   `system`, which the entry index excludes by design, so five awareness
   rows and two `lastSeenAt` were rendering as "Entry no longer exists".

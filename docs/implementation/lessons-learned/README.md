@@ -130,8 +130,8 @@ slice plans when relevant.
   `useReanimatedKeyboardAnimation` directly.
 - [`LayoutAnimationConfig skipExiting` doesn't reach the Accordion](./layoutanimationconfig-skipexiting-gap.md)
   — it does not suppress `AccordionContent`'s `FadeOutUp` when the
-  whole list swaps; gate the `exiting` prop on the item's own state,
-  and pin the culprit by deleting the prop.
+  whole list swaps. The collapse fade never showed on native, so the
+  prop is gone; pin a culprit animation by deleting its prop.
 
 ### State / data discipline
 

@@ -2575,6 +2575,39 @@ would kill it mid-migration.
 Parked 2026-09-13; a migration or other main-thread stall long enough
 to near the timeout is the signal to revisit.
 
+#### Accordion measured-height animation on native
+
+On native, `AccordionContent` mounts and unmounts outright, and the
+sections below slide via `LinearTransition` on each `AccordionItem`.
+Expand is revealed by a clip on the item's animated frame. Collapse
+has no animation of its own: the content disappears and the space
+closes. During expand, the item's divider and a card item's bottom
+border sit outside the growing clip, so they stay hidden until the
+200 ms transition ends.
+
+Reanimated's documented accordion pattern fixes all three: keep the
+content mounted, measure its natural height with `onLayout`, and
+animate the wrapper's `height` with `withTiming` under
+`overflow: hidden`. Layout then re-runs every frame, so dividers,
+card borders and the sections below follow the animation without
+`LinearTransition`. There is also no `exiting` to leave a ghost when
+a host swaps lists.
+
+Costs to weigh when it lands:
+
+- Collapsed content stays mounted through the collapse. Unmount it
+  from the timing callback, or Plot and World keep every collapsed
+  group's rows alive.
+- Every frame of the animation re-runs layout across long groups
+  (Plot thread tiers, World lists). Measure on a mid-range Android
+  device before adopting.
+- Web is untouched: radix already animates height through
+  `--radix-accordion-content-height`.
+
+Parked 2026-09-23; device use showing the collapse reading as abrupt,
+or the expand-time divider / card-border gap proving noticeable, is
+the signal to revisit.
+
 ### Code structure (parked)
 
 #### Unsaved-changes guard folder placement

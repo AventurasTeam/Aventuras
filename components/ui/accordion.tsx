@@ -3,7 +3,6 @@ import { ChevronDown } from 'lucide-react-native'
 import { type ComponentProps, type ReactNode } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 import Animated, {
-  FadeOutUp,
   LayoutAnimationConfig,
   LinearTransition,
   useAnimatedStyle,
@@ -13,7 +12,7 @@ import Animated, {
 
 import { Icon } from '@/components/ui/icon'
 import { TextClassContext } from '@/components/ui/text'
-import { POINTER_EVENTS_NONE } from '@/constants/styles'
+import { OVERFLOW_HIDDEN, POINTER_EVENTS_NONE } from '@/constants/styles'
 import { cn } from '@/lib/utils'
 
 function Accordion({
@@ -40,7 +39,12 @@ function AccordionItem({
 }: ComponentProps<typeof AccordionPrimitive.Item>) {
   return (
     <AccordionPrimitive.Item value={value} asChild={Platform.OS !== 'web'} {...props}>
-      <Animated.View layout={Platform.select({ native: LinearTransition.duration(200) })}>
+      {/* The clip lives here because LinearTransition animates only this frame; children lay out
+          at their final size, so expanding content would paint over the next item mid-slide. */}
+      <Animated.View
+        layout={Platform.select({ native: LinearTransition.duration(200) })}
+        style={Platform.select({ native: OVERFLOW_HIDDEN })}
+      >
         {/* Styling lives on this plain View rather than on Item: `asChild` routes
             Item's className onto the Animated.View on native, where NativeWind
             registers no cssInterop and silently drops it. One owner, both
@@ -126,15 +130,7 @@ function AccordionContent({
         )}
         {...props}
       >
-        {/* Only a collapse animates out: torn down while still expanded (the host swapped lists)
-            FadeOutUp paints these rows over the incoming ones. skipExiting does not reach here. */}
-        <Animated.View
-          exiting={isExpanded ? undefined : Platform.select({ native: FadeOutUp.duration(200) })}
-        >
-          {/* NativeWind registers cssInterop for RN core components only, so
-              className on a Reanimated Animated.* is dropped, not applied. */}
-          <View className={cn('pb-row-y-lg', className)}>{children}</View>
-        </Animated.View>
+        <View className={cn('pb-row-y-lg', className)}>{children}</View>
       </AccordionPrimitive.Content>
     </TextClassContext.Provider>
   )
