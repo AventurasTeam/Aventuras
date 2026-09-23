@@ -132,16 +132,6 @@ slice-planning gate forces its resolution before that slice is planned.
   where canon's Embedder sits. Either split the panel or amend canon to
   keep status with the model it describes. Surfaced 2026-09-15.
 
-- **Three copies of the save-session story harness cell.**
-  `components/story-settings/about-panel.stories.tsx`,
-  `models-panel.stories.tsx` and `memory-knobs-panel.stories.tsx` each
-  carry their own `useSyncExternalStore` cell plus harness so
-  `onCommit` refreshes the section's data synchronously (the timing
-  reason lives in a repeated comment, and in
-  [save-session harness refresh](lessons-learned/save-session-harness-sync-refresh.md)).
-  One generic `externalCell<T>()` in a shared story helper would hold
-  it once. Surfaced 2026-09-15.
-
 - **`ScreenShell`'s chrome is addressed through screen-specific locator
   namespaces.** The back arrow and the Actions menu belong to
   `ScreenShell` (`components/shells/screen-shell.tsx`), not to any one

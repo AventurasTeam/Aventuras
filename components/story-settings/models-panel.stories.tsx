@@ -17,6 +17,7 @@ import { t } from '@/lib/i18n'
 import { appSettingsStore, hydrateAppSettings } from '@/lib/stores'
 import { toastStore } from '@/lib/toast'
 
+import { externalCell } from './external-cell'
 import { ModelsPanel } from './models-panel'
 import { StorySettingsSaveSessionProvider } from './save-session'
 import { StorySettingsSaveBar } from './save-session-chrome'
@@ -82,34 +83,8 @@ function Harness({ settings: storySettings, disabled = false, onCommit }: Harnes
   )
 }
 
-type SettingsCell = {
-  get: () => StorySettings
-  set: (next: StorySettings) => void
-  subscribe: (listener: () => void) => () => void
-}
-
-function settingsCell(initial: StorySettings): SettingsCell {
-  let current = initial
-  const listeners = new Set<() => void>()
-  return {
-    get: () => current,
-    set: (next) => {
-      current = next
-      for (const listener of listeners) listener()
-    },
-    subscribe: (listener) => {
-      listeners.add(listener)
-      return () => {
-        listeners.delete(listener)
-      }
-    },
-  }
-}
-
-// An external store like `storiesStore`, not useState: only a store refresh
-// re-renders before the provider's post-commit re-read, as the real one does.
 function StatefulHarness({ settings: initial, onCommit }: HarnessProps) {
-  const [cell] = useState(() => settingsCell(initial))
+  const [cell] = useState(() => externalCell(initial))
   const current = useSyncExternalStore(cell.subscribe, cell.get)
   const commit = useCallback(
     async (patch: StorySettingsSessionPatch) => {
