@@ -63,10 +63,13 @@ function useSheetA11y(): SheetA11yValue {
 
 const FullWindowOverlay = Platform.OS === 'ios' ? RNFullWindowOverlay : Fragment
 
+// The radius is the one gorhom's default background carries; `backgroundStyle` sets none.
+const QUIET_BACKGROUND: ViewStyle = { borderRadius: 15 }
+
 // gorhom's default background and handle are also `adjustable` views with hard-coded English
 // labels. Both are decoration here, so these keep them out of the accessibility tree.
 export function QuietSheetBackground({ style, pointerEvents }: BottomSheetBackgroundProps) {
-  return <View pointerEvents={pointerEvents} style={style} />
+  return <View pointerEvents={pointerEvents} style={[QUIET_BACKGROUND, style]} />
 }
 
 export function QuietSheetHandle(props: BottomSheetHandleProps) {
