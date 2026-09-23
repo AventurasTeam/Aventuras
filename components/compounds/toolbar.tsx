@@ -192,7 +192,7 @@ function ToolbarRoot({ className, children, narrow }: ToolbarProps) {
   return (
     <View
       className={cn('w-full', className)}
-      onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
+      onLayout={narrow == null ? (e) => setContainerWidth(e.nativeEvent.layout.width) : undefined}
     >
       {isNarrow ? (
         <View className="gap-2">
