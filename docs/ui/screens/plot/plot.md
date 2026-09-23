@@ -360,9 +360,10 @@ inherit unchanged.
   route level.
 - **Top-bar shape on phone** per
   [`mobile/navigation.md → Phone`](../../foundations/mobile/navigation.md#phone--640-px):
-  slim single-row `[←] [<title> / Plot] [pill] [⛭] [⚲]`. List
-  state breadcrumb is `<title> / Plot`; detail-route extends to
-  `<title> / Plot / <Threads|Happenings>`.
+  slim single-row `[←] [<title> / Plot] [pill] [⛭] [⚲]`. The
+  breadcrumb stays `<title> / Plot` on the detail route too — the
+  sub-header already leads with the kind, per
+  [`principles.md → Master-detail sub-header`](../../principles.md#master-detail-sub-header).
 - **Threads / Happenings segment toggle** sits at the top of the
   list pane and uses the Select primitive's segment render mode at
   every tier — 2-cell stretch via `flex: 1 1 0` per the

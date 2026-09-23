@@ -893,11 +893,13 @@ overflows.
   the slim phone top bar at the route level.
 - **Top-bar shape on phone** per
   [`mobile/navigation.md → Phone`](../../foundations/mobile/navigation.md#phone--640-px):
-  slim single-row `[←] [<title> / World] [pill] [⛭] [⚲]`. List
-  state breadcrumb is `<title> / World`; detail-route extends to
-  `<title> / World / <kind>` (parent segments tappable per the
-  breadcrumb-tappability amendment, current segment inert with
-  tap-to-tooltip on truncation per
+  slim single-row `[←] [<title> / World] [pill] [⛭] [⚲]`. The
+  breadcrumb stays `<title> / World` on the detail route too — the
+  sub-header already leads with the kind, per
+  [`principles.md → Master-detail sub-header`](../../principles.md#master-detail-sub-header)
+  (parent segments tappable per the breadcrumb-tappability
+  amendment, current segment inert with tap-to-tooltip on truncation
+  per
   [`mobile/touch.md`](../../foundations/mobile/touch.md#tap-to-tooltip-on-inert-chrome-text)).
 - **Detail-pane tab navigation reroutes on narrow widths.** Tab
   strip is the desktop primitive; on tablet detail panes that

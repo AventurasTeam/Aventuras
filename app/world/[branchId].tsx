@@ -179,17 +179,16 @@ export default function WorldRoute() {
     [editBlocked, gateReason, category, openAddMenu],
   )
 
-  // Breadcrumb ignores the last segment's onPress, so parents alone navigate.
-  // world.md → Mobile expression.
+  // principles.md → Master-detail sub-header: the top bar stays screen-level on every tier.
   const titleSegments: BreadcrumbSegment[] = [
     {
       key: 'story',
       label: storyTitle ?? t('reader:placeholderTitle'),
       onPress: () => surfaceNavigate(`/reader-composer/${branchId}`),
     },
-    { key: 'world', label: t('world:title'), onPress: () => setSelectedId(null) },
-    ...(detailOpen ? [{ key: 'kind', label: worldCategoryLabel(category) }] : []),
+    { key: 'world', label: t('world:title') },
   ]
+  // Breadcrumb ignores the last segment's onPress: `category` navigates only while a row follows.
   const subHeaderSegments: BreadcrumbSegment[] = [
     { key: 'category', label: worldCategoryLabel(category), onPress: () => setSelectedId(null) },
     ...(selection != null
