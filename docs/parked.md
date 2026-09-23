@@ -2499,18 +2499,6 @@ investigated, and any future locator or a11y assumption about
 background-hiding on this stack is unsafe. Surfaced by M3.7b
 implementation (2026-07-31).
 
-#### Tab-qualified invalid-reason notice on the save bar
-
-**The save bar's invalid-reason notice is not tab-qualified.**
-`computeSnapshot` (`components/story-settings/save-session-state.ts`)
-reports the first dirty-and-invalid section in rail order, and the
-bar lists dirty fields from every tab — so once M4.4 adds more
-sections, a user on one tab can be shown a blocking reason sourced
-from another with nothing indicating where to go. Moot at one
-section; `{ tab, reason }` would be a single optional field on the
-existing `SaveSessionSnapshot` type. Surfaced by M3.7b
-implementation (2026-07-31).
-
 #### BC-style origin era rendering
 
 **A BC-style origin renders every non-opening entry in the wrong
