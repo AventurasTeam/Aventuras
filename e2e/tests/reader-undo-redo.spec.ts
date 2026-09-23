@@ -119,7 +119,7 @@ test.describe('reader — undo of a turn covered by a two-turn classifier pass',
       newCharacters: [],
     })
     setProviderEndpoint(seeded.dbPath, mock.url)
-    // unprocessedTurnCount counts entry ROWS, not turn pairs: two turns are four
+    // The cadence counts entry rows, not turn pairs: two turns are four
     // rows, so cadence 4 fires exactly one pass and only after turn B — the
     // single pass whose window covers both turns.
     setClassifierCadence(seeded.dbPath, 'story_hero', 4)

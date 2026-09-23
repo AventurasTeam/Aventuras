@@ -7,7 +7,7 @@ import {
   resetStuckClassifierRunState,
   reverseReplayDeltas,
   runClassifierNow,
-  unprocessedTurnCount,
+  unprocessedEntryCount,
 } from '@/lib/actions'
 import { createClassifierScheduler } from '@/lib/classifier'
 import { STORY_SETTINGS_DEFAULTS, type DbCtx } from '@/lib/db'
@@ -90,8 +90,8 @@ export function wireClassifierScheduler(ctx: DbCtx): void {
     cadenceFor: () =>
       currentStoryStore.getCurrentStory()?.settings.classifierCadence ??
       STORY_SETTINGS_DEFAULTS.classifierCadence,
-    unprocessedTurnsFor: (branchId, processedThrough) =>
-      unprocessedTurnCount(branchId, processedThrough, ctx),
+    unprocessedEntriesFor: (branchId, processedThrough) =>
+      unprocessedEntryCount(branchId, processedThrough, ctx),
     statusFor: (branchId) => readClassifierStatus(branchId, ctx),
     startRun: (branchId) => runClassifierNow(branchId, ctx),
     setTimer: (fn, ms) => setTimeout(fn, ms),

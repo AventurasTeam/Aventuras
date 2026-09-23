@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { unprocessedTurnCount, readClassifierStatus, runClassifierNow } from '@/lib/actions'
+import { unprocessedEntryCount, readClassifierStatus, runClassifierNow } from '@/lib/actions'
 import { idleStatus } from '@/lib/classifier'
 import { storyDefinitionSchema, storySettingsSchema, type DbCtx } from '@/lib/db'
 import { embedClassifierDescriptions } from '@/lib/embedder-swap'
@@ -72,7 +72,7 @@ describe('wireClassifierScheduler', () => {
       definition: DEFINITION,
       settings: SETTINGS,
     })
-    vi.mocked(unprocessedTurnCount).mockResolvedValue(5)
+    vi.mocked(unprocessedEntryCount).mockResolvedValue(5)
     vi.mocked(readClassifierStatus).mockResolvedValue(idleStatus())
     vi.mocked(runClassifierNow).mockResolvedValue({
       outcome: 'completed',

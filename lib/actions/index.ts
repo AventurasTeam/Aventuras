@@ -1,7 +1,7 @@
 export {
   readClassifierStatus,
   resetStuckClassifierRunState,
-  unprocessedTurnCount,
+  unprocessedEntryCount,
 } from './classifier/deps'
 export { runClassifierNow } from './classifier/run-now'
 export {

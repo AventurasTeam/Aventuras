@@ -81,10 +81,10 @@ export function effectiveCadenceEntries(cadence: number): number {
  */
 export function shouldCadenceFire(args: {
   status: ClassifierStatus
-  unprocessedTurns: number
+  unprocessedEntries: number
   cadence: number
 }): boolean {
-  const { status, unprocessedTurns, cadence } = args
+  const { status, unprocessedEntries, cadence } = args
   if (status.state === 'failed-persistent' || status.state === 'running') return false
-  return unprocessedTurns >= Math.max(1, cadence)
+  return unprocessedEntries >= Math.max(1, cadence)
 }
