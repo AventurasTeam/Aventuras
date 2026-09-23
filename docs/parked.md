@@ -2413,9 +2413,11 @@ attributes to stay on our `View`. Neither option is verified. No
 consumer passes `accessibilityRole="menu"`, so every Popover today is
 the same dialog-on-dialog shape.
 
-The three menu-shaped consumers, `ImporterMenu`, the wizard's add-cast
-menu and the story card's overflow, also put `menuitem` rows inside
-that dialog with no `menu` owner.
+The four menu-shaped consumers, `ImporterMenu`, the wizard's add-cast
+menu, the story card's overflow and `OverflowMenu` (Plot's detail
+head), also put `menuitem` rows inside that dialog with no `menu`
+owner. On phone `OverflowMenu` hosts them in a bottom `Sheet`, which
+has also been a `dialog` since 2026-09-23.
 That is deliberate: Popover has no arrow-key roving, and `role="menu"`
 would switch screen readers into a navigation mode the container does
 not honour. The fix is roving focus plus the role, or plain buttons in
