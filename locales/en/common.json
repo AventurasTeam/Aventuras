@@ -137,7 +137,8 @@
     "unsavedChanges_one": "{{count}} unsaved change",
     "unsavedChanges_other": "{{count}} unsaved changes",
     "discard": "Discard",
-    "save": "Save"
+    "save": "Save",
+    "note": "Save note"
   },
   "unsavedChanges": {
     "title": "Unsaved changes",

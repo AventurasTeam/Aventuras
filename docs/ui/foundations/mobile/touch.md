@@ -264,6 +264,11 @@ NOT in scope:
 - **Buttons / actionable icons / chips** — tap fires the action;
   no popover.
 
+One icon is in scope despite carrying no text: the save bar's `⚠`
+note ([`save-sessions.md → Invalid draft`](../../patterns/save-sessions.md#invalid-draft)).
+It is how a draft explains why Save is dead, so a tap opens its text
+in the same transient popover.
+
 Implementation guidance: bind the tap-to-popover handler only to
 elements whose text actually overflows at runtime. Don't bind on
 elements where the text fits — that creates a phantom affordance

@@ -98,8 +98,11 @@ contract — not a per-surface choice:
 
 **Surface-specific informational notes** (e.g., calendar editor's
 "saving propagates labels to N stories using this calendar") layer
-in as a small `⚠` icon with tooltip after the field list — a
-single primitive, never a second row. The visual contract stays
+in as a small `⚠` icon after the field list — a hover tooltip on
+desktop, and a tap or click opens the same text in a popover, which is
+how it reaches phone users (see
+[`touch.md → Tap-to-tooltip on inert chrome text`](../foundations/mobile/touch.md#tap-to-tooltip-on-inert-chrome-text)).
+A single primitive, never a second row. The visual contract stays
 single-row across surfaces.
 
 **Positioning** — the save bar is a flex item at the bottom of the

@@ -84,6 +84,12 @@ export const WithNotice: Story = {
     onSave: fn(),
     onDiscard: fn(),
   },
+  play: async ({ args }) => {
+    // A tap opens the note too: touch has no hover, so the tooltip alone never reaches a phone.
+    await userEvent.click(await screen.findByRole('button', { name: args.notice }))
+    const note = await screen.findByRole('dialog', { name: 'Save note' })
+    expect(note).toHaveTextContent(args.notice!)
+  },
 }
 
 /**
@@ -284,11 +290,10 @@ export const LiveRegionCoversOnlyTheMessage: Story = {
     // role="status" carries an implicit aria-atomic, so anything inside is
     // re-announced whole on every count change.
     expect(region).toHaveTextContent(/2 unsaved changes/)
-    expect(within(region).getByLabelText('Two categories share a label')).toBeInTheDocument()
     expect(within(region).queryAllByRole('button')).toEqual([])
 
     const bar = await screen.findByTestId('save-bar')
-    for (const name of [/^Save/, 'Discard']) {
+    for (const name of [/^Save/, 'Discard', 'Two categories share a label']) {
       const button = within(bar).getByRole('button', { name })
       expect(region.contains(button)).toBe(false)
     }

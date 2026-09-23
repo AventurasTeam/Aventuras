@@ -78,18 +78,3 @@ slice-planning gate forces its resolution before that slice is planned.
   panic-threshold technique are in
   [the compiler-suppression lesson](lessons-learned/exhaustive-deps-suppression-disables-the-compiler.md).
   Surfaced 2026-09-14.
-
-- **The save bar's invalid-draft reason is tooltip-only on phone.**
-  Rejections get a toast — `app/plot/[branchId].tsx`'s `onRejected`
-  is `toast.error`, because the save bar's notice is an icon with no
-  visible text — but an invalid draft doesn't: `session.invalidReason`
-  only reaches `SaveBar`'s `notice` slot, which is a `title` tooltip on
-  web and a bare `aria-label` on native
-  (`components/compounds/save-bar.tsx`). So on phone the reason a
-  disabled Save gives is unreachable by touch.
-  `docs/ui/patterns/save-sessions.md` (`Invalid draft`) already flags
-  that the slot "reaches phone users, who get no tooltip" for
-  field-level consequences and routes those elsewhere, but assigns the
-  invalid-draft reason itself to that same slot — check that doc for
-  the intended phone surface before deciding the fix. Surfaced
-  2026-09-22.

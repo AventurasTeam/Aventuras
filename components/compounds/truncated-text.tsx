@@ -28,7 +28,7 @@ type Truncation = {
 }
 
 // touch.md → Tap-to-tooltip on inert chrome text: the popover dismisses after a brief idle.
-const IDLE_DISMISS_MS = 4000
+export const TAP_TOOLTIP_IDLE_MS = 4000
 
 const PROBE_CLIP: ViewStyle = {
   position: 'absolute',
@@ -143,7 +143,7 @@ function FullTextPopover({
   const [open, setOpen] = useState(false)
   useEffect(() => {
     if (!open) return
-    const timer = setTimeout(() => trigger.current?.close(), IDLE_DISMISS_MS)
+    const timer = setTimeout(() => trigger.current?.close(), TAP_TOOLTIP_IDLE_MS)
     return () => clearTimeout(timer)
   }, [open])
   return (
