@@ -2610,6 +2610,35 @@ Parked 2026-09-23; device use showing the collapse reading as abrupt,
 or the expand-time divider / card-border gap proving noticeable, is
 the signal to revisit.
 
+#### A dirty links array on Save overwrites concurrent link writes
+
+`useRowSaveSession`'s same-row refresh (`hooks/use-row-save-session.ts`)
+merges a store patch per top-level field, so a dirty `involvements` /
+`awareness` array keeps the user's whole array rather than grafting the
+patch in; the natural-key builder in `lib/plot/happening-draft.ts` then
+reads that stale array as the truth and deletes or reverts the rows a
+concurrent write added. It also re-creates a row a concurrent write
+deleted, since a draft row whose id left the baseline reads as new.
+
+Unreachable today. Every writer that can link an existing happening is
+`hard-gate`, which blocks the Plot pane while it runs, and the periodic
+classifier, the one `no-gate` writer, links only happenings it creates
+in the same pass. Chapter-close does rewrite links on existing
+happenings
+([awareness pin tuning](./memory/chapter-close.md#3d--awareness-pin-tuning),
+[happenings consolidation](./memory/chapter-close.md#3e--happenings-consolidation)),
+but under the same gate. The fix is a three-way merge: record each
+links field's baseline when it goes dirty, then apply the user's diff
+onto the latest rows — about 60–100 lines across the hook and the
+draft builder.
+
+Parked 2026-09-23. Revisit when a `no-gate` writer links an existing
+happening —
+[`classifier.md → Provenance attribution`](./memory/classifier.md#provenance-attribution)
+already describes a character learning of an old happening, which
+today's schema cannot express — or when a gated run becomes startable
+while a Plot session is dirty. Raised 2026-09-22 by Slice 4.3.
+
 #### Select's dropdown popover is pinned to its trigger's width
 
 The popper Viewport in `components/ui/select.tsx` gets

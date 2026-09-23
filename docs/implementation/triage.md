@@ -175,18 +175,6 @@ slice-planning gate forces its resolution before that slice is planned.
   Moving `InlineNativeList` / `SheetNativeList` into a sibling module
   would also shrink the file. Surfaced 2026-09-22.
 
-- **A dirty links array on Save overwrites concurrent link changes to
-  the same row.** `useRowSaveSession`'s same-row refresh
-  (`hooks/use-row-save-session.ts`) merges a store patch per
-  top-level field, so a dirty `involvements` / `awareness` array
-  keeps the user's whole array rather than grafting the patch in; the
-  natural-key builder in `lib/plot/happening-draft.ts` then reads
-  that stale array as the truth and deletes or reverts the rows a
-  concurrent write added. Unreachable in M4 — turns hard-gate the
-  pane, and the classifier only links happenings it creates — but
-  live once chapter-close writes links onto existing happenings
-  through a path with no such gate. Surfaced 2026-09-22.
-
 - **`Toolbar` diverges from its own spec.**
   `docs/ui/patterns/toolbar.md → Mechanism` prescribes a CSS container
   query on web (`@container (max-width: 1023px)`, the FormRow
