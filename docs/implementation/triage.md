@@ -54,17 +54,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **Component inventory has no Story Settings or embedder rows.**
-  `docs/ui/component-inventory.md` lists single-domain compounds by
-  folder, but has no rows for `components/story-settings/` or
-  `components/embedder/` — shipped M3 pieces
-  (`StorySettingsSaveBar` / `StorySettingsDialogs`,
-  `UnsavedChangesDialog`, `AuthoringAidsPanel`, `MemoryPanel`,
-  `SwapDialog`, `SwapResumeDialog`) and Slice 4.4's
-  (`DefinitionalChangeDialog`, `AboutPanel`, `ModelsPanel`,
-  `MemoryKnobsPanel`, `EmbeddingUpgradeDialog`). Backfill as one pass
-  rather than piecemeal. Surfaced 2026-09-14.
-
 - **Nothing runs React Compiler, so its bail-outs are invisible.** The
   compiler is on (`app.json` → `expo.experiments.reactCompiler`) but no
   lint rule or CI step reports what it skipped:

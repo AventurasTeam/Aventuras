@@ -1065,6 +1065,17 @@ are a11y-contract rather than visual, so M9.2's audit has to widen
 past glyphs and spacing to own them — or they need a slice of their
 own.
 
+- **M9.1 — The component inventory is missing about 70 shipped
+  components.** `docs/ui/component-inventory.md` has no rows for
+  `components/story-settings/` or `components/embedder/`, and a
+  name-match sweep on 2026-09-23 found most of `reader/` (7 of 7),
+  `wizard/` (23 of 23) and `story/` (6 of 7) absent too, plus four
+  `plot/` pieces, about seven `compounds/`, two `shells/` and two `ui/`
+  (`Banner`, `KeyboardInsetColumn`). Shipped rows are added by hand when
+  a component ships, so these are the ones that skipped the step.
+  Backfill in one pass, and consider an inventory-versus-filesystem
+  check beside this milestone's story-coverage gate so the list stays
+  whole. Raised 2026-09-14 by Slice 4.4; widened 2026-09-23.
 - **M9.2 — `disabledReason` never reaches the accessibility tree on web.**
   `Button`, `SwitchRow`, `swap-dialog`'s `CandidateRow` and
   `ColorPicker` all pass the reason to `accessibilityHint`, which RN
