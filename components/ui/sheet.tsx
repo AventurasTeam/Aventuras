@@ -17,7 +17,6 @@ import {
   type ComponentProps,
 } from 'react'
 import {
-  type AccessibilityRole,
   BackHandler,
   Platform,
   StyleSheet,
@@ -44,7 +43,7 @@ type AutoFocusHandler = (event: Event) => void
 type SheetA11yValue = {
   ariaLabel?: string
   ariaLabelledBy?: string
-  /** Right-anchor only — forwarded to the Radix dialog as aria-describedby on web. */
+  /** Right-anchor only — forwarded to the dialog as aria-describedby on web. */
   ariaDescribedBy?: string
   /** Right-anchor only — forwarded to the Radix dialog's focus-on-open hook. */
   onOpenAutoFocus?: AutoFocusHandler
@@ -63,11 +62,6 @@ function useSheetA11y(): SheetA11yValue {
 }
 
 const FullWindowOverlay = Platform.OS === 'ios' ? RNFullWindowOverlay : Fragment
-
-// gorhom defaults its content to `adjustable`, which RN-Web emits as `slider`. Only web can say
-// `dialog`; RN's accessibilityRole union lacks it and native rejects unknown roles.
-const BOTTOM_SHEET_ROLE: AccessibilityRole =
-  Platform.OS === 'web' ? ('dialog' as AccessibilityRole) : 'none'
 
 // gorhom's default background and handle are also `adjustable` views with hard-coded English
 // labels. Both are decoration here, so these keep them out of the accessibility tree.
@@ -121,7 +115,6 @@ const BOTTOM_SNAP_PCT: Record<Exclude<SheetSize, 'auto'>, `${number}%`> = {
 type SheetContentProps = ComponentProps<typeof DialogPrimitive.Content> & {
   anchor?: SheetAnchor
   size?: SheetSize
-  title?: string
   /** Bottom-anchor only — allows a pending action to block swipe dismissal. */
   enablePanDownToClose?: boolean
   /** Right-anchor only — names the rn-primitives Portal host to render into. */
@@ -143,7 +136,6 @@ function SheetContent({ anchor = 'bottom', ...props }: SheetContentProps) {
 function BottomSheetContent({
   className,
   size = 'medium',
-  title = 'Sheet',
   children,
   // Pulled out of the rest bag so it can be merged with the safe-area padding
   // below rather than spread over it — a caller's `style` would otherwise drop
@@ -253,6 +245,13 @@ function BottomSheetContent({
     [theme],
   )
 
+  // gorhom forwards no aria-labelledby to its container, so on web the dialog is our content
+  // View, where both names reach the DOM.
+  const webDialog =
+    Platform.OS === 'web'
+      ? ({ role: 'dialog', 'aria-label': ariaLabel, 'aria-labelledby': ariaLabelledBy } as object)
+      : null
+
   return (
     <BottomSheetModal
       ref={sheetRef}
@@ -275,9 +274,10 @@ function BottomSheetContent({
       backgroundStyle={backgroundStyle}
       handleComponent={QuietSheetHandle}
       handleIndicatorStyle={handleIndicatorStyle}
-      accessibilityRole={BOTTOM_SHEET_ROLE}
-      // null, not undefined: undefined falls through to gorhom's English 'Bottom Sheet'.
-      accessibilityLabel={ariaLabel ?? (ariaLabelledBy ? null : title)}
+      // gorhom defaults its container to `adjustable` (RN-Web: `slider`), and native has no
+      // dialog role. null, not undefined: undefined falls through to gorhom's English label.
+      accessibilityRole="none"
+      accessibilityLabel={Platform.OS === 'web' ? null : (ariaLabel ?? null)}
       onDismiss={() => {
         if (!isMountedRef.current) return
         isPresentedRef.current = false
@@ -301,6 +301,7 @@ function BottomSheetContent({
             <BottomSheetView>
               <View
                 className={cn('p-6', className)}
+                {...webDialog}
                 {...(contentProps as ComponentProps<typeof View>)}
                 style={[safeBottomStyle(insets.bottom), style]}
               >
@@ -310,6 +311,7 @@ function BottomSheetContent({
           ) : (
             <View
               className={cn('flex-1 p-6', className)}
+              {...webDialog}
               {...(contentProps as ComponentProps<typeof View>)}
               style={[safeBottomStyle(insets.bottom), style]}
             >
@@ -322,10 +324,23 @@ function BottomSheetContent({
   )
 }
 
+// Radix wraps our View in a second role="dialog" element, labelled by this Title, and
+// rn-primitives forwards it none of our a11y props. Stripping its dialog semantics leaves
+// our View, which carries the Sheet's name, as the one dialog. The Title stays, empty,
+// because Radix warns when it is missing.
+function demoteRadixDialog(title: DialogPrimitive.TitleRef | null) {
+  const node = title as unknown as HTMLElement | null
+  if (!node?.id) return
+  const radix = node.closest(`[aria-labelledby="${node.id}"]`)
+  if (radix?.getAttribute('role') !== 'dialog') return
+  radix.removeAttribute('role')
+  radix.removeAttribute('aria-labelledby')
+  radix.removeAttribute('aria-describedby')
+}
+
 function RightSheetContent({
   className,
   portalHost,
-  title = 'Sheet',
   children,
   enablePanDownToClose: _enablePanDownToClose,
   suppressOverlayRegistration = false,
@@ -396,7 +411,7 @@ function RightSheetContent({
                 {...contentProps}
               >
                 {Platform.OS === 'web' ? (
-                  <DialogPrimitive.Title className="sr-only">{title}</DialogPrimitive.Title>
+                  <DialogPrimitive.Title ref={demoteRadixDialog} className="sr-only" />
                 ) : null}
                 {children}
               </DialogPrimitive.Content>

@@ -140,8 +140,8 @@ export function MultiSelect({
         >
           {triggerInner}
         </Pressable>
-        <Sheet open={open} onOpenChange={setOpen}>
-          <SheetContent anchor="bottom" size="medium" title={prefix}>
+        <Sheet open={open} onOpenChange={setOpen} ariaLabel={prefix}>
+          <SheetContent anchor="bottom" size="medium">
             {overlay}
           </SheetContent>
         </Sheet>

@@ -274,8 +274,8 @@ export const AClosedModalLeavesTheMenuLive: Story = {
 export const AClosedRightSheetLeavesTheMenuLive: Story = {
   render: () => (
     <>
-      <Sheet open={false}>
-        <SheetContent anchor="right" title="Entity details">
+      <Sheet open={false} ariaLabel="Entity details">
+        <SheetContent anchor="right">
           <Text>Entity details</Text>
         </SheetContent>
       </Sheet>
@@ -295,8 +295,8 @@ export const AClosedRightSheetLeavesTheMenuLive: Story = {
 export const RightSheetSuppressesTheMenu: Story = {
   render: () => (
     <>
-      <Sheet open>
-        <SheetContent anchor="right" title="Entity details">
+      <Sheet open ariaLabel="Entity details">
+        <SheetContent anchor="right">
           <Text>Entity details</Text>
         </SheetContent>
       </Sheet>
