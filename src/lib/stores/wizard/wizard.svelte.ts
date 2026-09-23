@@ -73,7 +73,7 @@ export class WizardStore {
         return true
       case 8: // Writing Style
         return true
-      case 9: // Opening â€” a new story's clock starts at the chosen time, never at a null one
+      case 9: // Opening — a new story's clock starts at the chosen time, never at a null one
         return this.narrative.storyTitle.trim().length > 0 && this.narrative.startingTime !== null
       default:
         return false

@@ -6,32 +6,32 @@ The shape of the repository, the data the app is built around, and the path a tu
 
 ```text
 aventuras/
-â”œâ”€â”€ src/                     # SvelteKit frontend source
-â”‚   â”œâ”€â”€ routes/              # SvelteKit pages (+page.svelte, +layout.svelte)
-â”‚   â”œâ”€â”€ themes/              # Theme definitions (dark, light, solarized, ...)
-â”‚   â””â”€â”€ lib/                 # Shared application logic and components
-â”‚       â”œâ”€â”€ components/      # UI components (PascalCase.svelte)
-â”‚       â”œâ”€â”€ services/        # Business logic modules (AI, generation, import/export, etc.)
-â”‚       â”œâ”€â”€ stores/          # Svelte stores (*.svelte.ts for runes) â€” story, ui, settings, debug
-â”‚       â”œâ”€â”€ hooks/           # Reusable Svelte hooks/composables
-â”‚       â”œâ”€â”€ constants/       # Shared constant values
-â”‚       â”œâ”€â”€ types/           # TypeScript types
-â”‚       â””â”€â”€ utils/           # Utility functions
-â”œâ”€â”€ src-tauri/               # Rust backend (Tauri 2)
-â”‚   â”œâ”€â”€ src/                 # Rust source (main.rs, lib.rs, backup.rs, avt_import.rs, sync/)
-â”‚   â”œâ”€â”€ migrations/          # Numbered SQLite migrations (sqlx)
-â”‚   â”œâ”€â”€ capabilities/        # Tauri ACL/permission definitions
-â”‚   â”œâ”€â”€ icons/               # App icons per platform (incl. iOS)
-â”‚   â”œâ”€â”€ gen/android/         # Android scaffold files (tracked in git â€” DO NOT OVERWRITE)
-â”‚   â”œâ”€â”€ Cargo.toml           # Rust dependencies
-â”‚   â””â”€â”€ tauri.conf.json      # Tauri configuration
-â”œâ”€â”€ static/                  # Static web assets
-â”œâ”€â”€ scripts/                 # Build, release, and Android setup scripts
-â”œâ”€â”€ third-party-licenses/    # License texts for bundled third-party code (e.g. Harper)
-â”œâ”€â”€ .github/workflows/       # CI/CD (lint/typecheck, release, pre-release)
-â”œâ”€â”€ lefthook.yml             # Git hooks configuration
-â”œâ”€â”€ components.json          # shadcn-svelte component generator config
-â””â”€â”€ package.json             # Node dependencies and scripts
+├── src/                     # SvelteKit frontend source
+│   ├── routes/              # SvelteKit pages (+page.svelte, +layout.svelte)
+│   ├── themes/              # Theme definitions (dark, light, solarized, ...)
+│   └── lib/                 # Shared application logic and components
+│       ├── components/      # UI components (PascalCase.svelte)
+│       ├── services/        # Business logic modules (AI, generation, import/export, etc.)
+│       ├── stores/          # Svelte stores (*.svelte.ts for runes) — story, ui, settings, debug
+│       ├── hooks/           # Reusable Svelte hooks/composables
+│       ├── constants/       # Shared constant values
+│       ├── types/           # TypeScript types
+│       └── utils/           # Utility functions
+├── src-tauri/               # Rust backend (Tauri 2)
+│   ├── src/                 # Rust source (main.rs, lib.rs, backup.rs, avt_import.rs, sync/)
+│   ├── migrations/          # Numbered SQLite migrations (sqlx)
+│   ├── capabilities/        # Tauri ACL/permission definitions
+│   ├── icons/               # App icons per platform (incl. iOS)
+│   ├── gen/android/         # Android scaffold files (tracked in git — DO NOT OVERWRITE)
+│   ├── Cargo.toml           # Rust dependencies
+│   └── tauri.conf.json      # Tauri configuration
+├── static/                  # Static web assets
+├── scripts/                 # Build, release, and Android setup scripts
+├── third-party-licenses/    # License texts for bundled third-party code (e.g. Harper)
+├── .github/workflows/       # CI/CD (lint/typecheck, release, pre-release)
+├── lefthook.yml             # Git hooks configuration
+├── components.json          # shadcn-svelte component generator config
+└── package.json             # Node dependencies and scripts
 ```
 
 ## Panels and gestures
@@ -141,7 +141,7 @@ is its first tabbable element** (`tabindex="0"`, `role="region"`), sized to the 
 than to its content. Every fallback then lands on a container already in view, and focusing it
 does not scroll. Two things keep that true, and both are structural:
 
-- nothing tabbable is placed before the region in DOM order â€” in the narrow layout that means
+- nothing tabbable is placed before the region in DOM order — in the narrow layout that means
   the title strip above it, in the wide layout the region already wraps the title;
 - the region keeps its `min-h-0 flex-1` sizing, so it never grows past the viewport.
 
@@ -173,14 +173,14 @@ The story is an append-only list of `StoryEntry` rows (`user_action`, `narration
   known, and left alone until we decide what editing shared history should mean.
 
 - **Entry numbers** are what a reader sees and types: `position + 1`, every entry type counted,
-  so the last entry's number equals the branch's entry count. Numbering is per branch view â€” a
+  so the last entry's number equals the branch's entry count. Numbering is per branch view — a
   branch continues its parent's positions from the fork, so shared history keeps its numbers and
   sibling branches reuse them after the fork. `resolveEntryByNumber` (`utils/storyNavigation.ts`)
   floors to the nearest lower entry, which is what makes a gap left by an import or a reconciliation
   navigable rather than a dead number.
 - **Chapters** cover a contiguous run of entries (`startEntryId`/`endEntryId`) and replace them
   in the prompt with a summary. Entries after the last chapter's end are the **un-chapterized
-  tail** (`story.getUnchapterizedEntries()`) â€” the newest material, and the part chapter-oriented
+  tail** (`story.getUnchapterizedEntries()`) — the newest material, and the part chapter-oriented
   tools would otherwise be blind to.
 - **World state** (`Character`/`Location`/`Item`/`StoryBeat`) is rewritten by the classifier after
   every turn. A lorebook `Entry` carries no live state of its own: the type has `state` fields
@@ -195,16 +195,16 @@ The story is an append-only list of `StoryEntry` rows (`user_action`, `narration
   **A rendered entity line must never be re-readable as a name.** The classifier is shown
   the entities that already exist and writes names back, so `- Eira (claimed as a consort)
 [inactive]` came back as the name, missed `sameEntityName`, and created a second
-  character â€” four of thirty-eight on a measured 41-chapter save, two carrying the
+  character — four of thirty-eight on a measured 41-chapter save, two carrying the
   subject's own `relationship` verbatim. Name and attributes are now separate lines
-  (`relationship:`, `status:`, `appearance:`), in every list `ClassifierService` renders â€”
-  characters, locations, items, story beats â€” and in `WorldStateInjector`'s narrator block,
+  (`relationship:`, `status:`, `appearance:`), in every list `ClassifierService` renders —
+  characters, locations, items, story beats — and in `WorldStateInjector`'s narrator block,
   whose prose the classifier also reads. One name per line also holds names a
   comma-separated list could not: locations and items were CSV until they carried state.
 
   **State reaches the classifier only where it can act on it.** `appearance:` goes with a
   character in the scene, `description:` with the current location, and an item's
-  `quantity`/`equipped`/`location` only when they differ from the default â€” because each of
+  `quantity`/`equipped`/`location` only when they differ from the default — because each of
   those is a whole-value replacement, and a model cannot rewrite what it was not shown. The
   same rule sizes the prompt: on a large cast the omitted halves are most of it.
 
@@ -212,16 +212,16 @@ The story is an append-only list of `StoryEntry` rows (`user_action`, `narration
   location if the name is new, marks it `current` and `visited`, and clears the previous
   one. `locationUpdates.changes.current` and `newLocations[].current` did the same job from
   two other places, applied in an order the model could not see, so a response naming two
-  places kept whichever ran last â€” and the merge path set a second `current` without
+  places kept whichever ran last — and the merge path set a second `current` without
   clearing the first. Both are gone from the schema.
 
   **Presence is reported, departure is inferred.** The classifier answers one question about the
-  cast â€” `scene.presentCharacterNames`, every _other_ character in the scene at the end of the
-  passage; the protagonist is in every scene by definition and is added by the consumers â€” and
+  cast — `scene.presentCharacterNames`, every _other_ character in the scene at the end of the
+  passage; the protagonist is in every scene by definition and is added by the consumers — and
   `resolveCharacterPresence` (`services/generation/characterPresence.ts`) turns the complement into
   `inactive`. Asking a model to name thirty absent characters produces nothing; asking it to name
   the three in front of it is the question the passage answers. The inference is refused whenever
-  the list carries no signal: a salvaged or failed classification, or an empty array â€” which the
+  the list carries no signal: a salvaged or failed classification, or an empty array — which the
   schema defaults, so "the model said nobody" and "the model did not answer" arrive identically.
   `characterUpdates.status` stays for what the scene states outright, `deceased` above all, and
   wins over the inference. `appearance:` is sent to the classifier only for characters in the
@@ -259,17 +259,17 @@ The story is an append-only list of `StoryEntry` rows (`user_action`, `narration
   belonging to that branch**. The delete is branch-scoped, so the insert has to be: a snapshot
   taken on a branch that resolves its world state through the lineage carries ancestor rows too,
   with their own `branch_id`, which the delete never touched. Re-inserting one collides on the
-  primary key â€” and since these statements cannot share a transaction (see
+  primary key — and since these statements cannot share a transaction (see
   [persistence.md](persistence.md)), the deletes have already committed by then, so the branch
   loses its entries _and_ its own world state and the restore dies with nothing put back.
   Filtering makes the two halves symmetric whatever shape the branch is, which matters because
   `snapshot_complete` no longer reliably says which shape that is. An override the undone
-  generation created is absent from the snapshot, so it is deleted and not restored â€” correct,
+  generation created is absent from the snapshot, so it is deleted and not restored — correct,
   because the inherited row it stood in for shows through again.
 
   That the branch ends up with nothing is not an experimental-settings matter: the per-branch
   entity queries match `branch_id` exactly and never fall back to inherited rows, main included
-  when the snapshot came from a branch. Lightweight branches only decide how total it is â€” a
+  when the snapshot came from a branch. Lightweight branches only decide how total it is — a
   pre-snapshot COW branch still resolves its ancestors' entities, while snapshot isolation and
   the legacy per-branch load both leave the panels empty.
 
@@ -286,16 +286,16 @@ A narrator turn is a sequence of phases under `src/lib/services/generation/phase
 generator that yields typed events and returns a result. Dependencies are injected, which is what makes
 them testable without a provider.
 
-`Retrieval â†’ Narrative â†’ Classification â†’ Translation â†’ Image / BackgroundImage â†’ PostGeneration`, with
+`Retrieval → Narrative → Classification → Translation → Image / BackgroundImage → PostGeneration`, with
 `PreGeneration` preparing the retry backup first.
 
-Only the narrative phase is fatal on failure â€” there is no turn without a narration. Every other phase
+Only the narrative phase is fatal on failure — there is no turn without a narration. Every other phase
 degrades: a failed classification leaves world state untouched, a failed translation keeps the original
 text, failed images leave the entry without one.
 
 `RetrievalPhase` runs in two stages on purpose. Stage A (world state + lorebook selection) must finish
 before stage B (memory retrieval), because the memory step is told what the narrator's prompt already
-contains, and a _partial_ list of that is worse than none â€” it is read as a statement, so naming half of
+contains, and a _partial_ list of that is worse than none — it is read as a statement, so naming half of
 it invites work on the other half.
 
 Phases are wired by `GenerationPipeline`, but the dependency objects are built in
@@ -303,8 +303,8 @@ Phases are wired by `GenerationPipeline`, but the dependency objects are built i
 store, the settings and `aiService` are bound together; the phases themselves import none of them,
 which is what keeps them testable.
 
-Alongside the pipeline, `BackgroundTaskRunner` handles what happens _after_ a turn â€” the chapter
-threshold check, lore management and the style review â€” on its own dependency object.
+Alongside the pipeline, `BackgroundTaskRunner` handles what happens _after_ a turn — the chapter
+threshold check, lore management and the style review — on its own dependency object.
 
 ### The generation lease
 
@@ -327,12 +327,12 @@ accepted while idle reaches the front of the queue _after_ a generation may have
 Two moments are distinct. **Drained** is when the turn's own writes have settled; **finished**
 is when a rewind deferred by Stop has run too, and only then is the branch given up.
 
-The lease does **not** cover the post-turn background tasks â€” chapter creation and lore
+The lease does **not** cover the post-turn background tasks — chapter creation and lore
 management are started un-awaited and outlive it. Lore management refuses a write whose branch
 has moved (`loreCallbacks.assertScope`); chapter creation does not, so a chapter finished after
 a switch takes its number from the branch now loaded. The row still carries the right branch,
 so this is a numbering fault rather than a misplaced chapter. Stop registers
-its rewind on the lease and waits for it rather than releasing â€” aborting the request to the model
+its rewind on the lease and waits for it rather than releasing — aborting the request to the model
 is not the completion of the generation's writes, and an `applyClassificationResult` already entered
 keeps going regardless. One release owner throughout, so the rewind cannot race the writes it
 exists to reverse.
@@ -340,15 +340,15 @@ exists to reverse.
 **Why the switch is refused rather than the writes redirected.** `applyClassificationResult` reads
 the active branch and mutates the in-memory `characters`/`locations`/`items`/`storyBeats` arrays,
 which hold _that_ branch's view. Pointing it at another branch means decoupling "the branch being
-written" from "the branch loaded in memory" â€” an architectural change, not a parameter. Redirecting
+written" from "the branch loaded in memory" — an architectural change, not a parameter. Redirecting
 only the entries would be worse than redirecting nothing: the narration would land on the branch
 that asked for it while the classification accounting for it did not, leaving that branch holding an
 entry its world state does not know about.
 
-**When the restriction can be lifted.** This covers the story guard too â€” it is the same
+**When the restriction can be lifted.** This covers the story guard too — it is the same
 stand-in, for the same reason. Once world-state application takes the branch to write to as
 an argument instead of reading the active one, **and** `addEntry` redirects to the bound branch
-rather than asserting against it. Both, not either â€” the entry half alone produces exactly the
+rather than asserting against it. Both, not either — the entry half alone produces exactly the
 mismatch described above. Branch-scoping `isGenerating`, so Stop and the streaming placeholder
 follow the generating branch, belongs to that work too; while the restriction stands the reader
 cannot reach another branch to see them. `addEntry`'s assertion is the tripwire in the meantime: if
@@ -359,14 +359,14 @@ branch.
 
 A turn records what it is doing as a tree of timed steps, so the wait before the first token is
 readable rather than a three-dot animation. `services/activity/` holds the record and the reading
-views over it â€” nesting, the deepest running step, durations, retention â€” all plain TypeScript;
+views over it — nesting, the deepest running step, durations, retention — all plain TypeScript;
 `stores/activity.svelte.ts` is the reactive shell.
 
 The phases reach it through an `ActivityReporter` on `PipelineDependencies`, bound in
 `buildPipelineDependencies` alongside everything else. They do not import the store: that is the same
 rule that keeps them testable without a provider, and `NO_ACTIVITY` stands in wherever no reporter was
 injected. Services under `services/ai/` write to the store directly instead, following the debug
-store's precedent â€” their tests mock it the same way.
+store's precedent — their tests mock it the same way.
 
 Nesting is by explicit parent id, threaded through the options objects that already reach those
 services (`activityParentId`). An implicit stack would not survive Stage A's two concurrent branches
@@ -383,22 +383,22 @@ and never persisted or exported.
 
 `activityReporting` defaults to `line`, so an install that has never touched the setting reports the
 running step rather than the ellipsis. `activity_reporting` is written only by `setActivityReporting`
-and the interface reset, so a stored `off` is a choice and is read back as one â€” the default reaches
+and the interface reset, so a stored `off` is a choice and is read back as one — the default reaches
 absent keys only.
 
 ## Images
 
-Nine backends live under `src/lib/services/ai/image/providers/` â€” NanoGPT, OpenAI, OpenRouter,
+Nine backends live under `src/lib/services/ai/image/providers/` — NanoGPT, OpenAI, OpenRouter,
 Google, Chutes, Zhipu, Pollinations, plus local ComfyUI (workflow-based) and A1111.
 
-Resolution is chosen as an **intent** â€” orientation (1:1 / 16:9 / 9:16) plus one of four size
-steps â€” and each adapter turns it into what its backend accepts: an aspect ratio for Google and
+Resolution is chosen as an **intent** — orientation (1:1 / 16:9 / 9:16) plus one of four size
+steps — and each adapter turns it into what its backend accepts: an aspect ratio for Google and
 OpenRouter, the model's own published resolution list for NanoGPT, real dimensions for
 ComfyUI/A1111/Pollinations (`src/lib/utils/image.ts`). A backend that is handed pixel dimensions
 it does not offer answers with the nearest thing it does, which is not the same picture.
 
 Images are stored as base64 in SQLite. Export and import of a story with images (`.avt`) is
-handled natively in Rust so the payloads never enter the WebView heap â€” see
+handled natively in Rust so the payloads never enter the WebView heap — see
 [persistence.md](persistence.md).
 
 ## Environment
@@ -406,7 +406,7 @@ handled natively in Rust so the payloads never enter the WebView heap â€” s
 There are no required `.env` files for local development or the built app:
 
 - `import.meta.env.DEV` is set automatically by Vite and only gates debug logging
-  (`src/lib/log.ts`) â€” nothing to configure.
+  (`src/lib/log.ts`) — nothing to configure.
 - **API Keys**: for AI providers, configured at runtime via the UI (Settings -> API Settings), not via
   environment variables.
 - Android builds read `ANDROID_HOME` (or `ANDROID_SDK_ROOT`), `NDK_HOME`, and `JAVA_HOME` from the shell
