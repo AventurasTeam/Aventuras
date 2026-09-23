@@ -54,15 +54,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **Four copies of the accent hex regex.**
-  `/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i` lives in
-  `lib/themes/core/accent-palette.ts`, `components/ui/color-picker.tsx`,
-  `components/story-settings/suggestion-categories-draft.ts`, and
-  `lib/db/stories/story-info-ops.ts` (`STORY_ACCENT_HEX`). One shared
-  home would stop them drifting; left apart in Slice 4.4 because the
-  copies sit on both sides of the `lib/db` ↔ `lib/themes` / components
-  boundary. Surfaced 2026-09-14.
-
 - **Component inventory has no Story Settings or embedder rows.**
   `docs/ui/component-inventory.md` lists single-domain compounds by
   folder, but has no rows for `components/story-settings/` or

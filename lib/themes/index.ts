@@ -1,6 +1,7 @@
 export {
   CURATED_ACCENT_PALETTE,
   CURATED_ACCENT_SLOTS,
+  isCuratedAccentSlot,
   NEUTRAL_ACCENT,
   resolveAccentColor,
   slotForHex,

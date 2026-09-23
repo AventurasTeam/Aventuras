@@ -1,8 +1,8 @@
 import { z } from 'zod'
 
-import type { SqlOp, Story } from '../types'
+import { HEX_COLOR } from '@/lib/hex-color'
 
-export const STORY_ACCENT_HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i
+import type { SqlOp, Story } from '../types'
 
 /**
  * The library-shaped `stories` columns Story Settings → About edits. `draft` is
@@ -13,7 +13,7 @@ export const storyInfoPatchSchema = z
     title: z.string().trim().min(1),
     description: z.string().nullable(),
     tags: z.array(z.string().trim().min(1)),
-    accentColor: z.string().regex(STORY_ACCENT_HEX).nullable(),
+    accentColor: z.string().regex(HEX_COLOR).nullable(),
     status: z.enum(['active', 'archived']),
     favorite: z.boolean(),
   })

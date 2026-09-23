@@ -1,4 +1,5 @@
-import { STORY_ACCENT_HEX, type StoryInfo, type StoryInfoPatch } from '@/lib/db'
+import type { StoryInfo, StoryInfoPatch } from '@/lib/db'
+import { HEX_COLOR } from '@/lib/hex-color'
 import { CURATED_ACCENT_PALETTE, CURATED_ACCENT_SLOTS } from '@/lib/themes'
 
 export type AboutDraft = {
@@ -92,7 +93,7 @@ export function validateAbout(draft: AboutDraft, baseline: AboutDraft): AboutPro
   if (baseline.status === 'draft') return 'draft-story'
   if (dirty.includes('title') && draft.title.trim() === '') return 'empty-title'
   const accent = draft.accentColor
-  if (dirty.includes('accentColor') && accent != null && !STORY_ACCENT_HEX.test(accent)) {
+  if (dirty.includes('accentColor') && accent != null && !HEX_COLOR.test(accent)) {
     return 'invalid-accent'
   }
   return null

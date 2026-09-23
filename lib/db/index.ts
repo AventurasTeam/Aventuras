@@ -90,7 +90,6 @@ export {
 } from './stories/settings-ops'
 export {
   setStoryInfoOps,
-  STORY_ACCENT_HEX,
   storyInfoPatchSchema,
   type StoryInfo,
   type StoryInfoPatch,

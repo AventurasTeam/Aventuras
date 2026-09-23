@@ -1,3 +1,5 @@
+import { HEX_COLOR } from '@/lib/hex-color'
+
 // The tuple is the source of truth, not Object.keys of the palette: it needs no
 // cast, it is readonly (the array backs the validity predicate below, so a
 // mutable export would let any importer redefine what counts as curated), and
@@ -34,9 +36,7 @@ export const CURATED_ACCENT_PALETTE: Record<CuratedAccentSlot, AccentHex> = {
 
 export const NEUTRAL_ACCENT = accentHex('#71717a')
 
-const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i
-
-function isCuratedSlot(value: string): value is CuratedAccentSlot {
+export function isCuratedAccentSlot(value: string): value is CuratedAccentSlot {
   // Membership via the slot tuple, not `value in CURATED_ACCENT_PALETTE`: `in`
   // walks the prototype chain, so a stored color of 'constructor' or 'toString'
   // would resolve to a function out of a String-returning fallback.
@@ -49,8 +49,8 @@ function isCuratedSlot(value: string): value is CuratedAccentSlot {
 // such check today.
 export function resolveAccentColor(value: string | null | undefined): AccentHex {
   if (value == null) return NEUTRAL_ACCENT
-  if (isCuratedSlot(value)) return CURATED_ACCENT_PALETTE[value]
-  return HEX.test(value) ? accentHex(value) : NEUTRAL_ACCENT
+  if (isCuratedAccentSlot(value)) return CURATED_ACCENT_PALETTE[value]
+  return HEX_COLOR.test(value) ? accentHex(value) : NEUTRAL_ACCENT
 }
 
 // Matches the palette's canonical 6-digit lowercase form only; a 3-digit
