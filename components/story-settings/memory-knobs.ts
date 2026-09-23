@@ -1,3 +1,4 @@
+import { effectiveCadenceEntries } from '@/lib/classifier'
 import type { StorySettings } from '@/lib/db'
 
 type Budgets = StorySettings['retrievalBudgets']
@@ -176,11 +177,11 @@ export function thresholdPreset(tokens: number | null): ThresholdPreset {
   return CHAPTER_THRESHOLD_PRESETS.find((preset) => preset.tokens === tokens)?.id ?? 'custom'
 }
 
-/** cadence.md → Buffer-aware cadence indicator; negative means turns leave the window unclassified. */
+/** cadence.md → Buffer-aware cadence indicator; negative means entries leave the window unclassified. */
 export function cadenceOverlap(
   partialChapterBuffer: number | null,
   classifierCadence: number | null,
 ): number | null {
   if (partialChapterBuffer == null || classifierCadence == null) return null
-  return partialChapterBuffer - classifierCadence
+  return partialChapterBuffer - effectiveCadenceEntries(classifierCadence)
 }

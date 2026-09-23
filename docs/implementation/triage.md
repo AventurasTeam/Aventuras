@@ -171,19 +171,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `components/ui/heading.tsx` exists to supply it. Convert in one pass
   across the panels. Surfaced 2026-09-14.
 
-- **Classifier cadence says turns but counts entries.** Story Settings
-  → Memory labels `classifierCadence` "Turns between periodic
-  classifier runs" and shows "N turns of coverage overlap", but the
-  counter counts every non-`system` entry — actions and replies alike
-  (`unprocessedTurnCount` in `lib/actions/classifier/deps.ts`; the
-  comparison against the cadence is `shouldCadenceFire` in
-  `lib/classifier/status.ts`, which counts nothing itself) — so a
-  cadence of 8 fires after about four exchanges, and the partial buffer
-  beside it is labelled in entries. A user reading "turn" as an
-  exchange mis-tunes it by about 2×. Canon uses the same wording
-  (`data-model.md` → `classifierCadence`: "turns … entry-counted"), so
-  this is a canon and copy decision. Surfaced 2026-09-14.
-
 - **Story Settings → Memory shows embedding status inside the Embedder
   block.** Canon (`story-settings.md` → Memory tab) lists Embedding
   status as its own conditional section after Keyword retrieval,

@@ -210,8 +210,10 @@ describe('presets and cadence', () => {
     expect(thresholdPreset(null)).toBe('custom')
   })
 
-  it('overlap is partial buffer minus cadence; null inputs give null', () => {
+  it('overlap is partial buffer minus the effective cadence; null inputs give null', () => {
     expect(cadenceOverlap(10, 8)).toBe(2)
+    expect(cadenceOverlap(10, 5)).toBe(4)
+    expect(cadenceOverlap(5, 5)).toBe(-1)
     expect(cadenceOverlap(10, 12)).toBe(-2)
     expect(cadenceOverlap(null, 8)).toBeNull()
     expect(cadenceOverlap(10, null)).toBeNull()

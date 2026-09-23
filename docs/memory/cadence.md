@@ -2,11 +2,11 @@
 
 Three agents touch memory state at different time scales.
 
-| Layer                      | Trigger                                       | Scope                                                                          |
-| -------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------ |
-| **Piggyback**              | Every AI reply, inline on the narrative call  | Scene-local fast-mutating state                                                |
-| **Periodic classifier**    | Background, every N turns (entry-counted; v1) | Multi-turn batch extractions                                                   |
-| **Chapter-close pipeline** | Token threshold crossed OR user-triggered     | 5 phases: catch-up classifier, boundary, metadata, lore-mgmt, lifecycle review |
+| Layer                      | Trigger                                            | Scope                                                                          |
+| -------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------ |
+| **Piggyback**              | Every AI reply, inline on the narrative call       | Scene-local fast-mutating state                                                |
+| **Periodic classifier**    | Background, every N entries (checked per turn; v1) | Multi-turn batch extractions                                                   |
+| **Chapter-close pipeline** | Token threshold crossed OR user-triggered          | 5 phases: catch-up classifier, boundary, metadata, lore-mgmt, lifecycle review |
 
 Two architectural drivers shape the stratification:
 
@@ -55,13 +55,13 @@ them.
 Five knobs per story. Defaults copied from
 `app_settings.default_story_settings` at story creation.
 
-| Knob                                 | Effect                                                                                                                                                                                                                  | Foot-shooting check                                                                                                                                                |
-| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `fullChapterInBuffer` (boolean)      | Two-mode axis. `true` = full current chapter verbatim. `false` = last `partialChapterBuffer` entries of current chapter.                                                                                                | UI shows token cost at chapter threshold when on ("at the chapter threshold this consumes ~X tokens"). Off-mode token cost is bounded by `partialChapterBuffer`.   |
-| `partialChapterBuffer` (entries)     | Size of the current-chapter slice when `fullChapterInBuffer = false`. Ignored in full mode.                                                                                                                             | Interacts with `classifierCadence` — see Buffer-aware cadence indicator below.                                                                                     |
-| `protectedBuffer` (entries)          | Chapter-boundary spillover floor. Applies in **both** modes. If the current chapter has fewer entries than this floor, fill from the previous chapter to satisfy.                                                       | Floor for fresh-chapter "the LLM has no recent history" risk; keeps writing style consistent across boundaries. Set too low and a fresh chapter starts threadbare. |
-| `classifierCadence` (turns)          | When the periodic classifier runs in the background.                                                                                                                                                                    | UI warns in partial mode when cadence > `partialChapterBuffer` (unclassified turns slide out of the window before classifier catches up). Suppressed in full mode. |
-| `classifierContextEntries` (entries) | How many trailing entries the per-turn fallback classifier sees. Minimum 2 — the fixed action-plus-reply pair it extracts from, which this knob must never be able to cut. Entries beyond the pair are background only. | Raising it widens what the classifier can reason over and raises the fallback's input cost on every turn it fires.                                                 |
+| Knob                                 | Effect                                                                                                                                                                                                                  | Foot-shooting check                                                                                                                                                  |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fullChapterInBuffer` (boolean)      | Two-mode axis. `true` = full current chapter verbatim. `false` = last `partialChapterBuffer` entries of current chapter.                                                                                                | UI shows token cost at chapter threshold when on ("at the chapter threshold this consumes ~X tokens"). Off-mode token cost is bounded by `partialChapterBuffer`.     |
+| `partialChapterBuffer` (entries)     | Size of the current-chapter slice when `fullChapterInBuffer = false`. Ignored in full mode.                                                                                                                             | Interacts with `classifierCadence` — see Buffer-aware cadence indicator below.                                                                                       |
+| `protectedBuffer` (entries)          | Chapter-boundary spillover floor. Applies in **both** modes. If the current chapter has fewer entries than this floor, fill from the previous chapter to satisfy.                                                       | Floor for fresh-chapter "the LLM has no recent history" risk; keeps writing style consistent across boundaries. Set too low and a fresh chapter starts threadbare.   |
+| `classifierCadence` (entries)        | When the periodic classifier runs in the background.                                                                                                                                                                    | UI warns in partial mode when cadence > `partialChapterBuffer` (unclassified entries slide out of the window before classifier catches up). Suppressed in full mode. |
+| `classifierContextEntries` (entries) | How many trailing entries the per-turn fallback classifier sees. Minimum 2 — the fixed action-plus-reply pair it extracts from, which this knob must never be able to cut. Entries beyond the pair are background only. | Raising it widens what the classifier can reason over and raises the fallback's input cost on every turn it fires.                                                   |
 
 ### Composition rule
 
@@ -111,11 +111,16 @@ pulls entries from before the boundary, so a
 ### Buffer-aware cadence indicator — partial mode only
 
 In partial mode, the cadence has to keep pace with the partial
-window so unclassified turns don't fall out of LLM coverage
+window so unclassified entries don't fall out of LLM coverage
 before the classifier catches up. Story Settings UI shows the
 relationship: "with partial chapter buffer = 10 entries and
-cadence = 8 turns, you have 2 turns of coverage overlap." Drop
+cadence = 8 entries, you have 2 entries of coverage overlap." Drop
 overlap below zero, get a warning chip.
+
+The cadence is checked only after a completed turn, which writes
+two entries, so an odd cadence runs one entry later than it reads.
+The indicator subtracts that effective interval: cadence 5 against
+a buffer of 10 is 4 entries of overlap, not 5.
 
 **Full mode suppresses the warning.** Full mode keeps the entire
 current chapter in context, and chapter-close phase 0 catches up
@@ -131,7 +136,7 @@ the cadence warning is hidden entirely.
   fullChapterInBuffer: boolean,    // default false
   partialChapterBuffer: number,    // entries; default 10
   protectedBuffer: number,         // entries; default 10
-  classifierCadence: number,       // turns; v1 ships entry-counted only — see parked.md → Token-trigger classifier cadence
+  classifierCadence: number,       // entries; v1 ships entry-counted only — see parked.md → Token-trigger classifier cadence
   classifierContextEntries: number // entries; default 4, minimum 2 (the fixed pair)
   // existing memory knobs continue: chapterTokenThreshold, chapterAutoClose
 }

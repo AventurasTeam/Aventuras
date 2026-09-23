@@ -271,7 +271,7 @@ so the status is operational state outside the reversal log.
 `processedThrough` is the highest entry position (`story_entries.position`)
 the classifier has fully processed; the pass range is
 `(processedThrough, head]`. It is the concrete field behind "unprocessed
-turns," read by the cadence trigger, `[Run classifier now]`, and
+entries," read by the cadence trigger, `[Run classifier now]`, and
 chapter-close phase 0. A successful pass over `(processedThrough, E]` sets
 `processedThrough = E` in its commit transaction. A prose reversal clamps
 it — `processedThrough ← min(processedThrough, position(B) − 1)` for `B`

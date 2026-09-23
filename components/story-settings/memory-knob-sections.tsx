@@ -268,7 +268,7 @@ export function ClassifierCadenceSection({
 }: MemoryKnobSectionProps) {
   const partial = draft.partialChapterBuffer
   const cadence = draft.classifierCadence
-  // Full mode keeps the whole chapter in context, so no turn can slide out unclassified.
+  // Full mode keeps the whole chapter in context, so no entry can slide out unclassified.
   const overlap =
     !draft.fullChapterInBuffer && KNOB_RULES.partialBuffer(partial) && KNOB_RULES.cadence(cadence)
       ? cadenceOverlap(partial, cadence)

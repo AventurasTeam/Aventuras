@@ -480,8 +480,8 @@ Full design in
 this section captures what the screen renders.
 
 - **Cadence config** — in-place edit of
-  `stories.settings.classifierCadence` (turns; v1 entry-counted
-  only), `classifierContextEntries` (entries, min 2), and the
+  `stories.settings.classifierCadence` (entries, checked per
+  turn), `classifierContextEntries` (entries, min 2), and the
   `piggybackMode` toggle. Buffer-aware cadence indicator from
   [`memory/cadence.md → User-tunable knobs`](../../../memory/cadence.md#user-tunable-knobs)
   renders inline.

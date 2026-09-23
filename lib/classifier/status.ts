@@ -67,7 +67,15 @@ export function nextStatusOnFailure(
 }
 
 /**
- * Turn-counted cadence (canon ships no token trigger in v1). Suspended in
+ * Entries between cadence-fired runs. The trigger is checked only after a completed turn,
+ * which writes an action and a reply, so an odd cadence rounds up to the next whole turn.
+ */
+export function effectiveCadenceEntries(cadence: number): number {
+  return Math.ceil(Math.max(1, cadence) / 2) * 2
+}
+
+/**
+ * Entry-counted cadence (canon ships no token trigger in v1). Suspended in
  * failed-persistent so a broken provider is not spammed on every tick — the
  * manual run is the only way out.
  */

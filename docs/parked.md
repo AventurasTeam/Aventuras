@@ -822,7 +822,7 @@ description demand emerges.
 #### Token-trigger classifier cadence mode
 
 `stories.settings.classifierCadence` ships v1 as a single number
-(turns between background classifier runs). The original schema
+(entries between background classifier runs). The original schema
 was a discriminated union — `{ mode: 'turns' | 'token-trigger',
 value: number }` — but the token-trigger variant was dropped from
 v1 because the buffer-aware overlap UX

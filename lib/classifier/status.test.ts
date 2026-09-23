@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   BACKOFF_MS,
+  effectiveCadenceEntries,
   idleStatus,
   nextStatusOnFailure,
   nextStatusOnStart,
@@ -68,6 +69,15 @@ describe('nextStatusOnFailure', () => {
       { error: 'network', at: 0 },
     )
     expect(status.processedThrough).toBe(7)
+  })
+})
+
+describe('effectiveCadenceEntries', () => {
+  it('rounds an odd cadence up to whole two-entry turns', () => {
+    expect(effectiveCadenceEntries(8)).toBe(8)
+    expect(effectiveCadenceEntries(5)).toBe(6)
+    expect(effectiveCadenceEntries(1)).toBe(2)
+    expect(effectiveCadenceEntries(0)).toBe(2)
   })
 })
 
