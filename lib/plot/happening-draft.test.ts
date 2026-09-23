@@ -102,11 +102,12 @@ describe('happeningDraftSchema', () => {
     expect(dupEntity.success).toBe(false)
   })
 
-  it('refuses an out-of-range decay resistance', () => {
+  // NaN is NumberInput's unreadable text: it must refuse, not save as "not recorded".
+  it.each([1.5, -0.1, Number.NaN])('refuses decay resistance %s with decayRange', (value) => {
     const base = happeningDraftFrom(ROW, LINKS)
     const result = happeningDraftSchema.safeParse({
       ...base,
-      awareness: [{ ...base.awareness[0], decayResistance: 1.5 }],
+      awareness: [{ ...base.awareness[0], decayResistance: value }],
     })
     expect(result.success).toBe(false)
     if (!result.success)
@@ -116,6 +117,15 @@ describe('happeningDraftSchema', () => {
           message: 'decayRange',
         }),
       )
+  })
+
+  it.each([0, 1, null])('accepts decay resistance %s', (value) => {
+    const base = happeningDraftFrom(ROW, LINKS)
+    const result = happeningDraftSchema.safeParse({
+      ...base,
+      awareness: [{ ...base.awareness[0], decayResistance: value }],
+    })
+    expect(result.success).toBe(true)
   })
 })
 

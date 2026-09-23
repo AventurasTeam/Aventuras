@@ -484,6 +484,33 @@ export const CommonKnowledgeHidesInvalidRow: Story = {
   },
 }
 
+/**
+ * Unreadable decay text refuses the save instead of writing "not recorded" over the stored
+ * value, and the refusal survives the editor remounting on a tab switch.
+ */
+export const UnreadableDecayRefusesSave: Story = {
+  play: async () => {
+    await openTab('Awareness')
+    const decay = within(await pane().findByTestId('awareness-0', {}, WAIT)).getByRole('textbox', {
+      name: 'Decay resistance',
+    })
+    await userEvent.clear(decay)
+    await userEvent.type(decay, '0.6.5')
+    await waitFor(
+      () => expect(within(pane().getByTestId('awareness-0')).getByText(DECAY_ERROR)).toBeVisible(),
+      WAIT,
+    )
+    expect(saveButton()).toBeDisabled()
+    expect(within(saveBar()).getByLabelText(`Awareness: ${DECAY_ERROR}`)).toBeInTheDocument()
+
+    await openTab('Overview')
+    await openTab('Awareness')
+    const row = await pane().findByTestId('awareness-0', {}, WAIT)
+    expect(within(row).getByText(DECAY_ERROR)).toBeVisible()
+    expect(saveButton()).toBeDisabled()
+  },
+}
+
 /** One Save carries the row's link edits; the patch lands mid-commit and the pane settles clean. */
 export const SaveCommitsLinks: Story = {
   play: async ({ args }) => {

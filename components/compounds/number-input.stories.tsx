@@ -94,11 +94,28 @@ export const EmptyReportsNull: Story = {
   },
 }
 
+// A nullable owner reads `null` as "not recorded": unreadable text must not collapse into it.
+export const UnreadableIsNotEmpty: Story = {
+  args: { initial: 0.5, integer: false },
+  play: async ({ args }) => {
+    const input = await screen.findByTestId('number')
+    await retype(input, '0.5.5')
+    expect(reported()).toBe('NaN')
+    expect(args.onChange).toHaveBeenLastCalledWith(Number.NaN)
+    expect(input).toHaveValue('0.5.5')
+    await userEvent.type(input, 'x')
+    expect(input).toHaveValue('0.5.5x')
+    await userEvent.clear(input)
+    expect(reported()).toBe('null')
+    expect(args.onChange).toHaveBeenLastCalledWith(null)
+  },
+}
+
 export const FractionRejectedWhenInteger: Story = {
   play: async () => {
     const input = await screen.findByTestId('number')
     await retype(input, '2.5')
-    expect(reported()).toBe('null')
+    expect(reported()).toBe('NaN')
     expect(input).toHaveValue('2.5')
     expect(input).toHaveAttribute('aria-invalid', 'true')
   },
@@ -109,8 +126,8 @@ export const RejectsNonDecimalForms: Story = {
     const input = await screen.findByTestId('number')
     for (const text of ['0x10', '1e3', '12abc', '1,5']) {
       await retype(input, text)
-      expect(reported()).toBe('null')
-      expect(args.onChange).toHaveBeenLastCalledWith(null)
+      expect(reported()).toBe('NaN')
+      expect(args.onChange).toHaveBeenLastCalledWith(Number.NaN)
       expect(input).toHaveValue(text)
       expect(input).toHaveAttribute('aria-invalid', 'true')
     }
@@ -120,11 +137,11 @@ export const RejectsNonDecimalForms: Story = {
   },
 }
 
-export const DigitsPastFloatRangeReportNull: Story = {
+export const DigitsPastFloatRangeReportNaN: Story = {
   play: async () => {
     const input = await screen.findByTestId('number')
     fireEvent.change(input, { target: { value: '9'.repeat(400) } })
-    expect(reported()).toBe('null')
+    expect(reported()).toBe('NaN')
     expect(input).toHaveAttribute('aria-invalid', 'true')
   },
 }
@@ -140,7 +157,7 @@ export const DecimalAllowed: Story = {
     expect(reported()).toBe('0.5')
     expect(input).not.toHaveAttribute('aria-invalid', 'true')
     await retype(input, '5e-1')
-    expect(reported()).toBe('null')
+    expect(reported()).toBe('NaN')
     expect(input).toHaveAttribute('aria-invalid', 'true')
   },
 }
@@ -156,7 +173,7 @@ export const AcceptsCommaDecimalSeparator: Story = {
 
     for (const text of ['1,2,3', '1.2,3']) {
       await retype(input, text)
-      expect(reported()).toBe('null')
+      expect(reported()).toBe('NaN')
       expect(input).toHaveAttribute('aria-invalid', 'true')
     }
   },
