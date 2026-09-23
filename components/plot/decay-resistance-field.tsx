@@ -39,6 +39,7 @@ export function DecayResistanceField({
             key={preset.id}
             selected={value === preset.value}
             disabled={disabled}
+            disabledReason={disabledReason}
             onPress={() => onChange(preset.value)}
           >
             <Text size="xs">{t(`plot:fields.decayPreset.${preset.id}`)}</Text>

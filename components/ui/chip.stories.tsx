@@ -53,7 +53,7 @@ export const FilterRow: Story = {
 export const Disabled: Story = {
   render: () => (
     <View className="flex-row gap-2">
-      <Chip disabled onPress={() => {}}>
+      <Chip disabled disabledReason="A run is in progress." onPress={() => {}}>
         Disabled, off
       </Chip>
       <Chip disabled selected onPress={() => {}}>
@@ -61,6 +61,10 @@ export const Disabled: Story = {
       </Chip>
     </View>
   ),
+  play: async () => {
+    const chip = screen.getByRole('button', { name: 'Disabled, off' })
+    await expect(chip.closest('[title]')).toHaveAttribute('title', 'A run is in progress.')
+  },
 }
 
 export const ThemeMatrix: Story = {

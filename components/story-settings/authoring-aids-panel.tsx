@@ -240,6 +240,7 @@ export function AuthoringAidsPanel({
           value={wrapPov}
           onValueChange={(value) => setWrapPov(value === 'first' ? 'first' : 'third')}
           disabled={disabled || wrapPovNeedsModes}
+          disabledReason={disabled ? disabledReason : undefined}
         />
       </FormRow>
 

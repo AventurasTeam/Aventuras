@@ -202,6 +202,7 @@ function ThreadOverviewForm({
               value={field.value}
               onValueChange={field.onChange}
               disabled={blocked}
+              disabledReason={blockedReason}
               options={THREAD_TIERS.map((value) => ({ value, label: t(`plot:tiers.${value}`) }))}
             />
           </FormRow>
@@ -270,6 +271,7 @@ function ThreadOverviewForm({
               value={field.value}
               onValueChange={field.onChange}
               disabled={blocked}
+              disabledReason={blockedReason}
               options={INJECTION_MODES.map((mode) => ({
                 value: mode,
                 label: t(`plot:fields.injection.${mode}`),

@@ -650,6 +650,10 @@ export const Blocked: Story = {
     expect(category).toHaveAttribute('readonly')
     expect(category).toHaveValue('encounter')
     expect(pane().getByRole('button', { name: 'Icon' })).toBeDisabled()
+    expect(pane().getByRole('button', { name: 'Icon' }).closest('[title]')).toHaveAttribute(
+      'title',
+      BLOCKED_REASON,
+    )
     expect(ckSwitch()).toHaveAttribute('aria-disabled', 'true')
     expect(pane().getByRole('button', { name: /^Occurred at/ })).toHaveAttribute(
       'aria-disabled',

@@ -329,6 +329,10 @@ export const Blocked: Story = {
     expect(await screen.findByText('What the amulet wants')).toBeVisible()
     expect(screen.queryByRole('button', { name: /^Edit / })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Status' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Status' }).closest('[title]')).toHaveAttribute(
+      'title',
+      BLOCKED_REASON,
+    )
     expect(screen.getByRole('button', { name: 'Icon' })).toBeDisabled()
     const injection = within(screen.getByRole('radiogroup', { name: 'Injection' })).getAllByRole(
       'radio',

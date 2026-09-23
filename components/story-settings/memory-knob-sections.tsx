@@ -144,6 +144,7 @@ export function ChapterCloseSection({
                 key={preset.id}
                 selected={selected === preset.id}
                 disabled={disabled}
+                disabledReason={disabledReason}
                 onPress={() => {
                   setCustomPinnedAt(null)
                   onChange({ ...draft, chapterTokenThreshold: preset.tokens })
@@ -155,6 +156,7 @@ export function ChapterCloseSection({
             <Chip
               selected={selected === 'custom'}
               disabled={disabled}
+              disabledReason={disabledReason}
               onPress={() => setCustomPinnedAt(threshold)}
             >
               <Text size="xs">{t('storySettings:memory.knobs.preset.custom')}</Text>

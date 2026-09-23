@@ -175,6 +175,36 @@ export const EmptyDropdownStaysControlled: Story = {
   },
 }
 
+/** Every render mode carries its disabled reason as a tooltip over the control. */
+export const DisabledReasonEveryMode: Story = {
+  render: () => (
+    <View className="w-72 flex-col gap-6 p-4">
+      {(['segment', 'radio', 'dropdown'] as const).map((mode) => (
+        <Select
+          key={mode}
+          mode={mode}
+          label={`${mode} field`}
+          options={mode === 'radio' ? RADIO_OPTIONS : SHORT_OPTIONS}
+          value={undefined}
+          onValueChange={() => {}}
+          disabled
+          disabledReason={`${mode} is busy`}
+        />
+      ))}
+    </View>
+  ),
+  play: async () => {
+    const controls = [
+      screen.getByRole('radiogroup', { name: 'segment field' }),
+      screen.getByRole('radiogroup', { name: 'radio field' }),
+      screen.getByRole('button', { name: 'dropdown field' }),
+    ]
+    for (const [i, mode] of ['segment', 'radio', 'dropdown'].entries()) {
+      expect(controls[i]!.closest('[title]')).toHaveAttribute('title', `${mode} is busy`)
+    }
+  },
+}
+
 export const LabelNamesEveryRenderMode: Story = {
   render: () => (
     <View className="w-72 flex-col gap-6 p-4">

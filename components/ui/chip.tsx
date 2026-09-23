@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
+import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Text, TextClassContext } from '@/components/ui/text'
 import { cn } from '@/lib/utils'
 
@@ -8,11 +9,20 @@ type ChipProps = {
   selected?: boolean
   onPress?: () => void
   disabled?: boolean
+  /** Why it's disabled: a web tooltip over the chip and its accessibility hint. */
+  disabledReason?: string
   className?: string
   children?: ReactNode
 }
 
-export function Chip({ selected = false, onPress, disabled, className, children }: ChipProps) {
+export function Chip({
+  selected = false,
+  onPress,
+  disabled,
+  disabledReason,
+  className,
+  children,
+}: ChipProps) {
   const interactive = onPress != null
   const baseClass = cn(
     // `group` on a static View makes NativeWind upgrade it to a Pressable that eats the parent's tap.
@@ -54,17 +64,20 @@ export function Chip({ selected = false, onPress, disabled, className, children 
   }
 
   return (
-    <Pressable
-      role="button"
-      accessibilityRole="button"
-      aria-pressed={selected}
-      accessibilityState={{ selected, disabled: !!disabled }}
-      disabled={disabled}
-      onPress={onPress}
-      className={baseClass}
-    >
-      {content}
-    </Pressable>
+    <ReasonTooltip reason={disabled ? disabledReason : undefined}>
+      <Pressable
+        role="button"
+        accessibilityRole="button"
+        aria-pressed={selected}
+        accessibilityState={{ selected, disabled: !!disabled }}
+        accessibilityHint={disabled ? disabledReason : undefined}
+        disabled={disabled}
+        onPress={onPress}
+        className={baseClass}
+      >
+        {content}
+      </Pressable>
+    </ReasonTooltip>
   )
 }
 

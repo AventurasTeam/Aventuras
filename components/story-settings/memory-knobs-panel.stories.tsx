@@ -533,6 +533,7 @@ export const Disabled: Story = {
     }
     expect(chip(COPY.short)).toHaveAttribute('aria-disabled', 'true')
     expect(chip(COPY.custom)).toHaveAttribute('aria-disabled', 'true')
+    expect(chip(COPY.short).closest('[title]')).toHaveAttribute('title', COPY.inFlight)
     for (const name of [COPY.autoClose, COPY.fullChapter]) {
       expect(screen.getByRole('switch', { name })).toHaveAttribute('aria-disabled', 'true')
     }

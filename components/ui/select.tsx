@@ -22,6 +22,7 @@ import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 import { Heading } from '@/components/ui/heading'
 import { Icon } from '@/components/ui/icon'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
+import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { QuietSheetBackground, QuietSheetHandle } from '@/components/ui/sheet'
 import { Text, TextClassContext } from '@/components/ui/text'
 import { POINTER_EVENTS_BOX_NONE, POINTER_EVENTS_NONE } from '@/constants/styles'
@@ -533,6 +534,8 @@ export type SelectProps = {
    */
   label?: string
   disabled?: boolean
+  /** Why it's disabled: a web tooltip over the control and its accessibility hint, every mode. */
+  disabledReason?: string
   className?: string
 
   /**
@@ -604,13 +607,22 @@ function groupOptions(options: SelectOption[]): {
   return groups
 }
 
-function SegmentBranch({ options, value, onValueChange, disabled, className, label }: SelectProps) {
+function SegmentBranch({
+  options,
+  value,
+  onValueChange,
+  disabled,
+  disabledReason,
+  className,
+  label,
+}: SelectProps) {
   return (
     <RadioGroupBase.Root
       value={value}
       onValueChange={onValueChange}
       disabled={disabled}
       aria-label={label}
+      accessibilityHint={disabled ? disabledReason : undefined}
       className={cn(
         'h-control-md flex-row overflow-hidden rounded-md border border-border-strong bg-bg-base',
         className,
@@ -647,13 +659,22 @@ function SegmentBranch({ options, value, onValueChange, disabled, className, lab
   )
 }
 
-function RadioBranch({ options, value, onValueChange, disabled, className, label }: SelectProps) {
+function RadioBranch({
+  options,
+  value,
+  onValueChange,
+  disabled,
+  disabledReason,
+  className,
+  label,
+}: SelectProps) {
   return (
     <RadioGroupBase.Root
       value={value}
       onValueChange={onValueChange}
       disabled={disabled}
       aria-label={label}
+      accessibilityHint={disabled ? disabledReason : undefined}
       className={cn('flex-col gap-2', className)}
     >
       {options.map((opt) => {
@@ -710,6 +731,7 @@ function DropdownBranch({
   value,
   onValueChange,
   disabled,
+  disabledReason,
   sheetSize,
   placeholder,
   label,
@@ -739,6 +761,7 @@ function DropdownBranch({
         disabled={disabled}
         size={size}
         aria-label={renderTrigger != null ? undefined : label}
+        accessibilityHint={disabled ? disabledReason : undefined}
       >
         {renderTrigger != null ? (
           renderTrigger({ selected, placeholder })
@@ -788,7 +811,15 @@ export function Select(props: SelectProps) {
   const tier = useTier()
   const mode = resolveMode(props.options, props.mode, tier)
   const branchProps = { ...props, onValueChange: changesOnly(props.value, props.onValueChange) }
-  if (mode === 'segment') return <SegmentBranch {...branchProps} />
-  if (mode === 'radio') return <RadioBranch {...branchProps} />
-  return <DropdownBranch {...branchProps} />
+  return (
+    <ReasonTooltip reason={props.disabled ? props.disabledReason : undefined}>
+      {mode === 'segment' ? (
+        <SegmentBranch {...branchProps} />
+      ) : mode === 'radio' ? (
+        <RadioBranch {...branchProps} />
+      ) : (
+        <DropdownBranch {...branchProps} />
+      )}
+    </ReasonTooltip>
+  )
 }
