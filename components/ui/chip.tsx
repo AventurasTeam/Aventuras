@@ -15,7 +15,9 @@ type ChipProps = {
 export function Chip({ selected = false, onPress, disabled, className, children }: ChipProps) {
   const interactive = onPress != null
   const baseClass = cn(
-    'group h-control-xs flex-row items-center justify-center rounded-sm border px-row-x-sm',
+    // `group` on a static View makes NativeWind upgrade it to a Pressable that eats the parent's tap.
+    interactive && 'group',
+    'h-control-xs flex-row items-center justify-center rounded-sm border px-row-x-sm',
     selected ? 'border-fg-primary bg-fg-primary' : 'border-border-strong bg-bg-base',
     interactive && (selected ? 'active:opacity-90' : 'active:bg-tint-press'),
     Platform.select({

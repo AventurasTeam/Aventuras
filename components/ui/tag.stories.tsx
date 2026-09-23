@@ -27,6 +27,10 @@ export const Static: Story = {
       <Tag>multi-word tag</Tag>
     </View>
   ),
+  play: async () => {
+    // NativeWind upgrades a `group` View to a Pressable, which swallows a parent row's tap.
+    await expect(screen.getByText('tag-name').parentElement).not.toHaveClass('group')
+  },
 }
 
 export const Removable: Story = {
@@ -90,6 +94,9 @@ export const Clickable: Story = {
       <Tag onPress={() => {}}>clickable label</Tag>
     </View>
   ),
+  play: async () => {
+    await expect(screen.getByText('clickable label').parentElement).toHaveClass('group')
+  },
 }
 
 export const MixedRow: Story = {

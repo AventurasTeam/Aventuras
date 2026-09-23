@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
 import { View } from 'react-native'
+import { expect, screen } from 'storybook/test'
 
 import { themes } from '@/lib/themes'
 
@@ -24,6 +25,10 @@ export const Static: Story = {
       <Chip selected>active state</Chip>
     </View>
   ),
+  play: async () => {
+    // NativeWind upgrades a `group` View to a Pressable, which swallows a parent row's tap.
+    await expect(screen.getByText('read-only').parentElement).not.toHaveClass('group')
+  },
 }
 
 export const FilterRow: Story = {
@@ -39,6 +44,9 @@ export const FilterRow: Story = {
         ))}
       </View>
     )
+  },
+  play: async () => {
+    await expect(screen.getByText('Staged').parentElement).toHaveClass('group')
   },
 }
 
