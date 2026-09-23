@@ -55,7 +55,7 @@ export const plot = {
 
   addAwareness: (page: Page): Locator =>
     page.getByRole('button', { name: t('plot:awareness.add'), exact: true }),
-  // Row-qualified (happening-detail-pane.tsx): unnamed until an entity is picked, then "Remove
+  // Row-qualified (awareness-editor.tsx): generic until a character is picked, then "Remove
   // {name}" — caller passes the row's character name.
   removeAwareness: (page: Page, name: string): Locator =>
     page.getByRole('button', { name: t('plot:awareness.removeNamed', { name }), exact: true }),
