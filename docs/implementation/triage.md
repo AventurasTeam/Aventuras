@@ -446,22 +446,6 @@ slice-planning gate forces its resolution before that slice is planned.
   the narrow layout (the `TierTupleInput` / FormRow-lesson precedent).
   Surfaced 2026-09-22.
 
-- **`InlineEditableName` commits only on blur or Enter.** A
-  title-only edit shows no save bar until then, and Cmd/Ctrl-S while
-  still typing the name either skips the typed title or does nothing:
-  `onChange` fires only from `commit()`
-  (`components/ui/inline-editable-name.tsx`'s `onBlur` /
-  `onSubmitEditing`), and `RowSaveBar`
-  (`components/compounds/row-save-session-chrome.tsx`) mounts
-  `SaveBar`, and with it the Cmd/Ctrl-S hotkey, only once
-  `session.dirty` is true. Affects every save-session host with an
-  inline name — Plot now
-  (`components/plot/thread-detail-pane.tsx`,
-  `happening-detail-pane.tsx`), World's entity detail head from slice
-  4.2a (named in
-  `docs/implementation/milestones/04-world-plot-read-surfaces/slices/02a-entity-detail.md`).
-  Surfaced 2026-09-22.
-
 - **The save bar's invalid-draft reason is tooltip-only on phone.**
   Rejections get a toast — `app/plot/[branchId].tsx`'s `onRejected`
   is `toast.error`, because the save bar's notice is an icon with no

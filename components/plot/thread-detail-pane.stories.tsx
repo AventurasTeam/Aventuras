@@ -367,6 +367,22 @@ export const BlockedWhileDirty: Story = {
   },
 }
 
+/** A title still being typed dirties the session, and Ctrl-S saves it without a blur. */
+export const TitleSavesBeforeBlur: Story = {
+  play: async ({ args }) => {
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit What the amulet wants' }))
+    const input = await screen.findByDisplayValue('What the amulet wants')
+    await userEvent.clear(input)
+    await userEvent.type(input, 'The amulet wakes')
+    await screen.findByTestId('save-bar', {}, WAIT)
+    expect(input).toHaveFocus()
+
+    await userEvent.keyboard('{Control>}s{/Control}')
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1), WAIT)
+    expect(args.onSave).toHaveBeenCalledWith(expect.objectContaining({ title: 'The amulet wakes' }))
+  },
+}
+
 /** An empty title can't be written: the bar says why and Save disables. */
 export const InvalidTitle: Story = {
   play: async ({ args }) => {

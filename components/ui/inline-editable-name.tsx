@@ -51,50 +51,26 @@ export function InlineEditableName({
   className,
 }: InlineEditableNameProps) {
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(value)
-  const exitedRef = useRef(false)
+  // Every keystroke reaches `onChange`, so a save session sees the edit before blur;
+  // Escape puts back the value the edit started from.
+  const startRef = useRef(value)
 
   useEffect(() => {
-    if (disabled && editing) {
-      exitedRef.current = true
-      setEditing(false)
-      setDraft(value)
-    }
-  }, [disabled, editing, value])
-
-  // If the consumer reassigns `value` while not editing, keep the
-  // buffered draft aligned so the next edit starts from current truth.
-  useEffect(() => {
-    if (!editing) setDraft(value)
-  }, [value, editing])
+    if (disabled && editing) setEditing(false)
+  }, [disabled, editing])
 
   const enterEdit = useCallback(() => {
     if (disabled) return
-    exitedRef.current = false
-    setDraft(value)
+    startRef.current = value
     setEditing(true)
   }, [disabled, value])
 
-  const commit = useCallback(
-    (next: string) => {
-      // Skip if Escape or a previous Enter / blur already handled the
-      // exit — guards against the unmount-blur double-fire.
-      if (exitedRef.current) {
-        exitedRef.current = false
-        return
-      }
-      exitedRef.current = true
-      setEditing(false)
-      if (next !== value) onChange(next)
-    },
-    [onChange, value],
-  )
+  const exitEdit = useCallback(() => setEditing(false), [])
 
   const cancel = useCallback(() => {
-    exitedRef.current = true
-    setDraft(value)
+    if (value !== startRef.current) onChange(startRef.current)
     setEditing(false)
-  }, [value])
+  }, [onChange, value])
 
   const handleKeyPress = (e: TextInputKeyPressEvent) => {
     if (Platform.OS !== 'web') return
@@ -126,10 +102,10 @@ export function InlineEditableName({
       <View className={cn('flex-row items-center', GAP[size], className)}>
         <Input
           size={size}
-          value={draft}
-          onChangeText={setDraft}
-          onBlur={() => commit(draft)}
-          onSubmitEditing={() => commit(draft)}
+          value={value}
+          onChangeText={onChange}
+          onBlur={exitEdit}
+          onSubmitEditing={exitEdit}
           onKeyPress={handleKeyPress}
           placeholder={placeholder}
           autoFocus
