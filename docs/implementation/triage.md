@@ -117,6 +117,10 @@ slice-planning gate forces its resolution before that slice is planned.
   `CommonActions.setParams(query)` with `source` set to the matched
   route's key before dismissing (unverified whether `setParams`
   replaces or pushes web history in this fork). Surfaced 2026-09-14.
+  Slice 4.5b's
+  [deep-link params open question](milestones/04-world-plot-read-surfaces/slices/05b-peek-drawer.md#open-questions)
+  covers the same hook for World and Plot links, so resolve the two
+  together.
 
 - **Three gaps in `components/ui/select.tsx`, one of them shared with
   `Chip`.** (1) **No `disabledReason`.** SwitchRow, Stepper, Button and
