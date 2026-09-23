@@ -13,6 +13,7 @@ import {
   removeUserDataDir,
   setProviderEndpoint,
 } from '../harness/seed'
+import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
 import { storySettings } from '../locators/story-settings'
@@ -111,7 +112,7 @@ test.describe('story settings — narrative override reaches the wire', () => {
       .poll(async () => (await readModels(app)).narrative)
       .toEqual({ providerId: 'prov_local', modelId: OVERRIDE_MODEL })
 
-    await storySettings.back(app.window).click()
+    await chrome.back(app.window).click()
     await expect(reader.composer(app.window)).toBeVisible({ timeout: 10_000 })
     await reader.composer(app.window).fill('E2E-MODELS I draw the blade and wait.')
     await reader.send(app.window).click()
@@ -139,7 +140,7 @@ test.describe('story settings — narrative override reaches the wire', () => {
     await expect(storySettings.save(app.window)).toBeHidden()
     await expect.poll(async () => (await readModels(app)).narrative).toBeUndefined()
 
-    await storySettings.back(app.window).click()
+    await chrome.back(app.window).click()
     await expect(reader.composer(app.window)).toBeVisible({ timeout: 10_000 })
     await reader.composer(app.window).fill('E2E-MODELS-2 I listen for the bell.')
     await reader.send(app.window).click()

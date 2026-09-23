@@ -4,6 +4,7 @@ import { queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { createSeededUserDataDir, removeUserDataDir, setAppEmbeddingModelId } from '../harness/seed'
+import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
 import { storySettings } from '../locators/story-settings'
@@ -39,7 +40,7 @@ async function reopenAndExpectQuiet(page: Page, title: string): Promise<void> {
   await storySettings.openFromReader(page).click()
   await expect(storySettings.aboutPanel(page)).toBeVisible({ timeout: 20_000 })
   await expect(storySettings.upgradePrompt(page)).toBeHidden()
-  await storySettings.back(page).click()
+  await chrome.back(page).click()
   await expect(reader.composer(page)).toBeVisible({ timeout: 10_000 })
   await expect(storySettings.upgradePrompt(page)).toBeHidden()
 }
@@ -72,7 +73,7 @@ test.describe('embedding upgrade prompt — Keep', () => {
     await expect.poll(() => declinedKey(app)).toBe(NEWER_DEFAULT)
 
     await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
-    await storySettings.back(page).click()
+    await chrome.back(page).click()
     await expect(home.openStory(page, HERO_TITLE)).toBeVisible({ timeout: 10_000 })
 
     // Same click, same app, same story as the open that raised the prompt above, so the silence
@@ -109,7 +110,7 @@ test.describe('embedding upgrade prompt — Later', () => {
       // are its two halves: a recorded decline would have kept the prompt away next launch too.
       expect(await declinedKey(first)).toBeUndefined()
 
-      await storySettings.back(first.window).click()
+      await chrome.back(first.window).click()
       await expect(home.openStory(first.window, HERO_TITLE)).toBeVisible({ timeout: 10_000 })
       // The deferral outlives the open it was made on: without it the latch would
       // re-read the still-open gate here and raise the prompt again.

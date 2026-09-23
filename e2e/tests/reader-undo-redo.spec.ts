@@ -11,6 +11,7 @@ import {
   setClassifierCadence,
   setProviderEndpoint,
 } from '../harness/seed'
+import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
 
@@ -70,12 +71,12 @@ test.describe('reader — undo / redo a turn', () => {
 
     // Undo through the chrome actions menu (the touch-tier path; the keyboard
     // shortcut is intentionally inert while focus is in the composer).
-    await reader.actionsTrigger(app.window).click()
+    await chrome.actionsTrigger(app.window).click()
     await reader.undoRow(app.window).click()
     await expect.poll(replyCount, { timeout: 15_000 }).toBe(0)
 
     // Redo re-applies the same turn — the row comes back.
-    await reader.actionsTrigger(app.window).click()
+    await chrome.actionsTrigger(app.window).click()
     await reader.redoRow(app.window).click()
     await expect.poll(replyCount, { timeout: 15_000 }).toBe(1)
   })
@@ -226,7 +227,7 @@ test.describe('reader — undo of a turn covered by a two-turn classifier pass',
     // would take the surviving turn's fact down with the undone turn.
     expect(anchorFor(FACT_A)[2]).toBeGreaterThan(createLogPosition)
 
-    await reader.actionsTrigger(app.window).click()
+    await chrome.actionsTrigger(app.window).click()
     await reader.undoRow(app.window).click()
     await expect.poll(() => turnBEntryCount(branch), { timeout: 15_000 }).toBe(0)
 
@@ -244,7 +245,7 @@ test.describe('reader — undo of a turn covered by a two-turn classifier pass',
     expect(watermark[0][0]).toBe(bUserPosition - 1)
 
     // Redo restores the whole unit — the turn and its B-anchored fact.
-    await reader.actionsTrigger(app.window).click()
+    await chrome.actionsTrigger(app.window).click()
     await reader.redoRow(app.window).click()
     await expect.poll(() => turnBEntryCount(branch), { timeout: 15_000 }).toBe(2)
     expect(await happeningCount(branch, FACT_B)).toBe(1)

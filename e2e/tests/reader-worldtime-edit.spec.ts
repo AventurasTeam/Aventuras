@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test'
 import { queryApp } from '../harness/db'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
+import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
 
@@ -122,7 +123,7 @@ test.describe('reader — edit an entry world time', () => {
     await expect(reader.monotonicityIndicator(app.window, TARGET_ID)).toBeVisible()
 
     // Undo restores the seconds and prunes the delta with them.
-    await reader.actionsTrigger(app.window).click()
+    await chrome.actionsTrigger(app.window).click()
     await reader.undoRow(app.window).click()
     await expect.poll(() => worldTimeOf(TARGET_ID), { timeout: 15_000 }).toBe(SEEDED_WORLD_TIME)
     expect(await editDeltaCount(TARGET_ID)).toBe(0)

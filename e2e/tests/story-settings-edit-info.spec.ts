@@ -13,6 +13,7 @@ import {
   removeUserDataDir,
   setProviderEndpoint,
 } from '../harness/seed'
+import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
 import { storyRecovery } from '../locators/recovery'
@@ -121,7 +122,7 @@ test.describe('story settings — the Edit info route', () => {
 
     // One ← reaches the library, which is what pins that the route interposed no
     // reader between the two screens even though `Edit info` opens the story.
-    await storySettings.back(page).click()
+    await chrome.back(page).click()
     await expect(home.openStory(page, RENAMED)).toBeVisible({ timeout: 10_000 })
     await expect(storySettings.aboutPanel(page)).toBeHidden()
   })
@@ -143,7 +144,7 @@ test.describe('story settings — the Edit info route', () => {
 
     // The push is what makes this ← land back on Story Settings; had the segment
     // replaced the surface, the library would be here instead.
-    await storySettings.back(page).click()
+    await chrome.back(page).click()
     await expect(storySettings.aboutPanel(page)).toBeVisible({ timeout: 10_000 })
     await expect(reader.composer(page)).toBeHidden()
 
@@ -160,7 +161,7 @@ test.describe('story settings — the Edit info route', () => {
     await expect(storySettings.authoringAidsPanel(page)).toBeHidden()
     await expect(page).toHaveURL(/\/story-settings\/[^?]+\?tab=about/)
 
-    await storySettings.back(page).click()
+    await chrome.back(page).click()
     await expect(home.newStory(page)).toBeVisible({ timeout: 10_000 })
     await expect(storySettings.aboutPanel(page)).toBeHidden()
   })
@@ -176,13 +177,13 @@ test.describe('story settings — the Edit info route', () => {
     await expect(storySettings.aboutPanel(page)).toBeVisible({ timeout: 20_000 })
     await expect(reader.composer(page)).toBeHidden()
 
-    await storySettings.back(page).click()
+    await chrome.back(page).click()
     await expect(reader.composer(page)).toBeVisible({ timeout: 10_000 })
     await expect(storySettings.aboutPanel(page)).toBeHidden()
 
     // A second ← reaches the library: the reader was the screen below the
     // surface, not one this visit pushed over it.
-    await storySettings.back(page).click()
+    await chrome.back(page).click()
     await expect(home.newStory(page)).toBeVisible({ timeout: 10_000 })
   })
 
@@ -232,7 +233,7 @@ test.describe('story settings — the Edit info route', () => {
 
     // The segment dismissed down to the reader that was already below the
     // surface, so one more ← reaches the library rather than Story Settings.
-    await storySettings.back(page).click()
+    await chrome.back(page).click()
     await expect(home.newStory(page)).toBeVisible({ timeout: 10_000 })
   })
 
@@ -259,7 +260,7 @@ test.describe('story settings — the Edit info route', () => {
     // regex behind `save`, and the save bar stays in the tree behind the dialog.
     await expect(storySettings.save(page)).toBeHidden()
 
-    await storySettings.back(page).click()
+    await chrome.back(page).click()
     await expect(home.newStory(page)).toBeVisible({ timeout: 10_000 })
   })
 })
@@ -304,7 +305,7 @@ test.describe('story settings — consent on a story with no turns yet', () => {
     const storyId = storyRows[0][0] as string
 
     // Finish replaces the wizard with the reader, so this ← reaches the library.
-    await storySettings.back(page).click()
+    await chrome.back(page).click()
     await expect(home.newStory(page)).toBeVisible({ timeout: 10_000 })
 
     await openEditInfo(page, FRESH_STORY.title)
@@ -332,7 +333,7 @@ test.describe('story settings — consent on a story with no turns yet', () => {
 
     // Back onto the surface the reader was pushed over. It re-reads storyHasTurns
     // on every focus precisely because a reader above it can add one.
-    await storySettings.back(page).click()
+    await chrome.back(page).click()
     await expect(storySettings.authoringAidsPanel(page)).toBeVisible({ timeout: 10_000 })
     await expect(reader.composer(page)).toBeHidden()
 

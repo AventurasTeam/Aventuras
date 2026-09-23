@@ -79,17 +79,6 @@ slice-planning gate forces its resolution before that slice is planned.
   [the compiler-suppression lesson](lessons-learned/exhaustive-deps-suppression-disables-the-compiler.md).
   Surfaced 2026-09-14.
 
-- **`ScreenShell`'s chrome is addressed through screen-specific locator
-  namespaces.** The back arrow and the Actions menu belong to
-  `ScreenShell` (`components/shells/screen-shell.tsx`), not to any one
-  screen, but `e2e/locators/story-settings.ts` owns `back` and
-  `actionsTrigger` and specs reach for them while a different screen is
-  focused — `story-settings-edit-info.spec.ts` calls
-  `storySettings.back` with the reader focused five times. It reads as
-  a scoping error at every call site and invites a duplicate per
-  screen. One shared `chrome` locator object, re-exported or imported
-  directly, would name what these actually are. Surfaced 2026-09-16.
-
 - **E2E turn helpers are copied per spec, and one invariant is
   justified two different ways.** `waitForTurnTerminal` is duplicated
   in `e2e/tests/story-settings-models.spec.ts` and

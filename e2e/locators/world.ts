@@ -5,18 +5,7 @@ import { t } from '../harness/i18n'
 // World panel (app/world/[branchId].tsx). testing.md → Selector strategy (Tier 2 default);
 // subHeader/detailName are Tier-3 exceptions; detailName's name would collide with a list row.
 export const world = {
-  // The chrome Actions menu on World; its accessible name carries the
-  // "(Ctrl+K)" hint on web, so it anchors on the base label.
-  actionsTrigger: (page: Page): Locator =>
-    page.getByRole('button', { name: new RegExp(t('chrome.actions')) }),
-
   // Actions menu rows are listbox options (searchable-overlay-list.tsx) named by their label.
-  goToWorldRow: (page: Page): Locator =>
-    page.getByRole('option', { name: t('chrome.goTo.openWorld'), exact: true }),
-  goToStorySettingsRow: (page: Page): Locator =>
-    page.getByRole('option', { name: t('chrome.goTo.openStorySettings'), exact: true }),
-  goToReaderRow: (page: Page): Locator =>
-    page.getByRole('option', { name: t('chrome.goTo.openReader'), exact: true }),
   addEntityRow: (page: Page): Locator =>
     page.getByRole('option', { name: t('world:actions.addEntity'), exact: true }),
   addLoreRow: (page: Page): Locator =>

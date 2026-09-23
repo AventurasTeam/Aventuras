@@ -5,6 +5,7 @@ import type { StorySettings, SuggestionCategory } from '@/lib/db'
 import { queryApp } from '../harness/db'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { createSeededUserDataDir, enableDiagnostics, removeUserDataDir } from '../harness/seed'
+import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
 import { storySettings } from '../locators/story-settings'
@@ -157,7 +158,7 @@ test.describe('story settings — dirty navigate-away guard', () => {
     await storySettings.categoryLabel(app.window, original.id).fill('E2E Dirty Edit')
     await expect(storySettings.save(app.window)).toBeVisible()
 
-    await storySettings.back(app.window).click()
+    await chrome.back(app.window).click()
     await expect(storySettings.unsavedDialog(app.window)).toBeVisible()
 
     await storySettings.unsavedDiscard(app.window).click()
@@ -210,7 +211,7 @@ test.describe('story settings — dirty Actions-menu guard', () => {
     await storySettings.categoryLabel(app.window, original.id).fill('E2E Menu Edit')
     await expect(storySettings.save(app.window)).toBeVisible()
 
-    await storySettings.actionsTrigger(app.window).click()
+    await chrome.actionsTrigger(app.window).click()
     await storySettings.diagnosticsHubRow(app.window).click()
     await expect(storySettings.unsavedDialog(app.window)).toBeVisible()
 
