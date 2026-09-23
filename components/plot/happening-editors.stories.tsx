@@ -1,12 +1,11 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
-import { Controller, useForm, useWatch } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { Button } from '@/components/ui/button'
-import { Switch } from '@/components/ui/switch'
 import { Text } from '@/components/ui/text'
 import type { Entity } from '@/lib/db'
 import type { EntryRef } from '@/lib/entry-refs'
@@ -14,7 +13,6 @@ import { t } from '@/lib/i18n'
 import { happeningDraftSchema, type HappeningDraft } from '@/lib/plot'
 
 import { AwarenessEditor } from './awareness-editor'
-import { CommonKnowledgeNotice } from './common-knowledge-notice'
 import { DecayResistanceField } from './decay-resistance-field'
 import { InvolvementsEditor } from './involvements-editor'
 
@@ -127,41 +125,6 @@ function AwarenessHarness() {
         <Text>Trigger</Text>
       </Button>
       <Text testID="values">{JSON.stringify(values)}</Text>
-    </View>
-  )
-}
-
-function CommonKnowledgeHarness() {
-  const form = useHappeningForm()
-  const commonKnowledge = useWatch({ control: form.control, name: 'commonKnowledge' })
-  return (
-    <View className="gap-4">
-      <Controller
-        control={form.control}
-        name="commonKnowledge"
-        render={({ field }) => (
-          <View className="flex-row items-center gap-2">
-            <Switch
-              checked={field.value}
-              onCheckedChange={field.onChange}
-              aria-label={t('plot:fields.commonKnowledge')}
-            />
-            <Text>{t('plot:fields.commonKnowledge')}</Text>
-          </View>
-        )}
-      />
-      {commonKnowledge ? (
-        <CommonKnowledgeNotice />
-      ) : (
-        <AwarenessEditor
-          control={form.control}
-          trigger={form.trigger}
-          entities={ENTITIES}
-          entries={ENTRIES}
-          blocked={false}
-          onOpenEntity={onOpenEntity}
-        />
-      )}
     </View>
   )
 }
@@ -472,20 +435,6 @@ export const DecayPresetsExactMatch: Story = {
     expect(screen.getByRole('textbox', { name: t('plot:fields.decayResistance') })).toHaveValue(
       '0.5',
     )
-  },
-}
-
-export const CommonKnowledgeSwap: Story = {
-  render: () => <CommonKnowledgeHarness />,
-  play: async () => {
-    expect(await screen.findByRole('button', { name: t('plot:awareness.add') })).toBeVisible()
-
-    await userEvent.click(screen.getByRole('switch', { name: t('plot:fields.commonKnowledge') }))
-    await waitFor(() => expect(screen.getByText(t('plot:awareness.ckBody'))).toBeVisible(), WAIT)
-    expect(screen.queryByRole('button', { name: t('plot:awareness.add') })).not.toBeInTheDocument()
-
-    await userEvent.click(screen.getByRole('switch', { name: t('plot:fields.commonKnowledge') }))
-    await waitFor(() => expect(within(row('awareness-0')).getByText('Mira')).toBeVisible(), WAIT)
   },
 }
 

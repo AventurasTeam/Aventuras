@@ -107,7 +107,8 @@ type HarnessProps = {
 
 /**
  * Mimics the route: an update's store patch lands mid-save; a create's new row is selected from
- * `onSaved`. Capture-phase F2 flips `blocked` (mid-edit run); F3 requests a leave via `onSession`.
+ * `onSaved`. Capture-phase F2 flips `blocked` (mid-edit run); F3 requests a leave via `onSession`;
+ * F4 is a repeat `[+] Blank` (a new create `seq`).
  */
 function Harness({
   row: initialRow,
@@ -123,6 +124,7 @@ function Harness({
 }: HarnessProps) {
   const [row, setRow] = useState(initialRow)
   const [blocked, setBlocked] = useState(initialBlocked)
+  const [createSeq, setCreateSeq] = useState(0)
   const created = useRef(new Map<string, ThreadDraft>())
   const session = useRef<RowSessionHandle | null>(null)
   const onSession = useCallback((handle: RowSessionHandle | null) => {
@@ -133,6 +135,7 @@ function Harness({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'F2') setBlocked((prev) => !prev)
       if (e.key === 'F3') session.current?.requestLeave(onLeave)
+      if (e.key === 'F4') setCreateSeq((n) => n + 1)
     }
     document.addEventListener('keydown', onKeyDown, true)
     return () => document.removeEventListener('keydown', onKeyDown, true)
@@ -170,6 +173,7 @@ function Harness({
     <View style={{ width: 860, maxWidth: '100%', height: 720 }} className="border border-border">
       <ThreadDetailPane
         row={row}
+        createSeq={row == null ? createSeq : undefined}
         entryIndex={ENTRY_INDEX}
         categories={CATEGORIES}
         recentlyClassified={recentlyClassified}
@@ -304,6 +308,17 @@ export const Create: Story = {
     expect(description()).toHaveValue('It rings under the river.')
     expect(screen.getByRole('button', { name: 'Status' })).toHaveTextContent('Pending')
     expect(screen.getByRole('button', { name: 'More actions' })).toBeEnabled()
+  },
+}
+
+/** A repeat `[+] Blank` while already creating opens a fresh draft, not the one in progress. */
+export const RepeatBlankResetsCreate: Story = {
+  args: { row: null },
+  play: async () => {
+    await editDescription('It rings under the river.')
+    await userEvent.keyboard('{F4}')
+    await waitFor(() => expect(description()).toHaveValue(''), WAIT)
+    expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument()
   },
 }
 

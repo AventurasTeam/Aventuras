@@ -185,7 +185,8 @@ type HarnessProps = {
 
 /**
  * Mimics the route: an update's row/link patches land mid-save; a create's new row is selected
- * from `onSaved`. Capture-phase F2 flips `blocked` (mid-edit run); F3 requests a leave.
+ * from `onSaved`. Capture-phase F2 flips `blocked` (mid-edit run); F3 requests a leave; F4 is a
+ * repeat `[+] Blank` (a new create `seq`).
  */
 function Harness({
   row: initialRow,
@@ -203,6 +204,7 @@ function Harness({
   const [row, setRow] = useState(initialRow)
   const [links, setLinks] = useState(initialLinks)
   const [blocked, setBlocked] = useState(initialBlocked)
+  const [createSeq, setCreateSeq] = useState(0)
   const created = useRef(new Map<string, HappeningDraft>())
   const session = useRef<RowSessionHandle | null>(null)
   const onSession = useCallback((handle: RowSessionHandle | null) => {
@@ -213,6 +215,7 @@ function Harness({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'F2') setBlocked((prev) => !prev)
       if (e.key === 'F3') session.current?.requestLeave(onLeave)
+      if (e.key === 'F4') setCreateSeq((n) => n + 1)
     }
     document.addEventListener('keydown', onKeyDown, true)
     return () => document.removeEventListener('keydown', onKeyDown, true)
@@ -257,6 +260,7 @@ function Harness({
     >
       <HappeningDetailPane
         row={row}
+        createSeq={row == null ? createSeq : undefined}
         links={links}
         entities={ENTITIES}
         entries={ENTRIES}
@@ -615,6 +619,23 @@ export const Create: Story = {
     expect(within(saved).getByRole('textbox', { name: 'Role' })).toHaveValue('actor')
     expect(tab('Involvements')).toHaveTextContent(/^Involvements\s*\(1\)$/)
     expect(pane().getByRole('button', { name: 'More actions' })).toBeEnabled()
+  },
+}
+
+/** A repeat `[+] Blank` while already creating opens a fresh draft, links included. */
+export const RepeatBlankResetsCreate: Story = {
+  args: { row: null, links: NO_LINKS },
+  play: async () => {
+    await editDescription('A bell under the river.')
+    await openTab('Involvements')
+    await userEvent.click(await pane().findByRole('button', { name: 'Add involvement' }, WAIT))
+    expect(await pane().findByTestId('involvement-0', {}, WAIT)).toBeVisible()
+
+    await userEvent.keyboard('{F4}')
+    await waitFor(() => expect(pane().queryByTestId('involvement-0')).not.toBeInTheDocument(), WAIT)
+    await openTab('Overview')
+    expect(description()).toHaveValue('')
+    expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument()
   },
 }
 
