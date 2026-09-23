@@ -24,7 +24,7 @@ describe('resolveGenreColor', () => {
     expect(resolveGenreColor('Horror', 'chartreuse')).toBe(GENRE_COLORS.red.badge)
   })
 
-  it('keeps the colours the preset genres had before a colour could be chosen', () => {
+  it('colours the preset genres by name', () => {
     expect(resolveGenreColor('Fantasy')).toBe(
       'bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/20',
     )

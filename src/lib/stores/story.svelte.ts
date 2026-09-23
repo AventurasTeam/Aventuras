@@ -12,6 +12,7 @@ import type {
   MemoryConfig,
   StoryMode,
   StorySettings,
+  StoryDetails,
   Entry,
   TimeTracker,
   PersistentCharacterSnapshot,
@@ -56,6 +57,7 @@ import {
 } from '$lib/services/generation'
 import { createLogger } from '$lib/log'
 import { sameEntityName } from '$lib/utils/text'
+import { storyDetailsUpdate } from '$lib/utils/storyDetails'
 import { grammarService } from '$lib/services/grammar'
 import { clearTier3SelectionCache } from '$lib/services/ai'
 import { clearImageMarkerCache } from '$lib/services/image'
@@ -4820,39 +4822,14 @@ class StoryStore {
    * written when nothing changed, so opening and saving the dialog does not bump the story up
    * the library.
    */
-  async updateStoryDetails(
-    storyId: string,
-    details: {
-      title: string
-      genre: string | null
-      description: string | null
-      genreColor: string | null
-    },
-  ): Promise<void> {
-    const title = details.title.trim()
-    if (!title) return
-    const genre = details.genre?.trim() || null
-    const description = details.description?.trim() || null
-    const genreColor = details.genreColor || null
-
-    // The loaded story is the freshest copy of the settings — `updateStorySettings` writes there
-    // without touching the library list — so it is preferred when it is the one being edited.
-    const stored =
-      (this.currentStory?.id === storyId ? this.currentStory : null) ??
-      this.allStories.find((s) => s.id === storyId) ??
-      (await database.getStory(storyId))
+  async updateStoryDetails(storyId: string, details: StoryDetails): Promise<void> {
+    // Read back rather than merging into an in-memory copy: the settings JSON is replaced whole,
+    // and `updateStorySettings` writes keys the library list never sees.
+    const stored = await database.getStory(storyId)
     if (!stored) throw new Error('Story not found')
 
-    const updates: Partial<Story> = {}
-    if (title !== stored.title) updates.title = title
-    if (genre !== (stored.genre || null)) updates.genre = genre
-    if (description !== (stored.description || null)) updates.description = description
-    if (genreColor !== (stored.settings?.genreColor || null)) {
-      // updateStory replaces the settings JSON whole, so merge rather than send the one key.
-      const { genreColor: _previous, ...rest } = stored.settings ?? {}
-      updates.settings = genreColor ? { ...rest, genreColor } : rest
-    }
-    if (Object.keys(updates).length === 0) return
+    const updates = storyDetailsUpdate(stored, details)
+    if (!updates) return
 
     await database.updateStory(storyId, updates)
 

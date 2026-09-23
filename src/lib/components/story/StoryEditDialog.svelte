@@ -4,15 +4,6 @@
   paragraphs. Mounted fresh for each edit and seeded from the stored story, so dismissing it
   leaves nothing behind to reset.
 -->
-<script lang="ts" module>
-  export interface StoryDetails {
-    title: string
-    genre: string | null
-    description: string | null
-    genreColor: string | null
-  }
-</script>
-
 <script lang="ts">
   import { onDestroy, untrack } from 'svelte'
   import { ChevronDown, Check } from '@lucide/svelte'
@@ -27,7 +18,7 @@
   import { MODAL_CLOSE_TRANSITION_MS } from '$lib/constants/layout'
   import WizardExitConfirm from '../wizard/WizardExitConfirm.svelte'
   import { createDrawerSwipeGuard } from '$lib/components/ui/drawer'
-  import type { Story } from '$lib/types'
+  import type { Story, StoryDetails } from '$lib/types'
   import {
     GENRE_COLORS,
     GENRE_COLOR_KEYS,
@@ -58,6 +49,7 @@
   let isOpen = $state(true)
   let closing = false
   let returning = false
+  let timer: ReturnType<typeof setTimeout> | null = null
   /** Bumped to remount the modal, so a sheet brought back after a swipe starts from clean. */
   let modalKey = $state(0)
   let showDiscardConfirm = $state(false)
@@ -75,23 +67,42 @@
   const selectedKey = $derived<GenreColorKey | null>(
     isGenreColorKey(genreColor) ? genreColor : null,
   )
-
-  $effect(() => {
-    if (!hasGenre) colorsOpen = false
-  })
+  // Derived rather than closed by an effect, so it never disagrees with the genre for a frame.
+  const showColors = $derived(colorsOpen && hasGenre)
 
   // Unmounting skips `vaul`'s own restore, so the lock is released here; see `utils/scrollLock`.
   function close() {
+    if (closing) return
     closing = true
     blurFocusedElement(isMobile.current)
     isOpen = false
-    setTimeout(() => {
+    timer = setTimeout(() => {
       releaseOrphanScrollLock()
       onClose()
     }, MODAL_CLOSE_TRANSITION_MS)
   }
 
-  onDestroy(() => releaseOrphanScrollLock())
+  /**
+   * Brings back a sheet `vaul` closed on its own, once it is fully out. Reopening it mid-close
+   * leaves its swipe styles and scroll lock behind, over a sheet that cannot be seen.
+   */
+  function returnSheet(ask: boolean) {
+    returning = true
+    timer = setTimeout(() => {
+      returning = false
+      if (closing) return
+      releaseOrphanScrollLock()
+      modalKey += 1
+      isOpen = true
+      if (ask) showDiscardConfirm = true
+    }, MODAL_CLOSE_TRANSITION_MS)
+  }
+
+  // A pending timer would otherwise close whichever story's dialog has taken this one's place.
+  onDestroy(() => {
+    if (timer) clearTimeout(timer)
+    releaseOrphanScrollLock()
+  })
 
   /** Only a drawer swipe gets here: Escape and outside clicks are intercepted on the content. */
   // An edited sheet swiped down stays put and asks, instead of closing.
@@ -107,17 +118,13 @@
 
   function handleOpenChange(open: boolean) {
     if (open || closing || returning) return
+    // `vaul` closes a drawer that is not dismissible when its handle is tapped, so a save in
+    // flight can be interrupted here. The sheet comes back without asking: those edits are being
+    // written, and `save` closes it for good once the write lands.
+    if (saving) return returnSheet(false)
     if (!dirty) return close()
-    // Only if the swipe guard misjudged `vaul`'s close. Reopening the same drawer mid-close
-    // leaves its swipe styles and scroll lock behind, so a fresh one comes back to ask.
-    returning = true
-    setTimeout(() => {
-      releaseOrphanScrollLock()
-      modalKey += 1
-      isOpen = true
-      showDiscardConfirm = true
-      returning = false
-    }, MODAL_CLOSE_TRANSITION_MS)
+    // Only if the swipe guard misjudged `vaul`'s close.
+    returnSheet(true)
   }
 
   function requestClose() {
@@ -152,14 +159,16 @@
     set(el.value)
   }
 
-  function handleKeydown(e: KeyboardEvent, multiline: boolean) {
+  function handleKeydown(e: KeyboardEvent, nextFieldId?: string) {
     if (e.key !== 'Enter' || e.isComposing) return
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault()
       void save()
-    } else if (!multiline) {
-      // Neither a line break nor a save: a phone's return key must not submit a half-typed form.
+    } else if (nextFieldId) {
+      // A single-value field takes no line break, and a phone's return key must not save a
+      // half-typed form. It moves on instead, which is what its "next" label promises.
       e.preventDefault()
+      document.getElementById(nextFieldId)?.focus()
     }
   }
 </script>
@@ -167,7 +176,7 @@
 {#key modalKey}
   <ResponsiveModal.Root bind:open={isOpen} dismissible={!saving} onOpenChange={handleOpenChange}>
     <ResponsiveModal.Content
-      class="flex max-h-[85vh] max-w-lg flex-col gap-0 p-0"
+      class="flex max-h-[85dvh] max-w-lg flex-col gap-0 p-0"
       onInteractOutside={(e: PointerEvent) => {
         e.preventDefault()
         requestClose()
@@ -205,7 +214,7 @@
               bind:value={title}
               enterkeyhint="next"
               oninput={(e) => singleLine(e, (v) => (title = v))}
-              onkeydown={(e) => handleKeydown(e, false)}
+              onkeydown={(e) => handleKeydown(e, 'story-edit-genre')}
             />
           </div>
 
@@ -219,14 +228,14 @@
               bind:value={genre}
               enterkeyhint="next"
               oninput={(e) => singleLine(e, (v) => (genre = v))}
-              onkeydown={(e) => handleKeydown(e, false)}
+              onkeydown={(e) => handleKeydown(e, 'story-edit-description')}
             />
 
             <button
               type="button"
               class="text-muted-foreground hover:text-foreground flex items-center gap-2 pt-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
               disabled={!hasGenre}
-              aria-expanded={colorsOpen}
+              aria-expanded={showColors}
               aria-controls="story-edit-genre-colors"
               onclick={() => (colorsOpen = !colorsOpen)}
             >
@@ -235,11 +244,11 @@
                 <TagBadge name={genre.trim()} color={resolveGenreColor(genre.trim(), genreColor)} />
               {/if}
               <ChevronDown
-                class={cn('h-3.5 w-3.5 transition-transform', colorsOpen && 'rotate-180')}
+                class={cn('h-3.5 w-3.5 transition-transform', showColors && 'rotate-180')}
               />
             </button>
 
-            {#if colorsOpen}
+            {#if showColors}
               <div
                 id="story-edit-genre-colors"
                 role="radiogroup"
@@ -288,7 +297,7 @@
               class="max-h-none"
               placeholder="No description"
               bind:value={description}
-              onkeydown={(e) => handleKeydown(e, true)}
+              onkeydown={(e) => handleKeydown(e)}
             />
           </div>
         </div>

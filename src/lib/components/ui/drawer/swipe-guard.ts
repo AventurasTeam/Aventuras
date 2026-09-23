@@ -2,7 +2,8 @@
 export const DRAWER_CLOSE_THRESHOLD = 0.75
 
 // `vaul-svelte` internals (`internal/constants.js`), not exported: its flick speed in px/ms and
-// its settle transition. Keep in step with the installed version.
+// its settle transition. Recheck both on upgrade, along with the seam this guard relies on; see
+// docs/architecture/overview.md, "Drawer swipes".
 const VELOCITY_THRESHOLD = 0.4
 const SETTLE_TRANSITION = 'transform 0.5s cubic-bezier(0.32, 0.72, 0, 1)'
 const OVERLAY_TRANSITION = 'opacity 0.5s cubic-bezier(0.32, 0.72, 0, 1)'

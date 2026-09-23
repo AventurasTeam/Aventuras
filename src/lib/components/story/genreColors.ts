@@ -64,7 +64,7 @@ export const GENRE_COLOR_KEYS = Object.keys(GENRE_COLORS) as GenreColorKey[]
 
 export const NEUTRAL_GENRE_BADGE = 'bg-secondary text-secondary-foreground border-border'
 
-/** The colour each wizard preset genre has always had. */
+/** Default colour for each wizard preset genre. */
 const PRESET_GENRE_COLORS: Record<string, GenreColorKey> = {
   Fantasy: 'purple',
   'Sci-Fi': 'cyan',

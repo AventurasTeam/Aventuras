@@ -15,8 +15,8 @@
   import { Button } from '$lib/components/ui/button'
   import EmptyState from '$lib/components/ui/empty-state/empty-state.svelte'
   import StoryCard from '$lib/components/story/StoryCard.svelte'
-  import StoryEditDialog, { type StoryDetails } from '$lib/components/story/StoryEditDialog.svelte'
-  import type { Story } from '$lib/types'
+  import StoryEditDialog from '$lib/components/story/StoryEditDialog.svelte'
+  import type { Story, StoryDetails } from '$lib/types'
 
   let isImporting = $state(false)
   /** Non-null only while the import is waiting on the user's pack choice. */

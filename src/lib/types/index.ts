@@ -143,6 +143,14 @@ export interface StorySettings {
   genreColor?: string // Library badge colour: a key of GENRE_COLORS; absent = colour by genre name
 }
 
+/** The fields a story's library card edits. */
+export interface StoryDetails {
+  title: string
+  genre: string | null
+  description: string | null
+  genreColor: string | null
+}
+
 export interface StoryEntry {
   id: string
   storyId: string
