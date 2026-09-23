@@ -67,11 +67,12 @@ export function nextStatusOnFailure(
 }
 
 /**
- * Entries between cadence-fired runs. The trigger is checked only after a completed turn,
- * which writes an action and a reply, so an odd cadence rounds up to the next whole turn.
+ * The most entries a cadence-fired run can trail by. The trigger is checked only after a
+ * completed turn, which writes two entries, and a prose reversal can leave the unprocessed count
+ * at either parity — so the count can step past the cadence by one, even or odd.
  */
-export function effectiveCadenceEntries(cadence: number): number {
-  return Math.ceil(Math.max(1, cadence) / 2) * 2
+export function worstCaseCadenceEntries(cadence: number): number {
+  return Math.max(1, cadence) + 1
 }
 
 /**

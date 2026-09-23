@@ -18,7 +18,6 @@ export { createClassifierScheduler } from './scheduler'
 export type { ClassifierSchedulerDeps, RunNowOutcome, StartRunOutcome } from './scheduler'
 export {
   BACKOFF_MS,
-  effectiveCadenceEntries,
   IDLE_STATUS_JSON,
   idleStatus,
   nextStatusOnFailure,
@@ -26,4 +25,5 @@ export {
   nextStatusOnSuccess,
   retryDelayForStatus,
   shouldCadenceFire,
+  worstCaseCadenceEntries,
 } from './status'

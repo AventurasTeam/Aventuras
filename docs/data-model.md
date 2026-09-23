@@ -1184,7 +1184,7 @@ stories.settings: {
   fullChapterInBuffer: boolean      // default false; two-mode axis — true = full current chapter verbatim, false = last partialChapterBuffer entries of current chapter
   partialChapterBuffer: number       // default 10; entries from current chapter when fullChapterInBuffer = false. See docs/memory/cadence.md → User-tunable knobs
   protectedBuffer: number            // default 10; chapter-boundary spillover floor — applies to BOTH modes. If current chapter has fewer entries, fill from previous chapter up to this floor. See docs/memory/cadence.md → User-tunable knobs
-  classifierCadence: number          // entries between periodic classifier runs in the background; checked after each completed turn, so an odd value rounds up to a whole turn. Cadence-vs-window overlap warning only fires in partial mode (full mode catches up unclassified entries at chapter close)
+  classifierCadence: number          // entries between periodic classifier runs in the background; checked after each completed turn, so a run can fire up to one entry past it. Cadence-vs-window overlap warning only fires in partial mode (full mode catches up unclassified entries at chapter close)
   classifierContextEntries: number   // default 4, MINIMUM 2; trailing entries the per-turn fallback classifier sees. The floor is the fixed action-plus-reply pair it extracts from — see docs/memory/cadence.md → User-tunable knobs
   piggybackMode: 'on' | 'off'       // capability-gated; on = narrative emits structured trailing block; off = separate per-turn classifier pass
   embeddingBackend: 'provider' | 'local'   // embedding runtime (provider endpoint OR bundled local ONNX); both produce identical retrieval algorithm

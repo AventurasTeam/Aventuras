@@ -241,7 +241,7 @@ export const CadenceOverlapPositive: Story = {
   play: async () => {
     await screen.findByTestId('memory-knobs-panel')
     expect(screen.getByTestId('memory-cadence-overlap')).toHaveTextContent(
-      t('storySettings:memory.knobs.cadenceOverlap', { count: 2 }),
+      t('storySettings:memory.knobs.cadenceOverlap', { count: 1 }),
     )
     expect(screen.queryByTestId('memory-cadence-warning')).not.toBeInTheDocument()
   },

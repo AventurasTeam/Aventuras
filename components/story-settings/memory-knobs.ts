@@ -1,4 +1,4 @@
-import { effectiveCadenceEntries } from '@/lib/classifier'
+import { worstCaseCadenceEntries } from '@/lib/classifier'
 import type { StorySettings } from '@/lib/db'
 
 type Budgets = StorySettings['retrievalBudgets']
@@ -183,5 +183,5 @@ export function cadenceOverlap(
   classifierCadence: number | null,
 ): number | null {
   if (partialChapterBuffer == null || classifierCadence == null) return null
-  return partialChapterBuffer - effectiveCadenceEntries(classifierCadence)
+  return partialChapterBuffer - worstCaseCadenceEntries(classifierCadence)
 }

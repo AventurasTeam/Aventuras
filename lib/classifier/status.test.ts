@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest'
 
 import {
   BACKOFF_MS,
-  effectiveCadenceEntries,
   idleStatus,
   nextStatusOnFailure,
   nextStatusOnStart,
   nextStatusOnSuccess,
   retryDelayForStatus,
   shouldCadenceFire,
+  worstCaseCadenceEntries,
 } from './status'
 
 describe('nextStatusOnSuccess', () => {
@@ -72,12 +72,12 @@ describe('nextStatusOnFailure', () => {
   })
 })
 
-describe('effectiveCadenceEntries', () => {
-  it('rounds an odd cadence up to whole two-entry turns', () => {
-    expect(effectiveCadenceEntries(8)).toBe(8)
-    expect(effectiveCadenceEntries(5)).toBe(6)
-    expect(effectiveCadenceEntries(1)).toBe(2)
-    expect(effectiveCadenceEntries(0)).toBe(2)
+describe('worstCaseCadenceEntries', () => {
+  it('allows one entry past the cadence, whatever its parity', () => {
+    expect(worstCaseCadenceEntries(8)).toBe(9)
+    expect(worstCaseCadenceEntries(5)).toBe(6)
+    expect(worstCaseCadenceEntries(1)).toBe(2)
+    expect(worstCaseCadenceEntries(0)).toBe(2)
   })
 })
 
