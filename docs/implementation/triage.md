@@ -53,3 +53,19 @@ slice-planning gate forces its resolution before that slice is planned.
   to get. Held rather than routed in the 2026-09-09 triage pass, which
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
+
+- **`InlineEditableName`'s accessible names are raw English.** The
+  pressable read state names itself `` `Edit ${value}` ``, or
+  `'Edit name'` when empty with no placeholder
+  (`components/ui/inline-editable-name.tsx`), bypassing `t()`. Every
+  Plot detail head uses it, and Worlds 4.2a and 4.2b will; stories and
+  E2E match the English `Edit …` names, so route them through the same
+  key when fixing. Surfaced 2026-09-23.
+
+- **A bottom `Sheet` named by `ariaLabelledBy` is unnamed on web.**
+  `BottomSheetContent` (`components/ui/sheet.tsx`) passes gorhom only
+  `accessibilityLabel`; gorhom forwards no `aria-labelledby`, so the
+  `dialog` a labelledby sheet renders on web carries no name (and on
+  native, no label). No consumer passes `ariaLabelledBy` to a bottom
+  sheet today — the right-anchored sheet wires it through
+  `DialogPrimitive.Content`. Surfaced 2026-09-23.
