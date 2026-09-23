@@ -14,7 +14,11 @@ const ENTITIES: Record<string, string> = {
 
 function decodeEntities(text: string): string {
   return text.replace(/&(#\d+|#x[0-9a-f]+|[a-z]+);/gi, (match, name: string) => {
-    if (name[0] !== '#') return ENTITIES[name.toLowerCase()] ?? match
+    if (name[0] !== '#') {
+      // Own keys only: `&constructor;` would otherwise resolve to Object.prototype's.
+      const key = name.toLowerCase()
+      return Object.hasOwn(ENTITIES, key) ? ENTITIES[key] : match
+    }
     const code =
       name[1] === 'x' || name[1] === 'X' ? parseInt(name.slice(2), 16) : Number(name.slice(1))
     return Number.isFinite(code) && code <= 0x10ffff ? String.fromCodePoint(code) : match

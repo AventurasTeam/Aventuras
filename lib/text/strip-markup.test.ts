@@ -48,4 +48,8 @@ describe('stripMarkup', () => {
   it('decodes the common entities after tags are gone', () => {
     expect(plain('Tom &amp; Jerry &lt;3 &#8212; &quot;hi&quot;')).toBe('Tom & Jerry <3 — "hi"')
   })
+
+  it('leaves an unknown name alone, including one on Object.prototype', () => {
+    expect(plain('a &constructor; b &bogus; c')).toBe('a &constructor; b &bogus; c')
+  })
 })
