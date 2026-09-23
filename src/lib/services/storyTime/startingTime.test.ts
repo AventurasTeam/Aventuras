@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { TimeTracker } from '$lib/types'
 import {
+  greetingStart,
   returnedStart,
   startingTimePromptValue,
   templateReceivesStartingTime,
@@ -50,5 +51,20 @@ describe('returnedStart', () => {
 
   it('leaves the start empty when neither is there', () => {
     expect(returnedStart('', null)).toEqual({ text: '', source: null })
+  })
+})
+
+describe('greetingStart', () => {
+  it('gives the first greeting the scenario’s start', () => {
+    expect(greetingStart(0, t(19))).toBe('Y1 D1 19:00')
+  })
+
+  it('leaves an alternate greeting without one', () => {
+    expect(greetingStart(2, t(19))).toBe('')
+  })
+
+  it('leaves every greeting empty when the scenario states none', () => {
+    expect(greetingStart(0, null)).toBe('')
+    expect(greetingStart(1, null)).toBe('')
   })
 })

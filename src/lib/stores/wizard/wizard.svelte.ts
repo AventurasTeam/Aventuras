@@ -9,7 +9,7 @@ import {
 import { scenarioService, type WizardData } from '$lib/services/ai/wizard/ScenarioService'
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
 import { QUICK_START_SEEDS } from '$lib/services/templates'
-import { formatStoryTime } from '$lib/services/storyTime'
+import { formatStoryTime, greetingStart } from '$lib/services/storyTime'
 import { replaceUserPlaceholders } from '$lib/components/wizard/wizardTypes'
 import type { VaultScenario } from '$lib/types'
 import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
@@ -176,9 +176,7 @@ export class WizardStore {
    */
   selectGreeting(index: number) {
     this.character.selectedGreetingIndex = index
-    const scenarioStart = this.character.cardImportedStartingTime
-    this.narrative.importedStartText =
-      index === 0 && scenarioStart ? formatStoryTime(scenarioStart) : ''
+    this.narrative.importedStartText = greetingStart(index, this.character.cardImportedStartingTime)
   }
 
   /** The imported opening goes, and the start that belonged to it with it. */
@@ -219,18 +217,19 @@ export class WizardStore {
       this.character.cardImportedTitle = scenario.name
       this.narrative.storyTitle = scenario.name
     }
-    this.narrative.setImportedStart(scenario.startingTime)
-
     // 4. Opening (Character/Narrative Store Integration)
     if (scenario.firstMessage) {
       this.character.cardImportedFirstMessage = scenario.firstMessage
       this.character.cardImportedAlternateGreetings = scenario.alternateGreetings || []
       this.character.cardImportedStartingTime = scenario.startingTime ?? null
       this.character.selectedGreetingIndex = 0
+      this.narrative.setImportedStart(scenario.startingTime)
     } else {
       this.character.cardImportedFirstMessage = null
       this.character.cardImportedAlternateGreetings = []
       this.character.cardImportedStartingTime = null
+      // A start with no opening to belong to would satisfy the guard for an opening never chosen.
+      this.narrative.setImportedStart(null)
     }
 
     // 5. Auto-link embedded lorebook if available

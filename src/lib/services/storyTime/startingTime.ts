@@ -38,6 +38,11 @@ export function returnedStart(
   }
 }
 
+/** The start shown beside an imported greeting: the scenario's describes its first message only. */
+export function greetingStart(index: number, scenarioStart: TimeTracker | null): string {
+  return index === 0 && scenarioStart ? formatStoryTime(scenarioStart) : ''
+}
+
 /** The value the opening prompts are given for the start. */
 export function startingTimePromptValue(start: TimeTracker | null | undefined): string {
   return start ? formatStoryTime(start) : SUGGEST_ONE

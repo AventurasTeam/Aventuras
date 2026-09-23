@@ -42,6 +42,7 @@ export {
   type ReconciliationWriteDeps,
 } from './reconciliation'
 export {
+  greetingStart,
   returnedStart,
   startingTimePromptValue,
   templateReceivesStartingTime,
