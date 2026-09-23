@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { View } from 'react-native'
 import { expect, screen, userEvent } from 'storybook/test'
 
+import { i18n } from '@/lib/i18n'
 import { themes } from '@/lib/themes'
 
 import { InlineEditableName } from './inline-editable-name'
@@ -55,6 +56,26 @@ export const LiveEditAndEscape: Story = {
     await userEvent.keyboard('{Escape}')
     expect(await screen.findByRole('button', { name: 'Edit Aria Vex' })).toBeVisible()
     expect(screen.getByText('Value: Aria Vex')).toBeVisible()
+  },
+}
+
+// cimode makes t() return its key, so only a name routed through t() can match.
+export const NamesAreTranslated: Story = {
+  render: () => (
+    <View className="gap-2" style={{ width: 360 }}>
+      <InlineEditableName value="Aria Vex" onChange={() => {}} />
+      <InlineEditableName value="" onChange={() => {}} />
+    </View>
+  ),
+  beforeEach: async () => {
+    await i18n.changeLanguage('cimode')
+    return () => {
+      void i18n.changeLanguage('en')
+    }
+  },
+  play: async () => {
+    expect(screen.getByRole('button', { name: 'inlineEditableName.edit' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'inlineEditableName.editUnnamed' })).toBeVisible()
   },
 }
 

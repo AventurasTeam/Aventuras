@@ -30,6 +30,10 @@
     "invalidHex": "Enter a hex color, e.g. {{example}}",
     "apply": "Apply"
   },
+  "inlineEditableName": {
+    "edit": "Edit {{name}}",
+    "editUnnamed": "Edit name"
+  },
   "generationGate": {
     "inFlight": "Generation is in flight. Cancel to edit.",
     "chapterClose": "Chapter close in progress. Cancel to edit."

@@ -5,6 +5,7 @@ import { Platform, Pressable, type TextInputKeyPressEvent, View } from 'react-na
 import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
+import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 type InlineEditableNameSize = 'sm' | 'md' | 'lg'
@@ -121,7 +122,11 @@ export function InlineEditableName({
     <Pressable
       onPress={enterEdit}
       accessibilityRole="button"
-      accessibilityLabel={value === '' ? (placeholder ?? 'Edit name') : `Edit ${value}`}
+      accessibilityLabel={
+        value === ''
+          ? (placeholder ?? t('inlineEditableName.editUnnamed'))
+          : t('inlineEditableName.edit', { name: value })
+      }
       className={cn(
         'group flex-row items-center rounded-sm',
         GAP[size],
