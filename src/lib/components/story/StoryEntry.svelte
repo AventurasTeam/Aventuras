@@ -38,8 +38,6 @@
     Clock,
     Metronome,
     MoreVertical,
-    ChevronLeft,
-    ChevronRight,
     MilestoneIcon,
   } from '@lucide/svelte'
   import { aiService } from '$lib/services/ai'
@@ -189,10 +187,10 @@
 
   const generationInfo = $derived.by(() => {
     const m = entry.metadata
-    // In-story time range for this message (start → end after time progression)
-    const start = compactStoryTime(m?.timeStart)
-    const end = compactStoryTime(m?.timeEnd)
-    const storyTime = start && end && start !== end ? `${start} → ${end}` : start || end || null
+    // Both ends always show: an equal pair is a zero-length entry, which is itself a finding.
+    const start = compactStoryTime(m?.timeStart) || 'not recorded'
+    const end = compactStoryTime(m?.timeEnd) || 'not recorded'
+    const storyTime = `${start} → ${end}`
     return {
       model: m?.model,
       profileName: m?.profileName,
@@ -394,8 +392,27 @@
   let isCreatingCheckpoint = $state(false)
   let isAnchoringTime = $state(false)
   let isEditingEntryTime = $state(false)
-  /** The overflow menu showing only the timeline adjustments, reset whenever the menu closes. */
-  let adjustmentsDrilled = $state(false)
+  let adjustmentsOpen = $state(false)
+  /** Outlives the submenu by one tap: the click that closed it must not land on a live item. */
+  let menuLocked = $state(false)
+  let closingByTap = false
+
+  /** While the adjustments submenu is open, a touch anywhere else in the menu only closes it. */
+  function closeAdjustmentsFromOutside(event: PointerEvent) {
+    if (!menuLocked) return
+    if ((event.target as Element | null)?.closest('[data-adjustments-menu]')) return
+    event.preventDefault()
+    closingByTap = true
+    adjustmentsOpen = false
+    const gestureEnd = new AbortController()
+    const release = () => {
+      closingByTap = false
+      menuLocked = false
+      gestureEnd.abort()
+    }
+    window.addEventListener('click', release, { capture: true, signal: gestureEnd.signal })
+    window.addEventListener('pointercancel', release, { capture: true, signal: gestureEnd.signal })
+  }
   let checkpointName = $state('')
 
   // Check if this is the latest entry (checkpoints can only be created at the latest entry)
@@ -1491,12 +1508,10 @@
               <dt class="text-muted-foreground shrink-0">Content tokens</dt>
               <dd class="text-right">{contentTokens}</dd>
             </div>
-            {#if generationInfo.storyTime}
-              <div class="flex justify-between gap-3">
-                <dt class="text-muted-foreground shrink-0">Story time</dt>
-                <dd class="text-right">{generationInfo.storyTime}</dd>
-              </div>
-            {/if}
+            <div class="flex justify-between gap-3">
+              <dt class="text-muted-foreground shrink-0">Story time</dt>
+              <dd class="text-right">{generationInfo.storyTime}</dd>
+            </div>
             {#if generationInfo.model}
               <div class="flex justify-between gap-3">
                 <dt class="text-muted-foreground shrink-0">Model</dt>
@@ -1715,7 +1730,11 @@
         >
           <Trash2 class="h-4 w-4" />
         </Button>
-        <DropdownMenu.Root onOpenChange={(isOpen) => !isOpen && (adjustmentsDrilled = false)}>
+        <DropdownMenu.Root
+          onOpenChange={(isOpen) => {
+            if (!isOpen) adjustmentsOpen = menuLocked = false
+          }}
+        >
           <DropdownMenu.Trigger>
             {#snippet child({ props })}
               <Button
@@ -1730,82 +1749,90 @@
               </Button>
             {/snippet}
           </DropdownMenu.Trigger>
-          <DropdownMenu.Content align="end" class="max-h-[70vh] overflow-y-auto">
-            {#if adjustmentsDrilled}
-              {@render timelineAdjustments()}
-              <DropdownMenu.Separator />
-              <DropdownMenu.Item closeOnSelect={false} onclick={() => (adjustmentsDrilled = false)}>
-                <ChevronLeft class="h-4 w-4" />
-                Back
+          <DropdownMenu.Content
+            align="end"
+            class="max-h-[70vh] overflow-y-auto {menuLocked
+              ? '[&_[role=menuitem]:not([data-adjustments-menu]_*)]:pointer-events-none'
+              : ''}"
+            onpointerdown={closeAdjustmentsFromOutside}
+          >
+            {#if canBranch}
+              <DropdownMenu.Item onclick={() => (isBranching = true)}>
+                <GitBranch class="h-4 w-4" />
+                Branch from here
               </DropdownMenu.Item>
-            {:else}
-              {#if canBranch}
-                <DropdownMenu.Item onclick={() => (isBranching = true)}>
-                  <GitBranch class="h-4 w-4" />
-                  Branch from here
-                </DropdownMenu.Item>
-              {/if}
-              {#if canCreateCheckpoint}
-                <DropdownMenu.Item onclick={() => (isCreatingCheckpoint = true)}>
-                  <Bookmark class="h-4 w-4" />
-                  Create checkpoint
-                </DropdownMenu.Item>
-              {/if}
-              <!-- Drills in rather than opening a submenu: this menu hugs the card's right edge,
-                   so anything opening beside it leaves a phone. -->
-              {#if entry.type !== 'user_action'}
-                <DropdownMenu.Item
-                  closeOnSelect={false}
-                  onclick={() => (adjustmentsDrilled = true)}
-                >
+            {/if}
+            {#if canCreateCheckpoint}
+              <DropdownMenu.Item onclick={() => (isCreatingCheckpoint = true)}>
+                <Bookmark class="h-4 w-4" />
+                Create checkpoint
+              </DropdownMenu.Item>
+            {/if}
+            <!-- Opens downward: this menu hugs the card's right edge, so a submenu opening
+                   beside it leaves a phone. -->
+            {#if entry.type !== 'user_action'}
+              <DropdownMenu.Sub
+                bind:open={adjustmentsOpen}
+                onOpenChange={(isOpen) => {
+                  if (isOpen || !closingByTap) menuLocked = isOpen
+                }}
+              >
+                <DropdownMenu.SubTrigger>
                   <Metronome class="h-4 w-4" />
                   Timeline adjustments
-                  <ChevronRight class="ml-auto h-4 w-4" />
-                </DropdownMenu.Item>
-              {/if}
-              <!-- Static label and icon: selecting an item closes the menu, so the "Copied!"
+                </DropdownMenu.SubTrigger>
+                <DropdownMenu.SubContent
+                  data-adjustments-menu
+                  side="bottom"
+                  align="end"
+                  class="border-[color-mix(in_oklab,var(--border),var(--foreground)_30%)] bg-[color-mix(in_oklab,var(--popover),var(--foreground)_6%)]"
+                >
+                  {@render timelineAdjustments()}
+                </DropdownMenu.SubContent>
+              </DropdownMenu.Sub>
+            {/if}
+            <!-- Static label and icon: selecting an item closes the menu, so the "Copied!"
                  state would never be on screen. The toast is the feedback here. -->
-              <DropdownMenu.Item onclick={handleCopyContent}>
-                <Copy class="h-4 w-4" />
-                Copy message text
+            <DropdownMenu.Item onclick={handleCopyContent}>
+              <Copy class="h-4 w-4" />
+              Copy message text
+            </DropdownMenu.Item>
+            {#if canGenerateStoryImages}
+              <DropdownMenu.Item
+                onclick={handleGenerateStoryImages}
+                disabled={ui.isGenerating || isGeneratingStoryImages || hasEmbeddedImages}
+              >
+                {#if isGeneratingStoryImages}
+                  <Loader2 class="h-4 w-4 animate-spin" />
+                {:else}
+                  <ImageIcon class="h-4 w-4" />
+                {/if}
+                {storyImagesLabel}
               </DropdownMenu.Item>
-              {#if canGenerateStoryImages}
-                <DropdownMenu.Item
-                  onclick={handleGenerateStoryImages}
-                  disabled={ui.isGenerating || isGeneratingStoryImages || hasEmbeddedImages}
-                >
-                  {#if isGeneratingStoryImages}
-                    <Loader2 class="h-4 w-4 animate-spin" />
-                  {:else}
-                    <ImageIcon class="h-4 w-4" />
-                  {/if}
-                  {storyImagesLabel}
-                </DropdownMenu.Item>
-              {/if}
-              {#if activityRecord}
-                <DropdownMenu.Item
-                  onclick={() => activity.setReportVisible(entry.id, !showActivityRecord)}
-                >
-                  <Clock class="h-4 w-4" />
-                  {showActivityRecord ? 'Hide' : 'Show'} generation activity
-                </DropdownMenu.Item>
-              {/if}
-              <!-- Rendered inline rather than behind an item: selecting an item closes the
+            {/if}
+            {#if activityRecord}
+              <DropdownMenu.Item
+                onclick={() => activity.setReportVisible(entry.id, !showActivityRecord)}
+              >
+                <Clock class="h-4 w-4" />
+                {showActivityRecord ? 'Hide' : 'Show'} generation activity
+              </DropdownMenu.Item>
+            {/if}
+            <!-- Rendered inline rather than behind an item: selecting an item closes the
                  menu, which would unmount any popover anchored to it. -->
-              {#if showInfo}
-                <DropdownMenu.Separator />
+            {#if showInfo}
+              <DropdownMenu.Separator />
+              <div class="w-56 px-2 pb-1.5 text-xs">
+                {@render entryNumberRow()}
+              </div>
+              <DropdownMenu.Group>
+                <DropdownMenu.GroupHeading class="px-2 py-1.5 text-sm font-medium">
+                  Response info
+                </DropdownMenu.GroupHeading>
                 <div class="w-56 px-2 pb-1.5 text-xs">
-                  {@render entryNumberRow()}
+                  {@render responseInfoRows()}
                 </div>
-                <DropdownMenu.Group>
-                  <DropdownMenu.GroupHeading class="px-2 py-1.5 text-sm font-medium">
-                    Response info
-                  </DropdownMenu.GroupHeading>
-                  <div class="w-56 px-2 pb-1.5 text-xs">
-                    {@render responseInfoRows()}
-                  </div>
-                </DropdownMenu.Group>
-              {/if}
+              </DropdownMenu.Group>
             {/if}
           </DropdownMenu.Content>
         </DropdownMenu.Root>
@@ -1816,7 +1843,7 @@
   {#snippet storyTimeChip()}
     <div class="flex items-center gap-1 text-right text-[12px] leading-4 tabular-nums">
       <Clock class="text-muted-foreground h-4 w-4 shrink-0" />
-      <span class="text-foreground">{generationInfo.storyTime || 'not recorded'}</span>
+      <span class="text-foreground">{generationInfo.storyTime}</span>
     </div>
   {/snippet}
 
