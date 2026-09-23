@@ -334,6 +334,10 @@ export const Blocked: Story = {
       BLOCKED_REASON,
     )
     expect(screen.getByRole('button', { name: 'Icon' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Icon' }).closest('[title]')).toHaveAttribute(
+      'title',
+      BLOCKED_REASON,
+    )
     const injection = within(screen.getByRole('radiogroup', { name: 'Injection' })).getAllByRole(
       'radio',
     )

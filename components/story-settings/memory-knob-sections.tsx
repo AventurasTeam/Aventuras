@@ -416,6 +416,7 @@ export function KeywordRetrievalSection({
             )
           }
           disabled={disabled}
+          disabledReason={disabledReason}
         />
       </FormRow>
       <KnobField

@@ -235,6 +235,7 @@ export function ModelsPanel({ settings, disabled = false, disabledReason }: Mode
           if (agent != null) setPending((prev) => [...prev, agent])
         }}
         disabled={disabled || noProviders || addable.length === 0}
+        disabledReason={pickerDisabledReason}
       />
     </View>
   )

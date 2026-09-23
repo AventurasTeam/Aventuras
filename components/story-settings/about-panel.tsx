@@ -161,6 +161,7 @@ export function AboutPanel({
             setDraft((prev) => ({ ...prev, status: value === 'archived' ? 'archived' : 'active' }))
           }
           disabled={disabled || isDraftStory}
+          disabledReason={disabledHint}
         />
       </FormRow>
 
