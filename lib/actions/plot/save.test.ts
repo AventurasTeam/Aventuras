@@ -12,6 +12,7 @@ import {
   threads,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { logger } from '@/lib/diagnostics'
 import { ID_PATTERN } from '@/lib/ids'
 import { happeningDraftFrom, threadDraftFrom } from '@/lib/plot'
 import { generationStore, resetAllStores } from '@/lib/stores'
@@ -110,6 +111,43 @@ describe('saveThread', () => {
     )
     expect(refused).toMatchObject({ status: 'rejected', code: 'in-flight' })
   })
+
+  // The UI disables first, so the gate firing is a bug worth a record at the default level.
+  it('logs the in-flight refusal at warn', async () => {
+    const { ctx } = await setup()
+    const warn = vi.spyOn(logger, 'warn')
+    vi.spyOn(generationStore, 'isUserEditBlocked').mockReturnValue(true)
+    await saveThread(
+      { branchId: 'br_1', row: null, draft: { ...threadDraftFrom(null), title: 'Amulet' } },
+      ctx,
+    )
+    expect(warn).toHaveBeenCalledWith('action_layer.thread_save_rejected', {
+      branchId: 'br_1',
+      id: null,
+      code: 'in-flight',
+    })
+  })
+
+  it('logs a rejected write with the action kinds it carried', async () => {
+    const { db, ctx } = await setup()
+    const created = await saveThread(
+      { branchId: 'br_1', row: null, draft: { ...threadDraftFrom(null), title: 'Amulet' } },
+      ctx,
+    )
+    if (created.status !== 'ok') throw new Error('create failed')
+    const [row] = (await db.select().from(threads).where(eq(threads.id, created.id))) as Thread[]
+    await db.delete(threads).where(eq(threads.id, row.id))
+    const warn = vi.spyOn(logger, 'warn')
+    const result = await saveThread(
+      { branchId: 'br_1', row, draft: { ...threadDraftFrom(row), title: 'Gone' } },
+      ctx,
+    )
+    expect(result.status).toBe('rejected')
+    expect(warn).toHaveBeenCalledWith(
+      'action_layer.thread_save_rejected',
+      expect.objectContaining({ id: row.id, create: false, actions: ['updateThread'] }),
+    )
+  })
 })
 
 describe('saveHappening', () => {
@@ -175,5 +213,39 @@ describe('saveHappening', () => {
     const second = await deltaRows(db)
     expect(second).toHaveLength(4)
     expect(second.filter((d) => d.op === 'delete')).toHaveLength(1)
+  })
+
+  it('logs a thrown write with its context and rethrows it', async () => {
+    const { ctx } = await setup()
+    const error = vi.spyOn(logger, 'error')
+    const empty = { involvements: [], awareness: [] }
+    const failing = {
+      ...ctx,
+      runInTransaction: () => Promise.reject(new Error('SQLITE_BUSY')),
+    }
+    await expect(
+      saveHappening(
+        {
+          branchId: 'br_1',
+          row: null,
+          links: empty,
+          draft: {
+            ...happeningDraftFrom(null, empty),
+            title: 'The alley ambush',
+            involvements: [{ id: null, entityId: 'char_kael', role: '' }],
+          },
+        },
+        failing,
+      ),
+    ).rejects.toThrow('SQLITE_BUSY')
+    expect(error).toHaveBeenCalledWith(
+      'action_layer.happening_save_failed',
+      expect.objectContaining({
+        branchId: 'br_1',
+        create: true,
+        actions: ['createHappening', 'createHappeningInvolvement'],
+        error: 'SQLITE_BUSY',
+      }),
+    )
   })
 })
