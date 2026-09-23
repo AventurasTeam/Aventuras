@@ -170,22 +170,6 @@ slice-planning gate forces its resolution before that slice is planned.
   scroller that sets it, or a lint rule — rather than a one-off
   sweep. Surfaced 2026-09-19.
 
-- **`Chip` and `Stepper` don't carry canon's 44 px phone floor.**
-  [`touch.md → The contract`](../ui/foundations/mobile/touch.md) pins a
-  44 px hard `min-height` on phone-tier interactive rows, applied at
-  the row wrapper independent of density; neither
-  `components/ui/chip.tsx` nor `components/ui/stepper.tsx` sets a
-  `min-height` or a `hitSlop`, so nothing enforces it. Measured on a
-  420 dpi emulator (2.625 px/dp) on Story Settings → Memory: the
-  chapter-threshold preset chips are **35.8 dp** and the classifier
-  context stepper's `−` / `+` buttons are **24 dp**, about half the
-  floor. `NumberInput` passes at 44.6 dp via `--control-h-md`, which is
-  the mechanism canon names, so the gap is the two primitives rather
-  than the rule. Both predate Slice 4.4 — it is the consumer that put
-  them on a phone settings surface. `ScreenShell`'s own Back and
-  Actions buttons measure 32 dp and are the same gap in `IconAction`.
-  Surfaced 2026-09-19.
-
 - **`ListRow`'s `aria-label` drops its status pill, when-marker, and
   ⊙ state from screen readers.** `components/compounds/list-row.tsx`
   sets `aria-label={label}` on the row's Pressable, which replaces

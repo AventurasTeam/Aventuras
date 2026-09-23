@@ -1164,7 +1164,23 @@ own.
   fields) or a lower promise in chips.md. Pressable pill bodies took
   `IconAction`'s visible + 2 × slop rule in the same pass, equally
   unverified on a device. Raised 2026-09-11 by Slice 4.1; split
-  2026-09-13.
+  2026-09-13. Every other slop consumer shares the question —
+  `Stepper`'s − / + and `ScreenShell`'s Back and Actions are
+  `IconAction`s, and interactive `Chip` took 4 px a side on
+  2026-09-23 — so check them in the same device pass. React Native
+  0.83's Fabric unions a child's slop into an overflow-visible
+  parent's `overflowInset`, which suggests the clip may not happen;
+  if the device agrees, the "never lets slop reach past the parent"
+  claim here and in `chips.md → Tag` is wrong.
+- **M9.5 — `ListRow` and `Button` `sm` sit under the phone tap floor.**
+  [`touch.md → Touch-target floor on phone`](../ui/foundations/mobile/touch.md#touch-target-floor-on-phone)
+  pins a 44 px `min-height` on "any tappable list row", but
+  `components/compounds/list-row.tsx` sets only `py-row-y-md` — no
+  phone floor, where `OverflowMenu`, the cast list and `Select`'s
+  phone rows each add `min-h-control-lg` on phone. `Button` `sm` is
+  `h-control-sm`, 40 px at `regular`, with no slop. Measure a
+  single-line World and Plot row on a phone before choosing a fix.
+  Raised 2026-09-19 by Slice 4.4; split 2026-09-23.
 - **M9.5 — The retrieval pass has never been measured on mobile.** Every
   figure in
   [`retrieval.md → Per-turn cost budget`](../memory/retrieval.md#per-turn-cost-budget)

@@ -5,6 +5,10 @@ import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Text, TextClassContext } from '@/components/ui/text'
 import { cn } from '@/lib/utils'
 
+// h-control-xs is 36 at regular (the phone default): 36 + 2·4 reaches the 44px phone floor, and
+// 4 a side stays inside half of a gap-2 chip row, so neighbours' slop never overlaps.
+const CHIP_HIT_SLOP = 4
+
 type ChipProps = {
   selected?: boolean
   onPress?: () => void
@@ -73,6 +77,7 @@ export function Chip({
         accessibilityHint={disabled ? disabledReason : undefined}
         disabled={disabled}
         onPress={onPress}
+        hitSlop={CHIP_HIT_SLOP}
         className={baseClass}
       >
         {content}
