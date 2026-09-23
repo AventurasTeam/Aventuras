@@ -16,19 +16,16 @@ export type EntryIndexSnapshot = {
   index: EntryIndex
   ready: boolean
   failed: boolean
+  /** Re-reads the current window; the error state's way out, since reads never retry on their own. */
+  retry: () => void
 }
 
 type LoadedWindow = { entries: readonly EntryRef[]; index: EntryIndex }
 
 const EMPTY_ENTRIES: readonly EntryRef[] = []
 const EMPTY_INDEX: EntryIndex = new Map()
-const EMPTY: EntryIndexSnapshot = {
-  entries: EMPTY_ENTRIES,
-  index: EMPTY_INDEX,
-  ready: false,
-  failed: false,
-}
-const FAILED: EntryIndexSnapshot = { ...EMPTY, failed: true }
+const EMPTY = { entries: EMPTY_ENTRIES, index: EMPTY_INDEX, ready: false, failed: false }
+const FAILED = { ...EMPTY, failed: true }
 
 /**
  * Branch entries for `entry #n` labels, chapter buckets and the entry-ref picker.
@@ -50,7 +47,7 @@ export function useEntryIndex(branchId: string): EntryIndexSnapshot {
     return last
   })
 
-  const { data, error } = useQuery({
+  const { data, error, refetch } = useQuery({
     queryKey: ['entry-index', branchId, settleCount, tailId],
     enabled: branchId !== '',
     // Local DB read, not a flaky network call — a failure is worth surfacing, not retried.
@@ -81,9 +78,11 @@ export function useEntryIndex(branchId: string): EntryIndexSnapshot {
   }, [error, branchId])
 
   return useMemo(() => {
+    const retry = () => void refetch()
     if (good != null) {
-      return { entries: good.window.entries, index: good.window.index, ready: true, failed: false }
+      const { entries, index } = good.window
+      return { entries, index, ready: true, failed: false, retry }
     }
-    return error != null ? FAILED : EMPTY
-  }, [good, error])
+    return { ...(error != null ? FAILED : EMPTY), retry }
+  }, [good, error, refetch])
 }

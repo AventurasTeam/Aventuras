@@ -286,13 +286,6 @@ slice-planning gate forces its resolution before that slice is planned.
   live once chapter-close writes links onto existing happenings
   through a path with no such gate. Surfaced 2026-09-22.
 
-- **A failed entry-index read has no Retry.** `useEntryIndex`
-  (`hooks/use-entry-index.ts`) disables react-query's retry on a local
-  DB read failure and blocks every Plot pane until the next turn
-  settles (`generationStore.settleCount` bumps) — but a turn can't be
-  started from Plot, so a failed read has no in-surface recovery path.
-  Consider a Retry action on the error state. Surfaced 2026-09-22.
-
 - **`Toolbar` diverges from its own spec.**
   `docs/ui/patterns/toolbar.md → Mechanism` prescribes a CSS container
   query on web (`@container (max-width: 1023px)`, the FormRow

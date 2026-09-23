@@ -207,6 +207,25 @@ describe('useEntryIndex', () => {
     warnSpy.mockRestore()
   })
 
+  it('reads again on retry and clears the failure once the read succeeds', async () => {
+    entriesStore.hydrate('br_1', [entry('e1', 1)])
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    reads.index.mockRejectedValueOnce(new Error('boom'))
+
+    renderProbe()
+    await waitFor(() => expect(latest?.failed).toBe(true))
+
+    reads.index.mockResolvedValueOnce([ref('e1', 1)])
+    act(() => latest?.retry())
+
+    await waitFor(() => expect(latest?.ready).toBe(true))
+    expect(reads.index).toHaveBeenCalledTimes(2)
+    expect(latest?.failed).toBe(false)
+    expect(latest?.entries.map((e) => e.id)).toEqual(['e1'])
+
+    warnSpy.mockRestore()
+  })
+
   it("does not carry another branch's entries into a fresh branch before its own read resolves", async () => {
     entriesStore.hydrate('br_1', [entry('e1', 1)])
     reads.index.mockResolvedValueOnce([ref('e1', 1)])

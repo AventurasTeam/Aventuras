@@ -64,7 +64,8 @@
   "noResults": "No results.",
   "noResultsHint": "Try clearing the search or another filter.",
   "entryIndexFailed": "Couldn't read this branch's entries.",
-  "entryIndexFailedBody": "Plot retries after the next turn.",
+  "entryIndexFailedBody": "Plot reads them again when the next run finishes, or when you retry.",
+  "entryIndexRetry": "Retry",
   "detail": {
     "selectRow": "Select a row",
     "selectRowBody": "Pick a thread or happening from the list to see it here.",
