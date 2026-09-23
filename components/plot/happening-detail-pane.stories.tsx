@@ -7,6 +7,7 @@ import type { RowSessionHandle } from '@/hooks/use-row-save-session'
 import type { PlotSaveResult } from '@/lib/actions'
 import type { Entity, Happening } from '@/lib/db'
 import type { EntryRef } from '@/lib/entry-refs'
+import { t } from '@/lib/i18n'
 import type { HappeningDraft, HappeningLinks } from '@/lib/plot'
 import type { RecentlyClassified } from '@/lib/row-signals'
 
@@ -117,12 +118,11 @@ const ENTRIES: EntryRef[] = Array.from({ length: 60 }, (_, i) => {
 const CATEGORIES = ['backstory', 'encounter', 'reveal']
 const NEW_ID = 'hap_new'
 const BLOCKED_REASON = 'Generation is in flight. Cancel to edit.'
-const FAILED_TEXT = "Couldn't save your changes. They're still here — try again."
-const IN_FLIGHT_TEXT = "Couldn't save while generation is in flight. Your changes are still here."
-const ANCHOR_ERROR = 'Choose a narrative entry or an out-of-narrative time, not both.'
-const DECAY_ERROR = 'Enter a value from 0 to 1.'
-const CK_BODY =
-  'Every character is aware of this happening; per-character awareness rows are skipped. Turn the toggle off on Overview to edit rows.'
+const FAILED_TEXT = t('plot:save.failed')
+const IN_FLIGHT_TEXT = t('plot:save.inFlight')
+const ANCHOR_ERROR = t('plot:validation.timeAnchorExclusive')
+const DECAY_ERROR = t('plot:validation.decayRange')
+const CK_BODY = t('plot:awareness.ckBody')
 // CI runs plays several times slower than local; every post-interaction wait uses this.
 const WAIT = { timeout: 3000 }
 
