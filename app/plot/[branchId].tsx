@@ -150,6 +150,10 @@ export default function PlotRoute() {
     [session],
   )
   useUnsavedChangesGuard(session?.dirty ?? false, guard)
+  const navigateGuarded = useCallback(
+    (path: string) => guard(() => surfaceNavigate(path)),
+    [guard, surfaceNavigate],
+  )
 
   const switchKind = useCallback(
     (next: PlotKind) => {
@@ -193,7 +197,8 @@ export default function PlotRoute() {
   const pendingLink = usePlotDeepLink(initialSelection, panesReady, revealLink)
 
   // The popover measures its trigger on open, and phone hides the list (and its `[+]`) while
-  // a row is selected. Opening the menu alone drops nothing, so only a switch is guarded.
+  // a row is selected. Opening the menu alone drops nothing, so only a kind switch, or phone's
+  // deselect, is guarded.
   const openAddMenu = useCallback(
     (target: PlotKind) => {
       if (target === kind && !isPhone) {
@@ -240,14 +245,11 @@ export default function PlotRoute() {
     },
     [select],
   )
-  // The save bar's notice is tooltip-only on phone, so a refused save surfaces here too.
-  const onRejected = useCallback((text: string) => {
-    toast.error(text)
-  }, [])
+  // The save bar's notice is an icon with no visible text, so a refused save also toasts.
+  const onRejected = toast.error
   const openEntity = useCallback(
-    (entity: Entity) =>
-      guard(() => surfaceNavigate(`/world/${branchId}?kind=${entity.kind}&id=${entity.id}`)),
-    [guard, surfaceNavigate, branchId],
+    (entity: Entity) => navigateGuarded(`/world/${branchId}?kind=${entity.kind}&id=${entity.id}`),
+    [navigateGuarded, branchId],
   )
 
   const selectedName =
@@ -257,15 +259,16 @@ export default function PlotRoute() {
         ? t(selection.kind === 'thread' ? 'plot:detail.newThread' : 'plot:detail.newHappening')
         : selection.row.title
 
-  // Breadcrumb ignores the last segment's onPress, so parents alone navigate.
+  // principles.md → Master-detail sub-header: the top bar stays screen-level on every tier.
   const titleSegments: BreadcrumbSegment[] = [
     {
       key: 'story',
       label: storyTitle ?? t('reader:placeholderTitle'),
-      onPress: () => guard(() => surfaceNavigate(`/reader-composer/${branchId}`)),
+      onPress: () => navigateGuarded(`/reader-composer/${branchId}`),
     },
-    { key: 'plot', label: t('plot:title'), onPress: () => guard(() => select(null)) },
+    { key: 'plot', label: t('plot:title') },
   ]
+  // Breadcrumb ignores the last segment's onPress: `kind` navigates only while a row follows it.
   const subHeaderSegments: BreadcrumbSegment[] = [
     { key: 'kind', label: plotKindLabel(kind), onPress: () => guard(() => select(null)) },
     ...(selectedName != null ? [{ key: 'row', label: selectedName }] : []),
@@ -348,7 +351,7 @@ export default function PlotRoute() {
       chapterProgress={openRegionPct}
       onBack={handleBack}
       onOpenStorySettings={() => {
-        if (storyId != null) guard(() => surfaceNavigate(`/story-settings/${storyId}`))
+        if (storyId != null) navigateGuarded(`/story-settings/${storyId}`)
       }}
       actions={
         <AppActionsMenu
@@ -369,8 +372,7 @@ export default function PlotRoute() {
             if (activeRunKind != null) void awaitRunTerminal(activeRunKind, branchId, 'cancel')
           }}
           onOpenMemory={() => {
-            if (storyId != null)
-              guard(() => surfaceNavigate(`/story-settings/${storyId}?tab=memory`))
+            if (storyId != null) navigateGuarded(`/story-settings/${storyId}?tab=memory`)
           }}
         />
       }
