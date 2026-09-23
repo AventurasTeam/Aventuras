@@ -116,6 +116,31 @@ describe('readEntryIndex', () => {
     expect(row?.excerpt).toBe('')
   })
 
+  it('previews the prose of a rich entry, not its markup, even when the window cuts a tag', async () => {
+    const { db } = await createTestDb()
+    await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values({ id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 })
+    const glow =
+      'Something in here pulses.\n\n<style>@keyframes seed-pulse { 50% { opacity: 0.35 } }</style>' +
+      '<p class="seed-glow">**It glows.**</p>'
+    const cutStyle = `The room hums.\n<style>.seed-resp { ${'padding: 10px; '.repeat(20)}}</style>`
+    await db.insert(storyEntries).values([
+      { id: 'e_1', branchId: 'br_1', position: 1, kind: 'ai_reply', content: glow, createdAt: 1 },
+      {
+        id: 'e_2',
+        branchId: 'br_1',
+        position: 2,
+        kind: 'ai_reply',
+        content: cutStyle,
+        createdAt: 1,
+      },
+    ])
+
+    const index = indexEntryRefs(await readEntryIndex('br_1', db))
+    expect(index.get('e_1')?.excerpt).toBe('Something in here pulses. It glows.')
+    expect(index.get('e_2')?.excerpt).toBe('The room hums.…')
+  })
+
   it('adds an ellipsis for a truncated entry whose 200-char head collapses under the excerpt cap', async () => {
     const { db } = await createTestDb()
     await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })

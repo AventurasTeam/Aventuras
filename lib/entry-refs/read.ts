@@ -2,7 +2,7 @@ import { and, desc, eq, ne, sql } from 'drizzle-orm'
 
 import type { DbCtx } from '@/lib/db'
 import { storyEntries } from '@/lib/db'
-import { excerpt } from '@/lib/text'
+import { excerpt, stripMarkup } from '@/lib/text'
 
 import type { EntryIndex, EntryRef } from './types'
 
@@ -44,7 +44,7 @@ export async function readEntryIndex(branchId: string, database: DbCtx['db']): P
     const truncated = Boolean(r.truncated)
     const cutMidWord = truncated && r.afterCut !== '' && !/\s/.test(r.afterCut)
     const head = cutMidWord ? dropTrailingPartialWord(r.head) : r.head
-    const text = excerpt(head, ENTRY_EXCERPT_CHARS) ?? ''
+    const text = excerpt(stripMarkup(head), ENTRY_EXCERPT_CHARS) ?? ''
     // excerpt() collapses whitespace after the truncation cut, so a short result doesn't prove a
     // short source — force the ellipsis excerpt() has no way to know it owes.
     const needsEllipsis = truncated && text !== '' && !text.endsWith('…')

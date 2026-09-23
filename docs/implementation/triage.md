@@ -205,15 +205,6 @@ slice-planning gate forces its resolution before that slice is planned.
   Actions buttons measure 32 dp and are the same gap in `IconAction`.
   Surfaced 2026-09-19.
 
-- **Entry-ref excerpts render raw markdown / rich-HTML markup.**
-  `EntryRefPicker` and its shared `EntryRefText`
-  (`components/compounds/entry-ref-picker.tsx`) print an entry's
-  excerpt as plain text, but an entry body can carry markdown or
-  sanitized rich HTML; `lib/markdown` has no plain-text-strip helper
-  to derive a display excerpt from either. Until one exists, a picker
-  row can show literal `**bold**` markers or stray tags instead of
-  prose. Surfaced 2026-09-22.
-
 - **`ListRow`'s `aria-label` drops its status pill, when-marker, and
   ⊙ state from screen readers.** `components/compounds/list-row.tsx`
   sets `aria-label={label}` on the row's Pressable, which replaces
