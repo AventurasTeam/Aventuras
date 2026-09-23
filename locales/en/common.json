@@ -2,6 +2,8 @@
   "cancel": "Cancel",
   "save": "Save",
   "disabledWithReason": "{{label}}, {{reason}}",
+  "countSuffix": "({{value}})",
+  "labelWithCount": "{{label}} ({{value}})",
   "entryRef": "entry #{{n}}",
   "entryRefDangling": "Entry no longer exists",
   "entryKind": {

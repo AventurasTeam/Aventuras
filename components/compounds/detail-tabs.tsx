@@ -3,6 +3,7 @@ import { View } from 'react-native'
 import { Select } from '@/components/ui/select'
 import { TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useTier } from '@/hooks/use-tier'
+import { t } from '@/lib/i18n'
 
 type DetailTab = { value: string; label: string; count?: number }
 
@@ -44,7 +45,10 @@ export function DetailTabs({ tabs, value, onValueChange, selectLabel }: DetailTa
         // A plain label string can't style the count, and a bare trailing number reads as name.
         options={tabs.map((tab) => ({
           value: tab.value,
-          label: tab.count != null ? `${tab.label} (${tab.count})` : tab.label,
+          label:
+            tab.count != null
+              ? t('labelWithCount', { label: tab.label, value: tab.count })
+              : tab.label,
         }))}
       />
     </View>

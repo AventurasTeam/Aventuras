@@ -4,6 +4,7 @@ import { Platform } from 'react-native'
 
 import { Text, TextClassContext } from '@/components/ui/text'
 import { POINTER_EVENTS_NONE } from '@/constants/styles'
+import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 function Tabs({ className, ...props }: ComponentProps<typeof TabsPrimitive.Root>) {
@@ -63,7 +64,7 @@ function TabsTrigger({ className, count, children, ...props }: TabsTriggerProps)
         {typeof children === 'string' ? <Text>{children}</Text> : children}
         {count != null ? (
           <Text size="xs" className="font-normal">
-            {`(${count})`}
+            {t('countSuffix', { value: count })}
           </Text>
         ) : null}
       </TabsPrimitive.Trigger>
