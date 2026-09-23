@@ -204,17 +204,6 @@ slice-planning gate forces its resolution before that slice is planned.
   One generic `externalCell<T>()` in a shared story helper would hold
   it once. Surfaced 2026-09-15.
 
-- **Android hardware back can skip an app-level alert dialog.** The
-  story-open upgrade prompt (and `SwapResumeHost`) register their
-  `hardwareBackPress` handler when their content mounts, which on the
-  `Edit info` path happens before Story Settings focuses and registers
-  `useMasterDetailBack` (`app/story-settings/[storyId].tsx`,
-  `hooks/use-master-detail-back.ts`); `BackHandler` runs the latest
-  registration first, so back collapses the tab or pops Story Settings
-  behind the still-open dialog. The library-card → reader path is
-  unaffected (the reader registers none). Read from code, not seen on a
-  device. Surfaced 2026-09-15.
-
 - **`ScreenShell`'s chrome is addressed through screen-specific locator
   namespaces.** The back arrow and the Actions menu belong to
   `ScreenShell` (`components/shells/screen-shell.tsx`), not to any one

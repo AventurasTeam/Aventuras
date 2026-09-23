@@ -2,6 +2,8 @@ import { useFocusEffect } from 'expo-router'
 import { useCallback, useRef } from 'react'
 import { BackHandler, Platform } from 'react-native'
 
+import { blockingOverlaysStore } from '@/lib/stores'
+
 /**
  * Android hardware-back for a master-detail surface. While `canCollapse` is
  * true the handler runs `onCollapse` and swallows the event; while false it
@@ -26,6 +28,9 @@ export function useMasterDetailBack(canCollapse: boolean, onCollapse: () => void
     useCallback(() => {
       if (Platform.OS !== 'android') return undefined
       const onHardwareBack = () => {
+        // An overlay that mounted before this surface focused registered first, so this
+        // handler would run ahead of its own; yield and let the overlay close itself.
+        if (blockingOverlaysStore.getState().open.size > 0) return false
         if (!canCollapse) return false
         onCollapseRef.current()
         return true
