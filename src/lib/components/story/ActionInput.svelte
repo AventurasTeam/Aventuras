@@ -8,7 +8,7 @@
   import { countTokens } from '$lib/services/tokenizer'
   import { story } from '$lib/stores/story.svelte'
   import { settings } from '$lib/stores/settings.svelte'
-  import type { Chapter, EntryMetadata, Story } from '$lib/types'
+  import type { EntryMetadata, Story } from '$lib/types'
   import { aiService } from '$lib/services/ai'
   import { database } from '$lib/services/database'
   import { SimpleActivationTracker } from '$lib/services/ai/retrieval/EntryRetrievalService'
@@ -383,7 +383,7 @@
       // A thunk: read when the session starts, after the classifier and the chapter check
       // have run. See BackgroundTaskInput.loreSession. The scope is the turn's, matching the
       // callbacks below, so a story switch refuses the session instead of misdirecting it.
-      loreSession: (newChapter?: Chapter) => ({
+      loreSession: (newChapter) => ({
         storyId,
         currentBranchId: branchId,
         lorebookEntries: story.lorebookEntries,
@@ -393,9 +393,7 @@
         pov: story.pov,
         tense: story.tense,
         tokenThreshold: story.memoryConfig.tokenThreshold,
-        newChapter: newChapter
-          ? { chapter: newChapter, entries: story.getChapterEntries(newChapter) }
-          : undefined,
+        newChapter,
       }),
       loreCallbacks: buildLoreManagementCallbacks({ storyId, branchId }),
       loreUICallbacks: buildLoreManagementUICallbacks(),

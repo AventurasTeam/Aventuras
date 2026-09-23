@@ -68,6 +68,8 @@ export interface ChapterServiceDependencies {
 export interface ChapterCreationResult {
   created: boolean
   chapter?: Chapter
+  // The entries `chapter` was summarized from, as of the turn that created it.
+  chapterEntries?: StoryEntry[]
   loreManagementTriggered: boolean
 }
 
@@ -199,6 +201,6 @@ export class ChapterService {
     await this.deps.addChapter(chapter)
     log('Chapter created', { number: chapterNumber, title: chapter.title })
 
-    return { created: true, chapter, loreManagementTriggered: true }
+    return { created: true, chapter, chapterEntries, loreManagementTriggered: true }
   }
 }
