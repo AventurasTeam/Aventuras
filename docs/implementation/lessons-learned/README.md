@@ -209,8 +209,7 @@ slice plans when relevant.
   plugin itself, and any new Vite target must too.
 - [One `exhaustive-deps` suppression opts the whole component out of React Compiler](./exhaustive-deps-suppression-disables-the-compiler.md)
   — the compiler skips the entire component, silently, and lint has no
-  rule for it; find the bail-outs lint cannot see by running the plugin
-  with `panicThreshold: 'all_errors'`.
+  rule for it; `pnpm compiler:check` ratchets every bail-out in CI.
 - [Failed Storybook files with zero failed tests](./storybook-load-flake-zero-failed-tests.md)
   — a file-load flake, not a test failure; contention is ruled out
   empirically and serializing the project breaks isolation, so check

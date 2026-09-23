@@ -53,28 +53,3 @@ slice-planning gate forces its resolution before that slice is planned.
   to get. Held rather than routed in the 2026-09-09 triage pass, which
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
-
-- **Nothing runs React Compiler, so its bail-outs are invisible.** The
-  compiler is on (`app.json` → `expo.experiments.reactCompiler`) but no
-  lint rule or CI step reports what it skipped:
-  `eslint-plugin-react-hooks` 5.2.0 ships no compiler rule, and
-  `.storybook/main.ts` adds only the worklets plugin, so plays exercise
-  uncompiled components. **The ask is a gate** — a lint rule, or the
-  sweep in CI — before anyone chases individual files. Evidence: running
-  `babel-plugin-react-compiler` with `panicThreshold: 'all_errors'` over
-  `components/`, `app/` and `hooks/` (stories and tests excluded) on
-  2026-09-16 found 25 of 269 files bailing — ref access during render,
-  several `Todo` shapes (`components/story-settings/memory-panel.tsx`'s
-  three `try … finally` handlers among them), manual-memo deps that
-  cannot be preserved, a value-mutation error and one incompatible
-  library. Five of the 25 bail for a cause a gate would catch first,
-  because lint can already see it: an
-  `eslint-disable-next-line react-hooks/exhaustive-deps` in
-  `components/reader/reader-document.tsx`,
-  `components/compounds/import-dialog.tsx`,
-  `components/compounds/model-card-document.tsx`,
-  `components/compounds/embedder-download-dialog.tsx` (two) and
-  `components/wizard/step-calendar.tsx`. The mechanism and the
-  panic-threshold technique are in
-  [the compiler-suppression lesson](lessons-learned/exhaustive-deps-suppression-disables-the-compiler.md).
-  Surfaced 2026-09-14.
