@@ -5,7 +5,7 @@ import type { HappeningFilter, ThreadFilter } from '@/lib/list-modules'
 import { t } from '../harness/i18n'
 
 // Plot panel (app/plot/[branchId].tsx). testing.md → Selector strategy — subHeader is the
-// one Tier-3 exception (no role, no unique name of its own).
+// one testID (no role, no unique name of its own).
 export const plot = {
   actionsTrigger: (page: Page): Locator =>
     page.getByRole('button', { name: new RegExp(t('chrome.actions')) }),
@@ -46,7 +46,7 @@ export const plot = {
   description: (page: Page): Locator =>
     page.getByRole('textbox', { name: t('plot:fields.description') }),
 
-  // InlineEditableName: not-editing renders a `button` named by the placeholder; editing
+  // InlineEditableName: not-editing and empty renders a `button` named by the placeholder; editing
   // swaps in an Input with the same `placeholder` — a stable target, unlike `input:focus`
   // which could bind to whatever the page happens to have focused (e.g. the list-pane search).
   nameTrigger: (page: Page): Locator =>
@@ -55,7 +55,7 @@ export const plot = {
 
   addAwareness: (page: Page): Locator =>
     page.getByRole('button', { name: t('plot:awareness.add'), exact: true }),
-  // Row-qualified (awareness-editor.tsx): generic until a character is picked, then "Remove
+  // Row-qualified (link-card.tsx): generic until a character is picked, then "Remove
   // {name}" — caller passes the row's character name.
   removeAwareness: (page: Page, name: string): Locator =>
     page.getByRole('button', { name: t('plot:awareness.removeNamed', { name }), exact: true }),
@@ -78,6 +78,6 @@ export const plot = {
       exact: true,
     }),
   // A status-tagged option (e.g. staged entity) adds text after the name, so this keeps
-  // Playwright's substring match — RegExp(name) would throw on a metacharacter in `name`.
+  // Playwright's substring match — RegExp(name) would misread a metacharacter in `name`.
   pickerOption: (page: Page, name: string): Locator => page.getByRole('option', { name }),
 }

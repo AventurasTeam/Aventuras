@@ -3,10 +3,10 @@
 Reanimated's
 [`LayoutAnimationConfig`](https://docs.swmansion.com/react-native-reanimated/docs/layout-animations/layout-animation-config)
 documents `skipExiting` as "skip children's exiting animations when
-the component is unmounted." In `components/ui/accordion.tsx` it does
-not: an `Animated.View exiting={…}` inside `AccordionPrimitive.Root`
-still runs its exit animation when an ancestor `LayoutAnimationConfig`
-unmounts around it.
+the component is unmounted." In `components/ui/accordion.tsx` it did
+not: while `AccordionContent` carried an `Animated.View exiting={…}`
+inside `AccordionPrimitive.Root`, that exit animation still ran when an
+ancestor `LayoutAnimationConfig` unmounted around it.
 
 **Symptom.** Swapping the Plot panel's kind segment left the outgoing
 kind's rows painted over the incoming list for ~230 ms, drifting up and

@@ -138,8 +138,7 @@ export const storySettings = {
       name: t('storySettings:models.clearOverride', { target: targetLabel }),
     }),
 
-  // Shared row-save-session chrome (save-session.ts): Story Settings and Plot
-  // both host `SaveBar` / `UnsavedChangesDialog` and resolve the same i18n keys.
+  // Shared row-save-session chrome (save-session.ts).
   save: saveSession.saveBarSave,
 
   discard: saveSession.saveBarDiscard,
@@ -158,8 +157,7 @@ export const storySettings = {
   diagnosticsHubRow: (page: Page): Locator =>
     page.getByText(t('settings:diagnosticsHub.actionLabel'), { exact: true }),
 
-  // Shared row-save-session chrome (save-session.ts). Radix's background-hiding doesn't remove
-  // the panel's own save bar from the a11y tree while open, so these stay dialog-scoped.
+  // Shared row-save-session chrome (save-session.ts).
   unsavedDialog: saveSession.unsavedDialog,
   unsavedDiscard: saveSession.unsavedDiscard,
   unsavedSave: saveSession.unsavedSave,

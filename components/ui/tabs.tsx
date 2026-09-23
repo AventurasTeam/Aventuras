@@ -28,7 +28,7 @@ type TabsTriggerProps = ComponentProps<typeof TabsPrimitive.Trigger> & {
   /**
    * Optional count rendered in parentheses after the label (e.g. `Connections (3)`) —
    * an inactive tab's label is already `fg-muted`, so a bare number has no contrast.
-   * Consumers format `99+` themselves; the primitive renders the value as-is.
+   * The primitive renders the value unclamped.
    */
   count?: number
   children?: ReactNode

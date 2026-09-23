@@ -92,7 +92,7 @@ export type HappeningDetailPaneProps = {
   onSave: (draft: HappeningDraft) => Promise<PlotSaveResult>
   /** After a successful save; the route selects the row (a create's new id). */
   onSaved: (id: string) => void
-  /** A save failed, with its translated reason — the bar's notice is tooltip-only on phone. */
+  /** A save failed, with its translated reason — the bar's notice has no visible text. */
   onRejected?: (reason: string) => void
   /** The surface routes row switches, `←`, segment switches and GO TO through this. */
   onSession: (handle: RowSessionHandle | null) => void

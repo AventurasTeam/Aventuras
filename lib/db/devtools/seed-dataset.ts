@@ -881,7 +881,7 @@ const heroHappenings: NewHappening[] = [
     icon: 'scroll',
     temporal: null,
     // Entry 59 (`ai_reply`, past CHAP2_END → chapter_id null): the only live open-region anchor —
-    // every other happening sits in a closed chapter, so without it `Current chapter` is always
+    // every other anchored happening sits in a closed chapter, so without it `Current chapter` is
     // empty/omitted. Not `system`: excluded by readEntryIndex, which would mask this via fallback.
     occurredAtEntryId: entryId('hero', 59),
     commonKnowledge: 0,

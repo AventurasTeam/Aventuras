@@ -83,7 +83,6 @@ export function happeningIssueText(message: string): string {
     : t('plot:validation.inTab', { tab: happeningFieldLabel(tab), issue: text })
 }
 
-/** Plot's detail-head `⋯` menu: export (disabled), view raw JSON (live), delete (disabled). */
 export function plotMenuEntries(kind: PlotKind, onViewJson: () => void): OverflowMenuEntry[] {
   return [
     {
