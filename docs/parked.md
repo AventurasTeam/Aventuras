@@ -2658,6 +2658,28 @@ today (checked 2026-09-23).
 Parked 2026-09-23; the first dropdown whose rows are wider than its
 trigger is the signal to revisit.
 
+#### A bottom Sheet named by `ariaLabelledBy` is unnamed
+
+`BottomSheetContent` (`components/ui/sheet.tsx`) names the gorhom
+modal through `accessibilityLabel` alone, and gorhom 5.2.14 forwards
+only `accessible`, `accessibilityRole` and `accessibilityLabel` to its
+container (checked in its source). A bottom sheet whose `Sheet` passes
+`ariaLabelledBy` without `ariaLabel` therefore renders an unnamed
+`dialog` on web and an unlabelled container on native. The
+right-anchored sheet is unaffected: it hands both props to
+`DialogPrimitive.Content`. **Latent — no consumer passes
+`ariaLabelledBy` to a bottom sheet today.**
+
+A type-level ban is not available: the name props sit on `Sheet` and
+the anchor on `SheetContent`, joined only by context. The enforceable
+forms are a `__DEV__` warning in `BottomSheetContent`, beside the one
+`Sheet` already raises for a missing name, or moving the role and name
+onto a `View` of ours inside the modal — react-native-web 0.21 maps
+`aria-labelledby` on a `View` to the DOM.
+
+Parked 2026-09-24; the first bottom sheet named by `ariaLabelledBy` is
+the signal to revisit.
+
 ### Code structure (parked)
 
 #### Unsaved-changes guard folder placement
