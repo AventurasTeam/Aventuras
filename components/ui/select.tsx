@@ -22,6 +22,7 @@ import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 import { Heading } from '@/components/ui/heading'
 import { Icon } from '@/components/ui/icon'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
+import { QuietSheetBackground, QuietSheetHandle } from '@/components/ui/sheet'
 import { Text, TextClassContext } from '@/components/ui/text'
 import { POINTER_EVENTS_BOX_NONE, POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useTier } from '@/hooks/use-tier'
@@ -178,8 +179,13 @@ function PhoneSheetContent({
             // 'adjustPan' deliberately — see sheet.tsx for why 'adjustResize'
             // puts every sheet back under the keyboard.
             android_keyboardInputMode="adjustPan"
+            backgroundComponent={QuietSheetBackground}
             backgroundStyle={backgroundStyle}
+            handleComponent={QuietSheetHandle}
             handleIndicatorStyle={handleIndicatorStyle}
+            // Native-only sheet: replaces gorhom's `adjustable` role and English 'Bottom Sheet' label.
+            accessibilityRole="none"
+            accessibilityLabel={label || null}
             onClose={() => onOpenChange(false)}
           >
             <TextClassContext.Provider value="text-fg-primary">

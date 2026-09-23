@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
 import { View } from 'react-native'
+import { expect, screen, userEvent } from 'storybook/test'
 
 import { Button } from './button'
 import { Heading } from './heading'
@@ -39,6 +40,11 @@ export const Default: Story = {
       </Sheet>
     </View>
   ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Open sheet' }))
+    expect(await screen.findByRole('dialog', { name: 'Sheet' })).toBeInTheDocument()
+    expect(screen.queryByRole('slider')).not.toBeInTheDocument()
+  },
 }
 
 export const Anchors: Story = {

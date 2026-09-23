@@ -1,4 +1,11 @@
-import { BottomSheetModal, BottomSheetTextInput, BottomSheetView } from '@gorhom/bottom-sheet'
+import {
+  type BottomSheetBackgroundProps,
+  BottomSheetHandle,
+  type BottomSheetHandleProps,
+  BottomSheetModal,
+  BottomSheetTextInput,
+  BottomSheetView,
+} from '@gorhom/bottom-sheet'
 import * as DialogPrimitive from '@rn-primitives/dialog'
 import {
   createContext,
@@ -10,6 +17,7 @@ import {
   type ComponentProps,
 } from 'react'
 import {
+  type AccessibilityRole,
   BackHandler,
   Platform,
   StyleSheet,
@@ -55,6 +63,29 @@ function useSheetA11y(): SheetA11yValue {
 }
 
 const FullWindowOverlay = Platform.OS === 'ios' ? RNFullWindowOverlay : Fragment
+
+// gorhom defaults its content to `adjustable`, which RN-Web emits as `slider`. Only web can say
+// `dialog`; RN's accessibilityRole union lacks it and native rejects unknown roles.
+const BOTTOM_SHEET_ROLE: AccessibilityRole =
+  Platform.OS === 'web' ? ('dialog' as AccessibilityRole) : 'none'
+
+// gorhom's default background and handle are also `adjustable` views with hard-coded English
+// labels. Both are decoration here, so these keep them out of the accessibility tree.
+export function QuietSheetBackground({ style, pointerEvents }: BottomSheetBackgroundProps) {
+  return <View pointerEvents={pointerEvents} style={style} />
+}
+
+export function QuietSheetHandle(props: BottomSheetHandleProps) {
+  return (
+    <BottomSheetHandle
+      {...props}
+      accessible={false}
+      accessibilityRole={null}
+      accessibilityLabel={null}
+      accessibilityHint={null}
+    />
+  )
+}
 
 // Native-only swap: gorhom's BottomSheetTextInput feeds the sheet's
 // keyboard-translate system, which is inert on web — and its blur handler
@@ -240,9 +271,13 @@ function BottomSheetContent({
       // that never arrives under edge-to-edge, putting every sheet under the
       // keyboard. Verified on-device both ways; gorhom keeps translating itself.
       android_keyboardInputMode="adjustPan"
+      backgroundComponent={QuietSheetBackground}
       backgroundStyle={backgroundStyle}
+      handleComponent={QuietSheetHandle}
       handleIndicatorStyle={handleIndicatorStyle}
-      accessibilityLabel={ariaLabel ?? (ariaLabelledBy ? undefined : title)}
+      accessibilityRole={BOTTOM_SHEET_ROLE}
+      // null, not undefined: undefined falls through to gorhom's English 'Bottom Sheet'.
+      accessibilityLabel={ariaLabel ?? (ariaLabelledBy ? null : title)}
       onDismiss={() => {
         if (!isMountedRef.current) return
         isPresentedRef.current = false

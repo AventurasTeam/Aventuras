@@ -309,13 +309,6 @@ slice-planning gate forces its resolution before that slice is planned.
   name from its rendered slots instead of overriding with the bare
   label. Surfaced 2026-09-22.
 
-- **Bottom-anchored `Sheet` exposes no container role on web.**
-  `components/ui/sheet.tsx`'s `BottomSheetContent` (gorhom's
-  `BottomSheetModal`) renders with no `role="dialog"`, unlike
-  `RightSheetContent`'s `DialogPrimitive.Content`, which sets one — a
-  screen reader gets no landmark for the phone-tier sheet surface.
-  Surfaced 2026-09-22.
-
 - **A presented bottom Sheet may not leave the DOM after close in the
   vitest-browser runner.** Closing a phone bottom Sheet didn't
   reliably remove it from the DOM under `vitest-browser` during this
