@@ -184,16 +184,6 @@ const header = (label: string) =>
 // CI runs plays several times slower than local; every post-interaction wait uses this.
 const INTERACTION_WAIT = { timeout: 3000 }
 
-// Toolbar first renders from useTier()'s window guess (one row), then remounts once
-// onLayout reports the 360px harness and only the narrow branch stacks search/chips.
-async function toolbarSettled() {
-  await waitFor(() => {
-    const search = screen.getByRole('textbox').getBoundingClientRect()
-    const chip = screen.getByRole('button', { name: 'All' }).getBoundingClientRect()
-    expect(chip.top).toBeGreaterThanOrEqual(search.bottom)
-  }, INTERACTION_WAIT)
-}
-
 /** Threads: Active starts open, the rest collapsed; a header click and a chip both work. */
 export const Threads: Story = {
   play: async () => {
@@ -209,7 +199,6 @@ export const Threads: Story = {
     expect(
       await screen.findByRole('button', { name: 'Expose the Syndicate broker' }, INTERACTION_WAIT),
     ).toBeInTheDocument()
-    await toolbarSettled()
     await userEvent.click(screen.getByRole('button', { name: 'Failed', pressed: false }))
     expect(
       await screen.findByRole('button', { name: 'Escape the River Keep' }, INTERACTION_WAIT),
@@ -231,7 +220,6 @@ export const HappeningsWithChapters: Story = {
     expect(header('Earlier chapters')).toHaveAttribute('aria-expanded', 'false')
     expect(header('Out of narrative')).toHaveAttribute('aria-expanded', 'false')
     expect(screen.getByRole('button', { name: 'This chapter', pressed: false })).toBeVisible()
-    await toolbarSettled()
     await userEvent.click(screen.getByRole('button', { name: 'Out-of-narrative', pressed: false }))
     expect(
       await screen.findByRole('button', { name: 'The old betrayal' }, INTERACTION_WAIT),
@@ -291,7 +279,6 @@ export const SearchNarrows: Story = {
     expect(
       await screen.findByRole('button', { name: 'Expose the Syndicate broker' }, INTERACTION_WAIT),
     ).toBeVisible()
-    await toolbarSettled()
     await userEvent.type(screen.getByPlaceholderText('Search threads…'), 'syndicate')
     expect(
       await screen.findByRole('button', { name: 'Expose the Syndicate broker' }, INTERACTION_WAIT),

@@ -107,7 +107,9 @@ named ones.
 ### `<Toolbar>`
 
 Bar wrapper. Owns layout, density-aware padding, the cross-tier
-overflow rule. No additional props beyond `className`.
+overflow rule. Props: `className`, and `narrow`, which pins the
+narrow layout for a host that is narrow by construction (see
+[Mechanism](#mechanism)).
 
 ### `<Toolbar.Search>`
 
@@ -254,15 +256,24 @@ wrap beneath as a single chip-flow row.
 
 ### Mechanism
 
-- Toolbar wrapper uses `flex-row flex-wrap` at narrow tiers; the
-  search slot has `flex-basis: 100%` to force its own row.
-- Filter chips and sort live in the second row, naturally wrapping
-  if chip count overflows.
-- Container-keyed via `@container (max-width: 1023px)` on web;
-  tier-keyed via `useTier()` on native
-  (`tier === 'phone' || tier === 'tablet'`). Same dual-mechanism
-  pattern [FormRow](./forms.md#form-rows--stacked-on-narrow-container)
-  uses.
+- **Two trees.** Wide: one row — search (`flex-1`), chips, sort.
+  Narrow: search on its own row, then the chips and the sort as
+  left-aligned siblings in one wrapping row. The narrow tree lifts
+  the chips out of their group into that row, which avoids nested
+  flex-shrink overlap at very narrow widths.
+- **Width source.** The toolbar measures its own width with
+  `onLayout` against the 1024 px threshold, on every platform. Before
+  the first measurement a `useTier()` guess picks the tree — narrow
+  unless the viewport tier is desktop. NativeWind 4 has container
+  queries on web but none on native, so one mechanism serves both;
+  [FormRow](./forms.md#form-rows--stacked-on-narrow-container) works
+  the same way.
+- **A wrong guess remounts.** The two trees are structurally
+  different, so when the guess and the measurement disagree, search
+  and chips remount a frame later, dropping focus and any node a test
+  or caller held. A host that is narrow by construction passes
+  `narrow` to skip the guess; `EntityListPane` does, since a list pane
+  is narrow at every tier.
 
 ### Why container-keyed (not viewport-keyed) on web
 

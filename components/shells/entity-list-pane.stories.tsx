@@ -214,6 +214,17 @@ function PlotThreadsHarness() {
   )
 }
 
+/** The search input mounted first is the one still there once layout lands: no remount. */
+export const SearchSurvivesFirstLayout: Story = {
+  render: () => <WorldCharactersHarness />,
+  play: async () => {
+    const input = await screen.findByPlaceholderText('Search characters…')
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    expect(input.isConnected).toBe(true)
+    expect(screen.getByPlaceholderText('Search characters…')).toBe(input)
+  },
+}
+
 export const PlotThreads: Story = {
   render: () => <PlotThreadsHarness />,
 }

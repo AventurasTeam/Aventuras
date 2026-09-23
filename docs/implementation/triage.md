@@ -79,27 +79,6 @@ slice-planning gate forces its resolution before that slice is planned.
   [the compiler-suppression lesson](lessons-learned/exhaustive-deps-suppression-disables-the-compiler.md).
   Surfaced 2026-09-14.
 
-- **`Toolbar` diverges from its own spec.**
-  `docs/ui/patterns/toolbar.md → Mechanism` prescribes a CSS container
-  query on web (`@container (max-width: 1023px)`, the FormRow
-  dual-mechanism) with `useTier()` only on native;
-  `components/compounds/toolbar.tsx` (166–212) instead uses `onLayout`
-  plus a `useTier()` first-frame guess on every platform and renders
-  two structurally different trees. Every desktop `EntityListPane`
-  sits in a 340 px list pane (`MasterDetailLayout`'s
-  `DEFAULT_LIST_PANE_WIDTH`), so it mounts wide off `useTier()`'s
-  viewport-width guess and remounts the search input and chips into
-  the narrow tree a commit later, once `onLayout` reports the actual
-  container width (one-frame flash; focus loss if a container crosses
-  the threshold — inferred, not observed). Storybook plays that click
-  a chip right after mount silently no-op against the pre-swap node;
-  Plot's own list-pane stories had to add a wait for the narrow
-  branch's geometry (`toolbarSettled()` in
-  `components/plot/plot-list-pane.stories.tsx`). Direction: one tree
-  keyed by the container query on web, or have `EntityListPane` pin
-  the narrow layout (the `TierTupleInput` / FormRow-lesson precedent).
-  Surfaced 2026-09-22.
-
 - **The save bar's invalid-draft reason is tooltip-only on phone.**
   Rejections get a toast — `app/plot/[branchId].tsx`'s `onRejected`
   is `toast.error`, because the save bar's notice is an icon with no
