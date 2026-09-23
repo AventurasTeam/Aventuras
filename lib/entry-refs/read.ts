@@ -11,10 +11,12 @@ const ENTRY_EXCERPT_CHARS = 120
 
 // Drops a trailing partial word so the forced ellipsis follows a whole word. Only meaningful
 // when the cut landed mid-word (see afterCut) — a head ending in whitespace has none to drop.
+// A head with no earlier word (unspaced scripts) stays whole: a hard cut beats an empty excerpt.
 function dropTrailingPartialWord(head: string): string {
   if (head === '' || /\s$/.test(head)) return head
   const lastBreak = head.search(/\s\S*$/)
-  return lastBreak === -1 ? '' : head.slice(0, lastBreak)
+  const kept = lastBreak === -1 ? '' : head.slice(0, lastBreak)
+  return kept.trim() === '' ? head : kept
 }
 
 /**

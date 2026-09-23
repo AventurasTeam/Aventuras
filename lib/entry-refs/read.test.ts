@@ -164,4 +164,27 @@ describe('readEntryIndex', () => {
     const [row] = await readEntryIndex('br_1', db)
     expect(row?.excerpt).toBe('quay again…')
   })
+
+  // Unspaced scripts (Chinese, Japanese) have no word to back off to.
+  const unspaced = '一二三四五六七八九十'
+  it.each([
+    ['no whitespace at all', unspaced.repeat(25)],
+    ['only leading whitespace', `\n  ${unspaced.repeat(25)}`],
+  ])('hard-cuts a mid-word head with %s instead of emptying it', async (_, content) => {
+    const { db } = await createTestDb()
+    await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values({ id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 })
+    await db.insert(storyEntries).values({
+      id: 'e_unspaced',
+      branchId: 'br_1',
+      position: 1,
+      kind: 'opening',
+      content,
+      chapterId: null,
+      createdAt: 1,
+    })
+
+    const [row] = await readEntryIndex('br_1', db)
+    expect(row?.excerpt).toBe(`${unspaced.repeat(12)}…`)
+  })
 })
