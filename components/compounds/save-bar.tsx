@@ -1,9 +1,8 @@
-import type { TriggerRef } from '@rn-primitives/popover'
 import { AlertTriangle } from 'lucide-react-native'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
-import { TAP_TOOLTIP_IDLE_MS } from '@/components/compounds/truncated-text'
+import { useTapTooltipTrigger } from '@/components/compounds/truncated-text'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -155,15 +154,9 @@ export type { SaveBarProps }
 
 // touch.md → Tap-to-tooltip: a hover tooltip never reaches a phone, so a tap opens the note.
 function Notice({ notice }: { notice: string }) {
-  const trigger = useRef<TriggerRef>(null)
-  const [open, setOpen] = useState(false)
-  useEffect(() => {
-    if (!open) return
-    const timer = setTimeout(() => trigger.current?.close(), TAP_TOOLTIP_IDLE_MS)
-    return () => clearTimeout(timer)
-  }, [open])
+  const { trigger, onOpenChange } = useTapTooltipTrigger()
   return (
-    <Popover onOpenChange={setOpen} ariaLabel={t('saveBar.note')}>
+    <Popover onOpenChange={onOpenChange} ariaLabel={t('saveBar.note')}>
       <ReasonTooltip reason={notice}>
         <PopoverTrigger ref={trigger} asChild>
           {/* 16px glyph + 2·14 slop = the 44px phone floor. */}
