@@ -372,7 +372,7 @@
             >
               {storyTimeIsInvalid(startingTimeText)
                 ? 'Not a story time. Try 19:00, D2 19:00, or Y1 D2 19:00.'
-                : 'Optional. A story created from this scenario starts at this time.'}
+                : 'Optional. When a story from this scenario begins, at the end of its first message.'}
             </p>
           </div>
         {/if}

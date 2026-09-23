@@ -88,17 +88,17 @@ describe('ContextBuilder', () => {
     'opening-generation-creative',
     'opening-refinement-adventure',
     'opening-refinement-creative',
-  ])('gives the shipped %s template the starting time beside the title', async (templateId) => {
+  ])('gives the shipped %s template the starting time', async (templateId) => {
     vi.mocked(database.getPackTemplate).mockResolvedValue(null)
 
     const given = await new ContextBuilder('test-pack')
-      .add({ title: 'The Long Night', startingTime: 'Y1 D1 19:30' })
+      .add({ title: 'The Long Night', storyStartingTime: 'Y1 D1 19:30' })
       .render(templateId)
-    expect(given.user).toContain('STARTS AT: Y1 D1 19:30')
+    expect(given.user).toContain('TIME: opening ends at Y1 D1 19:30')
 
     const requested = await new ContextBuilder('test-pack')
-      .add({ title: 'The Long Night', startingTime: '(suggest one)' })
+      .add({ title: 'The Long Night', storyStartingTime: '(suggest one)' })
       .render(templateId)
-    expect(requested.user).toContain('STARTS AT: (suggest one)')
+    expect(requested.user).toContain('TIME: opening ends at (suggest one)')
   })
 })

@@ -463,6 +463,7 @@
           manualStartText={wizard.narrative.manualStartText}
           guidanceStartText={wizard.narrative.guidanceStartText}
           resultStartText={wizard.narrative.resultStartText}
+          resultStartSource={wizard.narrative.resultStartSource}
           openingReceivesStart={wizard.narrative.openingReceivesStart}
           cardImportedFirstMessage={wizard.character.cardImportedFirstMessage}
           cardImportedStartingTime={wizard.character.cardImportedStartingTime}

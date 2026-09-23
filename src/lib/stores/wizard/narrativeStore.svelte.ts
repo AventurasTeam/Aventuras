@@ -21,6 +21,7 @@ import type { GeneratedOpening } from '$lib/services/ai/sdk'
 import { ContextBuilder } from '$lib/services/context'
 import {
   formatStoryTime,
+  normalizeTime,
   parseStoryTime,
   templateReceivesStartingTime,
 } from '$lib/services/storyTime'
@@ -68,10 +69,12 @@ export class NarrativeStore {
   importedStartText = $state('')
   /** Beside the opening the reader writes. Never prefilled. */
   manualStartText = $state('')
-  /** What generation is told the opening starts at; the one the prompt warning is about. */
+  /** What generation is told the opening ends at; the one the prompt warning is about. */
   guidanceStartText = $state('')
   /** What generation came back with, or the guidance when it returned none. */
   resultStartText = $state('')
+  resultStartSource = $state<'returned' | 'guidance' | 'edited' | null>(null)
+  private startBeforeEdit = { text: '', source: null as typeof this.resultStartSource }
   /** Whether the selected pack's opening template renders the start; null until checked. */
   openingReceivesStart = $state<boolean | null>(null)
 
@@ -87,7 +90,10 @@ export class NarrativeStore {
 
   importedStart = $derived(parseStoryTime(this.importedStartText))
   manualStart = $derived(parseStoryTime(this.manualStartText))
-  guidanceStart = $derived(parseStoryTime(this.guidanceStartText))
+  // A template without the variable never shows the model this start, so it must not seed the result.
+  guidanceStart = $derived(
+    this.openingReceivesStart === false ? null : parseStoryTime(this.guidanceStartText),
+  )
   resultStart = $derived(parseStoryTime(this.resultStartText))
 
   /**
@@ -222,7 +228,8 @@ export class NarrativeStore {
   private applyReturnedStart(opening: GeneratedOpening) {
     const returned = parseStoryTime(opening.startingTime ?? '')
     const start = returned ?? this.guidanceStart
-    this.resultStartText = start ? formatStoryTime(start) : ''
+    this.resultStartText = start ? formatStoryTime(normalizeTime(start)) : ''
+    this.resultStartSource = returned ? 'returned' : start ? 'guidance' : null
   }
 
   // Opening Actions
@@ -359,6 +366,7 @@ export class NarrativeStore {
     if (!this.generatedOpening || this.isEditingOpening) return
     this.openingError = null
     this.openingDraft = this.generatedOpening.scene
+    this.startBeforeEdit = { text: this.resultStartText, source: this.resultStartSource }
     this.isEditingOpening = true
   }
 
@@ -373,11 +381,17 @@ export class NarrativeStore {
       title: this.storyTitle.trim() || this.generatedOpening.title,
       scene: this.openingDraft,
     }
+    if (this.resultStartText !== this.startBeforeEdit.text) {
+      this.resultStartSource = this.resultStartText.trim() ? 'edited' : null
+    }
+    if (this.resultStart) this.resultStartText = formatStoryTime(normalizeTime(this.resultStart))
     this.clearOpeningEditState()
   }
 
   cancelOpeningEdit() {
     if (!this.generatedOpening) return
+    this.resultStartText = this.startBeforeEdit.text
+    this.resultStartSource = this.startBeforeEdit.source
     this.clearOpeningEditState()
   }
 

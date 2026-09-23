@@ -9,7 +9,7 @@
 import type { TimeTracker } from '$lib/types'
 import { formatStoryTime } from './duration'
 
-export const STARTING_TIME_VAR = 'startingTime'
+export const STARTING_TIME_VAR = 'storyStartingTime'
 
 /** What an empty start is sent as, the same request an empty title makes. */
 export const SUGGEST_ONE = '(suggest one)'

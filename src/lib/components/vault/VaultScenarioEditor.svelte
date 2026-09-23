@@ -7,7 +7,12 @@
   import type { FocusedEntity } from '$lib/services/ai/vault/InteractiveVaultService'
   import { untrack, onDestroy } from 'svelte'
   import { ui } from '$lib/stores/ui.svelte'
-  import { formatStoryTime, parseStoryTime, storyTimeIsInvalid } from '$lib/services/storyTime'
+  import {
+    formatStoryTime,
+    normalizeTime,
+    parseStoryTime,
+    storyTimeIsInvalid,
+  } from '$lib/services/storyTime'
 
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
@@ -100,7 +105,8 @@
     error = null
 
     try {
-      const startingTime = parseStoryTime(startingTimeText)
+      const parsedStart = parseStoryTime(startingTimeText)
+      const startingTime = parsedStart ? normalizeTime(parsedStart) : null
       await scenarioVault.update(scenario.id, {
         ...formData,
         name: formData.name.trim(),

@@ -193,10 +193,10 @@ Also avoid:
   userContent: `Create the opening scene:
 
 TITLE: {{ title }}
-STARTS AT: {{ startingTime }}
 GENRE: {{ genreLabel }}
 SETTING: {{ settingName }} - {{ settingDescription }}
 {{ atmosphereSection }}
+TIME: opening ends at {{ storyStartingTime }}
 PROTAGONIST: {{ protagonistName }}{{ protagonistDescription }}
 {{ supportingCharactersSection }}
 {{ povInstruction }}
@@ -274,10 +274,10 @@ Also avoid:
   userContent: `Create the opening scene:
 
 TITLE: {{ title }}
-STARTS AT: {{ startingTime }}
 GENRE: {{ genreLabel }}
 SETTING: {{ settingName }} - {{ settingDescription }}
 {{ atmosphereSection }}
+TIME: opening ends at {{ storyStartingTime }}
 PROTAGONIST: {{ protagonistName }}{{ protagonistDescription }}
 {{ supportingCharactersSection }}
 {{ povInstruction }}
@@ -359,10 +359,10 @@ CURRENT OPENING:
 {{ currentOpening }}
 
 TITLE: {{ title }}
-STARTS AT: {{ startingTime }}
 GENRE: {{ genreLabel }}
 SETTING: {{ settingName }} - {{ settingDescription }}
 {{ atmosphereSection }}
+TIME: opening ends at {{ storyStartingTime }}
 PROTAGONIST: {{ protagonistName }}{{ protagonistDescription }}
 {{ supportingCharactersSection }}
 {{ povInstruction }}
@@ -439,10 +439,10 @@ CURRENT OPENING:
 {{ currentOpening }}
 
 TITLE: {{ title }}
-STARTS AT: {{ startingTime }}
 GENRE: {{ genreLabel }}
 SETTING: {{ settingName }} - {{ settingDescription }}
 {{ atmosphereSection }}
+TIME: opening ends at {{ storyStartingTime }}
 PROTAGONIST: {{ protagonistName }}{{ protagonistDescription }}
 {{ supportingCharactersSection }}
 {{ povInstruction }}

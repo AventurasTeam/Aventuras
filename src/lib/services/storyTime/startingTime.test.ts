@@ -16,9 +16,12 @@ describe('startingTimePromptValue', () => {
 
 describe('templateReceivesStartingTime', () => {
   it('tells a template that renders the start from one that does not', () => {
-    expect(templateReceivesStartingTime('TITLE: {{ title }}\nSTARTS AT: {{ startingTime }}')).toBe(
-      true,
-    )
+    expect(
+      templateReceivesStartingTime(
+        'TITLE: {{ title }}\nTIME: opening ends at {{ storyStartingTime }}',
+      ),
+    ).toBe(true)
+    expect(templateReceivesStartingTime('TIME: opening ends at {{ startingTime }}')).toBe(false)
     expect(templateReceivesStartingTime('TITLE: {{ title }}')).toBe(false)
     expect(templateReceivesStartingTime(null)).toBe(false)
   })

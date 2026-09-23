@@ -579,7 +579,7 @@ class ScenarioService {
       protagonistName,
       protagonistDescription,
       title: title || '(suggest one)',
-      startingTime: startingTimePromptValue(wizardData.startingTime),
+      storyStartingTime: startingTimePromptValue(wizardData.startingTime),
       settingName: expandedSetting?.name || 'Unknown World',
       settingDescription: expandedSetting?.description || wizardData.settingSeed,
       atmosphereSection,
@@ -667,7 +667,7 @@ class ScenarioService {
       protagonistName,
       protagonistDescription,
       title: title || currentOpening.title || '(suggest one)',
-      startingTime: startingTimePromptValue(wizardData.startingTime),
+      storyStartingTime: startingTimePromptValue(wizardData.startingTime),
       settingName: expandedSetting?.name || 'Unknown World',
       settingDescription: expandedSetting?.description || wizardData.settingSeed,
       atmosphereSection,
@@ -788,7 +788,7 @@ class ScenarioService {
     "name": "string - location name",
     "description": "string - 1-2 sentences"
   },
-  "startingTime": "string - when the scene opens, as Y1 D1 14:30 (year, day, 24-hour clock); the STARTS AT time when one is given"
+  "startingTime": "string - when the opening scene ends and the story begins, as Y1 D1 14:30 (year, day, 24-hour clock); the TIME it is given, when there is one"
 }`
   }
 

@@ -815,10 +815,10 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     required: false,
   },
   {
-    name: 'startingTime',
+    name: 'storyStartingTime',
     type: 'text',
     category: 'runtime',
-    description: 'The time the opening scene starts at, or a request to suggest one',
+    description: 'When the opening scene ends and the story begins, or a request to suggest one',
     required: false,
   },
   {

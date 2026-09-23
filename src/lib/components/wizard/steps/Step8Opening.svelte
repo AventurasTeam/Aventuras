@@ -42,6 +42,7 @@
     manualStartText: string
     guidanceStartText: string
     resultStartText: string
+    resultStartSource: 'returned' | 'guidance' | 'edited' | null
     /** Null until checked; false when the pack's opening template cannot receive the start. */
     openingReceivesStart: boolean | null
 
@@ -97,6 +98,7 @@
     manualStartText,
     guidanceStartText,
     resultStartText,
+    resultStartSource,
     openingReceivesStart,
     cardImportedFirstMessage,
     cardImportedStartingTime,
@@ -144,6 +146,21 @@
     return parsed ? formatStoryTime(normalizeTime(parsed)) : null
   }
 
+  function resultStartNote(): string {
+    if (isEditingOpening)
+      return 'A manual override for the automatically generated value. Cancel restores the previous time.'
+    switch (resultStartSource) {
+      case 'returned':
+        return 'Set by generation. Edit the opening to change it.'
+      case 'guidance':
+        return 'Generation returned no time, so this is the one it was given. Edit the opening to change it.'
+      case 'edited':
+        return 'Set by you. Generating or refining again replaces it.'
+      default:
+        return 'No time set. Edit the opening to set one.'
+    }
+  }
+
   // POV options for summary
   const povOptions: POVOption[] = [
     { id: 'first', label: '1st Person', example: '' },
@@ -160,9 +177,10 @@
   onChange: (value: string) => void,
   hint: string,
   disabled: boolean = false,
+  label: string = 'Starting Time',
 )}
   <div class="space-y-1.5">
-    <Label for={id} class="text-xs">Starting Time</Label>
+    <Label for={id} class="text-xs">{label}</Label>
     <div class="flex items-center gap-2">
       <Input
         {id}
@@ -175,13 +193,16 @@
         class="h-8 w-44 text-sm {storyTimeIsInvalid(text) ? 'border-destructive' : ''}"
       />
       <span class="text-muted-foreground shrink-0 text-xs">
-        {normalized(text) ? `= ${normalized(text)}` : 'year, day, clock'}
+        {!disabled && normalized(text) ? `= ${normalized(text)}` : 'year, day, clock'}
       </span>
     </div>
     {#if storyTimeIsInvalid(text)}
       <p class="text-destructive text-xs">Not a story time. Try 19:00, D2 19:00, or Y1 D2 19:00.</p>
     {:else}
-      <p class="text-muted-foreground text-xs">{hint}</p>
+      <div class="flex-column text-muted-foreground text-xs">
+        <p>When the story begins after the opening.</p>
+        <p>{hint}</p>
+      </div>
     {/if}
   </div>
 {/snippet}
@@ -284,8 +305,8 @@
           importedStartText,
           onImportedStartChange,
           scenarioStated
-            ? 'Stated by the scenario. Used if you take this opening.'
-            : 'Needed if you take this opening.',
+            ? 'Imported from the scenario.'
+            : 'Not defined by the scenario. Please provide your own value.',
           scenarioStated,
         )}
 
@@ -299,7 +320,7 @@
 
   <!-- Manual Opening Entry or AI Generation -->
   {#if storyTitle.trim()}
-    <Card.Root class="bg-surface-900 border-surface-700">
+    <Card.Root class="bg-surface-800/50 border-surface-700">
       <Card.Content class="space-y-3 p-4">
         <h4 class="text-foreground font-medium">Opening Scene</h4>
         <p class="text-muted-foreground text-sm">
@@ -308,12 +329,12 @@
 
         <!-- Manual Text Entry -->
         <div class="space-y-2">
-          <Label>Write Your Own Opening</Label>
+          <Label class="text-muted-foreground text-xs font-medium">Write Your Own Opening</Label>
           <Textarea
             value={manualOpeningText}
             oninput={(e) => onManualOpeningChange(e.currentTarget.value)}
             placeholder="Write the opening scene of your story here... Describe the setting, introduce your character, set the mood. This will be the first entry in your adventure."
-            class="min-h-[140px] text-sm"
+            class="bg-surface-900 min-h-48 border-none p-3 text-sm"
             rows={6}
             disabled={isGeneratingOpening || isRefiningOpening || generatedOpening !== null}
           />
@@ -326,12 +347,7 @@
           {/if}
         </div>
 
-        {@render startField(
-          'manual-start',
-          manualStartText,
-          onManualStartChange,
-          'When the opening you write happens. Needed if you use it.',
-        )}
+        {@render startField('manual-start', manualStartText, onManualStartChange, '')}
 
         <!-- Expand with AI -->
         <div class="flex items-center gap-2 pt-1">
@@ -370,15 +386,20 @@
               'guidance-start',
               guidanceStartText,
               onGuidanceStartChange,
-              'What generation is told the scene opens at. Left empty, it suggests one.',
+              'This value is used in the AI opening generation',
+              openingReceivesStart === false,
+              'Starting Time (Optional)',
             )}
 
             {#if openingReceivesStart === false}
               <p class="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs">
-                The active prompt pack's opening template does not use
-                <code>{`{{ ${STARTING_TIME_VAR} }}`}</code>, so this time does not reach the model.
-                Add a <code>STARTS AT: {`{{ ${STARTING_TIME_VAR} }}`}</code> line beside the title in
-                the pack's opening templates, or choose a pack that has it.
+                The active prompt pack features the opening template that does not use
+                <code class="bg-muted rounded px-1 py-0.5 font-mono"
+                  >{`{{ ${STARTING_TIME_VAR} }}`}</code
+                >, which means that starting time guidance will have no effect. Add a
+                <code class="bg-muted rounded px-1 py-0.5 font-mono"
+                  >TIME: opening ends at {`{{ ${STARTING_TIME_VAR} }}`}</code
+                > line above the protagonist in the opening templates, or choose a pack that has it.
               </p>
             {/if}
             <div class="flex gap-2">
@@ -428,12 +449,12 @@
   {/if}
 
   {#if generatedOpening}
-    <Card.Root class="bg-surface-900 border-surface-700">
+    <Card.Root class="bg-surface-800/50 border-surface-700">
       <Card.Content class="space-y-3 p-4">
-        <div class="flex items-start justify-between gap-3">
-          <h3 class="text-foreground font-semibold">
+        <div class="flex items-center justify-between gap-3">
+          <h4 class="text-foreground font-medium">
             {generatedOpening?.title || storyTitle}
-          </h3>
+          </h4>
           {#if !isEditingOpening}
             <div class="flex items-center gap-2">
               <Button
@@ -472,32 +493,34 @@
             class="min-h-[140px] text-sm"
             rows={6}
           />
+        {:else}
+          <Card.Root class="bg-surface-900 border-none">
+            <Card.Content class="p-3">
+              <ScrollArea.Root class="h-48">
+                <div class="text-muted-foreground text-sm whitespace-pre-wrap">
+                  {generatedOpening?.scene || ''}
+                </div>
+              </ScrollArea.Root>
+            </Card.Content>
+          </Card.Root>
+        {/if}
+
+        <!-- What the generator said this opening ends at, editable only while it is. -->
+        {@render startField(
+          'result-start',
+          resultStartText,
+          onResultStartChange,
+          resultStartNote(),
+          !isEditingOpening,
+        )}
+        {#if isEditingOpening}
           <div class="flex justify-end gap-2">
             <Button variant="secondary" size="sm" onclick={onCancelEdit}>Cancel</Button>
             <Button size="sm" onclick={onSaveEdit} disabled={!openingDraft?.trim()}>
               Save Changes
             </Button>
           </div>
-        {:else}
-          <ScrollArea.Root class="h-64">
-            <div class="prose prose-invert prose-sm max-w-none">
-              <p class="text-muted-foreground whitespace-pre-wrap">
-                {generatedOpening?.scene || ''}
-              </p>
-            </div>
-          </ScrollArea.Root>
         {/if}
-
-        <!-- What the generator said this opening starts at, editable only while it is. -->
-        {@render startField(
-          'result-start',
-          resultStartText,
-          onResultStartChange,
-          isEditingOpening
-            ? 'What this opening starts at. Saved with the story when you use it.'
-            : 'Returned with this opening, or the time generation was given. Edit to change it.',
-          !isEditingOpening,
-        )}
       </Card.Content>
     </Card.Root>
   {/if}
