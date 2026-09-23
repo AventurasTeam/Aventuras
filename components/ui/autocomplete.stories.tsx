@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { useMemo, useState, type ComponentProps } from 'react'
+import { useEffect, useMemo, useState, type ComponentProps } from 'react'
 import { View } from 'react-native'
 import { expect, fireEvent, fn, screen, userEvent, waitFor } from 'storybook/test'
 
@@ -309,6 +309,41 @@ export const VirtualizedManyRows: Story = {
     await waitFor(() => {
       expect(screen.getByRole('option', { name: 'Entry 0500' })).toBeInTheDocument()
     })
+  },
+}
+
+// F2 flips `disabled` from a capture listener, so the open list isn't dismissed by a click.
+function DisableToggleAutocomplete() {
+  const [disabled, setDisabled] = useState(false)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F2') setDisabled((prev) => !prev)
+    }
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => document.removeEventListener('keydown', onKeyDown, true)
+  }, [])
+  return (
+    <ControlledAutocomplete sourceList={ERA_NAMES} placeholder="Era name…" disabled={disabled} />
+  )
+}
+
+/** Disabling mid-pick closes an already-open list; re-enabling lets it open again. */
+export const ClosesWhenDisabled: Story = {
+  render: () => <DisableToggleAutocomplete />,
+  play: async ({ canvas }) => {
+    const input = await canvas.findByPlaceholderText('Era name…')
+    await userEvent.click(input)
+    await screen.findByRole('option', { name: 'Reiwa' })
+
+    await userEvent.keyboard('{F2}')
+    await waitFor(() =>
+      expect(screen.queryByRole('option', { name: 'Reiwa' })).not.toBeInTheDocument(),
+    )
+
+    await userEvent.keyboard('{F2}')
+    await userEvent.click(document.body)
+    await userEvent.click(input)
+    expect(await screen.findByRole('option', { name: 'Reiwa' })).toBeInTheDocument()
   },
 }
 

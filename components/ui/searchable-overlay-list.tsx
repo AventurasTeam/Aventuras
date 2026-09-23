@@ -1408,6 +1408,12 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
     [],
   )
 
+  // A run disabling the field mid-pick closes the list: on web it is portaled past the
+  // wrapper's pointer-events gate, so its rows would otherwise stay pickable.
+  useEffect(() => {
+    if (disabled) setOpen(false)
+  }, [disabled])
+
   const updateAnchor = useCallback(() => {
     const node = wrapperRef.current
     if (!node) return

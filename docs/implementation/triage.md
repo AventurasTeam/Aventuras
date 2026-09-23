@@ -232,17 +232,6 @@ slice-planning gate forces its resolution before that slice is planned.
   runner artifact rather than real behavior; unverified on a narrow
   Electron window or Android. Surfaced 2026-09-22.
 
-- **Close-on-disable is copied into three components instead of
-  living in the substrate.** `OverflowMenu`
-  (`components/compounds/overflow-menu.tsx`), `EntityPicker`, and
-  `EntryRefPicker` (`components/compounds/`) each carry their own
-  effect closing the overlay when `disabled` flips true.
-  `SearchableOverlayList` already threads a `disabled` prop through
-  its as-trigger mode
-  ([Shape 2](../ui/patterns/searchable-overlay-list.md#shape-2--dialog-wrapping-a-combobox-and-listbox)),
-  which is the one consumer of that mode — moving close-on-disable
-  there would drop all three copies. Surfaced 2026-09-22.
-
 - **`ProviderModelPicker`'s broken-state scroll promises aren't
   implemented.** The
   [Trigger](../ui/patterns/provider-model-picker.md#trigger) section
