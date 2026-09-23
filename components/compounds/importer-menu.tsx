@@ -10,6 +10,7 @@ import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Text } from '@/components/ui/text'
 import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useTier } from '@/hooks/use-tier'
+import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 type ImporterMenuOption = {
@@ -144,47 +145,44 @@ function ImporterMenuItem({
   const tier = useTier()
   const isPhone = tier === 'phone'
   const isDisabled = option.disabled === true
-  const accessibleLabel = isDisabled && option.disabledReason ? option.disabledReason : option.label
+  // Compose, don't replace: the reason alone never says which option it explains.
+  const accessibleLabel =
+    isDisabled && option.disabledReason
+      ? t('common:disabledWithReason', { label: option.label, reason: option.disabledReason })
+      : option.label
 
-  const row = (
-    <Pressable
-      accessibilityRole="menuitem"
-      accessibilityLabel={accessibleLabel}
-      accessibilityState={{ disabled: isDisabled }}
-      disabled={isDisabled}
-      onPress={onSelect}
-      // rn-primitives wrappers don't gate disabled clicks on web.
-      style={isDisabled ? POINTER_EVENTS_NONE : undefined}
-      className={cn(
-        'justify-center rounded-sm px-row-x-md py-row-y-md',
-        isPhone ? 'min-h-control-lg' : 'min-h-control-md',
-        !isDisabled &&
-          cn(
-            'active:bg-tint-press',
-            Platform.select({ web: 'cursor-pointer hover:bg-tint-hover' }) ?? '',
-          ),
-        isDisabled && 'opacity-50',
-      )}
-    >
-      <Text size="sm" className={cn('font-medium', isDisabled && 'text-fg-muted')}>
-        {option.label}
-      </Text>
-      {option.description != null ? (
-        <Text size="xs" variant="muted" className="mt-0.5">
-          {option.description}
+  return (
+    <ReasonTooltip reason={isDisabled ? option.disabledReason : undefined}>
+      <Pressable
+        accessibilityRole="menuitem"
+        accessibilityLabel={accessibleLabel}
+        accessibilityState={{ disabled: isDisabled }}
+        disabled={isDisabled}
+        onPress={onSelect}
+        // rn-primitives wrappers don't gate disabled clicks on web.
+        style={isDisabled ? POINTER_EVENTS_NONE : undefined}
+        className={cn(
+          'justify-center rounded-sm px-row-x-md py-row-y-md',
+          isPhone ? 'min-h-control-lg' : 'min-h-control-md',
+          !isDisabled &&
+            cn(
+              'active:bg-tint-press',
+              Platform.select({ web: 'cursor-pointer hover:bg-tint-hover' }) ?? '',
+            ),
+          isDisabled && 'opacity-50',
+        )}
+      >
+        <Text size="sm" className={cn('font-medium', isDisabled && 'text-fg-muted')}>
+          {option.label}
         </Text>
-      ) : null}
-    </Pressable>
+        {option.description != null ? (
+          <Text size="xs" variant="muted" className="mt-0.5">
+            {option.description}
+          </Text>
+        ) : null}
+      </Pressable>
+    </ReasonTooltip>
   )
-
-  if (isDisabled && option.disabledReason && Platform.OS === 'web') {
-    return (
-      <div title={option.disabledReason} className="flex">
-        {row}
-      </div>
-    )
-  }
-  return row
 }
 
 export type { ImporterMenuOption, ImporterMenuProps }

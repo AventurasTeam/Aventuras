@@ -182,7 +182,9 @@ export const DisabledOptionDoesNotFire: Story = {
   play: async () => {
     const trigger = screen.getByRole('button', { name: /\+ New character/ })
     await userEvent.click(trigger)
-    const vaultItem = await screen.findByRole('menuitem', { name: /Vault library coming later/ })
+    const vaultItem = await screen.findByRole('menuitem', {
+      name: 'From Vault…, Vault library coming later.',
+    })
     expect(vaultItem).toHaveAttribute('aria-disabled', 'true')
     // Don't try to click — the inline `pointerEvents: 'none'` style
     // makes userEvent refuse anyway. The aria-disabled assertion is
