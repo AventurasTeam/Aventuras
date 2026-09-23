@@ -73,6 +73,34 @@ describe('buildSeedSteps', () => {
       ).toBe(true)
     }
   })
+
+  // The entry index skips `system` entries, so an anchor on one renders as dangling.
+  it('anchors every entry ref on an indexable entry', () => {
+    const kindOf = new Map(rowsOf('story_entries').map((r) => [r.id, r.kind]))
+    const refs: [string, unknown][] = [
+      ...rowsOf('threads').flatMap((r): [string, unknown][] => [
+        [`${r.id}.triggeredAt`, r.triggeredAtEntryId],
+        [`${r.id}.resolvedAt`, r.resolvedAtEntryId],
+      ]),
+      ...rowsOf('happenings').map((r): [string, unknown] => [
+        `${r.id}.occurredAt`,
+        r.occurredAtEntryId,
+      ]),
+      ...rowsOf('happening_awareness').map((r): [string, unknown] => [
+        `${r.id}.learnedAt`,
+        r.learnedAtEntryId,
+      ]),
+      ...rowsOf('entities').map((r): [string, unknown] => [
+        `${r.id}.lastSeenAt`,
+        (r.state as { lastSeenAt?: { entryId: string } | null } | null)?.lastSeenAt?.entryId,
+      ]),
+    ]
+    for (const [label, entryId] of refs) {
+      if (entryId == null) continue
+      expect(kindOf.has(entryId), label).toBe(true)
+      expect(kindOf.get(entryId), label).not.toBe('system')
+    }
+  })
 })
 
 // The substitution layer (lib/ids) only rewrites ids matching ID_PATTERN

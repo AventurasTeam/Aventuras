@@ -374,10 +374,11 @@ const heroEntities: NewEntity[] = [
       equipped_items: [ID.blade],
       inventory: [ID.amulet],
       faction_id: ID.watch,
+      // The last entry is a multiple of 12 (`system`); the one before it is a reply.
       lastSeenAt: {
-        entryId: entryId('hero', N_HERO),
+        entryId: entryId('hero', N_HERO - 1),
         locationId: ID.hollow,
-        worldTime: (N_HERO - 1) * 3,
+        worldTime: (N_HERO - 2) * 3,
       },
     }),
     embeddingStale: 1,
@@ -885,8 +886,8 @@ const heroHappenings: NewHappening[] = [
     occurredAtEntryId: entryId('hero', 59),
     commonKnowledge: 0,
     embeddingStale: 1,
-    createdAt: BASE + 48 * MIN,
-    updatedAt: BASE + 48 * MIN,
+    createdAt: BASE + 59 * MIN,
+    updatedAt: BASE + 59 * MIN,
   },
 ]
 

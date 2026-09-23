@@ -338,4 +338,5 @@ chapters` (deferred by canon), and `retrieval_count` review — M5.
   — `LayoutAnimationConfig skipExiting` does not suppress it.
 - **Seed anchors avoid multiples of 12.** Those hero entries are
   `system`, which the entry index excludes by design, so five awareness
-  rows and one `lastSeenAt` were rendering as "Entry no longer exists".
+  rows and two `lastSeenAt` were rendering as "Entry no longer exists".
+  `seed-dataset.test.ts` now fails on any entry ref landing on one.
