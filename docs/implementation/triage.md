@@ -99,20 +99,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `MasterDetailLayout` — in the detail pane on tablet and desktop,
   below both panes on phone — would hold it once. Surfaced 2026-09-14.
 
-- **`useSurfaceNavigate` drops the query when it pops.**
-  `app/world/[branchId].tsx` navigates to
-  `/story-settings/<id>?tab=memory`; when Story Settings is already
-  below World, the hook matches it, strips the query and
-  `router.dismiss(n)`s with no params, so the Memory tab never opens.
-  Fix inside the hook: on a match with a query, dispatch
-  `CommonActions.setParams(query)` with `source` set to the matched
-  route's key before dismissing (unverified whether `setParams`
-  replaces or pushes web history in this fork). Surfaced 2026-09-14.
-  Slice 4.5b's
-  [deep-link params open question](milestones/04-world-plot-read-surfaces/slices/05b-peek-drawer.md#open-questions)
-  covers the same hook for World and Plot links, so resolve the two
-  together.
-
 - **Story Settings → Memory shows embedding status inside the Embedder
   block.** Canon (`story-settings.md` → Memory tab) lists Embedding
   status as its own conditional section after Keyword retrieval,
