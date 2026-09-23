@@ -87,16 +87,6 @@ slice-planning gate forces its resolution before that slice is planned.
   runner artifact rather than real behavior; unverified on a narrow
   Electron window or Android. Surfaced 2026-09-22.
 
-- **`searchable-overlay-list.tsx` is ~1650 lines, and its
-  [Implementation notes](../ui/patterns/searchable-overlay-list.md#implementation-notes)
-  overstate native virtualization.** The doc says virtualization is
-  always on, via `SectionList` on native, but the inline
-  (popover-hosted) native branch, `InlineNativeList`, renders through
-  a plain gesture-handler `ScrollView` with no virtualization — only
-  `SheetNativeList` (the phone-Sheet branch) uses `SectionList`.
-  Moving `InlineNativeList` / `SheetNativeList` into a sibling module
-  would also shrink the file. Surfaced 2026-09-22.
-
 - **`Toolbar` diverges from its own spec.**
   `docs/ui/patterns/toolbar.md → Mechanism` prescribes a CSS container
   query on web (`@container (max-width: 1023px)`, the FormRow

@@ -369,9 +369,9 @@ type NativeListProps<T> = {
   style?: ViewStyle
 }
 
-// Plain ScrollView, not SectionList: nested under the consumer's ScrollView (same
-// orientation) breaks VirtualizedList windowing. Bounded lists skip virtualization fine;
-// sticky headers are dropped (Shape1Inline consumers don't request them).
+// Plain ScrollView, not SectionList: inside Shape1Inline it sits in the consumer's
+// same-direction ScrollView, which breaks VirtualizedList windowing. The native tablet
+// dialog lands here too — unvirtualized, no sticky headers — though it is portaled and could window.
 function InlineNativeList<T>({
   sections,
   renderItem,

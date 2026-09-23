@@ -1281,6 +1281,21 @@ own.
   fix is likely a `width` equal to the measured trigger floored as on
   web, about three lines. Cosmetic: the phone Sheet and desktop are
   correct. Raised 2026-09-22 by Slice 4.3; reframed 2026-09-23.
+- **M9.5 — Native tablet pickers render every row unvirtualized.**
+  `SearchableOverlayList` sends its dialog shape to the inline native
+  list off phone (`RowList variant={isPhone ? 'sheet' : 'inline'}`), a
+  plain gesture-handler `ScrollView`. On an Android tablet or an
+  unfolded Fold, `EntryRefPicker` then mounts every entry on the branch,
+  `ProviderModelPicker` every model of every catalog (hundreds on
+  OpenRouter) and loses its sticky provider headers, and `EntityPicker`
+  every entity — on each open. The popover is portaled to the root
+  `PortalHost`, so the nesting reason that keeps the inline combobox off
+  `SectionList` doesn't hold, and
+  [the pattern's implementation notes](../ui/patterns/searchable-overlay-list.md#implementation-notes)
+  expect `SectionList` there. Porting it means porting the
+  initial-scroll anchor too, roughly 40–80 lines. Not measured: profile
+  an open on a mid-range tablet first. Raised 2026-09-22 by Slice 4.3;
+  widened 2026-09-23.
 - **M9.5 — The retrieval pass has never been measured on mobile.** Every
   figure in
   [`retrieval.md → Per-turn cost budget`](../memory/retrieval.md#per-turn-cost-budget)
