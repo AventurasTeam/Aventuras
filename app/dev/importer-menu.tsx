@@ -67,7 +67,7 @@ export default function ImporterMenuDevRoute() {
   ]
 
   return (
-    <ScrollView className="flex-1 bg-bg-base">
+    <ScrollView keyboardShouldPersistTaps="handled" className="flex-1 bg-bg-base">
       <ThemePicker />
       <View className="flex-col gap-8 p-4">
         <Section title="Per-row entity (+ New character ▾)" log={entityLog.events}>

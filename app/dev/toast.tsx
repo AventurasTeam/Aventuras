@@ -10,7 +10,7 @@ import { toast } from '@/lib/toast'
 export default function ToastDevRoute() {
   return (
     <View className="flex-1 bg-bg-base">
-      <ScrollView contentContainerClassName="flex-grow">
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="flex-grow">
         <ThemePicker />
         <View className="flex-col gap-6 p-4">
           <View>

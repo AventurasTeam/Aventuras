@@ -145,7 +145,7 @@ function WorldCharactersHarness() {
         isEmpty={false}
         emptyState={null}
       >
-        <ScrollView className="flex-1">
+        <ScrollView keyboardShouldPersistTaps="handled" className="flex-1">
           {FAKE_CHARACTERS.map((c) => (
             <FakeListRow key={c.name} label={c.name} subtitle={c.subtitle} />
           ))}
@@ -204,7 +204,7 @@ function PlotThreadsHarness() {
         isEmpty={false}
         emptyState={null}
       >
-        <ScrollView className="flex-1">
+        <ScrollView keyboardShouldPersistTaps="handled" className="flex-1">
           {FAKE_THREADS.map((t) => (
             <FakeListRow key={t.title} label={t.title} subtitle={t.state} />
           ))}
@@ -297,7 +297,7 @@ function WithSortHarness() {
         isEmpty={false}
         emptyState={null}
       >
-        <ScrollView className="flex-1">
+        <ScrollView keyboardShouldPersistTaps="handled" className="flex-1">
           {FAKE_LORE.map((l) => (
             <FakeListRow key={l.title} label={l.title} subtitle={l.cat} />
           ))}
@@ -326,7 +326,7 @@ export const NoFilterChips: Story = {
         isEmpty={false}
         emptyState={null}
       >
-        <ScrollView className="flex-1">
+        <ScrollView keyboardShouldPersistTaps="handled" className="flex-1">
           {FAKE_LORE.map((l) => (
             <FakeListRow key={l.title} label={l.title} subtitle={l.cat} />
           ))}
@@ -375,7 +375,7 @@ function LongListHarness() {
         isEmpty={false}
         emptyState={null}
       >
-        <ScrollView className="flex-1">
+        <ScrollView keyboardShouldPersistTaps="handled" className="flex-1">
           {rows.map((r) => (
             <FakeListRow key={r.name} label={r.name} subtitle={r.subtitle} />
           ))}
@@ -412,7 +412,7 @@ function ThemePaneSample() {
       isEmpty={false}
       emptyState={null}
     >
-      <ScrollView className="flex-1">
+      <ScrollView keyboardShouldPersistTaps="handled" className="flex-1">
         {FAKE_CHARACTERS.slice(0, 4).map((c) => (
           <FakeListRow key={c.name} label={c.name} subtitle={c.subtitle} />
         ))}

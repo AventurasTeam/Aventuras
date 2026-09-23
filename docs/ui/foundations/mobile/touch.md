@@ -150,7 +150,10 @@ and is a no-op on web; wrap the surface's root in it. Scroll
 containers on the surface must also set
 `keyboardShouldPersistTaps="handled"`, or the first tap on any
 control while a field holds focus is consumed dismissing the
-keyboard instead of reaching the control.
+keyboard instead of reaching the control. Lint enforces it: a
+scroller element with no value set fails `no-restricted-syntax`.
+The rule matches element names, so a scroller held in a variable
+(`const Scroller = …`) escapes it and must set the prop by hand.
 
 The platform mechanism (RN's `KeyboardAvoidingView` modes, iOS
 interactive-dismiss vs Android adjust-resize) is **session 6

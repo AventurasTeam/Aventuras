@@ -9,7 +9,7 @@ import { TypeRamp } from './sections/type-ramp'
 
 export function FoundationsExplorer() {
   return (
-    <ScrollView className="flex-1 bg-bg-base">
+    <ScrollView keyboardShouldPersistTaps="handled" className="flex-1 bg-bg-base">
       <ThemePicker />
       <ColorSwatches />
       <TypeRamp />

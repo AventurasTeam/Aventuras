@@ -51,7 +51,7 @@ export function JSONViewer({ open, onOpenChange, name, data, className }: JSONVi
           ) : null}
         </View>
 
-        <ScrollView className="flex-1">
+        <ScrollView keyboardShouldPersistTaps="handled" className="flex-1">
           <JSONBlock data={data} />
         </ScrollView>
 

@@ -327,7 +327,7 @@ function Overlay({
     return (
       <View className="flex-1">
         {header}
-        <BottomSheetScrollView>{rows}</BottomSheetScrollView>
+        <BottomSheetScrollView keyboardShouldPersistTaps="handled">{rows}</BottomSheetScrollView>
       </View>
     )
   }
@@ -350,7 +350,7 @@ function Overlay({
           the gesture-handler ScrollView's web wrapper (RN-Web nests divs
           and the className lands on a wrapper that doesn't constrain the
           scrollable inner). Explicit style avoids the class pipeline. */}
-      <ScrollView style={SCROLL_MAX_HEIGHT} nestedScrollEnabled>
+      <ScrollView keyboardShouldPersistTaps="handled" style={SCROLL_MAX_HEIGHT} nestedScrollEnabled>
         {rows}
       </ScrollView>
     </View>

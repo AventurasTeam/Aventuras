@@ -182,7 +182,7 @@ export function ModuleList<
           </Text>
         </View>
       ) : (
-        <ScrollView ref={scrollRef} className="flex-1">
+        <ScrollView keyboardShouldPersistTaps="handled" ref={scrollRef} className="flex-1">
           <View ref={contentRef}>{list}</View>
         </ScrollView>
       )}

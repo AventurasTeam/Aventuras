@@ -149,27 +149,6 @@ slice-planning gate forces its resolution before that slice is planned.
   yet" from "written but wrong" — their own comments admit the
   coupling. Surfaced 2026-09-16.
 
-- **Nothing makes `keyboardShouldPersistTaps` the default, so most
-  scrollers eat the first tap.** With RN's `"never"` default, a tap
-  landing while a field holds focus is consumed dismissing the
-  keyboard and never reaches the control — every knob reads as dead
-  until tapped twice. Five files set `"handled"`
-  (`components/wizard/wizard-shell.tsx`,
-  `components/compounds/provider-model-picker.tsx`,
-  `components/ui/searchable-overlay-list.tsx` and two dev screens);
-  **twenty-plus do not**, including `components/ui/dialog.tsx`,
-  `ui/alert-dialog.tsx`, `ui/select.tsx`, `ui/multi-select.tsx`,
-  `shells/detail-pane.tsx`, `story/story-list.tsx`,
-  `compounds/scene-edit-form.tsx` and
-  `compounds/collision-resolve-dialog.tsx` — the form-bearing ones
-  bite hardest. Measured on a 420 dpi emulator before the fix: with a
-  field focused, tap 1 on a switch only closed the keyboard, tap 2
-  toggled it. Slice 4.4 set the prop on the two Story Settings
-  scrollers; the rest are untouched, and nothing stops the next new
-  scroller starting wrong. **The ask is a default** — a shared
-  scroller that sets it, or a lint rule — rather than a one-off
-  sweep. Surfaced 2026-09-19.
-
 - **`ListRow`'s `aria-label` drops its status pill, when-marker, and
   ⊙ state from screen readers.** `components/compounds/list-row.tsx`
   sets `aria-label={label}` on the row's Pressable, which replaces

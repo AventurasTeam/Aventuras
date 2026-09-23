@@ -88,6 +88,7 @@ export function DetailPane({
       {tabs != null ? (
         // `grow` lets a flex-1 tab control (DetailTabs' Select) span the pane.
         <ScrollView
+          keyboardShouldPersistTaps="handled"
           horizontal
           showsHorizontalScrollIndicator={false}
           className="flex-none"
@@ -97,7 +98,11 @@ export function DetailPane({
         </ScrollView>
       ) : null}
 
-      <ScrollView className="min-h-0 flex-1" contentContainerClassName="px-row-x-md py-row-y-md">
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        className="min-h-0 flex-1"
+        contentContainerClassName="px-row-x-md py-row-y-md"
+      >
         {children}
       </ScrollView>
 

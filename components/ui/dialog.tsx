@@ -94,7 +94,11 @@ function DialogContent({
           onStartShouldSetResponder={undefined}
         >
           {scrollable ? (
-            <ScrollView className="shrink" contentContainerClassName="gap-4">
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              className="shrink"
+              contentContainerClassName="gap-4"
+            >
               {children}
             </ScrollView>
           ) : (

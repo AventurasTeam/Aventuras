@@ -184,6 +184,7 @@ export function SuggestionStrip({
 
   const chipStack = (
     <ScrollView
+      keyboardShouldPersistTaps="handled"
       style={{ maxHeight: maxStackPx }}
       className={cn(locked && 'opacity-50')}
       contentContainerClassName="gap-1.5"

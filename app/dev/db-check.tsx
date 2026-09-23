@@ -43,7 +43,11 @@ export default function DbCheckDevRoute() {
   }, [run])
 
   return (
-    <ScrollView className="flex-1 bg-bg-base" contentContainerClassName="gap-4 p-4">
+    <ScrollView
+      keyboardShouldPersistTaps="handled"
+      className="flex-1 bg-bg-base"
+      contentContainerClassName="gap-4 p-4"
+    >
       <Text size="lg">DB check — {Platform.OS}</Text>
       <Button variant="secondary" onPress={run} loading={running}>
         <Text>Re-run checks</Text>

@@ -61,7 +61,11 @@ export function StoryList({
   const isEmpty = totalCount === 0
   // flex-grow on contentContainer lets the empty-state's flex-1 centering fill the viewport.
   return (
-    <ScrollView className="flex-1" contentContainerClassName="flex-grow">
+    <ScrollView
+      keyboardShouldPersistTaps="handled"
+      className="flex-1"
+      contentContainerClassName="flex-grow"
+    >
       {banner}
       <View className={isEmpty ? 'flex-1 gap-3 p-4' : 'gap-3 p-4'}>
         <View className="flex-row flex-wrap items-center justify-between gap-2">

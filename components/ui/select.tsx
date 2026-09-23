@@ -206,7 +206,7 @@ function PhoneSheetContent({
                       {label}
                     </Heading>
                   )}
-                  <BottomSheetScrollView className="flex-1">
+                  <BottomSheetScrollView keyboardShouldPersistTaps="handled" className="flex-1">
                     <SelectBase.Viewport>{children}</SelectBase.Viewport>
                   </BottomSheetScrollView>
                   {tailAction != null ? (
@@ -310,6 +310,7 @@ function PopoverContent({
                     children
                   ) : (
                     <ScrollView
+                      keyboardShouldPersistTaps="handled"
                       className="flex-1"
                       contentContainerClassName="flex-grow"
                       nestedScrollEnabled

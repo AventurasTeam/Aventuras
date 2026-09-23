@@ -55,7 +55,11 @@ export default function ProbeCapturesDevRoute() {
   )
 
   return (
-    <ScrollView className="flex-1 bg-bg-base" contentContainerClassName="gap-3 p-4">
+    <ScrollView
+      keyboardShouldPersistTaps="handled"
+      className="flex-1 bg-bg-base"
+      contentContainerClassName="gap-3 p-4"
+    >
       <Text size="lg">Probe captures</Text>
       <View className="flex-row gap-2">
         <Input

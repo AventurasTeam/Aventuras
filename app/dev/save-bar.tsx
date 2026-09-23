@@ -53,7 +53,7 @@ export default function SaveBarDevRoute() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-bg-base">
+    <ScrollView keyboardShouldPersistTaps="handled" className="flex-1 bg-bg-base">
       <ThemePicker />
       <View className="flex-col gap-8 p-4">
         <View className="gap-2">

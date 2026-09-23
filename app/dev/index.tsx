@@ -50,7 +50,11 @@ const ROUTES = [
 
 export default function DevIndex() {
   return (
-    <ScrollView className="flex-1 bg-bg-base" contentContainerClassName="gap-2 p-4">
+    <ScrollView
+      keyboardShouldPersistTaps="handled"
+      className="flex-1 bg-bg-base"
+      contentContainerClassName="gap-2 p-4"
+    >
       <Text size="lg">Dev surfaces</Text>
       {ROUTES.map((r) => (
         <Link key={r.href} href={r.href} asChild>

@@ -9,7 +9,7 @@ const KINDS: EntityKind[] = ['character', 'location', 'item', 'faction']
 
 export default function EntityKindIconDevRoute() {
   return (
-    <ScrollView className="flex-1 bg-bg-base">
+    <ScrollView keyboardShouldPersistTaps="handled" className="flex-1 bg-bg-base">
       <ThemePicker />
       <View className="flex-col gap-8 p-4">
         <View className="gap-3">
