@@ -13,6 +13,11 @@ type InlineEditableNameSize = 'sm' | 'md' | 'lg'
 type InlineEditableNameProps = {
   value: string
   onChange: (next: string) => void
+  /**
+   * The committed value. A change mid-edit is a save landing, and Escape then restores it
+   * instead of the value the edit started from.
+   */
+  savedValue?: string
   placeholder?: string
   disabled?: boolean
   /**
@@ -46,6 +51,7 @@ const GAP: Record<InlineEditableNameSize, string> = {
 export function InlineEditableName({
   value,
   onChange,
+  savedValue,
   placeholder,
   disabled = false,
   size = 'md',
@@ -53,8 +59,12 @@ export function InlineEditableName({
 }: InlineEditableNameProps) {
   const [editing, setEditing] = useState(false)
   // Every keystroke reaches `onChange`, so a save session sees the edit before blur;
-  // Escape puts back the value the edit started from.
+  // Escape puts back the value the edit started from, or the last save made during it.
   const startRef = useRef(value)
+
+  useEffect(() => {
+    if (savedValue !== undefined) startRef.current = savedValue
+  }, [savedValue])
 
   useEffect(() => {
     if (disabled && editing) setEditing(false)

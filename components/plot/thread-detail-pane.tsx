@@ -112,6 +112,7 @@ export function ThreadDetailPane({
                 <InlineEditableName
                   value={field.value}
                   onChange={field.onChange}
+                  savedValue={values.title}
                   placeholder={t('plot:detail.namePlaceholder')}
                   size="lg"
                   disabled={blocked}

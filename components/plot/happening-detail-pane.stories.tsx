@@ -769,6 +769,25 @@ export const SavedHandlerThrows: Story = {
   },
 }
 
+/** Escape after a mid-edit Ctrl-S restores the saved title, not the one the edit started from. */
+export const EscapeAfterSaveKeepsSavedTitle: Story = {
+  play: async ({ args }) => {
+    await userEvent.click(await pane().findByRole('button', { name: 'Edit The alley ambush' }))
+    const input = await pane().findByDisplayValue('The alley ambush')
+    await userEvent.clear(input)
+    await userEvent.type(input, 'The dock ambush')
+    await userEvent.keyboard('{Control>}s{/Control}')
+    await waitFor(() => expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument(), WAIT)
+    expect(input).toHaveFocus()
+
+    await userEvent.type(input, ' again')
+    await userEvent.keyboard('{Escape}')
+    expect(await pane().findByRole('button', { name: 'Edit The dock ambush' })).toBeVisible()
+    expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument()
+    expect(args.onSave).toHaveBeenCalledTimes(1)
+  },
+}
+
 /**
  * A leave requested through the session handle waits on the dialog; the gate disables its Save
  * with the gate's reason, and Discard releases the leave.

@@ -390,6 +390,25 @@ export const TitleSavesBeforeBlur: Story = {
   },
 }
 
+/** Escape after a mid-edit Ctrl-S restores the saved title, not the one the edit started from. */
+export const EscapeAfterSaveKeepsSavedTitle: Story = {
+  play: async ({ args }) => {
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit What the amulet wants' }))
+    const input = await screen.findByDisplayValue('What the amulet wants')
+    await userEvent.clear(input)
+    await userEvent.type(input, 'The amulet wakes')
+    await userEvent.keyboard('{Control>}s{/Control}')
+    await waitFor(() => expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument(), WAIT)
+    expect(input).toHaveFocus()
+
+    await userEvent.type(input, ' again')
+    await userEvent.keyboard('{Escape}')
+    expect(await screen.findByRole('button', { name: 'Edit The amulet wakes' })).toBeVisible()
+    expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument()
+    expect(args.onSave).toHaveBeenCalledTimes(1)
+  },
+}
+
 /** An empty title can't be written: the bar says why and Save disables. */
 export const InvalidTitle: Story = {
   play: async ({ args }) => {
