@@ -58,7 +58,7 @@ slice-planning gate forces its resolution before that slice is planned.
   pressable read state names itself `` `Edit ${value}` ``, or
   `'Edit name'` when empty with no placeholder
   (`components/ui/inline-editable-name.tsx`), bypassing `t()`. Every
-  Plot detail head uses it, and Worlds 4.2a and 4.2b will; stories and
+  Plot detail head uses it, and Slices 4.2a and 4.2b will; stories and
   E2E match the English `Edit …` names, so route them through the same
   key when fixing. Surfaced 2026-09-23.
 
