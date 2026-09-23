@@ -881,6 +881,21 @@ code before it moved; resolve with the slice it names.
   commit; the gap is the canon promise, and the picker's full surface
   lands with this slice's providers tab. Surfaced by Slice 4.4
   execution (2026-09-14), routed 2026-09-16.
+- **M7.1 — App Settings' phone save bar should come from
+  `MasterDetailLayout`, not a copy of Story Settings' shell.** Story
+  Settings lifts its save bar below whichever pane the phone shows
+  ([`touch.md → Save bar on phone`](../ui/foundations/mobile/touch.md#save-bar-on-phone))
+  from `StorySettingsShell` (`components/shells/story-settings-shell.tsx`),
+  which calls `useTier()` itself to know when the layout has collapsed.
+  [`app-settings.md → Mobile expression`](../ui/screens/app-settings/app-settings.md#mobile-expression)
+  makes App Settings' save bar identical, so the save session this
+  milestone adds would copy that lift. A `footer` slot on
+  `MasterDetailLayout` — in the detail pane on tablet and desktop, below
+  both panes on phone — holds it once: about 10 lines in the layout, 6
+  out of the shell. Duplication rather than live drift: both tier reads
+  are `useTier() === 'phone'`. World and Plot don't need it; their
+  per-row sessions guard the collapse instead. Raised 2026-09-14 by
+  Slice 4.4.
 - **M7.1 — `ProviderModelPicker`'s broken-state scroll promises aren't
   implemented.** The
   [Trigger](../ui/patterns/provider-model-picker.md#trigger) section

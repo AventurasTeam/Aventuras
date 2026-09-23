@@ -154,8 +154,12 @@ Phone (< 640 px) — same collapse for all three surface families:
   tabs).
 - **Save-session navigate-away guard** fires on the back action
   if the content is dirty (per
-  [`patterns/save-sessions.md`](../../patterns/save-sessions.md)).
-  Confirm modal asks discard / save; same as desktop.
+  [`patterns/save-sessions.md`](../../patterns/save-sessions.md))
+  when the session is per-row — World and Plot, where back to the
+  list leaves the row. Confirm modal asks discard / save; same as
+  desktop. Settings' session spans every tab, so back to the rail
+  stays inside it: no guard, and the save bar rides below the list
+  per [`touch.md → Save bar on phone`](./touch.md#save-bar-on-phone).
 - **Per-row import** (World/Plot only) and other list-state
   affordances open their modals as on desktop.
 - **List-first on first mount** unless the user navigated to the

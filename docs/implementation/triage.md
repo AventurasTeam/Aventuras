@@ -79,15 +79,6 @@ slice-planning gate forces its resolution before that slice is planned.
   [the compiler-suppression lesson](lessons-learned/exhaustive-deps-suppression-disables-the-compiler.md).
   Surfaced 2026-09-14.
 
-- **The phone save-bar lift lives in the Story Settings shell, not in
-  `MasterDetailLayout`.** The shell calls `useTier()` a second time to
-  guess when the layout has collapsed, which can drift from
-  `MasterDetailLayout`'s own collapse rule. App Settings' save session
-  needs the same lift (`app-settings.md` calls its mobile save bar
-  identical to Story Settings'). A `footer` slot on
-  `MasterDetailLayout` — in the detail pane on tablet and desktop,
-  below both panes on phone — would hold it once. Surfaced 2026-09-14.
-
 - **`ScreenShell`'s chrome is addressed through screen-specific locator
   namespaces.** The back arrow and the Actions menu belong to
   `ScreenShell` (`components/shells/screen-shell.tsx`), not to any one

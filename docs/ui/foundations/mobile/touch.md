@@ -116,7 +116,10 @@ Behavior contract on phone:
 - **Save bar sits at the surface's bottom edge, below whichever
   pane the phone shows** — the tab-list state included — when no
   keyboard is active. A dirty session collapsed back to the list
-  therefore stays saveable without re-entering a detail route.
+  therefore stays saveable without re-entering a detail route. This
+  is the surface-wide session (Settings); a per-row session (World,
+  Plot) guards the collapse instead, per
+  [`collapse.md → Two-pane navigation surfaces`](./collapse.md#two-pane-navigation-surfaces-world-plot-settings).
 - **Save bar stays visible when the soft keyboard opens**, riding
   directly above it. The surface reserves the keyboard's height and
   the panes compress; the bar never slides away and never sits under
