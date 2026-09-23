@@ -79,14 +79,6 @@ slice-planning gate forces its resolution before that slice is planned.
   [the compiler-suppression lesson](lessons-learned/exhaustive-deps-suppression-disables-the-compiler.md).
   Surfaced 2026-09-14.
 
-- **A presented bottom Sheet may not leave the DOM after close in the
-  vitest-browser runner.** Closing a phone bottom Sheet didn't
-  reliably remove it from the DOM under `vitest-browser` during this
-  slice's story work, so a play should assert dismissal through the
-  trigger's `aria-expanded` rather than the sheet's absence. Likely a
-  runner artifact rather than real behavior; unverified on a narrow
-  Electron window or Android. Surfaced 2026-09-22.
-
 - **`Toolbar` diverges from its own spec.**
   `docs/ui/patterns/toolbar.md → Mechanism` prescribes a CSS container
   query on web (`@container (max-width: 1023px)`, the FormRow

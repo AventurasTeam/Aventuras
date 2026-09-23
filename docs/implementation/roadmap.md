@@ -1281,6 +1281,21 @@ own.
   fix is likely a `width` equal to the measured trigger floored as on
   web, about three lines. Cosmetic: the phone Sheet and desktop are
   correct. Raised 2026-09-22 by Slice 4.3; reframed 2026-09-23.
+- **M9.5 — A bottom `Sheet` closed while it is still presenting can
+  stay mounted.** Probed in the Storybook browser runner on 2026-09-23.
+  After a normal close the primitive's content leaves the DOM about
+  690 ms later, when gorhom's dismiss animation ends. A close in the
+  same tick as the open leaves the content mounted off-screen with
+  `open` false and nothing `aria-hidden`, until the next open. And
+  `OverflowMenu`'s phone sheet kept its rows mounted and on screen for
+  3 s after both an item pick and a disable-close, three runs of three,
+  while its trigger reported `aria-expanded="false"`. `sheet.tsx`
+  defers `present()` a tick and calls `dismiss()` only once it has
+  presented, so a `dismiss()` landing mid-present-animation is the
+  likely gap; plays assert dismissal through the trigger's
+  `aria-expanded` meanwhile. Check a narrow Electron window and Android
+  first — a menu sheet left on screen after picking an item would be
+  user-visible. Raised 2026-09-22 by Slice 4.3; probed 2026-09-23.
 - **M9.5 — Native tablet pickers render every row unvirtualized.**
   `SearchableOverlayList` sends its dialog shape to the inline native
   list off phone (`RowList variant={isPhone ? 'sheet' : 'inline'}`), a
