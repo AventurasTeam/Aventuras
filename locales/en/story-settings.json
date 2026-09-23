@@ -28,10 +28,6 @@
     "failed": "Couldn't save your changes. They're still here — try again.",
     "stale": "Saved, but this screen is out of date. Reload to see the current values.",
     "unreadable": "Saved, but this story's settings can no longer be read. Reset them from your library to keep editing.",
-    "unsavedTitle": "Unsaved changes",
-    "unsavedBody": "You have unsaved changes on this screen. Save them, discard them, or stay here.",
-    "unsavedSave": "Save",
-    "unsavedDiscard": "Discard",
     "invalidOnTab": "{{tab}}: {{reason}}"
   },
   "confirm": {

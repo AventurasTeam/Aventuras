@@ -164,7 +164,7 @@ export const storySettings = {
   // Anchoring on the alertdialog role stays unambiguous even with the
   // panel's other two AlertDialogs (delete/reset confirm) in the tree.
   unsavedDialog: (page: Page): Locator =>
-    page.getByRole('alertdialog').filter({ hasText: t('storySettings:save.unsavedTitle') }),
+    page.getByRole('alertdialog').filter({ hasText: t('unsavedChanges.title') }),
 
   // Scoped inside the dialog, not a bare role+name query: the save bar behind
   // it stays in the accessibility tree while the dialog is open (confirmed by
@@ -172,16 +172,12 @@ export const storySettings = {
   // so an unscoped query resolves both this button and the save bar's own
   // "Discard".
   unsavedDiscard: (page: Page): Locator =>
-    storySettings
-      .unsavedDialog(page)
-      .getByRole('button', { name: t('storySettings:save.unsavedDiscard') }),
+    storySettings.unsavedDialog(page).getByRole('button', { name: t('unsavedChanges.discard') }),
 
   // Scoped inside the dialog for the same reason as unsavedDiscard: the save
   // bar behind it also renders a "Save" button, and stays in the a11y tree.
   unsavedSave: (page: Page): Locator =>
-    storySettings
-      .unsavedDialog(page)
-      .getByRole('button', { name: t('storySettings:save.unsavedSave') }),
+    storySettings.unsavedDialog(page).getByRole('button', { name: t('unsavedChanges.save') }),
 
   // The dialog's AlertDialogCancel uses the shared `common:cancel`, not a
   // storySettings-namespaced key.

@@ -56,7 +56,7 @@ export const world = {
   // the count to the tier, distinct from the top-bar reviewPill's.
   tierBadge: (page: Page, tierLabel: string, count: number): Locator =>
     page.getByRole('button', {
-      name: t('world:collision.groupNeedReview', { count, group: tierLabel }),
+      name: t('list.groupNeedReview', { count, group: tierLabel }),
       exact: true,
     }),
 

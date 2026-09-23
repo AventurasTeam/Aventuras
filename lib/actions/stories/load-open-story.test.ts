@@ -2,23 +2,33 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   branches,
+  chapters,
   entities,
+  happeningAwareness,
+  happeningInvolvements,
+  happenings,
   lore,
   storyDefinitionSchema,
   storyEntries,
   storySettingsSchema,
   stories,
+  threads,
   type StoryDefinition,
   type StorySettings,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import {
+  chaptersStore,
   currentStoryStore,
   entitiesStore,
   entriesStore,
+  happeningAwarenessStore,
+  happeningInvolvementsStore,
+  happeningsStore,
   loreStore,
   resetAllStores,
   storiesStore,
+  threadsStore,
 } from '@/lib/stores'
 
 import { loadOpenStory } from './operational'
@@ -131,15 +141,61 @@ describe('loadOpenStory', () => {
       createdAt: 1,
       updatedAt: 1,
     })
+    await db.insert(threads).values({
+      id: 'thread_1',
+      branchId: 'br_1',
+      title: 'Find the key',
+      status: 'active',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await db.insert(happenings).values({
+      id: 'hap_1',
+      branchId: 'br_1',
+      title: 'The gate falls',
+      occurredAtEntryId: 'e_1',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await db.insert(happeningInvolvements).values({
+      id: 'hinv_1',
+      branchId: 'br_1',
+      happeningId: 'hap_1',
+      entityId: 'char_1',
+      role: 'witness',
+    })
+    await db.insert(happeningAwareness).values({
+      id: 'haw_1',
+      branchId: 'br_1',
+      happeningId: 'hap_1',
+      characterId: 'char_1',
+      decayResistance: 0.5,
+    })
+    await db.insert(chapters).values({
+      id: 'chap_1',
+      branchId: 'br_1',
+      sequenceNumber: 1,
+      title: 'One',
+      summary: 'The keep.',
+      theme: 'arrival',
+      keywords: [],
+      startEntryId: 'e_1',
+      endEntryId: 'e_1',
+      tokenCount: 10,
+      closedAt: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    })
 
-    // Spy attached right before the call: only sees loadOpenStory's own reads —
-    // join + entries + entities + lore = 4. More would mean an extra N+1-shaped read.
+    // Counts only loadOpenStory's own reads: join + entries + entities + lore + threads +
+    // happenings + involvements + awareness + chapters = 9; more would mean an N+1 read.
     const selectSpy = vi.spyOn(ctx.db, 'select')
 
     const result = await loadOpenStory('br_1', ctx)
 
     expect(result).toEqual({ status: 'ok', storyId: 'story_1', branchId: 'br_1' })
-    expect(selectSpy).toHaveBeenCalledTimes(4)
+    expect(selectSpy).toHaveBeenCalledTimes(9)
 
     const open = currentStoryStore.getCurrentStory()
     expect(open?.storyId).toBe('story_1')
@@ -156,6 +212,15 @@ describe('loadOpenStory', () => {
     expect(loreStore.getLoadedBranch()).toBe('br_1')
     expect([...loreStore.getLore().values()].map((l) => l.id)).toEqual(['lore_1'])
     expect(loreStore.getById('lore_2')).toBeUndefined()
+
+    expect(threadsStore.getLoadedBranch()).toBe('br_1')
+    expect([...threadsStore.getThreads().values()].map((r) => r.id)).toEqual(['thread_1'])
+    expect(happeningsStore.getLoadedBranch()).toBe('br_1')
+    expect([...happeningsStore.getHappenings().values()].map((r) => r.id)).toEqual(['hap_1'])
+    expect(happeningInvolvementsStore.getByHappening('hap_1').map((r) => r.id)).toEqual(['hinv_1'])
+    expect(happeningAwarenessStore.getByHappening('hap_1').map((r) => r.id)).toEqual(['haw_1'])
+    expect(chaptersStore.getLoadedBranch()).toBe('br_1')
+    expect([...chaptersStore.getChapters().values()].map((r) => r.id)).toEqual(['chap_1'])
 
     expect(storiesStore.getStories().openFailures.story_1).toBeUndefined()
   })

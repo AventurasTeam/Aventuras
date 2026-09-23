@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
 import { View } from 'react-native'
+import { expect, screen, userEvent, waitFor } from 'storybook/test'
+
+import { t } from '@/lib/i18n'
 
 import { ProviderModelPicker, type ModelRef, type ProviderSource } from './provider-model-picker'
 import { Text } from '../ui/text'
@@ -219,6 +222,48 @@ export const LongModelNames: Story = {
       ]}
     />
   ),
+}
+
+// Zero-padded so the ids sort and match unambiguously.
+const BULK_PROVIDER: ProviderSource = {
+  id: 'bulk',
+  name: 'Bulk Provider',
+  models: Array.from({ length: 60 }, (_, i) => ({ id: `model-${String(i).padStart(2, '0')}` })),
+}
+const BULK_SELECTED: ModelRef = { providerId: 'bulk', modelId: 'model-50' }
+
+// The selection is also a favorite, so it has a twin in the strip at the top; the
+// picker must anchor the provider-section row, the one far down the list.
+export const OpensScrolledToSelection: Story = {
+  render: () => (
+    <DemoPicker
+      providers={[ANTHROPIC, BULK_PROVIDER]}
+      initialValue={BULK_SELECTED}
+      initialFavorites={[BULK_SELECTED]}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: t('modelPicker.selectedModel', { modelId: BULK_SELECTED.modelId }),
+      }),
+    )
+    await waitFor(
+      async () => {
+        const listbox = screen.getByRole('listbox')
+        const row = screen
+          .getAllByRole('option', { name: /model-50/ })
+          .find((el) => el.id.endsWith('-provider-bulk-model-50'))
+        await expect(row).toBeDefined()
+        const box = listbox.getBoundingClientRect()
+        const rect = row!.getBoundingClientRect()
+        const center = (rect.top + rect.bottom) / 2
+        await expect(center).toBeGreaterThan(box.top + box.height / 3)
+        await expect(center).toBeLessThan(box.top + (2 * box.height) / 3)
+      },
+      { timeout: 5000 },
+    )
+  },
 }
 
 export const Disabled: Story = {

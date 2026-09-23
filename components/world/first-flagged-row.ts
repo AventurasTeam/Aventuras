@@ -1,5 +1,5 @@
 import { entityListModule } from '@/components/entity/entity-list-module'
-import { arrangeRows, renderOrder } from '@/components/entity/list-module'
+import { arrangeRows, renderOrder } from '@/components/list/list-module'
 import type { Entity, EntityKind } from '@/lib/db'
 import {
   isEntityCategory,

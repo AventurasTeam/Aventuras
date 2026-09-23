@@ -26,12 +26,27 @@ describe('lib/i18n', () => {
     expect(t('settings:diagnosticsHub.comingSoon')).toBe('Diagnostics Hub — coming soon')
     expect(t('storySettings:title')).toBe('Story Settings')
     expect(t('storySettings:tabs.memory')).toBe('Memory')
-    expect(t('storySettings:save.unsavedTitle')).toBe('Unsaved changes')
   })
 
   it('resolves the shared chrome keys from the common namespace', () => {
     expect(t('chrome.appSettings')).toBe('App Settings')
     expect(t('chrome.back')).toBe('Back')
+  })
+
+  it('resolves the shared unsaved-changes-dialog keys from the common namespace', () => {
+    expect(t('unsavedChanges.title')).toBe('Unsaved changes')
+    expect(t('unsavedChanges.body')).toBe(
+      'You have unsaved changes on this screen. Save them, discard them, or stay here.',
+    )
+    expect(t('unsavedChanges.discard')).toBe('Discard')
+    expect(t('unsavedChanges.save')).toBe('Save')
+  })
+
+  it('resolves the shared list-module keys from the common namespace', () => {
+    expect(t('list.groupNeedReview', { count: 1, group: 'Active' })).toBe(
+      '1 in Active needs review',
+    )
+    expect(t('list.groupNeedReview', { count: 2, group: 'Active' })).toBe('2 in Active need review')
   })
 
   it('resolves the world namespace and the shared GO TO / collision-row keys', () => {
@@ -40,12 +55,6 @@ describe('lib/i18n', () => {
     expect(t('world:search.placeholder', { category: 'characters' })).toBe('Search characters…')
     expect(t('world:collision.needReview', { count: 1 })).toBe('1 needs review')
     expect(t('world:collision.needReview', { count: 3 })).toBe('3 need review')
-    expect(t('world:collision.groupNeedReview', { count: 1, group: 'Active' })).toBe(
-      '1 in Active needs review',
-    )
-    expect(t('world:collision.groupNeedReview', { count: 2, group: 'Active' })).toBe(
-      '2 in Active need review',
-    )
     expect(t('world:addMenu.blankEntityReason')).toBe('Lands in Slice 4.2a')
     expect(t('chrome.goTo.header')).toBe('Go to')
     expect(t('chrome.goTo.openWorld')).toBe('Open World')

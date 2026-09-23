@@ -28,10 +28,9 @@ async function accordionSettled(node: View): Promise<void> {
   }
 }
 
-// A reveal is a go-to, so focus follows it; the collapsed-tier badge that asks for one unmounts
-// on expand. Web moves keyboard focus (preventScroll leaves the animated scroll in charge);
-// native moves the screen reader's. The move lands only once the accordion settles, so on web it
-// yields to any surface that took focus meanwhile: a menu opened in that gap would close.
+// A reveal is a go-to: focus follows it once the accordion settles — web moves keyboard focus
+// (preventScroll leaves the animated scroll in charge), native the screen reader's; web yields to
+// any surface that took focus meanwhile — an opened menu isn't stolen back.
 function focusRow(target: View, claimant: Element | null): void {
   if (Platform.OS === 'web') {
     const active = document.activeElement
@@ -63,9 +62,8 @@ function useNodeRefs() {
 }
 
 /**
- * Scrolls to the row a reveal names and moves focus to it, or back to top when `resetKey` changes
- * without one. The caller must mount the row — expanding its group, widening the view — in the
- * same update, and hand `focusRef` to the row's pressable.
+ * Scrolls to the named row and focuses it, or resets to top when `resetKey` changes without one.
+ * Caller must mount the row in the same update (e.g. expand its group) and wire `focusRef` to it.
  */
 export function useRevealScroll(reveal: RevealRequest | null, resetKey: string) {
   const scrollRef = useRef<ScrollView>(null)

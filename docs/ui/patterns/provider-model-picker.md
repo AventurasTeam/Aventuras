@@ -175,7 +175,9 @@ the top of the scroll region, `🔍` and `×`-clear adornments,
 placeholder `Search models…`, autofocused on open. Not pre-filled
 from the current selection: opening shows the full list with the
 current selection scroll-anchored mid-viewport via the substrate's
-`initialScrollRowId`.
+`initialScrollRowId`. The anchor is the selection's provider-section
+row, not its Favorites-strip twin — the strip already sits at the
+top, so only the provider row moves anything.
 
 ### Sections + rows
 

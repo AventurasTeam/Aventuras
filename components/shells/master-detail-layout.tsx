@@ -69,7 +69,7 @@ export function MasterDetailLayout({
   return (
     <View className={cn('flex-1 flex-col bg-bg-base', className)}>
       {subHeader != null ? (
-        <View className="flex-row items-center border-b border-border bg-bg-base px-row-x-md py-row-y-sm">
+        <View className="flex-row items-center border-b border-border bg-bg-base px-row-x-md">
           {subHeader}
         </View>
       ) : null}

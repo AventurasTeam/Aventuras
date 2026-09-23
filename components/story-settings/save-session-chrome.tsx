@@ -1,12 +1,12 @@
 import { View } from 'react-native'
 
 import { SaveBar } from '@/components/compounds/save-bar'
+import { UnsavedChangesDialog } from '@/components/compounds/unsaved-changes-dialog'
 import { t } from '@/lib/i18n'
 
 import { DefinitionalChangeDialog } from './definitional-change-dialog'
 import { useStorySettingsSaveSession } from './save-session'
 import type { SaveSessionSnapshot } from './save-session-state'
-import { UnsavedChangesDialog } from './unsaved-changes-dialog'
 
 type DialogGateProps = {
   blocked?: boolean

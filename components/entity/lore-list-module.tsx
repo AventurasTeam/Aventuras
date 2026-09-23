@@ -1,8 +1,8 @@
+import type { ListModule } from '@/components/list/list-module'
 import type { Lore } from '@/lib/db'
 import { t } from '@/lib/i18n'
-import { LORE_SEARCH_SCOPE, queryLore } from '@/lib/list-modules'
+import { LORE_SEARCH_SCOPE, queryLore, type EntityListSignals } from '@/lib/list-modules'
 
-import type { ListModule } from './list-module'
 import { LoreRow } from './lore-row'
 import { worldListCopy } from './world-list-copy'
 
@@ -11,7 +11,7 @@ export const LORE_FILTER = 'all' as const
 
 const NO_FILTERS: readonly (typeof LORE_FILTER)[] = []
 
-export const loreListModule: ListModule<Lore, typeof LORE_FILTER> = {
+export const loreListModule: ListModule<Lore, typeof LORE_FILTER, EntityListSignals> = {
   filters: () => NO_FILTERS,
   query: (rows, input) => queryLore(rows, { search: input.search }),
   grouping: null,

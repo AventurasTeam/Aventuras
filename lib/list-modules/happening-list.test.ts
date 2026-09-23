@@ -1,0 +1,165 @@
+import { describe, expect, it } from 'vitest'
+
+import type { Happening } from '@/lib/db'
+import type { EntryIndex, EntryRef } from '@/lib/entry-refs'
+import type { PlotListSignals } from '@/lib/list-modules'
+
+import {
+  groupHappeningsByBucket,
+  happeningBucket,
+  happeningFilters,
+  queryHappenings,
+} from './happening-list'
+
+function entry(id: string, position: number, chapterId: string | null): EntryRef {
+  return { id, position, kind: 'ai_reply', chapterId, excerpt: '' }
+}
+
+const ENTRIES: EntryIndex = new Map(
+  [
+    entry('e1', 1, 'chap_1'),
+    entry('e2', 2, 'chap_1'),
+    entry('e3', 3, null),
+    entry('e4', 4, null),
+  ].map((e) => [e.id, e]),
+)
+
+function happening(id: string, title: string, extra: Partial<Happening> = {}): Happening {
+  return {
+    id,
+    branchId: 'br_1',
+    title,
+    description: null,
+    category: null,
+    icon: null,
+    temporal: null,
+    occurredAtEntryId: null,
+    commonKnowledge: 0,
+    embeddingStale: 1,
+    createdAt: 1,
+    updatedAt: 1,
+    ...extra,
+  }
+}
+
+// Both fields null: classifier writes this when a turn handle doesn't resolve (plan.ts).
+// data-model.md: null occurredAtEntryId = outside narrative → trailing block, not Current.
+const NONE_ROW = happening('h_none', 'Vanished entirely')
+
+const ROWS = [
+  happening('h_e3', 'Ambush', { occurredAtEntryId: 'e3' }),
+  happening('h_e1', 'Arrival', { occurredAtEntryId: 'e1', category: 'omen' }),
+  happening('h_temporal', 'Old betrayal', {
+    temporal: 'years past',
+    description: 'Sage sold them.',
+  }),
+  happening('h_e4', 'Market fire', { occurredAtEntryId: 'e4', commonKnowledge: 1 }),
+  happening('h_dangling', 'Rolled away', { occurredAtEntryId: 'gone' }),
+  NONE_ROW,
+]
+
+const WITH_CHAPTERS: PlotListSignals = { entries: ENTRIES, hasClosedChapters: true }
+const NO_CHAPTERS: PlotListSignals = {
+  entries: new Map([...ENTRIES].map(([id, e]) => [id, { ...e, chapterId: null }])),
+  hasClosedChapters: false,
+}
+
+describe('happeningBucket', () => {
+  it('buckets by the anchor entry chapter, temporal last, dangling in Current', () => {
+    expect(happeningBucket(ROWS[0], ENTRIES)).toBe('current')
+    expect(happeningBucket(ROWS[1], ENTRIES)).toBe('earlier')
+    expect(happeningBucket(ROWS[2], ENTRIES)).toBe('out-of-narrative')
+    expect(happeningBucket(ROWS[4], ENTRIES)).toBe('current')
+  })
+
+  it('buckets a both-null row (no anchor, no temporal) to Out of narrative', () => {
+    expect(happeningBucket(NONE_ROW, ENTRIES)).toBe('out-of-narrative')
+  })
+})
+
+describe('queryHappenings', () => {
+  it('sorts by entry position DESC, dangling after anchored, temporal in a last block', () => {
+    expect(
+      queryHappenings(ROWS, { search: '', filter: 'all' }, WITH_CHAPTERS).map((r) => r.id),
+    ).toEqual(['h_e4', 'h_e3', 'h_e1', 'h_dangling', 'h_temporal', 'h_none'])
+  })
+
+  it('breaks a shared anchor position by createdAt DESC, not title order', () => {
+    // Title order (Alpha < Zephyr) would put the older row first if the createdAt
+    // tie-break were dropped — proves the tie-break fires, not title collate.
+    const older = happening('h_e4_old', 'Alpha', { occurredAtEntryId: 'e4', createdAt: 5 })
+    const newer = happening('h_e4_new', 'Zephyr', { occurredAtEntryId: 'e4', createdAt: 9 })
+    expect(
+      queryHappenings([older, newer], { search: '', filter: 'all' }, WITH_CHAPTERS).map(
+        (r) => r.id,
+      ),
+    ).toEqual(['h_e4_new', 'h_e4_old'])
+  })
+
+  it('orders two out-of-narrative rows by title, not createdAt or insertion order', () => {
+    // Passed in reverse-title order with createdAt disagreeing with title order too, so
+    // neither insertion order nor a stray createdAt tie-break can pass this by accident.
+    const zenith = happening('h_out_z', 'Zenith fall', {
+      temporal: 'even longer ago',
+      createdAt: 20,
+    })
+    const amber = happening('h_out_a', 'Amber dusk', { temporal: 'long ago', createdAt: 1 })
+    expect(
+      queryHappenings([zenith, amber], { search: '', filter: 'all' }, WITH_CHAPTERS).map(
+        (r) => r.id,
+      ),
+    ).toEqual(['h_out_a', 'h_out_z'])
+  })
+
+  it('narrows per chip', () => {
+    const ids = (filter: Parameters<typeof queryHappenings>[1]['filter']) =>
+      queryHappenings(ROWS, { search: '', filter }, WITH_CHAPTERS).map((r) => r.id)
+    expect(ids('this-chapter')).toEqual(['h_e4', 'h_e3', 'h_dangling'])
+    expect(ids('common-knowledge')).toEqual(['h_e4'])
+    expect(ids('out-of-narrative')).toEqual(['h_temporal', 'h_none'])
+  })
+
+  it('searches title, description and category', () => {
+    expect(
+      queryHappenings(ROWS, { search: 'sold', filter: 'all' }, WITH_CHAPTERS).map((r) => r.id),
+    ).toEqual(['h_temporal'])
+    expect(
+      queryHappenings(ROWS, { search: 'market', filter: 'all' }, WITH_CHAPTERS).map((r) => r.id),
+    ).toEqual(['h_e4'])
+    expect(
+      queryHappenings(ROWS, { search: 'omen', filter: 'all' }, WITH_CHAPTERS).map((r) => r.id),
+    ).toEqual(['h_e1'])
+  })
+})
+
+describe('groupHappeningsByBucket', () => {
+  it('orders Current, Earlier, Out of narrative and omits empty buckets', () => {
+    const all = queryHappenings(ROWS, { search: '', filter: 'all' }, WITH_CHAPTERS)
+    expect(
+      groupHappeningsByBucket(all, WITH_CHAPTERS).groups.map((g) => [
+        g.key,
+        g.rows.map((r) => r.id),
+      ]),
+    ).toEqual([
+      ['current', ['h_e4', 'h_e3', 'h_dangling']],
+      ['earlier', ['h_e1']],
+      ['out-of-narrative', ['h_temporal', 'h_none']],
+    ])
+  })
+
+  it('collapses to Current plus Out of narrative while no chapter has closed', () => {
+    const all = queryHappenings(ROWS, { search: '', filter: 'all' }, NO_CHAPTERS)
+    expect(groupHappeningsByBucket(all, NO_CHAPTERS).groups.map((g) => g.key)).toEqual([
+      'current',
+      'out-of-narrative',
+    ])
+  })
+})
+
+describe('happeningFilters', () => {
+  it('offers This chapter only once a chapter has closed', () => {
+    expect(happeningFilters(WITH_CHAPTERS)).toContain('this-chapter')
+    expect(happeningFilters(NO_CHAPTERS)).not.toContain('this-chapter')
+    expect(happeningFilters(NO_CHAPTERS)).toBe(happeningFilters(NO_CHAPTERS))
+  })
+})

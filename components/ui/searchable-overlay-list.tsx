@@ -1,4 +1,8 @@
-import { BottomSheetSectionList } from '@gorhom/bottom-sheet'
+import {
+  BottomSheetSectionList,
+  SCROLLABLE_STATUS,
+  useBottomSheetInternal,
+} from '@gorhom/bottom-sheet'
 import * as PopoverPrimitive from '@rn-primitives/popover'
 import { Portal } from '@rn-primitives/portal'
 import { defaultRangeExtractor, useVirtualizer, type Range } from '@tanstack/react-virtual'
@@ -14,6 +18,8 @@ import {
   useState,
   type CSSProperties,
   type ComponentProps,
+  type ComponentRef,
+  type ReactElement,
   type ReactNode,
   type Ref,
 } from 'react'
@@ -23,11 +29,15 @@ import {
   Pressable,
   StyleSheet,
   View,
+  type LayoutChangeEvent,
+  type SectionList,
   type TextInputKeyPressEvent,
   type ViewStyle,
 } from 'react-native'
 import { ScrollView as GHScrollView } from 'react-native-gesture-handler'
+import { useAnimatedReaction } from 'react-native-reanimated'
 import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
+import { scheduleOnRN } from 'react-native-worklets'
 
 import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
@@ -89,6 +99,12 @@ type SearchableOverlayListProps<T> = {
   // surface in multiple sections — e.g. the picker marks the same model in
   // both the Favorites strip and its provider section.
   selectedRowIds?: readonly string[]
+  /**
+   * Scrolls to mid-viewport once per open, after rows lay out — not re-applied on query
+   * changes, no-op if the row is absent from `sections`. Independent of `selectedRowIds`
+   * and of the keyboard highlight, which still opens empty.
+   */
+  initialScrollRowId?: string
 
   // Web-only opt-in: the Shape 2 popover is at least as wide as its trigger
   // (with a floor so a narrow trigger doesn't crush content). Use for
@@ -205,6 +221,27 @@ function findRowSection<T>(
   return null
 }
 
+// Latches on each closed → open transition (only if the row is listed then) — a query
+// that re-shapes `sections` while open never re-fires it; `vetoOpening` blocks an open landing.
+function useInitialScrollTarget<T>(
+  open: boolean,
+  rowId: string | undefined,
+  sections: Section<T>[],
+): { target: string | null; clear: () => void; vetoOpening: () => void } {
+  const [latchedOpen, setLatchedOpen] = useState(false)
+  const [target, setTarget] = useState<string | null>(null)
+  const [vetoed, setVetoed] = useState(false)
+  if (open !== latchedOpen) {
+    setLatchedOpen(open)
+    setVetoed(false)
+    const listed = rowId != null && findRowSection(sections, rowId) != null
+    setTarget(open && !vetoed && listed ? rowId : null)
+  }
+  const clear = useCallback(() => setTarget(null), [])
+  const vetoOpening = useCallback(() => setVetoed(true), [])
+  return { target, clear, vetoOpening }
+}
+
 // Centralised query + highlight state shared across the two shapes.
 function useSearchableList<T>(props: SearchableOverlayListProps<T>) {
   const { onQueryChange, sections, valueLabel, searchPlacement } = props
@@ -313,11 +350,244 @@ type RowListProps<T> = {
   variant: 'inline' | 'sheet'
   listboxId: string
   rowIdPrefix: string
+  pendingScrollRowId: string | null
+  onInitialScrollDone: () => void
   className?: string
   style?: ViewStyle
 }
 
 const ROW_DIVIDER = <View className="mx-3 h-px bg-border" />
+
+type NativeListProps<T> = {
+  sections: Section<T>[]
+  renderItem: (item: Row<T>, onLayout?: (e: LayoutChangeEvent) => void) => ReactElement
+  renderHeader: (header: ReactNode) => ReactElement
+  pendingScrollRowId: string | null
+  onInitialScrollDone: () => void
+  listboxId: string
+  className?: string
+  style?: ViewStyle
+}
+
+// Plain ScrollView, not SectionList: nested under the consumer's ScrollView (same
+// orientation) breaks VirtualizedList windowing. Bounded lists skip virtualization fine;
+// sticky headers are dropped (Shape1Inline consumers don't request them).
+function InlineNativeList<T>({
+  sections,
+  renderItem,
+  renderHeader,
+  pendingScrollRowId,
+  onInitialScrollDone,
+  listboxId,
+  className,
+  style,
+}: NativeListProps<T>) {
+  const scrollRef = useRef<ComponentRef<typeof GHScrollView>>(null)
+  const [viewportHeight, setViewportHeight] = useState(0)
+  const [contentHeight, setContentHeight] = useState(0)
+  const [targetFrame, setTargetFrame] = useState<{ id: string; y: number; height: number } | null>(
+    null,
+  )
+
+  useEffect(() => {
+    if (pendingScrollRowId == null) return
+    if (findRowSection(sections, pendingScrollRowId) == null) {
+      onInitialScrollDone()
+      return
+    }
+    if (!viewportHeight || !contentHeight || targetFrame?.id !== pendingScrollRowId) return
+    const centered = targetFrame.y + targetFrame.height / 2 - viewportHeight / 2
+    // iOS doesn't clamp a programmatic offset to the content bounds.
+    const y = Math.min(Math.max(centered, 0), Math.max(contentHeight - viewportHeight, 0))
+    scrollRef.current?.scrollTo({ y, animated: false })
+    setTargetFrame(null)
+    onInitialScrollDone()
+  }, [
+    pendingScrollRowId,
+    sections,
+    viewportHeight,
+    contentHeight,
+    targetFrame,
+    onInitialScrollDone,
+  ])
+
+  // Measured only while a scroll is pending, so lists without one never re-render on
+  // layout. Sections render as Fragments so a row's layout y is relative to the content.
+  const measuring = pendingScrollRowId != null
+  return (
+    <GHScrollView
+      ref={scrollRef}
+      nativeID={listboxId}
+      accessibilityRole="list"
+      keyboardShouldPersistTaps="handled"
+      nestedScrollEnabled
+      onLayout={measuring ? (e) => setViewportHeight(e.nativeEvent.layout.height) : undefined}
+      onContentSizeChange={measuring ? (_w, h) => setContentHeight(h) : undefined}
+      className={className}
+      style={style}
+    >
+      {sections.map((section) => (
+        <Fragment key={section.id}>
+          {section.header != null ? renderHeader(section.header) : null}
+          {section.rows.map((row) =>
+            renderItem(
+              row,
+              row.id === pendingScrollRowId
+                ? (e) => {
+                    const { y, height } = e.nativeEvent.layout
+                    setTargetFrame({ id: row.id, y, height })
+                  }
+                : undefined,
+            ),
+          )}
+        </Fragment>
+      ))}
+    </GHScrollView>
+  )
+}
+
+const SCROLL_TO_ROW_RETRIES = 10
+const SCROLL_TO_ROW_RETRY_MS = 50
+
+// Sheet variant: gorhom's BottomSheetSectionList registers with the sheet's gesture/keyboard
+// system — a plain SectionList's touches conflict with the drag and won't shrink for the keyboard.
+function SheetNativeList<T>({
+  sections,
+  renderItem,
+  renderHeader,
+  query,
+  pendingScrollRowId,
+  onInitialScrollDone,
+  listboxId,
+  className,
+  style,
+}: NativeListProps<T> & { query: string }) {
+  const listRef = useRef<SectionList<Row<T>>>(null)
+  const { animatedScrollableStatus } = useBottomSheetInternal()
+
+  // Centering state lives in refs so a list with nothing to center never re-renders. Re-centered
+  // on each resize (open-animation padding and keyboard land late) until the user drags or types.
+  const sectionsRef = useRef(sections)
+  const anchorRowIdRef = useRef<string | null>(null)
+  const viewportHeightRef = useRef(0)
+  const unlockedRef = useRef(false)
+  const retryRef = useRef<{ rowId: string; attempts: number } | null>(null)
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useLayoutEffect(() => {
+    sectionsRef.current = sections
+  }, [sections])
+
+  useEffect(
+    () => () => {
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current)
+    },
+    [],
+  )
+
+  const scrollToRow = useCallback((rowId: string) => {
+    const found = findRowSection(sectionsRef.current, rowId)
+    if (found == null) return
+    // SectionList's itemIndex counts the section header as item 0.
+    listRef.current?.scrollToLocation({
+      sectionIndex: found.sectionIdx,
+      itemIndex: found.rowIdx + 1,
+      viewPosition: 0.5,
+      animated: false,
+    })
+  }, [])
+
+  // gorhom snaps the scrollable back to top on any scroll while short of its detent (LOCKED,
+  // e.g. mid open-animation) — nothing scrolls until UNLOCKED.
+  const centerAnchor = useCallback(() => {
+    const rowId = anchorRowIdRef.current
+    if (rowId == null || !unlockedRef.current || !viewportHeightRef.current) return
+    retryRef.current = { rowId, attempts: 0 }
+    scrollToRow(rowId)
+  }, [scrollToRow])
+
+  const handleUnlockedChange = useCallback(
+    (unlocked: boolean) => {
+      unlockedRef.current = unlocked
+      if (unlocked) centerAnchor()
+    },
+    [centerAnchor],
+  )
+  useAnimatedReaction(
+    () => animatedScrollableStatus.get() === SCROLLABLE_STATUS.UNLOCKED,
+    (unlocked, previous) => {
+      if (unlocked !== previous) scheduleOnRN(handleUnlockedChange, unlocked)
+    },
+  )
+
+  const releaseAnchor = useCallback(() => {
+    anchorRowIdRef.current = null
+    retryRef.current = null
+  }, [])
+
+  useEffect(() => {
+    releaseAnchor()
+  }, [query, releaseAnchor])
+
+  useEffect(() => {
+    if (pendingScrollRowId == null) return
+    anchorRowIdRef.current = pendingScrollRowId
+    onInitialScrollDone()
+    centerAnchor()
+  }, [pendingScrollRowId, onInitialScrollDone, centerAnchor])
+
+  // Without getItemLayout a target past the measured cells fails: jump to its estimated
+  // offset so the list renders it, then retry once those cells have measured.
+  const handleScrollToIndexFailed = useCallback(
+    (info: { index: number; averageItemLength: number }) => {
+      const pending = retryRef.current
+      if (pending == null || pending.attempts >= SCROLL_TO_ROW_RETRIES) return
+      pending.attempts += 1
+      listRef.current
+        ?.getScrollResponder()
+        ?.scrollTo({ y: info.averageItemLength * info.index, animated: false })
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current)
+      retryTimerRef.current = setTimeout(() => {
+        retryTimerRef.current = null
+        if (retryRef.current === pending && unlockedRef.current) scrollToRow(pending.rowId)
+      }, SCROLL_TO_ROW_RETRY_MS)
+    },
+    [scrollToRow],
+  )
+
+  const anySticky = sections.some((s) => s.sticky)
+  return (
+    <BottomSheetSectionList
+      ref={listRef}
+      sections={sections.map((s) => ({
+        key: s.id,
+        header: s.header,
+        sticky: s.sticky,
+        data: s.rows,
+      }))}
+      keyExtractor={(row) => row.id}
+      stickySectionHeadersEnabled={anySticky}
+      keyboardShouldPersistTaps="handled"
+      className={className}
+      style={style}
+      ItemSeparatorComponent={() => ROW_DIVIDER}
+      nativeID={listboxId}
+      accessibilityRole="list"
+      onLayout={(e) => {
+        const { height } = e.nativeEvent.layout
+        if (height === viewportHeightRef.current) return
+        viewportHeightRef.current = height
+        centerAnchor()
+      }}
+      onScrollBeginDrag={releaseAnchor}
+      onScrollToIndexFailed={handleScrollToIndexFailed}
+      renderSectionHeader={({ section }) =>
+        section.header != null ? renderHeader(section.header) : null
+      }
+      renderItem={({ item }) => renderItem(item)}
+    />
+  )
+}
 
 // Native side uses SectionList for free sticky headers when any section requests them.
 function RowListNative<T>({
@@ -331,6 +601,8 @@ function RowListNative<T>({
   variant,
   listboxId,
   rowIdPrefix,
+  pendingScrollRowId,
+  onInitialScrollDone,
   className,
   style,
 }: RowListProps<T>) {
@@ -343,12 +615,13 @@ function RowListNative<T>({
     )
   }
   const rowClass = variant === 'sheet' ? ROW_PHONE : ROW_DESKTOP
-  const renderItem = (item: Row<T>) => {
+  const renderItem = (item: Row<T>, onLayout?: (e: LayoutChangeEvent) => void) => {
     const highlighted = item.id === highlightedId
     const selected = selectedRowIds?.has(item.id) ?? false
     return (
       <Pressable
         key={item.id}
+        onLayout={onLayout}
         nativeID={`${rowIdPrefix}-${item.id}`}
         role="button"
         // aria-selected on web reflects committed selection; on native the
@@ -386,58 +659,20 @@ function RowListNative<T>({
     </View>
   )
 
-  // Inline variant (Shape1Inline's anchored popover) eagerly renders rows
-  // inside a gesture-handler ScrollView. SectionList would warn here because
-  // it's nested under the consumer's page ScrollView (same orientation, breaks
-  // VirtualizedList windowing). Autocomplete-shaped lists are bounded enough
-  // that virtualization isn't a real loss; sticky-header support is dropped on
-  // this branch (Shape1Inline consumers don't request sticky sections).
-  if (variant === 'inline') {
-    return (
-      <GHScrollView
-        nativeID={listboxId}
-        accessibilityRole="list"
-        keyboardShouldPersistTaps="handled"
-        nestedScrollEnabled
-        className={className}
-        style={style}
-      >
-        {sections.map((section) => (
-          <View key={section.id}>
-            {section.header != null ? renderHeader(section.header) : null}
-            {section.rows.map(renderItem)}
-          </View>
-        ))}
-      </GHScrollView>
-    )
+  const listProps: NativeListProps<T> = {
+    sections,
+    renderItem,
+    renderHeader,
+    pendingScrollRowId,
+    onInitialScrollDone,
+    listboxId,
+    className,
+    style,
   }
-
-  // Sheet variant — gorhom's BottomSheetSectionList registers with the sheet's
-  // gesture / keyboard system; a plain SectionList renders but its touches
-  // conflict with the sheet's drag and its scroll region doesn't shrink for
-  // the keyboard.
-  const anySticky = sections.some((s) => s.sticky)
-  return (
-    <BottomSheetSectionList
-      sections={sections.map((s) => ({
-        key: s.id,
-        header: s.header,
-        sticky: s.sticky,
-        data: s.rows,
-      }))}
-      keyExtractor={(row) => row.id}
-      stickySectionHeadersEnabled={anySticky}
-      keyboardShouldPersistTaps="handled"
-      className={className}
-      style={style}
-      ItemSeparatorComponent={() => ROW_DIVIDER}
-      nativeID={listboxId}
-      accessibilityRole="list"
-      renderSectionHeader={({ section }) =>
-        section.header != null ? renderHeader(section.header) : null
-      }
-      renderItem={({ item }) => renderItem(item)}
-    />
+  return variant === 'inline' ? (
+    <InlineNativeList {...listProps} />
+  ) : (
+    <SheetNativeList {...listProps} query={query} />
   )
 }
 
@@ -453,6 +688,8 @@ function RowListWeb<T>({
   variant,
   listboxId,
   rowIdPrefix,
+  pendingScrollRowId,
+  onInitialScrollDone,
   className,
   style,
 }: RowListProps<T>) {
@@ -474,6 +711,8 @@ function RowListWeb<T>({
       variant={variant}
       listboxId={listboxId}
       rowIdPrefix={rowIdPrefix}
+      pendingScrollRowId={pendingScrollRowId}
+      onInitialScrollDone={onInitialScrollDone}
       className={className}
       style={style}
     />
@@ -543,6 +782,8 @@ type VirtualizedRowListProps<T> = {
   variant: 'inline' | 'sheet'
   listboxId: string
   rowIdPrefix: string
+  pendingScrollRowId: string | null
+  onInitialScrollDone: () => void
   className?: string
   style?: ViewStyle
 }
@@ -556,6 +797,8 @@ function VirtualizedRowList<T>({
   variant,
   listboxId,
   rowIdPrefix,
+  pendingScrollRowId,
+  onInitialScrollDone,
   className,
   style,
 }: VirtualizedRowListProps<T>) {
@@ -586,6 +829,15 @@ function VirtualizedRowList<T>({
     overscan: 8,
     rangeExtractor,
   })
+
+  // Declared before the highlight effect so a same-commit highlight scroll wins.
+  // scrollToIndex keeps re-targeting while rows measure, so one call lands centered.
+  useEffect(() => {
+    if (pendingScrollRowId == null) return
+    const idx = items.findIndex((it) => it.kind === 'row' && it.row.id === pendingScrollRowId)
+    if (idx >= 0) virtualizer.scrollToIndex(idx, { align: 'center' })
+    onInitialScrollDone()
+  }, [pendingScrollRowId, items, virtualizer, onInitialScrollDone])
 
   // Keep the keyboard-highlighted row inside the viewport while the user arrows
   // through long lists. `align: 'auto'` only scrolls when out of view.
@@ -848,6 +1100,11 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
 
   const list = useSearchableList(props)
   const selectedRowIdsSet = useSelectedSet(props.selectedRowIds)
+  const { target: pendingScrollRowId, clear: clearInitialScroll } = useInitialScrollTarget(
+    open,
+    props.initialScrollRowId,
+    sections,
+  )
 
   // Reset query state on each open / close transition.
   const wasOpenRef = useRef(open)
@@ -967,7 +1224,12 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
     <>
       <SearchInput
         query={list.query}
-        onQueryChange={list.setQuery}
+        onQueryChange={(q) => {
+          // Typing before a deferred initial scroll lands (native waits out the sheet's
+          // open animation) supersedes it.
+          clearInitialScroll()
+          list.setQuery(q)
+        }}
         placeholder={searchPlaceholder}
         showLeadingGlyph
         onKeyPress={onKeyPress}
@@ -990,6 +1252,8 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
         variant={isPhone ? 'sheet' : 'inline'}
         listboxId={listboxId}
         rowIdPrefix={rowIdPrefix}
+        pendingScrollRowId={pendingScrollRowId}
+        onInitialScrollDone={clearInitialScroll}
         // Sheet has p-6 outer padding — bleed rows full-width via -mx-6 so dividers /
         // tint hover reach the sheet edge. Popover has p-4 + lighter row chrome, so no
         // bleed (rows respect the container padding; text aligns with the search field).
@@ -1110,6 +1374,11 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
   // whole-object reference (which is new every render) — preserves Input focus across renders.
   const { setQuery, moveHighlight, query: currentQuery, highlightedId } = list
   const [open, setOpen] = useState(false)
+  const {
+    target: pendingScrollRowId,
+    clear: clearInitialScroll,
+    vetoOpening: vetoInitialScroll,
+  } = useInitialScrollTarget(open, props.initialScrollRowId, sections)
   const wrapperRef = useRef<View>(null)
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const portalName = useId()
@@ -1279,6 +1548,8 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
         variant="inline"
         listboxId={listboxId}
         rowIdPrefix={rowIdPrefix}
+        pendingScrollRowId={pendingScrollRowId}
+        onInitialScrollDone={clearInitialScroll}
         style={STATIC_STYLES.flex1}
       />
       {renderFooter ? (
@@ -1300,7 +1571,11 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
         query={list.query}
         onQueryChange={(v) => {
           list.setQuery(v)
-          if (!disabled) setOpen(true)
+          if (disabled) return
+          // Typing supersedes the initial scroll, including the keystroke that opens.
+          if (open) clearInitialScroll()
+          else vetoInitialScroll()
+          setOpen(true)
         }}
         onClear={handleClearText}
         placeholder={searchPlaceholder ?? valueLabel}

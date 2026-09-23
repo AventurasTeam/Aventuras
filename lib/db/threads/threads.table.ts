@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
-import { INJECTION_MODES } from '../enums'
+import { INJECTION_MODES, THREAD_STATUSES } from '../enums'
 import { branches } from '../stories/stories.table'
 
 export const threads = sqliteTable(
@@ -15,7 +15,7 @@ export const threads = sqliteTable(
     description: text('description'),
     category: text('category'),
     icon: text('icon'),
-    status: text('status', { enum: ['pending', 'active', 'resolved', 'failed'] }).notNull(),
+    status: text('status', { enum: THREAD_STATUSES }).notNull(),
     injectionMode: text('injection_mode', { enum: INJECTION_MODES }).notNull(),
     triggeredAtEntryId: text('triggered_at_entry_id'),
     resolvedAtEntryId: text('resolved_at_entry_id'),

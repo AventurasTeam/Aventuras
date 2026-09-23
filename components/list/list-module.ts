@@ -2,7 +2,7 @@ import type { ComponentType, Ref } from 'react'
 import type { View } from 'react-native'
 
 import type { CollisionListRowProps } from '@/components/compounds/collision-list-row'
-import type { EntityListSignals, ListGrouping, ListQuery } from '@/lib/list-modules'
+import type { ListGrouping, ListQuery } from '@/lib/list-modules'
 import type { RecentlyClassified } from '@/lib/row-signals'
 
 export type LeadLabel = 'you' | 'protagonist'
@@ -19,11 +19,13 @@ export type RowSignals = {
 
 export type RowDensity = 'default' | 'compact'
 
-export type RowRendererProps<Row> = {
+export type RowRendererProps<Row, Signals = unknown> = {
   row: Row
   selected: boolean
   onPress: () => void
   signals: RowSignals
+  /** The module's list-level signals, for a row whose rendering depends on list-wide state. */
+  listSignals: Signals
   /** `compact` drops the description line for the rail's narrower column. */
   density?: RowDensity
   /** Goes on the row's pressable, so a reveal can move focus to it. */
@@ -47,7 +49,7 @@ export type ListCopy<Filter extends string = string> = {
 export type ListModule<
   Row extends { id: string },
   Filter extends string,
-  Signals = EntityListSignals,
+  Signals,
   GroupKey extends string = string,
 > = {
   /**
@@ -55,17 +57,19 @@ export type ListModule<
    * consumers may key effects on it. Empty hides the chip row.
    */
   filters: (signals: Signals) => readonly Filter[]
+  /** A row's inclusion never depends on the other rows. */
   query: (rows: readonly Row[], input: ListQuery<Filter>, signals: Signals) => Row[]
   /**
-   * Groups `query`'s result into the All view's ordered, non-empty groups, plus an optional row
-   * pinned above them; names each group key for display. Null when the kind has no grouping.
+   * The All view's ordered, non-empty groups plus an optional pinned row; null when ungrouped.
+   * A row's group key/pin never depends on the others; a pinned row is excluded from every
+   * group (`renderOrder` assumes it), and `planReveal` targets one row.
    */
   grouping: {
     group: (rows: readonly Row[], signals: Signals) => ListGrouping<Row, GroupKey>
     label: (key: GroupKey) => string
   } | null
   copy: (categoryLabel: string) => ListCopy<Filter>
-  Row: ComponentType<RowRendererProps<Row>>
+  Row: ComponentType<RowRendererProps<Row, Signals>>
 }
 
 export type ArrangedRows<Row, GroupKey extends string> = {

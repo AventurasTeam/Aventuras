@@ -2,22 +2,32 @@ import { eq } from 'drizzle-orm'
 
 import {
   branches,
+  chapters,
   entities,
+  happeningAwareness,
+  happeningInvolvements,
+  happenings,
   lore,
   storyDefinitionSchema,
   storySettingsSchema,
   stories,
+  threads,
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { kickStoryDrain } from '@/lib/embedder-swap'
 import {
+  chaptersStore,
   currentStoryStore,
   entitiesStore,
   entriesStore,
+  happeningAwarenessStore,
+  happeningInvolvementsStore,
+  happeningsStore,
   loreStore,
   navigationStore,
   rehydrateStories,
   storiesStore,
+  threadsStore,
   type OpenFailureKind,
   type OpenStory,
 } from '@/lib/stores'
@@ -80,8 +90,8 @@ type IsCurrentRequest = () => boolean
 
 const alwaysCurrent: IsCurrentRequest = () => true
 
-// Single place that parses story config JSON, hydrates entries/entities/lore, and sets
-// currentStoryStore — every story-open path (landing, wizard, deep link) shares these guarantees.
+// Single place every story-open path (landing, wizard, deep link) shares, so hydration and
+// currentStoryStore updates stay in lockstep across them.
 async function loadAndPublish(
   branchId: string,
   ctx: DbCtx,
@@ -129,11 +139,36 @@ async function loadAndPublish(
   if (!isCurrentRequest()) return { status: 'cancelled' }
   const loreRows = await ctx.db.select().from(lore).where(eq(lore.branchId, branchId))
   if (!isCurrentRequest()) return { status: 'cancelled' }
+  // Plot and the Browse rail read these from the working set, not a direct query.
+  const threadRows = await ctx.db.select().from(threads).where(eq(threads.branchId, branchId))
+  if (!isCurrentRequest()) return { status: 'cancelled' }
+  const happeningRows = await ctx.db
+    .select()
+    .from(happenings)
+    .where(eq(happenings.branchId, branchId))
+  if (!isCurrentRequest()) return { status: 'cancelled' }
+  const involvementRows = await ctx.db
+    .select()
+    .from(happeningInvolvements)
+    .where(eq(happeningInvolvements.branchId, branchId))
+  if (!isCurrentRequest()) return { status: 'cancelled' }
+  const awarenessRows = await ctx.db
+    .select()
+    .from(happeningAwareness)
+    .where(eq(happeningAwareness.branchId, branchId))
+  if (!isCurrentRequest()) return { status: 'cancelled' }
+  const chapterRows = await ctx.db.select().from(chapters).where(eq(chapters.branchId, branchId))
+  if (!isCurrentRequest()) return { status: 'cancelled' }
 
   storiesStore.clearOpenFailure(row.storyId)
   entriesStore.hydrate(branchId, entryRows)
   entitiesStore.hydrate(branchId, entityRows)
   loreStore.hydrate(branchId, loreRows)
+  threadsStore.hydrate(branchId, threadRows)
+  happeningsStore.hydrate(branchId, happeningRows)
+  happeningInvolvementsStore.hydrate(branchId, involvementRows)
+  happeningAwarenessStore.hydrate(branchId, awarenessRows)
+  chaptersStore.hydrate(branchId, chapterRows)
   publish({ storyId: row.storyId, branchId, definition, settings })
   // Warm the vec cache for a story opened with pre-existing stale rows; no-op
   // until boot wires the drain controller, and the sync stage owns correctness.

@@ -164,12 +164,14 @@ export const Compact: Story = {
         selected={false}
         onPress={fn()}
         signals={NONE}
+        listSignals={null}
       />
       <EntityRow
         row={entity({ id: 'char_kael', name: 'Kael' })}
         selected={false}
         onPress={fn()}
         signals={NONE}
+        listSignals={null}
         density="compact"
       />
     </View>

@@ -19,9 +19,9 @@ import { translationsStore } from './translations/translations'
 import { blockingOverlaysStore, useRegisteredOverlay } from './ui/blocking-overlays'
 import { embedderSwapStore } from './ui/embedder-swap'
 import { embeddingStatusStore } from './ui/embedding-status'
+import { listCollapseStore } from './ui/list-collapse'
 import { recoveryReportStore } from './ui/recovery-report'
 import { undoRedoStore } from './ui/undo-redo'
-import { worldListStore } from './ui/world-list'
 import { CAST_ID_PREFIX, wizardStore } from './wizard/wizard'
 
 // Test-harness seam: resets every domain store in one call
@@ -46,9 +46,9 @@ export function resetAllStores(): void {
   embedderSwapStore.__reset()
   embeddingStatusStore.__reset()
   blockingOverlaysStore.__reset()
+  listCollapseStore.__reset()
   recoveryReportStore.__reset()
   undoRedoStore.clear()
-  worldListStore.__reset()
   wizardStore.reset()
 }
 
@@ -70,6 +70,7 @@ export {
   happeningInvolvementsStore,
   happeningsStore,
   hydrateAppSettings,
+  listCollapseStore,
   loreStore,
   navigationStore,
   recoveryReportStore,
@@ -81,7 +82,6 @@ export {
   undoRedoStore,
   useRegisteredOverlay,
   wizardStore,
-  worldListStore,
 }
 
 export { createWorkingSetStore } from './factory/working-set-store'

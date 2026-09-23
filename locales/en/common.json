@@ -1,6 +1,15 @@
 {
   "cancel": "Cancel",
   "save": "Save",
+  "disabledWithReason": "{{label}}, {{reason}}",
+  "entryRef": "entry #{{n}}",
+  "entryRefDangling": "Entry no longer exists",
+  "entryKind": {
+    "opening": "opening",
+    "user_action": "action",
+    "ai_reply": "reply",
+    "system": "system"
+  },
   "calendarPicker": {
     "ariaLabel": "Calendars",
     "searchPlaceholder": "Search calendars",
@@ -119,9 +128,19 @@
     "searchScope": "Search scope",
     "searchScopeFields": "Searches: {{fields}}"
   },
+  "list": {
+    "groupNeedReview_one": "{{count}} in {{group}} needs review",
+    "groupNeedReview_other": "{{count}} in {{group}} need review"
+  },
   "saveBar": {
     "unsavedChanges_one": "{{count}} unsaved change",
     "unsavedChanges_other": "{{count}} unsaved changes",
+    "discard": "Discard",
+    "save": "Save"
+  },
+  "unsavedChanges": {
+    "title": "Unsaved changes",
+    "body": "You have unsaved changes on this screen. Save them, discard them, or stay here.",
     "discard": "Discard",
     "save": "Save"
   },
@@ -145,6 +164,17 @@
     "delete": "Delete",
     "draft": "Draft",
     "archived": "Archived"
+  },
+  "picker": {
+    "clear": "Clear selection",
+    "fieldLabel": "{{label}}: {{value}}",
+    "entitySearch": "Search entities…",
+    "entityNoResults": "No matching entities.",
+    "entityNone": "No entities to pick.",
+    "entityMissing": "Missing entity",
+    "entrySearch": "Search entries or #n…",
+    "entryNoResults": "No matching entries.",
+    "entryNone": "No entries yet."
   },
   "suggestionCategories": {
     "add": "+ Add category",

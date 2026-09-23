@@ -1,7 +1,6 @@
 import { useMemo, type ReactNode } from 'react'
 import { ScrollView, View } from 'react-native'
 
-import { arrangeRows, type ListModule, type RowSignals } from '@/components/entity/list-module'
 import { EntityListPane } from '@/components/shells/entity-list-pane'
 import {
   Accordion,
@@ -15,6 +14,7 @@ import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
 
+import { arrangeRows, type ListModule, type RowSignals } from './list-module'
 import { useRevealScroll, type RevealRequest } from './use-reveal-scroll'
 
 export type ModuleListProps<
@@ -35,8 +35,8 @@ export type ModuleListProps<
   addSlot: ReactNode
   listSignals: Signals
   rowSignals: (id: string) => RowSignals
-  /** Rows counted by a collapsed group's `⚠ N` badge. */
-  flagged: { has: (id: string) => boolean }
+  /** Rows counted by a collapsed group's `⚠ N` badge; omit for a kind with no flagged rows. */
+  flagged?: { has: (id: string) => boolean }
   selectedId: string | null
   onSelect: (id: string) => void
   /** Group keys the All view shows collapsed; the owner persists changes. */
@@ -49,10 +49,7 @@ export type ModuleListProps<
   resetKey: string
 }
 
-/**
- * A module's list inside the list-pane shell: chips, search, the All view's
- * group accordion with its pinned row and `⚠ N` badges, empty and no-results.
- */
+/** List-pane shell's row list: chips, search, All view's grouped accordion with `⚠ N` badges. */
 export function ModuleList<
   Row extends { id: string },
   Filter extends string,
@@ -97,6 +94,7 @@ export function ModuleList<
         selected={row.id === selectedId}
         onPress={() => onSelect(row.id)}
         signals={rowSignals(row.id)}
+        listSignals={listSignals}
         focusRef={focusRef(row.id)}
       />
     </View>
@@ -117,7 +115,7 @@ export function ModuleList<
           }}
         >
           {grouped.groups.map((group) => {
-            const flaggedRows = group.rows.filter((r) => flagged.has(r.id))
+            const flaggedRows = flagged == null ? [] : group.rows.filter((r) => flagged.has(r.id))
             return (
               <AccordionItem key={group.key} value={group.key}>
                 <View className="flex-row items-center gap-2 px-row-x-md">
@@ -134,7 +132,7 @@ export function ModuleList<
                   {collapsed.has(group.key) && flaggedRows.length > 0 ? (
                     <Tag
                       tone="warning"
-                      accessibilityLabel={t('world:collision.groupNeedReview', {
+                      accessibilityLabel={t('list.groupNeedReview', {
                         count: flaggedRows.length,
                         group: grouped.label(group.key),
                       })}

@@ -4,7 +4,7 @@ import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 import { UnsavedChangesDialog } from './unsaved-changes-dialog'
 
 const meta: Meta<typeof UnsavedChangesDialog> = {
-  title: 'Compounds/StorySettings/UnsavedChangesDialog',
+  title: 'Compounds/UnsavedChangesDialog',
   component: UnsavedChangesDialog,
   parameters: { layout: 'centered' },
   tags: ['autodocs'],
@@ -17,18 +17,14 @@ export const Open: Story = {
   args: { open: true, onSave: fn(), onDiscard: fn(), onCancel: fn() },
 }
 
-/**
- * Commit in flight — all three actions are inert. The owner keeps the
- * dialog mounted until the pending leave resolves.
- */
+/** Commit in flight: all three actions stay inert until the pending leave resolves. */
 export const Saving: Story = {
   args: { open: true, saving: true, onSave: fn(), onDiscard: fn(), onCancel: fn() },
   play: async ({ args }) => {
     for (const name of ['Cancel', 'Discard', 'Save']) {
       expect(await screen.findByRole('button', { name })).toBeDisabled()
     }
-    // Escape and Android back reach the same close handler the disabled
-    // Cancel does, so the guard has to hold for them too.
+    // Escape and Android back reach the disabled Cancel's close handler; the guard must hold too.
     await userEvent.keyboard('{Escape}')
     expect(args.onCancel).not.toHaveBeenCalled()
     expect(args.onSave).not.toHaveBeenCalled()
@@ -75,10 +71,8 @@ export const EscapeCancels: Story = {
 }
 
 /**
- * Invalid draft state — Save is disabled, but Discard and Cancel remain live
- * as escape hatches. The reason is displayed under the body copy and is
- * semantically included in the dialog's accessible description (aria-describedby).
- * Design invariant: an invalid session must never become a trap.
+ * Save disabled, Discard/Cancel stay live as escape hatches — an invalid session must
+ * never become a trap. Reason renders under the body, wired to aria-describedby.
  */
 export const InvalidDraft: Story = {
   args: {
@@ -112,10 +106,7 @@ export const InvalidDraft: Story = {
   },
 }
 
-/**
- * Invalid draft state with Cancel — verify Cancel still fires even when
- * Save is unavailable.
- */
+/** Cancel still fires even when Save is unavailable. */
 export const InvalidDraftCancel: Story = {
   args: {
     open: true,

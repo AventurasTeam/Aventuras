@@ -1,4 +1,5 @@
 export { entitySearchScope, entityTier, groupEntitiesByTier, queryEntities } from './entity-list'
+export { collate, compareId } from './collate'
 export { LORE_SEARCH_SCOPE, queryLore } from './lore-list'
 export {
   ENTITY_FILTERS,
@@ -17,3 +18,20 @@ export type {
   ListQuery,
   WorldCategory,
 } from './types'
+export { isPlotKind, PLOT_KINDS } from './plot'
+export type { PlotKind, PlotListSignals } from './plot'
+export {
+  groupThreadsByTier,
+  queryThreads,
+  THREAD_FILTERS,
+  THREAD_SEARCH_SCOPE,
+  THREAD_TIERS,
+} from './thread-list'
+export type { ThreadFilter, ThreadTier } from './thread-list'
+export {
+  groupHappeningsByBucket,
+  HAPPENING_SEARCH_SCOPE,
+  happeningFilters,
+  queryHappenings,
+} from './happening-list'
+export type { HappeningBucket, HappeningFilter } from './happening-list'
