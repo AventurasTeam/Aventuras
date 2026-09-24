@@ -64,10 +64,13 @@ names an entry and stands for that entry's ending — the anchor's time when anc
 - `anchor` — an anchored entry between them, fork point or not;
 - `fork` — an unanchored entry any branch in the story was forked from.
 
-**Only a fork point walls the timeline.** Every branch forked from an entry opens at that entry's
-ending; a range that spanned it, or moved it, would slide those branches' openings out from under
-them. Forks are taken from every branch in the story, not just the one in view, and kept where their
-entry is visible. Anchoring a fork point is the one deliberate way to move it. A checkpoint is not a
+**Only a fork point walls the timeline.** The entries before a fork are shared by every branch
+forked there; the entries after it belong to one branch. A range reaching across the fork would fit
+the shared entries to a destination inside one branch, rewriting the history every other branch
+stands on to suit that one. Stopping every range at the fork keeps shared entries reconciled only
+between points they all share. It also keeps the fork's own ending still, since every branch forked
+there opens on it. Forks are taken from every branch in the story, not just the one in view, and
+kept where their entry is visible. Anchoring a fork point is the one deliberate way to move it. A checkpoint is not a
 boundary: its clock is a copy, updated when its entry moves.
 
 A **range** is the stretch between two adjacent boundaries (`selectableRanges`). Adjacent only: a

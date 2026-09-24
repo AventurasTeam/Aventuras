@@ -32,8 +32,9 @@ export interface BoundaryInput {
  * Every boundary on the branch, in story order.
  *
  * The first entry opens the list and the last closes it; between them sit the anchors and the
- * entries some branch forked from. A natural boundary is a seam rather than a claim about the
- * time: another branch opens on that moment, so the ending recorded there may not move. An entry
+ * entries some branch forked from. A fork is a seam rather than a claim about the time: the
+ * entries before it are shared by every branch forked there, so no range may reach across it to fit
+ * them to a point inside one branch, and the branches open on its ending, so it may not move. An entry
  * that is both anchored and natural is one boundary, and resolves to the assertion either way.
  *
  * A checkpoint is not one of them. It copies the clock, but nothing reads that copy until a branch

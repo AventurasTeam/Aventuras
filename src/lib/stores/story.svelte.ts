@@ -1554,9 +1554,9 @@ class StoryStore {
     listBoundaries({
       entries: this.entries,
       anchors: this.timeAnchors,
-      // Every fork in the story, not just this branch's: a range that spanned another branch's
-      // fork would slide that branch's opening out from under it. `listBoundaries` keeps only the
-      // ones whose entry is visible here.
+      // Every fork in the story, not just this branch's: a range spanning a fork would fit the
+      // entries every branch there shares to a point inside one of them. `listBoundaries` keeps
+      // only the ones whose entry is visible here.
       forkEntryIds: this.branches.map((branch) => branch.forkEntryId),
     }),
   )
