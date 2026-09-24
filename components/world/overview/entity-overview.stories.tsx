@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
-import { expect, fn, screen, userEvent, within } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { EARTH_GREGORIAN } from '@/lib/calendar'
 import type { CharacterState, Entity } from '@/lib/db'
@@ -117,6 +117,12 @@ const SPARSE = makeEntity({
   }),
 })
 const ENTITIES = [HOLLOW, MARKET, KAEL, MIRA, WATCH, KEY, SPARSE]
+const ROAMER = makeEntity({
+  id: 'char_roamer',
+  kind: 'character',
+  name: 'Tamsin',
+  state: characterState({ current_location_id: null }),
+})
 
 type HarnessProps = {
   entity: Entity
@@ -151,6 +157,31 @@ const meta: Meta<typeof Harness> = {
 export default meta
 type Story = StoryObj<typeof Harness>
 
+function rect(testId: string): DOMRect {
+  return screen.getByTestId(testId).getBoundingClientRect()
+}
+
+async function expectCompactPortrait() {
+  const portrait = rect('overview-portrait')
+  await expect(portrait.width).toBe(96)
+  await expect(portrait.top).toBeGreaterThanOrEqual(rect('overview-description').bottom)
+}
+
+/** RN-Web drops `accessibilityHint`, so a button's name is its aria-label or its text. */
+function buttonNames(): string[] {
+  const root = screen.getByTestId('entity-overview')
+  return Array.from(root.querySelectorAll<HTMLElement>('button, [role="button"]')).map(
+    (el) => el.getAttribute('aria-label') ?? el.textContent ?? '',
+  )
+}
+
+// Pressable stops propagation, so a call count can't see a link nested in a button; the DOM can.
+async function expectNoLinkInsideAButton() {
+  const links = within(screen.getByTestId('entity-overview')).getAllByRole('link')
+  for (const link of links)
+    await expect(link.parentElement?.closest('button, [role="button"]') ?? null).toBeNull()
+}
+
 const CHARACTER_REGIONS = [
   'overview-status',
   'overview-description',
@@ -168,9 +199,15 @@ export const CharacterPanel: Story = {
   play: async () => {
     for (const id of CHARACTER_REGIONS)
       await expect(await screen.findByTestId(id, {}, WAIT)).toBeVisible()
-    await expect(screen.getByText('Always injected')).toBeVisible()
+    const chip = screen.getByText('Always injected')
+    await expect(chip).toBeVisible()
+    await expect(getComputedStyle(chip).textTransform).toBe('uppercase')
     await expect(screen.getByText('last seen 2 days ago', { exact: false })).toBeVisible()
     await expect(screen.getByText('+1')).toBeVisible()
+    await expect(screen.getByRole('button', { name: 'In, Edit in Connections' })).toBeVisible()
+    const portrait = rect('overview-portrait')
+    await expect(portrait.width).toBe(220)
+    await expect(portrait.left).toBeGreaterThanOrEqual(rect('overview-description').right)
   },
 }
 
@@ -188,6 +225,7 @@ export const CharacterRegionRouting: Story = {
     await userEvent.click(screen.getByRole('link', { name: MARKET.name }))
     await expect(args.onOpenEntity).toHaveBeenCalledWith('loc_market')
     await expect(args.onRegionPress).toHaveBeenCalledTimes(4)
+    await expectNoLinkInsideAButton()
   },
 }
 
@@ -205,6 +243,7 @@ export const LocationRegionRouting: Story = {
       within(screen.getByTestId('overview-items-here')).getByRole('link', { name: 'Old key' }),
     )
     await expect(args.onOpenEntity).toHaveBeenLastCalledWith('item_key')
+    await expectNoLinkInsideAButton()
   },
 }
 
@@ -235,8 +274,33 @@ export const SparseRetired: Story = {
   args: { entity: SPARSE },
   play: async () => {
     await expect(await screen.findByText('— killed by Vorne', {}, WAIT)).toBeVisible()
-    await expect(screen.getAllByText('— not yet described —').length).toBeGreaterThanOrEqual(5)
+    await expect(screen.getAllByText('— not yet described —')).toHaveLength(8)
     await expect(screen.queryByText('Always injected')).not.toBeInTheDocument()
+    const names = buttonNames()
+    await expect(names.length).toBeGreaterThan(0)
+    await expect(names.filter((name, i) => names.indexOf(name) !== i)).toEqual([])
+  },
+}
+
+/** No current location: the In region still carries "last seen" from `lastSeenAt`. */
+export const LastSeenWithoutLocation: Story = {
+  args: { entity: ROAMER },
+  play: async () => {
+    const region = await screen.findByTestId('overview-in', {}, WAIT)
+    await expect(within(region).getByText('— not yet described —')).toBeVisible()
+    await expect(within(region).getByText('last seen 2 days ago')).toBeVisible()
+  },
+}
+
+/** The phone tier reflows the panel variant: the portrait drops below the prose at md. */
+export const PhoneReflow: Story = {
+  globals: { viewport: { value: 'mobile1' } },
+  play: async () => {
+    await screen.findByTestId('entity-overview', {}, WAIT)
+    // useTier follows the viewport asynchronously (lessons-learned/storybook-viewport-usetier-async.md).
+    await waitFor(() => expectCompactPortrait(), WAIT)
+    // touch.md → Touch-target floor.
+    await expect(rect('overview-in-label').height).toBeGreaterThanOrEqual(44)
   },
 }
 
@@ -248,6 +312,7 @@ export const PeekAt440: Story = {
       await expect(await screen.findByTestId(id, {}, WAIT)).toBeVisible()
     const root = screen.getByTestId('entity-overview')
     await expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth)
+    await expectCompactPortrait()
   },
 }
 

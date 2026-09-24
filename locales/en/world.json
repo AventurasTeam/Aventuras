@@ -219,6 +219,7 @@
     "notDescribed": "— not yet described —",
     "add": "add →",
     "editIn": "Edit in {{tab}}",
+    "regionName": "{{label}}, {{action}}",
     "visual": "Visual",
     "traits": "Traits",
     "drives": "Drives",

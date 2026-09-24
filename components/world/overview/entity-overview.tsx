@@ -14,6 +14,7 @@ import {
   ChipRow,
   PortraitSlot,
   Region,
+  regionName,
   StatusRow,
   type KindBodyProps,
   type RegionPress,
@@ -66,6 +67,9 @@ export function EntityOverview({ variant, ...props }: EntityOverviewProps) {
             tab="identity"
             onRegionPress={onRegionPress}
             empty={description === ''}
+            accessibleName={
+              description === '' ? regionName(t('world:fields.description'), 'identity') : undefined
+            }
             testID="overview-description"
           >
             <Text size="sm">{description}</Text>
