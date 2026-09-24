@@ -65,6 +65,7 @@ const stackablesSchema = z.array(stackableSchema).superRefine(
   (rows, ctx) => {
     const keys = new Set<string>()
     rows.forEach((row, index) => {
+      if (row == null) return
       if (typeof row.key !== 'string') return
       const key = stackableKey(row.key)
       // A blank key is its own issue (stackableKeyRequired), never a duplicate.
@@ -95,6 +96,7 @@ const relationshipsSchema = z.array(relationshipSchema).superRefine(
   (rows, ctx) => {
     const others = new Set<string>()
     rows.forEach((row, index) => {
+      if (row == null) return
       // data-model.md → character_relationships: CHECK (kind IS NOT NULL OR inverse_kind IS NOT NULL).
       if (isBlank(row.selfToOther) && isBlank(row.otherToSelf)) {
         ctx.addIssue({

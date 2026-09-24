@@ -39,9 +39,9 @@ const KAEL: Entity = {
   branchId: 'br_1',
   kind: 'character',
   name: 'Kael',
-  description: null,
+  description: 'Carries sealed letters across the marches.',
   status: 'staged',
-  retiredReason: null,
+  retiredReason: 'Left the guild after the ambush.',
   injectionMode: 'always',
   nameCollisionFlag: 0,
   state: KAEL_STATE,
@@ -69,9 +69,9 @@ describe('characterDraftFrom', () => {
     ])
     expect(draft).toEqual({
       name: 'Kael',
-      description: '',
+      description: 'Carries sealed letters across the marches.',
       status: 'staged',
-      retiredReason: '',
+      retiredReason: 'Left the guild after the ambush.',
       injectionMode: 'always',
       keywords: ['the courier'],
       tags: ['courier'],
@@ -314,6 +314,18 @@ describe('draft schemas', () => {
       { path: ['relationships', 0, 'otherId'], message: 'characterRequired' },
       { path: ['relationships', 1, 'selfToOther'], message: 'relationshipPovRequired' },
     ])
+  })
+
+  it('reports a missing list row instead of throwing', () => {
+    const stackables = characterDraftSchema.safeParse({
+      ...base,
+      stackables: [null, { key: 'Gold', count: 1 }],
+    })
+    expect(stackables.success).toBe(false)
+    expect(issues(stackables).map((i) => i.path)).toEqual([['stackables', 0]])
+    const relationships = characterDraftSchema.safeParse({ ...base, relationships: [null] })
+    expect(relationships.success).toBe(false)
+    expect(issues(relationships).map((i) => i.path)).toEqual([['relationships', 0]])
   })
 
   it('keeps the relationship checks when a cleared picker leaves a row without a character', () => {
