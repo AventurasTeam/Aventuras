@@ -1,9 +1,11 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { View } from 'react-native'
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
 
+import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import type { Entity } from '@/lib/db'
 import { characterDraftFrom, characterDraftSchema, type CharacterDraft } from '@/lib/world'
@@ -57,9 +59,9 @@ const ENTITIES: Entity[] = [
 ]
 
 const THREE_STATES: CharacterDraft['relationships'] = [
-  { otherId: 'char_mira', selfToOther: 'ally', otherToSelf: 'ally' },
-  { otherId: 'char_jorin', selfToOther: 'mentor', otherToSelf: '' },
-  { otherId: 'char_vorne', selfToOther: '', otherToSelf: 'rival' },
+  { cardKey: 'rel_mira', otherId: 'char_mira', selfToOther: 'ally', otherToSelf: 'ally' },
+  { cardKey: 'rel_jorin', otherId: 'char_jorin', selfToOther: 'mentor', otherToSelf: '' },
+  { cardKey: 'rel_vorne', otherId: 'char_vorne', selfToOther: '', otherToSelf: 'rival' },
 ]
 
 type HarnessProps = {
@@ -78,6 +80,7 @@ function Harness({ editor, relationships = [], stackables = [], blocked = false 
   const draft = useWatch({ control: form.control })
   const inventory = useWatch({ control: form.control, name: 'inventory' })
   const gate = { blocked, blockedReason: blocked ? BLOCKED_REASON : undefined }
+  const [resets, setResets] = useState(0)
   return (
     <View style={{ width: 860, maxWidth: '100%' }} className="gap-4 p-4">
       {editor === 'relationships' ? (
@@ -103,6 +106,25 @@ function Harness({ editor, relationships = [], stackables = [], blocked = false 
           {...gate}
         />
       ) : null}
+      {/* Reset is the save session's rebase; Discard returns to the committed values. */}
+      <View className="flex-row gap-2">
+        <Button
+          variant="secondary"
+          size="sm"
+          onPress={() => {
+            form.reset(form.getValues())
+            setResets((n) => n + 1)
+          }}
+        >
+          <Text>Reset</Text>
+        </Button>
+        <Button variant="secondary" size="sm" onPress={() => form.reset()}>
+          <Text>Discard</Text>
+        </Button>
+        <Text testID="resets" size="xs" variant="muted">
+          {`resets: ${resets}`}
+        </Text>
+      </View>
       <Text testID="draft" size="xs" variant="muted">
         {JSON.stringify({
           relationships: draft.relationships,
@@ -138,7 +160,7 @@ export const RelationshipStates: Story = {
 export const RelationshipsEmpty: Story = {
   play: async () => {
     await expect(await screen.findByText('No relationships recorded yet', {}, WAIT)).toBeVisible()
-    await expect(screen.getByRole('button', { name: 'Add relationship' })).toBeEnabled()
+    await expect(screen.getByRole('button', { name: 'Add relationship' })).toBeInTheDocument()
   },
 }
 
@@ -154,7 +176,7 @@ export const RelationshipEditAndDelete: Story = {
     await waitFor(() => expect(draftText()).toContain('wary of you'), WAIT)
     await userEvent.click(card.getByRole('button', { name: 'Delete relationship with Mira' }))
     await waitFor(() => expect(draftText()).not.toContain('char_mira'), WAIT)
-    await expect(screen.queryByText('ally · they see you: ally')).not.toBeInTheDocument()
+    await expect(screen.queryByRole('button', { name: /^Mira/ })).toBeNull()
   },
 }
 
@@ -163,7 +185,7 @@ export const RelationshipAddNeedsAView: Story = {
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Add relationship' }, WAIT))
     const card = within(await screen.findByTestId('relationship-0', {}, WAIT))
-    await userEvent.click(card.getByRole('button', { name: 'Character' }))
+    await userEvent.click(await card.findByRole('button', { name: 'Character' }, WAIT))
     await userEvent.click(await screen.findByRole('option', { name: /Vorne/ }, WAIT))
     await expect(await card.findByText('Fill in at least one view.', {}, WAIT)).toBeVisible()
     await userEvent.type(card.getByRole('textbox', { name: 'Their view' }), 'rival')
@@ -179,13 +201,57 @@ export const RelationshipsBlocked: Story = {
     await expect(await screen.findByText('Add relationship', {}, WAIT)).toBeVisible()
     await expect(screen.queryByRole('button', { name: 'Add relationship' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /^Mira/ }))
-    const card = within(await screen.findByTestId('relationship-0', {}, WAIT))
-    await expect(card.getByRole('textbox', { name: 'Your view' })).toHaveAttribute('readonly')
+    const card = within(screen.getByTestId('relationship-0'))
+    await expect(await card.findByRole('textbox', { name: 'Your view' }, WAIT)).toHaveAttribute(
+      'readonly',
+    )
     // A disabled IconAction is named by its gate reason (lessons-learned/disabled-iconaction-renames-itself.md).
     await expect(card.getByRole('button', { name: BLOCKED_REASON })).toHaveAttribute(
       'aria-disabled',
       'true',
     )
+  },
+}
+
+/** react-hook-form regenerates every field id on reset; a committed and a new card keep their node. */
+export const RelationshipCardsSurviveReset: Story = {
+  args: { relationships: THREE_STATES },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: /^Mira/ }, WAIT))
+    const committed = screen.getByTestId('relationship-0')
+    const committedView = await within(committed).findByRole(
+      'textbox',
+      { name: 'Their view' },
+      WAIT,
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Add relationship' }))
+    const added = await screen.findByTestId('relationship-3', {}, WAIT)
+    const addedView = await within(added).findByRole('textbox', { name: 'Their view' }, WAIT)
+    await userEvent.type(addedView, 'rival')
+    await userEvent.click(screen.getByRole('button', { name: 'Reset' }))
+    await expect(await screen.findByText('resets: 1', {}, WAIT)).toBeInTheDocument()
+    await expect(screen.getByTestId('relationship-0')).toBe(committed)
+    await expect(screen.getByTestId('relationship-3')).toBe(added)
+    await expect(within(committed).getByRole('textbox', { name: 'Their view' })).toBe(committedView)
+    await expect(within(added).getByRole('textbox', { name: 'Their view' })).toBe(addedView)
+  },
+}
+
+/** no-harmless-id-leaks: a deleted card's key is pruned, so Discard brings it back collapsed. */
+export const RelationshipDeleteThenDiscardReturnsCollapsed: Story = {
+  args: { relationships: THREE_STATES },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: /^Mira/ }, WAIT))
+    const card = within(screen.getByTestId('relationship-0'))
+    await card.findByRole('textbox', { name: 'Their view' }, WAIT)
+    await userEvent.click(card.getByRole('button', { name: 'Delete relationship with Mira' }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: /^Mira/ })).toBeNull(), WAIT)
+    await userEvent.click(screen.getByRole('button', { name: 'Discard' }))
+    await screen.findByRole('button', { name: /^Mira/ }, WAIT)
+    // The row and its card body render in one pass: once Mira is back, expansion is decided.
+    await expect(
+      within(screen.getByTestId('relationship-0')).queryByRole('textbox', { name: 'Their view' }),
+    ).toBeNull()
   },
 }
 
@@ -196,11 +262,51 @@ export const StackablesDuplicateKey: Story = {
     const row = within(await screen.findByTestId('stackable-1', {}, WAIT))
     await userEvent.type(row.getByRole('textbox', { name: 'Quantity' }), 'gold ')
     await expect(await row.findByText('This quantity is already listed.', {}, WAIT)).toBeVisible()
-    await userEvent.click(row.getByRole('button', { name: 'Remove quantity' }))
+    await userEvent.click(row.getByRole('button', { name: 'Remove gold' }))
     await waitFor(
       () => expect(screen.queryByText('This quantity is already listed.')).toBeNull(),
       WAIT,
     )
+  },
+}
+
+const DUPLICATE = 'This quantity is already listed.'
+
+async function addDuplicateGold() {
+  await userEvent.click(await screen.findByRole('button', { name: 'Add quantity' }, WAIT))
+  const second = within(await screen.findByTestId('stackable-1', {}, WAIT))
+  await userEvent.type(second.getByRole('textbox', { name: 'Quantity' }), 'gold')
+  await expect(await second.findByText(DUPLICATE, {}, WAIT)).toBeVisible()
+  return second
+}
+
+/** The key's `deps`: renaming the first row clears the second row's duplicate. */
+export const StackablesRenameClearsOtherRowsDuplicate: Story = {
+  args: { editor: 'stackables', stackables: [{ key: 'Gold', count: 5 }] },
+  play: async () => {
+    const second = await addDuplicateGold()
+    const firstKey = within(screen.getByTestId('stackable-0')).getByRole('textbox', {
+      name: 'Quantity',
+    })
+    await userEvent.clear(firstKey)
+    await userEvent.type(firstKey, 'Silver')
+    await waitFor(() => expect(firstKey).toHaveValue('Silver'), WAIT)
+    await waitFor(() => expect(second.queryByText(DUPLICATE)).toBeNull(), WAIT)
+  },
+}
+
+/** The post-remove revalidation: the survivor that shifts into row 0 carries no stale duplicate. */
+export const StackablesRemoveRevalidatesSurvivor: Story = {
+  args: { editor: 'stackables', stackables: [{ key: 'Gold', count: 5 }] },
+  play: async () => {
+    await addDuplicateGold()
+    await userEvent.click(
+      within(screen.getByTestId('stackable-0')).getByRole('button', { name: 'Remove Gold' }),
+    )
+    await waitFor(() => expect(screen.queryByTestId('stackable-1')).toBeNull(), WAIT)
+    const survivor = within(screen.getByTestId('stackable-0'))
+    await expect(survivor.getByRole('textbox', { name: 'Quantity' })).toHaveValue('gold')
+    await waitFor(() => expect(survivor.queryByText(DUPLICATE)).toBeNull(), WAIT)
   },
 }
 

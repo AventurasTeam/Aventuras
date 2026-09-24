@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react-native'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import {
   Controller,
   useFieldArray,
@@ -21,6 +21,7 @@ import { Text } from '@/components/ui/text'
 import type { Entity, EntityKind } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
+import { generateId } from '@/lib/ids'
 import type { CharacterDraft } from '@/lib/world'
 
 import { issueLabel, relationshipDescription } from '../world-copy'
@@ -51,21 +52,12 @@ export function RelationshipsEditor({
   const { fields, append, remove } = useFieldArray({ control, name: 'relationships' })
   const rows = useWatch({ control, name: 'relationships' }) ?? []
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set())
-  const openAppended = useRef(false)
 
-  // An appended card opens expanded; its field id exists only once the append renders.
-  useEffect(() => {
-    if (!openAppended.current || fields.length === 0) return
-    openAppended.current = false
-    const id = fields[fields.length - 1].id
-    setOpen((prev) => new Set(prev).add(id))
-  }, [fields])
-
-  const toggle = (id: string) =>
+  const toggle = (key: string) =>
     setOpen((prev) => {
       const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
       return next
     })
   const taken = rows.map((r) => r.otherId).filter((id) => id !== '')
@@ -91,9 +83,12 @@ export function RelationshipsEditor({
         const name =
           other?.name ??
           (row?.otherId ? t('world:carrying.missing') : t('world:relationships.unnamed'))
-        const expanded = open.has(field.id)
+        // Not `field.id`: react-hook-form regenerates it on every reset (a store patch, each Save),
+        // which would collapse and remount the card being edited.
+        const key = row?.cardKey ?? field.id
+        const expanded = open.has(key)
         return (
-          <View key={field.id} className="gap-2" testID={`relationship-${index}`}>
+          <View key={key} className="gap-2" testID={`relationship-${index}`}>
             <ListRow
               label={name}
               description={relationshipDescription(row?.selfToOther, row?.otherToSelf)}
@@ -106,7 +101,7 @@ export function RelationshipsEditor({
                   className="text-fg-muted"
                 />
               }
-              onPress={() => toggle(field.id)}
+              onPress={() => toggle(key)}
             />
             {expanded ? (
               <View className="gap-3 rounded-md border border-border p-3">
@@ -185,10 +180,16 @@ export function RelationshipsEditor({
                     disabledReason={blockedReason}
                     onPress={() => {
                       remove(index)
+                      // Discard or undo can bring the same row id back; it returns collapsed.
+                      setOpen((prev) => {
+                        const next = new Set(prev)
+                        next.delete(key)
+                        return next
+                      })
                       revalidate()
                     }}
                   />
-                  <Button variant="secondary" size="sm" onPress={() => toggle(field.id)}>
+                  <Button variant="secondary" size="sm" onPress={() => toggle(key)}>
                     <Text>{t('world:relationships.done')}</Text>
                   </Button>
                 </View>
@@ -202,8 +203,9 @@ export function RelationshipsEditor({
         leading={<Icon as={Plus} aria-hidden size="sm" />}
         disabled={blocked}
         onPress={() => {
-          openAppended.current = true
-          append({ otherId: '', selfToOther: '', otherToSelf: '' })
+          const cardKey = generateId('reldraft')
+          setOpen((prev) => new Set(prev).add(cardKey))
+          append({ cardKey, otherId: '', selfToOther: '', otherToSelf: '' })
         }}
       />
     </View>

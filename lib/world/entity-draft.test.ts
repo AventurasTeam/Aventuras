@@ -90,7 +90,9 @@ describe('characterDraftFrom', () => {
       equippedItems: ['item_blade'],
       inventory: ['item_map'],
       stackables: [{ key: 'gold', count: 5 }],
-      relationships: [{ otherId: 'char_mira', selfToOther: 'ally', otherToSelf: '' }],
+      relationships: [
+        { cardKey: 'rel_1', otherId: 'char_mira', selfToOther: 'ally', otherToSelf: '' },
+      ],
     })
   })
 
@@ -274,8 +276,8 @@ describe('draft schemas', () => {
     const result = characterDraftSchema.safeParse({
       ...base,
       relationships: [
-        { otherId: '', selfToOther: 'ally', otherToSelf: '' },
-        { otherId: 'char_mira', selfToOther: ' ', otherToSelf: '' },
+        { cardKey: 'card_new1', otherId: '', selfToOther: 'ally', otherToSelf: '' },
+        { cardKey: 'card_mira', otherId: 'char_mira', selfToOther: ' ', otherToSelf: '' },
       ],
     })
     // The cross-row checks run on the array schemas, so an inner issue elsewhere never hides them.
@@ -286,10 +288,10 @@ describe('draft schemas', () => {
     const refined = characterDraftSchema.safeParse({
       ...base,
       relationships: [
-        { otherId: '', selfToOther: 'a', otherToSelf: '' },
-        { otherId: '', selfToOther: 'b', otherToSelf: '' },
-        { otherId: 'char_vorne', selfToOther: 'rival', otherToSelf: '' },
-        { otherId: 'char_vorne', selfToOther: '', otherToSelf: 'rival' },
+        { cardKey: 'card_new2', otherId: '', selfToOther: 'a', otherToSelf: '' },
+        { cardKey: 'card_new3', otherId: '', selfToOther: 'b', otherToSelf: '' },
+        { cardKey: 'card_vorne', otherId: 'char_vorne', selfToOther: 'rival', otherToSelf: '' },
+        { cardKey: 'card_vorne2', otherId: 'char_vorne', selfToOther: '', otherToSelf: 'rival' },
       ],
     })
     // Two unpicked cards are not duplicates of each other; a repeated character is.
@@ -305,8 +307,8 @@ describe('draft schemas', () => {
       ...base,
       priority: null,
       relationships: [
-        { otherId: '', selfToOther: 'ally', otherToSelf: '' },
-        { otherId: 'char_mira', selfToOther: ' ', otherToSelf: '' },
+        { cardKey: 'card_new4', otherId: '', selfToOther: 'ally', otherToSelf: '' },
+        { cardKey: 'card_mira', otherId: 'char_mira', selfToOther: ' ', otherToSelf: '' },
       ],
     })
     expect(issues(result)).toEqual([
@@ -332,9 +334,9 @@ describe('draft schemas', () => {
     const result = characterDraftSchema.safeParse({
       ...base,
       relationships: [
-        { otherId: null, selfToOther: 'ally', otherToSelf: '' },
-        { otherId: 'char_vorne', selfToOther: '', otherToSelf: '' },
-        { otherId: 'char_vorne', selfToOther: 'rival', otherToSelf: '' },
+        { cardKey: 'card_new5', otherId: null, selfToOther: 'ally', otherToSelf: '' },
+        { cardKey: 'card_vorne', otherId: 'char_vorne', selfToOther: '', otherToSelf: '' },
+        { cardKey: 'card_vorne2', otherId: 'char_vorne', selfToOther: 'rival', otherToSelf: '' },
       ],
     })
     expect(issues(result)).toEqual([

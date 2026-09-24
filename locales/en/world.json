@@ -282,6 +282,7 @@
     "stackableKeyPlaceholder": "e.g. gold",
     "stackableCount": "Count",
     "removeStackable": "Remove quantity",
+    "removeStackableNamed": "Remove {{key}}",
     "position": {
       "at": "at {{name}}",
       "heldBy": "held by {{name}}"

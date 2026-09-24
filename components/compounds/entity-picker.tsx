@@ -152,32 +152,36 @@ export function EntityPicker({
           )}
         </PickerField>
       )}
-      renderRow={(row) => (
-        <View className="w-full flex-row items-center gap-2">
-          <View className="shrink-0">
-            <EntityKindIcon kind={row.data.kind} />
-          </View>
-          <View className="min-w-0 flex-1">
-            <Text size="sm" className="shrink" numberOfLines={1}>
-              {row.data.name}
-            </Text>
-          </View>
-          {rowHint?.(row.data) ? (
+      renderRow={(row) => {
+        const hint = rowHint?.(row.data)
+        return (
+          <View className="w-full flex-row items-center gap-2">
             <View className="shrink-0">
-              <Text size="xs" variant="muted" numberOfLines={1}>
-                {rowHint(row.data)}
+              <EntityKindIcon kind={row.data.kind} />
+            </View>
+            <View className="min-w-0 flex-1">
+              <Text size="sm" className="shrink" numberOfLines={1}>
+                {row.data.name}
               </Text>
             </View>
-          ) : null}
-          {row.data.status !== 'active' ? (
-            <View className="shrink-0">
-              <Tag tone={ENTITY_STATUS_TONE[row.data.status]}>
-                {t(`world:status.${row.data.status}`)}
-              </Tag>
-            </View>
-          ) : null}
-        </View>
-      )}
+            {/* Capped so a long "held by A, B, C" truncates itself, not the name. */}
+            {hint ? (
+              <View className="min-w-0 max-w-[50%] shrink">
+                <Text size="xs" variant="muted" numberOfLines={1}>
+                  {hint}
+                </Text>
+              </View>
+            ) : null}
+            {row.data.status !== 'active' ? (
+              <View className="shrink-0">
+                <Tag tone={ENTITY_STATUS_TONE[row.data.status]}>
+                  {t(`world:status.${row.data.status}`)}
+                </Tag>
+              </View>
+            ) : null}
+          </View>
+        )
+      }}
       renderEmpty={(activeQuery) => (
         <Text size="sm" variant="muted" className="p-3">
           {activeQuery ? t('picker.entityNoResults') : t('picker.entityNone')}

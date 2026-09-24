@@ -179,8 +179,8 @@ describe('entityActions — relationships', () => {
     const draft = {
       ...characterDraftFrom(KAEL, [MIRA_LINK]),
       relationships: [
-        { otherId: 'char_mira', selfToOther: 'ally', otherToSelf: 'ally' },
-        { otherId: 'char_vorne', selfToOther: 'rival', otherToSelf: '' },
+        { cardKey: 'card_mira', otherId: 'char_mira', selfToOther: 'ally', otherToSelf: 'ally' },
+        { cardKey: 'card_vorne', otherId: 'char_vorne', selfToOther: 'rival', otherToSelf: '' },
       ],
     }
     expect(update(draft)).toEqual([
@@ -209,7 +209,14 @@ describe('entityActions — relationships', () => {
     expect(
       update({
         ...characterDraftFrom(KAEL, [MIRA_LINK]),
-        relationships: [{ otherId: 'char_mira', selfToOther: 'ally', otherToSelf: 'wary of you' }],
+        relationships: [
+          {
+            cardKey: 'card_mira',
+            otherId: 'char_mira',
+            selfToOther: 'ally',
+            otherToSelf: 'wary of you',
+          },
+        ],
       }),
     ).toEqual([
       {
@@ -235,7 +242,9 @@ describe('entityActions — relationships', () => {
     }
     const draft = {
       ...characterDraftFrom(KAEL, [link]),
-      relationships: [{ otherId: 'char_mira', selfToOther: ' ally ', otherToSelf: 'wary' }],
+      relationships: [
+        { cardKey: 'card_mira', otherId: 'char_mira', selfToOther: ' ally ', otherToSelf: 'wary' },
+      ],
     }
     expect(update(draft, [link])).toEqual([
       {
@@ -295,7 +304,7 @@ describe('entityActions — relationships, three-way', () => {
   it('leaves a pair added after the baseline alone', () => {
     expect(
       threeWay(
-        [{ otherId: 'char_mira', selfToOther: ' ally', otherToSelf: 'wary' }],
+        [{ cardKey: 'card_mira', otherId: 'char_mira', selfToOther: ' ally', otherToSelf: 'wary' }],
         [MIRA_LINK, vorne('rival')],
         [MIRA_LINK],
       ),
@@ -305,7 +314,14 @@ describe('entityActions — relationships, three-way', () => {
   it('keeps the text the classifier stored in a view the user left alone', () => {
     expect(
       threeWay(
-        [{ otherId: 'char_mira', selfToOther: 'friend', otherToSelf: 'ally' }],
+        [
+          {
+            cardKey: 'card_mira',
+            otherId: 'char_mira',
+            selfToOther: 'friend',
+            otherToSelf: 'ally',
+          },
+        ],
         [mira('ally', 'fond of you')],
         [mira('ally', 'ally')],
       ),
@@ -316,8 +332,8 @@ describe('entityActions — relationships, three-way', () => {
     expect(
       threeWay(
         [
-          { otherId: 'char_mira', selfToOther: 'ally', otherToSelf: 'wary' },
-          { otherId: 'char_vorne', selfToOther: 'rival', otherToSelf: '' },
+          { cardKey: 'card_mira', otherId: 'char_mira', selfToOther: 'ally', otherToSelf: 'wary' },
+          { cardKey: 'card_vorne', otherId: 'char_vorne', selfToOther: 'rival', otherToSelf: '' },
         ],
         [mira('ally', 'ally'), vorne('enemy')],
         [mira('ally', 'ally'), vorne('rival')],
@@ -328,7 +344,7 @@ describe('entityActions — relationships, three-way', () => {
   it('keeps what is stored in a view the user left blank on a pair new to the draft', () => {
     expect(
       threeWay(
-        [{ otherId: 'char_vorne', selfToOther: 'enemy', otherToSelf: '' }],
+        [{ cardKey: 'card_vorne', otherId: 'char_vorne', selfToOther: 'enemy', otherToSelf: '' }],
         [{ ...vorne('ally'), otherToSelf: 'rival' }],
         [],
       ),
@@ -338,7 +354,14 @@ describe('entityActions — relationships, three-way', () => {
   it('rewrites an edited pair whose row has gone with the view the user saw', () => {
     expect(
       threeWay(
-        [{ otherId: 'char_mira', selfToOther: 'friend', otherToSelf: 'ally' }],
+        [
+          {
+            cardKey: 'card_mira',
+            otherId: 'char_mira',
+            selfToOther: 'friend',
+            otherToSelf: 'ally',
+          },
+        ],
         [],
         [mira('ally', 'ally')],
       ),
@@ -348,7 +371,7 @@ describe('entityActions — relationships, three-way', () => {
   it('does not bring back an untouched pair whose row has gone', () => {
     expect(
       threeWay(
-        [{ otherId: 'char_mira', selfToOther: 'ally', otherToSelf: 'ally' }],
+        [{ cardKey: 'card_mira', otherId: 'char_mira', selfToOther: 'ally', otherToSelf: 'ally' }],
         [],
         [mira('ally', 'ally')],
       ),
@@ -363,7 +386,7 @@ describe('entityActions — relationships, three-way', () => {
   it('deletes the row when both views resolve to null', () => {
     expect(
       threeWay(
-        [{ otherId: 'char_mira', selfToOther: '', otherToSelf: 'rival' }],
+        [{ cardKey: 'card_mira', otherId: 'char_mira', selfToOther: '', otherToSelf: 'rival' }],
         [mira('ally', null)],
         [mira('ally', 'rival')],
       ),
@@ -373,7 +396,7 @@ describe('entityActions — relationships, three-way', () => {
   it('writes nothing for an edit back to what is now stored', () => {
     expect(
       threeWay(
-        [{ otherId: 'char_mira', selfToOther: 'ally', otherToSelf: 'wary' }],
+        [{ cardKey: 'card_mira', otherId: 'char_mira', selfToOther: 'ally', otherToSelf: 'wary' }],
         [mira('ally', 'wary ')],
         [mira('ally', 'ally')],
       ),
@@ -440,7 +463,9 @@ describe('entityActions — create', () => {
     const draft = {
       ...characterDraftFrom(null, []),
       name: 'Sable',
-      relationships: [{ otherId: 'char_kael', selfToOther: '', otherToSelf: 'debtor' }],
+      relationships: [
+        { cardKey: 'card_kael', otherId: 'char_kael', selfToOther: '', otherToSelf: 'debtor' },
+      ],
     }
     const actions = entityActions({
       kind: 'character',

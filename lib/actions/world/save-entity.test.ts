@@ -161,7 +161,14 @@ describe('saveEntity', () => {
     const row = await rowOf(db, 'char_kael')
     const draft = {
       ...characterDraftFrom(row, []),
-      relationships: [{ otherId: 'char_aria', selfToOther: 'sister', otherToSelf: 'brother' }],
+      relationships: [
+        {
+          cardKey: 'card_aria',
+          otherId: 'char_aria',
+          selfToOther: 'sister',
+          otherToSelf: 'brother',
+        },
+      ],
     }
     await saveEntity({ kind: 'character', branchId: 'br_1', row, draft, relationships: [] }, ctx)
     const rels = await db.select().from(characterRelationships)
@@ -184,7 +191,9 @@ describe('saveEntity', () => {
     const row = await rowOf(db, 'char_kael')
     const draft = {
       ...characterDraftFrom(row, []),
-      relationships: [{ otherId: 'char_aria', selfToOther: '', otherToSelf: 'rival' }],
+      relationships: [
+        { cardKey: 'card_aria', otherId: 'char_aria', selfToOther: '', otherToSelf: 'rival' },
+      ],
     }
     await saveEntity({ kind: 'character', branchId: 'br_1', row, draft, relationships: [] }, ctx)
     // Kael is b: Aria's view of Kael lands in `kind` (a's view of b).
@@ -205,7 +214,9 @@ describe('saveEntity', () => {
         draft: {
           ...characterDraftFrom(null, []),
           name: 'Sable',
-          relationships: [{ otherId: 'char_aria', selfToOther: 'debtor', otherToSelf: '' }],
+          relationships: [
+            { cardKey: 'card_aria', otherId: 'char_aria', selfToOther: 'debtor', otherToSelf: '' },
+          ],
         },
         relationships: [],
       },
@@ -274,7 +285,12 @@ describe('saveEntity', () => {
     const draft = {
       ...characterDraftFrom(row, base),
       relationships: [
-        { otherId: 'char_aria', selfToOther: 'estranged sister', otherToSelf: 'brother' },
+        {
+          cardKey: 'card_aria',
+          otherId: 'char_aria',
+          selfToOther: 'estranged sister',
+          otherToSelf: 'brother',
+        },
       ],
     }
     expect(
