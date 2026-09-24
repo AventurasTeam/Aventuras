@@ -371,15 +371,18 @@ post-creation writer of `stories.definition`: no such arm exists
 today — `updateStorySettings` takes settings only — so this is a new
 action, not a settings-path call. Pinned: it sets
 `definition.leadEntityId` for a story, validating that the target is a
-`kind='character'` entity on the story's current branch and that the
-result still satisfies the schema's `needsLead` refine; it writes no
-delta (`stories` is absent from `deltas.target_table`); it refuses
-while `isUserEditBlocked` holds, because both its consumers sit
-outside C7's gating; and it refreshes the current-story and stories
-stores so the reader's `You` anchor re-anchors immediately (the
-feedback canon names in
+`kind='character'` entity on the story's current branch, that its
+`status` is `'active'` (refused as `not-active`, carrying the
+wizard's staged-can't-lead rule forward), and that the result still
+satisfies the schema's `needsLead` refine; it writes no delta
+(`stories` is absent from `deltas.target_table`); it refuses while
+`isUserEditBlocked` holds, because both its consumers sit outside
+C7's gating; and it refreshes the current-story and stories stores so
+the reader's `You` anchor re-anchors immediately (the feedback canon
+names in
 [`reader-composer.md → Peek drawer`](../../../ui/screens/reader-composer/reader-composer.md#peek-drawer--lead-affordance-for-characters)).
-Consumers: 4.2a's `⋯ → Set as lead`, 4.5b's peek-head `Set as lead`.
+Consumers: 4.2a's `⋯ → Set as lead`, 4.5b's peek-head `Set as lead`
+(inherits the same `not-active` refusal).
 M7.2's Generation-tab lead picker is a later consumer of the same
 action. Name fixed in 4.2a's first commit.
 
@@ -419,8 +422,10 @@ navigator removal, window close and reload. Save commits every change
 as deltas under **one** `action_id` through `applyDeltaActionGroup`,
 which means a relationship row authored with both perspectives is
 **one** action — 4.2a extends the M1.5 `upsertCharacterRelationship`
-payload to carry both pov columns, since the runner rejects two
-writes to one row's column in a group. Discard resets; success fires
+payload to carry both pov columns, since handlers in a group read
+pre-group state: two single-POV writes to a new pair would both
+attempt an INSERT rather than the second becoming an UPDATE. Discard
+resets; success fires
 the `Saved.` toast; an invalid draft disables Save and renders its
 reason in the bar's `notice` slot; every control disables with the
 principle-owned tooltip while `isUserEditBlocked(txState)` holds; and

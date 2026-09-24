@@ -416,11 +416,6 @@
        overflow-wrap on the type-hint to break long monospace strings cleanly. */
     .field-row { grid-template-columns: 120px 1fr; gap: 10px; }
     .field-label, .field-label .type-hint { overflow-wrap: anywhere; word-break: break-word; }
-    /* Overview portrait stacks below content on tablet+phone (220 px
-       floating right eats too much detail-pane width on narrow tiers).
-       Phone shrinks further to 100 px, tablet keeps 140 px. */
-    .overview-row { flex-direction: column !important; gap: 14px !important; }
-    .overview-row .portrait-slot { width: 140px !important; height: 140px !important; align-self: flex-start; }
   }
   @container (max-width: 639px) {
     /* Phone top-bar shape — per mobile/navigation.md → Phone:
@@ -483,8 +478,11 @@
       color: var(--ink-muted);
     }
 
-    /* Overview portrait shrinks further on phone (tablet keeps 140 px). */
-    .overview-row .portrait-slot { width: 100px !important; height: 100px !important; }
+    /* Overview portrait stacks below content on phone only (220 px
+       floating right eats too much of the 390 px viewport). Tablet
+       floats like desktop — only phone is this cramped. */
+    .overview-row { flex-direction: column !important; gap: 14px !important; }
+    .overview-row .portrait-slot { width: 100px !important; height: 100px !important; align-self: flex-start; }
 
     /* History row stacks vertically — when / op / change each on its
        own line, all left-aligned. Tablet's compression rule already
@@ -976,13 +974,10 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
       </div>
       <div class="field-row">
         <div class="field-label">visual.distinguishing
-          <span class="type-hint">string[] &middot; CharacterState.visual</span>
+          <span class="type-hint">string &middot; CharacterState.visual</span>
         </div>
-        <div class="chip-row">
-          <span class="chip-small">scar across left cheek <span class="x">&times;</span></span>
-          <span class="chip-small">low gravelly voice <span class="x">&times;</span></span>
-          <span class="chip-small">slight limp from old wound <span class="x">&times;</span></span>
-          <span class="add-chip">+ add</span>
+        <div class="input-select">
+          <span>scar across left cheek, low gravelly voice, slight limp from an old wound</span>
         </div>
       </div>
 
@@ -1125,12 +1120,11 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
           <span class="type-hint">Record&lt;string, number&gt; &middot; CharacterState</span>
         </div>
         <div>
-          <div class="chip-row">
-            <span class="chip-small">gold &times; 200 <span class="x">&times;</span></span>
-            <span class="chip-small">silver &times; 30 <span class="x">&times;</span></span>
-            <span class="chip-small">arrows &times; 15 <span class="x">&times;</span></span>
-            <span class="chip-small">rations &times; 7 <span class="x">&times;</span></span>
-            <span class="add-chip" title="Add a new stackable key (currency, ammo, supply)">+ add</span>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <div style="display: flex; gap: 6px; align-items: center;"><div class="input-select" style="flex: 1;"><span>gold</span></div><div class="input-select" style="max-width: 90px;"><span>200</span></div><span class="x">&times;</span></div>
+            <div style="display: flex; gap: 6px; align-items: center;"><div class="input-select" style="flex: 1;"><span>silver</span></div><div class="input-select" style="max-width: 90px;"><span>30</span></div><span class="x">&times;</span></div>
+            <div style="display: flex; gap: 6px; align-items: center;"><div class="input-select" style="flex: 1;"><span>arrows</span></div><div class="input-select" style="max-width: 90px;"><span>15</span></div><span class="x">&times;</span></div>
+            <span class="add-chip" title="Add a quantity (currency, ammo, supply)">+ Add quantity</span>
           </div>
           <div style="font-size: 10px; color: var(--ink-muted); margin-top: 4px; line-height: 1.5;">
             Carried quantities &mdash; tracked on the character, not on container items. Currencies, ammo, supplies.
@@ -1226,7 +1220,7 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
         </span>
         <span style="color: var(--ink-faint); font-size: 14px;">&rsaquo;</span>
       </div>
-      <!-- Add affordance — pinned at the bottom of the sub-section. -->
+      <!-- Add affordance — pinned at the bottom of the sub-section. A row tap or Add expands an inline edit card below it (picker, your view, their view, Delete, Done) — not a sheet. -->
       <div class="list-row" data-rel-add style="cursor: pointer; border-style: dashed; border-color: var(--line-soft); color: var(--ink-muted); justify-content: center;">
         <span style="font-size: 12px;">+ Add relationship</span>
       </div>
