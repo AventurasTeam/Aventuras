@@ -33,3 +33,5 @@ export type {
   RelationshipLink,
   StackableDraft,
 } from './entity-draft'
+export { entityActions } from './entity-actions'
+export type { EntitySaveInput } from './entity-actions'
