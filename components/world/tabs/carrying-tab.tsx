@@ -50,6 +50,7 @@ export function CarryingTab({
               excludeIds={carried}
               rowHint={hint}
               testID="equipped"
+              addLabel={t('world:carrying.addEquipped')}
               {...gate}
             />
           )}
@@ -67,6 +68,7 @@ export function CarryingTab({
               excludeIds={equipped}
               rowHint={hint}
               testID="carried"
+              addLabel={t('world:carrying.addCarried')}
               {...gate}
             />
           )}

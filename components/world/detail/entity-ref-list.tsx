@@ -21,6 +21,8 @@ type EntityRefListProps = Gate & {
   excludeIds: readonly string[]
   rowHint: (entity: Entity) => string | undefined
   testID: string
+  /** Distinct per list: two lists share a pane, so their add pickers need different accessible names. */
+  addLabel: string
 }
 
 /** world.md → Carrying: an item-ref list, picker-backed, each row removable. */
@@ -31,6 +33,7 @@ export function EntityRefList({
   excludeIds,
   rowHint,
   testID,
+  addLabel,
   blocked,
   blockedReason,
 }: EntityRefListProps) {
@@ -71,8 +74,8 @@ export function EntityRefList({
         entities={entities}
         kinds={ITEM}
         excludeIds={[...value, ...excludeIds]}
-        label={t('world:carrying.addItem')}
-        placeholder={t('world:carrying.addItem')}
+        label={addLabel}
+        placeholder={addLabel}
         clearable={false}
         disabled={blocked}
         disabledReason={blockedReason}

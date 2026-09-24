@@ -80,7 +80,7 @@ export function LocationDetailPane({
       <TabsContent value="connections">
         <LocationConnections
           control={control}
-          self={row}
+          selfId={row?.id ?? null}
           entities={data.entities}
           onOpenEntity={onOpenEntity}
           {...gate}

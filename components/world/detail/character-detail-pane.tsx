@@ -132,10 +132,9 @@ export function CharacterDetailPane({
         <CharacterConnections
           control={control}
           trigger={trigger}
-          self={row}
+          selfId={row?.id ?? null}
           entities={data.entities}
           lastSeen={row == null ? null : lastSeenLine(stateOf(row, 'character'), data)}
-          onOpenEntity={onOpenEntity}
           {...gate}
         />
       </TabsContent>

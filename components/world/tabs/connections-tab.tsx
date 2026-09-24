@@ -22,11 +22,10 @@ import { EntityLink } from '../overview/overview-parts'
 const LOCATION: readonly EntityKind[] = ['location']
 const FACTION: readonly EntityKind[] = ['faction']
 
-type Shared = Gate & {
-  /** The pane's committed row; null while creating. */
-  self: Entity | null
+type Shared = {
+  /** The pane's committed row id; null while creating. */
+  selfId: string | null
   entities: readonly Entity[]
-  onOpenEntity: (id: string) => void
 }
 
 function LinkList({
@@ -55,16 +54,17 @@ function LinkList({
 export function CharacterConnections({
   control,
   trigger,
-  self,
+  selfId,
   entities,
   lastSeen,
   blocked,
   blockedReason,
-}: Shared & {
-  control: Control<CharacterDraft>
-  trigger: UseFormTrigger<CharacterDraft>
-  lastSeen: string | null
-}) {
+}: Shared &
+  Gate & {
+    control: Control<CharacterDraft>
+    trigger: UseFormTrigger<CharacterDraft>
+    lastSeen: string | null
+  }) {
   const gate = { blocked, blockedReason }
   return (
     <View className="gap-6">
@@ -94,7 +94,7 @@ export function CharacterConnections({
         <RelationshipsEditor
           control={control}
           trigger={trigger}
-          selfId={self?.id ?? null}
+          selfId={selfId}
           entities={entities}
           {...gate}
         />
@@ -111,12 +111,16 @@ export function CharacterConnections({
 
 export function LocationConnections({
   control,
-  self,
+  selfId,
   entities,
   onOpenEntity,
   blocked,
   blockedReason,
-}: Shared & { control: Control<LocationDraft> }) {
+}: Shared &
+  Gate & {
+    control: Control<LocationDraft>
+    onOpenEntity: (id: string) => void
+  }) {
   return (
     <View className="gap-6">
       <Section title={t('world:sections.compositional')}>
@@ -127,7 +131,7 @@ export function LocationConnections({
           placeholder={t('world:fields.parentPlaceholder')}
           entities={entities}
           kinds={LOCATION}
-          excludeIds={self == null ? [] : [self.id]}
+          excludeIds={selfId == null ? [] : [selfId]}
           testID="parent-location"
           blocked={blocked}
           blockedReason={blockedReason}
@@ -135,13 +139,13 @@ export function LocationConnections({
       </Section>
       <Section title={t('world:sections.charactersHere')}>
         <LinkList
-          entities={self == null ? [] : charactersAt(self.id, entities)}
+          entities={selfId == null ? [] : charactersAt(selfId, entities)}
           onOpenEntity={onOpenEntity}
         />
       </Section>
       <Section title={t('world:sections.itemsHere')}>
         <LinkList
-          entities={self == null ? [] : itemsAt(self.id, entities)}
+          entities={selfId == null ? [] : itemsAt(selfId, entities)}
           onOpenEntity={onOpenEntity}
         />
       </Section>
@@ -151,12 +155,16 @@ export function LocationConnections({
 
 export function ItemConnections({
   control,
-  self,
+  selfId,
   entities,
   onOpenEntity,
   blocked,
   blockedReason,
-}: Shared & { control: Control<ItemDraft> }) {
+}: Shared &
+  Gate & {
+    control: Control<ItemDraft>
+    onOpenEntity: (id: string) => void
+  }) {
   return (
     <View className="gap-6">
       <Section title={t('world:sections.positional')}>
@@ -173,7 +181,7 @@ export function ItemConnections({
       </Section>
       <Section title={t('world:sections.heldBy')}>
         <LinkList
-          entities={self == null ? [] : holdersOf(self.id, entities)}
+          entities={selfId == null ? [] : holdersOf(selfId, entities)}
           onOpenEntity={onOpenEntity}
         />
       </Section>
@@ -181,12 +189,16 @@ export function ItemConnections({
   )
 }
 
-export function FactionConnections({ self, entities, onOpenEntity }: Shared) {
+export function FactionConnections({
+  selfId,
+  entities,
+  onOpenEntity,
+}: Shared & { onOpenEntity: (id: string) => void }) {
   return (
     <View className="gap-6">
       <Section title={t('world:sections.members')}>
         <LinkList
-          entities={self == null ? [] : membersOf(self.id, entities)}
+          entities={selfId == null ? [] : membersOf(selfId, entities)}
           onOpenEntity={onOpenEntity}
         />
       </Section>

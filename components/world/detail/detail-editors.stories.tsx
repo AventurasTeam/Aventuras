@@ -10,6 +10,7 @@ import { Text } from '@/components/ui/text'
 import type { Entity } from '@/lib/db'
 import { characterDraftFrom, characterDraftSchema, type CharacterDraft } from '@/lib/world'
 
+import { CarryingTab } from '../tabs/carrying-tab'
 import { itemPositionHint } from '../world-copy'
 import { EntityRefList } from './entity-ref-list'
 import { RelationshipsEditor } from './relationships-editor'
@@ -65,7 +66,7 @@ const THREE_STATES: CharacterDraft['relationships'] = [
 ]
 
 type HarnessProps = {
-  editor: 'relationships' | 'stackables' | 'carrying'
+  editor: 'relationships' | 'stackables' | 'carrying' | 'carryingTab'
   relationships?: CharacterDraft['relationships']
   stackables?: CharacterDraft['stackables']
   blocked?: boolean
@@ -103,6 +104,16 @@ function Harness({ editor, relationships = [], stackables = [], blocked = false 
           excludeIds={[]}
           rowHint={(item) => itemPositionHint(item, ENTITIES, 'char_kael')}
           testID="carried"
+          addLabel="Link an item"
+          {...gate}
+        />
+      ) : null}
+      {editor === 'carryingTab' ? (
+        <CarryingTab
+          control={form.control}
+          trigger={form.trigger}
+          entities={ENTITIES}
+          selfId="char_kael"
           {...gate}
         />
       ) : null}
@@ -353,5 +364,16 @@ export const CarryingPickerShowsWhereabouts: Story = {
     await waitFor(() => expect(draftText()).toContain('item_key'), WAIT)
     await userEvent.click(screen.getByRole('button', { name: 'Remove Old key' }))
     await waitFor(() => expect(draftText()).not.toContain('item_key'), WAIT)
+  },
+}
+
+/** Equipped and Carried each have their own add picker — one accessible name apiece. */
+export const CarryingAddControlsHaveDistinctNames: Story = {
+  args: { editor: 'carryingTab' },
+  play: async () => {
+    await expect(
+      await screen.findByRole('button', { name: 'Add equipped item' }, WAIT),
+    ).toBeVisible()
+    await expect(screen.getByRole('button', { name: 'Add carried item' })).toBeVisible()
   },
 }

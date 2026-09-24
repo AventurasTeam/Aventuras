@@ -69,7 +69,7 @@ export function ItemDetailPane({
       <TabsContent value="connections">
         <ItemConnections
           control={control}
-          self={row}
+          selfId={row?.id ?? null}
           entities={data.entities}
           onOpenEntity={onOpenEntity}
           {...gate}

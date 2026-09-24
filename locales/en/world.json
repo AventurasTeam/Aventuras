@@ -274,7 +274,8 @@
   },
   "carrying": {
     "footnote": "Carried quantities — tracked on the character, not on container items.",
-    "addItem": "Link an item",
+    "addEquipped": "Add equipped item",
+    "addCarried": "Add carried item",
     "removeNamed": "Remove {{name}}",
     "missing": "Entity no longer exists",
     "addStackable": "Add quantity",
