@@ -216,7 +216,9 @@ convention, and the expectation that subsystems route through
   already landed), `entity_saved_handler_failed`
   (`components/world/use-entity-row-session.ts` — its World twin,
   an `EntityRowSessionOptions.onSaved` that throws after the write
-  already landed) and `plot_link_revalidate_failed`
+  already landed), `world_set_lead_failed` (`app/world/[branchId].tsx`
+  — a `⋯ → Set as lead` whose `setStoryLead` threw rather than
+  refused) and `plot_link_revalidate_failed`
   (`components/plot/link-card.tsx` — the revalidation after a link row's
   removal rejected, leaving a stale duplicate error blocking Save) are
   gated by the master gate like any other kind
