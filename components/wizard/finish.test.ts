@@ -642,6 +642,31 @@ describe('finishWizard', () => {
     })
   })
 
+  it('refuses a location hierarchy that loops, before anything is written', async () => {
+    const { db, ctx } = await setup()
+    const UPPER_ID = 'loc_77777777-7777-7777-7777-777777777777'
+
+    const result = await finishWizard(
+      makeState({
+        title: 'Looped',
+        cast: [
+          { ...emptyCastDraft('location', LOCATION_ID), name: 'Lower', parentLocationId: UPPER_ID },
+          { ...emptyCastDraft('location', UPPER_ID), name: 'Upper', parentLocationId: LOCATION_ID },
+        ],
+        opening: { content: 'Once.' },
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      2900,
+    )
+
+    expect(result).toEqual({ status: 'invalid', reasons: ['parentCycle'] })
+    expect(await db.select().from(stories)).toHaveLength(0)
+    expect(await db.select().from(entities)).toHaveLength(0)
+  })
+
   it('embeds every cast row and the lore rows in ONE call, cast first', async () => {
     const { ctx } = await setup()
     const row = loreRow({ title: 'Magic', body: 'Wells.' })
