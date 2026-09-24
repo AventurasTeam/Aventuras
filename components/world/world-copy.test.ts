@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
+import { EARTH_GREGORIAN } from '@/lib/calendar'
+import type { CharacterState } from '@/lib/db'
+import type { EntryRef } from '@/lib/entry-refs'
 import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
 import { characterDraftFrom, factionDraftFrom, itemDraftFrom, locationDraftFrom } from '@/lib/world'
 
@@ -9,6 +12,7 @@ import {
   entityMenuEntries,
   itemPositionHint,
   lastSeenDetail,
+  lastSeenLine,
   lastSeenText,
   leadDisabledReason,
   leadRejectionText,
@@ -55,6 +59,45 @@ describe('last seen', () => {
         span: { tier: 'second', count: 0 },
       }),
     ).toBe('just now')
+  })
+})
+
+describe('lastSeenLine', () => {
+  const DAY = 86_400
+  const tavern = makeEntity({ id: 'loc_tavern', kind: 'location', name: 'The Iron Tavern' })
+  const entryIndex = new Map<string, EntryRef>([
+    ['entry_47', { id: 'entry_47', position: 47, kind: 'ai_reply', chapterId: null, excerpt: '' }],
+  ])
+  const data = { entities: [tavern], entryIndex, worldTime: 10 * DAY, calendar: EARTH_GREGORIAN }
+  const seen = (lastSeenAt: CharacterState['lastSeenAt']): CharacterState => ({
+    visual: {},
+    traits: [],
+    drives: [],
+    current_location_id: null,
+    equipped_items: [],
+    inventory: [],
+    faction_id: null,
+    lastSeenAt,
+  })
+
+  it('is null when never seen', () => {
+    expect(lastSeenLine(seen(null), data)).toBeNull()
+  })
+
+  it('names the location, entry and in-world span', () => {
+    expect(
+      lastSeenLine(
+        seen({ entryId: 'entry_47', locationId: 'loc_tavern', worldTime: 8 * DAY }),
+        data,
+      ),
+    ).toBe('The Iron Tavern · entry #47 · 2 days ago in-world')
+  })
+
+  it('reads seen earlier, not a blank line, when no part is known', () => {
+    // No location, an entry outside the index, and a span that runs backwards.
+    expect(
+      lastSeenLine(seen({ entryId: 'entry_gone', locationId: null, worldTime: 11 * DAY }), data),
+    ).toBe('Seen earlier in the story')
   })
 })
 

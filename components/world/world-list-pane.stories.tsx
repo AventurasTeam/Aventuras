@@ -506,7 +506,10 @@ export const AddMenuDisabledEntries: Story = {
     await userEvent.click(await screen.findByRole('button', { name: 'New character' }))
     expect(await screen.findByTitle('Lands in Slice 4.6')).toBeInTheDocument()
     expect(screen.getByTitle('Vault lands in M8')).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: 'Blank' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Blank' })).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
   },
 }
 

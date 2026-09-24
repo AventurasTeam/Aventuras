@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Controller, type Control } from 'react-hook-form'
 import { View } from 'react-native'
 
@@ -32,10 +32,15 @@ export function useEntityTab(
   createSeq: number | undefined,
   initialTab: EntityTab | undefined,
 ) {
-  const [tab, setTab] = useState<EntityTab>(initialTab ?? (isCreate ? 'identity' : 'overview'))
-  useEffect(() => {
+  const [tab, setTab] = useState<EntityTab>(
+    createSeq != null ? 'identity' : (initialTab ?? (isCreate ? 'identity' : 'overview')),
+  )
+  // Synced during render so a new create draft never paints a frame on the previous tab.
+  const [seenSeq, setSeenSeq] = useState(createSeq)
+  if (createSeq !== seenSeq) {
+    setSeenSeq(createSeq)
     if (createSeq != null) setTab('identity')
-  }, [createSeq])
+  }
   return [tab, setTab] as const
 }
 
@@ -74,7 +79,13 @@ export function EntityDetailFrame<Draft extends EntityBaseDraft>({
   hotkeysEnabled,
   children,
 }: EntityDetailFrameProps<Draft>) {
+  const rowId = row?.id ?? null
   const [jsonOpen, setJsonOpen] = useState(false)
+  const [jsonRowId, setJsonRowId] = useState(rowId)
+  if (rowId !== jsonRowId) {
+    setJsonRowId(rowId)
+    setJsonOpen(false)
+  }
   const baseControl = asBaseControl(session.form.control)
   const changeTab = (value: string) => onTabChange(value as EntityTab)
   return (
@@ -82,7 +93,6 @@ export function EntityDetailFrame<Draft extends EntityBaseDraft>({
       <Tabs value={tab} onValueChange={changeTab} className="flex-1 gap-0">
         <DetailPane
           nameSlot={
-            // Shipped E2E reads the name through this testID (e2e/locators/world.ts → detailName).
             <View testID="world-detail-name">
               <Controller
                 control={baseControl}

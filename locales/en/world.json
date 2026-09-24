@@ -267,6 +267,7 @@
   "connections": {
     "none": "None",
     "lastSeenNever": "Not seen yet",
+    "lastSeenUnknown": "Seen earlier in the story",
     "entry": "entry #{{position}}",
     "ago": "{{span}} ago in-world",
     "justNow": "just now",

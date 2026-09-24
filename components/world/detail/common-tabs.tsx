@@ -1,14 +1,12 @@
 import { TabsContent } from '@/components/ui/tabs'
-import type { CharacterState, Entity } from '@/lib/db'
+import type { Entity } from '@/lib/db'
 import { t } from '@/lib/i18n'
-import { lastSeenSpan } from '@/lib/world'
 
+import type { EntityPaneData } from './entity-pane-props'
+import type { EntityTab } from './entity-tabs'
 import { EntityOverview } from '../overview/entity-overview'
 import { InvolvementsTab } from '../tabs/involvements-tab'
 import { PlaceholderTab } from '../tabs/placeholder-tab'
-import { lastSeenDetail } from '../world-copy'
-import type { EntityPaneData } from './entity-pane-props'
-import type { EntityTab } from './entity-tabs'
 
 export function OverviewTab({
   row,
@@ -70,18 +68,4 @@ export function TrailingTabs({
       </TabsContent>
     </>
   )
-}
-
-/** Connections → Last seen for a character, or null when never seen. */
-export function lastSeenLine(state: CharacterState, data: EntityPaneData): string | null {
-  const seen = state.lastSeenAt
-  if (seen == null) return null
-  return lastSeenDetail({
-    location:
-      seen.locationId == null
-        ? undefined
-        : data.entities.find((e) => e.id === seen.locationId)?.name,
-    position: data.entryIndex.get(seen.entryId)?.position,
-    span: lastSeenSpan(seen, data.worldTime, data.calendar),
-  })
 }

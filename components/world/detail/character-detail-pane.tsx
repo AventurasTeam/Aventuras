@@ -1,25 +1,20 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useWatch } from 'react-hook-form'
 
 import { TabsContent } from '@/components/ui/tabs'
-import {
-  characterDraftFrom,
-  characterDraftSchema,
-  stateOf,
-  type CharacterDraft,
-  type RelationshipLink,
-} from '@/lib/world'
+import { characterDraftFrom, characterDraftSchema, stateOf, type CharacterDraft } from '@/lib/world'
 
 import { CarryingTab } from '../tabs/carrying-tab'
 import { CharacterConnections } from '../tabs/connections-tab'
 import { CharacterIdentity } from '../tabs/identity-tab'
 import { SettingsTab } from '../tabs/settings-tab'
 import { useEntityRowSession } from '../use-entity-row-session'
-import { entityFieldLabel, entityIssueText, leadDisabledReason } from '../world-copy'
-import { lastSeenLine, OverviewTab, TrailingTabs } from './common-tabs'
+import { entityFieldLabel, entityIssueText, lastSeenLine, leadDisabledReason } from '../world-copy'
+import { OverviewTab, TrailingTabs } from './common-tabs'
 import { asBaseControl, EntityDetailFrame, useEntityTab } from './entity-detail-frame'
 import type { EntityPaneProps } from './entity-pane-props'
+import { useRelationshipsBase } from './use-relationships-base'
 
 const resolver = zodResolver(characterDraftSchema)
 const fieldLabel = (field: string) => entityFieldLabel('character', field)
@@ -45,9 +40,6 @@ export function CharacterDetailPane({
     () => characterDraftFrom(row, data.relationships),
     [row, data.relationships],
   )
-  // Null follows the store; while Relationships is dirty, the links its draft was based on.
-  // After a successful save, the list as saved (typing during the save keeps it dirty).
-  const [frozenBase, setFrozenBase] = useState<readonly RelationshipLink[] | null>(null)
   const session = useEntityRowSession<CharacterDraft>({
     kind: 'character',
     rowId: row?.id ?? null,
@@ -56,32 +48,26 @@ export function CharacterDetailPane({
     resolver,
     fieldLabel,
     issueText: entityIssueText,
+    // Runs at save time; `relationshipsBase` below needs this session's dirty fields.
     onSave: async (draft) => {
       const result = await onSave({
         kind: 'character',
         draft,
         relationships: data.relationships,
-        relationshipsBase: frozenBase ?? data.relationships,
+        relationshipsBase: relationshipsBase.base,
       })
-      if (result.status === 'ok')
-        setFrozenBase(
-          draft.relationships.map((r) => ({
-            rowId: '',
-            otherId: r.otherId,
-            selfToOther: r.selfToOther,
-            otherToSelf: r.otherToSelf,
-          })),
-        )
+      if (result.status === 'ok') relationshipsBase.markSaved(draft.relationships)
       return result
     },
     onSaved,
     onRejected,
     onSession,
   })
-  // `dirtyFields` holds labels, not keys. Render-phase sync, the NumberInput idiom.
-  const relationshipsDirty = session.dirtyFields.includes(fieldLabel('relationships'))
-  if (relationshipsDirty && frozenBase === null) setFrozenBase(data.relationships)
-  if (!relationshipsDirty && frozenBase !== null) setFrozenBase(null)
+  // `dirtyFields` holds labels, not keys.
+  const relationshipsBase = useRelationshipsBase(
+    session.dirtyFields.includes(fieldLabel('relationships')),
+    data.relationships,
+  )
   const { control, trigger } = session.form
   const [tab, setTab] = useEntityTab(row == null, createSeq, initialTab)
   // Lengths only, so typing in a row doesn't re-render the whole pane.

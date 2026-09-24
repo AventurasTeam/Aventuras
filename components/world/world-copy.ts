@@ -1,11 +1,12 @@
 import type { OverflowMenuEntry } from '@/components/compounds/overflow-menu'
 import { ENTITY_REJECTION, LEAD_REJECTION, type LeadRejectionCode } from '@/lib/actions'
 import type { WholeTierSpan } from '@/lib/calendar'
-import type { Entity, EntityKind } from '@/lib/db'
+import type { CharacterState, Entity, EntityKind } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import {
   holdersOf,
   isWorldIssue,
+  lastSeenSpan,
   stateOf,
   type CharacterDraft,
   type EntityBaseDraft,
@@ -15,6 +16,7 @@ import {
   type WorldIssue,
 } from '@/lib/world'
 
+import type { EntityPaneData } from './detail/entity-pane-props'
 import type { EntityTab } from './detail/entity-tabs'
 
 /** A draft-schema issue message (a key) → its text; unknown messages pass through. */
@@ -234,6 +236,24 @@ export function lastSeenDetail(parts: {
   const entry =
     parts.position == null ? undefined : t('world:connections.entry', { position: parts.position })
   return [parts.location, entry, ago].filter((p): p is string => p != null && p !== '').join(' · ')
+}
+
+/** Connections → Last seen for a character, or null when never seen. */
+export function lastSeenLine(
+  state: CharacterState,
+  data: Pick<EntityPaneData, 'entities' | 'entryIndex' | 'worldTime' | 'calendar'>,
+): string | null {
+  const seen = state.lastSeenAt
+  if (seen == null) return null
+  const detail = lastSeenDetail({
+    location:
+      seen.locationId == null
+        ? undefined
+        : data.entities.find((e) => e.id === seen.locationId)?.name,
+    position: data.entryIndex.get(seen.entryId)?.position,
+    span: lastSeenSpan(seen, data.worldTime, data.calendar),
+  })
+  return detail === '' ? t('world:connections.lastSeenUnknown') : detail
 }
 
 /** An item row's whereabouts for the Carrying picker; `selfId`'s own hold doesn't count. */
