@@ -10,25 +10,21 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Runners are pinned, not ubuntu-latest: that label moves to Ubuntu 26.04 from
+# 2026-10-19, and Playwright < 1.61 can't install Chromium or its deps there
+# (install-deps just warns and exits 0). Move the pin deliberately.
 jobs:
   check:
     name: Lint, format, typecheck, docs
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
+      - uses: actions/checkout@v7
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        uses: ./.github/actions/pnpm-install
+        with:
+          save-cache: 'true'
 
       - name: Lint
         run: pnpm lint
@@ -56,30 +52,28 @@ jobs:
 
   test:
     name: Storybook tests (vitest + playwright)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
+      - uses: actions/checkout@v7
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        uses: ./.github/actions/pnpm-install
 
-      # Playwright browser binaries are ~170 MB; cache across runs.
+      # Playwright browser binaries are ~250 MB. Each playwright-core release
+      # pins its browser builds, so key on that version, not the lockfile.
+      - name: Resolve Playwright version
+        id: playwright
+        run: |
+          version=$(node -p "require('./node_modules/playwright-core/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Restore Playwright cache
         id: playwright-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
@@ -94,32 +88,29 @@ jobs:
 
   e2e:
     name: E2E (Playwright + Electron, packaged)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
+      - uses: actions/checkout@v7
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        uses: ./.github/actions/pnpm-install
 
-      # Electron binary + builder downloads (~100 MB); cache across runs, keyed
-      # on the lockfile so a version bump busts it.
+      # Electron binary + builder downloads (~220 MB); keyed on the two versions
+      # that decide them, so an unrelated lockfile change keeps the cache.
+      - name: Resolve Electron versions
+        id: electron
+        run: |
+          versions=$(node -p "['electron', 'electron-builder'].map((p) => require('./node_modules/' + p + '/package.json').version).join('-')")
+          echo "versions=$versions" >> "$GITHUB_OUTPUT"
+
       - name: Restore Electron cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/electron
             ~/.cache/electron-builder
-          key: electron-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          key: electron-${{ runner.os }}-${{ steps.electron.outputs.versions }}
 
       - name: Build web bundle
         run: pnpm build:web
@@ -141,7 +132,7 @@ jobs:
       # Fixture embedder model (~24 MB from Hugging Face); the harness downloads
       # it on a cache miss. Keyed on the catalog so a model/revision bump busts.
       - name: Restore embedder model cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/aventuras-e2e
           key: e2e-embedder-${{ hashFiles('lib/embedder/catalog-data.json') }}
