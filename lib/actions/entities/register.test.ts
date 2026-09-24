@@ -367,6 +367,7 @@ describe('parent_location_id cycle guard', () => {
   it('refuses A → B when B → A with parent-cycle, writing nothing', async () => {
     const { db, ctx } = await setup()
     await db.insert(entities).values([loc('loc_a', null), loc('loc_b', 'loc_a')])
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
     const result = await applyDeltaAction(
       setState('loc_a', { parent_location_id: 'loc_b' }, 'act_1'),
       ctx,
@@ -378,6 +379,8 @@ describe('parent_location_id cycle guard', () => {
     })
     expect((await rowFor(db, 'loc_a')).state).toEqual({ parent_location_id: null })
     expect(await db.select().from(deltas)).toHaveLength(0)
+    expect(error).not.toHaveBeenCalled()
+    error.mockRestore()
   })
 
   it('refuses a self-parent on update and on create', async () => {
@@ -423,7 +426,7 @@ describe('parent_location_id cycle guard', () => {
     expect((await rowFor(db, 'loc_shop')).state).toEqual({ parent_location_id: 'loc_city' })
   })
 
-  it('does not re-walk an unchanged parent, so a corrupt chain elsewhere never blocks an edit', async () => {
+  it('does not re-walk an unchanged parent, so an existing loop never blocks an edit', async () => {
     const { db, ctx } = await setup()
     await db.insert(entities).values([loc('loc_x', 'loc_y'), loc('loc_y', 'loc_x')])
     const result = await applyDeltaAction(
@@ -438,7 +441,7 @@ describe('parent_location_id cycle guard', () => {
     await db
       .insert(entities)
       .values([loc('loc_x', 'loc_y'), loc('loc_y', 'loc_x'), loc('loc_c', null)])
-    const error = vi.spyOn(logger, 'error')
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
     const result = await applyDeltaAction(
       setState('loc_c', { parent_location_id: 'loc_x' }, 'act_1'),
       ctx,
