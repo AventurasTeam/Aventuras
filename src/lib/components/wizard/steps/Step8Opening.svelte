@@ -155,7 +155,7 @@
       case 'guidance':
         return 'Generation returned no time, so this is the one it was given. Edit the opening to change it.'
       case 'edited':
-        return 'Set by you. Generating or refining again replaces it.'
+        return 'Set by you. Generating again, or a refinement that returns a time, replaces it.'
       default:
         return 'No time set. Edit the opening to set one.'
     }
