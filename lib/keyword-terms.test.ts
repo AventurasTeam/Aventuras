@@ -10,7 +10,7 @@ describe('dedupeTerms', () => {
   })
 
   it('collapses the composed and decomposed forms of one term', () => {
-    expect(dedupeTerms(['Café', 'Café'])).toEqual(['Café'])
+    expect(dedupeTerms(['Café', 'Café'])).toEqual(['Café'])
   })
 
   it('trims, drops blanks and keeps distinct terms in order', () => {
