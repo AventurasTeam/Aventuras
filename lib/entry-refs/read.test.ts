@@ -151,6 +151,13 @@ describe('readEntryIndex', () => {
     expect(await readExcerpt(content)).toBe('The door opens. A cold draft follows her in.')
   })
 
+  it('keeps a literal `<` in prose through the wider read', async () => {
+    const content = `She typed <grin and walked off into the night. ${'The rain kept on. '.repeat(15)}`
+    expect(await readExcerpt(content)).toBe(
+      'She typed <grin and walked off into the night. The rain kept on. The rain kept on. The rain kept on. The rain kept on.…',
+    )
+  })
+
   it('reads once when the first window fills every preview', async () => {
     const db = await seedEntry('The rain has not stopped for three days. '.repeat(10))
     const select = vi.spyOn(db, 'select')

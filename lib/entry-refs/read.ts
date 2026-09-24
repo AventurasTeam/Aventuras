@@ -36,7 +36,7 @@ function dropTrailingPartialWord(head: string): string {
 function preview(source: SourceHead): { excerpt: string; readFurther: boolean } {
   const truncated = Boolean(source.truncated)
   const cutMidWord = truncated && source.afterCut !== '' && !/\s/.test(source.afterCut)
-  // Stripped first: a tag is a word break the raw head doesn't show as whitespace.
+  // Stripped first: the raw head's tags hide where its words break.
   const prose = stripMarkup(source.head)
   const head = cutMidWord ? dropTrailingPartialWord(prose) : prose
   const text = excerpt(head, ENTRY_EXCERPT_CHARS) ?? ''
