@@ -695,6 +695,12 @@ export interface LoreManagementResult {
   sessionId: string
 }
 
+/** The chapter that triggered a lore run and the entries it was summarized from. */
+export interface LoreNewChapterInput {
+  chapter: Chapter
+  entries: StoryEntry[]
+}
+
 // UI State types
 export type ActivePanel =
   'story' | 'library' | 'settings' | 'templates' | 'lorebook' | 'memory' | 'vault' | 'gallery'

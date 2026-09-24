@@ -5,7 +5,15 @@
  * entries based on story events using the Vercel AI SDK ToolLoopAgent.
  */
 
-import type { Entry, VaultLorebookEntry } from '$lib/types'
+import type {
+  Chapter,
+  Entry,
+  LoreNewChapterInput,
+  POV,
+  StoryMode,
+  Tense,
+  VaultLorebookEntry,
+} from '$lib/types'
 import type { ServiceId } from '$lib/stores/settings.svelte'
 import { BaseAIService } from '../BaseAIService'
 import { createLogger } from '$lib/log'
@@ -30,6 +38,7 @@ import {
 import { LoreSessionLedger, type LoreMergeResult } from './sessionChanges'
 import { ChapterQueryBudget, MAX_CHAPTER_QUERIES_LORE } from '../sdk/tools/chapterQueries'
 import { LORE_MANAGEMENT_DEFAULTS } from '../core/defaults'
+import { loreChapterContext } from './newChapter'
 
 const log = createLogger('LoreManagement')
 
@@ -67,7 +76,10 @@ export interface LoreManagementContext {
   recentStory: string
   existingEntries: Entry[]
   /** Available chapters for querying */
-  chapters?: LoreManagementChapter[]
+  chapters?: Chapter[]
+  mode: StoryMode
+  pov: POV
+  tense: Tense
   /** Callback to query a chapter with a question */
   queryChapter?: (chapterNumber: number, question: string) => Promise<string>
   /**
@@ -77,6 +89,7 @@ export interface LoreManagementContext {
   keptSeparate?: ReadonlySet<string>
   /** Persist a `keep_separate` decision, so it outlives the session. */
   onKeepSeparate?: (names: string[]) => Promise<void>
+  newChapter?: LoreNewChapterInput
 }
 
 /**
@@ -101,15 +114,18 @@ function entryToVaultEntry(entry: Entry): VaultLorebookEntry {
 export class LoreManagementService extends BaseAIService {
   private maxIterations: number
   private requireDuplicateResolution: boolean
+  private sendNewChapterText: boolean
 
   constructor(
     serviceId: ServiceId,
     maxIterations: number = LORE_MANAGEMENT_DEFAULTS.maxIterations,
     requireDuplicateResolution: boolean = LORE_MANAGEMENT_DEFAULTS.requireDuplicateResolution,
+    sendNewChapterText: boolean = LORE_MANAGEMENT_DEFAULTS.sendNewChapterText,
   ) {
     super(serviceId)
     this.maxIterations = maxIterations
     this.requireDuplicateResolution = requireDuplicateResolution
+    this.sendNewChapterText = sendNewChapterText
   }
 
   /**
@@ -145,9 +161,12 @@ export class LoreManagementService extends BaseAIService {
     const vaultEntries: VaultLorebookEntry[] = JSON.parse(
       JSON.stringify(managed.map(entryToVaultEntry)),
     )
-    const plainChapters = context.chapters
-      ? JSON.parse(JSON.stringify(context.chapters))
-      : undefined
+    // Fresh primitive-only objects: no Svelte proxy reaches the tools, so no clone.
+    const { chapters, newChapterSection } = loreChapterContext(
+      context.chapters ?? [],
+      context.newChapter,
+      this.sendNewChapterText,
+    )
 
     /**
      * Where an approved change lands. Owns the index -> entry mapping, which grows with
@@ -202,7 +221,7 @@ export class LoreManagementService extends BaseAIService {
       generateId: () => `lm-${++changeIdCounter}`,
       removedIndices,
       preventDuplicateNames: true,
-      chapters: plainChapters,
+      chapters,
       // Fewer reads than the retrieval agent gets, and for a different reason — see
       // MAX_CHAPTER_QUERIES_LORE. No `alternative`: there is no grep here to point at.
       chapterQueries: new ChapterQueryBudget({
@@ -254,7 +273,9 @@ export class LoreManagementService extends BaseAIService {
       ? `# Story Since The Last Chapter\n${context.recentStory}\n`
       : ''
 
-    const hasChapters = Boolean(context.chapters && context.chapters.length > 0)
+    const hasChapters = chapters.length > 0
+    const hasNewChapter = Boolean(newChapterSection)
+    const hasRecentStory = Boolean(context.recentStory)
 
     // The agent's only view of the chapter index — there is no list_chapters tool, so the
     // summaries never exist in two places for it to reconcile.
@@ -265,25 +286,31 @@ export class LoreManagementService extends BaseAIService {
     // `query_chapter` — a whole chapter read by a second model. Cutting converts tokens
     // into LLM calls rather than saving them.
     const chapterSummary = hasChapters
-      ? context
-          .chapters!.map(
-            (ch) => `- Chapter ${ch.number}${ch.title ? `: ${ch.title}` : ''}\n  ${ch.summary}`,
-          )
+      ? chapters
+          .map((ch) => `- Chapter ${ch.number}${ch.title ? `: ${ch.title}` : ''}\n  ${ch.summary}`)
           .join('\n')
-      : 'No chapters have been written yet.'
+      : hasNewChapter
+        ? 'No earlier chapters — the one below is the first.'
+        : 'No chapters have been written yet.'
 
     // Render prompts through unified pipeline
     const ctx = await ContextBuilder.forPack(context.storyId)
     ctx.add({
+      mode: context.mode,
+      pov: context.pov,
+      tense: context.tense,
       entrySummary,
       duplicateSummary,
       recentStorySection,
       chapterSummary,
       hasChapters,
-      // With neither chapters nor recent text the agent has only the entry list. It can
-      // still consolidate; anything it "identifies as missing" would be invented, so the
-      // prompt says so rather than leaving it to judgement.
-      hasStoryMaterial: hasChapters || Boolean(context.recentStory),
+      newChapterSection,
+      hasNewChapter,
+      hasRecentStory,
+      // With neither chapters, a new chapter nor recent text the agent has only the entry
+      // list. It can still consolidate; anything it "identifies as missing" would be
+      // invented, so the prompt says so rather than leaving it to judgement.
+      hasStoryMaterial: hasChapters || hasNewChapter || hasRecentStory,
       requireDuplicateResolution: this.requireDuplicateResolution,
     })
     const { system: systemPrompt, user: userPrompt } = await ctx.render('lore-management')

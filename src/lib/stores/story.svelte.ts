@@ -3864,8 +3864,8 @@ class StoryStore {
   }
 
   // Create a manual chapter at a specific entry index
-  /** @returns whether a chapter was actually written; false is a refusal, not a failure. */
-  async createManualChapter(endEntryIndex: number): Promise<boolean> {
+  /** @returns the chapter written; null is a refusal, not a failure. */
+  async createManualChapter(endEntryIndex: number): Promise<Chapter | null> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     // The button is disabled while a turn's background tasks run, but that is the visible
@@ -3880,7 +3880,7 @@ class StoryStore {
         'A chapter is already being written for this turn. Try again once it is done.',
         'warning',
       )
-      return false
+      return null
     }
 
     // Find the start index (after the last chapter or beginning)
@@ -3893,7 +3893,7 @@ class StoryStore {
 
     const chapter = await this.buildAndSaveChapter(startIndex, endEntryIndex)
     log('Manual chapter created:', chapter.number, chapter.title)
-    return true
+    return chapter
   }
 
   /**

@@ -20,3 +20,5 @@ export {
   type CleanedField,
   type DroppedTerm,
 } from './entryFields'
+
+export { renderLoreProse } from './newChapter'

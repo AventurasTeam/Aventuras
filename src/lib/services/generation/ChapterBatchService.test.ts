@@ -211,6 +211,16 @@ describe('ChapterBatchService — lorebook pass', () => {
     expect(chaptersArg).toHaveLength(3)
   })
 
+  it('passes no newChapter — the batch has no single chapter that triggered it', async () => {
+    const deps = baseDeps()
+    const service = new ChapterBatchService(deps)
+
+    await service.run(baseInput({ includeLorebook: true }), baseCallbacks())
+
+    const options = vi.mocked(deps.runLoreManagement).mock.calls[0][6]
+    expect(options?.newChapter).toBeUndefined()
+  })
+
   it('does not run the lorebook pass when includeLorebook is false', async () => {
     const deps = baseDeps()
     const service = new ChapterBatchService(deps)

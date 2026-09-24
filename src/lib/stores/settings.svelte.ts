@@ -839,6 +839,8 @@ export interface LoreManagementSpecificSettings {
    * create an existing name cost nothing and are always on.
    */
   requireDuplicateResolution: boolean
+  /** Hand the agent the chapter that triggered a run in full, instead of its summary. */
+  sendNewChapterText: boolean
 }
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -958,7 +960,10 @@ export function getDefaultStyleReviewerSpecificSettings(): StyleReviewerSpecific
 }
 
 export function getDefaultLoreManagementSpecificSettings(): LoreManagementSpecificSettings {
-  return { requireDuplicateResolution: LORE_MANAGEMENT_DEFAULTS.requireDuplicateResolution }
+  return {
+    requireDuplicateResolution: LORE_MANAGEMENT_DEFAULTS.requireDuplicateResolution,
+    sendNewChapterText: LORE_MANAGEMENT_DEFAULTS.sendNewChapterText,
+  }
 }
 
 export function getDefaultInteractiveVaultSpecificSettings(): InteractiveVaultSpecificSettings {

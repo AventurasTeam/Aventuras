@@ -104,6 +104,7 @@ export type {
   LoreManagementUICallbacks,
   LoreSessionInput,
   LoreManagementDependencies,
+  LoreRunOptions,
   LoreSessionResult,
 } from './LoreManagementCoordinator'
 

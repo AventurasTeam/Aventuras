@@ -32,7 +32,11 @@ import {
   emitBackgroundImageQueued,
   emitBackgroundImageReady,
 } from '$lib/services/events'
-import type { PromptContext, LoreManagementCallbacks } from '$lib/services/generation'
+import type {
+  PromptContext,
+  LoreManagementCallbacks,
+  LoreRunOptions,
+} from '$lib/services/generation'
 import type {
   Chapter,
   Character,
@@ -57,6 +61,7 @@ import { normalizeImageDataUrl, expectedPixels, type ImageSpec } from '$lib/util
 import type { StreamChunk } from './core/types'
 import { recentStoryBudgetChars } from './core/defaults'
 import { MIN_RECENT_ENTRIES_FOR_LORE, splitRecentTail } from './retrieval/recentTail'
+import { renderLoreProse } from './lorebook'
 import { serviceFactory } from './core/factory'
 import {
   inlineImageService,
@@ -632,11 +637,9 @@ class AIService {
     recentMessages: StoryEntry[],
     chapters: Chapter[],
     callbacks: LoreManagementCallbacks,
-    _mode: StoryMode = 'adventure',
-    _pov?: POV,
-    _tense?: Tense,
-    tokenThreshold?: number,
+    options: LoreRunOptions,
   ): Promise<LoreManagementResult> {
+    const { mode, pov, tense, tokenThreshold, newChapter } = options
     // The story since the last chapter — the only unsummarised material the agent has. It
     // used to be the single most recent action and narration, which on a story with no
     // chapters left the agent maintaining a lorebook for a story it could not read.
@@ -649,22 +652,7 @@ class AIService {
       recentStoryBudgetChars(tokenThreshold),
       MIN_RECENT_ENTRIES_FOR_LORE,
     )
-    const recentStory = shown
-      .map((m) => `[${m.type === 'user_action' ? 'ACTION' : 'NARRATIVE'}] ${m.content}`)
-      .join('\n\n')
-
-    // Number, title and summary only: the keyword and character facets were read by
-    // `list_chapters`, which no longer exists.
-    // Deep clone to avoid Svelte proxy issues with AI SDK structured cloning
-    const chapterInfos = JSON.parse(
-      JSON.stringify(
-        chapters.map((c) => ({
-          number: c.number,
-          title: c.title,
-          summary: c.summary,
-        })),
-      ),
-    )
+    const recentStory = renderLoreProse(shown)
 
     // Create service and run session
     const service = serviceFactory.createLoreManagementService()
@@ -672,7 +660,11 @@ class AIService {
       storyId,
       recentStory,
       existingEntries: entries,
-      chapters: chapterInfos,
+      chapters,
+      mode,
+      pov,
+      tense,
+      newChapter,
       queryChapter: callbacks.onQueryChapter,
       keptSeparate: await callbacks.getKeptSeparate?.(),
       onKeepSeparate: callbacks.onKeepSeparate,

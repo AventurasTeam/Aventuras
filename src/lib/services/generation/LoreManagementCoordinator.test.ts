@@ -1,9 +1,10 @@
 import { describe, it, expect, vi } from 'vitest'
-import type { Entry, LoreManagementResult } from '$lib/types'
+import type { Chapter, Entry, LoreManagementResult } from '$lib/types'
 import {
   LoreManagementCoordinator,
   isLoreManagementRunning,
   type LoreManagementCallbacks,
+  type LoreManagementDependencies,
   type LoreSessionInput,
 } from './LoreManagementCoordinator'
 
@@ -157,5 +158,31 @@ describe('progress reporting', () => {
     })
 
     expect(onSummary).toHaveBeenCalledWith('merged Vor’koth', 0)
+  })
+})
+
+describe('newChapter forwarding', () => {
+  it('forwards newChapter to runLoreManagement when the caller passes one', async () => {
+    const chapter = { id: 'ch-1', number: 3 } as unknown as Chapter
+    const deps: LoreManagementDependencies = { runLoreManagement: vi.fn(async () => emptyResult()) }
+    const coordinator = new LoreManagementCoordinator(deps)
+
+    await coordinator.runSession(
+      input({ storyId: 'story-5', newChapter: { chapter, entries: [] } }),
+      callbacks(),
+    )
+
+    const options = vi.mocked(deps.runLoreManagement).mock.calls[0][6]
+    expect(options?.newChapter).toEqual({ chapter, entries: [] })
+  })
+
+  it('passes no newChapter when the caller has none to give', async () => {
+    const deps: LoreManagementDependencies = { runLoreManagement: vi.fn(async () => emptyResult()) }
+    const coordinator = new LoreManagementCoordinator(deps)
+
+    await coordinator.runSession(input({ storyId: 'story-6' }), callbacks())
+
+    const options = vi.mocked(deps.runLoreManagement).mock.calls[0][6]
+    expect(options?.newChapter).toBeUndefined()
   })
 })

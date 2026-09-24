@@ -59,6 +59,30 @@ manually from the Memory view, and once per batch during `chapterizeFromBeginnin
 SillyTavern import path) — and on demand from the **Tidy lorebook** button in the Active Context
 panel (`runManualLoreManagement`, shared by both manual callers).
 
+**By default, the chapter that triggered a run arrives in full, not as a summary.** Every other
+chapter is still a `{number, title, summary}` line, but the one just written is handed over as its own
+entries — rendered `[ACTION]`/`[NARRATIVE]`, the same shape `recentStory` uses — plus its
+`characters` and `locations` facets, and dropped from the summary list so it is not shown twice.
+Why: `memoryConfig.summaryDetail` can be set to `concise`, and a concise summary does not carry
+the names and proper nouns a lorebook is built from — the agent's only recourse used to be
+`query_chapter`, paying a second model's call to recover text the caller already had in hand.
+`newChapter.ts` owns both rules (the render and the drop) and is covered by a unit test; the
+automatic path (`BackgroundTaskCoordinator`) and the manual one (`MemoryView` after a hand-built
+chapter) both supply it. The automatic path passes the entries `ChapterService` summarized,
+not a later read of the store, so a story switch before the session starts cannot swap them.
+Blank entries are dropped, and a chapter with no prose left keeps its summary instead.
+
+This is on by default and switched off with **Send full text of new chapter** (Advanced
+Settings → Lore Management, `serviceSpecificSettings.loreManagement.sendNewChapterText`).
+`createLoreManagementService` reads it alongside `requireDuplicateResolution`, and
+`loreChapterContext` in `newChapter.ts` applies it, so off means every chapter is a summary line.
+Both callers still pass the chapter either way: the automatic path's entries already exist, and
+the manual path's cost a slice of the store.
+
+**The batch importer is the exception** — `chapterizeFromBeginning`
+writes many chapters in one pass, so its single lore session keeps summaries only, as does a
+Tidy-lorebook run with no new chapter to speak of.
+
 **Its failure mode is growth.** A model that cannot see its own past sessions re-creates what it
 already wrote, so a lorebook accumulates "Kaelen", "Kaelen the Bold" and "Kaelan" and never loses
 one. Several things hold that down, and only the last is optional:
