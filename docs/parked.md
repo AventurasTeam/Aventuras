@@ -2716,6 +2716,34 @@ today (checked 2026-09-23).
 Parked 2026-09-23; the first dropdown whose rows are wider than its
 trigger is the signal to revisit.
 
+#### Entry index cost on large rich stories (Android)
+
+`readEntryIndex` (`lib/entry-refs/read.ts`) builds a plain-text
+preview for every entry in the branch, and the Plot screen re-runs it
+whenever a run settles or the tail moves (`hooks/use-entry-index.ts`).
+A rich entry whose first 200 characters are mostly markup gets a
+second, wider read; its leading style and script blocks are skipped
+by index, and about 600 characters past them are stripped.
+
+Measured 2026-09-24 on the x86_64 emulator (dev build, Hermes) with
+1000 rich entries of about 7000 characters, each opening with a style
+block of about 2700: one index read takes about 500 ms, down from
+2.9 s before the preamble skip. Reading 8000 characters per row from
+SQLite is about 50 ms of that. Hermes runs the stripper at roughly
+250 ns per character, and no single regex dominates, so the cost is
+the characters scanned. A mid-range phone is likely slower than the
+emulator on a desktop CPU; that was not measured.
+
+Two ways down, neither built. Cache each entry's preview across
+refetches, so only new or changed entries pay (the first open still
+does); `story_entries` has no updated-at column, so the cache key has
+to come from the content. Or yield between chunks of rows, so the
+read never blocks frames for its whole length.
+
+Parked 2026-09-24; revisit when testing on real devices shows the Plot
+screen stalling on a large rich story, or when the entry index gains a
+consumer outside Plot.
+
 ### Code structure (parked)
 
 #### Unsaved-changes guard folder placement
