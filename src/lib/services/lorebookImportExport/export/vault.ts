@@ -7,8 +7,15 @@ import { writeTextFile } from '@tauri-apps/plugin-fs'
 import { resolveSaveTarget } from '$lib/services/exportTarget'
 import type { VaultLorebook, VaultLorebookEntry, VaultCharacter, VaultScenario } from '$lib/types'
 import type { Entry, EntryType } from '$lib/types'
+import {
+  characterToExchange,
+  scenarioToExchange,
+  serializeExchange,
+  vaultLorebookToExchange,
+  wrapExchange,
+} from '$lib/services/exchange'
 import type { ExportFormat } from '../types'
-import { exportToAventura, exportToSillyTavern, exportToText } from './formats'
+import { exportToSillyTavern, exportToText } from './formats'
 import { getFormatInfo } from './metadata'
 
 /**
@@ -106,7 +113,7 @@ export async function exportVaultLorebook(
   lorebook: VaultLorebook,
   format: ExportFormat,
 ): Promise<boolean> {
-  if (lorebook.entries.length === 0) {
+  if (lorebook.entries.length === 0 && format !== 'aventura') {
     throw new Error('No entries to export')
   }
 
@@ -118,7 +125,7 @@ export async function exportVaultLorebook(
 
   switch (format) {
     case 'aventura':
-      content = exportToAventura(entries)
+      content = serializeExchange(wrapExchange('lorebook', vaultLorebookToExchange(lorebook)))
       break
     case 'sillytavern':
       content = exportToSillyTavern(entries, baseFilename)
@@ -136,7 +143,7 @@ export async function exportVaultLorebook(
  */
 export async function exportVaultCharacter(character: VaultCharacter): Promise<boolean> {
   const baseFilename = character.name || `character-${new Date().toISOString().split('T')[0]}`
-  const content = JSON.stringify(character, null, 2)
+  const content = serializeExchange(wrapExchange('character', characterToExchange(character)))
   return await saveFile(content, `${baseFilename}.json`)
 }
 
@@ -145,7 +152,7 @@ export async function exportVaultCharacter(character: VaultCharacter): Promise<b
  */
 export async function exportVaultScenario(scenario: VaultScenario): Promise<boolean> {
   const baseFilename = scenario.name || `scenario-${new Date().toISOString().split('T')[0]}`
-  const content = JSON.stringify(scenario, null, 2)
+  const content = serializeExchange(wrapExchange('scenario', scenarioToExchange(scenario)))
   return await saveFile(content, `${baseFilename}.json`)
 }
 

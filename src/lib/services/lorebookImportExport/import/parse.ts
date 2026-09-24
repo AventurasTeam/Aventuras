@@ -3,11 +3,22 @@
  */
 
 import { createLogger } from '$lib/log'
-import type { Entry, EntryInjectionMode } from '$lib/types'
+import type { EntryInjectionMode } from '$lib/types'
+import { parseExchange } from '$lib/services/exchange'
 import type { ImportedEntry, LorebookImportResult, SillyTavernEntry } from '../types'
 import { inferEntryType } from './inferType'
 
 const log = createLogger('LorebookImporter')
+
+function emptyResult(format: LorebookImportResult['metadata']['format']): LorebookImportResult {
+  return {
+    success: false,
+    entries: [],
+    errors: [],
+    warnings: [],
+    metadata: { format, totalEntries: 0, importedEntries: 0, skippedEntries: 0 },
+  }
+}
 
 function determineInjectionMode(entry: SillyTavernEntry): EntryInjectionMode {
   if (entry.disable) {
@@ -23,18 +34,7 @@ function determineInjectionMode(entry: SillyTavernEntry): EntryInjectionMode {
 }
 
 function parseSillyTavern(jsonString: string): LorebookImportResult {
-  const result: LorebookImportResult = {
-    success: false,
-    entries: [],
-    errors: [],
-    warnings: [],
-    metadata: {
-      format: 'unknown',
-      totalEntries: 0,
-      importedEntries: 0,
-      skippedEntries: 0,
-    },
-  }
+  const result = emptyResult('unknown')
 
   try {
     const data = JSON.parse(jsonString)
@@ -109,141 +109,62 @@ function parseSillyTavern(jsonString: string): LorebookImportResult {
   return result
 }
 
-function isAventuraFormat(data: unknown): data is Entry[] {
-  if (!Array.isArray(data)) return false
-  if (data.length === 0) return false
-
-  const first = data[0]
-  return (
-    typeof first === 'object' &&
-    first !== null &&
-    'name' in first &&
-    'type' in first &&
-    'description' in first &&
-    'injection' in first &&
-    typeof first.injection === 'object' &&
-    first.injection !== null &&
-    'mode' in first.injection
-  )
-}
-
-function parseAventura(jsonString: string): LorebookImportResult {
-  const result: LorebookImportResult = {
-    success: false,
-    entries: [],
-    errors: [],
-    warnings: [],
-    metadata: {
-      format: 'aventura',
-      totalEntries: 0,
-      importedEntries: 0,
-      skippedEntries: 0,
-    },
-  }
-
-  try {
-    const data = JSON.parse(jsonString)
-
-    if (!isAventuraFormat(data)) {
-      result.errors.push('Invalid Aventura format: expected array of Entry objects')
-      result.metadata.format = 'unknown'
-      return result
-    }
-
-    result.metadata.totalEntries = data.length
-
-    log('Parsing Aventura lorebook', { totalEntries: data.length })
-
-    for (const entry of data) {
-      try {
-        if (!entry.name?.trim()) {
-          result.warnings.push(`Skipped entry with no name`)
-          result.metadata.skippedEntries++
-          continue
-        }
-
-        if (!entry.description?.trim() && !entry.hiddenInfo?.trim()) {
-          result.warnings.push(`Skipped empty entry: ${entry.name}`)
-          result.metadata.skippedEntries++
-          continue
-        }
-
-        const importedEntry: ImportedEntry = {
-          name: entry.name,
-          type: entry.type || 'concept',
-          description: entry.description || '',
-          keywords: entry.injection?.keywords || [],
-          aliases: entry.aliases ?? [],
-          injectionMode: entry.injection?.mode || 'keyword',
-          priority: entry.injection?.priority ?? 100,
-          originalData: entry as unknown as SillyTavernEntry,
-        }
-
-        result.entries.push(importedEntry)
-        result.metadata.importedEntries++
-      } catch (entryError) {
-        const errorMsg = entryError instanceof Error ? entryError.message : 'Unknown error'
-        result.errors.push(`Failed to parse entry "${entry.name}": ${errorMsg}`)
-        result.metadata.skippedEntries++
-      }
-    }
-
-    result.success = result.metadata.importedEntries > 0
-
-    log('Aventura import complete', {
-      imported: result.metadata.importedEntries,
-      skipped: result.metadata.skippedEntries,
-      errors: result.errors.length,
-      warnings: result.warnings.length,
-    })
-  } catch (parseError) {
-    const errorMsg = parseError instanceof Error ? parseError.message : 'Unknown error'
-    result.errors.push(`Failed to parse JSON: ${errorMsg}`)
-    log('Parse error:', parseError)
-  }
-
-  return result
-}
-
+/** An Aventura export is read literally: no type inference, no skipping, no fallbacks. */
 export function parse(jsonString: string): LorebookImportResult {
+  const exchange = parseExchange(jsonString, 'lorebook')
+
+  if (exchange.kind === 'invalid') {
+    const result = emptyResult('aventura')
+    result.errors.push(exchange.error)
+    return result
+  }
+
+  if (exchange.kind === 'exchange') {
+    const { data } = exchange.document
+    const result = emptyResult('aventura')
+    result.warnings.push(...exchange.warnings)
+    result.lorebook = {
+      name: data.name,
+      description: data.description,
+      tags: data.tags,
+      favorite: data.favorite,
+      metadata: data.metadata,
+    }
+    result.entries = data.entries.map((e) => ({
+      name: e.name,
+      type: e.type,
+      description: e.description,
+      keywords: e.keywords,
+      aliases: e.aliases,
+      injectionMode: e.injectionMode,
+      priority: e.priority,
+      hiddenInfo: e.hiddenInfo ?? null,
+      loreManagementBlacklisted: e.loreManagementBlacklisted ?? false,
+    }))
+    result.metadata.totalEntries = data.entries.length
+    result.metadata.importedEntries = data.entries.length
+    result.success = true
+    log('Parsed Aventura lorebook', { name: data.name, totalEntries: data.entries.length })
+    return result
+  }
+
   try {
     const data = JSON.parse(jsonString)
 
-    if (isAventuraFormat(data)) {
-      log('Detected Aventura format')
-      return parseAventura(jsonString)
-    }
-
-    if (data && typeof data === 'object' && 'entries' in data) {
+    if (data && typeof data === 'object' && !Array.isArray(data) && 'entries' in data) {
       log('Detected SillyTavern format')
       return parseSillyTavern(jsonString)
     }
 
-    return {
-      success: false,
-      entries: [],
-      errors: ['Unknown lorebook format. Expected Aventura JSON array or SillyTavern format.'],
-      warnings: [],
-      metadata: {
-        format: 'unknown',
-        totalEntries: 0,
-        importedEntries: 0,
-        skippedEntries: 0,
-      },
-    }
+    const result = emptyResult('unknown')
+    result.errors.push(
+      'Unknown lorebook format. Expected an Aventuras lorebook export or a SillyTavern lorebook.',
+    )
+    return result
   } catch (parseError) {
     const errorMsg = parseError instanceof Error ? parseError.message : 'Unknown error'
-    return {
-      success: false,
-      entries: [],
-      errors: [`Failed to parse JSON: ${errorMsg}`],
-      warnings: [],
-      metadata: {
-        format: 'unknown',
-        totalEntries: 0,
-        importedEntries: 0,
-        skippedEntries: 0,
-      },
-    }
+    const result = emptyResult('unknown')
+    result.errors.push(`Failed to parse JSON: ${errorMsg}`)
+    return result
   }
 }

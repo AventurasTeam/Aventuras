@@ -2,6 +2,7 @@ import type { VaultLorebook, EntryType, VaultLorebookEntry } from '$lib/types'
 import { database } from '$lib/services/database'
 import { discoveryService, type DiscoveryCard } from '$lib/services/discovery'
 import { LorebookImportExport } from '$lib/services/lorebookImportExport'
+import { exchangeToVaultLorebook, hasStorySideFields } from '$lib/services/exchange'
 import { ui } from './ui.svelte'
 import { createLogger } from '$lib/log'
 
@@ -399,8 +400,13 @@ class LorebookVaultStore {
   private async _processFileImport(tempId: string, file: File, name: string): Promise<void> {
     const text = await file.text()
     const parsed = LorebookImportExport.parse(text)
-    if (!parsed.success || parsed.entries.length === 0) {
+    if (!parsed.success || (parsed.entries.length === 0 && !parsed.lorebook)) {
       throw new Error(parsed.errors.join('; ') || 'Failed to parse lorebook')
+    }
+
+    if (parsed.lorebook) {
+      await this._saveExchangeImport(tempId, file, parsed)
+      return
     }
 
     const entries = await LorebookImportExport.classifyEntries(
@@ -451,6 +457,31 @@ class LorebookVaultStore {
     await database.addVaultLorebook(finalData)
     this.lorebooks = this.lorebooks.map((lb) => (lb.id === tempId ? finalData : lb))
     log('Completed import for:', finalData.name)
+  }
+
+  /** An Aventura export is stored as written: no classification, no AI. */
+  private async _saveExchangeImport(
+    tempId: string,
+    file: File,
+    parsed: LorebookImportExport.LorebookImportResult,
+  ): Promise<void> {
+    const finalData = exchangeToVaultLorebook(
+      { ...parsed.lorebook!, entries: parsed.entries },
+      { id: tempId, originalFilename: file.name },
+    )
+
+    await database.addVaultLorebook(finalData)
+    this.lorebooks = this.lorebooks.map((lb) => (lb.id === tempId ? finalData : lb))
+    log('Completed Aventura import for:', finalData.name)
+
+    for (const warning of parsed.warnings) ui.showToast(warning, 'warning', 8000)
+    if (hasStorySideFields(parsed.entries)) {
+      ui.showToast(
+        `${finalData.name}: hidden information and lore-management exclusions belong to a story and were not kept in the vault.`,
+        'warning',
+        8000,
+      )
+    }
   }
 }
 

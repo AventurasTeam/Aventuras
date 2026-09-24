@@ -20,6 +20,7 @@
   let importProgress = $state<LorebookImportExport.ImportProgress | null>(null)
 
   const previewCount = $derived(parseResult?.entries.length ?? 0)
+  const isAventuraExport = $derived(parseResult?.metadata.format === 'aventura')
 
   // Type counts for preview
   const typeCounts = $derived.by(() => {
@@ -182,7 +183,7 @@
         </div>
 
         <p class="text-muted-foreground text-center text-xs">
-          Supports Aventuras (.avt, .json) and SillyTavern lorebook formats
+          Supports Aventuras lorebook exports and SillyTavern lorebooks (.json)
         </p>
       {:else}
         <!-- Preview -->
@@ -203,21 +204,33 @@
           </div>
         </div>
 
-        <!-- AI Classification toggle -->
-        <div class="flex items-start space-x-2 rounded-lg border p-3">
-          <Checkbox id="ai-classification" bind:checked={useAIClassification} class="mt-1" />
-          <div class="grid gap-1.5 leading-none">
-            <Label
-              for="ai-classification"
-              class="text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-            >
-              AI-powered classification
-            </Label>
+        {#if isAventuraExport}
+          <div class="bg-muted/30 rounded-lg border p-3">
+            <p class="text-foreground text-sm font-medium">
+              Aventuras export{parseResult.lorebook?.name ? `: ${parseResult.lorebook.name}` : ''}
+            </p>
             <p class="text-muted-foreground text-xs">
-              Use AI to better categorize entry types based on their content
+              Entries are imported exactly as saved, with their own types and fields. No AI is
+              involved.
             </p>
           </div>
-        </div>
+        {:else}
+          <!-- AI Classification toggle -->
+          <div class="flex items-start space-x-2 rounded-lg border p-3">
+            <Checkbox id="ai-classification" bind:checked={useAIClassification} class="mt-1" />
+            <div class="grid gap-1.5 leading-none">
+              <Label
+                for="ai-classification"
+                class="text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                AI-powered classification
+              </Label>
+              <p class="text-muted-foreground text-xs">
+                Use AI to better categorize entry types based on their content
+              </p>
+            </div>
+          </div>
+        {/if}
 
         {#if importing && importProgress}
           <div class="bg-muted/30 space-y-2 rounded-lg border p-3">

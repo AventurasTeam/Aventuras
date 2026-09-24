@@ -72,6 +72,7 @@ that area, and update it in the same commit when behaviour it describes changes.
 | SQLite, migrations, `src-tauri/src/`, the settings blob                        | [docs/architecture/persistence.md](docs/architecture/persistence.md)             |
 | `utils/dialogue.ts`, dialogue highlighting, TTS                                | [docs/architecture/dialogue-and-tts.md](docs/architecture/dialogue-and-tts.md)   |
 | `services/storyTime/`, time anchors, reconciliation, a new story's start       | [docs/architecture/story-time.md](docs/architecture/story-time.md)               |
+| `services/exchange/`, vault export/import, the Aventura lorebook format        | [docs/architecture/exchange-format.md](docs/architecture/exchange-format.md)     |
 | tests                                                                          | [docs/development/testing.md](docs/development/testing.md)                       |
 | the updater, CI, release scripts, Android builds                               | [docs/development/release.md](docs/development/release.md)                       |
 

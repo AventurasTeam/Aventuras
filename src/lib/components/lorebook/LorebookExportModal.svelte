@@ -28,7 +28,7 @@
   const hasSelection = $derived(ui.lorebookBulkSelection.size > 0)
 
   async function handleExport() {
-    if (entryCount === 0) {
+    if (entryCount === 0 && selectedFormat !== 'aventura') {
       ui.showToast('No entries to export', 'error')
       return
     }
@@ -36,10 +36,12 @@
     exporting = true
 
     try {
+      const title = story.currentStory?.title
       await LorebookImportExport.exportLorebook({
         format: selectedFormat,
         entries: entriesToExport(),
-        filename: story.currentStory?.title ? `${story.currentStory.title}-lorebook` : undefined,
+        filename: title ? `${title}-lorebook` : undefined,
+        name: title ? `${title} Lorebook` : undefined,
       })
       ui.showToast('Export successful', 'info')
       ui.closeLorebookExport()
@@ -154,7 +156,11 @@
 
     <ResponsiveModal.Footer class="mt-auto border-t px-6 py-4">
       <Button variant="outline" onclick={close} disabled={exporting}>Cancel</Button>
-      <Button onclick={handleExport} disabled={exporting || entryCount === 0} class="gap-2">
+      <Button
+        onclick={handleExport}
+        disabled={exporting || (entryCount === 0 && selectedFormat !== 'aventura')}
+        class="gap-2"
+      >
         {#if exporting}
           <Loader2 class="h-4 w-4 animate-spin" />
           Exporting...
