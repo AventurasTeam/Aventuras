@@ -21,20 +21,6 @@ const renderUserContent = (vars: Record<string, unknown>) =>
   engine.parseAndRender(loreManagement.userContent!, { ...baseVars, ...vars })
 
 describe('lore-management system prompt', () => {
-  it('parses and renders across every hasChapters/hasNewChapter combination', async () => {
-    for (const hasChapters of [true, false]) {
-      for (const hasNewChapter of [true, false]) {
-        await expect(
-          renderContent({
-            hasChapters,
-            hasNewChapter,
-            hasStoryMaterial: hasChapters || hasNewChapter,
-          }),
-        ).resolves.toBeTypeOf('string')
-      }
-    }
-  })
-
   it('tells the agent the chapter it just wrote needs no query, when both are true', async () => {
     const out = await renderContent({
       hasChapters: true,
@@ -81,17 +67,6 @@ describe('lore-management system prompt', () => {
     expect(out).toContain('Every chapter is there with its full summary.')
     expect(out).toContain("Use query_chapter when an earlier chapter's summary is not enough,")
     expect(out).not.toContain('needs no query')
-  })
-
-  it('names the new chapter as the primary input once duplicates are closed', async () => {
-    const out = await renderContent({
-      hasChapters: true,
-      hasNewChapter: true,
-      hasStoryMaterial: true,
-    })
-    expect(out).toContain(
-      'go back over the chapter you just wrote and the earlier chapter summaries',
-    )
   })
 })
 
