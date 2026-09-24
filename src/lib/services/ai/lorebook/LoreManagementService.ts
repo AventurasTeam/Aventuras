@@ -161,12 +161,12 @@ export class LoreManagementService extends BaseAIService {
     const vaultEntries: VaultLorebookEntry[] = JSON.parse(
       JSON.stringify(managed.map(entryToVaultEntry)),
     )
+    // Fresh primitive-only objects: no Svelte proxy reaches the tools, so no clone.
     const { chapters, newChapter } = loreChapterContext(
       context.chapters ?? [],
       context.newChapter,
       this.sendNewChapterText,
     )
-    const plainChapters: LoreManagementChapter[] = JSON.parse(JSON.stringify(chapters))
 
     /**
      * Where an approved change lands. Owns the index -> entry mapping, which grows with
@@ -221,7 +221,7 @@ export class LoreManagementService extends BaseAIService {
       generateId: () => `lm-${++changeIdCounter}`,
       removedIndices,
       preventDuplicateNames: true,
-      chapters: plainChapters,
+      chapters,
       // Fewer reads than the retrieval agent gets, and for a different reason — see
       // MAX_CHAPTER_QUERIES_LORE. No `alternative`: there is no grep here to point at.
       chapterQueries: new ChapterQueryBudget({
@@ -273,7 +273,7 @@ export class LoreManagementService extends BaseAIService {
       ? `# Story Since The Last Chapter\n${context.recentStory}\n`
       : ''
 
-    const hasChapters = plainChapters.length > 0
+    const hasChapters = chapters.length > 0
     const hasNewChapter = Boolean(newChapter)
     const hasRecentStory = Boolean(context.recentStory)
 
@@ -289,7 +289,7 @@ export class LoreManagementService extends BaseAIService {
     // `query_chapter` — a whole chapter read by a second model. Cutting converts tokens
     // into LLM calls rather than saving them.
     const chapterSummary = hasChapters
-      ? plainChapters
+      ? chapters
           .map((ch) => `- Chapter ${ch.number}${ch.title ? `: ${ch.title}` : ''}\n  ${ch.summary}`)
           .join('\n')
       : hasNewChapter
