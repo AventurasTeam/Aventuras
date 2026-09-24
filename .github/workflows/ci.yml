@@ -60,7 +60,7 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/pnpm-install
 
-      # Playwright browser binaries are ~170 MB. Each playwright-core release
+      # Playwright browser binaries are ~250 MB. Each playwright-core release
       # pins its browser builds, so key on that version, not the lockfile.
       - name: Resolve Playwright version
         id: playwright
@@ -96,7 +96,7 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/pnpm-install
 
-      # Electron binary + builder downloads (~100 MB); keyed on the two versions
+      # Electron binary + builder downloads (~220 MB); keyed on the two versions
       # that decide them, so an unrelated lockfile change keeps the cache.
       - name: Resolve Electron versions
         id: electron
