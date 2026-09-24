@@ -51,6 +51,12 @@ export {
 } from './stories/embedding-upgrade'
 export { resetStorySettings } from './stories/reset-settings'
 export {
+  LEAD_REJECTION,
+  setStoryLead,
+  type LeadRejectionCode,
+  type SetStoryLeadResult,
+} from './stories/set-lead'
+export {
   saveStorySettingsSession,
   StorySettingsStaleStoreError,
   StorySettingsUnreadableError,
