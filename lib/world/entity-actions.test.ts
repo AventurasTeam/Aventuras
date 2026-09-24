@@ -8,6 +8,8 @@ import {
   factionDraftFrom,
   itemDraftFrom,
   locationDraftFrom,
+  type RelationshipDraft,
+  type RelationshipLink,
 } from './entity-draft'
 
 const KAEL_STATE: CharacterState = {
@@ -248,6 +250,104 @@ describe('entityActions — relationships', () => {
         },
       },
     ])
+  })
+})
+
+describe('entityActions — relationships, three-way', () => {
+  const upsert = (objectId: string, kind: string | null, inverseKind: string | null) => ({
+    kind: 'upsertCharacterRelationship',
+    source: 'user_edit',
+    payload: { branchId: 'br_1', subjectId: 'char_kael', objectId, kind, inverseKind },
+  })
+  const remove = (id: string) => ({
+    kind: 'deleteCharacterRelationship',
+    source: 'user_edit',
+    payload: { branchId: 'br_1', id },
+  })
+  const mira = (selfToOther: string | null, otherToSelf: string | null): RelationshipLink => ({
+    rowId: 'rel_1',
+    otherId: 'char_mira',
+    selfToOther,
+    otherToSelf,
+  })
+  const vorne = (selfToOther: string | null): RelationshipLink => ({
+    rowId: 'rel_2',
+    otherId: 'char_vorne',
+    selfToOther,
+    otherToSelf: null,
+  })
+
+  function threeWay(
+    relationships: RelationshipDraft[],
+    current: readonly RelationshipLink[],
+    base: readonly RelationshipLink[],
+  ) {
+    return entityActions({
+      kind: 'character',
+      row: KAEL,
+      draft: { ...characterDraftFrom(KAEL, base), relationships },
+      relationships: current,
+      relationshipsBase: base,
+      ...AT,
+    })
+  }
+
+  it('leaves a pair added after the baseline alone', () => {
+    expect(
+      threeWay(
+        [{ otherId: 'char_mira', selfToOther: ' ally', otherToSelf: 'wary' }],
+        [MIRA_LINK, vorne('rival')],
+        [MIRA_LINK],
+      ),
+    ).toEqual([upsert('char_mira', ' ally', 'wary')])
+  })
+
+  it('keeps the text the classifier stored in a view the user left alone', () => {
+    expect(
+      threeWay(
+        [{ otherId: 'char_mira', selfToOther: 'friend', otherToSelf: 'ally' }],
+        [mira('ally', 'fond of you')],
+        [mira('ally', 'ally')],
+      ),
+    ).toEqual([upsert('char_mira', 'friend', 'fond of you')])
+  })
+
+  it('does not write an untouched pair the classifier changed', () => {
+    expect(
+      threeWay(
+        [
+          { otherId: 'char_mira', selfToOther: 'ally', otherToSelf: 'wary' },
+          { otherId: 'char_vorne', selfToOther: 'rival', otherToSelf: '' },
+        ],
+        [mira('ally', 'ally'), vorne('enemy')],
+        [mira('ally', 'ally'), vorne('rival')],
+      ),
+    ).toEqual([upsert('char_mira', 'ally', 'wary')])
+  })
+
+  it('deletes the current row of a removed pair, and nothing for a pair already gone', () => {
+    expect(threeWay([], [MIRA_LINK], [MIRA_LINK])).toEqual([remove('rel_1')])
+    expect(threeWay([], [], [MIRA_LINK])).toEqual([])
+  })
+
+  it('deletes the row when both views resolve to null', () => {
+    expect(
+      threeWay(
+        [{ otherId: 'char_mira', selfToOther: '', otherToSelf: 'rival' }],
+        [mira('ally', null)],
+        [mira('ally', 'rival')],
+      ),
+    ).toEqual([remove('rel_1')])
+  })
+
+  it('writes nothing for an edit back to what is now stored', () => {
+    expect(
+      threeWay(
+        [{ otherId: 'char_mira', selfToOther: 'ally', otherToSelf: 'wary ' }],
+        [mira('ally', 'wary')],
+        [mira('ally', 'ally')],
+      ),
+    ).toEqual([])
   })
 })
 

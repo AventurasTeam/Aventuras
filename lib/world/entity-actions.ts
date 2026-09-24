@@ -26,7 +26,18 @@ import {
 } from './entity-draft'
 
 export type EntitySaveInput =
-  | { kind: 'character'; draft: CharacterDraft; relationships: readonly RelationshipLink[] }
+  | {
+      kind: 'character'
+      draft: CharacterDraft
+      /** The committed links at Save. */
+      relationships: readonly RelationshipLink[]
+      /**
+       * The committed links the draft's relationships were based on (the pane freezes them when the
+       * list goes dirty); defaults to `relationships`. A pair or view the user left alone keeps
+       * whatever is stored at Save.
+       */
+      relationshipsBase?: readonly RelationshipLink[]
+    }
   | { kind: 'location'; draft: LocationDraft }
   | { kind: 'item'; draft: ItemDraft }
   | { kind: 'faction'; draft: FactionDraft }
@@ -228,22 +239,51 @@ function nextState(args: EntityActionArgs): EntityState | null {
   }
 }
 
-/** Diffed by the other character, never by draft position: a pair is written at most once. */
+/** Whether the user edited a view relative to the baseline, and the value Save sends for it. */
+function viewWrite(
+  draft: RelationshipDraft,
+  was: RelationshipLink | undefined,
+  now: RelationshipLink | undefined,
+  view: 'selfToOther' | 'otherToSelf',
+): { edited: boolean; value: string | null } {
+  const value = blankToNull(draft[view])
+  const edited = was == null || value !== blankToNull(was[view] ?? '')
+  const stored = now?.[view] ?? null
+  // An untouched view keeps the stored raw text, as does an edit that normalizes to it.
+  return { edited, value: edited && value !== blankToNull(stored ?? '') ? value : stored }
+}
+
+/**
+ * Three-way: only the user's changes relative to the links the draft was based on are written; the
+ * rest of what is stored stays. Diffed by the other character, so a pair is written at most once.
+ */
 function relationshipActions(
   branchId: string,
   selfId: string,
-  committed: readonly RelationshipLink[],
+  current: readonly RelationshipLink[],
+  base: readonly RelationshipLink[],
   drafts: readonly RelationshipDraft[],
 ): PipelineAction[] {
   const actions: PipelineAction[] = []
-  const byOther = new Map(committed.map((r) => [r.otherId, r]))
+  const nowByOther = new Map(current.map((r) => [r.otherId, r]))
+  const wasByOther = new Map(base.map((r) => [r.otherId, r]))
+  const remove = (id: string): PipelineAction => ({
+    kind: 'deleteCharacterRelationship',
+    source: 'user_edit',
+    payload: { branchId, id },
+  })
   for (const draft of drafts) {
-    const kind = blankToNull(draft.selfToOther)
-    const inverseKind = blankToNull(draft.otherToSelf)
-    const stored = byOther.get(draft.otherId)
-    const keepsKind = stored != null && blankToNull(stored.selfToOther ?? '') === kind
-    const keepsInverse = stored != null && blankToNull(stored.otherToSelf ?? '') === inverseKind
-    if (keepsKind && keepsInverse) continue
+    const was = wasByOther.get(draft.otherId)
+    const now = nowByOther.get(draft.otherId)
+    const self = viewWrite(draft, was, now, 'selfToOther')
+    const other = viewWrite(draft, was, now, 'otherToSelf')
+    if (!self.edited && !other.edited) continue
+    if (self.value === null && other.value === null) {
+      // The handler refuses a both-null upsert: the pair has no view left.
+      if (now != null) actions.push(remove(now.rowId))
+      continue
+    }
+    if (now != null && self.value === now.selfToOther && other.value === now.otherToSelf) continue
     actions.push({
       kind: 'upsertCharacterRelationship',
       source: 'user_edit',
@@ -251,20 +291,16 @@ function relationshipActions(
         branchId,
         subjectId: selfId,
         objectId: draft.otherId,
-        // An untouched view keeps the classifier's raw text.
-        kind: keepsKind ? stored.selfToOther : kind,
-        inverseKind: keepsInverse ? stored.otherToSelf : inverseKind,
+        kind: self.value,
+        inverseKind: other.value,
       },
     })
   }
   const kept = new Set(drafts.map((d) => d.otherId))
-  for (const stored of committed) {
-    if (kept.has(stored.otherId)) continue
-    actions.push({
-      kind: 'deleteCharacterRelationship',
-      source: 'user_edit',
-      payload: { branchId, id: stored.rowId },
-    })
+  for (const was of base) {
+    if (kept.has(was.otherId)) continue
+    const now = nowByOther.get(was.otherId)
+    if (now != null) actions.push(remove(now.rowId))
   }
   return actions
 }
@@ -311,6 +347,7 @@ export function entityActions(args: EntityActionArgs): PipelineAction[] {
         branchId,
         id,
         row == null ? [] : args.relationships,
+        row == null ? [] : (args.relationshipsBase ?? args.relationships),
         args.draft.relationships,
       ),
     )
