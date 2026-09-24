@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 
 import type { StorySettings, SuggestionCategory } from '@/lib/db'
 
@@ -10,11 +10,36 @@ import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
 import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
+import { saveSession } from '../locators/save-session'
 import { storySettings } from '../locators/story-settings'
 import { world } from '../locators/world'
 
 const HERO_STORY = 'story_hero'
 const HERO_TITLE = 'The Veilstone Courier'
+const KAEL_DESCRIPTION = 'A courier turned fugitive, carrying an amulet that should not exist.'
+
+async function entityId(page: Page, branchId: string, name: string): Promise<string> {
+  const [[id]] = await queryApp(page, `SELECT id FROM entities WHERE branch_id = ? AND name = ?`, [
+    branchId,
+    name,
+  ])
+  return id as string
+}
+
+// Reader → World over GO TO. The round trip pops to the World instance already on the stack, which
+// keeps its category and selection, so callers pick the category they need.
+async function goToWorld(page: Page): Promise<string> {
+  await chrome.actionsTrigger(page).click()
+  await chrome.goToWorldRow(page).click()
+  await page.waitForURL(/\/world\//)
+  return currentBranchId(page, HERO_STORY)
+}
+
+async function openWorldFromHome(app: LaunchedApp): Promise<void> {
+  await home.openStory(app.window, HERO_TITLE).click()
+  await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
+  await goToWorld(app.window)
+}
 
 // Serial suite, one shared app: later tests build on earlier ones' navigation state (a GO TO
 // round trip must land on the same stack entry), mirroring reload-guard.spec.ts.
@@ -322,5 +347,205 @@ test.describe.serial('World panel', () => {
     await chrome.actionsTrigger(page).click()
     await chrome.goToReaderRow(page).click()
     await page.waitForURL(/\/reader-composer\//)
+  })
+
+  test('Identity and Settings edits save as one delta; reader undo reverses all three', async () => {
+    const page = app.window
+    await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
+    const branchId = await goToWorld(page)
+    await world.categoryTrigger(page).click()
+    await world.categoryOption(page, 'character').click()
+    await world.row(page, 'Kael').click()
+    await world.tab(page, 'identity').click()
+    await world.description(page).fill('A courier turned fugitive — E2E.')
+    await world.visualField(page, 'hair').fill('dark, rain-soaked')
+    await world.tab(page, 'settings').click()
+    await world.tagsInput(page).fill('fugitive')
+    await world.tagsInput(page).press('Enter')
+    await expect(saveSession.saveBarSave(page)).toBeVisible()
+    await saveSession.saveBarSave(page).click()
+    await expect(saveSession.saveBarSave(page)).toHaveCount(0)
+
+    const kael = await entityId(page, branchId, 'Kael')
+    const rows = await queryApp(
+      page,
+      `SELECT action_id, op, undo_payload FROM deltas WHERE branch_id = ? AND target_table = 'entities' AND target_id = ? AND source = 'user_edit'`,
+      [branchId, kael],
+    )
+    expect(rows).toHaveLength(1)
+    const [actionId, op, undo] = rows[0]
+    expect(op).toBe('update')
+    const payload = JSON.parse(undo as string) as Record<string, unknown>
+    expect(Object.keys(payload).sort()).toEqual(['description', 'state', 'tags'])
+    expect(payload.state).toEqual({ visual: { hair: 'dark' } })
+    expect(
+      await queryApp(page, `SELECT COUNT(*) FROM deltas WHERE action_id = ?`, [actionId]),
+    ).toEqual([[1]])
+
+    // CTRL-Z lives on the reader; the Actions menu row is its touch-tier twin.
+    await chrome.actionsTrigger(page).click()
+    await chrome.goToReaderRow(page).click()
+    await page.waitForURL(/\/reader-composer\//)
+    await chrome.actionsTrigger(page).click()
+    await reader.undoRow(page).click()
+    await expect
+      .poll(
+        async () =>
+          (
+            await queryApp(
+              page,
+              `SELECT description, tags, json_extract(state, '$.visual.hair') FROM entities WHERE id = ?`,
+              [kael],
+            )
+          )[0],
+        { timeout: 30_000 },
+      )
+      .toEqual([KAEL_DESCRIPTION, JSON.stringify(['protagonist', 'courier']), 'dark'])
+  })
+
+  test('a dirty pane guards a row switch: Cancel keeps the draft, Discard drops it', async () => {
+    const page = app.window
+    const branchId = await goToWorld(page)
+    await world.row(page, 'Kael').click()
+    await world.tab(page, 'identity').click()
+    await world.description(page).fill('E2E dirty draft')
+
+    await world.row(page, 'Mira').click()
+    await expect(saveSession.unsavedDialog(page)).toBeVisible()
+    await saveSession.unsavedCancel(page).click()
+    await expect(saveSession.unsavedDialog(page)).toHaveCount(0)
+    await expect(world.subHeader(page)).toContainText('Kael')
+    await expect(world.description(page)).toHaveValue('E2E dirty draft')
+
+    await world.row(page, 'Mira').click()
+    await saveSession.unsavedDiscard(page).click()
+    await expect(world.subHeader(page)).toContainText('Mira')
+    const kael = await entityId(page, branchId, 'Kael')
+    expect(
+      (await queryApp(page, `SELECT description FROM entities WHERE id = ?`, [kael]))[0][0],
+    ).toBe(KAEL_DESCRIPTION)
+  })
+
+  test('[+] Blank on Locations creates a location on Save and selects it', async () => {
+    const page = app.window
+    const branchId = await currentBranchId(page, HERO_STORY)
+    await world.categoryTrigger(page).click()
+    await world.categoryOption(page, 'location').click()
+    await world.addTrigger(page, 'location').click()
+    await world.addMenuBlank(page).click()
+    await world.nameTrigger(page).click()
+    await world.nameInput(page).fill('E2E Salt Wells')
+    await world.nameInput(page).press('Enter')
+    await saveSession.saveBarSave(page).click()
+    await expect(saveSession.saveBarSave(page)).toHaveCount(0)
+    expect(
+      await queryApp(page, `SELECT kind, state FROM entities WHERE branch_id = ? AND name = ?`, [
+        branchId,
+        'E2E Salt Wells',
+      ]),
+    ).toEqual([['location', JSON.stringify({ parent_location_id: null })]])
+    await expect(world.subHeader(page)).toContainText('E2E Salt Wells')
+  })
+
+  test('Set as lead moves the lead to Mira', async () => {
+    const page = app.window
+    const branchId = await currentBranchId(page, HERO_STORY)
+    await world.categoryTrigger(page).click()
+    await world.categoryOption(page, 'character').click()
+    await world.row(page, 'Mira').click()
+    await world.moreActions(page).click()
+    await world.menuItem(page, 'setLead').click()
+    const mira = await entityId(page, branchId, 'Mira')
+    await expect
+      .poll(
+        async () =>
+          (
+            await queryApp(
+              page,
+              `SELECT json_extract(definition, '$.leadEntityId') FROM stories WHERE id = ?`,
+              [HERO_STORY],
+            )
+          )[0][0],
+      )
+      .toBe(mira)
+    await expect(world.leadTag(page, 'Mira')).toBeVisible()
+    // The row first, or the zero count could pass with Kael's row never mounted.
+    await expect(world.row(page, 'Kael')).toBeVisible()
+    await expect(world.leadTag(page, 'Kael')).toHaveCount(0)
+  })
+
+  // Hand-written URL (docs/testing.md → Harness structure): no in-app link carries World's `tab=`
+  // (Plot's Open in World sends kind and id only), so the cold mount is the seam under test. The
+  // link is one-shot: a later mount of the same row, after a kind switch, opens on Overview.
+  test('a cold-mount deep link opens its tab, on that mount only', async () => {
+    const page = app.window
+    await expect(world.subHeader(page)).toBeVisible()
+    const branchId = await currentBranchId(page, HERO_STORY)
+    const kael = await entityId(page, branchId, 'Kael')
+
+    await page.evaluate(
+      ({ branchId, kael }) => {
+        window.history.replaceState(
+          null,
+          '',
+          `/world/${branchId}?kind=character&id=${kael}&tab=connections`,
+        )
+      },
+      { branchId, kael },
+    )
+
+    const reloaded = page.waitForEvent('load')
+    await reloadFromMain(app)
+    await reloaded
+
+    await expect(world.detailName(page)).toHaveText('Kael')
+    await expect(world.tab(page, 'connections')).toHaveAttribute('aria-selected', 'true')
+
+    await world.categoryTrigger(page).click()
+    await world.categoryOption(page, 'location').click()
+    await world.row(page, 'The Drowned Market').click()
+    await expect(world.detailName(page)).toHaveText('The Drowned Market')
+    await world.categoryTrigger(page).click()
+    await world.categoryOption(page, 'character').click()
+    await world.row(page, 'Kael').click()
+    await expect(world.detailName(page)).toHaveText('Kael')
+    await expect(world.tab(page, 'overview')).toHaveAttribute('aria-selected', 'true')
+  })
+})
+
+test.describe('World panel — window close', () => {
+  let app: LaunchedApp
+  let userDataDir: string | undefined
+
+  test.beforeAll(async () => {
+    const seeded = createSeededUserDataDir()
+    userDataDir = seeded.userDataDir
+    app = await launchApp({ userDataDir, cleanupUserData: true })
+    suppressNativeUnloadDialogRace(app)
+  })
+
+  test.afterAll(async () => {
+    await app?.close().catch(() => {})
+    removeUserDataDir(userDataDir)
+  })
+
+  test('a window close with a dirty pane raises the unsaved-changes dialog', async () => {
+    const page = app.window
+    await openWorldFromHome(app)
+    // A click before typing: beforeunload needs sticky activation.
+    await world.row(page, 'Kael').click()
+    await world.tab(page, 'identity').click()
+    await world.description(page).fill('E2E close draft')
+    // The guard arms in the effects after the dirty commit (the save bar); a close that beats it
+    // goes through unguarded.
+    await expect(saveSession.saveBarSave(page)).toBeVisible()
+
+    const closed = app.app.waitForEvent('close')
+    await app.app.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0].close()
+    })
+    await expect(saveSession.unsavedDialog(page)).toBeVisible()
+    await saveSession.unsavedDiscard(page).click()
+    await closed
   })
 })
