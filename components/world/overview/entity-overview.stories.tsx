@@ -301,6 +301,8 @@ export const PhoneReflow: Story = {
     await waitFor(() => expectCompactPortrait(), WAIT)
     // touch.md → Touch-target floor.
     await expect(rect('overview-in-label').height).toBeGreaterThanOrEqual(44)
+    const link = within(screen.getByTestId('overview-in')).getByRole('link', { name: MARKET.name })
+    await expect(link.getBoundingClientRect().height).toBeGreaterThanOrEqual(44)
   },
 }
 

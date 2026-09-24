@@ -33,8 +33,10 @@ const PRESSABLE = cn(
 )
 
 // touch.md → Touch-target floor: visible size, since hitSlop can't pass the parent on Android.
+const PHONE_TOUCH_FLOOR = 'min-h-[44px] justify-center'
+
 function usePressBox(): string {
-  return cn(PRESSABLE, useTier() === 'phone' && 'min-h-[44px] justify-center')
+  return cn(PRESSABLE, useTier() === 'phone' && PHONE_TOUCH_FLOOR)
 }
 
 export function editInLabel(tab: EntityTab): string {
@@ -105,11 +107,16 @@ export function Region({
 }
 
 export function EntityLink({ entity, onPress }: { entity: Entity; onPress: () => void }) {
+  const isPhone = useTier() === 'phone'
   return (
     <Pressable
       accessibilityRole="link"
       onPress={onPress}
-      className={cn('shrink', Platform.select({ web: 'cursor-pointer' }))}
+      className={cn(
+        'shrink',
+        isPhone && PHONE_TOUCH_FLOOR,
+        Platform.select({ web: 'cursor-pointer' }),
+      )}
     >
       <Text size="sm" className="underline decoration-dotted">
         {entity.name}
