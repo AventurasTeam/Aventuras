@@ -76,7 +76,8 @@ export interface LoreSessionInput {
   newChapter?: LoreNewChapterInput
   /**
    * Show only the first this many `recentEntries`, in place of the character budget. Set by
-   * the runs a chapter creation triggers, to the story's `chapterBuffer`.
+   * the runs a chapter creation triggers, to the story's `chapterBuffer`, when
+   * `chapterBufferTail` is on.
    */
   recentEntryLimit?: number
 }
