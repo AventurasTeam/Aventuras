@@ -667,6 +667,33 @@ describe('finishWizard', () => {
     expect(await db.select().from(entities)).toHaveLength(0)
   })
 
+  it('commits a valid location hierarchy: a parent with no parent of its own', async () => {
+    const { db, ctx } = await setup()
+    const UPPER_ID = 'loc_88888888-8888-8888-8888-888888888888'
+
+    const result = await finishWizard(
+      makeState({
+        title: 'Nested',
+        cast: [
+          { ...emptyCastDraft('location', LOCATION_ID), name: 'Lower', parentLocationId: UPPER_ID },
+          { ...emptyCastDraft('location', UPPER_ID), name: 'Upper' },
+        ],
+        opening: { content: 'Once.' },
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      2925,
+    )
+
+    expect(result.status).toBe('ok')
+    const entityRows = await db.select().from(entities)
+    expect(entityRows.find((r) => r.id === LOCATION_ID)?.state).toEqual({
+      parent_location_id: UPPER_ID,
+    })
+  })
+
   it('embeds every cast row and the lore rows in ONE call, cast first', async () => {
     const { ctx } = await setup()
     const row = loreRow({ title: 'Magic', body: 'Wells.' })

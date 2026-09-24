@@ -196,11 +196,9 @@ export function resolveCastImports(
     }
   })
 
-  // data-model.md → LocationState: an imported pointer that closes a loop is dropped like a
-  // missing one, so Finish never meets a cycle the import itself introduced. First-come wins.
+  // data-model.md → LocationState: an imported pointer that closes a loop is dropped and left
+  // blank, so Finish never meets a cycle the import itself introduced. First-come wins.
   const parents = new Map<string, string | null>()
-  for (const row of existingCast)
-    if (row.kind === 'location') parents.set(row.id, row.parentLocationId)
   const acyclic = rows.map((row, i) => {
     if (row.kind !== 'location' || row.parentLocationId == null) return row
     if (checkParentChain(row.id, row.parentLocationId, (id) => parents.get(id) ?? null) === 'ok') {
@@ -211,7 +209,7 @@ export function resolveCastImports(
     const wantedName =
       suggestion.kind === 'location' ? (suggestion.parent_location_name ?? '').trim() : ''
     unresolved.push({ rowName: row.name, field: 'parentLocation', wantedName })
-    return { ...row, parentLocationId: null, unresolvedParentLocationName: wantedName }
+    return { ...row, parentLocationId: null, unresolvedParentLocationName: '' }
   })
 
   return { rows: acyclic, unresolved }

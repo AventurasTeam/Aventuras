@@ -176,7 +176,7 @@ function castEntityInput(
 // data-model.md → LocationState: the walk the entity handler runs. createStoryWithBranch inserts
 // the cast directly, so Finish is the only gate this path has.
 function castParentCycle(rows: readonly WizardCastEntityInput[]): boolean {
-  const parentOf = parentOfLocations(rows.map((r) => ({ id: r.id, kind: r.kind, state: r.state })))
+  const parentOf = parentOfLocations(rows)
   return rows.some(
     (r) =>
       r.kind === 'location' &&
