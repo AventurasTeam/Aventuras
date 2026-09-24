@@ -3,15 +3,17 @@ import { expect, test, type Page } from '@playwright/test'
 import type { StorySettings, SuggestionCategory } from '@/lib/db'
 
 import { currentBranchId, queryApp } from '../harness/db'
+import { installEmbedderModel } from '../harness/embedder'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
+import { startMockLlm, type MockLlm } from '../harness/mock-llm'
 import {
   expectCloseGuardArmed,
   reloadFromMain,
   suppressNativeUnloadDialogRace,
   watchCloseGuard,
 } from '../harness/reload'
-import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
+import { createSeededUserDataDir, removeUserDataDir, setProviderEndpoint } from '../harness/seed'
 import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
@@ -569,5 +571,60 @@ test.describe('World panel — window close', () => {
     await expect(saveSession.unsavedDialog(page)).toBeVisible()
     await saveSession.unsavedDiscard(page).click()
     await closed
+  })
+})
+
+// No reader surface shows the lead until 4.5a's You badge, so the composer wrap is the one place a
+// lead change is observable outside World. Its own launch: a turn needs the mock LLM and an
+// installed embedder, which the suites above don't.
+test.describe('World panel — lead change reaches the reader', () => {
+  let app: LaunchedApp
+  let mock: MockLlm
+  let userDataDir: string | undefined
+
+  test.beforeAll(async () => {
+    test.setTimeout(180_000)
+    const seeded = createSeededUserDataDir()
+    userDataDir = seeded.userDataDir
+    await installEmbedderModel(userDataDir)
+    mock = await startMockLlm()
+    mock.setNarrative('E2E-LEAD-REPLY the tide answers.')
+    setProviderEndpoint(seeded.dbPath, mock.url)
+    app = await launchApp({ userDataDir, cleanupUserData: true })
+  })
+
+  test.afterAll(async () => {
+    await app?.close()
+    await mock?.close()
+    removeUserDataDir(userDataDir)
+  })
+
+  // The hero story wraps in third person, so a Do turn names the lead as its subject.
+  test('a Do turn after Set as lead wraps with the new lead', async () => {
+    const page = app.window
+    await openWorldFromHome(app)
+    await world.row(page, 'Mira').click()
+    await world.moreActions(page).click()
+    await world.menuItem(page, 'setLead').click()
+    await expect(world.leadTag(page, 'Mira')).toBeVisible()
+
+    await chrome.actionsTrigger(page).click()
+    await chrome.goToReaderRow(page).click()
+    await page.waitForURL(/\/reader-composer\//)
+    await reader.modeTrigger(page).click()
+    await reader.modeOption(page, 'do').click()
+    await reader.composer(page).fill('draw the E2E-LEAD blade')
+    await reader.send(page).click()
+    await expect(page.getByText('E2E-LEAD-REPLY', { exact: false })).toBeVisible({
+      timeout: 30_000,
+    })
+
+    const branchId = await currentBranchId(page, HERO_STORY)
+    const rows = await queryApp(
+      page,
+      `SELECT content FROM story_entries WHERE branch_id = ? AND kind = 'user_action' AND content LIKE '%E2E-LEAD blade%'`,
+      [branchId],
+    )
+    expect(rows).toEqual([['Mira draws the E2E-LEAD blade.']])
   })
 })
