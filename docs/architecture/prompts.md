@@ -32,10 +32,16 @@ The pack therefore decides what each level says; the application only chooses be
 default and is what a story that has never set it receives. `none` renders nothing, and
 `joinReinforcement` then sends the turn message alone rather than a blank prefix.
 
+Response Length works the same way: `targetResponseLength` reaches the template as `dynamic`, `short`,
+`medium` or `long`, and the shipped system halves pick their `# Format` length line with a `case` on it.
+The application writes no length text of its own, and the length buttons show no paragraph counts, since
+what a length means is the pack's to say.
+
 A custom system prompt replaces the system half only. The turn message still comes from the pack, so
-Story Settings decides whether the reinforcement control is available by looking at the `-user` template
-regardless of an override — and at the effective system prompt too, since a pack may carry the
-reinforcement there instead.
+Story Settings decides whether either control is available by looking at the `-user` template regardless
+of an override — and at the effective system prompt too, since a pack may carry the setting in either.
+Only a reference Liquid would evaluate counts (`templateReferences.ts`); a comment, a raw block or a
+quoted name does not.
 
 ### Which pack is "the active pack"
 

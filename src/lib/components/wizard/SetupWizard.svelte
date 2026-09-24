@@ -439,7 +439,6 @@
           referenceMode={wizard.narrative.referenceMode}
           targetLength={wizard.narrative.targetLength}
           narratorReinforcement={wizard.narrative.narratorReinforcement}
-          mode={wizard.narrative.selectedMode}
           onBackgroundImagesEnabledChange={(v) => (wizard.narrative.backgroundImagesEnabled = v)}
           onReferenceModeChange={(v) => (wizard.narrative.referenceMode = v)}
           onTargetLengthChange={(v) => (wizard.narrative.targetLength = v)}

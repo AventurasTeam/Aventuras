@@ -20,10 +20,10 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
 ]
 
 export {
-  LENGTH_INSTRUCTION_VAR,
-  formatLengthInstruction,
-  templateUsesLengthInstruction,
-} from './lengthInstruction'
+  TARGET_RESPONSE_LENGTH_VAR,
+  templateUsesTargetResponseLength,
+  targetResponseLengthIsHonoured,
+} from './targetResponseLength'
 
 export {
   NARRATOR_REINFORCEMENT_VAR,

@@ -28,9 +28,7 @@
     backgroundImagesEnabled: boolean
     referenceMode: boolean
     targetLength?: TargetLength
-    /** Drives the paragraph counts shown for each length: they differ per mode. */
-    mode?: 'adventure' | 'creative-writing'
-    /** Set to disable the length control, e.g. a custom prompt that never renders it. */
+    /** Set to disable the length control, e.g. prompts that never reference it. */
     targetLengthDisabledReason?: string
     narratorReinforcement?: NarratorReinforcement
     /** Set to disable the reinforcement control, e.g. prompts that never reference it. */
@@ -64,7 +62,6 @@
     backgroundImagesEnabled,
     referenceMode,
     targetLength = 'dynamic',
-    mode = 'adventure',
     targetLengthDisabledReason,
     narratorReinforcement = 'full',
     narratorReinforcementDisabledReason,
@@ -111,51 +108,18 @@
     !imageGenerationEnabled || !backgroundAvailable || !portraitAvailable,
   )
 
-  /** Must match the ranges `formatLengthInstruction` asks for, which differ per mode. */
-  const LENGTH_RANGES = {
-    adventure: {
-      dynamic: {
-        short: 'Auto',
-        long: 'Adapts length naturally to scene pacing (1–2 paragraphs for action, up to 5–6 for atmosphere).',
-      },
-      short: { short: '1-3 para', long: 'Crisp and fast-paced narrative (1–3 paragraphs).' },
-      medium: { short: '2-4 para', long: 'Balanced storytelling momentum (2–4 paragraphs).' },
-      long: {
-        short: '3-6 para',
-        long: 'Detailed, expansive prose & environment (3–6 paragraphs).',
-      },
-    },
-    'creative-writing': {
-      dynamic: {
-        short: 'Auto',
-        long: 'Scales with the scene (2–3 paragraphs for rapid exchanges, 4–8 for chapter sections).',
-      },
-      short: {
-        short: '2-4 para',
-        long: 'Focused, economical prose with immediate momentum (2–4 paragraphs).',
-      },
-      medium: {
-        short: '3-6 para',
-        long: 'Balanced momentum, character voice and sensory detail (3–6 paragraphs).',
-      },
-      long: {
-        short: '5-8+ para',
-        long: 'Multi-layered literary prose, subtext and atmosphere (5–8+ paragraphs).',
-      },
-    },
-  } as const
-
-  const lengthRanges = $derived(LENGTH_RANGES[mode] ?? LENGTH_RANGES.adventure)
-  // Both come off disk, where the column is untyped text.
-  const selectedLength = $derived<TargetLength>(
-    targetLength && targetLength in lengthRanges ? targetLength : 'dynamic',
-  )
+  // Names only: what each length asks for is up to the story's prompt pack, so no paragraph
+  // count shown here could be relied on.
   const lengthOptions: { id: TargetLength; label: string }[] = [
-    { id: 'dynamic', label: 'Dynamic' },
+    { id: 'dynamic', label: 'Auto' },
     { id: 'short', label: 'Short' },
     { id: 'medium', label: 'Medium' },
     { id: 'long', label: 'Long' },
   ]
+  // Comes off disk, where the column is untyped text.
+  const selectedLength = $derived<TargetLength>(
+    lengthOptions.some((option) => option.id === targetLength) ? targetLength : 'dynamic',
+  )
 
   // The prompt pack decides what each level actually sends, so these describe the shipped
   // text rather than a guarantee.
@@ -324,7 +288,6 @@
           >
             <RadioGroup.Item value={item.id} id={`length-${item.id}`} class="sr-only" />
             <span class="font-medium">{item.label}</span>
-            <span class="text-muted-foreground text-xs">{lengthRanges[item.id].short}</span>
           </Label>
         {/each}
       </RadioGroup.Root>
@@ -333,7 +296,7 @@
           ? 'text-amber-500'
           : 'text-muted-foreground'}"
       >
-        {targetLengthDisabledReason ?? lengthRanges[selectedLength].long}
+        {targetLengthDisabledReason ?? "The story's prompt pack decides what each length means."}
       </p>
     </section>
   {/if}
