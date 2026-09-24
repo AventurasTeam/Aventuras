@@ -60,67 +60,81 @@ const stackableSchema = z.object({
     .min(0, WORLD_ISSUE.stackableCount),
 })
 
-const relationshipSchema = z.object({
-  otherId: z.string().min(1, WORLD_ISSUE.characterRequired),
-  selfToOther: z.string(),
-  otherToSelf: z.string(),
-})
-
-export const characterDraftSchema = z
-  .object({
-    ...baseShape,
-    visualPhysique: text(500),
-    visualFace: text(500),
-    visualHair: text(500),
-    visualEyes: text(500),
-    visualAttire: text(500),
-    visualDistinguishing: text(500),
-    traits: list,
-    drives: list,
-    voice: text(2000),
-    currentLocationId: z.string().nullable(),
-    factionId: z.string().nullable(),
-    equippedItems: z.array(z.string()),
-    inventory: z.array(z.string()),
-    stackables: z.array(stackableSchema),
-    relationships: z.array(relationshipSchema),
-  })
-  .superRefine((draft, ctx) => {
+// `when` runs the check past one row's type error (a cleared count), so it sees raw rows.
+const stackablesSchema = z.array(stackableSchema).superRefine(
+  (rows, ctx) => {
     const keys = new Set<string>()
-    draft.stackables.forEach((row, index) => {
+    rows.forEach((row, index) => {
+      if (typeof row.key !== 'string') return
       const key = stackableKey(row.key)
       // A blank key is its own issue (stackableKeyRequired), never a duplicate.
       if (key === '') return
       if (keys.has(key)) {
         ctx.addIssue({
           code: 'custom',
-          path: ['stackables', index, 'key'],
+          path: [index, 'key'],
           message: WORLD_ISSUE.duplicateStackable,
         })
       }
       keys.add(key)
     })
-    // data-model.md → character_relationships: CHECK (kind IS NOT NULL OR inverse_kind IS NOT NULL).
+  },
+  { when: (payload) => Array.isArray(payload.value) },
+)
+
+const relationshipSchema = z.object({
+  otherId: z.string({ error: WORLD_ISSUE.characterRequired }).min(1, WORLD_ISSUE.characterRequired),
+  selfToOther: z.string(),
+  otherToSelf: z.string(),
+})
+
+const isBlank = (value: unknown) => typeof value !== 'string' || value.trim() === ''
+
+// Same `when` as the quantities: a cleared picker leaves a row's otherId null.
+const relationshipsSchema = z.array(relationshipSchema).superRefine(
+  (rows, ctx) => {
     const others = new Set<string>()
-    draft.relationships.forEach((row, index) => {
-      if (row.selfToOther.trim() === '' && row.otherToSelf.trim() === '') {
+    rows.forEach((row, index) => {
+      // data-model.md → character_relationships: CHECK (kind IS NOT NULL OR inverse_kind IS NOT NULL).
+      if (isBlank(row.selfToOther) && isBlank(row.otherToSelf)) {
         ctx.addIssue({
           code: 'custom',
-          path: ['relationships', index, 'selfToOther'],
+          path: [index, 'selfToOther'],
           message: WORLD_ISSUE.relationshipPovRequired,
         })
       }
-      if (row.otherId === '') return
+      if (typeof row.otherId !== 'string' || row.otherId === '') return
       if (others.has(row.otherId)) {
         ctx.addIssue({
           code: 'custom',
-          path: ['relationships', index, 'otherId'],
+          path: [index, 'otherId'],
           message: WORLD_ISSUE.duplicateRelationship,
         })
       }
       others.add(row.otherId)
     })
-  })
+  },
+  { when: (payload) => Array.isArray(payload.value) },
+)
+
+export const characterDraftSchema = z.object({
+  ...baseShape,
+  visualPhysique: text(500),
+  visualFace: text(500),
+  visualHair: text(500),
+  visualEyes: text(500),
+  visualAttire: text(500),
+  visualDistinguishing: text(500),
+  traits: list,
+  drives: list,
+  voice: text(2000),
+  currentLocationId: z.string().nullable(),
+  factionId: z.string().nullable(),
+  equippedItems: z.array(z.string()),
+  inventory: z.array(z.string()),
+  stackables: stackablesSchema,
+  relationships: relationshipsSchema,
+})
 export type CharacterDraft = z.infer<typeof characterDraftSchema>
 export type StackableDraft = CharacterDraft['stackables'][number]
 export type RelationshipDraft = CharacterDraft['relationships'][number]
