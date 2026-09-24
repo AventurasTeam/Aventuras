@@ -21,17 +21,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Set up Node
-        uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        uses: ./.github/actions/pnpm-install
+        with:
+          save-cache: 'true'
 
       - name: Lint
         run: pnpm lint
@@ -64,25 +57,23 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Set up Node
-        uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        uses: ./.github/actions/pnpm-install
 
-      # Playwright browser binaries are ~170 MB; cache across runs.
+      # Playwright browser binaries are ~170 MB. Each playwright-core release
+      # pins its browser builds, so key on that version, not the lockfile.
+      - name: Resolve Playwright version
+        id: playwright
+        run: |
+          version=$(node -p "require('./node_modules/playwright-core/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Restore Playwright cache
         id: playwright-cache
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
@@ -102,27 +93,24 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Set up Node
-        uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        uses: ./.github/actions/pnpm-install
 
-      # Electron binary + builder downloads (~100 MB); cache across runs, keyed
-      # on the lockfile so a version bump busts it.
+      # Electron binary + builder downloads (~100 MB); keyed on the two versions
+      # that decide them, so an unrelated lockfile change keeps the cache.
+      - name: Resolve Electron versions
+        id: electron
+        run: |
+          versions=$(node -p "['electron', 'electron-builder'].map((p) => require('./node_modules/' + p + '/package.json').version).join('-')")
+          echo "versions=$versions" >> "$GITHUB_OUTPUT"
+
       - name: Restore Electron cache
         uses: actions/cache@v6
         with:
           path: |
             ~/.cache/electron
             ~/.cache/electron-builder
-          key: electron-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          key: electron-${{ runner.os }}-${{ steps.electron.outputs.versions }}
 
       - name: Build web bundle
         run: pnpm build:web

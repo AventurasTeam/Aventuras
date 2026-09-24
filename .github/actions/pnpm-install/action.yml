@@ -1,0 +1,61 @@
+name: Install pnpm dependencies
+description: >
+  Sets up pnpm and Node (.nvmrc) and runs a frozen install, with the pnpm store
+  cached on the lockfile hash.
+
+inputs:
+  save-cache:
+    description: >
+      Save the store after a main-branch miss. Set it on one job only, so
+      parallel jobs don't each upload the same store.
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Set up pnpm
+      uses: pnpm/action-setup@v6
+
+    # Automatic caching is npm-only today; disabled so a changed default can't
+    # add a second, every-branch store cache next to the one below.
+    - name: Set up Node
+      uses: actions/setup-node@v7
+      with:
+        node-version-file: .nvmrc
+        package-manager-cache: false
+
+    - name: Resolve pnpm store path
+      id: store
+      shell: bash
+      run: |
+        path=$(pnpm store path --silent)
+        echo "path=$path" >> "$GITHUB_OUTPUT"
+
+    # A lockfile change misses the exact key and falls back to main's newest
+    # store, so pnpm fetches only the delta.
+    - name: Restore pnpm store
+      id: restore
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ steps.store.outputs.path }}
+        key: pnpm-store-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: pnpm-store-${{ runner.os }}-${{ runner.arch }}-
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile
+
+    # Main-only: the repo's 10 GB cache quota is shared with master's v1
+    # builds, and a PR-scoped entry is readable by that PR alone. Pruning drops
+    # what the fallback store carried that this lockfile no longer references.
+    - name: Prune pnpm store
+      if: inputs.save-cache == 'true' && github.ref == 'refs/heads/main' && steps.restore.outputs.cache-hit != 'true'
+      shell: bash
+      run: pnpm store prune
+
+    - name: Save pnpm store
+      if: inputs.save-cache == 'true' && github.ref == 'refs/heads/main' && steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ steps.store.outputs.path }}
+        key: ${{ steps.restore.outputs.cache-primary-key }}

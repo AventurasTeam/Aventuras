@@ -414,7 +414,8 @@ every PR alongside `check` and `test`:
    skipping AppImage/deb compression (~58 s locally vs ~2m38s for a
    full package). Produces the asar, unpacked native modules, and
    `extraResources` migrations the tests need. The Electron binary and
-   builder downloads are cached, keyed on the lockfile.
+   builder downloads are cached, keyed on the Electron and
+   electron-builder versions.
 4. `playwright install-deps chromium` — Electron's shared libraries
    (no browser download).
 5. `pnpm test:e2e:packaged` (the `packaged` Playwright project) — the
