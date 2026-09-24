@@ -21,11 +21,4 @@ export {
   type DroppedTerm,
 } from './entryFields'
 
-export {
-  renderLoreProse,
-  buildNewChapterPayload,
-  formatNewChapterSection,
-  chapterSummariesExcluding,
-  loreChapterContext,
-  type LoreNewChapter,
-} from './newChapter'
+export { renderLoreProse } from './newChapter'

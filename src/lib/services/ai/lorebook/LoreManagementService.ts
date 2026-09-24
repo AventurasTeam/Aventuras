@@ -38,7 +38,7 @@ import {
 import { LoreSessionLedger, type LoreMergeResult } from './sessionChanges'
 import { ChapterQueryBudget, MAX_CHAPTER_QUERIES_LORE } from '../sdk/tools/chapterQueries'
 import { LORE_MANAGEMENT_DEFAULTS } from '../core/defaults'
-import { formatNewChapterSection, loreChapterContext } from './newChapter'
+import { loreChapterContext } from './newChapter'
 
 const log = createLogger('LoreManagement')
 
@@ -162,7 +162,7 @@ export class LoreManagementService extends BaseAIService {
       JSON.stringify(managed.map(entryToVaultEntry)),
     )
     // Fresh primitive-only objects: no Svelte proxy reaches the tools, so no clone.
-    const { chapters, newChapter } = loreChapterContext(
+    const { chapters, newChapterSection } = loreChapterContext(
       context.chapters ?? [],
       context.newChapter,
       this.sendNewChapterText,
@@ -274,11 +274,8 @@ export class LoreManagementService extends BaseAIService {
       : ''
 
     const hasChapters = chapters.length > 0
-    const hasNewChapter = Boolean(newChapter)
+    const hasNewChapter = Boolean(newChapterSection)
     const hasRecentStory = Boolean(context.recentStory)
-
-    // Left out entirely rather than printed empty, like `recentStorySection` above.
-    const newChapterSection = newChapter ? formatNewChapterSection(newChapter) : ''
 
     // The agent's only view of the chapter index — there is no list_chapters tool, so the
     // summaries never exist in two places for it to reconcile.
