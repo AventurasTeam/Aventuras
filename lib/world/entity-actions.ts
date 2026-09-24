@@ -33,7 +33,7 @@ export type EntitySaveInput =
 
 type EntityActionArgs = EntitySaveInput & {
   branchId: string
-  /** Null in create mode. */
+  /** The store's current row at Save (never the row at load); null in create mode. */
   row: Entity | null
   /** The row id — pre-generated in create mode so relationship writes can reference it. */
   id: string
@@ -244,16 +244,20 @@ function relationshipActions(
     const kind = blankToNull(draft.selfToOther)
     const inverseKind = blankToNull(draft.otherToSelf)
     const stored = byOther.get(draft.otherId)
-    if (
-      stored != null &&
-      blankToNull(stored.selfToOther ?? '') === kind &&
-      blankToNull(stored.otherToSelf ?? '') === inverseKind
-    )
-      continue
+    const keepsKind = stored != null && blankToNull(stored.selfToOther ?? '') === kind
+    const keepsInverse = stored != null && blankToNull(stored.otherToSelf ?? '') === inverseKind
+    if (keepsKind && keepsInverse) continue
     actions.push({
       kind: 'upsertCharacterRelationship',
       source: 'user_edit',
-      payload: { branchId, subjectId: selfId, objectId: draft.otherId, kind, inverseKind },
+      payload: {
+        branchId,
+        subjectId: selfId,
+        objectId: draft.otherId,
+        // An untouched view keeps the classifier's raw text.
+        kind: keepsKind ? stored.selfToOther : kind,
+        inverseKind: keepsInverse ? stored.otherToSelf : inverseKind,
+      },
     })
   }
   const kept = new Set(drafts.map((d) => d.otherId))
@@ -271,6 +275,8 @@ function relationshipActions(
 /** A create or the changed columns and state paths of an update, plus relationship writes. */
 export function entityActions(args: EntityActionArgs): PipelineAction[] {
   const { branchId, row, id, now, draft } = args
+  if (row != null && row.kind !== args.kind)
+    throw new Error(`entityActions: ${row.kind} row saved as ${args.kind}`)
   const actions: PipelineAction[] = []
   const state = nextState(args)
   if (row == null) {

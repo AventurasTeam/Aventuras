@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest'
 
-import type { CharacterState, Entity } from '@/lib/db'
+import { emptyEntityState, type CharacterState, type Entity } from '@/lib/db'
 
 import { entityActions } from './entity-actions'
-import { characterDraftFrom, locationDraftFrom } from './entity-draft'
+import {
+  characterDraftFrom,
+  factionDraftFrom,
+  itemDraftFrom,
+  locationDraftFrom,
+} from './entity-draft'
 
 const KAEL_STATE: CharacterState = {
   visual: { hair: 'dark', attire: ' travel-worn leathers ' },
-  traits: ['wary'],
+  traits: ['wary '],
   drives: [],
   current_location_id: 'loc_hollow',
   equipped_items: ['item_blade'],
@@ -22,13 +27,13 @@ const KAEL: Entity = {
   branchId: 'br_1',
   kind: 'character',
   name: 'Kael',
-  description: 'A courier.',
+  description: ' A courier. ',
   status: 'active',
   retiredReason: null,
   injectionMode: 'always',
   nameCollisionFlag: 0,
   state: KAEL_STATE,
-  tags: ['courier'],
+  tags: [' courier'],
   keywords: ['the courier', 'The Courier'],
   priority: 30,
   embeddingStale: 0,
@@ -36,7 +41,12 @@ const KAEL: Entity = {
   updatedAt: 1,
 }
 
-const MIRA_LINK = { rowId: 'rel_1', otherId: 'char_mira', selfToOther: 'ally', otherToSelf: 'ally' }
+const MIRA_LINK = {
+  rowId: 'rel_1',
+  otherId: 'char_mira',
+  selfToOther: ' ally',
+  otherToSelf: 'ally',
+}
 const AT = { branchId: 'br_1', id: 'char_kael', now: 42 }
 
 function update(draft: ReturnType<typeof characterDraftFrom>, links = [MIRA_LINK]) {
@@ -88,9 +98,9 @@ describe('entityActions — update', () => {
         { key: ' Arrows ', count: 12 },
       ],
     })
-    expect(changed.kind === 'updateEntity' && changed.payload.patch.state).toMatchObject({
-      stackables: { gold: 7, arrows: 12 },
-    })
+    const changedState =
+      changed.kind === 'updateEntity' ? (changed.payload.patch.state as CharacterState) : null
+    expect(changedState?.stackables).toEqual({ gold: 7, arrows: 12 })
     const [emptied] = update({
       ...characterDraftFrom(KAEL, [MIRA_LINK]),
       stackables: [{ key: 'Gold', count: 0 }],
@@ -109,6 +119,56 @@ describe('entityActions — update', () => {
       'the courier',
       'Grey Wolf',
     ])
+  })
+
+  it('drops a blanked item condition key', () => {
+    const rope: Entity = {
+      ...KAEL,
+      id: 'item_rope',
+      kind: 'item',
+      name: 'Rope',
+      state: { at_location_id: 'loc_hollow', condition: 'rusted' },
+    }
+    const draft = { ...itemDraftFrom(rope), condition: '' }
+    expect(entityActions({ kind: 'item', row: rope, draft, ...AT, id: 'item_rope' })).toStrictEqual(
+      [
+        {
+          kind: 'updateEntity',
+          source: 'user_edit',
+          payload: {
+            branchId: 'br_1',
+            id: 'item_rope',
+            patch: { state: { at_location_id: 'loc_hollow' } },
+          },
+        },
+      ],
+    )
+  })
+
+  it('drops an emptied faction agenda key', () => {
+    const guild: Entity = {
+      ...KAEL,
+      id: 'fac_guild',
+      kind: 'faction',
+      name: 'Salt Guild',
+      state: { standing: 'feared', agenda: ['x'] },
+    }
+    const draft = { ...factionDraftFrom(guild), agenda: [] }
+    expect(
+      entityActions({ kind: 'faction', row: guild, draft, ...AT, id: 'fac_guild' }),
+    ).toStrictEqual([
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: { branchId: 'br_1', id: 'fac_guild', patch: { state: { standing: 'feared' } } },
+      },
+    ])
+  })
+
+  it('refuses a row saved as another kind', () => {
+    expect(() =>
+      entityActions({ kind: 'location', row: KAEL, draft: locationDraftFrom(KAEL), ...AT }),
+    ).toThrow('entityActions: character row saved as location')
   })
 })
 
@@ -136,7 +196,7 @@ describe('entityActions — relationships', () => {
     ])
   })
 
-  it('deletes a removed pair by its row id, and rewrites both views on a one-view edit', () => {
+  it('deletes a removed pair by its row id, and sends both views on a one-view edit', () => {
     expect(update({ ...characterDraftFrom(KAEL, [MIRA_LINK]), relationships: [] })).toEqual([
       {
         kind: 'deleteCharacterRelationship',
@@ -144,14 +204,50 @@ describe('entityActions — relationships', () => {
         payload: { branchId: 'br_1', id: 'rel_1' },
       },
     ])
-    const [edited] = update({
-      ...characterDraftFrom(KAEL, [MIRA_LINK]),
-      relationships: [{ otherId: 'char_mira', selfToOther: 'ally', otherToSelf: 'wary of you' }],
-    })
-    expect(edited).toMatchObject({
-      kind: 'upsertCharacterRelationship',
-      payload: { kind: 'ally', inverseKind: 'wary of you' },
-    })
+    expect(
+      update({
+        ...characterDraftFrom(KAEL, [MIRA_LINK]),
+        relationships: [{ otherId: 'char_mira', selfToOther: 'ally', otherToSelf: 'wary of you' }],
+      }),
+    ).toEqual([
+      {
+        kind: 'upsertCharacterRelationship',
+        source: 'user_edit',
+        payload: {
+          branchId: 'br_1',
+          subjectId: 'char_kael',
+          objectId: 'char_mira',
+          kind: ' ally',
+          inverseKind: 'wary of you',
+        },
+      },
+    ])
+  })
+
+  it('keeps the stored raw text of the view the user left alone', () => {
+    const link = {
+      rowId: 'rel_1',
+      otherId: 'char_mira',
+      selfToOther: ' ally ',
+      otherToSelf: 'ally',
+    }
+    const draft = {
+      ...characterDraftFrom(KAEL, [link]),
+      relationships: [{ otherId: 'char_mira', selfToOther: ' ally ', otherToSelf: 'wary' }],
+    }
+    expect(update(draft, [link])).toEqual([
+      {
+        kind: 'upsertCharacterRelationship',
+        source: 'user_edit',
+        payload: {
+          branchId: 'br_1',
+          subjectId: 'char_kael',
+          objectId: 'char_mira',
+          kind: ' ally ',
+          inverseKind: 'wary',
+        },
+      },
+    ])
   })
 })
 
@@ -192,6 +288,22 @@ describe('entityActions — create', () => {
         },
       },
     ])
+  })
+
+  it('creates an untouched character over the empty character state', () => {
+    const actions = entityActions({
+      kind: 'character',
+      row: null,
+      draft: characterDraftFrom(null, []),
+      relationships: [],
+      branchId: 'br_1',
+      id: 'char_new',
+      now: 42,
+    })
+    expect(actions.map((a) => a.kind)).toEqual(['createEntity'])
+    expect(actions[0].kind === 'createEntity' && actions[0].payload.entry.state).toEqual(
+      emptyEntityState('character'),
+    )
   })
 
   it('creates a character before the relationships that point at its new id', () => {
