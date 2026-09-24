@@ -211,7 +211,7 @@ export const CharacterPanel: Story = {
   },
 }
 
-/** The slice's region-routing criterion: regions land their edit tabs, names open entities. */
+/** Regions land their edit tabs; names open entities. */
 export const CharacterRegionRouting: Story = {
   play: async ({ args }) => {
     await userEvent.click(await screen.findByTestId('overview-visual', {}, WAIT))
@@ -297,7 +297,7 @@ export const PhoneReflow: Story = {
   globals: { viewport: { value: 'mobile1' } },
   play: async () => {
     await screen.findByTestId('entity-overview', {}, WAIT)
-    // useTier follows the viewport asynchronously (lessons-learned/storybook-viewport-usetier-async.md).
+    // useTier follows the viewport async (lessons-learned/storybook-viewport-usetier-async.md).
     await waitFor(() => expectCompactPortrait(), WAIT)
     // touch.md → Touch-target floor.
     await expect(rect('overview-in-label').height).toBeGreaterThanOrEqual(44)
@@ -306,7 +306,7 @@ export const PhoneReflow: Story = {
   },
 }
 
-/** The 4.5b projection at 440 px: every region renders and nothing overflows horizontally. */
+/** world.md → Overview: peek drawer at 440 px — every region renders, no horizontal overflow. */
 export const PeekAt440: Story = {
   args: { variant: 'peek', width: 440 },
   play: async () => {

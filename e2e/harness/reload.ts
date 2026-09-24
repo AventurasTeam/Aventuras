@@ -22,9 +22,8 @@ export function suppressNativeUnloadDialogRace(app: LaunchedApp): void {
 
 type CloseGuardSpy = typeof globalThis & { e2eCloseGuard?: boolean }
 
-// Records the last close-guard state the renderer sends. boot() registers main's own listener
-// first and ipcMain runs listeners in registration order, so a `true` seen here means main's
-// guard is already armed. Register it before the edit that arms the guard.
+// boot() registers main's listener first and ipcMain runs listeners in order, so a `true` here
+// means main's guard is armed. Register before the edit that arms it.
 export const watchCloseGuard = (app: LaunchedApp) =>
   app.app.evaluate(({ ipcMain }, channel) => {
     const spy = globalThis as CloseGuardSpy

@@ -32,9 +32,8 @@ export type EntitySaveInput =
       /** The committed links at Save. */
       relationships: readonly RelationshipLink[]
       /**
-       * The committed links the draft's relationships were based on (the pane freezes them when the
-       * list goes dirty); defaults to `relationships`. A pair or view the user left alone keeps
-       * whatever is stored at Save; an edited pair whose row has gone is rewritten from the draft.
+       * Committed links the draft was based on (frozen once dirty); defaults to `relationships`.
+       * Untouched pairs/views keep what is stored; an edited pair whose row is gone is rewritten.
        */
       relationshipsBase?: readonly RelationshipLink[]
     }

@@ -26,7 +26,7 @@ export function asBaseControl<D extends EntityBaseDraft>(
   return control as unknown as Control<EntityBaseDraft>
 }
 
-/** A new `[+] Blank` (create `seq`) lands on Identity: the Overview has nothing to glance at yet. */
+/** A new `[+] Blank` (create `seq`) lands on Identity: Overview has nothing to glance at yet. */
 export function useEntityTab(
   isCreate: boolean,
   createSeq: number | undefined,

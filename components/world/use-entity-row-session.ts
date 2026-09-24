@@ -38,7 +38,7 @@ type EntityRowSessionOptions<Draft extends FieldValues> = {
   fieldErrors?: RefusalFields<Draft>
 }
 
-/** A World detail pane's row save session: translated refusals, field-level errors, route handle. */
+/** A World detail pane's row save session: translated refusals, field errors, route handle. */
 export function useEntityRowSession<Draft extends FieldValues>({
   kind,
   rowId,
@@ -68,8 +68,7 @@ export function useEntityRowSession<Draft extends FieldValues>({
         }
         return { status: 'rejected', reason: saveRejectionText(result.code) }
       }
-      // The write landed: a throwing handler must not read as a failed save, or a retry
-      // would create the row twice.
+      // The write landed: a throwing onSaved must not read as failed, or a retry creates it twice.
       try {
         onSaved(result.id)
       } catch (error) {

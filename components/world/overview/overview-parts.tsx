@@ -139,10 +139,7 @@ type LinkRegionProps = {
   testID: string
 }
 
-/**
- * A region with entity links. The label routes to the edit tab and each name opens its entity —
- * sibling press targets, never nested (a link inside a button is two controls in one).
- */
+/** Label opens the edit tab, each name its entity: sibling targets, never a link in a button. */
 export function LinkRegion({
   label,
   tab,

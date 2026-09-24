@@ -498,10 +498,9 @@ test.describe.serial('World panel', () => {
     await expect(world.leadTag(page, 'Kael')).toHaveCount(0)
   })
 
-  // Hand-written URL (docs/testing.md → Harness structure): no in-app link carries World's `tab=`
-  // (Plot's Open in World sends kind and id only). What this pins is the route wiring: the stores
-  // hydrate before `open`, so the linked pane mounts while the link is still pending. The one-shot
-  // itself is use-world-deep-link.test.tsx's; the remount only checks the route reads it.
+  // Hand-written URL (docs/testing.md → Harness structure): no in-app link carries `tab=`.
+  // Pins route wiring: stores hydrate before `open`, so the pane mounts with the link pending.
+  // The one-shot is use-world-deep-link.test.tsx's; the remount only checks the route reads it.
   test('a cold-mount deep link opens its tab, on that mount only', async () => {
     const page = app.window
     await expect(world.subHeader(page)).toBeVisible()
@@ -574,9 +573,8 @@ test.describe('World panel — window close', () => {
   })
 })
 
-// No reader surface shows the lead until 4.5a's You badge, so the composer wrap is the one place a
-// lead change is observable outside World. Its own launch: a turn needs the mock LLM and an
-// installed embedder, which the suites above don't.
+// The composer wrap is the only reader surface where a lead change shows. Own launch: a turn needs
+// the mock LLM and an installed embedder, which the suites above don't.
 test.describe('World panel — lead change reaches the reader', () => {
   let app: LaunchedApp
   let mock: MockLlm

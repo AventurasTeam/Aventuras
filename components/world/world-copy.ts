@@ -137,7 +137,7 @@ export function entityFieldLabel(kind: EntityKind, field: string): string {
 
 type LeadEntry = { onSetLead: () => void; disabledReason?: string }
 
-/** world.md → Detail head structure: Set as lead (characters only), Export, View raw JSON, Delete. */
+/** world.md → Detail head structure. */
 export function entityMenuEntries(
   kind: EntityKind,
   { onViewJson, lead }: { onViewJson: () => void; lead?: LeadEntry },

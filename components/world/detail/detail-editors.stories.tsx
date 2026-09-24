@@ -228,7 +228,8 @@ export const RelationshipsBlocked: Story = {
     await expect(await card.findByRole('textbox', { name: 'Your view' }, WAIT)).toHaveAttribute(
       'readonly',
     )
-    // A disabled IconAction is named by its gate reason (lessons-learned/disabled-iconaction-renames-itself.md).
+    // A disabled IconAction is named by its gate reason
+    // (lessons-learned/disabled-iconaction-renames-itself.md).
     await expect(card.getByRole('button', { name: BLOCKED_REASON })).toHaveAttribute(
       'aria-disabled',
       'true',
@@ -236,7 +237,7 @@ export const RelationshipsBlocked: Story = {
   },
 }
 
-/** react-hook-form regenerates every field id on reset; a committed and a new card keep their node. */
+/** react-hook-form regenerates field ids on reset; a committed and a new card keep their node. */
 export const RelationshipCardsSurviveReset: Story = {
   args: { relationships: THREE_STATES },
   play: async () => {

@@ -13,7 +13,7 @@ import {
 import { ListField, TextField, type Gate } from '../detail/fields'
 import { Section } from '../detail/section'
 
-// world.md → Identity: description and kind-specific identity slots; no operational chrome.
+// world.md → Identity: no operational chrome.
 export function CharacterIdentity({
   control,
   ...gate

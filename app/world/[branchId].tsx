@@ -134,8 +134,7 @@ export default function WorldRoute() {
   })
   const detailOpen = isPhone && selection != null
   const selectedEntity = selection?.type === 'entity' ? selection.row : null
-  // Story open hydrates the stores before it publishes `open`, so the linked row's pane mounts in
-  // that same commit.
+  // Stores hydrate before `open` publishes, so the linked row's pane mounts in that same commit.
   const pendingLink = useWorldDeepLink(initialSelection, open != null)
 
   const relationships = useMemo(
@@ -239,8 +238,7 @@ export default function WorldRoute() {
   )
 
   // One synchronous handler: the pane drops a reveal whose row isn't mounted in the same commit.
-  // Phone hides the list while a row is selected, so clear it. A reveal alone drops nothing, so
-  // only a switch, or phone's deselect, is guarded.
+  // Phone hides the list under a selection, so deselect. A bare reveal drops no draft: unguarded.
   const onPillPress = useCallback(() => {
     const target = firstFlaggedRow({
       entities,
@@ -282,8 +280,8 @@ export default function WorldRoute() {
   // Constant true: Android back always runs handleBack, so it can't leave past a dirty pane.
   useMasterDetailBack(true, handleBack)
 
-  // The popover measures its trigger on open, and phone hides the list (and its `[+]`) while a
-  // row is selected. Opening the menu alone drops nothing, so only a switch is guarded.
+  // The popover measures its trigger on open, and phone hides the list (and its `[+]`) under a
+  // selection, so deselect. Opening the menu drops no draft; only a switch or deselect is guarded.
   const openAddMenu = useCallback(
     (target: WorldCategory) => {
       if (target === category && !isPhone) {

@@ -180,7 +180,7 @@ type HarnessProps = {
   onSetLead: (id: string) => void
 }
 
-/** Route-shaped: create selects the saved row; capture-phase F2 flips `blocked` (a run starting). */
+/** Route-shaped: create selects the saved row; capture-phase F2 flips `blocked` (run starting). */
 function Harness({
   kind,
   row: initialRow,
@@ -289,7 +289,7 @@ type Story = StoryObj<typeof Harness>
 const tab = (name: RegExp) => screen.getByRole('tab', { name })
 const saveBar = () => screen.getByTestId('save-bar')
 
-/** Character field routing: every field on its canon tab (world.md → Tabs — per-kind composition). */
+/** Every field on its canon tab (world.md → Tabs — per-kind composition). */
 export const CharacterFieldRouting: Story = {
   play: async () => {
     const tabs = within(await screen.findByRole('tablist', {}, WAIT)).getAllByRole('tab')
@@ -424,7 +424,7 @@ export const InjectionChipHiddenForAuto: Story = {
   },
 }
 
-/** Criterion 1's component half: three edits across two tabs reach one Save. */
+/** Three edits across two tabs reach one Save. */
 export const SaveCarriesThreeFields: Story = {
   play: async ({ args }) => {
     await userEvent.click(await screen.findByRole('tab', { name: /^Identity/ }, WAIT))
@@ -457,10 +457,7 @@ export const SaveCarriesThreeFields: Story = {
   },
 }
 
-/**
- * D1: the Relationships base freezes when the list goes dirty. A pair the classifier writes after
- * that is in the stored links but not the base, so Save leaves it alone instead of deleting it.
- */
+/** The Relationships base freezes once dirty, so Save keeps a pair the classifier writes later. */
 export const RelationshipsBaseFrozenWhileDirty: Story = {
   args: { links: [MIRA_LINK], storeLink: VORNE_LINK },
   play: async ({ args }) => {
@@ -618,7 +615,7 @@ export const ParentCycleFieldError: Story = {
   },
 }
 
-/** C11 entries: Set as lead (characters only), Export and Delete disabled with reasons. */
+/** Set as lead (characters only), plus Export and Delete disabled with reasons. */
 export const OverflowMenuForAnActiveCharacter: Story = {
   args: { row: MIRA },
   play: async ({ args }) => {

@@ -37,10 +37,7 @@ type RelationshipsEditorProps = Gate & {
   entities: readonly Entity[]
 }
 
-/**
- * world.md → Relationships: ListRow rows that expand into an inline card. Inline, not a sheet —
- * the picker is itself a Sheet on phone, and a Sheet may not open over a Sheet.
- */
+/** world.md → Relationships. Inline cards: the phone picker is a Sheet, and Sheets can't stack. */
 export function RelationshipsEditor({
   control,
   trigger,
@@ -52,8 +49,8 @@ export function RelationshipsEditor({
   const { fields, append, remove } = useFieldArray({ control, name: 'relationships' })
   const rows = useWatch({ control, name: 'relationships' }) ?? []
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set())
-  // A key that left the draft (Delete, undo, a classifier removal) can come back, and must come back
-  // collapsed. Only keys seen in `rows` are pruned: a just-added one may reach `rows` a render late.
+  // A key that left the draft (Delete, undo, classifier removal) may return, and must return
+  // collapsed. Prune only keys seen in `rows`: a just-added one may reach `rows` a render late.
   const keys = rows.map((r) => r.cardKey)
   const [seen, setSeen] = useState(keys)
   if (keys.length !== seen.length || keys.some((key, i) => key !== seen[i])) {

@@ -24,7 +24,7 @@ import { ItemOverviewBody, LocationOverviewBody } from './place-overview'
 export type OverviewVariant = 'panel' | 'peek'
 
 export type EntityOverviewProps = {
-  /** The committed row (4.5b's peek projects the same component). */
+  /** The committed row. */
   entity: Entity
   /** The branch's entities, for links and inverse lists. */
   entities: readonly Entity[]

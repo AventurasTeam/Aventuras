@@ -3,9 +3,8 @@ import { useState } from 'react'
 import type { RelationshipDraft, RelationshipLink } from '@/lib/world'
 
 /**
- * The committed links a Relationships draft was based on, for Save's three-way diff. Follows
- * `links` while clean; frozen at the links of the render where `dirty` first holds; after
- * `markSaved`, the list as saved (typing during the save keeps it dirty).
+ * Committed links a Relationships draft was based on (Save's three-way diff): `links` while clean,
+ * frozen on the first dirty render; after `markSaved`, the saved list (mid-save edits stay dirty).
  */
 export function useRelationshipsBase(dirty: boolean, links: readonly RelationshipLink[]) {
   const [frozen, setFrozen] = useState<readonly RelationshipLink[] | null>(null)

@@ -124,7 +124,7 @@ type RefFieldProps<D extends FieldValues> = Gate & {
   testID?: string
 }
 
-/** One entity reference through the C8 picker; a field error (parent-cycle) renders below. */
+/** One entity reference; a field error (parent-cycle) renders below. */
 export function RefField<D extends FieldValues>({
   control,
   name,

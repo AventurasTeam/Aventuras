@@ -21,7 +21,7 @@ type EntityRefListProps = Gate & {
   excludeIds: readonly string[]
   rowHint: (entity: Entity) => string | undefined
   testID: string
-  /** Distinct per list: two lists share a pane, so their add pickers need different accessible names. */
+  /** Unique per list: the pane's two add pickers need distinct accessible names. */
   addLabel: string
 }
 

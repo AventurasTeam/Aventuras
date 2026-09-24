@@ -25,7 +25,7 @@ type StackablesEditorProps = Gate & {
   trigger: UseFormTrigger<CharacterDraft>
 }
 
-/** Quantities as editable rows: counts need direct entry (world.md → Carrying, amended). */
+/** Quantities as editable rows: counts need direct entry (world.md → Carrying). */
 export function StackablesEditor({
   control,
   trigger,
@@ -39,8 +39,8 @@ export function StackablesEditor({
       {fields.map((_, index) => {
         const key = rows[index]?.key.trim() ?? ''
         return (
-          // By index: react-hook-form regenerates every field id on each reset (a store patch, each
-          // Save), remounting the row being typed in. NumberInput's text buffer resyncs from its value.
+          // By index: RHF regenerates field ids on each reset (store patch, Save), which would
+          // remount the row being typed in. NumberInput's text buffer resyncs from its value.
           <View key={index} className="flex-row items-start gap-2" testID={`stackable-${index}`}>
             <Controller
               control={control}

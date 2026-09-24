@@ -34,10 +34,10 @@ describe('relationshipLinksFor', () => {
     const rows = new Map([
       ['rel_1', rel('rel_1', 'char_aria', 'char_kael', 'brother', 'sister')],
       ['rel_2', rel('rel_2', 'char_kael', 'char_zed', 'mentor', null)],
-      // Involves char_kael too, but on another branch: proves the branch check, not just the pair check.
+      // Involves char_kael on another branch: proves the branch check, not just the pair check.
       ['rel_3', rel('rel_3', 'char_kael', 'char_zed', 'x', 'y', 'br_2')],
     ])
-    // 'Abe' sorts before 'Aria', while insertion and rowId order both put rel_1 first: proves the sort runs.
+    // 'Abe' < 'Aria', yet insertion and rowId order both put rel_1 first: proves the sort runs.
     expect(relationshipLinksFor('char_kael', 'br_1', rows, ENTITIES)).toEqual([
       { rowId: 'rel_2', otherId: 'char_zed', selfToOther: 'mentor', otherToSelf: null },
       { rowId: 'rel_1', otherId: 'char_aria', selfToOther: 'sister', otherToSelf: 'brother' },

@@ -41,7 +41,7 @@ export function OverviewTab({
   )
 }
 
-/** Assets and History are placeholders in M4; Involvements is read-only (world.md → Assets, Involvements, History). */
+/** world.md → Assets, Involvements, History. Assets and History are placeholders. */
 export function TrailingTabs({
   data,
   onOpenHappening,

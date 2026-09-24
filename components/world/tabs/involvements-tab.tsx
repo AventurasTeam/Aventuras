@@ -8,7 +8,7 @@ import { t } from '@/lib/i18n'
 
 import type { EntityInvolvement } from '../world-route-data'
 
-/** world.md → Involvements: read-only here; each row opens its happening in Plot (C6). */
+/** world.md → Assets, Involvements, History: read-only; a row opens its happening in Plot. */
 export function InvolvementsTab({
   rows,
   onOpenHappening,

@@ -6,7 +6,7 @@ import { isEntityCategory, type WorldCategory } from '@/lib/list-modules'
 export type WorldDetailSelection =
   | { type: 'entity'; row: Entity }
   | { type: 'lore'; row: Lore }
-  /** `seq` changes on every `[+] Blank`, so a repeat create resets a draft already in create mode. */
+  /** `seq` bumps per `[+] Blank`, so a repeat create resets a draft already in create mode. */
   | { type: 'create'; kind: EntityKind; seq: number }
 
 type WorldSelectionInput = {

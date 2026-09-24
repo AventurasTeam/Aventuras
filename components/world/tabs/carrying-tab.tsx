@@ -12,7 +12,7 @@ import { Section } from '../detail/section'
 import { StackablesEditor } from '../detail/stackables-editor'
 import { itemPositionHint } from '../world-copy'
 
-// world.md → Carrying — character-only: quantities, then Equipped, then Carried.
+// world.md → Carrying — character-only.
 export function CarryingTab({
   control,
   trigger,

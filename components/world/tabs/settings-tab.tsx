@@ -11,7 +11,7 @@ import { ENTITY_STATUSES, type EntityBaseDraft } from '@/lib/world'
 import { ListField, TextField, type Gate } from '../detail/fields'
 import { issueLabel } from '../world-copy'
 
-// world.md → Settings: status, injection_mode, retired_reason, keywords, priority, tags.
+// world.md → Settings.
 export function SettingsTab({
   control,
   blocked,
