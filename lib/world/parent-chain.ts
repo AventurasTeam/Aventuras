@@ -12,7 +12,8 @@ export type ParentChainCheck = 'ok' | 'cycle' | 'cap-hit'
 
 /**
  * Walks proposed parent → its parent → … and reports `cycle` when the walk reaches `id`.
- * `cap-hit` is an existing loop elsewhere in the chain, which callers refuse too.
+ * `cap-hit` means the walk passed the cap without reaching `id` (a loop elsewhere, or an
+ * over-deep chain); callers refuse it too.
  */
 export function checkParentChain(
   id: string,

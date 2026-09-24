@@ -15,6 +15,10 @@ function parents(map: Record<string, string | null>): ParentOf {
 }
 
 describe('checkParentChain', () => {
+  it('pins the cap at 100', () => {
+    expect(PARENT_CHAIN_DEPTH_CAP).toBe(100)
+  })
+
   it('refuses a location as its own parent', () => {
     expect(checkParentChain('loc_a', 'loc_a', parents({}))).toBe('cycle')
   })
@@ -32,8 +36,14 @@ describe('checkParentChain', () => {
 
   it('accepts a chain as long as the cap that never returns', () => {
     const map: Record<string, string | null> = {}
-    for (let i = 1; i < PARENT_CHAIN_DEPTH_CAP; i++) map[`loc_${i}`] = `loc_${i + 1}`
+    for (let i = 1; i < 100; i++) map[`loc_${i}`] = `loc_${i + 1}`
     expect(checkParentChain('loc_0', 'loc_1', parents(map))).toBe('ok')
+  })
+
+  it('refuses a chain one longer than the cap that never returns', () => {
+    const map: Record<string, string | null> = {}
+    for (let i = 1; i <= 100; i++) map[`loc_${i}`] = `loc_${i + 1}`
+    expect(checkParentChain('loc_0', 'loc_1', parents(map))).toBe('cap-hit')
   })
 
   it('stops at the cap on an existing loop that does not include the location', () => {
@@ -51,7 +61,7 @@ describe('parentOfLocations', () => {
   it('reads location parents and ignores other kinds and unknown ids', () => {
     const rows = [
       { id: 'loc_shop', kind: 'location', state: { parent_location_id: 'loc_square' } },
-      { id: 'char_kael', kind: 'character', state: { current_location_id: 'loc_shop' } },
+      { id: 'char_kael', kind: 'character', state: { parent_location_id: 'loc_square' } },
     ] as unknown as Pick<Entity, 'id' | 'kind' | 'state'>[]
     const parentOf = parentOfLocations(rows)
     expect(parentOf('loc_shop')).toBe('loc_square')
@@ -71,5 +81,9 @@ describe('parentChainIds', () => {
     expect(
       parentChainIds('loc_a', parents({ loc_a: 'loc_b', loc_b: 'loc_c', loc_c: 'loc_b' })),
     ).toEqual(['loc_b', 'loc_c'])
+  })
+
+  it('stops before looping back to the location itself', () => {
+    expect(parentChainIds('loc_a', parents({ loc_a: 'loc_b', loc_b: 'loc_a' }))).toEqual(['loc_b'])
   })
 })
