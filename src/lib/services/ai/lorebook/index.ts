@@ -25,5 +25,6 @@ export {
   buildNewChapterPayload,
   formatNewChapterSection,
   chapterSummariesExcluding,
+  loreChapterContext,
   type LoreNewChapter,
 } from './newChapter'

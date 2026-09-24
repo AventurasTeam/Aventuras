@@ -73,9 +73,11 @@ not a later read of the store, so a story switch before the session starts canno
 Blank entries are dropped, and a chapter with no prose left keeps its summary instead.
 
 This is on by default and switched off with **Send full text of new chapter** (Advanced
-Settings → Lore Management, `serviceSpecificSettings.loreManagement.sendNewChapterText`). The
-gate sits where the payload is built in `AIService.runLoreManagement`, so off means every chapter
-is a summary line; both callers still pass the chapter either way.
+Settings → Lore Management, `serviceSpecificSettings.loreManagement.sendNewChapterText`).
+`createLoreManagementService` reads it alongside `requireDuplicateResolution`, and
+`loreChapterContext` in `newChapter.ts` applies it, so off means every chapter is a summary line.
+Both callers still pass the chapter either way: the automatic path's entries already exist, and
+the manual path's cost a slice of the store.
 
 **The batch importer is the exception** — `chapterizeFromBeginning`
 writes many chapters in one pass, so its single lore session keeps summaries only, as does a

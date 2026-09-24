@@ -5,7 +5,7 @@
  * entries based on story events using the Vercel AI SDK ToolLoopAgent.
  */
 
-import type { Entry, VaultLorebookEntry } from '$lib/types'
+import type { Chapter, Entry, StoryEntry, VaultLorebookEntry } from '$lib/types'
 import type { ServiceId } from '$lib/stores/settings.svelte'
 import { BaseAIService } from '../BaseAIService'
 import { createLogger } from '$lib/log'
@@ -30,7 +30,7 @@ import {
 import { LoreSessionLedger, type LoreMergeResult } from './sessionChanges'
 import { ChapterQueryBudget, MAX_CHAPTER_QUERIES_LORE } from '../sdk/tools/chapterQueries'
 import { LORE_MANAGEMENT_DEFAULTS } from '../core/defaults'
-import { formatNewChapterSection, type LoreNewChapter } from './newChapter'
+import { formatNewChapterSection, loreChapterContext } from './newChapter'
 import type { POV, StoryMode, Tense } from '$lib/types'
 
 const log = createLogger('LoreManagement')
@@ -69,7 +69,7 @@ export interface LoreManagementContext {
   recentStory: string
   existingEntries: Entry[]
   /** Available chapters for querying */
-  chapters?: LoreManagementChapter[]
+  chapters?: Chapter[]
   mode?: StoryMode
   pov?: POV
   tense?: Tense
@@ -82,8 +82,8 @@ export interface LoreManagementContext {
   keptSeparate?: ReadonlySet<string>
   /** Persist a `keep_separate` decision, so it outlives the session. */
   onKeepSeparate?: (names: string[]) => Promise<void>
-  /** The chapter that triggered this run, given in full rather than as a summary. */
-  newChapter?: LoreNewChapter
+  /** The chapter that triggered this run; given in full only when `sendNewChapterText` is on. */
+  newChapter?: { chapter: Chapter; entries: StoryEntry[] }
 }
 
 /**
@@ -108,15 +108,18 @@ function entryToVaultEntry(entry: Entry): VaultLorebookEntry {
 export class LoreManagementService extends BaseAIService {
   private maxIterations: number
   private requireDuplicateResolution: boolean
+  private sendNewChapterText: boolean
 
   constructor(
     serviceId: ServiceId,
     maxIterations: number = LORE_MANAGEMENT_DEFAULTS.maxIterations,
     requireDuplicateResolution: boolean = LORE_MANAGEMENT_DEFAULTS.requireDuplicateResolution,
+    sendNewChapterText: boolean = LORE_MANAGEMENT_DEFAULTS.sendNewChapterText,
   ) {
     super(serviceId)
     this.maxIterations = maxIterations
     this.requireDuplicateResolution = requireDuplicateResolution
+    this.sendNewChapterText = sendNewChapterText
   }
 
   /**
@@ -152,9 +155,12 @@ export class LoreManagementService extends BaseAIService {
     const vaultEntries: VaultLorebookEntry[] = JSON.parse(
       JSON.stringify(managed.map(entryToVaultEntry)),
     )
-    const plainChapters = context.chapters
-      ? JSON.parse(JSON.stringify(context.chapters))
-      : undefined
+    const { chapters, newChapter } = loreChapterContext(
+      context.chapters ?? [],
+      context.newChapter,
+      this.sendNewChapterText,
+    )
+    const plainChapters: LoreManagementChapter[] = JSON.parse(JSON.stringify(chapters))
 
     /**
      * Where an approved change lands. Owns the index -> entry mapping, which grows with
@@ -261,12 +267,12 @@ export class LoreManagementService extends BaseAIService {
       ? `# Story Since The Last Chapter\n${context.recentStory}\n`
       : ''
 
-    const hasChapters = Boolean(context.chapters && context.chapters.length > 0)
-    const hasNewChapter = Boolean(context.newChapter)
+    const hasChapters = plainChapters.length > 0
+    const hasNewChapter = Boolean(newChapter)
     const hasRecentStory = Boolean(context.recentStory)
 
     // Left out entirely rather than printed empty, like `recentStorySection` above.
-    const newChapterSection = context.newChapter ? formatNewChapterSection(context.newChapter) : ''
+    const newChapterSection = newChapter ? formatNewChapterSection(newChapter) : ''
 
     // The agent's only view of the chapter index — there is no list_chapters tool, so the
     // summaries never exist in two places for it to reconcile.
@@ -277,10 +283,8 @@ export class LoreManagementService extends BaseAIService {
     // `query_chapter` — a whole chapter read by a second model. Cutting converts tokens
     // into LLM calls rather than saving them.
     const chapterSummary = hasChapters
-      ? context
-          .chapters!.map(
-            (ch) => `- Chapter ${ch.number}${ch.title ? `: ${ch.title}` : ''}\n  ${ch.summary}`,
-          )
+      ? plainChapters
+          .map((ch) => `- Chapter ${ch.number}${ch.title ? `: ${ch.title}` : ''}\n  ${ch.summary}`)
           .join('\n')
       : hasNewChapter
         ? 'No earlier chapters — the one below is the first.'

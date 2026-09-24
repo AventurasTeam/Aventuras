@@ -4,6 +4,7 @@ import {
   buildNewChapterPayload,
   formatNewChapterSection,
   chapterSummariesExcluding,
+  loreChapterContext,
 } from './newChapter'
 
 function makeChapter(overrides: Partial<Chapter> = {}): Chapter {
@@ -72,7 +73,7 @@ describe('buildNewChapterPayload', () => {
 
   it('returns null when there is nothing to show', () => {
     // story.getChapterEntries() returns [] when it cannot place the chapter's boundary
-    // ids. The caller must not drop the chapter's summary on a null payload — see ai/index.ts.
+    // ids. The caller must not drop the chapter's summary on a null payload — see loreChapterContext.
     expect(buildNewChapterPayload(makeChapter(), [])).toBeNull()
   })
 
@@ -149,5 +150,36 @@ describe('chapterSummariesExcluding', () => {
 
   it('returns an empty list when the only chapter is the excluded one', () => {
     expect(chapterSummariesExcluding([chapters[0]], 'a')).toEqual([])
+  })
+})
+
+describe('loreChapterContext', () => {
+  const earlier = makeChapter({ id: 'a', number: 1, title: 'First', summary: 'One' })
+  const current = makeChapter({ id: 'b', number: 2, title: 'Second', summary: 'Two' })
+  const chapters = [earlier, current]
+  const prose = [makeEntry()]
+
+  it('sends the chapter in full and drops its summary when the setting is on', () => {
+    const result = loreChapterContext(chapters, { chapter: current, entries: prose }, true)
+    expect(result.newChapter?.text).toBe('[NARRATIVE] The gate creaked open.')
+    expect(result.chapters).toEqual([{ number: 1, title: 'First', summary: 'One' }])
+  })
+
+  it('keeps every summary and sends no payload when the setting is off', () => {
+    const result = loreChapterContext(chapters, { chapter: current, entries: prose }, false)
+    expect(result.newChapter).toBeNull()
+    expect(result.chapters).toHaveLength(2)
+  })
+
+  it('keeps the summary when the chapter has no prose to send', () => {
+    const result = loreChapterContext(chapters, { chapter: current, entries: [] }, true)
+    expect(result.newChapter).toBeNull()
+    expect(result.chapters).toHaveLength(2)
+  })
+
+  it('keeps every summary when there is no new chapter', () => {
+    const result = loreChapterContext(chapters, undefined, true)
+    expect(result.newChapter).toBeNull()
+    expect(result.chapters).toHaveLength(2)
   })
 })

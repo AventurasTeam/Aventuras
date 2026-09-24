@@ -25,9 +25,7 @@ export interface LoreNewChapter {
  *
  * Returns `null` when there is nothing to show — `entries` is empty (which
  * `story.getChapterEntries` returns when it cannot place the chapter's boundary ids) or holds
- * only blank or non-prose entries. The caller
- * must not drop the chapter's summary in that case: doing so on a `null` here would make the
- * chapter invisible instead of verbatim.
+ * only blank or non-prose entries. `loreChapterContext` keeps the chapter's summary then.
  */
 export function buildNewChapterPayload(
   chapter: Chapter,
@@ -80,4 +78,25 @@ export function chapterSummariesExcluding(
   return chapters
     .filter((c) => c.id !== excludeId)
     .map((c) => ({ number: c.number, title: c.title, summary: c.summary }))
+}
+
+/**
+ * The chapter list and triggering-chapter payload the agent is shown.
+ *
+ * The summary is dropped only when a payload replaces it, so a chapter is never shown twice
+ * and never missing.
+ */
+export function loreChapterContext(
+  chapters: Chapter[],
+  newChapter: { chapter: Chapter; entries: StoryEntry[] } | undefined,
+  sendFullText: boolean,
+): { chapters: LoreManagementChapter[]; newChapter: LoreNewChapter | null } {
+  const payload =
+    sendFullText && newChapter
+      ? buildNewChapterPayload(newChapter.chapter, newChapter.entries)
+      : null
+  return {
+    chapters: chapterSummariesExcluding(chapters, payload ? newChapter?.chapter.id : undefined),
+    newChapter: payload,
+  }
 }

@@ -101,6 +101,7 @@ export class ServiceFactory {
       'loreManagement',
       loreManagementSettings.maxIterations,
       settings.serviceSpecificSettings.loreManagement.requireDuplicateResolution,
+      settings.serviceSpecificSettings.loreManagement.sendNewChapterText,
     )
   }
 
