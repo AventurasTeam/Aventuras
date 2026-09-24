@@ -550,6 +550,53 @@ export const RichContent: StoryT = {
   },
 }
 
+const LIST_CONTENT = '1984. It was cold.\n\nShe packed:\n\n- a torn cloak\n- a lantern'
+
+// Tailwind's preflight strips list markers, so a plain entry opening with a year lost it.
+function expectListMarkers(root: ParentNode) {
+  const ol = root.querySelector('ol')
+  const ul = root.querySelector('ul')
+  expect(ol).not.toBeNull()
+  expect(ul).not.toBeNull()
+  expect(getComputedStyle(ol!).listStyleType).toBe('decimal')
+  expect(getComputedStyle(ul!).listStyleType).toBe('disc')
+  expect(parseFloat(getComputedStyle(ol!).paddingLeft)).toBeGreaterThan(0)
+  expect(parseFloat(getComputedStyle(ul!).paddingLeft)).toBeGreaterThan(0)
+}
+
+export const PlainListsShowMarkers: StoryT = {
+  ...wrap,
+  args: { ...baseProps, kind: 'ai_reply', content: LIST_CONTENT, meta: aiMeta },
+  play: async ({ canvasElement }) => {
+    const island = await waitFor(() => {
+      const found = canvasElement.querySelector<HTMLElement>('.narrative-html')
+      expect(found).not.toBeNull()
+      return found as HTMLElement
+    })
+    expectListMarkers(island)
+  },
+}
+
+export const RichListsShowMarkers: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    kind: 'ai_reply',
+    content: `<style>@keyframes x { to { opacity: 1 } }</style>\n\n${LIST_CONTENT}`,
+    meta: aiMeta,
+  },
+  play: async ({ canvasElement }) => {
+    const root = await waitFor(() => {
+      const host = Array.from(canvasElement.querySelectorAll('div')).find(
+        (div) => div.shadowRoot?.querySelector('ol') != null,
+      )
+      expect(host).toBeDefined()
+      return host!.shadowRoot!
+    })
+    expectListMarkers(root)
+  },
+}
+
 export const XssSanitizationAllowlist: StoryT = {
   ...wrap,
   args: {
