@@ -14,8 +14,7 @@ export function largestWholeTier(
   const baseUnits = Math.floor(elapsedSeconds / calendar.secondsPerBaseUnit)
   const { tiers } = calendar
   let best: WholeTierSpan = { tier: tiers[tiers.length - 1].name, count: 0 }
-  // A tier's length is the product of the rollovers below it, so it stays fixed only until a
-  // variable rollover (days-in-month) is met.
+  // Tier length = product of the rollovers below; past a variable one (days-in-month) it varies.
   let length = 1
   for (let i = tiers.length - 1; i >= 0; i--) {
     if (baseUnits >= length) best = { tier: tiers[i].name, count: Math.floor(baseUnits / length) }

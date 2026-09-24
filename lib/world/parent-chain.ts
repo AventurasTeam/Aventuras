@@ -11,9 +11,8 @@ export type ParentOf = (id: string) => string | null
 export type ParentChainCheck = 'ok' | 'cycle' | 'cap-hit'
 
 /**
- * Walks proposed parent → its parent → … and reports `cycle` when the walk reaches `id`.
- * `cap-hit` means the walk passed the cap without reaching `id` (a loop elsewhere, or an
- * over-deep chain); callers refuse it too.
+ * `cycle`: the walk up from `proposedParentId` reaches `id`. `cap-hit`: it passes the cap first
+ * (a loop elsewhere, or an over-deep chain) — callers refuse both.
  */
 export function checkParentChain(
   id: string,
@@ -41,7 +40,7 @@ export function parentOfLocations(rows: readonly LocationRow[]): ParentOf {
   return (id) => parents.get(id) ?? null
 }
 
-/** `id`'s ancestors, nearest first; stops at a repeat or the cap so a corrupt chain still renders. */
+/** Ancestors, nearest first; stops at a repeat or the cap so a corrupt chain still renders. */
 export function parentChainIds(id: string, parentOf: ParentOf): string[] {
   const chain: string[] = []
   const seen = new Set([id])

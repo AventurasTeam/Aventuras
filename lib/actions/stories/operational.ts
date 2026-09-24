@@ -161,7 +161,6 @@ async function loadAndPublish(
   if (!isCurrentRequest()) return { status: 'cancelled' }
   const chapterRows = await ctx.db.select().from(chapters).where(eq(chapters.branchId, branchId))
   if (!isCurrentRequest()) return { status: 'cancelled' }
-  // World's Relationships section and classifier patches read these from the working set.
   const relationshipRows = await ctx.db
     .select()
     .from(characterRelationships)

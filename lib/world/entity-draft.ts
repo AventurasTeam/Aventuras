@@ -97,7 +97,7 @@ const relationshipsSchema = z.array(relationshipSchema).superRefine(
     const others = new Set<string>()
     rows.forEach((row, index) => {
       if (row == null) return
-      // data-model.md → character_relationships: CHECK (kind IS NOT NULL OR inverse_kind IS NOT NULL).
+      // data-model.md → character_relationships CHECK: kind or inverse_kind must be non-null.
       if (isBlank(row.selfToOther) && isBlank(row.otherToSelf)) {
         ctx.addIssue({
           code: 'custom',

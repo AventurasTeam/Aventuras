@@ -84,7 +84,7 @@ function fullRow(entry: NewEntity): Entity {
   }
 }
 
-// data-model.md → LocationState: the pre-commit walk, for every write that goes through the entity handlers.
+// data-model.md → LocationState: the pre-commit walk, on every entity-handler write.
 async function refuseParentCycle(
   branchId: string,
   id: string,

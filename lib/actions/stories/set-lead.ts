@@ -51,7 +51,7 @@ export async function setStoryLead(
           .where(and(eq(entities.branchId, story.currentBranchId), eq(entities.id, entityId)))
   if (!target) return refuse(storyId, entityId, LEAD_REJECTION.wrongBranch)
   if (target.kind !== 'character') return refuse(storyId, entityId, LEAD_REJECTION.notCharacter)
-  // wizard.md → Lead requires status='active': a staged or retired character can't lead.
+  // wizard.md → Lead requires status='active'.
   if (target.status !== 'active') return refuse(storyId, entityId, LEAD_REJECTION.notActive)
   const next = storyDefinitionSchema.safeParse({ ...story.definition, leadEntityId: entityId })
   if (!next.success) return refuse(storyId, entityId, LEAD_REJECTION.invalidDefinition)

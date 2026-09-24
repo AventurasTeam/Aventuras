@@ -11,7 +11,7 @@ export const ENTITY_REJECTION = { ...ROW_SAVE_REJECTION, parentCycle: PARENT_CYC
 
 type SaveEntityArgs = EntitySaveInput & { branchId: string; row: Entity | null }
 
-/** One World pane Save: a create or the row's changed columns and state paths, plus relationships. */
+/** One World pane Save: a create or the changed columns and state paths, plus relationships. */
 export function saveEntity(args: SaveEntityArgs, ctx: DbCtx): Promise<EntitySaveResult> {
   return commitRowSave(
     'entity',

@@ -18,8 +18,8 @@ declare module '@/lib/actions/action-map' {
         objectId: string
         /** The subject's view of the object; null clears it. */
         kind: string | null
-        /** The object's view of the subject. Omitted leaves it as stored — the classifier's write.
-         * When present, both null is refused rather than deleting the row; removal goes through `deleteCharacterRelationship`. */
+        /** The object's view of the subject; omitted leaves it as stored (the classifier's write).
+         * When present, both null is refused, not a delete: use `deleteCharacterRelationship`. */
         inverseKind?: string | null
       }
     }
@@ -29,7 +29,7 @@ declare module '@/lib/actions/action-map' {
 
 type Pair = { aId: string; bId: string; subjectIsA: boolean }
 
-// One write for both POVs: handlers in a group read pre-group state, so two single-POV writes to a new pair would both insert.
+// Grouped handlers read pre-group state: two single-POV writes to a new pair would both insert.
 function bothPovOutcome(
   ctx: DbCtx,
   branchId: string,

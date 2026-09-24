@@ -75,7 +75,7 @@ export function membersOf(factionId: string, entities: readonly Entity[]): Entit
     .sort(byName)
 }
 
-/** The resolvable ancestors of a location, nearest first; a dangling or non-location id ends the chain. */
+/** Resolvable ancestors, nearest first; a dangling or non-location id ends the chain. */
 export function locationAncestors(locationId: string, entities: readonly Entity[]): Entity[] {
   const byId = new Map(entities.map((e) => [e.id, e]))
   return parentChainIds(locationId, parentOfLocations(entities)).flatMap((id) => {

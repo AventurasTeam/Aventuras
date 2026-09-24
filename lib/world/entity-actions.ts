@@ -92,10 +92,7 @@ function sameRecord(a: Readonly<Record<string, number>>, b: Readonly<Record<stri
   )
 }
 
-/**
- * Columns whose committed value differs from the draft. Normalized-to-normalized: the classifier
- * writes verbatim text, which must not read as a user edit.
- */
+/** Normalized on both sides: the classifier's verbatim text must not read as a user edit. */
 function columnPatch(row: Entity, draft: EntityBaseDraft): ColumnPatch {
   const patch: ColumnPatch = {}
   const name = draft.name.trim()
