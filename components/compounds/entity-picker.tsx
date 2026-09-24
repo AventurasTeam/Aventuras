@@ -32,6 +32,8 @@ type EntityPickerProps = {
   clearable?: boolean
   'aria-invalid'?: boolean | 'true' | 'false'
   testID?: string
+  /** A muted note after a row's name — an item's current whereabouts, say. */
+  rowHint?: (entity: Entity) => string | undefined
 }
 
 const KIND_ORDER: readonly EntityKind[] = ['character', 'location', 'item', 'faction']
@@ -57,6 +59,7 @@ export function EntityPicker({
   clearable = true,
   'aria-invalid': ariaInvalid,
   testID,
+  rowHint,
 }: EntityPickerProps) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
@@ -159,6 +162,13 @@ export function EntityPicker({
               {row.data.name}
             </Text>
           </View>
+          {rowHint?.(row.data) ? (
+            <View className="shrink-0">
+              <Text size="xs" variant="muted" numberOfLines={1}>
+                {rowHint(row.data)}
+              </Text>
+            </View>
+          ) : null}
           {row.data.status !== 'active' ? (
             <View className="shrink-0">
               <Tag tone={ENTITY_STATUS_TONE[row.data.status]}>

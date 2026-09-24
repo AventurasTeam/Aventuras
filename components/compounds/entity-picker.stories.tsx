@@ -69,6 +69,7 @@ function Harness(props: {
   disabled?: boolean
   entities?: Entity[]
   initialValue?: string | null
+  rowHint?: (e: Entity) => string | undefined
 }) {
   const [value, setValue] = useState<string | null>(props.initialValue ?? null)
   return (
@@ -84,6 +85,7 @@ function Harness(props: {
         disabled={props.disabled}
         disabledReason={props.disabled ? 'Generation is in flight. Cancel to edit.' : undefined}
         testID="picker"
+        rowHint={props.rowHint}
       />
       <Text testID="picker-value" size="xs" variant="muted">
         value: {value ?? 'null'}
@@ -294,6 +296,21 @@ export const NonActiveStatusTags: Story = {
     await waitFor(async () => {
       await expect(within(trigger).getByText(t('world:status.staged'))).toBeInTheDocument()
     })
+  },
+}
+
+export const RowHint: Story = {
+  args: {
+    kinds: ['character', 'location', 'item', 'faction'],
+    rowHint: (e: Entity) => (e.kind === 'location' ? `at the edge of ${e.name}` : undefined),
+  },
+  play: async () => {
+    await userEvent.click(screen.getByTestId('picker'))
+    const option = await screen.findByRole('option', { name: /Night Market/ })
+    await expect(within(option).getByText('at the edge of Night Market')).toBeVisible()
+    await expect(
+      within(screen.getByRole('option', { name: /Mira/ })).queryByText(/at the edge/),
+    ).toBeNull()
   },
 }
 
