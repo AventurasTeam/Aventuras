@@ -5,7 +5,12 @@ import type { StorySettings, SuggestionCategory } from '@/lib/db'
 import { currentBranchId, queryApp } from '../harness/db'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
-import { reloadFromMain, suppressNativeUnloadDialogRace } from '../harness/reload'
+import {
+  expectCloseGuardArmed,
+  reloadFromMain,
+  suppressNativeUnloadDialogRace,
+  watchCloseGuard,
+} from '../harness/reload'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
 import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
@@ -16,7 +21,6 @@ import { world } from '../locators/world'
 
 const HERO_STORY = 'story_hero'
 const HERO_TITLE = 'The Veilstone Courier'
-const KAEL_DESCRIPTION = 'A courier turned fugitive, carrying an amulet that should not exist.'
 
 async function entityId(page: Page, branchId: string, name: string): Promise<string> {
   const [[id]] = await queryApp(page, `SELECT id FROM entities WHERE branch_id = ? AND name = ?`, [
@@ -24,6 +28,26 @@ async function entityId(page: Page, branchId: string, name: string): Promise<str
     name,
   ])
   return id as string
+}
+
+type EntitySnapshot = {
+  description: unknown
+  tags: string[]
+  state: { visual?: { hair?: string } }
+}
+
+// JSON columns parsed, so a round trip compares values, not serializations.
+async function entitySnapshot(page: Page, id: string): Promise<EntitySnapshot> {
+  const [[description, tags, state]] = await queryApp(
+    page,
+    `SELECT description, tags, state FROM entities WHERE id = ?`,
+    [id],
+  )
+  return {
+    description,
+    tags: JSON.parse(tags as string) as string[],
+    state: JSON.parse(state as string) as EntitySnapshot['state'],
+  }
 }
 
 // Reader → World over GO TO. The round trip pops to the World instance already on the stack, which
@@ -353,6 +377,8 @@ test.describe.serial('World panel', () => {
     const page = app.window
     await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
     const branchId = await goToWorld(page)
+    const kael = await entityId(page, branchId, 'Kael')
+    const before = await entitySnapshot(page, kael)
     await world.categoryTrigger(page).click()
     await world.categoryOption(page, 'character').click()
     await world.row(page, 'Kael').click()
@@ -366,7 +392,10 @@ test.describe.serial('World panel', () => {
     await saveSession.saveBarSave(page).click()
     await expect(saveSession.saveBarSave(page)).toHaveCount(0)
 
-    const kael = await entityId(page, branchId, 'Kael')
+    const saved = await entitySnapshot(page, kael)
+    expect(saved.description).toBe('A courier turned fugitive — E2E.')
+    expect(saved.tags).toContain('fugitive')
+    expect(saved.state.visual?.hair).toBe('dark, rain-soaked')
     const rows = await queryApp(
       page,
       `SELECT action_id, op, undo_payload FROM deltas WHERE branch_id = ? AND target_table = 'entities' AND target_id = ? AND source = 'user_edit'`,
@@ -377,7 +406,7 @@ test.describe.serial('World panel', () => {
     expect(op).toBe('update')
     const payload = JSON.parse(undo as string) as Record<string, unknown>
     expect(Object.keys(payload).sort()).toEqual(['description', 'state', 'tags'])
-    expect(payload.state).toEqual({ visual: { hair: 'dark' } })
+    expect(payload.state).toEqual({ visual: { hair: before.state.visual?.hair } })
     expect(
       await queryApp(page, `SELECT COUNT(*) FROM deltas WHERE action_id = ?`, [actionId]),
     ).toEqual([[1]])
@@ -388,24 +417,17 @@ test.describe.serial('World panel', () => {
     await page.waitForURL(/\/reader-composer\//)
     await chrome.actionsTrigger(page).click()
     await reader.undoRow(page).click()
-    await expect
-      .poll(
-        async () =>
-          (
-            await queryApp(
-              page,
-              `SELECT description, tags, json_extract(state, '$.visual.hair') FROM entities WHERE id = ?`,
-              [kael],
-            )
-          )[0],
-        { timeout: 30_000 },
-      )
-      .toEqual([KAEL_DESCRIPTION, JSON.stringify(['protagonist', 'courier']), 'dark'])
+    await expect.poll(() => entitySnapshot(page, kael), { timeout: 30_000 }).toEqual(before)
   })
 
   test('a dirty pane guards a row switch: Cancel keeps the draft, Discard drops it', async () => {
     const page = app.window
+    await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
     const branchId = await goToWorld(page)
+    const kael = await entityId(page, branchId, 'Kael')
+    const committed = (await entitySnapshot(page, kael)).description
+    await world.categoryTrigger(page).click()
+    await world.categoryOption(page, 'character').click()
     await world.row(page, 'Kael').click()
     await world.tab(page, 'identity').click()
     await world.description(page).fill('E2E dirty draft')
@@ -420,14 +442,12 @@ test.describe.serial('World panel', () => {
     await world.row(page, 'Mira').click()
     await saveSession.unsavedDiscard(page).click()
     await expect(world.subHeader(page)).toContainText('Mira')
-    const kael = await entityId(page, branchId, 'Kael')
-    expect(
-      (await queryApp(page, `SELECT description FROM entities WHERE id = ?`, [kael]))[0][0],
-    ).toBe(KAEL_DESCRIPTION)
+    expect((await entitySnapshot(page, kael)).description).toBe(committed)
   })
 
   test('[+] Blank on Locations creates a location on Save and selects it', async () => {
     const page = app.window
+    await expect(world.subHeader(page)).toBeVisible()
     const branchId = await currentBranchId(page, HERO_STORY)
     await world.categoryTrigger(page).click()
     await world.categoryOption(page, 'location').click()
@@ -449,10 +469,12 @@ test.describe.serial('World panel', () => {
 
   test('Set as lead moves the lead to Mira', async () => {
     const page = app.window
+    await expect(world.subHeader(page)).toBeVisible()
     const branchId = await currentBranchId(page, HERO_STORY)
     await world.categoryTrigger(page).click()
     await world.categoryOption(page, 'character').click()
     await world.row(page, 'Mira').click()
+    await expect(world.leadTag(page, 'Kael')).toBeVisible()
     await world.moreActions(page).click()
     await world.menuItem(page, 'setLead').click()
     const mira = await entityId(page, branchId, 'Mira')
@@ -475,8 +497,9 @@ test.describe.serial('World panel', () => {
   })
 
   // Hand-written URL (docs/testing.md → Harness structure): no in-app link carries World's `tab=`
-  // (Plot's Open in World sends kind and id only), so the cold mount is the seam under test. The
-  // link is one-shot: a later mount of the same row, after a kind switch, opens on Overview.
+  // (Plot's Open in World sends kind and id only). What this pins is the route wiring: the stores
+  // hydrate before `open`, so the linked pane mounts while the link is still pending. The one-shot
+  // itself is use-world-deep-link.test.tsx's; the remount only checks the route reads it.
   test('a cold-mount deep link opens its tab, on that mount only', async () => {
     const page = app.window
     await expect(world.subHeader(page)).toBeVisible()
@@ -532,13 +555,12 @@ test.describe('World panel — window close', () => {
   test('a window close with a dirty pane raises the unsaved-changes dialog', async () => {
     const page = app.window
     await openWorldFromHome(app)
-    // A click before typing: beforeunload needs sticky activation.
     await world.row(page, 'Kael').click()
     await world.tab(page, 'identity').click()
+    await watchCloseGuard(app)
     await world.description(page).fill('E2E close draft')
-    // The guard arms in the effects after the dirty commit (the save bar); a close that beats it
-    // goes through unguarded.
-    await expect(saveSession.saveBarSave(page)).toBeVisible()
+    // The pane's save bar commits first; the route arms the guard a render later, over IPC.
+    await expectCloseGuardArmed(app)
 
     const closed = app.app.waitForEvent('close')
     await app.app.evaluate(({ BrowserWindow }) => {

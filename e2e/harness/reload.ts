@@ -1,4 +1,7 @@
+import { expect } from '@playwright/test'
+
 import type { LaunchedApp } from './launch'
+import { NATIVE_CHANNELS } from '../../electron/native/channels'
 
 // Driven via webContents.reload(): page.reload() awaits a load a cancelled unload never
 // produces, and Playwright key events don't reach Electron's menu accelerators.
@@ -16,3 +19,22 @@ export function suppressNativeUnloadDialogRace(app: LaunchedApp): void {
     void dialog.dismiss().catch(() => {})
   })
 }
+
+type CloseGuardSpy = typeof globalThis & { e2eCloseGuard?: boolean }
+
+// Records the last close-guard state the renderer sends. boot() registers main's own listener
+// first and ipcMain runs listeners in registration order, so a `true` seen here means main's
+// guard is already armed. Register it before the edit that arms the guard.
+export const watchCloseGuard = (app: LaunchedApp) =>
+  app.app.evaluate(({ ipcMain }, channel) => {
+    const spy = globalThis as CloseGuardSpy
+    spy.e2eCloseGuard = undefined
+    ipcMain.on(channel, (_event, active: boolean) => {
+      spy.e2eCloseGuard = active
+    })
+  }, NATIVE_CHANNELS.setCloseGuard)
+
+// The renderer arms the guard in effects that can land renders after the dirty commit a
+// locator sees; a close sent before then goes through unguarded.
+export const expectCloseGuardArmed = (app: LaunchedApp) =>
+  expect.poll(() => app.app.evaluate(() => (globalThis as CloseGuardSpy).e2eCloseGuard)).toBe(true)
