@@ -383,7 +383,7 @@
       // A thunk: read when the session starts, after the classifier and the chapter check
       // have run. See BackgroundTaskInput.loreSession. The scope is the turn's, matching the
       // callbacks below, so a story switch refuses the session instead of misdirecting it.
-      loreSession: (newChapter) => ({
+      loreSession: () => ({
         storyId,
         currentBranchId: branchId,
         lorebookEntries: story.lorebookEntries,
@@ -393,7 +393,6 @@
         pov: story.pov,
         tense: story.tense,
         tokenThreshold: story.memoryConfig.tokenThreshold,
-        newChapter,
       }),
       loreCallbacks: buildLoreManagementCallbacks({ storyId, branchId }),
       loreUICallbacks: buildLoreManagementUICallbacks(),

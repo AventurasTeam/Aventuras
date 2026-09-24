@@ -53,7 +53,7 @@ export interface BackgroundTaskInput {
    * chapter list without the chapter that triggered it, and a "recent story" still holding
    * the entries that chapter had just absorbed.
    */
-  loreSession: (newChapter?: LoreSessionInput['newChapter']) => LoreSessionInput
+  loreSession: () => LoreSessionInput
   loreCallbacks: LoreManagementCallbacks
   loreUICallbacks?: LoreManagementUICallbacks
 }
@@ -116,9 +116,11 @@ export class BackgroundTaskCoordinator {
       const { chapter, chapterEntries } = result.chapterCreation
       try {
         result.loreManagement = await this.loreCoordinator.runSession(
-          input.loreSession(
-            chapter && chapterEntries ? { chapter, entries: chapterEntries } : undefined,
-          ),
+          {
+            ...input.loreSession(),
+            newChapter:
+              chapter && chapterEntries ? { chapter, entries: chapterEntries } : undefined,
+          },
           input.loreCallbacks,
           input.loreUICallbacks,
         )
