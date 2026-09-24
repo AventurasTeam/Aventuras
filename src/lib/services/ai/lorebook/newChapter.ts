@@ -17,11 +17,18 @@ export interface LoreNewChapter {
   text: string
 }
 
+/** `[ACTION]` / `[NARRATIVE]` lines, non-prose and blank entries dropped. */
+export function renderLoreProse(entries: StoryEntry[]): string {
+  return entries
+    .filter(
+      (e) => (e.type === 'narration' || e.type === 'user_action') && e.content.trim().length > 0,
+    )
+    .map((e) => `[${e.type === 'user_action' ? 'ACTION' : 'NARRATIVE'}] ${e.content}`)
+    .join('\n\n')
+}
+
 /**
  * Build the payload for the chapter that just triggered this run.
- *
- * Renders `entries` with the same `[ACTION]` / `[NARRATIVE]` shape `runLoreManagement` already
- * uses for `recentStory`, so the two look like one voice in the prompt.
  *
  * Returns `null` when there is nothing to show — `entries` is empty (which
  * `story.getChapterEntries` returns when it cannot place the chapter's boundary ids) or holds
@@ -31,11 +38,7 @@ export function buildNewChapterPayload(
   chapter: Chapter,
   entries: StoryEntry[],
 ): LoreNewChapter | null {
-  const text = entries
-    .filter((e) => e.type === 'narration' || e.type === 'user_action')
-    .filter((e) => e.content.trim().length > 0)
-    .map((e) => `[${e.type === 'user_action' ? 'ACTION' : 'NARRATIVE'}] ${e.content}`)
-    .join('\n\n')
+  const text = renderLoreProse(entries)
 
   if (!text) return null
 

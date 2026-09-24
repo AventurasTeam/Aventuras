@@ -22,6 +22,7 @@ export {
 } from './entryFields'
 
 export {
+  renderLoreProse,
   buildNewChapterPayload,
   formatNewChapterSection,
   chapterSummariesExcluding,

@@ -61,6 +61,7 @@ import { normalizeImageDataUrl, expectedPixels, type ImageSpec } from '$lib/util
 import type { StreamChunk } from './core/types'
 import { recentStoryBudgetChars } from './core/defaults'
 import { MIN_RECENT_ENTRIES_FOR_LORE, splitRecentTail } from './retrieval/recentTail'
+import { renderLoreProse } from './lorebook'
 import { serviceFactory } from './core/factory'
 import {
   inlineImageService,
@@ -651,9 +652,7 @@ class AIService {
       recentStoryBudgetChars(tokenThreshold),
       MIN_RECENT_ENTRIES_FOR_LORE,
     )
-    const recentStory = shown
-      .map((m) => `[${m.type === 'user_action' ? 'ACTION' : 'NARRATIVE'}] ${m.content}`)
-      .join('\n\n')
+    const recentStory = renderLoreProse(shown)
 
     // Create service and run session
     const service = serviceFactory.createLoreManagementService()
