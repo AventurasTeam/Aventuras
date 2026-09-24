@@ -298,7 +298,6 @@ export class WizardStore {
         tone: this.narrative.tone,
       },
       title: this.narrative.storyTitle,
-      startingTime: this.narrative.guidanceStart,
       openingGuidance: this.narrative.openingGuidance.trim() || undefined,
     }
 
@@ -324,7 +323,6 @@ export class WizardStore {
         tone: this.narrative.tone,
       },
       title: this.narrative.storyTitle,
-      startingTime: this.narrative.guidanceStart,
       openingGuidance: this.narrative.openingGuidance.trim() || undefined,
     }
 

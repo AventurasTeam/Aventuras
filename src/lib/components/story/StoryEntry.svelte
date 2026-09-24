@@ -13,8 +13,6 @@
 
 <script lang="ts">
   import type { StoryEntry, EmbeddedImage, TimeTracker } from '$lib/types'
-  import TimeAnchorModal from '$lib/components/world/TimeAnchorModal.svelte'
-  import EntryTimeModal from '$lib/components/world/EntryTimeModal.svelte'
   import { story } from '$lib/stores/story.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { settings } from '$lib/stores/settings.svelte'
@@ -390,8 +388,6 @@
 
   // Checkpoint creation state
   let isCreatingCheckpoint = $state(false)
-  let isAnchoringTime = $state(false)
-  let isEditingEntryTime = $state(false)
   let adjustmentsOpen = $state(false)
   /** Outlives the submenu by one tap: the click that closed it must not land on a live item. */
   let menuLocked = $state(false)
@@ -2159,21 +2155,13 @@
   </div>
 </div>
 
-<!-- Mounted only while open: every entry in the story carries these. -->
-{#if isAnchoringTime}
-  <TimeAnchorModal bind:open={isAnchoringTime} entryId={entry.id} />
-{/if}
-{#if isEditingEntryTime}
-  <EntryTimeModal bind:open={isEditingEntryTime} entryId={entry.id} />
-{/if}
-
 <!-- One list, rendered in the toolbar menu and in the overflow menu: the two must not drift. -->
 {#snippet timelineAdjustments()}
-  <DropdownMenu.Item onclick={() => (isEditingEntryTime = true)}>
+  <DropdownMenu.Item onclick={() => ui.openEntryTimeModal(entry.id)}>
     <Clock class="h-4 w-4" />
     Edit in place
   </DropdownMenu.Item>
-  <DropdownMenu.Item onclick={() => (isAnchoringTime = true)}>
+  <DropdownMenu.Item onclick={() => ui.openAnchorModal(entry.id)}>
     <Anchor class="h-4 w-4" />
     {story.timeAnchorFor(entry.id) ? 'Edit the anchor' : 'Create an anchor'}
   </DropdownMenu.Item>

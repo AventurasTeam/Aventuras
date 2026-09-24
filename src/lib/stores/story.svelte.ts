@@ -38,6 +38,7 @@ import {
   reconcileRange,
   refuseRange,
   selectableRanges,
+  toMinutes,
   type Boundary,
   type DurationRequest,
   type RangeRefusal,
@@ -1241,7 +1242,7 @@ class StoryStore {
     }
 
     const droppedCheckpoints = this.checkpointsAnchoredTo(new Set([entryId]))
-    const droppedAnchors = await database.countTimeAnchorsForEntries([entryId])
+    const droppedAnchors = this.timeAnchors.filter((anchor) => anchor.entryId === entryId).length
     await database.deleteEntriesWithDependents({
       entryIds: [entryId],
       checkpointIds: droppedCheckpoints.map((cp) => cp.id),
@@ -1724,6 +1725,7 @@ class StoryStore {
     this.assertNotBusy('edit entry times')
     start = normalizeTime(start)
     end = normalizeTime(end)
+    if (toMinutes(end) < toMinutes(start)) throw new Error('An entry cannot end before it begins')
     const index = this.entries.findIndex((e) => e.id === entryId)
     if (index === -1) throw new Error('Entry not found')
 
@@ -1843,7 +1845,9 @@ class StoryStore {
 
     const droppedCheckpoints = this.checkpointsAnchoredTo(entryIdsToDelete)
 
-    const droppedAnchors = await database.countTimeAnchorsForEntries(Array.from(entryIdsToDelete))
+    const droppedAnchors = this.timeAnchors.filter((anchor) =>
+      entryIdsToDelete.has(anchor.entryId),
+    ).length
 
     log('Deleting entries and the rows that reference them', {
       chaptersToDelete: chaptersToDelete.length,
@@ -4860,10 +4864,18 @@ class StoryStore {
 
     // Update in-memory state only after the persistence transaction commits.
     this.checkpoints = this.checkpoints.filter((checkpoint) => checkpoint.branchId !== branchId)
-    // The branch's entries, and the anchors on them, are not in view, so they are re-read.
-    if (this.currentStory) this.timeAnchors = await database.getTimeAnchors(this.currentStory.id)
     // Note: We already checked that there are no child branches, so no reparenting needed
     this.branches = this.branches.filter((b) => b.id !== branchId)
+
+    // The branch's entries, and the anchors on them, are not in view, so they are re-read. The
+    // delete has committed by now, so a failed read must not surface as a failed delete.
+    if (this.currentStory) {
+      try {
+        this.timeAnchors = await database.getTimeAnchors(this.currentStory.id)
+      } catch (error) {
+        log('Re-reading time anchors after a branch delete failed', error)
+      }
+    }
 
     log('Branch deleted:', branchId)
   }

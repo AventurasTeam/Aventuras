@@ -3919,28 +3919,6 @@ class DatabaseService {
     await db.execute(`DELETE FROM time_anchors WHERE entry_id = ?`, [entryId])
   }
 
-  /**
-   * How many anchors these entries carry.
-   *
-   * Called before a deletion, not after: the foreign key takes the rows with the entries,
-   * and a count taken afterwards is always zero.
-   */
-  async countTimeAnchorsForEntries(entryIds: string[]): Promise<number> {
-    if (entryIds.length === 0) return 0
-    const db = await this.getDb()
-    const CHUNK = 500 // well under SQLite's 999 bound-parameter limit
-    let count = 0
-    for (let i = 0; i < entryIds.length; i += CHUNK) {
-      const slice = entryIds.slice(i, i + CHUNK)
-      const rows = await db.select<{ count: number }[]>(
-        `SELECT COUNT(*) as count FROM time_anchors WHERE entry_id IN (${slice.map(() => '?').join(',')})`,
-        slice,
-      )
-      count += rows[0]?.count ?? 0
-    }
-    return count
-  }
-
   // ===== Pack Variable Operations =====
 
   async getPackVariables(packId: string): Promise<CustomVariable[]> {

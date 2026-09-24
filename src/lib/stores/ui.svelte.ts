@@ -272,6 +272,11 @@ class UIStore {
   resummarizeChapterId = $state<string | null>(null)
   memoryLoading = $state(false)
 
+  // Entry time dialogs, one pair for the story view. The id outlives closing so the fade can finish.
+  timeDialogEntryId = $state<string | null>(null)
+  anchorModalOpen = $state(false)
+  entryTimeModalOpen = $state(false)
+
   // Sync modal state
   syncModalOpen = $state(false)
   syncMode = $state<SyncMode>('select')
@@ -1682,6 +1687,16 @@ class UIStore {
 
   closeManualChapterModal() {
     this.manualChapterModalOpen = false
+  }
+
+  openAnchorModal(entryId: string) {
+    this.timeDialogEntryId = entryId
+    this.anchorModalOpen = true
+  }
+
+  openEntryTimeModal(entryId: string) {
+    this.timeDialogEntryId = entryId
+    this.entryTimeModalOpen = true
   }
 
   openResummarizeModal(chapterId: string) {

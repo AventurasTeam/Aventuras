@@ -92,10 +92,6 @@ export class NarrativeStore {
 
   importedStart = $derived(parseStoryTime(this.importedStartText))
   manualStart = $derived(parseStoryTime(this.manualStartText))
-  // A template without the variable never shows the model this start, so it must not seed the result.
-  guidanceStart = $derived(
-    this.openingReceivesStart === false ? null : parseStoryTime(this.guidanceStartText),
-  )
   resultStart = $derived(parseStoryTime(this.resultStartText))
 
   /**
@@ -320,7 +316,7 @@ export class NarrativeStore {
       // A refinement that returns no time keeps the start the opening already had, the reader's
       // own edit included, rather than falling back to the guidance.
       const returned = parseStoryTime(this.generatedOpening.startingTime ?? '')
-      if (returned || !this.resultStartText.trim()) {
+      if (returned || !this.resultStart) {
         this.applyReturnedStart(this.generatedOpening, guidance)
       }
       this.clearOpeningEditState()
@@ -387,7 +383,9 @@ export class NarrativeStore {
   }
 
   startOpeningEdit() {
+    // A run in flight replaces the opening and decides its start, so it cannot be edited under it.
     if (!this.generatedOpening || this.isEditingOpening) return
+    if (this.isRefiningOpening || this.isGeneratingOpening) return
     this.openingError = null
     this.openingDraft = this.generatedOpening.scene
     this.startBeforeEdit = { text: this.resultStartText, source: this.resultStartSource }

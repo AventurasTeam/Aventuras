@@ -6,6 +6,8 @@
   import { tick, untrack } from 'svelte'
   import { fade } from 'svelte/transition'
   import StoryEntry from './StoryEntry.svelte'
+  import TimeAnchorModal from '$lib/components/world/TimeAnchorModal.svelte'
+  import EntryTimeModal from '$lib/components/world/EntryTimeModal.svelte'
   import StreamingEntry from './StreamingEntry.svelte'
   import ActionInput from './ActionInput.svelte'
   import ActionChoices from './ActionChoices.svelte'
@@ -626,3 +628,8 @@
     </div>
   </div>
 </div>
+
+{#if ui.timeDialogEntryId}
+  <TimeAnchorModal bind:open={ui.anchorModalOpen} entryId={ui.timeDialogEntryId} />
+  <EntryTimeModal bind:open={ui.entryTimeModalOpen} entryId={ui.timeDialogEntryId} />
+{/if}

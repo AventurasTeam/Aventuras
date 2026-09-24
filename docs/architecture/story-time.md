@@ -141,7 +141,9 @@ the story, in the order `createStory` picks an opening: generated, written, impo
 - **Guidance** — what generation is told, through `TIME: opening ends at {{ storyStartingTime }}` in
   the four opening templates, or `(suggest one)` when empty.
 - **Result** — what generation returned, or the guidance when it returned nothing readable
-  (`returnedStart`). Its source is shown to the reader.
+  (`returnedStart`). A refinement that returns nothing readable keeps the start the result already
+  has, and falls back to the guidance only when that start is empty or unreadable. The result cannot
+  be edited while a run is in flight. Its source is shown to the reader.
 
 A pack whose opening template predates the variable cannot pass the guidance on.
 `templateReceivesStartingTime` resolves the template that will actually run, before generation and

@@ -462,6 +462,7 @@
                 size="sm"
                 class="text-muted-foreground hover:text-foreground h-auto gap-1 px-2 py-1 text-xs"
                 onclick={onStartEdit}
+                disabled={isRefiningOpening || isGeneratingOpening}
                 title="Edit the opening text"
               >
                 <PenTool class="h-3 w-3" />
