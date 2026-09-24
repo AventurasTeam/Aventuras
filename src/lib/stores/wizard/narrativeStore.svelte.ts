@@ -226,9 +226,17 @@ export class NarrativeStore {
     return receives
   }
 
-  /** `guided` is whether the template that ran could pass the guidance on at all. */
-  private applyReturnedStart(opening: GeneratedOpening, guided: boolean) {
-    const { text, source } = returnedStart(opening.startingTime, guided ? this.guidanceStart : null)
+  /**
+   * The guidance for this run, read after its template is checked: the check can change what a
+   * previous one decided, so reading it before would send one run the last run's answer.
+   */
+  private async guidanceFor(kind: 'generation' | 'refinement'): Promise<TimeTracker | null> {
+    const received = await this.checkOpeningReceivesStart(kind)
+    return received ? parseStoryTime(this.guidanceStartText) : null
+  }
+
+  private applyReturnedStart(opening: GeneratedOpening, guidance: TimeTracker | null) {
+    const { text, source } = returnedStart(opening.startingTime, guidance)
     this.resultStartText = text
     this.resultStartSource = source
   }
@@ -253,14 +261,14 @@ export class NarrativeStore {
         : undefined
 
     try {
-      const guided = await this.checkOpeningReceivesStart('generation')
+      const guidance = await this.guidanceFor('generation')
       this.generatedOpening = await scenarioService.generateOpening(
         this.packId(),
-        wizardData,
+        { ...wizardData, startingTime: guidance },
         settings.servicePresetAssignments['wizard:openingGeneration'],
         lorebookContext,
       )
-      this.applyReturnedStart(this.generatedOpening, guided)
+      this.applyReturnedStart(this.generatedOpening, guidance)
 
       await this.translateOpening()
     } catch (error) {
@@ -292,15 +300,15 @@ export class NarrativeStore {
         ? { ...this.generatedOpening, title: this.storyTitle.trim() }
         : this.generatedOpening
 
-      const guided = await this.checkOpeningReceivesStart('refinement')
+      const guidance = await this.guidanceFor('refinement')
       this.generatedOpening = await scenarioService.refineOpening(
         this.packId(),
-        wizardData,
+        { ...wizardData, startingTime: guidance },
         currentOpening,
         settings.servicePresetAssignments['wizard:openingRefinement'],
         lorebookContext,
       )
-      this.applyReturnedStart(this.generatedOpening, guided)
+      this.applyReturnedStart(this.generatedOpening, guidance)
       this.clearOpeningEditState()
       await this.translateOpening()
     } catch (error) {
