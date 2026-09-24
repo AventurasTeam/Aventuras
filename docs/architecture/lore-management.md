@@ -59,8 +59,8 @@ manually from the Memory view, and once per batch during `chapterizeFromBeginnin
 SillyTavern import path) — and on demand from the **Tidy lorebook** button in the Active Context
 panel (`runManualLoreManagement`, shared by both manual callers).
 
-**The chapter that triggered a run arrives in full, not as a summary.** Every other chapter is
-still a `{number, title, summary}` line, but the one just written is handed over as its own
+**By default, the chapter that triggered a run arrives in full, not as a summary.** Every other
+chapter is still a `{number, title, summary}` line, but the one just written is handed over as its own
 entries — rendered `[ACTION]`/`[NARRATIVE]`, the same shape `recentStory` uses — plus its
 `characters` and `locations` facets, and dropped from the summary list so it is not shown twice.
 Why: `memoryConfig.summaryDetail` can be set to `concise`, and a concise summary does not carry
@@ -70,7 +70,14 @@ the names and proper nouns a lorebook is built from — the agent's only recours
 automatic path (`BackgroundTaskCoordinator`) and the manual one (`MemoryView` after a hand-built
 chapter) both supply it. The automatic path passes the entries `ChapterService` summarized,
 not a later read of the store, so a story switch before the session starts cannot swap them.
-Blank entries are dropped, and a chapter with no prose left keeps its summary instead.**The batch importer is the exception** — `chapterizeFromBeginning`
+Blank entries are dropped, and a chapter with no prose left keeps its summary instead.
+
+This is on by default and switched off with **Send full text of new chapter** (Advanced
+Settings → Lore Management, `serviceSpecificSettings.loreManagement.sendNewChapterText`). The
+gate sits where the payload is built in `AIService.runLoreManagement`, so off means every chapter
+is a summary line; both callers still pass the chapter either way.
+
+**The batch importer is the exception** — `chapterizeFromBeginning`
 writes many chapters in one pass, so its single lore session keeps summaries only, as does a
 Tidy-lorebook run with no new chapter to speak of.
 

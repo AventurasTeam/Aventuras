@@ -58,6 +58,7 @@ import type { StreamChunk } from './core/types'
 import { recentStoryBudgetChars } from './core/defaults'
 import { MIN_RECENT_ENTRIES_FOR_LORE, splitRecentTail } from './retrieval/recentTail'
 import { serviceFactory } from './core/factory'
+import { settings } from '$lib/stores/settings.svelte'
 import { buildNewChapterPayload, chapterSummariesExcluding } from './lorebook'
 import {
   inlineImageService,
@@ -638,7 +639,7 @@ class AIService {
       pov?: POV
       tense?: Tense
       tokenThreshold?: number
-      /** The chapter that triggered this run, given to the agent in full. */
+      /** The chapter that triggered this run; given in full only when `sendNewChapterText` is on. */
       newChapter?: { chapter: Chapter; entries: StoryEntry[] }
     },
   ): Promise<LoreManagementResult> {
@@ -659,17 +660,18 @@ class AIService {
       .map((m) => `[${m.type === 'user_action' ? 'ACTION' : 'NARRATIVE'}] ${m.content}`)
       .join('\n\n')
 
-    // `null` here means `newChapter.entries` had no prose to show. The chapter's summary must
-    // stay in that case: excluding it on a payload with nothing to show would make the
-    // chapter invisible instead of verbatim. So the drop below is keyed off the payload, not
-    // off `newChapter` itself, keeping the two atomic.
-    const newChapterPayload = newChapter
-      ? buildNewChapterPayload(newChapter.chapter, newChapter.entries)
-      : null
+    // `null` here means the setting is off or `newChapter.entries` had no prose to show. The
+    // chapter's summary must stay in either case: excluding it on a payload with nothing to
+    // show would make the chapter invisible instead of verbatim. So the drop below is keyed
+    // off the payload, not off `newChapter` itself, keeping the two atomic.
+    const newChapterPayload =
+      newChapter && settings.serviceSpecificSettings.loreManagement.sendNewChapterText
+        ? buildNewChapterPayload(newChapter.chapter, newChapter.entries)
+        : null
 
-    // Number, title and summary only, minus the chapter that triggered this run — it goes
-    // in below as `newChapter`, in full, and one chapter in two forms would be the same
-    // material twice in one prompt.
+    // Number, title and summary only, minus the chapter that triggered this run when it has a
+    // payload — it goes in below as `newChapter`, in full, and one chapter in two forms would
+    // be the same material twice in one prompt.
     // Deep clone to avoid Svelte proxy issues with AI SDK structured cloning
     const chapterInfos = JSON.parse(
       JSON.stringify(

@@ -765,6 +765,17 @@
                 saveService()
               },
             })}
+
+            {@render switchRow({
+              label: 'Send full text of new chapter',
+              description:
+                'Sends the agent the full text of the chapter just written instead of its summary. Every detail of that chapter is there to catch, including anything the summary left out, and the agent may need fewer steps since it has no reason to query it. Earlier chapters are still sent as summaries. The prompt grows by about one chapter.',
+              checked: service.loreManagement.sendNewChapterText,
+              onChange: (v) => {
+                service.loreManagement.sendNewChapterText = v
+                saveService()
+              },
+            })}
           </div>
         </Collapsible.Content>
       </Collapsible.Root>
