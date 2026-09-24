@@ -119,6 +119,21 @@ describe('characterDraftFrom', () => {
     })
   })
 
+  it('starts a location create from the literal schema defaults', () => {
+    expect(locationDraftFrom(null)).toEqual({
+      name: '',
+      description: '',
+      status: 'active',
+      retiredReason: '',
+      injectionMode: 'auto',
+      keywords: [],
+      tags: [],
+      priority: 0,
+      parentLocationId: null,
+      condition: '',
+    })
+  })
+
   it('reads a null stored state as the empty state', () => {
     expect(locationDraftFrom({ ...KAEL, kind: 'location', state: null })).toMatchObject({
       parentLocationId: null,

@@ -9,7 +9,7 @@ import type { EntitySaveResult } from '@/lib/actions'
 import { EARTH_GREGORIAN } from '@/lib/calendar'
 import type { CharacterState, Entity, EntityKind } from '@/lib/db'
 import type { EntryIndex, EntryRef } from '@/lib/entry-refs'
-import { locationDraftFrom, type EntitySaveInput, type RelationshipLink } from '@/lib/world'
+import type { EntitySaveInput, RelationshipLink } from '@/lib/world'
 
 import type { EntityInvolvement } from '../world-route-data'
 import { EntityDetailPane } from './entity-detail-pane'
@@ -52,6 +52,16 @@ const characterState = (over: Partial<CharacterState> = {}): CharacterState => (
   lastSeenAt: { entryId: 'e_47', locationId: 'loc_market', worldTime: 1000 },
   ...over,
 })
+// Nowhere in particular, carrying nothing: a derivation that over-matches shows an extra name.
+const bystander = (over: Partial<CharacterState> = {}): CharacterState =>
+  characterState({
+    current_location_id: null,
+    equipped_items: [],
+    inventory: [],
+    stackables: undefined,
+    faction_id: null,
+    ...over,
+  })
 
 const KAEL = makeEntity({
   id: 'char_kael',
@@ -66,20 +76,20 @@ const MIRA = makeEntity({
   id: 'char_mira',
   kind: 'character',
   name: 'Mira',
-  state: characterState({ faction_id: null }),
+  state: bystander({ current_location_id: 'loc_hollow' }),
 })
 const VORNE = makeEntity({
   id: 'char_vorne',
   kind: 'character',
   name: 'Vorne',
-  state: characterState({ faction_id: null }),
+  state: bystander(),
 })
 const SAGE = makeEntity({
   id: 'char_sage',
   kind: 'character',
   name: 'The Ashen Sage',
   status: 'staged',
-  state: characterState({ current_location_id: null, faction_id: null, lastSeenAt: null }),
+  state: bystander({ lastSeenAt: null }),
 })
 const RETIRED = makeEntity({
   id: 'char_brannoc',
@@ -87,7 +97,7 @@ const RETIRED = makeEntity({
   name: 'Brannoc',
   status: 'retired',
   retiredReason: 'killed by Vorne',
-  state: characterState({ faction_id: null }),
+  state: bystander(),
 })
 const HOLLOW = makeEntity({
   id: 'loc_hollow',
@@ -163,6 +173,7 @@ type HarnessProps = {
   /** A pair the harness's button writes to the store, as the periodic classifier would. */
   storeLink?: RelationshipLink
   onSave: (input: EntitySaveInput) => void
+  onSaved: (id: string) => void
   onRejected: (reason: string) => void
   onOpenEntity: (id: string) => void
   onOpenHappening: (id: string) => void
@@ -179,6 +190,7 @@ function Harness({
   links: initialLinks,
   storeLink,
   onSave,
+  onSaved,
   onRejected,
   onOpenEntity,
   onOpenHappening,
@@ -213,11 +225,12 @@ function Harness({
     },
     [onSave, saveResult, row, kind],
   )
-  const onSaved = useCallback(
+  const selectSaved = useCallback(
     (id: string) => {
+      onSaved(id)
       if (row == null) setRow(makeEntity({ id, kind, name: 'Saved' }))
     },
-    [row, kind],
+    [onSaved, row, kind],
   )
   return (
     <View className="gap-2">
@@ -229,7 +242,7 @@ function Harness({
           blocked={blocked}
           blockedReason={BLOCKED_REASON}
           onSave={save}
-          onSaved={onSaved}
+          onSaved={selectSaved}
           onRejected={onRejected}
           onSession={() => {}}
           onOpenEntity={onOpenEntity}
@@ -263,6 +276,7 @@ const meta: Meta<typeof Harness> = {
     kind: 'character',
     row: KAEL,
     onSave: fn(),
+    onSaved: fn(),
     onRejected: fn(),
     onOpenEntity: fn(),
     onOpenHappening: fn(),
@@ -301,7 +315,9 @@ export const CharacterFieldRouting: Story = {
       'Voice',
     ])
       await expect(await screen.findByRole('textbox', { name: label }, WAIT)).toBeVisible()
+    await expect(screen.getByRole('textbox', { name: 'Hair' })).toHaveValue('dark')
     await expect(screen.getByRole('textbox', { name: 'Traits' })).toBeVisible()
+    await expect(screen.getByText('understand the amulet')).toBeVisible()
     await userEvent.click(tab(/^Settings/))
     // Three short options render Select's segment on desktop: a radiogroup, not a trigger.
     await expect(await screen.findByRole('radiogroup', { name: 'Status' }, WAIT)).toBeVisible()
@@ -312,13 +328,24 @@ export const CharacterFieldRouting: Story = {
     await expect(screen.getByRole('textbox', { name: 'Keywords' })).toBeVisible()
     await expect(screen.getByRole('textbox', { name: 'Priority' })).toBeVisible()
     await userEvent.click(tab(/^Carrying/))
-    await expect(await screen.findByTestId('stackables', {}, WAIT)).toBeVisible()
-    await expect(screen.getByRole('button', { name: 'Add equipped item' })).toBeVisible()
-    await expect(screen.getByRole('button', { name: 'Add carried item' })).toBeVisible()
+    const stackables = within(await screen.findByTestId('stackables', {}, WAIT))
+    const quantities = stackables.getAllByRole('textbox', { name: 'Quantity' })
+    await expect(quantities).toHaveLength(3)
+    for (const [i, key] of ['gold', 'silver', 'rations'].entries())
+      await expect(quantities[i]).toHaveValue(key)
+    const equipped = within(screen.getByTestId('equipped'))
+    await expect(equipped.getByText('Courier’s Blade')).toBeVisible()
+    await expect(equipped.queryByText('Old key')).toBeNull()
+    await expect(equipped.getByRole('button', { name: 'Add equipped item' })).toBeVisible()
+    const carried = within(screen.getByTestId('carried'))
+    await expect(carried.getByText('The Veilstone Amulet')).toBeVisible()
+    await expect(carried.getByText('Old key')).toBeVisible()
+    await expect(carried.getByRole('button', { name: 'Add carried item' })).toBeVisible()
     await userEvent.click(tab(/^Connections/))
     await expect(
-      await screen.findByRole('button', { name: /^Current location/ }, WAIT),
+      await screen.findByRole('button', { name: 'Current location: The Drowned Market' }, WAIT),
     ).toBeVisible()
+    await expect(screen.getByRole('button', { name: 'Faction: The City Watch' })).toBeVisible()
     await expect(screen.getByText('your view: not recorded · they see you: rival')).toBeVisible()
     await expect(screen.getByTestId('connections-last-seen')).toHaveTextContent(
       'The Drowned Market · entry #47 · 2 days ago in-world',
@@ -340,12 +367,18 @@ export const LocationFieldRouting: Story = {
       'fire-scarred',
     )
     await userEvent.click(tab(/^Connections/))
-    await expect(await screen.findByRole('button', { name: /^Part of/ }, WAIT)).toBeVisible()
+    await expect(
+      await screen.findByRole('button', { name: 'Part of: Veil’s Hollow' }, WAIT),
+    ).toBeVisible()
     await expect(screen.getByRole('link', { name: 'Kael' })).toBeVisible()
+    // Mira stands in Veil’s Hollow, the Blade lies nowhere: neither belongs to the market.
+    await expect(screen.queryByRole('link', { name: 'Mira' })).toBeNull()
+    await expect(screen.getByRole('link', { name: 'Old key' })).toBeVisible()
+    await expect(screen.queryByRole('link', { name: 'Courier’s Blade' })).toBeNull()
   },
 }
 
-export const ItemAndFactionRouting: Story = {
+export const FactionFieldRouting: Story = {
   args: { kind: 'faction', row: WATCH },
   play: async () => {
     await userEvent.click(await screen.findByRole('tab', { name: /^Identity/ }, WAIT))
@@ -353,8 +386,10 @@ export const ItemAndFactionRouting: Story = {
       'wary allies',
     )
     await expect(screen.getByRole('textbox', { name: 'Agenda' })).toBeVisible()
+    await expect(screen.getByText('keep the peace')).toBeVisible()
     await userEvent.click(tab(/^Connections/))
     await expect(await screen.findByRole('link', { name: 'Kael' }, WAIT)).toBeVisible()
+    await expect(screen.queryByRole('link', { name: 'Mira' })).toBeNull()
   },
 }
 
@@ -382,7 +417,9 @@ export const InjectionChipVisibility: Story = {
 export const InjectionChipHiddenForAuto: Story = {
   args: { row: MIRA },
   play: async () => {
-    await expect(await screen.findByTestId('overview-status', {}, WAIT)).toBeVisible()
+    await expect(await screen.findByTestId('overview-status', {}, WAIT)).toHaveTextContent(
+      /^active$/,
+    )
     await expect(screen.queryByText('Always injected')).not.toBeInTheDocument()
   },
 }
@@ -476,8 +513,20 @@ export const CreateLocation: Story = {
     // The whole create draft — schema defaults plus the name — so a create can't carry stray state.
     await expect(args.onSave).toHaveBeenCalledWith({
       kind: 'location',
-      draft: { ...locationDraftFrom(null), name: 'The Salt Wells' },
+      draft: {
+        name: 'The Salt Wells',
+        description: '',
+        status: 'active',
+        retiredReason: '',
+        injectionMode: 'auto',
+        keywords: [],
+        tags: [],
+        priority: 0,
+        parentLocationId: null,
+        condition: '',
+      },
     })
+    await waitFor(() => expect(args.onSaved).toHaveBeenCalledWith('location_new'), WAIT)
     await expect(await screen.findByRole('button', { name: 'More actions' }, WAIT)).toBeEnabled()
   },
 }
@@ -489,8 +538,10 @@ export const CreateBlocked: Story = {
     await expect(await screen.findByRole('textbox', { name: 'Description' }, WAIT)).toHaveAttribute(
       'readonly',
     )
+    await expect(screen.getByRole('textbox', { name: 'Condition' })).toHaveAttribute('readonly')
     await expect(screen.queryByRole('button', { name: 'Unnamed' })).not.toBeInTheDocument()
-    await expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument()
+    await userEvent.click(tab(/^Connections/))
+    await expect(await screen.findByRole('button', { name: 'Part of' }, WAIT)).toBeDisabled()
   },
 }
 
@@ -539,6 +590,9 @@ export const BlockedWhileDirty: Story = {
       () => expect(within(bar).getByRole('button', { name: /^Save/ })).toBeDisabled(),
       WAIT,
     )
+    await expect(within(bar).getByRole('button', { name: BLOCKED_REASON })).toBeVisible()
+    // The shortcut skips the disabled button, so the bar's own gate is what refuses it.
+    await userEvent.keyboard('{Control>}s{/Control}')
     await userEvent.click(within(bar).getByRole('button', { name: 'Discard' }))
     await waitFor(() => expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument(), WAIT)
     await expect(args.onSave).not.toHaveBeenCalled()
@@ -554,7 +608,7 @@ export const ParentCycleFieldError: Story = {
   },
   play: async ({ args }) => {
     await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
-    await userEvent.click(await screen.findByTestId('parent-location', {}, WAIT))
+    await userEvent.click(await screen.findByRole('button', { name: 'Part of' }, WAIT))
     await userEvent.click(await screen.findByRole('option', { name: /The Drowned Market/ }, WAIT))
     const bar = await screen.findByTestId('save-bar', {}, WAIT)
     await userEvent.click(within(bar).getByRole('button', { name: /^Save/ }))
@@ -572,14 +626,12 @@ export const OverflowMenuForAnActiveCharacter: Story = {
     const setLead = await screen.findByRole('menuitem', { name: 'Set as lead' }, WAIT)
     // The popover fades in; the role query can outrace opacity settling.
     await waitFor(() => expect(setLead).toBeVisible(), WAIT)
-    await expect(screen.getByRole('menuitem', { name: /Export entity as JSON/ })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    )
-    await expect(screen.getByRole('menuitem', { name: /Delete entity/ })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    )
+    await expect(
+      screen.getByRole('menuitem', { name: 'Export entity as JSON, Lands in Slice 4.6' }),
+    ).toHaveAttribute('aria-disabled', 'true')
+    await expect(
+      screen.getByRole('menuitem', { name: 'Delete entity, Lands in Slice 4.2b' }),
+    ).toHaveAttribute('aria-disabled', 'true')
     await userEvent.click(setLead)
     await expect(args.onSetLead).toHaveBeenCalledWith('char_mira')
   },
@@ -626,9 +678,11 @@ export const PhoneSelectTabs: Story = {
   globals: { viewport: { value: 'mobile1' } },
   play: async () => {
     await waitFor(() => expect(screen.queryByRole('tablist')).toBeNull(), WAIT)
-    await userEvent.click(await screen.findByRole('button', { name: /Section/ }, WAIT))
+    await userEvent.click(await screen.findByRole('button', { name: 'Section' }, WAIT))
     const carrying = await screen.findByRole('option', { name: 'Carrying (6)' }, WAIT)
     await waitFor(() => expect(carrying).toBeVisible(), WAIT)
+    await userEvent.click(carrying)
+    await expect(await screen.findByRole('button', { name: 'Add quantity' }, WAIT)).toBeVisible()
   },
 }
 
@@ -642,8 +696,20 @@ export const ItemFieldRouting: Story = {
       }),
     ).toBeNull()
     await userEvent.click(tab(/^Connections/))
-    await expect(await screen.findByRole('button', { name: /^At location/ }, WAIT)).toBeVisible()
-    await expect(screen.getAllByRole('link', { name: 'Kael' }).length).toBeGreaterThan(0)
+    await expect(
+      await screen.findByRole('button', { name: 'At location: The Drowned Market' }, WAIT),
+    ).toBeVisible()
+    await expect(screen.getByRole('link', { name: 'Kael' })).toBeVisible()
+    await expect(screen.queryByRole('link', { name: 'Mira' })).toBeNull()
+  },
+}
+
+/** world.md → Overview: a region routes to the tab that edits it. */
+export const OverviewRegionOpensItsTab: Story = {
+  play: async () => {
+    await userEvent.click(await screen.findByTestId('overview-visual', {}, WAIT))
+    await waitFor(() => expect(tab(/^Identity/)).toHaveAttribute('aria-selected', 'true'), WAIT)
+    await expect(await screen.findByRole('textbox', { name: 'Physique' }, WAIT)).toHaveValue('lean')
   },
 }
 
