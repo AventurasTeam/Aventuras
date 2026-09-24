@@ -193,6 +193,10 @@ describe('both-perspective upsert (World relationship editor)', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({ kind: 'brother', inverseKind: 'sister' })
     expect(await deltasFor(db, 'act_1')).toHaveLength(1)
+    expect(characterRelationshipsStore.getById(rows[0].id)).toMatchObject({
+      kind: 'brother',
+      inverseKind: 'sister',
+    })
   })
 
   it('creates the row from the other perspective alone', async () => {
@@ -216,16 +220,56 @@ describe('both-perspective upsert (World relationship editor)', () => {
     const { db, ctx } = await setup()
     await applyDeltaAction(upsert('char_aria', 'char_kael', 'brother', 'act_1'), ctx)
     await applyDeltaAction(upsertBoth('char_aria', 'char_kael', 'rival', 'wary', 'act_2'), ctx)
-    expect((await pairRow(db, 'char_aria', 'char_kael'))[0]).toMatchObject({
+    const [updated] = await pairRow(db, 'char_aria', 'char_kael')
+    expect(updated).toMatchObject({ kind: 'rival', inverseKind: 'wary' })
+    expect(characterRelationshipsStore.getById(updated.id)).toMatchObject({
       kind: 'rival',
       inverseKind: 'wary',
     })
     const [delta] = await deltasFor(db, 'act_2')
     expect(delta.undoPayload).toEqual({ kind: 'brother', inverseKind: null })
     expect(await reverseReplayDeltas('act_2', ctx)).toBe(1)
-    expect((await pairRow(db, 'char_aria', 'char_kael'))[0]).toMatchObject({
+    const [reverted] = await pairRow(db, 'char_aria', 'char_kael')
+    expect(reverted).toMatchObject({ kind: 'brother', inverseKind: null })
+    expect(characterRelationshipsStore.getById(reverted.id)).toMatchObject({
       kind: 'brother',
       inverseKind: null,
+    })
+  })
+
+  it('writes only the changed column when clearing one side; reverse-replay restores it', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(upsertBoth('char_aria', 'char_kael', 'brother', 'sister', 'act_1'), ctx)
+    await applyDeltaAction(upsertBoth('char_aria', 'char_kael', 'brother', null, 'act_2'), ctx)
+    const [cleared] = await pairRow(db, 'char_aria', 'char_kael')
+    expect(cleared).toMatchObject({ kind: 'brother', inverseKind: null })
+    expect(characterRelationshipsStore.getById(cleared.id)).toMatchObject({
+      kind: 'brother',
+      inverseKind: null,
+    })
+    const [delta] = await deltasFor(db, 'act_2')
+    expect(delta.undoPayload).toEqual({ inverseKind: 'sister' })
+    expect(await reverseReplayDeltas('act_2', ctx)).toBe(1)
+    expect((await pairRow(db, 'char_aria', 'char_kael'))[0]).toMatchObject({
+      kind: 'brother',
+      inverseKind: 'sister',
+    })
+  })
+
+  it('refuses both perspectives empty against an existing row, leaving it unchanged', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(upsertBoth('char_aria', 'char_kael', 'brother', 'sister', 'act_1'), ctx)
+    const result = await applyDeltaAction(
+      upsertBoth('char_aria', 'char_kael', null, null, 'act_2'),
+      ctx,
+    )
+    expect(result).toMatchObject({
+      status: 'rejected',
+      reason: 'a relationship needs at least one perspective',
+    })
+    expect((await pairRow(db, 'char_aria', 'char_kael'))[0]).toMatchObject({
+      kind: 'brother',
+      inverseKind: 'sister',
     })
   })
 
