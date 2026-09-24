@@ -179,7 +179,10 @@ convention, and the expectation that subsystems route through
   (warn: the in-flight refusal, which the disabled UI should make
   unreachable, or a rejected write), `thread_save_failed` /
   `happening_save_failed` / `entity_save_failed` (error: a thrown write,
-  logged with the Save's action kinds, then rethrown)
+  logged with the Save's action kinds, then rethrown), `parent_chain_cap_hit`
+  (error: a `parent_location_id` walk hit the depth cap, meaning a loop
+  already exists in the stored chain), `story_lead_rejected` (warn: the lead
+  mutator refused, logged with its code)
 - `classifier.*` — `delta_clamped`, `schema_repair`, `empty_output`
 - `retrieval.*` — `row_skipped_stale`, `empty_pool`, `knn_error`
 - `provider.*` — `retry_succeeded`, `rate_limited`,

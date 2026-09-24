@@ -18,6 +18,17 @@ export const ENTITY_STATUSES = [
   'retired',
 ] as const satisfies readonly Entity['status'][]
 
+// Drift guard, both directions: `satisfies` above only proves ENTITY_STATUSES stays inside
+// Entity['status']; this closes the other side so a status the column adds can't go missing
+// from the Settings select without failing here first.
+type _StatusesMatch = [Entity['status']] extends [(typeof ENTITY_STATUSES)[number]]
+  ? [(typeof ENTITY_STATUSES)[number]] extends [Entity['status']]
+    ? true
+    : never
+  : never
+const _statusesMatchCheck: [_StatusesMatch] = [true]
+void _statusesMatchCheck
+
 /** A committed relationship seen from one character (the store's `RelationshipView`). */
 export type RelationshipLink = {
   rowId: string
@@ -157,13 +168,6 @@ export type ItemDraft = z.infer<typeof itemDraftSchema>
 
 export const factionDraftSchema = z.object({ ...baseShape, standing: text(500), agenda: list })
 export type FactionDraft = z.infer<typeof factionDraftSchema>
-
-export type EntityDraftByKind = {
-  character: CharacterDraft
-  location: LocationDraft
-  item: ItemDraft
-  faction: FactionDraft
-}
 
 /** Draft field ↔ `CharacterState.visual` key, in canon order. */
 export const VISUAL_DRAFT_FIELDS = [

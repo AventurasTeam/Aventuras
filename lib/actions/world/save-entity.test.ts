@@ -194,6 +194,48 @@ describe('saveEntity', () => {
     })
   })
 
+  it('creates an entity and its relationship in one action, id pre-generated for the write', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values(character('char_aria', 'Aria'))
+    const result = await saveEntity(
+      {
+        kind: 'character',
+        branchId: 'br_1',
+        row: null,
+        draft: {
+          ...characterDraftFrom(null, []),
+          name: 'Sable',
+          relationships: [{ otherId: 'char_aria', selfToOther: 'debtor', otherToSelf: '' }],
+        },
+        relationships: [],
+      },
+      ctx,
+    )
+    expect(result.status).toBe('ok')
+    if (result.status !== 'ok') return
+    expect(result.id).toMatch(ID_PATTERN)
+    expect(result.id.startsWith('char_')).toBe(true)
+
+    const entityRows = await db.select().from(entities)
+    expect(entityRows).toHaveLength(2)
+    expect(entityRows.find((e) => e.name === 'Sable')?.id).toBe(result.id)
+
+    // Canonical a_id < b_id order decides which column holds Sable's debtor view.
+    const sableIsA = result.id < 'char_aria'
+    const rels = await db.select().from(characterRelationships)
+    expect(rels).toHaveLength(1)
+    expect(rels[0]).toMatchObject({
+      aId: sableIsA ? result.id : 'char_aria',
+      bId: sableIsA ? 'char_aria' : result.id,
+      kind: sableIsA ? 'debtor' : null,
+      inverseKind: sableIsA ? null : 'debtor',
+    })
+
+    const rows = await deltaRows(db)
+    expect(rows).toHaveLength(2)
+    expect(new Set(rows.map((r) => r.actionId)).size).toBe(1)
+  })
+
   it('collapses keyword case variants on commit', async () => {
     const { db, ctx } = await setup()
     await db.insert(entities).values(character('char_kael', 'Kael'))
