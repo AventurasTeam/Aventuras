@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   branches,
   chapters,
+  characterRelationships,
   entities,
   happeningAwareness,
   happeningInvolvements,
@@ -19,6 +20,7 @@ import {
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import {
   chaptersStore,
+  characterRelationshipsStore,
   currentStoryStore,
   entitiesStore,
   entriesStore,
@@ -187,15 +189,25 @@ describe('loadOpenStory', () => {
       createdAt: 1,
       updatedAt: 1,
     })
+    await db.insert(characterRelationships).values({
+      id: 'rel_1',
+      branchId: 'br_1',
+      aId: 'char_1',
+      bId: 'char_2',
+      kind: 'ally',
+      inverseKind: null,
+      createdAt: 1,
+      updatedAt: 1,
+    })
 
     // Counts only loadOpenStory's own reads: join + entries + entities + lore + threads +
-    // happenings + involvements + awareness + chapters = 9; more would mean an N+1 read.
+    // happenings + involvements + awareness + chapters + relationships = 10; more would mean an N+1 read.
     const selectSpy = vi.spyOn(ctx.db, 'select')
 
     const result = await loadOpenStory('br_1', ctx)
 
     expect(result).toEqual({ status: 'ok', storyId: 'story_1', branchId: 'br_1' })
-    expect(selectSpy).toHaveBeenCalledTimes(9)
+    expect(selectSpy).toHaveBeenCalledTimes(10)
 
     const open = currentStoryStore.getCurrentStory()
     expect(open?.storyId).toBe('story_1')
@@ -221,6 +233,11 @@ describe('loadOpenStory', () => {
     expect(happeningAwarenessStore.getByHappening('hap_1').map((r) => r.id)).toEqual(['haw_1'])
     expect(chaptersStore.getLoadedBranch()).toBe('br_1')
     expect([...chaptersStore.getChapters().values()].map((r) => r.id)).toEqual(['chap_1'])
+
+    expect(characterRelationshipsStore.getLoadedBranch()).toBe('br_1')
+    expect(characterRelationshipsStore.getRelationships('char_1', 'br_1')).toEqual([
+      { rowId: 'rel_1', otherId: 'char_2', selfToOther: 'ally', otherToSelf: null },
+    ])
 
     expect(storiesStore.getStories().openFailures.story_1).toBeUndefined()
   })
