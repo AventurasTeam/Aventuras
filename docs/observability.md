@@ -210,7 +210,7 @@ convention, and the expectation that subsystems route through
   mount's `loadOpenStory` rejection, `hooks/use-cold-open-story.ts`),
   `world_story_not_found` / `plot_story_not_found` (warn: the same
   cold mount on a branch with no story, which leaves for the story
-  list) and
+  list),
   `plot_saved_handler_failed` (`components/plot/use-plot-row-session.ts`
   — a `PlotRowSessionOptions.onSaved` that throws after the write
   already landed), `entity_saved_handler_failed`

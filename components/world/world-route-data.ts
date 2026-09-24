@@ -9,6 +9,9 @@ export type EntityInvolvement = {
   role: string | null
 }
 
+const NO_RELATIONSHIP_LINKS: RelationshipLink[] = []
+const NO_INVOLVEMENTS: EntityInvolvement[] = []
+
 /** data-model.md → Lookup helper: both columns read, oriented to the character, by other name. */
 export function relationshipLinksFor(
   characterId: string | null,
@@ -16,7 +19,7 @@ export function relationshipLinksFor(
   rows: ReadonlyMap<string, CharacterRelationship>,
   entities: readonly Entity[],
 ): RelationshipLink[] {
-  if (characterId == null) return []
+  if (characterId == null) return NO_RELATIONSHIP_LINKS
   const names = new Map(entities.map((e) => [e.id, e.name]))
   const links: RelationshipLink[] = []
   for (const row of rows.values()) {
@@ -42,7 +45,7 @@ export function involvementsFor(
   involvements: ReadonlyMap<string, HappeningInvolvement>,
   happenings: ReadonlyMap<string, Happening>,
 ): EntityInvolvement[] {
-  if (entityId == null) return []
+  if (entityId == null) return NO_INVOLVEMENTS
   const out: EntityInvolvement[] = []
   for (const row of involvements.values()) {
     if (row.branchId !== branchId || row.entityId !== entityId) continue

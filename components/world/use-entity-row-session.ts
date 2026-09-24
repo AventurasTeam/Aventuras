@@ -13,7 +13,7 @@ import { logger } from '@/lib/diagnostics'
 
 import { saveFailureText, saveRejectionText } from './world-copy'
 
-type FieldErrors<Draft extends FieldValues> = Readonly<
+type RefusalFields<Draft extends FieldValues> = Readonly<
   Partial<Record<string, { field: Path<Draft>; message: string }>>
 >
 
@@ -35,7 +35,7 @@ type EntityRowSessionOptions<Draft extends FieldValues> = {
   /** The surface routes row switches, `←`, category switches and GO TO through this. */
   onSession: (handle: RowSessionHandle | null) => void
   /** A refusal code the pane shows on a field (`parent-cycle` → the parent picker). Stable. */
-  fieldErrors?: FieldErrors<Draft>
+  fieldErrors?: RefusalFields<Draft>
 }
 
 /** A World detail pane's row save session: translated refusals, field-level errors, route handle. */
@@ -53,14 +53,19 @@ export function useEntityRowSession<Draft extends FieldValues>({
   onSession,
   fieldErrors,
 }: EntityRowSessionOptions<Draft>): RowSaveSession<Draft> {
+  const rowKey = rowId ?? `create:${kind}:${createSeq}`
   const formRef = useRef<UseFormReturn<Draft> | null>(null)
+  const rowKeyRef = useRef(rowKey)
   const commit = useCallback(
     async (draft: Draft): Promise<RowCommitResult> => {
+      const startKey = rowKeyRef.current
       const result = await onSave(draft)
       if (result.status === 'rejected') {
         const target = result.code == null ? undefined : fieldErrors?.[result.code]
-        if (target != null)
+        // A row switch while the write was in flight: this refusal is no longer this row's to show.
+        if (target != null && rowKeyRef.current === startKey) {
           formRef.current?.setError(target.field, { type: 'server', message: target.message })
+        }
         return { status: 'rejected', reason: saveRejectionText(result.code) }
       }
       // The write landed: a throwing handler must not read as a failed save, or a retry
@@ -79,7 +84,7 @@ export function useEntityRowSession<Draft extends FieldValues>({
     [kind, onSave, onSaved, fieldErrors],
   )
   const session = useRowSaveSession<Draft>({
-    rowKey: rowId ?? `create:${kind}:${createSeq}`,
+    rowKey,
     values,
     resolver,
     fieldLabel,
@@ -91,7 +96,8 @@ export function useEntityRowSession<Draft extends FieldValues>({
   const { form, dirty, requestLeave } = session
   useLayoutEffect(() => {
     formRef.current = form
-  }, [form])
+    rowKeyRef.current = rowKey
+  }, [form, rowKey])
   useEffect(() => {
     onSession({ dirty, requestLeave })
     return () => onSession(null)
