@@ -325,8 +325,38 @@ describe('entityActions — relationships, three-way', () => {
     ).toEqual([upsert('char_mira', 'ally', 'wary')])
   })
 
+  it('keeps what is stored in a view the user left blank on a pair new to the draft', () => {
+    expect(
+      threeWay(
+        [{ otherId: 'char_vorne', selfToOther: 'enemy', otherToSelf: '' }],
+        [{ ...vorne('ally'), otherToSelf: 'rival' }],
+        [],
+      ),
+    ).toEqual([upsert('char_vorne', 'enemy', 'rival')])
+  })
+
+  it('rewrites an edited pair whose row has gone with the view the user saw', () => {
+    expect(
+      threeWay(
+        [{ otherId: 'char_mira', selfToOther: 'friend', otherToSelf: 'ally' }],
+        [],
+        [mira('ally', 'ally')],
+      ),
+    ).toEqual([upsert('char_mira', 'friend', 'ally')])
+  })
+
+  it('does not bring back an untouched pair whose row has gone', () => {
+    expect(
+      threeWay(
+        [{ otherId: 'char_mira', selfToOther: 'ally', otherToSelf: 'ally' }],
+        [],
+        [mira('ally', 'ally')],
+      ),
+    ).toEqual([])
+  })
+
   it('deletes the current row of a removed pair, and nothing for a pair already gone', () => {
-    expect(threeWay([], [MIRA_LINK], [MIRA_LINK])).toEqual([remove('rel_1')])
+    expect(threeWay([], [{ ...MIRA_LINK, rowId: 'rel_9' }], [MIRA_LINK])).toEqual([remove('rel_9')])
     expect(threeWay([], [], [MIRA_LINK])).toEqual([])
   })
 
@@ -343,8 +373,8 @@ describe('entityActions — relationships, three-way', () => {
   it('writes nothing for an edit back to what is now stored', () => {
     expect(
       threeWay(
-        [{ otherId: 'char_mira', selfToOther: 'ally', otherToSelf: 'wary ' }],
-        [mira('ally', 'wary')],
+        [{ otherId: 'char_mira', selfToOther: 'ally', otherToSelf: 'wary' }],
+        [mira('ally', 'wary ')],
         [mira('ally', 'ally')],
       ),
     ).toEqual([])

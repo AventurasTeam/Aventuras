@@ -34,7 +34,7 @@ export type EntitySaveInput =
       /**
        * The committed links the draft's relationships were based on (the pane freezes them when the
        * list goes dirty); defaults to `relationships`. A pair or view the user left alone keeps
-       * whatever is stored at Save.
+       * whatever is stored at Save; an edited pair whose row has gone is rewritten from the draft.
        */
       relationshipsBase?: readonly RelationshipLink[]
     }
@@ -247,8 +247,11 @@ function viewWrite(
   view: 'selfToOther' | 'otherToSelf',
 ): { edited: boolean; value: string | null } {
   const value = blankToNull(draft[view])
-  const edited = was == null || value !== blankToNull(was[view] ?? '')
-  const stored = now?.[view] ?? null
+  // A pair new to the draft compares as blank, so a view left empty keeps what is stored.
+  const edited = value !== blankToNull(was?.[view] ?? '')
+  // A gone row is rewritten from the draft, which holds the view the user saw.
+  if (now == null) return { edited, value }
+  const stored = now[view]
   // An untouched view keeps the stored raw text, as does an edit that normalizes to it.
   return { edited, value: edited && value !== blankToNull(stored ?? '') ? value : stored }
 }
@@ -277,6 +280,7 @@ function relationshipActions(
     const now = nowByOther.get(draft.otherId)
     const self = viewWrite(draft, was, now, 'selfToOther')
     const other = viewWrite(draft, was, now, 'otherToSelf')
+    // Left alone, a pair stays as stored, even when its row has gone since the baseline.
     if (!self.edited && !other.edited) continue
     if (self.value === null && other.value === null) {
       // The handler refuses a both-null upsert: the pair has no view left.
