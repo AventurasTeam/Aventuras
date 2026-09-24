@@ -5,27 +5,109 @@ import { characterRelationships, characterRelationshipWriteSchema } from '@/lib/
 import { generateId } from '@/lib/ids'
 import { characterRelationshipsStore } from '@/lib/stores'
 
-import { register, type ActionHandler } from '../delta/registry'
-import type { DeltaSource } from '../types'
+import { register, type ActionHandler, type HandlerOutcome } from '../delta/registry'
+import type { DbCtx, DeltaSource } from '../types'
 
 declare module '@/lib/actions/action-map' {
   interface PipelineActionMap {
     upsertCharacterRelationship: {
       source: DeltaSource
-      payload: { branchId: string; subjectId: string; objectId: string; kind: string | null }
+      payload: {
+        branchId: string
+        subjectId: string
+        objectId: string
+        /** The subject's view of the object; null clears it. */
+        kind: string | null
+        /** The object's view of the subject. Omitted leaves it as stored — the classifier's write. */
+        inverseKind?: string | null
+      }
     }
     deleteCharacterRelationship: { source: DeltaSource; payload: { branchId: string; id: string } }
+  }
+}
+
+type Pair = { aId: string; bId: string; subjectIsA: boolean }
+
+// One write for both POVs: the runner refuses two writes to one row's column in a group.
+function bothPovOutcome(
+  ctx: DbCtx,
+  branchId: string,
+  pair: Pair,
+  current: CharacterRelationship | undefined,
+  kind: string | null,
+  inverseKind: string | null,
+): HandlerOutcome {
+  const columns = {
+    kind: pair.subjectIsA ? kind : inverseKind,
+    inverseKind: pair.subjectIsA ? inverseKind : kind,
+  }
+  if (columns.kind === null && columns.inverseKind === null)
+    return { status: 'rejected', reason: 'a relationship needs at least one perspective' }
+  if (!current) {
+    const now = Date.now()
+    const row: CharacterRelationship = {
+      id: generateId('rel'),
+      branchId,
+      aId: pair.aId,
+      bId: pair.bId,
+      ...columns,
+      createdAt: now,
+      updatedAt: now,
+    }
+    return {
+      status: 'ok',
+      targetTable: 'character_relationships',
+      targetId: row.id,
+      op: 'create',
+      undoPayload: null,
+      ops: [ctx.db.insert(characterRelationships).values(row).toSQL()],
+      patch: { op: 'create', id: row.id, row },
+    }
+  }
+  const set: Partial<Pick<CharacterRelationship, 'kind' | 'inverseKind'>> = {}
+  const undoPayload: Record<string, unknown> = {}
+  if (columns.kind !== current.kind) {
+    set.kind = columns.kind
+    undoPayload.kind = current.kind
+  }
+  if (columns.inverseKind !== current.inverseKind) {
+    set.inverseKind = columns.inverseKind
+    undoPayload.inverseKind = current.inverseKind
+  }
+  if (Object.keys(set).length === 0)
+    return { status: 'rejected', reason: 'relationship unchanged', code: 'noop' }
+  return {
+    status: 'ok',
+    targetTable: 'character_relationships',
+    targetId: current.id,
+    op: 'update',
+    undoPayload,
+    ops: [
+      ctx.db
+        .update(characterRelationships)
+        .set(set)
+        .where(
+          and(
+            eq(characterRelationships.branchId, branchId),
+            eq(characterRelationships.id, current.id),
+          ),
+        )
+        .toSQL(),
+    ],
+    patch: { op: 'update', id: current.id, columns: set },
   }
 }
 
 const upsertHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'upsertCharacterRelationship')
     throw new Error(`handler/kind mismatch: ${action.kind}`)
-  const { branchId: bid, subjectId, objectId, kind } = action.payload
+  const { branchId: bid, subjectId, objectId, kind, inverseKind } = action.payload
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   if (subjectId === objectId) return { status: 'rejected', reason: 'self-relationship not allowed' }
-  const parsed = characterRelationshipWriteSchema.pick({ kind: true }).safeParse({ kind })
+  const parsed = characterRelationshipWriteSchema
+    .pick({ kind: true, inverseKind: true })
+    .safeParse({ kind, inverseKind })
   if (!parsed.success)
     return { status: 'rejected', reason: `invalid relationship kind: ${parsed.error.message}` }
 
@@ -44,6 +126,9 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx) => {
         eq(characterRelationships.bId, bId),
       ),
     )
+
+  if (inverseKind !== undefined)
+    return bothPovOutcome(ctx, bid, { aId, bId, subjectIsA }, current, kind, inverseKind)
 
   if (!current) {
     if (kind === null) return { status: 'rejected', reason: 'no relationship to clear' }
