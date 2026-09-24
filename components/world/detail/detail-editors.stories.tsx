@@ -106,7 +106,8 @@ function Harness({ editor, relationships = [], stackables = [], blocked = false 
           {...gate}
         />
       ) : null}
-      {/* Reset is the save session's rebase; Discard returns to the committed values. */}
+      {/* Reset is the save session's rebase; Discard returns to the committed values; Drop Mira
+      stands in for an undo or classifier removal. */}
       <View className="flex-row gap-2">
         <Button
           variant="secondary"
@@ -120,6 +121,17 @@ function Harness({ editor, relationships = [], stackables = [], blocked = false 
         </Button>
         <Button variant="secondary" size="sm" onPress={() => form.reset()}>
           <Text>Discard</Text>
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          onPress={() => {
+            const values = form.getValues()
+            const relationships = values.relationships.filter((r) => r.otherId !== 'char_mira')
+            form.reset({ ...values, relationships }, { keepDefaultValues: true })
+          }}
+        >
+          <Text>Drop Mira</Text>
         </Button>
         <Text testID="resets" size="xs" variant="muted">
           {`resets: ${resets}`}
@@ -249,6 +261,26 @@ export const RelationshipDeleteThenDiscardReturnsCollapsed: Story = {
     await userEvent.click(screen.getByRole('button', { name: 'Discard' }))
     await screen.findByRole('button', { name: /^Mira/ }, WAIT)
     // The row and its card body render in one pass: once Mira is back, expansion is decided.
+    await expect(
+      within(screen.getByTestId('relationship-0')).queryByRole('textbox', { name: 'Their view' }),
+    ).toBeNull()
+  },
+}
+
+/** A card removed from outside the editor (undo, classifier) also returns collapsed. */
+export const RelationshipRemovedExternallyReturnsCollapsed: Story = {
+  args: { relationships: THREE_STATES },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: /^Mira/ }, WAIT))
+    await within(screen.getByTestId('relationship-0')).findByRole(
+      'textbox',
+      { name: 'Their view' },
+      WAIT,
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Drop Mira' }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: /^Mira/ })).toBeNull(), WAIT)
+    await userEvent.click(screen.getByRole('button', { name: 'Discard' }))
+    await screen.findByRole('button', { name: /^Mira/ }, WAIT)
     await expect(
       within(screen.getByTestId('relationship-0')).queryByRole('textbox', { name: 'Their view' }),
     ).toBeNull()

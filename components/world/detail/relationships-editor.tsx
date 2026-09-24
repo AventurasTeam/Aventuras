@@ -52,6 +52,16 @@ export function RelationshipsEditor({
   const { fields, append, remove } = useFieldArray({ control, name: 'relationships' })
   const rows = useWatch({ control, name: 'relationships' }) ?? []
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set())
+  // A key that left the draft (Delete, undo, a classifier removal) can come back, and must come back
+  // collapsed. Only keys seen in `rows` are pruned: a just-added one may reach `rows` a render late.
+  const keys = rows.map((r) => r.cardKey)
+  const [seen, setSeen] = useState(keys)
+  if (keys.length !== seen.length || keys.some((key, i) => key !== seen[i])) {
+    setSeen(keys)
+    const gone = seen.filter((key) => !keys.includes(key))
+    if (gone.some((key) => open.has(key)))
+      setOpen((prev) => new Set([...prev].filter((key) => !gone.includes(key))))
+  }
 
   const toggle = (key: string) =>
     setOpen((prev) => {
@@ -180,12 +190,6 @@ export function RelationshipsEditor({
                     disabledReason={blockedReason}
                     onPress={() => {
                       remove(index)
-                      // Discard or undo can bring the same row id back; it returns collapsed.
-                      setOpen((prev) => {
-                        const next = new Set(prev)
-                        next.delete(key)
-                        return next
-                      })
                       revalidate()
                     }}
                   />
