@@ -335,8 +335,6 @@ export class WizardStore {
   async createStory() {
     if (this.isCreatingStory) return
     if (!this.narrative.storyTitle.trim()) return
-    // Taken now: turning a written or imported opening into the used one below would make the
-    // generated opening's start the one read.
     const startingTime = this.narrative.startingTime
     if (!startingTime) {
       this.narrative.openingError = 'Please enter a starting time for the story'
@@ -345,9 +343,11 @@ export class WizardStore {
 
     this.isCreatingStory = true
     try {
-      // Use manual opening if provided
-      if (!this.narrative.generatedOpening && this.narrative.manualOpeningText.trim()) {
-        this.narrative.generatedOpening = {
+      // Local rather than written back to the store: a creation that fails must leave the step as
+      // the reader left it, or the retry reads the generated opening's start instead of theirs.
+      let opening = this.narrative.generatedOpening
+      if (!opening && this.narrative.manualOpeningText.trim()) {
+        opening = {
           scene: this.narrative.manualOpeningText.trim(),
           title: this.narrative.storyTitle || 'Untitled Story',
           initialLocation: {
@@ -356,10 +356,8 @@ export class WizardStore {
           },
         }
       }
-
-      // Use card imported opening if available
-      if (!this.narrative.generatedOpening && this.character.cardImportedFirstMessage) {
-        this.narrative.generatedOpening = {
+      if (!opening && this.character.cardImportedFirstMessage) {
+        opening = {
           scene: this.character.cardImportedFirstMessage,
           title: this.character.cardImportedTitle || this.narrative.storyTitle || 'Untitled Story',
           initialLocation: {
@@ -369,7 +367,7 @@ export class WizardStore {
         }
       }
 
-      if (!this.narrative.generatedOpening) {
+      if (!opening) {
         this.narrative.openingError =
           'Please provide an opening scene (write your own or generate with AI)'
         return
@@ -408,8 +406,8 @@ export class WizardStore {
       }
 
       const processedOpening = {
-        ...this.narrative.generatedOpening,
-        scene: replaceUserPlaceholders(this.narrative.generatedOpening.scene, protagonistName),
+        ...opening,
+        scene: replaceUserPlaceholders(opening.scene, protagonistName),
       }
 
       const processedCharacters = this.character.supportingCharacters.map((char) => ({

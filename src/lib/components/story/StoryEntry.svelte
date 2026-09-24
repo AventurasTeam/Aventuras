@@ -1644,8 +1644,7 @@
             <Bookmark class="h-4 w-4" />
           </Button>
         {/if}
-        <!-- Both ways of moving this entry in time, under one control: they were a dialog and a
-             field hidden inside the text editor, which read as unrelated. -->
+        <!-- Both ways of moving this entry in time, under one control. -->
         {#if entry.type !== 'user_action'}
           <DropdownMenu.Root>
             <DropdownMenu.Trigger>
@@ -2160,8 +2159,13 @@
   </div>
 </div>
 
-<TimeAnchorModal bind:open={isAnchoringTime} entryId={entry.id} />
-<EntryTimeModal bind:open={isEditingEntryTime} entryId={entry.id} />
+<!-- Mounted only while open: every entry in the story carries these. -->
+{#if isAnchoringTime}
+  <TimeAnchorModal bind:open={isAnchoringTime} entryId={entry.id} />
+{/if}
+{#if isEditingEntryTime}
+  <EntryTimeModal bind:open={isEditingEntryTime} entryId={entry.id} />
+{/if}
 
 <!-- One list, rendered in the toolbar menu and in the overflow menu: the two must not drift. -->
 {#snippet timelineAdjustments()}

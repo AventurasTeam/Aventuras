@@ -19,6 +19,7 @@ export type TimelineAnomalyKind =
   | 'missing-stamp'
   | 'suspect-zero'
   | 'backwards'
+  | 'reversed'
   | 'overlap'
   | 'gap'
   | 'implausible-jump'
@@ -59,12 +60,12 @@ function wordCount(entry: StoryEntry): number {
 }
 
 /**
- * Every anomaly in a story's timeline, in story order.
+ * Every anomaly in a story's timeline.
  *
  * A zero stamp is reported as *suspect*, never as fabricated: `addEntry` writes the same
  * zero for a legitimately zero clock and for an absent one, so the stored value cannot tell
- * them apart. An entry with no stamp at all is a separate class -- an unknown duration is
- * not a recorded zero, and collapsing the two is the confusion this report exists to expose.
+ * them apart. An entry with no stamp at all is a separate class: an unknown duration is not a
+ * recorded zero.
  */
 export function analyzeTimeline(input: TimelineAnalysisInput): TimelineAnomaly[] {
   const { entries, chapters = [] } = input
@@ -92,6 +93,30 @@ export function analyzeTimeline(input: TimelineAnalysisInput): TimelineAnomaly[]
           'Recorded at zero. A zero clock and an absent one are written identically, so this may be a real time or no time at all.',
         severity: 'suspected',
       })
+    }
+
+    // Measured inside the entry, not across the interval before it: a day passing during three
+    // words is suspicious, a day passing between two scenes is a skip.
+    if (start && end) {
+      const elapsed = toMinutes(end) - toMinutes(start)
+      if (elapsed < 0) {
+        anomalies.push({
+          kind: 'reversed',
+          entryIds: [entry.id],
+          detail: 'This entry ends before it begins.',
+          severity: 'defect',
+        })
+      } else if (
+        elapsed >= IMPLAUSIBLE_JUMP_MINUTES &&
+        wordCount(entry) < IMPLAUSIBLE_JUMP_MAX_WORDS
+      ) {
+        anomalies.push({
+          kind: 'implausible-jump',
+          entryIds: [entry.id],
+          detail: `${elapsed} minutes pass within ${wordCount(entry)} words.`,
+          severity: 'suspected',
+        })
+      }
     }
   }
 
@@ -129,20 +154,6 @@ export function analyzeTimeline(input: TimelineAnalysisInput): TimelineAnomaly[]
         detail: 'This entry begins before the entry before it ended.',
         severity: 'defect',
       })
-    }
-
-    // Measured inside the entry, not across the interval before it: a day passing during three
-    // words is suspicious, a day passing between two scenes is a skip.
-    if (start && end) {
-      const elapsed = toMinutes(end) - toMinutes(start)
-      if (elapsed >= IMPLAUSIBLE_JUMP_MINUTES && wordCount(entry) < IMPLAUSIBLE_JUMP_MAX_WORDS) {
-        anomalies.push({
-          kind: 'implausible-jump',
-          entryIds: [entry.id],
-          detail: `${elapsed} minutes pass within ${wordCount(entry)} words.`,
-          severity: 'suspected',
-        })
-      }
     }
   }
 

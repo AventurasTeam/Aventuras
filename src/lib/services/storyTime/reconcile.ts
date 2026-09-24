@@ -84,8 +84,8 @@ function isValidSupplied(value: unknown): value is number {
  * every first weight negative. Against the neighbour, a reconciliation mixes rewritten times with
  * unrewritten ones and a second run gives a different answer.
  *
- * It also means a missing time costs one weight rather than two: nothing is measured *through*
- * an entry any more, so a gap in the record no longer spreads to its successor.
+ * A missing time therefore costs one weight rather than two: nothing is measured *through* an
+ * entry, so a gap in the record does not spread to its successor.
  */
 function weighEntries(
   entries: StoryEntry[],

@@ -562,6 +562,7 @@ class StoryStore {
     this.storyBeats = []
     this.chapters = []
     this.checkpoints = []
+    this.timeAnchors = []
     this.lorebookEntries = []
     this.invalidateWordCountCache()
     this.invalidateChapterCache()
@@ -1246,6 +1247,7 @@ class StoryStore {
       checkpointIds: droppedCheckpoints.map((cp) => cp.id),
     })
     this.announceDroppedAnchors(droppedAnchors)
+    this.forgetAnchors([entryId])
     this.forgetCheckpoints(droppedCheckpoints)
     this.entries = this.entries.filter((e) => e.id !== entryId)
 
@@ -1502,10 +1504,6 @@ class StoryStore {
     })
   }
 
-  /**
-   * Delete all entries from a given position onward.
-   * Used for entry-only retry restore (persistent retry).
-   */
   // ===== Time anchors and reconciliation =====
 
   /** Assert when an entry ended. Replaces any anchor the entry already carries. */
@@ -1552,20 +1550,18 @@ class StoryStore {
   }
 
   /** The points a range may be selected between, on the branch in view. */
-  get timeBoundaries(): Boundary[] {
-    return listBoundaries({
+  timeBoundaries = $derived<Boundary[]>(
+    listBoundaries({
       entries: this.entries,
       anchors: this.timeAnchors,
       // Every fork in the story, not just this branch's: a range that spanned another branch's
       // fork would slide that branch's opening out from under it. `listBoundaries` keeps only the
       // ones whose entry is visible here.
       forkEntryIds: this.branches.map((branch) => branch.forkEntryId),
-    })
-  }
+    }),
+  )
 
-  get timeRanges(): SelectableRange[] {
-    return selectableRanges(this.entries, this.timeBoundaries)
-  }
+  timeRanges = $derived<SelectableRange[]>(selectableRanges(this.entries, this.timeBoundaries))
 
   /** Everything the review needs, and the fingerprint apply revalidates against. */
   previewReconciliation(
@@ -1628,7 +1624,7 @@ class StoryStore {
       from: range.from,
       to: range.to,
       rangeEntries,
-      // Every kind of boundary, not just anchors: a checkpoint taken inside the range while the
+      // Every kind of boundary, not just anchors: a branch forked inside the range while the
       // preview is open splits it the same way an anchor does.
       boundaryEntryIds: this.timeBoundaries.map((boundary) => boundary.entryId),
     })
@@ -1773,6 +1769,12 @@ class StoryStore {
     }
   }
 
+  /** The foreign key removed these rows with their entries; this drops the copies held here. */
+  private forgetAnchors(entryIds: Iterable<string>): void {
+    const gone = new Set(entryIds)
+    this.timeAnchors = this.timeAnchors.filter((anchor) => !gone.has(anchor.entryId))
+  }
+
   /**
    * Say what a deletion cost in time anchors.
    *
@@ -1790,6 +1792,10 @@ class StoryStore {
     )
   }
 
+  /**
+   * Delete all entries from a given position onward.
+   * Used for entry-only retry restore (persistent retry).
+   */
   async deleteEntriesFromPosition(
     position: number,
     options?: { skipRollback?: boolean },
@@ -1853,6 +1859,7 @@ class StoryStore {
     })
 
     this.announceDroppedAnchors(droppedAnchors)
+    this.forgetAnchors(entryIdsToDelete)
 
     this.chapters = this.chapters.filter((ch) => !chaptersToDelete.some((d) => d.id === ch.id))
     this.forgetCheckpoints(droppedCheckpoints)
@@ -4853,6 +4860,8 @@ class StoryStore {
 
     // Update in-memory state only after the persistence transaction commits.
     this.checkpoints = this.checkpoints.filter((checkpoint) => checkpoint.branchId !== branchId)
+    // The branch's entries, and the anchors on them, are not in view, so they are re-read.
+    if (this.currentStory) this.timeAnchors = await database.getTimeAnchors(this.currentStory.id)
     // Note: We already checked that there are no child branches, so no reparenting needed
     this.branches = this.branches.filter((b) => b.id !== branchId)
 

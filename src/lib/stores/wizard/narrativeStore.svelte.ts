@@ -226,8 +226,9 @@ export class NarrativeStore {
     return receives
   }
 
-  private applyReturnedStart(opening: GeneratedOpening) {
-    const { text, source } = returnedStart(opening.startingTime, this.guidanceStart)
+  /** `guided` is whether the template that ran could pass the guidance on at all. */
+  private applyReturnedStart(opening: GeneratedOpening, guided: boolean) {
+    const { text, source } = returnedStart(opening.startingTime, guided ? this.guidanceStart : null)
     this.resultStartText = text
     this.resultStartSource = source
   }
@@ -252,14 +253,14 @@ export class NarrativeStore {
         : undefined
 
     try {
-      await this.checkOpeningReceivesStart('generation')
+      const guided = await this.checkOpeningReceivesStart('generation')
       this.generatedOpening = await scenarioService.generateOpening(
         this.packId(),
         wizardData,
         settings.servicePresetAssignments['wizard:openingGeneration'],
         lorebookContext,
       )
-      this.applyReturnedStart(this.generatedOpening)
+      this.applyReturnedStart(this.generatedOpening, guided)
 
       await this.translateOpening()
     } catch (error) {
@@ -291,6 +292,7 @@ export class NarrativeStore {
         ? { ...this.generatedOpening, title: this.storyTitle.trim() }
         : this.generatedOpening
 
+      const guided = await this.checkOpeningReceivesStart('refinement')
       this.generatedOpening = await scenarioService.refineOpening(
         this.packId(),
         wizardData,
@@ -298,7 +300,7 @@ export class NarrativeStore {
         settings.servicePresetAssignments['wizard:openingRefinement'],
         lorebookContext,
       )
-      this.applyReturnedStart(this.generatedOpening)
+      this.applyReturnedStart(this.generatedOpening, guided)
       this.clearOpeningEditState()
       await this.translateOpening()
     } catch (error) {

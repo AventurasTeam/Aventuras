@@ -212,12 +212,12 @@ export function reconciliationStatements(
     })
   }
 
-  if (plan.keyframeEntryIds.length > 0) {
+  // Chunked like the database service's deletes, to stay under SQLite's bound-parameter limit.
+  for (let i = 0; i < plan.keyframeEntryIds.length; i += 500) {
+    const slice = plan.keyframeEntryIds.slice(i, i + 500)
     statements.push({
-      sql: `DELETE FROM world_state_snapshots WHERE entry_id IN (${plan.keyframeEntryIds
-        .map(() => '?')
-        .join(', ')})`,
-      params: plan.keyframeEntryIds,
+      sql: `DELETE FROM world_state_snapshots WHERE entry_id IN (${slice.map(() => '?').join(', ')})`,
+      params: slice,
     })
   }
 

@@ -71,6 +71,7 @@ that area, and update it in the same commit when behaviour it describes changes.
 | a new `ServiceId`, agent profiles, reasoning effort, defaults                  | [docs/architecture/ai-services.md](docs/architecture/ai-services.md)             |
 | SQLite, migrations, `src-tauri/src/`, the settings blob                        | [docs/architecture/persistence.md](docs/architecture/persistence.md)             |
 | `utils/dialogue.ts`, dialogue highlighting, TTS                                | [docs/architecture/dialogue-and-tts.md](docs/architecture/dialogue-and-tts.md)   |
+| `services/storyTime/`, time anchors, reconciliation, a new story's start       | [docs/architecture/story-time.md](docs/architecture/story-time.md)               |
 | tests                                                                          | [docs/development/testing.md](docs/development/testing.md)                       |
 | the updater, CI, release scripts, Android builds                               | [docs/development/release.md](docs/development/release.md)                       |
 

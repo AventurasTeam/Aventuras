@@ -1,5 +1,6 @@
 <script lang="ts">
   import { story, type TimelineReconciliationPreview } from '$lib/stores/story.svelte'
+  import { ui } from '$lib/stores/ui.svelte'
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
   import * as Dialog from '$lib/components/ui/dialog'
@@ -18,6 +19,7 @@
     Plus,
   } from '@lucide/svelte'
   import { Textarea } from '$lib/components/ui/textarea'
+  import { entryNumber as numberOfEntry } from '$lib/utils/storyNavigation'
   import {
     toMinutes,
     parseStoryTime,
@@ -28,6 +30,7 @@
     durationIsInvalid,
     outstandingDurations,
     rangeIntervals,
+    refuseRange,
   } from '$lib/services/storyTime'
   import type {
     SelectableRange,
@@ -120,6 +123,7 @@
   }
 
   const byId = $derived(new Map(story.entries.map((entry) => [entry.id, entry])))
+  const anchorsInView = $derived(story.timeAnchors.filter((a) => byId.has(a.entryId)).length)
 
   const ANCHOR_NOTE_LIMIT = 140
   /** Which of the range's two boundaries is open for editing, and as what. */
@@ -133,6 +137,9 @@
   const anchorTime = $derived(parseStoryTime(anchorTimeText))
   const entryStart = $derived(parseStoryTime(entryStartText))
   const entryEnd = $derived(parseStoryTime(entryEndText))
+  const entryBackwards = $derived(
+    !!entryStart && !!entryEnd && toMinutes(entryEnd) < toMinutes(entryStart),
+  )
 
   function boundaryOf(which: 'from' | 'to'): Boundary | undefined {
     return which === 'from' ? range?.from : range?.to
@@ -186,6 +193,8 @@
     try {
       await story.setEntryTimes(boundary.entryId, entryStart, entryEnd)
       closeAnchorEditor()
+    } catch (error) {
+      ui.showToast(error instanceof Error ? error.message : 'The time could not be saved', 'error')
     } finally {
       anchorSaving = false
     }
@@ -198,6 +207,11 @@
     try {
       await story.setTimeAnchor(boundary.entryId, anchorTime, anchorNote.trim() || null)
       closeAnchorEditor()
+    } catch (error) {
+      ui.showToast(
+        error instanceof Error ? error.message : 'The anchor could not be saved',
+        'error',
+      )
     } finally {
       anchorSaving = false
     }
@@ -317,18 +331,14 @@
   )
   const resolved = $derived(unreadable.length === 0 && !invalidWeights)
 
-  const refusal = $derived(range ? story.previewReconciliation(range, {}, {}) : null)
-  const isRefused = $derived(refusal?.status === 'refused')
+  const refusal = $derived(range ? refuseRange(range.from, range.to) : null)
+  const isRefused = $derived(!!refusal)
 
   const preview = $derived<TimelineReconciliationPreview | null>(
     range && resolved && !isRefused
       ? story.previewReconciliation(range, overrides, statedWeights)
       : null,
   )
-
-  function pad(n: number): string {
-    return String(n ?? 0).padStart(2, '0')
-  }
 
   /** What the record holds for an entry, as one instant or a span. */
   function recordedText(entry: StoryEntry): string {
@@ -340,14 +350,12 @@
   }
 
   function stamp(time: TimeTracker | null | undefined): string {
-    if (!time) return '—'
-    return `Y${time.years + 1} D${time.days + 1} ${pad(time.hours)}:${pad(time.minutes)}`
+    return time ? formatStoryTime(time) : '—'
   }
 
   /** A stamp split where the ladder dims it: year, day, clock. */
   function stampParts(time: TimeTracker | null | undefined): string[] {
-    if (!time) return ['—']
-    return [`Y${time.years + 1}`, `D${time.days + 1}`, `${pad(time.hours)}:${pad(time.minutes)}`]
+    return time ? formatStoryTime(time).split(' ') : ['—']
   }
 
   function stampRange(start: TimeTracker | null | undefined, end: TimeTracker | null | undefined) {
@@ -370,17 +378,12 @@
   }
 
   function describeMinutes(total: number): string {
-    if (total === 0) return 'none'
-    const days = Math.floor(total / 1440)
-    const hours = Math.floor((total % 1440) / 60)
-    const minutes = total % 60
-    return [days ? `${days}d` : '', hours ? `${hours}h` : '', minutes ? `${minutes}m` : '']
-      .filter(Boolean)
-      .join(' ')
+    return total === 0 ? 'none' : formatDuration(total)
   }
 
   function entryNumber(entryId: string): number {
-    return story.entries.findIndex((entry) => entry.id === entryId) + 1
+    const entry = byId.get(entryId)
+    return entry ? numberOfEntry(entry) : 0
   }
 
   function entryText(entryId: string): string {
@@ -900,8 +903,8 @@
   </p>
   <p class="text-muted-foreground text-xs">
     In view: {story.entries.length}
-    {story.entries.length === 1 ? 'entry' : 'entries'}, {story.timeAnchors.length}
-    {story.timeAnchors.length === 1 ? 'anchor' : 'anchors'}, {story.timeBoundaries.length}
+    {story.entries.length === 1 ? 'entry' : 'entries'}, {anchorsInView}
+    {anchorsInView === 1 ? 'anchor' : 'anchors'}, {story.timeBoundaries.length}
     {story.timeBoundaries.length === 1 ? 'boundary' : 'boundaries'}.
   </p>
 {/snippet}
@@ -1045,6 +1048,8 @@
             <p class="text-destructive">
               Give both as Y1 D4 14:30. An unreadable time is left as it was.
             </p>
+          {:else if entryBackwards}
+            <p class="text-destructive">The entry cannot end before it begins.</p>
           {/if}
         {/if}
 
@@ -1065,7 +1070,7 @@
             <Button
               size="sm"
               class="h-6 text-[11px]"
-              disabled={!entryStart || !entryEnd || anchorSaving}
+              disabled={!entryStart || !entryEnd || entryBackwards || anchorSaving}
               onclick={saveEntryTime}
             >
               {anchorSaving ? 'Saving…' : 'Save'}
@@ -1202,8 +1207,8 @@
       {/if}
     </div>
 
-    {#if refusal?.status === 'refused'}
-      {@render refusalCard(refusal.refusal.reason, refusal.refusal.boundaries)}
+    {#if refusal}
+      {@render refusalCard(refusal.reason, refusal.boundaries)}
     {:else}
       <div class="border-border bg-card rounded-lg border px-3 py-1">
         <table class="w-full border-collapse text-xs">
@@ -1421,8 +1426,8 @@
     </div>
 
     <div class="flex flex-col gap-3 px-4 pt-3 pb-4">
-      {#if refusal?.status === 'refused'}
-        {@render refusalCard(refusal.refusal.reason, refusal.refusal.boundaries)}
+      {#if refusal}
+        {@render refusalCard(refusal.reason, refusal.boundaries)}
       {:else}
         {@render ladder()}
       {/if}

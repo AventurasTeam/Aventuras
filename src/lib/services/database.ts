@@ -3928,12 +3928,17 @@ class DatabaseService {
   async countTimeAnchorsForEntries(entryIds: string[]): Promise<number> {
     if (entryIds.length === 0) return 0
     const db = await this.getDb()
-    const placeholders = entryIds.map(() => '?').join(',')
-    const rows = await db.select<{ count: number }[]>(
-      `SELECT COUNT(*) as count FROM time_anchors WHERE entry_id IN (${placeholders})`,
-      entryIds,
-    )
-    return rows[0]?.count ?? 0
+    const CHUNK = 500 // well under SQLite's 999 bound-parameter limit
+    let count = 0
+    for (let i = 0; i < entryIds.length; i += CHUNK) {
+      const slice = entryIds.slice(i, i + CHUNK)
+      const rows = await db.select<{ count: number }[]>(
+        `SELECT COUNT(*) as count FROM time_anchors WHERE entry_id IN (${slice.map(() => '?').join(',')})`,
+        slice,
+      )
+      count += rows[0]?.count ?? 0
+    }
+    return count
   }
 
   // ===== Pack Variable Operations =====

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { story } from '$lib/stores/story.svelte'
+  import { ui } from '$lib/stores/ui.svelte'
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
   import { Textarea } from '$lib/components/ui/textarea'
@@ -94,6 +95,11 @@
     try {
       await story.removeTimeAnchor(usableEntry.id)
       open = false
+    } catch (error) {
+      ui.showToast(
+        error instanceof Error ? error.message : 'The anchor could not be deleted',
+        'error',
+      )
     } finally {
       saving = false
     }
@@ -105,6 +111,11 @@
     try {
       await story.setTimeAnchor(usableEntry.id, parsedTime, note.trim() || null)
       open = false
+    } catch (error) {
+      ui.showToast(
+        error instanceof Error ? error.message : 'The anchor could not be saved',
+        'error',
+      )
     } finally {
       saving = false
     }

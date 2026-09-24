@@ -20,7 +20,7 @@
   import TimelineAnomaliesModal from './TimelineAnomaliesModal.svelte'
   import TimeAnchorModal from './TimeAnchorModal.svelte'
   import EntryTimeModal from './EntryTimeModal.svelte'
-  import { toMinutes } from '$lib/services/storyTime'
+  import { formatStoryTime, toMinutes } from '$lib/services/storyTime'
   import type { TimeTracker } from '$lib/types'
 
   let reconcileOpen = $state(false)
@@ -159,13 +159,7 @@
   const defects = $derived(report.anomalies.filter((a) => a.severity === 'defect').length)
   const suspected = $derived(report.anomalies.filter((a) => a.severity === 'suspected').length)
 
-  function pad(n: number, width: number = 2): string {
-    return n.toString().padStart(width, '0')
-  }
-
-  function stamp(time: { years: number; days: number; hours: number; minutes: number }): string {
-    return `Y${time.years + 1} D${time.days + 1} ${pad(time.hours)}:${pad(time.minutes)}`
-  }
+  const stamp = formatStoryTime
 </script>
 
 <h3 class="text-foreground mb-2 text-xl font-bold tracking-tight">Timeline</h3>

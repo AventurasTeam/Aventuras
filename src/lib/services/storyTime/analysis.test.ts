@@ -120,6 +120,24 @@ describe('analyzeTimeline', () => {
     expect(kinds([a, b])).not.toContain('implausible-jump')
   })
 
+  it('checks the opening entry for a jump too', () => {
+    const opening = entry({
+      start: t(8),
+      end: { years: 0, days: 3, hours: 8, minutes: 0 },
+      content: 'Three days on the road.',
+    })
+    expect(kinds([opening])).toContain('implausible-jump')
+  })
+
+  it('reports an entry that ends before it begins as a defect', () => {
+    const a = entry({ start: t(8), end: t(10) })
+    const b = entry({ start: t(12), end: t(11) })
+    const found = analyzeTimeline({ entries: [a, b] })
+    const reversed = found.find((x) => x.kind === 'reversed')
+    expect(reversed).toMatchObject({ entryIds: [b.id], severity: 'defect' })
+    expect(found.map((x) => x.kind)).not.toContain('implausible-jump')
+  })
+
   it('reports a long run in which no time passes, once for the run', () => {
     const entries = chained(Array.from({ length: FLATLINE_RUN_LENGTH + 2 }, () => t(3)))
     const found = analyzeTimeline({ entries }).filter((a) => a.kind === 'flatline')
