@@ -175,11 +175,11 @@ convention, and the expectation that subsystems route through
 - `action_layer.*` — `user_write_rejected`, `constraint_violation`,
   `story_settings_repaired` (the corrupt-blob repair: carries the failing
   key paths, since the blob it describes is overwritten in the same call),
-  `thread_save_rejected` / `happening_save_rejected` (warn: the
-  in-flight refusal, which the disabled UI should make unreachable, or
-  a rejected write), `thread_save_failed` / `happening_save_failed`
-  (error: a thrown write, logged with the Save's action kinds, then
-  rethrown)
+  `thread_save_rejected` / `happening_save_rejected` / `entity_save_rejected`
+  (warn: the in-flight refusal, which the disabled UI should make
+  unreachable, or a rejected write), `thread_save_failed` /
+  `happening_save_failed` / `entity_save_failed` (error: a thrown write,
+  logged with the Save's action kinds, then rethrown)
 - `classifier.*` — `delta_clamped`, `schema_repair`, `empty_output`
 - `retrieval.*` — `row_skipped_stale`, `empty_pool`, `knn_error`
 - `provider.*` — `retry_succeeded`, `rate_limited`,

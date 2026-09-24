@@ -1,9 +1,10 @@
 import { eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { Delta, Entity, NewEntity } from '@/lib/db'
+import type { CharacterState, Delta, Entity, NewEntity } from '@/lib/db'
 import { branches, characterRelationships, deltas, entities, stories } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { logger } from '@/lib/diagnostics'
 import { ID_PATTERN } from '@/lib/ids'
 import { generationStore, resetAllStores } from '@/lib/stores'
 import { characterDraftFrom, locationDraftFrom } from '@/lib/world'
@@ -101,6 +102,11 @@ describe('saveEntity', () => {
       state: { visual: { hair: 'dark' } },
     })
 
+    const saved = await rowOf(db, 'char_kael')
+    expect(saved.description).toBe('A courier turned fugitive.')
+    expect(saved.tags).toEqual(['courier', 'fugitive'])
+    expect((saved.state as CharacterState).visual.hair).toBe('dark, rain-soaked')
+
     expect(await reverseReplayDeltas(rows[0].actionId, ctx)).toBe(1)
     const restored = await rowOf(db, 'char_kael')
     expect(restored.description).toBe('A courier.')
@@ -108,7 +114,7 @@ describe('saveEntity', () => {
     expect(restored.state).toEqual(row.state)
   })
 
-  it('creates a location with a generated id and selects nothing else', async () => {
+  it('creates a location with a generated id and an empty location state', async () => {
     const { db, ctx } = await setup()
     const result = await saveEntity(
       {
@@ -139,7 +145,11 @@ describe('saveEntity', () => {
       },
       ctx,
     )
-    expect(result).toMatchObject({ status: 'rejected', code: 'parent-cycle' })
+    expect(result).toMatchObject({
+      status: 'rejected',
+      reason: 'parent-cycle',
+      code: 'parent-cycle',
+    })
     expect(await deltaRows(db)).toHaveLength(0)
   })
 
@@ -206,6 +216,7 @@ describe('saveEntity', () => {
     await db.insert(entities).values(character('char_kael', 'Kael'))
     const row = await rowOf(db, 'char_kael')
     vi.spyOn(generationStore, 'isUserEditBlocked').mockReturnValue(true)
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
     const result = await saveEntity(
       {
         kind: 'character',
@@ -218,5 +229,10 @@ describe('saveEntity', () => {
     )
     expect(result).toMatchObject({ status: 'rejected', code: 'in-flight' })
     expect(await deltaRows(db)).toHaveLength(0)
+    expect(warn).toHaveBeenCalledWith('action_layer.entity_save_rejected', {
+      branchId: 'br_1',
+      id: 'char_kael',
+      code: 'in-flight',
+    })
   })
 })

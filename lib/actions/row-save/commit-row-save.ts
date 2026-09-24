@@ -11,6 +11,8 @@ export type RowSaveResult =
 
 export const ROW_SAVE_REJECTION = { inFlight: 'in-flight' } as const
 
+export type RowSaveKind = 'thread' | 'happening' | 'entity'
+
 type CommitRowSaveArgs = {
   branchId: string
   /** Null for a create; the id is generated before the actions are built. */
@@ -19,16 +21,16 @@ type CommitRowSaveArgs = {
   build: (id: string) => PipelineAction[]
 }
 
-/** One Save = one `action_id`; refusals and failures log as `action_layer.<logKind>_save_*`. */
+/** One Save = one `action_id`; refusals and failures log as `action_layer.<rowKind>_save_*`. */
 export async function commitRowSave(
-  logKind: string,
+  rowKind: RowSaveKind,
   { branchId, rowId, idPrefix, build }: CommitRowSaveArgs,
   ctx: DbCtx,
 ): Promise<RowSaveResult> {
   // generation-pipeline.md → Action rejection — defense in depth: the UI disables first, so
   // this firing means a gating bug or a render race.
   if (generationStore.isUserEditBlocked()) {
-    logger.warn(`action_layer.${logKind}_save_rejected`, {
+    logger.warn(`action_layer.${rowKind}_save_rejected`, {
       branchId,
       id: rowId,
       code: ROW_SAVE_REJECTION.inFlight,
@@ -37,20 +39,23 @@ export async function commitRowSave(
   }
   const id = rowId ?? generateId(idPrefix)
   const actions = build(id)
-  if (actions.length === 0) return { status: 'ok', id }
+  if (actions.length === 0) {
+    if (rowId == null) throw new Error('commitRowSave: a create built no actions')
+    return { status: 'ok', id }
+  }
   const context = { branchId, id, create: rowId == null, actions: actions.map((a) => a.kind) }
   let result
   try {
     result = await applyDeltaActionGroup(actions, { actionId: generateId('act'), branchId }, ctx)
   } catch (error) {
-    logger.error(`action_layer.${logKind}_save_failed`, {
+    logger.error(`action_layer.${rowKind}_save_failed`, {
       ...context,
       error: error instanceof Error ? error.message : String(error),
     })
     throw error
   }
   if (result.status !== 'ok') {
-    logger.warn(`action_layer.${logKind}_save_rejected`, {
+    logger.warn(`action_layer.${rowKind}_save_rejected`, {
       ...context,
       reason: result.reason,
       code: result.code,
