@@ -393,6 +393,7 @@
         pov: story.pov,
         tense: story.tense,
         tokenThreshold: story.memoryConfig.tokenThreshold,
+        recentEntryLimit: story.memoryConfig.chapterBuffer,
       }),
       loreCallbacks: buildLoreManagementCallbacks({ storyId, branchId }),
       loreUICallbacks: buildLoreManagementUICallbacks(),

@@ -74,11 +74,16 @@ export interface LoreSessionInput {
    * summary. Absent on the batch importer's pass and on a tidy run with no new chapter.
    */
   newChapter?: LoreNewChapterInput
+  /**
+   * Show only the first this many `recentEntries`, in place of the character budget. Set by
+   * the runs a chapter creation triggers, to the story's `chapterBuffer`.
+   */
+  recentEntryLimit?: number
 }
 
 export type LoreRunOptions = Pick<
   LoreSessionInput,
-  'mode' | 'pov' | 'tense' | 'tokenThreshold' | 'newChapter'
+  'mode' | 'pov' | 'tense' | 'tokenThreshold' | 'newChapter' | 'recentEntryLimit'
 >
 
 export interface LoreManagementDependencies {
@@ -212,6 +217,7 @@ export class LoreManagementCoordinator {
           tense: input.tense,
           tokenThreshold: input.tokenThreshold,
           newChapter: input.newChapter,
+          recentEntryLimit: input.recentEntryLimit,
         },
       )
 

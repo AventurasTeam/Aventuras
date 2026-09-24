@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { splitRecentTail } from './recentTail'
+import { MIN_RECENT_ENTRIES_FOR_LORE, loreRecentEntries, splitRecentTail } from './recentTail'
 import type { StoryEntry } from '$lib/types'
 
 const entry = (content: string): StoryEntry => ({ type: 'narration', content }) as StoryEntry
@@ -95,5 +95,51 @@ describe('splitRecentTail — the minimum-entries floor', () => {
   it('treats a floor below one as one', () => {
     const tail = sized(50, 5000)
     expect(splitRecentTail(tail, 100, 0).shown).toEqual(tail.slice(1))
+  })
+})
+
+describe('loreRecentEntries', () => {
+  const typed = (type: StoryEntry['type'], content = 'x'.repeat(100)) =>
+    ({ type, content }) as StoryEntry
+
+  it('falls back to the character budget and floor when no limit is given', () => {
+    const tail = sized(3000, 3000, 3000, 3000, 3000, 3000, 80)
+    expect(loreRecentEntries(tail, 2048)).toEqual(
+      splitRecentTail(tail, 2048, MIN_RECENT_ENTRIES_FOR_LORE).shown,
+    )
+  })
+
+  it('shows the first N entries after the chapter, ignoring the character budget', () => {
+    const tail = sized(3000, 3000, 3000, 3000, 3000, 3000, 3000, 80)
+    expect(loreRecentEntries(tail, 100, 7)).toEqual(tail.slice(0, 7))
+  })
+
+  it('picks up where the chapter ended, not at the end of the story', () => {
+    // A chapter ending at entry 59 of 120 leaves entries 60-119 as the tail.
+    const tail = Array.from({ length: 60 }, (_, i) => entry(`entry ${60 + i}`))
+    const shown = loreRecentEntries(tail, 100, 10)
+    expect(shown.map((e) => e.content)).toEqual(
+      Array.from({ length: 10 }, (_, i) => `entry ${60 + i}`),
+    )
+  })
+
+  it('shows nothing when the limit is 0 or negative', () => {
+    const tail = sized(10, 10, 10)
+    expect(loreRecentEntries(tail, 1000, 0)).toEqual([])
+    expect(loreRecentEntries(tail, 1000, -2)).toEqual([])
+  })
+
+  it('shows every entry when the limit exceeds the tail', () => {
+    const tail = sized(10, 10)
+    expect(loreRecentEntries(tail, 1000, 5)).toEqual(tail)
+  })
+
+  it('drops non-prose entries before counting', () => {
+    const first = typed('narration', 'first')
+    const action = typed('user_action', 'action')
+    const last = typed('narration', 'last')
+    const tail = [typed('system'), first, typed('retry'), action, last]
+    expect(loreRecentEntries(tail, 1000, 2)).toEqual([first, action])
+    expect(loreRecentEntries(tail, 1000)).toEqual([first, action, last])
   })
 })

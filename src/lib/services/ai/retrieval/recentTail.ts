@@ -86,3 +86,22 @@ export function splitRecentTail(
 
   return { shown: tail.slice(firstShown), searchable: tail.slice(0, firstShown) }
 }
+
+/**
+ * The prose lore management quotes from the unchaptered tail.
+ *
+ * With `entryLimit` it is the first that many entries after the chapter, so it continues
+ * straight on from it, and `maxChars` does not apply. Without it, `maxChars` bounds the newest
+ * entries above a floor of `MIN_RECENT_ENTRIES_FOR_LORE`.
+ */
+export function loreRecentEntries(
+  tail: StoryEntry[],
+  maxChars: number,
+  entryLimit?: number,
+): StoryEntry[] {
+  const prose = tail.filter((e) => e.type === 'narration' || e.type === 'user_action')
+  if (entryLimit === undefined) {
+    return splitRecentTail(prose, maxChars, MIN_RECENT_ENTRIES_FOR_LORE).shown
+  }
+  return prose.slice(0, Math.max(0, entryLimit))
+}

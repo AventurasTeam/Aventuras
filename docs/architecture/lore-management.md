@@ -220,21 +220,30 @@ session. Blacklisted entries (`loreManagementBlacklisted`) are filtered out of t
 entirely; showing them was worse than useless, since the agent cannot act on one but can
 re-create it.
 
-**An agent with no story text must not create.** Chapters are the usual material, but a manual
-run can happen before any chapter exists, so every caller passes `recentEntries` — the
-un-chapterized tail, bounded by `runLoreManagement` to
-`recentStoryBudgetChars(tokenThreshold)` — the same `CHAPTER_READ_BUDGET_RATIO` (2.5) a chapter
-read uses, converted to characters at ~4 per token, so it reads as "about 2.5 chapters" on both
-sides and scales with the user's own setting rather than sitting at a fixed 16,384. It was
-hardcoded to `[]` on all three paths. With
-neither chapters nor a tail, the prompt says so and restricts the run to consolidating what is
-already written; anything it "identified as missing" would be invented.
+**An agent with no story text must not create.** Chapters are the usual material, but a manual run
+can happen before any chapter exists, so every caller passes `recentEntries` — the un-chapterized
+tail. On a run no chapter triggered, `runLoreManagement` bounds it to
+`recentStoryBudgetChars(tokenThreshold)` (a chapter-triggered run is covered below) — the same
+`CHAPTER_READ_BUDGET_RATIO` (2.5) a chapter read uses, converted to characters at ~4 per token, so
+it reads as "about 2.5 chapters" on both sides and scales with the user's own setting rather than
+sitting at a fixed 16,384. It was hardcoded to `[]` on all three paths. With neither chapters nor a
+tail, the prompt says so and restricts the run to consolidating what is already written; anything it
+"identified as missing" would be invented.
 
 **Characters, not entries, and through the same helper the retrieval tail uses**
 (`splitRecentTail`). An entry count is not a budget: ten entries is 1,000 characters of terse
 exchanges or 27,000 of long prose, and what is being bounded is the prompt. The floor of
 `MIN_RECENT_ENTRIES_FOR_LORE` (5) is not belt and braces — measured entries averaged 2,688
 characters, so a character budget alone can collapse to the player's last action.
+
+**Except after a chapter is written, where the tail is the first `chapterBuffer` entries after
+it.** The automatic path and a manual chapter both set `recentEntryLimit` to Buffer Messages,
+and `loreRecentEntries` then shows that many prose entries starting right after the chapter,
+with no character budget and no floor. The triggering chapter is in the prompt in full, so the
+tail continues it without a gap, however far before the end of the story the chapter was cut.
+A buffer of 0 shows none, and an empty tail is absent rather than announced: `hasRecentStory`
+drops both its section and every mention of it in the instructions. The batch importer and the
+Tidy-lorebook button keep the character budget.
 
 All three callers go through `LoreManagementCoordinator` with the same
 `buildLoreManagementCallbacks(scope)`, which is the only place that says what a lore change does

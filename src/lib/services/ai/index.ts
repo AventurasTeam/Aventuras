@@ -60,7 +60,7 @@ import type {
 import { normalizeImageDataUrl, expectedPixels, type ImageSpec } from '$lib/utils/image'
 import type { StreamChunk } from './core/types'
 import { recentStoryBudgetChars } from './core/defaults'
-import { MIN_RECENT_ENTRIES_FOR_LORE, splitRecentTail } from './retrieval/recentTail'
+import { loreRecentEntries } from './retrieval/recentTail'
 import { renderLoreProse } from './lorebook'
 import { serviceFactory } from './core/factory'
 import {
@@ -639,20 +639,12 @@ class AIService {
     callbacks: LoreManagementCallbacks,
     options: LoreRunOptions,
   ): Promise<LoreManagementResult> {
-    const { mode, pov, tense, tokenThreshold, newChapter } = options
-    // The story since the last chapter — the only unsummarised material the agent has. It
-    // used to be the single most recent action and narration, which on a story with no
-    // chapters left the agent maintaining a lorebook for a story it could not read.
-    //
-    // Bounded through the same helper the retrieval tail uses, so both sides measure the
-    // same thing the same way. `searchable` is dropped rather than split: there is no grep
-    // here to reach what the budget leaves out.
-    const { shown } = splitRecentTail(
-      recentMessages.filter((m) => m.type === 'narration' || m.type === 'user_action'),
-      recentStoryBudgetChars(tokenThreshold),
-      MIN_RECENT_ENTRIES_FOR_LORE,
+    const { mode, pov, tense, tokenThreshold, newChapter, recentEntryLimit } = options
+    // The story since the last chapter — the only unsummarised material the agent has.
+    // Chapter-triggered runs take its first N entries, every other run is capped by characters.
+    const recentStory = renderLoreProse(
+      loreRecentEntries(recentMessages, recentStoryBudgetChars(tokenThreshold), recentEntryLimit),
     )
-    const recentStory = renderLoreProse(shown)
 
     // Create service and run session
     const service = serviceFactory.createLoreManagementService()

@@ -79,6 +79,7 @@ async function startManualLoreManagement(newChapter?: Chapter): Promise<LoreSess
       newChapter: newChapter
         ? { chapter: newChapter, entries: story.getChapterEntries(newChapter) }
         : undefined,
+      recentEntryLimit: newChapter ? story.memoryConfig.chapterBuffer : undefined,
     },
     buildLoreManagementCallbacks({
       storyId: currentStory.id,
