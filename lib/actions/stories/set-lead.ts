@@ -23,8 +23,8 @@ function refuse(storyId: string, entityId: string, code: LeadRejectionCode): Set
 }
 
 /**
- * Milestone 4 C5: sets `definition.leadEntityId` to an active character on the story's current
- * branch. `stories` is not delta-logged, so this is a direct write with no CTRL-Z.
+ * Sets `definition.leadEntityId` to an active character on the story's current branch. `stories`
+ * is not delta-logged, so this is a direct write with no CTRL-Z.
  */
 export async function setStoryLead(
   storyId: string,
@@ -64,8 +64,8 @@ export async function setStoryLead(
       .where(eq(stories.id, storyId))
       .toSQL(),
   ])
-  await rehydrateStories(ctx.db)
   const open = currentStoryStore.getCurrentStory()
   if (open?.storyId === storyId) currentStoryStore.set({ ...open, definition: next.data })
+  await rehydrateStories(ctx.db)
   return { status: 'ok' }
 }

@@ -120,6 +120,14 @@ async function storedLead(db: Awaited<ReturnType<typeof setup>>['db']) {
   return (row.definition as StoryDefinition).leadEntityId
 }
 
+async function storedUpdatedAt(db: Awaited<ReturnType<typeof setup>>['db']) {
+  const [row] = await db
+    .select({ updatedAt: stories.updatedAt })
+    .from(stories)
+    .where(eq(stories.id, 'story_1'))
+  return row.updatedAt
+}
+
 beforeEach(() => {
   resetAllStores()
 })
@@ -132,12 +140,43 @@ describe('setStoryLead', () => {
     const { db, ctx } = await setup()
     expect(await setStoryLead('story_1', 'char_mira', ctx, 500)).toEqual({ status: 'ok' })
     expect(await storedLead(db)).toBe('char_mira')
+    expect(await storedUpdatedAt(db)).toBe(500)
     expect(currentStoryStore.getCurrentStory()?.definition).toEqual({
       ...DEFINITION,
       leadEntityId: 'char_mira',
     })
     const row = storiesStore.getStories().rows.find((r) => r.id === 'story_1')
     expect((row?.definition as StoryDefinition).leadEntityId).toBe('char_mira')
+  })
+
+  it('leaves a different open story untouched', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(stories).values({
+      id: 'story_2',
+      title: 'T2',
+      status: 'active',
+      createdAt: 1,
+      updatedAt: 1,
+      currentBranchId: 'br_3',
+      definition: DEFINITION,
+      settings: SETTINGS,
+    })
+    await db
+      .insert(branches)
+      .values([{ id: 'br_3', storyId: 'story_2', name: 'main', createdAt: 1 }])
+    currentStoryStore.set({
+      storyId: 'story_2',
+      branchId: 'br_3',
+      definition: DEFINITION,
+      settings: SETTINGS,
+    })
+    expect(await setStoryLead('story_1', 'char_mira', ctx)).toEqual({ status: 'ok' })
+    expect(currentStoryStore.getCurrentStory()).toEqual({
+      storyId: 'story_2',
+      branchId: 'br_3',
+      definition: DEFINITION,
+      settings: SETTINGS,
+    })
   })
 
   it.each([
@@ -161,10 +200,16 @@ describe('setStoryLead', () => {
   })
 
   it('refuses a draft story', async () => {
-    const { ctx } = await setup('draft')
+    const { db, ctx } = await setup('draft')
     expect(await setStoryLead('story_1', 'char_mira', ctx)).toEqual({
       status: 'rejected',
       code: 'draft-story',
     })
+    expect(await storedLead(db)).toBe('char_kael')
+  })
+
+  it('throws for a missing story', async () => {
+    const { ctx } = await setup()
+    await expect(setStoryLead('story_missing', 'char_mira', ctx)).rejects.toThrow('Story not found')
   })
 })
