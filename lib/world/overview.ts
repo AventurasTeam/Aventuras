@@ -13,7 +13,7 @@ import { stateOf } from './entity-draft'
 import { parentChainIds, parentOfLocations } from './parent-chain'
 
 function byName(a: Entity, b: Entity): number {
-  return collate(a.name, b.name) || compareId(a.id, b.id)
+  return collate(a.name, b.name) || a.createdAt - b.createdAt || compareId(a.id, b.id)
 }
 
 /** The first `max` populated visual fields, in canon order (world.md → Character Overview). */
@@ -75,12 +75,12 @@ export function membersOf(factionId: string, entities: readonly Entity[]): Entit
     .sort(byName)
 }
 
-/** The resolvable ancestors of a location, nearest first; a dangling id ends the chain. */
+/** The resolvable ancestors of a location, nearest first; a dangling or non-location id ends the chain. */
 export function locationAncestors(locationId: string, entities: readonly Entity[]): Entity[] {
   const byId = new Map(entities.map((e) => [e.id, e]))
   return parentChainIds(locationId, parentOfLocations(entities)).flatMap((id) => {
     const entity = byId.get(id)
-    return entity == null ? [] : [entity]
+    return entity?.kind === 'location' ? [entity] : []
   })
 }
 
@@ -96,7 +96,10 @@ export function lastSeenSpan(
 
 type TimedEntry = TurnEntry & { metadata: Partial<Pick<EntryMetadata, 'worldTime'>> | null }
 
-/** The branch's current world time: the narrative tail's, or the entry before a metadata-less tail. */
+/**
+ * The branch's current world time: the narrative tail's, or the entry before a metadata-less
+ * tail. `entries` MUST be ordered ascending by position.
+ */
 export function branchWorldTime(entries: readonly TimedEntry[]): number {
   const head = resolveHeadTurn(entries)
   return inheritedEntryMetadata(head?.tail.metadata ?? head?.previous?.metadata).worldTime

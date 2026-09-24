@@ -17,7 +17,12 @@ import {
   visualParts,
 } from './overview'
 
-const character = (id: string, name: string, state: Partial<CharacterState>): Entity =>
+const character = (
+  id: string,
+  name: string,
+  state: Partial<CharacterState>,
+  overrides: Partial<Entity> = {},
+): Entity =>
   makeEntity({
     id,
     kind: 'character',
@@ -33,6 +38,7 @@ const character = (id: string, name: string, state: Partial<CharacterState>): En
       lastSeenAt: null,
       ...state,
     },
+    ...overrides,
   })
 const location = (id: string, name: string, parent: string | null) =>
   makeEntity({ id, kind: 'location', name, state: { parent_location_id: parent } })
@@ -42,6 +48,8 @@ const item = (id: string, name: string, at: string | null) =>
 const CITY = location('loc_city', 'City', null)
 const SQUARE = location('loc_square', 'Town Square', 'loc_city')
 const SHOP = location('loc_shop', 'Shop', 'loc_square')
+const LOC_ORPHAN = location('loc_orphan', 'Orphan Loc', 'loc_missing')
+const LOC_MISPARENTED = location('loc_bad_parent', 'Bad Parent Loc', 'char_kael')
 const KAEL = character('char_kael', 'Kael', {
   current_location_id: 'loc_shop',
   faction_id: 'fac_watch',
@@ -52,17 +60,33 @@ const MIRA = character('char_mira', 'Mira', {
   current_location_id: 'loc_shop',
   inventory: ['item_coin'],
 })
+// Same name, ids in the opposite order to createdAt — pins the createdAt tie-break over compareId.
+const ASH_A = character('char_ash_a', 'Ash', { current_location_id: 'loc_shop' }, { createdAt: 2 })
+const ASH_Z = character('char_ash_z', 'Ash', { current_location_id: 'loc_shop' }, { createdAt: 1 })
 const COIN = item('item_coin', 'Silver coin', null)
 const KEY = item('item_key', 'Old key', 'loc_shop')
-const ALL = [CITY, SQUARE, SHOP, KAEL, MIRA, COIN, KEY]
+const ALL = [CITY, SQUARE, SHOP, LOC_ORPHAN, LOC_MISPARENTED, MIRA, KAEL, ASH_A, ASH_Z, COIN, KEY]
 
 describe('Overview derivations', () => {
   it('walks the parent chain nearest first', () => {
     expect(locationAncestors('loc_shop', ALL).map((e) => e.name)).toEqual(['Town Square', 'City'])
   })
 
-  it('derives characters and items at a location, sorted by name', () => {
-    expect(charactersAt('loc_shop', ALL).map((e) => e.name)).toEqual(['Kael', 'Mira'])
+  it('excludes a non-location ancestor', () => {
+    expect(locationAncestors('loc_bad_parent', ALL)).toEqual([])
+  })
+
+  it('excludes a dangling ancestor id', () => {
+    expect(locationAncestors('loc_orphan', ALL)).toEqual([])
+  })
+
+  it('derives characters and items at a location, sorted by name, ties broken by createdAt then id', () => {
+    expect(charactersAt('loc_shop', ALL).map((e) => e.id)).toEqual([
+      'char_ash_z',
+      'char_ash_a',
+      'char_kael',
+      'char_mira',
+    ])
     expect(itemsAt('loc_shop', ALL).map((e) => e.name)).toEqual(['Old key'])
   })
 
@@ -76,7 +100,7 @@ describe('Overview derivations', () => {
   })
 
   it('picks the first two populated visual fields in canon order', () => {
-    expect(visualParts({ physique: ' ', face: 'scarred', eyes: 'grey', attire: 'cloak' })).toEqual([
+    expect(visualParts({ attire: 'cloak', eyes: 'grey', face: 'scarred', physique: ' ' })).toEqual([
       'scarred',
       'grey',
     ])
@@ -90,6 +114,7 @@ describe('Overview derivations', () => {
     expect(
       carryingSummary({
         ...(KAEL.state as CharacterState),
+        equipped_items: ['item_blade', 'item_key'],
         stackables: { gold: 200, rations: 7, silver: 30, arrows: 1 },
       }),
     ).toEqual({
@@ -98,7 +123,7 @@ describe('Overview derivations', () => {
         { key: 'silver', count: 30 },
         { key: 'rations', count: 7 },
       ],
-      equipped: 1,
+      equipped: 2,
       carried: 1,
     })
   })
@@ -121,5 +146,9 @@ describe('Overview derivations', () => {
         { id: 'e_3', kind: 'system', position: 3, metadata: { worldTime: 999 } },
       ]),
     ).toBe(60)
+  })
+
+  it('reads a world time of 0 for an empty branch', () => {
+    expect(branchWorldTime([])).toBe(0)
   })
 })
