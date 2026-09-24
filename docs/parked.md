@@ -2438,6 +2438,56 @@ use, or the first time someone needs an unfiltered dialog query. Raised
 2026-08-15 by the Slice 3.8 Task 5 and Task 7 reviews, diagnosed and
 parked 2026-08-18.
 
+#### Android bottom sheets are not dialogs for TalkBack
+
+On Android a bottom `Sheet` is one TalkBack item, not a dialog.
+gorhom 5.2.14 wraps all of a sheet's content in a view that is
+`accessible` by default, and `BottomSheetContent`
+(`components/ui/sheet.tsx`) overrides only its role and label.
+Checked on the `Medium_Phone` emulator with TalkBack on, 2026-09-24:
+
+- TalkBack's focus box covers the whole sheet as a single item.
+- A sheet named by `ariaLabel` speaks only that label. Its own
+  heading and plain text sit inside the item and are not separate
+  stops; its inputs and buttons still are.
+- A sheet named by `ariaLabelledBy` gets no label, so Android joins
+  its plain text into one description. The JSON viewer reads "Raw
+  JSON, ·, Mira (character), Edit raw — coming later", its header and
+  footer run together. The JSON itself sits in its own scroll area
+  and is not part of that item.
+- While a sheet is open, the screen behind it stays in the
+  accessibility tree, so TalkBack can walk out of the sheet into the
+  page underneath. On web the same sheet has been a proper `dialog`
+  since 2026-09-23.
+
+`accessible={false}` alone is not the fix (tried, then reverted). The
+container stops being a stop and its parts become reachable, but
+React Native still attaches the joined description to it, so the
+header would likely be read twice; and when the JSON viewer opened,
+TalkBack's focus did not move into it at all. A labelled sheet keeps
+its label that way, so the name is not what is lost. Setting
+`accessible` only when the sheet has an `ariaLabel` fixes the JSON
+viewer's joined item and nothing else.
+
+What a sheet needs on Android is dialog behaviour: on open, focus
+moves into the sheet and lands on its name or heading; the page
+behind is hidden from TalkBack while it is open; and the content can
+be walked item by item. The second part reaches past the primitive to
+the app root.
+
+Not verified: the order TalkBack actually reads in. adb could not
+drive its navigation (keyboard shortcuts sent over adb did not move
+its focus), so the stops above come from `uiautomator dump` and
+TalkBack's focus box, not from hearing a swipe-through. A fix needs a
+manual swipe check; adb-injected taps bypass TalkBack's gestures, so
+swipe with the mouse in the emulator window instead.
+
+Parked 2026-09-24 as degraded rather than broken: every control inside
+a sheet stays reachable. Revisit on a deliberate a11y pass, on any
+report from real TalkBack use, or when a phone sheet whose plain text
+carries meaning ships. Raised 2026-09-24 by a code review of the
+2026-09-23 triage-pass branch.
+
 #### Unset affordance for optional story-settings keys
 
 **Story settings has no unset affordance for optional keys.**
