@@ -21,6 +21,7 @@ export {
 export { PLOT_REJECTION, type PlotSaveResult } from './plot/commit-plot-save'
 export { saveHappening } from './plot/save-happening'
 export { saveThread } from './plot/save-thread'
+export { ENTITY_REJECTION, saveEntity, type EntitySaveResult } from './world/save-entity'
 export {
   addProvider,
   ensureProviderEmbeddingDim,
