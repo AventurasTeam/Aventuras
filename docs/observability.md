@@ -213,6 +213,9 @@ convention, and the expectation that subsystems route through
   list) and
   `plot_saved_handler_failed` (`components/plot/use-plot-row-session.ts`
   — a `PlotRowSessionOptions.onSaved` that throws after the write
+  already landed), `entity_saved_handler_failed`
+  (`components/world/use-entity-row-session.ts` — its World twin,
+  an `EntityRowSessionOptions.onSaved` that throws after the write
   already landed) and `plot_link_revalidate_failed`
   (`components/plot/link-card.tsx` — the revalidation after a link row's
   removal rejected, leaving a stale duplicate error blocking Save) are
