@@ -14,6 +14,12 @@
   } from '@lucide/svelte'
   import TagInput from '$lib/components/tags/TagInput.svelte'
   import { normalizeImageDataUrl } from '$lib/utils/image'
+  import {
+    formatStoryTime,
+    normalizeTime,
+    parseStoryTime,
+    storyTimeIsInvalid,
+  } from '$lib/services/storyTime'
 
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
@@ -28,14 +34,22 @@
     data: VaultScenarioInput
     onUpdate: (data: VaultScenarioInput) => void
     changedFields?: Set<string>
+    /** Shown only where given: the assistant's review of a change has no start to offer. */
+    startingTimeText?: string
   }
 
-  let { data, onUpdate, changedFields }: Props = $props()
+  let { data, onUpdate, changedFields, startingTimeText = $bindable(undefined) }: Props = $props()
 
   const changed = (field: string) =>
     changedFields?.has(field)
       ? 'border-l-2 border-l-blue-400/50 bg-blue-500/5 pl-3 -ml-3 rounded-lg'
       : ''
+
+  /** What the typed value comes to once days roll into years: `Y1 D400` is a year and 35 days. */
+  const startNormalized = $derived.by(() => {
+    const parsed = parseStoryTime(startingTimeText)
+    return parsed ? formatStoryTime(normalizeTime(parsed)) : null
+  })
 
   let showCharacterSelector = $state(false)
   let charSearchQuery = $state('')
@@ -333,6 +347,35 @@
           />
           <p class="text-muted-foreground text-[0.8rem]">Shown when the story begins.</p>
         </div>
+
+        {#if startingTimeText !== undefined}
+          <div class="space-y-2">
+            <Label for="starting-time">Starting Time</Label>
+            <div class="flex items-center gap-2">
+              <Input
+                id="starting-time"
+                fullWidth={false}
+                bind:value={startingTimeText}
+                placeholder="e.g. Y1 D1 19:00"
+                class="h-8 w-40 text-sm {storyTimeIsInvalid(startingTimeText)
+                  ? 'border-destructive'
+                  : ''}"
+              />
+              <span class="text-muted-foreground shrink-0 text-xs">
+                {startNormalized ? `= ${startNormalized}` : 'year, day, clock'}
+              </span>
+            </div>
+            <p
+              class="text-xs {storyTimeIsInvalid(startingTimeText)
+                ? 'text-destructive'
+                : 'text-muted-foreground'}"
+            >
+              {storyTimeIsInvalid(startingTimeText)
+                ? 'Not a story time. Try 19:00, D2 19:00, or Y1 D2 19:00.'
+                : 'Optional. When a story from this scenario begins, at the end of its first message.'}
+            </p>
+          </div>
+        {/if}
 
         <div class="space-y-4 {changed('alternateGreetings')}">
           <div class="flex items-center justify-between">

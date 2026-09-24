@@ -23,6 +23,21 @@ export interface TimeTracker {
   minutes: number
 }
 
+/**
+ * An in-story time the reader asserts an entry ended at.
+ *
+ * Every other timestamp is derived from the classifier's time progression; this is the only
+ * record of what the reader knows. See docs/architecture/story-time.md.
+ */
+export interface TimeAnchor {
+  id: string
+  storyId: string
+  entryId: string
+  assertedTime: TimeTracker
+  note: string | null
+  createdAt: number
+}
+
 export interface Story {
   id: string
   title: string
@@ -337,6 +352,8 @@ export interface VaultScenario {
   // Opening scene data
   firstMessage: string | null
   alternateGreetings: string[]
+  /** The in-story time a story created from this scenario starts at. Absent or null: no view. */
+  startingTime?: TimeTracker | null
 
   // Organization
   tags: string[]
@@ -411,6 +428,8 @@ export interface StoryBeat {
 export interface TemplateInitialState {
   protagonist?: Partial<Character>
   startingLocation?: Partial<Location>
+  /** The in-story time a story created from it starts at. */
+  startingTime?: TimeTracker
 }
 
 // Chapter for memory system
@@ -680,6 +699,9 @@ export interface LoreManagementResult {
 export type ActivePanel =
   'story' | 'library' | 'settings' | 'templates' | 'lorebook' | 'memory' | 'vault' | 'gallery'
 export type SidebarTab = 'characters' | 'locations' | 'inventory' | 'quests' | 'time' | 'branches'
+
+/** Left to right on screen, so the last of them is the one nearest the story. */
+export type NavPanelTab = 'timeline' | 'navigation'
 
 // Provider types matching Vercel AI SDK providers
 export type ProviderType =

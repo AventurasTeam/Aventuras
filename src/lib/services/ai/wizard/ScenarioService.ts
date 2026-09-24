@@ -14,8 +14,10 @@ import type {
   Location,
   Item,
   ImageGenerationMode,
+  TimeTracker,
 } from '$lib/types'
 import { ContextBuilder } from '$lib/services/context'
+import { startingTimePromptValue } from '$lib/services/storyTime'
 import { createLogger } from '$lib/log'
 import {
   type ExpandedSetting,
@@ -60,6 +62,8 @@ export interface WizardData {
     narratorReinforcement?: NarratorReinforcement
   }
   title: string
+  /** The start the reader or a scenario set; generation is asked to suggest one when absent. */
+  startingTime?: TimeTracker | null
   openingGuidance?: string
 }
 
@@ -575,6 +579,7 @@ class ScenarioService {
       protagonistName,
       protagonistDescription,
       title: title || '(suggest one)',
+      storyStartingTime: startingTimePromptValue(wizardData.startingTime),
       settingName: expandedSetting?.name || 'Unknown World',
       settingDescription: expandedSetting?.description || wizardData.settingSeed,
       atmosphereSection,
@@ -662,6 +667,7 @@ class ScenarioService {
       protagonistName,
       protagonistDescription,
       title: title || currentOpening.title || '(suggest one)',
+      storyStartingTime: startingTimePromptValue(wizardData.startingTime),
       settingName: expandedSetting?.name || 'Unknown World',
       settingDescription: expandedSetting?.description || wizardData.settingSeed,
       atmosphereSection,
@@ -781,7 +787,8 @@ class ScenarioService {
   "initialLocation": {
     "name": "string - location name",
     "description": "string - 1-2 sentences"
-  }
+  },
+  "startingTime": "string - when the opening scene ends and the story begins, as Y1 D1 14:30 (year, day, 24-hour clock); the TIME it is given, when there is one"
 }`
   }
 

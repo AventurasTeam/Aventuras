@@ -28,11 +28,13 @@
     RotateCcw,
     Loader2,
     GitBranch,
+    Anchor,
     Bookmark,
     Volume2,
     Image as ImageIcon,
     Copy,
     Clock,
+    Metronome,
     MoreVertical,
     MilestoneIcon,
   } from '@lucide/svelte'
@@ -156,7 +158,7 @@
   // The duration chip and its fallback in Response info must never both be absent. The fallback
   // renders in a portal outside the card, where a container query cannot reach, so one measured
   // width decides both.
-  const ACTIVITY_CHIP_MIN_REM = 29
+  const ACTIVITY_CHIP_MIN_REM = 30
   let cardRect = $state<DOMRectReadOnly>()
   const activityChipFits = $derived.by(() => {
     if (!cardRect) return true
@@ -166,13 +168,15 @@
   // An action is an instant and a system entry is not story, so neither has a span to show.
   const showEntryMeta = $derived(settings.uiSettings.showEntryNumberAndTime && isNarrationLike)
 
-  function formatStoryTime(time: TimeTracker | null | undefined): string {
+  function compactStoryTime(time: TimeTracker | null | undefined): string {
     if (!time) return ''
     const parts: string[] = []
     // TimeTracker's fields are all required, but this data is persisted JSON: a story imported
     // from an older .avt can carry a partial tracker that the type system never sees.
-    if (time.years && time.years > 0) parts.push(`Y${time.years}`)
-    if (time.days && time.days > 0) parts.push(`D${time.days}`)
+    // Counted from one, as `formatStoryTime` and every other story-time surface reads them.
+    // A zero is the first year or day and is left out, so a same-day stamp is just the clock.
+    if (time.years && time.years > 0) parts.push(`Y${time.years + 1}`)
+    if (time.days && time.days > 0) parts.push(`D${time.days + 1}`)
     const hours = time.hours ?? 0
     const minutes = time.minutes ?? 0
     parts.push(`${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`)
@@ -181,10 +185,10 @@
 
   const generationInfo = $derived.by(() => {
     const m = entry.metadata
-    // In-story time range for this message (start → end after time progression)
-    const start = formatStoryTime(m?.timeStart)
-    const end = formatStoryTime(m?.timeEnd)
-    const storyTime = start && end && start !== end ? `${start} → ${end}` : start || end || null
+    // Both ends always show: an equal pair is a zero-length entry, which is itself a finding.
+    const start = compactStoryTime(m?.timeStart) || 'not recorded'
+    const end = compactStoryTime(m?.timeEnd) || 'not recorded'
+    const storyTime = `${start} → ${end}`
     return {
       model: m?.model,
       profileName: m?.profileName,
@@ -384,6 +388,27 @@
 
   // Checkpoint creation state
   let isCreatingCheckpoint = $state(false)
+  let adjustmentsOpen = $state(false)
+  /** Outlives the submenu by one tap: the click that closed it must not land on a live item. */
+  let menuLocked = $state(false)
+  let closingByTap = false
+
+  /** While the adjustments submenu is open, a touch anywhere else in the menu only closes it. */
+  function closeAdjustmentsFromOutside(event: PointerEvent) {
+    if (!menuLocked) return
+    if ((event.target as Element | null)?.closest('[data-adjustments-menu]')) return
+    event.preventDefault()
+    closingByTap = true
+    adjustmentsOpen = false
+    const gestureEnd = new AbortController()
+    const release = () => {
+      closingByTap = false
+      menuLocked = false
+      gestureEnd.abort()
+    }
+    window.addEventListener('click', release, { capture: true, signal: gestureEnd.signal })
+    window.addEventListener('pointercancel', release, { capture: true, signal: gestureEnd.signal })
+  }
   let checkpointName = $state('')
 
   // Check if this is the latest entry (checkpoints can only be created at the latest entry)
@@ -1399,7 +1424,7 @@
          needs the width. Narration entries keep it under "Response info" in the overflow menu;
          on any other entry type it is not shown there at all. -->
     <span
-      class="bg-muted hidden rounded px-1.5 py-0.5 text-[11px] tabular-nums @min-[27rem]:inline"
+      class="bg-muted hidden rounded px-1.5 py-0.5 text-[11px] tabular-nums @min-[28rem]:inline"
     >
       {#if isReasoningEnabled && reasoningTokens > 0}
         <span class="text-muted-foreground">{reasoningTokens}r</span>
@@ -1431,9 +1456,9 @@
       </div>
     {/if}
 
-    <!-- Drops to its own row below 40rem: it is the widest thing on the row. -->
+    <!-- Drops to its own row below 41rem: it is the widest thing on the row. -->
     {#if showEntryMeta}
-      <div class="hidden @min-[40rem]:flex">
+      <div class="hidden @min-[41rem]:flex">
         {@render storyTimeChip()}
       </div>
     {/if}
@@ -1479,12 +1504,10 @@
               <dt class="text-muted-foreground shrink-0">Content tokens</dt>
               <dd class="text-right">{contentTokens}</dd>
             </div>
-            {#if generationInfo.storyTime}
-              <div class="flex justify-between gap-3">
-                <dt class="text-muted-foreground shrink-0">Story time</dt>
-                <dd class="text-right">{generationInfo.storyTime}</dd>
-              </div>
-            {/if}
+            <div class="flex justify-between gap-3">
+              <dt class="text-muted-foreground shrink-0">Story time</dt>
+              <dd class="text-right">{generationInfo.storyTime}</dd>
+            </div>
             {#if generationInfo.model}
               <div class="flex justify-between gap-3">
                 <dt class="text-muted-foreground shrink-0">Model</dt>
@@ -1543,7 +1566,7 @@
                 <Button
                   variant="text"
                   size="icon"
-                  class="text-muted-foreground hover:text-foreground hidden h-7 w-7 @min-[22rem]:flex"
+                  class="text-muted-foreground hover:text-foreground hidden h-7 w-7 @min-[23rem]:flex"
                   title="Response info"
                   {...props}
                 >
@@ -1600,7 +1623,7 @@
             variant="text"
             size="icon"
             onclick={() => (isBranching = true)}
-            class="hidden h-7 w-7 text-amber-500 hover:text-amber-600 @min-[22rem]:flex"
+            class="hidden h-7 w-7 text-amber-500 hover:text-amber-600 @min-[23rem]:flex"
             title="Branch from here"
           >
             <GitBranch class="h-4 w-4" />
@@ -1611,11 +1634,34 @@
             variant="text"
             size="icon"
             onclick={() => (isCreatingCheckpoint = true)}
-            class="hidden h-7 w-7 text-blue-500 hover:text-blue-600 @min-[22rem]:flex"
+            class="hidden h-7 w-7 text-blue-500 hover:text-blue-600 @min-[23rem]:flex"
             title="Create checkpoint"
           >
             <Bookmark class="h-4 w-4" />
           </Button>
+        {/if}
+        <!-- Both ways of moving this entry in time, under one control. -->
+        {#if entry.type !== 'user_action'}
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger>
+              {#snippet child({ props })}
+                <Button
+                  {...props}
+                  variant="text"
+                  size="icon"
+                  class="hidden h-7 w-7 @min-[23rem]:flex {story.timeAnchorFor(entry.id)
+                    ? 'text-amber-500 hover:text-amber-600'
+                    : 'text-muted-foreground hover:text-foreground'}"
+                  title="Timeline adjustments"
+                >
+                  <Metronome class="h-4 w-4" />
+                </Button>
+              {/snippet}
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="end">
+              {@render timelineAdjustments()}
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
         {/if}
         <Button
           variant="text"
@@ -1639,7 +1685,7 @@
             size="icon"
             onclick={handleGenerateStoryImages}
             disabled={ui.isGenerating || isGeneratingStoryImages || hasEmbeddedImages}
-            class="text-muted-foreground hover:text-foreground hidden h-7 w-7 @min-[22rem]:flex"
+            class="text-muted-foreground hover:text-foreground hidden h-7 w-7 @min-[23rem]:flex"
             title={storyImagesLabel}
           >
             {#if isGeneratingStoryImages}
@@ -1653,7 +1699,7 @@
           variant="text"
           size="icon"
           onclick={handleCopyContent}
-          class="text-muted-foreground hover:text-foreground hidden h-7 w-7 @min-[22rem]:flex"
+          class="text-muted-foreground hover:text-foreground hidden h-7 w-7 @min-[23rem]:flex"
           title={copyLabel}
           aria-label={isCopied ? 'Message copied' : copyLabel}
         >
@@ -1679,13 +1725,17 @@
         >
           <Trash2 class="h-4 w-4" />
         </Button>
-        <DropdownMenu.Root>
+        <DropdownMenu.Root
+          onOpenChange={(isOpen) => {
+            if (!isOpen) adjustmentsOpen = menuLocked = false
+          }}
+        >
           <DropdownMenu.Trigger>
             {#snippet child({ props })}
               <Button
                 variant="text"
                 size="icon"
-                class="text-muted-foreground hover:text-foreground h-7 w-7 @min-[22rem]:hidden"
+                class="text-muted-foreground hover:text-foreground h-7 w-7 @min-[23rem]:hidden"
                 title="More actions"
                 aria-label="More actions"
                 {...props}
@@ -1694,7 +1744,13 @@
               </Button>
             {/snippet}
           </DropdownMenu.Trigger>
-          <DropdownMenu.Content align="end" class="max-h-[70vh] overflow-y-auto">
+          <DropdownMenu.Content
+            align="end"
+            class="max-h-[70vh] overflow-y-auto {menuLocked
+              ? '[&_[role=menuitem]:not([data-adjustments-menu]_*)]:pointer-events-none'
+              : ''}"
+            onpointerdown={closeAdjustmentsFromOutside}
+          >
             {#if canBranch}
               <DropdownMenu.Item onclick={() => (isBranching = true)}>
                 <GitBranch class="h-4 w-4" />
@@ -1706,6 +1762,29 @@
                 <Bookmark class="h-4 w-4" />
                 Create checkpoint
               </DropdownMenu.Item>
+            {/if}
+            <!-- Opens downward: this menu hugs the card's right edge, so a submenu opening
+                   beside it leaves a phone. -->
+            {#if entry.type !== 'user_action'}
+              <DropdownMenu.Sub
+                bind:open={adjustmentsOpen}
+                onOpenChange={(isOpen) => {
+                  if (isOpen || !closingByTap) menuLocked = isOpen
+                }}
+              >
+                <DropdownMenu.SubTrigger>
+                  <Metronome class="h-4 w-4" />
+                  Timeline adjustments
+                </DropdownMenu.SubTrigger>
+                <DropdownMenu.SubContent
+                  data-adjustments-menu
+                  side="bottom"
+                  align="end"
+                  class="border-[color-mix(in_oklab,var(--border),var(--foreground)_30%)] bg-[color-mix(in_oklab,var(--popover),var(--foreground)_6%)]"
+                >
+                  {@render timelineAdjustments()}
+                </DropdownMenu.SubContent>
+              </DropdownMenu.Sub>
             {/if}
             <!-- Static label and icon: selecting an item closes the menu, so the "Copied!"
                  state would never be on screen. The toast is the feedback here. -->
@@ -1759,12 +1838,12 @@
   {#snippet storyTimeChip()}
     <div class="flex items-center gap-1 text-right text-[12px] leading-4 tabular-nums">
       <Clock class="text-muted-foreground h-4 w-4 shrink-0" />
-      <span class="text-foreground">{generationInfo.storyTime || 'not recorded'}</span>
+      <span class="text-foreground">{generationInfo.storyTime}</span>
     </div>
   {/snippet}
 
   {#if showEntryMeta}
-    <div class="mb-2 flex justify-end @min-[40rem]:hidden">
+    <div class="mb-2 flex justify-end @min-[41rem]:hidden">
       {@render storyTimeChip()}
     </div>
   {/if}
@@ -2075,6 +2154,18 @@
     {/if}
   </div>
 </div>
+
+<!-- One list, rendered in the toolbar menu and in the overflow menu: the two must not drift. -->
+{#snippet timelineAdjustments()}
+  <DropdownMenu.Item onclick={() => ui.openEntryTimeModal(entry.id)}>
+    <Clock class="h-4 w-4" />
+    Edit in place
+  </DropdownMenu.Item>
+  <DropdownMenu.Item onclick={() => ui.openAnchorModal(entry.id)}>
+    <Anchor class="h-4 w-4" />
+    {story.timeAnchorFor(entry.id) ? 'Edit the anchor' : 'Create an anchor'}
+  </DropdownMenu.Item>
+{/snippet}
 
 <!-- View/Edit Image Modal -->
 <ResponsiveModal.Root bind:open={isViewingImage}>

@@ -28,6 +28,7 @@ const db = {
   getCheckpointRecords: vi.fn(),
   getBranches: vi.fn(),
   getChapters: vi.fn(),
+  getTimeAnchors: vi.fn(),
   getStoryPackId: vi.fn(),
   getPack: vi.fn(),
   getPackVariables: vi.fn(),
@@ -58,6 +59,7 @@ function baseline() {
   db.getCheckpointRecords.mockResolvedValue([])
   db.getBranches.mockResolvedValue([])
   db.getChapters.mockResolvedValue([])
+  db.getTimeAnchors.mockResolvedValue([])
   db.getStoryPackId.mockResolvedValue(null)
   db.getPack.mockResolvedValue(null)
   db.getPackVariables.mockResolvedValue([])
@@ -197,5 +199,25 @@ describe('exportStoryToJson — known divergences from the .avt path', () => {
 
     expect(p.currentBgImage ?? null).toBeNull()
     expect(db.getBackgroundForBranch).not.toHaveBeenCalled()
+  })
+})
+
+describe('exportStoryToJson — time anchors', () => {
+  it('carries the story’s anchors, since a replacing sync deletes the local story first', async () => {
+    const anchor = {
+      id: 'a1',
+      storyId: 's1',
+      entryId: 'e1',
+      assertedTime: { years: 0, days: 1, hours: 19, minutes: 0 },
+      note: null,
+      createdAt: 1,
+    }
+    db.getTimeAnchors.mockResolvedValue([anchor])
+
+    expect((await payload()).timeAnchors).toEqual([anchor])
+  })
+
+  it('omits the section for a story with none, as the .avt export does', async () => {
+    expect((await payload()).timeAnchors).toBeUndefined()
   })
 })

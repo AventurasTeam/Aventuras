@@ -9,6 +9,7 @@ import {
 import { scenarioService, type WizardData } from '$lib/services/ai/wizard/ScenarioService'
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
 import { QUICK_START_SEEDS } from '$lib/services/templates'
+import { formatStoryTime, greetingStart, scenarioOpeningStart } from '$lib/services/storyTime'
 import { replaceUserPlaceholders } from '$lib/components/wizard/wizardTypes'
 import type { VaultScenario } from '$lib/types'
 import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
@@ -72,8 +73,8 @@ export class WizardStore {
         return true
       case 8: // Writing Style
         return true
-      case 9: // Opening
-        return this.narrative.storyTitle.trim().length > 0
+      case 9: // Opening — a new story's clock starts at the chosen time, never at a null one
+        return this.narrative.storyTitle.trim().length > 0 && this.narrative.startingTime !== null
       default:
         return false
     }
@@ -163,6 +164,26 @@ export class WizardStore {
       this.character.showManualInput = true
       this.character.useManualCharacter()
     }
+
+    // A seed brings no opening of its own, so its start is what generation is told.
+    const seedStart = scenario.initialState.startingTime
+    if (seedStart) this.narrative.guidanceStartText = formatStoryTime(seedStart)
+  }
+
+  /**
+   * An alternate greeting is a different opening, and the scenario's start describes the first
+   * message only, so switching to one leaves its start to be stated like any other.
+   */
+  selectGreeting(index: number) {
+    this.character.selectedGreetingIndex = index
+    this.narrative.importedStartText = greetingStart(index, this.character.cardImportedStartingTime)
+  }
+
+  /** The imported opening goes, and the start that belonged to it with it. */
+  clearCardImport() {
+    this.clearScenarioLinkedLorebook()
+    this.character.clearCardImport()
+    this.narrative.setImportedStart(null)
   }
 
   selectScenarioFromVault(scenario: VaultScenario) {
@@ -196,8 +217,10 @@ export class WizardStore {
       this.character.cardImportedTitle = scenario.name
       this.narrative.storyTitle = scenario.name
     }
-
     // 4. Opening (Character/Narrative Store Integration)
+    const openingStart = scenarioOpeningStart(scenario)
+    this.character.cardImportedStartingTime = openingStart
+    this.narrative.setImportedStart(openingStart)
     if (scenario.firstMessage) {
       this.character.cardImportedFirstMessage = scenario.firstMessage
       this.character.cardImportedAlternateGreetings = scenario.alternateGreetings || []
@@ -310,12 +333,19 @@ export class WizardStore {
   async createStory() {
     if (this.isCreatingStory) return
     if (!this.narrative.storyTitle.trim()) return
+    const startingTime = this.narrative.startingTime
+    if (!startingTime) {
+      this.narrative.openingError = 'Please enter a starting time for the story'
+      return
+    }
 
     this.isCreatingStory = true
     try {
-      // Use manual opening if provided
-      if (!this.narrative.generatedOpening && this.narrative.manualOpeningText.trim()) {
-        this.narrative.generatedOpening = {
+      // Local rather than written back to the store: a creation that fails must leave the step as
+      // the reader left it, or the retry reads the generated opening's start instead of theirs.
+      let opening = this.narrative.generatedOpening
+      if (!opening && this.narrative.manualOpeningText.trim()) {
+        opening = {
           scene: this.narrative.manualOpeningText.trim(),
           title: this.narrative.storyTitle || 'Untitled Story',
           initialLocation: {
@@ -324,10 +354,8 @@ export class WizardStore {
           },
         }
       }
-
-      // Use card imported opening if available
-      if (!this.narrative.generatedOpening && this.character.cardImportedFirstMessage) {
-        this.narrative.generatedOpening = {
+      if (!opening && this.character.cardImportedFirstMessage) {
+        opening = {
           scene: this.character.cardImportedFirstMessage,
           title: this.character.cardImportedTitle || this.narrative.storyTitle || 'Untitled Story',
           initialLocation: {
@@ -337,7 +365,7 @@ export class WizardStore {
         }
       }
 
-      if (!this.narrative.generatedOpening) {
+      if (!opening) {
         this.narrative.openingError =
           'Please provide an opening scene (write your own or generate with AI)'
         return
@@ -376,8 +404,8 @@ export class WizardStore {
       }
 
       const processedOpening = {
-        ...this.narrative.generatedOpening,
-        scene: replaceUserPlaceholders(this.narrative.generatedOpening.scene, protagonistName),
+        ...opening,
+        scene: replaceUserPlaceholders(opening.scene, protagonistName),
       }
 
       const processedCharacters = this.character.supportingCharacters.map((char) => ({
@@ -420,6 +448,7 @@ export class WizardStore {
           narratorReinforcement: this.narrative.narratorReinforcement,
         },
         title: this.narrative.storyTitle,
+        startingTime,
         openingGuidance: this.narrative.openingGuidance.trim() || undefined,
       }
 
@@ -579,6 +608,7 @@ export class WizardStore {
 
       const newStory = await story.createStoryFromWizard({
         ...storyData,
+        startingTime,
         importedEntries: processedEntries.length > 0 ? processedEntries : undefined,
         translations,
       })

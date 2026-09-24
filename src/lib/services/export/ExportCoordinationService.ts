@@ -11,6 +11,7 @@ import type {
   Item,
   StoryBeat,
   Chapter,
+  TimeAnchor,
   Entry,
   CheckpointRecord,
   Branch,
@@ -32,6 +33,7 @@ export interface StoryExportData {
   checkpoints: CheckpointRecord[]
   branches: Branch[]
   chapters: Chapter[]
+  timeAnchors: TimeAnchor[]
   /**
    * The story's prompt pack, as much of it as can safely travel. Null when the story has no pack
    * row to point at (a story predating the column, or one whose pack has since been deleted) —
@@ -114,6 +116,7 @@ export async function gatherStoryData(storyId: string): Promise<StoryExportData>
     branches,
     chapters,
     packBinding,
+    timeAnchors,
   ] = await Promise.all([
     database.getStoryEntries(storyId),
     database.getCharacters(storyId),
@@ -126,6 +129,7 @@ export async function gatherStoryData(storyId: string): Promise<StoryExportData>
     database.getBranches(storyId),
     database.getChapters(storyId),
     gatherPackBinding(storyId),
+    database.getTimeAnchors(storyId),
   ])
 
   return {
@@ -140,6 +144,7 @@ export async function gatherStoryData(storyId: string): Promise<StoryExportData>
     branches,
     chapters,
     packBinding,
+    timeAnchors,
   }
 }
 

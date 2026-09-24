@@ -196,6 +196,7 @@ TITLE: {{ title }}
 GENRE: {{ genreLabel }}
 SETTING: {{ settingName }} - {{ settingDescription }}
 {{ atmosphereSection }}
+TIME: opening ends at {{ storyStartingTime }}
 PROTAGONIST: {{ protagonistName }}{{ protagonistDescription }}
 {{ supportingCharactersSection }}
 {{ povInstruction }}
@@ -276,6 +277,7 @@ TITLE: {{ title }}
 GENRE: {{ genreLabel }}
 SETTING: {{ settingName }} - {{ settingDescription }}
 {{ atmosphereSection }}
+TIME: opening ends at {{ storyStartingTime }}
 PROTAGONIST: {{ protagonistName }}{{ protagonistDescription }}
 {{ supportingCharactersSection }}
 {{ povInstruction }}
@@ -360,6 +362,7 @@ TITLE: {{ title }}
 GENRE: {{ genreLabel }}
 SETTING: {{ settingName }} - {{ settingDescription }}
 {{ atmosphereSection }}
+TIME: opening ends at {{ storyStartingTime }}
 PROTAGONIST: {{ protagonistName }}{{ protagonistDescription }}
 {{ supportingCharactersSection }}
 {{ povInstruction }}
@@ -439,6 +442,7 @@ TITLE: {{ title }}
 GENRE: {{ genreLabel }}
 SETTING: {{ settingName }} - {{ settingDescription }}
 {{ atmosphereSection }}
+TIME: opening ends at {{ storyStartingTime }}
 PROTAGONIST: {{ protagonistName }}{{ protagonistDescription }}
 {{ supportingCharactersSection }}
 {{ povInstruction }}

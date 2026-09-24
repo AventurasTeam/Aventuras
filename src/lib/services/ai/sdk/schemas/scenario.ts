@@ -51,6 +51,13 @@ export const generatedOpeningSchema = z.object({
     name: z.string(),
     description: z.string().describe('1-2 sentences describing the location'),
   }),
+  // Optional: a pack whose template predates it, or a model that omits it, still yields an opening.
+  startingTime: z
+    .string()
+    .optional()
+    .describe(
+      'when the opening scene ends and the story begins, as Y1 D1 14:30 (year, day, 24-hour clock)',
+    ),
 })
 
 export type ExpandedSetting = z.infer<typeof expandedSettingSchema>

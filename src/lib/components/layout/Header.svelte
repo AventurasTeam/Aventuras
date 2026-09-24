@@ -10,6 +10,7 @@
   import {
     PanelRight,
     PanelLeft,
+    Columns2,
     Settings,
     Library,
     ArrowUpDown,
@@ -34,8 +35,9 @@
 
   let showExportMenu = $state(false)
   let showMobileMenu = $state(false)
+  let showPanelMenu = $state(false)
 
-  // Both menus are mounted only while there is a story, so closing one closes the menu's
+  // The menus are mounted only while there is a story, so closing one closes the menu's
   // own `bind:open` write-back with it: a binding that does not get to run leaves the state
   // `true`, and the menu springs open by itself on returning to a story. Reset here rather
   // than in `goToLibrary`, because that is not the only way out — the Android hardware back
@@ -45,6 +47,7 @@
     if (!story.currentStory) {
       showMobileMenu = false
       showExportMenu = false
+      showPanelMenu = false
     }
   })
 
@@ -97,6 +100,7 @@
         data.chapters,
         null, // currentBgImage: unchanged from before; the importer reads it off story instead
         data.packBinding,
+        data.timeAnchors,
       )
     }, 'Aventuras (.avt)')
   }
@@ -324,12 +328,6 @@
           <DropdownMenu.Separator />
           {@render importExportMenuItems()}
           <DropdownMenu.Separator />
-          <!-- The toolbar button beside this menu is desktop-only; on a narrow screen the
-               menu is where it lives instead. -->
-          <DropdownMenu.Item class="sm:hidden" onclick={() => ui.toggleNavPanel()}>
-            <PanelLeft class="text-muted-foreground h-4 w-4" />
-            Go to an entry
-          </DropdownMenu.Item>
           <DropdownMenu.Item class="sm:hidden" onclick={() => ui.toggleLorebookDebug()}>
             <Bug class="text-muted-foreground h-4 w-4" />
             Active Context
@@ -401,8 +399,7 @@
     {@render settingsButton('hidden sm:block')}
 
     {#if story.currentStory}
-      <!-- Desktop-only, like the Active Context button above: on a narrow screen the mobile
-           menu carries it instead, and the swipe gesture reaches it without either. -->
+      <!-- Desktop-only: on a narrow screen the panels menu below carries both. -->
       <Button
         icon={PanelLeft}
         variant="text"
@@ -413,10 +410,34 @@
       <Button
         icon={PanelRight}
         variant="text"
-        class="text-muted-foreground hover:text-primary min-h-11 min-w-11"
+        class="text-muted-foreground hover:text-primary hidden min-h-11 min-w-11 sm:flex"
         onclick={() => ui.toggleSidebar()}
         title={ui.sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
       />
+      <!-- Both panels from one button: the edge swipes are unreliable on some devices. -->
+      <DropdownMenu.Root bind:open={showPanelMenu}>
+        <DropdownMenu.Trigger>
+          {#snippet child({ props })}
+            <Button
+              {...props}
+              icon={Columns2}
+              variant="text"
+              class="text-muted-foreground hover:text-primary min-h-11 min-w-11 sm:hidden"
+              title="Panels"
+            />
+          {/snippet}
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="end">
+          <DropdownMenu.Item onclick={() => ui.toggleNavPanel()}>
+            <PanelLeft class="text-muted-foreground h-4 w-4" />
+            Left panel
+          </DropdownMenu.Item>
+          <DropdownMenu.Item onclick={() => ui.toggleSidebar()}>
+            <PanelRight class="text-muted-foreground h-4 w-4" />
+            Right panel
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
     {/if}
   </div>
 </header>

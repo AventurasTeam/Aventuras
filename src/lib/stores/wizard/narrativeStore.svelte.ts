@@ -8,6 +8,7 @@ import { aiService } from '$lib/services/ai'
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
 import { settings } from '$lib/stores/settings.svelte'
 import type {
+  TimeTracker,
   StoryMode,
   POV,
   TargetLength,
@@ -17,6 +18,15 @@ import type {
 } from '$lib/types'
 import type { ImportedLorebookItem } from '$lib/components/wizard/wizardTypes'
 import type { GeneratedOpening } from '$lib/services/ai/sdk'
+import { ContextBuilder } from '$lib/services/context'
+import {
+  formatStoryTime,
+  normalizeTime,
+  parseStoryTime,
+  returnedStart,
+  templateReceivesStartingTime,
+  type ResultStartSource,
+} from '$lib/services/storyTime'
 
 export class NarrativeStore {
   // Step 1: Mode
@@ -53,6 +63,23 @@ export class NarrativeStore {
   openingDraft = $state('')
   manualOpeningText = $state('')
 
+  /**
+   * A start per opening, not one for the step: each belongs to the opening beside it, and only
+   * the one whose opening is used seeds the story.
+   */
+  /** Beside the imported opening. Prefilled and locked where the scenario stated one. */
+  importedStartText = $state('')
+  /** Beside the opening the reader writes. Never prefilled. */
+  manualStartText = $state('')
+  /** What generation is told the opening ends at; the one the prompt warning is about. */
+  guidanceStartText = $state('')
+  /** What generation came back with, or the guidance when it returned none. */
+  resultStartText = $state('')
+  resultStartSource = $state<ResultStartSource | null>(null)
+  private startBeforeEdit = { text: '', source: null as typeof this.resultStartSource }
+  /** Whether the selected pack's opening template renders the start; null until checked. */
+  openingReceivesStart = $state<boolean | null>(null)
+
   // Card Import Integration (for Opening)
   cardImportedFirstMessage = $state<string | null>(null)
   cardImportedAlternateGreetings = $state<string[]>([])
@@ -62,6 +89,22 @@ export class NarrativeStore {
   importedEntries = $derived(this.importedLorebooks.flatMap((lb) => lb.entries))
 
   generatedOpeningDisplay = $derived(this.generatedOpeningTranslated ?? this.generatedOpening)
+
+  importedStart = $derived(parseStoryTime(this.importedStartText))
+  manualStart = $derived(parseStoryTime(this.manualStartText))
+  resultStart = $derived(parseStoryTime(this.resultStartText))
+
+  /**
+   * The start that seeds the story: the one belonging to the opening that will be used, in the
+   * order `createStory` picks an opening — generated, then written, then imported.
+   */
+  startingTime = $derived(
+    this.generatedOpening
+      ? this.resultStart
+      : this.manualOpeningText.trim()
+        ? this.manualStart
+        : this.importedStart,
+  )
 
   /** The pack the wizard has selected; read live, since the user can change it mid-wizard. */
   private packId: () => string | undefined
@@ -154,6 +197,52 @@ export class NarrativeStore {
     this.importError = null
   }
 
+  // Starting time
+
+  /** A scenario's own start fills the field beside its opening, and locks it. */
+  setImportedStart(start: TimeTracker | null | undefined) {
+    this.importedStartText = start ? formatStoryTime(start) : ''
+  }
+
+  /**
+   * Resolve the opening template this pack will run for the mode and ask whether it renders the
+   * start, in either half. Rechecked before each generation, since the pack can change.
+   */
+  async checkOpeningReceivesStart(
+    kind: 'generation' | 'refinement' = 'generation',
+    packId: string | undefined = this.packId(),
+  ) {
+    const style = this.selectedMode === 'creative-writing' ? 'creative' : 'adventure'
+    const templateId = `opening-${kind}-${style}`
+    const builder = new ContextBuilder(packId)
+    const [system, user] = await Promise.all([
+      builder.resolveTemplate(templateId),
+      builder.resolveTemplate(`${templateId}-user`),
+    ])
+    const receives =
+      templateReceivesStartingTime(system?.content) || templateReceivesStartingTime(user?.content)
+    if (kind === 'generation') this.openingReceivesStart = receives
+    return receives
+  }
+
+  /**
+   * The guidance for this run, read after its template is checked: the check can change what a
+   * previous one decided, so reading it before would send one run the last run's answer.
+   */
+  private async guidanceFor(
+    kind: 'generation' | 'refinement',
+    packId: string | undefined,
+  ): Promise<TimeTracker | null> {
+    const received = await this.checkOpeningReceivesStart(kind, packId)
+    return received ? parseStoryTime(this.guidanceStartText) : null
+  }
+
+  private applyReturnedStart(opening: GeneratedOpening, guidance: TimeTracker | null) {
+    const { text, source } = returnedStart(opening.startingTime, guidance)
+    this.resultStartText = text
+    this.resultStartSource = source
+  }
+
   // Opening Actions
   async generateOpeningScene(wizardData: WizardData) {
     if (this.isGeneratingOpening) return
@@ -174,12 +263,16 @@ export class NarrativeStore {
         : undefined
 
     try {
+      // One pack for the whole run: the one checked must be the one that generates.
+      const packId = this.packId()
+      const guidance = await this.guidanceFor('generation', packId)
       this.generatedOpening = await scenarioService.generateOpening(
-        this.packId(),
-        wizardData,
+        packId,
+        { ...wizardData, startingTime: guidance },
         settings.servicePresetAssignments['wizard:openingGeneration'],
         lorebookContext,
       )
+      this.applyReturnedStart(this.generatedOpening, guidance)
 
       await this.translateOpening()
     } catch (error) {
@@ -211,13 +304,21 @@ export class NarrativeStore {
         ? { ...this.generatedOpening, title: this.storyTitle.trim() }
         : this.generatedOpening
 
+      const packId = this.packId()
+      const guidance = await this.guidanceFor('refinement', packId)
       this.generatedOpening = await scenarioService.refineOpening(
-        this.packId(),
-        wizardData,
+        packId,
+        { ...wizardData, startingTime: guidance },
         currentOpening,
         settings.servicePresetAssignments['wizard:openingRefinement'],
         lorebookContext,
       )
+      // A refinement that returns no time keeps the start the opening already had, the reader's
+      // own edit included, rather than falling back to the guidance.
+      const returned = parseStoryTime(this.generatedOpening.startingTime ?? '')
+      if (returned || !this.resultStart) {
+        this.applyReturnedStart(this.generatedOpening, guidance)
+      }
       this.clearOpeningEditState()
       await this.translateOpening()
     } catch (error) {
@@ -282,9 +383,12 @@ export class NarrativeStore {
   }
 
   startOpeningEdit() {
+    // A run in flight replaces the opening and decides its start, so it cannot be edited under it.
     if (!this.generatedOpening || this.isEditingOpening) return
+    if (this.isRefiningOpening || this.isGeneratingOpening) return
     this.openingError = null
     this.openingDraft = this.generatedOpening.scene
+    this.startBeforeEdit = { text: this.resultStartText, source: this.resultStartSource }
     this.isEditingOpening = true
   }
 
@@ -299,11 +403,17 @@ export class NarrativeStore {
       title: this.storyTitle.trim() || this.generatedOpening.title,
       scene: this.openingDraft,
     }
+    if (this.resultStartText !== this.startBeforeEdit.text) {
+      this.resultStartSource = this.resultStartText.trim() ? 'edited' : null
+    }
+    if (this.resultStart) this.resultStartText = formatStoryTime(normalizeTime(this.resultStart))
     this.clearOpeningEditState()
   }
 
   cancelOpeningEdit() {
     if (!this.generatedOpening) return
+    this.resultStartText = this.startBeforeEdit.text
+    this.resultStartSource = this.startBeforeEdit.source
     this.clearOpeningEditState()
   }
 

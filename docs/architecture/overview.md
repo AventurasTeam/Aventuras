@@ -34,6 +34,29 @@ aventuras/
 └── package.json             # Node dependencies and scripts
 ```
 
+## Panels and gestures
+
+Two panels flank the story: the world sidebar on the right (`Sidebar.svelte`) and the story
+navigation panel on the left (`StoryNavPanel.svelte`). Each opens with a swipe away from its own
+edge, and that same direction then keeps carrying the reader further in, while its opposite walks
+back out and finally closes the panel.
+
+| Panel                   | Opens with  | Next tab    | Back, then closes |
+| ----------------------- | ----------- | ----------- | ----------------- |
+| World sidebar (right)   | swipe left  | swipe left  | swipe right       |
+| Navigation panel (left) | swipe right | swipe right | swipe left        |
+
+One consequence is easy to undo by accident: **each tab strip is ordered so that the tab nearest
+the story is its default and the one a further outward swipe closes from.** The sidebar runs
+Characters -> Branches left to right and starts on Characters; the navigation panel runs Timeline ->
+Navigation and starts on Navigation. Reversing either list, or moving a tab into it at the wrong
+end, leaves the opening swipe with nowhere to go and puts the close on the wrong tab.
+
+Only the _first_ opening uses that default. Both panels keep their current tab in `ui.svelte.ts`
+(`sidebarTab`, `navPanelTab`) rather than in the component, so closing and reopening returns the
+reader to where they were. Holding it in the panel would reset it on every mount, which reads as
+the panel forgetting what you were doing.
+
 ## Edge swipes
 
 The edge swipes that open the two side panels live in `AppShell.svelte` and are deliberately
@@ -105,6 +128,26 @@ meta asks the _browser_ to shrink the layout viewport, and in an embedded WebVie
 only come from the embedder's window, which edge-to-edge has opted out of. It was tried, and
 changed nothing.
 
+## Focus inside a long dialog
+
+`Dialog.Content` traps focus, and the trap has one fallback: when the element holding focus is
+removed from the DOM, it focuses the first tabbable element in the dialog. A long editing dialog
+removes focused elements all the time (a card folds, a Clear button vanishes, an overlay's Back
+button unmounts), and a fallback that lands on a control at the top scrolls the whole surface up
+to it. `TimelineReconciliationModal.svelte` is the worked case.
+
+The rule that makes this a non-problem rather than a list of cases: **the dialog's scroll region
+is its first tabbable element** (`tabindex="0"`, `role="region"`), sized to the viewport rather
+than to its content. Every fallback then lands on a container already in view, and focusing it
+does not scroll. Two things keep that true, and both are structural:
+
+- nothing tabbable is placed before the region in DOM order — in the narrow layout that means
+  the title strip above it, in the wide layout the region already wraps the title;
+- the region keeps its `min-h-0 flex-1` sizing, so it never grows past the viewport.
+
+`holdFocus` calls remain where a card is about to disappear under an open soft keyboard, so the
+keyboard closes before the card does; they are no longer what stops the scroll.
+
 ## Data Model
 
 The story is an append-only list of `StoryEntry` rows (`user_action`, `narration`, `system`,
@@ -113,11 +156,27 @@ The story is an append-only list of `StoryEntry` rows (`user_action`, `narration
 - **Branches** fork at a `forkEntryId`. `story.entries` is the current branch's view, assembled
   from the branch's own rows plus everything inherited from its ancestors; `visibleEntries` is
   that list minus what has been folded into chapters.
+
+  **Editing an entry from before a fork changes that entry for every branch below it — but only
+  its text.** Say a branch was forked at entry 30, and entry 12 is then rewritten. Entries are one
+  set of rows that branches point into, never copies, so the new branch shows the new wording
+  immediately. What it does _not_ show is any consequence of the rewrite: the world state it was
+  given when it forked, the per-entry `worldStateDelta` a rollback would restore, and the clock
+  stored on the fork's checkpoint were all derived from the old text and are left as they were. So
+  the branch can be reading a passage that no longer mentions a knife while its world state still
+  holds one. Nothing detects or reports this.
+
+  `updateEntry` guards the wrong thing here. Its one rule is that the entry must belong to the
+  branch you are on, which allows the rewrite above (entry 12 belongs to the branch you are
+  standing on) and refuses the reverse case, where you stand on the new branch and edit entry 12
+  — the edit that would have had the same effect, from the branch that cares about it. That is
+  known, and left alone until we decide what editing shared history should mean.
+
 - **Entry numbers** are what a reader sees and types: `position + 1`, every entry type counted,
   so the last entry's number equals the branch's entry count. Numbering is per branch view — a
   branch continues its parent's positions from the fork, so shared history keeps its numbers and
   sibling branches reuse them after the fork. `resolveEntryByNumber` (`utils/storyNavigation.ts`)
-  floors to the nearest lower entry, which is what makes a gap left by an import or a repair
+  floors to the nearest lower entry, which is what makes a gap left by an import or a reconciliation
   navigable rather than a dead number.
 - **Chapters** cover a contiguous run of entries (`startEntryId`/`endEntryId`) and replace them
   in the prompt with a summary. Entries after the last chapter's end are the **un-chapterized

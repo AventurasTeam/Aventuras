@@ -7,6 +7,12 @@
   import type { FocusedEntity } from '$lib/services/ai/vault/InteractiveVaultService'
   import { untrack, onDestroy } from 'svelte'
   import { ui } from '$lib/stores/ui.svelte'
+  import {
+    formatStoryTime,
+    normalizeTime,
+    parseStoryTime,
+    storyTimeIsInvalid,
+  } from '$lib/services/storyTime'
 
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
@@ -35,10 +41,22 @@
 
   let savedSnapshot = $state<string>(untrack(() => JSON.stringify(formData)))
 
+  // Kept beside the form rather than in it: the form's shape is the vault assistant's input
+  // schema, and the assistant has no say over when a story starts.
+  const startText = (scenarioStart: VaultScenario['startingTime']) =>
+    scenarioStart ? formatStoryTime(scenarioStart) : ''
+  let startingTimeText = $state(untrack(() => startText(scenario.startingTime)))
+  let savedStartingTime = $state(untrack(() => startText(scenario.startingTime)))
+
   $effect(() => {
     const current = scenarioVault.getById(scenario.id)
     if (!current) return
     untrack(() => {
+      const currentStart = startText(current.startingTime)
+      if (currentStart !== savedStartingTime) {
+        startingTimeText = currentStart
+        savedStartingTime = currentStart
+      }
       const snapshot: VaultScenarioInput = {
         name: current.name,
         description: current.description,
@@ -57,7 +75,9 @@
   })
 
   const isCreating = $derived(scenario.name === '' && scenario.settingSeed === '')
-  const hasChanges = $derived(JSON.stringify(formData) !== savedSnapshot)
+  const hasChanges = $derived(
+    JSON.stringify(formData) !== savedSnapshot || startingTimeText.trim() !== savedStartingTime,
+  )
 
   let saving = $state(false)
   let error = $state<string | null>(null)
@@ -76,14 +96,21 @@
       error = 'Scenario name is required'
       return
     }
+    if (storyTimeIsInvalid(startingTimeText)) {
+      error = 'Starting time is not a story time'
+      return
+    }
 
     saving = true
     error = null
 
     try {
+      const parsedStart = parseStoryTime(startingTimeText)
+      const startingTime = parsedStart ? normalizeTime(parsedStart) : null
       await scenarioVault.update(scenario.id, {
         ...formData,
         name: formData.name.trim(),
+        startingTime,
         metadata: {
           ...scenario.metadata,
           npcCount: formData.npcs.length,
@@ -92,6 +119,8 @@
         },
       })
       savedSnapshot = JSON.stringify(formData)
+      savedStartingTime = startText(startingTime)
+      startingTimeText = savedStartingTime
       ui.showToast('Scenario saved', 'info')
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to save scenario'
@@ -185,7 +214,11 @@
         </div>
       {/if}
 
-      <VaultScenarioFormFields data={formData} onUpdate={(newData) => (formData = newData)} />
+      <VaultScenarioFormFields
+        data={formData}
+        onUpdate={(newData) => (formData = newData)}
+        bind:startingTimeText
+      />
     </div>
 
     <ResponsiveModal.Footer class="bg-muted/40 border-t px-6 py-4">

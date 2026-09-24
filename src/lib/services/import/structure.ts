@@ -22,6 +22,7 @@ import { remapRuntimeVars } from '$lib/services/packs'
 import type { RuntimeVariable, RuntimeEntityType } from '$lib/services/packs'
 import type { PackBindingResolution } from './packBinding'
 import { createMappers } from './idMaps'
+import { normalizeTime } from '$lib/services/storyTime'
 
 /** The resolved binding, plus both sides' runtime variable definitions for the re-keying. */
 export interface StoryPackBinding extends PackBindingResolution {
@@ -228,6 +229,28 @@ export async function importStructure(
       reasoning: entry.reasoning,
       suggestedActions: entry.suggestedActions ?? null,
       worldStateDelta: remapWorldStateDelta(entry.worldStateDelta),
+    })
+  }
+
+  // After the entries, because the anchor's foreign key points at one. An anchor whose entry
+  // did not survive the import, or whose time cannot be read, is dropped rather than failing
+  // the whole import: an assertion with no position or no time cannot bound a reconciliation.
+  for (const anchor of data.timeAnchors ?? []) {
+    const newEntryId = oldToNewId.get(anchor.entryId)
+    if (!newEntryId) continue
+    const asserted = anchor.assertedTime
+    const readable =
+      !!asserted &&
+      [asserted.years, asserted.days, asserted.hours, asserted.minutes].every(Number.isFinite)
+    if (!readable) continue
+
+    await database.setTimeAnchor({
+      id: crypto.randomUUID(),
+      storyId: newStoryId,
+      entryId: newEntryId,
+      assertedTime: normalizeTime(asserted),
+      note: anchor.note ?? null,
+      createdAt: anchor.createdAt ?? Date.now(),
     })
   }
 

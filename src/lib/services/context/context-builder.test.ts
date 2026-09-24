@@ -82,4 +82,23 @@ describe('ContextBuilder', () => {
     expect(ctx.protagonistName).toBe('Hero')
     expect(ctx.currentLocation).toBe('Oakvale')
   })
+
+  it.each([
+    'opening-generation-adventure',
+    'opening-generation-creative',
+    'opening-refinement-adventure',
+    'opening-refinement-creative',
+  ])('gives the shipped %s template the starting time', async (templateId) => {
+    vi.mocked(database.getPackTemplate).mockResolvedValue(null)
+
+    const given = await new ContextBuilder('test-pack')
+      .add({ title: 'The Long Night', storyStartingTime: 'Y1 D1 19:30' })
+      .render(templateId)
+    expect(given.user).toContain('TIME: opening ends at Y1 D1 19:30')
+
+    const requested = await new ContextBuilder('test-pack')
+      .add({ title: 'The Long Night', storyStartingTime: '(suggest one)' })
+      .render(templateId)
+    expect(requested.user).toContain('TIME: opening ends at (suggest one)')
+  })
 })

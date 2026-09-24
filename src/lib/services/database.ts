@@ -17,6 +17,7 @@ import type {
   PersistentRetryState,
   PersistentStyleReviewState,
   TimeTracker,
+  TimeAnchor,
   EmbeddedImage,
   EmbeddedImageMeta,
   EmbeddedImageStatus,
@@ -3188,9 +3189,9 @@ class DatabaseService {
     await db.execute(
       `INSERT INTO scenario_vault (
         id, name, description, setting_seed, npcs, primary_character_name,
-        first_message, alternate_greetings, tags, favorite, source,
+        first_message, alternate_greetings, starting_time, tags, favorite, source,
         original_filename, metadata, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         scenario.id,
         scenario.name,
@@ -3200,6 +3201,7 @@ class DatabaseService {
         scenario.primaryCharacterName,
         scenario.firstMessage,
         JSON.stringify(scenario.alternateGreetings),
+        scenario.startingTime ? JSON.stringify(scenario.startingTime) : null,
         JSON.stringify(scenario.tags),
         scenario.favorite ? 1 : 0,
         scenario.source,
@@ -3243,6 +3245,10 @@ class DatabaseService {
     if (updates.alternateGreetings !== undefined) {
       setClauses.push('alternate_greetings = ?')
       values.push(JSON.stringify(updates.alternateGreetings))
+    }
+    if (updates.startingTime !== undefined) {
+      setClauses.push('starting_time = ?')
+      values.push(updates.startingTime ? JSON.stringify(updates.startingTime) : null)
     }
     if (updates.tags !== undefined) {
       setClauses.push('tags = ?')
@@ -3861,6 +3867,58 @@ class DatabaseService {
     ])
   }
 
+  // ===== Time Anchor Operations =====
+
+  async getTimeAnchors(storyId: string): Promise<TimeAnchor[]> {
+    const db = await this.getDb()
+    const rows = await db.select<
+      {
+        id: string
+        story_id: string
+        entry_id: string
+        asserted_time: string
+        note: string | null
+        created_at: number
+      }[]
+    >(`SELECT * FROM time_anchors WHERE story_id = ?`, [storyId])
+    return rows.map((row) => ({
+      id: row.id,
+      storyId: row.story_id,
+      entryId: row.entry_id,
+      assertedTime: JSON.parse(row.asserted_time) as TimeTracker,
+      note: row.note,
+      createdAt: row.created_at,
+    }))
+  }
+
+  /**
+   * Write an anchor, replacing any the entry already carries.
+   *
+   * Upsert rather than delete-then-insert: the unique constraint is on `entry_id`, and a
+   * second anchor on one entry would be a second assertion about the same fact.
+   */
+  async setTimeAnchor(anchor: TimeAnchor): Promise<void> {
+    const db = await this.getDb()
+    await db.execute(
+      `INSERT INTO time_anchors (id, story_id, entry_id, asserted_time, note, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(entry_id) DO UPDATE SET asserted_time = excluded.asserted_time, note = excluded.note`,
+      [
+        anchor.id,
+        anchor.storyId,
+        anchor.entryId,
+        JSON.stringify(anchor.assertedTime),
+        anchor.note,
+        anchor.createdAt,
+      ],
+    )
+  }
+
+  async deleteTimeAnchor(entryId: string): Promise<void> {
+    const db = await this.getDb()
+    await db.execute(`DELETE FROM time_anchors WHERE entry_id = ?`, [entryId])
+  }
+
   // ===== Pack Variable Operations =====
 
   async getPackVariables(packId: string): Promise<CustomVariable[]> {
@@ -4296,6 +4354,7 @@ class DatabaseService {
       primaryCharacterName: row.primary_character_name || '',
       firstMessage: row.first_message,
       alternateGreetings: row.alternate_greetings ? JSON.parse(row.alternate_greetings) : [],
+      startingTime: row.starting_time ? JSON.parse(row.starting_time) : null,
       tags: row.tags ? JSON.parse(row.tags) : [],
       favorite: row.favorite === 1,
       source: row.source || 'import',

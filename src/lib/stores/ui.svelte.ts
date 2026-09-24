@@ -1,6 +1,7 @@
 import type {
   ActivePanel,
   SidebarTab,
+  NavPanelTab,
   EntryType,
   StoryEntry,
   Character,
@@ -117,6 +118,9 @@ interface PersistedActivationData {
 class UIStore {
   activePanel = $state<ActivePanel>('story')
   sidebarTab = $state<SidebarTab>('characters')
+  // Held here rather than in the panel so it survives closing and reopening, as the sidebar's
+  // does. It opens on Navigation until the reader leaves it somewhere else.
+  navPanelTab = $state<NavPanelTab>('navigation')
   sidebarOpen = $state(typeof window !== 'undefined' ? window.innerWidth >= 640 : false)
   // Persisted like `sidebarOpen`, but defaults closed at every width: it is a place the
   // reader opts into, not an ambient reference the way the sidebar is.
@@ -268,6 +272,11 @@ class UIStore {
   resummarizeChapterId = $state<string | null>(null)
   memoryLoading = $state(false)
 
+  // Entry time dialogs, one pair for the story view. The id outlives closing so the fade can finish.
+  timeDialogEntryId = $state<string | null>(null)
+  anchorModalOpen = $state(false)
+  entryTimeModalOpen = $state(false)
+
   // Sync modal state
   syncModalOpen = $state(false)
   syncMode = $state<SyncMode>('select')
@@ -372,6 +381,10 @@ class UIStore {
 
   setSidebarTab(tab: SidebarTab) {
     this.sidebarTab = tab
+  }
+
+  setNavPanelTab(tab: NavPanelTab) {
+    this.navPanelTab = tab
   }
 
   setVaultTab(tab: VaultTab) {
@@ -1674,6 +1687,16 @@ class UIStore {
 
   closeManualChapterModal() {
     this.manualChapterModalOpen = false
+  }
+
+  openAnchorModal(entryId: string) {
+    this.timeDialogEntryId = entryId
+    this.anchorModalOpen = true
+  }
+
+  openEntryTimeModal(entryId: string) {
+    this.timeDialogEntryId = entryId
+    this.entryTimeModalOpen = true
   }
 
   openResummarizeModal(chapterId: string) {

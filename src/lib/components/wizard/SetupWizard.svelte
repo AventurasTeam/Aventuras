@@ -126,8 +126,10 @@
   dismissible={allowSwipeDismiss}
   onOpenChange={(open) => !open && !wizard.isCreatingStory && handleClose()}
 >
+  <!-- One height for every step: the dialog sized itself to each, so the footer and the progress
+       bar moved under the cursor as the reader walked through it. -->
   <ResponsiveModal.Content
-    class="flex h-full flex-col gap-0 p-0 sm:h-auto sm:max-h-[90vh] sm:max-w-3xl"
+    class="flex h-full flex-col gap-0 p-0 sm:h-[90vh] sm:max-w-3xl"
     interactOutsideBehavior={wizard.isCreatingStory ? 'ignore' : 'close'}
     escapeKeydownBehavior={wizard.isCreatingStory ? 'ignore' : 'close'}
     onInteractOutside={(e: PointerEvent) => {
@@ -225,10 +227,7 @@
           onEditSetting={() => wizard.setting.editSetting()}
           onCancelEdit={() => wizard.setting.cancelSettingEdit()}
           onSelectScenario={(id) => wizard.selectScenario(id)}
-          onClearCardImport={() => {
-            wizard.clearScenarioLinkedLorebook()
-            wizard.character.clearCardImport()
-          }}
+          onClearCardImport={() => wizard.clearCardImport()}
           onSaveToVault={() =>
             wizard.setting.saveScenarioToVault(
               wizard.narrative.storyTitle,
@@ -457,7 +456,14 @@
           openingDraft={wizard.narrative.openingDraft}
           openingError={wizard.narrative.openingError}
           manualOpeningText={wizard.narrative.manualOpeningText}
+          importedStartText={wizard.narrative.importedStartText}
+          manualStartText={wizard.narrative.manualStartText}
+          guidanceStartText={wizard.narrative.guidanceStartText}
+          resultStartText={wizard.narrative.resultStartText}
+          resultStartSource={wizard.narrative.resultStartSource}
+          openingReceivesStart={wizard.narrative.openingReceivesStart}
           cardImportedFirstMessage={wizard.character.cardImportedFirstMessage}
+          cardImportedStartingTime={wizard.character.cardImportedStartingTime}
           cardImportedAlternateGreetings={wizard.character.cardImportedAlternateGreetings}
           selectedGreetingIndex={wizard.character.selectedGreetingIndex}
           selectedMode={wizard.narrative.selectedMode}
@@ -469,8 +475,13 @@
           protagonist={wizard.character.protagonistDisplay}
           importedEntriesCount={wizard.narrative.importedEntries.length}
           onTitleChange={(v) => (wizard.narrative.storyTitle = v)}
+          onImportedStartChange={(v) => (wizard.narrative.importedStartText = v)}
+          onManualStartChange={(v) => (wizard.narrative.manualStartText = v)}
+          onGuidanceStartChange={(v) => (wizard.narrative.guidanceStartText = v)}
+          onResultStartChange={(v) => (wizard.narrative.resultStartText = v)}
+          onCheckStartReception={() => void wizard.narrative.checkOpeningReceivesStart()}
           onGuidanceChange={(v) => (wizard.narrative.openingGuidance = v)}
-          onSelectedGreetingChange={(v) => (wizard.character.selectedGreetingIndex = v)}
+          onSelectedGreetingChange={(v) => wizard.selectGreeting(v)}
           onGenerateOpening={() => wizard.generateOpeningScene()}
           onRefineOpening={() => wizard.refineOpeningScene()}
           onStartEdit={() => wizard.narrative.startOpeningEdit()}
@@ -478,10 +489,7 @@
           onSaveEdit={() => wizard.narrative.saveOpeningEdit()}
           onDraftChange={(v) => (wizard.narrative.openingDraft = v)}
           onUseCardOpening={() => wizard.narrative.useCardOpening()}
-          onClearCardOpening={() => {
-            wizard.clearScenarioLinkedLorebook()
-            wizard.character.clearCardImport()
-          }}
+          onClearCardOpening={() => wizard.clearCardImport()}
           onManualOpeningChange={(v) => (wizard.narrative.manualOpeningText = v)}
           onClearGenerated={() => wizard.narrative.clearGeneratedOpening()}
         />
@@ -505,6 +513,7 @@
           class="flex items-center gap-2"
           onclick={() => wizard.createStory()}
           disabled={!wizard.narrative.storyTitle.trim() ||
+            !wizard.narrative.startingTime ||
             wizard.narrative.isGeneratingOpening ||
             wizard.narrative.isRefiningOpening ||
             wizard.narrative.isEditingOpening ||

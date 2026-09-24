@@ -15,6 +15,7 @@ import type {
   StoryDetails,
   Entry,
   TimeTracker,
+  TimeAnchor,
   PersistentCharacterSnapshot,
   WorldStateDelta,
   WorldStateSnapshot,
@@ -27,6 +28,40 @@ import type {
 import { database } from '$lib/services/database'
 import { rollbackService } from '$lib/services/rollbackService'
 import { ui } from './ui.svelte'
+import {
+  analyzeTimeline,
+  applyReconciliation,
+  fingerprintPreview,
+  listBoundaries,
+  normalizeTime,
+  planReconciliation,
+  reconcileRange,
+  refuseRange,
+  selectableRanges,
+  toMinutes,
+  type Boundary,
+  type DurationRequest,
+  type RangeRefusal,
+  type ReconcileResult,
+  type ReconciliationPlan,
+  type SelectableRange,
+  type TimelineAnomaly,
+} from '$lib/services/storyTime'
+
+/** What a previewed reconciliation carries: the refusal, the outstanding requests, or the plan. */
+export type TimelineReconciliationPreview =
+  | { status: 'refused'; refusal: RangeRefusal; range?: SelectableRange }
+  | { status: 'needs-durations'; requests: DurationRequest[]; range: SelectableRange }
+  | {
+      status: 'ok'
+      result: Extract<ReconcileResult, { status: 'ok' }>
+      range: SelectableRange
+      rangeEntries: StoryEntry[]
+      plan: ReconciliationPlan
+      fingerprint: string
+      /** What the reader supplied, so apply can recompute the same preview to revalidate it. */
+      inputs: { durations: Record<string, number>; intervals: Record<string, number> }
+    }
 import { settings } from './settings.svelte'
 import { extractInlineCustomVars } from '$lib/services/ai/sdk/schemas/runtime-variables'
 import type { ClassificationResult } from '$lib/services/ai/sdk/schemas/classifier'
@@ -123,6 +158,7 @@ class StoryStore {
   // Memory system
   chapters = $state<Chapter[]>([])
   checkpoints = $state<Checkpoint[]>([])
+  timeAnchors = $state<TimeAnchor[]>([])
 
   // Batch chapterization (chapterizeFromBeginning) progress/cancel state.
   // Local to the store (not ui.svelte.ts) because this is a blocking,
@@ -527,6 +563,7 @@ class StoryStore {
     this.storyBeats = []
     this.chapters = []
     this.checkpoints = []
+    this.timeAnchors = []
     this.lorebookEntries = []
     this.invalidateWordCountCache()
     this.invalidateChapterCache()
@@ -1205,10 +1242,13 @@ class StoryStore {
     }
 
     const droppedCheckpoints = this.checkpointsAnchoredTo(new Set([entryId]))
+    const droppedAnchors = this.timeAnchors.filter((anchor) => anchor.entryId === entryId).length
     await database.deleteEntriesWithDependents({
       entryIds: [entryId],
       checkpointIds: droppedCheckpoints.map((cp) => cp.id),
     })
+    this.announceDroppedAnchors(droppedAnchors)
+    this.forgetAnchors([entryId])
     this.forgetCheckpoints(droppedCheckpoints)
     this.entries = this.entries.filter((e) => e.id !== entryId)
 
@@ -1465,6 +1505,295 @@ class StoryStore {
     })
   }
 
+  // ===== Time anchors and reconciliation =====
+
+  /** Assert when an entry ended. Replaces any anchor the entry already carries. */
+  async setTimeAnchor(entryId: string, assertedTime: TimeTracker, note: string | null = null) {
+    if (!this.currentStory) throw new Error('No story loaded')
+
+    const existing = this.timeAnchors.find((anchor) => anchor.entryId === entryId)
+    const anchor: TimeAnchor = {
+      id: existing?.id ?? crypto.randomUUID(),
+      storyId: this.currentStory.id,
+      entryId,
+      assertedTime: normalizeTime(assertedTime),
+      note,
+      createdAt: existing?.createdAt ?? Date.now(),
+    }
+
+    await database.setTimeAnchor(anchor)
+    this.timeAnchors = [
+      ...this.timeAnchors.filter((existingAnchor) => existingAnchor.entryId !== entryId),
+      anchor,
+    ]
+  }
+
+  async removeTimeAnchor(entryId: string): Promise<void> {
+    await database.deleteTimeAnchor(entryId)
+    this.timeAnchors = this.timeAnchors.filter((anchor) => anchor.entryId !== entryId)
+  }
+
+  timeAnchorFor(entryId: string): TimeAnchor | undefined {
+    return this.timeAnchors.find((anchor) => anchor.entryId === entryId)
+  }
+
+  /**
+   * Whether this entry belongs to the branch in view rather than to its inherited history.
+   *
+   * Times on an inherited entry are writable from here — it is the same row every branch reads,
+   * so a wrong stamp is one wrong fact. This says only that the entry is shared, which is worth
+   * telling the reader before they reconcile it.
+   */
+  ownsEntry(entryId: string): boolean {
+    const branchId = this.currentStory?.currentBranchId ?? null
+    const entry = this.entries.find((e) => e.id === entryId)
+    return (entry?.branchId ?? null) === branchId
+  }
+
+  /** The points a range may be selected between, on the branch in view. */
+  timeBoundaries = $derived<Boundary[]>(
+    listBoundaries({
+      entries: this.entries,
+      anchors: this.timeAnchors,
+      // Every fork in the story, not just this branch's: a range spanning a fork would fit the
+      // entries every branch there shares to a point inside one of them. `listBoundaries` keeps
+      // only the ones whose entry is visible here.
+      forkEntryIds: this.branches.map((branch) => branch.forkEntryId),
+    }),
+  )
+
+  timeRanges = $derived<SelectableRange[]>(selectableRanges(this.entries, this.timeBoundaries))
+
+  /** Everything the review needs, and the fingerprint apply revalidates against. */
+  previewReconciliation(
+    range: SelectableRange,
+    suppliedDurations: Record<string, number> = {},
+    intervalWeights: Record<string, number> = {},
+  ): TimelineReconciliationPreview {
+    const refusal = refuseRange(range.from, range.to)
+    if (refusal) return { status: 'refused', refusal }
+
+    const byId = new Map(this.entries.map((entry) => [entry.id, entry]))
+    const rangeEntries = range.entryIds
+      .map((id) => byId.get(id))
+      .filter((entry): entry is StoryEntry => !!entry)
+
+    const before = this.entries[range.from.index]
+    const after = this.entries[range.to.index + 1]
+
+    const result = reconcileRange({
+      entries: rangeEntries,
+      baseline: range.from.time!,
+      target: range.to.time!,
+      previousEnd: before?.metadata?.timeEnd ?? null,
+      nextStart: after?.metadata?.timeStart ?? null,
+      suppliedDurations,
+      intervalWeights,
+    })
+
+    if (result.status === 'refused') {
+      return {
+        status: 'refused',
+        refusal: { reason: 'backwards-span', boundaries: [range.from, range.to] },
+        range,
+      }
+    }
+    if (result.status === 'needs-durations') {
+      return { status: 'needs-durations', requests: result.requests, range }
+    }
+
+    return {
+      status: 'ok',
+      result,
+      range,
+      rangeEntries,
+      plan: planReconciliation({
+        entries: this.entries,
+        chapters: this.chapters,
+        times: result.times,
+        checkpoints: this.checkpoints,
+      }),
+      fingerprint: this.timelineFingerprint(range, rangeEntries),
+      inputs: { durations: suppliedDurations, intervals: intervalWeights },
+    }
+  }
+
+  private timelineFingerprint(range: SelectableRange, rangeEntries: StoryEntry[]): string {
+    return fingerprintPreview({
+      storyId: this.currentStory?.id ?? '',
+      branchId: this.currentStory?.currentBranchId ?? null,
+      from: range.from,
+      to: range.to,
+      rangeEntries,
+      // Every kind of boundary, not just anchors: a branch forked inside the range while the
+      // preview is open splits it the same way an anchor does.
+      boundaryEntryIds: this.timeBoundaries.map((boundary) => boundary.entryId),
+    })
+  }
+
+  /**
+   * Commit a previewed reconciliation.
+   *
+   * Refuses when anything the preview was computed from has moved — generation, a deletion, an
+   * anchor edit, a branch switch, or an anchor appearing inside the range, which invalidates the
+   * selection even though both endpoints still resolve.
+   */
+  async applyReconciliation(preview: TimelineReconciliationPreview): Promise<'applied' | 'stale'> {
+    if (!this.currentStory) throw new Error('No story loaded')
+    if (preview.status !== 'ok') return 'stale'
+
+    this.assertNotBusy('reconcile the timeline')
+
+    // Re-resolved, not reused: the preview's boundaries carry the times they had when it was
+    // built, so an endpoint's anchor edited since would otherwise compare equal to itself.
+    const range = this.timeRanges.find(
+      (candidate) =>
+        candidate.from.entryId === preview.range.from.entryId &&
+        candidate.to.entryId === preview.range.to.entryId,
+    )
+    if (!range) return 'stale'
+
+    // With the same weights: a range whose entries have no recorded time resolves only when the
+    // reader's figures are handed back, and without them every such apply would read as stale.
+    const fresh = this.previewReconciliation(
+      range,
+      preview.inputs.durations,
+      preview.inputs.intervals,
+    )
+    if (fresh.status !== 'ok' || fresh.fingerprint !== preview.fingerprint) return 'stale'
+
+    await applyReconciliation(fresh.plan, this.entries, {
+      transaction: (statements) => database.transaction(statements),
+      publish: (plan) => this.publishReconciliation(plan),
+    })
+
+    log('Timeline reconciled', {
+      entries: fresh.plan.times.length,
+      chapters: fresh.plan.chapterSpans.length,
+      clockMoved: !!fresh.plan.clock,
+    })
+    return 'applied'
+  }
+
+  /** In-memory state after a reconciliation commits, shared by every path that plans one. */
+  private publishReconciliation(plan: ReconciliationPlan): void {
+    const times = new Map(plan.times.map((time) => [time.entryId, time]))
+    const deltas = new Map(plan.deltas.map((update) => [update.entryId, update.delta]))
+    this.entries = this.entries.map((entry) => {
+      const time = times.get(entry.id)
+      if (!time) return entry
+      const delta = deltas.get(entry.id)
+      return {
+        ...entry,
+        metadata: { ...entry.metadata, timeStart: time.start, timeEnd: time.end },
+        ...(delta ? { worldStateDelta: delta } : {}),
+      }
+    })
+
+    const spans = new Map(plan.chapterSpans.map((span) => [span.chapterId, span]))
+    this.chapters = this.chapters.map((chapter) => {
+      const span = spans.get(chapter.id)
+      return span ? { ...chapter, startTime: span.startTime, endTime: span.endTime } : chapter
+    })
+
+    const clocks = new Map(plan.checkpointClocks.map((u) => [u.checkpointId, u.timeTracker]))
+    if (clocks.size > 0) {
+      this.checkpoints = this.checkpoints.map((checkpoint) => {
+        const timeTracker = clocks.get(checkpoint.id)
+        return timeTracker ? { ...checkpoint, timeTrackerSnapshot: timeTracker } : checkpoint
+      })
+    }
+
+    if (plan.clock && this.currentStory) {
+      this.currentStory = { ...this.currentStory, timeTracker: plan.clock }
+    }
+
+    this.invalidateChapterCache()
+  }
+
+  /**
+   * Write one entry's own beginning and ending.
+   *
+   * Planned as a one-entry reconciliation rather than a bare metadata write, so it carries the same
+   * guarantees: chapter spans covering it are recomputed, the clock inside its delta follows,
+   * the keyframe it invalidates is discarded, and the story clock moves only when the entry is
+   * the last one. All of it commits together.
+   */
+  async setEntryTimes(entryId: string, start: TimeTracker, end: TimeTracker): Promise<void> {
+    if (!this.currentStory) throw new Error('No story loaded')
+    // A generation still running would classify this entry and overwrite its ending afterwards.
+    this.assertNotBusy('edit entry times')
+    start = normalizeTime(start)
+    end = normalizeTime(end)
+    if (toMinutes(end) < toMinutes(start)) throw new Error('An entry cannot end before it begins')
+    const index = this.entries.findIndex((e) => e.id === entryId)
+    if (index === -1) throw new Error('Entry not found')
+
+    // The action before a narration is the instant that narration answers, so it moves with it.
+    // Left where it was, a new start would open time between them that neither entry claims.
+    const previous = this.entries[index - 1]
+    const times =
+      previous?.type === 'user_action'
+        ? [
+            { entryId: previous.id, start, end: start },
+            { entryId, start, end },
+          ]
+        : [{ entryId, start, end }]
+
+    const plan = planReconciliation({
+      entries: this.entries,
+      chapters: this.chapters,
+      times,
+      checkpoints: this.checkpoints,
+    })
+
+    await applyReconciliation(plan, this.entries, {
+      transaction: (statements) => database.transaction(statements),
+      publish: (applied) => this.publishReconciliation(applied),
+    })
+
+    log('Entry times set', { entryId, clockMoved: !!plan.clock })
+  }
+
+  /** How many branches were created from this checkpoint, or forked at the entry holding it. */
+  branchesForkedFrom(checkpointId: string | null, entryId: string): number {
+    return this.branches.filter(
+      (branch) =>
+        (checkpointId !== null && branch.checkpointId === checkpointId) ||
+        branch.forkEntryId === entryId,
+    ).length
+  }
+
+  /** Anomalies, for the Timeline panel. */
+  get timelineReport(): { anomalies: TimelineAnomaly[] } {
+    return {
+      anomalies: analyzeTimeline({ entries: this.entries, chapters: this.chapters }),
+    }
+  }
+
+  /** The foreign key removed these rows with their entries; this drops the copies held here. */
+  private forgetAnchors(entryIds: Iterable<string>): void {
+    const gone = new Set(entryIds)
+    this.timeAnchors = this.timeAnchors.filter((anchor) => !gone.has(anchor.entryId))
+  }
+
+  /**
+   * Say what a deletion cost in time anchors.
+   *
+   * The count is taken before the delete, since the foreign key removes the rows with the
+   * entries. Chapters and checkpoints go silently because the story can produce them again;
+   * an anchor is a judgement the reader made and nothing reconstructs it.
+   */
+  private announceDroppedAnchors(count: number): void {
+    if (count === 0) return
+    ui.showToast(
+      count === 1
+        ? '1 time anchor was deleted with those entries'
+        : `${count} time anchors were deleted with those entries`,
+      'warning',
+    )
+  }
+
   /**
    * Delete all entries from a given position onward.
    * Used for entry-only retry restore (persistent retry).
@@ -1516,10 +1845,15 @@ class StoryStore {
 
     const droppedCheckpoints = this.checkpointsAnchoredTo(entryIdsToDelete)
 
+    const droppedAnchors = this.timeAnchors.filter((anchor) =>
+      entryIdsToDelete.has(anchor.entryId),
+    ).length
+
     log('Deleting entries and the rows that reference them', {
       chaptersToDelete: chaptersToDelete.length,
       chapterNumbers: chaptersToDelete.map((ch) => ch.number),
       checkpointsToDelete: droppedCheckpoints.length,
+      timeAnchorsToDelete: droppedAnchors,
     })
 
     await database.deleteEntriesWithDependents({
@@ -1527,6 +1861,9 @@ class StoryStore {
       chapterIds: chaptersToDelete.map((ch) => ch.id),
       checkpointIds: droppedCheckpoints.map((cp) => cp.id),
     })
+
+    this.announceDroppedAnchors(droppedAnchors)
+    this.forgetAnchors(entryIdsToDelete)
 
     this.chapters = this.chapters.filter((ch) => !chaptersToDelete.some((d) => d.id === ch.id))
     this.forgetCheckpoints(droppedCheckpoints)
@@ -4454,6 +4791,10 @@ class StoryStore {
       })
     }
 
+    // Anchors are per story, not per branch: one binds to an entry, and the entry carries the
+    // branch. A branch that inherits an entry inherits the assertion made about it.
+    this.timeAnchors = await database.getTimeAnchors(this.currentStory.id)
+
     // Restore time tracker from the last entry's metadata
     await this.restoreTimeFromLastEntry()
   }
@@ -4525,6 +4866,16 @@ class StoryStore {
     this.checkpoints = this.checkpoints.filter((checkpoint) => checkpoint.branchId !== branchId)
     // Note: We already checked that there are no child branches, so no reparenting needed
     this.branches = this.branches.filter((b) => b.id !== branchId)
+
+    // The branch's entries, and the anchors on them, are not in view, so they are re-read. The
+    // delete has committed by now, so a failed read must not surface as a failed delete.
+    if (this.currentStory) {
+      try {
+        this.timeAnchors = await database.getTimeAnchors(this.currentStory.id)
+      } catch (error) {
+        log('Re-reading time anchors after a branch delete failed', error)
+      }
+    }
 
     log('Branch deleted:', branchId)
   }
@@ -4869,6 +5220,8 @@ class StoryStore {
     startingLocation: Partial<Location>
     initialItems: Partial<Item>[]
     openingScene: string
+    /** Where the clock and the opening start. Absent on paths with no opening step. */
+    startingTime?: TimeTracker | null
     characters: Partial<Character>[]
     importedEntries?: LorebookImportExport.ImportedEntry[]
     // Translation data (optional)
@@ -4925,7 +5278,7 @@ class StoryStore {
       memoryConfig: DEFAULT_MEMORY_CONFIG,
       retryState: null,
       styleReviewState: null,
-      timeTracker: null,
+      timeTracker: data.startingTime ?? null,
       currentBranchId: null,
       currentBgImage: null,
     })
