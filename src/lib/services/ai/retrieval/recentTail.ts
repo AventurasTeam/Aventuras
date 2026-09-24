@@ -90,18 +90,22 @@ export function splitRecentTail(
 /**
  * The prose lore management quotes from the unchaptered tail.
  *
- * With `entryLimit` it is the first that many entries after the chapter, so it continues
- * straight on from it, and `maxChars` does not apply. Without it, `maxChars` bounds the newest
- * entries above a floor of `MIN_RECENT_ENTRIES_FOR_LORE`.
+ * `fromStart` takes the oldest entries, so the tail continues straight on from the chapter;
+ * otherwise the newest. `entryLimit` takes exactly that many from the start; without it,
+ * `maxChars` bounds the entries above a floor of `MIN_RECENT_ENTRIES_FOR_LORE`.
  */
 export function loreRecentEntries(
   tail: StoryEntry[],
   maxChars: number,
-  entryLimit?: number,
+  { fromStart = false, entryLimit }: { fromStart?: boolean; entryLimit?: number } = {},
 ): StoryEntry[] {
   const prose = tail.filter((e) => e.type === 'narration' || e.type === 'user_action')
-  if (entryLimit === undefined) {
-    return splitRecentTail(prose, maxChars, MIN_RECENT_ENTRIES_FOR_LORE).shown
-  }
-  return prose.slice(0, Math.max(0, entryLimit))
+  if (entryLimit !== undefined) return prose.slice(0, Math.max(0, entryLimit))
+  if (!fromStart) return splitRecentTail(prose, maxChars, MIN_RECENT_ENTRIES_FOR_LORE).shown
+  // Oldest-first: the same budget and floor, counted from the chapter's end.
+  return splitRecentTail(
+    [...prose].reverse(),
+    maxChars,
+    MIN_RECENT_ENTRIES_FOR_LORE,
+  ).shown.reverse()
 }

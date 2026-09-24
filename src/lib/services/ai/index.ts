@@ -641,9 +641,12 @@ class AIService {
   ): Promise<LoreManagementResult> {
     const { mode, pov, tense, tokenThreshold, newChapter, recentEntryLimit } = options
     // The story since the last chapter — the only unsummarised material the agent has.
-    // Chapter-triggered runs take its first N entries, every other run is capped by characters.
+    // A chapter-triggered run reads on from the chapter; every other run reads the newest entries.
     const recentStory = renderLoreProse(
-      loreRecentEntries(recentMessages, recentStoryBudgetChars(tokenThreshold), recentEntryLimit),
+      loreRecentEntries(recentMessages, recentStoryBudgetChars(tokenThreshold), {
+        fromStart: newChapter !== undefined,
+        entryLimit: recentEntryLimit,
+      }),
     )
 
     // Create service and run session
