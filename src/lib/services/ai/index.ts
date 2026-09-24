@@ -32,7 +32,11 @@ import {
   emitBackgroundImageQueued,
   emitBackgroundImageReady,
 } from '$lib/services/events'
-import type { PromptContext, LoreManagementCallbacks } from '$lib/services/generation'
+import type {
+  PromptContext,
+  LoreManagementCallbacks,
+  LoreRunOptions,
+} from '$lib/services/generation'
 import type {
   Chapter,
   Character,
@@ -632,16 +636,9 @@ class AIService {
     recentMessages: StoryEntry[],
     chapters: Chapter[],
     callbacks: LoreManagementCallbacks,
-    options?: {
-      mode?: StoryMode
-      pov?: POV
-      tense?: Tense
-      tokenThreshold?: number
-      /** The chapter that triggered this run; given in full only when `sendNewChapterText` is on. */
-      newChapter?: { chapter: Chapter; entries: StoryEntry[] }
-    },
+    options: LoreRunOptions,
   ): Promise<LoreManagementResult> {
-    const { mode, pov, tense, tokenThreshold, newChapter } = options ?? {}
+    const { mode, pov, tense, tokenThreshold, newChapter } = options
     // The story since the last chapter — the only unsummarised material the agent has. It
     // used to be the single most recent action and narration, which on a story with no
     // chapters left the agent maintaining a lorebook for a story it could not read.

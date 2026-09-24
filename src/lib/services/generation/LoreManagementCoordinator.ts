@@ -7,6 +7,7 @@ import type {
   Entry,
   Chapter,
   LoreManagementResult,
+  LoreNewChapterInput,
   StoryEntry,
   StoryMode,
   POV,
@@ -72,8 +73,13 @@ export interface LoreSessionInput {
    * The chapter that triggered this run, given to the agent in full rather than as a
    * summary. Absent on the batch importer's pass and on a tidy run with no new chapter.
    */
-  newChapter?: { chapter: Chapter; entries: StoryEntry[] }
+  newChapter?: LoreNewChapterInput
 }
+
+export type LoreRunOptions = Pick<
+  LoreSessionInput,
+  'mode' | 'pov' | 'tense' | 'tokenThreshold' | 'newChapter'
+>
 
 export interface LoreManagementDependencies {
   runLoreManagement: (
@@ -83,13 +89,7 @@ export interface LoreManagementDependencies {
     recentMessages: StoryEntry[],
     chapters: Chapter[],
     callbacks: LoreManagementCallbacks,
-    options?: {
-      mode?: StoryMode
-      pov?: POV
-      tense?: Tense
-      tokenThreshold?: number
-      newChapter?: { chapter: Chapter; entries: StoryEntry[] }
-    },
+    options: LoreRunOptions,
   ) => Promise<LoreManagementResult>
 }
 

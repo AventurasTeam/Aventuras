@@ -5,7 +5,15 @@
  * entries based on story events using the Vercel AI SDK ToolLoopAgent.
  */
 
-import type { Chapter, Entry, StoryEntry, VaultLorebookEntry } from '$lib/types'
+import type {
+  Chapter,
+  Entry,
+  LoreNewChapterInput,
+  POV,
+  StoryMode,
+  Tense,
+  VaultLorebookEntry,
+} from '$lib/types'
 import type { ServiceId } from '$lib/stores/settings.svelte'
 import { BaseAIService } from '../BaseAIService'
 import { createLogger } from '$lib/log'
@@ -31,7 +39,6 @@ import { LoreSessionLedger, type LoreMergeResult } from './sessionChanges'
 import { ChapterQueryBudget, MAX_CHAPTER_QUERIES_LORE } from '../sdk/tools/chapterQueries'
 import { LORE_MANAGEMENT_DEFAULTS } from '../core/defaults'
 import { formatNewChapterSection, loreChapterContext } from './newChapter'
-import type { POV, StoryMode, Tense } from '$lib/types'
 
 const log = createLogger('LoreManagement')
 
@@ -70,9 +77,9 @@ export interface LoreManagementContext {
   existingEntries: Entry[]
   /** Available chapters for querying */
   chapters?: Chapter[]
-  mode?: StoryMode
-  pov?: POV
-  tense?: Tense
+  mode: StoryMode
+  pov: POV
+  tense: Tense
   /** Callback to query a chapter with a question */
   queryChapter?: (chapterNumber: number, question: string) => Promise<string>
   /**
@@ -82,8 +89,7 @@ export interface LoreManagementContext {
   keptSeparate?: ReadonlySet<string>
   /** Persist a `keep_separate` decision, so it outlives the session. */
   onKeepSeparate?: (names: string[]) => Promise<void>
-  /** The chapter that triggered this run; given in full only when `sendNewChapterText` is on. */
-  newChapter?: { chapter: Chapter; entries: StoryEntry[] }
+  newChapter?: LoreNewChapterInput
 }
 
 /**
@@ -293,9 +299,9 @@ export class LoreManagementService extends BaseAIService {
     // Render prompts through unified pipeline
     const ctx = await ContextBuilder.forPack(context.storyId)
     ctx.add({
-      mode: context.mode ?? 'adventure',
-      pov: context.pov ?? 'second',
-      tense: context.tense ?? 'present',
+      mode: context.mode,
+      pov: context.pov,
+      tense: context.tense,
       entrySummary,
       duplicateSummary,
       recentStorySection,
