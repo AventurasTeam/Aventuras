@@ -95,6 +95,53 @@ describe('lore-management system prompt', () => {
   })
 })
 
+describe('lore-management system prompt — the recent story', () => {
+  const flags = [true, false]
+
+  it('never mentions recent material when the tail is empty', async () => {
+    for (const hasChapters of flags) {
+      for (const hasNewChapter of flags) {
+        const out = await renderContent({
+          hasChapters,
+          hasNewChapter,
+          hasRecentStory: false,
+          hasStoryMaterial: hasChapters || hasNewChapter,
+          recentStorySection: '',
+        })
+        expect(out, `hasChapters=${hasChapters} hasNewChapter=${hasNewChapter}`).not.toMatch(
+          /recent/i,
+        )
+      }
+    }
+  })
+
+  it('lists exactly the material present', async () => {
+    const cases: [boolean, boolean, boolean, string][] = [
+      [
+        true,
+        true,
+        true,
+        'the chapter you just wrote, the earlier chapter summaries and the recent story:',
+      ],
+      [true, true, false, 'the chapter you just wrote and the earlier chapter summaries:'],
+      [false, true, true, 'the chapter you just wrote and the recent story:'],
+      [false, true, false, 'the chapter you just wrote:'],
+      [true, false, true, 'the chapter summaries and the recent story:'],
+      [true, false, false, 'the chapter summaries:'],
+      [false, false, true, 'the recent story:'],
+    ]
+    for (const [hasChapters, hasNewChapter, hasRecentStory, list] of cases) {
+      const out = await renderContent({
+        hasChapters,
+        hasNewChapter,
+        hasRecentStory,
+        hasStoryMaterial: true,
+      })
+      expect(out).toContain(`go back over ${list}`)
+    }
+  })
+})
+
 describe('lore-management user content', () => {
   it('places the new-chapter block after duplicates and before the recent story', async () => {
     const out = await renderUserContent({

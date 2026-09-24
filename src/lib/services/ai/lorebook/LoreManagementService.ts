@@ -263,6 +263,7 @@ export class LoreManagementService extends BaseAIService {
 
     const hasChapters = Boolean(context.chapters && context.chapters.length > 0)
     const hasNewChapter = Boolean(context.newChapter)
+    const hasRecentStory = Boolean(context.recentStory)
 
     // Left out entirely rather than printed empty, like `recentStorySection` above.
     const newChapterSection = context.newChapter ? formatNewChapterSection(context.newChapter) : ''
@@ -298,10 +299,11 @@ export class LoreManagementService extends BaseAIService {
       hasChapters,
       newChapterSection,
       hasNewChapter,
+      hasRecentStory,
       // With neither chapters, a new chapter nor recent text the agent has only the entry
       // list. It can still consolidate; anything it "identifies as missing" would be
       // invented, so the prompt says so rather than leaving it to judgement.
-      hasStoryMaterial: hasChapters || hasNewChapter || Boolean(context.recentStory),
+      hasStoryMaterial: hasChapters || hasNewChapter || hasRecentStory,
       requireDuplicateResolution: this.requireDuplicateResolution,
     })
     const { system: systemPrompt, user: userPrompt } = await ctx.render('lore-management')
