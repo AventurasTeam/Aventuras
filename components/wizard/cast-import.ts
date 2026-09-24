@@ -2,6 +2,7 @@ import { wizardCastDraftSchema, type WizardCastDraft } from '@/lib/db'
 import { generateId } from '@/lib/ids'
 import { CAST_ID_PREFIX } from '@/lib/stores'
 import { CAST_SOFT_CAPS, type CastSuggestion } from '@/lib/wizard'
+import { checkParentChain } from '@/lib/world'
 
 // AI-imported strings use the entity-state degradation bounds; arrays use the
 // lower wizard soft caps, with ARRAY_MAX as a hard backstop. The hand-typed
@@ -195,5 +196,21 @@ export function resolveCastImports(
     }
   })
 
-  return { rows, unresolved }
+  // data-model.md → LocationState: an imported pointer that closes a loop is dropped and left
+  // blank, so Finish never meets a cycle the import itself introduced. First-come wins.
+  const parents = new Map<string, string | null>()
+  const acyclic = rows.map((row, i) => {
+    if (row.kind !== 'location' || row.parentLocationId == null) return row
+    if (checkParentChain(row.id, row.parentLocationId, (id) => parents.get(id) ?? null) === 'ok') {
+      parents.set(row.id, row.parentLocationId)
+      return row
+    }
+    const suggestion = minted[i].suggestion
+    const wantedName =
+      suggestion.kind === 'location' ? (suggestion.parent_location_name ?? '').trim() : ''
+    unresolved.push({ rowName: row.name, field: 'parentLocation', wantedName })
+    return { ...row, parentLocationId: null, unresolvedParentLocationName: '' }
+  })
+
+  return { rows: acyclic, unresolved }
 }

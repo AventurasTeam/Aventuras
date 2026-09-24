@@ -445,6 +445,61 @@ describe('unresolved reference reporting', () => {
     )
     expect(unresolved).toEqual([])
   })
+
+  it('drops an imported parent that would close a loop, and reports it', () => {
+    const { rows, unresolved } = resolveCastImports(
+      [
+        {
+          kind: 'location',
+          name: 'Upper',
+          description: '',
+          status: 'active',
+          parent_location_name: 'Lower',
+        },
+        {
+          kind: 'location',
+          name: 'Lower',
+          description: '',
+          status: 'active',
+          parent_location_name: 'Upper',
+        },
+      ],
+      [],
+      mintId,
+    )
+    const upper = rows.find((r) => r.name === 'Upper')
+    const lower = rows.find((r) => r.name === 'Lower')
+    expect(upper?.kind === 'location' && upper.parentLocationId).toBe(lower?.id)
+    expect(lower?.kind === 'location' && lower.parentLocationId).toBeNull()
+    expect(lower?.kind === 'location' && lower.unresolvedParentLocationName).toBe('')
+    expect(unresolved).toEqual([{ rowName: 'Lower', field: 'parentLocation', wantedName: 'Upper' }])
+  })
+
+  it('keeps a three-location chain that never returns', () => {
+    const { rows, unresolved } = resolveCastImports(
+      [
+        { kind: 'location', name: 'City', description: '', status: 'active' },
+        {
+          kind: 'location',
+          name: 'Square',
+          description: '',
+          status: 'active',
+          parent_location_name: 'City',
+        },
+        {
+          kind: 'location',
+          name: 'Shop',
+          description: '',
+          status: 'active',
+          parent_location_name: 'Square',
+        },
+      ],
+      [],
+      mintId,
+    )
+    expect(unresolved).toEqual([])
+    expect(rows.filter((r) => r.kind === 'location' && r.parentLocationId != null)).toHaveLength(2)
+  })
 })
 
 // Pins VOICE_MAX/ARRAY_MAX/FIELD_MAX to entity-state-schema.ts's actual .max()

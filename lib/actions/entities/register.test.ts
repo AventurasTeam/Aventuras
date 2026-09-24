@@ -1,8 +1,9 @@
 import { eq } from 'drizzle-orm'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
-import { branches, deltas, entities, stories, type NewEntity } from '@/lib/db'
+import { branches, deltas, entities, stories, type EntityState, type NewEntity } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { logger } from '@/lib/diagnostics'
 import { entitiesStore } from '@/lib/stores'
 
 import { registerEntities } from './register'
@@ -332,5 +333,125 @@ describe('entities CRUD arms', () => {
     // keywords is not in KIND_FIELDS.entity: re-embedding on an alias edit is pure cost.
     expect(row.embeddingStale).toBe(0)
     expect(entitiesStore.getById('char_1')?.keywords).toEqual(['the grey wolf'])
+  })
+})
+
+const loc = (id: string, parent: string | null): NewEntity => ({
+  id,
+  branchId: 'br_1',
+  kind: 'location',
+  name: id,
+  status: 'active',
+  injectionMode: 'auto',
+  state: { parent_location_id: parent },
+  createdAt: 1,
+  updatedAt: 1,
+})
+
+const setState = (
+  id: string,
+  state: Record<string, unknown>,
+  actionId: string,
+  source: 'user_edit' | 'ai_classifier' = 'user_edit',
+) => ({
+  action: {
+    kind: 'updateEntity' as const,
+    source,
+    payload: { branchId: 'br_1', id, patch: { state: state as EntityState } },
+  },
+  actionId,
+  branchId: 'br_1',
+})
+
+describe('parent_location_id cycle guard', () => {
+  it('refuses A → B when B → A with parent-cycle, writing nothing', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values([loc('loc_a', null), loc('loc_b', 'loc_a')])
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const result = await applyDeltaAction(
+      setState('loc_a', { parent_location_id: 'loc_b' }, 'act_1'),
+      ctx,
+    )
+    expect(result).toMatchObject({
+      status: 'rejected',
+      reason: 'parent-cycle',
+      code: 'parent-cycle',
+    })
+    expect((await rowFor(db, 'loc_a')).state).toEqual({ parent_location_id: null })
+    expect(await db.select().from(deltas)).toHaveLength(0)
+    expect(error).not.toHaveBeenCalled()
+    error.mockRestore()
+  })
+
+  it('refuses a self-parent on update and on create', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values([loc('loc_a', null)])
+    expect(
+      await applyDeltaAction(setState('loc_a', { parent_location_id: 'loc_a' }, 'act_1'), ctx),
+    ).toMatchObject({ status: 'rejected', code: 'parent-cycle' })
+    const created = await applyDeltaAction(
+      {
+        action: {
+          kind: 'createEntity',
+          source: 'user_edit',
+          payload: { entry: loc('loc_n', 'loc_n') },
+        },
+        actionId: 'act_2',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect(created).toMatchObject({ status: 'rejected', code: 'parent-cycle' })
+    expect(await rowFor(db, 'loc_n')).toBeUndefined()
+  })
+
+  it('refuses the classifier the same way — the guard lives in the handler', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values([loc('loc_a', null), loc('loc_b', 'loc_a')])
+    const result = await applyDeltaAction(
+      setState('loc_a', { parent_location_id: 'loc_b' }, 'act_1', 'ai_classifier'),
+      ctx,
+    )
+    expect(result).toMatchObject({ status: 'rejected', code: 'parent-cycle' })
+  })
+
+  it('accepts a parent that does not loop', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values([loc('loc_city', null), loc('loc_shop', null)])
+    const result = await applyDeltaAction(
+      setState('loc_shop', { parent_location_id: 'loc_city' }, 'act_1'),
+      ctx,
+    )
+    expect(result.status).toBe('ok')
+    expect((await rowFor(db, 'loc_shop')).state).toEqual({ parent_location_id: 'loc_city' })
+  })
+
+  it('does not re-walk an unchanged parent, so an existing loop never blocks an edit', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values([loc('loc_x', 'loc_y'), loc('loc_y', 'loc_x')])
+    const result = await applyDeltaAction(
+      setState('loc_x', { parent_location_id: 'loc_y', condition: 'flooded' }, 'act_1'),
+      ctx,
+    )
+    expect(result.status).toBe('ok')
+  })
+
+  it('logs a cap hit on an existing loop at error and refuses', async () => {
+    const { db, ctx } = await setup()
+    await db
+      .insert(entities)
+      .values([loc('loc_x', 'loc_y'), loc('loc_y', 'loc_x'), loc('loc_c', null)])
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const result = await applyDeltaAction(
+      setState('loc_c', { parent_location_id: 'loc_x' }, 'act_1'),
+      ctx,
+    )
+    expect(result).toMatchObject({ status: 'rejected', code: 'parent-cycle' })
+    expect(error).toHaveBeenCalledWith('action_layer.parent_chain_cap_hit', {
+      branchId: 'br_1',
+      id: 'loc_c',
+      parentId: 'loc_x',
+    })
+    error.mockRestore()
   })
 })

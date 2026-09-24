@@ -54,6 +54,7 @@ const FINISH_REASON_KEY = {
   effectiveDim: 'wizard:finish.missing.effectiveDim',
   cast: 'wizard:finish.missing.cast',
   lore: 'wizard:finish.missing.lore',
+  parentCycle: 'wizard:finish.missing.parentCycle',
 } as const
 
 type GateState =

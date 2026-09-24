@@ -21,6 +21,7 @@ export {
 export { PLOT_REJECTION, type PlotSaveResult } from './plot/commit-plot-save'
 export { saveHappening } from './plot/save-happening'
 export { saveThread } from './plot/save-thread'
+export { ENTITY_REJECTION, saveEntity, type EntitySaveResult } from './world/save-entity'
 export {
   addProvider,
   ensureProviderEmbeddingDim,
@@ -49,6 +50,12 @@ export {
   type DeclineEmbeddingUpgradeFn,
 } from './stories/embedding-upgrade'
 export { resetStorySettings } from './stories/reset-settings'
+export {
+  LEAD_REJECTION,
+  setStoryLead,
+  type LeadRejectionCode,
+  type SetStoryLeadResult,
+} from './stories/set-lead'
 export {
   saveStorySettingsSession,
   StorySettingsStaleStoreError,
