@@ -237,7 +237,6 @@
     "heldBy": "Held by",
     "members": "Members",
     "more": "+{{count}}",
-    "count": "{{count}}",
     "retiredReason": "— {{reason}}",
     "lastSeen": "last seen {{span}} ago",
     "lastSeenJustNow": "last seen just now",
@@ -302,12 +301,12 @@
     "deleteNamed": "Delete relationship with {{name}}",
     "both": "{{self}} · they see you: {{other}}",
     "onlySelf": "{{self}} · their view: not recorded",
-    "onlyOther": "your view: not recorded · they see you: {{other}}"
+    "onlyOther": "your view: not recorded · they see you: {{other}}",
+    "neither": "no views recorded yet"
   },
   "involvements": {
     "empty": "No involvements yet.",
     "emptyBody": "The classifier writes these as happenings involve this entity; add them from a happening's Involvements tab.",
-    "noRole": "no role recorded",
-    "open": "Open {{title}} in Plot"
+    "noRole": "no role recorded"
   }
 }

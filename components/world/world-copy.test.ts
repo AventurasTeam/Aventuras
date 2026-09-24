@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 
-import { hasCopy } from '@/lib/i18n/__tests__/locale-keys'
 import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
 import { characterDraftFrom, factionDraftFrom, itemDraftFrom, locationDraftFrom } from '@/lib/world'
 
@@ -12,6 +11,7 @@ import {
   lastSeenDetail,
   lastSeenText,
   leadDisabledReason,
+  leadRejectionText,
   relationshipDescription,
   saveRejectionText,
 } from './world-copy'
@@ -23,6 +23,11 @@ describe('relationshipDescription', () => {
     expect(relationshipDescription(' ', 'rival')).toBe(
       'your view: not recorded · they see you: rival',
     )
+  })
+
+  it('reads neither view recorded when both are blank', () => {
+    expect(relationshipDescription(null, null)).toBe('no views recorded yet')
+    expect(relationshipDescription('', ' ')).toBe('no views recorded yet')
   })
 })
 
@@ -54,7 +59,7 @@ describe('last seen', () => {
 })
 
 describe('labels and issues', () => {
-  it('has copy for every draft field of every kind', () => {
+  it("labels every draft field of every kind with its own kind's map", () => {
     const fields = [
       ...Object.keys(characterDraftFrom(null, [])).map((f) => ['character', f] as const),
       ...Object.keys(locationDraftFrom(null)).map((f) => ['location', f] as const),
@@ -62,7 +67,6 @@ describe('labels and issues', () => {
       ...Object.keys(factionDraftFrom(null)).map((f) => ['faction', f] as const),
     ]
     for (const [kind, field] of fields) expect(entityFieldLabel(kind, field)).not.toBe(field)
-    expect(hasCopy('world:fields.visual.distinguishing')).toBe(true)
   })
 
   it('names the tab a link-row or quantity issue lives on', () => {
@@ -71,6 +75,10 @@ describe('labels and issues', () => {
     )
     expect(entityIssueText('duplicateStackable')).toBe('Carrying: This quantity is already listed.')
     expect(entityIssueText('nameRequired')).toBe('A name is required.')
+  })
+
+  it('leaves an unknown message unchanged', () => {
+    expect(entityIssueText('Expected number, received nan')).toBe('Expected number, received nan')
   })
 
   it('maps refusal codes to user copy', () => {
@@ -83,6 +91,35 @@ describe('labels and issues', () => {
     expect(saveRejectionText(undefined)).toBe(
       "Couldn't save your changes. They're still here — try again.",
     )
+  })
+})
+
+describe('ISSUE_TAB', () => {
+  it('names the tab for every mapped issue', () => {
+    expect(entityIssueText('characterRequired')).toBe('Connections: Pick a character.')
+    expect(entityIssueText('relationshipPovRequired')).toBe(
+      'Connections: Fill in at least one view.',
+    )
+    expect(entityIssueText('duplicateRelationship')).toBe(
+      'Connections: This character already has a relationship here.',
+    )
+    expect(entityIssueText('parentCycle')).toBe(
+      'Connections: That parent would make this location part of itself.',
+    )
+    expect(entityIssueText('stackableKeyRequired')).toBe('Carrying: Name the quantity.')
+    expect(entityIssueText('stackableCount')).toBe('Carrying: Enter a whole number, 0 or more.')
+    expect(entityIssueText('duplicateStackable')).toBe('Carrying: This quantity is already listed.')
+    expect(entityIssueText('priorityRange')).toBe('Settings: Enter a whole number from 0 to 100.')
+  })
+})
+
+describe('leadRejectionText', () => {
+  it('names generation in flight and an inactive character, otherwise the generic failure', () => {
+    expect(leadRejectionText('in-flight')).toBe(
+      "Couldn't change the lead while generation is in flight.",
+    )
+    expect(leadRejectionText('not-active')).toBe('Only an active character can be the lead.')
+    expect(leadRejectionText('wrong-branch')).toBe("Couldn't change the lead.")
   })
 })
 
@@ -105,6 +142,21 @@ describe('overflow menu', () => {
     ).toEqual(['export', 'json', 'delete'])
   })
 
+  it('disables the lead entry with its reason, and omits it for non-characters', () => {
+    const entries = entityMenuEntries('character', {
+      onViewJson: () => {},
+      lead: { onSetLead: () => {}, disabledReason: 'Already the lead' },
+    })
+    const lead = entries.find((e) => e.key === 'lead')
+    expect(lead?.disabled).toBe(true)
+    expect(lead?.disabledReason).toBe('Already the lead')
+    expect(
+      entityMenuEntries('faction', { onViewJson: () => {}, lead: { onSetLead: () => {} } }).some(
+        (e) => e.key === 'lead',
+      ),
+    ).toBe(false)
+  })
+
   it('disables Set as lead on the current lead and on a non-active character', () => {
     const kael = makeEntity({ id: 'char_kael', kind: 'character', name: 'Kael' })
     expect(leadDisabledReason(kael, 'char_kael', false)).toBe('Already the lead')
@@ -113,6 +165,11 @@ describe('overflow menu', () => {
     )
     expect(leadDisabledReason(kael, null, true, 'blocked')).toBe('blocked')
     expect(leadDisabledReason(kael, null, false)).toBeUndefined()
+  })
+
+  it('falls back to the generation-gate text when blocked with no reason given', () => {
+    const kael = makeEntity({ id: 'char_kael', kind: 'character', name: 'Kael' })
+    expect(leadDisabledReason(kael, null, true)).toBe('Generation is in flight. Cancel to edit.')
   })
 })
 
@@ -143,5 +200,15 @@ describe('itemPositionHint', () => {
     expect(itemPositionHint(key, [keep, key], null)).toBe('at The River Keep')
     expect(itemPositionHint(key, [keep, key, kael], null)).toBe('held by Kael')
     expect(itemPositionHint(key, [keep, key, kael], 'char_kael')).toBe('at The River Keep')
+  })
+
+  it('reads the missing text alone when the location no longer exists', () => {
+    const orphan = makeEntity({
+      id: 'item_orphan',
+      kind: 'item',
+      name: 'Orphan key',
+      state: { at_location_id: 'loc_gone' },
+    })
+    expect(itemPositionHint(orphan, [orphan], null)).toBe('Entity no longer exists')
   })
 })

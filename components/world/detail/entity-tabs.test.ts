@@ -9,6 +9,31 @@ describe('entityTabs', () => {
     expect(entityTabs('faction')).not.toContain('carrying')
   })
 
+  it("orders each kind's tabs canonically", () => {
+    expect(entityTabs('character')).toEqual([
+      'overview',
+      'identity',
+      'carrying',
+      'connections',
+      'settings',
+      'assets',
+      'involvements',
+      'history',
+    ])
+    const withoutCarrying = [
+      'overview',
+      'identity',
+      'connections',
+      'settings',
+      'assets',
+      'involvements',
+      'history',
+    ]
+    expect(entityTabs('location')).toEqual(withoutCarrying)
+    expect(entityTabs('item')).toEqual(withoutCarrying)
+    expect(entityTabs('faction')).toEqual(withoutCarrying)
+  })
+
   it('drops a deep-link tab the kind does not have', () => {
     expect(entityTabOf('character', 'carrying')).toBe('carrying')
     expect(entityTabOf('item', 'carrying')).toBeUndefined()

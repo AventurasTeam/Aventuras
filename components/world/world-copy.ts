@@ -57,10 +57,18 @@ export function saveFailureText(): string {
   return t('world:save.failed')
 }
 
+// Exhaustive: a new LeadRejectionCode fails typecheck until it has text here.
+const LEAD_REJECTION_TEXT: Record<LeadRejectionCode, () => string> = {
+  [LEAD_REJECTION.inFlight]: () => t('world:lead.inFlight'),
+  [LEAD_REJECTION.draftStory]: () => t('world:lead.failed'),
+  [LEAD_REJECTION.wrongBranch]: () => t('world:lead.failed'),
+  [LEAD_REJECTION.notCharacter]: () => t('world:lead.failed'),
+  [LEAD_REJECTION.notActive]: () => t('world:lead.notActive'),
+  [LEAD_REJECTION.invalidDefinition]: () => t('world:lead.failed'),
+}
+
 export function leadRejectionText(code: LeadRejectionCode): string {
-  if (code === LEAD_REJECTION.inFlight) return t('world:lead.inFlight')
-  if (code === LEAD_REJECTION.notActive) return t('world:lead.notActive')
-  return t('world:lead.failed')
+  return LEAD_REJECTION_TEXT[code]()
 }
 
 const BASE_LABEL: Record<keyof EntityBaseDraft, () => string> = {
@@ -172,7 +180,7 @@ export function leadDisabledReason(
   blocked: boolean,
   blockedReason?: string,
 ): string | undefined {
-  if (blocked) return blockedReason
+  if (blocked) return blockedReason ?? t('common:generationGate.inFlight')
   if (row.id === leadId) return t('world:detail.menu.setLeadAlready')
   if (row.status !== 'active') return t('world:detail.menu.setLeadInactive')
   return undefined
@@ -187,7 +195,8 @@ export function relationshipDescription(
   const other = otherToSelf?.trim() || null
   if (self != null && other != null) return t('world:relationships.both', { self, other })
   if (self != null) return t('world:relationships.onlySelf', { self })
-  return t('world:relationships.onlyOther', { other: other ?? '' })
+  if (other != null) return t('world:relationships.onlyOther', { other })
+  return t('world:relationships.neither')
 }
 
 const SPAN_TIERS = ['year', 'month', 'day', 'hour', 'minute', 'second'] as const
@@ -239,5 +248,7 @@ export function itemPositionHint(
   const at = stateOf(item, 'item').at_location_id
   if (at == null) return undefined
   const place = entities.find((e) => e.id === at)
-  return t('world:carrying.position.at', { name: place?.name ?? t('world:carrying.missing') })
+  return place == null
+    ? t('world:carrying.missing')
+    : t('world:carrying.position.at', { name: place.name })
 }
