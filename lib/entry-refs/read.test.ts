@@ -146,6 +146,28 @@ describe('readEntryIndex', () => {
     )
   })
 
+  it('reads past a mixed-case style, script and comment preamble to the prose', async () => {
+    const preamble = [
+      `<STYLE type="text/css">.a { ${'margin: 2px; '.repeat(150)}}</STYLE>`,
+      '<script>window.x = "</div>"</script>',
+      '<!-- layout -->',
+    ].join('\n')
+    expect(preamble.length).toBeGreaterThan(2000)
+    const prose = 'The lamps gutter out one by one. '.repeat(6)
+    expect(await readExcerpt(`${preamble}\n\n${prose}`)).toBe(
+      'The lamps gutter out one by one. The lamps gutter out one by one. The lamps gutter out one by one. The lamps gutter out…',
+    )
+  })
+
+  it('reads the rest of the wide window when markup after the preamble outlasts the near scan', async () => {
+    const content = `<style>.a { color: red }</style>\n<div style="${'x'.repeat(900)}">The lamps gutter out.</div>`
+    expect(await readExcerpt(content)).toBe('The lamps gutter out.')
+  })
+
+  it('shows nothing when a leading style block never closes inside the wide window', async () => {
+    expect(await readExcerpt(`<style>.a { ${'margin: 2px; '.repeat(700)}`)).toBe('')
+  })
+
   it('reads on when the first window cuts a tag open ahead of the prose', async () => {
     const content = `The door opens.\n<p style="${'color: red; '.repeat(20)}">A cold draft follows her in.</p>`
     expect(await readExcerpt(content)).toBe('The door opens. A cold draft follows her in.')

@@ -9,6 +9,8 @@ import type { EntryIndex, EntryRef } from './types'
 const EXCERPT_SOURCE_CHARS = 200
 // Bounded, not whole content: a story of rich entries can send every row to the wider read.
 const WIDE_SOURCE_CHARS = 8000
+// Hermes strips at ~250 ns/char, so the wide read scans this much past any preamble first.
+const NEAR_SOURCE_CHARS = 600
 const ENTRY_EXCERPT_CHARS = 120
 
 type SourceHead = { head: string; afterCut: string; truncated: number }
@@ -51,6 +53,37 @@ function preview(source: SourceHead): { excerpt: string; readFurther: boolean } 
   }
 }
 
+const HIDDEN_OPEN = /\s*<(style|script)(?=[\s/>])/iy
+
+// End of the leading style and script blocks — a rich entry's preamble, skipped by index rather
+// than stripped. The length when one never closes: the reader hides the rest.
+function hiddenPrefixEnd(text: string): number {
+  let at = 0
+  for (;;) {
+    HIDDEN_OPEN.lastIndex = at
+    const tag = HIDDEN_OPEN.exec(text)?.[1].toLowerCase()
+    if (tag == null) return at
+    let close = text.indexOf('</', HIDDEN_OPEN.lastIndex)
+    while (close !== -1 && text.slice(close + 2, close + 2 + tag.length).toLowerCase() !== tag)
+      close = text.indexOf('</', close + 2)
+    const end = close === -1 ? -1 : text.indexOf('>', close)
+    if (end === -1) return text.length
+    at = end + 1
+  }
+}
+
+function widePreview(source: SourceHead): string {
+  const start = hiddenPrefixEnd(source.head)
+  const cut = start + NEAR_SOURCE_CHARS
+  const near = preview({
+    head: source.head.slice(start, cut),
+    afterCut: source.head.charAt(cut) || source.afterCut,
+    truncated: Number(source.head.length > cut || Boolean(source.truncated)),
+  })
+  if (!near.readFurther || source.head.length <= cut) return near.excerpt
+  return preview({ ...source, head: source.head.slice(start) }).excerpt
+}
+
 async function readWideExcerpts(
   ids: readonly string[],
   database: DbCtx['db'],
@@ -62,7 +95,7 @@ async function readWideExcerpts(
       .select({ id: storyEntries.id, ...sourceHead(WIDE_SOURCE_CHARS) })
       .from(storyEntries)
       .where(inArray(storyEntries.id, ids.slice(i, i + BIND_CHUNK)))
-    for (const r of rows) excerpts.set(r.id, preview(r).excerpt)
+    for (const r of rows) excerpts.set(r.id, widePreview(r))
   }
   return excerpts
 }
