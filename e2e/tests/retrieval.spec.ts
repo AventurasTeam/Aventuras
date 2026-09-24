@@ -10,6 +10,7 @@ import {
   removeUserDataDir,
   setProviderEndpoint,
 } from '../harness/seed'
+import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
 
@@ -138,7 +139,7 @@ test.describe('retrieval — a turn injects a retrieved bundle', () => {
     // The slice's acceptance criterion: the bump is reversible. The turn's
     // reversal window is anchored at the user_action's create delta, which the
     // bumps sit after, so one undo has to take them with it.
-    await reader.actionsTrigger(app.window).click()
+    await chrome.actionsTrigger(app.window).click()
     await reader.undoRow(app.window).click()
     await expect
       .poll(async () => scalar(AWARENESS_SUM_SQL, [HERO_BRANCH]), { timeout: 15_000 })

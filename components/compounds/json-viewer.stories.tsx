@@ -137,13 +137,13 @@ export const TriggerOpensDrawer: Story = {
   play: async () => {
     const trigger = screen.getByRole('button', { name: 'View raw JSON' })
     await userEvent.click(trigger)
-    // The close × is only present while the drawer is mounted —
-    // a more specific assertion than `getByText(/Raw JSON/)`,
-    // which matches both the sr-only DialogTitle and the visible
-    // split-text header.
+    // The close × is only present while the drawer is mounted.
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Close raw JSON viewer' })).toBeInTheDocument(),
     )
+    // Named by its visible header, as the only dialog on screen.
+    expect(screen.getByRole('dialog', { name: 'Raw JSON · Mira (character)' })).toBeVisible()
+    expect(screen.getAllByRole('dialog')).toHaveLength(1)
   },
 }
 

@@ -160,6 +160,7 @@ export function HappeningDetailPane({
                 <InlineEditableName
                   value={field.value}
                   onChange={field.onChange}
+                  savedValue={values.title}
                   placeholder={t('plot:detail.namePlaceholder')}
                   size="lg"
                   disabled={blocked}
@@ -322,6 +323,7 @@ function HappeningOverviewForm({
               value={iconOptionValue(field.value)}
               onValueChange={(value) => field.onChange(iconFromOption(value))}
               disabled={blocked}
+              disabledReason={blockedReason}
               // The committed key, not the draft's: an unknown stored key stays pickable.
               options={plotIconOptions(row?.icon ?? null)}
             />

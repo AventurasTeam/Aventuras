@@ -17,7 +17,7 @@ export default function InputDevRoute() {
   )
 
   return (
-    <ScrollView className="flex-1 bg-bg-base">
+    <ScrollView keyboardShouldPersistTaps="handled" className="flex-1 bg-bg-base">
       <ThemePicker />
       <DensityPicker />
       <View className="gap-6 p-4">

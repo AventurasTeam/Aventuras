@@ -646,10 +646,14 @@ export const Blocked: Story = {
     expect(await pane().findByText('The alley ambush')).toBeVisible()
     expect(pane().queryByRole('button', { name: /^Edit / })).not.toBeInTheDocument()
     expect(description()).toHaveAttribute('readonly')
-    const category = pane().getByPlaceholderText('e.g. mystery, goal, conflict')
+    const category = pane().getByRole('combobox', { name: 'Category' })
     expect(category).toHaveAttribute('readonly')
     expect(category).toHaveValue('encounter')
     expect(pane().getByRole('button', { name: 'Icon' })).toBeDisabled()
+    expect(pane().getByRole('button', { name: 'Icon' }).closest('[title]')).toHaveAttribute(
+      'title',
+      BLOCKED_REASON,
+    )
     expect(ckSwitch()).toHaveAttribute('aria-disabled', 'true')
     expect(pane().getByRole('button', { name: /^Occurred at/ })).toHaveAttribute(
       'aria-disabled',
@@ -762,6 +766,25 @@ export const SavedHandlerThrows: Story = {
     expect(args.onRejected).not.toHaveBeenCalled()
     expect(screen.queryByLabelText(FAILED_TEXT)).not.toBeInTheDocument()
     expect(description()).toHaveValue(`${AMBUSH.description} At dusk.`)
+  },
+}
+
+/** Escape after a mid-edit Ctrl-S restores the saved title, not the one the edit started from. */
+export const EscapeAfterSaveKeepsSavedTitle: Story = {
+  play: async ({ args }) => {
+    await userEvent.click(await pane().findByRole('button', { name: 'Edit The alley ambush' }))
+    const input = await pane().findByDisplayValue('The alley ambush')
+    await userEvent.clear(input)
+    await userEvent.type(input, 'The dock ambush')
+    await userEvent.keyboard('{Control>}s{/Control}')
+    await waitFor(() => expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument(), WAIT)
+    expect(input).toHaveFocus()
+
+    await userEvent.type(input, ' again')
+    await userEvent.keyboard('{Escape}')
+    expect(await pane().findByRole('button', { name: 'Edit The dock ambush' })).toBeVisible()
+    expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument()
+    expect(args.onSave).toHaveBeenCalledTimes(1)
   },
 }
 

@@ -67,16 +67,25 @@ export function nextStatusOnFailure(
 }
 
 /**
- * Turn-counted cadence (canon ships no token trigger in v1). Suspended in
+ * The most entries a cadence-fired run can trail by. The trigger is checked only after a
+ * completed turn, which writes two entries, and a prose reversal can leave the unprocessed count
+ * at either parity — so the count can step past the cadence by one, even or odd.
+ */
+export function worstCaseCadenceEntries(cadence: number): number {
+  return Math.max(1, cadence) + 1
+}
+
+/**
+ * Entry-counted cadence (canon ships no token trigger in v1). Suspended in
  * failed-persistent so a broken provider is not spammed on every tick — the
  * manual run is the only way out.
  */
 export function shouldCadenceFire(args: {
   status: ClassifierStatus
-  unprocessedTurns: number
+  unprocessedEntries: number
   cadence: number
 }): boolean {
-  const { status, unprocessedTurns, cadence } = args
+  const { status, unprocessedEntries, cadence } = args
   if (status.state === 'failed-persistent' || status.state === 'running') return false
-  return unprocessedTurns >= Math.max(1, cadence)
+  return unprocessedEntries >= Math.max(1, cadence)
 }

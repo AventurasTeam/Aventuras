@@ -11,7 +11,11 @@ export function ThemePicker() {
       <Text variant="muted" size="sm">
         Theme
       </Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        horizontal
+        showsHorizontalScrollIndicator={false}
+      >
         <View className="flex-row gap-2">
           {themes.map((t) => (
             <Button

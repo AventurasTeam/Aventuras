@@ -36,6 +36,8 @@
     "storybook:build": "storybook build",
     "build-storybook": "storybook build",
     "themes:audit": "tsx scripts/themes-audit.ts",
+    "compiler:check": "tsx scripts/compiler-bailouts.ts",
+    "compiler:baseline": "tsx scripts/compiler-bailouts.ts --update",
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
     "db:check:format": "tsx scripts/check-migrations-format.ts",

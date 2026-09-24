@@ -98,8 +98,11 @@ contract — not a per-surface choice:
 
 **Surface-specific informational notes** (e.g., calendar editor's
 "saving propagates labels to N stories using this calendar") layer
-in as a small `⚠` icon with tooltip after the field list — a
-single primitive, never a second row. The visual contract stays
+in as a small `⚠` icon after the field list — a hover tooltip on
+desktop, and a tap or click opens the same text in a popover, which is
+how it reaches phone users (see
+[`touch.md → Tap-to-tooltip on inert chrome text`](../foundations/mobile/touch.md#tap-to-tooltip-on-inert-chrome-text)).
+A single primitive, never a second row. The visual contract stays
 single-row across surfaces.
 
 **Positioning** — the save bar is a flex item at the bottom of the
@@ -107,9 +110,10 @@ editable pane, a **sibling of the pane's scroller rather than a
 child of it**. It stays anchored to the pane's bottom edge no
 matter how long the form is. On tablet and desktop it spans the
 editable pane only — never the rail or the surrounding chrome. On
-phone, where a two-pane surface collapses to one pane at a time, the
-bar sits below whichever pane is showing — list or detail — so the
-session stays saveable from the list state; see
+phone, where a two-pane surface collapses to one pane at a time, a
+surface-wide session's bar sits below whichever pane is showing —
+list or detail — so the session stays saveable from the list state
+(a per-row session guards the collapse instead); see
 [`story-settings.md → Mobile expression`](../screens/story-settings/story-settings.md#mobile-expression).
 Pinned by layout — the scroller is the flex sibling that shrinks —
 not by `position: sticky`.

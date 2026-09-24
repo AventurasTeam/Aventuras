@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite'
 
-import type { Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
 import { gunzipSync } from 'fflate'
 
 import type { EntryMetadata, ProbeCapturePayload } from '@/lib/db'
@@ -72,6 +72,20 @@ export async function latestCapture(
   if (blob === undefined) return null
   const json = new TextDecoder().decode(gunzipSync(blob))
   return JSON.parse(json) as ProbeCapturePayload
+}
+
+// latestCapture reads newest-first, so waiting for target_entry_id to move off the previous
+// turn's is what waits for THIS turn's capture instead of re-reading the last one — and a wrong
+// capture then fails on its own assertion, not on a poll timeout. `undefined` waits for the first.
+export async function captureForTurn(
+  page: Page,
+  branchId: string,
+  previousTargetEntryId: string | undefined,
+): Promise<ProbeCapturePayload> {
+  await expect
+    .poll(async () => (await latestCapture(page, branchId))?.target_entry_id, { timeout: 30_000 })
+    .not.toBe(previousTargetEntryId)
+  return (await latestCapture(page, branchId))!
 }
 
 // Read-only assertion handle over the fixture DB file. E2E drives the app

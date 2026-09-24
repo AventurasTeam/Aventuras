@@ -1,7 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
 import { View } from 'react-native'
+import { expect, screen, userEvent } from 'storybook/test'
 
+import { i18n } from '@/lib/i18n'
 import { themes } from '@/lib/themes'
 
 import { InlineEditableName } from './inline-editable-name'
@@ -38,6 +40,43 @@ function Controlled({
 
 export const Default: Story = {
   render: () => <Controlled initial="Aria Vex" />,
+}
+
+/** Typing reaches `onChange` before any blur or Enter; Escape restores the starting value. */
+export const LiveEditAndEscape: Story = {
+  render: () => <Controlled initial="Aria Vex" />,
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Aria Vex' }))
+    const input = await screen.findByDisplayValue('Aria Vex')
+    await userEvent.clear(input)
+    await userEvent.type(input, 'Mara')
+    expect(input).toHaveFocus()
+    expect(screen.getByText('Value: Mara')).toBeVisible()
+
+    await userEvent.keyboard('{Escape}')
+    expect(await screen.findByRole('button', { name: 'Edit Aria Vex' })).toBeVisible()
+    expect(screen.getByText('Value: Aria Vex')).toBeVisible()
+  },
+}
+
+// cimode makes t() return its key, so only a name routed through t() can match.
+export const NamesAreTranslated: Story = {
+  render: () => (
+    <View className="gap-2" style={{ width: 360 }}>
+      <InlineEditableName value="Aria Vex" onChange={() => {}} />
+      <InlineEditableName value="" onChange={() => {}} />
+    </View>
+  ),
+  beforeEach: async () => {
+    await i18n.changeLanguage('cimode')
+    return () => {
+      void i18n.changeLanguage('en')
+    }
+  },
+  play: async () => {
+    expect(screen.getByRole('button', { name: 'inlineEditableName.edit' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'inlineEditableName.editUnnamed' })).toBeVisible()
+  },
 }
 
 export const Sizes: Story = {

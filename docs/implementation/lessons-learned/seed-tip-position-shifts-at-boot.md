@@ -20,7 +20,7 @@ const tip = db
 
 The failure is silent and looks like a product bug. Parking the classifier
 watermark one position high pushed the spec's first turn out of the pass window,
-so `unprocessedTurnCount` saw three rows where the cadence needed four and the
+so `unprocessedEntryCount` saw three rows where the cadence needed four and the
 pass simply never fired — no error, just a poll that timed out on an empty
 `happenings` table. Had the count still reached the cadence, the damage would
 have been worse: the window's `t1..tN` handles shift by one, so a fixture

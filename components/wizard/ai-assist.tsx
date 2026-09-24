@@ -449,7 +449,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
               </Pressable>
             </View>
             <View className={isPhone ? 'flex-1' : 'max-h-96'}>
-              <Scroller>
+              <Scroller keyboardShouldPersistTaps="handled">
                 <View className="gap-2">
                   {marked.map((row) => {
                     const key = itemKey(row)
@@ -562,7 +562,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
         {/* Bounded like the prose result: the chip count is model-supplied, and an
             unbounded wrap pushes the actions out of the height-capped dialog. */}
         <View className={isPhone ? 'flex-1' : 'max-h-96'}>
-          <Scroller>
+          <Scroller keyboardShouldPersistTaps="handled">
             <View className="flex-row flex-wrap gap-2">
               {chips.map((chip) => (
                 <Tag
@@ -601,7 +601,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
             isPhone ? 'flex-1' : 'max-h-96',
           )}
         >
-          <Scroller>
+          <Scroller keyboardShouldPersistTaps="handled">
             <Text size="sm">{prose}</Text>
           </Scroller>
         </View>

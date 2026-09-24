@@ -60,6 +60,20 @@ module.exports = defineConfig([
           message:
             'Wildcard imports are banned. Use named imports. Exception: @rn-primitives/*. See .claude/rules/code.md.',
         },
+        // RN's default "never" spends the first tap while a field is focused on dismissing the
+        // keyboard. Kept in this array: a second no-restricted-syntax entry would replace it.
+        {
+          selector:
+            'JSXOpeningElement[name.name=/^(GH)?(ScrollView|FlatList|SectionList)$|^BottomSheet(ScrollView|FlatList|SectionList)$|^KeyboardAwareScrollView$/]:not(:has(> JSXAttribute[name.name="keyboardShouldPersistTaps"])):not(:has(> JSXSpreadAttribute))',
+          message:
+            'Set keyboardShouldPersistTaps (usually "handled"): the default spends the first tap on dismissing the keyboard. See docs/ui/foundations/mobile/touch.md.',
+        },
+        {
+          selector:
+            'JSXOpeningElement[name.property.name=/^(ScrollView|FlatList|SectionList)$/]:not(:has(> JSXAttribute[name.name="keyboardShouldPersistTaps"])):not(:has(> JSXSpreadAttribute))',
+          message:
+            'Set keyboardShouldPersistTaps (usually "handled"): the default spends the first tap on dismissing the keyboard. See docs/ui/foundations/mobile/touch.md.',
+        },
       ],
 
       // lib/* modules expose a public API via index.ts; any importer

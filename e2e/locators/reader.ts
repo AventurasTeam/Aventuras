@@ -90,11 +90,7 @@ export const reader = {
   switchEmbedderFix: (page: Page): Locator =>
     page.getByRole('button', { name: t('reader:systemEntry.switchEmbedder') }),
 
-  // The chrome actions menu (IconAction trigger; on web the accessible name
-  // carries the "(Ctrl+K)" shortcut hint, so match on the base label). Undo /
-  // Redo live in its contextual group; their row labels are i18n-resolved.
-  actionsTrigger: (page: Page): Locator =>
-    page.getByRole('button', { name: new RegExp(t('chrome.actions')) }),
+  // Undo / Redo live in the chrome Actions menu's contextual group (chrome.ts opens it).
   undoRow: (page: Page): Locator => page.getByText(t('reader:actions.undo'), { exact: true }),
   redoRow: (page: Page): Locator => page.getByText(t('reader:actions.redo'), { exact: true }),
 

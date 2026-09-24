@@ -85,13 +85,21 @@ function Body({
 }) {
   if (!insideSheet) {
     return (
-      <ScrollView className="shrink" contentContainerClassName="gap-3">
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        className="shrink"
+        contentContainerClassName="gap-3"
+      >
         {children}
       </ScrollView>
     )
   }
   return (
-    <BottomSheetScrollView contentContainerClassName="gap-3 pb-3" style={FILL}>
+    <BottomSheetScrollView
+      keyboardShouldPersistTaps="handled"
+      contentContainerClassName="gap-3 pb-3"
+      style={FILL}
+    >
       {children}
     </BottomSheetScrollView>
   )

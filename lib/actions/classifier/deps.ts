@@ -9,7 +9,7 @@ import { branches, deltas, storyEntries, type ClassifierStatus, type DbCtx } fro
  * out of the window, so a position delta fires the cadence early on a branch that
  * carries technical rows.
  */
-export async function unprocessedTurnCount(
+export async function unprocessedEntryCount(
   branchId: string,
   processedThrough: number | null,
   ctx: DbCtx,

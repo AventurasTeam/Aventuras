@@ -48,6 +48,9 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: React Compiler bail-out ratchet
+        run: pnpm compiler:check
+
       - name: Typecheck Electron main
         run: pnpm electron:compile
 

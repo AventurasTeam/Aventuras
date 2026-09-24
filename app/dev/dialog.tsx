@@ -16,7 +16,7 @@ import { Text } from '@/components/ui/text'
 
 export default function DialogDevRoute() {
   return (
-    <ScrollView className="flex-1 bg-bg-base">
+    <ScrollView keyboardShouldPersistTaps="handled" className="flex-1 bg-bg-base">
       <ThemePicker />
       <View className="flex-col gap-6 p-4">
         <View>
@@ -59,7 +59,11 @@ export default function DialogDevRoute() {
                 <DialogHeader>
                   <DialogTitle>Form-owned scroll</DialogTitle>
                 </DialogHeader>
-                <ScrollView className="shrink" contentContainerClassName="gap-1">
+                <ScrollView
+                  keyboardShouldPersistTaps="handled"
+                  className="shrink"
+                  contentContainerClassName="gap-1"
+                >
                   {Array.from({ length: 40 }, (_, i) => (
                     <Text key={i} size="sm">{`Row ${i + 1}`}</Text>
                   ))}

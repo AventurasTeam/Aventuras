@@ -5,6 +5,7 @@ import { FormRow } from '@/components/compounds/form-row'
 import { NumberInput } from '@/components/compounds/number-input'
 import { SwitchRow } from '@/components/compounds/switch-row'
 import { Chip } from '@/components/ui/chip'
+import { Heading } from '@/components/ui/heading'
 import { Select } from '@/components/ui/select'
 import { Stepper } from '@/components/ui/stepper'
 import { Tag } from '@/components/ui/tag'
@@ -35,7 +36,7 @@ type MemoryKnobSectionProps = {
 }
 
 function SectionTitle({ children }: { children: string }) {
-  return <Text className="font-semibold">{children}</Text>
+  return <Heading level={3}>{children}</Heading>
 }
 
 function invalidCopy(problem: MemoryKnobsProblem) {
@@ -144,6 +145,7 @@ export function ChapterCloseSection({
                 key={preset.id}
                 selected={selected === preset.id}
                 disabled={disabled}
+                disabledReason={disabledReason}
                 onPress={() => {
                   setCustomPinnedAt(null)
                   onChange({ ...draft, chapterTokenThreshold: preset.tokens })
@@ -155,6 +157,7 @@ export function ChapterCloseSection({
             <Chip
               selected={selected === 'custom'}
               disabled={disabled}
+              disabledReason={disabledReason}
               onPress={() => setCustomPinnedAt(threshold)}
             >
               <Text size="xs">{t('storySettings:memory.knobs.preset.custom')}</Text>
@@ -268,7 +271,7 @@ export function ClassifierCadenceSection({
 }: MemoryKnobSectionProps) {
   const partial = draft.partialChapterBuffer
   const cadence = draft.classifierCadence
-  // Full mode keeps the whole chapter in context, so no turn can slide out unclassified.
+  // Full mode keeps the whole chapter in context, so no entry can slide out unclassified.
   const overlap =
     !draft.fullChapterInBuffer && KNOB_RULES.partialBuffer(partial) && KNOB_RULES.cadence(cadence)
       ? cadenceOverlap(partial, cadence)
@@ -413,6 +416,7 @@ export function KeywordRetrievalSection({
             )
           }
           disabled={disabled}
+          disabledReason={disabledReason}
         />
       </FormRow>
       <KnobField

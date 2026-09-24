@@ -9,11 +9,11 @@ import {
   markSwapPending,
   removeUserDataDir,
 } from '../harness/seed'
+import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
 import { statusPill } from '../locators/status-pill'
 import { storySettings } from '../locators/story-settings'
-import { world } from '../locators/world'
 
 const HERO_TITLE = 'The Veilstone Courier'
 const HERO_BRANCH = 'br_hero_main'
@@ -157,8 +157,8 @@ test.describe.serial('embedder — swap-paused status pill', () => {
     const page = app.window
     await expect(reader.composer(page)).toBeVisible()
 
-    await reader.actionsTrigger(page).click()
-    await world.goToWorldRow(page).click()
+    await chrome.actionsTrigger(page).click()
+    await chrome.goToWorldRow(page).click()
     await page.waitForURL(/\/world\//)
     await expect(statusPill.swapPaused(page)).toBeVisible()
 

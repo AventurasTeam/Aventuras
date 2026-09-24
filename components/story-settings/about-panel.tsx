@@ -7,6 +7,7 @@ import { SwitchRow } from '@/components/compounds/switch-row'
 import { TagInput } from '@/components/compounds/tag-input'
 import { MODE_DEFAULT_COLOR } from '@/components/story/story-card'
 import { ColorPicker } from '@/components/ui/color-picker'
+import { Heading } from '@/components/ui/heading'
 import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
@@ -76,7 +77,7 @@ export function AboutPanel({
   return (
     <View testID="about-panel" className="gap-4">
       <View className="gap-0.5">
-        <Text className="font-semibold">{t('storySettings:about.heading')}</Text>
+        <Heading level={3}>{t('storySettings:about.heading')}</Heading>
         <Text size="sm" variant="muted">
           {t('storySettings:about.intro')}
         </Text>
@@ -160,6 +161,7 @@ export function AboutPanel({
             setDraft((prev) => ({ ...prev, status: value === 'archived' ? 'archived' : 'active' }))
           }
           disabled={disabled || isDraftStory}
+          disabledReason={disabledHint}
         />
       </FormRow>
 

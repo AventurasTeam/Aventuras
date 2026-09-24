@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
+import { expect, screen } from 'storybook/test'
 
 import { JSONBlock } from './json-block'
 
@@ -20,12 +21,20 @@ const SAMPLE_OBJECT = {
   source: 'provider:anthropic-main',
 }
 
+/** Copy shares the text's top inset, so it never sits flush on a divider above the block. */
 export const Basic: Story = {
   render: () => (
     <View className="w-96 p-4">
       <JSONBlock data={SAMPLE_OBJECT} />
     </View>
   ),
+  play: async () => {
+    const copy = await screen.findByRole('button', { name: 'Copy' })
+    const text = screen.getByText(/"attempt": 2/)
+    const inset = parseFloat(getComputedStyle(text).paddingTop)
+    expect(inset).toBeGreaterThan(0)
+    expect(copy.getBoundingClientRect().top - text.getBoundingClientRect().top).toBe(inset)
+  },
 }
 
 export const NestedObject: Story = {

@@ -15,6 +15,7 @@ import { Text } from '@/components/ui/text'
 import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useTier } from '@/hooks/use-tier'
 import { useDensity, type DensityValue } from '@/lib/density'
+import { HEX_COLOR } from '@/lib/hex-color'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
@@ -34,12 +35,11 @@ type ColorPickerProps = {
   testID?: string
 }
 
-const HEX_PATTERN = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i
 const DEFAULT_CUSTOM_HEX = '#3b82f6'
 
 function normalizeHex(input: string): string | null {
   const trimmed = input.trim()
-  if (!HEX_PATTERN.test(trimmed)) return null
+  if (!HEX_COLOR.test(trimmed)) return null
   if (trimmed.length === 4) {
     const [, r, g, b] = trimmed
     return `#${r}${r}${g}${g}${b}${b}`.toLowerCase()

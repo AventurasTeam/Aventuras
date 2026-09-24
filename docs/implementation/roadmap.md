@@ -551,8 +551,8 @@ tab is the canonical _don't_ — M3.1's implementation will refine
 its spec.
 
 Carried deferrals, routed out of [`triage.md`](./triage.md)
-2026-08-18 and 2026-08-20. Each was verified against the code before it
-moved; resolve with the slice it names.
+2026-08-18, 2026-08-20 and later passes. Each was verified against the
+code before it moved; resolve with the slice it names.
 
 - **M7.3 — Electron main has no unhandled-rejection handler.**
   Slice 3.12a installed one in the renderer (`lib/boot/rejection-handler.ts`),
@@ -827,6 +827,23 @@ moved; resolve with the slice it names.
   fixed on Story Settings → Models, and `resolveModel`'s failure
   result does not say which path failed. Unreachable until deletion
   ships. Surfaced by Slice 4.4 execution (2026-09-14).
+- **M7.2 — Story Settings → Memory's embedder block departs from
+  canon.** [`story-settings.md → Memory tab`](../ui/screens/story-settings/story-settings.md#memory-tab)
+  puts [Embedding status](../ui/screens/story-settings/story-settings.md#embedding-status)
+  in its own section after Keyword retrieval, rendered only while the
+  active branch has stale rows. The shipped `MemoryPanel`
+  (`components/story-settings/memory-panel.tsx`), seated in the
+  Embedder slot by Slice 4.4, shows the stale count unconditionally —
+  "0 rows pending re-embed." included — beside the current model, with
+  `Reindex now` under it. The [Embedder](../ui/screens/story-settings/story-settings.md#embedder)
+  section differs too: canon lists the backend, model id and display
+  name, the resolved execution provider and, where it applies, the
+  effective dimension; the panel shows only the raw model id.
+  `Reindex now` is in no canon doc, only the M3.1b slice doc. Decide
+  each: split status out and gate it, or amend canon to keep it beside
+  the model it describes; add the display fields or trim the list;
+  write `Reindex now` into canon or drop it. The tab's Probe section is
+  M7.5's. Raised 2026-09-15 by Slice 4.4; widened 2026-09-23.
 - **M7.2 — The Authoring aids gates read the stored `definition.mode`.**
   Slice 4.4 reads the story's SAVED mode in two places: the composer
   gates (the modes toggle is adventure-only; wrap POV follows it) and
@@ -864,6 +881,39 @@ moved; resolve with the slice it names.
   commit; the gap is the canon promise, and the picker's full surface
   lands with this slice's providers tab. Surfaced by Slice 4.4
   execution (2026-09-14), routed 2026-09-16.
+- **M7.1 — App Settings' phone save bar should come from
+  `MasterDetailLayout`, not a copy of Story Settings' shell.** Story
+  Settings lifts its save bar below whichever pane the phone shows
+  ([`touch.md → Save bar on phone`](../ui/foundations/mobile/touch.md#save-bar-on-phone))
+  from `StorySettingsShell` (`components/shells/story-settings-shell.tsx`),
+  which calls `useTier()` itself to know when the layout has collapsed.
+  [`app-settings.md → Mobile expression`](../ui/screens/app-settings/app-settings.md#mobile-expression)
+  makes App Settings' save bar identical, so the save session this
+  milestone adds would copy that lift. A `footer` slot on
+  `MasterDetailLayout` — in the detail pane on tablet and desktop, below
+  both panes on phone — holds it once: about 10 lines in the layout, 6
+  out of the shell. Duplication rather than live drift: both tier reads
+  are `useTier() === 'phone'`. World and Plot don't need it; their
+  per-row sessions guard the collapse instead. Raised 2026-09-14 by
+  Slice 4.4.
+- **M7.1 — `ProviderModelPicker`'s broken-state scroll promises aren't
+  implemented.** The
+  [Trigger](../ui/patterns/provider-model-picker.md#trigger) section
+  promises the picker opens scrolled to the first existing provider's
+  section when the value's provider is missing, and scoped to that
+  provider's section when the model isn't in the catalog. The picker
+  passes `initialScrollRowId={value ? rowId('provider', value) : undefined}`
+  — the broken value's own row id, which exists in neither state — and
+  `SearchableOverlayList` latches a scroll target only for a row it
+  finds, so both open unscrolled. The happy path is right. The
+  provider-missing promise is nearly empty: with no Favorites the first
+  provider's section is already at the top, and the substrate centres
+  a row rather than top-aligning a section. "Scoped to" is ambiguous
+  between filtered and scrolled. Provider-missing is unreachable until
+  provider deletion (above) ships; model-not-in-catalog is reachable
+  after a catalog refresh drops a model. Settle the wording with the
+  providers tab, then fix (about 8 lines) with a play on a
+  non-first-provider story. Raised 2026-09-22 by Slice 4.3.
 
 **Gates.** M6 (settings should reflect real branching + multi-
 story behavior; diagnostics should inspect real branch-aware
@@ -1060,11 +1110,22 @@ author it as 2–3 slices so the audit spreads across contributors
 instead of serializing on one.
 
 Carried deferrals, routed out of [`triage.md`](./triage.md)
-(2026-08-18 and 2026-09-13), verified against the code first. Several
+(2026-08-18, 2026-09-13 and 2026-09-23), verified against the code first. Several
 are a11y-contract rather than visual, so M9.2's audit has to widen
 past glyphs and spacing to own them — or they need a slice of their
 own.
 
+- **M9.1 — The component inventory is missing about 70 shipped
+  components.** `docs/ui/component-inventory.md` has no rows for
+  `components/story-settings/` or `components/embedder/`, and a
+  name-match sweep on 2026-09-23 found most of `reader/` (7 of 7),
+  `wizard/` (23 of 23) and `story/` (6 of 7) absent too, plus four
+  `plot/` pieces, about seven `compounds/`, two `shells/` and two `ui/`
+  (`Banner`, `KeyboardInsetColumn`). Shipped rows are added by hand when
+  a component ships, so these are the ones that skipped the step.
+  Backfill in one pass, and consider an inventory-versus-filesystem
+  check beside this milestone's story-coverage gate so the list stays
+  whole. Raised 2026-09-14 by Slice 4.4; widened 2026-09-23.
 - **M9.2 — `disabledReason` never reaches the accessibility tree on web.**
   `Button`, `SwitchRow`, `swap-dialog`'s `CandidateRow` and
   `ColorPicker` all pass the reason to `accessibilityHint`, which RN
@@ -1129,7 +1190,13 @@ own.
   missing. Dropping the label also breaks the E2E row locators, which
   match it as the exact accessible name. `ListRow` is pan-domain and
   canon never says what a row announces, so this wants a
-  shared-contract design pass. Raised 2026-09-11 by Slice 4.1.
+  shared-contract design pass. Raised 2026-09-11 by Slice 4.1. Plot's
+  rows add the same two classes: the when-marker and a thread's status
+  and category are text `Tag`s the label hides, and a happening's ⊙
+  common-knowledge glyph is text-less, so it joins in-scene and
+  recently-classified in needing the hidden-text primitive. The row's
+  `description` line (a happening's category, a lore excerpt) is hidden
+  too. Widened 2026-09-22 by Slice 4.3.
 - **M9.5 — No navigation landmark anywhere.** No `navigation` landmark
   role exists in the app. Breadcrumb is the natural first one, but
   World renders two (the top-bar title and the sub-header), so a role
@@ -1140,6 +1207,19 @@ own.
   [`mobile/platform.md → Accessibility`](../ui/foundations/mobile/platform.md#accessibility)
   already leaves landmark structure to the per-screen passes. Raised
   2026-09-11 by Slice 4.1.
+- **M9.5 — Titles outside Story Settings aren't headings, and no rule
+  sets their level.** Story Settings' panel and section titles became
+  `Heading` level 3 on 2026-09-23 — a stand-in level, since the screen
+  title above them is not a heading either. Elsewhere titles are plain
+  `Text`: the screen titles in `app/settings/index.tsx`, `app/index.tsx`
+  and `app/diagnostics/index.tsx`, `EmbedderDefaultCard`, `StoryList`,
+  `SuggestionStrip`, `SettingsRecoveryScreen`, `WorldDetailPlaceholder`,
+  and the Story Settings shell's rail group headers.
+  [`mobile/platform.md → Accessibility`](../ui/foundations/mobile/platform.md#accessibility)
+  says headings get the `header` role but no doc says which level a
+  screen, panel or section title takes; settle that with the landmark
+  entry above, then sweep. Raised 2026-09-14 for Story Settings;
+  widened 2026-09-23.
 - **M9.5 — A removable `Tag`'s × likely misses the phone tap floor on
   Android.** [`chips.md → Tag`](../ui/patterns/chips.md#tag--pill-labeled-content)
   promises the × its own 44 px target. It is a 20 px circle with
@@ -1151,7 +1231,86 @@ own.
   fields) or a lower promise in chips.md. Pressable pill bodies took
   `IconAction`'s visible + 2 × slop rule in the same pass, equally
   unverified on a device. Raised 2026-09-11 by Slice 4.1; split
-  2026-09-13.
+  2026-09-13. Every other slop consumer shares the question —
+  `Stepper`'s − / + and `ScreenShell`'s Back and Actions are
+  `IconAction`s, and interactive `Chip` took 4 px a side on
+  2026-09-23 — so check them in the same device pass. React Native
+  0.83's Fabric unions a child's slop into an overflow-visible
+  parent's `overflowInset`, which suggests the clip may not happen;
+  if the device agrees, the "never lets slop reach past the parent"
+  claim here and in `chips.md → Tag` is wrong.
+- **M9.5 — `ListRow` and `Button` `sm` sit under the phone tap floor.**
+  [`touch.md → Touch-target floor on phone`](../ui/foundations/mobile/touch.md#touch-target-floor-on-phone)
+  pins a 44 px `min-height` on "any tappable list row", but
+  `components/compounds/list-row.tsx` sets only `py-row-y-md` — no
+  phone floor, where `OverflowMenu`, the cast list and `Select`'s
+  phone rows each add `min-h-control-lg` on phone. `Button` `sm` is
+  `h-control-sm`, 40 px at `regular`, with no slop. Measure a
+  single-line World and Plot row on a phone before choosing a fix.
+  Raised 2026-09-19 by Slice 4.4; split 2026-09-23.
+- **M9.5 — Native initial-scroll-to-value has three residual gaps.**
+  `SearchableOverlayList` (`components/ui/searchable-overlay-list.tsx`)
+  holds its scroll-to-selection anchor until the user drags the list or
+  types, as
+  [its pattern doc](../ui/patterns/searchable-overlay-list.md) says. A
+  wheel or trackpad scroll (DeX, ChromeOS) or a TalkBack scroll action
+  never fires `onScrollBeginDrag` — React Native's `ReactScrollView`
+  scrolls those without it — so the anchor survives and snaps the list
+  back at the next viewport-height change, a keyboard show / hide or a
+  resize. A close-then-reopen inside gorhom's dismiss animation carries
+  the old anchor over only when the value was cleared or moved to an
+  unlisted id in that window; otherwise the next open overwrites it. On
+  a phone sheet with sticky section headers (`ProviderModelPicker`
+  only), the target lands one header height, about 24 px, below centre:
+  `VirtualizedSectionList` adds the header's height to `viewOffset`.
+  Each fix is 5–15 lines; no Storybook play (web) or desktop E2E can
+  reach them, so they want a device pass. Raised 2026-09-22 by Slice
+  4.3; corrected 2026-09-23.
+- **M9.5 — Native tablet pickers' popovers render screen-wide, not under
+  their field.** Seen on `EntityPicker` at tablet tier (`wm density 200`
+  on the phone AVD): the popover starts at x=0 and covers the list pane.
+  Anchoring is not the cause — the rn-primitives native `Portal` renders
+  nothing until the trigger is measured. The likely cause is width:
+  native `matchTriggerWidth` sets only `minWidth`, so the auto-width
+  content grows to its `w-full` rows and search input, which resolve
+  against the window, and rn-primitives then clamps `left` to 0. If so,
+  every `matchTriggerWidth` consumer shows it on native tablet
+  (`EntityPicker`, `EntryRefPicker`, `ProviderModelPicker`,
+  `CalendarPicker`) while fixed-width menus (`ActionsMenu`,
+  `PresetBrowser`) don't; comparing the two on the AVD settles it. The
+  fix is likely a `width` equal to the measured trigger floored as on
+  web, about three lines. Cosmetic: the phone Sheet and desktop are
+  correct. Raised 2026-09-22 by Slice 4.3; reframed 2026-09-23.
+- **M9.5 — A bottom `Sheet` closed while it is still presenting can
+  stay mounted.** Probed in the Storybook browser runner on 2026-09-23.
+  After a normal close the primitive's content leaves the DOM about
+  690 ms later, when gorhom's dismiss animation ends. A close in the
+  same tick as the open leaves the content mounted off-screen with
+  `open` false and nothing `aria-hidden`, until the next open. And
+  `OverflowMenu`'s phone sheet kept its rows mounted and on screen for
+  3 s after both an item pick and a disable-close, three runs of three,
+  while its trigger reported `aria-expanded="false"`. `sheet.tsx`
+  defers `present()` a tick and calls `dismiss()` only once it has
+  presented, so a `dismiss()` landing mid-present-animation is the
+  likely gap; plays assert dismissal through the trigger's
+  `aria-expanded` meanwhile. Check a narrow Electron window and Android
+  first — a menu sheet left on screen after picking an item would be
+  user-visible. Raised 2026-09-22 by Slice 4.3; probed 2026-09-23.
+- **M9.5 — Native tablet pickers render every row unvirtualized.**
+  `SearchableOverlayList` sends its dialog shape to the inline native
+  list off phone (`RowList variant={isPhone ? 'sheet' : 'inline'}`), a
+  plain gesture-handler `ScrollView`. On an Android tablet or an
+  unfolded Fold, `EntryRefPicker` then mounts every entry on the branch,
+  `ProviderModelPicker` every model of every catalog (hundreds on
+  OpenRouter) and loses its sticky provider headers, and `EntityPicker`
+  every entity — on each open. The popover is portaled to the root
+  `PortalHost`, so the nesting reason that keeps the inline combobox off
+  `SectionList` doesn't hold, and
+  [the pattern's implementation notes](../ui/patterns/searchable-overlay-list.md#implementation-notes)
+  expect `SectionList` there. Porting it means porting the
+  initial-scroll anchor too, roughly 40–80 lines. Not measured: profile
+  an open on a mid-range tablet first. Raised 2026-09-22 by Slice 4.3;
+  widened 2026-09-23.
 - **M9.5 — The retrieval pass has never been measured on mobile.** Every
   figure in
   [`retrieval.md → Per-turn cost budget`](../memory/retrieval.md#per-turn-cost-budget)

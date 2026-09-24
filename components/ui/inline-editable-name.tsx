@@ -5,6 +5,7 @@ import { Platform, Pressable, type TextInputKeyPressEvent, View } from 'react-na
 import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
+import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 type InlineEditableNameSize = 'sm' | 'md' | 'lg'
@@ -12,6 +13,11 @@ type InlineEditableNameSize = 'sm' | 'md' | 'lg'
 type InlineEditableNameProps = {
   value: string
   onChange: (next: string) => void
+  /**
+   * The committed value. A change mid-edit is a save landing, and Escape then restores it
+   * instead of the value the edit started from.
+   */
+  savedValue?: string
   placeholder?: string
   disabled?: boolean
   /**
@@ -45,56 +51,37 @@ const GAP: Record<InlineEditableNameSize, string> = {
 export function InlineEditableName({
   value,
   onChange,
+  savedValue,
   placeholder,
   disabled = false,
   size = 'md',
   className,
 }: InlineEditableNameProps) {
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(value)
-  const exitedRef = useRef(false)
+  // Every keystroke reaches `onChange`, so a save session sees the edit before blur;
+  // Escape puts back the value the edit started from, or the last save made during it.
+  const startRef = useRef(value)
 
   useEffect(() => {
-    if (disabled && editing) {
-      exitedRef.current = true
-      setEditing(false)
-      setDraft(value)
-    }
-  }, [disabled, editing, value])
+    if (savedValue !== undefined) startRef.current = savedValue
+  }, [savedValue])
 
-  // If the consumer reassigns `value` while not editing, keep the
-  // buffered draft aligned so the next edit starts from current truth.
   useEffect(() => {
-    if (!editing) setDraft(value)
-  }, [value, editing])
+    if (disabled && editing) setEditing(false)
+  }, [disabled, editing])
 
   const enterEdit = useCallback(() => {
     if (disabled) return
-    exitedRef.current = false
-    setDraft(value)
+    startRef.current = value
     setEditing(true)
   }, [disabled, value])
 
-  const commit = useCallback(
-    (next: string) => {
-      // Skip if Escape or a previous Enter / blur already handled the
-      // exit — guards against the unmount-blur double-fire.
-      if (exitedRef.current) {
-        exitedRef.current = false
-        return
-      }
-      exitedRef.current = true
-      setEditing(false)
-      if (next !== value) onChange(next)
-    },
-    [onChange, value],
-  )
+  const exitEdit = useCallback(() => setEditing(false), [])
 
   const cancel = useCallback(() => {
-    exitedRef.current = true
-    setDraft(value)
+    if (value !== startRef.current) onChange(startRef.current)
     setEditing(false)
-  }, [value])
+  }, [onChange, value])
 
   const handleKeyPress = (e: TextInputKeyPressEvent) => {
     if (Platform.OS !== 'web') return
@@ -126,10 +113,10 @@ export function InlineEditableName({
       <View className={cn('flex-row items-center', GAP[size], className)}>
         <Input
           size={size}
-          value={draft}
-          onChangeText={setDraft}
-          onBlur={() => commit(draft)}
-          onSubmitEditing={() => commit(draft)}
+          value={value}
+          onChangeText={onChange}
+          onBlur={exitEdit}
+          onSubmitEditing={exitEdit}
           onKeyPress={handleKeyPress}
           placeholder={placeholder}
           autoFocus
@@ -145,7 +132,11 @@ export function InlineEditableName({
     <Pressable
       onPress={enterEdit}
       accessibilityRole="button"
-      accessibilityLabel={value === '' ? (placeholder ?? 'Edit name') : `Edit ${value}`}
+      accessibilityLabel={
+        value === ''
+          ? (placeholder ?? t('inlineEditableName.editUnnamed'))
+          : t('inlineEditableName.edit', { name: value })
+      }
       className={cn(
         'group flex-row items-center rounded-sm',
         GAP[size],

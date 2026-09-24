@@ -104,7 +104,11 @@ function AlertDialogContent({
           style={StyleSheet.flatten([{ maxHeight: height * MAX_HEIGHT_RATIO }, style])}
           {...props}
         >
-          <ScrollView className="shrink" contentContainerClassName="gap-4">
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            className="shrink"
+            contentContainerClassName="gap-4"
+          >
             {body}
           </ScrollView>
           {actions}

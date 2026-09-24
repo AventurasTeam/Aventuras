@@ -9,6 +9,7 @@ import { t } from '@/lib/i18n'
 
 import { ACCENT_SWATCHES } from './about-draft'
 import { AboutPanel } from './about-panel'
+import { externalCell } from './external-cell'
 import { StorySettingsSaveSessionProvider } from './save-session'
 import { StorySettingsSaveBar } from './save-session-chrome'
 
@@ -54,34 +55,8 @@ function Harness({ story, disabled = false, onCommit }: HarnessProps) {
   )
 }
 
-type StoryCell = {
-  get: () => StoryInfo
-  set: (next: StoryInfo) => void
-  subscribe: (listener: () => void) => () => void
-}
-
-function storyCell(initial: StoryInfo): StoryCell {
-  let current = initial
-  const listeners = new Set<() => void>()
-  return {
-    get: () => current,
-    set: (next) => {
-      current = next
-      for (const listener of listeners) listener()
-    },
-    subscribe: (listener) => {
-      listeners.add(listener)
-      return () => {
-        listeners.delete(listener)
-      }
-    },
-  }
-}
-
-// An external store like `storiesStore`, not useState: only a store refresh
-// re-renders before the provider's post-commit re-read, as the real one does.
 function StatefulHarness({ story: initial, onCommit }: HarnessProps) {
-  const [cell] = useState(() => storyCell(initial))
+  const [cell] = useState(() => externalCell(initial))
   const story = useSyncExternalStore(cell.subscribe, cell.get)
   const commit = useCallback(
     async (patch: StorySettingsSessionPatch) => {
@@ -133,6 +108,9 @@ type Story = StoryObj<typeof Harness>
 
 export const Populated: Story = {
   play: async () => {
+    expect(
+      await screen.findByRole('heading', { name: t('storySettings:about.heading') }),
+    ).toBeVisible()
     expect(await screen.findByTestId('about-title')).toHaveValue(STORY.title)
     expect(screen.getByTestId('about-description')).toHaveValue(STORY.description)
     expect(screen.getByText('noir')).toBeInTheDocument()

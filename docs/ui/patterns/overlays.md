@@ -318,7 +318,9 @@ surface they use for visible UI copy.
 
 ### Sheet — ARIA contract
 
-**Role.** Sheet renders `role="dialog"` always. The consent-gate
+**Role.** Sheet renders `role="dialog"` on web. A bottom sheet on
+native is `none`: gorhom's container takes only `accessibilityRole`,
+whose union has no `dialog`. The consent-gate
 shape lives on [`AlertDialog`](./alert-dialog.md); Sheet's
 `dismissable={false}` variant is a modal form (save-session,
 multi-field edit, calendar swap warning), not an alert.
@@ -340,7 +342,9 @@ rarely needed. Convention: visible heading → use `ariaLabelledBy`
 (duplicating heading text into `ariaLabel` is a maintenance
 hazard); no visible heading → use `ariaLabel`. Passing neither
 logs a dev-mode warning; opt-out via explicit empty
-`ariaLabel=""`.
+`ariaLabel=""`. On native a bottom sheet's container is labelled by
+`ariaLabel` alone — gorhom forwards no `aria-labelledby` — so a sheet
+named by its heading has that heading read in place there.
 
 **Focus management — close.** Default returns focus to the trigger
 element when one exists. Programmatic-open without a trigger child

@@ -4,11 +4,12 @@ import {
   findDuplicateLabelIds,
 } from '@/components/compounds/suggestion-category-labels'
 import type { SuggestionCategory as StoredCategory } from '@/lib/db'
+import { HEX_COLOR } from '@/lib/hex-color'
 import {
   CURATED_ACCENT_PALETTE,
   CURATED_ACCENT_SLOTS,
+  isCuratedAccentSlot,
   slotForHex,
-  type CuratedAccentSlot,
 } from '@/lib/themes'
 
 /** The swatches the per-row ColorPicker offers — the fixed, mode-agnostic set. */
@@ -16,18 +17,12 @@ export const SUGGESTION_SWATCHES: string[] = CURATED_ACCENT_SLOTS.map(
   (slot) => CURATED_ACCENT_PALETTE[slot],
 )
 
-const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i
-
-function isCuratedSlot(value: string): value is CuratedAccentSlot {
-  return (CURATED_ACCENT_SLOTS as readonly string[]).includes(value)
-}
-
 // Not resolveAccentColor: that collapses "unset" and "unresolvable" into
 // NEUTRAL_ACCENT, and the editor needs null to render its fallback swatch —
 // otherwise every colourless row comes back looking deliberately grey.
 function storedColorToHex(color: string): string | null {
-  if (isCuratedSlot(color)) return CURATED_ACCENT_PALETTE[color]
-  return HEX.test(color) ? color : null
+  if (isCuratedAccentSlot(color)) return CURATED_ACCENT_PALETTE[color]
+  return HEX_COLOR.test(color) ? color : null
 }
 
 /** Stored rows → the editor's shape. `order` becomes array position. */

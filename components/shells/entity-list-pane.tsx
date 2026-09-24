@@ -69,7 +69,8 @@ export function EntityListPane({
         {addSlot != null ? <View className="shrink-0">{addSlot}</View> : null}
       </View>
 
-      <Toolbar>
+      {/* A list pane is narrow at every tier: full width on phone, 340px beside the detail. */}
+      <Toolbar narrow>
         <Toolbar.Search {...search} />
         {filterChips != null ? <Toolbar.FilterChips>{filterChips}</Toolbar.FilterChips> : null}
         {sortControl}

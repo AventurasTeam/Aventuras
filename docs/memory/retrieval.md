@@ -497,7 +497,9 @@ AlertDialog surfaces three options:
      Commit. Story is now consistently on NEW.
 
   **Crash recovery.** On story open, if `embedding_swap_target`
-  is set, surface a resume / cancel prompt:
+  is set, surface a resume / cancel prompt once no unacknowledged
+  crash-recovery report is pending — the recovery modal shows
+  first:
   - **Resume.** If any rows lack a `model_id = NEW` counterpart,
     continue Phase 1 (skip rows that already have one). Then run
     Phase 2.

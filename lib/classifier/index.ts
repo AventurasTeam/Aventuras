@@ -25,4 +25,5 @@ export {
   nextStatusOnSuccess,
   retryDelayForStatus,
   shouldCadenceFire,
+  worstCaseCadenceEntries,
 } from './status'

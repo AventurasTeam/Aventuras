@@ -29,7 +29,7 @@ export function JSONBlock({ data, className }: JSONBlockProps) {
 
   return (
     <View className={cn('relative', className)}>
-      <View className="absolute right-0 top-0 z-10">
+      <View className="absolute right-0 top-3 z-10">
         <Button variant="secondary" size="sm" onPress={handleCopy}>
           <Text>Copy</Text>
         </Button>

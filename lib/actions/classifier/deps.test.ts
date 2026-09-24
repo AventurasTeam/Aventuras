@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { branches, deltas, stories, storyEntries, type ClassifierStatus } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
-import { resetStuckClassifierRunState, unprocessedTurnCount } from './deps'
+import { resetStuckClassifierRunState, unprocessedEntryCount } from './deps'
 
 async function seed(
   db: Awaited<ReturnType<typeof createTestDb>>['db'],
@@ -164,7 +164,7 @@ describe('resetStuckClassifierRunState', () => {
   })
 })
 
-describe('unprocessedTurnCount', () => {
+describe('unprocessedEntryCount', () => {
   // Differencing MAX(position) against the watermark instead would count the
   // technical rows the window filters out, firing the cadence early.
   it('counts classifiable turns past the watermark, ignoring system rows', async () => {
@@ -184,8 +184,8 @@ describe('unprocessedTurnCount', () => {
         createdAt: 1,
       } as never)
 
-    expect(await unprocessedTurnCount('b1', null, { db, runInTransaction })).toBe(3)
-    expect(await unprocessedTurnCount('b1', 2, { db, runInTransaction })).toBe(2)
-    expect(await unprocessedTurnCount('b1', 5, { db, runInTransaction })).toBe(0)
+    expect(await unprocessedEntryCount('b1', null, { db, runInTransaction })).toBe(3)
+    expect(await unprocessedEntryCount('b1', 2, { db, runInTransaction })).toBe(2)
+    expect(await unprocessedEntryCount('b1', 5, { db, runInTransaction })).toBe(0)
   })
 })

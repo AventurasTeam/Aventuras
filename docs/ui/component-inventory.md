@@ -8,8 +8,8 @@ what's deferred.
 Sister to [`components.md`](./components.md) (construction
 conventions), [`patterns/README.md`](./patterns/README.md) (pattern
 specs), and [`../followups.md`](../followups.md) (decision-shaped
-open items). This file is roadmap-shaped — entries leave the file
-when they ship.
+open items). Rows move between states rather than leave: a
+component that ships trades its build-ready row for a shipped one.
 
 ## States
 

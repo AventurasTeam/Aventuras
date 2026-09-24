@@ -13,7 +13,7 @@ export type RunNowOutcome = StartRunOutcome | { outcome: 'busy' | 'stopped' }
 
 export type ClassifierSchedulerDeps = {
   cadenceFor: (branchId: string) => number
-  unprocessedTurnsFor: (branchId: string, processedThrough: number | null) => Promise<number>
+  unprocessedEntriesFor: (branchId: string, processedThrough: number | null) => Promise<number>
   statusFor: (branchId: string) => Promise<ClassifierStatus>
   startRun: (branchId: string) => Promise<StartRunOutcome>
   setTimer: (fn: () => void, ms: number) => unknown
@@ -76,8 +76,8 @@ export function createClassifierScheduler(deps: ClassifierSchedulerDeps) {
     noteTurnCommitted: async (branchId: string): Promise<void> => {
       if (stopped || stateFor(branchId).inFlight) return
       const status = await deps.statusFor(branchId)
-      const unprocessedTurns = await deps.unprocessedTurnsFor(branchId, status.processedThrough)
-      if (!shouldCadenceFire({ status, unprocessedTurns, cadence: deps.cadenceFor(branchId) }))
+      const unprocessedEntries = await deps.unprocessedEntriesFor(branchId, status.processedThrough)
+      if (!shouldCadenceFire({ status, unprocessedEntries, cadence: deps.cadenceFor(branchId) }))
         return
       await start(branchId)
     },

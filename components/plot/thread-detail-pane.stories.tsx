@@ -329,14 +329,21 @@ export const Blocked: Story = {
     expect(await screen.findByText('What the amulet wants')).toBeVisible()
     expect(screen.queryByRole('button', { name: /^Edit / })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Status' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Status' }).closest('[title]')).toHaveAttribute(
+      'title',
+      BLOCKED_REASON,
+    )
     expect(screen.getByRole('button', { name: 'Icon' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Icon' }).closest('[title]')).toHaveAttribute(
+      'title',
+      BLOCKED_REASON,
+    )
     const injection = within(screen.getByRole('radiogroup', { name: 'Injection' })).getAllByRole(
       'radio',
     )
     expect(injection).toHaveLength(3)
     for (const radio of injection) expect(radio).toHaveAttribute('aria-disabled', 'true')
-    // The Autocomplete's input carries no accessible name yet; its placeholder is unique here.
-    const category = screen.getByPlaceholderText('e.g. mystery, goal, conflict')
+    const category = screen.getByRole('combobox', { name: 'Category' })
     expect(category).toHaveAttribute('readonly')
     expect(category).toHaveValue('mystery')
     expect(description()).toHaveAttribute('readonly')
@@ -364,6 +371,41 @@ export const BlockedWhileDirty: Story = {
     await waitFor(() => expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument(), WAIT)
     expect(description()).toHaveValue(AMULET.description)
     expect(args.onSave).not.toHaveBeenCalled()
+  },
+}
+
+/** A title still being typed dirties the session, and Ctrl-S saves it without a blur. */
+export const TitleSavesBeforeBlur: Story = {
+  play: async ({ args }) => {
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit What the amulet wants' }))
+    const input = await screen.findByDisplayValue('What the amulet wants')
+    await userEvent.clear(input)
+    await userEvent.type(input, 'The amulet wakes')
+    await screen.findByTestId('save-bar', {}, WAIT)
+    expect(input).toHaveFocus()
+
+    await userEvent.keyboard('{Control>}s{/Control}')
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1), WAIT)
+    expect(args.onSave).toHaveBeenCalledWith(expect.objectContaining({ title: 'The amulet wakes' }))
+  },
+}
+
+/** Escape after a mid-edit Ctrl-S restores the saved title, not the one the edit started from. */
+export const EscapeAfterSaveKeepsSavedTitle: Story = {
+  play: async ({ args }) => {
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit What the amulet wants' }))
+    const input = await screen.findByDisplayValue('What the amulet wants')
+    await userEvent.clear(input)
+    await userEvent.type(input, 'The amulet wakes')
+    await userEvent.keyboard('{Control>}s{/Control}')
+    await waitFor(() => expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument(), WAIT)
+    expect(input).toHaveFocus()
+
+    await userEvent.type(input, ' again')
+    await userEvent.keyboard('{Escape}')
+    expect(await screen.findByRole('button', { name: 'Edit The amulet wakes' })).toBeVisible()
+    expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument()
+    expect(args.onSave).toHaveBeenCalledTimes(1)
   },
 }
 

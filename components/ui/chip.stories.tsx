@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
 import { View } from 'react-native'
+import { expect, screen } from 'storybook/test'
 
 import { themes } from '@/lib/themes'
 
@@ -24,6 +25,10 @@ export const Static: Story = {
       <Chip selected>active state</Chip>
     </View>
   ),
+  play: async () => {
+    // NativeWind upgrades a `group` View to a Pressable, which swallows a parent row's tap.
+    await expect(screen.getByText('read-only').parentElement).not.toHaveClass('group')
+  },
 }
 
 export const FilterRow: Story = {
@@ -40,12 +45,15 @@ export const FilterRow: Story = {
       </View>
     )
   },
+  play: async () => {
+    await expect(screen.getByText('Staged').parentElement).toHaveClass('group')
+  },
 }
 
 export const Disabled: Story = {
   render: () => (
     <View className="flex-row gap-2">
-      <Chip disabled onPress={() => {}}>
+      <Chip disabled disabledReason="A run is in progress." onPress={() => {}}>
         Disabled, off
       </Chip>
       <Chip disabled selected onPress={() => {}}>
@@ -53,6 +61,10 @@ export const Disabled: Story = {
       </Chip>
     </View>
   ),
+  play: async () => {
+    const chip = screen.getByRole('button', { name: 'Disabled, off' })
+    await expect(chip.closest('[title]')).toHaveAttribute('title', 'A run is in progress.')
+  },
 }
 
 export const ThemeMatrix: Story = {

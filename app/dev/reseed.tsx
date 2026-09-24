@@ -37,7 +37,11 @@ export default function ReseedDevRoute() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-bg-base" contentContainerClassName="gap-4 p-4">
+    <ScrollView
+      keyboardShouldPersistTaps="handled"
+      className="flex-1 bg-bg-base"
+      contentContainerClassName="gap-4 p-4"
+    >
       <Heading level={2}>Reseed database</Heading>
       <Text variant="muted">
         Wipes every table and reinserts the dev seed dataset — the same data as `pnpm db:seed` on

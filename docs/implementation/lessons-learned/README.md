@@ -66,6 +66,9 @@ slice plans when relevant.
   — NativeWind registers cssInterop for RN core components only and
   RNW drops unknown props, so the class lands nowhere on either
   platform; nest a plain `View` and style that.
+- [A `group` or pseudo-class on a native `View` turns it into a `Pressable`](./nativewind-group-view-becomes-pressable.md)
+  — css-interop upgrades the host silently and its no-op `onPress`
+  eats the parent row's tap; gate the class on the interactive branch.
 
 ### rn-primitives substrate
 
@@ -206,8 +209,7 @@ slice plans when relevant.
   plugin itself, and any new Vite target must too.
 - [One `exhaustive-deps` suppression opts the whole component out of React Compiler](./exhaustive-deps-suppression-disables-the-compiler.md)
   — the compiler skips the entire component, silently, and lint has no
-  rule for it; find the bail-outs lint cannot see by running the plugin
-  with `panicThreshold: 'all_errors'`.
+  rule for it; `pnpm compiler:check` ratchets every bail-out in CI.
 - [Failed Storybook files with zero failed tests](./storybook-load-flake-zero-failed-tests.md)
   — a file-load flake, not a test failure; contention is ruled out
   empirically and serializing the project breaks isolation, so check

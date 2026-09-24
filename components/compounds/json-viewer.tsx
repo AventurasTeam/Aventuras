@@ -1,5 +1,5 @@
 import { X } from 'lucide-react-native'
-import { useCallback } from 'react'
+import { useCallback, useId } from 'react'
 import { ScrollView, View } from 'react-native'
 
 import { IconAction } from '@/components/ui/icon-action'
@@ -28,12 +28,13 @@ export function JSONViewer({ open, onOpenChange, name, data, className }: JSONVi
   const showCloseButton = anchor !== 'bottom'
 
   const handleClose = useCallback(() => onOpenChange(false), [onOpenChange])
+  const headingId = useId()
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent anchor={anchor} size="tall" title={`Raw JSON · ${name}`} className={className}>
+    <Sheet open={open} onOpenChange={onOpenChange} ariaLabelledBy={headingId}>
+      <SheetContent anchor={anchor} size="tall" className={className}>
         <View className="flex-row items-center gap-3 border-b border-border pb-3">
-          <View className="min-w-0 flex-1 flex-row items-baseline gap-1">
+          <View nativeID={headingId} className="min-w-0 flex-1 flex-row items-baseline gap-1">
             <Text numberOfLines={1} className="shrink-0 font-semibold">
               Raw JSON
             </Text>
@@ -51,7 +52,7 @@ export function JSONViewer({ open, onOpenChange, name, data, className }: JSONVi
           ) : null}
         </View>
 
-        <ScrollView className="flex-1">
+        <ScrollView keyboardShouldPersistTaps="handled" className="flex-1">
           <JSONBlock data={data} />
         </ScrollView>
 

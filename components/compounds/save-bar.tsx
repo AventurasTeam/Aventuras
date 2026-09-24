@@ -1,9 +1,12 @@
 import { AlertTriangle } from 'lucide-react-native'
 import { useCallback, useMemo } from 'react'
-import { Platform, View } from 'react-native'
+import { Platform, Pressable, View } from 'react-native'
 
+import { useTapTooltipTrigger } from '@/components/compounds/truncated-text'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Text } from '@/components/ui/text'
 import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
@@ -25,7 +28,7 @@ type SaveBarProps = {
   dirtyCount?: number
   /**
    * Optional informational note. Renders as a `⚠` icon after the
-   * field list with the text shown via web tooltip / aria-label.
+   * field list: a web hover tooltip, and a tap or click opens the text in a popover.
    */
   notice?: string
   onSave: () => void
@@ -102,32 +105,28 @@ export function SaveBar({
         style={POINTER_EVENTS_NONE}
       />
 
-      {/* Scoped to the message: role="status" implies aria-atomic, so a region
-          spanning the bar would re-announce both button labels per keystroke. */}
-      <View role="status" aria-live="polite" className="min-w-0 shrink flex-row items-center gap-2">
-        <View className="h-2 w-2 shrink-0 rounded-full bg-warning" aria-hidden />
-        <Text size="xs" numberOfLines={1} className="shrink">
-          <Text size="xs" className="font-semibold text-fg-primary">
-            {t('saveBar.unsavedChanges', { count })}
-          </Text>
-          {fieldList != null ? (
-            <Text size="xs" variant="secondary">
-              {' — '}
-              {fieldList}
+      <View className="min-w-0 shrink flex-row items-center gap-2">
+        {/* Scoped to the message: role="status" implies aria-atomic, so a region
+            spanning the bar would re-announce every button label per keystroke. */}
+        <View
+          role="status"
+          aria-live="polite"
+          className="min-w-0 shrink flex-row items-center gap-2"
+        >
+          <View className="h-2 w-2 shrink-0 rounded-full bg-warning" aria-hidden />
+          <Text size="xs" numberOfLines={1} className="shrink">
+            <Text size="xs" className="font-semibold text-fg-primary">
+              {t('saveBar.unsavedChanges', { count })}
             </Text>
-          ) : null}
-        </Text>
-        {notice != null ? (
-          Platform.OS === 'web' ? (
-            <div title={notice} className="inline-flex" aria-label={notice}>
-              <Icon as={AlertTriangle} size="sm" className="text-warning" />
-            </div>
-          ) : (
-            <View aria-label={notice}>
-              <Icon as={AlertTriangle} size="sm" className="text-warning" />
-            </View>
-          )
-        ) : null}
+            {fieldList != null ? (
+              <Text size="xs" variant="secondary">
+                {' — '}
+                {fieldList}
+              </Text>
+            ) : null}
+          </Text>
+        </View>
+        {notice != null ? <Notice notice={notice} /> : null}
       </View>
 
       <View className="shrink-0 flex-row items-center gap-2">
@@ -152,3 +151,33 @@ export function SaveBar({
 }
 
 export type { SaveBarProps }
+
+// touch.md → Tap-to-tooltip: a hover tooltip never reaches a phone, so a tap opens the note.
+function Notice({ notice }: { notice: string }) {
+  const { trigger, onOpenChange } = useTapTooltipTrigger()
+  return (
+    <Popover onOpenChange={onOpenChange} ariaLabel={t('saveBar.note')}>
+      <ReasonTooltip reason={notice}>
+        <PopoverTrigger ref={trigger} asChild>
+          {/* 16px glyph + 2·14 slop = the 44px phone floor. */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={notice}
+            hitSlop={14}
+            className={cn(
+              'rounded-sm',
+              Platform.select({
+                web: 'cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
+              }),
+            )}
+          >
+            <Icon as={AlertTriangle} size="sm" className="text-warning" />
+          </Pressable>
+        </PopoverTrigger>
+      </ReasonTooltip>
+      <PopoverContent side="top" align="start" className="w-auto max-w-72 px-3 py-2">
+        <Text size="sm">{notice}</Text>
+      </PopoverContent>
+    </Popover>
+  )
+}

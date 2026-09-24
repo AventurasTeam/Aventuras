@@ -88,12 +88,17 @@ Visual contract:
 - Hover (web, when interactive): `text-fg-primary` on unselected.
 - Focus-visible (web): standard `--focus-ring` slot.
 
-**Density-awareness gates on interactivity.** Interactive Chip
-(with `onPress`) follows the active density tokens for tap-target
-floor on phone (per
-[touch.md → Touch-target floor](../foundations/mobile/touch.md#touch-target-floor-on-phone)).
-Non-interactive Chip (no `onPress`) is density-agnostic —
-display-only sizing, no touch-floor inflation. A `Draft` badge on
+**The tap floor gates on interactivity.** Interactive Chip (with
+`onPress`) reaches the phone floor in
+[touch.md → Touch-target floor](../foundations/mobile/touch.md#touch-target-floor-on-phone)
+through `hitSlop`, not height: `h-control-xs` is 36 px at `regular`,
+the phone default, and 4 px of slop a side makes 44 — the same
+visible-plus-slop rule `IconAction` follows, which
+[`spacing.md → Tap-target on native`](../foundations/spacing.md#tap-target-on-native) allows for affordances at
+`--control-h-xs`. Four a side also stays inside half of a `gap-2`
+chip row, so neighbouring chips' targets never overlap. Non-interactive
+Chip (no `onPress`) gets no slop — display-only sizing, no touch-floor
+inflation. A `Draft` badge on
 a [Story Card](./story-card.md#status-badges-chip-primitives)
 doesn't need a 44 px tap target.
 

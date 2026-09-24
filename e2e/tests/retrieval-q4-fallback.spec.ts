@@ -1,6 +1,12 @@
 import { expect, test } from '@playwright/test'
 
-import { currentBranchId, latestCapture, queryApp, tailMetadata } from '../harness/db'
+import {
+  captureForTurn,
+  currentBranchId,
+  latestCapture,
+  queryApp,
+  tailMetadata,
+} from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm } from '../harness/mock-llm'
@@ -83,6 +89,7 @@ test.describe('retrieval Q4 — fallback classifier across a turn boundary', () 
     test.setTimeout(120_000)
 
     let branchId = ''
+    let turn1TargetEntryId: string | undefined
 
     await test.step('turn 1 — the fallback writes the asks', async () => {
       await home.openStory(app.window, HERO_TITLE).click()
@@ -107,9 +114,10 @@ test.describe('retrieval Q4 — fallback classifier across a turn boundary', () 
         'per_turn_classifier',
       )
 
-      // The five-slot poll in step 2 only distinguishes turn 2's capture from turn 1's
-      // because turn 1 had no prior row to read: three fixed slots, no Q4.
-      expect((await latestCapture(app.window, branchId))?.queries.length).toBe(3)
+      // Turn 1 has no prior row to read: three fixed slots, no Q4.
+      const turn1 = (await latestCapture(app.window, branchId))!
+      expect(turn1.queries.length).toBe(3)
+      turn1TargetEntryId = turn1.target_entry_id
     })
 
     await test.step('turn 2 — retrieval embeds turn 1 asks, not its own', async () => {
@@ -120,15 +128,7 @@ test.describe('retrieval Q4 — fallback classifier across a turn boundary', () 
       await reader.composer(app.window).fill('E2E-Q4F-USER-2 I ask what the sigil means.')
       await reader.send(app.window).click()
 
-      // Turn 1 wrote its own capture with three slots (Q1-Q3, no emitted Q4 yet), so
-      // polling for five is what waits for turn 2's row specifically.
-      await expect
-        .poll(async () => (await latestCapture(app.window, branchId))?.queries.length, {
-          timeout: 30_000,
-        })
-        .toBe(5)
-
-      const capture = (await latestCapture(app.window, branchId))!
+      const capture = await captureForTurn(app.window, branchId, turn1TargetEntryId)
       expect(capture.queries.map((q) => q.source)).toEqual([
         'user_action',
         'structural_digest',

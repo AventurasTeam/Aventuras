@@ -46,8 +46,13 @@ babel.transformSync(source, {
 })
 ```
 
-Nothing runs this today — `eslint-plugin-react-hooks` 5.2.0 ships no compiler
-rule, and `.storybook/main.ts` adds only the worklets plugin, so plays exercise
-uncompiled components. A repo-wide sweep is
-[queued in triage](../triage.md). Surfaced in Slice 4.4, where it was a
-standing rule for every task.
+`pnpm compiler:check` (`scripts/compiler-bailouts.ts`) runs exactly this
+in CI, with the compiler `babel-preset-expo` builds with, over `app/`,
+`components/`, `hooks/` and `lib/`. It ratchets against
+`scripts/compiler-bailouts.baseline.json`: a file that newly bails fails
+the build, and so does a baseline entry that now compiles, until it is
+removed. `pnpm compiler:check --list` prints every current bail-out with
+its reason. Lint still can't see these — `eslint-plugin-react-hooks` 5.2.0
+ships no compiler rule — and `.storybook/main.ts` adds only the worklets
+plugin, so plays exercise uncompiled components. Surfaced in Slice 4.4,
+where it was a standing rule for every task.

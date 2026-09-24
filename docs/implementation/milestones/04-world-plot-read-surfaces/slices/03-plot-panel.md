@@ -271,9 +271,10 @@ chapters` (deferred by canon), and `retrieval_count` review — M5.
   remove-then-re-add or a swap between two rows becomes an update
   rather than two writes to one row (the action-group runner rejects
   that). A stale dirty links array on Save can still overwrite a
-  concurrent link write to the same row — filed to
-  [`triage.md`](../../../triage.md), unreachable in M4 because turns
-  hard-gate the pane.
+  concurrent link write to the same row — parked as
+  [a dirty links array on Save](../../../../parked.md#a-dirty-links-array-on-save-overwrites-concurrent-link-writes),
+  unreachable in M4 because every writer linking an existing happening
+  hard-gates the pane.
 - **Entry index cache-key invariant.** `useEntryIndex`
   (`hooks/use-entry-index.ts`) keys its refetch on
   `generationStore.settleCount` plus the branch's tail entry id — every

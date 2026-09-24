@@ -94,8 +94,8 @@ export const Phone: Story = {
     const viewJson = await waitFor(() => screen.getByRole('menuitem', { name: 'View raw JSON' }))
     await waitFor(() => expect(viewJson).toBeVisible())
 
-    // No dialog role on Sheet content; a match here means Popover rendered, not Sheet.
-    expect(screen.queryByRole('dialog')).toBeNull()
+    // Both surfaces are dialogs; only the Popover sits inside Radix's popper wrapper.
+    expect(viewJson.closest('[data-radix-popper-content-wrapper]')).toBeNull()
 
     // Regular density's phone floor (`control-h-lg`) is 48px; `control-h-md` is 44px
     // at that density too, so a >=44 check alone can't tell the two rows apart.

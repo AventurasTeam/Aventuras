@@ -29,7 +29,7 @@ store and read it through `useSyncExternalStore`, so a write inside
 `onCommit` is visible to the very next read:
 
 ```tsx
-const [cell] = useState(() => storyCell(initial))
+const [cell] = useState(() => externalCell(initial))
 const story = useSyncExternalStore(cell.subscribe, cell.get)
 const commit = useCallback(
   async (patch: StorySettingsSessionPatch) => {

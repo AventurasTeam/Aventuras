@@ -7,7 +7,7 @@ function harness(over: Partial<Parameters<typeof createClassifierScheduler>[0]> 
   const timers: { fn: () => void; ms: number }[] = []
   const deps = {
     cadenceFor: vi.fn(() => 4),
-    unprocessedTurnsFor: vi.fn(async () => 8),
+    unprocessedEntriesFor: vi.fn(async () => 8),
     statusFor: vi.fn(async () => idleStatus()),
     startRun: vi.fn(async () => ({ outcome: 'completed' as const })),
     setTimer: vi.fn((fn: () => void, ms: number) => {
@@ -30,7 +30,7 @@ describe('createClassifierScheduler', () => {
   })
 
   it('does not start when the cadence is not reached', async () => {
-    const { deps, scheduler } = harness({ unprocessedTurnsFor: vi.fn(async () => 3) })
+    const { deps, scheduler } = harness({ unprocessedEntriesFor: vi.fn(async () => 3) })
     await scheduler.noteTurnCommitted('branch_1')
     expect(deps.startRun).not.toHaveBeenCalled()
   })
@@ -133,7 +133,7 @@ describe('createClassifierScheduler', () => {
   })
 
   it('runNow() starts regardless of the cadence count', async () => {
-    const { deps, scheduler } = harness({ unprocessedTurnsFor: vi.fn(async () => 1) })
+    const { deps, scheduler } = harness({ unprocessedEntriesFor: vi.fn(async () => 1) })
     const result = await scheduler.runNow('branch_1')
     expect(deps.startRun).toHaveBeenCalledWith('branch_1')
     expect(result).toEqual({ outcome: 'completed' })
@@ -212,7 +212,7 @@ describe('createClassifierScheduler', () => {
   })
 
   it('runNow() returns the start outcome when it starts', async () => {
-    const { scheduler } = harness({ unprocessedTurnsFor: vi.fn(async () => 1) })
+    const { scheduler } = harness({ unprocessedEntriesFor: vi.fn(async () => 1) })
     const result = await scheduler.runNow('branch_1')
     expect(result).toEqual({ outcome: 'completed' })
   })
@@ -225,13 +225,13 @@ describe('createClassifierScheduler', () => {
   })
 
   it('asks for the unprocessed count at the persisted watermark, not from zero', async () => {
-    const unprocessedTurnsFor = vi.fn(async () => 1)
+    const unprocessedEntriesFor = vi.fn(async () => 1)
     const { scheduler } = harness({
-      unprocessedTurnsFor,
+      unprocessedEntriesFor,
       statusFor: vi.fn(async () => ({ ...idleStatus(), processedThrough: 12 })),
     })
     await scheduler.noteTurnCommitted('branch_1')
-    expect(unprocessedTurnsFor).toHaveBeenCalledWith('branch_1', 12)
+    expect(unprocessedEntriesFor).toHaveBeenCalledWith('branch_1', 12)
   })
 
   it('runNow() returns a busy marker instead of silently declining when a run is in flight', async () => {

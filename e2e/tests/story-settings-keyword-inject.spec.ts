@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test'
 
-import type { ProbeCapturePayload, StorySettings } from '@/lib/db'
+import type { StorySettings } from '@/lib/db'
 
-import { currentBranchId, latestCapture, queryApp } from '../harness/db'
+import { takeTurn } from '../flows/turn'
+import { captureForTurn, currentBranchId, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm } from '../harness/mock-llm'
@@ -13,6 +14,7 @@ import {
   removeUserDataDir,
   setProviderEndpoint,
 } from '../harness/seed'
+import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
 import { storySettings } from '../locators/story-settings'
@@ -35,34 +37,6 @@ async function keywordMode(app: LaunchedApp): Promise<StorySettings['keywordRetr
     HERO_STORY,
   ])
   return (JSON.parse(json as string) as StorySettings).keywordRetrieval.mode
-}
-
-// Send returns only once the pipeline releases its phase, so waiting on it —
-// not on the reply — keeps the save below clear of the hard-gate rejection
-// (update-story-settings.ts → `generation in flight`). Sound only because
-// refreshSuggestions' one call site hangs off the strip's press handlers, so a
-// turn queues no second hard-gate run behind itself; if one is, wait on the gate.
-async function takeTurn(app: LaunchedApp, action: string, marker: string): Promise<void> {
-  await reader.composer(app.window).fill(action)
-  await reader.send(app.window).click()
-  await expect(app.window.getByText(marker, { exact: false })).toBeVisible({ timeout: 30_000 })
-  await expect(reader.send(app.window)).toBeVisible({ timeout: 30_000 })
-}
-
-// latestCapture reads newest-first, so polling until target_entry_id moves off
-// the previous turn's is what waits for THIS turn's capture instead of
-// re-reading the last one. `undefined` as the predecessor waits for the first.
-async function captureForTurn(
-  app: LaunchedApp,
-  branchId: string,
-  previousTargetEntryId: string | undefined,
-): Promise<ProbeCapturePayload> {
-  await expect
-    .poll(async () => (await latestCapture(app.window, branchId))?.target_entry_id, {
-      timeout: 30_000,
-    })
-    .not.toBe(previousTargetEntryId)
-  return (await latestCapture(app.window, branchId))!
 }
 
 test.describe('story settings — keyword Inject seats a keyworded lore row', () => {
@@ -120,8 +94,8 @@ test.describe('story settings — keyword Inject seats a keyworded lore row', ()
 
     const boostTargetEntryId =
       await test.step('under Boost the keyword reaches the scan surface and injects nothing', async () => {
-        await takeTurn(app, `E2E-KW-1 I press the ${KEYWORD} for a name.`, BOOST_MARKER)
-        const capture = await captureForTurn(app, branchId, undefined)
+        await takeTurn(app.window, `E2E-KW-1 I press the ${KEYWORD} for a name.`, BOOST_MARKER)
+        const capture = await captureForTurn(app.window, branchId, undefined)
         // Lowercased as matchTerms does, so the empty array below is a
         // statement about the mode rather than about a term that never arrived.
         expect(capture.scan_text.toLowerCase()).toContain(KEYWORD)
@@ -145,11 +119,11 @@ test.describe('story settings — keyword Inject seats a keyworded lore row', ()
 
     await test.step('the next turn seats the keyworded lore row', async () => {
       mock.setNarrative(`${INJECT_MARKER} the archive door opens.`)
-      await storySettings.back(app.window).click()
+      await chrome.back(app.window).click()
       await expect(reader.composer(app.window)).toBeVisible({ timeout: 10_000 })
-      await takeTurn(app, `E2E-KW-2 I press the ${KEYWORD} once more.`, INJECT_MARKER)
+      await takeTurn(app.window, `E2E-KW-2 I press the ${KEYWORD} once more.`, INJECT_MARKER)
 
-      const capture = await captureForTurn(app, branchId, boostTargetEntryId)
+      const capture = await captureForTurn(app.window, branchId, boostTargetEntryId)
       const injected = capture.keyword_injections.find((row) => row.target_id === loreId)
       expect(injected, 'the keyworded lore row is a keyword injection').toBeDefined()
       expect(injected?.target_kind).toBe('lore')

@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 
 import type { StorySettings } from '@/lib/db'
 
+import { waitForTurnTerminal } from '../flows/turn'
 import { queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { t } from '../harness/i18n'
@@ -13,6 +14,7 @@ import {
   removeUserDataDir,
   setProviderEndpoint,
 } from '../harness/seed'
+import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
 import { storySettings } from '../locators/story-settings'
@@ -44,16 +46,6 @@ async function readModels(app: LaunchedApp): Promise<StorySettings['models']> {
 function lastNarrativeModel(mock: MockLlm): string | undefined {
   const streamed = mock.requests.filter((r) => r.streamed)
   return streamed[streamed.length - 1]?.body.model as string | undefined
-}
-
-// The reply rendering is not the run's terminal: the composer swaps Send →
-// Cancel while the turn's pipeline holds a phase, and a settings save landing
-// during a hard-gate run is rejected with `generation in flight`. Sufficient
-// only because nothing auto-starts a suggestion-refresh run — that one is
-// hard-gate too but isGenerating deliberately ignores it, so Send would come
-// back with the save still gated. If a turn ever queues one, wait on the gate.
-async function waitForTurnTerminal(app: LaunchedApp): Promise<void> {
-  await expect(reader.send(app.window)).toBeVisible({ timeout: 30_000 })
 }
 
 test.describe('story settings — narrative override reaches the wire', () => {
@@ -111,14 +103,14 @@ test.describe('story settings — narrative override reaches the wire', () => {
       .poll(async () => (await readModels(app)).narrative)
       .toEqual({ providerId: 'prov_local', modelId: OVERRIDE_MODEL })
 
-    await storySettings.back(app.window).click()
+    await chrome.back(app.window).click()
     await expect(reader.composer(app.window)).toBeVisible({ timeout: 10_000 })
     await reader.composer(app.window).fill('E2E-MODELS I draw the blade and wait.')
     await reader.send(app.window).click()
     await expect(app.window.getByText('E2E-MODELS-REPLY', { exact: false })).toBeVisible({
       timeout: 30_000,
     })
-    await waitForTurnTerminal(app)
+    await waitForTurnTerminal(app.window)
     expect(lastNarrativeModel(mock)).toBe(OVERRIDE_MODEL)
 
     mock.setNarrative(REPLY_CLEARED)
@@ -139,14 +131,14 @@ test.describe('story settings — narrative override reaches the wire', () => {
     await expect(storySettings.save(app.window)).toBeHidden()
     await expect.poll(async () => (await readModels(app)).narrative).toBeUndefined()
 
-    await storySettings.back(app.window).click()
+    await chrome.back(app.window).click()
     await expect(reader.composer(app.window)).toBeVisible({ timeout: 10_000 })
     await reader.composer(app.window).fill('E2E-MODELS-2 I listen for the bell.')
     await reader.send(app.window).click()
     await expect(app.window.getByText('E2E-MODELS-REPLY-2', { exact: false })).toBeVisible({
       timeout: 30_000,
     })
-    await waitForTurnTerminal(app)
+    await waitForTurnTerminal(app.window)
     expect(lastNarrativeModel(mock)).toBe(SEED_MODEL)
   })
 })

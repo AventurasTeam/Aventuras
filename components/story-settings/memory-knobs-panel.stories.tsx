@@ -7,6 +7,7 @@ import type { StorySettingsSessionPatch } from '@/lib/actions'
 import { STORY_SETTINGS_DEFAULTS, type StorySettings } from '@/lib/db'
 import { t } from '@/lib/i18n'
 
+import { externalCell } from './external-cell'
 import { MemoryKnobsPanel } from './memory-knobs-panel'
 import { StorySettingsSaveSessionProvider } from './save-session'
 import { StorySettingsSaveBar } from './save-session-chrome'
@@ -38,34 +39,8 @@ function Harness({ settings: storySettings, disabled = false, embedder, onCommit
   )
 }
 
-type SettingsCell = {
-  get: () => StorySettings
-  set: (next: StorySettings) => void
-  subscribe: (listener: () => void) => () => void
-}
-
-function settingsCell(initial: StorySettings): SettingsCell {
-  let current = initial
-  const listeners = new Set<() => void>()
-  return {
-    get: () => current,
-    set: (next) => {
-      current = next
-      for (const listener of listeners) listener()
-    },
-    subscribe: (listener) => {
-      listeners.add(listener)
-      return () => {
-        listeners.delete(listener)
-      }
-    },
-  }
-}
-
-// An external store like `storiesStore`, not useState: only a store refresh
-// re-renders before the provider's post-commit re-read, as the real one does.
 function StatefulHarness({ settings: initial, onCommit }: HarnessProps) {
-  const [cell] = useState(() => settingsCell(initial))
+  const [cell] = useState(() => externalCell(initial))
   const current = useSyncExternalStore(cell.subscribe, cell.get)
   const commit = useCallback(
     async (patch: StorySettingsSessionPatch) => {
@@ -146,6 +121,13 @@ type Story = StoryObj<typeof Harness>
 export const Populated: Story = {
   play: async () => {
     await screen.findByTestId('memory-knobs-panel')
+    // Section titles are headings, so a screen reader can jump between them.
+    const headings = screen.getAllByRole('heading').map((h) => h.textContent)
+    expect(headings).toEqual(
+      (['chapterClose', 'promptContext', 'classifier', 'budgets', 'keyword'] as const).map((key) =>
+        t(`storySettings:memory.knobs.${key}`),
+      ),
+    )
     expect(screen.getByTestId('memory-budget-total')).toHaveTextContent(
       t('storySettings:memory.knobs.budgetTotal', { tokens: 5500 }),
     )
@@ -259,7 +241,7 @@ export const CadenceOverlapPositive: Story = {
   play: async () => {
     await screen.findByTestId('memory-knobs-panel')
     expect(screen.getByTestId('memory-cadence-overlap')).toHaveTextContent(
-      t('storySettings:memory.knobs.cadenceOverlap', { count: 2 }),
+      t('storySettings:memory.knobs.cadenceOverlap', { count: 1 }),
     )
     expect(screen.queryByTestId('memory-cadence-warning')).not.toBeInTheDocument()
   },
@@ -533,6 +515,7 @@ export const Disabled: Story = {
     }
     expect(chip(COPY.short)).toHaveAttribute('aria-disabled', 'true')
     expect(chip(COPY.custom)).toHaveAttribute('aria-disabled', 'true')
+    expect(chip(COPY.short).closest('[title]')).toHaveAttribute('title', COPY.inFlight)
     for (const name of [COPY.autoClose, COPY.fullChapter]) {
       expect(screen.getByRole('switch', { name })).toHaveAttribute('aria-disabled', 'true')
     }

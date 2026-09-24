@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test'
 import { queryApp } from '../harness/db'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
+import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
 
@@ -81,7 +82,7 @@ test.describe('reader — edit an entry', () => {
 
     // The defect this guards: with no delta of its own the edit was invisible to the
     // undo target walk, so this reversed the turn and deleted its entries instead.
-    await reader.actionsTrigger(app.window).click()
+    await chrome.actionsTrigger(app.window).click()
     await reader.undoRow(app.window).click()
 
     await expect.poll(contentOf, { timeout: 15_000 }).toBe(original)

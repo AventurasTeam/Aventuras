@@ -603,6 +603,20 @@
     margin-top: 4px;
     margin-bottom: 4px;
   }
+  /* Preflight strips list markers and indent, so a plain entry opening "1984. It was
+   * cold." lost its year. These are the browser defaults a rich entry's shadow root keeps. */
+  .narrative-html ol,
+  .narrative-html ul {
+    margin-top: 4px;
+    margin-bottom: 4px;
+    padding-left: 40px;
+  }
+  .narrative-html ol {
+    list-style-type: decimal;
+  }
+  .narrative-html ul {
+    list-style-type: disc;
+  }
   .narrative-html blockquote {
     border-left-width: 2px;
     border-left-color: var(--border);

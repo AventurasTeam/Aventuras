@@ -369,9 +369,9 @@ type NativeListProps<T> = {
   style?: ViewStyle
 }
 
-// Plain ScrollView, not SectionList: nested under the consumer's ScrollView (same
-// orientation) breaks VirtualizedList windowing. Bounded lists skip virtualization fine;
-// sticky headers are dropped (Shape1Inline consumers don't request them).
+// Plain ScrollView, not SectionList: inside Shape1Inline it sits in the consumer's
+// same-direction ScrollView, which breaks VirtualizedList windowing. The native tablet
+// dialog lands here too — unvirtualized, no sticky headers — though it is portaled and could window.
 function InlineNativeList<T>({
   sections,
   renderItem,
@@ -965,6 +965,8 @@ type SearchInputProps = {
   highlightedRowId?: string
   rowIdPrefix: string
   ariaInvalid?: boolean | 'true' | 'false'
+  ariaLabel?: string
+  ariaLabelledBy?: string
   className?: string
 }
 
@@ -1006,6 +1008,8 @@ function SearchInput({
   highlightedRowId,
   rowIdPrefix,
   ariaInvalid,
+  ariaLabel,
+  ariaLabelledBy,
   className,
 }: SearchInputProps) {
   // aria-activedescendant must reference a DOM-mounted element — the listbox only
@@ -1026,6 +1030,8 @@ function SearchInput({
       onFocus={onFocus}
       onBlur={onBlur}
       aria-invalid={ariaInvalid}
+      aria-label={ariaLabel}
+      aria-labelledby={ariaLabelledBy}
       role="combobox"
       aria-expanded={expanded}
       aria-autocomplete="list"
@@ -1239,6 +1245,8 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
         highlightedRowId={list.highlightedId ?? undefined}
         rowIdPrefix={rowIdPrefix}
         ariaInvalid={ariaInvalid}
+        ariaLabel={ariaLabel}
+        ariaLabelledBy={ariaLabelledBy}
         className="mb-3"
       />
       <RowList
@@ -1364,6 +1372,8 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
     disabled,
     disabledReason,
     'aria-invalid': ariaInvalid,
+    ariaLabel,
+    ariaLabelledBy,
     escClearsQueryFirst = false,
     className,
   } = props
@@ -1397,6 +1407,12 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
     },
     [],
   )
+
+  // A run disabling the field mid-pick closes the list: on web it is portaled past the
+  // wrapper's pointer-events gate, so its rows would otherwise stay pickable.
+  useEffect(() => {
+    if (disabled) setOpen(false)
+  }, [disabled])
 
   const updateAnchor = useCallback(() => {
     const node = wrapperRef.current
@@ -1591,6 +1607,8 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
         highlightedRowId={list.highlightedId ?? undefined}
         rowIdPrefix={rowIdPrefix}
         ariaInvalid={ariaInvalid}
+        ariaLabel={ariaLabel}
+        ariaLabelledBy={ariaLabelledBy}
       />
       {open ? (
         Platform.OS === 'web' ? (

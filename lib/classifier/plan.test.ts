@@ -107,6 +107,41 @@ describe('buildClassifierActions', () => {
     expect(awareness?.entryId).toBe('e3')
   })
 
+  it('stores blank free text as absent rather than an empty string', () => {
+    const { planned } = buildClassifierActions(
+      {
+        happenings: [
+          {
+            title: 'A',
+            description: '  ',
+            temporal: '',
+            sourceTurn: 't1',
+            involvements: [{ ref: 'char_a', role: ' ' }],
+            awareness: [{ ref: 'char_b', source: '', severity: 0.5 }],
+          },
+        ],
+        relationships: [],
+        statusFlips: [{ ref: 'char_kael', to: 'retired', reason: '\n', sourceTurn: 't2' }],
+        newCharacters: [],
+      },
+      base,
+    )
+    const byKind = (kind: string) => planned.find((p) => p.action.kind === kind)
+    expect(payloadOf<{ entry: object }>(byKind('createHappening')).entry).toMatchObject({
+      description: null,
+      temporal: null,
+    })
+    expect(payloadOf<{ entry: object }>(byKind('createHappeningInvolvement')).entry).toMatchObject({
+      role: null,
+    })
+    expect(
+      payloadOf<{ source?: string }>(byKind('upsertHappeningAwareness')).source,
+    ).toBeUndefined()
+    expect(payloadOf<{ patch: object }>(byKind('updateEntity')).patch).toMatchObject({
+      retiredReason: null,
+    })
+  })
+
   it('clamps an out-of-range severity into [0, 1]', () => {
     const { planned } = buildClassifierActions(
       {

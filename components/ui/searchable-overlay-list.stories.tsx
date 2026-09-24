@@ -261,7 +261,7 @@ async function playInitialScroll({ phone }: { phone: boolean }) {
   await expectRowCentered(SCROLL_TARGET_NAME)
 
   // Initial scroll is not the keyboard cursor: nothing is highlighted on open.
-  const search = screen.getByPlaceholderText('Search items…')
+  const search = screen.getByRole('combobox', { name: 'Item picker' })
   await expect(search).not.toHaveAttribute('aria-activedescendant')
   await expect(screen.getByRole('option', { name: SCROLL_TARGET_NAME })).toHaveAttribute(
     'aria-selected',

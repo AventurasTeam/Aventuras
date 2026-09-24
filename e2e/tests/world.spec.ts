@@ -7,6 +7,7 @@ import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { reloadFromMain, suppressNativeUnloadDialogRace } from '../harness/reload'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
+import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
 import { storySettings } from '../locators/story-settings'
@@ -61,8 +62,8 @@ test.describe.serial('World panel', () => {
   test('opens from the reader, lists the branch, switches category, searches, selects', async () => {
     await home.openStory(app.window, HERO_TITLE).click()
     await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
-    await reader.actionsTrigger(app.window).click()
-    await world.goToWorldRow(app.window).click()
+    await chrome.actionsTrigger(app.window).click()
+    await chrome.goToWorldRow(app.window).click()
     await app.window.waitForURL(/\/world\//)
 
     const branchId = await currentBranchId(app.window, HERO_STORY)
@@ -122,15 +123,15 @@ test.describe.serial('World panel', () => {
     const page = app.window
     await expect(world.subHeader(page)).toContainText('Origins of the Syndicate')
 
-    await world.actionsTrigger(page).click()
+    await chrome.actionsTrigger(page).click()
     // A sibling check first, or a zero-count assertion could pass with the menu never open.
-    await expect(world.goToStorySettingsRow(page)).toBeVisible()
-    await expect(world.goToWorldRow(page)).toHaveCount(0)
-    await world.goToStorySettingsRow(page).click()
+    await expect(chrome.goToStorySettingsRow(page)).toBeVisible()
+    await expect(chrome.goToWorldRow(page)).toHaveCount(0)
+    await chrome.goToStorySettingsRow(page).click()
     await page.waitForURL(/\/story-settings\//)
 
-    await storySettings.actionsTrigger(page).click()
-    await world.goToWorldRow(page).click()
+    await chrome.actionsTrigger(page).click()
+    await chrome.goToWorldRow(page).click()
     await page.waitForURL(/\/world\//)
     await expect(world.subHeader(page)).toContainText('Origins of the Syndicate')
   })
@@ -139,19 +140,19 @@ test.describe.serial('World panel', () => {
   test('a GO TO round trip keeps the same reader instance', async () => {
     const page = app.window
     await expect(world.subHeader(page)).toBeVisible()
-    await world.actionsTrigger(page).click()
-    await world.goToReaderRow(page).click()
+    await chrome.actionsTrigger(page).click()
+    await chrome.goToReaderRow(page).click()
     await page.waitForURL(/\/reader-composer\//)
     await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
     await expect(reader.composer(page)).toHaveValue('')
 
     await reader.composer(page).fill('E2E draft survives')
-    await reader.actionsTrigger(page).click()
-    await world.goToWorldRow(page).click()
+    await chrome.actionsTrigger(page).click()
+    await chrome.goToWorldRow(page).click()
     await page.waitForURL(/\/world\//)
 
-    await world.actionsTrigger(page).click()
-    await world.goToReaderRow(page).click()
+    await chrome.actionsTrigger(page).click()
+    await chrome.goToReaderRow(page).click()
     await page.waitForURL(/\/reader-composer\//)
     await expect(reader.composer(page)).toHaveValue('E2E draft survives')
 
@@ -169,8 +170,8 @@ test.describe.serial('World panel', () => {
 
     const original = await dirtyGenerationTab('E2E World GoTo Discard')
 
-    await storySettings.actionsTrigger(page).click()
-    await world.goToReaderRow(page).click()
+    await chrome.actionsTrigger(page).click()
+    await chrome.goToReaderRow(page).click()
     await expect(storySettings.unsavedDialog(page)).toBeVisible()
 
     const navigated = expect(
@@ -192,8 +193,8 @@ test.describe.serial('World panel', () => {
 
     const original = await dirtyGenerationTab('E2E World GoTo Save')
 
-    await storySettings.actionsTrigger(page).click()
-    await world.goToReaderRow(page).click()
+    await chrome.actionsTrigger(page).click()
+    await chrome.goToReaderRow(page).click()
     await expect(storySettings.unsavedDialog(page)).toBeVisible()
 
     const navigated = expect(
@@ -216,8 +217,8 @@ test.describe.serial('World panel', () => {
   test('the review pill and collapsed-tier badge reveal the flagged row', async () => {
     const page = app.window
     await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
-    await reader.actionsTrigger(page).click()
-    await world.goToWorldRow(page).click()
+    await chrome.actionsTrigger(page).click()
+    await chrome.goToWorldRow(page).click()
     await page.waitForURL(/\/world\//)
     // A fresh World instance starts on Characters, but tier collapse is session-scoped: this
     // relies on the earlier tests leaving Active open and Staged shut.
@@ -257,7 +258,7 @@ test.describe.serial('World panel', () => {
     const page = app.window
     await expect(world.subHeader(page)).toBeVisible()
 
-    await world.actionsTrigger(page).click()
+    await chrome.actionsTrigger(page).click()
     await world.addEntityRow(page).click()
 
     await expect(world.addMenuOption(page, 'blank')).toBeVisible()
@@ -269,7 +270,7 @@ test.describe.serial('World panel', () => {
 
     // A reopen exercises the route's addOpen state actually resetting, not just its initial open —
     // a controlled seam that silently no-ops on reopen is the failure mode this guards against.
-    await world.actionsTrigger(page).click()
+    await chrome.actionsTrigger(page).click()
     await world.addEntityRow(page).click()
     await expect(world.addMenuOption(page, 'blank')).toBeVisible()
 
@@ -277,7 +278,7 @@ test.describe.serial('World panel', () => {
     await expect(world.addMenuOption(page, 'blank')).toHaveCount(0)
 
     // Add lore… switches to Lore and opens the menu in the same update — the seam's other half.
-    await world.actionsTrigger(page).click()
+    await chrome.actionsTrigger(page).click()
     await world.addLoreRow(page).click()
     await expect(world.categoryTrigger(page)).toHaveText(t('world:categories.lore'))
     await expect(world.addMenuOption(page, 'blank')).toBeVisible()
@@ -318,8 +319,8 @@ test.describe.serial('World panel', () => {
     await expect(world.detailName(page)).toHaveText('The Drowned Market')
 
     // Known screen for anything appended after this test.
-    await world.actionsTrigger(page).click()
-    await world.goToReaderRow(page).click()
+    await chrome.actionsTrigger(page).click()
+    await chrome.goToReaderRow(page).click()
     await page.waitForURL(/\/reader-composer\//)
   })
 })

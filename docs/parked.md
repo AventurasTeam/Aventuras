@@ -822,7 +822,7 @@ description demand emerges.
 #### Token-trigger classifier cadence mode
 
 `stories.settings.classifierCadence` ships v1 as a single number
-(turns between background classifier runs). The original schema
+(entries between background classifier runs). The original schema
 was a discriminated union — `{ mode: 'turns' | 'token-trigger',
 value: number }` — but the token-trigger variant was dropped from
 v1 because the buffer-aware overlap UX
@@ -2413,13 +2413,23 @@ attributes to stay on our `View`. Neither option is verified. No
 consumer passes `accessibilityRole="menu"`, so every Popover today is
 the same dialog-on-dialog shape.
 
-The three menu-shaped consumers, `ImporterMenu`, the wizard's add-cast
-menu and the story card's overflow, also put `menuitem` rows inside
-that dialog with no `menu` owner.
+The four menu-shaped consumers, `ImporterMenu`, the wizard's add-cast
+menu, the story card's overflow and `OverflowMenu` (Plot's detail
+head), also put `menuitem` rows inside that dialog with no `menu`
+owner. On phone `OverflowMenu` hosts them in a bottom `Sheet`, which
+has also been a `dialog` since 2026-09-23.
 That is deliberate: Popover has no arrow-key roving, and `role="menu"`
 would switch screen readers into a navigation mode the container does
 not honour. The fix is roving focus plus the role, or plain buttons in
 place of the menu items.
+
+The right-anchored `Sheet` had the same dialog-on-dialog shape, its
+outer named by an sr-only Radix Title, and took the lift on 2026-09-24
+(`demoteRadixDialog` in `components/ui/sheet.tsx`). It finds Radix's
+element through the Title's id rather than `parentElement`, and a
+story pins that re-rendering the sheet leaves the stripped attributes
+stripped. Popover has no Title to anchor on, so its lift would still
+rest on the parent assumption.
 
 Parked as accepted for v1 rather than dissolved: the degradation is
 real, but it costs announcement quality rather than function. Revisit
@@ -2427,6 +2437,56 @@ on a deliberate a11y pass, on any report from real assistive-technology
 use, or the first time someone needs an unfiltered dialog query. Raised
 2026-08-15 by the Slice 3.8 Task 5 and Task 7 reviews, diagnosed and
 parked 2026-08-18.
+
+#### Android bottom sheets are not dialogs for TalkBack
+
+On Android a bottom `Sheet` is one TalkBack item, not a dialog.
+gorhom 5.2.14 wraps all of a sheet's content in a view that is
+`accessible` by default, and `BottomSheetContent`
+(`components/ui/sheet.tsx`) overrides only its role and label.
+Checked on the `Medium_Phone` emulator with TalkBack on, 2026-09-24:
+
+- TalkBack's focus box covers the whole sheet as a single item.
+- A sheet named by `ariaLabel` speaks only that label. Its own
+  heading and plain text sit inside the item and are not separate
+  stops; its inputs and buttons still are.
+- A sheet named by `ariaLabelledBy` gets no label, so Android joins
+  its plain text into one description. The JSON viewer reads "Raw
+  JSON, ·, Mira (character), Edit raw — coming later", its header and
+  footer run together. The JSON itself sits in its own scroll area
+  and is not part of that item.
+- While a sheet is open, the screen behind it stays in the
+  accessibility tree, so TalkBack can walk out of the sheet into the
+  page underneath. On web the same sheet has been a proper `dialog`
+  since 2026-09-23.
+
+`accessible={false}` alone is not the fix (tried, then reverted). The
+container stops being a stop and its parts become reachable, but
+React Native still attaches the joined description to it, so the
+header would likely be read twice; and when the JSON viewer opened,
+TalkBack's focus did not move into it at all. A labelled sheet keeps
+its label that way, so the name is not what is lost. Setting
+`accessible` only when the sheet has an `ariaLabel` fixes the JSON
+viewer's joined item and nothing else.
+
+What a sheet needs on Android is dialog behaviour: on open, focus
+moves into the sheet and lands on its name or heading; the page
+behind is hidden from TalkBack while it is open; and the content can
+be walked item by item. The second part reaches past the primitive to
+the app root.
+
+Not verified: the order TalkBack actually reads in. adb could not
+drive its navigation (keyboard shortcuts sent over adb did not move
+its focus), so the stops above come from `uiautomator dump` and
+TalkBack's focus box, not from hearing a swipe-through. A fix needs a
+manual swipe check; adb-injected taps bypass TalkBack's gestures, so
+swipe with the mouse in the emulator window instead.
+
+Parked 2026-09-24 as degraded rather than broken: every control inside
+a sheet stays reachable. Revisit on a deliberate a11y pass, on any
+report from real TalkBack use, or when a phone sheet whose plain text
+carries meaning ships. Raised 2026-09-24 by a code review of the
+2026-09-23 triage-pass branch.
 
 #### Unset affordance for optional story-settings keys
 
@@ -2495,18 +2555,6 @@ button while the dialog was open — confirmed by an actual run
 through the dialog, but the root cause (portal nesting?) was never
 investigated, and any future locator or a11y assumption about
 background-hiding on this stack is unsafe. Surfaced by M3.7b
-implementation (2026-07-31).
-
-#### Tab-qualified invalid-reason notice on the save bar
-
-**The save bar's invalid-reason notice is not tab-qualified.**
-`computeSnapshot` (`components/story-settings/save-session-state.ts`)
-reports the first dirty-and-invalid section in rail order, and the
-bar lists dirty fields from every tab — so once M4.4 adds more
-sections, a user on one tab can be shown a blocking reason sourced
-from another with nothing indicating where to go. Moot at one
-section; `{ tab, reason }` would be a single optional field on the
-existing `SaveSessionSnapshot` type. Surfaced by M3.7b
 implementation (2026-07-31).
 
 #### BC-style origin era rendering
@@ -2607,6 +2655,94 @@ Costs to weigh when it lands:
 Parked 2026-09-23; device use showing the collapse reading as abrupt,
 or the expand-time divider / card-border gap proving noticeable, is
 the signal to revisit.
+
+#### A dirty links array on Save overwrites concurrent link writes
+
+`useRowSaveSession`'s same-row refresh (`hooks/use-row-save-session.ts`)
+merges a store patch per top-level field, so a dirty `involvements` /
+`awareness` array keeps the user's whole array rather than grafting the
+patch in; the natural-key builder in `lib/plot/happening-draft.ts` then
+reads that stale array as the truth and deletes or reverts the rows a
+concurrent write added. It also re-creates a row a concurrent write
+deleted, since a draft row whose id left the baseline reads as new.
+
+Unreachable today. Every writer that can link an existing happening is
+`hard-gate`, which blocks the Plot pane while it runs, and the periodic
+classifier, the one `no-gate` writer, links only happenings it creates
+in the same pass. Chapter-close does rewrite links on existing
+happenings
+([awareness pin tuning](./memory/chapter-close.md#3d--awareness-pin-tuning),
+[happenings consolidation](./memory/chapter-close.md#3e--happenings-consolidation)),
+but under the same gate. The fix is a three-way merge: record each
+links field's baseline when it goes dirty, then apply the user's diff
+onto the latest rows — about 60–100 lines across the hook and the
+draft builder.
+
+Parked 2026-09-23. Revisit when a `no-gate` writer links an existing
+happening —
+[`classifier.md → Provenance attribution`](./memory/classifier.md#provenance-attribution)
+already describes a character learning of an old happening, which
+today's schema cannot express — or when a gated run becomes startable
+while a Plot session is dirty. Raised 2026-09-22 by Slice 4.3.
+
+#### Select's dropdown popover is pinned to its trigger's width
+
+The popper Viewport in `components/ui/select.tsx` gets
+`w-[var(--radix-select-trigger-width)]`; upstream shadcn uses
+`w-full min-w-[var(--radix-select-trigger-width)]`, so its popover
+grows to fit content while ours cannot. **Latent — no current
+victim.** Slice 4.4's Add override Select hit it and was fixed at the
+call site by dropping a `self-start` hug that deviated from
+[`forms.md → Input width within form rows`](./ui/patterns/forms.md#input-width-within-form-rows)
+anyway; the only other narrow-trigger dropdown, the reader composer's
+mode picker, measures 115 px under a 123 px trigger and the developer
+judged it fine there — its rows are short. So this bites only a
+future dropdown whose rows are wider than its trigger, and the fix
+rewidens every Select in the app, which is why the primitive was left
+alone. Note that `resolveMode` routes description-bearing options to
+`radio` by default, so any `mode="dropdown"` caller with descriptions
+has opted out of that and lands on the pinned path.
+
+The pin was deliberate: `cbd9725b` (2026-05-06) switched `min-w` to
+`w` so rich rows — the calendar picker's at the time — could not
+overflow past the anchor and overlap adjacent layout. That caller has
+since moved to `SearchableOverlayList`, whose `matchTriggerWidth` is a
+floor. `min-w` changes only a Select whose rows are wider than its
+trigger, so it rewidens fewer Selects than the paragraph above says.
+Toolbar's sort trigger carries a label prefix, and World's and Plot's
+kind selectors stretch across the list pane, so none is a victim
+today (checked 2026-09-23).
+
+Parked 2026-09-23; the first dropdown whose rows are wider than its
+trigger is the signal to revisit.
+
+#### Entry index cost on large rich stories (Android)
+
+`readEntryIndex` (`lib/entry-refs/read.ts`) builds a plain-text
+preview for every entry in the branch, and the Plot screen re-runs it
+whenever a run settles or the tail moves (`hooks/use-entry-index.ts`).
+A rich entry whose first 200 characters are mostly markup gets a
+second, wider read; its leading style and script blocks are skipped
+by index, and about 600 characters past them are stripped.
+
+Measured 2026-09-24 on the x86_64 emulator (dev build, Hermes) with
+1000 rich entries of about 7000 characters, each opening with a style
+block of about 2700: one index read takes about 500 ms, down from
+2.9 s before the preamble skip. Reading 8000 characters per row from
+SQLite is about 50 ms of that. Hermes runs the stripper at roughly
+250 ns per character, and no single regex dominates, so the cost is
+the characters scanned. A mid-range phone is likely slower than the
+emulator on a desktop CPU; that was not measured.
+
+Two ways down, neither built. Cache each entry's preview across
+refetches, so only new or changed entries pay (the first open still
+does); `story_entries` has no updated-at column, so the cache key has
+to come from the content. Or yield between chunks of rows, so the
+read never blocks frames for its whole length.
+
+Parked 2026-09-24; revisit when testing on real devices shows the Plot
+screen stalling on a large rich story, or when the entry index gains a
+consumer outside Plot.
 
 ### Code structure (parked)
 

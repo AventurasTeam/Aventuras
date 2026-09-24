@@ -255,8 +255,11 @@ RN supports VoiceOver (iOS) and TalkBack (Android) via
   `accessibilityLabel="Story Settings"` on the `⛭` button.
 - **Roles match WAI-ARIA conventions.** Buttons get
   `accessibilityRole="button"`, headings get `header`, lists get
-  `list`. Custom interactions (sheet drag handle) get
-  `accessibilityRole="adjustable"` with appropriate hint.
+  `list`. A custom interaction gets `adjustable` only when it wires
+  the increment / decrement actions that role promises. The bottom
+  Sheet's drag handle wires none, and screen-reader users dismiss
+  through back, Escape or the backdrop, so the handle stays out of
+  the accessibility tree.
 - **Sheets and modals trap focus.** VoiceOver / TalkBack focus
   cycles within the open sheet / modal until dismissed. RN's
   `accessibilityViewIsModal` prop handles this on iOS.

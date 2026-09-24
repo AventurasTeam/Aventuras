@@ -9,7 +9,7 @@ import { Text } from '@/components/ui/text'
 
 export default function IconActionDevRoute() {
   return (
-    <ScrollView className="flex-1 bg-bg-base">
+    <ScrollView keyboardShouldPersistTaps="handled" className="flex-1 bg-bg-base">
       <ThemePicker />
       <DensityPicker />
       <View className="flex-col gap-6 p-4">

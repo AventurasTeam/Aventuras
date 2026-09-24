@@ -15,6 +15,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import { Heading } from '@/components/ui/heading'
 import { IconAction } from '@/components/ui/icon-action'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select } from '@/components/ui/select'
@@ -180,7 +181,7 @@ export function AuthoringAidsPanel({
   return (
     <View testID="authoring-aids-panel" className="gap-4">
       <View className="flex-row items-center justify-between gap-2">
-        <Text className="font-semibold">{t('storySettings:generation.authoringAids')}</Text>
+        <Heading level={3}>{t('storySettings:generation.authoringAids')}</Heading>
         <Popover ariaLabel={t('storySettings:generation.menu')}>
           <PopoverTrigger ref={menuTriggerRef} asChild>
             <IconAction
@@ -240,6 +241,7 @@ export function AuthoringAidsPanel({
           value={wrapPov}
           onValueChange={(value) => setWrapPov(value === 'first' ? 'first' : 'third')}
           disabled={disabled || wrapPovNeedsModes}
+          disabledReason={disabled ? disabledReason : undefined}
         />
       </FormRow>
 

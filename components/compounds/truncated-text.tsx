@@ -28,7 +28,19 @@ type Truncation = {
 }
 
 // touch.md → Tap-to-tooltip on inert chrome text: the popover dismisses after a brief idle.
-const IDLE_DISMISS_MS = 4000
+const TAP_TOOLTIP_IDLE_MS = 4000
+
+/** Trigger ref and open handler for a tap-to-tooltip popover that closes itself after an idle. */
+export function useTapTooltipTrigger() {
+  const trigger = useRef<TriggerRef>(null)
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    const timer = setTimeout(() => trigger.current?.close(), TAP_TOOLTIP_IDLE_MS)
+    return () => clearTimeout(timer)
+  }, [open])
+  return { trigger, onOpenChange: setOpen }
+}
 
 const PROBE_CLIP: ViewStyle = {
   position: 'absolute',
@@ -139,15 +151,9 @@ function FullTextPopover({
   className: string
   children: ReactNode
 }) {
-  const trigger = useRef<TriggerRef>(null)
-  const [open, setOpen] = useState(false)
-  useEffect(() => {
-    if (!open) return
-    const timer = setTimeout(() => trigger.current?.close(), IDLE_DISMISS_MS)
-    return () => clearTimeout(timer)
-  }, [open])
+  const { trigger, onOpenChange } = useTapTooltipTrigger()
   return (
-    <Popover asChild onOpenChange={setOpen} ariaLabel={t('chrome.fullText')}>
+    <Popover asChild onOpenChange={onOpenChange} ariaLabel={t('chrome.fullText')}>
       <View className={className}>
         {children}
         {/* An overlay rather than a wrapper: the whole box is the target, padding and floor

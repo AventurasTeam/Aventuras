@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import { View } from 'react-native'
 
 import { ProviderModelPicker, type ModelRef } from '@/components/compounds/provider-model-picker'
+import { Heading } from '@/components/ui/heading'
 import { IconAction } from '@/components/ui/icon-action'
 import { Select } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
@@ -139,7 +140,7 @@ export function ModelsPanel({ settings, disabled = false, disabledReason }: Mode
   return (
     <View testID="models-panel" className="gap-4">
       <View className="gap-0.5">
-        <Text className="font-semibold">{t('storySettings:models.heading')}</Text>
+        <Heading level={3}>{t('storySettings:models.heading')}</Heading>
         <Text size="sm" variant="muted">
           {t('storySettings:models.intro')}
         </Text>
@@ -210,8 +211,6 @@ export function ModelsPanel({ settings, disabled = false, disabledReason }: Mode
       })}
 
       <Select
-        // Select can't hold a controlled empty value, so it keeps its own pick; remount per offer.
-        key={addable.join(' ')}
         mode="dropdown"
         label={t('storySettings:models.addOverrideLabel')}
         placeholder={t('storySettings:models.addOverride')}
@@ -236,6 +235,7 @@ export function ModelsPanel({ settings, disabled = false, disabledReason }: Mode
           if (agent != null) setPending((prev) => [...prev, agent])
         }}
         disabled={disabled || noProviders || addable.length === 0}
+        disabledReason={pickerDisabledReason}
       />
     </View>
   )

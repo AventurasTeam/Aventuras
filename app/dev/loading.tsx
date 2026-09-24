@@ -10,7 +10,7 @@ import { Text } from '@/components/ui/text'
 
 export default function LoadingDevRoute() {
   return (
-    <ScrollView className="flex-1 bg-bg-base">
+    <ScrollView keyboardShouldPersistTaps="handled" className="flex-1 bg-bg-base">
       <ThemePicker />
       <DensityPicker />
       <View className="gap-6 p-4">

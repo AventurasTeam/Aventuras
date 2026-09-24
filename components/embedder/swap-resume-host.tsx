@@ -2,7 +2,8 @@ import { useRouter } from 'expo-router'
 import { useCallback, useEffect } from 'react'
 
 import { useSwapResumeActions } from '@/hooks/use-swap-resume-actions'
-import { currentStoryStore, embedderSwapStore } from '@/lib/stores'
+import { swapResumePromptOpen } from '@/lib/embedder-swap'
+import { currentStoryStore, embedderSwapStore, recoveryReportStore } from '@/lib/stores'
 
 import { SwapResumeDialog } from './swap-resume-dialog'
 
@@ -23,12 +24,21 @@ export function SwapResumeHost() {
     (s) => embedderSwapStore.progressFor(s, storyId) != null,
   )
   const deferred = embedderSwapStore.useSwap((s) => s.resumeDeferredFor)
+  const recoveryActive = recoveryReportStore.useRecoveryReport(
+    (s) => s.activeRecoveryReport != null || s.pendingRecoveryReport != null,
+  )
 
   useEffect(() => {
     embedderSwapStore.expireDeferredResume(storyId, target)
   }, [storyId, target])
 
-  const open = storyId != null && target != null && !running && deferred !== storyId
+  const open = swapResumePromptOpen({
+    storyId,
+    swapTarget: target,
+    swapRunning: running,
+    deferredForThisStory: deferred === storyId,
+    recoveryActive,
+  })
 
   const router = useRouter()
   const { resume, cancelSwap } = useSwapResumeActions(storyId)

@@ -22,6 +22,8 @@ import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 import { Heading } from '@/components/ui/heading'
 import { Icon } from '@/components/ui/icon'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
+import { ReasonTooltip } from '@/components/ui/reason-tooltip'
+import { QuietSheetBackground, QuietSheetHandle } from '@/components/ui/sheet'
 import { Text, TextClassContext } from '@/components/ui/text'
 import { POINTER_EVENTS_BOX_NONE, POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useTier } from '@/hooks/use-tier'
@@ -46,8 +48,8 @@ function Value({
   children?: ReactNode
 }) {
   const { value } = SelectBase.useRootContext()
-  const display = value?.label ?? children ?? placeholder ?? ''
-  const empty = !value
+  const empty = !value?.value
+  const display = empty ? (children ?? placeholder ?? '') : value.label
   return (
     <Text
       size="sm"
@@ -178,8 +180,13 @@ function PhoneSheetContent({
             // 'adjustPan' deliberately — see sheet.tsx for why 'adjustResize'
             // puts every sheet back under the keyboard.
             android_keyboardInputMode="adjustPan"
+            backgroundComponent={QuietSheetBackground}
             backgroundStyle={backgroundStyle}
+            handleComponent={QuietSheetHandle}
             handleIndicatorStyle={handleIndicatorStyle}
+            // Native-only sheet: replaces gorhom's `adjustable` role and English 'Bottom Sheet' label.
+            accessibilityRole="none"
+            accessibilityLabel={label || null}
             onClose={() => onOpenChange(false)}
           >
             <TextClassContext.Provider value="text-fg-primary">
@@ -199,7 +206,7 @@ function PhoneSheetContent({
                       {label}
                     </Heading>
                   )}
-                  <BottomSheetScrollView className="flex-1">
+                  <BottomSheetScrollView keyboardShouldPersistTaps="handled" className="flex-1">
                     <SelectBase.Viewport>{children}</SelectBase.Viewport>
                   </BottomSheetScrollView>
                   {tailAction != null ? (
@@ -303,6 +310,7 @@ function PopoverContent({
                     children
                   ) : (
                     <ScrollView
+                      keyboardShouldPersistTaps="handled"
                       className="flex-1"
                       contentContainerClassName="flex-grow"
                       nestedScrollEnabled
@@ -527,6 +535,8 @@ export type SelectProps = {
    */
   label?: string
   disabled?: boolean
+  /** Why it's disabled: a web tooltip over the control and its accessibility hint, every mode. */
+  disabledReason?: string
   className?: string
 
   /**
@@ -598,13 +608,22 @@ function groupOptions(options: SelectOption[]): {
   return groups
 }
 
-function SegmentBranch({ options, value, onValueChange, disabled, className, label }: SelectProps) {
+function SegmentBranch({
+  options,
+  value,
+  onValueChange,
+  disabled,
+  disabledReason,
+  className,
+  label,
+}: SelectProps) {
   return (
     <RadioGroupBase.Root
       value={value}
       onValueChange={onValueChange}
       disabled={disabled}
       aria-label={label}
+      accessibilityHint={disabled ? disabledReason : undefined}
       className={cn(
         'h-control-md flex-row overflow-hidden rounded-md border border-border-strong bg-bg-base',
         className,
@@ -641,13 +660,22 @@ function SegmentBranch({ options, value, onValueChange, disabled, className, lab
   )
 }
 
-function RadioBranch({ options, value, onValueChange, disabled, className, label }: SelectProps) {
+function RadioBranch({
+  options,
+  value,
+  onValueChange,
+  disabled,
+  disabledReason,
+  className,
+  label,
+}: SelectProps) {
   return (
     <RadioGroupBase.Root
       value={value}
       onValueChange={onValueChange}
       disabled={disabled}
       aria-label={label}
+      accessibilityHint={disabled ? disabledReason : undefined}
       className={cn('flex-col gap-2', className)}
     >
       {options.map((opt) => {
@@ -695,11 +723,16 @@ function RadioBranch({ options, value, onValueChange, disabled, className, label
   )
 }
 
+// The Root must stay controlled: `undefined` flips it uncontrolled, so it keeps its own pick
+// (shown as the raw option value on web) and Radix warns. Radix renders '' as the placeholder.
+const EMPTY_VALUE = { value: '', label: '' }
+
 function DropdownBranch({
   options,
   value,
   onValueChange,
   disabled,
+  disabledReason,
   sheetSize,
   placeholder,
   label,
@@ -714,7 +747,7 @@ function DropdownBranch({
     sheetSize === undefined || sheetSize === 'auto' ? autoSheetSize(options) : sheetSize
   return (
     <Root
-      value={selected ? { value: selected.value, label: selected.label } : undefined}
+      value={selected ? { value: selected.value, label: selected.label } : EMPTY_VALUE}
       onValueChange={(opt) => {
         if (opt) onValueChange(opt.value)
       }}
@@ -729,6 +762,7 @@ function DropdownBranch({
         disabled={disabled}
         size={size}
         aria-label={renderTrigger != null ? undefined : label}
+        accessibilityHint={disabled ? disabledReason : undefined}
       >
         {renderTrigger != null ? (
           renderTrigger({ selected, placeholder })
@@ -778,7 +812,15 @@ export function Select(props: SelectProps) {
   const tier = useTier()
   const mode = resolveMode(props.options, props.mode, tier)
   const branchProps = { ...props, onValueChange: changesOnly(props.value, props.onValueChange) }
-  if (mode === 'segment') return <SegmentBranch {...branchProps} />
-  if (mode === 'radio') return <RadioBranch {...branchProps} />
-  return <DropdownBranch {...branchProps} />
+  return (
+    <ReasonTooltip reason={props.disabled ? props.disabledReason : undefined}>
+      {mode === 'segment' ? (
+        <SegmentBranch {...branchProps} />
+      ) : mode === 'radio' ? (
+        <RadioBranch {...branchProps} />
+      ) : (
+        <DropdownBranch {...branchProps} />
+      )}
+    </ReasonTooltip>
+  )
 }

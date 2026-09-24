@@ -116,7 +116,10 @@ Behavior contract on phone:
 - **Save bar sits at the surface's bottom edge, below whichever
   pane the phone shows** — the tab-list state included — when no
   keyboard is active. A dirty session collapsed back to the list
-  therefore stays saveable without re-entering a detail route.
+  therefore stays saveable without re-entering a detail route. This
+  is the surface-wide session (Settings); a per-row session (World,
+  Plot) guards the collapse instead, per
+  [`collapse.md → Two-pane navigation surfaces`](./collapse.md#two-pane-navigation-surfaces-world-plot-settings).
 - **Save bar stays visible when the soft keyboard opens**, riding
   directly above it. The surface reserves the keyboard's height and
   the panes compress; the bar never slides away and never sits under
@@ -150,7 +153,10 @@ and is a no-op on web; wrap the surface's root in it. Scroll
 containers on the surface must also set
 `keyboardShouldPersistTaps="handled"`, or the first tap on any
 control while a field holds focus is consumed dismissing the
-keyboard instead of reaching the control.
+keyboard instead of reaching the control. Lint enforces it: a
+scroller element with no value set fails `no-restricted-syntax`.
+The rule matches element names, so a scroller held in a variable
+(`const Scroller = …`) escapes it and must set the prop by hand.
 
 The platform mechanism (RN's `KeyboardAvoidingView` modes, iOS
 interactive-dismiss vs Android adjust-resize) is **session 6
@@ -257,6 +263,11 @@ NOT in scope:
   reachable via the row's normal navigation.
 - **Buttons / actionable icons / chips** — tap fires the action;
   no popover.
+
+One icon is in scope despite carrying no text: the save bar's `⚠`
+note ([`save-sessions.md → Invalid draft`](../../patterns/save-sessions.md#invalid-draft)).
+It is how a draft explains why Save is dead, so a tap opens its text
+in the same transient popover.
 
 Implementation guidance: bind the tap-to-popover handler only to
 elements whose text actually overflows at runtime. Don't bind on

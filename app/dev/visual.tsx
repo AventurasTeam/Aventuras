@@ -31,7 +31,7 @@ const SAMPLE_IMAGE = 'https://i.pravatar.cc/300'
 
 export default function VisualDevRoute() {
   return (
-    <ScrollView className="flex-1 bg-bg-base">
+    <ScrollView keyboardShouldPersistTaps="handled" className="flex-1 bg-bg-base">
       <ThemePicker />
       <DensityPicker />
       <View className="gap-6 p-4">

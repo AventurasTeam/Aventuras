@@ -360,6 +360,7 @@ function LicenseBody({
         <ModelCardRegion markdown={licenseText} sourceUrl={meta.source} />
       ) : (
         <ScrollView
+          keyboardShouldPersistTaps="handled"
           accessibilityLabel={t('embedder:license.a11yRegion')}
           className={cn(
             'rounded-md border border-border bg-bg-sunken',
@@ -465,7 +466,11 @@ function ImportConfirmBody({
   availableEps: readonly ExecutionProvider[]
 }) {
   return (
-    <ScrollView className="shrink" contentContainerClassName="gap-3">
+    <ScrollView
+      keyboardShouldPersistTaps="handled"
+      className="shrink"
+      contentContainerClassName="gap-3"
+    >
       <Text variant="secondary" size="sm">
         {t('embedder:import.notice')}
       </Text>
@@ -509,7 +514,11 @@ function DownloadingBody({
   // The catalog's file count is provider-supplied, so the list has no ceiling and must
   // scroll inside the capped panel rather than push the footer out of it.
   return (
-    <ScrollView className="shrink" contentContainerClassName="gap-3">
+    <ScrollView
+      keyboardShouldPersistTaps="handled"
+      className="shrink"
+      contentContainerClassName="gap-3"
+    >
       {entries.map(([file, progress]) => (
         <View key={file} className="gap-1">
           <View className="flex-row justify-between">
@@ -572,7 +581,11 @@ function VerifyingBody({
 }) {
   const entries = Object.entries(verifyByFile)
   return (
-    <ScrollView className="shrink" contentContainerClassName="gap-2">
+    <ScrollView
+      keyboardShouldPersistTaps="handled"
+      className="shrink"
+      contentContainerClassName="gap-2"
+    >
       {entries.map(([file, status]) => (
         <View key={file} className="flex-row items-center gap-2">
           <Text>

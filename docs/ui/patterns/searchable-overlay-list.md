@@ -375,12 +375,15 @@ therefore not a substrate consumer either.
 
 ## Implementation notes
 
-- **Virtualization is always on**, regardless of source-list size:
-  `@tanstack/react-virtual` on web, `SectionList` (the sectioned
-  member of the `FlatList` family, for native sticky section
-  headers) on native. The shipped `Autocomplete` (`autocomplete.tsx`)
-  is the reference implementation for the virtualization this
-  substrate generalizes.
+- **Virtualization is on wherever the list lives in an overlay**,
+  regardless of source-list size: `@tanstack/react-virtual` on web,
+  `SectionList` (the sectioned member of the `FlatList` family, for
+  native sticky section headers) on native — the phone Sheet and the
+  tablet / desktop popover alike. The native inline combobox (Shape 1
+  off phone) is the one exception: its list renders inside the
+  consumer's same-direction scroller, where a nested `VirtualizedList`
+  loses its windowing, so it uses a plain `ScrollView`; its source
+  lists are short.
 - **The hardest build surface** is virtualization combined with
   sticky section headers, `initialScrollRowId`, and
   highlight-scroll-into-view at once. Both libraries support it —

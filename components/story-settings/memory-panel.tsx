@@ -4,6 +4,7 @@ import { View } from 'react-native'
 import { ReindexConfirmDialog } from '@/components/embedder/reindex-confirm-dialog'
 import { SwapDialog, type SwapCandidate } from '@/components/embedder/swap-dialog'
 import { Button } from '@/components/ui/button'
+import { Heading } from '@/components/ui/heading'
 import { Text } from '@/components/ui/text'
 import { useInstalledModels, type InstalledModelInfo } from '@/hooks/use-installed-models'
 import { useSwapResumeActions } from '@/hooks/use-swap-resume-actions'
@@ -328,7 +329,7 @@ export function MemoryPanel({
 
   return (
     <View testID="memory-panel" className="gap-4">
-      <Text className="font-semibold">{t('storySettings:memory.heading')}</Text>
+      <Heading level={3}>{t('storySettings:memory.heading')}</Heading>
       <Text>{t('storySettings:memory.staleCount', { count: staleTotal })}</Text>
       {reasonLine != null ? (
         <Text size="sm" variant="muted">
@@ -410,7 +411,9 @@ export function MemoryPanel({
         // row is also the only affordance when Story Settings is reached by a cold
         // reload, where there is no open story for the host to key on.
         <View testID="memory-swap-pending" className="gap-2 rounded-md border border-border p-3">
-          <Text className="font-semibold">{t('storySettings:memory.swapPendingTitle')}</Text>
+          <Heading level={4} className="font-semibold">
+            {t('storySettings:memory.swapPendingTitle')}
+          </Heading>
           <Text size="sm" variant="muted">
             {t('storySettings:memory.swapPendingBody', {
               model: settings.embedding_swap_target ?? '',

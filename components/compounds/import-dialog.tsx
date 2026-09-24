@@ -361,7 +361,14 @@ function PayloadIssueList({
     return list
   }
   // Desktop / tablet: bounded internal scroll keeps the dialog body compact.
-  return <ScrollView style={{ maxHeight: PAYLOAD_DETAILS_MAX_HEIGHT }}>{list}</ScrollView>
+  return (
+    <ScrollView
+      keyboardShouldPersistTaps="handled"
+      style={{ maxHeight: PAYLOAD_DETAILS_MAX_HEIGHT }}
+    >
+      {list}
+    </ScrollView>
+  )
 }
 
 type SourceButtonProps = {

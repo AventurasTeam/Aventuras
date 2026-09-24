@@ -311,6 +311,10 @@ export const HardGateDisablesDirtyAuthoringSession: Story = {
     expect(
       screen.getAllByRole('button', { name: t('generationGate.inFlight') }).length,
     ).toBeGreaterThanOrEqual(3)
+    const wrapPov = screen.getByRole('radiogroup', {
+      name: t('storySettings:generation.composerWrapPov'),
+    })
+    expect(wrapPov.closest('[title]')).toHaveAttribute('title', t('generationGate.inFlight'))
     expect(screen.getByTestId('suggestion-category-label-cat-combat')).toHaveAttribute('readonly')
     expect(screen.getByLabelText(COPY.hexColor)).toHaveAttribute('readonly')
     expect(screen.getByRole('button', { name: COPY.applyColor })).toBeDisabled()

@@ -45,3 +45,4 @@ export {
   type EmbeddingUpgradePromptInput,
   type UpgradePromptLatch,
 } from './upgrade-prompt'
+export { swapResumePromptOpen, type SwapResumePromptInput } from './resume-prompt'

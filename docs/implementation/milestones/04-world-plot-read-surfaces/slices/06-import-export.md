@@ -181,6 +181,18 @@ exported file to the user.
   [the parked tier-wrap entry](../../../../parked.md#duplicated-desktop-popover--phone-sheet-tier-wrap).
   The controlled-open seam drives the trigger ref, so a Sheet needs it
   re-plumbed.
+- **Four hand-copied menu-item rows.** (2026-09-22)
+  `ImporterMenuItem` (`components/compounds/importer-menu.tsx`),
+  `OverflowMenu`'s `MenuItem` (`components/compounds/overflow-menu.tsx`),
+  `StoryCard`'s `OverflowItem` (`components/story/story-card.tsx`), and
+  the cast-list inline row (`components/wizard/cast-list.tsx`) each
+  reimplement the same pressable-row shape. Their disabled naming was
+  aligned to `label, reason` on 2026-09-23, but the shapes still
+  differ: only the first two have a disabled state, and `StoryCard`'s
+  row is `py-row-y-sm` with no phone `min-h`. This slice re-plumbs
+  `ImporterMenu` anyway, which makes it the cheapest place to extract
+  one shared `MenuItem`. The rows' role stays with
+  [Nested dialog roles in Popover](../../../../parked.md#nested-dialog-roles-in-popover).
 
 ## Implementation notes
 

@@ -7,13 +7,6 @@ import { t } from '../harness/i18n'
 // Plot panel (app/plot/[branchId].tsx). testing.md → Selector strategy — subHeader is the
 // one testID (no role, no unique name of its own).
 export const plot = {
-  actionsTrigger: (page: Page): Locator =>
-    page.getByRole('button', { name: new RegExp(t('chrome.actions')) }),
-  goToPlotRow: (page: Page): Locator =>
-    page.getByRole('option', { name: t('chrome.goTo.openPlot'), exact: true }),
-  goToReaderRow: (page: Page): Locator =>
-    page.getByRole('option', { name: t('chrome.goTo.openReader'), exact: true }),
-
   // ListRow's Pressable carries the label as its accessible name.
   row: (page: Page, title: string): Locator =>
     page.getByRole('button', { name: title, exact: true }),
@@ -39,9 +32,6 @@ export const plot = {
   // The top bar's story segment: a Breadcrumb parent renders as a link named by its label.
   storyCrumb: (page: Page, title: string): Locator =>
     page.getByRole('link', { name: title, exact: true }),
-
-  // ScreenShell's chrome back arrow, an IconAction named t('chrome.back').
-  back: (page: Page): Locator => page.getByRole('button', { name: t('chrome.back') }),
 
   addTrigger: (page: Page, kind: 'thread' | 'happening'): Locator =>
     page.getByRole('button', { name: t(`plot:add.${kind}`), exact: true }),

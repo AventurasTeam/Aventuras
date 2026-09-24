@@ -161,13 +161,19 @@ function ToolbarSort({ value, onChange, options, label, disabled, className }: T
 type ToolbarProps = {
   className?: string
   children: ReactNode
+  /**
+   * Pins the narrow layout for a host that is narrow by construction. Unpinned, the first
+   * frame guesses from the viewport tier and a narrow container remounts search and chips.
+   */
+  narrow?: boolean
 }
 
-function ToolbarRoot({ className, children }: ToolbarProps) {
+function ToolbarRoot({ className, children, narrow }: ToolbarProps) {
   const initialTier = useTier()
   const [containerWidth, setContainerWidth] = useState<number | null>(null)
   const isNarrow =
-    containerWidth != null ? containerWidth < NARROW_THRESHOLD_PX : initialTier !== 'desktop'
+    narrow ??
+    (containerWidth != null ? containerWidth < NARROW_THRESHOLD_PX : initialTier !== 'desktop')
 
   let searchSlot: ReactNode = null
   let chipsSlot: ReactElement<{ children?: ReactNode }> | null = null
@@ -186,7 +192,7 @@ function ToolbarRoot({ className, children }: ToolbarProps) {
   return (
     <View
       className={cn('w-full', className)}
-      onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
+      onLayout={narrow == null ? (e) => setContainerWidth(e.nativeEvent.layout.width) : undefined}
     >
       {isNarrow ? (
         <View className="gap-2">

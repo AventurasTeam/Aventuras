@@ -5,6 +5,7 @@ import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { reloadFromMain, suppressNativeUnloadDialogRace } from '../harness/reload'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
+import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
 import { plot } from '../locators/plot'
 import { reader } from '../locators/reader'
@@ -38,8 +39,8 @@ test.describe.serial('Plot panel', () => {
     const page = app.window
     await home.openStory(page, HERO_TITLE).click()
     await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
-    await reader.actionsTrigger(page).click()
-    await plot.goToPlotRow(page).click()
+    await chrome.actionsTrigger(page).click()
+    await chrome.goToPlotRow(page).click()
     await page.waitForURL(/\/plot\//)
     branchId = await currentBranchId(page, HERO_STORY)
 
@@ -122,10 +123,10 @@ test.describe.serial('Plot panel', () => {
     ).toEqual([[1]])
 
     // CTRL-Z lives on the reader; the Actions menu row is its touch-tier twin.
-    await plot.actionsTrigger(page).click()
-    await plot.goToReaderRow(page).click()
+    await chrome.actionsTrigger(page).click()
+    await chrome.goToReaderRow(page).click()
     await page.waitForURL(/\/reader-composer\//)
-    await reader.actionsTrigger(page).click()
+    await chrome.actionsTrigger(page).click()
     await reader.undoRow(page).click()
     await expect
       .poll(
@@ -140,8 +141,8 @@ test.describe.serial('Plot panel', () => {
   // Mira -> Vorne is a delete plus a create; Kael's untouched row is the control.
   test('one Save carries an Overview edit and awareness link changes under one action_id; undo reverses all of it', async () => {
     const page = app.window
-    await reader.actionsTrigger(page).click()
-    await plot.goToPlotRow(page).click()
+    await chrome.actionsTrigger(page).click()
+    await chrome.goToPlotRow(page).click()
     await page.waitForURL(/\/plot\//)
     await plot.segmentCell(page, 'happening').click()
     await plot.tierHeader(page, t('plot:buckets.earlier')).click()
@@ -238,15 +239,15 @@ test.describe.serial('Plot panel', () => {
     await page.waitForURL(new RegExp(`/world/${branchId}\\?kind=character&id=${kaelId}`))
     await expect(world.detailName(page)).toHaveText('Kael')
 
-    await world.actionsTrigger(page).click()
-    await plot.goToPlotRow(page).click()
+    await chrome.actionsTrigger(page).click()
+    await chrome.goToPlotRow(page).click()
     await page.waitForURL(/\/plot\//)
     await expect(plot.tab(page, 'awareness')).toHaveAttribute('aria-selected', 'true')
 
-    await plot.actionsTrigger(page).click()
-    await plot.goToReaderRow(page).click()
+    await chrome.actionsTrigger(page).click()
+    await chrome.goToReaderRow(page).click()
     await page.waitForURL(/\/reader-composer\//)
-    await reader.actionsTrigger(page).click()
+    await chrome.actionsTrigger(page).click()
     await reader.undoRow(page).click()
 
     const revertedState = async () => {
@@ -274,8 +275,8 @@ test.describe.serial('Plot panel', () => {
 
   test('a dirty pane guards a row switch, the chrome back and a GO TO push; Cancel keeps the draft', async () => {
     const page = app.window
-    await reader.actionsTrigger(page).click()
-    await plot.goToPlotRow(page).click()
+    await chrome.actionsTrigger(page).click()
+    await chrome.goToPlotRow(page).click()
     await page.waitForURL(/\/plot\//)
     const description = async (title: string) =>
       (
@@ -304,11 +305,11 @@ test.describe.serial('Plot panel', () => {
     await plot.row(page, 'Expose the Syndicate broker').click()
     await cancelKeepsDraft()
     // A pop: only the route's usePreventRemove sees it.
-    await plot.back(page).click()
+    await chrome.back(page).click()
     await cancelKeepsDraft()
     // World left the stack in an earlier test, so this pushes: only beforeNavigate sees it.
-    await plot.actionsTrigger(page).click()
-    await world.goToWorldRow(page).click()
+    await chrome.actionsTrigger(page).click()
+    await chrome.goToWorldRow(page).click()
     await cancelKeepsDraft()
     expect(await description('What the amulet wants')).toBe(committed)
   })
@@ -318,7 +319,7 @@ test.describe.serial('Plot panel', () => {
     const page = app.window
     await expect(plot.description(page)).toHaveValue('E2E dirty draft')
 
-    await plot.back(page).click()
+    await chrome.back(page).click()
     await expect(saveSession.unsavedDialog(page)).toBeVisible()
     const navigated = expect(
       page,
@@ -340,8 +341,8 @@ test.describe.serial('Plot panel', () => {
   test('a cold-mount deep link preselects the row, and its tab opens that mount only', async () => {
     const page = app.window
     // The prior test ended on the reader, which dismissed Plot: this is a fresh instance.
-    await reader.actionsTrigger(page).click()
-    await plot.goToPlotRow(page).click()
+    await chrome.actionsTrigger(page).click()
+    await chrome.goToPlotRow(page).click()
     await page.waitForURL(/\/plot\//)
 
     // IDs are UUID-substituted too (lib/ids/prefixes.ts) — read fresh here, not hard-coded.
@@ -380,15 +381,15 @@ test.describe.serial('Plot panel', () => {
     await expect(plot.tab(page, 'overview')).toHaveAttribute('aria-selected', 'true')
 
     // Known screen for anything appended after this test.
-    await plot.actionsTrigger(page).click()
-    await plot.goToReaderRow(page).click()
+    await chrome.actionsTrigger(page).click()
+    await chrome.goToReaderRow(page).click()
     await page.waitForURL(/\/reader-composer\//)
   })
 
   test('a dirty pane guards the segment switch', async () => {
     const page = app.window
-    await reader.actionsTrigger(page).click()
-    await plot.goToPlotRow(page).click()
+    await chrome.actionsTrigger(page).click()
+    await chrome.goToPlotRow(page).click()
     await page.waitForURL(/\/plot\//)
 
     await plot.segmentCell(page, 'thread').click()

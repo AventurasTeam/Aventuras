@@ -227,7 +227,9 @@ describe('periodicClassifierPhase', () => {
     // Technical rows hold positions the model must never see; leaving the
     // watermark behind them re-fires the cadence on every run_complete forever.
     expect(h.status()?.processedThrough).toBe(2)
-    expect(shouldCadenceFire({ status: h.status()!, unprocessedTurns: 0, cadence: 1 })).toBe(false)
+    expect(shouldCadenceFire({ status: h.status()!, unprocessedEntries: 0, cadence: 1 })).toBe(
+      false,
+    )
     // Nothing ran, so the lifecycle keys must not read as a successful pass.
     expect(h.status()).toMatchObject({ state: 'idle', lastSuccessAt: null, retryCount: 0 })
   })

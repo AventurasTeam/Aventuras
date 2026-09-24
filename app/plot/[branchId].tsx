@@ -29,8 +29,10 @@ import {
   storySettingsGenerationPhase,
   useStoryGenerationGate,
 } from '@/components/story-settings/generation-run'
+import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { KeyboardInsetColumn } from '@/components/ui/keyboard-inset-column'
+import { Text } from '@/components/ui/text'
 import { single as singleParam } from '@/components/world/world-selection'
 import { useColdOpenStory } from '@/hooks/use-cold-open-story'
 import { useEntryIndex } from '@/hooks/use-entry-index'
@@ -380,10 +382,15 @@ export default function PlotRoute() {
       {!panesReady ? (
         <View className="flex-1 items-center justify-center">
           {entryIndex.failed ? (
-            <EmptyState
-              title={t('plot:entryIndexFailed')}
-              subtext={t('plot:entryIndexFailedBody')}
-            />
+            <View className="items-center gap-3">
+              <EmptyState
+                title={t('plot:entryIndexFailed')}
+                subtext={t('plot:entryIndexFailedBody')}
+              />
+              <Button variant="secondary" onPress={entryIndex.retry}>
+                <Text>{t('plot:entryIndexRetry')}</Text>
+              </Button>
+            </View>
           ) : (
             <EmptyState title={t('reader:hydrationLoading')} />
           )}

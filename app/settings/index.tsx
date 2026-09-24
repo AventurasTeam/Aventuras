@@ -101,6 +101,7 @@ export default function SettingsRoute() {
 
   const rail = (
     <ScrollView
+      keyboardShouldPersistTaps="handled"
       accessibilityRole="tablist"
       className="flex-1"
       contentContainerClassName="gap-3 p-3"
@@ -138,7 +139,11 @@ export default function SettingsRoute() {
   )
 
   const detail = (
-    <ScrollView className="flex-1" contentContainerClassName="gap-4 p-4">
+    <ScrollView
+      keyboardShouldPersistTaps="handled"
+      className="flex-1"
+      contentContainerClassName="gap-4 p-4"
+    >
       {activeTab === 'diagnostics' ? (
         <>
           <DiagnosticsSettingsPanel

@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
 import { View } from 'react-native'
+import { expect, screen, userEvent } from 'storybook/test'
 
 import { Button } from './button'
 import { Heading } from './heading'
@@ -39,6 +40,11 @@ export const Default: Story = {
       </Sheet>
     </View>
   ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Open sheet' }))
+    expect(await screen.findByRole('dialog', { name: 'Sheet' })).toBeInTheDocument()
+    expect(screen.queryByRole('slider')).not.toBeInTheDocument()
+  },
 }
 
 export const Anchors: Story = {
@@ -84,6 +90,53 @@ export const Anchors: Story = {
       </View>
     </View>
   ),
+}
+
+// One dialog per sheet, named by the visible heading: gorhom (bottom) forwards no
+// aria-labelledby, and Radix (right) wraps the content in a second dialog of its own.
+function labelledSheet(anchor: 'bottom' | 'right'): Story {
+  return {
+    render: () => (
+      <Sheet open onOpenChange={() => {}} ariaLabelledBy={`${anchor}-sheet-heading`}>
+        <SheetContent anchor={anchor} size="short">
+          <Heading level={3} nativeID={`${anchor}-sheet-heading`}>
+            Scene
+          </Heading>
+        </SheetContent>
+      </Sheet>
+    ),
+    play: async () => {
+      expect(await screen.findByRole('dialog', { name: 'Scene' })).toBeVisible()
+      expect(screen.getAllByRole('dialog')).toHaveLength(1)
+    },
+  }
+}
+
+export const BottomNamedByHeading = labelledSheet('bottom')
+export const RightNamedByHeading = labelledSheet('right')
+
+function RerenderingRightSheet() {
+  const [renders, setRenders] = useState(1)
+  return (
+    <Sheet open onOpenChange={() => {}} ariaLabel="Entity details">
+      <SheetContent anchor="right">
+        <Button onPress={() => setRenders((n) => n + 1)}>
+          <Text>{`Rendered ${renders}×`}</Text>
+        </Button>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+// The right anchor strips Radix's wrapper once, on mount; a re-render must not bring it back.
+export const RightStaysOneDialogAcrossRenders: Story = {
+  render: () => <RerenderingRightSheet />,
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'Rendered 1×' }))
+    expect(await screen.findByRole('button', { name: 'Rendered 2×' })).toBeVisible()
+    expect(screen.getAllByRole('dialog')).toHaveLength(1)
+    expect(screen.getByRole('dialog', { name: 'Entity details' })).toBeVisible()
+  },
 }
 
 export const Sizes: Story = {

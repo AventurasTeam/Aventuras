@@ -186,7 +186,7 @@ export const TallContentFormOwnedScroll: Story = {
         <DialogHeader>
           <DialogTitle>Form-owned scroll</DialogTitle>
         </DialogHeader>
-        <ScrollView style={{ maxHeight: 240 }}>
+        <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 240 }}>
           {Array.from({ length: 60 }, (_, i) => (
             <Text key={i}>{`Row ${i + 1}`}</Text>
           ))}
