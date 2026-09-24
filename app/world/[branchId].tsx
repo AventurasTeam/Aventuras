@@ -80,7 +80,12 @@ export default function WorldRoute() {
   const leadLabel =
     open == null ? null : open.definition.mode === 'adventure' ? 'you' : 'protagonist'
 
-  const { selectedId, setSelectedId, selection } = useWorldSelection({
+  const {
+    selectedId,
+    select: setSelectedId,
+    selection,
+    startCreate,
+  } = useWorldSelection({
     initialId: initialSelection?.id ?? null,
     category,
     entities,
@@ -88,6 +93,7 @@ export default function WorldRoute() {
     ready: open != null,
   })
   const detailOpen = isPhone && selection != null
+  const placeholderSelection = selection?.type === 'create' ? null : selection
 
   const { activeRunKind, editBlocked, gateReason } = useStoryGenerationGate(storyId ?? undefined)
   const openRegionPct = useOpenRegionTokens(storyId)
@@ -191,11 +197,14 @@ export default function WorldRoute() {
   // Breadcrumb ignores the last segment's onPress: `category` navigates only while a row follows.
   const subHeaderSegments: BreadcrumbSegment[] = [
     { key: 'category', label: worldCategoryLabel(category), onPress: () => setSelectedId(null) },
-    ...(selection != null
+    ...(placeholderSelection != null
       ? [
           {
             key: 'row',
-            label: selection.type === 'lore' ? selection.row.title : selection.row.name,
+            label:
+              placeholderSelection.type === 'lore'
+                ? placeholderSelection.row.title
+                : placeholderSelection.row.name,
           },
         ]
       : []),
@@ -267,7 +276,10 @@ export default function WorldRoute() {
                 <ImporterMenu
                   trigger="icon"
                   label={worldAddLabel(category)}
-                  options={worldAddOptions(category)}
+                  options={worldAddOptions(category, startCreate, {
+                    disabled: editBlocked,
+                    disabledReason: gateReason,
+                  })}
                   open={addOpen}
                   onOpenChange={setAddOpen}
                 />
@@ -276,10 +288,10 @@ export default function WorldRoute() {
           }
           detailPane={
             <WorldDetailPlaceholder
-              selection={selection}
+              selection={placeholderSelection}
               recentlyClassified={
-                selection != null
-                  ? signals.recentlyClassified.rows.get(selection.row.id)
+                placeholderSelection != null
+                  ? signals.recentlyClassified.rows.get(placeholderSelection.row.id)
                   : undefined
               }
             />

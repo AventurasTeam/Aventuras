@@ -215,7 +215,7 @@ function Harness({
           <ImporterMenu
             trigger="icon"
             label={worldAddLabel(category)}
-            options={worldAddOptions(category)}
+            options={worldAddOptions(category, () => {}, {})}
             open={addOpen}
             onOpenChange={setAddOpen}
           />
@@ -500,13 +500,13 @@ export const Empty: Story = {
   },
 }
 
-/** The `[+]` menu: every option present, disabled, with its reason. */
+/** The `[+]` menu on an entity category: Blank is live; From JSON / From Vault stay disabled. */
 export const AddMenuDisabledEntries: Story = {
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'New character' }))
-    expect(await screen.findByTitle('Lands in Slice 4.2a')).toBeInTheDocument()
-    expect(screen.getByTitle('Lands in Slice 4.6')).toBeInTheDocument()
+    expect(await screen.findByTitle('Lands in Slice 4.6')).toBeInTheDocument()
     expect(screen.getByTitle('Vault lands in M8')).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Blank' })).toBeInTheDocument()
   },
 }
 

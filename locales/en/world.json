@@ -17,7 +17,6 @@
   },
   "addMenu": {
     "blank": "Blank",
-    "blankEntityReason": "Lands in Slice 4.2a",
     "blankLoreReason": "Lands in Slice 4.2b",
     "fromJson": "From JSON file…",
     "fromJsonReason": "Lands in Slice 4.6",

@@ -9,10 +9,12 @@ import { t } from '@/lib/i18n'
 import type { RecentlyClassified } from '@/lib/row-signals'
 
 /** An entity's kind lives only on its row, so no copy of it can disagree. */
-export type WorldDetailSelection = { type: 'entity'; row: Entity } | { type: 'lore'; row: Lore }
+export type WorldPlaceholderSelection =
+  | { type: 'entity'; row: Entity }
+  | { type: 'lore'; row: Lore }
 
 type WorldDetailPlaceholderProps = {
-  selection: WorldDetailSelection | null
+  selection: WorldPlaceholderSelection | null
   /** Mirrors the row tint in the head (patterns/entity.md → Detail-pane mirroring). */
   recentlyClassified?: RecentlyClassified
 }
