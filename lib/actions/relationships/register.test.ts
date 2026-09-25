@@ -114,10 +114,27 @@ describe('character_relationships upsert', () => {
     expect(await deltasFor(db, 'act_2')).toHaveLength(0)
   })
 
-  it('is a no-op when the write is a case/whitespace variant of the stored view', async () => {
+  it('is a no-op when the write is a case variant of the stored view', async () => {
     const { db, ctx } = await setup()
     await applyDeltaAction(upsert('char_aria', 'char_kael', 'sister', 'act_1'), ctx)
     const result = await applyDeltaAction(upsert('char_aria', 'char_kael', 'Sister', 'act_2'), ctx)
+    expect(result).toEqual({
+      status: 'rejected',
+      reason: 'relationship unchanged',
+      code: 'noop',
+    })
+    const rows = await pairRow(db, 'char_aria', 'char_kael')
+    expect(rows[0].kind).toBe('sister')
+    expect(await deltasFor(db, 'act_2')).toHaveLength(0)
+  })
+
+  it('is a no-op when the write is a whitespace variant of the stored view', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(upsert('char_aria', 'char_kael', 'sister', 'act_1'), ctx)
+    const result = await applyDeltaAction(
+      upsert('char_aria', 'char_kael', ' sister ', 'act_2'),
+      ctx,
+    )
     expect(result).toEqual({
       status: 'rejected',
       reason: 'relationship unchanged',

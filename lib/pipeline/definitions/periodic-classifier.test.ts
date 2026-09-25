@@ -254,8 +254,7 @@ describe('periodicClassifierPhase', () => {
     expect(h.status()?.processedThrough).toBe(30)
   })
 
-  // Passing `relationships: []` from the phase leaves this green with no other
-  // store wired up — the branch filter on the read is what this guards.
+  // Fails if the phase stops passing the store's rows or stops filtering them by branch.
   it('shows the classifier only the stored relationship rows for its own branch', async () => {
     const kael = {
       id: CHAR_KAEL,

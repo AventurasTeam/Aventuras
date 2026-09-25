@@ -51,11 +51,12 @@ declaration values.
   perspective per fact, the subject's view of the object and never the
   inferred inverse, upserted into the pair's row as it stands when the
   write lands. The prompt shows the classifier the stored view for
-  every stored pair on the branch (one line per non-null perspective),
-  and it is told to emit a fact only when the prose establishes a view
-  or changes one already listed. A write repeating the stored view,
-  ignoring case and spacing, is rejected as a no-op at the action
-  layer — it writes no delta.
+  every stored pair on the branch whose two characters exist (one
+  line per non-null perspective), and it is told to emit a fact only
+  when the prose establishes a view or changes one already listed. A
+  write repeating the stored view, ignoring case and surrounding
+  whitespace, is rejected as a no-op at the action layer — it writes
+  no delta.
 
 ## Provenance attribution
 

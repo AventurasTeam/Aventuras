@@ -179,7 +179,7 @@ slice-planning gate forces its resolution before that slice is planned.
 - **The classifier prompt has no token budget beyond
   `classifierWindowMaxEntries`.** That knob bounds only the turns
   block; the entity, happening and relationship lists grow unbounded
-  with the branch, and `generateStructured` (`lib/ai/generate.ts:142`)
+  with the branch, and `generateStructured` (`lib/ai/generate.ts`)
   passes the rendered prompt straight to the provider with no length
   guard. Revisit trigger: the first long-story prompt-size or cost
   signal.
