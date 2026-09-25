@@ -32,7 +32,7 @@ describe('newTerms', () => {
     expect(newTerms(['a', 'b'], ['A', ' b'])).toEqual([])
   })
 
-  it('matches the current list under the same normalisation as incoming', () => {
+  it('matches the current list under the same normalization as incoming', () => {
     expect(newTerms([' The Grey Wolf ', 'Café'], ['the grey wolf', 'Café'])).toEqual([])
   })
 })
