@@ -104,3 +104,65 @@ slice-planning gate forces its resolution before that slice is planned.
   in e.g. German), and `overview.within` is a joiner fragment. Per-tier
   whole-sentence keys fix it. Revisit trigger: the first non-English
   locale.
+
+- **A plain rejection mid-pass leaves the classifier `running`.**
+  `handleEvent` throws `ActionRejectedError` on any non-noop rejection
+  (`orchestrator.ts:146`), and an action-layer throw takes the same
+  path. The pass wrote `running` at `periodic-classifier.ts:163` and
+  its generator is never resumed, so neither status write after it
+  lands. The scheduler then gets no retry delay (`scheduler.ts:65`;
+  `retryDelayForStatus` is null outside `retrying`), and
+  `shouldCadenceFire` refuses while `running` (`status.ts:89`), so the
+  cadence stops until boot reconciliation
+  (`resetStuckClassifierRunState`, `actions/classifier/deps.ts:53`) or
+  a manual run. The guarded entity actions no-op on a missing row, so
+  they no longer trigger it. A blank relationship `kind` still does:
+  the extraction schema's `z.string()` passes it and the upsert handler
+  rejects it plainly (`relationships/register.ts:113`). Reachable
+  today.
+
+- **World and Plot's pill Cancel misses a sibling branch's run.** The
+  pill's foreground kind is story-keyed
+  (`selectStorySettingsGenerationRunKind`, `generation-run.ts:25`), but
+  `onCancel` passes the route's branch to `awaitRunTerminal`
+  (`app/world/[branchId].tsx:448`, `app/plot/[branchId].tsx:372`),
+  which matches kind and branch. A foreground run on a sibling branch
+  shows in the pill, and its Cancel does nothing. Not reachable through
+  shipped navigation until M6 branch switching; in dev a
+  `/world/<other branch>` link reaches it, since `useColdOpenStory`
+  opens the branch without checking for a run. Revisit trigger: M6
+  planning.
+
+- **Whether `updating-memory` blocks branch switching.**
+  [`branch-navigator.md → During generation`](../ui/screens/reader-composer/branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked)
+  pauses switch, delete and create while the pill is active ("any
+  pipeline phase", line 116) and sends the user to wait or cancel from
+  `Send → Cancel` (lines 120-123). Its phase list doesn't name the
+  periodic classifier's `updating-memory`, which the pill now shows and
+  which can't be cancelled, so the rule either parks switching behind
+  an uncancellable pass or doesn't cover it. Not reachable until M6
+  ships switching. Revisit trigger: M6 planning.
+
+- **Reconciliation matches against the pass's snapshot.** Namesakes
+  come from the entity snapshot the pass read before its model call
+  (`reconcile.ts:54-57`, read at `periodic-classifier.ts:146`), so a
+  character the user creates in World mid-pass is invisible to it. If
+  the pass's prose introduces the same name, it creates a second row
+  with `nameCollisionFlag` 0 (`plan.ts:197`), and World's collision
+  review lists flagged rows only (`collisions.ts:27`), so nobody is
+  asked about the duplicate. Reachable today: World create is gated
+  only by `hard-gate` runs.
+
+- **An entry-scoped reversal can drop a later user edit.** The
+  classifier's keyword and status deltas record the whole prior value
+  as `undoPayload` (`state-patch-actions.ts:213`, `:250`, `:283`). A
+  prose reversal reverses only the classifier deltas anchored to the
+  edited entries (`resolveClassifierFactDeltas`,
+  `story-entries/classifier-facts.ts:204`), so a World edit to the same
+  field made after the pass is not in the set, and the restored value
+  overwrites it. `updateEntity` did the same. An append's natural undo,
+  removing the terms it added, can't be expressed by the generic
+  reverse-replay, which restores unschema'd columns wholesale
+  (`reverse-replay.ts:170-197`). Reachable today: edit the head turn's
+  prose after editing, in World, an entity whose keywords or status
+  that turn's pass wrote.
