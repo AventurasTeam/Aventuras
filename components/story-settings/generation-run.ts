@@ -2,7 +2,13 @@ import type { GenerationPhase } from '@/components/compounds/generation-status-p
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { t } from '@/lib/i18n'
 import { SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
-import { generationStore, isBackgroundKind, isUserEditBlocked, type TxState } from '@/lib/stores'
+import {
+  backgroundClassifierRunId,
+  generationStore,
+  isBackgroundKind,
+  isUserEditBlocked,
+  type TxState,
+} from '@/lib/stores'
 
 type StorySettingsGenerationPhase =
   | 'generating-narrative'
@@ -44,7 +50,7 @@ export function generationGateReason(
   return t(runKind === 'chapter-close' ? 'generationGate.chapterClose' : 'generationGate.inFlight')
 }
 
-/** The story's in-flight periodic-classifier run, or null. */
+/** The story's in-flight periodic-classifier run id, or null. */
 export function selectStoryClassifierRunId(
   txState: TxState,
   storyId: string | undefined,
@@ -56,14 +62,18 @@ export function selectStoryClassifierRunId(
 
 /**
  * The run the story's status pill describes, the classifier pass in flight,
- * and why in-story edits are blocked.
+ * and why in-story edits are blocked. `branchId` keys the classifier pass to
+ * that branch (World, Plot); omitted, it keys to the whole story (Story
+ * Settings, which has no branch param).
  */
-export function useStoryGenerationGate(storyId: string | undefined) {
+export function useStoryGenerationGate(storyId: string | undefined, branchId?: string) {
   const activeRunKind = generationStore.useGeneration((s) =>
     selectStorySettingsGenerationRunKind(s.txState, storyId),
   )
   const classifierRunId = generationStore.useGeneration((s) =>
-    selectStoryClassifierRunId(s.txState, storyId),
+    branchId != null
+      ? backgroundClassifierRunId(s.txState, branchId)
+      : selectStoryClassifierRunId(s.txState, storyId),
   )
   const editBlocked = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
   const gateReason = generationGateReason(editBlocked, activeRunKind)

@@ -145,10 +145,11 @@ export function isForegroundGenerating(txState: TxState, branchId: string): bool
   )
 }
 
-export function backgroundClassifierRunning(txState: TxState, branchId: string): boolean {
-  return [...txState.runs.values()].some(
+export function backgroundClassifierRunId(txState: TxState, branchId: string): string | null {
+  const run = [...txState.runs.values()].find(
     (r) => r.branchId === branchId && r.kind === PERIODIC_CLASSIFIER_KIND,
   )
+  return run?.runId ?? null
 }
 
 // Generic wait on an in-flight run of `kind` on `branchId`; no-op when none is

@@ -139,6 +139,7 @@ export default function PlotRoute() {
 
   const { activeRunKind, editBlocked, gateReason, classifierRunId } = useStoryGenerationGate(
     storyId ?? undefined,
+    branchId,
   )
   const openRegionPct = useOpenRegionTokens(storyId)
 

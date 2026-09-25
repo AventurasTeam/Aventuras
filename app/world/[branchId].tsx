@@ -163,6 +163,7 @@ export default function WorldRoute() {
 
   const { activeRunKind, editBlocked, gateReason, classifierRunId } = useStoryGenerationGate(
     storyId ?? undefined,
+    branchId,
   )
   const openRegionPct = useOpenRegionTokens(storyId)
 

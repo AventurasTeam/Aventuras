@@ -172,10 +172,10 @@ It is deliberately a separate phase from `classifying`, which is the
 per-turn piggyback fallback: same work, opposite answer to "can I keep
 writing?".
 
-Every in-story surface resolves it, not only the reader: World, Plot
-and Story Settings show `updating-memory` while the story's
-periodic-classifier run is in flight and no foreground run holds the
-pill.
+World, Plot and Story Settings resolve it too, not only the reader:
+World and Plot while their branch's periodic-classifier run is in
+flight, Story Settings while any of the story's is, each only when
+no foreground run holds the pill.
 
 Blocking is tracked per phase rather than inferred from a phase having
 no cancel label. The two coincide today only because the one background

@@ -10,12 +10,14 @@ import {
   selectStorySettingsGenerationRunKind,
   storyPillPhase,
   storySettingsGenerationPhase,
+  useStoryGenerationGate,
 } from './generation-run'
 
 function run(
   kind: string,
   storyId = 'story-1',
   gateBehavior: RunState['gateBehavior'] = 'hard-gate',
+  branchId = 'branch-1',
 ): RunState {
   return {
     runId: `run-${kind}`,
@@ -23,7 +25,7 @@ function run(
     gateBehavior,
     actionId: `action-${kind}`,
     storyId,
-    branchId: 'branch-1',
+    branchId,
     abortController: new AbortController(),
     currentPhase: 'running',
     intermediates: {},
@@ -38,6 +40,20 @@ function tx(...runs: RunState[]): TxState {
 
 function Probe() {
   generationStore.useGeneration((s) => selectStorySettingsGenerationRunKind(s.txState, 'story-1'))
+  return null
+}
+
+function GateProbe({
+  storyId,
+  branchId,
+  onResult,
+}: {
+  storyId: string
+  branchId?: string
+  onResult: (classifierRunId: string | null) => void
+}) {
+  const { classifierRunId } = useStoryGenerationGate(storyId, branchId)
+  onResult(classifierRunId)
   return null
 }
 
@@ -93,7 +109,7 @@ describe('storySettingsGenerationPhase', () => {
 })
 
 describe('selectStoryClassifierRunId', () => {
-  it("returns the story's classifier run and nothing else", () => {
+  it("returns the story's classifier run id and nothing else", () => {
     expect(
       selectStoryClassifierRunId(tx(run('periodic-classifier', 'story-1', 'no-gate')), 'story-1'),
     ).toBe('run-periodic-classifier')
@@ -112,6 +128,34 @@ describe('storyPillPhase', () => {
   it('shows the classifier pass as updating memory when nothing else runs', () => {
     expect(storyPillPhase(null, 'run-1')).toBe('updating-memory')
     expect(storyPillPhase(null, null)).toBeUndefined()
+  })
+})
+
+describe('useStoryGenerationGate classifier run id', () => {
+  it("yields the branch's classifier run id while it is in flight, then null once it finishes", () => {
+    generationStore.startRun(run('periodic-classifier', 'story-1', 'no-gate', 'branch-1'))
+    let captured: string | null = null
+    const first = render(
+      <GateProbe storyId="story-1" branchId="branch-1" onResult={(id) => (captured = id)} />,
+    )
+    expect(captured).toBe('run-periodic-classifier')
+    first.unmount()
+
+    generationStore.finishRun('run-periodic-classifier')
+    render(<GateProbe storyId="story-1" branchId="branch-1" onResult={(id) => (captured = id)} />)
+    expect(captured).toBeNull()
+  })
+
+  it('keys by branch when branchId is given, and by story when it is not', () => {
+    generationStore.startRun(run('periodic-classifier', 'story-1', 'no-gate', 'branch-2'))
+
+    let byBranch: string | null = null
+    render(<GateProbe storyId="story-1" branchId="branch-1" onResult={(id) => (byBranch = id)} />)
+    expect(byBranch).toBeNull()
+
+    let byStory: string | null = null
+    render(<GateProbe storyId="story-1" onResult={(id) => (byStory = id)} />)
+    expect(byStory).toBe('run-periodic-classifier')
   })
 })
 
