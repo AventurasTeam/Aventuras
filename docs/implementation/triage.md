@@ -114,12 +114,15 @@ slice-planning gate forces its resolution before that slice is planned.
   `retryDelayForStatus` is null outside `retrying`), and
   `shouldCadenceFire` refuses while `running` (`status.ts:89`), so the
   cadence stops until boot reconciliation
-  (`resetStuckClassifierRunState`, `actions/classifier/deps.ts:53`) or
-  a manual run. The guarded entity actions no-op on a missing row, so
-  they no longer trigger it. A blank relationship `kind` still does:
-  the extraction schema's `z.string()` passes it and the upsert handler
-  rejects it plainly (`relationships/register.ts:113`). Reachable
-  today.
+  (`resetStuckClassifierRunState`, `actions/classifier/deps.ts:53`).
+  Restarting the app is the user's only way out today: `runNow`
+  (`scheduler.ts:85`) has no caller outside its own tests, and Story
+  Settings' [`Run classifier now`](../ui/screens/story-settings/story-settings.md#classifier)
+  button is specced but not built. The guarded entity actions no-op on
+  a missing row, so they no longer trigger it. A blank relationship
+  `kind` still does: the extraction schema's `z.string()` passes it and
+  the upsert handler rejects it plainly (`relationships/register.ts:113`).
+  Reachable today.
 
 - **World and Plot's pill Cancel misses a sibling branch's run.** The
   pill's foreground kind is story-keyed
@@ -148,7 +151,8 @@ slice-planning gate forces its resolution before that slice is planned.
   (`reconcile.ts:54-57`, read at `periodic-classifier.ts:146`), so a
   character the user creates in World mid-pass is invisible to it. If
   the pass's prose introduces the same name, it creates a second row
-  with `nameCollisionFlag` 0 (`plan.ts:197`), and World's collision
+  with `nameCollisionFlag` 0 (`buildClassifierActions`'s create path),
+  and World's collision
   review lists flagged rows only (`collisions.ts:27`), so nobody is
   asked about the duplicate. Reachable today: World create is gated
   only by `hard-gate` runs.
@@ -163,6 +167,5 @@ slice-planning gate forces its resolution before that slice is planned.
   overwrites it. `updateEntity` did the same. An append's natural undo,
   removing the terms it added, can't be expressed by the generic
   reverse-replay, which restores unschema'd columns wholesale
-  (`reverse-replay.ts:170-197`). Reachable today: edit the head turn's
-  prose after editing, in World, an entity whose keywords or status
-  that turn's pass wrote.
+  (`reverse-replay.ts:170-197`). Reachable today: edit an entity in
+  World that the head turn's pass wrote, then edit that turn's prose.

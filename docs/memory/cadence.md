@@ -211,8 +211,8 @@ The background classifier is the first agent that runs concurrent
 with the per-turn pipeline. The user-edit gate (UI-side disabling of
 controls during `hard-gate` pipeline runs) does **not** relax. The
 classifier itself is `no-gate`, and its write set is not disjoint from
-user edits: both write entity status, keywords and character
-relationships. [User edits during a periodic pass](#user-edits-during-a-periodic-pass)
+user edits: both write entity status (with its retired reason),
+keywords and character relationships. [User edits during a periodic pass](#user-edits-during-a-periodic-pass)
 covers how those overlaps resolve.
 
 `'concurrent-allowed'` was previously theoretical in
@@ -233,9 +233,9 @@ the snapshot:
   for a row its snapshot holds as `staged`, and the handler no-ops
   unless the live row is still `staged` when the write lands.
 - Retirement goes through `retireEntity`. The pass plans it only for a
-  snapshot-`active` row, and the handler no-ops unless the live row is
-  still `active` when the write lands, so a user's own status and
-  retired reason stand.
+  row active in its snapshot or made active earlier in the same pass,
+  and the handler no-ops unless the live row is still `active` when
+  the write lands, so a user's own status and retired reason stand.
 - Keywords go through `appendEntityKeywords`, in two parts. The pass
   sends only terms new against its snapshot, so an alias the user
   removed mid-pass is not re-sent; the handler appends only terms the

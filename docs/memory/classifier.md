@@ -22,9 +22,10 @@ declaration values.
   - `active → retired` on hard finality signals only (death, exile,
     faction-disbanded). Conservative bias.
 
-  Both are checked against the pass's snapshot when planned and
-  against the row as it stands when the write lands, so a status the
-  user changed mid-pass stands (see
+  Both are checked against the pass's view — its snapshot plus what
+  earlier facts in the same reply changed — when planned, and against
+  the row as it stands when the write lands, so a status the user
+  changed mid-pass stands (see
   [`cadence.md → User edits during a periodic pass`](./cadence.md#user-edits-during-a-periodic-pass)).
 
 - **First-introduction descriptions** — when the classifier extracts
