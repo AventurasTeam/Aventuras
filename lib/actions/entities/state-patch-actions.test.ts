@@ -9,6 +9,7 @@ import { registerEntities } from './register'
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { __resetRegistry } from '../delta/registry'
 import { reverseReplayDeltas } from '../delta/reverse-replay'
+import type { PipelineAction } from '../types'
 
 async function setup() {
   __resetRegistry()
@@ -351,5 +352,171 @@ describe('promoteStagedEntity', () => {
     const row = await rowFor(db, 'char_1')
     expect(row.status).toBe('active')
     expect(entitiesStore.getById('char_1')?.status).toBe('active')
+  })
+})
+
+type Ctx = Awaited<ReturnType<typeof setup>>['ctx']
+
+const apply = (ctx: Ctx, action: PipelineAction, actionId: string) =>
+  applyDeltaAction({ action, actionId, branchId: 'br_1' }, ctx)
+
+const userPatch = (patch: Record<string, unknown>): PipelineAction => ({
+  kind: 'updateEntity',
+  source: 'user_edit',
+  payload: { branchId: 'br_1', id: 'char_1', patch },
+})
+
+describe('appendEntityKeywords', () => {
+  const append = (keywords: string[]): PipelineAction => ({
+    kind: 'appendEntityKeywords',
+    source: 'periodic_classifier',
+    payload: { branchId: 'br_1', id: 'char_1', keywords },
+  })
+
+  it('appends only what the live row lacks, keeping an alias the user added mid-pass', async () => {
+    const { db, ctx } = await setup()
+    await apply(
+      ctx,
+      {
+        kind: 'createEntity',
+        source: 'user_edit',
+        payload: { entry: { ...CHAR, keywords: ['the knight'] } },
+      },
+      'act_c',
+    )
+    expect(
+      (await apply(ctx, userPatch({ keywords: ['the knight', 'ser kael'] }), 'act_u')).status,
+    ).toBe('ok')
+    const result = await apply(ctx, append(['The Knight', 'the wanderer']), 'act_k')
+    expect(result.status).toBe('ok')
+    expect((await rowFor(db, 'char_1')).keywords).toEqual([
+      'the knight',
+      'ser kael',
+      'the wanderer',
+    ])
+    expect(entitiesStore.getById('char_1')?.keywords).toEqual([
+      'the knight',
+      'ser kael',
+      'the wanderer',
+    ])
+  })
+
+  it('does not bring back an alias the user removed mid-pass', async () => {
+    const { db, ctx } = await setup()
+    await apply(
+      ctx,
+      {
+        kind: 'createEntity',
+        source: 'user_edit',
+        payload: { entry: { ...CHAR, keywords: ['the knight', 'the drunk'] } },
+      },
+      'act_c',
+    )
+    expect((await apply(ctx, userPatch({ keywords: ['the knight'] }), 'act_u')).status).toBe('ok')
+    await apply(ctx, append(['the wanderer']), 'act_k')
+    expect((await rowFor(db, 'char_1')).keywords).toEqual(['the knight', 'the wanderer'])
+  })
+
+  it('no-ops when every term is already held', async () => {
+    const { ctx } = await setup()
+    await apply(
+      ctx,
+      {
+        kind: 'createEntity',
+        source: 'user_edit',
+        payload: { entry: { ...CHAR, keywords: ['the knight'] } },
+      },
+      'act_c',
+    )
+    expect(await apply(ctx, append([' THE KNIGHT ']), 'act_k')).toEqual({
+      status: 'rejected',
+      reason: 'no-new-keywords',
+      code: 'noop',
+    })
+  })
+
+  it('reverses to the list it extended', async () => {
+    const { db, ctx } = await setup()
+    await apply(
+      ctx,
+      {
+        kind: 'createEntity',
+        source: 'user_edit',
+        payload: { entry: { ...CHAR, keywords: ['the knight'] } },
+      },
+      'act_c',
+    )
+    await apply(ctx, append(['the wanderer']), 'act_k')
+    expect(await reverseReplayDeltas('act_k', ctx)).toBe(1)
+    expect((await rowFor(db, 'char_1')).keywords).toEqual(['the knight'])
+  })
+})
+
+describe('retireEntity', () => {
+  const retire = (retiredReason: string | null): PipelineAction => ({
+    kind: 'retireEntity',
+    source: 'periodic_classifier',
+    payload: { branchId: 'br_1', id: 'char_1', retiredReason },
+  })
+  const ACTIVE = { ...CHAR, status: 'active' as const }
+
+  it('retires an active entity with its reason', async () => {
+    const { db, ctx } = await setup()
+    await apply(
+      ctx,
+      { kind: 'createEntity', source: 'user_edit', payload: { entry: ACTIVE } },
+      'act_c',
+    )
+    expect((await apply(ctx, retire('fell at the ford'), 'act_r')).status).toBe('ok')
+    const row = await rowFor(db, 'char_1')
+    expect(row.status).toBe('retired')
+    expect(row.retiredReason).toBe('fell at the ford')
+    expect(entitiesStore.getById('char_1')?.status).toBe('retired')
+  })
+
+  it("no-ops on a row the user retired mid-pass, keeping the user's reason", async () => {
+    const { db, ctx } = await setup()
+    await apply(
+      ctx,
+      { kind: 'createEntity', source: 'user_edit', payload: { entry: ACTIVE } },
+      'act_c',
+    )
+    expect(
+      (await apply(ctx, userPatch({ status: 'retired', retiredReason: 'exiled' }), 'act_u')).status,
+    ).toBe('ok')
+    expect(await apply(ctx, retire('fell at the ford'), 'act_r')).toEqual({
+      status: 'rejected',
+      reason: 'not-active',
+      code: 'noop',
+    })
+    expect((await rowFor(db, 'char_1')).retiredReason).toBe('exiled')
+  })
+
+  it('no-ops on a staged row', async () => {
+    const { ctx } = await setup()
+    await apply(
+      ctx,
+      { kind: 'createEntity', source: 'user_edit', payload: { entry: CHAR } },
+      'act_c',
+    )
+    expect(await apply(ctx, retire(null), 'act_r')).toEqual({
+      status: 'rejected',
+      reason: 'not-active',
+      code: 'noop',
+    })
+  })
+
+  it('reverses to the prior status and reason', async () => {
+    const { db, ctx } = await setup()
+    await apply(
+      ctx,
+      { kind: 'createEntity', source: 'user_edit', payload: { entry: ACTIVE } },
+      'act_c',
+    )
+    await apply(ctx, retire('fell at the ford'), 'act_r')
+    expect(await reverseReplayDeltas('act_r', ctx)).toBe(1)
+    const row = await rowFor(db, 'char_1')
+    expect(row.status).toBe('active')
+    expect(row.retiredReason).toBeNull()
   })
 })

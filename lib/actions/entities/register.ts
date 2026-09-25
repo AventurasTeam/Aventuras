@@ -17,7 +17,9 @@ import { computeUndoPayload } from '../delta/delta-encoding'
 import { register, type ActionHandler, type HandlerOutcome } from '../delta/registry'
 import type { DbCtx, DeltaSource } from '../types'
 import {
+  appendEntityKeywordsHandler,
   promoteStagedEntityHandler,
+  retireEntityHandler,
   updateEntityInventoryHandler,
   updateEntityLocationTrackingHandler,
   updateEntityStackablesHandler,
@@ -268,6 +270,8 @@ export function registerEntities(): void {
       updateEntityStackables: updateEntityStackablesHandler,
       updateEntityLocationTracking: updateEntityLocationTrackingHandler,
       promoteStagedEntity: promoteStagedEntityHandler,
+      appendEntityKeywords: appendEntityKeywordsHandler,
+      retireEntity: retireEntityHandler,
     },
     patcher: (branchId, p) => entitiesStore.patch(branchId, p),
   })

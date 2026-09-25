@@ -3,10 +3,12 @@ import { and, eq } from 'drizzle-orm'
 import {
   entities,
   entityStateColumnSchema,
+  entityWriteSchema,
   type CharacterState,
   type Entity,
   type EntityState,
 } from '@/lib/db'
+import { newTerms } from '@/lib/keyword-terms'
 import { entitiesStore } from '@/lib/stores'
 
 import { computeUndoPayload } from '../delta/delta-encoding'
@@ -44,6 +46,14 @@ declare module '@/lib/actions/action-map' {
     promoteStagedEntity: {
       source: DeltaSource
       payload: { branchId: string; id: string }
+    }
+    appendEntityKeywords: {
+      source: DeltaSource
+      payload: { branchId: string; id: string; keywords: string[] }
+    }
+    retireEntity: {
+      source: DeltaSource
+      payload: { branchId: string; id: string; retiredReason: string | null }
     }
   }
 }
@@ -206,5 +216,70 @@ export const promoteStagedEntityHandler: ActionHandler = async (action, branchId
         .toSQL(),
     ],
     patch: { op: 'update', id, columns: { status: 'active' } },
+  }
+}
+
+/** Appends only what the live row lacks: a pass's snapshot must not undo a mid-pass edit. */
+export const appendEntityKeywordsHandler: ActionHandler = async (action, branchId, ctx) => {
+  if (action.kind !== 'appendEntityKeywords')
+    throw new Error(`handler/kind mismatch: expected 'appendEntityKeywords', got '${action.kind}'`)
+  const { branchId: bid, id, keywords } = action.payload
+  if (bid !== branchId)
+    return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
+  const current = await loadCurrent(bid, id, ctx)
+  if (!current)
+    return { status: 'rejected', reason: `keyword target entities ${bid}:${id} not found` }
+  const added = newTerms(current.keywords, keywords)
+  if (added.length === 0) return { status: 'rejected', reason: 'no-new-keywords', code: 'noop' }
+  const next = [...current.keywords, ...added]
+  const parsed = entityWriteSchema.partial().safeParse({ keywords: next })
+  if (!parsed.success)
+    return { status: 'rejected', reason: `invalid keywords: ${parsed.error.message}` }
+  return {
+    status: 'ok',
+    targetTable: 'entities',
+    targetId: id,
+    op: 'update',
+    undoPayload: { keywords: current.keywords },
+    ops: [
+      ctx.db
+        .update(entities)
+        .set({ keywords: next })
+        .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
+        .toSQL(),
+    ],
+    patch: { op: 'update', id, columns: { keywords: next } },
+  }
+}
+
+/** active → retired only: a row moved since the pass read it keeps the user's status. */
+export const retireEntityHandler: ActionHandler = async (action, branchId, ctx) => {
+  if (action.kind !== 'retireEntity')
+    throw new Error(`handler/kind mismatch: expected 'retireEntity', got '${action.kind}'`)
+  const { branchId: bid, id, retiredReason } = action.payload
+  if (bid !== branchId)
+    return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
+  const current = await loadCurrent(bid, id, ctx)
+  if (!current)
+    return { status: 'rejected', reason: `retire target entities ${bid}:${id} not found` }
+  if (current.status !== 'active') return { status: 'rejected', reason: 'not-active', code: 'noop' }
+  const columns = { status: 'retired' as const, retiredReason }
+  const parsed = entityWriteSchema.partial().safeParse(columns)
+  if (!parsed.success)
+    return { status: 'rejected', reason: `invalid retirement: ${parsed.error.message}` }
+  return {
+    status: 'ok',
+    targetTable: 'entities',
+    targetId: id,
+    op: 'update',
+    undoPayload: { status: current.status, retiredReason: current.retiredReason },
+    ops: [
+      ctx.db
+        .update(entities)
+        .set(columns)
+        .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
+        .toSQL(),
+    ],
+    patch: { op: 'update', id, columns },
   }
 }
