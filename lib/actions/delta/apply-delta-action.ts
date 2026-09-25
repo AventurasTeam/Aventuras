@@ -42,11 +42,9 @@ function guardedEntityLockKey(kind: GuardedEntityKind, branchId: string, id: str
 
 export async function applyDeltaAction(args: Args, ctx: DbCtx): Promise<MutationResult> {
   const { action } = args
-  // Defense in depth for the reversal barrier (prose-reversal.ts): rejecting a
-  // pipeline write here would abort it mid-commit and roll the burst back
-  // (generation-pipeline.md → Prose reversals and the classifier barrier) —
-  // exempting pipeline sources avoids that outright, since the barrier
-  // already drained the burst before setting reversalInProgress.
+  // The barrier (prose-reversal.ts) sets reversalInProgress before draining
+  // the in-flight classifier, whose burst must still commit; rejecting a
+  // pipeline write here would roll that burst back and burn a retry.
   if (isUserOriginatedSource(action.source) && generationStore.getTxState().reversalInProgress)
     return {
       status: 'rejected',

@@ -63,7 +63,11 @@ interface Pipeline {
   concurrencyPolicy: ConcurrencyPolicy
   chainsTo?: (run: RunState) => string | null // consulted at commit; sources its own deps
   onPreflightFailure?: (ctx, error: PipelineError) => Promise<void> // pre-flight halts before phase 0, so only this hook ever sees that failure
-  onPhaseException?: (ctx, error: PipelineError) => Promise<void> // a phase threw; runs once its rollback has committed, before the run releases
+  // a phase threw; runs once its rollback has committed, before the run releases
+  onPhaseException?: (
+    ctx,
+    error: Extract<PipelineError, { kind: 'action-layer' | 'orchestrator' }>,
+  ) => Promise<void>
 }
 
 export const pipelines: ReadonlyMap<string, Pipeline>

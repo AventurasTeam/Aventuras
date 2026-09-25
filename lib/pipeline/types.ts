@@ -131,20 +131,16 @@ export type PreflightFailureHook = (
 ) => Promise<void>
 
 /**
- * Reacts to a phase throwing — an action-layer rejection or throw, or an
- * orchestrator-level error — as opposed to a phase that RETURNS `{ status:
- * 'failed', error }`, which persists its own failure and never reaches this
- * hook. Runs from `abortRun`, after the pass's writes have been rolled back —
- * never when the rollback itself fails to commit, since recovery
- * (`resetStuckClassifierRunState`) owns that branch instead — and while the
- * run is still registered, under the same concurrency gate as
- * `onPreflightFailure`.
+ * Reacts to a phase throwing (action-layer rejection/throw, or an
+ * orchestrator error) — not a phase that RETURNS `{ status: 'failed' }`,
+ * which persists its own failure. Fires from `abortRun` once the pass's
+ * writes have rolled back, while the run is still registered; skipped when
+ * the rollback itself can't commit, since recovery owns the run instead.
  *
- * Caveat for a parallel phase group: `runParallelGroup`'s `Promise.all`
- * rejects on the first sibling to throw while the other siblings keep
- * running in the background, so a sibling's own eventual `{ status: 'failed'
- * }` is not synchronized with this hook. No production pipeline uses
- * parallel groups today.
+ * Caveat: a parallel group's `Promise.all` rejects on the first sibling to
+ * throw while the rest keep running, so a sibling's later `{ status:
+ * 'failed' }` isn't synchronized with this hook (no pipeline uses parallel
+ * groups today).
  */
 export type PhaseExceptionHook = (
   ctx: Pick<PhaseContext, 'db' | 'branchId'>,

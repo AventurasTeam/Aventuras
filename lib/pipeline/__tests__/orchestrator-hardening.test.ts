@@ -86,6 +86,12 @@ async function* failsCleanly(): AsyncGenerator<never, PhaseResult> {
   return { status: 'failed', error: { kind: 'phase-logic', detail: 'clean fail' } }
 }
 
+// Same error kind a throw produces, but returned — only `cause.thrown` (not
+// the error-kind filter) keeps onPhaseException from firing on this one.
+async function* failsCleanlyWithHookEligibleKind(): AsyncGenerator<never, PhaseResult> {
+  return { status: 'failed', error: { kind: 'orchestrator', detail: 'clean fail' } }
+}
+
 describe('orchestrator hardening', () => {
   beforeEach(() => resetSingletons())
   afterEach(() => resetSingletons())
@@ -217,6 +223,24 @@ describe('orchestrator hardening', () => {
     })
 
     const result = expectRan(await runPipeline('phase-exception-clean-fail', ctx))
+
+    expect(called).toBe(false)
+    expect(result.outcome).toBe('failed')
+  })
+
+  it('does not run onPhaseException for a returned failure whose kind the hook would otherwise accept', async () => {
+    const { ctx } = await makeHarness()
+    let called = false
+    definePipeline({
+      kind: 'phase-exception-clean-fail-hook-kind',
+      phases: [{ name: 'p', run: failsCleanlyWithHookEligibleKind }],
+      onPhaseException: async () => {
+        called = true
+      },
+      ...base,
+    })
+
+    const result = expectRan(await runPipeline('phase-exception-clean-fail-hook-kind', ctx))
 
     expect(called).toBe(false)
     expect(result.outcome).toBe('failed')
