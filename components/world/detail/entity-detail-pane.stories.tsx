@@ -172,6 +172,10 @@ type HarnessProps = {
   links?: RelationshipLink[]
   /** A pair the harness's button writes to the store, as the periodic classifier would. */
   storeLink?: RelationshipLink
+  /** An ok character Save writes its pairs to the store before resolving, as the delta layer does. */
+  commitLinks?: boolean
+  /** Save stays pending until the harness's `Finish save` button. */
+  holdSave?: boolean
   onSave: (input: EntitySaveInput) => void
   onSaved: (id: string) => void
   onRejected: (reason: string) => void
@@ -189,6 +193,8 @@ function Harness({
   saveResult,
   links: initialLinks,
   storeLink,
+  commitLinks = false,
+  holdSave = false,
   onSave,
   onSaved,
   onRejected,
@@ -199,6 +205,7 @@ function Harness({
   const [row, setRow] = useState(initialRow)
   const [blocked, setBlocked] = useState(initialBlocked)
   const [links, setLinks] = useState(initialLinks)
+  const [finishSave, setFinishSave] = useState<(() => void) | null>(null)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'F2') setBlocked((prev) => !prev)
@@ -221,9 +228,21 @@ function Harness({
   const save = useCallback(
     async (input: EntitySaveInput): Promise<EntitySaveResult> => {
       onSave(input)
-      return saveResult ?? { status: 'ok', id: row?.id ?? `${kind}_new` }
+      if (holdSave) await new Promise<void>((resolve) => setFinishSave(() => resolve))
+      const result = saveResult ?? { status: 'ok', id: row?.id ?? `${kind}_new` }
+      if (commitLinks && result.status === 'ok' && input.kind === 'character') {
+        setLinks(
+          input.draft.relationships.map((r) => ({
+            rowId: input.relationships.find((l) => l.otherId === r.otherId)?.rowId ?? r.cardKey,
+            otherId: r.otherId,
+            selfToOther: r.selfToOther.trim() || null,
+            otherToSelf: r.otherToSelf.trim() || null,
+          })),
+        )
+      }
+      return result
     },
-    [onSave, saveResult, row, kind],
+    [onSave, holdSave, saveResult, row, kind, commitLinks],
   )
   const selectSaved = useCallback(
     (id: string) => {
@@ -263,6 +282,19 @@ function Harness({
             {`store pairs: ${data.relationships.length}`}
           </Text>
         </View>
+      ) : null}
+      {holdSave ? (
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={finishSave == null}
+          onPress={() => {
+            finishSave?.()
+            setFinishSave(null)
+          }}
+        >
+          <Text>Finish save</Text>
+        </Button>
       ) : null}
     </View>
   )
@@ -486,6 +518,76 @@ export const RelationshipsBaseFrozenWhileDirty: Story = {
         }),
       }),
     )
+  },
+}
+
+const editMiraView = async (name: 'Your view' | 'Their view', text: string) => {
+  const view = within(screen.getByTestId('relationship-0')).getByRole('textbox', { name })
+  await userEvent.clear(view)
+  await userEvent.type(view, text)
+}
+const pressSave = async () =>
+  userEvent.click(
+    within(await screen.findByTestId('save-bar', {}, WAIT)).getByRole('button', { name: /^Save/ }),
+  )
+
+/** A Save that leaves Relationships clean hands the base back to the store it wrote. */
+export const RelationshipsBaseFollowsStoreAfterSave: Story = {
+  args: { links: [MIRA_LINK], commitLinks: true },
+  play: async ({ args }) => {
+    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
+    await userEvent.click(await screen.findByRole('button', { name: /^Mira/ }, WAIT))
+    await screen.findByTestId('relationship-0', {}, WAIT)
+    await editMiraView('Your view', 'sworn ally')
+    await pressSave()
+    await waitFor(() => expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument(), WAIT)
+    await editMiraView('Their view', 'wary')
+    await pressSave()
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(2), WAIT)
+    const stored = { ...MIRA_LINK, selfToOther: 'sworn ally' }
+    await expect(args.onSave).toHaveBeenLastCalledWith(
+      expect.objectContaining({ relationshipsBase: [stored], relationships: [stored] }),
+    )
+  },
+}
+
+/** An edit typed while Save runs stays dirty, based on what that Save wrote. */
+export const RelationshipsBaseAfterMidSaveEdit: Story = {
+  args: { links: [MIRA_LINK], commitLinks: true, holdSave: true },
+  play: async ({ args }) => {
+    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
+    await userEvent.click(await screen.findByRole('button', { name: /^Mira/ }, WAIT))
+    await screen.findByTestId('relationship-0', {}, WAIT)
+    await editMiraView('Your view', 'sworn ally')
+    await pressSave()
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1), WAIT)
+    await editMiraView('Their view', 'wary')
+    await userEvent.click(screen.getByRole('button', { name: 'Finish save' }))
+    await waitFor(
+      () => expect(within(saveBar()).getByRole('button', { name: /^Save/ })).toBeEnabled(),
+      WAIT,
+    )
+    await expect(saveBar()).toHaveTextContent('Relationships')
+    await pressSave()
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(2), WAIT)
+    await expect(args.onSave).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        relationshipsBase: [
+          expect.objectContaining({
+            otherId: 'char_mira',
+            selfToOther: 'sworn ally',
+            otherToSelf: 'ally',
+          }),
+        ],
+        relationships: [{ ...MIRA_LINK, selfToOther: 'sworn ally' }],
+        draft: expect.objectContaining({
+          relationships: [
+            expect.objectContaining({ selfToOther: 'sworn ally', otherToSelf: 'wary' }),
+          ],
+        }),
+      }),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Finish save' }))
   },
 }
 
