@@ -150,3 +150,28 @@ slice-planning gate forces its resolution before that slice is planned.
   reverse-replay, which restores unschema'd columns wholesale
   (`reverse-replay.ts:170-197`). Reachable today: edit an entity in
   World that the head turn's pass wrote, then edit that turn's prose.
+
+- **A recurring classifier failure reaches `failed-persistent`
+  invisibly.** The backoff
+  ([`classifier.md → Auto-retry policy`](../memory/classifier.md#auto-retry-policy))
+  exhausts in about 7.5 minutes (30s + 2m + 5m) against a repeating
+  apply-time rejection, and `failed-persistent` survives a restart —
+  boot recovery (`resetStuckClassifierRunState`) resets only
+  `'running'`. Nothing in `app/`, `components/` or `hooks/` reads
+  classifier status or calls `runNow` (`scheduler.ts:85`) today, so a
+  branch can stop updating memory with no visible signal until M7.2
+  builds Settings → Memory's `[Retry]` / `[Run classifier now]`
+  ([`story-settings.md → Classifier`](../ui/screens/story-settings/story-settings.md#classifier)).
+  Revisit trigger: M7.2 planning.
+
+- **A blank happening title or new-character name still reaches a
+  row.** `classifierExtractionSchema` gives both `happening.title` and
+  `newCharacters[].name` a bare `z.string()` (`schema.ts:20`, `:58`),
+  and neither `happeningWriteObject` nor `entityWriteSchema` adds the
+  `.min(1)` that `characterRelationshipWriteSchema` gives `kind`, so
+  the write layer accepts an empty string. `plan.ts` routes neither
+  field through `nonBlank`, only through `clampEmbedded` (a length
+  cap, not a blank check), contradicting the "a blank never reaches a
+  row" comment at `plan.ts:40` — true only for the fields the planner
+  does route through `nonBlank`. Revisit trigger: a happening or
+  character surfacing with an empty name/title in World or Plot.

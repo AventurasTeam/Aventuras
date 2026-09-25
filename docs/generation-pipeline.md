@@ -62,6 +62,8 @@ interface Pipeline {
   gateBehavior: 'hard-gate' | 'no-gate' // 'scoped-gate' deferred
   concurrencyPolicy: ConcurrencyPolicy
   chainsTo?: (run: RunState) => string | null // consulted at commit; sources its own deps
+  onPreflightFailure?: (ctx, error: PipelineError) => Promise<void> // pre-flight halts before phase 0, so only this hook ever sees that failure
+  onPhaseException?: (ctx, error: PipelineError) => Promise<void> // a phase threw; runs once its rollback has committed, before the run releases
 }
 
 export const pipelines: ReadonlyMap<string, Pipeline>
@@ -920,11 +922,16 @@ in-progress (currentPhase iterates)
    │                                                          │  emit run_complete (outcome: 'completed')
    │
    ├── phase returns failed ────────────────────► abortRun (reason: phase-failure)
+   ├── phase throws (action-layer rejection,
+   │   orchestrator error) ─────────────────────► abortRun (reason: phase-failure, thrown: true)
    └── user-initiated cancel ───────────────────► abortRun (reason: user-cancel)
                                                       │  abortController.abort()
                                                       │  drain in-flight phases (return aborted)
                                                       │  reverse-replay deltas and UPDATE pipeline_runs
                                                       │    SET finished_at, outcome (one SQLite txn)
+                                                      │  if thrown && rollback committed:
+                                                      │    pipeline.onPhaseException(ctx, error) —
+                                                      │    skipped when the rollback itself could not commit
                                                       │  remove run from txState
                                                       │  emit run_complete (outcome: 'aborted' | 'failed')
 ```
@@ -1679,10 +1686,16 @@ user-originated. Pipeline-sourced writes are deliberately exempt from
 that last check: the in-flight classifier burst this barrier drains
 (the `'cancel'` abort never reaches the commit burst — see above) must
 still reach `applyDeltaAction` and commit. A rejection there instead
-throws inside the phase, aborting the run before it writes
-`classifier_status` back from `'running'` — a plain row, not
-delta-logged, so the sweep can't undo it — wedging `shouldCadenceFire`
-on that branch until the next app restart.
+throws inside the phase; the orchestrator reverse-replays the burst's
+deltas and, once that rollback commits, `onPhaseException`
+(see [Pipeline declaration](#pipeline-declaration) and
+[Run state transitions](#run-state-transitions)) records the failure
+through the classifier's ordinary retry status
+([`classifier.md → Auto-retry policy`](./memory/classifier.md#auto-retry-policy))
+— a failed run like any other, backed off the same way. Only when the
+rollback itself cannot commit does the branch stay at `'running'`,
+left for boot recovery (`resetStuckClassifierRunState`) rather than
+the ordinary backoff.
 The synchronous-`setState` invariant (see [Invariants](#invariants))
 closes the check-vs-register race the same way it does for chained
 transitions.
