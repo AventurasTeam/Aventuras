@@ -1289,12 +1289,12 @@ them.
 
 ### Keywords schema
 
-| Type         | Keyword surface                            | Source                                                                                 |
-| ------------ | ------------------------------------------ | -------------------------------------------------------------------------------------- |
-| `lore`       | `keywords TEXT` (JSON `string[]`)          | User-authored at create time, OR lore-mgmt agent emits at chapter close                |
-| `entities`   | `name` + `keywords TEXT` (JSON `string[]`) | Name implicit; keywords user-authored, OR periodic classifier emits at entity creation |
-| `happenings` | `awareness.source` strings                 | Implicit (per-row, not per-happening)                                                  |
-| `threads`    | (none)                                     | —                                                                                      |
+| Type         | Keyword surface                            | Source                                                                                                             |
+| ------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `lore`       | `keywords TEXT` (JSON `string[]`)          | User-authored at create time, OR lore-mgmt agent emits at chapter close                                            |
+| `entities`   | `name` + `keywords TEXT` (JSON `string[]`) | Name implicit; keywords user-authored, OR periodic classifier emits at entity creation and appends on later passes |
+| `happenings` | `awareness.source` strings                 | Implicit (per-row, not per-happening)                                                                              |
+| `threads`    | (none)                                     | —                                                                                                                  |
 
 Lore's `keywords` field is added; `lore.tags` stays separate (tags are
 user-meaningful labels; keywords are retrieval-targeted strings). The

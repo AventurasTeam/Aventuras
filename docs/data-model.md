@@ -79,7 +79,7 @@ erDiagram
         text description
         text status "staged | active | retired"
         text retired_reason "free-form; only meaningful when status=retired. Hard-finality only — e.g. 'killed by Kael', 'temple destroyed in quake', 'faction disbanded after coup', 'exiled to the southern wastes'. Off-screen-but-alive characters stay status=active with stale lastSeenAt; see docs/memory/edge-cases.md → Retirement"
-        json keywords "string[]; aliases / epithets / relational references beyond the canonical name. User-authored, OR periodic-classifier-emitted at entity creation (append-only, never removes). Matched alongside name in the keyword pathway. See docs/memory/retrieval.md → Keywords schema"
+        json keywords "string[]; aliases / epithets / relational references beyond the canonical name. User-authored, OR periodic-classifier-emitted at entity creation and appended on later passes (append-only, never removes). Matched alongside name in the keyword pathway. See docs/memory/retrieval.md → Keywords schema"
         text injection_mode "always | auto | disabled; short-circuited by active+in-scene invariant"
         integer priority "0..100; orders keyword-inject overflow ONLY — unlike lore.priority it does not feed the ranker pin_signal, which stays 0 for entities. See docs/memory/retrieval.md → Keyword injection budget"
         integer name_collision_flag "0 | 1; 1 = same-name collision detected at classifier extraction; surfaces in World panel for review. See docs/memory/edge-cases.md → Name collision"

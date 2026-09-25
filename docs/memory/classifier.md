@@ -22,9 +22,9 @@ declaration values.
   - `active → retired` on hard finality signals only (death, exile,
     faction-disbanded). Conservative bias.
 
-  Both are guarded against the row as it stands when the write lands,
-  not the pass's snapshot, so a status the user changed mid-pass
-  stands (see
+  Both are checked against the pass's snapshot when planned and
+  against the row as it stands when the write lands, so a status the
+  user changed mid-pass stands (see
   [`cadence.md → User edits during a periodic pass`](./cadence.md#user-edits-during-a-periodic-pass)).
 
 - **First-introduction descriptions** — when the classifier extracts
@@ -46,6 +46,10 @@ declaration values.
   stands when the write lands, and never remove, so user-authored
   aliases survive every subsequent pass, including one added while the
   pass ran.
+- **Character relationships** — `character_relationships`. One
+  perspective per fact, the subject's view of the object and never the
+  inferred inverse, upserted into the pair's row as it stands when the
+  write lands.
 
 ## Provenance attribution
 
@@ -123,10 +127,10 @@ blocking failure path applies. No classifier-specific deferral
 mechanism — same path as any other dirty row.
 
 The classifier does not modify already-embedded fields on existing
-rows. Status flips touch `entities.status` only, which isn't
-embedded. If a future extension lets the classifier modify an
-embedded field, it flags the row dirty the same way — no special
-path required.
+rows. Status flips (with a retirement's `retired_reason`) and keyword
+appends touch no embedded field. If a future extension lets the
+classifier modify an embedded field, it flags the row dirty the same
+way — no special path required.
 
 The transient embedding computed in the disambiguation flow below
 (extracted description for the similarity check) is a decision-time
@@ -165,13 +169,13 @@ The periodic classifier runs as a background pipeline — a Pipeline
 declaration in the framework's registry, same shape as per-turn and
 chapter-close but with different concurrency / gating values:
 
-| Field                           | Value                                                                                                                                                                 |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kind`                          | `'periodic-classifier'`                                                                                                                                               |
-| `gateBehavior`                  | `'no-gate'` — doesn't block user-source writes                                                                                                                        |
-| `concurrencyPolicy`             | `{ blockedBy: ['periodic-classifier', 'chapter-close'] }` — no double passes; blocked from starting during chapter-close                                              |
-| `affordance`                    | `'pill-only'` — folds into the generation indicator at low priority (see below)                                                                                       |
-| Write set (prose, not declared) | happenings, happening_involvements, happening_awareness, entity status flips, entity keyword appends, character relationships, first-introduction entity descriptions |
+| Field                           | Value                                                                                                                                                                                                                                 |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`                          | `'periodic-classifier'`                                                                                                                                                                                                               |
+| `gateBehavior`                  | `'no-gate'` — doesn't block user-source writes                                                                                                                                                                                        |
+| `concurrencyPolicy`             | `{ blockedBy: ['periodic-classifier', 'chapter-close'] }` — no double passes; blocked from starting during chapter-close                                                                                                              |
+| `affordance`                    | `'pill-only'` — folds into the generation indicator at low priority (see below)                                                                                                                                                       |
+| Write set (prose, not declared) | happenings, happening_involvements, happening_awareness, new character entities (first-introduction description, keywords, collision flag), entity status flips with retired reasons, entity keyword appends, character relationships |
 
 Write-set boundaries between the classifier and the piggyback / per-turn
 pipeline are enforced via narrow action functions named for field-set
@@ -179,8 +183,9 @@ scope (see
 [`generation-pipeline.md → Narrow action functions over write-set declarations`](../generation-pipeline.md#narrow-action-functions-over-write-set-declarations)),
 not a typed declaration. The single-writer invariant relaxes to
 **single-writer-per-write-set** in v1; piggyback's write-set and the
-classifier's write-set are disjoint at the row-and-field granularity
-(see [`cadence.md → Concurrency`](./cadence.md#concurrency)).
+classifier's write-set are disjoint at the row-and-field granularity,
+apart from the monotonic `entities.status` overlap (see
+[`cadence.md → Concurrency`](./cadence.md#concurrency)).
 
 If the user starts a new turn while the classifier is mid-run, both
 proceed. The classifier holds its own `actionId` for its writes; the

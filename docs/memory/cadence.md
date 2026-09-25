@@ -167,9 +167,12 @@ field sets, with one documented overlap on `entities.status`.
 | `entities.state` (location, equipped, inventory, stackables, lastSeenAt) | ✓                                                   | —                                                    |
 | `entities.status`                                                        | ✓ (staged → active only, on `sceneEntities` ID hit) | ✓ (staged → active slow path; active → retired)      |
 | `entities.description`                                                   | —                                                   | ✓ (first introduction only; see authorship contract) |
+| `entities.keywords`                                                      | —                                                   | ✓ (append-only; new characters and later passes)     |
+| `entities.retired_reason`                                                | —                                                   | ✓ (with active → retired)                            |
 | `happenings`                                                             | —                                                   | ✓                                                    |
 | `happening_involvements`                                                 | —                                                   | ✓                                                    |
 | `happening_awareness`                                                    | —                                                   | ✓                                                    |
+| `character_relationships`                                                | —                                                   | ✓                                                    |
 
 **Field-overlap invariant.** `entities.status` is the only field
 both writers touch. They never collide on the same entity at the
@@ -206,9 +209,11 @@ underlying SQLite UPDATEs are independent. Optimistic concurrency
 
 The background classifier is the first agent that runs concurrent
 with the per-turn pipeline. The user-edit gate (UI-side disabling of
-controls during pipeline runs) does **not** relax — user edits already
-operate at field granularity and respect the same write-set
-boundaries.
+controls during `hard-gate` pipeline runs) does **not** relax. The
+classifier itself is `no-gate`, and its write set is not disjoint from
+user edits: both write entity status, keywords and character
+relationships. [User edits during a periodic pass](#user-edits-during-a-periodic-pass)
+covers how those overlaps resolve.
 
 `'concurrent-allowed'` was previously theoretical in
 [`architecture.md`](../architecture.md); the periodic classifier is its
@@ -218,18 +223,23 @@ first real consumer and triggers documenting the value.
 
 The periodic classifier is `no-gate`, so World stays editable while a
 pass runs. The pass reads its entity snapshot before the model call
-and writes after it returns, up to the call's timeout later, so a user
-edit can land in between. Every classifier write that depends on an
-entity's current value therefore re-reads the row when it applies,
-rather than trusting the snapshot:
+and writes only after the model call and reconciliation return, which
+can be minutes later, so a user edit can land in between. The
+classifier's updates to an existing entity's status and keywords
+therefore check the row as it stands when the write lands, not only
+the snapshot:
 
-- Promotion goes through `promoteStagedEntity`, which no-ops unless
-  the row is still `staged`.
-- Retirement goes through `retireEntity`, which no-ops unless the row
-  is still `active`, so a user's own status and retired reason stand.
-- Keywords go through `appendEntityKeywords`, which appends only the
-  terms the live list lacks, so an alias the user added or removed
-  mid-pass stays as the user left it.
+- Promotion goes through `promoteStagedEntity`. The pass plans it only
+  for a row its snapshot holds as `staged`, and the handler no-ops
+  unless the live row is still `staged` when the write lands.
+- Retirement goes through `retireEntity`. The pass plans it only for a
+  snapshot-`active` row, and the handler no-ops unless the live row is
+  still `active` when the write lands, so a user's own status and
+  retired reason stand.
+- Keywords go through `appendEntityKeywords`, in two parts. The pass
+  sends only terms new against its snapshot, so an alias the user
+  removed mid-pass is not re-sent; the handler appends only terms the
+  live list lacks, so one the user added is not duplicated.
 
 A relationship view is the one field both writers can set to
 different values. The upsert merges its single perspective into the

@@ -536,11 +536,11 @@ shape for templates to consume.
 Memory-state writes split across three time scales per the cadence
 stratification in [`memory/cadence.md`](./memory/cadence.md):
 
-| Layer                      | Trigger                                                                 | Scope                                                                                                                    |
-| -------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| **Piggyback**              | Every AI reply, inline on the narrative call (capability-gated)         | Scene-local fast-mutating state — `sceneEntities`, `currentLocationId`, `worldTime`, visual mutations, item transfers    |
-| **Periodic classifier**    | Background, configurable cadence (`stories.settings.classifierCadence`) | Multi-turn batch extractions — happenings, involvements, awareness, entity status flips, first-introduction descriptions |
-| **Chapter-close pipeline** | Token threshold crossed OR user-triggered                               | 5-phase pipeline: catch-up classifier, boundary, metadata, lore-mgmt (5 sub-jobs), lifecycle review                      |
+| Layer                      | Trigger                                                                 | Scope                                                                                                                                             |
+| -------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Piggyback**              | Every AI reply, inline on the narrative call (capability-gated)         | Scene-local fast-mutating state — `sceneEntities`, `currentLocationId`, `worldTime`, visual mutations, item transfers                             |
+| **Periodic classifier**    | Background, configurable cadence (`stories.settings.classifierCadence`) | Multi-turn batch extractions — happenings, involvements, awareness, new characters, entity status flips, keyword appends, character relationships |
+| **Chapter-close pipeline** | Token threshold crossed OR user-triggered                               | 5-phase pipeline: catch-up classifier, boundary, metadata, lore-mgmt (5 sub-jobs), lifecycle review                                               |
 
 The periodic classifier is itself a Pipeline (per
 [`generation-pipeline.md`](./generation-pipeline.md)) — same
