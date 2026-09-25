@@ -42,7 +42,7 @@ export function EntityRefList({
     <View className="gap-2" testID={testID}>
       {value.map((id) => {
         const entity = byId.get(id)
-        const name = entity?.name ?? t('world:carrying.missing')
+        const name = entity?.name ?? t('world:entityMissing')
         return (
           <View key={id} className="flex-row items-center gap-2">
             <View className="shrink-0">

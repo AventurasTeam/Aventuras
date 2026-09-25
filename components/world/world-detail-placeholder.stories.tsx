@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
 import { expect, screen } from 'storybook/test'
 
-import type { Entity, Lore } from '@/lib/db'
+import type { Lore } from '@/lib/db'
 
 import { WorldDetailPlaceholder } from './world-detail-placeholder'
 
@@ -21,25 +21,6 @@ const meta: Meta<typeof WorldDetailPlaceholder> = {
 
 export default meta
 type Story = StoryObj<typeof WorldDetailPlaceholder>
-
-const KAEL: Entity = {
-  id: 'char_kael',
-  branchId: 'br_1',
-  kind: 'character',
-  name: 'Kael',
-  description: null,
-  status: 'active',
-  retiredReason: null,
-  injectionMode: 'always',
-  nameCollisionFlag: 0,
-  state: null,
-  tags: [],
-  keywords: [],
-  priority: 30,
-  embeddingStale: 1,
-  createdAt: 1,
-  updatedAt: 1,
-}
 
 const VEIL: Lore = {
   id: 'lore_veil',
@@ -63,16 +44,6 @@ export const NoSelection: Story = {
   },
 }
 
-export const EntitySelected: Story = {
-  args: { selection: { type: 'entity', row: KAEL }, recentlyClassified: 'fresh' },
-  play: async ({ canvasElement }) => {
-    expect(screen.getByText('Kael')).toBeInTheDocument()
-    expect(screen.getByText('Recently classified')).toBeInTheDocument()
-    expect(canvasElement.querySelector('.bg-recently-classified-bg.opacity-50')).toBeNull()
-    expect(screen.getByText('Details land in Slice 4.2a')).toBeInTheDocument()
-  },
-}
-
 export const LoreSelected: Story = {
   args: { selection: { type: 'lore', row: VEIL } },
   play: async () => {
@@ -85,10 +56,10 @@ export const LoreSelected: Story = {
   },
 }
 
-export const EntityFading: Story = {
-  args: { selection: { type: 'entity', row: KAEL }, recentlyClassified: 'fading' },
+export const LoreFading: Story = {
+  args: { selection: { type: 'lore', row: VEIL }, recentlyClassified: 'fading' },
   play: async ({ canvasElement }) => {
-    expect(screen.getByText('Kael')).toBeInTheDocument()
+    expect(screen.getByText('The Veil')).toBeInTheDocument()
     expect(screen.getByText('Recently classified')).toBeInTheDocument()
     expect(canvasElement.querySelector('.bg-recently-classified-bg.opacity-50')).toBeNull()
     expect(canvasElement.querySelector('.bg-recently-classified-bg')).not.toBeNull()

@@ -269,6 +269,6 @@ export function itemPositionHint(
   if (at == null) return undefined
   const place = entities.find((e) => e.id === at)
   return place == null
-    ? t('world:carrying.missing')
+    ? t('world:entityMissing')
     : t('world:carrying.position.at', { name: place.name })
 }

@@ -78,6 +78,7 @@
   },
   "noResults": "No results.",
   "noResultsHint": "Try clearing the search or another filter.",
+  "entityMissing": "Entity no longer exists",
   "collision": {
     "needReview_one": "{{count}} needs review",
     "needReview_other": "{{count}} need review",
@@ -86,7 +87,6 @@
   "detail": {
     "selectRow": "Select a row",
     "selectRowBody": "Pick an entity or lore entry from the list to see it here.",
-    "entityPlaceholder": "Details land in Slice 4.2a",
     "lorePlaceholder": "Details land in Slice 4.2b",
     "placeholderBody": "Tabs and editors for this row aren't available yet.",
     "recentlyClassified": "Recently classified",
@@ -261,8 +261,7 @@
       "always": "Always injected",
       "disabled": "Disabled"
     },
-    "portrait": "Portrait of {{name}}",
-    "missing": "Entity no longer exists"
+    "portrait": "Portrait of {{name}}"
   },
   "connections": {
     "none": "None",
@@ -278,7 +277,6 @@
     "addEquipped": "Add equipped item",
     "addCarried": "Add carried item",
     "removeNamed": "Remove {{name}}",
-    "missing": "Entity no longer exists",
     "addStackable": "Add quantity",
     "stackableKey": "Quantity",
     "stackableKeyPlaceholder": "e.g. gold",

@@ -58,5 +58,5 @@ export function useWorldSelection({
     setCreateSeq((n) => n + 1)
   }, [])
 
-  return { selectedId, creating, selection, select, startCreate }
+  return { selectedId, selection, select, startCreate }
 }

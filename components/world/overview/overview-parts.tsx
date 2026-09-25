@@ -199,7 +199,7 @@ export function LinkRegion({
                 <EntityLink entity={entity} onPress={() => onOpenEntity(entity.id)} />
               ) : (
                 <Text size="sm" className="text-warning">
-                  {t('world:overview.missing')}
+                  {t('world:entityMissing')}
                 </Text>
               )}
             </View>

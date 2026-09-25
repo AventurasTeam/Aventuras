@@ -89,7 +89,7 @@ export function RelationshipsEditor({
         const other = entities.find((e) => e.id === row?.otherId)
         const name =
           other?.name ??
-          (row?.otherId ? t('world:carrying.missing') : t('world:relationships.unnamed'))
+          (row?.otherId ? t('world:entityMissing') : t('world:relationships.unnamed'))
         // Not `field.id`: react-hook-form regenerates it on every reset (a store patch, each Save),
         // which would collapse and remount the card being edited.
         const key = row?.cardKey ?? field.id
