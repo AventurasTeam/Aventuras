@@ -776,6 +776,17 @@
                 saveService()
               },
             })}
+
+            {@render switchRow({
+              label: 'Limit post-chapter story to Buffer Messages',
+              description:
+                "After a chapter is created, the agent reads the story that follows it. With this on, it reads as many messages as the story's Buffer Messages setting; off, about 2.5 chapters' worth of text.",
+              checked: service.loreManagement.chapterBufferTail,
+              onChange: (v) => {
+                service.loreManagement.chapterBufferTail = v
+                saveService()
+              },
+            })}
           </div>
         </Collapsible.Content>
       </Collapsible.Root>

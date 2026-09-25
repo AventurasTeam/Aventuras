@@ -186,3 +186,25 @@ describe('newChapter forwarding', () => {
     expect(options?.newChapter).toBeUndefined()
   })
 })
+
+describe('chapterBuffer forwarding', () => {
+  it('forwards chapterBuffer to runLoreManagement, including 0', async () => {
+    const deps: LoreManagementDependencies = { runLoreManagement: vi.fn(async () => emptyResult()) }
+    const coordinator = new LoreManagementCoordinator(deps)
+
+    await coordinator.runSession(input({ storyId: 'story-7', chapterBuffer: 0 }), callbacks())
+
+    const options = vi.mocked(deps.runLoreManagement).mock.calls[0][6]
+    expect(options?.chapterBuffer).toBe(0)
+  })
+
+  it('passes no chapterBuffer when the caller sets none', async () => {
+    const deps: LoreManagementDependencies = { runLoreManagement: vi.fn(async () => emptyResult()) }
+    const coordinator = new LoreManagementCoordinator(deps)
+
+    await coordinator.runSession(input({ storyId: 'story-8' }), callbacks())
+
+    const options = vi.mocked(deps.runLoreManagement).mock.calls[0][6]
+    expect(options?.chapterBuffer).toBeUndefined()
+  })
+})

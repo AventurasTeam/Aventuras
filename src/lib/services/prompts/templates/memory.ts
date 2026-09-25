@@ -162,7 +162,9 @@ An entry is pulled into the narrator's prompt when its **name**, one of its **al
 # Possible Duplicates
 Each line is one group. Close every one with \`merge_entries\`, \`keep_separate\`, or \`delete_entry\` where a member is simply erroneous.
 {{ duplicateSummary }}
-{% endif %}{{ newChapterSection }}{{ recentStorySection }}`,
+{% endif %}{{ newChapterSection }}{{ recentStorySection }}{% if recentStoryContinues %}
+The story goes on past the end of what is shown here, so its last event is not the present. Do not mark an entry outdated on the strength of what is left unresolved.
+{% endif %}`,
 }
 
 const interactiveLorebookPromptTemplate: PromptTemplate = {

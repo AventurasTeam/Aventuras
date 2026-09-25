@@ -107,6 +107,8 @@ export const LORE_MANAGEMENT_DEFAULTS = {
   requireDuplicateResolution: false,
   /** Give the agent the triggering chapter's text in place of its summary. */
   sendNewChapterText: true,
+  /** After a chapter, show Buffer Messages entries of the tail rather than a character budget. */
+  chapterBufferTail: true,
 } as const
 
 /**

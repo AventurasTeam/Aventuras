@@ -841,6 +841,8 @@ export interface LoreManagementSpecificSettings {
   requireDuplicateResolution: boolean
   /** Hand the agent the chapter that triggered a run in full, instead of its summary. */
   sendNewChapterText: boolean
+  /** Size the post-chapter tail by the story's `chapterBuffer` instead of the character budget. */
+  chapterBufferTail: boolean
 }
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -963,6 +965,7 @@ export function getDefaultLoreManagementSpecificSettings(): LoreManagementSpecif
   return {
     requireDuplicateResolution: LORE_MANAGEMENT_DEFAULTS.requireDuplicateResolution,
     sendNewChapterText: LORE_MANAGEMENT_DEFAULTS.sendNewChapterText,
+    chapterBufferTail: LORE_MANAGEMENT_DEFAULTS.chapterBufferTail,
   }
 }
 

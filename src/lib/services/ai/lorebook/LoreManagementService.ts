@@ -10,6 +10,7 @@ import type {
   Entry,
   LoreNewChapterInput,
   POV,
+  StoryEntry,
   StoryMode,
   Tense,
   VaultLorebookEntry,
@@ -37,8 +38,8 @@ import {
 } from '$lib/services/duplicates'
 import { LoreSessionLedger, type LoreMergeResult } from './sessionChanges'
 import { ChapterQueryBudget, MAX_CHAPTER_QUERIES_LORE } from '../sdk/tools/chapterQueries'
-import { LORE_MANAGEMENT_DEFAULTS } from '../core/defaults'
-import { loreChapterContext } from './newChapter'
+import { LORE_MANAGEMENT_DEFAULTS, recentStoryBudgetChars } from '../core/defaults'
+import { loreChapterContext, loreRecentEntries, renderLoreProse } from './newChapter'
 
 const log = createLogger('LoreManagement')
 
@@ -68,12 +69,16 @@ export interface LoreManagementChapter {
 export interface LoreManagementContext {
   storyId: string
   /**
-   * Story text the chapters do not cover yet, already formatted and bounded by the caller.
+   * The story the chapters do not cover yet; the service picks how much of it the agent reads.
    *
    * Empty is normal — a run triggered right after a chapter has almost nothing after it.
    * Empty *and* no chapters means the agent has no story at all; see `hasStoryMaterial`.
    */
-  recentStory: string
+  recentEntries: StoryEntry[]
+  /** Scales the recent-story character budget. */
+  tokenThreshold?: number
+  /** The story's Buffer Messages; sizes the tail after `newChapter` when the setting is on. */
+  chapterBuffer?: number
   existingEntries: Entry[]
   /** Available chapters for querying */
   chapters?: Chapter[]
@@ -115,17 +120,20 @@ export class LoreManagementService extends BaseAIService {
   private maxIterations: number
   private requireDuplicateResolution: boolean
   private sendNewChapterText: boolean
+  private chapterBufferTail: boolean
 
   constructor(
     serviceId: ServiceId,
     maxIterations: number = LORE_MANAGEMENT_DEFAULTS.maxIterations,
     requireDuplicateResolution: boolean = LORE_MANAGEMENT_DEFAULTS.requireDuplicateResolution,
     sendNewChapterText: boolean = LORE_MANAGEMENT_DEFAULTS.sendNewChapterText,
+    chapterBufferTail: boolean = LORE_MANAGEMENT_DEFAULTS.chapterBufferTail,
   ) {
     super(serviceId)
     this.maxIterations = maxIterations
     this.requireDuplicateResolution = requireDuplicateResolution
     this.sendNewChapterText = sendNewChapterText
+    this.chapterBufferTail = chapterBufferTail
   }
 
   /**
@@ -269,13 +277,19 @@ export class LoreManagementService extends BaseAIService {
 
     // Left out entirely rather than printed empty: an empty heading is text the model
     // reads to learn nothing, and there is nothing after the last chapter more often than not.
-    const recentStorySection = context.recentStory
-      ? `# Story Since The Last Chapter\n${context.recentStory}\n`
-      : ''
+    const { shown, continues } = loreRecentEntries(
+      context.recentEntries,
+      recentStoryBudgetChars(context.tokenThreshold),
+      context.newChapter && {
+        entryLimit: this.chapterBufferTail ? context.chapterBuffer : undefined,
+      },
+    )
+    const recentStory = renderLoreProse(shown)
+    const recentStorySection = recentStory ? `# Story Since The Last Chapter\n${recentStory}\n` : ''
 
     const hasChapters = chapters.length > 0
     const hasNewChapter = Boolean(newChapterSection)
-    const hasRecentStory = Boolean(context.recentStory)
+    const hasRecentStory = Boolean(recentStory)
 
     // The agent's only view of the chapter index — there is no list_chapters tool, so the
     // summaries never exist in two places for it to reconcile.
@@ -307,6 +321,7 @@ export class LoreManagementService extends BaseAIService {
       newChapterSection,
       hasNewChapter,
       hasRecentStory,
+      recentStoryContinues: continues,
       // With neither chapters, a new chapter nor recent text the agent has only the entry
       // list. It can still consolidate; anything it "identifies as missing" would be
       // invented, so the prompt says so rather than leaving it to judgement.

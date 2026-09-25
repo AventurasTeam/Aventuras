@@ -74,11 +74,13 @@ export interface LoreSessionInput {
    * summary. Absent on the batch importer's pass and on a tidy run with no new chapter.
    */
   newChapter?: LoreNewChapterInput
+  /** The story's Buffer Messages; sizes the post-chapter tail when `chapterBufferTail` is on. */
+  chapterBuffer?: number
 }
 
 export type LoreRunOptions = Pick<
   LoreSessionInput,
-  'mode' | 'pov' | 'tense' | 'tokenThreshold' | 'newChapter'
+  'mode' | 'pov' | 'tense' | 'tokenThreshold' | 'chapterBuffer' | 'newChapter'
 >
 
 export interface LoreManagementDependencies {
@@ -212,6 +214,7 @@ export class LoreManagementCoordinator {
           tense: input.tense,
           tokenThreshold: input.tokenThreshold,
           newChapter: input.newChapter,
+          chapterBuffer: input.chapterBuffer,
         },
       )
 
