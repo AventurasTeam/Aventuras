@@ -334,6 +334,76 @@ describe('entities CRUD arms', () => {
     expect(row.embeddingStale).toBe(0)
     expect(entitiesStore.getById('char_1')?.keywords).toEqual(['the grey wolf'])
   })
+
+  // user-precedence.ts reads an update's undo payload keys as the columns the user wrote.
+  it('records only the columns a patch changes', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: { kind: 'createEntity', source: 'user_edit', payload: { entry: CHAR } },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateEntity',
+          source: 'user_edit',
+          payload: {
+            branchId: 'br_1',
+            id: 'char_1',
+            patch: { status: 'active', name: 'Kael the Grey' },
+          },
+        },
+        actionId: 'act_u',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    const [delta] = await db.select().from(deltas).where(eq(deltas.actionId, 'act_u'))
+    expect(delta.undoPayload).toEqual({ name: 'Kael' })
+    expect((await rowFor(db, 'char_1')).name).toBe('Kael the Grey')
+  })
+
+  it('no-ops a patch whose every column matches the row, writing no delta', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'createEntity',
+          source: 'user_edit',
+          payload: { entry: { ...CHAR, keywords: ['the knight'] } },
+        },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    const result = await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateEntity',
+          source: 'user_edit',
+          payload: {
+            branchId: 'br_1',
+            id: 'char_1',
+            patch: {
+              status: 'active',
+              keywords: ['the knight'],
+              state: structuredClone(CHAR.state) as EntityState,
+            },
+          },
+        },
+        actionId: 'act_u',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect(result).toEqual({ status: 'rejected', reason: 'no-op entity patch', code: 'noop' })
+    expect((await db.select().from(deltas)).length).toBe(1)
+  })
 })
 
 const loc = (id: string, parent: string | null): NewEntity => ({

@@ -935,6 +935,44 @@ describe('prose source on guarded writes', () => {
       ['retireEntity', 'e1', 'e1'],
     ])
   })
+
+  // The survival anchor falls back to the newest turn; precedence must not date the
+  // prose that late, or a user edit made after its real source would lose.
+  it('dates an unattributed fact by the oldest window turn, keeping the head as its anchor', () => {
+    const { planned, fellBackCount } = buildClassifierActions(
+      {
+        happenings: [],
+        relationships: [{ subject: 'char_kael', object: 'char_aria', kind: 'sister' }],
+        statusFlips: [{ ref: 'char_a', to: 'retired' }],
+        newCharacters: [{ handle: 'h1', name: 'P', description: 'x', keywords: ['the keeper'] }],
+      },
+      {
+        ...base,
+        entities: [
+          entityRow('char_p', 'staged'),
+          entityRow('char_a'),
+          entityRow('char_kael'),
+          entityRow('char_aria'),
+        ] as never[],
+        decisions: new Map<string, ReconcileDecision>([
+          ['h1', { kind: 'promote', entityId: 'char_p', similarity: 0.9 }],
+        ]),
+      },
+    )
+    expect(
+      planned.map((p) => [
+        p.action.kind,
+        payloadOf<{ proseEntryId?: string }>(p).proseEntryId,
+        p.entryId,
+      ]),
+    ).toEqual([
+      ['promoteStagedEntity', 'e1', 'e3'],
+      ['appendEntityKeywords', 'e1', 'e3'],
+      ['upsertCharacterRelationship', 'e1', 'e3'],
+      ['retireEntity', 'e1', 'e3'],
+    ])
+    expect(fellBackCount).toBe(3)
+  })
 })
 
 // The classifier is the only machine writer into an embedded column and the embedder

@@ -36,13 +36,13 @@ export async function proseLogPosition(
   return row?.lp ?? 0
 }
 
-/** `user_edit` deltas on one row logged after `since`, oldest first. */
-export async function userEditsSince(
+async function rowDeltasAfter(
   ctx: DbCtx,
   branchId: string,
   targetTable: string,
   targetId: string,
   since: number,
+  userOnly: boolean,
 ): Promise<Delta[]> {
   return (await ctx.db
     .select()
@@ -53,22 +53,46 @@ export async function userEditsSince(
         eq(deltas.targetId, targetId),
         gt(deltas.logPosition, since),
         eq(deltas.targetTable, targetTable),
-        eq(deltas.source, 'user_edit'),
+        userOnly ? eq(deltas.source, 'user_edit') : undefined,
       ),
     )
     .orderBy(asc(deltas.logPosition))) as Delta[]
 }
 
+/** `user_edit` deltas on one row logged after `since`, oldest first. */
+export function userEditsSince(
+  ctx: DbCtx,
+  branchId: string,
+  targetTable: string,
+  targetId: string,
+  since: number,
+): Promise<Delta[]> {
+  return rowDeltasAfter(ctx, branchId, targetTable, targetId, since, true)
+}
+
+/** Deltas of any source on one row logged after `since`, oldest first. */
+export function rowDeltasSince(
+  ctx: DbCtx,
+  branchId: string,
+  targetTable: string,
+  targetId: string,
+  since: number,
+): Promise<Delta[]> {
+  return rowDeltasAfter(ctx, branchId, targetTable, targetId, since, false)
+}
+
 /**
- * Whether one of these deltas created the row or changed `column` on it. Sound because
- * user updates record only the columns they changed, so an undo payload's keys are
- * exactly what the user wrote.
+ * Whether the delta recorded `column`'s prior value. The user's update paths
+ * (`updateEntity`, the both-perspective upsert) drop unchanged columns, so a user
+ * update carries exactly the columns it changed.
  */
+export function carriesColumn(delta: Delta, column: string): boolean {
+  return delta.undoPayload != null && column in delta.undoPayload
+}
+
+/** Whether one of these deltas created the row or changed `column` on it. */
 export function wroteColumn(edits: readonly Delta[], column: string): boolean {
-  return edits.some(
-    (d) =>
-      d.op === 'create' || (d.op === 'update' && d.undoPayload != null && column in d.undoPayload),
-  )
+  return edits.some((d) => d.op === 'create' || (d.op === 'update' && carriesColumn(d, column)))
 }
 
 /** Whether the user deleted a `character_relationships` row for this canonical pair after `since`. */

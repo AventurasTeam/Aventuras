@@ -7,11 +7,12 @@ import { characterRelationshipsStore } from '@/lib/stores'
 
 import { register, type ActionHandler, type HandlerOutcome } from '../delta/registry'
 import {
+  carriesColumn,
   proseLogPosition,
+  rowDeltasSince,
   USER_EDITED_SINCE_PROSE,
   userDeletedPairSince,
   userEditsSince,
-  wroteColumn,
 } from '../delta/user-precedence'
 import type { DbCtx, DeltaSource } from '../types'
 
@@ -38,6 +39,26 @@ declare module '@/lib/actions/action-map' {
 
 type Pair = { aId: string; bId: string; subjectIsA: boolean }
 
+// The first later delta to carry the view recorded its value at create; the live row may
+// hold one the classifier filled in since.
+async function viewAtCreate(
+  ctx: DbCtx,
+  branchId: string,
+  current: CharacterRelationship,
+  povCol: 'kind' | 'inverseKind',
+  createdAt: number,
+): Promise<unknown> {
+  const later = await rowDeltasSince(
+    ctx,
+    branchId,
+    'character_relationships',
+    current.id,
+    createdAt,
+  )
+  const first = later.find((d) => carriesColumn(d, povCol))
+  return first == null ? current[povCol] : first.undoPayload?.[povCol]
+}
+
 async function userWroteViewSince(
   ctx: DbCtx,
   branchId: string,
@@ -50,7 +71,10 @@ async function userWroteViewSince(
   if (await userDeletedPairSince(ctx, branchId, pair.aId, pair.bId, since)) return true
   if (!current) return false
   const edits = await userEditsSince(ctx, branchId, 'character_relationships', current.id, since)
-  return wroteColumn(edits, povCol)
+  if (edits.some((d) => d.op === 'update' && carriesColumn(d, povCol))) return true
+  const create = edits.find((d) => d.op === 'create')
+  if (create == null) return false
+  return (await viewAtCreate(ctx, branchId, current, povCol, create.logPosition)) !== null
 }
 
 // Grouped handlers read pre-group state: two single-POV writes to a new pair would both insert.

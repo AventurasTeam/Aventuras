@@ -89,6 +89,14 @@ export function buildClassifierActions(
     return entryId
   }
 
+  // An unattributed fact's prose dates to the window's oldest turn while its survival
+  // anchor stays the newest: dating the prose too late would outrank the user's edits.
+  const oldestEntryId = window.turns[0]?.entryId ?? ''
+  const proseSource = (turn: string | undefined): string => {
+    const { entryId, fellBack } = window.resolveHandle(turn)
+    return fellBack ? oldestEntryId : entryId
+  }
+
   // Mutable, not a frozen snapshot: rows this pass plans are visible to later
   // facts in the same reply, so the flip guards read post-plan status and a ref
   // to a just-created character resolves.
@@ -124,6 +132,7 @@ export function buildClassifierActions(
       continue
     }
     const entryId = anchor(candidate.sourceTurn)
+    const proseEntryId = proseSource(candidate.sourceTurn)
     // Both branches send snapshot-new terms only: re-sending a held term would restore
     // an alias the user removed mid-pass.
     if (decision.kind === 'promote') {
@@ -140,7 +149,7 @@ export function buildClassifierActions(
         action: {
           kind: 'promoteStagedEntity',
           source: SOURCE,
-          payload: { branchId, id: decision.entityId, proseEntryId: entryId },
+          payload: { branchId, id: decision.entityId, proseEntryId },
         },
         entryId,
       })
@@ -149,7 +158,7 @@ export function buildClassifierActions(
           action: {
             kind: 'appendEntityKeywords',
             source: SOURCE,
-            payload: { branchId, id: decision.entityId, keywords: added, proseEntryId: entryId },
+            payload: { branchId, id: decision.entityId, keywords: added, proseEntryId },
           },
           entryId,
         })
@@ -166,7 +175,7 @@ export function buildClassifierActions(
           action: {
             kind: 'appendEntityKeywords',
             source: SOURCE,
-            payload: { branchId, id: decision.entityId, keywords: added, proseEntryId: entryId },
+            payload: { branchId, id: decision.entityId, keywords: added, proseEntryId },
           },
           entryId,
         })
@@ -303,16 +312,21 @@ export function buildClassifierActions(
     // rather than fail the pass.
     const kind = nonBlank(relationship.kind)
     if (kind == null) continue
-    const entryId = anchor(relationship.sourceTurn)
     planned.push({
       action: {
         kind: 'upsertCharacterRelationship',
         source: SOURCE,
         // Canonical a_id < b_id ordering and the POV merge live in the action
         // (lib/actions/relationships/register.ts) — emit the raw perspective.
-        payload: { branchId, subjectId, objectId, kind, proseEntryId: entryId },
+        payload: {
+          branchId,
+          subjectId,
+          objectId,
+          kind,
+          proseEntryId: proseSource(relationship.sourceTurn),
+        },
       },
-      entryId,
+      entryId: anchor(relationship.sourceTurn),
     })
   }
 
@@ -326,7 +340,7 @@ export function buildClassifierActions(
     if (flip.to === 'active' && current.status !== 'staged') continue
     if (flip.to === 'retired' && current.status !== 'active') continue
     index.set(id, { ...current, status: flip.to })
-    const entryId = anchor(flip.sourceTurn)
+    const proseEntryId = proseSource(flip.sourceTurn)
     planned.push({
       action:
         flip.to === 'retired'
@@ -337,15 +351,15 @@ export function buildClassifierActions(
                 branchId,
                 id,
                 retiredReason: nonBlank(flip.reason) ?? null,
-                proseEntryId: entryId,
+                proseEntryId,
               },
             }
           : {
               kind: 'promoteStagedEntity',
               source: SOURCE,
-              payload: { branchId, id, proseEntryId: entryId },
+              payload: { branchId, id, proseEntryId },
             },
-      entryId,
+      entryId: anchor(flip.sourceTurn),
     })
   }
 

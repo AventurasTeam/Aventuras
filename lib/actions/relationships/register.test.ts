@@ -365,7 +365,7 @@ describe('both-perspective upsert (World relationship editor)', () => {
 // a=kael, b=mira and Kael's view of Mira is the `kind` column.
 describe('single-perspective upsert against a user edit newer than the prose', () => {
   const PROSE = 'e_prose'
-  const writeProse = (ctx: Awaited<ReturnType<typeof setup>>['ctx']) =>
+  const writeProse = (ctx: Awaited<ReturnType<typeof setup>>['ctx'], id = PROSE, position = 1) =>
     applyDeltaAction(
       {
         action: {
@@ -373,21 +373,21 @@ describe('single-perspective upsert against a user edit newer than the prose', (
           source: 'ai_classifier',
           payload: {
             entry: {
-              id: PROSE,
+              id,
               branchId: 'br_1',
-              position: 1,
+              position,
               kind: 'ai_reply',
               content: 'Kael swore himself to Mira.',
               createdAt: 1,
             },
           },
         },
-        actionId: 'act_prose',
+        actionId: `act_${id}`,
         branchId: 'br_1',
       },
       ctx,
     )
-  const classify = (kind: string, actionId: string) => ({
+  const classify = (kind: string | null, actionId: string, proseEntryId = PROSE) => ({
     action: {
       kind: 'upsertCharacterRelationship' as const,
       source: 'periodic_classifier' as const,
@@ -396,7 +396,7 @@ describe('single-perspective upsert against a user edit newer than the prose', (
         subjectId: 'char_kael',
         objectId: 'char_mira',
         kind,
-        proseEntryId: PROSE,
+        proseEntryId,
       },
     },
     actionId,
@@ -448,12 +448,44 @@ describe('single-perspective upsert against a user edit newer than the prose', (
     expect(await pairRow(db, 'char_kael', 'char_mira')).toHaveLength(0)
   })
 
-  it('leaves a view blank that the user left blank creating the pair after the prose', async () => {
+  it('keeps a view the user set creating the pair after the prose', async () => {
+    const { db, ctx } = await setup()
+    await writeProse(ctx)
+    await applyDeltaAction(views('rival', 'wary', 'act_u'), ctx)
+    expect(await applyDeltaAction(classify('ally', 'act_k'), ctx)).toEqual(userWon)
+    expect((await pairRow(db, 'char_kael', 'char_mira'))[0].kind).toBe('rival')
+  })
+
+  it('fills a view the user left blank creating the pair after the prose', async () => {
     const { db, ctx } = await setup()
     await writeProse(ctx)
     await applyDeltaAction(views(null, 'wary', 'act_u'), ctx)
-    expect(await applyDeltaAction(classify('ally', 'act_k'), ctx)).toEqual(userWon)
-    expect((await pairRow(db, 'char_kael', 'char_mira'))[0].kind).toBeNull()
+    expect((await applyDeltaAction(classify('ally', 'act_k'), ctx)).status).toBe('ok')
+    expect((await pairRow(db, 'char_kael', 'char_mira'))[0]).toMatchObject({
+      kind: 'ally',
+      inverseKind: 'wary',
+    })
+  })
+
+  // A live-row read would see `friend` at the second write and credit it to the user's create.
+  it('reads a blank view at create from the chain after an older fact filled it', async () => {
+    const { db, ctx } = await setup()
+    await writeProse(ctx, 'e_p0', 1)
+    await writeProse(ctx, 'e_p', 2)
+    await applyDeltaAction(views(null, 'wary', 'act_u'), ctx)
+    expect((await applyDeltaAction(classify('friend', 'act_k0', 'e_p0'), ctx)).status).toBe('ok')
+    expect((await applyDeltaAction(classify('ally', 'act_k1', 'e_p'), ctx)).status).toBe('ok')
+    expect((await pairRow(db, 'char_kael', 'char_mira'))[0].kind).toBe('ally')
+  })
+
+  it("does not count the classifier's own delete of the pair as the user's", async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(views('friend', null, 'act_0'), ctx)
+    await writeProse(ctx)
+    expect((await applyDeltaAction(classify(null, 'act_k0'), ctx)).status).toBe('ok')
+    expect(await pairRow(db, 'char_kael', 'char_mira')).toHaveLength(0)
+    expect((await applyDeltaAction(classify('ally', 'act_k1'), ctx)).status).toBe('ok')
+    expect((await pairRow(db, 'char_kael', 'char_mira'))[0].kind).toBe('ally')
   })
 
   it('overwrites a view the user set before the prose', async () => {

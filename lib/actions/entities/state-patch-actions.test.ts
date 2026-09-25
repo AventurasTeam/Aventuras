@@ -710,6 +710,36 @@ describe('user edits newer than the prose', () => {
     expect((await rowFor(db, 'char_1')).keywords).toEqual(['the knight'])
   })
 
+  it('keeps the status of an entity the user created after the prose', async () => {
+    const { db, ctx } = await setup()
+    await writeProse(ctx)
+    await create(ctx, { ...CHAR, status: 'active' })
+    expect(await apply(ctx, retire, 'act_r')).toEqual(userWon)
+    expect((await rowFor(db, 'char_1')).status).toBe('active')
+  })
+
+  it('retires once the user undoes the status edits made after the prose', async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, { ...CHAR, status: 'active' })
+    await writeProse(ctx)
+    await apply(ctx, userPatch({ status: 'retired', retiredReason: 'exiled' }), 'act_u1')
+    await apply(ctx, userPatch({ status: 'active' }), 'act_u2')
+    expect(await apply(ctx, retire, 'act_r1')).toEqual(userWon)
+    await reverseReplayDeltas('act_u2', ctx)
+    await reverseReplayDeltas('act_u1', ctx)
+    expect((await apply(ctx, retire, 'act_r2')).status).toBe('ok')
+    expect((await rowFor(db, 'char_1')).status).toBe('retired')
+  })
+
+  it("matches a removed alias under normalizeTerm, whatever the user's spelling", async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, { ...CHAR, keywords: ['the knight', 'The Drunk'] })
+    await writeProse(ctx)
+    await apply(ctx, userPatch({ keywords: ['the knight'] }), 'act_u')
+    expect((await apply(ctx, append(['the drunk', 'the wanderer']), 'act_k')).status).toBe('ok')
+    expect((await rowFor(db, 'char_1')).keywords).toEqual(['the knight', 'the wanderer'])
+  })
+
   it('restores an alias the user removed before the prose', async () => {
     const { db, ctx } = await setup()
     await create(ctx, { ...CHAR, keywords: ['the knight', 'the drunk'] })
