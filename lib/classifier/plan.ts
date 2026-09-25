@@ -299,8 +299,8 @@ export function buildClassifierActions(
     const subjectId = resolveRef(relationship.subject, 'character')
     const objectId = resolveRef(relationship.object, 'character')
     if (subjectId == null || objectId == null || subjectId === objectId) continue
-    // The write schema requires a non-blank kind; a blank model reply would
-    // otherwise reject the whole write instead of just this one fact.
+    // A blank kind is rejected (empty) or stored as whitespace; drop the fact
+    // rather than fail the pass.
     const kind = nonBlank(relationship.kind)
     if (kind == null) continue
     planned.push({

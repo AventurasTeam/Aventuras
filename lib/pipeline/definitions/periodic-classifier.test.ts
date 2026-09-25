@@ -7,6 +7,7 @@ import { generateStructured } from '@/lib/ai'
 import { shouldCadenceFire, type EmbedDescriptions } from '@/lib/classifier'
 import {
   branches,
+  deltas,
   stories,
   storyEntries,
   type ClassifierStatus,
@@ -752,7 +753,10 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
     })
   })
 
-  it('routes a write the action layer rejects to the retry status instead of leaving running stuck', async () => {
+  async function seedApplyTimeHarness(): Promise<{
+    db: Awaited<ReturnType<typeof createTestDb>>['db']
+    runInTransaction: Awaited<ReturnType<typeof createTestDb>>['runInTransaction']
+  }> {
     const { db, runInTransaction } = await createTestDb()
     await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
     await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
@@ -777,10 +781,15 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
     entitiesStore.hydrate('b1', [])
     happeningsStore.hydrate('b1', [])
     await hydrateAppSettings(async () => CLASSIFIER_WIRED_CONFIG)
+    return { db, runInTransaction }
+  }
+
+  it('routes a write the action layer rejects to the retry status instead of leaving running stuck', async () => {
+    const { db, runInTransaction } = await seedApplyTimeHarness()
 
     // A fake handler for the one write the pass plans, standing in for any
     // action layer rejection (branch mismatch, invalid write, etc.) — the guard
-    // must recover from all of them the same way, not just the blank-kind trigger.
+    // must recover from all of them the same way.
     configureDeltaActionPort({
       applyDeltaAction: (args, applyCtx) =>
         args.action.kind === 'createHappening'
@@ -808,6 +817,63 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
       .from(branches)
       .where(eq(branches.id, 'b1'))
     expect(row.status).toMatchObject({ state: 'retrying', retryCount: 1 })
-    expect(row.status?.lastError).not.toBeNull()
+    expect(row.status?.lastError).toBe('classifier: forced test rejection')
+  })
+
+  // If the reversal itself cannot commit, the pass's write attempt is still on
+  // disk; arming a retry over it would race a retry pass into re-reading it.
+  // The branch must stay at `running` so resetStuckClassifierRunState — not the
+  // ordinary backoff — is what reconciles it at the next boot.
+  it('leaves running when the reversal itself cannot commit, deferring to boot recovery', async () => {
+    const { db, runInTransaction } = await seedApplyTimeHarness()
+    const fixedActionId = 'act_classifier_poison'
+    await db.insert(deltas).values({
+      id: 'd_classifier_poison',
+      branchId: 'b1',
+      entryId: null,
+      actionId: fixedActionId,
+      logPosition: 900,
+      source: 'ai_classifier',
+      targetTable: 'not_a_registered_table',
+      targetId: 'x',
+      op: 'create',
+      undoPayload: null,
+      encodingVersion: 1,
+      createdAt: 1,
+    })
+
+    configureDeltaActionPort({
+      applyDeltaAction: (args, applyCtx) =>
+        args.action.kind === 'createHappening'
+          ? Promise.resolve({ status: 'rejected', reason: 'forced test rejection' })
+          : realApplyDeltaAction(args, applyCtx),
+      reverseReplayDeltas,
+      describeReplayError: describeDeltaReplayError,
+    })
+
+    ensurePeriodicClassifierPipelineRegistered()
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({
+        happenings: [{ title: 'A', sourceTurn: 't1', involvements: [], awareness: [] }],
+      }),
+    })
+
+    const ctx: RunCtx = {
+      storyId: 's1',
+      branchId: 'b1',
+      db,
+      runInTransaction,
+      actionId: fixedActionId,
+    }
+    const result = await runPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
+    if (result.outcome === 'rejected') throw new Error('unexpected rejected start')
+    expect(result.outcome).toBe('failed')
+
+    const [row] = await db
+      .select({ status: branches.classifierStatus })
+      .from(branches)
+      .where(eq(branches.id, 'b1'))
+    expect(row.status).toMatchObject({ state: 'running', retryCount: 0 })
   })
 })

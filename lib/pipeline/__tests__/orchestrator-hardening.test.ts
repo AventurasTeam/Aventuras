@@ -122,25 +122,86 @@ describe('orchestrator hardening', () => {
     expect(result.error?.kind).toBe('action-layer')
   })
 
-  it('runs onPhaseException for a rejected write, while the run is still registered', async () => {
+  it('runs onPhaseException for a rejected write, after rollback but before the run is released', async () => {
     const { ctx } = await makeHarness()
-    const seen: { kind?: string }[] = []
+    const seen: { kind?: string; runStillRegistered: boolean }[] = []
     definePipeline({
       kind: 'phase-exception',
       phases: [{ name: 'p', run: updateMissing }],
       onPhaseException: async (_hookCtx, error) => {
-        seen.push({ kind: error.kind })
-        // The hook must run before abortRun releases the run — that release is
-        // what drops the gate serializing this write against the phase's own.
-        expect(generationStore.getTxState().runs.size).toBeGreaterThan(0)
+        // Recorded as data, not asserted here: a failing expect() inside the
+        // hook is swallowed by the orchestrator's own try/catch around it and
+        // would never fail this test.
+        seen.push({
+          kind: error.kind,
+          runStillRegistered: generationStore.getTxState().runs.size > 0,
+        })
       },
       ...base,
     })
 
     const result = expectRan(await runPipeline('phase-exception', ctx))
 
-    expect(seen).toEqual([{ kind: 'action-layer' }])
+    expect(seen).toEqual([{ kind: 'action-layer', runStillRegistered: true }])
     expect(result.outcome).toBe('failed')
+  })
+
+  it('winds the run down even when onPhaseException throws', async () => {
+    const { ctx } = await makeHarness()
+    definePipeline({
+      kind: 'phase-exception-throws',
+      phases: [{ name: 'p', run: updateMissing }],
+      onPhaseException: async () => {
+        throw new Error('boom')
+      },
+      ...base,
+    })
+
+    const result = expectRan(await runPipeline('phase-exception-throws', ctx))
+
+    expect(result.outcome).toBe('failed')
+    expect(generationStore.getTxState().runs.size).toBe(0)
+  })
+
+  // A retry armed over writes an uncommitted reversal left on disk would let a
+  // retry pass re-read them; recovery must own that branch instead, so the
+  // hook must not fire when the reversal itself cannot commit.
+  it('does not run onPhaseException when the reversal itself cannot commit', async () => {
+    const { db, ctx } = await makeHarness()
+    // Fixed so the pre-seeded poison delta below shares the run's actionId —
+    // abortRun's reversal reverses every delta under that actionId together.
+    const fixedActionId = 'act_poison_throw'
+    await db.insert(deltas).values({
+      id: 'd_poison_throw',
+      branchId: 'b1',
+      entryId: null,
+      actionId: fixedActionId,
+      logPosition: 900,
+      source: 'ai_classifier',
+      targetTable: 'not_a_registered_table',
+      targetId: 'x',
+      op: 'create',
+      undoPayload: null,
+      encodingVersion: 1,
+      createdAt: 1,
+    })
+    let called = false
+    definePipeline({
+      kind: 'phase-exception-reversal-fails',
+      phases: [{ name: 'p', run: throwsDirectly }],
+      onPhaseException: async () => {
+        called = true
+      },
+      ...base,
+    })
+
+    const result = expectRan(
+      await runPipeline('phase-exception-reversal-fails', { ...ctx, actionId: fixedActionId }),
+    )
+
+    expect(called).toBe(false)
+    expect(result.outcome).toBe('failed')
+    expect(generationStore.getTxState().runs.size).toBe(0)
   })
 
   it('does not run onPhaseException for a phase that returns its own failed result', async () => {
