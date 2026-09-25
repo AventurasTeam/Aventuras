@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { Chapter, StoryEntry } from '$lib/types'
-import { renderLoreProse, loreChapterContext } from './newChapter'
+import { MIN_RECENT_ENTRIES_FOR_LORE, splitRecentTail } from '../retrieval/recentTail'
+import { renderLoreProse, loreChapterContext, loreRecentEntries } from './newChapter'
 
 function makeChapter(overrides: Partial<Chapter> = {}): Chapter {
   return {
@@ -60,6 +61,104 @@ describe('renderLoreProse', () => {
         makeEntry({ content: 'Kept.' }),
       ]),
     ).toBe('[NARRATIVE] Kept.')
+  })
+})
+
+describe('loreRecentEntries', () => {
+  const sized = (...lengths: number[]) =>
+    lengths.map((n, i) => makeEntry({ id: `e${i}`, content: 'x'.repeat(n) }))
+
+  describe('without a chapter', () => {
+    it('shows the newest entries the budget allows, above the floor', () => {
+      const tail = sized(3000, 3000, 3000, 3000, 3000, 3000, 80)
+      const { shown, continues } = loreRecentEntries(tail, 2048)
+      expect(shown).toEqual(splitRecentTail(tail, 2048, MIN_RECENT_ENTRIES_FOR_LORE).shown)
+      expect(shown).toEqual(tail.slice(-MIN_RECENT_ENTRIES_FOR_LORE))
+      expect(continues).toBe(false)
+    })
+
+    it('drops non-prose and blank entries before counting', () => {
+      const first = makeEntry({ id: 'first', content: 'first' })
+      const last = makeEntry({ id: 'last', content: 'last' })
+      const tail = [
+        makeEntry({ type: 'system' }),
+        first,
+        makeEntry({ content: '  ' }),
+        makeEntry({ type: 'retry' }),
+        last,
+      ]
+      expect(loreRecentEntries(tail, 1000).shown).toEqual([first, last])
+    })
+
+    it('returns nothing for an empty tail', () => {
+      expect(loreRecentEntries([], 1000)).toEqual({ shown: [], continues: false })
+    })
+  })
+
+  describe('after a chapter', () => {
+    it('takes exactly entryLimit entries from the chapter end, ignoring the budget', () => {
+      const tail = sized(3000, 3000, 3000, 3000, 3000, 3000, 3000, 80)
+      const { shown } = loreRecentEntries(tail, 100, { entryLimit: 7 })
+      expect(shown).toEqual(tail.slice(0, 7))
+    })
+
+    it('picks up where the chapter ended, not at the end of the story', () => {
+      // A chapter ending at entry 59 of 120 leaves entries 60-119 as the tail.
+      const tail = Array.from({ length: 60 }, (_, i) => makeEntry({ content: `entry ${60 + i}` }))
+      const { shown } = loreRecentEntries(tail, 100, { entryLimit: 10 })
+      expect(shown.map((e) => e.content)).toEqual(
+        Array.from({ length: 10 }, (_, i) => `entry ${60 + i}`),
+      )
+    })
+
+    it('without a limit, takes the oldest entries the budget allows', () => {
+      // 100 + 5 × 102 = 610 fits in 700; a seventh entry would not.
+      const tail = sized(100, 100, 100, 100, 100, 100, 100, 100, 100, 100)
+      expect(loreRecentEntries(tail, 700, {}).shown).toEqual(tail.slice(0, 6))
+    })
+
+    it('without a limit, still honours the floor', () => {
+      const tail = sized(3000, 3000, 3000, 3000, 3000, 3000, 3000, 80)
+      expect(loreRecentEntries(tail, 2048, {}).shown).toEqual(
+        tail.slice(0, MIN_RECENT_ENTRIES_FOR_LORE),
+      )
+    })
+
+    it('counts only entries the agent will actually see', () => {
+      const prose = sized(10, 10, 10, 10)
+      const tail = [
+        makeEntry({ content: ' ' }),
+        prose[0],
+        makeEntry({ type: 'system' }),
+        ...prose.slice(1),
+      ]
+      expect(loreRecentEntries(tail, 1000, { entryLimit: 3 }).shown).toEqual(prose.slice(0, 3))
+      expect(loreRecentEntries(tail, 1000, {}).shown).toEqual(prose)
+    })
+
+    it('shows nothing when the limit is 0 or negative', () => {
+      const tail = sized(10, 10, 10)
+      expect(loreRecentEntries(tail, 1000, { entryLimit: 0 }).shown).toEqual([])
+      expect(loreRecentEntries(tail, 1000, { entryLimit: -2 }).shown).toEqual([])
+    })
+
+    it('shows every entry when the limit exceeds the tail', () => {
+      const tail = sized(10, 10)
+      expect(loreRecentEntries(tail, 1000, { entryLimit: 5 }).shown).toEqual(tail)
+    })
+
+    it('returns nothing for an empty tail', () => {
+      expect(loreRecentEntries([], 1000, {})).toEqual({ shown: [], continues: false })
+    })
+
+    it('reports that the story continues only when the excerpt stops short', () => {
+      const tail = sized(10, 10, 10, 10)
+      expect(loreRecentEntries(tail, 1000, { entryLimit: 2 }).continues).toBe(true)
+      expect(loreRecentEntries(tail, 1000, { entryLimit: 4 }).continues).toBe(false)
+      expect(loreRecentEntries(tail, 1000, { entryLimit: 9 }).continues).toBe(false)
+      expect(loreRecentEntries(tail, 1000, {}).continues).toBe(false)
+      expect(loreRecentEntries(sized(10, 10, 10, 10, 10, 10, 10, 10), 25, {}).continues).toBe(true)
+    })
   })
 })
 
