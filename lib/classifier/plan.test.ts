@@ -775,7 +775,10 @@ describe('entity keywords', () => {
     expect(payloadOf<{ keywords: string[] }>(appends[1]).keywords).toEqual(['the innkeeper'])
   })
 
-  it('filters a later candidate against the terms a promote in the same reply added', () => {
+  // Reconciliation decides every namesake against the same snapshot status
+  // (reconcile.ts), so two candidates for one staged entity both come back
+  // 'promote' — never one 'promote' and one 'known'.
+  it('plans a repeated promote for a staged entity reconciliation decides promote twice, filtering the second append against the first', () => {
     const { planned } = buildClassifierActions(
       {
         happenings: [],
@@ -801,16 +804,17 @@ describe('entity keywords', () => {
         entities: [entityRow('char_kael', 'staged', 'Kael')] as never[],
         decisions: new Map<string, ReconcileDecision>([
           ['new:k1', { kind: 'promote', entityId: 'char_kael', similarity: 0.9 }],
-          ['new:k2', { kind: 'known', entityId: 'char_kael', similarity: 0.9 }],
+          ['new:k2', { kind: 'promote', entityId: 'char_kael', similarity: 0.9 }],
         ]),
       },
     )
     expect(planned.map((p) => p.action.kind)).toEqual([
       'promoteStagedEntity',
       'appendEntityKeywords',
+      'promoteStagedEntity',
       'appendEntityKeywords',
     ])
-    expect(payloadOf<{ keywords: string[] }>(planned[2]).keywords).toEqual(['the innkeeper'])
+    expect(payloadOf<{ keywords: string[] }>(planned[3]).keywords).toEqual(['the innkeeper'])
   })
 
   // Two guarded writes: a promotion the user pre-empted no-ops while the aliases still land.
