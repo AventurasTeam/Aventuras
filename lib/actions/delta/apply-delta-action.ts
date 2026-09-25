@@ -18,20 +18,20 @@ import { resolveByActionKind, resolveByTable, type HandlerOutcome } from './regi
 
 type Args = { action: PipelineAction; actionId: string; branchId: string; entryId?: string | null }
 
-// Every read-then-decide entity handler: loadCurrent then branch, inside the handler
-// rather than atomic with its write. Adding a kind here must add its handler to that shape.
-type GuardedEntityKind = 'promoteStagedEntity' | 'appendEntityKeywords' | 'retireEntity'
-
-const GUARDED_ENTITY_KINDS = new Set<PipelineAction['kind']>([
+// Read-then-decide entity handlers that concurrent writers can race; the lock
+// covers only a read made inside the handler.
+const GUARDED_ENTITY_KINDS = [
   'promoteStagedEntity',
   'appendEntityKeywords',
   'retireEntity',
-])
+] as const satisfies readonly PipelineAction['kind'][]
+type GuardedEntityKind = (typeof GUARDED_ENTITY_KINDS)[number]
+const GUARDED_ENTITY_KIND_SET: ReadonlySet<string> = new Set(GUARDED_ENTITY_KINDS)
 
 function isGuardedEntityAction(
   a: PipelineAction,
 ): a is Extract<PipelineAction, { kind: GuardedEntityKind }> {
-  return GUARDED_ENTITY_KINDS.has(a.kind)
+  return GUARDED_ENTITY_KIND_SET.has(a.kind)
 }
 
 // Single and group commits must derive this identically or they stop serializing
