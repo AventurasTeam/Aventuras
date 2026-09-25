@@ -8,18 +8,10 @@ export function normalizeTerm(s: string): string {
 
 /** Trimmed terms, one per `normalizeTerm` key with the first spelling kept; blanks dropped. */
 export function dedupeTerms(terms: readonly string[]): string[] {
-  const seen = new Set<string>()
-  const kept: string[] = []
-  for (const term of terms) {
-    const key = normalizeTerm(term)
-    if (key === '' || seen.has(key)) continue
-    seen.add(key)
-    kept.push(term.trim())
-  }
-  return kept
+  return newTerms([], terms)
 }
 
-/** `incoming` terms `current` lacks under `normalizeTerm`, trimmed, first spelling kept. */
+/** `incoming` terms `current` lacks under `normalizeTerm`, trimmed, first spelling kept; blanks dropped. */
 export function newTerms(current: readonly string[], incoming: readonly string[]): string[] {
   const seen = new Set(current.map(normalizeTerm))
   const added: string[] = []
