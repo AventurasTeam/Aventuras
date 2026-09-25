@@ -86,11 +86,18 @@ const MIRA = makeEntity({
   name: 'Mirabelle Ashgrove, Keeper of the Tidewater Ledgers',
   state: characterState({ faction_id: null }),
 })
+// The second agenda item alone is wider than the 440 px peek: its chip must wrap inside itself.
 const WATCH = makeEntity({
   id: 'fac_watch',
   kind: 'faction',
   name: 'The City Watch',
-  state: { standing: 'wary allies', agenda: ['keep the peace', 'curb the Syndicate'] },
+  state: {
+    standing: 'wary allies',
+    agenda: [
+      'keep the peace',
+      'break the Syndicate’s hold on every dock, warehouse and toll-gate along the Salt-Ash seawall',
+    ],
+  },
 })
 const KEY = makeEntity({
   id: 'item_key',
@@ -322,6 +329,27 @@ export const LocationPeekAt440: Story = {
   args: { entity: MARKET, variant: 'peek', width: 440 },
   play: async () => {
     const root = await screen.findByTestId('entity-overview', {}, WAIT)
+    await expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth)
+  },
+}
+
+/** Held by two long-named characters and placed at the long-named market. */
+export const ItemPeekAt440: Story = {
+  args: { entity: KEY, variant: 'peek', width: 440 },
+  play: async () => {
+    await expect(await screen.findByTestId('overview-held-by', {}, WAIT)).toBeVisible()
+    await expect(screen.getByRole('link', { name: MARKET.name })).toBeVisible()
+    const root = screen.getByTestId('entity-overview')
+    await expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth)
+  },
+}
+
+export const FactionPeekAt440: Story = {
+  args: { entity: WATCH, variant: 'peek', width: 440 },
+  play: async () => {
+    await expect(await screen.findByTestId('overview-agenda', {}, WAIT)).toBeVisible()
+    await expect(screen.getByRole('link', { name: KAEL.name })).toBeVisible()
+    const root = screen.getByTestId('entity-overview')
     await expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth)
   },
 }

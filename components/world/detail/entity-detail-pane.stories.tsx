@@ -542,10 +542,16 @@ export const CreateBlocked: Story = {
   },
 }
 
+const expectGateReason = (control: HTMLElement) =>
+  expect(control.closest('[title]')).toHaveAttribute('title', BLOCKED_REASON)
+
 /** Every control disables with the principle-owned tooltip while a turn is in flight. */
 export const EveryControlBlocked: Story = {
   args: { blocked: true },
   play: async () => {
+    const name = within(await screen.findByTestId('world-detail-name', {}, WAIT))
+    await expect(name.getByText('Kael')).toBeVisible()
+    await expect(name.queryByRole('button')).toBeNull()
     await userEvent.click(await screen.findByRole('tab', { name: /^Identity/ }, WAIT))
     await expect(await screen.findByRole('textbox', { name: 'Description' }, WAIT)).toHaveAttribute(
       'readonly',
@@ -556,9 +562,32 @@ export const EveryControlBlocked: Story = {
     const statuses = within(status).getAllByRole('radio')
     await expect(statuses).toHaveLength(3)
     for (const option of statuses) await expect(option).toHaveAttribute('aria-disabled', 'true')
-    await expect(status.closest('[title]')).toHaveAttribute('title', BLOCKED_REASON)
+    await expectGateReason(status)
+    const injection = screen.getByRole('radiogroup', { name: 'Injection' })
+    const modes = within(injection).getAllByRole('radio')
+    await expect(modes).toHaveLength(3)
+    for (const option of modes) await expect(option).toHaveAttribute('aria-disabled', 'true')
+    await expectGateReason(injection)
+    for (const label of ['Keywords', 'Priority', 'Tags']) {
+      const field = screen.getByRole('textbox', { name: label })
+      await expect(field).toHaveAttribute('readonly')
+      await expectGateReason(field)
+    }
     await userEvent.click(tab(/^Carrying/))
-    await expect(await screen.findByRole('button', { name: 'Add quantity' }, WAIT)).toBeDisabled()
+    const addQuantity = await screen.findByRole('button', { name: 'Add quantity' }, WAIT)
+    await expect(addQuantity).toBeDisabled()
+    await expectGateReason(addQuantity)
+    for (const label of ['Add equipped item', 'Add carried item']) {
+      const picker = screen.getByRole('button', { name: label })
+      await expect(picker).toBeDisabled()
+      await expectGateReason(picker)
+    }
+    const gold = within(screen.getByTestId('stackable-0'))
+    await expect(gold.getByRole('textbox', { name: 'Quantity' })).toHaveValue('gold')
+    await expect(gold.getByRole('textbox', { name: 'Quantity' })).toHaveAttribute('readonly')
+    const count = gold.getByRole('textbox', { name: 'Count' })
+    await expect(count).toHaveAttribute('readonly')
+    await expectGateReason(count)
     await userEvent.click(tab(/^Connections/))
     const location = await screen.findByRole('button', { name: /^Current location/ }, WAIT)
     await expect(location).toBeDisabled()
@@ -593,6 +622,25 @@ export const BlockedWhileDirty: Story = {
     await userEvent.click(within(bar).getByRole('button', { name: 'Discard' }))
     await waitFor(() => expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument(), WAIT)
     await expect(args.onSave).not.toHaveBeenCalled()
+  },
+}
+
+/** CHECK (kind IS NOT NULL OR inverse_kind IS NOT NULL): Save waits for one view on the card. */
+export const RelationshipWithoutAViewBlocksSave: Story = {
+  args: { row: MIRA },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
+    await userEvent.click(await screen.findByRole('button', { name: 'Add relationship' }, WAIT))
+    const card = within(await screen.findByTestId('relationship-0', {}, WAIT))
+    await userEvent.click(await card.findByRole('button', { name: 'Character' }, WAIT))
+    await userEvent.click(await screen.findByRole('option', { name: /Vorne/ }, WAIT))
+    const issue = 'Connections: Fill in at least one view.'
+    const save = () => within(saveBar()).getByRole('button', { name: /^Save/ })
+    await waitFor(() => expect(save()).toBeDisabled(), WAIT)
+    await expect(save().closest('[title]')).toHaveAttribute('title', issue)
+    await expect(within(saveBar()).getByRole('button', { name: issue })).toBeVisible()
+    await userEvent.type(card.getByRole('textbox', { name: 'Their view' }), 'rival')
+    await waitFor(() => expect(save()).toBeEnabled(), WAIT)
   },
 }
 
@@ -724,7 +772,171 @@ export const InvolvementsAndPlaceholders: Story = {
   },
 }
 
-export const Staged: Story = { args: { row: SAGE } }
+// The pane matrix (sparse / retired / staged per kind); populated is each kind's FieldRouting story.
+const NOT_DESCRIBED = '— not yet described —'
+
+async function expectEmptyRegion(testId: string, placeholder = NOT_DESCRIBED) {
+  const region = await screen.findByTestId(testId, {}, WAIT)
+  await expect(within(region).getByText(placeholder)).toBeVisible()
+}
+
+async function expectStatusPill(status: 'staged' | 'retired') {
+  const pill = await screen.findByTestId('overview-status', {}, WAIT)
+  await expect(within(pill).getByText(status)).toBeVisible()
+}
+
+/** Retired shows its reason on the pill, and Settings opens the reason for edit. */
+async function expectRetired(reason: string) {
+  await expectStatusPill('retired')
+  await expect(within(screen.getByTestId('overview-status')).getByText(`— ${reason}`)).toBeVisible()
+  await userEvent.click(tab(/^Settings/))
+  const field = await screen.findByRole('textbox', { name: 'Retired reason' }, WAIT)
+  await expect(field).toHaveValue(reason)
+  await expect(field).not.toHaveAttribute('readonly')
+}
+
+export const Staged: Story = {
+  args: { row: SAGE },
+  play: async () => {
+    await expectStatusPill('staged')
+  },
+}
+
 export const Sparse: Story = {
   args: { row: makeEntity({ id: 'char_new', kind: 'character', name: 'Nobody', state: null }) },
+  play: async () => {
+    await expectEmptyRegion('overview-visual')
+    await expectEmptyRegion('overview-traits')
+    await expectEmptyRegion('overview-carrying')
+  },
+}
+
+export const LocationSparse: Story = {
+  args: {
+    kind: 'location',
+    row: makeEntity({ id: 'loc_new', kind: 'location', name: 'Unmapped cove' }),
+  },
+  play: async () => {
+    await expectEmptyRegion('overview-part-of')
+    await expectEmptyRegion('overview-condition')
+    await expectEmptyRegion('overview-characters-here', 'None')
+  },
+}
+
+export const LocationRetired: Story = {
+  args: {
+    kind: 'location',
+    row: makeEntity({
+      id: 'loc_lighthouse',
+      kind: 'location',
+      name: 'The Old Lighthouse',
+      status: 'retired',
+      retiredReason: 'swallowed by the tide',
+      state: { parent_location_id: null },
+    }),
+  },
+  play: async () => {
+    await expectRetired('swallowed by the tide')
+  },
+}
+
+export const LocationStaged: Story = {
+  args: {
+    kind: 'location',
+    row: makeEntity({
+      id: 'loc_vault',
+      kind: 'location',
+      name: 'The Sealed Vault',
+      status: 'staged',
+      state: { parent_location_id: null },
+    }),
+  },
+  play: async () => {
+    await expectStatusPill('staged')
+  },
+}
+
+export const ItemSparse: Story = {
+  args: { kind: 'item', row: makeEntity({ id: 'item_new', kind: 'item', name: 'Unmarked crate' }) },
+  play: async () => {
+    await expectEmptyRegion('overview-condition')
+    await expectEmptyRegion('overview-position')
+    await expect(screen.queryByTestId('overview-held-by')).toBeNull()
+  },
+}
+
+export const ItemRetired: Story = {
+  args: {
+    kind: 'item',
+    row: makeEntity({
+      id: 'item_lantern',
+      kind: 'item',
+      name: 'Cracked lantern',
+      status: 'retired',
+      retiredReason: 'shattered in the fire',
+      state: { at_location_id: null },
+    }),
+  },
+  play: async () => {
+    await expectRetired('shattered in the fire')
+  },
+}
+
+export const ItemStaged: Story = {
+  args: {
+    kind: 'item',
+    row: makeEntity({
+      id: 'item_chart',
+      kind: 'item',
+      name: 'Sea chart',
+      status: 'staged',
+      state: { at_location_id: null },
+    }),
+  },
+  play: async () => {
+    await expectStatusPill('staged')
+  },
+}
+
+export const FactionSparse: Story = {
+  args: {
+    kind: 'faction',
+    row: makeEntity({ id: 'fac_new', kind: 'faction', name: 'Unnamed guild' }),
+  },
+  play: async () => {
+    await expectEmptyRegion('overview-standing')
+    await expectEmptyRegion('overview-agenda')
+    await expectEmptyRegion('overview-members', 'None')
+  },
+}
+
+export const FactionRetired: Story = {
+  args: {
+    kind: 'faction',
+    row: makeEntity({
+      id: 'fac_syndicate',
+      kind: 'faction',
+      name: 'The Tide Syndicate',
+      status: 'retired',
+      retiredReason: 'disbanded after the raid',
+    }),
+  },
+  play: async () => {
+    await expectRetired('disbanded after the raid')
+  },
+}
+
+export const FactionStaged: Story = {
+  args: {
+    kind: 'faction',
+    row: makeEntity({
+      id: 'fac_order',
+      kind: 'faction',
+      name: 'The Lantern Order',
+      status: 'staged',
+    }),
+  },
+  play: async () => {
+    await expectStatusPill('staged')
+  },
 }
