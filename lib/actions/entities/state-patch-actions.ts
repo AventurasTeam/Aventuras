@@ -3,7 +3,6 @@ import { and, eq } from 'drizzle-orm'
 import {
   entities,
   entityStateColumnSchema,
-  entityWriteSchema,
   type CharacterState,
   type Entity,
   type EntityState,
@@ -228,13 +227,14 @@ export const appendEntityKeywordsHandler: ActionHandler = async (action, branchI
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const current = await loadCurrent(bid, id, ctx)
   if (!current)
-    return { status: 'rejected', reason: `keyword target entities ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `keyword target entities ${bid}:${id} not found`,
+      code: 'noop',
+    }
   const added = newTerms(current.keywords, keywords)
   if (added.length === 0) return { status: 'rejected', reason: 'no-new-keywords', code: 'noop' }
   const next = [...current.keywords, ...added]
-  const parsed = entityWriteSchema.partial().safeParse({ keywords: next })
-  if (!parsed.success)
-    return { status: 'rejected', reason: `invalid keywords: ${parsed.error.message}` }
   return {
     status: 'ok',
     targetTable: 'entities',
@@ -261,12 +261,13 @@ export const retireEntityHandler: ActionHandler = async (action, branchId, ctx) 
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const current = await loadCurrent(bid, id, ctx)
   if (!current)
-    return { status: 'rejected', reason: `retire target entities ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `retire target entities ${bid}:${id} not found`,
+      code: 'noop',
+    }
   if (current.status !== 'active') return { status: 'rejected', reason: 'not-active', code: 'noop' }
   const columns = { status: 'retired' as const, retiredReason }
-  const parsed = entityWriteSchema.partial().safeParse(columns)
-  if (!parsed.success)
-    return { status: 'rejected', reason: `invalid retirement: ${parsed.error.message}` }
   return {
     status: 'ok',
     targetTable: 'entities',

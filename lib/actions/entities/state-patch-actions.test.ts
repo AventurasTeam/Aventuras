@@ -401,7 +401,7 @@ describe('appendEntityKeywords', () => {
     ])
   })
 
-  it('does not bring back an alias the user removed mid-pass', async () => {
+  it('extends the live list, so an alias removed mid-pass stays out when the payload omits it', async () => {
     const { db, ctx } = await setup()
     await apply(
       ctx,
@@ -450,6 +450,35 @@ describe('appendEntityKeywords', () => {
     expect(await reverseReplayDeltas('act_k', ctx)).toBe(1)
     expect((await rowFor(db, 'char_1')).keywords).toEqual(['the knight'])
   })
+
+  it('no-ops when the target row is gone, same as any other row the pass read stale', async () => {
+    const { ctx } = await setup()
+    expect(await apply(ctx, append(['the wanderer']), 'act_k')).toEqual({
+      status: 'rejected',
+      reason: 'keyword target entities br_1:char_1 not found',
+      code: 'noop',
+    })
+  })
+
+  it('serializes two concurrent appends onto the same row: both land, in either order', async () => {
+    const { db, ctx } = await setup()
+    await apply(
+      ctx,
+      {
+        kind: 'createEntity',
+        source: 'user_edit',
+        payload: { entry: { ...CHAR, keywords: ['the knight'] } },
+      },
+      'act_c',
+    )
+    await Promise.all([
+      apply(ctx, append(['the wanderer']), 'act_k1'),
+      apply(ctx, append(['the drunk']), 'act_k2'),
+    ])
+    expect((await rowFor(db, 'char_1')).keywords.slice().sort()).toEqual(
+      ['the drunk', 'the knight', 'the wanderer'].sort(),
+    )
+  })
 })
 
 describe('retireEntity', () => {
@@ -472,6 +501,22 @@ describe('retireEntity', () => {
     expect(row.status).toBe('retired')
     expect(row.retiredReason).toBe('fell at the ford')
     expect(entitiesStore.getById('char_1')?.status).toBe('retired')
+    expect(entitiesStore.getById('char_1')?.retiredReason).toBe('fell at the ford')
+  })
+
+  it('clears a leftover retiredReason when retiring with no reason given', async () => {
+    const { db, ctx } = await setup()
+    await apply(
+      ctx,
+      {
+        kind: 'createEntity',
+        source: 'user_edit',
+        payload: { entry: { ...ACTIVE, retiredReason: 'old' } },
+      },
+      'act_c',
+    )
+    expect((await apply(ctx, retire(null), 'act_r')).status).toBe('ok')
+    expect((await rowFor(db, 'char_1')).retiredReason).toBeNull()
   })
 
   it("no-ops on a row the user retired mid-pass, keeping the user's reason", async () => {
@@ -518,5 +563,14 @@ describe('retireEntity', () => {
     const row = await rowFor(db, 'char_1')
     expect(row.status).toBe('active')
     expect(row.retiredReason).toBeNull()
+  })
+
+  it('no-ops when the target row is gone, same as any other row the pass read stale', async () => {
+    const { ctx } = await setup()
+    expect(await apply(ctx, retire('fell at the ford'), 'act_r')).toEqual({
+      status: 'rejected',
+      reason: 'retire target entities br_1:char_1 not found',
+      code: 'noop',
+    })
   })
 })

@@ -18,10 +18,26 @@ import { resolveByActionKind, resolveByTable, type HandlerOutcome } from './regi
 
 type Args = { action: PipelineAction; actionId: string; branchId: string; entryId?: string | null }
 
+// Every read-then-decide entity handler: loadCurrent then branch, inside the handler
+// rather than atomic with its write. Adding a kind here must add its handler to that shape.
+type GuardedEntityKind = 'promoteStagedEntity' | 'appendEntityKeywords' | 'retireEntity'
+
+const GUARDED_ENTITY_KINDS = new Set<PipelineAction['kind']>([
+  'promoteStagedEntity',
+  'appendEntityKeywords',
+  'retireEntity',
+])
+
+function isGuardedEntityAction(
+  a: PipelineAction,
+): a is Extract<PipelineAction, { kind: GuardedEntityKind }> {
+  return GUARDED_ENTITY_KINDS.has(a.kind)
+}
+
 // Single and group commits must derive this identically or they stop serializing
 // against each other.
-function promoteStagedEntityLockKey(branchId: string, id: string): string {
-  return `promoteStagedEntity:${branchId}:${id}`
+function guardedEntityLockKey(kind: GuardedEntityKind, branchId: string, id: string): string {
+  return `${kind}:${branchId}:${id}`
 }
 
 export async function applyDeltaAction(args: Args, ctx: DbCtx): Promise<MutationResult> {
@@ -34,12 +50,11 @@ export async function applyDeltaAction(args: Args, ctx: DbCtx): Promise<Mutation
       code: 'reversal-in-progress',
       reason: 'prose reversal in progress',
     }
-  // Opting in here covers promoteStagedEntity because its read-then-decide
-  // (loadCurrent, then branch on status) lives inside its handler. An action
-  // whose read happens before dispatch must take the lock itself.
-  if (action.kind === 'promoteStagedEntity') {
-    return withKeyLock(promoteStagedEntityLockKey(action.payload.branchId, action.payload.id), () =>
-      applyDeltaActionUnlocked(args, ctx),
+  // An action whose read happens before dispatch must take the lock itself.
+  if (isGuardedEntityAction(action)) {
+    return withKeyLock(
+      guardedEntityLockKey(action.kind, action.payload.branchId, action.payload.id),
+      () => applyDeltaActionUnlocked(args, ctx),
     )
   }
   return applyDeltaActionUnlocked(args, ctx)
@@ -100,12 +115,10 @@ export type DeltaGroupResult =
 
 type GroupArgs = { actionId: string; branchId: string; entryId?: string | null }
 
-function promoteLockKeys(actions: readonly PipelineAction[]): string[] {
-  const keys = actions.flatMap((a) =>
-    a.kind === 'promoteStagedEntity'
-      ? [promoteStagedEntityLockKey(a.payload.branchId, a.payload.id)]
-      : [],
-  )
+function guardedEntityLockKeys(actions: readonly PipelineAction[]): string[] {
+  const keys = actions
+    .filter(isGuardedEntityAction)
+    .map((a) => guardedEntityLockKey(a.kind, a.payload.branchId, a.payload.id))
   // Sorted so two groups sharing a subset of keys acquire them in the same order.
   return [...new Set(keys)].sort()
 }
@@ -127,7 +140,7 @@ export async function applyDeltaActionGroup(
   args: GroupArgs,
   ctx: DbCtx,
 ): Promise<DeltaGroupResult> {
-  return withKeyLocks(promoteLockKeys(actions), () =>
+  return withKeyLocks(guardedEntityLockKeys(actions), () =>
     applyDeltaActionGroupUnlocked(actions, args, ctx),
   )
 }
