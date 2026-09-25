@@ -173,6 +173,7 @@
   },
   "picker": {
     "clear": "Clear selection",
+    "open": "Open {{name}}",
     "fieldLabel": "{{label}}: {{value}}",
     "entitySearch": "Search entities…",
     "entityNoResults": "No matching entities.",

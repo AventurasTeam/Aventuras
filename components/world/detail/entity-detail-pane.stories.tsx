@@ -356,7 +356,7 @@ export const CharacterFieldRouting: Story = {
 /** Location: no Carrying tab; Identity has condition; Connections has the parent picker. */
 export const LocationFieldRouting: Story = {
   args: { kind: 'location', row: MARKET },
-  play: async () => {
+  play: async ({ args }) => {
     await expect(
       within(await screen.findByRole('tablist', {}, WAIT)).queryByRole('tab', {
         name: /^Carrying/,
@@ -370,6 +370,8 @@ export const LocationFieldRouting: Story = {
     await expect(
       await screen.findByRole('button', { name: 'Part of: Veil’s Hollow' }, WAIT),
     ).toBeVisible()
+    await userEvent.click(screen.getByRole('button', { name: 'Open Veil’s Hollow' }))
+    await expect(args.onOpenEntity).toHaveBeenCalledWith('loc_hollow')
     await expect(screen.getByRole('link', { name: 'Kael' })).toBeVisible()
     // Mira stands in Veil’s Hollow, the Blade lies nowhere: neither belongs to the market.
     await expect(screen.queryByRole('link', { name: 'Mira' })).toBeNull()
@@ -592,6 +594,7 @@ export const EveryControlBlocked: Story = {
     const location = await screen.findByRole('button', { name: /^Current location/ }, WAIT)
     await expect(location).toBeDisabled()
     await expect(location.closest('[title]')).toHaveAttribute('title', BLOCKED_REASON)
+    await expect(screen.getByRole('button', { name: 'Open The Drowned Market' })).toBeEnabled()
     // A disabled ListRow drops its button role (list-row.stories.tsx → DisabledDoesNotFire).
     await expect(screen.getByText('Add relationship')).toBeVisible()
     await expect(screen.queryByRole('button', { name: 'Add relationship' })).not.toBeInTheDocument()
@@ -734,7 +737,7 @@ export const PhoneSelectTabs: Story = {
 /** Item: an at-location picker and the derived Held by list (both shown when they disagree). */
 export const ItemFieldRouting: Story = {
   args: { kind: 'item', row: KEY },
-  play: async () => {
+  play: async ({ args }) => {
     await expect(
       within(await screen.findByRole('tablist', {}, WAIT)).queryByRole('tab', {
         name: /^Carrying/,
@@ -744,8 +747,42 @@ export const ItemFieldRouting: Story = {
     await expect(
       await screen.findByRole('button', { name: 'At location: The Drowned Market' }, WAIT),
     ).toBeVisible()
+    await userEvent.click(screen.getByRole('button', { name: 'Open The Drowned Market' }))
+    await expect(args.onOpenEntity).toHaveBeenCalledWith('loc_market')
     await expect(screen.getByRole('link', { name: 'Kael' })).toBeVisible()
     await expect(screen.queryByRole('link', { name: 'Mira' })).toBeNull()
+  },
+}
+
+/** Connections' pickers carry the jump to their entity; the Overview names don't link. */
+export const ConnectionsPickersOpenTheirEntity: Story = {
+  play: async ({ args }) => {
+    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Open The Drowned Market' }, WAIT),
+    )
+    await expect(args.onOpenEntity).toHaveBeenLastCalledWith('loc_market')
+    const open = screen.getByRole('button', { name: 'Open The City Watch' })
+    await userEvent.click(open)
+    await expect(args.onOpenEntity).toHaveBeenLastCalledWith('fac_watch')
+    // 20px between the ↗ and the × keeps their 44px phone touch zones apart.
+    const field = screen.getByRole('button', { name: 'Faction: The City Watch' }).parentElement!
+    const clear = within(field).getByRole('button', { name: 'Clear selection' })
+    await expect(
+      clear.getBoundingClientRect().left - open.getBoundingClientRect().right,
+    ).toBeGreaterThanOrEqual(20)
+  },
+}
+
+/** An empty picker keeps the ↗'s slot but hides it. */
+export const ConnectionsEmptyPickerHidesOpen: Story = {
+  args: { row: makeEntity({ id: 'char_new', kind: 'character', name: 'Nobody', state: null }) },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
+    await expect(
+      await screen.findByRole('button', { name: 'Current location' }, WAIT),
+    ).toBeVisible()
+    await expect(screen.queryByRole('button', { name: /^Open / })).toBeNull()
   },
 }
 

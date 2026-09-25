@@ -204,7 +204,7 @@ the asset gallery pass` / `lands in Slice 4.2b`).
   Save and selects it; the create form respects `isUserEditBlocked`
   (component test).
 - Pressing the visual line lands Identity, the carrying summary lands
-  Carrying, the location link lands Connections, per kind (component
+  Carrying, the location region lands Connections, per kind (component
   test on `onRegionPress`).
 - Every control disables during an in-flight turn with the
   `Generation is in flight. Cancel to edit.` tooltip (component test
@@ -268,11 +268,19 @@ the asset gallery pass` / `lands in Slice 4.2b`).
   [parked](../../../../parked.md#a-dirty-links-array-on-save-overwrites-concurrent-link-writes)).
   Touched `keywords` still overwrite a classifier append (accepted,
   last writer wins).
-- **Overview press targets are siblings.** Entity names call
-  `onOpenEntity(id)` (World: a guarded row switch, crossing kinds);
-  region labels and content call `onRegionPress(tab)`.
-  [Slice 4.5b](./05b-peek-drawer.md) projects `EntityOverview` with
-  both props.
+- **Overview regions are single targets; entity navigation lives in
+  Connections (manual review, 2026-09-25).** The first cut made each
+  entity name a link beside a region label that opened Connections;
+  the label-as-link read as non-obvious, and on phone the two stacked
+  44 px floors opened a wide gap between label and name. Every region
+  naming entities (in, with, part of, characters and items here, held
+  by, position, members) now renders the names as text and opens its
+  edit tab; `EntityOverview` dropped `onOpenEntity`, so
+  [Slice 4.5b](./05b-peek-drawer.md) projects it with `onRegionPress`
+  alone. Connections' entity pickers gained an open action
+  (`PickerField`'s external-link icon, 20 px before the clear `×`,
+  live while edits are blocked); the inverse lists already linked.
+  `world.md` amended.
 - **Last seen is in-world.** Elapsed seconds since
   `lastSeenAt.worldTime`, counted in the calendar's largest
   fixed-length tier (`largestWholeTier`); a backwards span is omitted.

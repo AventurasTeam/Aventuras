@@ -101,7 +101,7 @@ export function CharacterDetailPane({
       hotkeysEnabled={hotkeysEnabled}
       {...gate}
     >
-      <OverviewTab row={row} data={data} onRegionPress={setTab} onOpenEntity={onOpenEntity} />
+      <OverviewTab row={row} data={data} onRegionPress={setTab} />
       <TabsContent value="identity">
         <CharacterIdentity control={control} {...gate} />
       </TabsContent>
@@ -121,6 +121,7 @@ export function CharacterDetailPane({
           selfId={row?.id ?? null}
           entities={data.entities}
           lastSeen={row == null ? null : lastSeenLine(stateOf(row, 'character'), data)}
+          onOpenEntity={onOpenEntity}
           {...gate}
         />
       </TabsContent>

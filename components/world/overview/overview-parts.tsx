@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { Fragment, type ReactNode } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
 import { EntityKindIcon } from '@/components/entity/entity-kind-icon'
@@ -24,7 +24,6 @@ export type KindBodyProps = {
   worldTime: number
   calendar: CalendarSystem
   onRegionPress: RegionPress
-  onOpenEntity: (id: string) => void
 }
 
 const PRESSABLE = cn(
@@ -125,13 +124,12 @@ export function EntityLink({ entity, onPress }: { entity: Entity; onPress: () =>
   )
 }
 
-type LinkRegionProps = {
+type NamesRegionProps = {
   label: string
   tab: EntityTab
   onRegionPress: RegionPress
   /** Resolved targets; null is a dangling id. */
   targets: readonly (Entity | null)[]
-  onOpenEntity: (id: string) => void
   meta?: string
   joiner?: string
   /** An inverse list has nothing to add from here: it says "None" instead of "add →". */
@@ -139,79 +137,58 @@ type LinkRegionProps = {
   testID: string
 }
 
-/** Label opens the edit tab, each name its entity: sibling targets, never a link in a button. */
-export function LinkRegion({
+/** Names as text, not links: the whole region opens its edit tab, where each name links out. */
+export function NamesRegion({
   label,
   tab,
   onRegionPress,
   targets,
-  onOpenEntity,
   meta,
   joiner = ', ',
   derived = false,
   testID,
-}: LinkRegionProps) {
-  const pressBox = usePressBox()
-  // No links to keep apart: one press target, like any other empty region.
-  if (targets.length === 0 && !derived) {
-    return (
-      <View testID={testID}>
-        <Region
-          label={label}
-          tab={tab}
-          onRegionPress={onRegionPress}
-          empty
-          testID={`${testID}-label`}
-        />
-        {meta != null ? (
-          <Text size="xs" variant="muted" className="px-1">
-            {meta}
-          </Text>
-        ) : null}
-      </View>
+}: NamesRegionProps) {
+  const metaText =
+    meta == null ? null : (
+      <Text size="xs" variant="muted">
+        {targets.length === 0 ? meta : ` · ${meta}`}
+      </Text>
     )
-  }
   return (
-    <View className="gap-1 px-1 py-2" testID={testID}>
-      <Pressable
-        testID={`${testID}-label`}
-        accessibilityRole="button"
-        aria-label={regionName(label, tab)}
-        onPress={() => onRegionPress(tab)}
-        className={cn('self-start', pressBox)}
-      >
-        <RegionLabel label={label} />
-      </Pressable>
+    <Region label={label} tab={tab} onRegionPress={onRegionPress} empty={false} testID={testID}>
       {targets.length === 0 ? (
-        <Text size="sm" variant="muted">
-          {t('world:connections.none')}
-        </Text>
+        <>
+          {derived ? (
+            <Text size="sm" variant="muted">
+              {t('world:connections.none')}
+            </Text>
+          ) : (
+            <NotDescribed />
+          )}
+          {metaText}
+        </>
       ) : (
-        <View className="min-w-0 flex-row flex-wrap items-baseline">
+        <Text size="sm">
           {targets.map((entity, i) => (
-            <View key={entity?.id ?? `missing-${i}`} className="max-w-full flex-row items-baseline">
+            <Fragment key={entity?.id ?? `missing-${i}`}>
               {i > 0 ? (
                 <Text size="sm" variant="muted">
                   {joiner}
                 </Text>
               ) : null}
               {entity != null ? (
-                <EntityLink entity={entity} onPress={() => onOpenEntity(entity.id)} />
+                entity.name
               ) : (
                 <Text size="sm" className="text-warning">
                   {t('world:entityMissing')}
                 </Text>
               )}
-            </View>
+            </Fragment>
           ))}
-          {meta != null ? (
-            <Text size="xs" variant="muted">
-              {` · ${meta}`}
-            </Text>
-          ) : null}
-        </View>
+          {metaText}
+        </Text>
       )}
-    </View>
+    </Region>
   )
 }
 

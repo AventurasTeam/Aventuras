@@ -2,17 +2,12 @@ import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
 import { chipPreview, membersOf, stateOf } from '@/lib/world'
 
-import { ChipRow, LinkRegion, Region, type KindBodyProps } from './overview-parts'
+import { ChipRow, NamesRegion, Region, type KindBodyProps } from './overview-parts'
 
 const PREVIEW = 3
 
 // world.md → Faction Overview.
-export function FactionOverviewBody({
-  entity,
-  entities,
-  onRegionPress,
-  onOpenEntity,
-}: KindBodyProps) {
+export function FactionOverviewBody({ entity, entities, onRegionPress }: KindBodyProps) {
   const state = stateOf(entity, 'faction')
   const standing = state.standing?.trim() ?? ''
   const agenda = chipPreview(state.agenda ?? [])
@@ -37,7 +32,7 @@ export function FactionOverviewBody({
       >
         <ChipRow preview={agenda} />
       </Region>
-      <LinkRegion
+      <NamesRegion
         label={t('labelWithCount', { label: t('world:overview.members'), value: members.length })}
         tab="connections"
         onRegionPress={onRegionPress}
@@ -48,7 +43,6 @@ export function FactionOverviewBody({
             : undefined
         }
         derived
-        onOpenEntity={onOpenEntity}
         testID="overview-members"
       />
     </>

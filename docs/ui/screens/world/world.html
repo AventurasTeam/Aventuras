@@ -868,14 +868,14 @@
             </div>
           </div>
 
-          <!-- Position + affiliation — Connections refs surfaced inline. Click links → those entities. -->
-          <div style="padding: 10px 0; border-top: 1px solid var(--line-soft);">
+          <!-- Position + affiliation — Connections refs surfaced inline as text. Click → Connections, where each picker opens its entity. -->
+          <div style="cursor: pointer; padding: 10px 0; border-top: 1px solid var(--line-soft);" title="Edit in Connections">
             <div style="font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 3px;">In</div>
-            <div style="font-size: 13px;"><a style="color: var(--ink); text-decoration: underline; text-decoration-style: dotted; cursor: pointer;">The Iron Tavern</a> &middot; <span style="color: var(--ink-muted); font-size: 11px;">last seen 2 days ago</span></div>
+            <div style="font-size: 13px;">The Iron Tavern &middot; <span style="color: var(--ink-muted); font-size: 11px;">last seen 2 days ago</span></div>
           </div>
-          <div style="padding: 10px 0;">
+          <div style="cursor: pointer; padding: 10px 0;" title="Edit in Connections">
             <div style="font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 3px;">With</div>
-            <div style="font-size: 13px;"><a style="color: var(--ink); text-decoration: underline; text-decoration-style: dotted; cursor: pointer;">Ironshore Bounty Guild</a></div>
+            <div style="font-size: 13px;">Ironshore Bounty Guild</div>
           </div>
 
           <!-- Carrying summary. Click → Carrying tab. -->
@@ -1174,9 +1174,14 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
         <div class="field-label">current_location_id
           <span class="type-hint">EntityId (location)</span>
         </div>
-        <div class="input-picker picked-state">
-          <span class="picked">The Iron Tavern</span>
-          <span style="color: var(--ink-faint);">change&hellip;</span>
+        <!-- Open (external-link icon) before clear ×, 20px apart so their phone touch zones don't overlap. -->
+        <div style="display: flex; align-items: center;">
+          <div class="input-picker picked-state" style="flex: 1;">
+            <span class="picked">The Iron Tavern</span>
+            <span style="color: var(--ink-faint);">change&hellip;</span>
+          </div>
+          <span style="margin-left: 4px; cursor: pointer; color: var(--ink-muted);" title="Open The Iron Tavern">&#8599;</span>
+          <span style="margin-left: 20px; cursor: pointer; color: var(--ink-muted);" title="Clear selection">&times;</span>
         </div>
       </div>
 
@@ -1185,9 +1190,13 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
         <div class="field-label">faction_id
           <span class="type-hint">EntityId (faction) &middot; optional</span>
         </div>
-        <div class="input-picker picked-state">
-          <span class="picked">Ironshore Bounty Guild</span>
-          <span style="color: var(--ink-faint);">change&hellip;</span>
+        <div style="display: flex; align-items: center;">
+          <div class="input-picker picked-state" style="flex: 1;">
+            <span class="picked">Ironshore Bounty Guild</span>
+            <span style="color: var(--ink-faint);">change&hellip;</span>
+          </div>
+          <span style="margin-left: 4px; cursor: pointer; color: var(--ink-muted);" title="Open Ironshore Bounty Guild">&#8599;</span>
+          <span style="margin-left: 20px; cursor: pointer; color: var(--ink-muted);" title="Clear selection">&times;</span>
         </div>
       </div>
 

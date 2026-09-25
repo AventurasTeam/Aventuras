@@ -73,7 +73,7 @@ export function LocationDetailPane({
       hotkeysEnabled={hotkeysEnabled}
       {...gate}
     >
-      <OverviewTab row={row} data={data} onRegionPress={setTab} onOpenEntity={onOpenEntity} />
+      <OverviewTab row={row} data={data} onRegionPress={setTab} />
       <TabsContent value="identity">
         <LocationIdentity control={control} {...gate} />
       </TabsContent>

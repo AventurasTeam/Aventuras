@@ -57,6 +57,7 @@ export function CharacterConnections({
   selfId,
   entities,
   lastSeen,
+  onOpenEntity,
   blocked,
   blockedReason,
 }: Shared &
@@ -64,6 +65,7 @@ export function CharacterConnections({
     control: Control<CharacterDraft>
     trigger: UseFormTrigger<CharacterDraft>
     lastSeen: string | null
+    onOpenEntity: (id: string) => void
   }) {
   const gate = { blocked, blockedReason }
   return (
@@ -76,6 +78,7 @@ export function CharacterConnections({
           placeholder={t('world:fields.locationPlaceholder')}
           entities={entities}
           kinds={LOCATION}
+          onOpenEntity={onOpenEntity}
           {...gate}
         />
       </Section>
@@ -87,6 +90,7 @@ export function CharacterConnections({
           placeholder={t('world:fields.factionPlaceholder')}
           entities={entities}
           kinds={FACTION}
+          onOpenEntity={onOpenEntity}
           {...gate}
         />
       </Section>
@@ -133,6 +137,7 @@ export function LocationConnections({
           kinds={LOCATION}
           excludeIds={selfId == null ? [] : [selfId]}
           testID="parent-location"
+          onOpenEntity={onOpenEntity}
           blocked={blocked}
           blockedReason={blockedReason}
         />
@@ -175,6 +180,7 @@ export function ItemConnections({
           placeholder={t('world:fields.locationPlaceholder')}
           entities={entities}
           kinds={LOCATION}
+          onOpenEntity={onOpenEntity}
           blocked={blocked}
           blockedReason={blockedReason}
         />

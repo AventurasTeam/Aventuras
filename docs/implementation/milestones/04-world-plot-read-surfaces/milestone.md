@@ -553,7 +553,7 @@ use.
   the World panel lists the classifier-created entities with the
   fresh / fading tint on the rows it wrote this turn and last; opening
   a character shows its Overview glance card with resolved location
-  and faction links; editing `description` on Identity and saving
+  and faction names; editing `description` on Identity and saving
   writes one delta group under a single `action_id` (verified in the
   DB); CTRL-Z in the reader reverses it; the entity's History tab
   lists the edit and the classifier's earlier writes.

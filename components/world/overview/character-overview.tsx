@@ -3,7 +3,7 @@ import { t } from '@/lib/i18n'
 import { carryingSummary, chipPreview, lastSeenSpan, stateOf, visualParts } from '@/lib/world'
 
 import { lastSeenText } from '../world-copy'
-import { ChipRow, LinkRegion, Region, type KindBodyProps } from './overview-parts'
+import { ChipRow, NamesRegion, Region, type KindBodyProps } from './overview-parts'
 
 // world.md → Character Overview (top-down).
 export function CharacterOverviewBody({
@@ -12,7 +12,6 @@ export function CharacterOverviewBody({
   worldTime,
   calendar,
   onRegionPress,
-  onOpenEntity,
 }: KindBodyProps) {
   const state = stateOf(entity, 'character')
   const byId = new Map(entities.map((e) => [e.id, e]))
@@ -55,21 +54,19 @@ export function CharacterOverviewBody({
       >
         <ChipRow preview={drives} />
       </Region>
-      <LinkRegion
+      <NamesRegion
         label={t('world:overview.in')}
         tab="connections"
         onRegionPress={onRegionPress}
         targets={location}
         meta={lastSeen ?? undefined}
-        onOpenEntity={onOpenEntity}
         testID="overview-in"
       />
-      <LinkRegion
+      <NamesRegion
         label={t('world:overview.with')}
         tab="connections"
         onRegionPress={onRegionPress}
         targets={faction}
-        onOpenEntity={onOpenEntity}
         testID="overview-with"
       />
       <Region

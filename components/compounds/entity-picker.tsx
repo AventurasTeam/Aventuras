@@ -34,6 +34,8 @@ type EntityPickerProps = {
   testID?: string
   /** A muted note after a row's name — an item's current whereabouts, say. */
   rowHint?: (entity: Entity) => string | undefined
+  /** Adds a `↗` that opens the picked entity; hidden while the value is empty or dangling. */
+  onOpen?: (id: string) => void
 }
 
 const KIND_ORDER: readonly EntityKind[] = ['character', 'location', 'item', 'faction']
@@ -60,6 +62,7 @@ export function EntityPicker({
   'aria-invalid': ariaInvalid,
   testID,
   rowHint,
+  onOpen,
 }: EntityPickerProps) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
@@ -125,6 +128,10 @@ export function EntityPicker({
           aria-invalid={ariaInvalid}
           testID={testID}
           onClear={clearable ? () => onChange(null) : undefined}
+          openLabel={
+            onOpen == null ? undefined : t('picker.open', { name: selected?.name ?? label })
+          }
+          onOpen={onOpen == null || selected == null ? undefined : () => onOpen(selected.id)}
         >
           {!hasValue ? null : selected != null ? (
             <View className="min-w-0 flex-1 flex-row items-center gap-2">

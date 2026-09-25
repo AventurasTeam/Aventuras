@@ -136,10 +136,9 @@ type HarnessProps = {
   variant: OverviewVariant
   width: number
   onRegionPress: (tab: string) => void
-  onOpenEntity: (id: string) => void
 }
 
-function Harness({ entity, variant, width, onRegionPress, onOpenEntity }: HarnessProps) {
+function Harness({ entity, variant, width, onRegionPress }: HarnessProps) {
   return (
     <View style={{ width, maxWidth: '100%' }} className="border border-border p-4">
       <EntityOverview
@@ -149,7 +148,6 @@ function Harness({ entity, variant, width, onRegionPress, onOpenEntity }: Harnes
         calendar={EARTH_GREGORIAN}
         variant={variant}
         onRegionPress={onRegionPress}
-        onOpenEntity={onOpenEntity}
       />
     </View>
   )
@@ -159,13 +157,20 @@ const meta: Meta<typeof Harness> = {
   title: 'World/EntityOverview',
   component: Harness,
   parameters: { layout: 'padded' },
-  args: { entity: KAEL, variant: 'panel', width: 860, onRegionPress: fn(), onOpenEntity: fn() },
+  args: { entity: KAEL, variant: 'panel', width: 860, onRegionPress: fn() },
 }
 export default meta
 type Story = StoryObj<typeof Harness>
 
 function rect(testId: string): DOMRect {
   return screen.getByTestId(testId).getBoundingClientRect()
+}
+
+// Where the text draws, not its element's box: a Text can fill a taller parent.
+function glyphs(el: Element): DOMRect {
+  const range = document.createRange()
+  range.selectNodeContents(el)
+  return range.getBoundingClientRect()
 }
 
 async function expectCompactPortrait() {
@@ -182,11 +187,9 @@ function buttonNames(): string[] {
   )
 }
 
-// Pressable stops propagation, so a call count can't see a link nested in a button; the DOM can.
-async function expectNoLinkInsideAButton() {
-  const links = within(screen.getByTestId('entity-overview')).getAllByRole('link')
-  for (const link of links)
-    await expect(link.parentElement?.closest('button, [role="button"]') ?? null).toBeNull()
+// Entity links live in Connections; an Overview region is one target that opens its edit tab.
+async function expectNoLinks() {
+  await expect(within(screen.getByTestId('entity-overview')).queryAllByRole('link')).toEqual([])
 }
 
 const CHARACTER_REGIONS = [
@@ -211,28 +214,28 @@ export const CharacterPanel: Story = {
     await expect(getComputedStyle(chip).textTransform).toBe('uppercase')
     await expect(screen.getByText('last seen 2 days ago', { exact: false })).toBeVisible()
     await expect(screen.getByText('+1')).toBeVisible()
-    await expect(screen.getByRole('button', { name: 'In, Edit in Connections' })).toBeVisible()
+    await expect(within(screen.getByTestId('overview-in')).getByText(MARKET.name)).toBeVisible()
     const portrait = rect('overview-portrait')
     await expect(portrait.width).toBe(220)
     await expect(portrait.left).toBeGreaterThanOrEqual(rect('overview-description').right)
   },
 }
 
-/** Regions land their edit tabs; names open entities. */
+/** Regions land their edit tabs; a name is part of its region, not a link. */
 export const CharacterRegionRouting: Story = {
   play: async ({ args }) => {
     await userEvent.click(await screen.findByTestId('overview-visual', {}, WAIT))
     await expect(args.onRegionPress).toHaveBeenLastCalledWith('identity')
     await userEvent.click(screen.getByTestId('overview-carrying'))
     await expect(args.onRegionPress).toHaveBeenLastCalledWith('carrying')
-    await userEvent.click(screen.getByTestId('overview-in-label'))
+    await userEvent.click(screen.getByText(MARKET.name))
+    await expect(args.onRegionPress).toHaveBeenLastCalledWith('connections')
+    await userEvent.click(screen.getByTestId('overview-with'))
     await expect(args.onRegionPress).toHaveBeenLastCalledWith('connections')
     await userEvent.click(screen.getByTestId('overview-status'))
     await expect(args.onRegionPress).toHaveBeenLastCalledWith('settings')
-    await userEvent.click(screen.getByRole('link', { name: MARKET.name }))
-    await expect(args.onOpenEntity).toHaveBeenCalledWith('loc_market')
-    await expect(args.onRegionPress).toHaveBeenCalledTimes(4)
-    await expectNoLinkInsideAButton()
+    await expect(args.onRegionPress).toHaveBeenCalledTimes(5)
+    await expectNoLinks()
   },
 }
 
@@ -242,15 +245,12 @@ export const LocationRegionRouting: Story = {
     await expect(await screen.findByText('Characters here (2)', {}, WAIT)).toBeVisible()
     await userEvent.click(screen.getByTestId('overview-condition'))
     await expect(args.onRegionPress).toHaveBeenLastCalledWith('identity')
-    await userEvent.click(screen.getByTestId('overview-part-of-label'))
+    await userEvent.click(screen.getByText('Veil’s Hollow'))
     await expect(args.onRegionPress).toHaveBeenLastCalledWith('connections')
-    await userEvent.click(screen.getByRole('link', { name: 'Veil’s Hollow' }))
-    await expect(args.onOpenEntity).toHaveBeenCalledWith('loc_hollow')
-    await userEvent.click(
-      within(screen.getByTestId('overview-items-here')).getByRole('link', { name: 'Old key' }),
-    )
-    await expect(args.onOpenEntity).toHaveBeenLastCalledWith('item_key')
-    await expectNoLinkInsideAButton()
+    await userEvent.click(within(screen.getByTestId('overview-items-here')).getByText('Old key'))
+    await expect(args.onRegionPress).toHaveBeenCalledTimes(3)
+    await expect(args.onRegionPress).toHaveBeenLastCalledWith('connections')
+    await expectNoLinks()
   },
 }
 
@@ -260,7 +260,7 @@ export const ItemHeldAndPlaced: Story = {
   play: async ({ args }) => {
     await expect(await screen.findByTestId('overview-held-by', {}, WAIT)).toBeVisible()
     await expect(screen.getByTestId('overview-position')).toBeVisible()
-    await userEvent.click(screen.getByTestId('overview-position-label'))
+    await userEvent.click(screen.getByTestId('overview-position'))
     await expect(args.onRegionPress).toHaveBeenLastCalledWith('connections')
   },
 }
@@ -271,7 +271,7 @@ export const FactionRegionRouting: Story = {
     await expect(await screen.findByText('Members (1)', {}, WAIT)).toBeVisible()
     await userEvent.click(screen.getByTestId('overview-agenda'))
     await expect(args.onRegionPress).toHaveBeenLastCalledWith('identity')
-    await userEvent.click(screen.getByTestId('overview-members-label'))
+    await userEvent.click(screen.getByTestId('overview-members'))
     await expect(args.onRegionPress).toHaveBeenLastCalledWith('connections')
   },
 }
@@ -306,8 +306,12 @@ export const PhoneReflow: Story = {
     await screen.findByTestId('entity-overview', {}, WAIT)
     // useTier follows the viewport async (lessons-learned/storybook-viewport-usetier-async.md).
     await waitFor(() => expectCompactPortrait(), WAIT)
-    // touch.md → Touch-target floor.
-    await expect(rect('overview-in-label').height).toBeGreaterThanOrEqual(44)
+    // touch.md → Touch-target floor, on the region as a whole: the name sits right under its label.
+    await expect(rect('overview-in').height).toBeGreaterThanOrEqual(44)
+    const inRegion = within(screen.getByTestId('overview-in'))
+    const labelBottom = glyphs(inRegion.getByText('In')).bottom
+    const nameTop = glyphs(inRegion.getByText(MARKET.name)).top
+    await expect(nameTop - labelBottom).toBeLessThanOrEqual(8)
     // The status chips center in their floored box instead of packing at its top.
     const status = rect('overview-status')
     const chip = within(screen.getByTestId('overview-status')).getByText('active')
@@ -316,8 +320,6 @@ export const PhoneReflow: Story = {
     await expect(
       Math.abs(chipBox.top + chipBox.height / 2 - (status.top + status.height / 2)),
     ).toBeLessThanOrEqual(1)
-    const link = within(screen.getByTestId('overview-in')).getByRole('link', { name: MARKET.name })
-    await expect(link.getBoundingClientRect().height).toBeGreaterThanOrEqual(44)
   },
 }
 
@@ -346,7 +348,10 @@ export const ItemPeekAt440: Story = {
   args: { entity: KEY, variant: 'peek', width: 440 },
   play: async () => {
     await expect(await screen.findByTestId('overview-held-by', {}, WAIT)).toBeVisible()
-    await expect(screen.getByRole('link', { name: MARKET.name })).toBeVisible()
+    await expect(
+      within(screen.getByTestId('overview-position')).getByText(MARKET.name),
+    ).toBeVisible()
+    await expectNoLinks()
     const root = screen.getByTestId('entity-overview')
     await expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth)
   },
@@ -356,7 +361,7 @@ export const FactionPeekAt440: Story = {
   args: { entity: WATCH, variant: 'peek', width: 440 },
   play: async () => {
     await expect(await screen.findByTestId('overview-agenda', {}, WAIT)).toBeVisible()
-    await expect(screen.getByRole('link', { name: KAEL.name })).toBeVisible()
+    await expect(within(screen.getByTestId('overview-members')).getByText(KAEL.name)).toBeVisible()
     const root = screen.getByTestId('entity-overview')
     await expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth)
   },

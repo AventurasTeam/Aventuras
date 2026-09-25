@@ -124,7 +124,11 @@ Other tabs render for every kind with kind-specific content.
 ### Overview — glance summary, read-mostly
 
 The Overview tab is a glance summary card, not the full form.
-Click any region to route to the relevant edit tab. Doubles as
+Click any region to route to the relevant edit tab. Entity names
+inside a region are text, not links: each region is one target,
+and moving to a related entity happens in
+[Connections](#connections--positional--compositional--affiliation--relationships).
+Doubles as
 the [peek-drawer body](../reader-composer/reader-composer.md#peek-drawer--lead-affordance-for-characters)
 at narrower (440px) width — same content, no duplicated design.
 
@@ -149,14 +153,12 @@ treatment used by `retired_reason` (visible only when
   `·`. Click → Identity / Visual.
 - `TRAITS` and `DRIVES` chip rows — first ~3 of each with `+ N` overflow
   indicator. Click → Identity / Personality.
-- `IN <location>` (current_location_id link) `· last seen N days ago`
-  (from `lastSeenAt`). Click the location → that entity's detail
-  pane; click the region label → Connections. The span is in-world
+- `IN <location>` (current_location_id) `· last seen N days ago`
+  (from `lastSeenAt`). Click → Connections. The span is in-world
   time since `lastSeenAt.worldTime`, counted in the calendar's
   largest unit of fixed length (days on Gregorian, never months); a
   span running backwards is omitted.
-- `WITH <faction>` (faction_id link). Click the faction name → that
-  faction's detail pane; click the region label → Connections.
+- `WITH <faction>` (faction_id). Click → Connections.
 - Carrying summary — top stackables by quantity + equipped/carried
   counts in one line. Click → Carrying tab.
 - Tags chip row — read-only on Overview; edits live on the
@@ -171,8 +173,8 @@ treatment used by `retired_reason` (visible only when
 - Parent chain — breadcrumb (`Shop in Town Square in City`) per
   [`LocationState.parent_location_id`](../../../data-model.md#locationstate-shape)
 - `condition` — single line if populated
-- "Characters here" count + first 3 names (links; portraits once
-  the asset gallery lands)
+- "Characters here" count + first 3 names (portraits once the
+  asset gallery lands)
 - "Items here" count + first few names
 - Portrait slot
 - Tags
@@ -182,7 +184,7 @@ treatment used by `retired_reason` (visible only when
 - Status pill + item icon
 - Description prose
 - `condition` — single line if populated
-- Position — `at_location_id` link OR "Held by `<character>`"
+- Position — `at_location_id` OR "Held by `<character>`"
   inverse-derived from any character's `equipped_items` /
   `inventory`
 - Portrait slot
@@ -194,8 +196,8 @@ treatment used by `retired_reason` (visible only when
 - Description prose
 - `standing` — single line if populated
 - Top agenda chips — top ~3 with overflow indicator
-- Member count + first few member names (links; portraits once the
-  asset gallery lands) from inverse-derived `character.faction_id`
+- Member count + first few member names (portraits once the asset
+  gallery lands) from inverse-derived `character.faction_id`
 - Portrait slot
 - Tags
 
@@ -269,6 +271,14 @@ Per-kind sub-labels:
 | **Location**  | `Compositional` (parent_location_id) · `Characters here` · `Items here` (inverse)                                       |
 | **Item**      | `Positional` (at_location_id) · `Held by` (inverse from `character.equipped_items` / `inventory`)                       |
 | **Faction**   | `Members` (inverse from `character.faction_id`) · inter-faction (deferred)                                              |
+
+Connections is where entity navigation lives. A picker holding an
+entity (current location, faction, parent location, an item's
+location) carries an open action — an external-link icon before
+its clear `×`, spaced so their phone touch zones don't overlap —
+that opens that entity's detail pane; it stays live while edits
+are blocked, since navigating isn't editing. The inverse lists
+link each name.
 
 The tab name **Connections** is the umbrella for both structural
 links (positional, affiliation) and social bonds. It was originally

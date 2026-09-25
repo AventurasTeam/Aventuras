@@ -12,12 +12,10 @@ export function OverviewTab({
   row,
   data,
   onRegionPress,
-  onOpenEntity,
 }: {
   row: Entity | null
   data: EntityPaneData
   onRegionPress: (tab: EntityTab) => void
-  onOpenEntity: (id: string) => void
 }) {
   return (
     <TabsContent value="overview">
@@ -34,7 +32,6 @@ export function OverviewTab({
           calendar={data.calendar}
           variant="panel"
           onRegionPress={onRegionPress}
-          onOpenEntity={onOpenEntity}
         />
       )}
     </TabsContent>

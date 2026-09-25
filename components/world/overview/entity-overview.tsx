@@ -34,7 +34,6 @@ export type EntityOverviewProps = {
   /** `peek` is the 440 px projection: compact portrait below the prose. */
   variant: OverviewVariant
   onRegionPress: RegionPress
-  onOpenEntity: (id: string) => void
 }
 
 function KindBody(props: KindBodyProps) {

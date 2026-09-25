@@ -2,7 +2,7 @@ import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
 import { charactersAt, holdersOf, itemsAt, locationAncestors, stateOf } from '@/lib/world'
 
-import { LinkRegion, Region, type KindBodyProps } from './overview-parts'
+import { NamesRegion, Region, type KindBodyProps } from './overview-parts'
 
 const PREVIEW = 3
 
@@ -36,46 +36,38 @@ function ConditionRegion({
 }
 
 // world.md → Location Overview.
-export function LocationOverviewBody({
-  entity,
-  entities,
-  onRegionPress,
-  onOpenEntity,
-}: KindBodyProps) {
+export function LocationOverviewBody({ entity, entities, onRegionPress }: KindBodyProps) {
   const state = stateOf(entity, 'location')
   const ancestors = locationAncestors(entity.id, entities)
   const people = charactersAt(entity.id, entities)
   const things = itemsAt(entity.id, entities)
   return (
     <>
-      <LinkRegion
+      <NamesRegion
         label={t('world:overview.partOf')}
         tab="connections"
         onRegionPress={onRegionPress}
         targets={ancestors}
         joiner={` ${t('world:overview.within')} `}
-        onOpenEntity={onOpenEntity}
         testID="overview-part-of"
       />
       <ConditionRegion condition={state.condition} onRegionPress={onRegionPress} />
-      <LinkRegion
+      <NamesRegion
         label={countLabel(t('world:overview.charactersHere'), people.length)}
         tab="connections"
         onRegionPress={onRegionPress}
         targets={people.slice(0, PREVIEW)}
         meta={moreMeta(people.length)}
         derived
-        onOpenEntity={onOpenEntity}
         testID="overview-characters-here"
       />
-      <LinkRegion
+      <NamesRegion
         label={countLabel(t('world:overview.itemsHere'), things.length)}
         tab="connections"
         onRegionPress={onRegionPress}
         targets={things.slice(0, PREVIEW)}
         meta={moreMeta(things.length)}
         derived
-        onOpenEntity={onOpenEntity}
         testID="overview-items-here"
       />
     </>
@@ -83,7 +75,7 @@ export function LocationOverviewBody({
 }
 
 // world.md → Item Overview. Both positions render when they disagree (shown, not fixed).
-export function ItemOverviewBody({ entity, entities, onRegionPress, onOpenEntity }: KindBodyProps) {
+export function ItemOverviewBody({ entity, entities, onRegionPress }: KindBodyProps) {
   const state = stateOf(entity, 'item')
   const byId = new Map(entities.map((e) => [e.id, e]))
   const holders = holdersOf(entity.id, entities)
@@ -92,22 +84,20 @@ export function ItemOverviewBody({ entity, entities, onRegionPress, onOpenEntity
     <>
       <ConditionRegion condition={state.condition} onRegionPress={onRegionPress} />
       {holders.length > 0 ? (
-        <LinkRegion
+        <NamesRegion
           label={t('world:overview.heldBy')}
           tab="connections"
           onRegionPress={onRegionPress}
           targets={holders}
-          onOpenEntity={onOpenEntity}
           testID="overview-held-by"
         />
       ) : null}
       {at.length > 0 || holders.length === 0 ? (
-        <LinkRegion
+        <NamesRegion
           label={t('world:overview.position')}
           tab="connections"
           onRegionPress={onRegionPress}
           targets={at}
-          onOpenEntity={onOpenEntity}
           testID="overview-position"
         />
       ) : null}

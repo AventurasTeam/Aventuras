@@ -122,6 +122,8 @@ type RefFieldProps<D extends FieldValues> = Gate & {
   kinds: readonly EntityKind[]
   excludeIds?: readonly string[]
   testID?: string
+  /** Adds the picker's `↗` jump to the linked entity. */
+  onOpenEntity?: (id: string) => void
 }
 
 /** One entity reference; a field error (parent-cycle) renders below. */
@@ -134,6 +136,7 @@ export function RefField<D extends FieldValues>({
   kinds,
   excludeIds,
   testID,
+  onOpenEntity,
   blocked,
   blockedReason,
 }: RefFieldProps<D>) {
@@ -155,6 +158,7 @@ export function RefField<D extends FieldValues>({
             disabledReason={blockedReason}
             aria-invalid={fieldState.error != null}
             testID={testID}
+            onOpen={onOpenEntity}
           />
         </FormRow>
       )}
