@@ -25,8 +25,9 @@ declaration values.
   Both are checked against the pass's view — its snapshot plus what
   earlier facts in the same reply changed — when planned, and against
   the row as it stands when the write lands, so a status the user
-  changed mid-pass stands (see
-  [`cadence.md → User edits during a periodic pass`](./cadence.md#user-edits-during-a-periodic-pass)).
+  changed mid-pass stands. A status the user wrote after the flip's
+  prose stands too, even when written before the pass started (see
+  [`cadence.md → User edits and classifier writes`](./cadence.md#user-edits-and-classifier-writes)).
 
 - **First-introduction descriptions** — when the classifier extracts
   a genuinely new character (no name match against existing
@@ -46,7 +47,8 @@ declaration values.
   Writes are strictly append-and-deduplicate against the row as it
   stands when the write lands, and never remove, so user-authored
   aliases survive every subsequent pass, including one added while the
-  pass ran.
+  pass ran. An alias the user removed after the fact's prose is not
+  re-added ([user precedence](./cadence.md#user-edits-and-classifier-writes)).
 - **Character relationships** — `character_relationships`. One
   perspective per fact, the subject's view of the object and never the
   inferred inverse, upserted into the pair's row as it stands when the
@@ -56,7 +58,9 @@ declaration values.
   when the prose establishes a view or changes one already listed. A
   write repeating the stored view, ignoring case and surrounding
   whitespace, is rejected as a no-op at the action layer — it writes
-  no delta.
+  no delta. So is one against a view the user wrote, or a pair the user
+  deleted, after the fact's prose
+  ([user precedence](./cadence.md#user-edits-and-classifier-writes)).
 
 ## Provenance attribution
 

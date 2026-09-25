@@ -212,22 +212,27 @@ with the per-turn pipeline. The user-edit gate (UI-side disabling of
 controls during `hard-gate` pipeline runs) does **not** relax. The
 classifier itself is `no-gate`, and its write set is not disjoint from
 user edits: both write entity status (with its retired reason),
-keywords and character relationships. [User edits during a periodic pass](#user-edits-during-a-periodic-pass)
+keywords and character relationships. [User edits and classifier writes](#user-edits-and-classifier-writes)
 covers how those overlaps resolve.
 
 `'concurrent-allowed'` was previously theoretical in
 [`architecture.md`](../architecture.md); the periodic classifier is its
 first real consumer and triggers documenting the value.
 
-### User edits during a periodic pass
+### User edits and classifier writes
 
 The periodic classifier is `no-gate`, so World stays editable while a
-pass runs. The pass reads its entity snapshot before the model call
-and writes only after the model call and reconciliation return, which
-can be minutes later, so a user edit can land in between. The
-classifier's updates to an existing entity's status and keywords
-therefore check the row as it stands when the write lands, not only
-the snapshot:
+pass runs. A user edit can meet a classifier write in two ways. It can
+land during the pass: the pass reads its entity snapshot before the
+model call and writes only after the model call and reconciliation
+return, which can be minutes later. Or it can predate the pass but
+postdate the prose the pass processes, since a pass works through the
+backlog of turns written since the last one. The classifier's writes
+to an existing entity's status and keywords, and to a relationship
+view, resolve both.
+
+**Live-row guards.** Status and keyword writes check the row as it
+stands when the write lands, not only the pass's snapshot:
 
 - Promotion goes through `promoteStagedEntity`. The pass plans it only
   for a row its snapshot holds as `staged`, and the handler no-ops
@@ -241,10 +246,43 @@ the snapshot:
   removed mid-pass is not re-sent; the handler appends only terms the
   live list lacks, so one the user added is not duplicated.
 
-A relationship view is the one field both writers can set to
-different values. The upsert merges its single perspective into the
-live row, so a view the user saved during the pass is overwritten when
-the pass lands, per the authoring contract that user edits stick only
-until contradicting prose
-([`world.md → Relationships`](../ui/screens/world/world.md#relationships--character-to-character)).
-World asks before such a Save.
+**User precedence.** A field the user wrote after the prose a fact
+came from keeps the user's value. The classifier's status, keyword and
+relationship writes carry the fact's source entry, and the delta log
+already orders both writers, so nothing new is stored:
+
+- The prose's position is the log position of the entry's latest
+  create or content-edit delta. An entry with neither predates the
+  log, so every user edit outranks it.
+- The user wrote a field after that prose when a `user_edit` delta on
+  the same row, logged later, created the row or changed that column.
+  World's saves record only the columns they change, so an edit to a
+  description does not shield the status.
+- A status the user wrote after the prose stands: promotion and
+  retirement no-op.
+- An alias the user removed after the prose stays removed. The same
+  write's other new aliases still land.
+
+Undoing the user's edit removes its delta, which lifts the protection.
+A later content edit of the source entry makes that prose newer than
+the user's edit, so its facts win again.
+
+**Relationship views.** The classifier's upsert writes one
+perspective into the pair's row, and a view the user wrote after the
+fact's prose stands: the upsert no-ops when a user write after that
+prose created the row or set that perspective. A pair the user deleted
+after the prose stays deleted, since the upsert does not re-create it.
+The user setting only the other perspective leaves this one to the
+classifier. This is how the authoring contract, where the classifier
+updates a view on subsequent contradicting prose, is enforced
+([`data-model.md → Character-to-character relationships`](../data-model.md#character-to-character-relationships)).
+
+What stays open:
+
+- Prose written after the user's edit can still revise the field. That
+  is the authoring contract, not a gap.
+- A fact whose source turn doesn't resolve anchors to the window's
+  newest turn
+  ([`classifier.md → Provenance attribution`](./classifier.md#provenance-attribution)),
+  so its prose position reads later than it is. A user edit made
+  between the real source turn and that one loses to it.

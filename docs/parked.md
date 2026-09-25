@@ -684,6 +684,12 @@ wizard) or _when_ it was last touched. Two real costs:
   classifier could honor user-asserted values until prose
   explicitly contradicts.
 
+User-edit precedence for `status`, keywords and relationship views
+has landed without this sidecar, through the delta log's order
+([`memory/cadence.md → User edits and classifier writes`](./memory/cadence.md#user-edits-and-classifier-writes)).
+What remains here is the same precedence for `entities.state`
+fields, and stale detection.
+
 Sketch shape (v1.5):
 
 ```ts

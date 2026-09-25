@@ -911,7 +911,11 @@ isn't recorded yet").
 **Authoring policy: v1 lean — classifier wins on prose evidence.**
 Both classifier and user write; classifier UPSERTs on subsequent
 contradicting prose. User edits "stick" only until classifier reads
-contradicting prose. Same policy as the rest of CharacterState (see
+contradicting prose. "Subsequent" is enforced through the delta log's
+order: an upsert from prose older than the user's last write of that
+view, or than the user's deletion of the pair, no-ops
+([`memory/cadence.md → User edits and classifier writes`](./memory/cadence.md#user-edits-and-classifier-writes)).
+Same policy as the rest of CharacterState (see
 the authoring matrix under
 [World-state storage](#world-state-storage)). No per-field
 provenance in v1 — the parked v1.5

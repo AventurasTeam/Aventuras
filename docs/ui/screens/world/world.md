@@ -347,19 +347,17 @@ are referenced.
   view the classifier changed meanwhile, and the user left alone,
   keeps its stored value.
 
-**Save during a memory update.** A periodic classifier pass works from
-the snapshot it read when it started, and its relationship writes land
-when it finishes, so a view saved meanwhile can be overwritten (see the
-authoring contract below). While a pass is in flight and an existing
-character's Relationships are dirty, Save (the button or `Cmd/Ctrl-S`)
-first opens a confirm, **Memory is updating**, with `Cancel` and
-`Save anyway`. It asks once per pass: after `Save anyway`, later saves
-during the same pass go straight through. The Unsaved-changes dialog
-carries the same warning line under its body instead of opening a
-second modal. A create never asks, since the pass's snapshot predates
-the row. Other fields don't ask: the classifier's status and keyword
-writes re-read the row when they land
-([`cadence.md → User edits during a periodic pass`](../../../memory/cadence.md#user-edits-during-a-periodic-pass)).
+**Edits and memory updates.** A memory update never overwrites a
+status, a removed alias or a relationship view the user saved after the
+prose it processes, whether the save came before the pass started or
+while it ran, and it does not re-create a pair the user deleted after
+that prose
+([`cadence.md → User edits and classifier writes`](../../../memory/cadence.md#user-edits-and-classifier-writes)).
+Prose written after the user's edit can still revise it, per the
+authoring contract below. The generation status pill reads
+`updating memory…` while a pass runs
+([`generation-status-pill.md → Non-blocking phases`](../../patterns/generation-status-pill.md#non-blocking-phases));
+Save never asks for confirmation first.
 
 **Empty state.** When the character has no recorded relationships,
 render the Relationships sub-section heading + an empty-state hint
