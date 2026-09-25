@@ -94,11 +94,40 @@ describe('buildClassifierContext', () => {
     expect(context.turns).toEqual([{ handle: 't1', content: 'prose' }])
   })
 
-  it('emits one fact per non-null perspective, dropping null views', () => {
+  it('emits one fact per non-null perspective, with both names inlined, dropping null views', () => {
     const idMap = new IdBiMap()
     const context = buildClassifierContext({
       window: { turns: [] } as never,
-      entities: [],
+      entities: [
+        {
+          id: 'char_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          kind: 'character',
+          name: 'Aefre',
+          description: '',
+          status: 'active',
+        } as never,
+        {
+          id: 'char_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+          kind: 'character',
+          name: 'Bael',
+          description: '',
+          status: 'active',
+        } as never,
+        {
+          id: 'char_cccccccc-cccc-cccc-cccc-cccccccccccc',
+          kind: 'character',
+          name: 'Cora',
+          description: '',
+          status: 'active',
+        } as never,
+        {
+          id: 'char_dddddddd-dddd-dddd-dddd-dddddddddddd',
+          kind: 'character',
+          name: 'Dez',
+          description: '',
+          status: 'active',
+        } as never,
+      ],
       happenings: [],
       relationships: [
         {
@@ -125,9 +154,41 @@ describe('buildClassifierContext', () => {
       idMap,
     })
     expect(context.relationships).toEqual([
-      { subject: 'c1', object: 'c2', kind: 'sister' },
-      { subject: 'c3', object: 'c4', kind: 'ally' },
-      { subject: 'c4', object: 'c3', kind: 'rival' },
+      { subject: 'c1', subjectName: 'Aefre', object: 'c2', objectName: 'Bael', kind: 'sister' },
+      { subject: 'c3', subjectName: 'Cora', object: 'c4', objectName: 'Dez', kind: 'ally' },
+      { subject: 'c4', subjectName: 'Dez', object: 'c3', objectName: 'Cora', kind: 'rival' },
     ])
+  })
+
+  it('drops a relationship row whose character has no entity in the snapshot', () => {
+    const idMap = new IdBiMap()
+    const context = buildClassifierContext({
+      window: { turns: [] } as never,
+      entities: [
+        {
+          id: 'char_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          kind: 'character',
+          name: 'Aefre',
+          description: '',
+          status: 'active',
+        } as never,
+      ],
+      happenings: [],
+      relationships: [
+        {
+          // bId's entity is absent from the snapshot — deleted character, orphan row.
+          id: 'rel_11111111-1111-1111-1111-111111111111',
+          branchId: 'b1',
+          aId: 'char_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          bId: 'char_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+          kind: 'sister',
+          inverseKind: null,
+          createdAt: 1,
+          updatedAt: 1,
+        } as never,
+      ],
+      idMap,
+    })
+    expect(context.relationships).toEqual([])
   })
 })

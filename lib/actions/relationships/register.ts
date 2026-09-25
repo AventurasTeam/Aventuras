@@ -131,7 +131,9 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx) => {
   if (inverseKind !== undefined)
     return bothPovOutcome(ctx, bid, { aId, bId, subjectIsA }, current, kind, inverseKind)
 
-  if (current && current[povCol] === kind)
+  // Only the classifier reaches this path; re-wording the same view in
+  // different case or spacing is not a change worth a delta.
+  if (current && current[povCol]?.trim().toLowerCase() === kind?.trim().toLowerCase())
     return { status: 'rejected', reason: 'relationship unchanged', code: 'noop' }
 
   if (!current) {

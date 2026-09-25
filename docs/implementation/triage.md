@@ -175,3 +175,11 @@ slice-planning gate forces its resolution before that slice is planned.
   row" comment at `plan.ts:40` — true only for the fields the planner
   does route through `nonBlank`. Revisit trigger: a happening or
   character surfacing with an empty name/title in World or Plot.
+
+- **The classifier prompt has no token budget beyond
+  `classifierWindowMaxEntries`.** That knob bounds only the turns
+  block; the entity, happening and relationship lists grow unbounded
+  with the branch, and `generateStructured` (`lib/ai/generate.ts:142`)
+  passes the rendered prompt straight to the provider with no length
+  guard. Revisit trigger: the first long-story prompt-size or cost
+  signal.

@@ -252,10 +252,10 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
     },
     {
       name: 'relationships',
-      type: '{ subject, object, kind }[]',
+      type: '{ subject, subjectName, object, objectName, kind }[]',
       category: 'Entities',
       description:
-        "Stored character-to-character views, one per perspective: the subject's view of the object. The author's edits live here too.",
+        "Stored character-to-character views, one per perspective: the subject's view of the object, with both names inlined so the model doesn't have to cross-reference the entity list. The author's edits live here too.",
       required: false,
     },
   ],

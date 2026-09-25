@@ -14,7 +14,9 @@ const context = {
     { id: 'c2', name: 'Aria', kind: 'character', status: 'staged', description: 'His sister.' },
   ],
   happenings: [{ id: 'hp1', title: 'The satchel was stolen' }],
-  relationships: [{ subject: 'c1', object: 'c2', kind: 'brother' }],
+  relationships: [
+    { subject: 'c1', subjectName: 'Kael', object: 'c2', objectName: 'Aria', kind: 'sister' },
+  ],
   lore: [],
   definition: { setting: '', genre: { promptBody: '' }, tone: { promptBody: '' } },
   calendarVocabulary: null,
@@ -79,8 +81,8 @@ describe('periodic classifier template', () => {
     expect(rendered).toContain('(none)')
   })
 
-  it('renders a stored relationship view as a subject-to-object line', () => {
+  it('renders a stored relationship view as a subject-sees-object line', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
-    expect(rendered).toContain('- [c1] → [c2]: brother')
+    expect(rendered).toContain('- [c1] Kael sees [c2] Aria as: sister')
   })
 })

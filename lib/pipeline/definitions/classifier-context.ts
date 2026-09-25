@@ -2,6 +2,49 @@ import type { ClassifierWindow } from '@/lib/classifier'
 import type { CharacterRelationship, Entity, Happening } from '@/lib/db'
 import { substituteIds, type IdBiMap } from '@/lib/ids'
 
+type RelationshipFact = {
+  subject: string
+  subjectName: string
+  object: string
+  objectName: string
+  kind: string
+}
+
+// One row can emit two facts, one per non-null perspective; a row whose
+// character has no entity in the snapshot (FK-less table, deleted character)
+// has no name to inline and is dropped.
+function projectRelationships(
+  relationships: readonly CharacterRelationship[],
+  entities: readonly Entity[],
+): RelationshipFact[] {
+  const characterNames = new Map(
+    entities.filter((e) => e.kind === 'character').map((e) => [e.id, e.name]),
+  )
+  return relationships.flatMap((r): RelationshipFact[] => {
+    const aName = characterNames.get(r.aId)
+    const bName = characterNames.get(r.bId)
+    if (aName == null || bName == null) return []
+    const facts: RelationshipFact[] = []
+    if (r.kind != null)
+      facts.push({
+        subject: r.aId,
+        subjectName: aName,
+        object: r.bId,
+        objectName: bName,
+        kind: r.kind,
+      })
+    if (r.inverseKind != null)
+      facts.push({
+        subject: r.bId,
+        subjectName: bName,
+        object: r.aId,
+        objectName: aName,
+        kind: r.inverseKind,
+      })
+    return facts
+  })
+}
+
 // The classifierContext group's one builder. Separate from generationContext
 // because the classifier's window carries provenance handles no other agent has,
 // and the pinned variable set is parity-tested per group.
@@ -28,15 +71,7 @@ export function buildClassifierContext(args: {
       status: e.status,
     })),
     happenings: happenings.map((h) => ({ id: h.id, title: h.title })),
-    // One row per non-null perspective, not per pair: a row with both views set
-    // becomes two facts, each already shaped like the (subject, object, kind)
-    // upsert the model is asked to emit.
-    relationships: relationships.flatMap((r) => {
-      const rows: { subject: string; object: string; kind: string }[] = []
-      if (r.kind != null) rows.push({ subject: r.aId, object: r.bId, kind: r.kind })
-      if (r.inverseKind != null) rows.push({ subject: r.bId, object: r.aId, kind: r.inverseKind })
-      return rows
-    }),
+    relationships: projectRelationships(relationships, entities),
   }
   return substituteIds(context, idMap) as Record<string, unknown>
 }

@@ -10,6 +10,7 @@ import {
   deltas,
   stories,
   storyEntries,
+  type CharacterRelationship,
   type ClassifierStatus,
   type Entity,
   type StoryEntry,
@@ -17,6 +18,7 @@ import {
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { makeLogger } from '@/lib/diagnostics'
 import {
+  characterRelationshipsStore,
   currentStoryStore,
   entitiesStore,
   entriesStore,
@@ -44,6 +46,7 @@ vi.mock('@/lib/ai', async (importOriginal) => ({
 }))
 
 const CHAR_KAEL = 'char_11111111-1111-1111-1111-111111111111'
+const CHAR_ARIA = 'char_22222222-2222-2222-2222-222222222222'
 
 const CLASSIFIER_WIRED_CONFIG = {
   providers: [
@@ -83,6 +86,7 @@ async function ctxWith(opts: {
   headPosition: number
   entryKind?: StoryEntry['kind']
   entities?: Entity[]
+  relationships?: CharacterRelationship[]
   seedStatus?: Partial<ClassifierStatus>
   onWatermark?: (n: number) => void
 }): Promise<Harness> {
@@ -140,6 +144,7 @@ async function ctxWith(opts: {
   })
   entriesStore.hydrate('b1', entries)
   entitiesStore.hydrate('b1', opts.entities ?? [])
+  characterRelationshipsStore.hydrate('b1', opts.relationships ?? [])
   happeningsStore.hydrate('b1', [])
 
   const watermarks: number[] = []
@@ -247,6 +252,62 @@ describe('periodicClassifierPhase', () => {
     expect(prompt).not.toContain('turn 151')
     // maxEntries defaults to 20, so one pass claims 11..30 and the backlog drains.
     expect(h.status()?.processedThrough).toBe(30)
+  })
+
+  // Passing `relationships: []` from the phase leaves this green with no other
+  // store wired up — the branch filter on the read is what this guards.
+  it('shows the classifier only the stored relationship rows for its own branch', async () => {
+    const kael = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      status: 'active',
+      description: 'A courier.',
+    } as unknown as Entity
+    const aria = {
+      id: CHAR_ARIA,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Aria',
+      status: 'active',
+      description: 'His sister.',
+    } as unknown as Entity
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 2,
+      entities: [kael, aria],
+      relationships: [
+        {
+          id: 'rel_1',
+          branchId: 'b1',
+          aId: CHAR_KAEL,
+          bId: CHAR_ARIA,
+          kind: 'ally',
+          inverseKind: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+        {
+          id: 'rel_2',
+          branchId: 'other',
+          aId: CHAR_KAEL,
+          bId: CHAR_ARIA,
+          kind: 'rival',
+          inverseKind: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ] as CharacterRelationship[],
+    })
+    vi.mocked(generateStructured).mockResolvedValue({ status: 'ok', value: extraction() } as never)
+
+    await drain(h.ctx)
+
+    const prompt = vi.mocked(generateStructured).mock.calls[0][1] as string
+    expect(prompt).toContain('Kael sees')
+    expect(prompt).toContain('as: ally')
+    expect(prompt).not.toContain('rival')
   })
 
   it('advances past a window of only system entries, so the cadence cannot live-lock', async () => {

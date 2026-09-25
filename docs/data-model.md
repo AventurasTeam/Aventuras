@@ -833,9 +833,9 @@ CREATE INDEX idx_char_rel_branch_b ON character_relationships(branch_id, b_id);
 
 **One row per pair.** Symmetric AND asymmetric relationships share the
 shape — `kind`/`inverse_kind` carry the two perspectives independently
-("Aria → Kael: sister", "Kael → Aria: brother") and either may be
-null until that POV is observed. Single row keeps lookups cheap and
-gives clean UPSERT semantics.
+("Aria sees Kael as: brother", "Kael sees Aria as: sister") and either
+may be null until that POV is observed. Single row keeps lookups cheap
+and gives clean UPSERT semantics.
 
 **Canonical ordering invariant: `a_id < b_id`.** Lexicographic string
 compare on the `char_${uuid}` IDs. Application write path always

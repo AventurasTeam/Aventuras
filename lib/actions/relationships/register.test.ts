@@ -114,6 +114,35 @@ describe('character_relationships upsert', () => {
     expect(await deltasFor(db, 'act_2')).toHaveLength(0)
   })
 
+  it('is a no-op when the write is a case/whitespace variant of the stored view', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(upsert('char_aria', 'char_kael', 'sister', 'act_1'), ctx)
+    const result = await applyDeltaAction(upsert('char_aria', 'char_kael', 'Sister', 'act_2'), ctx)
+    expect(result).toEqual({
+      status: 'rejected',
+      reason: 'relationship unchanged',
+      code: 'noop',
+    })
+    const rows = await pairRow(db, 'char_aria', 'char_kael')
+    expect(rows[0].kind).toBe('sister')
+    expect(await deltasFor(db, 'act_2')).toHaveLength(0)
+  })
+
+  it('is a no-op when a single-perspective clear targets an already-null view', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(upsert('char_kael', 'char_aria', 'sister', 'act_1'), ctx)
+    const result = await applyDeltaAction(upsert('char_aria', 'char_kael', null, 'act_2'), ctx)
+    expect(result).toEqual({
+      status: 'rejected',
+      reason: 'relationship unchanged',
+      code: 'noop',
+    })
+    const rows = await pairRow(db, 'char_aria', 'char_kael')
+    expect(rows[0].kind).toBeNull()
+    expect(rows[0].inverseKind).toBe('sister')
+    expect(await deltasFor(db, 'act_2')).toHaveLength(0)
+  })
+
   it('rejects a null-POV write against a non-existent pair', async () => {
     const { ctx } = await setup()
     const res = await applyDeltaAction(upsert('char_aria', 'char_kael', null, 'act_1'), ctx)

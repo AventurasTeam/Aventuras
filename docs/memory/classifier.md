@@ -51,9 +51,11 @@ declaration values.
   perspective per fact, the subject's view of the object and never the
   inferred inverse, upserted into the pair's row as it stands when the
   write lands. The prompt shows the classifier the stored view for
-  every pair it can see (one line per non-null perspective), and it
-  emits a fact only when the prose establishes a view or changes one
-  already listed; an unchanged view writes nothing.
+  every stored pair on the branch (one line per non-null perspective),
+  and it is told to emit a fact only when the prose establishes a view
+  or changes one already listed. A write repeating the stored view,
+  ignoring case and spacing, is rejected as a no-op at the action
+  layer — it writes no delta.
 
 ## Provenance attribution
 
@@ -95,7 +97,7 @@ underlying `char_<uuid>` / `loc_<uuid>` / etc. forms — the
 substitution layer swaps both directions
 (see [`generation-pipeline.md → ID placeholder substitution`](../generation-pipeline.md#id-placeholder-substitution)).
 The placeholder universe shown to the classifier covers entities
-in the prompt's structured entity/lore/happening lists.
+in the prompt's structured entity/lore/happening/relationship lists.
 
 When the classifier creates a brand-new entity, it emits the
 entity as a **full object with no `id` field** — name, description,
