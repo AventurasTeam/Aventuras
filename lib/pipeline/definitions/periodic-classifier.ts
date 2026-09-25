@@ -21,7 +21,13 @@ import {
 import { branches, storyEntries, type ClassifierStatus, type StoryEntry } from '@/lib/db'
 import { generateId, IdBiMap } from '@/lib/ids'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
-import { appSettingsStore, currentStoryStore, entitiesStore, happeningsStore } from '@/lib/stores'
+import {
+  appSettingsStore,
+  characterRelationshipsStore,
+  currentStoryStore,
+  entitiesStore,
+  happeningsStore,
+} from '@/lib/stores'
 
 import { buildClassifierContext } from './classifier-context'
 import { definePipeline } from '../authoring/define'
@@ -151,6 +157,9 @@ export async function* periodicClassifierPhase(
   const entities = [...entitiesStore.getEntities().values()].filter(
     (e) => e.branchId === ctx.branchId,
   )
+  const relationships = [...characterRelationshipsStore.getRelationshipRows().values()].filter(
+    (r) => r.branchId === ctx.branchId,
+  )
   const idMap = new IdBiMap()
   const prompt = renderTemplate(
     TEMPLATE_IDS.periodicClassifier,
@@ -160,6 +169,7 @@ export async function* periodicClassifierPhase(
       happenings: [...happeningsStore.getHappenings().values()].filter(
         (h) => h.branchId === ctx.branchId,
       ),
+      relationships,
       idMap,
     }),
   )

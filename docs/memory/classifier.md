@@ -50,7 +50,10 @@ declaration values.
 - **Character relationships** — `character_relationships`. One
   perspective per fact, the subject's view of the object and never the
   inferred inverse, upserted into the pair's row as it stands when the
-  write lands.
+  write lands. The prompt shows the classifier the stored view for
+  every pair it can see (one line per non-null perspective), and it
+  emits a fact only when the prose establishes a view or changes one
+  already listed; an unchanged view writes nothing.
 
 ## Provenance attribution
 

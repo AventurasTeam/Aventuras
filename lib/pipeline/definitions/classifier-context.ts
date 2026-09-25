@@ -1,5 +1,5 @@
 import type { ClassifierWindow } from '@/lib/classifier'
-import type { Entity, Happening } from '@/lib/db'
+import type { CharacterRelationship, Entity, Happening } from '@/lib/db'
 import { substituteIds, type IdBiMap } from '@/lib/ids'
 
 // The classifierContext group's one builder. Separate from generationContext
@@ -9,9 +9,10 @@ export function buildClassifierContext(args: {
   window: ClassifierWindow
   entities: readonly Entity[]
   happenings: readonly Happening[]
+  relationships: readonly CharacterRelationship[]
   idMap: IdBiMap
 }): Record<string, unknown> {
-  const { window, entities, happenings, idMap } = args
+  const { window, entities, happenings, relationships, idMap } = args
   const context = {
     // entryId/position stay out: the model addresses turns by handle only, and
     // entry_* is not substitutable, so leaking it would put a raw id in the prompt.
@@ -27,6 +28,15 @@ export function buildClassifierContext(args: {
       status: e.status,
     })),
     happenings: happenings.map((h) => ({ id: h.id, title: h.title })),
+    // One row per non-null perspective, not per pair: a row with both views set
+    // becomes two facts, each already shaped like the (subject, object, kind)
+    // upsert the model is asked to emit.
+    relationships: relationships.flatMap((r) => {
+      const rows: { subject: string; object: string; kind: string }[] = []
+      if (r.kind != null) rows.push({ subject: r.aId, object: r.bId, kind: r.kind })
+      if (r.inverseKind != null) rows.push({ subject: r.bId, object: r.aId, kind: r.inverseKind })
+      return rows
+    }),
   }
   return substituteIds(context, idMap) as Record<string, unknown>
 }

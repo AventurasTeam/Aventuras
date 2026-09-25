@@ -131,6 +131,9 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx) => {
   if (inverseKind !== undefined)
     return bothPovOutcome(ctx, bid, { aId, bId, subjectIsA }, current, kind, inverseKind)
 
+  if (current && current[povCol] === kind)
+    return { status: 'rejected', reason: 'relationship unchanged', code: 'noop' }
+
   if (!current) {
     if (kind === null) return { status: 'rejected', reason: 'no relationship to clear' }
     const now = Date.now()
