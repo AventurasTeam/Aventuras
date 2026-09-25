@@ -84,26 +84,30 @@ export function StackablesEditor({
                 </View>
               )}
             />
-            <IconAction
-              icon={Trash2}
-              label={
-                key === ''
-                  ? t('world:carrying.removeStackable')
-                  : t('world:carrying.removeStackableNamed', { key })
-              }
-              size="sm"
-              variant="destructive"
-              disabled={blocked}
-              disabledReason={blockedReason}
-              onPress={() => {
-                remove(index)
-                trigger('stackables').catch((error: unknown) => {
-                  logger.error('app.world_stackables_revalidate_failed', {
-                    error: error instanceof Error ? error.message : String(error),
+            {/* Centered on the inputs, not on an error line; square so the phone hit slop stays
+                inside the parent, where Android can reach it. */}
+            <View className="h-control-md w-control-md items-center justify-center">
+              <IconAction
+                icon={Trash2}
+                label={
+                  key === ''
+                    ? t('world:carrying.removeStackable')
+                    : t('world:carrying.removeStackableNamed', { key })
+                }
+                size="sm"
+                variant="destructive"
+                disabled={blocked}
+                disabledReason={blockedReason}
+                onPress={() => {
+                  remove(index)
+                  trigger('stackables').catch((error: unknown) => {
+                    logger.error('app.world_stackables_revalidate_failed', {
+                      error: error instanceof Error ? error.message : String(error),
+                    })
                   })
-                })
-              }}
-            />
+                }}
+              />
+            </View>
           </View>
         )
       })}

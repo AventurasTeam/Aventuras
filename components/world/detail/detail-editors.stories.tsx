@@ -354,6 +354,27 @@ export const StackablesRemoveRevalidatesSurvivor: Story = {
   },
 }
 
+function verticalCenter(el: Element): number {
+  const r = el.getBoundingClientRect()
+  return r.top + r.height / 2
+}
+
+/** The trash centers on the row's inputs, and an error line under the key doesn't move it. */
+export const StackablesTrashCenteredOnInputs: Story = {
+  args: { editor: 'stackables', stackables: [{ key: 'Gold', count: 5 }] },
+  play: async () => {
+    const second = await addDuplicateGold()
+    for (const [row, name] of [
+      [within(screen.getByTestId('stackable-0')), 'Remove Gold'],
+      [second, 'Remove gold'],
+    ] as const) {
+      const input = verticalCenter(row.getByRole('textbox', { name: 'Quantity' }))
+      const trash = verticalCenter(row.getByRole('button', { name }))
+      await expect(Math.abs(trash - input)).toBeLessThanOrEqual(1)
+    }
+  },
+}
+
 /** Decision: contradictory positions are shown, not fixed — the picker says where each item is. */
 export const CarryingPickerShowsWhereabouts: Story = {
   args: { editor: 'carrying' },
