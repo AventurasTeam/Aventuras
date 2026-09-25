@@ -197,7 +197,11 @@ export const promoteStagedEntityHandler: ActionHandler = async (action, branchId
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const current = await loadCurrent(bid, id, ctx)
   if (!current)
-    return { status: 'rejected', reason: `promote target entities ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `promote target entities ${bid}:${id} not found`,
+      code: 'noop',
+    }
   const storeEntity = entitiesStore.getById(id)
   if (current.status !== 'staged' || (storeEntity !== undefined && storeEntity.status !== 'staged'))
     return { status: 'rejected', reason: 'not-staged', code: 'noop' }
@@ -218,7 +222,10 @@ export const promoteStagedEntityHandler: ActionHandler = async (action, branchId
   }
 }
 
-/** Appends only what the live row lacks: a pass's snapshot must not undo a mid-pass edit. */
+/**
+ * Appends the payload terms the live row lacks; callers send only terms new against
+ * what they read, so a mid-pass removal stays removed.
+ */
 export const appendEntityKeywordsHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'appendEntityKeywords')
     throw new Error(`handler/kind mismatch: expected 'appendEntityKeywords', got '${action.kind}'`)

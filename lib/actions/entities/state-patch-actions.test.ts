@@ -353,6 +353,28 @@ describe('promoteStagedEntity', () => {
     expect(row.status).toBe('active')
     expect(entitiesStore.getById('char_1')?.status).toBe('active')
   })
+
+  it('no-ops when the target row is gone, same as any other row the pass read stale', async () => {
+    const { ctx } = await setup()
+    expect(
+      await applyDeltaAction(
+        {
+          action: {
+            kind: 'promoteStagedEntity',
+            source: 'ai_classifier',
+            payload: { branchId: 'br_1', id: 'char_1' },
+          },
+          actionId: 'act_p',
+          branchId: 'br_1',
+        },
+        ctx,
+      ),
+    ).toEqual({
+      status: 'rejected',
+      reason: 'promote target entities br_1:char_1 not found',
+      code: 'noop',
+    })
+  })
 })
 
 type Ctx = Awaited<ReturnType<typeof setup>>['ctx']
