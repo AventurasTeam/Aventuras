@@ -195,6 +195,15 @@ handler, which is where the sweep must therefore live.
   the referencing entities' `state` patches and the tail metadata
   write are built against rows that still exist; confirm the runner's
   pre-group-state rule makes the order irrelevant, or pin it.
+- **Lead removed by a reversal.** 4.2a's `Set as lead` (C5) can point
+  the lead at a character whose create is still undoable (World
+  `[+] Blank`, or a classifier-introduced character); CTRL-Z /
+  regenerate / rollback of that group deletes the row while
+  `stories.definition.leadEntityId` (not delta-logged) keeps the dead
+  id. Should the `lead-entity` refusal this slice adds for
+  delete/merge also cover reversing the group that created the
+  current lead? Nothing outside the wizard reads the lead before
+  4.5a.
 
 ## Implementation notes
 

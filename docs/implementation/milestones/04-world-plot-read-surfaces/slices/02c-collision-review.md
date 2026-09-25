@@ -177,6 +177,15 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   synchronous handler" contract is comment-only, not type-enforced. A
   `revealFirstFlagged()` handle method would own both if this slice
   touches the pill.
+- **Grouped relationship and parent writes read pre-group state.**
+  4.2a's handlers each read the state before the group, so (a) two
+  creates for the same character pair in one group throw on the
+  pair's unique index rather than rejecting cleanly — merge duplicate
+  pairs before emitting actions; (b) two `parent_location_id` writes
+  in one group can form a loop the cycle guard doesn't see, and a
+  valid reparent sequence (A.parent := null; B.parent := A while
+  A.parent = B) is refused. Does the merge rewrite need a group-aware
+  pass?
 
 ## Implementation notes
 

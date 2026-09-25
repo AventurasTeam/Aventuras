@@ -1,4 +1,4 @@
-import { X } from 'lucide-react-native'
+import { ExternalLink, X } from 'lucide-react-native'
 import { useCallback, useRef, type ReactElement, type Ref, type RefCallback } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
@@ -23,6 +23,10 @@ type PickerFieldProps = TriggerProps & {
   label: string
   /** Renders a `×` beside a set value that clears without opening the overlay. */
   onClear?: () => void
+  /** Renders a `↗` before the `×`, named by this label; kept in layout, hidden while `onOpen` is unset. */
+  openLabel?: string
+  /** Opens the value elsewhere (not the overlay). */
+  onOpen?: () => void
   disabled?: boolean
   disabledReason?: string
   'aria-invalid'?: boolean | 'true' | 'false'
@@ -52,6 +56,8 @@ export function PickerField({
   placeholder,
   label,
   onClear,
+  openLabel,
+  onOpen,
   disabled,
   disabledReason,
   'aria-invalid': ariaInvalid,
@@ -103,6 +109,18 @@ export function PickerField({
           </Text>
         )}
       </Pressable>
+      {/* Navigating isn't editing: stays live while the field is disabled. */}
+      {openLabel != null ? (
+        <IconAction
+          icon={ExternalLink}
+          label={openLabel}
+          size="sm"
+          disabled={onOpen == null}
+          aria-hidden={onOpen == null}
+          onPress={onOpen}
+          className={cn('ml-1', onOpen == null && 'opacity-0')}
+        />
+      ) : null}
       {onClear != null ? (
         <IconAction
           icon={X}
@@ -111,7 +129,8 @@ export function PickerField({
           disabled={disabled || !hasValue}
           aria-hidden={!hasValue}
           onPress={handleClear}
-          className={cn('ml-1', !hasValue && 'opacity-0')}
+          // 20px from a ↗ keeps the two 44px phone touch zones apart.
+          className={cn(openLabel != null ? 'ml-5' : 'ml-1', !hasValue && 'opacity-0')}
         />
       ) : null}
     </View>

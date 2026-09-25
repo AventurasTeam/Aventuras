@@ -6,7 +6,7 @@ import { branches, characterRelationships, deltas, entities, stories } from '@/l
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { logger } from '@/lib/diagnostics'
 import { ID_PATTERN } from '@/lib/ids'
-import { generationStore, resetAllStores } from '@/lib/stores'
+import { characterRelationshipsStore, generationStore, resetAllStores } from '@/lib/stores'
 import { characterDraftFrom, locationDraftFrom } from '@/lib/world'
 
 import { saveEntity } from './save-entity'
@@ -161,7 +161,14 @@ describe('saveEntity', () => {
     const row = await rowOf(db, 'char_kael')
     const draft = {
       ...characterDraftFrom(row, []),
-      relationships: [{ otherId: 'char_aria', selfToOther: 'sister', otherToSelf: 'brother' }],
+      relationships: [
+        {
+          cardKey: 'card_aria',
+          otherId: 'char_aria',
+          selfToOther: 'sister',
+          otherToSelf: 'brother',
+        },
+      ],
     }
     await saveEntity({ kind: 'character', branchId: 'br_1', row, draft, relationships: [] }, ctx)
     const rels = await db.select().from(characterRelationships)
@@ -184,7 +191,9 @@ describe('saveEntity', () => {
     const row = await rowOf(db, 'char_kael')
     const draft = {
       ...characterDraftFrom(row, []),
-      relationships: [{ otherId: 'char_aria', selfToOther: '', otherToSelf: 'rival' }],
+      relationships: [
+        { cardKey: 'card_aria', otherId: 'char_aria', selfToOther: '', otherToSelf: 'rival' },
+      ],
     }
     await saveEntity({ kind: 'character', branchId: 'br_1', row, draft, relationships: [] }, ctx)
     // Kael is b: Aria's view of Kael lands in `kind` (a's view of b).
@@ -205,7 +214,9 @@ describe('saveEntity', () => {
         draft: {
           ...characterDraftFrom(null, []),
           name: 'Sable',
-          relationships: [{ otherId: 'char_aria', selfToOther: 'debtor', otherToSelf: '' }],
+          relationships: [
+            { cardKey: 'card_aria', otherId: 'char_aria', selfToOther: 'debtor', otherToSelf: '' },
+          ],
         },
         relationships: [],
       },
@@ -234,6 +245,81 @@ describe('saveEntity', () => {
     const rows = await deltaRows(db)
     expect(rows).toHaveLength(2)
     expect(new Set(rows.map((r) => r.actionId)).size).toBe(1)
+  })
+
+  it('keeps a pair added after the draft baseline while it writes the edited one', async () => {
+    const { db, ctx } = await setup()
+    await db
+      .insert(entities)
+      .values([
+        character('char_aria', 'Aria'),
+        character('char_kael', 'Kael'),
+        character('char_vorne', 'Vorne'),
+      ])
+    const rel = { branchId: 'br_1', createdAt: 1, updatedAt: 1 }
+    await db.insert(characterRelationships).values([
+      {
+        ...rel,
+        id: 'rel_aria',
+        aId: 'char_aria',
+        bId: 'char_kael',
+        kind: 'brother',
+        inverseKind: 'sister',
+      },
+      {
+        ...rel,
+        id: 'rel_vorne',
+        aId: 'char_kael',
+        bId: 'char_vorne',
+        kind: 'rival',
+        inverseKind: null,
+      },
+    ])
+    characterRelationshipsStore.hydrate('br_1', await db.select().from(characterRelationships))
+    const current = characterRelationshipsStore.getRelationships('char_kael', 'br_1')
+    const base = current.filter((r) => r.otherId === 'char_aria')
+    expect(base).toHaveLength(1)
+    expect(current).toHaveLength(2)
+
+    const row = await rowOf(db, 'char_kael')
+    const draft = {
+      ...characterDraftFrom(row, base),
+      relationships: [
+        {
+          cardKey: 'card_aria',
+          otherId: 'char_aria',
+          selfToOther: 'estranged sister',
+          otherToSelf: 'brother',
+        },
+      ],
+    }
+    expect(
+      await saveEntity(
+        {
+          kind: 'character',
+          branchId: 'br_1',
+          row,
+          draft,
+          relationships: current,
+          relationshipsBase: base,
+        },
+        ctx,
+      ),
+    ).toEqual({ status: 'ok', id: 'char_kael' })
+
+    const rels = await db.select().from(characterRelationships)
+    expect(rels.find((r) => r.id === 'rel_vorne')).toMatchObject({
+      kind: 'rival',
+      inverseKind: null,
+    })
+    // Kael is b of Kael↔Aria, so Kael's view of Aria is inverse_kind.
+    expect(rels.find((r) => r.id === 'rel_aria')).toMatchObject({
+      kind: 'brother',
+      inverseKind: 'estranged sister',
+    })
+    const rows = await deltaRows(db)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ op: 'update', targetId: 'rel_aria' })
   })
 
   it('collapses keyword case variants on commit', async () => {

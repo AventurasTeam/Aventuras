@@ -1,9 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import type { Entity, Lore } from '@/lib/db'
+import type { Entity, EntityKind, Lore } from '@/lib/db'
 import { isEntityCategory, type WorldCategory } from '@/lib/list-modules'
 
-import type { WorldDetailSelection } from './world-detail-placeholder'
+export type WorldDetailSelection =
+  | { type: 'entity'; row: Entity }
+  | { type: 'lore'; row: Lore }
+  /** `seq` bumps per `[+] Blank`, so a repeat create resets a draft already in create mode. */
+  | { type: 'create'; kind: EntityKind; seq: number }
 
 type WorldSelectionInput = {
   initialId: string | null
@@ -14,7 +18,7 @@ type WorldSelectionInput = {
   ready: boolean
 }
 
-/** World's selected row: the id, and the current category's row it resolves to. */
+/** World's selected row, or create mode; a row that disappears takes its selection with it. */
 export function useWorldSelection({
   initialId,
   category,
@@ -23,7 +27,12 @@ export function useWorldSelection({
   ready,
 }: WorldSelectionInput) {
   const [selectedId, setSelectedId] = useState<string | null>(initialId)
+  const [creating, setCreating] = useState(false)
+  const [createSeq, setCreateSeq] = useState(0)
+
   const selection = useMemo<WorldDetailSelection | null>(() => {
+    if (creating && isEntityCategory(category))
+      return { type: 'create', kind: category, seq: createSeq }
     if (selectedId == null) return null
     if (isEntityCategory(category)) {
       const row = entities.find((e) => e.id === selectedId && e.kind === category)
@@ -31,13 +40,23 @@ export function useWorldSelection({
     }
     const row = lore.find((l) => l.id === selectedId)
     return row == null ? null : { type: 'lore', row }
-  }, [selectedId, category, entities, lore])
+  }, [creating, createSeq, selectedId, category, entities, lore])
 
   // A row that disappears (an undo, a reversed run) takes its selection with it, so a
   // restore under the same id can't reopen the detail on its own.
   useEffect(() => {
-    if (ready && selectedId != null && selection == null) setSelectedId(null)
-  }, [ready, selectedId, selection])
+    if (ready && !creating && selectedId != null && selection == null) setSelectedId(null)
+  }, [ready, creating, selectedId, selection])
 
-  return { selectedId, setSelectedId, selection }
+  const select = useCallback((id: string | null) => {
+    setCreating(false)
+    setSelectedId(id)
+  }, [])
+  const startCreate = useCallback(() => {
+    setSelectedId(null)
+    setCreating(true)
+    setCreateSeq((n) => n + 1)
+  }, [])
+
+  return { selectedId, selection, select, startCreate }
 }

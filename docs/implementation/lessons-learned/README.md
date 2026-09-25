@@ -40,6 +40,10 @@ slice plans when relevant.
   surfaces use `hover:opacity-90` / `active:opacity-90`.
 - [Icon `fill="currentColor"`](./icon-fill-currentcolor.md) —
   broken on Android; drive fill via Tailwind `fill-*` className.
+- [Android wraps content-sized text into a clipped second line](./android-text-subpixel-wrap.md)
+  — a chip's frame can land a pixel short of its text and drop the
+  last word, depending on position; `Tag` pads string labels with a
+  trailing hair space, and `onTextLayout` doesn't show what was drawn.
 - [Raw HTML islands need an explicit theme baseline](./raw-html-island-theme-baseline.md)
   — web inherits `body { color: var(--fg-primary) }`, native
   RenderHTML always gets a `baseStyle` color; never patch color
