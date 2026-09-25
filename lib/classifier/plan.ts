@@ -153,8 +153,7 @@ export function buildClassifierActions(
         })
       continue
     }
-    // A known character writes only when the prose named it by something new: keywords aren't
-    // frozen after introduction, but a recurring name must not cost a delta row per pass.
+    // Snapshot-new terms only: re-sending a held term would restore an alias the user removed mid-pass.
     if (decision.kind === 'known') {
       handleMap.set(candidate.handle, decision.entityId)
       const known = index.get(decision.entityId)

@@ -603,6 +603,11 @@ describe('buildClassifierActions', () => {
       expect(planned).toHaveLength(0)
     })
 
+    it('skips a retire flip when the snapshot status is staged, not active', () => {
+      const { planned } = flip('char_s', 'retired', [entityRow('char_s', 'staged')])
+      expect(planned).toHaveLength(0)
+    })
+
     it('emits one delta for two identical retire flips', () => {
       const { planned } = buildClassifierActions(
         {
@@ -700,6 +705,19 @@ describe('entity keywords', () => {
     })
   })
 
+  it('sends a promoted entity only the terms its snapshot lacks', () => {
+    const { planned } = buildClassifierActions(candidate(['the grey wolf', 'The Innkeeper']), {
+      ...base,
+      entities: [entityRow('char_kael', 'staged', 'Kael', ['the innkeeper'])] as never[],
+      decisions: decide({ kind: 'promote', entityId: 'char_kael', similarity: 0.9 }),
+    })
+    expect(planned.map((p) => p.action.kind)).toEqual([
+      'promoteStagedEntity',
+      'appendEntityKeywords',
+    ])
+    expect(payloadOf<{ keywords: string[] }>(planned[1]).keywords).toEqual(['the grey wolf'])
+  })
+
   it('trims the terms it sends', () => {
     const { planned } = buildClassifierActions(candidate(['  the grey wolf ']), {
       ...base,
@@ -720,18 +738,76 @@ describe('entity keywords', () => {
     expect(planned).toEqual([])
   })
 
+  // The index tracks each append in turn, so a second candidate for the same entity
+  // filters against what the first one just added, not just the pass's opening snapshot.
+  it('filters a second candidate against the first candidate keywords in the same reply', () => {
+    const { planned } = buildClassifierActions(
+      {
+        happenings: [],
+        relationships: [],
+        statusFlips: [],
+        newCharacters: [
+          {
+            handle: 'new:k1',
+            name: 'Kael',
+            description: 'A courier.',
+            keywords: ['the grey wolf'],
+          },
+          {
+            handle: 'new:k2',
+            name: 'Kael',
+            description: 'A courier.',
+            keywords: ['The Grey Wolf', 'the innkeeper'],
+          },
+        ],
+      },
+      {
+        ...base,
+        entities: [entityRow('char_kael', 'active', 'Kael')] as never[],
+        decisions: new Map<string, ReconcileDecision>([
+          ['new:k1', { kind: 'known', entityId: 'char_kael', similarity: 0.9 }],
+          ['new:k2', { kind: 'known', entityId: 'char_kael', similarity: 0.9 }],
+        ]),
+      },
+    )
+    const appends = planned.filter((p) => p.action.kind === 'appendEntityKeywords')
+    expect(appends).toHaveLength(2)
+    expect(payloadOf<{ keywords: string[] }>(appends[1]).keywords).toEqual(['the innkeeper'])
+  })
+
   // Two guarded writes: a promotion the user pre-empted no-ops while the aliases still land.
   it('promotes and appends keywords as separate writes', () => {
-    const { planned } = buildClassifierActions(candidate(['the grey wolf']), {
-      ...base,
-      entities: [entityRow('char_kael', 'staged', 'Kael')] as never[],
-      decisions: decide({ kind: 'promote', entityId: 'char_kael', similarity: 0.9 }),
-    })
+    const { planned } = buildClassifierActions(
+      {
+        happenings: [],
+        relationships: [],
+        statusFlips: [],
+        newCharacters: [
+          {
+            handle: 'new:k',
+            name: 'Kael',
+            description: 'A courier.',
+            keywords: ['the grey wolf'],
+            sourceTurn: 't1',
+          },
+        ],
+      },
+      {
+        ...base,
+        entities: [entityRow('char_kael', 'staged', 'Kael')] as never[],
+        decisions: decide({ kind: 'promote', entityId: 'char_kael', similarity: 0.9 }),
+      },
+    )
     expect(planned.map((p) => p.action.kind)).toEqual([
       'promoteStagedEntity',
       'appendEntityKeywords',
     ])
-    expect(payloadOf<{ keywords: string[] }>(planned[1]).keywords).toEqual(['the grey wolf'])
+    expect(planned.map((p) => p.entryId)).toEqual(['e1', 'e1'])
+    expect(payloadOf<{ id: string }>(planned[0]).id).toBe('char_kael')
+    expect(payloadOf<{ id: string; keywords: string[] }>(planned[1])).toMatchObject({
+      id: 'char_kael',
+      keywords: ['the grey wolf'],
+    })
   })
 })
 
