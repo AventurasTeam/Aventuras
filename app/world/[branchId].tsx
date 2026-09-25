@@ -9,10 +9,7 @@ import { ImporterMenu } from '@/components/compounds/importer-menu'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { MasterDetailLayout } from '@/components/shells/master-detail-layout'
 import { ScreenShell } from '@/components/shells/screen-shell'
-import {
-  storySettingsGenerationPhase,
-  useStoryGenerationGate,
-} from '@/components/story-settings/generation-run'
+import { storyPillPhase, useStoryGenerationGate } from '@/components/story-settings/generation-run'
 import { EmptyState } from '@/components/ui/empty-state'
 import { KeyboardInsetColumn } from '@/components/ui/keyboard-inset-column'
 import { CollisionReviewPill } from '@/components/world/collision-review-pill'
@@ -164,7 +161,9 @@ export default function WorldRoute() {
     [entities, relationships, involvements, entryIndex.index, worldTime, calendar, leadId],
   )
 
-  const { activeRunKind, editBlocked, gateReason } = useStoryGenerationGate(storyId ?? undefined)
+  const { activeRunKind, editBlocked, gateReason, classifierRunId } = useStoryGenerationGate(
+    storyId ?? undefined,
+  )
   const openRegionPct = useOpenRegionTokens(storyId)
 
   // save-sessions.md → Navigate-away guard: every in-surface transition routes through here.
@@ -443,9 +442,7 @@ export default function WorldRoute() {
           <StoryStatusPill
             storyId={storyId}
             swapTarget={open?.settings.embedding_swap_target}
-            activePhase={
-              activeRunKind != null ? storySettingsGenerationPhase(activeRunKind) : undefined
-            }
+            activePhase={storyPillPhase(activeRunKind, classifierRunId)}
             onCancel={() => {
               if (activeRunKind != null) void awaitRunTerminal(activeRunKind, branchId, 'cancel')
             }}

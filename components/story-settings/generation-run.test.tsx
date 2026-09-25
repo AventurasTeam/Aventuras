@@ -6,7 +6,9 @@ import { generationStore, type RunState, type TxState } from '@/lib/stores'
 
 import {
   generationGateReason,
+  selectStoryClassifierRunId,
   selectStorySettingsGenerationRunKind,
+  storyPillPhase,
   storySettingsGenerationPhase,
 } from './generation-run'
 
@@ -87,6 +89,29 @@ describe('storySettingsGenerationPhase', () => {
     expect(storySettingsGenerationPhase('chapter-close')).toBe('closing-chapter')
     expect(storySettingsGenerationPhase('suggestion-refresh')).toBe('refreshing-suggestions')
     expect(storySettingsGenerationPhase('per-turn')).toBe('generating-narrative')
+  })
+})
+
+describe('selectStoryClassifierRunId', () => {
+  it("returns the story's classifier run and nothing else", () => {
+    expect(
+      selectStoryClassifierRunId(tx(run('periodic-classifier', 'story-1', 'no-gate')), 'story-1'),
+    ).toBe('run-periodic-classifier')
+    expect(
+      selectStoryClassifierRunId(tx(run('periodic-classifier', 'story-2', 'no-gate')), 'story-1'),
+    ).toBeNull()
+    expect(selectStoryClassifierRunId(tx(run('per-turn')), 'story-1')).toBeNull()
+  })
+})
+
+describe('storyPillPhase', () => {
+  it('shows a foreground run over the classifier pass', () => {
+    expect(storyPillPhase('chapter-close', 'run-1')).toBe('closing-chapter')
+  })
+
+  it('shows the classifier pass as updating memory when nothing else runs', () => {
+    expect(storyPillPhase(null, 'run-1')).toBe('updating-memory')
+    expect(storyPillPhase(null, null)).toBeUndefined()
   })
 })
 

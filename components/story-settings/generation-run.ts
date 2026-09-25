@@ -1,3 +1,5 @@
+import type { GenerationPhase } from '@/components/compounds/generation-status-pill'
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { t } from '@/lib/i18n'
 import { SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
 import { generationStore, isBackgroundKind, isUserEditBlocked, type TxState } from '@/lib/stores'
@@ -42,20 +44,45 @@ export function generationGateReason(
   return t(runKind === 'chapter-close' ? 'generationGate.chapterClose' : 'generationGate.inFlight')
 }
 
-/** The run the story's status pill describes, and whether and why in-story edits are blocked. */
+/** The story's in-flight periodic-classifier run, or null. */
+export function selectStoryClassifierRunId(
+  txState: TxState,
+  storyId: string | undefined,
+): string | null {
+  for (const run of txState.runs.values())
+    if (run.storyId === storyId && run.kind === PERIODIC_CLASSIFIER_KIND) return run.runId
+  return null
+}
+
+/**
+ * The run the story's status pill describes, the classifier pass in flight,
+ * and why in-story edits are blocked.
+ */
 export function useStoryGenerationGate(storyId: string | undefined) {
   const activeRunKind = generationStore.useGeneration((s) =>
     selectStorySettingsGenerationRunKind(s.txState, storyId),
   )
+  const classifierRunId = generationStore.useGeneration((s) =>
+    selectStoryClassifierRunId(s.txState, storyId),
+  )
   const editBlocked = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
   const gateReason = generationGateReason(editBlocked, activeRunKind)
-  return { activeRunKind, editBlocked, gateReason }
+  return { activeRunKind, editBlocked, gateReason, classifierRunId }
 }
 
 export function storySettingsGenerationPhase(kind: string): StorySettingsGenerationPhase {
   if (kind === 'chapter-close') return 'closing-chapter'
   if (kind === SUGGESTION_REFRESH_KIND) return 'refreshing-suggestions'
   return 'generating-narrative'
+}
+
+/** The status pill's phase: a foreground run's, else the classifier pass's non-blocking one. */
+export function storyPillPhase(
+  activeRunKind: string | null,
+  classifierRunId: string | null,
+): GenerationPhase | undefined {
+  if (activeRunKind != null) return storySettingsGenerationPhase(activeRunKind)
+  return classifierRunId != null ? 'updating-memory' : undefined
 }
 
 export type { StorySettingsGenerationPhase }
