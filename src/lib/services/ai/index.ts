@@ -59,9 +59,6 @@ import type {
 } from '$lib/types'
 import { normalizeImageDataUrl, expectedPixels, type ImageSpec } from '$lib/utils/image'
 import type { StreamChunk } from './core/types'
-import { recentStoryBudgetChars } from './core/defaults'
-import { loreRecentEntries } from './retrieval/recentTail'
-import { renderLoreProse } from './lorebook'
 import { serviceFactory } from './core/factory'
 import {
   inlineImageService,
@@ -639,21 +636,15 @@ class AIService {
     callbacks: LoreManagementCallbacks,
     options: LoreRunOptions,
   ): Promise<LoreManagementResult> {
-    const { mode, pov, tense, tokenThreshold, newChapter, recentEntryLimit } = options
-    // The story since the last chapter — the only unsummarised material the agent has.
-    // A chapter-triggered run reads on from the chapter; every other run reads the newest entries.
-    const recentStory = renderLoreProse(
-      loreRecentEntries(recentMessages, recentStoryBudgetChars(tokenThreshold), {
-        fromStart: newChapter !== undefined,
-        entryLimit: recentEntryLimit,
-      }),
-    )
+    const { mode, pov, tense, tokenThreshold, chapterBuffer, newChapter } = options
 
     // Create service and run session
     const service = serviceFactory.createLoreManagementService()
     const sessionResult = await service.runSession({
       storyId,
-      recentStory,
+      recentEntries: recentMessages,
+      tokenThreshold,
+      chapterBuffer,
       existingEntries: entries,
       chapters,
       mode,

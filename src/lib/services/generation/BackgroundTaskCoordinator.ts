@@ -114,15 +114,12 @@ export class BackgroundTaskCoordinator {
     // 2. Lore management (only if chapter creation triggered it)
     if (result.chapterCreation.loreManagementTriggered) {
       const { chapter, chapterEntries } = result.chapterCreation
-      const newChapter =
-        chapter && chapterEntries ? { chapter, entries: chapterEntries } : undefined
       try {
-        const session = input.loreSession()
         result.loreManagement = await this.loreCoordinator.runSession(
           {
-            ...session,
-            newChapter,
-            recentEntryLimit: newChapter ? session.recentEntryLimit : undefined,
+            ...input.loreSession(),
+            newChapter:
+              chapter && chapterEntries ? { chapter, entries: chapterEntries } : undefined,
           },
           input.loreCallbacks,
           input.loreUICallbacks,

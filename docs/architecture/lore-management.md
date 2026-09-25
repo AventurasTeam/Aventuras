@@ -61,11 +61,11 @@ panel (`runManualLoreManagement`, shared by both manual callers).
 
 **By default, the chapter that triggered a run arrives in full, not as a summary.** Every other
 chapter is still a `{number, title, summary}` line, but the one just written is handed over as its own
-entries — rendered `[ACTION]`/`[NARRATIVE]`, the same shape `recentStory` uses — plus its
+entries — rendered `[ACTION]`/`[NARRATIVE]` by `renderLoreProse` — plus its
 `characters` and `locations` facets, and dropped from the summary list so it is not shown twice.
 Why: `memoryConfig.summaryDetail` can be set to `concise`, and a concise summary does not carry
-the names and proper nouns a lorebook is built from — the agent's only recourse used to be
-`query_chapter`, paying a second model's call to recover text the caller already had in hand.
+the names and proper nouns a lorebook is built from — the agent's only recourse would be
+`query_chapter`, paying a second model's call to recover text the caller already has in hand.
 `newChapter.ts` owns both rules (the render and the drop) and is covered by a unit test; the
 automatic path (`BackgroundTaskCoordinator`) and the manual one (`MemoryView` after a hand-built
 chapter) both supply it. The automatic path passes the entries `ChapterService` summarized,
@@ -222,30 +222,39 @@ re-create it.
 
 **An agent with no story text must not create.** Chapters are the usual material, but a manual run
 can happen before any chapter exists, so every caller passes `recentEntries` — the un-chapterized
-tail. `runLoreManagement` bounds it to `recentStoryBudgetChars(tokenThreshold)`, unless a
-chapter-triggered run sizes it by Buffer Messages instead (covered below) — the same
-`CHAPTER_READ_BUDGET_RATIO` (2.5) a chapter read uses, converted to characters at ~4 per token, so
-it reads as "about 2.5 chapters" on both sides and scales with the user's own setting rather than
-sitting at a fixed 16,384. It was hardcoded to `[]` on all three paths. With neither chapters nor a
-tail, the prompt says so and restricts the run to consolidating what is already written; anything it
-"identified as missing" would be invented.
+tail — along with the story's `tokenThreshold` and `chapterBuffer`. `LoreManagementService` picks
+what the agent reads of it (`loreRecentEntries`). By default that is bounded to
+`recentStoryBudgetChars(tokenThreshold)`: the same `CHAPTER_READ_BUDGET_RATIO` (2.5) a chapter read
+uses, converted to characters at ~4 per token, so it reads as "about 2.5 chapters" on both sides
+and scales with the user's own setting rather than sitting at a fixed 16,384. With neither
+chapters nor a tail, the prompt says so and restricts the run to consolidating what is already
+written; anything it "identified as missing" would be invented.
 
 **Characters, not entries, and through the same helper the retrieval tail uses**
 (`splitRecentTail`). An entry count is not a budget: ten entries is 1,000 characters of terse
 exchanges or 27,000 of long prose, and what is being bounded is the prompt. The floor of
 `MIN_RECENT_ENTRIES_FOR_LORE` (5) is not belt and braces — measured entries averaged 2,688
-characters, so a character budget alone can collapse to the player's last action.
+characters, so a character budget alone can collapse to the player's last action. Only entries the
+agent will be shown count towards the budget, the floor and any limit: `isLoreProse` is the one
+predicate behind both the count and `renderLoreProse`, so a blank entry never takes a slot.
 
 **After a chapter is written, the tail starts right after it rather than at the end of the
-story.** Any run with a `newChapter` passes `fromStart` to `loreRecentEntries`. The triggering
-chapter is in the prompt in full, so the tail continues it without a gap, however far before the
-end of the story the chapter was cut. How far it runs is the Advanced Settings switch
-`chapterBufferTail` (on by default). On, the automatic path and a manual chapter set
-`recentEntryLimit` to Buffer Messages: exactly that many prose entries, with no character budget
-and no floor. Off, it is the same character budget and floor, counted from the chapter's end.
-A buffer of 0 shows none, and an empty tail is absent rather than announced: `hasRecentStory`
-drops both its section and every mention of it in the instructions. The batch importer and the
-Tidy-lorebook button have no new chapter and read the newest entries.
+story.** A run with a `newChapter` — the automatic path and a manual chapter — reads the oldest
+entries first. The triggering chapter is in the prompt in full (or as its summary when _Send full
+text of new chapter_ is off), so the tail continues it without a gap, however far before the end
+of the story the chapter was cut. How far it runs is the Advanced Settings switch
+`chapterBufferTail` (on by default), which `createLoreManagementService` hands the service beside
+`sendNewChapterText`. On, the story's Buffer Messages is the limit: exactly that many prose entries,
+with no character budget and no floor, however long they are. Off, it is the same character budget
+and floor, counted from the chapter's end. A buffer of 0 shows none, and an empty tail is absent
+rather than announced: `hasRecentStory` drops both its section and every mention of it in the
+instructions. Callers pass `chapterBuffer` unconditionally; only a run with a `newChapter` uses it,
+so the batch importer and the Tidy-lorebook button read the newest entries within the character
+budget.
+
+**A tail that stops short of the present says so.** Cut off at Buffer Messages, the excerpt can end
+well before the last entry of the story. `loreRecentEntries` reports `continues`, and the prompt
+tells the agent not to treat the excerpt's last event as the present.
 
 All three callers go through `LoreManagementCoordinator` with the same
 `buildLoreManagementCallbacks(scope)`, which is the only place that says what a lore change does

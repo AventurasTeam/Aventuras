@@ -7,7 +7,6 @@
  */
 
 import { story } from '$lib/stores/story.svelte'
-import { settings } from '$lib/stores/settings.svelte'
 import { aiService } from '$lib/services/ai'
 import { createLogger } from '$lib/log'
 import type { Chapter } from '$lib/types'
@@ -71,7 +70,7 @@ async function startManualLoreManagement(newChapter?: Chapter): Promise<LoreSess
       chapters: story.currentBranchChapters,
       // Everything the chapters do not cover. On a story with no chapters this is the
       // whole story, and without it a manual run would be reasoning from the entry list
-      // alone — see the note on `recentStory` in LoreManagementService.
+      // alone — see `LoreManagementContext.recentEntries`.
       recentEntries: story.getUnchapterizedEntries(),
       mode: currentStory.mode ?? 'adventure',
       pov: story.pov,
@@ -80,10 +79,7 @@ async function startManualLoreManagement(newChapter?: Chapter): Promise<LoreSess
       newChapter: newChapter
         ? { chapter: newChapter, entries: story.getChapterEntries(newChapter) }
         : undefined,
-      recentEntryLimit:
-        newChapter && settings.serviceSpecificSettings.loreManagement.chapterBufferTail
-          ? story.memoryConfig.chapterBuffer
-          : undefined,
+      chapterBuffer: story.memoryConfig.chapterBuffer,
     },
     buildLoreManagementCallbacks({
       storyId: currentStory.id,
