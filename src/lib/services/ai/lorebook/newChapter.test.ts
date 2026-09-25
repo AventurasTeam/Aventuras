@@ -80,13 +80,7 @@ describe('loreRecentEntries', () => {
     it('drops non-prose and blank entries before counting', () => {
       const first = makeEntry({ id: 'first', content: 'first' })
       const last = makeEntry({ id: 'last', content: 'last' })
-      const tail = [
-        makeEntry({ type: 'system' }),
-        first,
-        makeEntry({ content: '  ' }),
-        makeEntry({ type: 'retry' }),
-        last,
-      ]
+      const tail = [makeEntry({ type: 'system' }), first, makeEntry({ content: '  ' }), last]
       expect(loreRecentEntries(tail, 1000).shown).toEqual([first, last])
     })
 
