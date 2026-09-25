@@ -30,3 +30,8 @@ export {
   templateUsesNarratorReinforcement,
   narratorReinforcementIsHonoured,
 } from './narratorReinforcement'
+
+export {
+  narratorSettingAvailability,
+  type NarratorSettingAvailability,
+} from './narratorSettingAvailability'

@@ -11,6 +11,10 @@
   import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
   import { characterVault } from '$lib/stores/characterVault.svelte'
   import { hasRequiredCredentials } from '$lib/services/ai/image'
+  import {
+    resolveNarratorSettingAvailability,
+    type NarratorSettingAvailability,
+  } from '$lib/services/context'
   import type { VaultCharacter } from '$lib/types'
 
   import WizardExitConfirm from './WizardExitConfirm.svelte'
@@ -117,6 +121,19 @@
   $effect(() => {
     if (wizard.currentStep === 2) {
       wizard.loadPacks()
+    }
+  })
+
+  let narratorSettings = $state<NarratorSettingAvailability>({})
+  $effect(() => {
+    const packId = wizard.selectedPackId
+    const mode = wizard.narrative.selectedMode
+    let cancelled = false
+    void resolveNarratorSettingAvailability(packId, mode, undefined).then((reasons) => {
+      if (!cancelled) narratorSettings = reasons
+    })
+    return () => {
+      cancelled = true
     }
   })
 </script>
@@ -443,6 +460,8 @@
           onReferenceModeChange={(v) => (wizard.narrative.referenceMode = v)}
           onTargetLengthChange={(v) => (wizard.narrative.targetLength = v)}
           onNarratorReinforcementChange={(v) => (wizard.narrative.narratorReinforcement = v)}
+          targetLengthDisabledReason={narratorSettings.targetResponseLength}
+          narratorReinforcementDisabledReason={narratorSettings.narratorReinforcement}
         />
       {:else if wizard.currentStep === 9}
         <Step8Opening

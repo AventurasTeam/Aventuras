@@ -41,7 +41,9 @@ A custom system prompt replaces the system half only. The turn message still com
 Story Settings decides whether either control is available by looking at the `-user` template regardless
 of an override — and at the effective system prompt too, since a pack may carry the setting in either.
 Only a reference Liquid would evaluate counts (`templateReferences.ts`); a comment, a raw block or a
-quoted name does not.
+quoted name does not. The new-story wizard runs the same check (`resolveNarratorSettingAvailability`) against
+the pack and mode chosen in it, with no custom prompt; the SillyTavern import offers neither setting, so its
+stories start at `dynamic` and `full`.
 
 ### Which pack is "the active pack"
 
