@@ -308,6 +308,14 @@ export const PhoneReflow: Story = {
     await waitFor(() => expectCompactPortrait(), WAIT)
     // touch.md → Touch-target floor.
     await expect(rect('overview-in-label').height).toBeGreaterThanOrEqual(44)
+    // The status chips center in their floored box instead of packing at its top.
+    const status = rect('overview-status')
+    const chip = within(screen.getByTestId('overview-status')).getByText('active')
+    const chipBox = chip.getBoundingClientRect()
+    await expect(status.height).toBeGreaterThanOrEqual(44)
+    await expect(
+      Math.abs(chipBox.top + chipBox.height / 2 - (status.top + status.height / 2)),
+    ).toBeLessThanOrEqual(1)
     const link = within(screen.getByTestId('overview-in')).getByRole('link', { name: MARKET.name })
     await expect(link.getBoundingClientRect().height).toBeGreaterThanOrEqual(44)
   },

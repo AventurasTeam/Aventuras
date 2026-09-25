@@ -244,7 +244,11 @@ export function StatusRow({
       accessibilityRole="button"
       accessibilityHint={editInLabel('settings')}
       onPress={() => onRegionPress('settings')}
-      className={cn('flex-row flex-wrap items-center gap-2 self-start px-1 py-1', pressBox)}
+      // content-center: a wrapping row packs its lines at the top of the phone floor otherwise.
+      className={cn(
+        'flex-row flex-wrap content-center items-center gap-2 self-start px-1 py-1',
+        pressBox,
+      )}
     >
       {entity.kind !== 'character' ? <EntityKindIcon kind={entity.kind} /> : null}
       <Tag tone={ENTITY_STATUS_TONE[entity.status]}>{t(`world:status.${entity.status}`)}</Tag>
