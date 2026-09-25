@@ -740,7 +740,7 @@ describe('entity keywords', () => {
 
   // The index tracks each append in turn, so a second candidate for the same entity
   // filters against what the first one just added, not just the pass's opening snapshot.
-  it('filters a second candidate against the first candidate keywords in the same reply', () => {
+  it("filters a second candidate against the first candidate's keywords in the same reply", () => {
     const { planned } = buildClassifierActions(
       {
         happenings: [],
@@ -773,6 +773,44 @@ describe('entity keywords', () => {
     const appends = planned.filter((p) => p.action.kind === 'appendEntityKeywords')
     expect(appends).toHaveLength(2)
     expect(payloadOf<{ keywords: string[] }>(appends[1]).keywords).toEqual(['the innkeeper'])
+  })
+
+  it('filters a later candidate against the terms a promote in the same reply added', () => {
+    const { planned } = buildClassifierActions(
+      {
+        happenings: [],
+        relationships: [],
+        statusFlips: [],
+        newCharacters: [
+          {
+            handle: 'new:k1',
+            name: 'Kael',
+            description: 'A courier.',
+            keywords: ['the grey wolf'],
+          },
+          {
+            handle: 'new:k2',
+            name: 'Kael',
+            description: 'A courier.',
+            keywords: ['the grey wolf', 'the innkeeper'],
+          },
+        ],
+      },
+      {
+        ...base,
+        entities: [entityRow('char_kael', 'staged', 'Kael')] as never[],
+        decisions: new Map<string, ReconcileDecision>([
+          ['new:k1', { kind: 'promote', entityId: 'char_kael', similarity: 0.9 }],
+          ['new:k2', { kind: 'known', entityId: 'char_kael', similarity: 0.9 }],
+        ]),
+      },
+    )
+    expect(planned.map((p) => p.action.kind)).toEqual([
+      'promoteStagedEntity',
+      'appendEntityKeywords',
+      'appendEntityKeywords',
+    ])
+    expect(payloadOf<{ keywords: string[] }>(planned[2]).keywords).toEqual(['the innkeeper'])
   })
 
   // Two guarded writes: a promotion the user pre-empted no-ops while the aliases still land.

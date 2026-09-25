@@ -124,6 +124,8 @@ export function buildClassifierActions(
       continue
     }
     const entryId = anchor(candidate.sourceTurn)
+    // Both branches send snapshot-new terms only: re-sending a held term would restore
+    // an alias the user removed mid-pass.
     if (decision.kind === 'promote') {
       handleMap.set(candidate.handle, decision.entityId)
       const promoted = index.get(decision.entityId)
@@ -153,7 +155,6 @@ export function buildClassifierActions(
         })
       continue
     }
-    // Snapshot-new terms only: re-sending a held term would restore an alias the user removed mid-pass.
     if (decision.kind === 'known') {
       handleMap.set(candidate.handle, decision.entityId)
       const known = index.get(decision.entityId)
