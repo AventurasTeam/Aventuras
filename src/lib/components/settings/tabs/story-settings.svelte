@@ -162,7 +162,12 @@
       if (cancelled) return
       lengthUnavailableReason = reasons.targetResponseLength
       reinforcementUnavailableReason = reasons.narratorReinforcement
-    })().catch((error) => console.warn('[StorySettings] Narrator setting check failed:', error))
+    })().catch((error) => {
+      console.warn('[StorySettings] Narrator setting check failed:', error)
+      if (cancelled) return
+      lengthUnavailableReason = undefined
+      reinforcementUnavailableReason = undefined
+    })
 
     return () => {
       cancelled = true

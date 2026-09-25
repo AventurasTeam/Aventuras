@@ -134,7 +134,10 @@
       .then((reasons) => {
         if (!cancelled) narratorSettings = reasons
       })
-      .catch((error) => console.warn('[SetupWizard] Narrator setting check failed:', error))
+      .catch((error) => {
+        console.warn('[SetupWizard] Narrator setting check failed:', error)
+        if (!cancelled) narratorSettings = {}
+      })
     return () => {
       cancelled = true
     }
