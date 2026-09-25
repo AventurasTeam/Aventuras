@@ -230,37 +230,101 @@ the asset gallery pass` / `lands in Slice 4.2b`).
 - E2E (desktop): edit, save, undo round trip; dirty-switch and
   window-close guards.
 
-## Open questions
-
-- **Portrait placeholder shape.** Whether the slot renders an
-  `Avatar` initial or nothing until the asset link exists — pick the
-  one that survives the gallery pass without a re-layout; the
-  thumbnail tap per
-  [`patterns/image-preview.md`](../../../../ui/patterns/image-preview.md)
-  stays inert until then.
-- **Relationship delete inside the sheet.** Whether the sheet's Delete
-  commits immediately (one-field session, like the peek exception) or
-  joins the pane's session as a `deleteCharacterRelationship` in the
-  group. Default: joins, so one Save reverses everything.
-- **`visual.distinguishing` shape drift.**
-  [`world.md → Identity`](../../../../ui/screens/world/world.md#identity--editable-body-of-who-this-is)
-  (~208) shows it as a chip list; the schema
-  ([`data-model.md → CharacterState shape`](../../../../data-model.md#characterstate-shape))
-  has it as a single string. Fix the Identity-tab treatment to the
-  string shape and amend `world.md`.
-- **C7 / C8 / C11 now ship from 4.3, not 4.2a.** The doc-as-contract
-  pairing said whichever slice landed first would fix the names;
-  [Slice 4.3](./03-plot-panel.md) landed first and authored
-  `useRowSaveSession`, `PickerField` / `EntityPicker` and
-  `OverflowMenu` at the milestone's pinned shapes (see
-  [its Implementation notes](./03-plot-panel.md#implementation-notes)).
-  4.2a's panes build against those shipped APIs — including the
-  `failureText` / `onRejected` session options and `PickerField`'s
-  trigger-spread shape, both reworked mid-build — rather than
-  authoring them; read the shipped files before wiring the entity
-  panes.
-
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved
-developer decisions._
+- **C7 / C8 / C11 adopted from 4.3's shipped files.** The panes run on
+  `useRowSaveSession` through a World wrapper
+  (`components/world/use-entity-row-session.ts`) that also maps a
+  refusal code to a field error; `EntityPicker` gained an additive
+  `rowHint`. `commitPlotSave`'s body became the shared `commitRowSave`
+  (`lib/actions/row-save/`), which Plot's `commitPlotSave` now wraps.
+  Create-mode keystrokes typed during the save are dropped, the limit
+  4.3 recorded.
+- **Relationships stage in the pane session and edit in an inline
+  card.** One Save writes one both-perspective
+  `upsertCharacterRelationship` per changed pair under the pane's
+  `action_id` (the payload gained an optional `inverseKind`); a removed
+  pair joins the same group as a `deleteCharacterRelationship`. One
+  write per pair because a group's handlers read pre-group state, per
+  [C7](../milestone.md#c7--per-row-save-session-host-for-world-and-plot-detail-panes),
+  not the two-writes-to-one-column rule Scope cites. A sheet was
+  dropped: the character picker is a phone Sheet, and `layout.md`
+  forbids a Sheet over a Sheet; `world.md` amended. A card keys by a
+  `cardKey` (the committed row id, or a client key for a new card), so
+  a save-session reset (Save's rebase, a classifier patch, undo)
+  doesn't collapse an open card; a new card collapses once on the Save
+  that commits it, as Plot's new rows do.
+- **Relationship edits merge three-way (developer decision at the PR 1
+  gate).** The periodic classifier is `no-gate` and writes
+  relationships while a pane can be dirty, so the pane freezes the
+  links its Relationships draft was based on (`useRelationshipsBase`)
+  and `entityActions` writes only the user's changes relative to them;
+  a pair or view the classifier changed and the user left alone keeps
+  its stored value. The diff's current links are the ones rendered
+  when Save was pressed, so a classifier write landing during Save's
+  validation can still be overwritten on an edited pair's untouched
+  view — a narrow window. `useRowSaveSession` and Plot are unchanged (Plot's
+  links-array case stays
+  [parked](../../../../parked.md#a-dirty-links-array-on-save-overwrites-concurrent-link-writes)).
+  Touched `keywords` still overwrite a classifier append (accepted,
+  last writer wins).
+- **Overview press targets are siblings.** Entity names call
+  `onOpenEntity(id)` (World: a guarded row switch, crossing kinds);
+  region labels and content call `onRegionPress(tab)`.
+  [Slice 4.5b](./05b-peek-drawer.md) projects `EntityOverview` with
+  both props.
+- **Last seen is in-world.** Elapsed seconds since
+  `lastSeenAt.worldTime`, counted in the calendar's largest
+  fixed-length tier (`largestWholeTier`); a backwards span is omitted.
+  On Gregorian every span therefore reads in days, two years as "730
+  days ago in-world": a duration floor, not a date difference.
+- **`setStoryLead` refuses a non-active character** (`not-active`,
+  now in
+  [C5](../milestone.md#c5--story-definition-lead-mutator)), extending
+  the wizard's staged-can't-lead rule; the `⋯` entry is disabled for
+  staged, retired and the current lead. **4.5b's peek `Set as lead`
+  must mirror this.** No reader surface shows a `You` badge before
+  4.5a, so the lead E2E checks the change through the composer wrap.
+  Setting a lead whose create is still undoable opens a dangling-lead
+  path: reversing that step deletes the row but keeps its id in
+  `leadEntityId` — see
+  [4.2b's Open questions](./02b-lore-history-delete.md#open-questions).
+- **Cycle guard.** `lib/world`'s walker (`checkParentChain`) runs in
+  the `updateEntity` and `createEntity` handlers and the wizard's
+  Finish (`parentCycle`); `cast-import.ts` blanks a loop-closing
+  parent, leaving no "attach it" hint, which would rebuild the loop.
+  It refuses loops only: a parent id that resolves to no location
+  walks to null and passes. World surfaces the refusal only on Save,
+  as a field error on the parent picker; the walker is pure, so an
+  inline resolver check is possible later. The handler reads pre-group
+  state; the grouped-writes question now sits in
+  [4.2c's Open questions](./02c-collision-review.md#open-questions).
+- **Contradictory item positions are shown, not cascaded**; the
+  user-edit transfer rule is in [`triage.md`](../../../triage.md).
+- **Relationships now load at story open**; nothing loaded them
+  before.
+- **Quantities edit as rows**, `visual.distinguishing` is a single
+  string, the phone save bar rides above the keyboard
+  (`KeyboardInsetColumn`, the Plot route's shape), and Involvements
+  rows link live to Plot; `world.md` and its wireframe updated.
+- **`dedupeTerms`** in `lib/keyword-terms.ts` is the C12 commit helper
+  4.2b, 4.2c and 4.6 reuse: trimmed terms, one per `normalizeTerm`
+  key, first spelling kept.
+- **The detail head follows canon, not the brief.** Name, the
+  `Recently classified` badge and `⋯` only, with no kind breadcrumb
+  (4.3 removed it); the injection-mode chip sits on the Overview
+  beside the status pill, per
+  [`world.md → Detail head structure`](../../../../ui/screens/world/world.md#detail-head-structure)
+  and its wireframe.
+- **The portrait is a placeholder slot.** `Avatar` with initials,
+  sized as the gallery pass will fill it; the tap is inert because no
+  portrait assets exist yet, so `world.md`'s "tap the portrait to view
+  it full-size" waits for the asset gallery pass.
+- **Deep-link tab is one-shot** (`useWorldDeepLink`, mirroring Plot's
+  `usePlotDeepLink`): only the mount that reads the link opens on its
+  tab. A deep-linked row is still not revealed in the list, which
+  [4.5b's Open questions](./05b-peek-drawer.md#open-questions) record.
+- **Deferred to [`triage.md`](../../../triage.md):** classifier
+  parent-cycle surfacing, stackable-writer hygiene, retired and staged
+  characters in derived lists, involvement row names, C5 follow-ups
+  for M7.2, and i18n composition in World copy.
