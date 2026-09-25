@@ -372,10 +372,10 @@
     prevEntryCount = currentCount
 
     const lastEntry = story.entries[story.entries.length - 1]
-    // Key entries (user action, narration, retry) must never be hidden behind
+    // Key entries (user action, narration) must never be hidden behind
     // the "N later entries hidden" collapse indicator.
     const isKeyEntry =
-      wasAdded && lastEntry && ['user_action', 'retry', 'narration'].includes(lastEntry.type)
+      wasAdded && lastEntry && ['user_action', 'narration'].includes(lastEntry.type)
 
     if (wasAdded) {
       if (!ui.userScrolledUp) {
@@ -400,15 +400,14 @@
       return
     }
 
-    // Physical scroll: autoScroll setting must be enabled. user_action/retry
+    // Physical scroll: autoScroll setting must be enabled. user_action
     // additionally override the userScrolledUp check (sending a message always
     // re-engages auto-scroll). Narration does NOT — if the user scrolled up
     // during streaming they stay where they are.
     const shouldScroll =
       settings.uiSettings.autoScroll &&
       (ui.isStreaming || wasAdded) &&
-      (!ui.userScrolledUp ||
-        (wasAdded && lastEntry && ['user_action', 'retry'].includes(lastEntry.type)))
+      (!ui.userScrolledUp || (wasAdded && lastEntry?.type === 'user_action'))
 
     if (!shouldScroll) return
 

@@ -55,7 +55,6 @@ describe('renderLoreProse', () => {
     expect(
       renderLoreProse([
         makeEntry({ type: 'system', content: 'Dropped.' }),
-        makeEntry({ type: 'retry', content: 'Also dropped.' }),
         makeEntry({ content: '  \n ' }),
         makeEntry({ type: 'user_action', content: '' }),
         makeEntry({ content: 'Kept.' }),

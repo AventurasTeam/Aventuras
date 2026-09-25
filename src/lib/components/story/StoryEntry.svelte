@@ -134,17 +134,13 @@
   // Check if Visual Prose mode is enabled for this story
   const visualProseMode = $derived(story.currentStory?.settings?.visualProseMode ?? false)
 
-  // `retry` is narration in older saves; nothing creates one now, and every other reader in the
-  // tree treats one as narration.
-  const isNarrationLike = $derived(entry.type === 'narration' || entry.type === 'retry')
-
   // Generation info shown in the "info" popover (model/profile/effort/timestamp)
-  const showInfo = $derived(isNarrationLike)
+  const showInfo = $derived(entry.type === 'narration')
 
   // Only while this turn's record is still retained; an evicted one offers nothing rather
   // than an empty panel. See RETAINED_TURNS.
   const activityRecord = $derived(
-    settings.uiSettings.activityReporting !== 'off' && isNarrationLike
+    settings.uiSettings.activityReporting !== 'off' && entry.type === 'narration'
       ? activity.recordFor(entry.id)
       : null,
   )
@@ -166,7 +162,9 @@
   })
 
   // An action is an instant and a system entry is not story, so neither has a span to show.
-  const showEntryMeta = $derived(settings.uiSettings.showEntryNumberAndTime && isNarrationLike)
+  const showEntryMeta = $derived(
+    settings.uiSettings.showEntryNumberAndTime && entry.type === 'narration',
+  )
 
   function compactStoryTime(time: TimeTracker | null | undefined): string {
     if (!time) return ''
@@ -1219,7 +1217,6 @@
     user_action: User,
     narration: BookOpen,
     system: Info,
-    retry: BookOpen,
   }
 
   const styles = $derived({
@@ -1232,9 +1229,6 @@
     system: story.currentBgImage
       ? 'border-l-muted bg-muted/20 backdrop-blur-md italic text-muted-foreground'
       : 'border-l-muted bg-muted/30 italic text-muted-foreground',
-    retry: story.currentBgImage
-      ? 'border-l-amber-500 bg-amber-500/20 backdrop-blur-md'
-      : 'border-l-amber-500 bg-amber-500/10',
   })
 
   const Icon = $derived(icons[entry.type])

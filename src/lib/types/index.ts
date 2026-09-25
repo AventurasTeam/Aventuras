@@ -169,7 +169,7 @@ export interface StoryDetails {
 export interface StoryEntry {
   id: string
   storyId: string
-  type: 'user_action' | 'narration' | 'system' | 'retry'
+  type: 'user_action' | 'narration' | 'system'
   content: string
   parentId: string | null
   position: number

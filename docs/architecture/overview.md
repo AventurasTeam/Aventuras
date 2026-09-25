@@ -150,8 +150,8 @@ keyboard closes before the card does; they are no longer what stops the scroll.
 
 ## Data Model
 
-The story is an append-only list of `StoryEntry` rows (`user_action`, `narration`, `system`,
-`retry`), each carrying a `position` and a `branchId`. Almost everything else hangs off that list:
+The story is an append-only list of `StoryEntry` rows (`user_action`, `narration`, `system`),
+each carrying a `position` and a `branchId`. Almost everything else hangs off that list:
 
 - **Branches** fork at a `forkEntryId`. `story.entries` is the current branch's view, assembled
   from the branch's own rows plus everything inherited from its ancestors; `visibleEntries` is
