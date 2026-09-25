@@ -254,7 +254,8 @@ budget.
 
 **A tail that stops short of the present says so.** Cut off at Buffer Messages, the excerpt can end
 well before the last entry of the story. `loreRecentEntries` reports `continues`, and the prompt
-tells the agent not to treat the excerpt's last event as the present.
+tells the agent not to treat the last event shown as the present. That holds with a buffer of 0
+too: no excerpt is shown, but the note still follows the chapter when later prose exists.
 
 All three callers go through `LoreManagementCoordinator` with the same
 `buildLoreManagementCallbacks(scope)`, which is the only place that says what a lore change does

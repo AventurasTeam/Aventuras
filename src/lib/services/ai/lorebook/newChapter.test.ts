@@ -142,6 +142,11 @@ describe('loreRecentEntries', () => {
       expect(loreRecentEntries(tail, 1000, { entryLimit: -2 }).shown).toEqual([])
     })
 
+    it('reports that the story continues when a limit of 0 leaves prose unshown', () => {
+      expect(loreRecentEntries(sized(10, 10), 1000, { entryLimit: 0 }).continues).toBe(true)
+      expect(loreRecentEntries([], 1000, { entryLimit: 0 }).continues).toBe(false)
+    })
+
     it('shows every entry when the limit exceeds the tail', () => {
       const tail = sized(10, 10)
       expect(loreRecentEntries(tail, 1000, { entryLimit: 5 }).shown).toEqual(tail)
