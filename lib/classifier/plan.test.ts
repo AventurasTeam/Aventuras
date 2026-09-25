@@ -886,6 +886,57 @@ describe('entity keywords', () => {
   })
 })
 
+// cadence.md → User edits and classifier writes: the guarded writes compare the user's
+// edits against the prose each fact came from.
+describe('prose source on guarded writes', () => {
+  it("stamps each guarded write with its own fact's anchor as proseEntryId", () => {
+    const { planned } = buildClassifierActions(
+      {
+        happenings: [],
+        relationships: [
+          { subject: 'char_kael', object: 'char_aria', kind: 'sister', sourceTurn: 't3' },
+        ],
+        statusFlips: [
+          { ref: 'char_s', to: 'active', sourceTurn: 't2' },
+          { ref: 'char_a', to: 'retired', sourceTurn: 't1' },
+        ],
+        newCharacters: [
+          { handle: 'h1', name: 'P', description: 'x', keywords: ['the keeper'], sourceTurn: 't1' },
+          { handle: 'h2', name: 'A', description: 'x', keywords: ['the wolf'], sourceTurn: 't2' },
+        ],
+      },
+      {
+        ...base,
+        entities: [
+          entityRow('char_p', 'staged'),
+          entityRow('char_s', 'staged'),
+          entityRow('char_a'),
+          entityRow('char_kael'),
+          entityRow('char_aria'),
+        ] as never[],
+        decisions: new Map<string, ReconcileDecision>([
+          ['h1', { kind: 'promote', entityId: 'char_p', similarity: 0.9 }],
+          ['h2', { kind: 'known', entityId: 'char_a', similarity: 0.95 }],
+        ]),
+      },
+    )
+    expect(
+      planned.map((p) => [
+        p.action.kind,
+        payloadOf<{ proseEntryId?: string }>(p).proseEntryId,
+        p.entryId,
+      ]),
+    ).toEqual([
+      ['promoteStagedEntity', 'e1', 'e1'],
+      ['appendEntityKeywords', 'e1', 'e1'],
+      ['appendEntityKeywords', 'e2', 'e2'],
+      ['upsertCharacterRelationship', 'e3', 'e3'],
+      ['promoteStagedEntity', 'e2', 'e2'],
+      ['retireEntity', 'e1', 'e1'],
+    ])
+  })
+})
+
 // The classifier is the only machine writer into an embedded column and the embedder
 // drops anything past its window silently, so bounding has to happen in the planner.
 describe('embedded-column bounds', () => {

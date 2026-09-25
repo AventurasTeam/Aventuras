@@ -9,11 +9,15 @@ import { registerEntities } from './register'
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { __resetRegistry } from '../delta/registry'
 import { reverseReplayDeltas } from '../delta/reverse-replay'
+import { USER_EDITED_SINCE_PROSE } from '../delta/user-precedence'
+import { updateStoryEntryContent } from '../story-entries/operational'
+import { registerStoryEntries } from '../story-entries/register'
 import type { PipelineAction } from '../types'
 
 async function setup() {
   __resetRegistry()
   registerEntities()
+  registerStoryEntries()
   const { db, runInTransaction } = await createTestDb()
   await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
   await db.insert(branches).values({ id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 })
@@ -594,5 +598,128 @@ describe('retireEntity', () => {
       reason: 'retire target entities br_1:char_1 not found',
       code: 'noop',
     })
+  })
+})
+
+// cadence.md → User edits and classifier writes: a field the user wrote after the fact's
+// prose keeps the user's value.
+describe('user edits newer than the prose', () => {
+  const PROSE = 'e_prose'
+  const writeProse = (ctx: Ctx) =>
+    apply(
+      ctx,
+      {
+        kind: 'createStoryEntry',
+        source: 'ai_classifier',
+        payload: {
+          entry: {
+            id: PROSE,
+            branchId: 'br_1',
+            position: 1,
+            kind: 'ai_reply',
+            content: 'Kael fell at the ford.',
+            createdAt: 1,
+          },
+        },
+      },
+      'act_prose',
+    )
+  const create = (ctx: Ctx, entry: NewEntity) =>
+    apply(ctx, { kind: 'createEntity', source: 'user_edit', payload: { entry } }, 'act_c')
+  const retire: PipelineAction = {
+    kind: 'retireEntity',
+    source: 'periodic_classifier',
+    payload: { branchId: 'br_1', id: 'char_1', retiredReason: 'fell', proseEntryId: PROSE },
+  }
+  const promote: PipelineAction = {
+    kind: 'promoteStagedEntity',
+    source: 'periodic_classifier',
+    payload: { branchId: 'br_1', id: 'char_1', proseEntryId: PROSE },
+  }
+  const append = (keywords: string[]): PipelineAction => ({
+    kind: 'appendEntityKeywords',
+    source: 'periodic_classifier',
+    payload: { branchId: 'br_1', id: 'char_1', keywords, proseEntryId: PROSE },
+  })
+  const RETIRED = { ...CHAR, status: 'retired' as const, retiredReason: 'lost' }
+  const userWon = { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
+
+  it('keeps a revive the user made after the prose', async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, RETIRED)
+    await writeProse(ctx)
+    await apply(ctx, userPatch({ status: 'active' }), 'act_u')
+    expect(await apply(ctx, retire, 'act_r')).toEqual(userWon)
+    expect((await rowFor(db, 'char_1')).status).toBe('active')
+  })
+
+  it('retires over a revive the user made before the prose', async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, RETIRED)
+    await apply(ctx, userPatch({ status: 'active' }), 'act_u')
+    await writeProse(ctx)
+    expect((await apply(ctx, retire, 'act_r')).status).toBe('ok')
+    expect((await rowFor(db, 'char_1')).status).toBe('retired')
+  })
+
+  it('retires once a content edit makes the prose newer than the revive', async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, RETIRED)
+    await writeProse(ctx)
+    await apply(ctx, userPatch({ status: 'active' }), 'act_u')
+    expect(await updateStoryEntryContent('br_1', PROSE, 'Kael drowned at the ford.', ctx)).toEqual({
+      status: 'ok',
+    })
+    expect((await apply(ctx, retire, 'act_r')).status).toBe('ok')
+    expect((await rowFor(db, 'char_1')).status).toBe('retired')
+  })
+
+  it('keeps a status the user set after the prose on a row still staged', async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, { ...CHAR, status: 'active' })
+    await writeProse(ctx)
+    await apply(ctx, userPatch({ status: 'staged' }), 'act_u')
+    expect(await apply(ctx, promote, 'act_p')).toEqual(userWon)
+    expect((await rowFor(db, 'char_1')).status).toBe('staged')
+  })
+
+  it('promotes past a user edit after the prose that left status alone', async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, CHAR)
+    await writeProse(ctx)
+    await apply(ctx, userPatch({ description: 'a knight errant' }), 'act_u')
+    expect((await apply(ctx, promote, 'act_p')).status).toBe('ok')
+    expect((await rowFor(db, 'char_1')).status).toBe('active')
+  })
+
+  it('drops an alias the user removed after the prose and appends the rest', async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, { ...CHAR, keywords: ['the knight', 'the drunk'] })
+    await writeProse(ctx)
+    await apply(ctx, userPatch({ keywords: ['the knight'] }), 'act_u')
+    expect((await apply(ctx, append(['The Drunk', 'the wanderer']), 'act_k')).status).toBe('ok')
+    expect((await rowFor(db, 'char_1')).keywords).toEqual(['the knight', 'the wanderer'])
+  })
+
+  it('no-ops when every new alias is one the user removed after the prose', async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, { ...CHAR, keywords: ['the knight', 'the drunk'] })
+    await writeProse(ctx)
+    await apply(ctx, userPatch({ keywords: ['the knight'] }), 'act_u')
+    expect(await apply(ctx, append(['the drunk']), 'act_k')).toEqual(userWon)
+    expect((await rowFor(db, 'char_1')).keywords).toEqual(['the knight'])
+  })
+
+  it('restores an alias the user removed before the prose', async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, { ...CHAR, keywords: ['the knight', 'the drunk'] })
+    await apply(ctx, userPatch({ keywords: ['the knight'] }), 'act_u')
+    await writeProse(ctx)
+    expect((await apply(ctx, append(['The Drunk', 'the wanderer']), 'act_k')).status).toBe('ok')
+    expect((await rowFor(db, 'char_1')).keywords).toEqual([
+      'the knight',
+      'The Drunk',
+      'the wanderer',
+    ])
   })
 })

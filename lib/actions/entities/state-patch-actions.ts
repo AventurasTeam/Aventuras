@@ -4,14 +4,21 @@ import {
   entities,
   entityStateColumnSchema,
   type CharacterState,
+  type Delta,
   type Entity,
   type EntityState,
 } from '@/lib/db'
-import { newTerms } from '@/lib/keyword-terms'
+import { newTerms, normalizeTerm } from '@/lib/keyword-terms'
 import { entitiesStore } from '@/lib/stores'
 
 import { computeUndoPayload } from '../delta/delta-encoding'
 import type { ActionHandler } from '../delta/registry'
+import {
+  proseLogPosition,
+  USER_EDITED_SINCE_PROSE,
+  userEditsSince,
+  wroteColumn,
+} from '../delta/user-precedence'
 import type { DbCtx, DeltaSource } from '../types'
 
 declare module '@/lib/actions/action-map' {
@@ -44,17 +51,43 @@ declare module '@/lib/actions/action-map' {
     }
     promoteStagedEntity: {
       source: DeltaSource
-      payload: { branchId: string; id: string }
+      payload: {
+        branchId: string
+        id: string
+        /** The fact's source entry (classifier only): a field the user wrote after that prose keeps its value. */
+        proseEntryId?: string
+      }
     }
     appendEntityKeywords: {
       source: DeltaSource
-      payload: { branchId: string; id: string; keywords: string[] }
+      payload: { branchId: string; id: string; keywords: string[]; proseEntryId?: string }
     }
     retireEntity: {
       source: DeltaSource
-      payload: { branchId: string; id: string; retiredReason: string | null }
+      payload: { branchId: string; id: string; retiredReason: string | null; proseEntryId?: string }
     }
   }
+}
+
+async function userEditsSinceProse(
+  ctx: DbCtx,
+  branchId: string,
+  id: string,
+  proseEntryId: string,
+): Promise<Delta[]> {
+  const since = await proseLogPosition(ctx, branchId, proseEntryId)
+  return userEditsSince(ctx, branchId, 'entities', id, since)
+}
+
+// Matched only against terms the live list lacks, so a hit is one the user removed.
+function priorTerms(edits: readonly Delta[]): Set<string> {
+  const terms = new Set<string>()
+  for (const edit of edits) {
+    const prior = edit.undoPayload?.keywords
+    if (!Array.isArray(prior)) continue
+    for (const term of prior) if (typeof term === 'string') terms.add(normalizeTerm(term))
+  }
+  return terms
 }
 
 async function loadCurrent(branchId: string, id: string, ctx: DbCtx): Promise<Entity | undefined> {
@@ -192,7 +225,7 @@ export const updateEntityLocationTrackingHandler: ActionHandler = async (action,
 export const promoteStagedEntityHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'promoteStagedEntity')
     throw new Error(`handler/kind mismatch: expected 'promoteStagedEntity', got '${action.kind}'`)
-  const { branchId: bid, id } = action.payload
+  const { branchId: bid, id, proseEntryId } = action.payload
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const current = await loadCurrent(bid, id, ctx)
@@ -205,6 +238,11 @@ export const promoteStagedEntityHandler: ActionHandler = async (action, branchId
   const storeEntity = entitiesStore.getById(id)
   if (current.status !== 'staged' || (storeEntity !== undefined && storeEntity.status !== 'staged'))
     return { status: 'rejected', reason: 'not-staged', code: 'noop' }
+  if (
+    proseEntryId !== undefined &&
+    wroteColumn(await userEditsSinceProse(ctx, bid, id, proseEntryId), 'status')
+  )
+    return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
   return {
     status: 'ok',
     targetTable: 'entities',
@@ -224,12 +262,13 @@ export const promoteStagedEntityHandler: ActionHandler = async (action, branchId
 
 /**
  * Appends the payload terms the live row lacks; callers send only terms new against
- * what they read, so a mid-pass removal stays removed.
+ * what they read, so a mid-pass removal stays removed. With `proseEntryId`, a term the
+ * user removed after that prose stays removed too.
  */
 export const appendEntityKeywordsHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'appendEntityKeywords')
     throw new Error(`handler/kind mismatch: expected 'appendEntityKeywords', got '${action.kind}'`)
-  const { branchId: bid, id, keywords } = action.payload
+  const { branchId: bid, id, keywords, proseEntryId } = action.payload
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const current = await loadCurrent(bid, id, ctx)
@@ -239,8 +278,14 @@ export const appendEntityKeywordsHandler: ActionHandler = async (action, branchI
       reason: `keyword target entities ${bid}:${id} not found`,
       code: 'noop',
     }
-  const added = newTerms(current.keywords, keywords)
+  let added = newTerms(current.keywords, keywords)
   if (added.length === 0) return { status: 'rejected', reason: 'no-new-keywords', code: 'noop' }
+  if (proseEntryId !== undefined) {
+    const removed = priorTerms(await userEditsSinceProse(ctx, bid, id, proseEntryId))
+    added = added.filter((term) => !removed.has(normalizeTerm(term)))
+    if (added.length === 0)
+      return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
+  }
   const next = [...current.keywords, ...added]
   return {
     status: 'ok',
@@ -263,7 +308,7 @@ export const appendEntityKeywordsHandler: ActionHandler = async (action, branchI
 export const retireEntityHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'retireEntity')
     throw new Error(`handler/kind mismatch: expected 'retireEntity', got '${action.kind}'`)
-  const { branchId: bid, id, retiredReason } = action.payload
+  const { branchId: bid, id, retiredReason, proseEntryId } = action.payload
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const current = await loadCurrent(bid, id, ctx)
@@ -274,6 +319,11 @@ export const retireEntityHandler: ActionHandler = async (action, branchId, ctx) 
       code: 'noop',
     }
   if (current.status !== 'active') return { status: 'rejected', reason: 'not-active', code: 'noop' }
+  if (
+    proseEntryId !== undefined &&
+    wroteColumn(await userEditsSinceProse(ctx, bid, id, proseEntryId), 'status')
+  )
+    return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
   const columns = { status: 'retired' as const, retiredReason }
   return {
     status: 'ok',

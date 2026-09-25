@@ -140,7 +140,7 @@ export function buildClassifierActions(
         action: {
           kind: 'promoteStagedEntity',
           source: SOURCE,
-          payload: { branchId, id: decision.entityId },
+          payload: { branchId, id: decision.entityId, proseEntryId: entryId },
         },
         entryId,
       })
@@ -149,7 +149,7 @@ export function buildClassifierActions(
           action: {
             kind: 'appendEntityKeywords',
             source: SOURCE,
-            payload: { branchId, id: decision.entityId, keywords: added },
+            payload: { branchId, id: decision.entityId, keywords: added, proseEntryId: entryId },
           },
           entryId,
         })
@@ -166,7 +166,7 @@ export function buildClassifierActions(
           action: {
             kind: 'appendEntityKeywords',
             source: SOURCE,
-            payload: { branchId, id: decision.entityId, keywords: added },
+            payload: { branchId, id: decision.entityId, keywords: added, proseEntryId: entryId },
           },
           entryId,
         })
@@ -303,15 +303,16 @@ export function buildClassifierActions(
     // rather than fail the pass.
     const kind = nonBlank(relationship.kind)
     if (kind == null) continue
+    const entryId = anchor(relationship.sourceTurn)
     planned.push({
       action: {
         kind: 'upsertCharacterRelationship',
         source: SOURCE,
         // Canonical a_id < b_id ordering and the POV merge live in the action
         // (lib/actions/relationships/register.ts) — emit the raw perspective.
-        payload: { branchId, subjectId, objectId, kind },
+        payload: { branchId, subjectId, objectId, kind, proseEntryId: entryId },
       },
-      entryId: anchor(relationship.sourceTurn),
+      entryId,
     })
   }
 
@@ -325,16 +326,26 @@ export function buildClassifierActions(
     if (flip.to === 'active' && current.status !== 'staged') continue
     if (flip.to === 'retired' && current.status !== 'active') continue
     index.set(id, { ...current, status: flip.to })
+    const entryId = anchor(flip.sourceTurn)
     planned.push({
       action:
         flip.to === 'retired'
           ? {
               kind: 'retireEntity',
               source: SOURCE,
-              payload: { branchId, id, retiredReason: nonBlank(flip.reason) ?? null },
+              payload: {
+                branchId,
+                id,
+                retiredReason: nonBlank(flip.reason) ?? null,
+                proseEntryId: entryId,
+              },
             }
-          : { kind: 'promoteStagedEntity', source: SOURCE, payload: { branchId, id } },
-      entryId: anchor(flip.sourceTurn),
+          : {
+              kind: 'promoteStagedEntity',
+              source: SOURCE,
+              payload: { branchId, id, proseEntryId: entryId },
+            },
+      entryId,
     })
   }
 
