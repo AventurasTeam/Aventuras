@@ -172,6 +172,11 @@ It is deliberately a separate phase from `classifying`, which is the
 per-turn piggyback fallback: same work, opposite answer to "can I keep
 writing?".
 
+Every in-story surface resolves it, not only the reader: World, Plot
+and Story Settings show `updating-memory` while the story's
+periodic-classifier run is in flight and no foreground run holds the
+pill.
+
 Blocking is tracked per phase rather than inferred from a phase having
 no cancel label. The two coincide today only because the one background
 phase is also the one nothing can cancel; a blocking phase that is

@@ -21,6 +21,12 @@ declaration values.
     [Staged-entity promotion](./edge-cases.md#staged-entity-promotion)).
   - `active → retired` on hard finality signals only (death, exile,
     faction-disbanded). Conservative bias.
+
+  Both are guarded against the row as it stands when the write lands,
+  not the pass's snapshot, so a status the user changed mid-pass
+  stands (see
+  [`cadence.md → User edits during a periodic pass`](./cadence.md#user-edits-during-a-periodic-pass)).
+
 - **First-introduction descriptions** — when the classifier extracts
   a genuinely new character (no name match against existing
   entities), it authors the initial `description` from prose. After
@@ -36,8 +42,10 @@ declaration values.
   [`retrieval.md → Keywords schema`](./retrieval.md#keywords-schema).
   Unlike `description`, keywords are **not** frozen after first
   introduction: later passes may append newly-observed references.
-  Writes are strictly append-and-deduplicate and never remove, so
-  user-authored aliases survive every subsequent pass.
+  Writes are strictly append-and-deduplicate against the row as it
+  stands when the write lands, and never remove, so user-authored
+  aliases survive every subsequent pass, including one added while the
+  pass ran.
 
 ## Provenance attribution
 
@@ -157,13 +165,13 @@ The periodic classifier runs as a background pipeline — a Pipeline
 declaration in the framework's registry, same shape as per-turn and
 chapter-close but with different concurrency / gating values:
 
-| Field                           | Value                                                                                                                    |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `kind`                          | `'periodic-classifier'`                                                                                                  |
-| `gateBehavior`                  | `'no-gate'` — doesn't block user-source writes                                                                           |
-| `concurrencyPolicy`             | `{ blockedBy: ['periodic-classifier', 'chapter-close'] }` — no double passes; blocked from starting during chapter-close |
-| `affordance`                    | `'pill-only'` — folds into the generation indicator at low priority (see below)                                          |
-| Write set (prose, not declared) | happenings, happening_involvements, happening_awareness, entity status flips, first-introduction entity descriptions     |
+| Field                           | Value                                                                                                                                                                 |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`                          | `'periodic-classifier'`                                                                                                                                               |
+| `gateBehavior`                  | `'no-gate'` — doesn't block user-source writes                                                                                                                        |
+| `concurrencyPolicy`             | `{ blockedBy: ['periodic-classifier', 'chapter-close'] }` — no double passes; blocked from starting during chapter-close                                              |
+| `affordance`                    | `'pill-only'` — folds into the generation indicator at low priority (see below)                                                                                       |
+| Write set (prose, not declared) | happenings, happening_involvements, happening_awareness, entity status flips, entity keyword appends, character relationships, first-introduction entity descriptions |
 
 Write-set boundaries between the classifier and the piggyback / per-turn
 pipeline are enforced via narrow action functions named for field-set

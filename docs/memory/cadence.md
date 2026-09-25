@@ -213,3 +213,28 @@ boundaries.
 `'concurrent-allowed'` was previously theoretical in
 [`architecture.md`](../architecture.md); the periodic classifier is its
 first real consumer and triggers documenting the value.
+
+### User edits during a periodic pass
+
+The periodic classifier is `no-gate`, so World stays editable while a
+pass runs. The pass reads its entity snapshot before the model call
+and writes after it returns, up to the call's timeout later, so a user
+edit can land in between. Every classifier write that depends on an
+entity's current value therefore re-reads the row when it applies,
+rather than trusting the snapshot:
+
+- Promotion goes through `promoteStagedEntity`, which no-ops unless
+  the row is still `staged`.
+- Retirement goes through `retireEntity`, which no-ops unless the row
+  is still `active`, so a user's own status and retired reason stand.
+- Keywords go through `appendEntityKeywords`, which appends only the
+  terms the live list lacks, so an alias the user added or removed
+  mid-pass stays as the user left it.
+
+A relationship view is the one field both writers can set to
+different values. The upsert merges its single perspective into the
+live row, so a view the user saved during the pass is overwritten when
+the pass lands, per the authoring contract that user edits stick only
+until contradicting prose
+([`world.md → Relationships`](../ui/screens/world/world.md#relationships--character-to-character)).
+World asks before such a Save.
