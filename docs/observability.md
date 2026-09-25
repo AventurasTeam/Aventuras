@@ -218,10 +218,14 @@ convention, and the expectation that subsystems route through
   an `EntityRowSessionOptions.onSaved` that throws after the write
   already landed), `world_set_lead_failed` (`app/world/[branchId].tsx`
   — a `⋯ → Set as lead` whose `setStoryLead` threw rather than
-  refused) and `plot_link_revalidate_failed`
+  refused), `plot_link_revalidate_failed`
   (`components/plot/link-card.tsx` — the revalidation after a link row's
-  removal rejected, leaving a stale duplicate error blocking Save) are
-  gated by the master gate like any other kind
+  removal rejected, leaving a stale duplicate error blocking Save) and
+  its World twins `world_relationships_revalidate_failed`
+  (`components/world/detail/relationships-editor.tsx` — after a
+  relationship card's Delete) and `world_stackables_revalidate_failed`
+  (`components/world/detail/stackables-editor.tsx` — after a quantity
+  row's removal) are gated by the master gate like any other kind
 - `reader.*` — reader-composer dispatches routed through `runAction`
   (`lib/utils.ts`) instead of a bare `void`: `story_id_load_failed`,
   `undo_failed`, `redo_failed`, `rollback_failed`, `regenerate_failed`
