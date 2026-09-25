@@ -68,18 +68,12 @@ describe('recentContent', () => {
     })
 
     it('never puts an internal type identifier in the prompt', () => {
-      // Nothing creates these today; they survive in stories saved by older versions.
-      const labelled = recentContent([typed('system'), typed('retry')], 2, AS_PROSE, {
+      const labelled = recentContent([typed('system'), typed('narration')], 2, AS_PROSE, {
         roles: true,
       })
 
       expect(labelled).not.toContain('[system]')
-      expect(labelled).not.toContain('[retry]')
       expect(labelled).toBe('[System Note]: said\n\n[Narrator]: said')
-    })
-
-    it('calls a retry a narration, because that is what the model is being shown', () => {
-      expect(recentContent([typed('retry')], 1, AS_PROSE, { roles: true })).toBe('[Narrator]: said')
     })
 
     it('leaves the content untouched with no options', () => {

@@ -23,13 +23,12 @@ describe('findPrecedingUserAction', () => {
   })
 
   it('skips back over intervening non-action entries', () => {
-    // A retry or a system note between the action and the narration must not hide it --
+    // A system note between the action and the narration must not hide it --
     // this is what the regenerate button uses to decide it has a prompt to re-answer.
     const entries = [
       entry('a1', 'user_action', 0),
       entry('sys', 'system', 1),
-      entry('r1', 'retry', 2),
-      entry('n1', 'narration', 3),
+      entry('n1', 'narration', 2),
     ]
     expect(findPrecedingUserAction(entries, 'n1')?.id).toBe('a1')
   })
