@@ -2,7 +2,7 @@ import { and, asc, desc, eq, gt, or, sql } from 'drizzle-orm'
 
 import { deltas, type Delta } from '@/lib/db'
 
-import type { DbCtx } from '../types'
+import { isUserOriginatedSource, type DbCtx } from '../types'
 
 /** Noop reason for a classifier write a newer user edit of the same field outranks. */
 export const USER_EDITED_SINCE_PROSE = 'user-edited-since-prose'
@@ -68,6 +68,37 @@ export function userEditsSince(
   since: number,
 ): Promise<Delta[]> {
   return rowDeltasAfter(ctx, branchId, targetTable, targetId, since, true)
+}
+
+const rowKey = (d: Delta) => `${d.targetTable}:${d.branchId}:${d.targetId}`
+
+/**
+ * Looks up, for a machine delta in `rows`, the `user_edit` deltas on its row logged after
+ * it that `rows` does not reverse too, oldest first. A user delta gets none.
+ */
+export async function userEditsOutliving(
+  ctx: DbCtx,
+  rows: readonly Delta[],
+): Promise<(delta: Delta) => Delta[]> {
+  const reversed = new Set(rows.map((r) => r.id))
+  const oldestByRow = new Map<string, Delta>()
+  for (const d of rows) {
+    if (isUserOriginatedSource(d.source)) continue
+    const oldest = oldestByRow.get(rowKey(d))
+    if (oldest == null || d.logPosition < oldest.logPosition) oldestByRow.set(rowKey(d), d)
+  }
+  const editsByRow = new Map<string, Delta[]>()
+  for (const [key, d] of oldestByRow) {
+    const edits = await userEditsSince(ctx, d.branchId, d.targetTable, d.targetId, d.logPosition)
+    editsByRow.set(
+      key,
+      edits.filter((e) => !reversed.has(e.id)),
+    )
+  }
+  return (delta) =>
+    isUserOriginatedSource(delta.source)
+      ? []
+      : (editsByRow.get(rowKey(delta)) ?? []).filter((e) => e.logPosition > delta.logPosition)
 }
 
 /** Deltas of any source on one row logged after `since`, oldest first. */

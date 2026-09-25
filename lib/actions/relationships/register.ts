@@ -299,5 +299,6 @@ export function registerCharacterRelationships(): void {
       deleteCharacterRelationship: deleteHandler,
     },
     patcher: (branchId, p) => characterRelationshipsStore.patch(branchId, p),
+    rowKeepingColumns: ['kind', 'inverseKind'],
   })
 }

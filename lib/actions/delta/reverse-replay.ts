@@ -6,6 +6,7 @@ import { deltas, embeddedFieldsForTable, isEmbeddedSourceTable } from '@/lib/db'
 import type { DbCtx } from '../types'
 import { applyUndoPayload, isPayloadMetaKey } from './delta-encoding'
 import { resolveByTable, whereForDelta, type StorePatch } from './registry'
+import { userEditsOutliving, wroteColumn } from './user-precedence'
 
 /**
  * `transaction`: nothing landed. `store-sync`: the DB write landed and the in-memory sync after it
@@ -87,6 +88,8 @@ function undoDirtiesVector(targetTable: string, payloadKeys: readonly string[]):
 // A per-row working copy threads each op=update undo onto the prior one so multiple
 // updates to the SAME row — even touching disjoint sub-keys of a JSON column —
 // compose correctly instead of clobbering via stale-base whole-column overwrites.
+// A machine delta's undo skips each column a later `user_edit` outside `rows` wrote
+// (generation-pipeline.md → Reverse-replay).
 async function buildUndoOps(
   rows: Delta[],
   ctx: DbCtx,
@@ -94,6 +97,7 @@ async function buildUndoOps(
   const working = new Map<string, Record<string, unknown>>()
   const ops: SqlOp[] = []
   const patches: PatchEmission[] = []
+  const laterUserEdits = await userEditsOutliving(ctx, rows)
 
   for (const delta of rows) {
     const entry = resolveByTable(delta.targetTable)
@@ -101,10 +105,53 @@ async function buildUndoOps(
     const { table } = entry.descriptor
     const where = whereForDelta(entry.descriptor, delta)
     const key = `${delta.targetTable}:${delta.branchId}:${delta.targetId}`
+    const userEdits = laterUserEdits(delta)
+
+    const workingRow = async (): Promise<Record<string, unknown>> => {
+      let row = working.get(key)
+      if (!row) {
+        const [current] = (await ctx.db.select().from(table).where(where)) as Record<
+          string,
+          unknown
+        >[]
+        row = { ...(current ?? {}) }
+        working.set(key, row)
+      }
+      return row
+    }
+
+    const emitUpdate = (restored: Record<string, unknown>, row: Record<string, unknown>) => {
+      // Revalidation (app-deps.ts) only ever CLEARS this flag, so nothing outside a writer
+      // like this one sets it back to 1 — erring dirty is the self-correcting direction.
+      if (undoDirtiesVector(delta.targetTable, Object.keys(restored))) {
+        restored.embeddingStale = 1
+        row.embeddingStale = 1
+      }
+      ops.push(ctx.db.update(table).set(restored).where(where).toSQL())
+      patches.push({
+        table: delta.targetTable,
+        branchId: delta.branchId,
+        patch: { op: 'update', id: delta.targetId, columns: restored },
+      })
+    }
 
     // No cascade on purpose: an actionId-scoped set already carries the children's deltas;
     // an entry-scoped caller owes the closure by hand (generation-pipeline.md → Reverse-replay).
     if (delta.op === 'create') {
+      const keeping = entry.rowKeepingColumns ?? []
+      const userKept = keeping.filter((col) => wroteColumn(userEdits, col))
+      if (userKept.length > 0) {
+        const row = await workingRow()
+        const restored: Record<string, unknown> = {}
+        for (const col of keeping) {
+          if (!userKept.includes(col) && row[col] != null) restored[col] = null
+        }
+        if (userKept.some((col) => row[col] != null)) {
+          Object.assign(row, restored)
+          if (Object.keys(restored).length > 0) emitUpdate(restored, row)
+          continue
+        }
+      }
       working.delete(key)
       ops.push(ctx.db.delete(table).where(where).toSQL())
       patches.push({
@@ -159,17 +206,16 @@ async function buildUndoOps(
       continue
     }
 
-    let row = working.get(key)
-    if (!row) {
-      const [current] = (await ctx.db.select().from(table).where(where)) as Record<
-        string,
-        unknown
-      >[]
-      row = { ...(current ?? {}) }
-      working.set(key, row)
-    }
     const payload = (delta.undoPayload ?? {}) as Record<string, unknown>
-    const columns = Object.keys(payload).filter((key) => !isPayloadMetaKey(key))
+    // A schema-backed column's undo restores sub-fields, so a user write to one of them
+    // does not speak for the others this delta changed.
+    const columns = Object.keys(payload).filter(
+      (col) =>
+        !isPayloadMetaKey(col) &&
+        (Object.hasOwn(entry.columnSchemas, col) || !wroteColumn(userEdits, col)),
+    )
+    if (columns.length === 0) continue
+    const row = await workingRow()
     const restored: Record<string, unknown> = {}
     for (const col of columns) {
       const partial = payload[col]
@@ -188,18 +234,7 @@ async function buildUndoOps(
       restored[col] = value
       row[col] = value // thread into the working copy for later-in-DESC undos
     }
-    // Revalidation (app-deps.ts) only ever CLEARS this flag, so nothing outside a writer
-    // like this one sets it back to 1 — erring dirty is the self-correcting direction.
-    if (undoDirtiesVector(delta.targetTable, columns)) {
-      restored.embeddingStale = 1
-      row.embeddingStale = 1
-    }
-    ops.push(ctx.db.update(table).set(restored).where(where).toSQL())
-    patches.push({
-      table: delta.targetTable,
-      branchId: delta.branchId,
-      patch: { op: 'update', id: delta.targetId, columns: restored },
-    })
+    emitUpdate(restored, row)
   }
 
   return { ops, patches }

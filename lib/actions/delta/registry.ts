@@ -77,6 +77,12 @@ export type DomainRegistration = {
   patcher?: StorePatcher
   restoreCascade?: CascadeRestore
   cascadeDeleteOps?: CascadeDeleteOps
+  /**
+   * Columns the row exists for while any is non-null. Reversing a machine `create` keeps a
+   * row a later user write set one of them on: it nulls the rest, and deletes only once
+   * all are null.
+   */
+  rowKeepingColumns?: readonly string[]
 }
 
 type TableEntry = Omit<DomainRegistration, 'handlers'>
