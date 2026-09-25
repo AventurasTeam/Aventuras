@@ -18,3 +18,16 @@ export function dedupeTerms(terms: readonly string[]): string[] {
   }
   return kept
 }
+
+/** `incoming` terms `current` lacks under `normalizeTerm`, trimmed, first spelling kept. */
+export function newTerms(current: readonly string[], incoming: readonly string[]): string[] {
+  const seen = new Set(current.map(normalizeTerm))
+  const added: string[] = []
+  for (const term of incoming) {
+    const key = normalizeTerm(term)
+    if (key === '' || seen.has(key)) continue
+    seen.add(key)
+    added.push(term.trim())
+  }
+  return added
+}
