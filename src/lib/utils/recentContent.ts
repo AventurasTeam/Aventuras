@@ -58,13 +58,11 @@ function entryTime(entry: StoryEntry): string {
  * What each entry type is called when the text is labelled for a model to read.
  *
  * A `Record` over the union, so a new entry type is a compile error here rather than an
- * internal identifier appearing in a prompt. `retry` is an alternative narration and is
- * labelled as one: a model told it was a retry treats the re-roll as an event.
+ * internal identifier appearing in a prompt.
  */
 const ROLE_LABELS: Record<StoryEntry['type'], string> = {
   user_action: '[Player Action]',
   narration: '[Narrator]',
-  retry: '[Narrator]',
   system: '[System Note]',
 }
 
