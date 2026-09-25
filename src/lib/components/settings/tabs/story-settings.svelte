@@ -155,13 +155,14 @@
     if (!storyId) return
 
     let cancelled = false
+    // A failed lookup leaves both controls enabled rather than locking them on a read error.
     void (async () => {
       const packId = (await database.getStoryPackId(storyId)) || DEFAULT_PACK_ID
       const reasons = await resolveNarratorSettingAvailability(packId, mode, override)
       if (cancelled) return
       lengthUnavailableReason = reasons.targetResponseLength
       reinforcementUnavailableReason = reasons.narratorReinforcement
-    })()
+    })().catch((error) => console.warn('[StorySettings] Narrator setting check failed:', error))
 
     return () => {
       cancelled = true

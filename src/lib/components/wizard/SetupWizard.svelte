@@ -129,9 +129,12 @@
     const packId = wizard.selectedPackId
     const mode = wizard.narrative.selectedMode
     let cancelled = false
-    void resolveNarratorSettingAvailability(packId, mode, undefined).then((reasons) => {
-      if (!cancelled) narratorSettings = reasons
-    })
+    // A failed lookup leaves both controls enabled rather than locking them on a read error.
+    resolveNarratorSettingAvailability(packId, mode, undefined)
+      .then((reasons) => {
+        if (!cancelled) narratorSettings = reasons
+      })
+      .catch((error) => console.warn('[SetupWizard] Narrator setting check failed:', error))
     return () => {
       cancelled = true
     }

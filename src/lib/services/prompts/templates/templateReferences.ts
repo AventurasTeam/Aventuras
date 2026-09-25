@@ -16,6 +16,9 @@ const LIQUID_EXPRESSION = /\{%-?[\s\S]*?-?%\}|\{\{-?[\s\S]*?-?\}\}/g
 /** String literals, which name no variable however they read. */
 const LIQUID_STRING = /'[^']*'|"[^"]*"/g
 
+/** The target of an `assign` or `capture`, which overwrites the incoming value instead of reading it. */
+const LIQUID_WRITE_TARGET = /^\{%-?\s*(?:assign|capture)\s+[A-Za-z_][\w-]*/
+
 /**
  * Whether a template could read the variable at all.
  *
@@ -32,7 +35,7 @@ export function templateReferencesVariable(
   const active = content.replace(LIQUID_INERT, '')
   const reference = new RegExp(`\\b${name}\\b`)
   return (active.match(LIQUID_EXPRESSION) ?? []).some((expression) =>
-    reference.test(expression.replace(LIQUID_STRING, '')),
+    reference.test(expression.replace(LIQUID_WRITE_TARGET, '').replace(LIQUID_STRING, '')),
   )
 }
 

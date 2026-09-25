@@ -53,6 +53,19 @@ describe('templateUsesTargetResponseLength', () => {
     ).toBe(false)
   })
 
+  it('does not count assigning to the variable, which overwrites the setting', () => {
+    expect(templateUsesTargetResponseLength(`{% assign targetResponseLength = 'short' %}`)).toBe(
+      false,
+    )
+    expect(
+      templateUsesTargetResponseLength(`{% capture targetResponseLength %}x{% endcapture %}`),
+    ).toBe(false)
+  })
+
+  it('counts an assignment that reads the variable', () => {
+    expect(templateUsesTargetResponseLength(`{% assign len = targetResponseLength %}`)).toBe(true)
+  })
+
   it('ignores the name written as prose or quoted as a string', () => {
     expect(templateUsesTargetResponseLength('Set targetResponseLength to short.')).toBe(false)
     expect(templateUsesTargetResponseLength(`{{ "targetResponseLength" }}`)).toBe(false)
