@@ -1,6 +1,6 @@
 import type { PipelineAction } from '@/lib/actions'
 import type { Entity } from '@/lib/db'
-import { normalizeTerm } from '@/lib/keyword-terms'
+import { dedupeTerms, newTerms } from '@/lib/keyword-terms'
 
 import type { ReconcileDecision } from './reconcile'
 import type { ClassifierExtraction } from './schema'
@@ -73,22 +73,6 @@ export function clampEmbeddedCharacter(candidate: { name: string; description: s
   }
 }
 
-/**
- * retrieval.md → Keywords schema: append-only, de-duped under matchTerms' normalization — authored
- * aliases must survive every pass. null when nothing is new, so a repeated name writes no delta.
- */
-function appendKeywords(current: readonly string[], incoming: readonly string[]): string[] | null {
-  const seen = new Set(current.map(normalizeTerm))
-  const added: string[] = []
-  for (const term of incoming) {
-    const key = normalizeTerm(term)
-    if (key === '' || seen.has(key)) continue
-    seen.add(key)
-    added.push(term)
-  }
-  return added.length === 0 ? null : [...current, ...added]
-}
-
 export function buildClassifierActions(
   extraction: ClassifierExtraction,
   deps: PlanDeps,
@@ -143,25 +127,30 @@ export function buildClassifierActions(
     if (decision.kind === 'promote') {
       handleMap.set(candidate.handle, decision.entityId)
       const promoted = index.get(decision.entityId)
-      const merged = appendKeywords(promoted?.keywords ?? [], candidate.keywords)
+      const added = newTerms(promoted?.keywords ?? [], candidate.keywords)
       if (promoted != null)
         index.set(decision.entityId, {
           ...promoted,
           status: 'active',
-          keywords: merged ?? promoted.keywords,
+          keywords: [...promoted.keywords, ...added],
         })
       planned.push({
         action: {
-          kind: 'updateEntity',
+          kind: 'promoteStagedEntity',
           source: SOURCE,
-          payload: {
-            branchId,
-            id: decision.entityId,
-            patch: merged == null ? { status: 'active' } : { status: 'active', keywords: merged },
-          },
+          payload: { branchId, id: decision.entityId },
         },
         entryId,
       })
+      if (added.length > 0)
+        planned.push({
+          action: {
+            kind: 'appendEntityKeywords',
+            source: SOURCE,
+            payload: { branchId, id: decision.entityId, keywords: added },
+          },
+          entryId,
+        })
       continue
     }
     // A known character writes only when the prose named it by something new: keywords aren't
@@ -169,14 +158,15 @@ export function buildClassifierActions(
     if (decision.kind === 'known') {
       handleMap.set(candidate.handle, decision.entityId)
       const known = index.get(decision.entityId)
-      const merged = appendKeywords(known?.keywords ?? [], candidate.keywords)
-      if (merged != null) {
-        if (known != null) index.set(decision.entityId, { ...known, keywords: merged })
+      const added = newTerms(known?.keywords ?? [], candidate.keywords)
+      if (added.length > 0) {
+        if (known != null)
+          index.set(decision.entityId, { ...known, keywords: [...known.keywords, ...added] })
         planned.push({
           action: {
-            kind: 'updateEntity',
+            kind: 'appendEntityKeywords',
             source: SOURCE,
-            payload: { branchId, id: decision.entityId, patch: { keywords: merged } },
+            payload: { branchId, id: decision.entityId, keywords: added },
           },
           entryId,
         })
@@ -185,7 +175,7 @@ export function buildClassifierActions(
     }
     const id = newId('char')
     const timestamp = now()
-    const keywords = appendKeywords([], candidate.keywords) ?? []
+    const keywords = dedupeTerms(candidate.keywords)
     const stored = clampEmbeddedCharacter(candidate)
     handleMap.set(candidate.handle, id)
     index.set(id, { kind: 'character', status: 'active', keywords })
@@ -332,18 +322,14 @@ export function buildClassifierActions(
     if (flip.to === 'retired' && current.status !== 'active') continue
     index.set(id, { ...current, status: flip.to })
     planned.push({
-      action: {
-        kind: 'updateEntity',
-        source: SOURCE,
-        payload: {
-          branchId,
-          id,
-          patch:
-            flip.to === 'retired'
-              ? { status: 'retired', retiredReason: nonBlank(flip.reason) ?? null }
-              : { status: 'active' },
-        },
-      },
+      action:
+        flip.to === 'retired'
+          ? {
+              kind: 'retireEntity',
+              source: SOURCE,
+              payload: { branchId, id, retiredReason: nonBlank(flip.reason) ?? null },
+            }
+          : { kind: 'promoteStagedEntity', source: SOURCE, payload: { branchId, id } },
       entryId: anchor(flip.sourceTurn),
     })
   }

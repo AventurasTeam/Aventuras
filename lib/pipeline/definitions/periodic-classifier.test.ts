@@ -567,6 +567,7 @@ describe('periodicClassifierPhase', () => {
       name: 'Kael',
       status: 'staged',
       description: 'A courier.',
+      keywords: [],
     } as unknown as Entity
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
@@ -588,11 +589,11 @@ describe('periodicClassifierPhase', () => {
     const actions = events.map((e) => (e as { action: { kind: string; payload: unknown } }).action)
     // Promote, not create: the namesake exists and the descriptions match.
     expect(actions.map((a) => a.kind)).toEqual([
-      'updateEntity',
+      'promoteStagedEntity',
       'createHappening',
       'createHappeningInvolvement',
     ])
-    expect(actions[0].payload).toMatchObject({ id: CHAR_KAEL, patch: { status: 'active' } })
+    expect(actions[0].payload).toMatchObject({ id: CHAR_KAEL })
     expect(actions[2].payload).toMatchObject({ entry: { entityId: CHAR_KAEL } })
   })
 
