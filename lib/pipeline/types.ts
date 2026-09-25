@@ -130,6 +130,18 @@ export type PreflightFailureHook = (
   error: PipelineError,
 ) => Promise<void>
 
+/**
+ * Reacts to a phase throwing — an action-layer rejection or throw, or an
+ * orchestrator-level error — as opposed to a phase that RETURNS `{ status:
+ * 'failed', error }`, which persists its own failure and never reaches this
+ * hook. Runs from `runPhases`' catch, before `abortRun` releases the run, under
+ * the same concurrency gate as `onPreflightFailure`.
+ */
+export type PhaseExceptionHook = (
+  ctx: Pick<PhaseContext, 'db' | 'branchId'>,
+  error: PipelineError,
+) => Promise<void>
+
 export type Pipeline = {
   kind: string
   phases: readonly PhaseNode[]
@@ -138,6 +150,7 @@ export type Pipeline = {
   concurrencyPolicy: ConcurrencyPolicy
   chainsTo?: (run: RunState) => string | null
   onPreflightFailure?: PreflightFailureHook
+  onPhaseException?: PhaseExceptionHook
 }
 
 export type TxResult = {

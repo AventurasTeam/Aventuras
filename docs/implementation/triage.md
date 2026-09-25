@@ -105,25 +105,6 @@ slice-planning gate forces its resolution before that slice is planned.
   whole-sentence keys fix it. Revisit trigger: the first non-English
   locale.
 
-- **A plain rejection mid-pass leaves the classifier `running`.**
-  `handleEvent` throws `ActionRejectedError` on any non-noop rejection
-  (`orchestrator.ts:146`), and an action-layer throw takes the same
-  path. The pass wrote `running` at `periodic-classifier.ts:163` and
-  its generator is never resumed, so neither status write after it
-  lands. The scheduler then gets no retry delay (`scheduler.ts:65`;
-  `retryDelayForStatus` is null outside `retrying`), and
-  `shouldCadenceFire` refuses while `running` (`status.ts:89`), so the
-  cadence stops until boot reconciliation
-  (`resetStuckClassifierRunState`, `actions/classifier/deps.ts:53`).
-  Restarting the app is the user's only way out today: `runNow`
-  (`scheduler.ts:85`) has no caller outside its own tests, and Story
-  Settings' [`Run classifier now`](../ui/screens/story-settings/story-settings.md#classifier)
-  button is specced but not built. The guarded entity actions no-op on
-  a missing row, so they no longer trigger it. A blank relationship
-  `kind` still does: the extraction schema's `z.string()` passes it and
-  the upsert handler rejects it plainly (`relationships/register.ts:113`).
-  Reachable today.
-
 - **World and Plot's pill Cancel misses a sibling branch's run.** The
   pill's foreground kind is story-keyed
   (`selectStorySettingsGenerationRunKind`, `generation-run.ts:25`), but

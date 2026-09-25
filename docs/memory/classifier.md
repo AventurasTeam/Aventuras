@@ -273,7 +273,9 @@ limit, network drop, provider 5xx). Errors that aren't transient
 failed-persistent on the original failure plus the three retries
 just like any other; the user resolves at the source (re-key,
 swap profile, etc.) rather than waiting for retries to magically
-succeed.
+succeed. A failure while the pass applies its planned writes (a
+rejected write rolls the whole pass back) is a failed run too and
+takes the same backoff.
 
 ### Persistence
 

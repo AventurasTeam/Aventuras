@@ -384,6 +384,23 @@ async function runPhases(run: RunState, ctx: RunCtx): Promise<PhaseOutcome> {
       { runId: run.runId, errorKind: error.kind, errorDetail: error.detail },
       { actionId: run.actionId },
     )
+    // Before the caller's abortRun: that releases the run, and releasing it drops
+    // the gate that serializes this write against the phases' own status writes.
+    const onPhaseException = getPipeline(run.kind).onPhaseException
+    if (onPhaseException) {
+      try {
+        await onPhaseException(ctx, error)
+      } catch (hookError) {
+        logger.error(
+          'pipeline.phase_exception_hook_failed',
+          {
+            runId: run.runId,
+            error: hookError instanceof Error ? hookError.message : String(hookError),
+          },
+          { actionId: run.actionId },
+        )
+      }
+    }
     return { kind: 'aborted', cause: { reason: 'phase-failure', error } }
   }
   return { kind: 'completed' }

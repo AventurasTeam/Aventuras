@@ -122,6 +122,45 @@ describe('orchestrator hardening', () => {
     expect(result.error?.kind).toBe('action-layer')
   })
 
+  it('runs onPhaseException for a rejected write, while the run is still registered', async () => {
+    const { ctx } = await makeHarness()
+    const seen: { kind?: string }[] = []
+    definePipeline({
+      kind: 'phase-exception',
+      phases: [{ name: 'p', run: updateMissing }],
+      onPhaseException: async (_hookCtx, error) => {
+        seen.push({ kind: error.kind })
+        // The hook must run before abortRun releases the run — that release is
+        // what drops the gate serializing this write against the phase's own.
+        expect(generationStore.getTxState().runs.size).toBeGreaterThan(0)
+      },
+      ...base,
+    })
+
+    const result = expectRan(await runPipeline('phase-exception', ctx))
+
+    expect(seen).toEqual([{ kind: 'action-layer' }])
+    expect(result.outcome).toBe('failed')
+  })
+
+  it('does not run onPhaseException for a phase that returns its own failed result', async () => {
+    const { ctx } = await makeHarness()
+    let called = false
+    definePipeline({
+      kind: 'phase-exception-clean-fail',
+      phases: [{ name: 'p', run: failsCleanly }],
+      onPhaseException: async () => {
+        called = true
+      },
+      ...base,
+    })
+
+    const result = expectRan(await runPipeline('phase-exception-clean-fail', ctx))
+
+    expect(called).toBe(false)
+    expect(result.outcome).toBe('failed')
+  })
+
   // A model restating current state is ordinary, and an unmarked rejection cost
   // the user the entire turn: the run failed and the reversal sweep took the
   // committed prose with it. The 'noop' code exists to say "well-formed, changed

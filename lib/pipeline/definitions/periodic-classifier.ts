@@ -87,6 +87,11 @@ async function readStatus(ctx: StatusCtx): Promise<ClassifierStatus> {
   return row?.classifierStatus ?? idleStatus()
 }
 
+async function recordFailure(ctx: StatusCtx, detail: string): Promise<void> {
+  const { status } = nextStatusOnFailure(await readStatus(ctx), { error: detail, at: Date.now() })
+  await writeStatus(ctx, status)
+}
+
 async function writeStatus(ctx: StatusCtx, status: ClassifierStatus): Promise<void> {
   // branches is not delta-logged (classifier.md -> Persistence), so this is a
   // direct row write. Key-scoped json_set because the reversal clamp owns
@@ -273,12 +278,12 @@ export function ensurePeriodicClassifierPipelineRegistered(): void {
       affordance: 'pill-only',
       onPreflightFailure: async (ctx, error) => {
         const detail = error.kind === 'config-resolver' ? error.failure : error.detail
-        const { status } = nextStatusOnFailure(await readStatus(ctx), {
-          error: `classifier: ${detail}`,
-          at: Date.now(),
-        })
-        await writeStatus(ctx, status)
+        await recordFailure(ctx, `classifier: ${detail}`)
       },
+      // A rejected write throws past the phase (lib/pipeline/runtime/orchestrator.ts
+      // runPhases), so the phase itself never gets a chance to persist a failure
+      // status the way a provider failure does — this hook is that failure write.
+      onPhaseException: (ctx, error) => recordFailure(ctx, `classifier: ${error.detail}`),
       gateBehavior: 'no-gate',
       concurrencyPolicy: { blockedBy: [PERIODIC_CLASSIFIER_KIND, 'chapter-close'] },
     })

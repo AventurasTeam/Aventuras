@@ -1,5 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { eq } from 'drizzle-orm'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { applyDeltaAction as realApplyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
+import { describeDeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
 import { generateStructured } from '@/lib/ai'
 import { shouldCadenceFire, type EmbedDescriptions } from '@/lib/classifier'
 import {
@@ -17,6 +20,7 @@ import {
   entitiesStore,
   entriesStore,
   happeningsStore,
+  hydrateAppSettings,
   resetAllStores,
 } from '@/lib/stores'
 
@@ -29,6 +33,8 @@ import {
   periodicClassifierPhase,
 } from './periodic-classifier'
 import { __resetRegistry, getPipeline } from '../authoring/registry'
+import { configureDeltaActionPort } from '../runtime/action-port'
+import { runPipeline, type RunCtx } from '../runtime/orchestrator'
 import type { PhaseContext } from '../types'
 
 vi.mock('@/lib/ai', async (importOriginal) => ({
@@ -37,6 +43,30 @@ vi.mock('@/lib/ai', async (importOriginal) => ({
 }))
 
 const CHAR_KAEL = 'char_11111111-1111-1111-1111-111111111111'
+
+const CLASSIFIER_WIRED_CONFIG = {
+  providers: [
+    {
+      id: 'prov-1',
+      type: 'openai-compatible' as const,
+      displayName: 'Local',
+      apiKey: 'k',
+      endpoint: 'http://x/v1',
+      favoriteModelIds: [] as string[],
+    },
+  ],
+  profiles: [
+    {
+      id: 'agent-1',
+      kind: 'agent' as const,
+      name: 'Agent',
+      modelRef: { providerId: 'prov-1', modelId: 'm' },
+    },
+  ],
+  assignments: { classifier: 'agent-1' },
+  defaultProviderId: 'prov-1',
+  diagnostics: { enabled: false, debug_level_enabled: false },
+}
 
 type Harness = {
   ctx: PhaseContext
@@ -701,5 +731,83 @@ describe('periodicClassifierPhase', () => {
     })
     // Idempotent: bootstrap and tests both call it.
     expect(() => ensurePeriodicClassifierPipelineRegistered()).not.toThrow()
+  })
+})
+
+// These drive the phase through the real orchestrator (runPipeline), not drain():
+// the apply-time rejection this guards against only happens when a planned write
+// reaches the action layer, which the phase itself never calls.
+describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    __resetRegistry()
+    __resetClassifierEmbedder()
+  })
+
+  afterEach(() => {
+    configureDeltaActionPort({
+      applyDeltaAction: realApplyDeltaAction,
+      reverseReplayDeltas,
+      describeReplayError: describeDeltaReplayError,
+    })
+  })
+
+  it('routes a write the action layer rejects to the retry status instead of leaving running stuck', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
+    await db.insert(storyEntries).values({
+      id: 'e1',
+      branchId: 'b1',
+      position: 1,
+      kind: 'ai_reply',
+      content: 'turn 1',
+      chapterId: null,
+      metadata: {},
+      createdAt: 1,
+    } as never)
+
+    resetAllStores()
+    currentStoryStore.set({
+      storyId: 's1',
+      branchId: 'b1',
+      definition: {} as never,
+      settings: { models: {} } as never,
+    })
+    entitiesStore.hydrate('b1', [])
+    happeningsStore.hydrate('b1', [])
+    await hydrateAppSettings(async () => CLASSIFIER_WIRED_CONFIG)
+
+    // A fake handler for the one write the pass plans, standing in for any
+    // action layer rejection (branch mismatch, invalid write, etc.) — the guard
+    // must recover from all of them the same way, not just the blank-kind trigger.
+    configureDeltaActionPort({
+      applyDeltaAction: (args, applyCtx) =>
+        args.action.kind === 'createHappening'
+          ? Promise.resolve({ status: 'rejected', reason: 'forced test rejection' })
+          : realApplyDeltaAction(args, applyCtx),
+      reverseReplayDeltas,
+      describeReplayError: describeDeltaReplayError,
+    })
+
+    ensurePeriodicClassifierPipelineRegistered()
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({
+        happenings: [{ title: 'A', sourceTurn: 't1', involvements: [], awareness: [] }],
+      }),
+    })
+
+    const ctx: RunCtx = { storyId: 's1', branchId: 'b1', db, runInTransaction }
+    const result = await runPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
+    if (result.outcome === 'rejected') throw new Error('unexpected rejected start')
+    expect(result.outcome).toBe('failed')
+
+    const [row] = await db
+      .select({ status: branches.classifierStatus })
+      .from(branches)
+      .where(eq(branches.id, 'b1'))
+    expect(row.status).toMatchObject({ state: 'retrying', retryCount: 1 })
+    expect(row.status?.lastError).not.toBeNull()
   })
 })

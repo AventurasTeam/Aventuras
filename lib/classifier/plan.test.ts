@@ -228,6 +228,39 @@ describe('buildClassifierActions', () => {
     })
   })
 
+  it('plans nothing for a relationship whose kind is blank', () => {
+    const { planned } = buildClassifierActions(
+      {
+        happenings: [],
+        relationships: [
+          { subject: 'char_kael', object: 'char_aria', kind: '   ', sourceTurn: 't1' },
+        ],
+        statusFlips: [],
+        newCharacters: [],
+      },
+      base,
+    )
+    expect(planned).toEqual([])
+  })
+
+  it('trims a relationship kind before writing it', () => {
+    const { planned } = buildClassifierActions(
+      {
+        happenings: [],
+        relationships: [
+          { subject: 'char_kael', object: 'char_aria', kind: ' ally ', sourceTurn: 't1' },
+        ],
+        statusFlips: [],
+        newCharacters: [],
+      },
+      base,
+    )
+    expect(planned[0].action).toMatchObject({
+      kind: 'upsertCharacterRelationship',
+      payload: { kind: 'ally' },
+    })
+  })
+
   it('writes a retirement only for the retired transition and carries the reason', () => {
     const { planned } = buildClassifierActions(
       {

@@ -299,13 +299,17 @@ export function buildClassifierActions(
     const subjectId = resolveRef(relationship.subject, 'character')
     const objectId = resolveRef(relationship.object, 'character')
     if (subjectId == null || objectId == null || subjectId === objectId) continue
+    // The write schema requires a non-blank kind; a blank model reply would
+    // otherwise reject the whole write instead of just this one fact.
+    const kind = nonBlank(relationship.kind)
+    if (kind == null) continue
     planned.push({
       action: {
         kind: 'upsertCharacterRelationship',
         source: SOURCE,
         // Canonical a_id < b_id ordering and the POV merge live in the action
         // (lib/actions/relationships/register.ts) — emit the raw perspective.
-        payload: { branchId, subjectId, objectId, kind: relationship.kind },
+        payload: { branchId, subjectId, objectId, kind },
       },
       entryId: anchor(relationship.sourceTurn),
     })
