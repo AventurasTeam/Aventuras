@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render } from '@testing-library/react'
+import { act, cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { generationStore, type RunState, type TxState } from '@/lib/stores'
@@ -132,18 +132,18 @@ describe('storyPillPhase', () => {
 })
 
 describe('useStoryGenerationGate classifier run id', () => {
-  it("yields the branch's classifier run id while it is in flight, then null once it finishes", () => {
+  // The probe stays mounted across the store update so the assertion exercises the
+  // live subscription, not a selector re-evaluated by a fresh render.
+  it("updates the same mounted probe from the branch's classifier run id to null when the run finishes", () => {
     generationStore.startRun(run('periodic-classifier', 'story-1', 'no-gate', 'branch-1'))
-    let captured: string | null = null
-    const first = render(
-      <GateProbe storyId="story-1" branchId="branch-1" onResult={(id) => (captured = id)} />,
-    )
-    expect(captured).toBe('run-periodic-classifier')
-    first.unmount()
+    const captured: (string | null)[] = []
+    render(<GateProbe storyId="story-1" branchId="branch-1" onResult={(id) => captured.push(id)} />)
+    expect(captured.at(-1)).toBe('run-periodic-classifier')
 
-    generationStore.finishRun('run-periodic-classifier')
-    render(<GateProbe storyId="story-1" branchId="branch-1" onResult={(id) => (captured = id)} />)
-    expect(captured).toBeNull()
+    act(() => {
+      generationStore.finishRun('run-periodic-classifier')
+    })
+    expect(captured.at(-1)).toBeNull()
   })
 
   it('keys by branch when branchId is given, and by story when it is not', () => {
