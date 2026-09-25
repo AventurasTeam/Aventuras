@@ -256,24 +256,32 @@ already orders both writers, so nothing new is stored:
   log, so every user edit outranks it.
 - The user wrote a field after that prose when a `user_edit` delta on
   the same row, logged later, created the row or changed that column.
-  World's saves record only the columns they change, so an edit to a
-  description does not shield the status.
+  `updateEntity` drops the columns a patch leaves unchanged, so an edit
+  to a description does not shield the status.
 - A status the user wrote after the prose stands: promotion and
-  retirement no-op.
+  retirement no-op. The scene editor's staged-to-active promotion of an
+  entity it brings into the scene is a user status write too.
 - An alias the user removed after the prose stays removed. The same
   write's other new aliases still land.
 
 Undoing the user's edit removes its delta, which lifts the protection.
 A later content edit of the source entry makes that prose newer than
-the user's edit, so its facts win again.
+the user's edit, so its facts win again when a pass re-reads the
+entry: an edit to the head turn reopens it
+([`data-model.md → Entry mutability & rollback`](../data-model.md#entry-mutability--rollback)),
+and an entry still in the backlog is read anyway. An edit to an entry
+a pass already processed, off the head turn, is not re-read.
 
 **Relationship views.** The classifier's upsert writes one
 perspective into the pair's row, and a view the user wrote after the
 fact's prose stands: the upsert no-ops when a user write after that
-prose created the row or set that perspective. A pair the user deleted
-after the prose stays deleted, since the upsert does not re-create it.
-The user setting only the other perspective leaves this one to the
-classifier. This is how the authoring contract, where the classifier
+prose created the row with that perspective set, or set that
+perspective later. A pair the user deleted after the prose stays
+deleted, since the upsert does not re-create it. A create that left
+this perspective blank, or a user write of only the other one, leaves
+it to the classifier; whether the create set it is read from the delta
+chain, since the live row may hold a value the classifier filled in
+since. This is how the authoring contract, where the classifier
 updates a view on subsequent contradicting prose, is enforced
 ([`data-model.md → Character-to-character relationships`](../data-model.md#character-to-character-relationships)).
 
@@ -281,8 +289,9 @@ What stays open:
 
 - Prose written after the user's edit can still revise the field. That
   is the authoring contract, not a gap.
-- A fact whose source turn doesn't resolve anchors to the window's
-  newest turn
+- A fact whose source turn doesn't resolve keeps the window's newest
+  turn as its survival anchor
   ([`classifier.md → Provenance attribution`](./classifier.md#provenance-attribution)),
-  so its prose position reads later than it is. A user edit made
-  between the real source turn and that one loses to it.
+  but its prose dates to the window's oldest turn. A user edit made
+  after that turn then outranks it even when the real source is
+  later, an error in the user's favor.
