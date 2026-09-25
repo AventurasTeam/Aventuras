@@ -50,7 +50,7 @@ edit, knowing the classifier may overwrite it on contradicting prose.
   and [`Mobile expression`](../../../../ui/screens/world/world.md#mobile-expression)
   — every field, every tab, every tier rule.
 - [`world.md → Relationships — character-to-character`](../../../../ui/screens/world/world.md#relationships--character-to-character)
-  — row composition, the three perspective states, the edit sheet,
+  — row composition, the three perspective states, the inline edit card,
   the CHECK gate.
 - [`patterns/entity.md → Entity detail-pane composition`](../../../../ui/patterns/entity.md#entity-detail-pane-composition)
   and [`Entity editing — uses the save-session pattern`](../../../../ui/patterns/entity.md#entity-editing--uses-the-save-session-pattern).
@@ -109,13 +109,13 @@ edit, knowing the classifier may overwrite it on contradicting prose.
 - **Connections** per kind: positional / compositional / affiliation
   pickers (C8, kind-filtered, self-excluded), inverse-derived read-only
   lists, `lastSeenAt` read-only; the **Relationships** sub-section —
-  `ListRow` rows with both perspectives, `+ Add relationship`, an edit
-  sheet (Autocomplete over characters minus self, `kind` and
-  `inverse_kind` inputs, at-least-one gate, Delete inside the sheet).
-  The sheet's save is **one** action: this slice extends the M1.5
-  `upsertCharacterRelationship` payload to carry both perspective
-  columns, since the group runner rejects two writes to one row's
-  column (C7).
+  `ListRow` rows with both perspectives, `+ Add relationship`, an
+  inline edit card (the C8 picker over characters minus self, `kind`
+  and `inverse_kind` inputs, at-least-one gate, Delete inside the
+  card). Each changed pair saves as **one** write: this slice extends
+  the M1.5 `upsertCharacterRelationship` payload to carry both
+  perspective columns, since handlers in a group read pre-group state
+  and two single-POV writes to a new pair would both insert (C7).
 - **Settings:** `status`, `injection_mode` with its explanation,
   `retired_reason` (enabled only when retired), `keywords` and `tags`
   as `TagInput` — keywords normalized through C12 at commit — and
@@ -195,7 +195,7 @@ the asset gallery pass` / `lands in Slice 4.2b`).
   action and one row with `a_id < b_id`; with only `inverse_kind`
   filled it saves; with neither filled Save is disabled; the row
   renders `your view: not recorded · they see you: rival` (vitest on
-  the extended arm and the sheet's write mapping).
+  the extended arm and the card's write mapping).
 - `Set as lead` on a character updates `definition.leadEntityId`,
   the reader's `You` badge moves on return, the entry is absent on
   non-character kinds, and the action is refused while a turn is in
@@ -246,8 +246,8 @@ the asset gallery pass` / `lands in Slice 4.2b`).
   `action_id` (the payload gained an optional `inverseKind`); a removed
   pair joins the same group as a `deleteCharacterRelationship`. One
   write per pair because a group's handlers read pre-group state, per
-  [C7](../milestone.md#c7--per-row-save-session-host-for-world-and-plot-detail-panes),
-  not the two-writes-to-one-column rule Scope cites. A sheet was
+  [C7](../milestone.md#c7--per-row-save-session-host-for-world-and-plot-detail-panes).
+  A sheet was
   dropped: the character picker is a phone Sheet, and `layout.md`
   forbids a Sheet over a Sheet; `world.md` amended. A card keys by a
   `cardKey` (the committed row id, or a client key for a new card), so
