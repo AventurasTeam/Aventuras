@@ -137,4 +137,17 @@ describe('lore-management user content', () => {
     expect(out).not.toContain('<<NEW_CHAPTER>>')
     expect(out).toContain('<<RECENT_STORY>>')
   })
+
+  it('warns that the story goes on only when the excerpt is cut short', async () => {
+    const cut = await renderUserContent({ hasRecentStory: true, recentStoryContinues: true })
+    const whole = await renderUserContent({ hasRecentStory: true, recentStoryContinues: false })
+    expect(cut).toContain('The story goes on past the end of this excerpt')
+    expect(cut.indexOf('<<RECENT_STORY>>')).toBeLessThan(cut.indexOf('The story goes on'))
+    expect(whole).not.toContain('The story goes on')
+  })
+
+  it('has no continuation note when there is no excerpt to be cut short', async () => {
+    const out = await renderUserContent({ hasRecentStory: false, recentStoryContinues: true })
+    expect(out).not.toContain('The story goes on')
+  })
 })
