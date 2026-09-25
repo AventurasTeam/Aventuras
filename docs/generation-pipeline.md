@@ -1287,7 +1287,8 @@ an entity or happening exists only because of the reversed prose,
 except in a table that registers `rowKeepingColumns`: a character
 relationship whose view a later user write set keeps its row, with the
 views the user did not write nulled, and is deleted only once both are
-null.
+null. An update's reversal that would leave both views null deletes the
+row too, since the pair's one-view `CHECK` forbids it.
 
 **Undoing a `create` consults no cascade.**
 A domain may register a cascade hook for its child rows, but that hook

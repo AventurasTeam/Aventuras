@@ -289,7 +289,8 @@ updates a view on subsequent contradicting prose, is enforced
 or redo, or a failed or interrupted pass keeps each field the user
 wrote after the fact, so the precedence above never leaves a value
 neither the user nor the prose chose. A pair the classifier created
-keeps a view the user added since and loses the classifier's. A
+keeps a view the user added since and loses the classifier's, and a
+pair the reversal would leave with no view is deleted. A
 rollback or regenerate differs: a World edit has no entry to survive
 on, so the user's later edits reverse along with the fact and the
 field returns to its value before it

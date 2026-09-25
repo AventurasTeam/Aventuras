@@ -103,7 +103,7 @@ const promote: PipelineAction = {
 const retire: PipelineAction = {
   kind: 'retireEntity',
   source: 'periodic_classifier',
-  payload: { branchId: 'b1', id: 'char_kael', retiredReason: 'fell at the ford' },
+  payload: { branchId: 'b1', id: 'char_kael', retiredReason: 'fell' },
 }
 
 const append = (keywords: string[]): PipelineAction => ({
@@ -117,6 +117,12 @@ const classifyView = (kind: string): PipelineAction => ({
   kind: 'upsertCharacterRelationship',
   source: 'periodic_classifier',
   payload: { branchId: 'b1', subjectId: 'char_kael', objectId: 'char_mira', kind },
+})
+
+const classifyMiraView = (kind: string): PipelineAction => ({
+  kind: 'upsertCharacterRelationship',
+  source: 'periodic_classifier',
+  payload: { branchId: 'b1', subjectId: 'char_mira', objectId: 'char_kael', kind },
 })
 
 const userViews = (kaelView: string | null, miraView: string | null): PipelineAction => ({
@@ -185,6 +191,17 @@ describe('reversing a machine write under a later user write', () => {
     const [row] = await pair(db)
     expect(row).toMatchObject({ kind: 'rival', inverseKind: 'friend' })
     expect(characterRelationshipsStore.getById(row.id)).toEqual(row)
+  })
+
+  it('still reverses the columns of its own the user did not write since', async () => {
+    const { db, ctx } = await setup()
+    await createKael(ctx)
+    await apply(ctx, retire, 'act_c')
+    await apply(ctx, userPatch({ status: 'active' }), 'act_u')
+
+    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+
+    expect(await kael(db)).toMatchObject({ status: 'active', retiredReason: null })
   })
 
   it('still reverses a column the later user edit left alone', async () => {
@@ -265,6 +282,34 @@ describe('reversing a machine write under a later user write', () => {
     await reverseReplayDeltas('act_u1', ctx)
 
     expect((await kael(db)).status).toBe('active')
+  })
+})
+
+describe('reversing a machine view update', () => {
+  it('deletes a pair the reversal would leave with no view', async () => {
+    const { db, ctx } = await setup()
+    await apply(ctx, userViews('ally', null), 'act_0')
+    const [created] = await pair(db)
+    await apply(ctx, classifyMiraView('wary'), 'act_c')
+    await apply(ctx, userViews(null, 'wary'), 'act_u')
+
+    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+
+    expect(await pair(db)).toHaveLength(0)
+    expect(characterRelationshipsStore.getById(created.id)).toBeUndefined()
+    expect(await actionIds(db)).toEqual(['act_0', 'act_u'])
+  })
+
+  it('updates a pair the reversal leaves with a view', async () => {
+    const { db, ctx } = await setup()
+    await apply(ctx, userViews('ally', null), 'act_0')
+    await apply(ctx, classifyMiraView('wary'), 'act_c')
+
+    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+
+    const [row] = await pair(db)
+    expect(row).toMatchObject({ kind: 'ally', inverseKind: null })
+    expect(characterRelationshipsStore.getById(row.id)).toEqual(row)
   })
 })
 

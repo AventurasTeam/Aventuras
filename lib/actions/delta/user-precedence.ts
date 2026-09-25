@@ -73,32 +73,32 @@ export function userEditsSince(
 const rowKey = (d: Delta) => `${d.targetTable}:${d.branchId}:${d.targetId}`
 
 /**
- * Looks up, for a machine delta in `rows`, the `user_edit` deltas on its row logged after
- * it that `rows` does not reverse too, oldest first. A user delta gets none.
+ * Maps each machine delta in `rows`, by id, to the `user_edit` deltas on its row logged
+ * after it that `rows` does not reverse too, oldest first. A user delta has no entry.
  */
 export async function userEditsOutliving(
   ctx: DbCtx,
   rows: readonly Delta[],
-): Promise<(delta: Delta) => Delta[]> {
+): Promise<ReadonlyMap<string, Delta[]>> {
   const reversed = new Set(rows.map((r) => r.id))
-  const oldestByRow = new Map<string, Delta>()
+  const machineByRow = new Map<string, Delta[]>()
   for (const d of rows) {
     if (isUserOriginatedSource(d.source)) continue
-    const oldest = oldestByRow.get(rowKey(d))
-    if (oldest == null || d.logPosition < oldest.logPosition) oldestByRow.set(rowKey(d), d)
+    machineByRow.set(rowKey(d), [...(machineByRow.get(rowKey(d)) ?? []), d])
   }
-  const editsByRow = new Map<string, Delta[]>()
-  for (const [key, d] of oldestByRow) {
-    const edits = await userEditsSince(ctx, d.branchId, d.targetTable, d.targetId, d.logPosition)
-    editsByRow.set(
-      key,
-      edits.filter((e) => !reversed.has(e.id)),
+  const byDelta = new Map<string, Delta[]>()
+  for (const machine of machineByRow.values()) {
+    const { branchId, targetTable, targetId } = machine[0]
+    const since = Math.min(...machine.map((d) => d.logPosition))
+    const edits = (await userEditsSince(ctx, branchId, targetTable, targetId, since)).filter(
+      (e) => !reversed.has(e.id),
     )
+    for (const d of machine) {
+      const later = edits.filter((e) => e.logPosition > d.logPosition)
+      byDelta.set(d.id, later)
+    }
   }
-  return (delta) =>
-    isUserOriginatedSource(delta.source)
-      ? []
-      : (editsByRow.get(rowKey(delta)) ?? []).filter((e) => e.logPosition > delta.logPosition)
+  return byDelta
 }
 
 /** Deltas of any source on one row logged after `since`, oldest first. */

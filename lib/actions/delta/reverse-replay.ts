@@ -105,7 +105,7 @@ async function buildUndoOps(
     const { table } = entry.descriptor
     const where = whereForDelta(entry.descriptor, delta)
     const key = `${delta.targetTable}:${delta.branchId}:${delta.targetId}`
-    const userEdits = laterUserEdits(delta)
+    const userEdits = laterUserEdits.get(delta.id) ?? []
 
     const workingRow = async (): Promise<Record<string, unknown>> => {
       let row = working.get(key)
@@ -135,6 +135,16 @@ async function buildUndoOps(
       })
     }
 
+    const emitDelete = () => {
+      working.delete(key)
+      ops.push(ctx.db.delete(table).where(where).toSQL())
+      patches.push({
+        table: delta.targetTable,
+        branchId: delta.branchId,
+        patch: { op: 'delete', id: delta.targetId },
+      })
+    }
+
     // No cascade on purpose: an actionId-scoped set already carries the children's deltas;
     // an entry-scoped caller owes the closure by hand (generation-pipeline.md → Reverse-replay).
     if (delta.op === 'create') {
@@ -152,13 +162,7 @@ async function buildUndoOps(
           continue
         }
       }
-      working.delete(key)
-      ops.push(ctx.db.delete(table).where(where).toSQL())
-      patches.push({
-        table: delta.targetTable,
-        branchId: delta.branchId,
-        patch: { op: 'delete', id: delta.targetId },
-      })
+      emitDelete()
       continue
     }
     if (delta.op === 'delete') {
@@ -234,7 +238,9 @@ async function buildUndoOps(
       restored[col] = value
       row[col] = value // thread into the working copy for later-in-DESC undos
     }
-    emitUpdate(restored, row)
+    const keeping = entry.rowKeepingColumns
+    if (keeping && keeping.every((col) => row[col] == null)) emitDelete()
+    else emitUpdate(restored, row)
   }
 
   return { ops, patches }

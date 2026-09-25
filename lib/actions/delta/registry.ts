@@ -78,9 +78,9 @@ export type DomainRegistration = {
   restoreCascade?: CascadeRestore
   cascadeDeleteOps?: CascadeDeleteOps
   /**
-   * Columns the row exists for while any is non-null. Reversing a machine `create` keeps a
-   * row a later user write set one of them on: it nulls the rest, and deletes only once
-   * all are null.
+   * Columns the row exists for while any is non-null: a reversal that would null them all
+   * deletes the row instead. Reversing a machine `create` keeps a row a later user write
+   * set one of them on, nulling only the rest.
    */
   rowKeepingColumns?: readonly string[]
 }
