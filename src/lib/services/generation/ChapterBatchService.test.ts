@@ -221,17 +221,6 @@ describe('ChapterBatchService — lorebook pass', () => {
     expect(options?.newChapter).toBeUndefined()
   })
 
-  it("forwards the story's chapterBuffer beside the token threshold", async () => {
-    const deps = baseDeps()
-    const service = new ChapterBatchService(deps)
-
-    await service.run(baseInput({ includeLorebook: true, chapterBuffer: 1 }), baseCallbacks())
-
-    const options = vi.mocked(deps.runLoreManagement).mock.calls[0][6]
-    expect(options?.chapterBuffer).toBe(1)
-    expect(options?.newChapter).toBeUndefined()
-  })
-
   it('does not run the lorebook pass when includeLorebook is false', async () => {
     const deps = baseDeps()
     const service = new ChapterBatchService(deps)

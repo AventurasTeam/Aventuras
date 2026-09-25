@@ -184,7 +184,6 @@ export class ChapterBatchService {
           pov: input.pov,
           tense: input.tense,
           tokenThreshold: input.tokenThreshold,
-          chapterBuffer: input.chapterBuffer,
         },
         callbacks.loreCallbacks,
         callbacks.loreUICallbacks,
