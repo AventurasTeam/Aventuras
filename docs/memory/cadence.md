@@ -285,6 +285,16 @@ since. This is how the authoring contract, where the classifier
 updates a view on subsequent contradicting prose, is enforced
 ([`data-model.md → Character-to-character relationships`](../data-model.md#character-to-character-relationships)).
 
+**Reversals.** Reversing a classifier fact for a prose edit, its undo
+or redo, or a failed or interrupted pass keeps each field the user
+wrote after the fact, so the precedence above never leaves a value
+neither the user nor the prose chose. A pair the classifier created
+keeps a view the user added since and loses the classifier's. A
+rollback or regenerate differs: a World edit has no entry to survive
+on, so the user's later edits reverse along with the fact and the
+field returns to its value before it
+([`generation-pipeline.md → Reverse-replay`](../generation-pipeline.md#reverse-replay)).
+
 What stays open:
 
 - Prose written after the user's edit can still revise the field. That

@@ -138,18 +138,23 @@ slice-planning gate forces its resolution before that slice is planned.
   asked about the duplicate. Reachable today: World create is gated
   only by `hard-gate` runs.
 
-- **An entry-scoped reversal can drop a later user edit.** The
-  classifier's keyword and status deltas record the whole prior value
-  as `undoPayload` (`state-patch-actions.ts:213`, `:250`, `:283`). A
-  prose reversal reverses only the classifier deltas anchored to the
-  edited entries (`resolveClassifierFactDeltas`,
-  `story-entries/classifier-facts.ts:204`), so a World edit to the same
-  field made after the pass is not in the set, and the restored value
-  overwrites it. `updateEntity` did the same. An append's natural undo,
-  removing the terms it added, can't be expressed by the generic
-  reverse-replay, which restores unschema'd columns wholesale
-  (`reverse-replay.ts:170-197`). Reachable today: edit an entity in
-  World that the head turn's pass wrote, then edit that turn's prose.
+- **A reversal can still drop a later user edit.** Reversing a machine
+  write skips each column a later `user_edit` outside the reversed set
+  wrote
+  ([`generation-pipeline.md → Reverse-replay`](../generation-pipeline.md#reverse-replay)),
+  with two gaps left. Reversing a classifier `create` deletes the row,
+  and a user edit made to it since goes with it, its delta left
+  pointing at nothing. A prose edit reverses a happening's create
+  (`isReversible` in `story-entries/classifier-facts.ts` spares only
+  entities'), and a failed pass's `abortRun` or boot recovery reverses
+  both kinds. Reachable today: edit in Plot a happening the head
+  turn's pass created, then edit that turn's prose. And a schema-backed
+  column (`entities.state`, `story_entries.metadata`) still restores
+  the sub-fields its delta changed over a later user write to the same
+  sub-field. That one is latent: only hard-gated runs write either
+  column, so no user edit lands while such a run can abort, and a
+  rollback or regenerate that reverses their deltas later sweeps the
+  user's edits after them too.
 
 - **A recurring classifier failure reaches `failed-persistent`
   invisibly.** The backoff

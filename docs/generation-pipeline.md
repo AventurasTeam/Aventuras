@@ -1272,7 +1272,24 @@ still reports the run failed, but does not leave it to boot recovery,
 since its marker settled with the reversal. `submitTurn` logs either
 kind and still returns the rejection.
 
-**Undoing a `create` is a bare row delete, and consults no cascade.**
+**A reversed machine write keeps a later user write.** Undoing a delta
+from a pipeline source skips each top-level column that a later
+`user_edit` delta on the same row wrote, by creating the row or
+changing that column, unless that delta is in the set being reversed
+too. A delta left with no column writes nothing and is still pruned. A `user_edit` inside the set restores as usual: a
+rollback or regenerate sweeps every null-anchored World edit after its
+target, so the row still returns to its prior value, and CTRL-Z of the
+user's own action is never filtered. The rule has two exceptions. A
+schema-backed JSON column such as an entity's `state` restores the
+sub-fields its delta changed as before, even over a later user write
+to the same sub-field. A machine `create` still deletes its row, since
+an entity or happening exists only because of the reversed prose,
+except in a table that registers `rowKeepingColumns`: a character
+relationship whose view a later user write set keeps its row, with the
+views the user did not write nulled, and is deleted only once both are
+null.
+
+**Undoing a `create` consults no cascade.**
 A domain may register a cascade hook for its child rows, but that hook
 is **delete-op-only**: it replays a forward `delete`, so the undo of a
 `create` and the redo of a `delete` are the only arms that may read it.
