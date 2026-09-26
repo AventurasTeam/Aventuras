@@ -6,7 +6,7 @@
 import { writeTextFile } from '@tauri-apps/plugin-fs'
 import { resolveSaveTarget } from '$lib/services/exportTarget'
 import type { VaultLorebook, VaultLorebookEntry, VaultCharacter, VaultScenario } from '$lib/types'
-import type { Entry, EntryType } from '$lib/types'
+import type { Entry } from '$lib/types'
 import {
   characterToExchange,
   scenarioToExchange,
@@ -17,6 +17,7 @@ import {
 import type { ExportFormat } from '../types'
 import { exportToSillyTavern, exportToText } from './formats'
 import { getFormatInfo } from './metadata'
+import { defaultEntryState } from '../import/convert'
 
 /**
  * Convert a VaultLorebookEntry to an Entry-like structure for export.
@@ -32,7 +33,7 @@ export function vaultEntryToEntryLike(vaultEntry: VaultLorebookEntry, index: num
     description: vaultEntry.description,
     hiddenInfo: null,
     aliases: vaultEntry.aliases ?? [],
-    state: createDefaultState(vaultEntry.type),
+    state: defaultEntryState(vaultEntry.type),
     adventureState: null,
     creativeState: null,
     injection: {
@@ -45,64 +46,6 @@ export function vaultEntryToEntryLike(vaultEntry: VaultLorebookEntry, index: num
     updatedAt: now,
     loreManagementBlacklisted: false,
     branchId: null,
-  }
-}
-
-/**
- * Create default state for a given entry type.
- */
-function createDefaultState(type: EntryType): Entry['state'] {
-  switch (type) {
-    case 'character':
-      return {
-        type: 'character',
-        isPresent: false,
-        lastSeenLocation: null,
-        currentDisposition: null,
-        relationship: { level: 0, status: 'unknown', history: [] },
-        knownFacts: [],
-        revealedSecrets: [],
-      }
-    case 'location':
-      return {
-        type: 'location',
-        isCurrentLocation: false,
-        visitCount: 0,
-        changes: [],
-        presentCharacters: [],
-        presentItems: [],
-      }
-    case 'item':
-      return {
-        type: 'item',
-        inInventory: false,
-        currentLocation: null,
-        condition: null,
-        uses: [],
-      }
-    case 'faction':
-      return {
-        type: 'faction',
-        playerStanding: 0,
-        status: 'unknown',
-        knownMembers: [],
-      }
-    case 'event':
-      return {
-        type: 'event',
-        occurred: false,
-        occurredAt: null,
-        witnesses: [],
-        consequences: [],
-      }
-    case 'concept':
-    default:
-      return {
-        type: 'concept',
-        revealed: false,
-        comprehensionLevel: 'unknown',
-        relatedEntries: [],
-      }
   }
 }
 

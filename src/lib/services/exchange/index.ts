@@ -15,7 +15,7 @@ export type {
   ExchangeScenarioNpc,
 } from './types'
 export { EXCHANGE_FORMAT, EXCHANGE_FORMAT_VERSION } from './types'
-export { parseExchange, classifyExchange } from './parse'
+export { parseExchange, classifyExchange, exchangeImportRedirect } from './parse'
 export { checkFormatVersion } from './version'
 export {
   PORTABLE_METADATA,

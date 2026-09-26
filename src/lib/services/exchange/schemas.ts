@@ -1,21 +1,12 @@
 import * as z from 'zod'
+import { visualDescriptorsSchema } from '$lib/services/ai/sdk/schemas'
 import { EXCHANGE_FORMAT } from './types'
 
 const metadata = z.record(z.string(), z.unknown()).default({})
 const strings = z.array(z.string()).default([])
 const nullableString = z.string().nullable().default(null)
 
-const visualDescriptors = z
-  .object({
-    face: z.string().optional(),
-    hair: z.string().optional(),
-    eyes: z.string().optional(),
-    build: z.string().optional(),
-    clothing: z.string().optional(),
-    accessories: z.string().optional(),
-    distinguishing: z.string().optional(),
-  })
-  .default({})
+const visualDescriptors = visualDescriptorsSchema.default({})
 
 export const characterSchema = z.object({
   name: z.string().min(1),

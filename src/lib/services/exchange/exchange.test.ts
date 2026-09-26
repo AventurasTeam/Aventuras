@@ -7,6 +7,7 @@ import {
   checkFormatVersion,
   exchangeToCharacter,
   exchangeToScenario,
+  exchangeImportRedirect,
   exchangeToVaultLorebook,
   hasStorySideFields,
   parseExchange,
@@ -173,6 +174,18 @@ describe('exchange / envelope', () => {
   it('rejects a document without a version', () => {
     const text = JSON.stringify({ format: EXCHANGE_FORMAT, entity: 'character', data: {} })
     expect(parseExchange(text, 'character').kind).toBe('invalid')
+  })
+})
+
+describe('exchange / card-only importers', () => {
+  it('names the entity and points to the Vault', () => {
+    const text = textOf('scenario', scenarioToExchange(scenario))
+    expect(exchangeImportRedirect(text)).toMatch(/Aventuras scenario export.*Vault/)
+  })
+
+  it('stays silent for anything else', () => {
+    expect(exchangeImportRedirect('{"name":"Mira","description":"x"}')).toBeNull()
+    expect(exchangeImportRedirect('not json')).toBeNull()
   })
 })
 
@@ -376,6 +389,16 @@ describe('exchange / lorebook', () => {
     const imported = exchangeToVaultLorebook(res.document.data, { id: 'x', originalFilename: 'f' })
     expect(imported.entries[0]).not.toHaveProperty('hiddenInfo')
     expect(imported.entries[0]).not.toHaveProperty('loreManagementBlacklisted')
+  })
+
+  it('exports vault entries stored without keyword or alias arrays', () => {
+    const legacy = {
+      ...vaultLorebook,
+      entries: [{ ...vaultLorebook.entries[0], keywords: undefined, aliases: undefined }],
+    } as unknown as VaultLorebook
+    const [entry] = vaultLorebookToExchange(legacy).entries
+    expect(entry.keywords).toEqual([])
+    expect(entry.aliases).toEqual([])
   })
 
   it('accepts an empty lorebook', () => {

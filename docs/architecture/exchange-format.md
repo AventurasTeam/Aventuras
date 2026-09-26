@@ -51,6 +51,9 @@ A declared Aventuras file that fails validation is terminal. It is never reinter
 a SillyTavern lorebook, and never reaches a model. Importing a lorebook export through the
 character import is an `invalid` result with a message naming the right section.
 
+The setup wizard and the SillyTavern import wizard take cards only. Given an exchange file, they say
+so and point to the Vault, whose pickers they already offer, through `exchangeImportRedirect`.
+
 ## Portable content
 
 Every payload carries the record's portable content and nothing else. Portable content is
@@ -90,6 +93,10 @@ which is what the vault-to-story path always produced.
 the generation entity merger, and by the lore agent's merge. Every wizard path that seeds a story
 from the vault starts them empty, and `VaultLorebookEntry` has never had them. The vault is the
 story-agnostic source of lore; a story is its consumer and accumulates these on top.
+
+A vault lorebook can be exported empty, since its name, description and tags are content of their
+own. A story lorebook cannot: a story keeps no lorebook-level fields, so there would be nothing to
+carry.
 
 A lorebook export from a story carries both as optional entry fields, so a story-to-story transfer
 is literal. Importing that file into a story keeps them. Importing it into the vault drops them and

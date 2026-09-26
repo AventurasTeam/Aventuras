@@ -1,4 +1,5 @@
 import { story } from '$lib/stores/story.svelte'
+import { exchangeImportRedirect } from '$lib/services/exchange'
 import { ui } from '$lib/stores/ui.svelte'
 import { settings } from '$lib/stores/settings.svelte'
 import { scenarioService, type WizardData } from '$lib/services/ai/wizard/ScenarioService'
@@ -343,7 +344,9 @@ export class STImportWizardStore {
       const parsed = CharacterCardImport.parseJson(jsonString)
 
       if (!parsed) {
-        this.cardFileError = 'Could not parse character card. Unsupported format.'
+        this.cardFileError =
+          exchangeImportRedirect(jsonString) ??
+          'Could not parse character card. Unsupported format.'
         return
       }
 

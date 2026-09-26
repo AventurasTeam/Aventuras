@@ -52,7 +52,9 @@ export async function importEntries(
       message: 'Converting entries...',
     })
 
-    const entries = convertToEntries(entriesToImport, 'import')
+    const entries = convertToEntries(entriesToImport, 'import', {
+      keywordAliases: parseResult.metadata.format !== 'aventura',
+    })
 
     // Phase 3: Batch insert into database
     onProgress?.({

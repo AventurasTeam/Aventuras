@@ -28,7 +28,7 @@
   const hasSelection = $derived(ui.lorebookBulkSelection.size > 0)
 
   async function handleExport() {
-    if (entryCount === 0 && selectedFormat !== 'aventura') {
+    if (entryCount === 0) {
       ui.showToast('No entries to export', 'error')
       return
     }
@@ -156,11 +156,7 @@
 
     <ResponsiveModal.Footer class="mt-auto border-t px-6 py-4">
       <Button variant="outline" onclick={close} disabled={exporting}>Cancel</Button>
-      <Button
-        onclick={handleExport}
-        disabled={exporting || (entryCount === 0 && selectedFormat !== 'aventura')}
-        class="gap-2"
-      >
+      <Button onclick={handleExport} disabled={exporting || entryCount === 0} class="gap-2">
         {#if exporting}
           <Loader2 class="h-4 w-4 animate-spin" />
           Exporting...

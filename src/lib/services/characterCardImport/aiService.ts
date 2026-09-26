@@ -1,4 +1,5 @@
 import { createLogger } from '$lib/log'
+import { exchangeImportRedirect } from '$lib/services/exchange'
 import type { ServiceId } from '$lib/stores/settings.svelte'
 import { BaseAIService } from '$lib/services/ai/BaseAIService'
 import type { GeneratedCharacter } from '$lib/services/ai/sdk'
@@ -130,6 +131,7 @@ export async function clean(
 ): Promise<CardImportResult> {
   const card = parseJson(jsonString)
   if (!card) {
+    const redirect = exchangeImportRedirect(jsonString)
     return {
       success: false,
       settingSeed: '',
@@ -139,7 +141,8 @@ export async function clean(
       firstMessage: '',
       alternateGreetings: [],
       errors: [
-        'Failed to parse character card. Please ensure the file is a valid SillyTavern character card JSON.',
+        redirect ??
+          'Failed to parse character card. Please ensure the file is a valid SillyTavern character card JSON.',
       ],
     }
   }

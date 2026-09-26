@@ -4,7 +4,7 @@
 
 import { createLogger } from '$lib/log'
 import type { EntryInjectionMode } from '$lib/types'
-import { parseExchange } from '$lib/services/exchange'
+import { classifyExchange } from '$lib/services/exchange'
 import type { ImportedEntry, LorebookImportResult, SillyTavernEntry } from '../types'
 import { inferEntryType } from './inferType'
 
@@ -33,12 +33,10 @@ function determineInjectionMode(entry: SillyTavernEntry): EntryInjectionMode {
   return 'keyword'
 }
 
-function parseSillyTavern(jsonString: string): LorebookImportResult {
+function parseSillyTavern(data: { entries?: unknown; name?: string }): LorebookImportResult {
   const result = emptyResult('unknown')
 
   try {
-    const data = JSON.parse(jsonString)
-
     if (!data.entries || typeof data.entries !== 'object') {
       result.errors.push('Invalid lorebook format: missing "entries" object')
       return result
@@ -102,7 +100,7 @@ function parseSillyTavern(jsonString: string): LorebookImportResult {
     })
   } catch (parseError) {
     const errorMsg = parseError instanceof Error ? parseError.message : 'Unknown error'
-    result.errors.push(`Failed to parse JSON: ${errorMsg}`)
+    result.errors.push(`Failed to parse lorebook: ${errorMsg}`)
     log('Parse error:', parseError)
   }
 
@@ -111,7 +109,17 @@ function parseSillyTavern(jsonString: string): LorebookImportResult {
 
 /** An Aventura export is read literally: no type inference, no skipping, no fallbacks. */
 export function parse(jsonString: string): LorebookImportResult {
-  const exchange = parseExchange(jsonString, 'lorebook')
+  let raw: unknown
+  try {
+    raw = JSON.parse(jsonString)
+  } catch (parseError) {
+    const errorMsg = parseError instanceof Error ? parseError.message : 'Unknown error'
+    const result = emptyResult('unknown')
+    result.errors.push(`Failed to parse JSON: ${errorMsg}`)
+    return result
+  }
+
+  const exchange = classifyExchange(raw, 'lorebook')
 
   if (exchange.kind === 'invalid') {
     const result = emptyResult('aventura')
@@ -148,23 +156,14 @@ export function parse(jsonString: string): LorebookImportResult {
     return result
   }
 
-  try {
-    const data = JSON.parse(jsonString)
-
-    if (data && typeof data === 'object' && !Array.isArray(data) && 'entries' in data) {
-      log('Detected SillyTavern format')
-      return parseSillyTavern(jsonString)
-    }
-
-    const result = emptyResult('unknown')
-    result.errors.push(
-      'Unknown lorebook format. Expected an Aventuras lorebook export or a SillyTavern lorebook.',
-    )
-    return result
-  } catch (parseError) {
-    const errorMsg = parseError instanceof Error ? parseError.message : 'Unknown error'
-    const result = emptyResult('unknown')
-    result.errors.push(`Failed to parse JSON: ${errorMsg}`)
-    return result
+  if (raw && typeof raw === 'object' && !Array.isArray(raw) && 'entries' in raw) {
+    log('Detected SillyTavern format')
+    return parseSillyTavern(raw)
   }
+
+  const result = emptyResult('unknown')
+  result.errors.push(
+    'Unknown lorebook format. Expected an Aventuras lorebook export or a SillyTavern lorebook.',
+  )
+  return result
 }

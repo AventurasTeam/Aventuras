@@ -92,8 +92,7 @@
     try {
       const filePath = await open({
         filters: [
-          { name: 'Aventura Lorebook', extensions: ['json', 'avt'] },
-          { name: 'JSON', extensions: ['json'] },
+          { name: 'Lorebook', extensions: ['json'] },
           { name: 'All Files', extensions: ['*'] },
         ],
       })
@@ -129,6 +128,9 @@
         story.lorebookEntries = await database.getEntries(story.currentStory.id)
 
         ui.showToast(`Successfully imported ${result.entriesImported} entries`, 'info')
+        if (isAventuraExport) {
+          for (const warning of result.warnings) ui.showToast(warning, 'warning', 8000)
+        }
         ui.closeLorebookImport()
       } else {
         const errorMsg = result.errors.length > 0 ? result.errors.join(', ') : 'Import failed'

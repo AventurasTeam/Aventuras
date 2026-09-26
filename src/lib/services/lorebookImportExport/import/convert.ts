@@ -17,7 +17,7 @@ export function entryToVaultEntry(entry: Entry): VaultLorebookEntry {
   }
 }
 
-function defaultState(type: Entry['type']): Entry['state'] {
+export function defaultEntryState(type: Entry['type']): Entry['state'] {
   switch (type) {
     case 'character':
       return {
@@ -53,6 +53,8 @@ function defaultState(type: Entry['type']): Entry['state'] {
 export function convertToEntries(
   importedEntries: ImportedEntry[],
   createdBy: EntryCreator = 'import',
+  // An Aventura export states its aliases; an empty list there is deliberate.
+  { keywordAliases = true }: { keywordAliases?: boolean } = {},
 ): Omit<Entry, 'id' | 'storyId'>[] {
   const now = Date.now()
 
@@ -61,12 +63,11 @@ export function convertToEntries(
     type: imported.type,
     description: imported.description,
     hiddenInfo: imported.hiddenInfo ?? null,
-    // The keyword fallback is for SillyTavern entries, which carry no aliases of their own.
     aliases:
-      imported.aliases.length > 0 || !imported.originalData
+      imported.aliases.length > 0 || !keywordAliases
         ? imported.aliases
         : imported.keywords.slice(0, 5),
-    state: defaultState(imported.type),
+    state: defaultEntryState(imported.type),
     adventureState: null,
     creativeState: null,
     injection: {

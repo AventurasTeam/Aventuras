@@ -74,3 +74,22 @@ export function classifyExchange<E extends ExchangeEntity>(
 
   return { kind: 'exchange', document, warnings: version.warning ? [version.warning] : [] }
 }
+
+/**
+ * For importers that take cards only: a message that sends an Aventuras export to the Vault,
+ * or null when the text is not one.
+ */
+export function exchangeImportRedirect(text: string): string | null {
+  let raw: unknown
+  try {
+    raw = JSON.parse(text)
+  } catch {
+    return null
+  }
+  if (!raw || typeof raw !== 'object' || (raw as { format?: unknown }).format !== EXCHANGE_FORMAT) {
+    return null
+  }
+  const entity = (raw as { entity?: unknown }).entity
+  const what = typeof entity === 'string' && isEntity(entity) ? entity : 'item'
+  return `This is an Aventuras ${what} export, not a character card. Import it into the Vault, then pick it from there.`
+}

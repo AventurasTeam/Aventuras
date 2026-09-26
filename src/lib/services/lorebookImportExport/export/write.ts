@@ -27,7 +27,7 @@ async function saveFile(content: string, defaultPath: string): Promise<boolean> 
 export async function exportLorebook(options: LorebookExportOptions): Promise<boolean> {
   const { format, entries, filename, name } = options
 
-  if (entries.length === 0 && format !== 'aventura') {
+  if (entries.length === 0) {
     throw new Error('No entries to export')
   }
 

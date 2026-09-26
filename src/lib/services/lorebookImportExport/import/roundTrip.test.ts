@@ -32,6 +32,28 @@ const source: Entry = {
   branchId: 'branch-1',
 }
 
+describe('lorebookImportExport / convertToEntries aliases', () => {
+  const vaultEntry = {
+    name: 'Old Pell',
+    type: 'character' as const,
+    description: 'Ferryman.',
+    keywords: ['pell', 'ferry', 'boat'],
+    aliases: [],
+    injectionMode: 'keyword' as const,
+    priority: 40,
+  }
+
+  it('falls back to keywords for an entry with no aliases, as vault-to-story always did', () => {
+    const [entry] = convertToEntries([vaultEntry])
+    expect(entry.aliases).toEqual(['pell', 'ferry', 'boat'])
+  })
+
+  it('keeps the empty alias list of an Aventura export', () => {
+    const [entry] = convertToEntries([vaultEntry], 'import', { keywordAliases: false })
+    expect(entry.aliases).toEqual([])
+  })
+})
+
 describe('lorebookImportExport / story round trip', () => {
   it('story -> export -> story keeps portable content and no source identifier or state', () => {
     const parsed = parse(exportToAventura([source], 'Story Lore'))
@@ -39,7 +61,7 @@ describe('lorebookImportExport / story round trip', () => {
     expect(parsed.metadata.format).toBe('aventura')
     expect(parsed.lorebook?.name).toBe('Story Lore')
 
-    const [entry] = convertToEntries(parsed.entries)
+    const [entry] = convertToEntries(parsed.entries, 'import', { keywordAliases: false })
     expect(entry.name).toBe(source.name)
     expect(entry.description).toBe(source.description)
     expect(entry.hiddenInfo).toBe(source.hiddenInfo)
