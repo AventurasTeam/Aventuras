@@ -51,6 +51,22 @@ const MIRA_LINK = {
 }
 const AT = { branchId: 'br_1', id: 'char_kael', now: 42 }
 
+function upsert(objectId: string, kind: string | null, inverseKind: string | null) {
+  return {
+    kind: 'upsertCharacterRelationship',
+    source: 'user_edit',
+    payload: { branchId: 'br_1', subjectId: 'char_kael', objectId, kind, inverseKind },
+  }
+}
+
+function remove(id: string) {
+  return {
+    kind: 'deleteCharacterRelationship',
+    source: 'user_edit',
+    payload: { branchId: 'br_1', id },
+  }
+}
+
 function update(draft: ReturnType<typeof characterDraftFrom>, links = [MIRA_LINK]) {
   return entityActions({
     kind: 'character',
@@ -211,28 +227,12 @@ describe('entityActions — relationships', () => {
         { cardKey: 'card_vorne', otherId: 'char_vorne', selfToOther: 'rival', otherToSelf: '' },
       ],
     }
-    expect(update(draft)).toEqual([
-      {
-        kind: 'upsertCharacterRelationship',
-        source: 'user_edit',
-        payload: {
-          branchId: 'br_1',
-          subjectId: 'char_kael',
-          objectId: 'char_vorne',
-          kind: 'rival',
-          inverseKind: null,
-        },
-      },
-    ])
+    expect(update(draft)).toEqual([upsert('char_vorne', 'rival', null)])
   })
 
   it('deletes a removed pair by its row id, and sends both views on a one-view edit', () => {
     expect(update({ ...characterDraftFrom(KAEL, [MIRA_LINK]), relationships: [] })).toEqual([
-      {
-        kind: 'deleteCharacterRelationship',
-        source: 'user_edit',
-        payload: { branchId: 'br_1', id: 'rel_1' },
-      },
+      remove('rel_1'),
     ])
     expect(
       update({
@@ -246,19 +246,7 @@ describe('entityActions — relationships', () => {
           },
         ],
       }),
-    ).toEqual([
-      {
-        kind: 'upsertCharacterRelationship',
-        source: 'user_edit',
-        payload: {
-          branchId: 'br_1',
-          subjectId: 'char_kael',
-          objectId: 'char_mira',
-          kind: ' ally',
-          inverseKind: 'wary of you',
-        },
-      },
-    ])
+    ).toEqual([upsert('char_mira', ' ally', 'wary of you')])
   })
 
   it('keeps the stored raw text of the view the user left alone', () => {
@@ -274,33 +262,11 @@ describe('entityActions — relationships', () => {
         { cardKey: 'card_mira', otherId: 'char_mira', selfToOther: ' ally ', otherToSelf: 'wary' },
       ],
     }
-    expect(update(draft, [link])).toEqual([
-      {
-        kind: 'upsertCharacterRelationship',
-        source: 'user_edit',
-        payload: {
-          branchId: 'br_1',
-          subjectId: 'char_kael',
-          objectId: 'char_mira',
-          kind: ' ally ',
-          inverseKind: 'wary',
-        },
-      },
-    ])
+    expect(update(draft, [link])).toEqual([upsert('char_mira', ' ally ', 'wary')])
   })
 })
 
 describe('entityActions — relationships, three-way', () => {
-  const upsert = (objectId: string, kind: string | null, inverseKind: string | null) => ({
-    kind: 'upsertCharacterRelationship',
-    source: 'user_edit',
-    payload: { branchId: 'br_1', subjectId: 'char_kael', objectId, kind, inverseKind },
-  })
-  const remove = (id: string) => ({
-    kind: 'deleteCharacterRelationship',
-    source: 'user_edit',
-    payload: { branchId: 'br_1', id },
-  })
   const mira = (selfToOther: string | null, otherToSelf: string | null): RelationshipLink => ({
     rowId: 'rel_1',
     otherId: 'char_mira',
