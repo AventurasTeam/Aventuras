@@ -55,9 +55,9 @@ export function selectStoryClassifierRunning(
   txState: TxState,
   storyId: string | undefined,
 ): boolean {
-  for (const run of txState.runs.values())
-    if (run.storyId === storyId && run.kind === PERIODIC_CLASSIFIER_KIND) return true
-  return false
+  return [...txState.runs.values()].some(
+    (run) => run.storyId === storyId && run.kind === PERIODIC_CLASSIFIER_KIND,
+  )
 }
 
 /**
