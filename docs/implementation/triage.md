@@ -197,3 +197,22 @@ slice-planning gate forces its resolution before that slice is planned.
   passes the rendered prompt straight to the provider with no length
   guard. Revisit trigger: the first long-story prompt-size or cost
   signal.
+
+- **Redo applies a snapshot read before the classifier drain.**
+  `redoLastAction` (`lib/actions/story-entries/undo.ts`) reads its redo
+  snapshot before `bracketProseReversal` drains the in-flight classifier
+  pass and never re-checks the stack afterwards. A classifier write
+  that commits during the drain clears the redo stack, yet redo still
+  restores its whole-row snapshot over that write. Fix: peek the
+  snapshot inside the bracket body, after the drain, and refuse if it
+  changed. Needs a redo while a pass commits to the same row; predates
+  the memory-update guard.
+
+- **Undo captures its redo snapshot outside the row locks.**
+  `undoLastAction` takes the redo snapshot before
+  `reverseAndPruneDeltaRows` acquires the row locks, so a user write
+  that took its lock and passed the reversal barrier just before the
+  flag went up can land in between. The result is a stale redo
+  snapshot, not a lost write at undo time. Closing it needs a
+  lock-free variant of the reversal that the undo body calls under
+  locks it already holds.
