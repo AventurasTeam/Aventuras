@@ -82,13 +82,14 @@ function Harness({ editor, relationships = [], stackables = [], blocked = false 
   const inventory = useWatch({ control: form.control, name: 'inventory' })
   const gate = { blocked, blockedReason: blocked ? BLOCKED_REASON : undefined }
   const [resets, setResets] = useState(0)
+  const [selfId, setSelfId] = useState('char_kael')
   return (
     <View style={{ width: 860, maxWidth: '100%' }} className="gap-4 p-4">
       {editor === 'relationships' ? (
         <RelationshipsEditor
           control={form.control}
           trigger={form.trigger}
-          selfId="char_kael"
+          selfId={selfId}
           entities={ENTITIES}
           {...gate}
         />
@@ -143,6 +144,22 @@ function Harness({ editor, relationships = [], stackables = [], blocked = false 
           }}
         >
           <Text>Drop Mira</Text>
+        </Button>
+        {/* The pane stays mounted across a same-kind row switch; a pair's card keys by its row id. */}
+        <Button
+          variant="secondary"
+          size="sm"
+          onPress={() => {
+            const mirasView = { otherId: 'char_kael', selfToOther: 'ally', otherToSelf: 'ally' }
+            setSelfId('char_mira')
+            form.reset({
+              ...characterDraftFrom(null, []),
+              name: 'Mira',
+              relationships: [{ cardKey: 'rel_mira', ...mirasView }],
+            })
+          }}
+        >
+          <Text>Switch to Mira</Text>
         </Button>
         <Text testID="resets" size="xs" variant="muted">
           {`resets: ${resets}`}
@@ -273,6 +290,24 @@ export const RelationshipDeleteThenDiscardReturnsCollapsed: Story = {
     await userEvent.click(screen.getByRole('button', { name: 'Discard' }))
     await screen.findByRole('button', { name: /^Mira/ }, WAIT)
     // The row and its card body render in one pass: once Mira is back, expansion is decided.
+    await expect(
+      within(screen.getByTestId('relationship-0')).queryByRole('textbox', { name: 'Their view' }),
+    ).toBeNull()
+  },
+}
+
+/** no-harmless-id-leaks: the other character of a pair opens on its card collapsed. */
+export const RelationshipSwitchToOtherCharacterStartsCollapsed: Story = {
+  args: { relationships: THREE_STATES },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: /^Mira/ }, WAIT))
+    await within(screen.getByTestId('relationship-0')).findByRole(
+      'textbox',
+      { name: 'Their view' },
+      WAIT,
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Switch to Mira' }))
+    await screen.findByRole('button', { name: /^Kael/ }, WAIT)
     await expect(
       within(screen.getByTestId('relationship-0')).queryByRole('textbox', { name: 'Their view' }),
     ).toBeNull()
