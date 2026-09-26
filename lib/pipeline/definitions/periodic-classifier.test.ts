@@ -881,6 +881,53 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
     expect(row.status?.lastError).toBe('classifier: forced test rejection')
   })
 
+  it('still reaches the retry status when the first failure write fails', async () => {
+    const { db, runInTransaction } = await seedApplyTimeHarness()
+    let failNextStatusWrite = false
+    configureDeltaActionPort({
+      applyDeltaAction: (args, applyCtx) => {
+        if (args.action.kind !== 'createHappening') return realApplyDeltaAction(args, applyCtx)
+        failNextStatusWrite = true
+        return Promise.resolve({ status: 'rejected', reason: 'forced test rejection' })
+      },
+      reverseReplayDeltas,
+      describeReplayError: describeDeltaReplayError,
+    })
+    const flaky = new Proxy(db, {
+      get(target, prop) {
+        if (prop === 'run')
+          return (...args: Parameters<typeof db.run>) => {
+            if (failNextStatusWrite) {
+              failNextStatusWrite = false
+              throw new Error('SQLITE_BUSY')
+            }
+            return target.run(...args)
+          }
+        const value = Reflect.get(target, prop, target)
+        return typeof value === 'function' ? value.bind(target) : value
+      },
+    })
+
+    ensurePeriodicClassifierPipelineRegistered()
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({
+        happenings: [{ title: 'A', sourceTurn: 't1', involvements: [], awareness: [] }],
+      }),
+    })
+
+    const ctx: RunCtx = { storyId: 's1', branchId: 'b1', db: flaky, runInTransaction }
+    const result = await runPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
+    if (result.outcome === 'rejected') throw new Error('unexpected rejected start')
+    expect(result.outcome).toBe('failed')
+
+    const [row] = await db
+      .select({ status: branches.classifierStatus })
+      .from(branches)
+      .where(eq(branches.id, 'b1'))
+    expect(row.status).toMatchObject({ state: 'retrying', retryCount: 1 })
+  })
+
   // If the reversal can't commit, the write attempt is still on disk; arming a retry would
   // race a retry pass into re-reading it. Branch stays at `running` — only
   // resetStuckClassifierRunState, not the ordinary backoff, reconciles it at the next boot.

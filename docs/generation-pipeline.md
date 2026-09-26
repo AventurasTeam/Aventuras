@@ -1730,10 +1730,11 @@ deltas and, once that rollback commits, `onPhaseException`
 [Run state transitions](#run-state-transitions)) records the failure
 through the classifier's ordinary retry status
 ([`classifier.md → Auto-retry policy`](./memory/classifier.md#auto-retry-policy))
-— a failed run like any other, backed off the same way. Only when the
-rollback itself cannot commit does the branch stay at `'running'`,
-left for boot recovery (`resetStuckClassifierRunState`) rather than
-the ordinary backoff.
+— a failed run like any other, backed off the same way. A failed
+attempt at that record lands nothing, so the hook makes one more. The
+branch stays at `'running'` only when the rollback itself cannot
+commit or both attempts fail, left for boot recovery
+(`resetStuckClassifierRunState`) rather than the ordinary backoff.
 The synchronous-`setState` invariant (see [Invariants](#invariants))
 closes the check-vs-register race the same way it does for chained
 transitions.

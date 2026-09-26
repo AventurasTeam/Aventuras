@@ -19,6 +19,7 @@ import {
   type ReconcileDecision,
 } from '@/lib/classifier'
 import { branches, storyEntries, type ClassifierStatus, type StoryEntry } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { generateId, IdBiMap } from '@/lib/ids'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import {
@@ -292,7 +293,19 @@ export function ensurePeriodicClassifierPipelineRegistered(): void {
       },
       // A rejected write throws past the phase (orchestrator.ts runPhases) rather than
       // returning `{ status: 'failed' }`, so this hook is what persists the failure.
-      onPhaseException: (ctx, error) => recordFailure(ctx, `classifier: ${error.detail}`),
+      onPhaseException: async (ctx, error) => {
+        const detail = `classifier: ${error.detail}`
+        try {
+          await recordFailure(ctx, detail)
+        } catch (e) {
+          // A failed attempt lands nothing; unrecorded, the branch stays running until boot.
+          logger.warn('classifier.failure_record_retried', {
+            branchId: ctx.branchId,
+            error: e instanceof Error ? e.message : String(e),
+          })
+          await recordFailure(ctx, detail)
+        }
+      },
       gateBehavior: 'no-gate',
       concurrencyPolicy: { blockedBy: [PERIODIC_CLASSIFIER_KIND, 'chapter-close'] },
     })
