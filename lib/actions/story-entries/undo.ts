@@ -125,6 +125,9 @@ export async function redoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
   // A redo restores prose and reverses classifier output, so it drains an in-flight
   // pass the way every other reversal does.
   return bracketProseReversal(branchId, async () => {
+    // A write committing during the drain clears the stack; its snapshot would restore over it.
+    if (undoRedoStore.peekRedoGroup() !== snapshot)
+      return { status: 'rejected', code: 'nothing-to-apply', reason: 'nothing to redo' }
     const invalidation = await resolveRedoInvalidation(branchId, snapshot, ctx)
     if (invalidation.status === 'unreadable') return unreadableScopeRejection(invalidation.deltaId)
     try {

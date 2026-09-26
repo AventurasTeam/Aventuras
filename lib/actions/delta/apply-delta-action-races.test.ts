@@ -13,7 +13,7 @@ import {
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { entriesStore, resetAllStores, undoRedoStore } from '@/lib/stores'
 
-import { undoLastAction } from '../story-entries/undo'
+import { redoLastAction, undoLastAction } from '../story-entries/undo'
 import type { PipelineAction } from '../types'
 import { applyDeltaAction, applyDeltaActionGroup } from './apply-delta-action'
 import { applyRedo, snapshotForRedo } from './redo'
@@ -628,4 +628,55 @@ describe('a user Save racing CTRL-Z of the Save before it', () => {
       }
     },
   )
+})
+
+describe('a user Save racing CTRL-Y', () => {
+  beforeEach(() => resetAllStores())
+  afterEach(() => resetAllStores())
+
+  it('never restores the redo snapshot over a Save that landed first', async () => {
+    const ctx = await setup()
+    const keywordSave = (id: string, value: string, actionId: string) =>
+      save(
+        {
+          kind: 'updateEntity',
+          source: 'user_edit',
+          payload: { branchId: BRANCH, id, patch: { keywords: [value] } },
+        },
+        actionId,
+        ctx,
+      )
+    for (let delay = 0; ; delay++) {
+      const id = `char_${delay}`
+      await ctx.db.insert(entities).values(character(id, 'active', ['v0']))
+      entriesStore.hydrate(BRANCH, [])
+      undoRedoStore.clear()
+      expect((await keywordSave(id, 'v1', `s1_${delay}`)).status).toBe('ok')
+      expect(await undoLastAction(BRANCH, ctx)).toEqual({ status: 'ok' })
+
+      let saveSettled = false
+      const second = keywordSave(id, 'v2', `s2_${delay}`).then((result) => {
+        saveSettled = true
+        return result
+      })
+      const redo = ticks(delay).then(async () => {
+        const serial = saveSettled
+        return { serial, result: await redoLastAction(BRANCH, ctx) }
+      })
+      const [saved, redone] = await Promise.all([second, redo])
+
+      const label = `CTRL-Y after ${delay} ticks`
+      const [row] = await ctx.db.select().from(entities).where(eq(entities.id, id))
+      if (saved.status === 'ok') {
+        expect(row.keywords, label).toEqual(['v2'])
+        expect(redone.result, label).toMatchObject({ status: 'rejected' })
+      } else {
+        expect(saved, label).toMatchObject({ code: 'reversal-in-progress' })
+        expect(redone.result, label).toEqual({ status: 'ok' })
+        expect(row.keywords, label).toEqual(['v1'])
+      }
+      if (redone.serial) break
+      if (delay > 5000) throw new Error('the Save never settled before CTRL-Y started')
+    }
+  })
 })
