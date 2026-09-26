@@ -90,7 +90,17 @@ describe('saveEntity', () => {
     }
 
     expect(
-      await saveEntity({ kind: 'character', branchId: 'br_1', row, draft, relationships: [] }, ctx),
+      await saveEntity(
+        {
+          kind: 'character',
+          branchId: 'br_1',
+          row,
+          draft,
+          relationships: [],
+          relationshipsBase: [],
+        },
+        ctx,
+      ),
     ).toEqual({ status: 'ok', id: 'char_kael' })
 
     const rows = await deltaRows(db)
@@ -170,7 +180,10 @@ describe('saveEntity', () => {
         },
       ],
     }
-    await saveEntity({ kind: 'character', branchId: 'br_1', row, draft, relationships: [] }, ctx)
+    await saveEntity(
+      { kind: 'character', branchId: 'br_1', row, draft, relationships: [], relationshipsBase: [] },
+      ctx,
+    )
     const rels = await db.select().from(characterRelationships)
     expect(rels).toHaveLength(1)
     expect(rels[0]).toMatchObject({
@@ -195,7 +208,10 @@ describe('saveEntity', () => {
         { cardKey: 'card_aria', otherId: 'char_aria', selfToOther: '', otherToSelf: 'rival' },
       ],
     }
-    await saveEntity({ kind: 'character', branchId: 'br_1', row, draft, relationships: [] }, ctx)
+    await saveEntity(
+      { kind: 'character', branchId: 'br_1', row, draft, relationships: [], relationshipsBase: [] },
+      ctx,
+    )
     // Kael is b: Aria's view of Kael lands in `kind` (a's view of b).
     expect((await db.select().from(characterRelationships))[0]).toMatchObject({
       kind: 'rival',
@@ -219,6 +235,7 @@ describe('saveEntity', () => {
           ],
         },
         relationships: [],
+        relationshipsBase: [],
       },
       ctx,
     )
@@ -333,6 +350,7 @@ describe('saveEntity', () => {
         row,
         draft: { ...characterDraftFrom(row, []), keywords: ['Grey Wolf', 'grey wolf'] },
         relationships: [],
+        relationshipsBase: [],
       },
       ctx,
     )
@@ -352,6 +370,7 @@ describe('saveEntity', () => {
         row,
         draft: { ...characterDraftFrom(row, []), description: 'x' },
         relationships: [],
+        relationshipsBase: [],
       },
       ctx,
     )

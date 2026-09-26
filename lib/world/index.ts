@@ -22,6 +22,7 @@ export type {
   ItemDraft,
   LocationDraft,
   RelationshipDraft,
+  RelationshipBaseLink,
   RelationshipLink,
   StackableDraft,
 } from './entity-draft'

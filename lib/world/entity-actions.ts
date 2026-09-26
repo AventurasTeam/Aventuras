@@ -21,6 +21,7 @@ import {
   type ItemDraft,
   type LocationDraft,
   type RelationshipDraft,
+  type RelationshipBaseLink,
   type RelationshipLink,
   type StackableDraft,
 } from './entity-draft'
@@ -32,10 +33,10 @@ export type EntitySaveInput =
       /** The committed links at Save. */
       relationships: readonly RelationshipLink[]
       /**
-       * Committed links the draft was based on (frozen once dirty); defaults to `relationships`.
+       * Committed links the draft was based on (frozen once dirty; `relationships` while clean).
        * Untouched pairs/views keep what is stored; an edited pair whose row is gone is rewritten.
        */
-      relationshipsBase?: readonly RelationshipLink[]
+      relationshipsBase: readonly RelationshipBaseLink[]
     }
   | { kind: 'location'; draft: LocationDraft }
   | { kind: 'item'; draft: ItemDraft }
@@ -241,7 +242,7 @@ function nextState(args: EntityActionArgs): EntityState | null {
 /** Whether the user edited a view relative to the baseline, and the value Save sends for it. */
 function viewWrite(
   draft: RelationshipDraft,
-  was: RelationshipLink | undefined,
+  was: RelationshipBaseLink | undefined,
   now: RelationshipLink | undefined,
   view: 'selfToOther' | 'otherToSelf',
 ): { edited: boolean; value: string | null } {
@@ -263,7 +264,7 @@ function relationshipActions(
   branchId: string,
   selfId: string,
   current: readonly RelationshipLink[],
-  base: readonly RelationshipLink[],
+  base: readonly RelationshipBaseLink[],
   drafts: readonly RelationshipDraft[],
 ): PipelineAction[] {
   const actions: PipelineAction[] = []
@@ -350,7 +351,7 @@ export function entityActions(args: EntityActionArgs): PipelineAction[] {
         branchId,
         id,
         row == null ? [] : args.relationships,
-        row == null ? [] : (args.relationshipsBase ?? args.relationships),
+        row == null ? [] : args.relationshipsBase,
         args.draft.relationships,
       ),
     )

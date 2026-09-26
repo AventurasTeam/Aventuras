@@ -37,6 +37,9 @@ export type RelationshipLink = {
   otherToSelf: string | null
 }
 
+/** The views a Relationships draft was based on; a Save's baseline names no row. */
+export type RelationshipBaseLink = Omit<RelationshipLink, 'rowId'>
+
 // data-model.md → Soft caps: the Zod degradation bounds the state schema enforces.
 const text = (max: number) => z.string().max(max, WORLD_ISSUE.tooLong)
 const list = z.array(z.string()).max(50, WORLD_ISSUE.tooLong)

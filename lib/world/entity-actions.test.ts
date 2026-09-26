@@ -52,7 +52,14 @@ const MIRA_LINK = {
 const AT = { branchId: 'br_1', id: 'char_kael', now: 42 }
 
 function update(draft: ReturnType<typeof characterDraftFrom>, links = [MIRA_LINK]) {
-  return entityActions({ kind: 'character', row: KAEL, draft, relationships: links, ...AT })
+  return entityActions({
+    kind: 'character',
+    row: KAEL,
+    draft,
+    relationships: links,
+    relationshipsBase: links,
+    ...AT,
+  })
 }
 
 describe('entityActions — update', () => {
@@ -449,6 +456,7 @@ describe('entityActions — create', () => {
       row: null,
       draft: characterDraftFrom(null, []),
       relationships: [],
+      relationshipsBase: [],
       branchId: 'br_1',
       id: 'char_new',
       now: 42,
@@ -472,6 +480,7 @@ describe('entityActions — create', () => {
       row: null,
       draft,
       relationships: [],
+      relationshipsBase: [],
       branchId: 'br_1',
       id: 'char_new',
       now: 42,

@@ -2,7 +2,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import type { RelationshipDraft, RelationshipLink } from '@/lib/world'
+import type { RelationshipBaseLink, RelationshipDraft, RelationshipLink } from '@/lib/world'
 
 import { useRelationshipsBase } from './use-relationships-base'
 
@@ -24,8 +24,7 @@ const MIRA_DRAFT: RelationshipDraft = {
   selfToOther: 'friend',
   otherToSelf: 'ally',
 }
-const MIRA_SAVED: RelationshipLink = {
-  rowId: '',
+const MIRA_SAVED: RelationshipBaseLink = {
   otherId: 'char_mira',
   selfToOther: 'friend',
   otherToSelf: 'ally',
