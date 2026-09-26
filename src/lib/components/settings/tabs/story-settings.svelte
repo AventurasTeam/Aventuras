@@ -3,14 +3,8 @@
   import { story } from '$lib/stores/story.svelte'
   import { hasRequiredCredentials } from '$lib/services/ai/image'
   import { templateEngine } from '$lib/services/templates/engine'
-  import {
-    PROMPT_TEMPLATES,
-    LENGTH_INSTRUCTION_VAR,
-    templateUsesLengthInstruction,
-    NARRATOR_REINFORCEMENT_VAR,
-    narratorReinforcementIsHonoured,
-  } from '$lib/services/prompts/templates'
-  import { ContextBuilder } from '$lib/services/context'
+  import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates'
+  import { resolveNarratorSettingAvailability } from '$lib/services/context'
   import { database } from '$lib/services/database'
   import { DEFAULT_PACK_ID } from '$lib/services/packs/binding'
   import type { PresetPack } from '$lib/services/packs/types'
@@ -46,6 +40,7 @@
     'runtimeVars_storyBeats',
     'runtimeVars_protagonist',
     'narratorReinforcement',
+    'targetResponseLength',
   ])
 
   const VARIABLE_REFERENCE = [
@@ -64,6 +59,19 @@
         { name: 'genre', desc: 'Story genre' },
         { name: 'tone', desc: 'Writing tone' },
         { name: 'settingDescription', desc: 'World description' },
+      ],
+    },
+    {
+      group: 'Narration',
+      vars: [
+        {
+          name: 'targetResponseLength',
+          desc: 'Response length: dynamic, short, medium or long (branch on it)',
+        },
+        {
+          name: 'narratorReinforcement',
+          desc: 'Narrator reinforcement: full, minimal or none (branch on it)',
+        },
       ],
     },
     {
@@ -150,77 +158,28 @@
     }
   })
 
-  /**
-   * Response Length only does anything if the prompt that will actually run renders
-   * `{{ lengthInstruction }}` — a per-story override replaces the pack template outright,
-   * and a pack created before the variable existed keeps its own copy of the body.
-   */
+  // Both settings do nothing unless a prompt that will actually run reads their variable.
   let lengthUnavailableReason = $state<string | undefined>(undefined)
-  $effect(() => {
-    const storyId = story.currentStory?.id
-    const override = savedCustomPrompt
-    const templateId =
-      story.currentStory?.mode === 'creative-writing' ? 'creative-writing' : 'adventure'
-    if (!storyId) return
-
-    let cancelled = false
-    const resolve = async () => {
-      if (override) return templateUsesLengthInstruction(override)
-      const packId = (await database.getStoryPackId(storyId)) || DEFAULT_PACK_ID
-      const template = await new ContextBuilder(packId).resolveTemplate(templateId)
-      return templateUsesLengthInstruction(template?.content)
-    }
-
-    resolve().then((supported) => {
-      if (cancelled) return
-      lengthUnavailableReason = supported
-        ? undefined
-        : `The active ${override ? 'custom prompt' : 'prompt pack template'} does not use ` +
-          `{{ ${LENGTH_INSTRUCTION_VAR} }}, so this setting would have no effect. Add it under ` +
-          `# Format${override ? '' : ', or switch the story to a pack that has it'}.`
-    })
-
-    return () => {
-      cancelled = true
-    }
-  })
-
-  /**
-   * Narrator Reinforcement is carried by the turn message, which comes from the pack whether
-   * or not a custom system prompt replaces the system half — so unlike Response Length this
-   * checks the `-user` template regardless of an override. A pack may carry the reinforcement
-   * in the system prompt instead, so a reference in either prompt counts.
-   */
   let reinforcementUnavailableReason = $state<string | undefined>(undefined)
   $effect(() => {
     const storyId = story.currentStory?.id
     const override = savedCustomPrompt
-    const templateId =
-      story.currentStory?.mode === 'creative-writing' ? 'creative-writing' : 'adventure'
+    const mode = story.currentStory?.mode
     if (!storyId) return
 
     let cancelled = false
-    const resolve = async () => {
+    // A failed lookup leaves both controls enabled rather than locking them on a read error.
+    void (async () => {
       const packId = (await database.getStoryPackId(storyId)) || DEFAULT_PACK_ID
-      const ctx = new ContextBuilder(packId)
-      const [userTemplate, systemTemplate] = await Promise.all([
-        ctx.resolveTemplate(`${templateId}-user`),
-        ctx.resolveTemplate(templateId),
-      ])
-      return narratorReinforcementIsHonoured({
-        userTemplate: userTemplate?.content,
-        systemTemplate: systemTemplate?.content,
-        customSystemPrompt: override,
-      })
-    }
-
-    resolve().then((supported) => {
+      const reasons = await resolveNarratorSettingAvailability(packId, mode, override)
       if (cancelled) return
-      reinforcementUnavailableReason = supported
-        ? undefined
-        : `Neither prompt this story sends references {{ ${NARRATOR_REINFORCEMENT_VAR} }}, so ` +
-          `this setting would have no effect. Add it to the narrator turn message in the ` +
-          `story's prompt pack, or switch the story to a pack that has it.`
+      lengthUnavailableReason = reasons.targetResponseLength
+      reinforcementUnavailableReason = reasons.narratorReinforcement
+    })().catch((error) => {
+      console.warn('[StorySettings] Narrator setting check failed:', error)
+      if (cancelled) return
+      lengthUnavailableReason = undefined
+      reinforcementUnavailableReason = undefined
     })
 
     return () => {
@@ -295,7 +254,6 @@
     backgroundImagesEnabled={storySettings.backgroundImagesEnabled ?? false}
     referenceMode={storySettings.referenceMode ?? false}
     targetLength={storySettings.targetLength ?? 'dynamic'}
-    mode={story.currentStory?.mode === 'creative-writing' ? 'creative-writing' : 'adventure'}
     onPOVChange={(v) => story.updateStorySettings({ pov: v })}
     onTenseChange={(v) => story.updateStorySettings({ tense: v })}
     onToneChange={(v) => story.updateStorySettings({ tone: v })}

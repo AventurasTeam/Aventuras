@@ -1,9 +1,16 @@
 import { describe, it, expect } from 'vitest'
 import {
-  templateUsesNarratorReinforcement,
-  narratorReinforcementIsHonoured,
-} from './narratorReinforcement'
+  templateReferencesVariable,
+  variableIsHonoured,
+  type NarratorPrompts,
+} from './templateReferences'
+import { NARRATOR_REINFORCEMENT_VAR } from './narratorSettingReasons'
 import { storyTemplates } from './narrative'
+
+const templateUsesNarratorReinforcement = (content: string | null | undefined) =>
+  templateReferencesVariable(content, NARRATOR_REINFORCEMENT_VAR)
+const narratorReinforcementIsHonoured = (prompts: NarratorPrompts) =>
+  variableIsHonoured(NARRATOR_REINFORCEMENT_VAR, prompts)
 
 describe('templateUsesNarratorReinforcement', () => {
   it('sees the level branched on in a conditional', () => {
@@ -44,9 +51,9 @@ describe('templateUsesNarratorReinforcement', () => {
   })
 })
 
-// The precedence a turn actually uses. Checking the system half alone -- the shape the
-// Response Length guard has, and the obvious thing to "simplify" this back to -- refuses the
-// setting for a story whose turn message honours it perfectly well.
+// The precedence a turn actually uses. Checking the system half alone -- the obvious thing to
+// "simplify" this back to -- refuses the setting for a story whose turn message honours it
+// perfectly well.
 describe('narratorReinforcementIsHonoured', () => {
   const BRANCHES = `{% if narratorReinforcement == 'full' %}x{% endif %}`
   const PLAIN = 'You are the narrator.'

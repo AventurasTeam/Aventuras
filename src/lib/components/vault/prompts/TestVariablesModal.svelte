@@ -87,8 +87,6 @@
         'lorebookContext',
         'protagonistDescription',
         'povInstruction',
-        'lengthInstruction',
-        'narratorReinforcement',
         'userInput',
       ],
     },

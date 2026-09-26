@@ -13,7 +13,6 @@
 
 import { streamNarrative, generateNarrative } from '../sdk/generate'
 import { ContextBuilder } from '$lib/services/context'
-import { formatLengthInstruction } from '$lib/services/prompts/templates'
 import { StyleReviewerService } from './StyleReviewerService'
 import { templateEngine } from '$lib/services/templates/engine'
 import { createLogger } from '$lib/log'
@@ -436,14 +435,9 @@ export class NarrativeService {
       storyTime: (ctx.getContext().storyTime as string) ?? '',
     })
 
-    // `ContextBuilder.forStory` sets these; this covers contexts built another way, since
-    // the templates render `{{ lengthInstruction }}` bare.
-    if (!ctx.getContext().lengthInstruction) {
-      const targetLength = story?.settings?.targetLength || 'dynamic'
-      ctx.add({
-        targetLength,
-        lengthInstruction: formatLengthInstruction(targetLength, mode),
-      })
+    // `ContextBuilder.forStory` sets these; this covers contexts built another way.
+    if (!ctx.getContext().targetResponseLength) {
+      ctx.add({ targetResponseLength: story?.settings?.targetLength || 'dynamic' })
     }
     if (!ctx.getContext().narratorReinforcement) {
       ctx.add({ narratorReinforcement: story?.settings?.narratorReinforcement || 'full' })

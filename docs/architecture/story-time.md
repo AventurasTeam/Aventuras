@@ -147,8 +147,9 @@ the story, in the order `createStory` picks an opening: generated, written, impo
 
 A pack whose opening template predates the variable cannot pass the guidance on.
 `templateReceivesStartingTime` resolves the template that will actually run, before generation and
-before refinement, and the guidance is then disabled and not used as a fallback — the same detection
-Story Settings does for `{{ lengthInstruction }}`.
+before refinement, and the guidance is then disabled and not used as a fallback. It matches a
+`{{ startingTime` output tag; the narrator settings' checks use the parser instead
+(`templateReferences.ts`), which also sees the variable inside `{% if %}` and ignores comments.
 
 ## Persistence and transport
 

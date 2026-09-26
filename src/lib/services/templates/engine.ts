@@ -74,6 +74,18 @@ class TemplateEngine {
   }
 
   /**
+   * Top-level names the template reads from its context, as the parser sees them: comments, raw
+   * blocks, string literals and `assign`/`capture` targets are excluded. `null` if it does not parse.
+   */
+  readVariables(template: string): string[] | null {
+    try {
+      return this.liquid.variablesSync(template)
+    } catch {
+      return null
+    }
+  }
+
+  /**
    * Extract variable names referenced in a template
    *
    * Parses the template and extracts all variable names from:

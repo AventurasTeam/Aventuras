@@ -87,6 +87,22 @@ export const SYSTEM_VARIABLES: VariableDefinition[] = [
     required: true,
     enumValues: ['past', 'present'],
   },
+  {
+    name: 'targetResponseLength',
+    type: 'enum',
+    category: 'system',
+    description: 'Response length',
+    required: false,
+    enumValues: ['dynamic', 'short', 'medium', 'long'],
+  },
+  {
+    name: 'narratorReinforcement',
+    type: 'enum',
+    category: 'system',
+    description: 'Narrator reinforcement',
+    required: false,
+    enumValues: ['full', 'minimal', 'none'],
+  },
 ]
 
 /**
@@ -464,21 +480,6 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     type: 'text',
     category: 'runtime',
     description: 'Point of view instruction text',
-    required: false,
-  },
-  {
-    name: 'lengthInstruction',
-    type: 'text',
-    category: 'runtime',
-    description: 'Response length instruction',
-    required: false,
-  },
-  {
-    name: 'narratorReinforcement',
-    type: 'text',
-    category: 'runtime',
-    description:
-      "How much the turn message repeats the narrator's role and agency rules: full, minimal or none",
     required: false,
   },
 

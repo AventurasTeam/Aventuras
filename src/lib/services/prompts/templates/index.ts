@@ -19,14 +19,4 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
   ...imageTemplates,
 ]
 
-export {
-  LENGTH_INSTRUCTION_VAR,
-  formatLengthInstruction,
-  templateUsesLengthInstruction,
-} from './lengthInstruction'
-
-export {
-  NARRATOR_REINFORCEMENT_VAR,
-  templateUsesNarratorReinforcement,
-  narratorReinforcementIsHonoured,
-} from './narratorReinforcement'
+export { narratorSettingReasons, type NarratorSettingReasons } from './narratorSettingReasons'

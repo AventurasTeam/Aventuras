@@ -128,7 +128,10 @@ export interface MemoryConfig {
   summaryDetail?: SummaryDetail // Detail level for chapter summaries (default: 'auto')
 }
 
-/** Target narration length for a turn. Drives `{{ lengthInstruction }}` in the prompt. */
+/**
+ * Target narration length for a turn. Reaches the templates as `targetResponseLength`; the
+ * pack's narrator templates decide what each length asks for.
+ */
 export type TargetLength = 'short' | 'medium' | 'long' | 'dynamic'
 
 /**
