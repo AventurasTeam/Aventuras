@@ -82,7 +82,7 @@ export type DomainRegistration = {
    * instead (a reversal restores a machine write column by column around later user writes,
    * so no other invariant may span columns). See `docs/generation-pipeline.md` → Reverse-replay.
    */
-  rowKeepingColumns?: readonly string[]
+  rowKeepingColumns?: readonly [string, ...string[]]
 }
 
 type TableEntry = Omit<DomainRegistration, 'handlers'>
@@ -91,8 +91,10 @@ const actionRegistry = new Map<string, { table: string; handler: ActionHandler }
 const tableRegistry = new Map<string, TableEntry>()
 
 export function register(reg: DomainRegistration): void {
-  // A misspelled name reads as null on every row, turning each update reversal into a delete.
+  // A misspelled name, or none, reads as null on every row: each update reversal would delete.
   if (reg.rowKeepingColumns) {
+    if (reg.rowKeepingColumns.length === 0)
+      throw new Error(`register: ${reg.table} lists no row-keeping column`)
     const columns = getTableColumns(reg.descriptor.table)
     for (const col of reg.rowKeepingColumns) {
       if (!Object.hasOwn(columns, col))

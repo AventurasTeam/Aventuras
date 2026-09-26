@@ -31,7 +31,7 @@ describe('delta registry', () => {
 
   it('refuses a row-keeping column the table does not have', () => {
     __resetRegistry()
-    const reg = (rowKeepingColumns: string[]) => () =>
+    const reg = (rowKeepingColumns: [string, ...string[]]) => () =>
       register({
         table: 'character_relationships',
         descriptor: { table: characterRelationships, idCol: characterRelationships.id },
@@ -42,5 +42,21 @@ describe('delta registry', () => {
     expect(reg(['kind', 'inverse_kind'])).toThrow(/inverse_kind/)
     expect(resolveByTable('character_relationships')).toBeUndefined()
     expect(reg(['kind', 'inverseKind'])).not.toThrow()
+  })
+
+  // Every row would read as keeping none, so each update reversal would delete its row.
+  it('refuses an empty row-keeping list', () => {
+    __resetRegistry()
+    const empty = [] as unknown as [string, ...string[]]
+    expect(() =>
+      register({
+        table: 'character_relationships',
+        descriptor: { table: characterRelationships, idCol: characterRelationships.id },
+        columnSchemas: {},
+        handlers: {},
+        rowKeepingColumns: empty,
+      }),
+    ).toThrow(/no row-keeping column/)
+    expect(resolveByTable('character_relationships')).toBeUndefined()
   })
 })
