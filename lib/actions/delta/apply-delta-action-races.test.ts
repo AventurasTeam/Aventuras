@@ -11,8 +11,9 @@ import {
   type NewEntity,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { resetAllStores } from '@/lib/stores'
+import { entriesStore, resetAllStores, undoRedoStore } from '@/lib/stores'
 
+import { undoLastAction } from '../story-entries/undo'
 import type { PipelineAction } from '../types'
 import { applyDeltaAction, applyDeltaActionGroup } from './apply-delta-action'
 import { reverseAndPruneDeltaRows, reverseReplayDeltas } from './reverse-replay'
@@ -402,4 +403,64 @@ describe('a classifier write racing a user Save on one row', () => {
     const logged = await ctx.db.select().from(deltas).where(eq(deltas.actionId, 'act_1'))
     expect(logged).toHaveLength(2)
   })
+})
+
+describe('a user Save racing CTRL-Z of the Save before it', () => {
+  beforeEach(() => resetAllStores())
+  afterEach(() => resetAllStores())
+
+  const paths = {
+    group: save,
+    single: (action: PipelineAction, actionId: string, ctx: Ctx) =>
+      applyDeltaAction({ action, actionId, branchId: BRANCH }, ctx),
+  }
+
+  it.each(Object.entries(paths))(
+    'leaves the row as the surviving log says, whichever lands first (%s)',
+    async (_path, write) => {
+      const ctx = await setup()
+      const keywordSave = (id: string, value: string, actionId: string) =>
+        write(
+          {
+            kind: 'updateEntity',
+            source: 'user_edit',
+            payload: { branchId: BRANCH, id, patch: { keywords: [value] } },
+          },
+          actionId,
+          ctx,
+        )
+      for (let delay = 0; ; delay++) {
+        const id = `char_${delay}`
+        await ctx.db.insert(entities).values(character(id, 'active', ['v0']))
+        expect((await keywordSave(id, 'v1', `s1_${delay}`)).status).toBe('ok')
+        entriesStore.hydrate(BRANCH, [])
+        undoRedoStore.clear()
+
+        let saveSettled = false
+        const second = keywordSave(id, 'v2', `s2_${delay}`).then((result) => {
+          saveSettled = true
+          return result
+        })
+        const undo = ticks(delay).then(async () => {
+          const serial = saveSettled
+          return { serial, result: await undoLastAction(BRANCH, ctx) }
+        })
+        const [saved, undone] = await Promise.all([second, undo])
+
+        const label = `CTRL-Z after ${delay} ticks`
+        expect(undone.result, label).toEqual({ status: 'ok' })
+        if (saved.status !== 'ok')
+          expect(saved, label).toMatchObject({ code: 'reversal-in-progress' })
+        const [row] = await ctx.db.select().from(entities).where(eq(entities.id, id))
+        const survivor = (await deltaOf(ctx.db, `s2_${delay}`))
+          ? 'v2'
+          : (await deltaOf(ctx.db, `s1_${delay}`))
+            ? 'v1'
+            : 'v0'
+        expect(row.keywords, label).toEqual([survivor])
+        if (undone.serial) break
+        if (delay > 5000) throw new Error('the Save never settled before CTRL-Z started')
+      }
+    },
+  )
 })

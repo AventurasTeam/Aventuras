@@ -95,10 +95,29 @@ function lockKeyFor(action: PipelineAction): string | null {
   return isProductionAction(action) ? lockKeyOf(action.kind, action.payload) : null
 }
 
+// A user write can pass the reversal barrier just before it rises; the reversal settles these
+// before it reads the log, or it would restore over the write once its lock frees.
+const userWrites = new Set<Promise<unknown>>()
+
+function trackUserWrite<T>(write: Promise<T>): Promise<T> {
+  userWrites.add(write)
+  write.then(
+    () => userWrites.delete(write),
+    () => userWrites.delete(write),
+  )
+  return write
+}
+
+/** Resolves once every user write dispatched so far has committed or been refused. */
+export async function settleUserWrites(): Promise<void> {
+  await Promise.allSettled([...userWrites])
+}
+
 export async function applyDeltaAction(args: Args, ctx: DbCtx): Promise<MutationResult> {
   const key = lockKeyFor(args.action)
   const run = () => applyDeltaActionUnlocked(args, ctx)
-  return key === null ? run() : withKeyLock(key, run)
+  const write = key === null ? run() : withKeyLock(key, run)
+  return isUserOriginatedSource(args.action.source) ? trackUserWrite(write) : write
 }
 
 async function applyDeltaActionUnlocked(args: Args, ctx: DbCtx): Promise<MutationResult> {
@@ -182,7 +201,8 @@ export async function applyDeltaActionGroup(
   ctx: DbCtx,
 ): Promise<DeltaGroupResult> {
   const keys = actions.map(lockKeyFor).filter((key) => key !== null)
-  return withKeyLocks(keys, () => applyDeltaActionGroupUnlocked(actions, args, ctx))
+  const write = withKeyLocks(keys, () => applyDeltaActionGroupUnlocked(actions, args, ctx))
+  return actions.some((a) => isUserOriginatedSource(a.source)) ? trackUserWrite(write) : write
 }
 
 async function applyDeltaActionGroupUnlocked(

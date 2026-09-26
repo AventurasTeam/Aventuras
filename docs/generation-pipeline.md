@@ -1738,6 +1738,15 @@ The synchronous-`setState` invariant (see [Invariants](#invariants))
 closes the check-vs-register race the same way it does for chained
 transitions.
 
+`applyDeltaAction` reads the flag once it holds the row lock, so a
+user write can pass it just before the flag rises and commit after.
+The bracket therefore also settles every dispatched user write
+(`settleUserWrites`) after the classifier drain and before the sweep
+reads the log. A Save that races CTRL-Z either lands first, and CTRL-Z
+undoes it, or is refused. Without the settle, the undo would choose its
+target from a log the Save is still writing to, and restore over it
+once the Save frees its lock.
+
 **`yieldsTo` stays unused in v1.** Modelling reversal as a `'reversal'`
 pipeline kind with `periodic-classifier` declaring
 `yieldsTo: ['reversal']` was considered and rejected: a reversal writes
