@@ -12,7 +12,12 @@ import {
   type NewEntity,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { characterRelationshipsStore, entitiesStore, entriesStore } from '@/lib/stores'
+import {
+  characterRelationshipsStore,
+  entitiesStore,
+  entriesStore,
+  undoRedoStore,
+} from '@/lib/stores'
 
 import { applyDeltaAction } from './apply-delta-action'
 import {
@@ -22,6 +27,7 @@ import {
 } from './reverse-replay'
 import { USER_EDITED_SINCE_PROSE } from './user-precedence'
 import { updateStoryEntryContent } from '../story-entries/operational'
+import { redoLastAction, undoLastAction } from '../story-entries/undo'
 import type { PipelineAction } from '../types'
 
 afterEach(() => {
@@ -522,5 +528,63 @@ describe('a prose edit under a later user write', () => {
     )
     expect(rederived).toEqual({ status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' })
     expect((await pair(db))[0].kind).toBe('rival')
+  })
+})
+
+// A redo re-logs the user's delta at the head, above the machine writes it preceded.
+describe('reversing a machine write after an undo and redo of the user write before it', () => {
+  async function undoThenRedo(ctx: Ctx) {
+    entriesStore.hydrate('b1', [])
+    undoRedoStore.clear()
+    expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+    expect(await redoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+  }
+
+  it('clears a view the classifier filled in on a pair the user created', async () => {
+    const { db, ctx } = await setup()
+    await apply(ctx, userViews(null, 'wary'), 'act_u')
+    await apply(ctx, classifyView('friend'), 'act_c')
+    await undoThenRedo(ctx)
+
+    await reverseReplayDeltas('act_c', ctx)
+
+    expect((await pair(db))[0]).toMatchObject({ kind: null, inverseKind: 'wary' })
+  })
+
+  it('restores the value the user wrote before the machine changed the same column', async () => {
+    const { db, ctx } = await setup()
+    await createKael(ctx)
+    await apply(ctx, userPatch({ keywords: ['the knight', 'ser kael'] }), 'act_u')
+    await apply(ctx, append(['the wanderer']), 'act_c')
+    await undoThenRedo(ctx)
+
+    await reverseReplayDeltas('act_c', ctx)
+
+    expect((await kael(db)).keywords).toEqual(['the knight', 'ser kael'])
+  })
+
+  it('still orders the user write by where it first logged after a second redo', async () => {
+    const { db, ctx } = await setup()
+    await createKael(ctx)
+    await apply(ctx, userPatch({ keywords: ['the knight', 'ser kael'] }), 'act_u')
+    await apply(ctx, append(['the wanderer']), 'act_c')
+    await undoThenRedo(ctx)
+    await undoThenRedo(ctx)
+
+    await reverseReplayDeltas('act_c', ctx)
+
+    expect((await kael(db)).keywords).toEqual(['the knight', 'ser kael'])
+  })
+
+  it('keeps a value the user wrote after the machine', async () => {
+    const { db, ctx } = await setup()
+    await createKael(ctx)
+    await apply(ctx, append(['the wanderer']), 'act_c')
+    await apply(ctx, userPatch({ keywords: ['ser kael'] }), 'act_u')
+    await undoThenRedo(ctx)
+
+    await reverseReplayDeltas('act_c', ctx)
+
+    expect((await kael(db)).keywords).toEqual(['ser kael'])
   })
 })

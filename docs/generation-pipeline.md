@@ -1282,7 +1282,10 @@ kind and still returns the rejection.
 from a pipeline source skips each top-level column that a later
 `user_edit` delta on the same row wrote, by creating the row or
 changing that column, unless that delta is in the set being reversed
-too. A delta left with no column writes nothing and is still pruned.
+too. Later means by the position the user delta first logged at: a
+redo re-logs it at the head, above machine writes it preceded, and
+records the first position in `$firstLoggedAt`. A delta left with no
+column writes nothing and is still pruned.
 A `user_edit` inside the set restores as usual: a rollback or
 regenerate sweeps every null-anchored World edit after its target, so
 the row still returns to its prior value, and CTRL-Z of the user's own

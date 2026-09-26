@@ -2343,6 +2343,8 @@ arbitrary editing.
   be namespaced out of that walk or it reaches a `SET` clause and the store
   patch beside it. The prefix cannot collide with a column, because column
   keys are identifiers. `$invalidationScope` is the first such key.
+  `$firstLoggedAt` is the second: the position a redone `user_edit`
+  delta held before its first undo (see `log_position` assignment).
 - **The reversal set closes over the happening → link-row relation**, not
   over the anchor alone. Undoing a `create` is a plain row delete with no
   cascade — only the explicit `deleteHappening` action carries one — and a
@@ -2426,7 +2428,11 @@ uniqueness backstop below and wedge the redo stack, since the snapshot
 is only popped on a post-commit failure. Re-assigning also keeps the
 restored delta at the log head, so a following CTRL-Z reaches it rather
 than whatever ran in the gap. A group re-inserts in ascending original
-order, which preserves its internal ordering.
+order, which preserves its internal ordering. The head slot would also
+rank a restored user write above the machine writes it preceded, so a
+redo stamps a `user_edit` delta with `$firstLoggedAt`, and reversal
+precedence orders by that
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
 
 Invariant: monotonically increasing within branch. Gaps are fine
 (rollback, fork copy, delete deltas — so gaps occur naturally; the
