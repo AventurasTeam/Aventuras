@@ -2,16 +2,13 @@ import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
 import { chipPreview, membersOf, stateOf } from '@/lib/world'
 
-import { ChipRow, NamesRegion, Region, type KindBodyProps } from './overview-parts'
-
-const PREVIEW = 3
+import { ChipRow, DerivedNamesRegion, Region, type KindBodyProps } from './overview-parts'
 
 // world.md → Faction Overview.
 export function FactionOverviewBody({ entity, entities, onRegionPress }: KindBodyProps) {
   const state = stateOf(entity, 'faction')
   const standing = state.standing?.trim() ?? ''
   const agenda = chipPreview(state.agenda ?? [])
-  const members = membersOf(entity.id, entities)
   return (
     <>
       <Region
@@ -32,17 +29,10 @@ export function FactionOverviewBody({ entity, entities, onRegionPress }: KindBod
       >
         <ChipRow preview={agenda} />
       </Region>
-      <NamesRegion
-        label={t('labelWithCount', { label: t('world:overview.members'), value: members.length })}
-        tab="connections"
+      <DerivedNamesRegion
+        label={t('world:overview.members')}
         onRegionPress={onRegionPress}
-        targets={members.slice(0, PREVIEW)}
-        meta={
-          members.length > PREVIEW
-            ? t('world:overview.more', { count: members.length - PREVIEW })
-            : undefined
-        }
-        derived
+        entities={membersOf(entity.id, entities)}
         testID="overview-members"
       />
     </>

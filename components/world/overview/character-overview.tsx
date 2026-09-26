@@ -3,7 +3,7 @@ import { t } from '@/lib/i18n'
 import { carryingSummary, chipPreview, lastSeenSpan, stateOf, visualParts } from '@/lib/world'
 
 import { lastSeenText } from '../world-copy'
-import { ChipRow, NamesRegion, Region, type KindBodyProps } from './overview-parts'
+import { ChipRow, NamesRegion, refTargets, Region, type KindBodyProps } from './overview-parts'
 
 // world.md → Character Overview (top-down).
 export function CharacterOverviewBody({
@@ -14,14 +14,12 @@ export function CharacterOverviewBody({
   onRegionPress,
 }: KindBodyProps) {
   const state = stateOf(entity, 'character')
-  const byId = new Map(entities.map((e) => [e.id, e]))
   const visual = visualParts(state.visual)
   const traits = chipPreview(state.traits)
   const drives = chipPreview(state.drives)
   const carrying = carryingSummary(state)
-  const location =
-    state.current_location_id == null ? [] : [byId.get(state.current_location_id) ?? null]
-  const faction = state.faction_id == null ? [] : [byId.get(state.faction_id) ?? null]
+  const location = refTargets(state.current_location_id, entities)
+  const faction = refTargets(state.faction_id, entities)
   const lastSeen = lastSeenText(lastSeenSpan(state.lastSeenAt, worldTime, calendar))
   const carryingEmpty =
     carrying.stackables.length === 0 && carrying.equipped === 0 && carrying.carried === 0

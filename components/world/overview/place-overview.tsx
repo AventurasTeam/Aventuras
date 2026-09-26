@@ -2,17 +2,13 @@ import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
 import { charactersAt, holdersOf, itemsAt, locationAncestors, stateOf } from '@/lib/world'
 
-import { NamesRegion, Region, type KindBodyProps } from './overview-parts'
-
-const PREVIEW = 3
-
-function countLabel(label: string, value: number): string {
-  return t('labelWithCount', { label, value })
-}
-
-function moreMeta(total: number): string | undefined {
-  return total > PREVIEW ? t('world:overview.more', { count: total - PREVIEW }) : undefined
-}
+import {
+  DerivedNamesRegion,
+  NamesRegion,
+  refTargets,
+  Region,
+  type KindBodyProps,
+} from './overview-parts'
 
 function ConditionRegion({
   condition,
@@ -39,8 +35,6 @@ function ConditionRegion({
 export function LocationOverviewBody({ entity, entities, onRegionPress }: KindBodyProps) {
   const state = stateOf(entity, 'location')
   const ancestors = locationAncestors(entity.id, entities)
-  const people = charactersAt(entity.id, entities)
-  const things = itemsAt(entity.id, entities)
   return (
     <>
       <NamesRegion
@@ -52,22 +46,16 @@ export function LocationOverviewBody({ entity, entities, onRegionPress }: KindBo
         testID="overview-part-of"
       />
       <ConditionRegion condition={state.condition} onRegionPress={onRegionPress} />
-      <NamesRegion
-        label={countLabel(t('world:overview.charactersHere'), people.length)}
-        tab="connections"
+      <DerivedNamesRegion
+        label={t('world:overview.charactersHere')}
         onRegionPress={onRegionPress}
-        targets={people.slice(0, PREVIEW)}
-        meta={moreMeta(people.length)}
-        derived
+        entities={charactersAt(entity.id, entities)}
         testID="overview-characters-here"
       />
-      <NamesRegion
-        label={countLabel(t('world:overview.itemsHere'), things.length)}
-        tab="connections"
+      <DerivedNamesRegion
+        label={t('world:overview.itemsHere')}
         onRegionPress={onRegionPress}
-        targets={things.slice(0, PREVIEW)}
-        meta={moreMeta(things.length)}
-        derived
+        entities={itemsAt(entity.id, entities)}
         testID="overview-items-here"
       />
     </>
@@ -77,9 +65,8 @@ export function LocationOverviewBody({ entity, entities, onRegionPress }: KindBo
 // world.md → Item Overview. Both positions render when they disagree (shown, not fixed).
 export function ItemOverviewBody({ entity, entities, onRegionPress }: KindBodyProps) {
   const state = stateOf(entity, 'item')
-  const byId = new Map(entities.map((e) => [e.id, e]))
   const holders = holdersOf(entity.id, entities)
-  const at = state.at_location_id == null ? [] : [byId.get(state.at_location_id) ?? null]
+  const at = refTargets(state.at_location_id, entities)
   return (
     <>
       <ConditionRegion condition={state.condition} onRegionPress={onRegionPress} />
