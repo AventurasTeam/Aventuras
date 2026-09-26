@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { Liquid } from 'liquidjs'
 import { storyTemplates } from './narrative'
+import { variableIsHonoured } from './templateReferences'
+import { TARGET_RESPONSE_LENGTH_VAR } from './narratorSettingReasons'
 
 const engine = new Liquid()
 
@@ -284,5 +286,58 @@ describe('an unexpected pov falls back the way the system half does', () => {
     const out = await renderUser('creative-writing', 'full', 'fourth', 'present')
     expect(out).toContain('third person')
     expect(out).not.toContain('fourth person')
+  })
+})
+
+// The pack words each length now; these are the properties the shipped wording has to keep,
+// not its exact bytes.
+const lengthLine = async (id: string, targetResponseLength: string | undefined) => {
+  const template = storyTemplates.find((t) => t.id === id)
+  if (!template) throw new Error(`no ${id} template`)
+  const out: string = await engine.parseAndRender(template.content, {
+    targetResponseLength,
+    protagonistName: 'Aria',
+  })
+  const line = out.split('\n').find((l) => l.startsWith('- Length:'))
+  if (!line) throw new Error(`${id} rendered no length line for ${targetResponseLength}`)
+  return line
+}
+
+describe.each(['adventure', 'creative-writing'])('%s — target response length', (id) => {
+  const lengths = ['dynamic', 'short', 'medium', 'long']
+
+  it('renders a distinct length line for each of the four lengths', async () => {
+    const lines = await Promise.all(lengths.map((length) => lengthLine(id, length)))
+    expect(new Set(lines).size).toBe(lengths.length)
+    for (const line of lines) expect(line).not.toMatch(/\{%|\{\{/)
+  })
+
+  it('falls back to dynamic for a missing or unrecognised length, without naming it', async () => {
+    const dynamic = await lengthLine(id, 'dynamic')
+    expect(await lengthLine(id, undefined)).toBe(dynamic)
+    const unknown = await lengthLine(id, 'enormous')
+    expect(unknown).toBe(dynamic)
+    expect(unknown).not.toContain('enormous')
+  })
+
+  it('is honoured by the shipped pack', () => {
+    const template = storyTemplates.find((t) => t.id === id)
+    expect(
+      variableIsHonoured(TARGET_RESPONSE_LENGTH_VAR, {
+        userTemplate: template?.userContent,
+        systemTemplate: template?.content,
+        customSystemPrompt: undefined,
+      }),
+    ).toBe(true)
+  })
+})
+
+describe('each mode words its own lengths', () => {
+  it("serves no length in one mode with the other mode's text", async () => {
+    for (const length of ['dynamic', 'short', 'medium', 'long']) {
+      expect(await lengthLine('adventure', length)).not.toBe(
+        await lengthLine('creative-writing', length),
+      )
+    }
   })
 })

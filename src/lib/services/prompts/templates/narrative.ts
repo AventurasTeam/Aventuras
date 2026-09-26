@@ -96,7 +96,16 @@ When [LOREBOOK CONTEXT] is provided, treat it as canonical:
 - Dialogue tag overload: "said" is invisible; use fancy tags sparingly
 
 # Format
-- {{ lengthInstruction }}
+- {% case targetResponseLength -%}
+{%- when 'short' -%}
+Length: Concise (1–3 paragraphs). Keep the prose crisp and fast-paced, focusing on immediate sensory feedback and prompt player agency.
+{%- when 'medium' -%}
+Length: Balanced (2–4 paragraphs). Provide immersive detail and NPC reactions while maintaining a steady narrative momentum.
+{%- when 'long' -%}
+Length: Expansive (3–6 paragraphs). Develop rich environmental detail, deep character subtext, and layered narrative beats.
+{%- else -%}
+Length: Dynamic (1–6 paragraphs). Adapt the response length naturally to the scene's pacing: write concise, punchy narration (1–2 paragraphs) during fast-paced action, quick dialogue exchanges, or key decision points; expand into richer, atmospheric prose (up to 5–6 paragraphs) during quiet exploration, scene transitions, or emotional beats.
+{%- endcase %}
 - Build each response toward one crystallizing moment—the image or line the player ({{ protagonistName }}) remembers
 - End at a moment of potential action—an NPC awaiting response, a door to open, a sound demanding investigation
 - Create a pregnant pause that naturally invites the player's next move
@@ -299,7 +308,16 @@ When [LOREBOOK CONTEXT] is provided, treat it as canonical:
 - Banned names: Elara, Kael, Lyra, Seraphina, Thorne, Astra, Zephyr, Caelan, Rowan (when male), Kai—use more distinctive names
 
 # Format
-- {{ lengthInstruction }}
+- {% case targetResponseLength -%}
+{%- when 'short' -%}
+Length: Compact Beat (2–4 paragraphs). Deliver focused, evocative prose that executes the author's direction with economy and immediate momentum.
+{%- when 'medium' -%}
+Length: Standard Scene (3–6 paragraphs). Balance narrative momentum with rich character voice, sensory detail, and natural scene progression.
+{%- when 'long' -%}
+Length: Full Scene / Chapter Pass (5–8+ paragraphs). Craft immersive, multi-layered literary prose, thoroughly expanding on character internalities, subtext, and vivid atmospheric texture.
+{%- else -%}
+Length: Dynamic (2–8 paragraphs). Scale the depth of narration to serve the scene's momentum: brief and direct (2–3 paragraphs) during rapid back-and-forth interactions; lush and comprehensive (4–8 paragraphs) when crafting immersive chapter sections, character reflections, or evocative environment setups.
+{%- endcase %}
 - End at natural narrative beats; preserve tension rather than resolving it artificially
 - Balance action, dialogue, and description
 

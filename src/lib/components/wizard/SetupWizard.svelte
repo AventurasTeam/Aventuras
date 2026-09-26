@@ -11,6 +11,10 @@
   import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
   import { characterVault } from '$lib/stores/characterVault.svelte'
   import { hasRequiredCredentials } from '$lib/services/ai/image'
+  import {
+    resolveNarratorSettingAvailability,
+    type NarratorSettingReasons,
+  } from '$lib/services/context'
   import type { VaultCharacter } from '$lib/types'
 
   import WizardExitConfirm from './WizardExitConfirm.svelte'
@@ -117,6 +121,25 @@
   $effect(() => {
     if (wizard.currentStep === 2) {
       wizard.loadPacks()
+    }
+  })
+
+  let narratorSettings = $state<NarratorSettingReasons>({})
+  $effect(() => {
+    const packId = wizard.selectedPackId
+    const mode = wizard.narrative.selectedMode
+    let cancelled = false
+    // A failed lookup leaves both controls enabled rather than locking them on a read error.
+    resolveNarratorSettingAvailability(packId, mode, undefined)
+      .then((reasons) => {
+        if (!cancelled) narratorSettings = reasons
+      })
+      .catch((error) => {
+        console.warn('[SetupWizard] Narrator setting check failed:', error)
+        if (!cancelled) narratorSettings = {}
+      })
+    return () => {
+      cancelled = true
     }
   })
 </script>
@@ -439,11 +462,12 @@
           referenceMode={wizard.narrative.referenceMode}
           targetLength={wizard.narrative.targetLength}
           narratorReinforcement={wizard.narrative.narratorReinforcement}
-          mode={wizard.narrative.selectedMode}
           onBackgroundImagesEnabledChange={(v) => (wizard.narrative.backgroundImagesEnabled = v)}
           onReferenceModeChange={(v) => (wizard.narrative.referenceMode = v)}
           onTargetLengthChange={(v) => (wizard.narrative.targetLength = v)}
           onNarratorReinforcementChange={(v) => (wizard.narrative.narratorReinforcement = v)}
+          targetLengthDisabledReason={narratorSettings.targetResponseLength}
+          narratorReinforcementDisabledReason={narratorSettings.narratorReinforcement}
         />
       {:else if wizard.currentStep === 9}
         <Step8Opening

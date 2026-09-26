@@ -10,7 +10,7 @@
  */
 
 import { database } from '$lib/services/database'
-import { PROMPT_TEMPLATES, formatLengthInstruction } from '$lib/services/prompts/templates'
+import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates'
 import { templateEngine } from '$lib/services/templates/engine'
 import { createLogger } from '$lib/log'
 import type { RenderResult } from './types'
@@ -84,8 +84,6 @@ export class ContextBuilder {
     const builder = new ContextBuilder(packId)
 
     const mode = story.mode || 'adventure'
-    const targetLength = story.settings?.targetLength || 'dynamic'
-    const lengthInstruction = formatLengthInstruction(targetLength, mode)
 
     // Load story data into context
     builder.add({
@@ -98,8 +96,7 @@ export class ContextBuilder {
       settingDescription: story.description || '',
       visualProseMode: story.settings?.visualProseMode || false,
       inlineImageMode: story.settings?.imageGenerationMode === 'inline',
-      targetLength,
-      lengthInstruction,
+      targetResponseLength: story.settings?.targetLength || 'dynamic',
       narratorReinforcement: story.settings?.narratorReinforcement || 'full',
     })
 

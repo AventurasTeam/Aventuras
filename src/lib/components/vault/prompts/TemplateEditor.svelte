@@ -24,7 +24,6 @@
     activeTab?: 'system' | 'user'
     mobileView?: 'editor' | 'preview'
     testValues?: Record<string, string>
-    hasCustomVariables?: boolean
     onTestVarsOpen?: () => void
     onDirtyChange?: (dirty: boolean) => void
     onActiveTabChange?: (tab: 'system' | 'user') => void
@@ -38,7 +37,6 @@
     activeTab = 'system',
     mobileView = 'editor',
     testValues = {},
-    hasCustomVariables = false,
     onTestVarsOpen,
     onDirtyChange,
     onActiveTabChange,
@@ -416,7 +414,7 @@
         {/if}
       </div>
 
-      {#if hasCustomVariables && onTestVarsOpen}
+      {#if onTestVarsOpen}
         <Button
           variant="ghost"
           size="sm"

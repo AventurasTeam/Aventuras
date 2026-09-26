@@ -14,6 +14,8 @@ export const systemSamples: Record<string, string> = {
   mode: 'adventure',
   pov: 'second',
   tense: 'present',
+  targetResponseLength: 'dynamic',
+  narratorReinforcement: 'full',
 }
 
 export const runtimeSamples: Record<string, string> = {
@@ -62,8 +64,6 @@ export const runtimeSamples: Record<string, string> = {
   lorebookContext: '[Relevant lorebook entries injected by context system...]',
   protagonistDescription: 'A young woman with silver hair and violet eyes',
   povInstruction: 'Write in second person perspective.',
-  lengthInstruction: 'Write 2-3 paragraphs.',
-  narratorReinforcement: 'full',
 
   // Shared / Common
   userInput: 'I want to explore the ancient ruins to the north.',

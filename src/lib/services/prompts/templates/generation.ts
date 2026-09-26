@@ -40,7 +40,7 @@ Avoid choices like "Wait and see" or "Do nothing" - each option should lead to m
 
 {{ povInstruction }}
 
-{{ lengthInstruction }}
+Keep each choice concise but specific - typically 5-15 words.
 
 ## Choice Types
 - action: Physical actions (fight, take, use, give, etc.)

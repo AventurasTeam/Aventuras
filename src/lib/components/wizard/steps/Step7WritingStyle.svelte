@@ -20,7 +20,8 @@
     referenceMode: boolean
     targetLength?: TargetLength
     narratorReinforcement?: NarratorReinforcement
-    mode?: 'adventure' | 'creative-writing'
+    targetLengthDisabledReason?: string
+    narratorReinforcementDisabledReason?: string
     onPOVChange: (v: POV) => void
     onTenseChange: (v: Tense) => void
     onToneChange: (v: string) => void
@@ -43,7 +44,8 @@
     referenceMode,
     targetLength = 'dynamic',
     narratorReinforcement = 'full',
-    mode = 'adventure',
+    targetLengthDisabledReason,
+    narratorReinforcementDisabledReason,
     onPOVChange,
     onTenseChange,
     onToneChange,
@@ -85,7 +87,8 @@
       {referenceMode}
       {targetLength}
       {narratorReinforcement}
-      {mode}
+      {targetLengthDisabledReason}
+      {narratorReinforcementDisabledReason}
       {onPOVChange}
       {onTenseChange}
       {onToneChange}

@@ -605,7 +605,6 @@
               activeTab={editorActiveTab}
               {mobileView}
               {testValues}
-              hasCustomVariables={(fullPack?.variables.length ?? 0) > 0}
               onTestVarsOpen={() => (showTestVars = true)}
               onDirtyChange={handleDirtyChange}
               onActiveTabChange={(tab) => (editorActiveTab = tab)}

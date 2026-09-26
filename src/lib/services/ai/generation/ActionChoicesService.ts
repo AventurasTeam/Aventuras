@@ -124,9 +124,6 @@ export class ActionChoicesService extends BaseAIService {
           ? 'Use second person (you, your) for all action choices.'
           : 'Use third person for all action choices.'
 
-    // Length instruction
-    const lengthInstruction = 'Keep each choice concise but specific - typically 5-15 words.'
-
     // Create ContextBuilder -- use forStory when storyId available
     let ctx: ContextBuilder
     if (context.storyId) {
@@ -153,7 +150,6 @@ export class ActionChoicesService extends BaseAIService {
       protagonistDescription,
       styleGuidance,
       povInstruction,
-      lengthInstruction,
     })
 
     // Render through the action-choices template
