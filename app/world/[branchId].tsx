@@ -19,7 +19,10 @@ import { EntityDetailPane } from '@/components/world/detail/entity-detail-pane'
 import type { EntityPaneData } from '@/components/world/detail/entity-pane-props'
 import { entityTabOf } from '@/components/world/detail/entity-tabs'
 import { firstFlaggedRow } from '@/components/world/first-flagged-row'
-import { useWorldSelection } from '@/components/world/use-world-selection'
+import {
+  useWorldSelection,
+  type WorldDetailSelection,
+} from '@/components/world/use-world-selection'
 import { worldAddOptions } from '@/components/world/world-add-options'
 import { leadRejectionText } from '@/components/world/world-copy'
 import { WorldDetailPlaceholder } from '@/components/world/world-detail-placeholder'
@@ -61,6 +64,18 @@ import { toast } from '@/lib/toast'
 import { branchWorldTime, type EntitySaveInput } from '@/lib/world'
 
 const ctx = { db, runInTransaction }
+
+function selectionName(selection: WorldDetailSelection | null): string | null {
+  if (selection == null) return null
+  switch (selection.type) {
+    case 'create':
+      return t(`world:detail.newEntity.${selection.kind}`)
+    case 'lore':
+      return selection.row.title
+    case 'entity':
+      return selection.row.name
+  }
+}
 
 export default function WorldRoute() {
   const router = useRouter()
@@ -359,14 +374,7 @@ export default function WorldRoute() {
     [storyId, entities],
   )
 
-  const selectedName =
-    selection == null
-      ? null
-      : selection.type === 'create'
-        ? t(`world:detail.newEntity.${selection.kind}`)
-        : selection.type === 'lore'
-          ? selection.row.title
-          : selection.row.name
+  const selectedName = selectionName(selection)
 
   // principles.md → Master-detail sub-header: the top bar stays screen-level on every tier.
   const titleSegments: BreadcrumbSegment[] = [
