@@ -255,7 +255,7 @@ describe('promoteStagedEntity', () => {
         action: {
           kind: 'promoteStagedEntity',
           source: 'ai_classifier',
-          payload: { branchId: 'br_1', id: 'char_1' },
+          payload: { branchId: 'br_1', id: 'char_1', proseEntryId: null },
         },
         actionId: 'act_p',
         branchId: 'br_1',
@@ -282,7 +282,7 @@ describe('promoteStagedEntity', () => {
         action: {
           kind: 'promoteStagedEntity',
           source: 'ai_classifier',
-          payload: { branchId: 'br_1', id: 'char_1' },
+          payload: { branchId: 'br_1', id: 'char_1', proseEntryId: null },
         },
         actionId: 'act_p1',
         branchId: 'br_1',
@@ -294,7 +294,7 @@ describe('promoteStagedEntity', () => {
         action: {
           kind: 'promoteStagedEntity',
           source: 'ai_classifier',
-          payload: { branchId: 'br_1', id: 'char_1' },
+          payload: { branchId: 'br_1', id: 'char_1', proseEntryId: null },
         },
         actionId: 'act_p2',
         branchId: 'br_1',
@@ -326,7 +326,7 @@ describe('promoteStagedEntity', () => {
           action: {
             kind: 'promoteStagedEntity',
             source: 'ai_classifier',
-            payload: { branchId: 'br_1', id: 'char_1' },
+            payload: { branchId: 'br_1', id: 'char_1', proseEntryId: null },
           },
           actionId: 'act_p1',
           branchId: 'br_1',
@@ -338,7 +338,7 @@ describe('promoteStagedEntity', () => {
           action: {
             kind: 'promoteStagedEntity',
             source: 'ai_classifier',
-            payload: { branchId: 'br_1', id: 'char_1' },
+            payload: { branchId: 'br_1', id: 'char_1', proseEntryId: null },
           },
           actionId: 'act_p2',
           branchId: 'br_1',
@@ -366,7 +366,7 @@ describe('promoteStagedEntity', () => {
           action: {
             kind: 'promoteStagedEntity',
             source: 'ai_classifier',
-            payload: { branchId: 'br_1', id: 'char_1' },
+            payload: { branchId: 'br_1', id: 'char_1', proseEntryId: null },
           },
           actionId: 'act_p',
           branchId: 'br_1',
@@ -396,7 +396,7 @@ describe('appendEntityKeywords', () => {
   const append = (keywords: string[]): PipelineAction => ({
     kind: 'appendEntityKeywords',
     source: 'periodic_classifier',
-    payload: { branchId: 'br_1', id: 'char_1', keywords },
+    payload: { branchId: 'br_1', id: 'char_1', keywords, proseEntryId: null },
   })
 
   it('appends only what the live row lacks, keeping an alias the user added mid-pass', async () => {
@@ -511,7 +511,7 @@ describe('retireEntity', () => {
   const retire = (retiredReason: string | null): PipelineAction => ({
     kind: 'retireEntity',
     source: 'periodic_classifier',
-    payload: { branchId: 'br_1', id: 'char_1', retiredReason },
+    payload: { branchId: 'br_1', id: 'char_1', retiredReason, proseEntryId: null },
   })
   const ACTIVE = { ...CHAR, status: 'active' as const }
 

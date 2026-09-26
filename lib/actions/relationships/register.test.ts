@@ -36,7 +36,7 @@ const upsert = (subjectId: string, objectId: string, kind: string | null, action
   action: {
     kind: 'upsertCharacterRelationship' as const,
     source: 'ai_classifier' as const,
-    payload: { branchId: 'br_1', subjectId, objectId, kind },
+    payload: { branchId: 'br_1', subjectId, objectId, kind, proseEntryId: null },
   },
   actionId,
   branchId: 'br_1',

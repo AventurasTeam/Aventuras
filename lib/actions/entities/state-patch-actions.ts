@@ -14,7 +14,7 @@ import { entitiesStore } from '@/lib/stores'
 import { computeUndoPayload } from '../delta/delta-encoding'
 import type { ActionHandler } from '../delta/registry'
 import { USER_EDITED_SINCE_PROSE, userEditsSinceProse, wroteColumn } from '../delta/user-precedence'
-import type { DbCtx, DeltaSource } from '../types'
+import type { DbCtx, DeltaSource, ProseEntryId } from '../types'
 
 declare module '@/lib/actions/action-map' {
   interface PipelineActionMap {
@@ -46,20 +46,20 @@ declare module '@/lib/actions/action-map' {
     }
     promoteStagedEntity: {
       source: DeltaSource
-      payload: {
-        branchId: string
-        id: string
-        /** Classifier only: a field the user wrote after this prose's entry keeps its value. */
-        proseEntryId?: string
-      }
+      payload: { branchId: string; id: string; proseEntryId: ProseEntryId }
     }
     appendEntityKeywords: {
       source: DeltaSource
-      payload: { branchId: string; id: string; keywords: string[]; proseEntryId?: string }
+      payload: { branchId: string; id: string; keywords: string[]; proseEntryId: ProseEntryId }
     }
     retireEntity: {
       source: DeltaSource
-      payload: { branchId: string; id: string; retiredReason: string | null; proseEntryId?: string }
+      payload: {
+        branchId: string
+        id: string
+        retiredReason: string | null
+        proseEntryId: ProseEntryId
+      }
     }
   }
 }
@@ -224,7 +224,7 @@ export const promoteStagedEntityHandler: ActionHandler = async (action, branchId
   if (current.status !== 'staged' || (storeEntity !== undefined && storeEntity.status !== 'staged'))
     return { status: 'rejected', reason: 'not-staged', code: 'noop' }
   if (
-    proseEntryId !== undefined &&
+    proseEntryId !== null &&
     wroteColumn(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId), 'status')
   )
     return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
@@ -264,7 +264,7 @@ export const appendEntityKeywordsHandler: ActionHandler = async (action, branchI
     }
   let added = newTerms(current.keywords, keywords)
   if (added.length === 0) return { status: 'rejected', reason: 'no-new-keywords', code: 'noop' }
-  if (proseEntryId !== undefined) {
+  if (proseEntryId !== null) {
     const removed = priorTerms(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId))
     added = added.filter((term) => !removed.has(normalizeTerm(term)))
     if (added.length === 0)
@@ -304,7 +304,7 @@ export const retireEntityHandler: ActionHandler = async (action, branchId, ctx) 
     }
   if (current.status !== 'active') return { status: 'rejected', reason: 'not-active', code: 'noop' }
   if (
-    proseEntryId !== undefined &&
+    proseEntryId !== null &&
     wroteColumn(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId), 'status')
   )
     return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }

@@ -14,7 +14,7 @@ import {
   userDeletedPairSince,
   userEditsSince,
 } from '../delta/user-precedence'
-import type { DbCtx, DeltaSource } from '../types'
+import type { DbCtx, DeltaSource, ProseEntryId } from '../types'
 
 declare module '@/lib/actions/action-map' {
   interface PipelineActionMap {
@@ -26,12 +26,19 @@ declare module '@/lib/actions/action-map' {
         objectId: string
         /** The subject's view of the object; null clears it. */
         kind: string | null
-        /** The object's view of the subject; omitted leaves it as stored (the classifier's write).
-         * When present, both null is refused, not a delete: use `deleteCharacterRelationship`. */
-        inverseKind?: string | null
-        /** Classifier only: a view the user wrote after this prose's entry keeps its value. */
-        proseEntryId?: string
-      }
+      } & (
+        | {
+            /** The object's view of the subject. Both null is refused, not a delete: use
+             * `deleteCharacterRelationship`. */
+            inverseKind: string | null
+            proseEntryId?: never
+          }
+        | {
+            /** Leaves the object's view as stored: the classifier's single-view write. */
+            inverseKind?: never
+            proseEntryId: ProseEntryId
+          }
+      )
     }
     deleteCharacterRelationship: { source: DeltaSource; payload: { branchId: string; id: string } }
   }
@@ -179,7 +186,7 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx) => {
     return { status: 'rejected', reason: 'relationship unchanged', code: 'noop' }
 
   if (
-    proseEntryId !== undefined &&
+    proseEntryId != null &&
     (await userWroteViewSince(ctx, bid, { aId, bId }, current, povCol, proseEntryId))
   )
     return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }

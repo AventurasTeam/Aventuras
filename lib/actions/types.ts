@@ -2,6 +2,12 @@ import type { PipelineActionMap, TestPipelineActionMap } from './action-map'
 
 export type { DbCtx } from '@/lib/db'
 
+/**
+ * The entry a classifier write derives from: a field the user wrote after its prose keeps its
+ * value. Null skips that check, for writers it doesn't cover (the user, the piggyback).
+ */
+export type ProseEntryId = string | null
+
 export type DeltaSource =
   | 'ai_classifier'
   | 'piggyback_tagged_block'

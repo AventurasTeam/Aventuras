@@ -103,32 +103,44 @@ const userPatch = (patch: Record<string, unknown>): PipelineAction => ({
 const promote: PipelineAction = {
   kind: 'promoteStagedEntity',
   source: 'periodic_classifier',
-  payload: { branchId: 'b1', id: 'char_kael' },
+  payload: { branchId: 'b1', id: 'char_kael', proseEntryId: null },
 }
 
 const retire: PipelineAction = {
   kind: 'retireEntity',
   source: 'periodic_classifier',
-  payload: { branchId: 'b1', id: 'char_kael', retiredReason: 'fell' },
+  payload: { branchId: 'b1', id: 'char_kael', retiredReason: 'fell', proseEntryId: null },
 }
 
 const append = (keywords: string[]): PipelineAction => ({
   kind: 'appendEntityKeywords',
   source: 'periodic_classifier',
-  payload: { branchId: 'b1', id: 'char_kael', keywords },
+  payload: { branchId: 'b1', id: 'char_kael', keywords, proseEntryId: null },
 })
 
 // char_kael < char_mira, so the row's `kind` is Kael's view and `inverseKind` Mira's.
 const classifyView = (kind: string): PipelineAction => ({
   kind: 'upsertCharacterRelationship',
   source: 'periodic_classifier',
-  payload: { branchId: 'b1', subjectId: 'char_kael', objectId: 'char_mira', kind },
+  payload: {
+    branchId: 'b1',
+    subjectId: 'char_kael',
+    objectId: 'char_mira',
+    kind,
+    proseEntryId: null,
+  },
 })
 
 const classifyMiraView = (kind: string): PipelineAction => ({
   kind: 'upsertCharacterRelationship',
   source: 'periodic_classifier',
-  payload: { branchId: 'b1', subjectId: 'char_mira', objectId: 'char_kael', kind },
+  payload: {
+    branchId: 'b1',
+    subjectId: 'char_mira',
+    objectId: 'char_kael',
+    kind,
+    proseEntryId: null,
+  },
 })
 
 const userViews = (kaelView: string | null, miraView: string | null): PipelineAction => ({
@@ -261,7 +273,11 @@ describe('reversing a machine write under a later user write', () => {
       'act_0m',
     )
     await apply(ctx, promote, 'act_c')
-    await apply(ctx, { ...promote, payload: { branchId: 'b1', id: 'char_mira' } }, 'act_c')
+    await apply(
+      ctx,
+      { ...promote, payload: { branchId: 'b1', id: 'char_mira', proseEntryId: null } },
+      'act_c',
+    )
     await apply(ctx, userPatch({ status: 'retired' }), 'act_u')
 
     await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
@@ -354,7 +370,13 @@ describe('reversing a machine view update', () => {
       {
         kind: 'upsertCharacterRelationship',
         source: 'periodic_classifier',
-        payload: { branchId: 'b1', subjectId: 'char_mira', objectId: 'char_kael', kind: null },
+        payload: {
+          branchId: 'b1',
+          subjectId: 'char_mira',
+          objectId: 'char_kael',
+          kind: null,
+          proseEntryId: null,
+        },
       },
       'act_x',
     )

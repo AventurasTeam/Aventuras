@@ -253,7 +253,7 @@ describe('a classifier write racing a user Save on one row', () => {
           {
             kind: 'upsertCharacterRelationship',
             source: 'periodic_classifier',
-            payload: { branchId: BRANCH, ...pairOf(round), kind: 'friend' },
+            payload: { branchId: BRANCH, ...pairOf(round), kind: 'friend', proseEntryId: null },
           },
           `k0_${round}`,
           ctx,
@@ -343,7 +343,7 @@ describe('a classifier write racing a user Save on one row', () => {
             {
               kind: 'appendEntityKeywords',
               source: 'periodic_classifier',
-              payload: { branchId: BRANCH, id, keywords: ['b'] },
+              payload: { branchId: BRANCH, id, keywords: ['b'], proseEntryId: null },
             },
             `k_${round}`,
             ctx,
@@ -395,6 +395,7 @@ describe('a classifier write racing a user Save on one row', () => {
                 subjectId: `x_${round}`,
                 objectId: `y_${round}`,
                 kind: 'friend',
+                proseEntryId: null,
               },
             },
             `k_${round}`,
@@ -468,7 +469,7 @@ describe('a classifier write racing a user Save on one row', () => {
               {
                 kind: 'appendEntityKeywords',
                 source: 'periodic_classifier',
-                payload: { branchId: BRANCH, id, keywords: ['b'] },
+                payload: { branchId: BRANCH, id, keywords: ['b'], proseEntryId: null },
               },
               `k_${round}`,
               ctx,
@@ -500,7 +501,7 @@ describe('a classifier write racing a user Save on one row', () => {
           {
             kind: 'upsertCharacterRelationship',
             source: 'periodic_classifier',
-            payload: { ...pair, kind: 'friend' },
+            payload: { ...pair, kind: 'friend', proseEntryId: null },
           },
           `k0_${round}`,
           ctx,
@@ -516,7 +517,7 @@ describe('a classifier write racing a user Save on one row', () => {
               {
                 kind: 'upsertCharacterRelationship',
                 source: 'periodic_classifier',
-                payload: { ...pair, kind: 'rival' },
+                payload: { ...pair, kind: 'rival', proseEntryId: null },
               },
               `k_${round}`,
               ctx,
@@ -552,12 +553,12 @@ describe('a classifier write racing a user Save on one row', () => {
         {
           kind: 'promoteStagedEntity',
           source: 'user_edit',
-          payload: { branchId: BRANCH, id: 'char_1' },
+          payload: { branchId: BRANCH, id: 'char_1', proseEntryId: null },
         },
         {
           kind: 'appendEntityKeywords',
           source: 'user_edit',
-          payload: { branchId: BRANCH, id: 'char_1', keywords: ['b'] },
+          payload: { branchId: BRANCH, id: 'char_1', keywords: ['b'], proseEntryId: null },
         },
       ],
       { actionId: 'act_1', branchId: BRANCH },

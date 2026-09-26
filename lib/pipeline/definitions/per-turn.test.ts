@@ -410,7 +410,7 @@ describe('per-turn pipeline declaration', () => {
       action: {
         kind: 'promoteStagedEntity',
         source: 'piggyback_tagged_block',
-        payload: { branchId: 'b1', id: heroId },
+        payload: { branchId: 'b1', id: heroId, proseEntryId: null },
       },
     })
   })
