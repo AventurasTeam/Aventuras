@@ -39,7 +39,14 @@ echo "🚀 Building unsigned iOS archive (aarch64-apple-ios)..."
 # CODE_SIGNING_REQUIRED=NO and CODE_SIGN_IDENTITY="" to xcodebuild.
 # --target aarch64: iOS device ARM64 (the CLI's shorthand for aarch64-apple-ios;
 # it also accepts aarch64-sim and x86_64).
-npx tauri ios build --target aarch64 --archive-only "$@"
+# "$@" (the --config list) stays before `--`: everything after it is passed to
+# xcodebuild as build settings, which override the project's automatic signing
+# and make the team requirement moot — this is what actually disables signing
+# (the CLI's env defaults do not reach the archive).
+npx tauri ios build --target aarch64 --archive-only "$@" -- \
+    CODE_SIGNING_ALLOWED=NO \
+    CODE_SIGNING_REQUIRED=NO \
+    CODE_SIGN_IDENTITY=""
 
 ARCHIVE="$(find src-tauri/gen/apple/build -name '*_iOS.xcarchive' -type d 2>/dev/null | sort | tail -n1)"
 if [[ -z "$ARCHIVE" ]]; then
