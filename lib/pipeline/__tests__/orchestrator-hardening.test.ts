@@ -86,8 +86,7 @@ async function* failsCleanly(): AsyncGenerator<never, PhaseResult> {
   return { status: 'failed', error: { kind: 'phase-logic', detail: 'clean fail' } }
 }
 
-// Same error kind a throw produces, but returned — only `cause.threw` (not
-// the error-kind filter) keeps onPhaseException from firing on this one.
+// Only `cause.threw`, not the error-kind filter, keeps onPhaseException from firing here.
 async function* failsCleanlyWithHookEligibleKind(): AsyncGenerator<never, PhaseResult> {
   return { status: 'failed', error: { kind: 'orchestrator', detail: 'clean fail' } }
 }
@@ -135,8 +134,7 @@ describe('orchestrator hardening', () => {
       kind: 'phase-exception',
       phases: [{ name: 'p', run: updateMissing }],
       onPhaseException: async (_hookCtx, error) => {
-        // Recorded as data: an expect() here is swallowed by the orchestrator's own
-        // try/catch and would never fail this test.
+        // Recorded as data: an expect() here would be swallowed by the orchestrator's try/catch.
         seen.push({
           kind: error.kind,
           runStillRegistered: generationStore.getTxState().runs.size > 0,

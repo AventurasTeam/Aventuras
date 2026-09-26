@@ -5,13 +5,8 @@ import { awaitRunTerminal, generationStore } from '@/lib/stores'
 import { settleUserWrites } from '../delta/apply-delta-action'
 
 /**
- * Drains the in-flight classifier and the user writes already past the barrier, and holds
- * `reversalInProgress` across the whole wait -> sweep window, so no freshly-scheduled run
- * can read pre-sweep prose and no write lands between the sweep's read and its locks
- * (generation-pipeline.md -> Prose reversals and the classifier barrier).
- *
- * Not re-entrant: `reversalInProgress` is a plain boolean, so a nested bracket's
- * `finally` would drop the barrier while the outer sweep still runs.
+ * generation-pipeline.md -> Prose reversals and the classifier barrier. Not re-entrant: a
+ * nested bracket's `finally` would drop the barrier while the outer sweep still runs.
  */
 export async function bracketProseReversal<T>(
   branchId: string,

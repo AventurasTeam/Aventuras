@@ -6,7 +6,7 @@ import { FactionDetailPane } from './faction-detail-pane'
 import { ItemDetailPane } from './item-detail-pane'
 import { LocationDetailPane } from './location-detail-pane'
 
-/** patterns/entity.md → Hand-written per-kind components: one pane per kind. */
+/** patterns/entity.md → Hand-written per-kind components. */
 export function EntityDetailPane({ kind, ...props }: EntityPaneProps & { kind: EntityKind }) {
   switch (kind) {
     case 'character':

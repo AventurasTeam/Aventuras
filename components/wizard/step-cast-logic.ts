@@ -52,9 +52,8 @@ export function canSetLead(row: WizardCastDraft, leadEntityId: string | null): b
 }
 
 /**
- * Locations `row` may take as its parent: none whose own chain already leads back to it, so the
- * picker can't build the loop Finish refuses. The current parent stays, so a stored loop still
- * shows what it points at.
+ * Locations `row` may take as parent — none whose chain leads back to it (Finish refuses loops);
+ * the current parent stays, so a stored loop still shows what it points at.
  */
 export function parentCandidates(
   row: WizardLocationDraft,

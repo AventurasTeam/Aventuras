@@ -771,8 +771,7 @@ describe('entity keywords', () => {
     expect(planned).toEqual([])
   })
 
-  // The index tracks each append in turn, so a second candidate for the same entity
-  // filters against what the first one just added, not just the pass's opening snapshot.
+  // The keyword index updates on each append, not only from the pass's opening snapshot.
   it("filters a second candidate against the first candidate's keywords in the same reply", () => {
     const { planned } = buildClassifierActions(
       {

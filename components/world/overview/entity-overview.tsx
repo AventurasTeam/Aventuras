@@ -49,7 +49,7 @@ function KindBody(props: KindBodyProps) {
   }
 }
 
-/** world.md → Overview: read-mostly glance card; every region routes to its edit tab. */
+/** world.md → Overview. */
 export function EntityOverview({ variant, ...props }: EntityOverviewProps) {
   const { entity, onRegionPress } = props
   const isPhone = useTier() === 'phone'

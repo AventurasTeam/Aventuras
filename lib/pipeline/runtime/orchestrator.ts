@@ -317,8 +317,7 @@ async function runPhaseExceptionHook(
 type AbortCause =
   | { reason: 'user-cancel' }
   | { reason: 'preflight-failure'; error: PipelineError }
-  // `threw`: the phase threw rather than returning `{ status: 'failed' }`, the only case
-  // onPhaseException fires for (see the type's JSDoc in ../types.ts).
+  // `threw`: thrown, not returned as failed — onPhaseException's only trigger (see ../types.ts).
   | { reason: 'phase-failure'; error: PipelineError; threw: boolean }
 
 async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<TxResult> {

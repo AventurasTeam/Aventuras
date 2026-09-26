@@ -86,10 +86,8 @@ function undoDirtiesVector(targetTable: string, payloadKeys: readonly string[]):
   return fields !== undefined && payloadKeys.some((key) => fields.includes(key))
 }
 
-// A per-row working copy threads each update undo onto the prior one, so multiple updates to
-// the SAME row (even disjoint JSON sub-keys) compose instead of clobbering via a stale base.
-// A machine delta's undo skips columns a later `user_edit` outside `rows` wrote
-// (generation-pipeline.md → Reverse-replay).
+// Per-row working copy: same-row undos (even disjoint JSON sub-keys) compose, not clobber via a
+// stale base. Machine undos yield to later user edits: generation-pipeline.md → Reverse-replay.
 async function buildUndoOps(
   rows: Delta[],
   ctx: DbCtx,

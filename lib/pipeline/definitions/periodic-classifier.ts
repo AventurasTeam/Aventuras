@@ -94,9 +94,8 @@ async function readStatus(ctx: StatusCtx): Promise<ClassifierStatus> {
   return row?.classifierStatus ?? idleStatus()
 }
 
-// branches is not delta-logged (classifier.md -> Persistence), so these are direct
-// row writes. Key-scoped json_set because the reversal clamp owns $.processedThrough
-// and can commit between this run's read and its write.
+// Direct row writes: branches isn't delta-logged (classifier.md -> Persistence). Key-scoped
+// json_set: the reversal clamp owns $.processedThrough and can commit between read and write.
 async function patchStatus(ctx: StatusCtx, keys: SQL): Promise<void> {
   await ctx.db.run(
     sql`UPDATE ${branches} SET classifier_status = json_set(

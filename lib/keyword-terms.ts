@@ -11,10 +11,7 @@ export function dedupeTerms(terms: readonly string[]): string[] {
   return newTerms([], terms)
 }
 
-/**
- * `incoming` terms `current` lacks under `normalizeTerm`, trimmed, first spelling kept;
- * blanks dropped.
- */
+/** `incoming` terms `current` lacks by `normalizeTerm`: trimmed, first spelling kept, no blanks. */
 export function newTerms(current: readonly string[], incoming: readonly string[]): string[] {
   const seen = new Set(current.map(normalizeTerm))
   const added: string[] = []

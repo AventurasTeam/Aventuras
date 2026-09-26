@@ -71,7 +71,7 @@ type EntityDetailFrameProps<Draft extends EntityBaseDraft> = {
   children: ReactNode
 }
 
-/** world.md → Detail head structure: name, Recently classified, ⋯ — then the tab strip. */
+/** world.md → Detail head structure. */
 export function EntityDetailFrame<Draft extends EntityBaseDraft>({
   kind,
   row,

@@ -132,8 +132,7 @@ describe('storyPillPhase', () => {
 })
 
 describe('useStoryGenerationGate classifier running', () => {
-  // The probe stays mounted across the store update so the assertion exercises the
-  // live subscription, not a selector re-evaluated by a fresh render.
+  // Pins the live subscription, not a selector re-evaluated by a fresh render.
   it("flips the same mounted probe from true to false when the branch's classifier run finishes", () => {
     generationStore.startRun(run('periodic-classifier', 'story-1', 'no-gate', 'branch-1'))
     const captured: boolean[] = []

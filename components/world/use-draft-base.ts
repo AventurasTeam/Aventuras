@@ -3,9 +3,8 @@ import { useState } from 'react'
 export type DraftBase<T> = { base: T; markSaved: (saved: T) => void }
 
 /**
- * The committed value a dirty field's draft was based on, for a Save's three-way diff: `current`
- * while clean, frozen on the first dirty render; after `markSaved`, the saved value, so an edit
- * made during the Save stays dirty against what that Save wrote.
+ * A dirty draft's committed base, for a Save's three-way diff: `current` while clean, frozen on
+ * the first dirty render; after `markSaved`, the saved value, so a mid-Save edit stays dirty.
  */
 export function useDraftBase<T>(dirty: boolean, current: T): DraftBase<T> {
   const [frozen, setFrozen] = useState<{ value: T } | null>(null)

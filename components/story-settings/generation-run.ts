@@ -62,7 +62,7 @@ export function selectStoryClassifierRunning(
 
 /**
  * The pill's run, whether the classifier pass is in flight, and why edits are blocked.
- * `branchId` scopes the classifier check to a branch (World, Plot); omitted, to the whole story.
+ * `branchId` scopes the classifier check to a branch; omitted, to the whole story.
  */
 export function useStoryGenerationGate(storyId: string | undefined, branchId?: string) {
   const activeRunKind = generationStore.useGeneration((s) =>

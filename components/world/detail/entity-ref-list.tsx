@@ -25,7 +25,7 @@ type EntityRefListProps = Gate & {
   addLabel: string
 }
 
-/** world.md → Carrying: an item-ref list, picker-backed, each row removable. */
+/** world.md → Carrying. */
 export function EntityRefList({
   value,
   onChange,

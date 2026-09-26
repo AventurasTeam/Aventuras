@@ -798,8 +798,7 @@ describe('periodicClassifierPhase', () => {
   })
 })
 
-// Drives the phase through runPipeline, not drain(): the apply-time rejection this guards
-// against only happens once a planned write reaches the action layer, which drain() skips.
+// Not drain(): it skips the action layer, the only place apply-time rejection happens.
 describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
   beforeEach(() => {
     vi.resetAllMocks()
@@ -890,8 +889,7 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
   it('routes a write the action layer rejects to the retry status instead of leaving running stuck', async () => {
     const { db, runInTransaction } = await seedApplyTimeHarness()
 
-    // Fake handler stands in for any action-layer rejection (branch mismatch, invalid write,
-    // etc.); the guard must recover from all of them the same way.
+    // Stands in for any action-layer rejection; the guard must recover from each the same way.
     rejectCreateHappening()
     registerWithReply()
 
@@ -978,9 +976,8 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
     })
   })
 
-  // If the reversal can't commit, the write attempt is still on disk; arming a retry would
-  // race a retry pass into re-reading it. Branch stays at `running` — only
-  // resetStuckClassifierRunState, not the ordinary backoff, reconciles it at the next boot.
+  // A failed reversal leaves the write on disk, so arming a retry would race a pass into
+  // re-reading it. `running` stays for boot's resetStuckClassifierRunState, not the backoff.
   it('leaves running when the reversal itself cannot commit, deferring to boot recovery', async () => {
     const { db, runInTransaction } = await seedApplyTimeHarness()
     const fixedActionId = 'act_classifier_poison'

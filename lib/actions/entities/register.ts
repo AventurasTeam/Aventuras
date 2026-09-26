@@ -177,8 +177,7 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   }
 
   const named = UPDATABLE.filter((col) => col in patch)
-  // A patch that parsed but touched no updatable column would reach Drizzle's
-  // .set({}) and throw "No values to set" — reject instead.
+  // No updatable column → Drizzle's .set({}) would throw "No values to set"; reject instead.
   if (named.length === 0)
     return {
       status: 'rejected',
