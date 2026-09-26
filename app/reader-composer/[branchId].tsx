@@ -97,7 +97,7 @@ import {
 import {
   appSettingsStore,
   awaitRunTerminal,
-  backgroundClassifierRunId,
+  backgroundClassifierRunning,
   currentStoryStore,
   entitiesStore,
   entriesStore,
@@ -244,8 +244,8 @@ export default function ReaderComposerRoute() {
       (r) => r.branchId === branchId && r.kind === SUGGESTION_REFRESH_KIND,
     ),
   )
-  const classifierRunning = generationStore.useGeneration(
-    (s) => backgroundClassifierRunId(s.txState, branchId) != null,
+  const classifierRunning = generationStore.useGeneration((s) =>
+    backgroundClassifierRunning(s.txState, branchId),
   )
 
   const open = currentStoryStore.useCurrentStory((s) => s)

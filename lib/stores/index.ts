@@ -94,7 +94,7 @@ export type { OpenStory } from './current-story/current-story'
 export type { WorkingSetStore } from './factory/working-set-store'
 export {
   awaitRunTerminal,
-  backgroundClassifierRunId,
+  backgroundClassifierRunning,
   isBackgroundKind,
   isForegroundGenerating,
   isUserEditBlocked,

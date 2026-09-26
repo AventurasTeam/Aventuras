@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 
 import {
   awaitRunTerminal,
-  backgroundClassifierRunId,
+  backgroundClassifierRunning,
   generationStore,
   isForegroundGenerating,
   isUserEditBlocked,
@@ -123,8 +123,8 @@ describe('isForegroundGenerating', () => {
     generationStore.startRun(runFor('periodic-classifier'))
     const tx = generationStore.getTxState()
     expect(isForegroundGenerating(tx, 'branch_1')).toBe(false)
-    expect(backgroundClassifierRunId(tx, 'branch_1')).toBe('run_periodic-classifier')
-    expect(backgroundClassifierRunId(tx, 'branch_other')).toBeNull()
+    expect(backgroundClassifierRunning(tx, 'branch_1')).toBe(true)
+    expect(backgroundClassifierRunning(tx, 'branch_other')).toBe(false)
   })
 
   it('is true for a per-turn run on the same branch', () => {

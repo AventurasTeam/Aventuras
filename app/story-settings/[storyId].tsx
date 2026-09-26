@@ -202,7 +202,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
     activeRunKind,
     editBlocked,
     gateReason: disabledReason,
-    classifierRunId,
+    classifierRunning,
   } = useStoryGenerationGate(storyId)
   // awaitRunTerminal is branch-scoped, and this screen has no branch param. Any
   // cancellable run for this story carries it: runs only exist for the open
@@ -368,7 +368,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
         <StoryStatusPill
           storyId={storyId ?? null}
           swapTarget={settings?.embedding_swap_target}
-          activePhase={storyPillPhase(activeRunKind, classifierRunId)}
+          activePhase={storyPillPhase(activeRunKind, classifierRunning)}
           onCancel={() => {
             if (activeRunKind != null && cancelBranchId != null) {
               void awaitRunTerminal(activeRunKind, cancelBranchId, 'cancel')

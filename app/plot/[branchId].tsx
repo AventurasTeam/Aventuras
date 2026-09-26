@@ -137,7 +137,7 @@ export default function PlotRoute() {
     [selectedHappeningId, branchId, involvementRows, awarenessRows],
   )
 
-  const { activeRunKind, editBlocked, gateReason, classifierRunId } = useStoryGenerationGate(
+  const { activeRunKind, editBlocked, gateReason, classifierRunning } = useStoryGenerationGate(
     storyId ?? undefined,
     branchId,
   )
@@ -367,7 +367,7 @@ export default function PlotRoute() {
         <StoryStatusPill
           storyId={storyId}
           swapTarget={open?.settings.embedding_swap_target}
-          activePhase={storyPillPhase(activeRunKind, classifierRunId)}
+          activePhase={storyPillPhase(activeRunKind, classifierRunning)}
           onCancel={() => {
             if (activeRunKind != null) void awaitRunTerminal(activeRunKind, branchId, 'cancel')
           }}
