@@ -17,6 +17,12 @@ on:
 jobs:
   build:
     name: Build iOS
+    # iOS is best-effort: continue-on-error reports success to the callers
+    # (ci.yml, release.yml, pre-release.yml), so an iOS-only failure — brew, a
+    # runner-image change, the init fallback — leaves those runs green and never
+    # blocks a release or marks master red. The job still shows its failure in
+    # the run's checks; callers just don't inherit it.
+    continue-on-error: true
     runs-on: macos-15
     timeout-minutes: 60
     env:
@@ -64,8 +70,9 @@ jobs:
 
       # The Xcode scaffold is normally committed under src-tauri/gen/apple (generated
       # once by bootstrap-ios.yml). When it is absent — first run, or a fork — generate
-      # it here instead of failing: the runner is a Mac, so init costs seconds and the
-      # Info.plist keys the build needs are merged by the build script regardless.
+      # it here instead of failing: the runner is a Mac, so init costs seconds, and the
+      # Info.plist keys come from src-tauri/Info.ios.plist, which the CLI merges into
+      # every build regardless of how the scaffold got there.
       - name: Generate iOS scaffold if not committed
         run: |
           if [ ! -f src-tauri/gen/apple/project.yml ]; then
@@ -75,20 +82,25 @@ jobs:
 
       # Produces Aventuras_v<version>_ios-arm64-unsigned.ipa: an unsigned,
       # ARM64 device build. No Apple certificates, profiles or signing secrets are
-      # used anywhere — the CLI archives with CODE_SIGNING_ALLOWED=NO, and the
-      # script packages the .app itself instead of running the signed export.
+      # used anywhere — the script disables signing via a temporary project.yml
+      # patch (the CLI's own CODE_SIGNING_* settings don't reach xcodebuild archive)
+      # and packages the .app itself instead of running the signed export. The
+      # resolved version (base + -sha on CI builds) is passed explicitly: the CLI
+      # writes only the base semver into CFBundleShortVersionString, so the name
+      # must come from the same source as every other platform.
       - name: Build unsigned IPA
         run: scripts/build-ios-unsigned.sh ${{ steps.version.outputs.config-args }}
+        env:
+          IPA_VERSION: ${{ steps.version.outputs.version }}
 
       # Deliberately publish workflow artifacts for every build, matching the
-      # Android leg. Glob rather than an exact name: the CLI stamps the iOS
-      # project with the base semver (the -sha suffix is not a valid
-      # CFBundleShortVersionString), so the two versions can differ on CI runs.
+      # Android leg. The exact name is safe: the script names the .ipa from
+      # IPA_VERSION, which this workflow sets from the same version output.
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v7
         with:
           name: ios-ipa
-          path: Aventuras_v*_ios-arm64-unsigned.ipa
+          path: Aventuras_v${{ steps.version.outputs.version }}_ios-arm64-unsigned.ipa
           archive: false
 
       # Only upload to a GitHub Release when publishing a new version. draft is
@@ -102,4 +114,4 @@ jobs:
           tag_name: v${{ steps.version.outputs.version }}
           draft: true
           prerelease: ${{ inputs.prerelease }}
-          files: Aventuras_v*_ios-arm64-unsigned.ipa
+          files: Aventuras_v${{ steps.version.outputs.version }}_ios-arm64-unsigned.ipa

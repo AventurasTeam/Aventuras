@@ -67,8 +67,12 @@ jobs:
       prerelease: true
     secrets: inherit
 
+  # iOS is best-effort: it's in needs only so publish waits for it to finish (no
+  # redundant gh-release lookups), but its failure does not block publishing the
+  # desktop and Android assets.
   publish:
     needs: [create-release, build-desktop, build-android, build-ios]
+    if: ${{ !cancelled() && needs.build-desktop.result == 'success' && needs.build-android.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Publish the pre-release

@@ -23,10 +23,11 @@ comments stay short and say only what the next reader cannot infer — see
 
 ## Development
 
-| Document                             | Read it before                                                        |
-| ------------------------------------ | --------------------------------------------------------------------- |
-| [testing.md](development/testing.md) | writing a test — the suite has real constraints on what it can import |
-| [release.md](development/release.md) | cutting a release, or changing the updater, CI or the build scripts   |
+| Document                                              | Read it before                                                        |
+| ----------------------------------------------------- | --------------------------------------------------------------------- |
+| [testing.md](development/testing.md)                  | writing a test — the suite has real constraints on what it can import |
+| [release.md](development/release.md)                  | cutting a release, or changing the updater, CI or the build scripts   |
+| [ios-build-target.md](development/ios-build-target.md) | the iOS build target, the unsigned `.ipa` pipeline, or `gen/apple`    |
 
 ## Keeping them true
 

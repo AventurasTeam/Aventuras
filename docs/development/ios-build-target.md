@@ -63,8 +63,10 @@ A third, discovered only in CI: **the CLI's signing defaults don't reach
   [`build-ios.yml`](../../.github/workflows/build-ios.yml) wired into
   [`release.yml`](../../.github/workflows/release.yml),
   [`pre-release.yml`](../../.github/workflows/pre-release.yml) (including its
-  `publish.needs`), and [`ci.yml`](../../.github/workflows/ci.yml) (including a
-  `src-tauri/gen/apple/**` path trigger), exactly matching the Android leg's shape.
+  `publish.needs`), and [`ci.yml`](../../.github/workflows/ci.yml), exactly matching
+  the Android leg's shape. iOS is best-effort: the CI leg runs
+  `continue-on-error`, and the pre-release `publish` job gates only on the desktop and
+  Android legs, so an iOS-only failure never blocks a release or marks `master` red.
 - **Devtools feature** — left alone. `tauri.release.conf.json` already empties
   `build.features` for CI/release builds, and iOS only builds in CI. Local
   `tauri ios dev` needs `--config src-tauri/tauri.release.conf.json` to drop the
@@ -95,16 +97,23 @@ macOS-only (guards on `uname`, repo root, tool availability). Steps:
 3. **Locate the archive** — newest `*_iOS.xcarchive` under
    `src-tauri/gen/apple/build/`, with an Xcode `DerivedData` fallback; the `.app` is at
    `Products/Applications/Aventuras.app` inside it.
-4. **Merge iOS `Info.plist` keys** (idempotent `PlistBuddy`): `NSCameraUsageDescription`
+4. **Assert the iOS `Info.plist` keys are present**: `NSCameraUsageDescription`
    (html5-qrcode), `NSLocalNetworkUsageDescription` (the LAN sync server binds
    `0.0.0.0`), `NSAppTransportSecurity:NSAllowsLocalNetworking` (local LLM servers over
-   `http://`), `ITSAppUsesNonExemptEncryption=false`. Merged at build time, not
-   committed, so a fresh scaffold needs no hand-editing.
-5. **Package** `Payload/Aventuras.app` → `Aventuras_v<version>_ios-arm64-unsigned.ipa`,
-   with `<version>` read from the built app's `CFBundleShortVersionString`.
+   `http://`), `ITSAppUsesNonExemptEncryption=false`. These live in
+   `src-tauri/Info.ios.plist`, which the Tauri CLI merges into **every** iOS build's
+   `Info.plist` (`tauri ios dev` and Xcode builds included — none of which run this
+   script); the script asserts they made it through rather than assume.
+5. **Package** `Payload/Aventuras.app` →
+   `Aventuras_v<IPA_VERSION>_ios-arm64-unsigned.ipa`. `IPA_VERSION` is the resolved
+   build version (base + `-sha` on CI builds), passed by the workflow from the
+   build-version action — the built `Info.plist` only ever carries the base semver
+   (the CLI refuses the suffix there), so naming from the plist would make CI builds
+   indistinguishable from a release. It defaults to `tauri.conf.json`'s version so a
+   plain local build needs no extra setup.
 6. **Verify before exiting 0**: binary is `arm64` (`lipo -info`), bundle is *not*
    signed (`codesign -dv` must fail), `.ipa` contains `Payload/<app>/Aventuras` and
-   `Info.plist`.
+   `Info.plist`, each checked separately.
 
 ### `.github/workflows/build-ios.yml` — the reusable CI leg
 
@@ -121,17 +130,19 @@ referenced anywhere.
 ### `.github/workflows/bootstrap-ios.yml` — one-shot scaffold generator
 
 Manual dispatch on `macos-15`: npm install, Rust + target, ensure XcodeGen,
-`tauri ios init --skip-targets-install`, smoke-test the full unsigned build, upload
-`src-tauri/gen/apple` (excluding `build/` — `upload-artifact` does not respect
-`.gitignore`) plus the smoke-test `.ipa`.
+`tauri ios init --skip-targets-install`, upload the **pristine** scaffold immediately
+(before the smoke test patches `project.yml` and leaves compiled outputs behind),
+then smoke-test the full unsigned build and upload the test `.ipa`.
 
 ### Orchestrator wiring (additive)
 
-- `release.yml` / `pre-release.yml`: a `build-ios` job (`needs: create-release`), and
-  `pre-release`'s `publish` job additionally gates on `build-ios`.
+- `release.yml` / `pre-release.yml`: a `build-ios` job (`needs: create-release`).
+  `pre-release`'s `publish` job keeps `build-ios` in `needs` for ordering but gates
+  only on the desktop and Android results (iOS is best-effort).
 - `ci.yml`: a `build-ios` job with `publish: false` and the same version-bump skip
-  guard; path triggers gained `src-tauri/gen/apple/**`, `src-tauri/icons/ios/**`, and
-  the build script.
+  guard. No iOS-specific path triggers: iOS builds run on the weekly schedule and
+  manual dispatch, so a change confined to iOS files doesn't rebuild every desktop
+  and Android leg whose caches don't depend on them.
 
 ### Frontend (additive branch, no behavior change elsewhere)
 
@@ -189,9 +200,11 @@ The target repo was a scratch fork (`TheDWz/AventurasiOStest`) pushing straight 
    `.ipa` was **built and verified successfully**; the upload steps computed their
    expected name from the build-version action (`0.7.11-shae23df95`) while the iOS CLI
    stamps the Xcode project with the base semver (`0.7.11` — the `-sha` suffix is not a
-   valid `CFBundleShortVersionString`). *Fix:* upload steps glob
-   `Aventuras_v*_ios-arm64-unsigned.ipa` instead of interpolating an exact name, and
-   the script names the `.ipa` from the built app's own `Info.plist`.
+   valid `CFBundleShortVersionString`). *Fix (final):* the workflow passes the resolved
+   version to the script via `IPA_VERSION` and the script names the `.ipa` from it, so
+   the name always matches what the upload steps expect, on every kind of run. (An
+   earlier fix globbed the upload paths; the explicit version made that unnecessary
+   and the globs were reverted to exact names.)
 
 After #5: **the iOS leg went green** — `tauri ios init` → Rust compile for
 `aarch64-apple-ios` → `xcodebuild archive` (unsigned) → `.ipa` packaging → artifact

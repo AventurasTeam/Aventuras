@@ -60,8 +60,10 @@ leg installs one from GitHub's own apt repository, since `ubuntu:22.04`'s packag
 and too old.
 
 Both workflows now create their release as a **draft** — `release.yml` always did; `pre-release.yml`
-used to publish immediately. A `publish` job in `pre-release.yml`, gated on every build job
-succeeding, turns the draft into a pre-release with `gh release edit --draft=false`. A stable
+used to publish immediately. A `publish` job in `pre-release.yml`, gated on the desktop and
+Android builds succeeding (iOS is best-effort: its failure leaves the `.ipa` missing but does
+not block publishing the other platforms), turns the draft into a pre-release with
+`gh release edit --draft=false`. A stable
 release is still published by hand, as before (see [Cutting a New
 Release](#cutting-a-new-release)). Every upload step (`build-desktop.yml`'s `releaseDraft`,
 `build-android.yml`'s `draft`) sets `draft: true` to match, regardless of `prerelease` — only the
@@ -325,8 +327,9 @@ on `macos-15`, smoke-tests a full unsigned build, and uploads the scaffold plus 
 
 The iOS-specific `Info.plist` keys (camera permission for QR pairing, local-network
 permission and the `NSAllowsLocalNetworking` ATS exception for LAN sync and local LLM
-servers, export-compliance) are **not** committed into the scaffold: the build script
-merges them into the built app idempotently, so a fresh scaffold needs no hand-editing.
+servers, export-compliance) live in **`src-tauri/Info.ios.plist`**, which the Tauri CLI
+merges into every iOS build's `Info.plist` — `tauri ios dev`, Xcode builds and the CI
+script alike — so the keys are not tied to any one build path.
 
 ```bash
 # macOS only, from the repo root
@@ -342,10 +345,12 @@ The `.ipa` is written to the repo root as
 
 Mechanics worth knowing:
 
-- The script calls `tauri ios build --target aarch64 --archive-only`, which stops after
-  `xcodebuild archive` and skips the CLI's IPA-export phase (the part that requires
-  signing). With no signing configuration, the CLI itself passes `CODE_SIGNING_ALLOWED=NO`,
-  `CODE_SIGNING_REQUIRED=NO` and `CODE_SIGN_IDENTITY=""`.
+- The script temporarily patches `project.yml` with the four signing-disabled settings and
+  runs `tauri ios build --target aarch64 --archive-only`, which stops after `xcodebuild
+  archive` and skips the CLI's IPA-export phase (the part that requires signing). Do not
+  rely on the CLI's own `CODE_SIGNING_*` defaults or xcodebuild runner args for this:
+  neither reaches the signing validation inside `xcodebuild archive` — the patch is what
+  disables signing, and it is restored on exit.
 - The archive lands at `src-tauri/gen/apple/build/<target>_iOS.xcarchive`, and the app
   bundle at `Products/Applications/Aventuras.app` inside it.
 - **Local `tauri ios dev` does not work with the `devtools` feature**

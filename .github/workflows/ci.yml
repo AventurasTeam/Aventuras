@@ -29,9 +29,6 @@ on:
       - '.github/actions/**'
       - 'scripts/ci/**'
       - 'src-tauri/gen/android/**/*.gradle*'
-      - 'src-tauri/gen/apple/**'
-      - 'src-tauri/icons/ios/**'
-      - 'scripts/build-ios-unsigned.sh'
   workflow_dispatch:
 
 permissions:

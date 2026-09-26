@@ -35,25 +35,25 @@ jobs:
       - name: Ensure XcodeGen
         run: command -v xcodegen >/dev/null 2>&1 || brew install xcodegen
 
+      # --skip-targets-install: the toolchain is already installed above.
       - name: Generate iOS Xcode scaffold
-        # --skip-targets-install: the toolchain is already installed above. (tauri ios
-        # init has no --ci flag — that belongs to tauri init.)
         run: npx tauri ios init --skip-targets-install
 
-      - name: Smoke-test unsigned .ipa build
-        run: scripts/build-ios-unsigned.sh --config src-tauri/tauri.release.conf.json
-
-      # upload-artifact does not respect .gitignore, so the scaffold's build output
-      # is excluded explicitly here; the committed gen/apple/.gitignore still covers
-      # whatever the scaffold regenerates.
-      - name: Upload Xcode scaffold
+      # Uploaded BEFORE the smoke test, so the artifact a maintainer commits is the
+      # pristine scaffold: the build script below patches project.yml with signing-
+      # disabled settings (a committed copy would break signed builds / tauri ios dev
+      # until reverted by hand) and leaves compiled outputs (Externals/*.a) behind.
+      - name: Upload pristine Xcode scaffold
         uses: actions/upload-artifact@v7
         with:
           name: ios-xcode-scaffold
-          path: |
-            src-tauri/gen/apple
-            !src-tauri/gen/apple/build
+          path: src-tauri/gen/apple
           archive: false
+
+      - name: Smoke-test unsigned .ipa build
+        run: scripts/build-ios-unsigned.sh --config src-tauri/tauri.release.conf.json
+        env:
+          IPA_VERSION: 0.0.0-bootstrap
 
       - name: Upload smoke-test IPA
         uses: actions/upload-artifact@v7

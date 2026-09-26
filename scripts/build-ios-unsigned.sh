@@ -7,7 +7,9 @@
 #
 # Usage: scripts/build-ios-unsigned.sh [--config <file> ...]
 # Any arguments are forwarded verbatim to `tauri ios build`, so the --config list
-# from .github/actions/build-version flows through unchanged.
+# from .github/actions/build-version flows through unchanged. IPA_VERSION
+# overrides the version in the .ipa filename (CI passes the resolved version,
+# including the -sha suffix of a non-publishing build).
 #
 # Produces: Aventuras_v<version>_ios-arm64-unsigned.ipa (and echoes its path).
 set -euo pipefail
@@ -35,13 +37,18 @@ fi
 # Disable signing at the project level: neither the CLI's env defaults nor its
 # `--` runner args reach `xcodebuild archive`, which fails on the missing
 # development team otherwise. project.yml is what xcodegen re-renders the
-# .xcodeproj from on every build, so patching it (idempotent) is what actually
-# turns signing off.
+# .xcodeproj from on every build, so patching it is what actually turns signing
+# off. The patch is TEMPORARY: the original is backed up before patching and
+# restored on exit, so a run never leaves a signing-disabled edit in the
+# working tree for someone to commit by accident (gen/apple is tracked).
 PROJECT_YML="src-tauri/gen/apple/project.yml"
 if [[ ! -f "$PROJECT_YML" ]]; then
     echo "Error: $PROJECT_YML not found (run 'tauri ios init' first)." >&2
     exit 1
 fi
+PROJECT_YML_BACKUP="$(mktemp)"
+trap 'if [[ -f "$PROJECT_YML_BACKUP" ]]; then mv "$PROJECT_YML_BACKUP" "$PROJECT_YML"; echo "project.yml restored"; fi' EXIT
+cp "$PROJECT_YML" "$PROJECT_YML_BACKUP"
 python3 - "$PROJECT_YML" <<'PYEOF'
 import sys
 path = sys.argv[1]
@@ -67,10 +74,9 @@ lines[settings + 2:settings + 2] = [
 ]
 with open(path, 'w') as f:
     f.writelines(lines)
-print('Patched project.yml for unsigned build')
+print('Patched project.yml for unsigned build (restored on exit)')
 PYEOF
 (cd src-tauri/gen/apple && xcodegen generate)
-
 echo "🚀 Building unsigned iOS archive (aarch64)..."
 # --archive-only: stop after `xcodebuild archive`, skip the CLI's IPA-export phase
 # (which requires signing assets we deliberately do not have).
@@ -94,28 +100,30 @@ if [[ -z "$APP" ]]; then
 fi
 echo "📦 App bundle: $APP"
 
-# iOS-specific permission/ATS metadata, mirrored from gen/android's
-# AndroidManifest.xml. Merged here (not committed into gen/apple) so a fresh
-# `tauri ios init` never needs hand-editing before a build. Idempotent.
+# Permission/ATS metadata live in src-tauri/Info.ios.plist, which the Tauri CLI
+# merges into every build's Info.plist (including tauri ios dev and Xcode builds
+# that never run this script). Assert they made it through rather than assume.
 INFO_PLIST="$APP/Info.plist"
-inject_plist() {
-    local key="$1" type="$2" value="$3"
+for key in NSCameraUsageDescription NSLocalNetworkUsageDescription ITSAppUsesNonExemptEncryption; do
     if ! "$PLIST_BUDDY" -c "Print :$key" "$INFO_PLIST" >/dev/null 2>&1; then
-        "$PLIST_BUDDY" -c "Add :$key $type $value" "$INFO_PLIST"
+        echo "Error: $key missing from the built Info.plist (expected via src-tauri/Info.ios.plist)." >&2
+        exit 1
     fi
-}
-inject_plist NSCameraUsageDescription string "Scan QR codes to pair devices for local story sync."
-inject_plist NSLocalNetworkUsageDescription string "Aventuras uses the local network to sync stories directly between your devices."
-inject_plist ITSAppUsesNonExemptEncryption bool false
-"$PLIST_BUDDY" -c "Add :NSAppTransportSecurity dict" "$INFO_PLIST" 2>/dev/null || true
-"$PLIST_BUDDY" -c "Add :NSAppTransportSecurity:NSAllowsLocalNetworking bool true" "$INFO_PLIST" 2>/dev/null || true
+done
+if ! "$PLIST_BUDDY" -c 'Print :NSAppTransportSecurity:NSAllowsLocalNetworking' "$INFO_PLIST" >/dev/null 2>&1; then
+    echo "Error: NSAppTransportSecurity:NSAllowsLocalNetworking missing from the built Info.plist (expected via src-tauri/Info.ios.plist)." >&2
+    exit 1
+fi
 
-# The app's Info.plist carries the RESOLVED version (the CLI sets it from the
-# merged --config list), which on CI builds is the base version plus a -sha
-# suffix. Naming from the plist keeps the .ipa in step with what the workflow's
-# upload steps expect.
-VERSION="$("$PLIST_BUDDY" -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")"
-IPA_NAME="Aventuras_v${VERSION}_ios-arm64-unsigned.ipa"
+# The .ipa name takes the RESOLVED version (base + -sha suffix on CI builds) so
+# its name matches the other platforms' assets and can never collide with a
+# published release's. The built Info.plist itself carries only the base semver
+# — the CLI refuses the -sha suffix there — so the version comes from IPA_VERSION
+# (the workflow sets it from steps.version.outputs.version). It defaults to
+# tauri.conf.json's version, the same source the --config list is merged from,
+# so a plain local build names its .ipa correctly without extra setup.
+IPA_VERSION="${IPA_VERSION:-$(node -p "require('./src-tauri/tauri.conf.json').version")}"
+IPA_NAME="Aventuras_v${IPA_VERSION}_ios-arm64-unsigned.ipa"
 rm -rf Payload "$IPA_NAME"
 mkdir Payload
 cp -R "$APP" Payload/
@@ -137,10 +145,15 @@ if codesign -dv "$APP" >/dev/null 2>&1; then
     echo "Error: app bundle is signed; expected unsigned." >&2
     exit 1
 fi
-if ! unzip -l "$IPA_NAME" | grep -qE 'Payload/[^/]+\.app/(Aventuras|Info\.plist)'; then
-    echo "Error: $IPA_NAME is missing Payload/<app>/Aventuras or Info.plist." >&2
-    exit 1
-fi
+# Each required path is checked on its own: an alternation would pass on either
+# one alone.
+IPA_LISTING="$(unzip -l "$IPA_NAME")"
+for required in 'Payload/[^/]+\.app/Aventuras' 'Payload/[^/]+\.app/Info\.plist'; do
+    if ! grep -qE "$required" <<<"$IPA_LISTING"; then
+        echo "Error: $IPA_NAME is missing $required." >&2
+        exit 1
+    fi
+done
 
 echo "✅ Unsigned IPA: $IPA_NAME"
 echo "$IPA_NAME"

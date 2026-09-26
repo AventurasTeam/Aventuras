@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  iOS-only Info.plist keys, merged by the Tauri CLI into the generated app
+  (Info.plist + Info.ios.plist) on every build — including tauri ios dev and
+  Xcode builds, which never run scripts/build-ios-unsigned.sh. Keys mirror
+  gen/android/app/src/main/AndroidManifest.xml.
+-->
+<plist version="1.0">
+<dict>
+	<!-- html5-qrcode: QR pairing for local story sync. -->
+	<key>NSCameraUsageDescription</key>
+	<string>Scan QR codes to pair devices for local story sync.</string>
+	<!-- LAN story sync (the sync server binds 0.0.0.0) and local LLM servers. -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Aventuras uses the local network to sync stories directly between your devices.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<!-- The app uses only HTTPS/TLS standard crypto. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+</dict>
+</plist>
