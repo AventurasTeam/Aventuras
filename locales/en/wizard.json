@@ -301,6 +301,8 @@
     "leadUnsetRemovedToast": "Lead unset — the lead was removed from the cast.",
     "importRefsDropped_one": "1 reference couldn't be matched and was left blank.",
     "importRefsDropped_other": "{{count}} references couldn't be matched and were left blank.",
+    "importParentsLooped_one": "1 location parent would have made a loop and was left blank.",
+    "importParentsLooped_other": "{{count}} location parents would have made a loop and were left blank.",
     "unresolvedRef": {
       "factionMissing": "Suggested faction “{{name}}” is not in your cast.",
       "factionUnattached": "“{{name}}” is in your cast — attach it in the editor.",
