@@ -86,7 +86,7 @@ async function* failsCleanly(): AsyncGenerator<never, PhaseResult> {
   return { status: 'failed', error: { kind: 'phase-logic', detail: 'clean fail' } }
 }
 
-// Same error kind a throw produces, but returned — only `cause.thrown` (not
+// Same error kind a throw produces, but returned — only `cause.threw` (not
 // the error-kind filter) keeps onPhaseException from firing on this one.
 async function* failsCleanlyWithHookEligibleKind(): AsyncGenerator<never, PhaseResult> {
   return { status: 'failed', error: { kind: 'orchestrator', detail: 'clean fail' } }

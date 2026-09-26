@@ -292,6 +292,28 @@ async function commitRun(
   return { tx: { runId: run.runId, actionId: run.actionId, outcome: 'completed' }, successor }
 }
 
+async function runPhaseExceptionHook(
+  run: RunState,
+  ctx: RunCtx,
+  error: PipelineError,
+): Promise<void> {
+  if (error.kind !== 'action-layer' && error.kind !== 'orchestrator') return
+  const onPhaseException = getPipeline(run.kind).onPhaseException
+  if (!onPhaseException) return
+  try {
+    await onPhaseException(ctx, error)
+  } catch (hookError) {
+    logger.error(
+      'pipeline.phase_exception_hook_failed',
+      {
+        runId: run.runId,
+        error: hookError instanceof Error ? hookError.message : String(hookError),
+      },
+      { actionId: run.actionId },
+    )
+  }
+}
+
 type AbortCause =
   | { reason: 'user-cancel' }
   | { reason: 'preflight-failure'; error: PipelineError }
@@ -323,26 +345,8 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
   // Must run once the rollback has committed: arming a retry over writes still on disk would
   // race it into re-reading them; an uncommitted reversal leaves recovery to own the branch.
   // Must precede generationStore.abortRun below — that release drops the gate serializing this.
-  if (cause.reason === 'phase-failure' && cause.threw && !reversalFailed) {
-    const thrownError = cause.error
-    if (thrownError.kind === 'action-layer' || thrownError.kind === 'orchestrator') {
-      const onPhaseException = getPipeline(run.kind).onPhaseException
-      if (onPhaseException) {
-        try {
-          await onPhaseException(ctx, thrownError)
-        } catch (hookError) {
-          logger.error(
-            'pipeline.phase_exception_hook_failed',
-            {
-              runId: run.runId,
-              error: hookError instanceof Error ? hookError.message : String(hookError),
-            },
-            { actionId: run.actionId },
-          )
-        }
-      }
-    }
-  }
+  if (cause.reason === 'phase-failure' && cause.threw && !reversalFailed)
+    await runPhaseExceptionHook(run, ctx, cause.error)
   generationStore.abortRun(run.runId)
   // Uncommitted: the marker rolled back with the reversal, so boot recovery still owns the run.
   if (reversalFailed)
