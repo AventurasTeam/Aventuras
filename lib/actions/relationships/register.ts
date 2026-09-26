@@ -79,6 +79,33 @@ async function userWroteViewSince(
   return userDeletedPairSince(ctx, branchId, pair.aId, pair.bId, since)
 }
 
+function createOutcome(
+  ctx: DbCtx,
+  branchId: string,
+  pair: { aId: string; bId: string },
+  views: Pick<CharacterRelationship, 'kind' | 'inverseKind'>,
+): HandlerOutcome {
+  const now = Date.now()
+  const row: CharacterRelationship = {
+    id: generateId('rel'),
+    branchId,
+    aId: pair.aId,
+    bId: pair.bId,
+    ...views,
+    createdAt: now,
+    updatedAt: now,
+  }
+  return {
+    status: 'ok',
+    targetTable: 'character_relationships',
+    targetId: row.id,
+    op: 'create',
+    undoPayload: null,
+    ops: [ctx.db.insert(characterRelationships).values(row).toSQL()],
+    patch: { op: 'create', id: row.id, row },
+  }
+}
+
 // Grouped handlers read pre-group state: two single-POV writes to a new pair would both insert.
 function bothPovOutcome(
   ctx: DbCtx,
@@ -94,27 +121,7 @@ function bothPovOutcome(
   }
   if (columns.kind === null && columns.inverseKind === null)
     return { status: 'rejected', reason: 'a relationship needs at least one perspective' }
-  if (!current) {
-    const now = Date.now()
-    const row: CharacterRelationship = {
-      id: generateId('rel'),
-      branchId,
-      aId: pair.aId,
-      bId: pair.bId,
-      ...columns,
-      createdAt: now,
-      updatedAt: now,
-    }
-    return {
-      status: 'ok',
-      targetTable: 'character_relationships',
-      targetId: row.id,
-      op: 'create',
-      undoPayload: null,
-      ops: [ctx.db.insert(characterRelationships).values(row).toSQL()],
-      patch: { op: 'create', id: row.id, row },
-    }
-  }
+  if (!current) return createOutcome(ctx, branchId, pair, columns)
   const set: Partial<Pick<CharacterRelationship, 'kind' | 'inverseKind'>> = {}
   const undoPayload: Record<string, unknown> = {}
   if (columns.kind !== current.kind) {
@@ -193,26 +200,12 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx) => {
 
   if (!current) {
     if (kind === null) return { status: 'rejected', reason: 'no relationship to clear' }
-    const now = Date.now()
-    const row: CharacterRelationship = {
-      id: generateId('rel'),
-      branchId: bid,
-      aId,
-      bId,
-      kind: subjectIsA ? kind : null,
-      inverseKind: subjectIsA ? null : kind,
-      createdAt: now,
-      updatedAt: now,
-    }
-    return {
-      status: 'ok',
-      targetTable: 'character_relationships',
-      targetId: row.id,
-      op: 'create',
-      undoPayload: null,
-      ops: [ctx.db.insert(characterRelationships).values(row).toSQL()],
-      patch: { op: 'create', id: row.id, row },
-    }
+    return createOutcome(
+      ctx,
+      bid,
+      { aId, bId },
+      { kind: subjectIsA ? kind : null, inverseKind: subjectIsA ? null : kind },
+    )
   }
 
   // Nulling the last remaining POV would leave the row both-null (CHECK fails) → delete it.
