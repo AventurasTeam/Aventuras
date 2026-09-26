@@ -19,8 +19,10 @@ export async function importEntries(
   try {
     let entriesToImport = parseResult.entries
 
-    // Phase 1: Classification (optional)
-    if (useAIClassification && entriesToImport.length > 0) {
+    // Phase 1: Classification. Only an external format has anything to classify; an Aventura
+    // export already says what every entry is.
+    const classifiable = parseResult.metadata.format === 'sillytavern'
+    if (useAIClassification && classifiable && entriesToImport.length > 0) {
       onProgress?.({
         phase: 'classifying',
         current: 0,
@@ -50,7 +52,9 @@ export async function importEntries(
       message: 'Converting entries...',
     })
 
-    const entries = convertToEntries(entriesToImport, 'import')
+    const entries = convertToEntries(entriesToImport, 'import', {
+      keywordAliases: parseResult.metadata.format !== 'aventura',
+    })
 
     // Phase 3: Batch insert into database
     onProgress?.({

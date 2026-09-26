@@ -3,11 +3,12 @@
  */
 
 import type { Entry, EntryType } from '$lib/types'
+import { serializeExchange, storyEntriesToExchange, wrapExchange } from '$lib/services/exchange'
 import type { SillyTavernEntry, SillyTavernLorebook } from '../types'
 import { entryToSillyTavern } from './convert'
 
-export function exportToAventura(entries: Entry[]): string {
-  return JSON.stringify(entries, null, 2)
+export function exportToAventura(entries: Entry[], name: string): string {
+  return serializeExchange(wrapExchange('lorebook', storyEntriesToExchange(entries, { name })))
 }
 
 export function exportToSillyTavern(entries: Entry[], name?: string): string {

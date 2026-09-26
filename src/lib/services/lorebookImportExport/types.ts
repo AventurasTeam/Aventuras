@@ -14,6 +14,9 @@ export type ImportedEntry = {
   aliases: string[]
   injectionMode: EntryInjectionMode
   priority: number
+  /** Story-side, from an Aventura export: kept by a story import, dropped by the vault. */
+  hiddenInfo?: string | null
+  loreManagementBlacklisted?: boolean
   originalData?: SillyTavernEntry
 }
 
@@ -22,6 +25,14 @@ export type LorebookImportResult = {
   entries: ImportedEntry[]
   errors: string[]
   warnings: string[]
+  /** Lorebook-level fields; present only for an Aventura export. */
+  lorebook?: {
+    name: string
+    description: string | null
+    tags: string[]
+    favorite: boolean
+    metadata: Record<string, unknown>
+  }
   metadata: {
     format: 'aventura' | 'sillytavern' | 'unknown'
     totalEntries: number
@@ -58,6 +69,8 @@ export type ExportFormat = 'aventura' | 'sillytavern' | 'text'
 export type LorebookExportOptions = {
   format: ExportFormat
   entries: Entry[]
+  /** Lorebook-level name written into an Aventura export; defaults to the filename. */
+  name?: string
   filename?: string
 }
 

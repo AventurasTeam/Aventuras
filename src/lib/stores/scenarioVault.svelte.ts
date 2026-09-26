@@ -3,6 +3,7 @@ import { database } from '$lib/services/database'
 import { discoveryService, type DiscoveryCard } from '$lib/services/discovery'
 import { CharacterCardImport } from '$lib/services/characterCardImport'
 import { LorebookImportExport } from '$lib/services/lorebookImportExport'
+import { exchangeToScenario, parseExchange } from '$lib/services/exchange'
 import { lorebookVault } from './lorebookVault.svelte'
 import type { Genre } from '$lib/services/ai/wizard/ScenarioService'
 import { ui } from './ui.svelte'
@@ -281,8 +282,24 @@ class ScenarioVaultStore {
     file: File,
     options: { sourceUrl?: string; tags?: string[]; genre?: Genre },
   ): Promise<void> {
-    // Parse and convert. No pack: the Vault is global, so it renders from `default-pack`.
     const jsonString = await CharacterCardImport.readFile(file)
+
+    // An Aventuras export is ours to accept or reject; it never reaches the card cleaner.
+    const exchange = parseExchange(jsonString, 'scenario')
+    if (exchange.kind === 'invalid') throw new Error(exchange.error)
+    if (exchange.kind === 'exchange') {
+      const finalData = exchangeToScenario(exchange.document.data, {
+        id: tempId,
+        originalFilename: file.name,
+      })
+      await database.addVaultScenario(finalData)
+      this.scenarios = this.scenarios.map((s) => (s.id === tempId ? finalData : s))
+      for (const warning of exchange.warnings) ui.showToast(warning, 'warning', 8000)
+      log('Completed Aventura import for:', finalData.name)
+      return
+    }
+
+    // Clean with AI. No pack: the Vault is global, so it renders from `default-pack`.
     const result = await CharacterCardImport.clean(undefined, jsonString, options.genre)
 
     if (!result.success && result.errors.length > 0 && !result.settingSeed) {

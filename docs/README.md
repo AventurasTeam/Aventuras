@@ -20,6 +20,7 @@ comments stay short and say only what the next reader cannot infer — see
 | [persistence.md](architecture/persistence.md)             | SQLite, a new migration, `src-tauri/src/`, or the shape of the settings blob                                                            |
 | [dialogue-and-tts.md](architecture/dialogue-and-tts.md)   | `utils/dialogue.ts`, dialogue highlighting, or the TTS pipeline                                                                         |
 | [story-time.md](architecture/story-time.md)               | `services/storyTime/`, time anchors, timeline anomalies, reconciliation, or a new story's starting time                                 |
+| [exchange-format.md](architecture/exchange-format.md)     | `services/exchange/`, exporting or importing a vault character, scenario or lorebook, the Aventura JSON format                          |
 
 ## Development
 

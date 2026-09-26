@@ -36,10 +36,12 @@
     exporting = true
 
     try {
+      const title = story.currentStory?.title
       await LorebookImportExport.exportLorebook({
         format: selectedFormat,
         entries: entriesToExport(),
-        filename: story.currentStory?.title ? `${story.currentStory.title}-lorebook` : undefined,
+        filename: title ? `${title}-lorebook` : undefined,
+        name: title ? `${title} Lorebook` : undefined,
       })
       ui.showToast('Export successful', 'info')
       ui.closeLorebookExport()

@@ -6,10 +6,18 @@
 import { writeTextFile } from '@tauri-apps/plugin-fs'
 import { resolveSaveTarget } from '$lib/services/exportTarget'
 import type { VaultLorebook, VaultLorebookEntry, VaultCharacter, VaultScenario } from '$lib/types'
-import type { Entry, EntryType } from '$lib/types'
+import type { Entry } from '$lib/types'
+import {
+  characterToExchange,
+  scenarioToExchange,
+  serializeExchange,
+  vaultLorebookToExchange,
+  wrapExchange,
+} from '$lib/services/exchange'
 import type { ExportFormat } from '../types'
-import { exportToAventura, exportToSillyTavern, exportToText } from './formats'
+import { exportToSillyTavern, exportToText } from './formats'
 import { getFormatInfo } from './metadata'
+import { defaultEntryState } from '../import/convert'
 
 /**
  * Convert a VaultLorebookEntry to an Entry-like structure for export.
@@ -25,7 +33,7 @@ export function vaultEntryToEntryLike(vaultEntry: VaultLorebookEntry, index: num
     description: vaultEntry.description,
     hiddenInfo: null,
     aliases: vaultEntry.aliases ?? [],
-    state: createDefaultState(vaultEntry.type),
+    state: defaultEntryState(vaultEntry.type),
     adventureState: null,
     creativeState: null,
     injection: {
@@ -42,71 +50,13 @@ export function vaultEntryToEntryLike(vaultEntry: VaultLorebookEntry, index: num
 }
 
 /**
- * Create default state for a given entry type.
- */
-function createDefaultState(type: EntryType): Entry['state'] {
-  switch (type) {
-    case 'character':
-      return {
-        type: 'character',
-        isPresent: false,
-        lastSeenLocation: null,
-        currentDisposition: null,
-        relationship: { level: 0, status: 'unknown', history: [] },
-        knownFacts: [],
-        revealedSecrets: [],
-      }
-    case 'location':
-      return {
-        type: 'location',
-        isCurrentLocation: false,
-        visitCount: 0,
-        changes: [],
-        presentCharacters: [],
-        presentItems: [],
-      }
-    case 'item':
-      return {
-        type: 'item',
-        inInventory: false,
-        currentLocation: null,
-        condition: null,
-        uses: [],
-      }
-    case 'faction':
-      return {
-        type: 'faction',
-        playerStanding: 0,
-        status: 'unknown',
-        knownMembers: [],
-      }
-    case 'event':
-      return {
-        type: 'event',
-        occurred: false,
-        occurredAt: null,
-        witnesses: [],
-        consequences: [],
-      }
-    case 'concept':
-    default:
-      return {
-        type: 'concept',
-        revealed: false,
-        comprehensionLevel: 'unknown',
-        relatedEntries: [],
-      }
-  }
-}
-
-/**
  * Export a vault lorebook to a file.
  */
 export async function exportVaultLorebook(
   lorebook: VaultLorebook,
   format: ExportFormat,
 ): Promise<boolean> {
-  if (lorebook.entries.length === 0) {
+  if (lorebook.entries.length === 0 && format !== 'aventura') {
     throw new Error('No entries to export')
   }
 
@@ -118,7 +68,7 @@ export async function exportVaultLorebook(
 
   switch (format) {
     case 'aventura':
-      content = exportToAventura(entries)
+      content = serializeExchange(wrapExchange('lorebook', vaultLorebookToExchange(lorebook)))
       break
     case 'sillytavern':
       content = exportToSillyTavern(entries, baseFilename)
@@ -136,7 +86,7 @@ export async function exportVaultLorebook(
  */
 export async function exportVaultCharacter(character: VaultCharacter): Promise<boolean> {
   const baseFilename = character.name || `character-${new Date().toISOString().split('T')[0]}`
-  const content = JSON.stringify(character, null, 2)
+  const content = serializeExchange(wrapExchange('character', characterToExchange(character)))
   return await saveFile(content, `${baseFilename}.json`)
 }
 
@@ -145,7 +95,7 @@ export async function exportVaultCharacter(character: VaultCharacter): Promise<b
  */
 export async function exportVaultScenario(scenario: VaultScenario): Promise<boolean> {
   const baseFilename = scenario.name || `scenario-${new Date().toISOString().split('T')[0]}`
-  const content = JSON.stringify(scenario, null, 2)
+  const content = serializeExchange(wrapExchange('scenario', scenarioToExchange(scenario)))
   return await saveFile(content, `${baseFilename}.json`)
 }
 
