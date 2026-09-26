@@ -5,9 +5,11 @@ import { applyUndoPayload, computeUndoPayload } from '@/lib/actions/delta/delta-
 import {
   characterStateSchema,
   entityStateColumnSchema,
+  entityStateSchemaForKind,
   factionStateSchema,
   itemStateSchema,
   locationStateSchema,
+  type EntityKind,
 } from './entity-state-schema'
 
 describe('per-kind state schemas', () => {
@@ -82,5 +84,49 @@ describe('entityStateColumnSchema round-trips through the encoder', () => {
     const undo = computeUndoPayload(entityStateColumnSchema, prior, next)
     const restored = applyUndoPayload(entityStateColumnSchema, next, undo)
     expect(restored).toEqual(prior)
+  })
+})
+
+// The encoder reads only the column schema, so a key or flag it lacks makes a state edit's
+// undo partial come out empty, and updateEntity drops the edit as a no-op.
+describe('entityStateColumnSchema covers every kind', () => {
+  type Def = { type: string; innerType?: { def: Def }; shape?: Record<string, { def: Def }> }
+  type Node = { def: Def }
+
+  function unwrap(node: Node) {
+    let { def } = node
+    let optional = false
+    let nullable = false
+    while (def.type === 'optional' || def.type === 'nullable') {
+      if (def.type === 'optional') optional = true
+      else nullable = true
+      def = def.innerType!.def
+    }
+    return { type: def.type, optional, nullable, shape: def.shape }
+  }
+
+  function expectCovered(perKind: Node, column: Node, path: string) {
+    const want = unwrap(perKind)
+    const got = unwrap(column)
+    expect({ path, type: got.type, optional: got.optional, nullable: got.nullable }).toEqual({
+      path,
+      type: want.type,
+      optional: want.optional,
+      nullable: want.nullable,
+    })
+    for (const [key, child] of Object.entries(want.shape ?? {})) {
+      expect(Object.keys(got.shape ?? {}), `${path}.${key}`).toContain(key)
+      expectCovered(child, got.shape![key], `${path}.${key}`)
+    }
+  }
+
+  const KINDS: EntityKind[] = ['character', 'location', 'item', 'faction']
+
+  it.each(KINDS)('carries every %s state key with its optional and nullable flags', (kind) => {
+    expectCovered(
+      entityStateSchemaForKind(kind) as unknown as Node,
+      entityStateColumnSchema as unknown as Node,
+      kind,
+    )
   })
 })

@@ -39,23 +39,17 @@ declare module '@/lib/actions/action-map' {
 
 type Pair = { aId: string; bId: string; subjectIsA: boolean }
 
-// The first later delta to carry the view recorded its value at create; the live row may
-// hold one the classifier filled in since.
+// The row's first delta to carry the view recorded its value at create; the live row may
+// hold one the classifier filled in since. Read from the log's start, not the create's
+// position: a redo re-inserts the create above the deltas its snapshot absorbed.
 async function viewAtCreate(
   ctx: DbCtx,
   branchId: string,
   current: CharacterRelationship,
   povCol: 'kind' | 'inverseKind',
-  createdAt: number,
 ): Promise<unknown> {
-  const later = await rowDeltasSince(
-    ctx,
-    branchId,
-    'character_relationships',
-    current.id,
-    createdAt,
-  )
-  const first = later.find((d) => carriesColumn(d, povCol))
+  const history = await rowDeltasSince(ctx, branchId, 'character_relationships', current.id, 0)
+  const first = history.find((d) => carriesColumn(d, povCol))
   return first == null ? current[povCol] : first.undoPayload?.[povCol]
 }
 
@@ -72,9 +66,8 @@ async function userWroteViewSince(
   if (!current) return false
   const edits = await userEditsSince(ctx, branchId, 'character_relationships', current.id, since)
   if (edits.some((d) => d.op === 'update' && carriesColumn(d, povCol))) return true
-  const create = edits.find((d) => d.op === 'create')
-  if (create == null) return false
-  return (await viewAtCreate(ctx, branchId, current, povCol, create.logPosition)) !== null
+  if (!edits.some((d) => d.op === 'create')) return false
+  return (await viewAtCreate(ctx, branchId, current, povCol)) !== null
 }
 
 // Grouped handlers read pre-group state: two single-POV writes to a new pair would both insert.

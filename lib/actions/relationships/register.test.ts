@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import { branches, characterRelationships, deltas, stories } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { characterRelationshipsStore } from '@/lib/stores'
+import { characterRelationshipsStore, entriesStore, undoRedoStore } from '@/lib/stores'
 
 import { registerCharacterRelationships } from './register'
 import { applyDeltaAction } from '../delta/apply-delta-action'
@@ -11,6 +11,7 @@ import { __resetRegistry } from '../delta/registry'
 import { reverseReplayDeltas } from '../delta/reverse-replay'
 import { USER_EDITED_SINCE_PROSE } from '../delta/user-precedence'
 import { registerStoryEntries } from '../story-entries/register'
+import { redoLastAction, undoLastAction } from '../story-entries/undo'
 
 async function setup() {
   __resetRegistry()
@@ -476,6 +477,24 @@ describe('single-perspective upsert against a user edit newer than the prose', (
     expect((await applyDeltaAction(classify('friend', 'act_k0', 'e_p0'), ctx)).status).toBe('ok')
     expect((await applyDeltaAction(classify('ally', 'act_k1', 'e_p'), ctx)).status).toBe('ok')
     expect((await pairRow(db, 'char_kael', 'char_mira'))[0].kind).toBe('ally')
+  })
+
+  // Redo re-inserts the create at the log head, above the fill its snapshot absorbed.
+  it('reads a blank view at create through an undo and redo of the create', async () => {
+    const { db, ctx } = await setup()
+    entriesStore.hydrate('br_1', [])
+    undoRedoStore.clear()
+    await writeProse(ctx, 'e_p0', 1)
+    await applyDeltaAction(views(null, 'wary', 'act_u'), ctx)
+    expect((await applyDeltaAction(classify('friend', 'act_k0', 'e_p0'), ctx)).status).toBe('ok')
+    expect(await undoLastAction('br_1', ctx)).toEqual({ status: 'ok' })
+    expect(await pairRow(db, 'char_kael', 'char_mira')).toHaveLength(0)
+    expect(await redoLastAction('br_1', ctx)).toEqual({ status: 'ok' })
+    expect((await pairRow(db, 'char_kael', 'char_mira'))[0].kind).toBe('friend')
+
+    expect((await applyDeltaAction(classify('ally', 'act_k1', 'e_p0'), ctx)).status).toBe('ok')
+    expect((await pairRow(db, 'char_kael', 'char_mira'))[0].kind).toBe('ally')
+    entriesStore.__reset()
   })
 
   it("does not count the classifier's own delete of the pair as the user's", async () => {
