@@ -69,7 +69,10 @@ npx tauri dev
 | `npm run release` | version bump, tag and push      |
 
 Desktop builds are `npx tauri build`; Android and iOS are documented in
-[docs/development/release.md](docs/development/release.md).
+[docs/development/release.md](docs/development/release.md). iOS produces an **unsigned**
+device `.ipa` (no Apple certificates or signing secrets — see
+[docs/development/ios-build-target.md](docs/development/ios-build-target.md) for the full
+account of how the target was added and how the unsigned CI pipeline works).
 
 ## Tech stack
 
