@@ -188,7 +188,10 @@ writes only the columns it changes but computes them from a read of
 the row, so every delta-logged write to an existing `entities` row,
 and every reversal of one, serializes on a lock keyed by that row: one
 writer's read and commit never straddle another's, whether that is
-the piggyback, the classifier or a user edit.
+the piggyback, the classifier or a user edit. A World Save builds its
+values from the row as the pane rendered it, not from that read, so it
+can still overwrite a classifier write that landed after the render
+(see [User edits and classifier writes](#user-edits-and-classifier-writes)).
 `character_relationships` writes serialize on one key per branch,
 since a delete names a row id, not a pair. A shared JSON column such
 as `branches.classifier_status`, which the reversal clamp and the
@@ -307,3 +310,13 @@ What stays open:
   happening on abort or recovery or a happening on a prose edit,
   deletes the user's edits to it too, and leaves their deltas pointing
   at nothing.
+- A World Save writes the values the pane rendered, so it overwrites a
+  classifier write made since to a field the Save writes. A keyword
+  list the user touched loses an alias the classifier appended while
+  the pane was open, and because the Save's undo payload holds the
+  appended list, that alias then counts as one the user removed, so
+  older prose cannot re-add it. An edited relationship pair sends its
+  untouched view as rendered, which reverts a classifier write to that
+  view landing between the render and the Save. `entities.state` is
+  written whole, which holds only while no writer outside the hard
+  gate touches it.

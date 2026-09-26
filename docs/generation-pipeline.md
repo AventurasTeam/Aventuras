@@ -933,13 +933,14 @@ in-progress (currentPhase iterates)
    │
    ├── phase returns failed ────────────────────► abortRun (reason: phase-failure)
    ├── phase throws (action-layer rejection,
-   │   orchestrator error) ─────────────────────► abortRun (reason: phase-failure, thrown: true)
+   │   orchestrator error) ─────────────────────► abortRun (reason: phase-failure, threw: true)
    └── user-initiated cancel ───────────────────► abortRun (reason: user-cancel)
                                                       │  abortController.abort()
-                                                      │  drain in-flight phases (return aborted)
+                                                      │  no drain: a parallel sibling still running
+                                                      │    is not awaited
                                                       │  reverse-replay deltas and UPDATE pipeline_runs
                                                       │    SET finished_at, outcome (one SQLite txn)
-                                                      │  if thrown && rollback committed:
+                                                      │  if threw && rollback committed:
                                                       │    pipeline.onPhaseException(ctx, error) —
                                                       │    skipped when the rollback itself could not commit
                                                       │  remove run from txState
