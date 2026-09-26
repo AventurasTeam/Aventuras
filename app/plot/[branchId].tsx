@@ -21,7 +21,6 @@ import {
   type PlotSelection,
 } from '@/components/plot/plot-selection'
 import { ThreadDetailPane } from '@/components/plot/thread-detail-pane'
-import { usePlotDeepLink } from '@/components/plot/use-plot-deep-link'
 import { usePlotSelection } from '@/components/plot/use-plot-selection'
 import { MasterDetailLayout } from '@/components/shells/master-detail-layout'
 import { ScreenShell } from '@/components/shells/screen-shell'
@@ -30,12 +29,13 @@ import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { KeyboardInsetColumn } from '@/components/ui/keyboard-inset-column'
 import { Text } from '@/components/ui/text'
-import { single as singleParam } from '@/components/world/world-selection'
+import { single as singleParam, worldHref } from '@/components/world/world-selection'
 import { useColdOpenStory } from '@/hooks/use-cold-open-story'
 import { useEntryIndex } from '@/hooks/use-entry-index'
 import { useIsRouteFocused } from '@/hooks/use-is-route-focused'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
 import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
+import { useRouteLink } from '@/hooks/use-route-link'
 import type { RowSessionHandle } from '@/hooks/use-row-save-session'
 import { useRowSignals } from '@/hooks/use-row-signals'
 import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
@@ -71,10 +71,16 @@ export default function PlotRoute() {
     tab?: string | string[]
   }>()
   const branchId = singleParam(params.branchId) ?? ''
-  // Params seed the initial state only; `tab` opens the linked row's detail on that tab.
-  const [initialSelection] = useState(() =>
-    parsePlotSelection({ kind: params.kind, id: params.id, tab: params.tab }),
+  const linkKind = singleParam(params.kind)
+  const linkId = singleParam(params.id)
+  const linkTab = singleParam(params.tab)
+  const link = useMemo(
+    () => parsePlotSelection({ kind: linkKind, id: linkId, tab: linkTab }),
+    [linkKind, linkId, linkTab],
   )
+  // The link seeds the initial state, and `tab` opens its row's detail on that tab; one set on
+  // this mounted screen later is followed below.
+  const [initialSelection] = useState(link)
   const [kind, setKind] = useState<PlotKind>(initialSelection?.kind ?? 'thread')
   const [threadFilter, setThreadFilter] = useState<ThreadFilter>('all')
   const [happeningFilter, setHappeningFilter] = useState<HappeningFilter>('all')
@@ -196,7 +202,25 @@ export default function PlotRoute() {
   const revealLink = useCallback((link: PlotSelection) => {
     listRef.current?.revealRow(link.kind, link.id)
   }, [])
-  const pendingLink = usePlotDeepLink(initialSelection, panesReady, revealLink)
+  // A link set on this mounted screen (useSurfaceNavigate reuses it) selects its row, and
+  // remounts the pane so it opens on the link's tab.
+  const [linkMount, setLinkMount] = useState(0)
+  const followLink = useCallback(
+    (target: PlotSelection, atMount: boolean) => {
+      if (atMount) {
+        revealLink(target)
+        return
+      }
+      guard(() => {
+        if (target.kind !== kind) switchKind(target.kind)
+        select(target.id)
+        setLinkMount((n) => n + 1)
+        revealLink(target)
+      })
+    },
+    [kind, guard, switchKind, select, revealLink],
+  )
+  const pendingLink = useRouteLink(link, panesReady, followLink)
 
   // The popover measures its trigger on open, and phone hides the list (and its `[+]`) while
   // a row is selected. Opening the menu alone drops nothing, so only a kind switch, or phone's
@@ -250,7 +274,8 @@ export default function PlotRoute() {
   // The save bar's notice is an icon with no visible text, so a refused save also toasts.
   const onRejected = toast.error
   const openEntity = useCallback(
-    (entity: Entity) => navigateGuarded(`/world/${branchId}?kind=${entity.kind}&id=${entity.id}`),
+    (entity: Entity) =>
+      navigateGuarded(worldHref(branchId, { category: entity.kind, id: entity.id })),
     [navigateGuarded, branchId],
   )
 
@@ -282,6 +307,7 @@ export default function PlotRoute() {
     ) : selection.type === 'happening' ||
       (selection.type === 'create' && selection.kind === 'happening') ? (
       <HappeningDetailPane
+        key={linkMount}
         row={selection.type === 'happening' ? selection.row : null}
         createSeq={selection.type === 'create' ? selection.seq : undefined}
         links={links}
@@ -319,6 +345,7 @@ export default function PlotRoute() {
       />
     ) : (
       <ThreadDetailPane
+        key={linkMount}
         row={selection.type === 'thread' ? selection.row : null}
         createSeq={selection.type === 'create' ? selection.seq : undefined}
         entryIndex={entryIndex.index}

@@ -401,4 +401,29 @@ test.describe.serial('Plot panel', () => {
     await expect(saveSession.unsavedDialog(page)).toHaveCount(0)
     await expect(plot.row(page, 'Vorne’s pact')).toBeVisible()
   })
+
+  // useSurfaceNavigate pops back to a Plot screen already in the stack instead of pushing one:
+  // the link's row and tab must land on that reused instance.
+  test('a World link back to the open Plot screen shows its row on its tab', async () => {
+    const page = app.window
+    // The prior test left Plot on the happening segment.
+    await plot.row(page, 'Vorne’s pact').click()
+    await plot.tab(page, 'involvements').click()
+    // Route-local state, which only this Plot instance holds: a pushed one would start empty.
+    await plot.search(page, 'happening').fill('the')
+    await plot.openInWorldInvolvement(page, 'Kael').click()
+    await page.waitForURL(/\/world\//)
+    await expect(world.subHeader(page)).toContainText('Kael')
+
+    await world.tab(page, 'involvements').click()
+    await world.row(page, 'The alley ambush').click()
+    await page.waitForURL(/\/plot\//)
+    await expect(plot.subHeader(page)).toContainText('The alley ambush')
+    await expect(plot.tab(page, 'involvements')).toHaveAttribute('aria-selected', 'true')
+    // Its Earlier bucket starts collapsed: visible proves the followed link revealed it.
+    await expect(plot.row(page, 'The alley ambush')).toBeVisible()
+    // Popped to, not pushed: the same instance, search text and all.
+    await expect(plot.search(page, 'happening')).toHaveValue('the')
+    await plot.search(page, 'happening').fill('')
+  })
 })

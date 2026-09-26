@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { happeningLinkTab, parsePlotSelection, threadLinkTab } from './plot-selection'
+import { happeningLinkTab, parsePlotSelection, threadLinkTab, plotHref } from './plot-selection'
 
 describe('parsePlotSelection', () => {
   it('needs a Plot kind and an id; carries tab when present', () => {
@@ -44,5 +44,22 @@ describe('link tabs', () => {
   it('has nothing to hand without a link or a tab', () => {
     expect(happeningLinkTab(null, 'h_1')).toBeUndefined()
     expect(happeningLinkTab({ kind: 'happening', id: 'h_1' }, 'h_1')).toBeUndefined()
+  })
+})
+
+describe('plotHref', () => {
+  const query = (href: string) => Object.fromEntries(new URLSearchParams(href.split('?')[1]))
+
+  it('builds the route with the link as its query, round-tripping through the parser', () => {
+    const link = { kind: 'happening', id: 'hap_1', tab: 'involvements' } as const
+    const href = plotHref('br_1', link)
+    expect(href.split('?')[0]).toBe('/plot/br_1')
+    expect(parsePlotSelection(query(href))).toEqual(link)
+  })
+
+  it('leaves out a tab the link has none of', () => {
+    expect(plotHref('br_1', { kind: 'thread', id: 'thr_1' })).toBe(
+      '/plot/br_1?kind=thread&id=thr_1',
+    )
   })
 })

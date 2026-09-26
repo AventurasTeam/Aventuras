@@ -349,9 +349,15 @@ the asset gallery pass` / `lands in Slice 4.2b`).
   sized as the gallery pass will fill it; the tap is inert because no
   portrait assets exist yet, so `world.md`'s "tap the portrait to view
   it full-size" waits for the asset gallery pass.
-- **Deep-link tab is one-shot** (`useWorldDeepLink`, mirroring Plot's
-  `usePlotDeepLink`): only the mount that reads the link opens on its
-  tab. A deep-linked row is still not revealed in the list, which
+- **Route links are followed** (pulled in from 4.5b's Open questions,
+  developer decision 2026-09-27). `useSurfaceNavigate` sets a link's
+  query on a matched screen before popping to it (`setParams` targeted
+  by route key; link keys the new link omits are cleared), and World
+  and Plot follow a link set on their mounted screen (`useRouteLink`):
+  it selects through the guard and remounts the pane so it opens on the
+  link's tab. Only the mount a link arrives for opens on its tab.
+  Producers build URLs with `worldHref` and `plotHref`. A deep-linked
+  World row is still not revealed in the list, which
   [4.5b's Open questions](./05b-peek-drawer.md#open-questions) record.
 - **Deferred to [`triage.md`](../../../triage.md):** classifier
   parent-cycle surfacing, stackable-writer hygiene, retired and staged

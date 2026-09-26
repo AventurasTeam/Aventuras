@@ -500,7 +500,7 @@ test.describe.serial('World panel', () => {
 
   // Hand-written URL (docs/testing.md → Harness structure): no in-app link carries `tab=`.
   // Pins route wiring: stores hydrate before `open`, so the pane mounts with the link pending.
-  // The one-shot is use-world-deep-link.test.tsx's; the remount only checks the route reads it.
+  // The one-shot is use-route-link.test.tsx's; the remount only checks the route reads it.
   test('a cold-mount deep link opens its tab, on that mount only', async () => {
     const page = app.window
     await expect(world.subHeader(page)).toBeVisible()

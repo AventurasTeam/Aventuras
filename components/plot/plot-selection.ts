@@ -38,6 +38,13 @@ export function parsePlotSelection(params: {
   return tab == null ? { kind, id } : { kind, id, tab }
 }
 
+/** The Plot route selecting `link`; producers build it here rather than by hand. */
+export function plotHref(branchId: string, link: PlotSelection): string {
+  const query = new URLSearchParams({ kind: link.kind, id: link.id })
+  if (link.tab != null) query.set('tab', link.tab)
+  return `/plot/${branchId}?${query.toString()}`
+}
+
 /** A deep link's tab, for its own row only. */
 export function threadLinkTab(link: PlotSelection | null, id: string): ThreadTab | undefined {
   return link?.kind === 'thread' && link.id === id ? link.tab : undefined

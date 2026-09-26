@@ -142,31 +142,6 @@ Sheet.
   unchanged for those kinds and defines no body; the summaries above
   are the default assumption — confirm and, if kept, add a line to
   `reader-composer.md`.
-- **Deep-link stack matching ignores params.** `hooks/use-surface-navigate.ts`
-  matches stack entries on the path only, so `/world/<branch>?kind=…&id=…`
-  pops back to an existing World screen and drops the selection — and
-  does nothing at all when that World screen is already on top,
-  dropping the selection the same way. Decide: match on path plus
-  params, or `setParams` when the params differ. Either way the World
-  route must also react to changed params — today it reads `kind`,
-  `id` and `tab` once, at mount. Story Settings is the exception: its
-  route re-syncs the tab whenever `tab` changes
-  (`app/story-settings/[storyId].tsx`), so there only the hook loses
-  the query — World's and Plot's status-pill taps to `?tab=memory` pop
-  back to an open Story Settings on whatever tab it shows. The
-  `setParams` route is available: `CommonActions.setParams` with
-  `source` set to the matched route's key merges params, `dismiss` is
-  queued behind a synchronous dispatch, and on web a `setParams` on an
-  unfocused route should replace the history entry rather than push
-  one (read from expo-router's `useLinking`, not run). Plot has the same limit
-  at both ends: its route also reads `kind`, `id` and `tab` once, at
-  mount, so this slice's `Open in Plot panel →` hits it; and the
-  `Open <name> in World` links on a happening's Involvements and
-  Awareness tabs (`app/plot/[branchId].tsx`) already hand-write the
-  World URL — reachable as Reader → World → Plot → tap an involved
-  entity. Pair the fix with a `worldHref()` builder beside
-  `parseWorldSelection` and a `plotHref()` beside
-  `parsePlotSelection`, so producers stop hand-writing the URL.
 - **Deep-linked selection isn't revealed.** A row selected via the
   deep link is selected but not revealed in the list (its tier stays
   collapsed, the list sits at the top) — call the list's `revealRow`

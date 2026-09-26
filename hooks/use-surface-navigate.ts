@@ -1,8 +1,10 @@
-import { NavigationContext } from '@react-navigation/native'
+import { CommonActions, NavigationContext } from '@react-navigation/native'
 import { useRouter, type Href } from 'expo-router'
 import { useCallback, useContext } from 'react'
 
-type StackRoute = { name: string; params?: object }
+type StackRoute = { key?: string; name: string; params?: object }
+
+const dynamicSegment = (segment: string) => /^\[(.+)\]$/.exec(segment)?.[1]
 
 /** A file-route name + its params, resolved to the pathname this helper matches against. */
 export function routePathname(route: StackRoute): string {
@@ -11,10 +13,26 @@ export function routePathname(route: StackRoute): string {
   if (segments[segments.length - 1] === 'index') segments.pop()
   if (segments.length === 0) return '/'
   const resolved = segments.map((segment) => {
-    const match = /^\[(.+)\]$/.exec(segment)
-    return match == null ? segment : String(params[match[1]])
+    const name = dynamicSegment(segment)
+    return name == null ? segment : String(params[name])
   })
   return `/${resolved.join('/')}`
+}
+
+/**
+ * `path`'s query as params for `route`, or null for a path without one. A query key the route
+ * holds but the link omits is cleared; the route's path segments and the router's own
+ * (`__`-prefixed, nested `params`) keys are left alone.
+ */
+export function linkParams(route: StackRoute, path: string): Record<string, unknown> | null {
+  const query = path.split('?')[1]
+  if (!query) return null
+  const next: Record<string, unknown> = Object.fromEntries(new URLSearchParams(query))
+  const pathKeys = new Set(route.name.split('/').map(dynamicSegment))
+  const cleared = Object.keys(route.params ?? {}).filter(
+    (key) => !pathKeys.has(key) && !key.startsWith('__') && key !== 'params' && !(key in next),
+  )
+  return { ...Object.fromEntries(cleared.map((key) => [key, undefined])), ...next }
 }
 
 /** The last stack index whose route resolves to `path` (query stripped), or -1. */
@@ -37,11 +55,16 @@ export function useSurfaceNavigate(): (path: string) => void {
   return useCallback(
     (path: string) => {
       const state = navigation?.getState()
-      if (state == null) {
+      if (navigation == null || state == null) {
         router.push(path as Href)
         return
       }
       const match = stackIndexOfPath(state.routes, path)
+      // A matched screen is reused, and dismiss carries no params: the link's go on first.
+      const route = state.routes[match] as StackRoute | undefined
+      const params = route == null ? null : linkParams(route, path)
+      if (route?.key != null && params != null)
+        navigation.dispatch({ ...CommonActions.setParams(params), source: route.key })
       if (match === state.index) return
       // dismissTo replaces the top screen; pop to an exact match instead, so Return lands right.
       if (match !== -1 && match < state.index) {
