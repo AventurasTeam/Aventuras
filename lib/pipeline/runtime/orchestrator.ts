@@ -292,18 +292,17 @@ async function commitRun(
   return { tx: { runId: run.runId, actionId: run.actionId, outcome: 'completed' }, successor }
 }
 
-type AbortCause = {
-  reason: 'user-cancel' | 'phase-failure' | 'preflight-failure'
-  error?: PipelineError
-  // Set only when a phase THREW rather than returning `{ status: 'failed' }` — onPhaseException
-  // fires only for this case (see the type's JSDoc in ../types.ts).
-  thrown?: boolean
-}
+type AbortCause =
+  | { reason: 'user-cancel' }
+  | { reason: 'preflight-failure'; error: PipelineError }
+  // `threw`: the phase threw rather than returning `{ status: 'failed' }`, the only case
+  // onPhaseException fires for (see the type's JSDoc in ../types.ts).
+  | { reason: 'phase-failure'; error: PipelineError; threw: boolean }
 
 async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<TxResult> {
   run.abortController.abort()
   let outcome: 'aborted' | 'failed' = cause.reason === 'user-cancel' ? 'aborted' : 'failed'
-  let error = cause.error
+  let error = cause.reason === 'user-cancel' ? undefined : cause.error
   const markerOp = (settled: 'aborted' | 'failed') =>
     ctx.db
       .update(pipelineRuns)
@@ -324,7 +323,7 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
   // Must run once the rollback has committed: arming a retry over writes still on disk would
   // race it into re-reading them; an uncommitted reversal leaves recovery to own the branch.
   // Must precede generationStore.abortRun below — that release drops the gate serializing this.
-  if (cause.reason === 'phase-failure' && cause.thrown && !reversalFailed && cause.error) {
+  if (cause.reason === 'phase-failure' && cause.threw && !reversalFailed) {
     const thrownError = cause.error
     if (thrownError.kind === 'action-layer' || thrownError.kind === 'orchestrator') {
       const onPhaseException = getPipeline(run.kind).onPhaseException
@@ -393,7 +392,10 @@ async function runPhases(run: RunState, ctx: RunCtx): Promise<PhaseOutcome> {
           },
           { actionId: run.actionId },
         )
-        return { kind: 'aborted', cause: { reason: 'phase-failure', error: result.error } }
+        return {
+          kind: 'aborted',
+          cause: { reason: 'phase-failure', error: result.error, threw: false },
+        }
       }
       if (result.status === 'aborted') return { kind: 'aborted', cause: { reason: 'user-cancel' } }
     }
@@ -407,7 +409,7 @@ async function runPhases(run: RunState, ctx: RunCtx): Promise<PhaseOutcome> {
       { runId: run.runId, errorKind: error.kind, errorDetail: error.detail },
       { actionId: run.actionId },
     )
-    return { kind: 'aborted', cause: { reason: 'phase-failure', error, thrown: true } }
+    return { kind: 'aborted', cause: { reason: 'phase-failure', error, threw: true } }
   }
   return { kind: 'completed' }
 }
