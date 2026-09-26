@@ -32,6 +32,15 @@ async function entityId(page: Page, branchId: string, name: string): Promise<str
   return id as string
 }
 
+async function leadEntityId(page: Page): Promise<unknown> {
+  const [[id]] = await queryApp(
+    page,
+    `SELECT json_extract(definition, '$.leadEntityId') FROM stories WHERE id = ?`,
+    [HERO_STORY],
+  )
+  return id
+}
+
 type EntitySnapshot = {
   description: unknown
   tags: string[]
@@ -480,18 +489,7 @@ test.describe.serial('World panel', () => {
     await world.moreActions(page).click()
     await world.menuItem(page, 'setLead').click()
     const mira = await entityId(page, branchId, 'Mira')
-    await expect
-      .poll(
-        async () =>
-          (
-            await queryApp(
-              page,
-              `SELECT json_extract(definition, '$.leadEntityId') FROM stories WHERE id = ?`,
-              [HERO_STORY],
-            )
-          )[0][0],
-      )
-      .toBe(mira)
+    await expect.poll(() => leadEntityId(page)).toBe(mira)
     await expect(world.leadTag(page, 'Mira')).toBeVisible()
     // The row first, or the zero count could pass with Kael's row never mounted.
     await expect(world.row(page, 'Kael')).toBeVisible()
