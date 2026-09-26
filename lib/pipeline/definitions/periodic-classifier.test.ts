@@ -41,7 +41,7 @@ import {
 import { __resetRegistry, getPipeline } from '../authoring/registry'
 import { configureDeltaActionPort } from '../runtime/action-port'
 import { runPipeline, type RunCtx } from '../runtime/orchestrator'
-import type { PhaseContext } from '../types'
+import type { PhaseContext, TxResult } from '../types'
 
 vi.mock('@/lib/ai', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -815,24 +815,13 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
     })
   })
 
-  async function seedApplyTimeHarness(): Promise<{
-    db: Awaited<ReturnType<typeof createTestDb>>['db']
-    runInTransaction: Awaited<ReturnType<typeof createTestDb>>['runInTransaction']
-  }> {
+  type TestDb = Awaited<ReturnType<typeof createTestDb>>
+  type Seeded = Pick<TestDb, 'db' | 'runInTransaction'>
+
+  async function seedStory(): Promise<Seeded> {
     const { db, runInTransaction } = await createTestDb()
     await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
     await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
-    await db.insert(storyEntries).values({
-      id: 'e1',
-      branchId: 'b1',
-      position: 1,
-      kind: 'ai_reply',
-      content: 'turn 1',
-      chapterId: null,
-      metadata: {},
-      createdAt: 1,
-    } as never)
-
     resetAllStores()
     currentStoryStore.set({
       storyId: 's1',
@@ -846,52 +835,78 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
     return { db, runInTransaction }
   }
 
-  it('routes a write the action layer rejects to the retry status instead of leaving running stuck', async () => {
-    const { db, runInTransaction } = await seedApplyTimeHarness()
+  async function seedApplyTimeHarness(): Promise<Seeded> {
+    const seeded = await seedStory()
+    await seeded.db.insert(storyEntries).values({
+      id: 'e1',
+      branchId: 'b1',
+      position: 1,
+      kind: 'ai_reply',
+      content: 'turn 1',
+      chapterId: null,
+      metadata: {},
+      createdAt: 1,
+    } as never)
+    return seeded
+  }
 
-    // Fake handler stands in for any action-layer rejection (branch mismatch, invalid write,
-    // etc.); the guard must recover from all of them the same way.
+  function rejectCreateHappening(onReject?: () => void): void {
     configureDeltaActionPort({
-      applyDeltaAction: (args, applyCtx) =>
-        args.action.kind === 'createHappening'
-          ? Promise.resolve({ status: 'rejected', reason: 'forced test rejection' })
-          : realApplyDeltaAction(args, applyCtx),
+      applyDeltaAction: (args, applyCtx) => {
+        if (args.action.kind !== 'createHappening') return realApplyDeltaAction(args, applyCtx)
+        onReject?.()
+        return Promise.resolve({ status: 'rejected', reason: 'forced test rejection' })
+      },
       reverseReplayDeltas,
       describeReplayError: describeDeltaReplayError,
     })
+  }
 
+  function registerWithReply(over: Partial<Record<string, unknown>> = {}): void {
     ensurePeriodicClassifierPipelineRegistered()
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
       value: extraction({
         happenings: [{ title: 'A', sourceTurn: 't1', involvements: [], awareness: [] }],
+        ...over,
       }),
     })
+  }
 
-    const ctx: RunCtx = { storyId: 's1', branchId: 'b1', db, runInTransaction }
+  async function runOutcome(ctx: RunCtx): Promise<TxResult['outcome']> {
     const result = await runPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
     if (result.outcome === 'rejected') throw new Error('unexpected rejected start')
-    expect(result.outcome).toBe('failed')
+    return result.outcome
+  }
 
+  async function storedStatus(db: TestDb['db']): Promise<ClassifierStatus | null> {
     const [row] = await db
       .select({ status: branches.classifierStatus })
       .from(branches)
       .where(eq(branches.id, 'b1'))
-    expect(row.status).toMatchObject({ state: 'retrying', retryCount: 1 })
-    expect(row.status?.lastError).toBe('classifier: forced test rejection')
+    return row.status
+  }
+
+  it('routes a write the action layer rejects to the retry status instead of leaving running stuck', async () => {
+    const { db, runInTransaction } = await seedApplyTimeHarness()
+
+    // Fake handler stands in for any action-layer rejection (branch mismatch, invalid write,
+    // etc.); the guard must recover from all of them the same way.
+    rejectCreateHappening()
+    registerWithReply()
+
+    expect(await runOutcome({ storyId: 's1', branchId: 'b1', db, runInTransaction })).toBe('failed')
+
+    const status = await storedStatus(db)
+    expect(status).toMatchObject({ state: 'retrying', retryCount: 1 })
+    expect(status?.lastError).toBe('classifier: forced test rejection')
   })
 
   it('still reaches the retry status when the first failure write fails', async () => {
     const { db, runInTransaction } = await seedApplyTimeHarness()
     let failNextStatusWrite = false
-    configureDeltaActionPort({
-      applyDeltaAction: (args, applyCtx) => {
-        if (args.action.kind !== 'createHappening') return realApplyDeltaAction(args, applyCtx)
-        failNextStatusWrite = true
-        return Promise.resolve({ status: 'rejected', reason: 'forced test rejection' })
-      },
-      reverseReplayDeltas,
-      describeReplayError: describeDeltaReplayError,
+    rejectCreateHappening(() => {
+      failNextStatusWrite = true
     })
     const flaky = new Proxy(db, {
       get(target, prop) {
@@ -908,24 +923,13 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
       },
     })
 
-    ensurePeriodicClassifierPipelineRegistered()
-    vi.mocked(generateStructured).mockResolvedValue({
-      status: 'ok',
-      value: extraction({
-        happenings: [{ title: 'A', sourceTurn: 't1', involvements: [], awareness: [] }],
-      }),
-    })
+    registerWithReply()
 
-    const ctx: RunCtx = { storyId: 's1', branchId: 'b1', db: flaky, runInTransaction }
-    const result = await runPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
-    if (result.outcome === 'rejected') throw new Error('unexpected rejected start')
-    expect(result.outcome).toBe('failed')
+    expect(await runOutcome({ storyId: 's1', branchId: 'b1', db: flaky, runInTransaction })).toBe(
+      'failed',
+    )
 
-    const [row] = await db
-      .select({ status: branches.classifierStatus })
-      .from(branches)
-      .where(eq(branches.id, 'b1'))
-    expect(row.status).toMatchObject({ state: 'retrying', retryCount: 1 })
+    expect(await storedStatus(db)).toMatchObject({ state: 'retrying', retryCount: 1 })
   })
 
   it('counts a pass whose watermark write fails as a failure, not a success', async () => {
@@ -960,25 +964,13 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
       },
     })
 
-    ensurePeriodicClassifierPipelineRegistered()
-    vi.mocked(generateStructured).mockResolvedValue({
-      status: 'ok',
-      value: extraction({
-        happenings: [{ title: 'A', sourceTurn: 't1', involvements: [], awareness: [] }],
-      }),
-    })
+    registerWithReply()
 
-    const ctx: RunCtx = { storyId: 's1', branchId: 'b1', db: flaky, runInTransaction }
-    const result = await runPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
-    if (result.outcome === 'rejected') throw new Error('unexpected rejected start')
+    const outcome = await runOutcome({ storyId: 's1', branchId: 'b1', db: flaky, runInTransaction })
     expect(failWatermark).toBe(false)
-    expect(result.outcome).toBe('failed')
+    expect(outcome).toBe('failed')
 
-    const [row] = await db
-      .select({ status: branches.classifierStatus })
-      .from(branches)
-      .where(eq(branches.id, 'b1'))
-    expect(row.status).toMatchObject({
+    expect(await storedStatus(db)).toMatchObject({
       state: 'retrying',
       retryCount: 2,
       lastSuccessAt: null,
@@ -1007,56 +999,25 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
       createdAt: 1,
     })
 
-    configureDeltaActionPort({
-      applyDeltaAction: (args, applyCtx) =>
-        args.action.kind === 'createHappening'
-          ? Promise.resolve({ status: 'rejected', reason: 'forced test rejection' })
-          : realApplyDeltaAction(args, applyCtx),
-      reverseReplayDeltas,
-      describeReplayError: describeDeltaReplayError,
-    })
+    rejectCreateHappening()
+    registerWithReply()
 
-    ensurePeriodicClassifierPipelineRegistered()
-    vi.mocked(generateStructured).mockResolvedValue({
-      status: 'ok',
-      value: extraction({
-        happenings: [{ title: 'A', sourceTurn: 't1', involvements: [], awareness: [] }],
+    expect(
+      await runOutcome({
+        storyId: 's1',
+        branchId: 'b1',
+        db,
+        runInTransaction,
+        actionId: fixedActionId,
       }),
-    })
+    ).toBe('failed')
 
-    const ctx: RunCtx = {
-      storyId: 's1',
-      branchId: 'b1',
-      db,
-      runInTransaction,
-      actionId: fixedActionId,
-    }
-    const result = await runPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
-    if (result.outcome === 'rejected') throw new Error('unexpected rejected start')
-    expect(result.outcome).toBe('failed')
-
-    const [row] = await db
-      .select({ status: branches.classifierStatus })
-      .from(branches)
-      .where(eq(branches.id, 'b1'))
-    expect(row.status).toMatchObject({ state: 'running', retryCount: 0 })
+    expect(await storedStatus(db)).toMatchObject({ state: 'running', retryCount: 0 })
   })
 
   // cadence.md → User edits and classifier writes.
   it('completes a pass whose retire a newer user revive blocks, landing its other writes', async () => {
-    const { db, runInTransaction } = await createTestDb()
-    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
-    await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
-    resetAllStores()
-    currentStoryStore.set({
-      storyId: 's1',
-      branchId: 'b1',
-      definition: {} as never,
-      settings: { models: {} } as never,
-    })
-    entitiesStore.hydrate('b1', [])
-    happeningsStore.hydrate('b1', [])
-    await hydrateAppSettings(async () => CLASSIFIER_WIRED_CONFIG)
+    const { db, runInTransaction } = await seedStory()
 
     // Through the action layer, so the entry's create delta dates the prose in the real log.
     const apply = async (action: PipelineAction, actionId: string) => {
@@ -1117,23 +1078,13 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
       'act_revive',
     )
 
-    ensurePeriodicClassifierPipelineRegistered()
-    vi.mocked(generateStructured).mockResolvedValue({
-      status: 'ok',
-      value: extraction({
-        statusFlips: [{ ref: 'c1', to: 'retired', reason: 'drowned', sourceTurn: 't1' }],
-        happenings: [{ title: 'A', sourceTurn: 't1', involvements: [], awareness: [] }],
-      }),
+    registerWithReply({
+      statusFlips: [{ ref: 'c1', to: 'retired', reason: 'drowned', sourceTurn: 't1' }],
     })
 
-    const result = await runPipeline(PERIODIC_CLASSIFIER_KIND, {
-      storyId: 's1',
-      branchId: 'b1',
-      db,
-      runInTransaction,
-    })
-    if (result.outcome === 'rejected') throw new Error('unexpected rejected start')
-    expect(result.outcome).toBe('completed')
+    expect(await runOutcome({ storyId: 's1', branchId: 'b1', db, runInTransaction })).toBe(
+      'completed',
+    )
 
     const [kael] = await db.select().from(entities).where(eq(entities.id, CHAR_KAEL))
     expect(kael).toMatchObject({ status: 'active', retiredReason: null })
@@ -1145,11 +1096,7 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
       .where(eq(deltas.source, 'periodic_classifier'))
     expect(classifierWrites.map((d) => d.targetTable)).toEqual(['happenings'])
 
-    const [row] = await db
-      .select({ status: branches.classifierStatus })
-      .from(branches)
-      .where(eq(branches.id, 'b1'))
-    expect(row.status).toMatchObject({
+    expect(await storedStatus(db)).toMatchObject({
       state: 'idle',
       processedThrough: 1,
       retryCount: 0,
