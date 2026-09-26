@@ -13,7 +13,8 @@ export function getFormatInfo(format: ExportFormat): {
     case 'aventura':
       return {
         label: 'Aventura JSON',
-        description: 'Full entry data, can be re-imported with all fields',
+        description:
+          'Re-imports into Aventuras exactly, without AI. Per-story entry state (presence, relationships, visits) is not included.',
         extension: '.json',
       }
     case 'sillytavern':

@@ -7,6 +7,7 @@ import {
 } from '$lib/services/discovery'
 import { CharacterCardImport } from '$lib/services/characterCardImport'
 import { LorebookImportExport } from '$lib/services/lorebookImportExport'
+import { exchangeToCharacter, parseExchange } from '$lib/services/exchange'
 import { lorebookVault } from './lorebookVault.svelte'
 import { ui } from './ui.svelte'
 import { createLogger } from '$lib/log'
@@ -346,8 +347,23 @@ class CharacterVaultStore {
     extraMetadata: Record<string, any>,
   ): Promise<void> {
     try {
-      // Parse
       const jsonString = await CharacterCardImport.readFile(file)
+
+      // An Aventuras export is ours to accept or reject; it never reaches the card parser.
+      const exchange = parseExchange(jsonString, 'character')
+      if (exchange.kind === 'invalid') throw new Error(exchange.error)
+      if (exchange.kind === 'exchange') {
+        const finalData = exchangeToCharacter(exchange.document.data, {
+          id: tempId,
+          originalFilename: file.name,
+        })
+        await database.addVaultCharacter(finalData)
+        this.characters = this.characters.map((c) => (c.id === tempId ? finalData : c))
+        for (const warning of exchange.warnings) ui.showToast(warning, 'warning', 8000)
+        log('Completed Aventura import for:', finalData.name)
+        return
+      }
+
       const parsed = CharacterCardImport.parseJson(jsonString)
       if (!parsed) throw new Error('Failed to parse character card')
 

@@ -25,7 +25,7 @@ async function saveFile(content: string, defaultPath: string): Promise<boolean> 
 }
 
 export async function exportLorebook(options: LorebookExportOptions): Promise<boolean> {
-  const { format, entries, filename } = options
+  const { format, entries, filename, name } = options
 
   if (entries.length === 0) {
     throw new Error('No entries to export')
@@ -37,7 +37,7 @@ export async function exportLorebook(options: LorebookExportOptions): Promise<bo
 
   switch (format) {
     case 'aventura':
-      content = exportToAventura(entries)
+      content = exportToAventura(entries, name ?? baseFilename)
       break
     case 'sillytavern':
       content = exportToSillyTavern(entries, baseFilename)
