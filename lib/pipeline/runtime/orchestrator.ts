@@ -295,9 +295,8 @@ async function commitRun(
 type AbortCause = {
   reason: 'user-cancel' | 'phase-failure' | 'preflight-failure'
   error?: PipelineError
-  // Set only by runPhases' catch, for a phase that THREW rather than returning
-  // its own `{ status: 'failed' }` — onPhaseException fires only for this case
-  // (see the type's JSDoc in ../types.ts).
+  // Set only when a phase THREW rather than returning `{ status: 'failed' }` — onPhaseException
+  // fires only for this case (see the type's JSDoc in ../types.ts).
   thrown?: boolean
 }
 
@@ -322,11 +321,9 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
     outcome = 'failed'
     reversalFailed = !failure.committed
   }
-  // Only once the rollback has committed (or there was nothing to reverse): a
-  // failure status arming a retry over writes still on disk would race a retry
-  // pass into re-reading them. An uncommitted reversal leaves recovery to own
-  // the branch instead. Before generationStore.abortRun below: that release
-  // drops the gate that serializes this write against the phases' own writes.
+  // Must run once the rollback has committed: arming a retry over writes still on disk would
+  // race it into re-reading them; an uncommitted reversal leaves recovery to own the branch.
+  // Must precede generationStore.abortRun below — that release drops the gate serializing this.
   if (cause.reason === 'phase-failure' && cause.thrown && !reversalFailed && cause.error) {
     const thrownError = cause.error
     if (thrownError.kind === 'action-layer' || thrownError.kind === 'orchestrator') {

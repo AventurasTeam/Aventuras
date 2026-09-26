@@ -135,9 +135,8 @@ describe('orchestrator hardening', () => {
       kind: 'phase-exception',
       phases: [{ name: 'p', run: updateMissing }],
       onPhaseException: async (_hookCtx, error) => {
-        // Recorded as data, not asserted here: a failing expect() inside the
-        // hook is swallowed by the orchestrator's own try/catch around it and
-        // would never fail this test.
+        // Recorded as data: an expect() here is swallowed by the orchestrator's own
+        // try/catch and would never fail this test.
         seen.push({
           kind: error.kind,
           runStillRegistered: generationStore.getTxState().runs.size > 0,
@@ -169,13 +168,11 @@ describe('orchestrator hardening', () => {
     expect(generationStore.getTxState().runs.size).toBe(0)
   })
 
-  // A retry armed over writes an uncommitted reversal left on disk would let a
-  // retry pass re-read them; recovery must own that branch instead, so the
-  // hook must not fire when the reversal itself cannot commit.
+  // Recovery, not a retry, must own writes from a reversal that never committed — a retry
+  // could re-read them. So the hook must not fire when the reversal itself fails to commit.
   it('does not run onPhaseException when the reversal itself cannot commit', async () => {
     const { db, ctx } = await makeHarness()
-    // Fixed so the pre-seeded poison delta below shares the run's actionId —
-    // abortRun's reversal reverses every delta under that actionId together.
+    // Fixed so the seeded poison delta shares this run's actionId — abortRun reverses by actionId.
     const fixedActionId = 'act_poison_throw'
     await db.insert(deltas).values({
       id: 'd_poison_throw',

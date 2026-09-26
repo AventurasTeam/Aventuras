@@ -28,8 +28,8 @@ type LockKey<K extends ProductionKind> =
 const entityRow = (p: { branchId: string; id: string }) => entityRowLockKey(p.branchId, p.id)
 const relationships = (p: { branchId: string }) => relationshipsLockKey(p.branchId)
 
-// Handlers read before they commit, so a write the classifier and a user Save can both make
-// to one row serializes: entities per row, relationships per branch.
+// Handlers read before they commit, so a racing classifier/user write to one row must
+// serialize: entities lock per row, relationships lock per branch.
 const LOCK_KEY: { [K in ProductionKind]: LockKey<K> } = {
   createStoryEntry: null,
   updateStoryEntryMetadata: null,
@@ -104,9 +104,8 @@ export async function applyDeltaAction(args: Args, ctx: DbCtx): Promise<Mutation
 async function applyDeltaActionUnlocked(args: Args, ctx: DbCtx): Promise<MutationResult> {
   const { action, actionId, branchId } = args
   const entryId = args.entryId ?? null
-  // The barrier (prose-reversal.ts) sets reversalInProgress before draining
-  // the in-flight classifier, whose burst must still commit; rejecting a
-  // pipeline write here would roll that burst back and burn a retry.
+  // The barrier (prose-reversal.ts) sets reversalInProgress before draining the in-flight
+  // classifier burst, which must still commit — rejecting it here would burn a retry.
   if (isUserOriginatedSource(action.source) && generationStore.getTxState().reversalInProgress)
     return {
       status: 'rejected',

@@ -49,7 +49,7 @@ declare module '@/lib/actions/action-map' {
       payload: {
         branchId: string
         id: string
-        /** The fact's source entry (classifier only): a field the user wrote after that prose keeps its value. */
+        /** Classifier only: a field the user wrote after this prose's entry keeps its value. */
         proseEntryId?: string
       }
     }
@@ -246,9 +246,8 @@ export const promoteStagedEntityHandler: ActionHandler = async (action, branchId
 }
 
 /**
- * Appends the payload terms the live row lacks; callers send only terms new against
- * what they read, so a mid-pass removal stays removed. With `proseEntryId`, a term the
- * user removed after that prose stays removed too.
+ * Appends only the payload terms the live row lacks, so a mid-pass removal stays removed;
+ * with `proseEntryId`, a term the user removed after that prose also stays removed.
  */
 export const appendEntityKeywordsHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'appendEntityKeywords')

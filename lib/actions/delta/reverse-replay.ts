@@ -86,19 +86,17 @@ function undoDirtiesVector(targetTable: string, payloadKeys: readonly string[]):
   return fields !== undefined && payloadKeys.some((key) => fields.includes(key))
 }
 
-// Build undo ops for one action's deltas (already in log_position DESC order).
-// A per-row working copy threads each op=update undo onto the prior one so multiple
-// updates to the SAME row — even touching disjoint sub-keys of a JSON column —
-// compose correctly instead of clobbering via stale-base whole-column overwrites.
-// A machine delta's undo skips each column a later `user_edit` outside `rows` wrote
+// A per-row working copy threads each update undo onto the prior one, so multiple updates to
+// the SAME row (even disjoint JSON sub-keys) compose instead of clobbering via a stale base.
+// A machine delta's undo skips columns a later `user_edit` outside `rows` wrote
 // (generation-pipeline.md → Reverse-replay).
 async function buildUndoOps(
   rows: Delta[],
   ctx: DbCtx,
 ): Promise<{ ops: SqlOp[]; patches: PatchEmission[] }> {
   const working = new Map<string, Record<string, unknown>>()
-  // Rows the plan has deleted, or found missing. A tombstone keeps the full row, so an
-  // older undo that gives it a row-keeping column back re-inserts it; an absent row stays out.
+  // A tombstone keeps the deleted row so an older undo giving back a row-keeping column
+  // re-inserts it; an absent row (never existed) stays out.
   const tombstones = new Set<string>()
   const absent = new Set<string>()
   const ops: SqlOp[] = []
@@ -128,8 +126,7 @@ async function buildUndoOps(
     }
 
     const emitUpdate = (restored: Record<string, unknown>, row: Record<string, unknown>) => {
-      // Revalidation (app-deps.ts) only ever CLEARS this flag, so nothing outside a writer
-      // like this one sets it back to 1 — erring dirty is the self-correcting direction.
+      // Revalidation (app-deps.ts) only clears this flag — setting it dirty here self-corrects.
       if (undoDirtiesVector(delta.targetTable, Object.keys(restored))) {
         restored.embeddingStale = 1
         row.embeddingStale = 1
@@ -162,7 +159,7 @@ async function buildUndoOps(
     }
 
     // No cascade on purpose: an actionId-scoped set already carries the children's deltas;
-    // an entry-scoped caller owes the closure by hand (generation-pipeline.md → Reverse-replay).
+    // an entry-scoped caller owes the closure itself (generation-pipeline.md → Reverse-replay).
     if (delta.op === 'create') {
       const keeping = entry.rowKeepingColumns ?? []
       const userKept = keeping.filter((col) => wroteColumn(userEdits, col))
@@ -232,8 +229,8 @@ async function buildUndoOps(
     }
 
     const payload = (delta.undoPayload ?? {}) as Record<string, unknown>
-    // A schema-backed column's undo restores sub-fields, so a user write to one of them
-    // does not speak for the others this delta changed.
+    // A schema-backed column's undo restores sub-fields — a user write to one doesn't cover
+    // the others this delta changed.
     const columns = Object.keys(payload).filter(
       (col) =>
         !isPayloadMetaKey(col) &&

@@ -10,7 +10,7 @@ const KEY_BY_TABLE = new Map<string, (d: Delta) => string>([
   ['character_relationships', (d) => relationshipsLockKey(d.branchId)],
 ])
 
-/** The keys that serialize writes to the rows `rows` target, so a reversal can't straddle a Save. */
+/** Keys serializing writes to the rows `rows` targets, so a reversal can't straddle a Save. */
 export function deltaLockKeys(rows: readonly Delta[]): string[] {
   return rows.flatMap((d) => {
     const key = KEY_BY_TABLE.get(d.targetTable)

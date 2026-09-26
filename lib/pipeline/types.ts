@@ -131,15 +131,13 @@ export type PreflightFailureHook = (
 ) => Promise<void>
 
 /**
- * Reacts to a phase throwing (action-layer rejection/throw, or an
- * orchestrator error) — not a phase that RETURNS `{ status: 'failed' }`,
- * which persists its own failure. Fires from `abortRun` once the pass's
- * writes have rolled back, while the run is still registered; skipped when
- * the rollback itself can't commit, since recovery owns the run instead.
+ * Fires when a phase throws (action-layer rejection or orchestrator error) — never for a
+ * phase that returns `{ status: 'failed' }` (that persists its own failure). Runs from
+ * `abortRun` after rollback, while the run is still registered; skipped if rollback itself
+ * can't commit.
  *
- * Caveat: a parallel group's `Promise.all` rejects on the first sibling to
- * throw while the rest keep running, so a sibling's later `{ status:
- * 'failed' }` isn't synchronized with this hook.
+ * Caveat: in a parallel group, `Promise.all` rejects on the first throw while siblings keep
+ * running, so a later sibling's own `{ status: 'failed' }` isn't synchronized with this hook.
  */
 export type PhaseExceptionHook = (
   ctx: Pick<PhaseContext, 'db' | 'branchId'>,

@@ -808,9 +808,8 @@ describe('entity keywords', () => {
     expect(payloadOf<{ keywords: string[] }>(appends[1]).keywords).toEqual(['the innkeeper'])
   })
 
-  // Reconciliation decides every namesake against the same snapshot status
-  // (reconcile.ts), so two candidates for one staged entity both come back
-  // 'promote' — never one 'promote' and one 'known'.
+  // Reconciliation decides every namesake against the same snapshot status (reconcile.ts):
+  // two candidates for one staged entity always agree — never split 'promote' vs 'known'.
   it('plans a repeated promote for a staged entity reconciliation decides promote twice, filtering the second append against the first', () => {
     const { planned } = buildClassifierActions(
       {
@@ -886,8 +885,7 @@ describe('entity keywords', () => {
   })
 })
 
-// cadence.md → User edits and classifier writes: the guarded writes compare the user's
-// edits against the prose each fact came from.
+// cadence.md → User edits and classifier writes.
 describe('prose source on guarded writes', () => {
   it("stamps each guarded write with its own fact's anchor as proseEntryId", () => {
     const { planned } = buildClassifierActions(

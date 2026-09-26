@@ -78,10 +78,9 @@ export type DomainRegistration = {
   restoreCascade?: CascadeRestore
   cascadeDeleteOps?: CascadeDeleteOps
   /**
-   * Columns the row exists for while any is non-null: a reversal that would null them all
-   * deletes the row instead. No other invariant may span columns, since a reversal restores
-   * a machine write column by column around later user writes. Checked against the table's
-   * columns at `register()`; see `docs/generation-pipeline.md` → Reverse-replay.
+   * Row exists while any of these is non-null; a reversal nulling them all deletes the row
+   * instead (a reversal restores a machine write column by column around later user writes,
+   * so no other invariant may span columns). See `docs/generation-pipeline.md` → Reverse-replay.
    */
   rowKeepingColumns?: readonly string[]
 }

@@ -601,8 +601,7 @@ describe('retireEntity', () => {
   })
 })
 
-// cadence.md → User edits and classifier writes: a field the user wrote after the fact's
-// prose keeps the user's value.
+// cadence.md → User edits and classifier writes: user edits after the prose win.
 describe('user edits newer than the prose', () => {
   const PROSE = 'e_prose'
   const writeProse = (ctx: Ctx) =>

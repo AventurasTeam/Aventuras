@@ -798,9 +798,8 @@ describe('periodicClassifierPhase', () => {
   })
 })
 
-// These drive the phase through the real orchestrator (runPipeline), not drain():
-// the apply-time rejection this guards against only happens when a planned write
-// reaches the action layer, which the phase itself never calls.
+// Drives the phase through runPipeline, not drain(): the apply-time rejection this guards
+// against only happens once a planned write reaches the action layer, which drain() skips.
 describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
   beforeEach(() => {
     vi.resetAllMocks()
@@ -850,9 +849,8 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
   it('routes a write the action layer rejects to the retry status instead of leaving running stuck', async () => {
     const { db, runInTransaction } = await seedApplyTimeHarness()
 
-    // A fake handler for the one write the pass plans, standing in for any
-    // action layer rejection (branch mismatch, invalid write, etc.) — the guard
-    // must recover from all of them the same way.
+    // Fake handler stands in for any action-layer rejection (branch mismatch, invalid write,
+    // etc.); the guard must recover from all of them the same way.
     configureDeltaActionPort({
       applyDeltaAction: (args, applyCtx) =>
         args.action.kind === 'createHappening'
@@ -883,10 +881,9 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
     expect(row.status?.lastError).toBe('classifier: forced test rejection')
   })
 
-  // If the reversal itself cannot commit, the pass's write attempt is still on
-  // disk; arming a retry over it would race a retry pass into re-reading it.
-  // The branch must stay at `running` so resetStuckClassifierRunState — not the
-  // ordinary backoff — is what reconciles it at the next boot.
+  // If the reversal can't commit, the write attempt is still on disk; arming a retry would
+  // race a retry pass into re-reading it. Branch stays at `running` — only
+  // resetStuckClassifierRunState, not the ordinary backoff, reconciles it at the next boot.
   it('leaves running when the reversal itself cannot commit, deferring to boot recovery', async () => {
     const { db, runInTransaction } = await seedApplyTimeHarness()
     const fixedActionId = 'act_classifier_poison'
@@ -940,8 +937,7 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
     expect(row.status).toMatchObject({ state: 'running', retryCount: 0 })
   })
 
-  // cadence.md → User edits and classifier writes: a write the user's newer edit outranks
-  // no-ops, so the rest of the pass still lands and the pass completes.
+  // cadence.md → User edits and classifier writes.
   it('completes a pass whose retire a newer user revive blocks, landing its other writes', async () => {
     const { db, runInTransaction } = await createTestDb()
     await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })

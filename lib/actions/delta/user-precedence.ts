@@ -7,7 +7,7 @@ import { isUserOriginatedSource, type DbCtx } from '../types'
 /** Noop reason for a classifier write a newer user edit of the same field outranks. */
 export const USER_EDITED_SINCE_PROSE = 'user-edited-since-prose'
 
-/** The source entry's prose position: its latest create or content-edit delta, 0 when it has none. */
+/** The source entry's latest create/content-edit delta position, 0 when it has none. */
 export async function proseLogPosition(
   ctx: DbCtx,
   branchId: string,
@@ -95,9 +95,8 @@ function groupBy(items: readonly Delta[], key: (d: Delta) => string): Map<string
 }
 
 /**
- * Maps each machine delta in `rows` that `wanted` accepts, by id, to the `user_edit` deltas
- * on its row logged after it that `rows` does not reverse too, oldest first. A user delta
- * has no entry.
+ * Maps each machine delta in `rows` that `wanted` accepts to the `user_edit` deltas on its
+ * row logged after it that `rows` doesn't also reverse, oldest first. A user delta has none.
  */
 export async function userEditsOutliving(
   ctx: DbCtx,
@@ -139,9 +138,8 @@ export function rowDeltasSince(
 }
 
 /**
- * Whether the delta recorded `column`'s prior value. The user's update paths
- * (`updateEntity`, the both-perspective upsert) drop unchanged columns, so a user
- * update carries exactly the columns it changed.
+ * Whether the delta recorded `column`'s prior value. User update paths (`updateEntity`, the
+ * both-perspective upsert) drop unchanged columns, so a user update carries only changed ones.
  */
 export function carriesColumn(delta: Delta, column: string): boolean {
   return delta.undoPayload != null && column in delta.undoPayload
@@ -152,7 +150,7 @@ export function wroteColumn(edits: readonly Delta[], column: string): boolean {
   return edits.some((d) => d.op === 'create' || (d.op === 'update' && carriesColumn(d, column)))
 }
 
-/** Whether the user deleted a `character_relationships` row for this canonical pair after `since`. */
+/** Whether the user deleted a `character_relationships` row for this pair after `since`. */
 export async function userDeletedPairSince(
   ctx: DbCtx,
   branchId: string,

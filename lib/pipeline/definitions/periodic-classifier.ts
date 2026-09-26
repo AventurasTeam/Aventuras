@@ -290,9 +290,8 @@ export function ensurePeriodicClassifierPipelineRegistered(): void {
         const detail = error.kind === 'config-resolver' ? error.failure : error.detail
         await recordFailure(ctx, `classifier: ${detail}`)
       },
-      // A rejected write throws past the phase (lib/pipeline/runtime/orchestrator.ts
-      // runPhases), so the phase itself never gets a chance to persist a failure
-      // status the way a provider failure does — this hook is that failure write.
+      // A rejected write throws past the phase (orchestrator.ts runPhases) rather than
+      // returning `{ status: 'failed' }`, so this hook is what persists the failure.
       onPhaseException: (ctx, error) => recordFailure(ctx, `classifier: ${error.detail}`),
       gateBehavior: 'no-gate',
       concurrencyPolicy: { blockedBy: [PERIODIC_CLASSIFIER_KIND, 'chapter-close'] },

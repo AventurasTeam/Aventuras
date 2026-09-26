@@ -61,10 +61,8 @@ export function selectStoryClassifierRunning(
 }
 
 /**
- * The run the story's status pill describes, whether the classifier pass is in
- * flight, and why in-story edits are blocked. `branchId` keys the classifier
- * pass to that branch (World, Plot); omitted, it keys to the whole story
- * (Story Settings, which has no branch param).
+ * The pill's run, whether the classifier pass is in flight, and why edits are blocked.
+ * `branchId` scopes the classifier check to a branch (World, Plot); omitted, to the whole story.
  */
 export function useStoryGenerationGate(storyId: string | undefined, branchId?: string) {
   const activeRunKind = generationStore.useGeneration((s) =>

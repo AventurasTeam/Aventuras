@@ -150,11 +150,9 @@ async function pair(db: Db) {
     )
 }
 
-// cadence.md → User edits and classifier writes: reversing a machine write keeps any
-// column the user wrote after it.
+// cadence.md → User edits and classifier writes.
 describe('reversing a machine write under a later user write', () => {
-  // Not a retire then a revive: the retire's undo restores `active`, the revive's own
-  // value, so that case passes with or without the rule.
+  // Not retire-then-revive: that undo also restores `active`, so it'd pass without the rule too.
   it('keeps a status the user set after the promotion, and prunes only the promotion', async () => {
     const { db, ctx } = await setup()
     await createKael(ctx, { status: 'staged' })

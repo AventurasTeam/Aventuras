@@ -10,9 +10,8 @@ type RelationshipFact = {
   kind: string
 }
 
-// One row can emit two facts, one per non-null perspective; a row whose
-// character has no entity in the snapshot (FK-less table, deleted character)
-// has no name to inline and is dropped.
+// One row can emit two facts, one per non-null perspective; a row whose character
+// has no entity in the snapshot (FK-less, deleted) has no name to inline and is dropped.
 function projectRelationships(
   relationships: readonly CharacterRelationship[],
   entities: readonly Entity[],

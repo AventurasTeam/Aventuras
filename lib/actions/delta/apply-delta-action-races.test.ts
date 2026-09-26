@@ -95,9 +95,8 @@ async function ticks(count: number): Promise<void> {
 type Round = { classifier: () => Promise<unknown>; user: () => Promise<unknown> }
 
 /**
- * Starts one writer, then the other `delay` microtasks later, for each delay until the
- * second starts only after the first has settled, with each writer leading in turn. Every
- * interleaving of the two writers' awaits is covered, on real handlers and a real log.
+ * Starts one writer, then delays the second by increasing microtask counts until it starts
+ * only after the first settles — covers every interleaving of the two writers' awaits.
  */
 async function sweep(
   prepare: (round: number) => Promise<Round>,
@@ -178,7 +177,7 @@ describe('a classifier write racing a user Save on one row', () => {
           expect(row.keywords, label).toEqual(['a'])
         } else {
           // The user removed `b` after the prose: precedence drops it from the append, and the
-          // lock keeps a read from before the removal from restoring it.
+          // lock stops a stale read from restoring it.
           expect(user!.undoPayload, label).toEqual({ keywords: ['a', 'b'] })
           expect(machine!.undoPayload, label).toEqual({ keywords: ['a'] })
           expect(row.keywords, label).toEqual(['a', 'c'])
@@ -318,8 +317,7 @@ describe('a classifier write racing a user Save on one row', () => {
     )
   })
 
-  // A failing pass's abortRun reverses its writes by action id; undo, rollback and
-  // regenerate hand the rows over.
+  // abortRun reverses a failing pass's writes by action id; undo/rollback/regenerate share this.
   const reversals = {
     reverseReplayDeltas: (actionId: string, ctx: Ctx) => reverseReplayDeltas(actionId, ctx),
     reverseAndPruneDeltaRows: async (actionId: string, ctx: Ctx) => {

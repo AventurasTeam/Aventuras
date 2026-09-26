@@ -362,8 +362,8 @@ describe('both-perspective upsert (World relationship editor)', () => {
   })
 })
 
-// cadence.md → User edits and classifier writes. char_kael < char_mira, so the row is
-// a=kael, b=mira and Kael's view of Mira is the `kind` column.
+// cadence.md → User edits and classifier writes.
+// char_kael < char_mira, so `kind` here is Kael's view of Mira.
 describe('single-perspective upsert against a user edit newer than the prose', () => {
   const PROSE = 'e_prose'
   const writeProse = (ctx: Awaited<ReturnType<typeof setup>>['ctx'], id = PROSE, position = 1) =>

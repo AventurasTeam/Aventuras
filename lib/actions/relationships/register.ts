@@ -29,7 +29,7 @@ declare module '@/lib/actions/action-map' {
         /** The object's view of the subject; omitted leaves it as stored (the classifier's write).
          * When present, both null is refused, not a delete: use `deleteCharacterRelationship`. */
         inverseKind?: string | null
-        /** The fact's source entry (classifier only): a view the user wrote after that prose keeps its value. */
+        /** Classifier only: a view the user wrote after this prose's entry keeps its value. */
         proseEntryId?: string
       }
     }
@@ -39,9 +39,8 @@ declare module '@/lib/actions/action-map' {
 
 type Pair = { aId: string; bId: string; subjectIsA: boolean }
 
-// The row's first delta to carry the view recorded its value at create; the live row may
-// hold one the classifier filled in since. Read from the log's start, not the create's
-// position: a redo re-inserts the create above the deltas its snapshot absorbed.
+// Read from the log's start, not the create's position: a redo re-inserts the create above
+// the deltas its snapshot absorbed, so the live row may hold a view the classifier filled in since.
 async function viewAtCreate(
   ctx: DbCtx,
   branchId: string,
@@ -65,8 +64,8 @@ async function userWroteViewSince(
   if (current) {
     const edits = await userEditsSince(ctx, branchId, 'character_relationships', current.id, since)
     if (edits.some((d) => d.op === 'update' && carriesColumn(d, povCol))) return true
-    // Only the user's re-create outranks their delete; a pair the classifier re-created
-    // from newer prose still leaves older prose facing the delete.
+    // Only the user's own re-create outranks their delete; a classifier re-create from newer
+    // prose still leaves older prose facing the delete.
     if (edits.some((d) => d.op === 'create'))
       return (await viewAtCreate(ctx, branchId, current, povCol)) !== null
   }
@@ -175,8 +174,7 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx) => {
   if (inverseKind !== undefined)
     return bothPovOutcome(ctx, bid, { aId, bId, subjectIsA }, current, kind, inverseKind)
 
-  // Only the classifier reaches this path; a repeat that differs in case or
-  // surrounding whitespace is the same view.
+  // Only the classifier reaches this path; a case/whitespace-only repeat is the same view.
   if (current && current[povCol]?.trim().toLowerCase() === kind?.trim().toLowerCase())
     return { status: 'rejected', reason: 'relationship unchanged', code: 'noop' }
 

@@ -133,8 +133,7 @@ export function buildClassifierActions(
     }
     const entryId = anchor(candidate.sourceTurn)
     const proseEntryId = proseSource(candidate.sourceTurn)
-    // Both branches send snapshot-new terms only: re-sending a held term would restore
-    // an alias the user removed mid-pass.
+    // New terms only: resending a held one would restore an alias the user removed mid-pass.
     if (decision.kind === 'promote') {
       handleMap.set(candidate.handle, decision.entityId)
       const promoted = index.get(decision.entityId)
@@ -308,8 +307,7 @@ export function buildClassifierActions(
     const subjectId = resolveRef(relationship.subject, 'character')
     const objectId = resolveRef(relationship.object, 'character')
     if (subjectId == null || objectId == null || subjectId === objectId) continue
-    // A blank kind is rejected (empty) or stored as whitespace; drop the fact
-    // rather than fail the pass.
+    // A blank kind would be rejected or stored as whitespace; drop the fact instead of failing.
     const kind = nonBlank(relationship.kind)
     if (kind == null) continue
     planned.push({
