@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import type { CharacterRelationship, Entity } from '@/lib/db'
 import { IdBiMap } from '@/lib/ids'
 import { VARIABLES } from '@/lib/prompts'
 
@@ -94,64 +95,40 @@ describe('buildClassifierContext', () => {
     expect(context.turns).toEqual([{ handle: 't1', content: 'prose' }])
   })
 
+  const AEFRE = 'char_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+  const BAEL = 'char_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+  const CORA = 'char_cccccccc-cccc-cccc-cccc-cccccccccccc'
+  const DEZ = 'char_dddddddd-dddd-dddd-dddd-dddddddddddd'
+
+  function character(id: string, name: string): Entity {
+    return { id, kind: 'character', name, description: '', status: 'active' } as unknown as Entity
+  }
+
+  function relationship(
+    id: string,
+    aId: string,
+    bId: string,
+    kind: string | null,
+    inverseKind: string | null,
+  ): CharacterRelationship {
+    return { id, branchId: 'b1', aId, bId, kind, inverseKind, createdAt: 1, updatedAt: 1 }
+  }
+
   it('emits one fact per non-null perspective, with both names inlined, dropping null views', () => {
-    const idMap = new IdBiMap()
     const context = buildClassifierContext({
       window: { turns: [] } as never,
       entities: [
-        {
-          id: 'char_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-          kind: 'character',
-          name: 'Aefre',
-          description: '',
-          status: 'active',
-        } as never,
-        {
-          id: 'char_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-          kind: 'character',
-          name: 'Bael',
-          description: '',
-          status: 'active',
-        } as never,
-        {
-          id: 'char_cccccccc-cccc-cccc-cccc-cccccccccccc',
-          kind: 'character',
-          name: 'Cora',
-          description: '',
-          status: 'active',
-        } as never,
-        {
-          id: 'char_dddddddd-dddd-dddd-dddd-dddddddddddd',
-          kind: 'character',
-          name: 'Dez',
-          description: '',
-          status: 'active',
-        } as never,
+        character(AEFRE, 'Aefre'),
+        character(BAEL, 'Bael'),
+        character(CORA, 'Cora'),
+        character(DEZ, 'Dez'),
       ],
       happenings: [],
       relationships: [
-        {
-          id: 'rel_11111111-1111-1111-1111-111111111111',
-          branchId: 'b1',
-          aId: 'char_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-          bId: 'char_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-          kind: 'sister',
-          inverseKind: null,
-          createdAt: 1,
-          updatedAt: 1,
-        } as never,
-        {
-          id: 'rel_22222222-2222-2222-2222-222222222222',
-          branchId: 'b1',
-          aId: 'char_cccccccc-cccc-cccc-cccc-cccccccccccc',
-          bId: 'char_dddddddd-dddd-dddd-dddd-dddddddddddd',
-          kind: 'ally',
-          inverseKind: 'rival',
-          createdAt: 1,
-          updatedAt: 1,
-        } as never,
+        relationship('rel_11111111-1111-1111-1111-111111111111', AEFRE, BAEL, 'sister', null),
+        relationship('rel_22222222-2222-2222-2222-222222222222', CORA, DEZ, 'ally', 'rival'),
       ],
-      idMap,
+      idMap: new IdBiMap(),
     })
     expect(context.relationships).toEqual([
       { subject: 'c1', subjectName: 'Aefre', object: 'c2', objectName: 'Bael', kind: 'sister' },
@@ -161,33 +138,15 @@ describe('buildClassifierContext', () => {
   })
 
   it('drops a relationship row whose character has no entity in the snapshot', () => {
-    const idMap = new IdBiMap()
     const context = buildClassifierContext({
       window: { turns: [] } as never,
-      entities: [
-        {
-          id: 'char_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-          kind: 'character',
-          name: 'Aefre',
-          description: '',
-          status: 'active',
-        } as never,
-      ],
+      entities: [character(AEFRE, 'Aefre')],
       happenings: [],
+      // BAEL is absent from the snapshot — deleted character, orphan row.
       relationships: [
-        {
-          // bId's entity is absent from the snapshot — deleted character, orphan row.
-          id: 'rel_11111111-1111-1111-1111-111111111111',
-          branchId: 'b1',
-          aId: 'char_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-          bId: 'char_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-          kind: 'sister',
-          inverseKind: null,
-          createdAt: 1,
-          updatedAt: 1,
-        } as never,
+        relationship('rel_11111111-1111-1111-1111-111111111111', AEFRE, BAEL, 'sister', null),
       ],
-      idMap,
+      idMap: new IdBiMap(),
     })
     expect(context.relationships).toEqual([])
   })
