@@ -215,7 +215,7 @@ export default function WorldRoute() {
     },
     [selectedId, guard, select],
   )
-  // Overview and Connections links may cross kinds; the list pane reveals in the same update.
+  // Connections links may cross kinds; the list pane reveals in the same update.
   const openEntity = useCallback(
     (id: string) => {
       const target = entities.find((e) => e.id === id)

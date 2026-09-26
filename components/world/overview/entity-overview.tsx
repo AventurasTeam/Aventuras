@@ -26,7 +26,7 @@ export type OverviewVariant = 'panel' | 'peek'
 export type EntityOverviewProps = {
   /** The committed row. */
   entity: Entity
-  /** The branch's entities, for links and inverse lists. */
+  /** The branch's entities, for resolving names and the inverse lists. */
   entities: readonly Entity[]
   /** The branch's current world time in seconds (`branchWorldTime`). */
   worldTime: number

@@ -79,7 +79,7 @@ type RegionProps = {
   testID: string
 }
 
-/** A region with no links: the whole region routes to its edit tab (world.md → Overview). */
+/** An Overview region: the whole region routes to its edit tab (world.md → Overview). */
 export function Region({
   label,
   tab,

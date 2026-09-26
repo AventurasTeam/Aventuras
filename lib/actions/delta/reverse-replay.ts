@@ -96,7 +96,7 @@ async function buildUndoOps(
 ): Promise<{ ops: SqlOp[]; patches: PatchEmission[] }> {
   const working = new Map<string, Record<string, unknown>>()
   // A tombstone keeps the deleted row so an older undo giving back a row-keeping column
-  // re-inserts it; an absent row (never existed) stays out.
+  // re-inserts it; a row already missing, or deleted by a create's undo here, stays out.
   const tombstones = new Set<string>()
   const absent = new Set<string>()
   const ops: SqlOp[] = []
@@ -272,7 +272,7 @@ async function buildUndoOps(
   return { ops, patches }
 }
 
-// Only an update's undo, or a create's on a table with row-keeping columns, reads later user edits.
+// A delete's undo re-inserts the whole row whatever came after, so it reads no user edits.
 function readsUserEdits(delta: Delta): boolean {
   if (delta.op === 'update') return true
   return delta.op === 'create' && resolveByTable(delta.targetTable)?.rowKeepingColumns != null

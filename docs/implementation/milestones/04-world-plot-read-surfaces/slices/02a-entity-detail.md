@@ -299,9 +299,11 @@ the asset gallery pass` / `lands in Slice 4.2b`).
   `world.md` amended.
 - **Last seen is in-world.** Elapsed seconds since
   `lastSeenAt.worldTime`, counted in the calendar's largest
-  fixed-length tier (`largestWholeTier`); a backwards span is omitted.
-  On Gregorian every span therefore reads in days, two years as "730
-  days ago in-world": a duration floor, not a date difference.
+  fixed-length tier the span fills at least once (`largestWholeTier`);
+  a backwards span is omitted. On Gregorian a span of a day or more
+  therefore reads in days, two years as "730 days ago in-world": a
+  duration floor, not a date difference. A shorter one reads in hours,
+  minutes or seconds.
 - **`setStoryLead` refuses a non-active character** (`not-active`,
   now in
   [C5](../milestone.md#c5--story-definition-lead-mutator)), extending

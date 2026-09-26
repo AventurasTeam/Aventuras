@@ -155,9 +155,10 @@ treatment used by `retired_reason` (visible only when
   indicator. Click → Identity / Personality.
 - `IN <location>` (current_location_id) `· last seen N days ago`
   (from `lastSeenAt`). Click → Connections. The span is in-world
-  time since `lastSeenAt.worldTime`, counted in the calendar's
-  largest unit of fixed length (days on Gregorian, never months); a
-  span running backwards is omitted.
+  time since `lastSeenAt.worldTime`, counted in the largest
+  fixed-length unit of the calendar that the span fills at least once
+  (at most days on Gregorian, never months, so a same-day span reads in
+  hours, minutes or seconds); a span running backwards is omitted.
 - `WITH <faction>` (faction_id). Click → Connections.
 - Carrying summary — top stackables by quantity + equipped/carried
   counts in one line. Click → Carrying tab.
