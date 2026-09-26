@@ -105,6 +105,7 @@ export function EntityDetailFrame<Draft extends EntityBaseDraft>({
                     placeholder={t('world:detail.namePlaceholder')}
                     size="lg"
                     disabled={blocked}
+                    disabledReason={blockedReason}
                   />
                 )}
               />

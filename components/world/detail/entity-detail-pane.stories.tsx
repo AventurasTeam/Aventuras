@@ -656,6 +656,7 @@ export const EveryControlBlocked: Story = {
     const name = within(await screen.findByTestId('world-detail-name', {}, WAIT))
     await expect(name.getByText('Kael')).toBeVisible()
     await expect(name.queryByRole('button')).toBeNull()
+    await expectGateReason(name.getByText('Kael'))
     await userEvent.click(await screen.findByRole('tab', { name: /^Identity/ }, WAIT))
     await expect(await screen.findByRole('textbox', { name: 'Description' }, WAIT)).toHaveAttribute(
       'readonly',
@@ -700,6 +701,7 @@ export const EveryControlBlocked: Story = {
     // A disabled ListRow drops its button role (list-row.stories.tsx → DisabledDoesNotFire).
     await expect(screen.getByText('Add relationship')).toBeVisible()
     await expect(screen.queryByRole('button', { name: 'Add relationship' })).not.toBeInTheDocument()
+    await expectGateReason(screen.getByText('Add relationship'))
     await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
     await expect(
       await screen.findByRole('menuitem', { name: /Set as lead/ }, WAIT),

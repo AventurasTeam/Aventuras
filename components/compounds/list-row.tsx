@@ -1,6 +1,7 @@
 import { type ReactNode, type Ref } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
+import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Text } from '@/components/ui/text'
 import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import type { RecentlyClassified } from '@/lib/row-signals'
@@ -45,6 +46,8 @@ type ListRowProps = {
   selected?: boolean
   onPress?: () => void
   disabled?: boolean
+  /** Explains a disabled row through its accessibility hint and a web tooltip. */
+  disabledReason?: string
   className?: string
   /** The row's pressable, e.g. for moving focus to it. */
   ref?: Ref<View>
@@ -61,69 +64,74 @@ export function ListRow({
   selected,
   onPress,
   disabled,
+  disabledReason,
   className,
   ref,
 }: ListRowProps) {
   const interactive = !disabled && onPress != null
+  const reason = disabled ? disabledReason : undefined
   return (
-    <Pressable
-      ref={ref}
-      onPress={interactive ? onPress : undefined}
-      disabled={!interactive}
-      accessibilityRole={interactive ? 'button' : undefined}
-      aria-label={label}
-      aria-selected={selected}
-      className={cn(
-        'relative flex-row items-center gap-3 px-row-x-md py-row-y-md',
-        selected && 'bg-bg-sunken',
-        recentlyClassified === 'fresh' && 'bg-recently-classified-bg',
-        interactive && 'active:bg-tint-press',
-        Platform.select({ web: interactive ? 'cursor-pointer hover:bg-tint-hover' : '' }),
-        disabled && 'opacity-50',
-        Platform.select({ web: disabled && 'cursor-not-allowed' }),
-        className,
-      )}
-    >
-      {recentlyClassified === 'fading' ? (
-        <View
-          className="absolute inset-0 bg-recently-classified-bg opacity-50"
-          aria-hidden
-          style={POINTER_EVENTS_NONE}
-        />
-      ) : null}
-      {inScene ? (
-        <View
-          className="absolute bottom-0 left-0 top-0 w-[3px] bg-success"
-          aria-hidden
-          style={POINTER_EVENTS_NONE}
-        />
-      ) : null}
-      {selected ? (
-        <View
-          className="absolute bottom-0 right-0 top-0 w-[3px] bg-accent"
-          aria-hidden
-          style={POINTER_EVENTS_NONE}
-        />
-      ) : null}
-
-      {leading != null ? <View className="shrink-0">{leading}</View> : null}
-
-      <View className="min-w-0 flex-1 gap-0.5">
-        <View className="flex-row items-center gap-2">
-          <Text className="shrink font-medium" numberOfLines={1}>
-            {label}
-          </Text>
-          {meta}
-        </View>
-        {description != null ? (
-          <Text variant="muted" size="sm" numberOfLines={2}>
-            {description}
-          </Text>
+    <ReasonTooltip reason={reason}>
+      <Pressable
+        ref={ref}
+        onPress={interactive ? onPress : undefined}
+        disabled={!interactive}
+        accessibilityRole={interactive ? 'button' : undefined}
+        accessibilityHint={reason}
+        aria-label={label}
+        aria-selected={selected}
+        className={cn(
+          'relative flex-row items-center gap-3 px-row-x-md py-row-y-md',
+          selected && 'bg-bg-sunken',
+          recentlyClassified === 'fresh' && 'bg-recently-classified-bg',
+          interactive && 'active:bg-tint-press',
+          Platform.select({ web: interactive ? 'cursor-pointer hover:bg-tint-hover' : '' }),
+          disabled && 'opacity-50',
+          Platform.select({ web: disabled && 'cursor-not-allowed' }),
+          className,
+        )}
+      >
+        {recentlyClassified === 'fading' ? (
+          <View
+            className="absolute inset-0 bg-recently-classified-bg opacity-50"
+            aria-hidden
+            style={POINTER_EVENTS_NONE}
+          />
         ) : null}
-      </View>
+        {inScene ? (
+          <View
+            className="absolute bottom-0 left-0 top-0 w-[3px] bg-success"
+            aria-hidden
+            style={POINTER_EVENTS_NONE}
+          />
+        ) : null}
+        {selected ? (
+          <View
+            className="absolute bottom-0 right-0 top-0 w-[3px] bg-accent"
+            aria-hidden
+            style={POINTER_EVENTS_NONE}
+          />
+        ) : null}
 
-      {trailing != null ? <View className="shrink-0">{trailing}</View> : null}
-    </Pressable>
+        {leading != null ? <View className="shrink-0">{leading}</View> : null}
+
+        <View className="min-w-0 flex-1 gap-0.5">
+          <View className="flex-row items-center gap-2">
+            <Text className="shrink font-medium" numberOfLines={1}>
+              {label}
+            </Text>
+            {meta}
+          </View>
+          {description != null ? (
+            <Text variant="muted" size="sm" numberOfLines={2}>
+              {description}
+            </Text>
+          ) : null}
+        </View>
+
+        {trailing != null ? <View className="shrink-0">{trailing}</View> : null}
+      </Pressable>
+    </ReasonTooltip>
   )
 }
 
