@@ -287,13 +287,16 @@ updates a view on subsequent contradicting prose, is enforced
 
 **Reversals.** Reversing a classifier fact for a prose edit, its undo
 or redo, or a failed or interrupted pass keeps each field the user
-wrote after the fact, so the precedence above never leaves a value
-neither the user nor the prose chose. A pair the classifier created
-keeps a view the user added since and loses the classifier's, and a
-pair the reversal would leave with no view is deleted. A
-rollback or regenerate differs: a World edit has no entry to survive
-on, so the user's later edits reverse along with the fact and the
-field returns to its value before it
+wrote after the fact on a row the reversal leaves standing, so the
+precedence above never leaves a value neither the user nor the prose
+chose. A pair the classifier created keeps a view the user added since
+and loses the classifier's, and a pair the reversal would leave with no
+view is deleted. A row the reversal deletes takes the user's edits to
+it along: an entity or happening a failed or interrupted pass created,
+or a happening a prose edit reverses. A rollback or regenerate differs:
+a World edit has no entry to survive on, so the user's later edits
+reverse along with the fact and the field returns to its value before
+it
 ([`generation-pipeline.md → Reverse-replay`](../generation-pipeline.md#reverse-replay)).
 
 What stays open:
@@ -306,3 +309,7 @@ What stays open:
   but its prose dates to the window's oldest turn. A user edit made
   after that turn then outranks it even when the real source is
   later, an error in the user's favor.
+- A reversal that deletes a row the machine created, an entity or
+  happening on abort or recovery or a happening on a prose edit,
+  deletes the user's edits to it too, and leaves their deltas pointing
+  at nothing.

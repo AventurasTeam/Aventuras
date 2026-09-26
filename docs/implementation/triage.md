@@ -142,7 +142,7 @@ slice-planning gate forces its resolution before that slice is planned.
   write skips each column a later `user_edit` outside the reversed set
   wrote
   ([`generation-pipeline.md → Reverse-replay`](../generation-pipeline.md#reverse-replay)),
-  with two gaps left. Reversing a classifier `create` deletes the row,
+  with gaps left. Reversing a classifier `create` deletes the row,
   and a user edit made to it since goes with it, its delta left
   pointing at nothing. A prose edit reverses a happening's create
   (`isReversible` in `story-entries/classifier-facts.ts` spares only
@@ -154,7 +154,16 @@ slice-planning gate forces its resolution before that slice is planned.
   sub-field. That one is latent: only hard-gated runs write either
   column, so no user edit lands while such a run can abort, and a
   rollback or regenerate that reverses their deltas later sweeps the
-  user's edits after them too.
+  user's edits after them too. Both deletes, a reversed create's and a
+  character relationship left with no view, strand the user deltas on
+  the row, a user create included, pointing at a row that is gone.
+  CTRL-Z of such an edit reports a reversal and prunes it, but the row
+  stays gone: a silent no-op undo. `reverse-replay-user-writes.test.ts`
+  ("deletes a pair the reversal would leave with no view") pins this
+  current behaviour. And `abortRun` or boot recovery of a pass that
+  created a happening leaves an involvement or awareness row the user
+  added under it standing with no parent, since `happening_id` carries
+  no foreign key; reasoned from the code, not reproduced.
 
 - **A recurring classifier failure reaches `failed-persistent`
   invisibly.** The backoff
