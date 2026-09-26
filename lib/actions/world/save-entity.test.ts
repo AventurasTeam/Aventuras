@@ -76,6 +76,30 @@ afterEach(() => {
 })
 
 describe('saveEntity', () => {
+  it('logs a Save whose actions fail to build, and rethrows', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values(loc('loc_keep', null))
+    const row = await rowOf(db, 'loc_keep')
+    const error = vi.spyOn(logger, 'error')
+    await expect(
+      saveEntity(
+        {
+          kind: 'character',
+          branchId: 'br_1',
+          row,
+          draft: characterDraftFrom(null, []),
+          relationships: [],
+          relationshipsBase: [],
+        },
+        ctx,
+      ),
+    ).rejects.toThrow('location row saved as character')
+    expect(error).toHaveBeenCalledWith(
+      'action_layer.entity_save_failed',
+      expect.objectContaining({ id: 'loc_keep', error: expect.stringContaining('saved as') }),
+    )
+  })
+
   it('writes description, visual.hair and a tag as one delta whose undo holds exactly those three', async () => {
     const { db, ctx } = await setup()
     await db
