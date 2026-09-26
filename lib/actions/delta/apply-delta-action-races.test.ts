@@ -16,6 +16,7 @@ import { entriesStore, resetAllStores, undoRedoStore } from '@/lib/stores'
 import { undoLastAction } from '../story-entries/undo'
 import type { PipelineAction } from '../types'
 import { applyDeltaAction, applyDeltaActionGroup } from './apply-delta-action'
+import { applyRedo, snapshotForRedo } from './redo'
 import { reverseAndPruneDeltaRows, reverseReplayDeltas } from './reverse-replay'
 
 type Db = Awaited<ReturnType<typeof createTestDb>>['db']
@@ -379,7 +380,170 @@ describe('a classifier write racing a user Save on one row', () => {
     },
   )
 
-  // Promote and append now share one row key; a group re-taking it would wait on itself.
+  it.each(Object.entries(reversals))(
+    "keeps a user's view Save that races %s of the classifier's create of the pair",
+    async (_name, reverse) => {
+      const ctx = await setup()
+      await sweep(
+        async (round) => {
+          const created = await classify(
+            {
+              kind: 'upsertCharacterRelationship',
+              source: 'periodic_classifier',
+              payload: {
+                branchId: BRANCH,
+                subjectId: `x_${round}`,
+                objectId: `y_${round}`,
+                kind: 'friend',
+              },
+            },
+            `k_${round}`,
+            ctx,
+          )
+          expect(created.status).toBe('ok')
+          return {
+            classifier: () => reverse(`k_${round}`, ctx),
+            // y's own view, sending x's as stored, as World's Save does for an untouched view.
+            user: () =>
+              save(
+                {
+                  kind: 'upsertCharacterRelationship',
+                  source: 'user_edit',
+                  payload: {
+                    branchId: BRANCH,
+                    subjectId: `y_${round}`,
+                    objectId: `x_${round}`,
+                    kind: 'wary',
+                    inverseKind: 'friend',
+                  },
+                },
+                `u_${round}`,
+                ctx,
+              ),
+          }
+        },
+        async (round, label) => {
+          const [row] = await ctx.db
+            .select()
+            .from(characterRelationships)
+            .where(
+              and(
+                eq(characterRelationships.aId, `x_${round}`),
+                eq(characterRelationships.bId, `y_${round}`),
+              ),
+            )
+          expect(await deltaOf(ctx.db, `k_${round}`), label).toBeUndefined()
+          expect(await deltaOf(ctx.db, `u_${round}`), label).toBeDefined()
+          expect(row?.inverseKind, label).toBe('wary')
+        },
+      )
+    },
+  )
+
+  it('keeps a redo and a classifier append consistent with the order they logged', async () => {
+    const ctx = await setup()
+    await sweep(
+      async (round) => {
+        const id = `char_${round}`
+        await ctx.db.insert(entities).values(character(id, 'active', ['a']))
+        const saved = await save(
+          {
+            kind: 'updateEntity',
+            source: 'user_edit',
+            payload: { branchId: BRANCH, id, patch: { keywords: ['a', 'u'] } },
+          },
+          `u_${round}`,
+          ctx,
+        )
+        expect(saved.status).toBe('ok')
+        const rows = (await ctx.db
+          .select()
+          .from(deltas)
+          .where(eq(deltas.actionId, `u_${round}`))) as Delta[]
+        const snapshot = await snapshotForRedo(rows, ctx)
+        await reverseAndPruneDeltaRows(rows, ctx)
+        return {
+          classifier: () =>
+            classify(
+              {
+                kind: 'appendEntityKeywords',
+                source: 'periodic_classifier',
+                payload: { branchId: BRANCH, id, keywords: ['b'] },
+              },
+              `k_${round}`,
+              ctx,
+            ),
+          user: () => applyRedo(snapshot, ctx),
+        }
+      },
+      async (round, label) => {
+        const machine = await deltaOf(ctx.db, `k_${round}`)
+        const redone = await deltaOf(ctx.db, `u_${round}`)
+        const [row] = await ctx.db
+          .select()
+          .from(entities)
+          .where(eq(entities.id, `char_${round}`))
+        expect(redone, label).toBeDefined()
+        expect(row.keywords, label).toContain('u')
+        if (machine && machine.logPosition > redone!.logPosition)
+          expect(row.keywords, label).toEqual(['a', 'u', 'b'])
+      },
+    )
+  })
+
+  it('never logs a classifier view update onto a pair the user deleted first', async () => {
+    const ctx = await setup()
+    await sweep(
+      async (round) => {
+        const pair = { branchId: BRANCH, subjectId: `x_${round}`, objectId: `y_${round}` }
+        const created = await classify(
+          {
+            kind: 'upsertCharacterRelationship',
+            source: 'periodic_classifier',
+            payload: { ...pair, kind: 'friend' },
+          },
+          `k0_${round}`,
+          ctx,
+        )
+        expect(created.status).toBe('ok')
+        const [row] = await ctx.db
+          .select({ id: characterRelationships.id })
+          .from(characterRelationships)
+          .where(eq(characterRelationships.aId, `x_${round}`))
+        return {
+          classifier: () =>
+            classify(
+              {
+                kind: 'upsertCharacterRelationship',
+                source: 'periodic_classifier',
+                payload: { ...pair, kind: 'rival' },
+              },
+              `k_${round}`,
+              ctx,
+            ),
+          user: () =>
+            save(
+              {
+                kind: 'deleteCharacterRelationship',
+                source: 'user_edit',
+                payload: { branchId: BRANCH, id: row.id },
+              },
+              `u_${round}`,
+              ctx,
+            ),
+        }
+      },
+      async (round, label) => {
+        const deleted = await deltaOf(ctx.db, `u_${round}`)
+        const machine = await deltaOf(ctx.db, `k_${round}`)
+        expect(deleted, label).toBeDefined()
+        if (machine?.targetId === deleted!.targetId)
+          expect(machine.logPosition, label).toBeLessThan(deleted!.logPosition)
+      },
+    )
+  })
+
+  // Promote and append share one row key; a group re-taking it would wait on itself.
   it('takes a row key once for a group writing that row through two kinds', async () => {
     const ctx = await setup()
     await ctx.db.insert(entities).values(character('char_1', 'staged', ['a']))

@@ -115,6 +115,22 @@ describe('useEntityRowSession', () => {
     expect(onSaved).toHaveBeenCalledWith('loc_shop')
   })
 
+  it('reports a committed Save even when the saved handler throws', async () => {
+    const { hook, onSaved, onRejected } = setup({ status: 'ok', id: 'loc_shop' })
+    onSaved.mockImplementation(() => {
+      throw new Error('select failed')
+    })
+    act(() => {
+      hook.result.current.form.setValue('condition', 'flooded', { shouldDirty: true })
+    })
+    let outcome
+    await act(async () => {
+      outcome = await hook.result.current.save()
+    })
+    expect(outcome).toEqual({ status: 'committed' })
+    expect(onRejected).not.toHaveBeenCalled()
+  })
+
   it('sets no field error for a refusal code with no field mapping', async () => {
     const { hook, onRejected } = setup({
       status: 'rejected',
