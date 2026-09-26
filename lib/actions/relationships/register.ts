@@ -268,8 +268,14 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     .select()
     .from(characterRelationships)
     .where(and(eq(characterRelationships.branchId, bid), eq(characterRelationships.id, id)))
+  // Only the user deletes a pair, and a pair already gone is the state they asked for; a
+  // refusal would fail the rest of their Save with it.
   if (!current)
-    return { status: 'rejected', reason: `delete target relationship ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `delete target relationship ${bid}:${id} not found`,
+      code: 'noop',
+    }
   return {
     status: 'ok',
     targetTable: 'character_relationships',

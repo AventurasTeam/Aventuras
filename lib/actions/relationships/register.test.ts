@@ -6,7 +6,7 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { characterRelationshipsStore, entriesStore, undoRedoStore } from '@/lib/stores'
 
 import { registerCharacterRelationships } from './register'
-import { applyDeltaAction } from '../delta/apply-delta-action'
+import { applyDeltaAction, applyDeltaActionGroup } from '../delta/apply-delta-action'
 import { __resetRegistry } from '../delta/registry'
 import { reverseReplayDeltas } from '../delta/reverse-replay'
 import { USER_EDITED_SINCE_PROSE } from '../delta/user-precedence'
@@ -235,6 +235,26 @@ describe('character_relationships upsert', () => {
     expect(characterRelationshipsStore.getById(created.id)).toBeUndefined()
     expect(await reverseReplayDeltas('act_d', ctx)).toBe(1)
     expect(characterRelationshipsStore.getById(created.id)?.kind).toBe('brother')
+  })
+
+  // World's Save sends this in one group with the pane's other writes.
+  it('does not refuse a Save whose relationship delete finds the row already gone', async () => {
+    const { db, ctx } = await setup()
+    const result = await applyDeltaActionGroup(
+      [
+        upsertBoth('char_aria', 'char_kael', 'brother', 'sister', 'act_s').action,
+        {
+          kind: 'deleteCharacterRelationship',
+          source: 'user_edit',
+          payload: { branchId: 'br_1', id: 'rel_gone' },
+        },
+      ],
+      { actionId: 'act_s', branchId: 'br_1' },
+      ctx,
+    )
+    expect(result).toEqual({ status: 'ok' })
+    expect(await pairRow(db, 'char_aria', 'char_kael')).toHaveLength(1)
+    expect(await deltasFor(db, 'act_s')).toHaveLength(1)
   })
 })
 
