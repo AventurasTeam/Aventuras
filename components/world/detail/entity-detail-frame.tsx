@@ -26,15 +26,23 @@ export function asBaseControl<D extends EntityBaseDraft>(
   return control as unknown as Control<EntityBaseDraft>
 }
 
+function openingTab(
+  isCreate: boolean,
+  createSeq: number | undefined,
+  initialTab: EntityTab | undefined,
+): EntityTab {
+  if (createSeq != null) return 'identity'
+  if (initialTab != null) return initialTab
+  return isCreate ? 'identity' : 'overview'
+}
+
 /** A new `[+] Blank` (create `seq`) lands on Identity: Overview has nothing to glance at yet. */
 export function useEntityTab(
   isCreate: boolean,
   createSeq: number | undefined,
   initialTab: EntityTab | undefined,
 ) {
-  const [tab, setTab] = useState<EntityTab>(
-    createSeq != null ? 'identity' : (initialTab ?? (isCreate ? 'identity' : 'overview')),
-  )
+  const [tab, setTab] = useState(openingTab(isCreate, createSeq, initialTab))
   // Synced during render so a new create draft never paints a frame on the previous tab.
   const [seenSeq, setSeenSeq] = useState(createSeq)
   if (createSeq !== seenSeq) {
