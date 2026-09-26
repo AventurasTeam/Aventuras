@@ -493,6 +493,50 @@ describe('single-perspective upsert against a user edit newer than the prose', (
     })
   })
 
+  it('keeps older prose off a pair the user deleted, after newer prose re-created it', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(views('friend', 'friend', 'act_0'), ctx)
+    await writeProse(ctx, 'e_old', 1)
+    const [row] = await pairRow(db, 'char_kael', 'char_mira')
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'deleteCharacterRelationship',
+          source: 'user_edit',
+          payload: { branchId: 'br_1', id: row.id },
+        },
+        actionId: 'act_d',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    await writeProse(ctx, 'e_new', 2)
+    expect((await applyDeltaAction(classify('ally', 'act_k1', 'e_new'), ctx)).status).toBe('ok')
+    const miraView = await applyDeltaAction(
+      {
+        action: {
+          kind: 'upsertCharacterRelationship',
+          source: 'periodic_classifier',
+          payload: {
+            branchId: 'br_1',
+            subjectId: 'char_mira',
+            objectId: 'char_kael',
+            kind: 'sister',
+            proseEntryId: 'e_old',
+          },
+        },
+        actionId: 'act_k2',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect(miraView).toEqual(userWon)
+    expect((await pairRow(db, 'char_kael', 'char_mira'))[0]).toMatchObject({
+      kind: 'ally',
+      inverseKind: null,
+    })
+  })
+
   // A live-row read would see `friend` at the second write and credit it to the user's create.
   it('reads a blank view at create from the chain after an older fact filled it', async () => {
     const { db, ctx } = await setup()

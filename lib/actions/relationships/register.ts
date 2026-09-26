@@ -12,7 +12,7 @@ import {
   rowDeltasSince,
   USER_EDITED_SINCE_PROSE,
   userDeletedPairSince,
-  userEditsSinceProse,
+  userEditsSince,
 } from '../delta/user-precedence'
 import type { DbCtx, DeltaSource } from '../types'
 
@@ -61,21 +61,16 @@ async function userWroteViewSince(
   povCol: 'kind' | 'inverseKind',
   proseEntryId: string,
 ): Promise<boolean> {
-  // A pair re-created since the delete is judged by its own create, not by the delete.
-  if (!current) {
-    const since = await proseLogPosition(ctx, branchId, proseEntryId)
-    return userDeletedPairSince(ctx, branchId, pair.aId, pair.bId, since)
+  const since = await proseLogPosition(ctx, branchId, proseEntryId)
+  if (current) {
+    const edits = await userEditsSince(ctx, branchId, 'character_relationships', current.id, since)
+    if (edits.some((d) => d.op === 'update' && carriesColumn(d, povCol))) return true
+    // Only the user's re-create outranks their delete; a pair the classifier re-created
+    // from newer prose still leaves older prose facing the delete.
+    if (edits.some((d) => d.op === 'create'))
+      return (await viewAtCreate(ctx, branchId, current, povCol)) !== null
   }
-  const edits = await userEditsSinceProse(
-    ctx,
-    branchId,
-    'character_relationships',
-    current.id,
-    proseEntryId,
-  )
-  if (edits.some((d) => d.op === 'update' && carriesColumn(d, povCol))) return true
-  if (!edits.some((d) => d.op === 'create')) return false
-  return (await viewAtCreate(ctx, branchId, current, povCol)) !== null
+  return userDeletedPairSince(ctx, branchId, pair.aId, pair.bId, since)
 }
 
 // Grouped handlers read pre-group state: two single-POV writes to a new pair would both insert.
