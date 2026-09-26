@@ -32,21 +32,51 @@ if [[ ! -x "$PLIST_BUDDY" ]]; then
     exit 1
 fi
 
-echo "🚀 Building unsigned iOS archive (aarch64-apple-ios)..."
+# Disable signing at the project level: neither the CLI's env defaults nor its
+# `--` runner args reach `xcodebuild archive`, which fails on the missing
+# development team otherwise. project.yml is what xcodegen re-renders the
+# .xcodeproj from on every build, so patching it (idempotent) is what actually
+# turns signing off.
+PROJECT_YML="src-tauri/gen/apple/project.yml"
+if [[ ! -f "$PROJECT_YML" ]]; then
+    echo "Error: $PROJECT_YML not found (run 'tauri ios init' first)." >&2
+    exit 1
+fi
+python3 - "$PROJECT_YML" <<'PYEOF'
+import sys
+path = sys.argv[1]
+with open(path) as f:
+    lines = f.readlines()
+if any('CODE_SIGNING_ALLOWED' in l for l in lines):
+    sys.exit(0)
+try:
+    t = next(i for i, l in enumerate(lines) if l.rstrip('\n') == 'targets:')
+    ios = next(i for i in range(t + 1, len(lines))
+               if lines[i].rstrip('\n').endswith('_iOS:') and lines[i].startswith('  '))
+    settings = next(i for i in range(ios + 1, len(lines))
+                    if lines[i].rstrip('\n') == '    settings:')
+except StopIteration:
+    sys.exit('project.yml: iOS target settings section not found')
+if lines[settings + 1].rstrip('\n') != '      base:':
+    sys.exit('project.yml: unexpected settings layout')
+lines[settings + 2:settings + 2] = [
+    '        CODE_SIGNING_ALLOWED: NO\n',
+    '        CODE_SIGNING_REQUIRED: NO\n',
+    '        CODE_SIGN_IDENTITY: ""\n',
+    '        CODE_SIGN_STYLE: Manual\n',
+]
+with open(path, 'w') as f:
+    f.writelines(lines)
+print('Patched project.yml for unsigned build')
+PYEOF
+(cd src-tauri/gen/apple && xcodegen generate)
+
+echo "🚀 Building unsigned iOS archive (aarch64)..."
 # --archive-only: stop after `xcodebuild archive`, skip the CLI's IPA-export phase
-# (which requires signing assets we deliberately do not have). With no signing
-# configuration, the Tauri CLI itself passes CODE_SIGNING_ALLOWED=NO,
-# CODE_SIGNING_REQUIRED=NO and CODE_SIGN_IDENTITY="" to xcodebuild.
+# (which requires signing assets we deliberately do not have).
 # --target aarch64: iOS device ARM64 (the CLI's shorthand for aarch64-apple-ios;
 # it also accepts aarch64-sim and x86_64).
-# "$@" (the --config list) stays before `--`: everything after it is passed to
-# xcodebuild as build settings, which override the project's automatic signing
-# and make the team requirement moot — this is what actually disables signing
-# (the CLI's env defaults do not reach the archive).
-npx tauri ios build --target aarch64 --archive-only "$@" -- \
-    CODE_SIGNING_ALLOWED=NO \
-    CODE_SIGNING_REQUIRED=NO \
-    CODE_SIGN_IDENTITY=""
+npx tauri ios build --target aarch64 --archive-only "$@"
 
 ARCHIVE="$(find src-tauri/gen/apple/build -name '*_iOS.xcarchive' -type d 2>/dev/null | sort | tail -n1)"
 if [[ -z "$ARCHIVE" ]]; then
