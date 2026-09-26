@@ -630,6 +630,7 @@ export const CreateLocation: Story = {
     // The whole create draft — schema defaults plus the name — so a create can't carry stray state.
     await expect(args.onSave).toHaveBeenCalledWith({
       kind: 'location',
+      keywordsBase: [],
       draft: {
         name: 'The Salt Wells',
         description: '',
