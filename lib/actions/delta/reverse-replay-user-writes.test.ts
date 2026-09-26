@@ -231,6 +231,19 @@ describe('reversing a machine write under a later user write', () => {
     expect((await pair(db))[0].kind).toBe('friend')
   })
 
+  it('weighs each machine write against the user edits after it alone', async () => {
+    const { db, ctx } = await setup()
+    await apply(ctx, userViews('friend', 'friend'), 'act_0')
+    await apply(ctx, classifyView('ally'), 'act_c1')
+    await apply(ctx, userViews('rival', 'friend'), 'act_u')
+    await apply(ctx, classifyView('enemy'), 'act_c2')
+
+    const rows = [...(await deltasOf(db, 'act_c2')), ...(await deltasOf(db, 'act_c1'))]
+    await reverseAndPruneDeltaRows(rows, ctx)
+
+    expect((await pair(db))[0].kind).toBe('rival')
+  })
+
   it('is not held back by a later machine write', async () => {
     const { db, ctx } = await setup()
     await apply(ctx, userViews('friend', 'friend'), 'act_0')
@@ -298,6 +311,88 @@ describe('reversing a machine view update', () => {
     expect(await pair(db)).toHaveLength(0)
     expect(characterRelationshipsStore.getById(created.id)).toBeUndefined()
     expect(await actionIds(db)).toEqual(['act_0', 'act_u'])
+  })
+
+  // The classifier never clears a view today, but the upsert handler accepts a null one.
+  it('re-inserts a pair an older undo in the same reversal gives a view back', async () => {
+    const { db, ctx } = await setup()
+    await apply(ctx, userViews(null, 'friend'), 'act_0')
+    const [created] = await pair(db)
+    await apply(ctx, classifyMiraView('wary'), 'act_c')
+    await apply(ctx, classifyView('ally'), 'act_c')
+    await apply(
+      ctx,
+      {
+        kind: 'upsertCharacterRelationship',
+        source: 'periodic_classifier',
+        payload: { branchId: 'b1', subjectId: 'char_mira', objectId: 'char_kael', kind: null },
+      },
+      'act_x',
+    )
+
+    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+
+    const [row] = await pair(db)
+    expect(row).toEqual({ ...created, kind: null, inverseKind: 'friend' })
+    expect(characterRelationshipsStore.getById(row.id)).toEqual(row)
+  })
+
+  it('leaves a pair the user deleted since deleted', async () => {
+    const { db, ctx } = await setup()
+    await apply(ctx, userViews(null, 'friend'), 'act_0')
+    const [created] = await pair(db)
+    await apply(ctx, classifyMiraView('wary'), 'act_c')
+    await apply(ctx, classifyView('ally'), 'act_c')
+    await apply(
+      ctx,
+      {
+        kind: 'deleteCharacterRelationship',
+        source: 'user_edit',
+        payload: { branchId: 'b1', id: created.id },
+      },
+      'act_u',
+    )
+
+    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+
+    expect(await pair(db)).toHaveLength(0)
+  })
+
+  // Out of order only after a redo re-inserts the create above deltas its snapshot absorbed.
+  it('keeps a reversed create out even when older undos in the plan would give it a view', async () => {
+    const { db, ctx } = await setup()
+    await apply(ctx, userViews('ally', null), 'act_0')
+    const [row] = await pair(db)
+    const delta = (
+      id: string,
+      logPosition: number,
+      op: Delta['op'],
+      undoPayload: Record<string, unknown> | null,
+    ): Delta => ({
+      id,
+      branchId: 'b1',
+      entryId: null,
+      actionId: 'act_synthetic',
+      logPosition,
+      source: op === 'create' ? 'user_edit' : 'periodic_classifier',
+      targetTable: 'character_relationships',
+      targetId: row.id,
+      op,
+      undoPayload,
+      encodingVersion: 1,
+      createdAt: logPosition,
+    })
+
+    await reverseAndPruneDeltaRows(
+      [
+        delta('d_create', 30, 'create', null),
+        delta('d_kael', 20, 'update', { kind: null }),
+        delta('d_mira', 10, 'update', { inverseKind: 'friend' }),
+      ],
+      ctx,
+    )
+
+    expect(await pair(db)).toHaveLength(0)
   })
 
   it('updates a pair the reversal leaves with a view', async () => {

@@ -95,9 +95,13 @@ async function buildUndoOps(
   ctx: DbCtx,
 ): Promise<{ ops: SqlOp[]; patches: PatchEmission[] }> {
   const working = new Map<string, Record<string, unknown>>()
+  // Rows the plan has deleted, or found missing. A tombstone keeps the full row, so an
+  // older undo that gives it a row-keeping column back re-inserts it; an absent row stays out.
+  const tombstones = new Set<string>()
+  const absent = new Set<string>()
   const ops: SqlOp[] = []
   const patches: PatchEmission[] = []
-  const laterUserEdits = await userEditsOutliving(ctx, rows)
+  const laterUserEdits = await userEditsOutliving(ctx, rows, readsUserEdits)
 
   for (const delta of rows) {
     const entry = resolveByTable(delta.targetTable)
@@ -114,6 +118,7 @@ async function buildUndoOps(
           string,
           unknown
         >[]
+        if (!current) absent.add(key)
         row = { ...(current ?? {}) }
         working.set(key, row)
       }
@@ -136,12 +141,21 @@ async function buildUndoOps(
     }
 
     const emitDelete = () => {
-      working.delete(key)
       ops.push(ctx.db.delete(table).where(where).toSQL())
       patches.push({
         table: delta.targetTable,
         branchId: delta.branchId,
         patch: { op: 'delete', id: delta.targetId },
+      })
+    }
+
+    const emitInsert = (row: Record<string, unknown>) => {
+      if (isEmbeddedSourceTable(delta.targetTable)) row.embeddingStale = 1
+      ops.push(ctx.db.insert(table).values(row).toSQL())
+      patches.push({
+        table: delta.targetTable,
+        branchId: delta.branchId,
+        patch: { op: 'create', id: delta.targetId, row: { ...row } },
       })
     }
 
@@ -162,6 +176,9 @@ async function buildUndoOps(
           continue
         }
       }
+      working.set(key, {})
+      absent.add(key)
+      tombstones.delete(key)
       emitDelete()
       continue
     }
@@ -180,6 +197,8 @@ async function buildUndoOps(
       if (isEmbeddedSourceTable(delta.targetTable)) rowData.embeddingStale = 1
 
       working.set(key, { ...rowData })
+      absent.delete(key)
+      tombstones.delete(key)
       ops.push(ctx.db.insert(table).values(rowData).toSQL())
       patches.push({
         table: delta.targetTable,
@@ -239,11 +258,25 @@ async function buildUndoOps(
       row[col] = value // thread into the working copy for later-in-DESC undos
     }
     const keeping = entry.rowKeepingColumns
-    if (keeping && keeping.every((col) => row[col] == null)) emitDelete()
-    else emitUpdate(restored, row)
+    const keepsNone = keeping !== undefined && keeping.every((col) => row[col] == null)
+    if (tombstones.has(key)) {
+      if (!keepsNone) {
+        tombstones.delete(key)
+        emitInsert(row)
+      }
+    } else if (keepsNone && !absent.has(key)) {
+      tombstones.add(key)
+      emitDelete()
+    } else emitUpdate(restored, row)
   }
 
   return { ops, patches }
+}
+
+// Only an update's undo, or a create's on a table with row-keeping columns, reads later user edits.
+function readsUserEdits(delta: Delta): boolean {
+  if (delta.op === 'update') return true
+  return delta.op === 'create' && resolveByTable(delta.targetTable)?.rowKeepingColumns != null
 }
 
 export async function reverseAndPruneDeltaRows(

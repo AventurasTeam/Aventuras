@@ -73,17 +73,19 @@ export function userEditsSince(
 const rowKey = (d: Delta) => `${d.targetTable}:${d.branchId}:${d.targetId}`
 
 /**
- * Maps each machine delta in `rows`, by id, to the `user_edit` deltas on its row logged
- * after it that `rows` does not reverse too, oldest first. A user delta has no entry.
+ * Maps each machine delta in `rows` that `wanted` accepts, by id, to the `user_edit` deltas
+ * on its row logged after it that `rows` does not reverse too, oldest first. A user delta
+ * has no entry.
  */
 export async function userEditsOutliving(
   ctx: DbCtx,
   rows: readonly Delta[],
+  wanted: (delta: Delta) => boolean,
 ): Promise<ReadonlyMap<string, Delta[]>> {
   const reversed = new Set(rows.map((r) => r.id))
   const machineByRow = new Map<string, Delta[]>()
   for (const d of rows) {
-    if (isUserOriginatedSource(d.source)) continue
+    if (isUserOriginatedSource(d.source) || !wanted(d)) continue
     machineByRow.set(rowKey(d), [...(machineByRow.get(rowKey(d)) ?? []), d])
   }
   const byDelta = new Map<string, Delta[]>()

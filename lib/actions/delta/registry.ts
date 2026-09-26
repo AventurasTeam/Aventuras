@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, getTableColumns } from 'drizzle-orm'
 import type { SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core'
 import type { ZodType } from 'zod'
 
@@ -78,9 +78,13 @@ export type DomainRegistration = {
   restoreCascade?: CascadeRestore
   cascadeDeleteOps?: CascadeDeleteOps
   /**
-   * Columns the row exists for while any is non-null: a reversal that would null them all
-   * deletes the row instead. Reversing a machine `create` keeps a row a later user write
-   * set one of them on, nulling only the rest.
+   * Columns the row exists for while any is non-null. A reversal that would null them all
+   * deletes the row but keeps it as a tombstone: an older undo in the same plan that gives
+   * one a value back re-inserts the whole row. Reversing a machine `create` keeps a row a
+   * later user write set one of them on, nulling only the rest. Reversal restores a
+   * machine write column by column around later user writes, which assumes no invariant
+   * spans columns beyond these: `happenings_mutual_excl` would break if a machine write
+   * ever updated a happening. Checked against the table's columns at `register()`.
    */
   rowKeepingColumns?: readonly string[]
 }
@@ -91,6 +95,14 @@ const actionRegistry = new Map<string, { table: string; handler: ActionHandler }
 const tableRegistry = new Map<string, TableEntry>()
 
 export function register(reg: DomainRegistration): void {
+  // A misspelled name reads as null on every row, turning each update reversal into a delete.
+  if (reg.rowKeepingColumns) {
+    const columns = getTableColumns(reg.descriptor.table)
+    for (const col of reg.rowKeepingColumns) {
+      if (!Object.hasOwn(columns, col))
+        throw new Error(`register: ${reg.table} has no column ${col} to keep rows by`)
+    }
+  }
   const { handlers, ...tableEntry } = reg
   tableRegistry.set(reg.table, tableEntry)
   for (const [kind, handler] of Object.entries(handlers)) {
