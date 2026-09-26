@@ -226,16 +226,12 @@ export default function WorldRoute() {
       const target = entities.find((e) => e.id === id)
       if (target == null) return
       guard(() => {
-        if (target.kind !== category) {
-          setCategory(target.kind)
-          setFilter('all')
-          setSearch('')
-        }
+        if (target.kind !== category) switchCategory(target.kind)
         select(id)
         listRef.current?.revealRow(id)
       })
     },
-    [entities, category, guard, select],
+    [entities, category, guard, switchCategory, select],
   )
   const openHappening = useCallback(
     (id: string) =>
@@ -249,17 +245,13 @@ export default function WorldRoute() {
     (target: WorldSelection, atMount: boolean) => {
       if (atMount) return
       guard(() => {
-        if (target.category !== category) {
-          setCategory(target.category)
-          setFilter('all')
-          setSearch('')
-        }
+        if (target.category !== category) switchCategory(target.category)
         select(target.id)
         setLinkMount((n) => n + 1)
         listRef.current?.revealRow(target.id)
       })
     },
-    [category, guard, select],
+    [category, guard, switchCategory, select],
   )
   // Stores hydrate before `open` publishes, so the linked row's pane mounts in that same commit.
   const pendingLink = useRouteLink(link, open != null, followLink)
