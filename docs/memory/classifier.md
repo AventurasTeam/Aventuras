@@ -299,7 +299,9 @@ the classifier has fully processed; the pass range is
 `(processedThrough, head]`. It is the concrete field behind "unprocessed
 entries," read by the cadence trigger, `[Run classifier now]`, and
 chapter-close phase 0. A successful pass over `(processedThrough, E]` sets
-`processedThrough = E` in its commit transaction. A prose reversal clamps
+`processedThrough = E` in its commit transaction, in the same write as its
+success status, so a pass that fails to advance the watermark never resets
+the retry count it then fails against. A prose reversal clamps
 it — `processedThrough ← min(processedThrough, position(B) − 1)` for `B`
 the earliest removed entry (see
 [`data-model.md → Entry mutability & rollback → Survival anchor`](../data-model.md#survival-anchor))

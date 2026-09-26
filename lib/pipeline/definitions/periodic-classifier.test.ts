@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { PipelineAction } from '@/lib/actions'
@@ -926,6 +926,64 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
       .from(branches)
       .where(eq(branches.id, 'b1'))
     expect(row.status).toMatchObject({ state: 'retrying', retryCount: 1 })
+  })
+
+  it('counts a pass whose watermark write fails as a failure, not a success', async () => {
+    const { db, runInTransaction } = await seedApplyTimeHarness()
+    await db.run(
+      sql`UPDATE branches SET classifier_status = ${JSON.stringify({
+        state: 'retrying',
+        lastSuccessAt: null,
+        lastError: 'rate limited',
+        retryCount: 1,
+        processedThrough: 0,
+      })} WHERE id = 'b1'`,
+    )
+    let failWatermark = true
+    type Chunk = { value?: unknown; queryChunks?: Chunk[] } | null
+    const sqlText = (query: Chunk): string =>
+      (query?.queryChunks ?? [])
+        .map((chunk) => (Array.isArray(chunk?.value) ? chunk.value.join('') : sqlText(chunk)))
+        .join('')
+    const flaky = new Proxy(db, {
+      get(target, prop) {
+        if (prop === 'run')
+          return (...args: Parameters<typeof db.run>) => {
+            if (failWatermark && sqlText(args[0] as Chunk).includes('processedThrough')) {
+              failWatermark = false
+              throw new Error('SQLITE_FULL')
+            }
+            return target.run(...args)
+          }
+        const value = Reflect.get(target, prop, target)
+        return typeof value === 'function' ? value.bind(target) : value
+      },
+    })
+
+    ensurePeriodicClassifierPipelineRegistered()
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({
+        happenings: [{ title: 'A', sourceTurn: 't1', involvements: [], awareness: [] }],
+      }),
+    })
+
+    const ctx: RunCtx = { storyId: 's1', branchId: 'b1', db: flaky, runInTransaction }
+    const result = await runPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
+    if (result.outcome === 'rejected') throw new Error('unexpected rejected start')
+    expect(failWatermark).toBe(false)
+    expect(result.outcome).toBe('failed')
+
+    const [row] = await db
+      .select({ status: branches.classifierStatus })
+      .from(branches)
+      .where(eq(branches.id, 'b1'))
+    expect(row.status).toMatchObject({
+      state: 'retrying',
+      retryCount: 2,
+      lastSuccessAt: null,
+      processedThrough: 0,
+    })
   })
 
   // If the reversal can't commit, the write attempt is still on disk; arming a retry would

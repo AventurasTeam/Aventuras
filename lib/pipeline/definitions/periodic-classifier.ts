@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, sql } from 'drizzle-orm'
+import { and, asc, eq, gt, sql, type SQL } from 'drizzle-orm'
 
 import { boundedSignal } from '@/lib/abort'
 import { generateStructured } from '@/lib/ai'
@@ -99,31 +99,31 @@ async function recordFailure(ctx: StatusCtx, detail: string): Promise<void> {
   await writeStatus(ctx, status)
 }
 
-async function writeStatus(ctx: StatusCtx, status: ClassifierStatus): Promise<void> {
-  // branches is not delta-logged (classifier.md -> Persistence), so this is a
-  // direct row write. Key-scoped json_set because the reversal clamp owns
-  // $.processedThrough and can commit between this run's read and this write.
+// branches is not delta-logged (classifier.md -> Persistence), so these are direct
+// row writes. Key-scoped json_set because the reversal clamp owns $.processedThrough
+// and can commit between this run's read and its write.
+async function patchStatus(ctx: StatusCtx, keys: SQL): Promise<void> {
   await ctx.db.run(
     sql`UPDATE ${branches} SET classifier_status = json_set(
-          COALESCE(classifier_status, ${IDLE_STATUS_JSON}),
-          '$.state', ${status.state},
-          '$.lastSuccessAt', ${status.lastSuccessAt},
-          '$.lastError', ${status.lastError},
-          '$.retryCount', ${status.retryCount}
+          COALESCE(classifier_status, ${IDLE_STATUS_JSON}), ${keys}
         ) WHERE ${branches.id} = ${ctx.branchId}`,
   )
 }
 
-// Its own key-scoped write, for the mirror reason: it must not carry this run's
-// snapshot of the lifecycle keys.
-async function advanceWatermark(ctx: PhaseContext, coversThrough: number): Promise<void> {
-  await ctx.db.run(
-    sql`UPDATE ${branches} SET classifier_status = json_set(
-          COALESCE(classifier_status, ${IDLE_STATUS_JSON}), '$.processedThrough',
-          MAX(COALESCE(json_extract(classifier_status, '$.processedThrough'), 0), ${coversThrough})
-        ) WHERE ${branches.id} = ${ctx.branchId}`,
-  )
-}
+const lifecycleKeys = (status: ClassifierStatus) =>
+  sql`'$.state', ${status.state}, '$.lastSuccessAt', ${status.lastSuccessAt},
+      '$.lastError', ${status.lastError}, '$.retryCount', ${status.retryCount}`
+
+// MAX-guarded, and never from this run's snapshot of the lifecycle keys.
+const watermarkKey = (coversThrough: number) =>
+  sql`'$.processedThrough',
+      MAX(COALESCE(json_extract(classifier_status, '$.processedThrough'), 0), ${coversThrough})`
+
+const writeStatus = (ctx: StatusCtx, status: ClassifierStatus) =>
+  patchStatus(ctx, lifecycleKeys(status))
+
+const advanceWatermark = (ctx: StatusCtx, coversThrough: number) =>
+  patchStatus(ctx, watermarkKey(coversThrough))
 
 export async function* periodicClassifierPhase(
   ctx: PhaseContext,
@@ -266,10 +266,9 @@ export async function* periodicClassifierPhase(
   }
 
   const next = nextStatusOnSuccess(status, { coversThrough: window.coversThrough, at: Date.now() })
-  // writeStatus persists the lifecycle keys only; next.processedThrough is not
-  // one of them — the watermark lands below, key-scoped and MAX-guarded in SQL.
-  await writeStatus(ctx, next)
-  await advanceWatermark(ctx, window.coversThrough)
+  // One statement: a success recorded without its watermark would reset the retry count on a
+  // pass that then fails and reverses, and retry it at the first backoff forever.
+  await patchStatus(ctx, sql`${lifecycleKeys(next)}, ${watermarkKey(window.coversThrough)}`)
   return { status: 'completed' }
 }
 
