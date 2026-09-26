@@ -12,7 +12,7 @@ import type { EntityKind } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import type { EntityBaseDraft } from '@/lib/world'
 
-import { useDraftBase } from './use-draft-base'
+import { useDraftBase, type DraftBase } from './use-draft-base'
 import { saveFailureText, saveRejectionText } from './world-copy'
 
 type RefusalFields<Draft extends FieldValues> = Readonly<
@@ -61,7 +61,7 @@ export function useEntityRowSession<Draft extends EntityDraft>({
   const rowKey = rowId ?? `create:${kind}:${createSeq}`
   const formRef = useRef<UseFormReturn<Draft> | null>(null)
   const rowKeyRef = useRef(rowKey)
-  const keywordsRef = useRef<ReturnType<typeof useDraftBase<readonly string[]>> | null>(null)
+  const keywordsRef = useRef<DraftBase<readonly string[]> | null>(null)
   const commit = useCallback(
     async (draft: Draft): Promise<RowCommitResult> => {
       const startKey = rowKeyRef.current
