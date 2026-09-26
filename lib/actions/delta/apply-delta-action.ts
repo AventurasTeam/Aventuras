@@ -14,8 +14,9 @@ import {
   type PipelineAction,
 } from '../types'
 import { deltaRowOp } from './delta-row'
-import { withKeyLock } from './key-lock'
+import { withKeyLock, withKeyLocks } from './key-lock'
 import { resolveByActionKind, resolveByTable, type HandlerOutcome } from './registry'
+import { entityRowLockKey, relationshipsLockKey } from './row-locks'
 
 type Args = { action: PipelineAction; actionId: string; branchId: string; entryId?: string | null }
 
@@ -24,11 +25,11 @@ type LockKey<K extends ProductionKind> =
   | ((payload: PipelineActionMap[K]['payload']) => string)
   | null
 
-const entityRow = (p: { branchId: string; id: string }) => `entities:${p.branchId}:${p.id}`
-const relationships = (p: { branchId: string }) => `character_relationships:${p.branchId}`
+const entityRow = (p: { branchId: string; id: string }) => entityRowLockKey(p.branchId, p.id)
+const relationships = (p: { branchId: string }) => relationshipsLockKey(p.branchId)
 
 // Handlers read before they commit, so a write the classifier and a user Save can both make
-// to one row serializes: entities per row, relationships per branch (a delete names no pair).
+// to one row serializes: entities per row, relationships per branch.
 const LOCK_KEY: { [K in ProductionKind]: LockKey<K> } = {
   createStoryEntry: null,
   updateStoryEntryMetadata: null,
@@ -164,13 +165,6 @@ export type DeltaGroupResult =
 
 type GroupArgs = { actionId: string; branchId: string; entryId?: string | null }
 
-function lockKeysFor(actions: readonly PipelineAction[]): string[] {
-  const keys = actions.map(lockKeyFor).filter((key) => key !== null)
-  // Deduped because withKeyLock is not reentrant; sorted so two groups sharing keys take
-  // them in the same order.
-  return [...new Set(keys)].sort()
-}
-
 /**
  * Commits several actions under one actionId as a SINGLE transaction, so a rejection
  * anywhere in the group leaves nothing behind. Sequential `applyDeltaAction` calls
@@ -188,16 +182,8 @@ export async function applyDeltaActionGroup(
   args: GroupArgs,
   ctx: DbCtx,
 ): Promise<DeltaGroupResult> {
-  return withKeyLocks(lockKeysFor(actions), () => applyDeltaActionGroupUnlocked(actions, args, ctx))
-}
-
-function withKeyLocks(
-  keys: readonly string[],
-  run: () => Promise<DeltaGroupResult>,
-): Promise<DeltaGroupResult> {
-  const [first, ...rest] = keys
-  if (first === undefined) return run()
-  return withKeyLock(first, () => withKeyLocks(rest, run))
+  const keys = actions.map(lockKeyFor).filter((key) => key !== null)
+  return withKeyLocks(keys, () => applyDeltaActionGroupUnlocked(actions, args, ctx))
 }
 
 async function applyDeltaActionGroupUnlocked(

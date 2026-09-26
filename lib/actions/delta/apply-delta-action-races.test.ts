@@ -15,6 +15,7 @@ import { resetAllStores } from '@/lib/stores'
 
 import type { PipelineAction } from '../types'
 import { applyDeltaAction, applyDeltaActionGroup } from './apply-delta-action'
+import { reverseAndPruneDeltaRows, reverseReplayDeltas } from './reverse-replay'
 
 type Db = Awaited<ReturnType<typeof createTestDb>>['db']
 type Ctx = {
@@ -145,7 +146,7 @@ describe('a classifier write racing a user Save on one row', () => {
               {
                 kind: 'appendEntityKeywords',
                 source: 'periodic_classifier',
-                payload: { branchId: BRANCH, id, keywords: ['c'], proseEntryId: `e_${round}` },
+                payload: { branchId: BRANCH, id, keywords: ['b', 'c'], proseEntryId: `e_${round}` },
               },
               `k_${round}`,
               ctx,
@@ -176,7 +177,8 @@ describe('a classifier write racing a user Save on one row', () => {
           expect(user!.undoPayload, label).toEqual({ keywords: ['a', 'b', 'c'] })
           expect(row.keywords, label).toEqual(['a'])
         } else {
-          // The user removed `b` after the prose, so the append must not bring it back.
+          // The user removed `b` after the prose: precedence drops it from the append, and the
+          // lock keeps a read from before the removal from restoring it.
           expect(user!.undoPayload, label).toEqual({ keywords: ['a', 'b'] })
           expect(machine!.undoPayload, label).toEqual({ keywords: ['a'] })
           expect(row.keywords, label).toEqual(['a', 'c'])
@@ -315,6 +317,68 @@ describe('a classifier write racing a user Save on one row', () => {
       },
     )
   })
+
+  // A failing pass's abortRun reverses its writes by action id; undo, rollback and
+  // regenerate hand the rows over.
+  const reversals = {
+    reverseReplayDeltas: (actionId: string, ctx: Ctx) => reverseReplayDeltas(actionId, ctx),
+    reverseAndPruneDeltaRows: async (actionId: string, ctx: Ctx) => {
+      const rows = (await ctx.db
+        .select()
+        .from(deltas)
+        .where(eq(deltas.actionId, actionId))) as Delta[]
+      return reverseAndPruneDeltaRows(rows, ctx)
+    },
+  }
+
+  it.each(Object.entries(reversals))(
+    'keeps a user keyword Save that races %s of a classifier append',
+    async (_name, reverse) => {
+      const ctx = await setup()
+      await sweep(
+        async (round) => {
+          const id = `char_${round}`
+          await ctx.db.insert(entities).values(character(id, 'active', ['a']))
+          const appended = await classify(
+            {
+              kind: 'appendEntityKeywords',
+              source: 'periodic_classifier',
+              payload: { branchId: BRANCH, id, keywords: ['b'] },
+            },
+            `k_${round}`,
+            ctx,
+          )
+          expect(appended.status).toBe('ok')
+          return {
+            classifier: () => reverse(`k_${round}`, ctx),
+            user: () =>
+              save(
+                {
+                  kind: 'updateEntity',
+                  source: 'user_edit',
+                  payload: { branchId: BRANCH, id, patch: { keywords: ['a', 'c'] } },
+                },
+                `u_${round}`,
+                ctx,
+              ),
+          }
+        },
+        async (round, label) => {
+          const user = await deltaOf(ctx.db, `u_${round}`)
+          const [row] = await ctx.db
+            .select()
+            .from(entities)
+            .where(eq(entities.id, `char_${round}`))
+          expect(await deltaOf(ctx.db, `k_${round}`), label).toBeUndefined()
+          // The Save always logs after the append it races the reversal of, so its list stands.
+          expect(user, label).toBeDefined()
+          expect(row.keywords, label).toEqual(['a', 'c'])
+          // The Save overwrote either the appended list or the one the reversal restored.
+          expect([['a', 'b'], ['a']], label).toContainEqual(user!.undoPayload?.keywords)
+        },
+      )
+    },
+  )
 
   // Promote and append now share one row key; a group re-taking it would wait on itself.
   it('takes a row key once for a group writing that row through two kinds', async () => {

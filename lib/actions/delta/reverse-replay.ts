@@ -5,7 +5,9 @@ import { deltas, embeddedFieldsForTable, isEmbeddedSourceTable } from '@/lib/db'
 
 import type { DbCtx } from '../types'
 import { applyUndoPayload, isPayloadMetaKey } from './delta-encoding'
+import { withKeyLocks } from './key-lock'
 import { resolveByTable, whereForDelta, type StorePatch } from './registry'
+import { deltaLockKeys } from './row-locks'
 import { userEditsOutliving, wroteColumn } from './user-precedence'
 
 /**
@@ -286,20 +288,22 @@ export async function reverseAndPruneDeltaRows(
 ): Promise<number> {
   if (rows.length === 0 && extraOps.length === 0) return 0
   const actionId = rows[0]?.actionId ?? 'rollback'
-  let patches: PatchEmission[]
-  try {
-    const plan = await buildReverseAndPrunePlan(rows, ctx)
-    patches = plan.patches
-    await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...extraOps])
-  } catch (e) {
-    throw new DeltaReplayError('Reverse-and-prune failed', {
-      cause: e,
-      actionId,
-      stage: 'transaction',
-    })
-  }
-  emitCommittedPatches(patches, actionId)
-  return rows.length
+  return withKeyLocks(deltaLockKeys(rows), async () => {
+    let patches: PatchEmission[]
+    try {
+      const plan = await buildReverseAndPrunePlan(rows, ctx)
+      patches = plan.patches
+      await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...extraOps])
+    } catch (e) {
+      throw new DeltaReplayError('Reverse-and-prune failed', {
+        cause: e,
+        actionId,
+        stage: 'transaction',
+      })
+    }
+    emitCommittedPatches(patches, actionId)
+    return rows.length
+  })
 }
 
 /**
@@ -312,28 +316,32 @@ export async function reverseReplayDeltas(
   ctx: DbCtx,
   settleOps: (deltaCount: number) => readonly SqlOp[] = () => [],
 ): Promise<number> {
+  const fail = (e: unknown) =>
+    new DeltaReplayError('Reverse-replay failed', { cause: e, actionId, stage: 'transaction' })
   let rows: Delta[]
-  let patches: PatchEmission[]
   try {
     rows = (await ctx.db
       .select()
       .from(deltas)
       .where(eq(deltas.actionId, actionId))
       .orderBy(desc(deltas.logPosition))) as Delta[]
-    const settle = settleOps(rows.length)
-    if (rows.length === 0 && settle.length === 0) return 0
-
-    const plan = await buildReverseAndPrunePlan(rows, ctx)
-    patches = plan.patches
-    await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...settle])
   } catch (e) {
-    throw new DeltaReplayError('Reverse-replay failed', {
-      cause: e,
-      actionId,
-      stage: 'transaction',
-    })
+    throw fail(e)
   }
-  // Action layer owns the patch: invert in the held-branch store after the tx.
-  emitCommittedPatches(patches, actionId)
-  return rows.length
+  return withKeyLocks(deltaLockKeys(rows), async () => {
+    let patches: PatchEmission[]
+    try {
+      const settle = settleOps(rows.length)
+      if (rows.length === 0 && settle.length === 0) return 0
+
+      const plan = await buildReverseAndPrunePlan(rows, ctx)
+      patches = plan.patches
+      await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...settle])
+    } catch (e) {
+      throw fail(e)
+    }
+    // Action layer owns the patch: invert in the held-branch store after the tx.
+    emitCommittedPatches(patches, actionId)
+    return rows.length
+  })
 }
