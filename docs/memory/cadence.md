@@ -185,11 +185,15 @@ field, they cannot write the same row to different values.
 The only shared row is `entities`, and field-level disjointness
 holds for everything except the `status`-overlap above. Each action
 writes only the columns it changes but computes them from a read of
-the row, so every delta-logged write to an existing `entities` row
-serializes on a lock keyed by that row: one writer's read and commit
-never straddle another's, whether that is the piggyback, the
-classifier or a user edit. `character_relationships` writes serialize
-on one key per branch, since a delete names a row id, not a pair.
+the row, so every delta-logged write to an existing `entities` row,
+and every reversal of one, serializes on a lock keyed by that row: one
+writer's read and commit never straddle another's, whether that is
+the piggyback, the classifier or a user edit.
+`character_relationships` writes serialize on one key per branch,
+since a delete names a row id, not a pair. A shared JSON column such
+as `branches.classifier_status`, which the reversal clamp and the
+classifier pipeline both write, is written with key-scoped `json_set`,
+never a whole-blob read-modify-write.
 
 ### Single-writer-per-write-set in v1
 
