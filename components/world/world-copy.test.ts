@@ -128,6 +128,9 @@ describe('labels and issues', () => {
     expect(saveRejectionText('parent-cycle')).toBe(
       'That parent would make this location part of itself.',
     )
+    expect(saveRejectionText('parent-chain-broken')).toBe(
+      "That parent's own chain of parents loops back or runs too deep. Fix that chain first.",
+    )
     expect(saveRejectionText('in-flight')).toBe(
       "Couldn't save while generation is in flight. Your changes are still here.",
     )

@@ -6,6 +6,9 @@ export const PARENT_CHAIN_DEPTH_CAP = 100
 /** The `reason` and `code` a `parent_location_id` write that would loop is refused with. */
 export const PARENT_CYCLE = 'parent-cycle'
 
+/** Refusal for a proposed parent whose own chain already loops or passes the depth cap. */
+export const PARENT_CHAIN_BROKEN = 'parent-chain-broken'
+
 export type ParentOf = (id: string) => string | null
 
 export type ParentChainCheck = 'ok' | 'cycle' | 'cap-hit'

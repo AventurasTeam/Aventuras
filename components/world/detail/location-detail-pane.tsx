@@ -5,6 +5,7 @@ import { TabsContent } from '@/components/ui/tabs'
 import {
   locationDraftFrom,
   locationDraftSchema,
+  PARENT_CHAIN_BROKEN,
   PARENT_CYCLE,
   WORLD_ISSUE,
   type LocationDraft,
@@ -24,6 +25,7 @@ const fieldLabel = (field: string) => entityFieldLabel('location', field)
 // data-model.md → LocationState: a handler parent-cycle refusal is a form error on the parent.
 const FIELD_ERRORS = {
   [PARENT_CYCLE]: { field: 'parentLocationId', message: WORLD_ISSUE.parentCycle },
+  [PARENT_CHAIN_BROKEN]: { field: 'parentLocationId', message: WORLD_ISSUE.parentChainBroken },
 } as const
 
 export function LocationDetailPane({

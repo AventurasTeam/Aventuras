@@ -770,6 +770,27 @@ export const ParentCycleFieldError: Story = {
   },
 }
 
+/** A cap-hit refusal names the chain above the parent, still on the parent field. */
+export const ParentChainBrokenFieldError: Story = {
+  args: {
+    kind: 'location',
+    row: HOLLOW,
+    saveResult: { status: 'rejected', reason: 'parent-chain-broken', code: 'parent-chain-broken' },
+  },
+  play: async ({ args }) => {
+    const text =
+      "That parent's own chain of parents loops back or runs too deep. Fix that chain first."
+    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
+    await userEvent.click(await screen.findByRole('button', { name: 'Part of' }, WAIT))
+    await userEvent.click(await screen.findByRole('option', { name: /The Drowned Market/ }, WAIT))
+    const bar = await screen.findByTestId('save-bar', {}, WAIT)
+    await userEvent.click(within(bar).getByRole('button', { name: /^Save/ }))
+    await expect(await screen.findByText(text, {}, WAIT)).toBeVisible()
+    await expect(within(saveBar()).getByRole('button', { name: /^Save/ })).toBeDisabled()
+    await expect(args.onRejected).toHaveBeenCalledWith(text)
+  },
+}
+
 /** Set as lead (characters only), plus Export and Delete disabled with reasons. */
 export const OverflowMenuForAnActiveCharacter: Story = {
   args: { row: MIRA },

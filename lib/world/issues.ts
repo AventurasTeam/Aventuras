@@ -10,6 +10,7 @@ export const WORLD_ISSUE = {
   relationshipPovRequired: 'relationshipPovRequired',
   duplicateRelationship: 'duplicateRelationship',
   parentCycle: 'parentCycle',
+  parentChainBroken: 'parentChainBroken',
 } as const
 
 export type WorldIssue = (typeof WORLD_ISSUE)[keyof typeof WORLD_ISSUE]

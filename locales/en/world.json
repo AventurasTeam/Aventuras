@@ -206,13 +206,15 @@
     "relationshipPovRequired": "Fill in at least one view.",
     "duplicateRelationship": "This character already has a relationship here.",
     "parentCycle": "That parent would make this location part of itself.",
+    "parentChainBroken": "That parent's own chain of parents loops back or runs too deep. Fix that chain first.",
     "inTab": "{{tab}}: {{issue}}"
   },
   "save": {
     "saved": "Saved.",
     "failed": "Couldn't save your changes. They're still here — try again.",
     "inFlight": "Couldn't save while generation is in flight. Your changes are still here.",
-    "parentCycle": "That parent would make this location part of itself."
+    "parentCycle": "That parent would make this location part of itself.",
+    "parentChainBroken": "That parent's own chain of parents loops back or runs too deep. Fix that chain first."
   },
   "overview": {
     "notDescribed": "— not yet described —",

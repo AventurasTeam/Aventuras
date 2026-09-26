@@ -506,7 +506,8 @@ describe('parent_location_id cycle guard', () => {
     expect(result.status).toBe('ok')
   })
 
-  it('logs a cap hit on an existing loop at error and refuses', async () => {
+  // The proposed parent isn't the fault: a loop already stored above it is.
+  it('logs a cap hit on an existing loop at error and refuses it as a broken chain', async () => {
     const { db, ctx } = await setup()
     await db
       .insert(entities)
@@ -516,7 +517,7 @@ describe('parent_location_id cycle guard', () => {
       setState('loc_c', { parent_location_id: 'loc_x' }, 'act_1'),
       ctx,
     )
-    expect(result).toMatchObject({ status: 'rejected', code: 'parent-cycle' })
+    expect(result).toMatchObject({ status: 'rejected', code: 'parent-chain-broken' })
     expect(error).toHaveBeenCalledWith('action_layer.parent_chain_cap_hit', {
       branchId: 'br_1',
       id: 'loc_c',

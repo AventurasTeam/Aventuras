@@ -11,7 +11,7 @@ import {
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { entitiesStore } from '@/lib/stores'
-import { checkParentChain, PARENT_CYCLE, parentOfLocations } from '@/lib/world'
+import { checkParentChain, PARENT_CHAIN_BROKEN, PARENT_CYCLE, parentOfLocations } from '@/lib/world'
 
 import { computeUndoPayload, deepEqual } from '../delta/delta-encoding'
 import { register, type ActionHandler, type HandlerOutcome } from '../delta/registry'
@@ -100,9 +100,9 @@ async function refuseParentCycle(
     .where(and(eq(entities.branchId, branchId), eq(entities.kind, 'location')))
   const check = checkParentChain(id, proposed, parentOfLocations(rows))
   if (check === 'ok') return null
-  if (check === 'cap-hit')
-    logger.error('action_layer.parent_chain_cap_hit', { branchId, id, parentId: proposed })
-  return { status: 'rejected', reason: PARENT_CYCLE, code: PARENT_CYCLE }
+  if (check === 'cycle') return { status: 'rejected', reason: PARENT_CYCLE, code: PARENT_CYCLE }
+  logger.error('action_layer.parent_chain_cap_hit', { branchId, id, parentId: proposed })
+  return { status: 'rejected', reason: PARENT_CHAIN_BROKEN, code: PARENT_CHAIN_BROKEN }
 }
 
 const createHandler: ActionHandler = async (action, branchId, ctx) => {

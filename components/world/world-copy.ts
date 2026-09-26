@@ -33,6 +33,7 @@ const ISSUE_TAB: Partial<Record<WorldIssue, EntityTab>> = {
   relationshipPovRequired: 'connections',
   duplicateRelationship: 'connections',
   parentCycle: 'connections',
+  parentChainBroken: 'connections',
   stackableKeyRequired: 'carrying',
   stackableCount: 'carrying',
   duplicateStackable: 'carrying',
@@ -52,6 +53,7 @@ export function entityIssueText(message: string): string {
 export function saveRejectionText(code: string | undefined): string {
   if (code === ENTITY_REJECTION.inFlight) return t('world:save.inFlight')
   if (code === ENTITY_REJECTION.parentCycle) return t('world:save.parentCycle')
+  if (code === ENTITY_REJECTION.parentChainBroken) return t('world:save.parentChainBroken')
   return t('world:save.failed')
 }
 

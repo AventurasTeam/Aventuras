@@ -744,7 +744,9 @@ updated. Depth-cap at 100 with an error log on cap-hit (shouldn't
 happen in real data).
 
 **Failure mode.** Rejected writes return
-`{ status: 'rejected', reason: 'parent-cycle' }` (mirrors the
+`{ status: 'rejected', reason: 'parent-cycle' }`, or
+`reason: 'parent-chain-broken'` on a cap-hit, where the fault is a loop
+already stored above the proposed parent rather than the write (mirrors the
 gate-rejection shape at
 [`generation-pipeline.md → Action rejection`](./generation-pipeline.md#action-rejection--defense-in-depth)).
 Classifier writes hitting the rejection surface as a phase-level
