@@ -23,7 +23,6 @@ import {
   type RelationshipDraft,
   type RelationshipBaseLink,
   type RelationshipLink,
-  type StackableDraft,
 } from './entity-draft'
 
 export type EntitySaveInput = (
@@ -83,6 +82,19 @@ function blankToAbsent(value: string | undefined): string | undefined {
   return trimmed === '' ? undefined : trimmed
 }
 
+/** Sets `key` to the draft's text, or removes it when blank; false when it already reads so. */
+function writeText<K extends string>(
+  state: Partial<Record<K, string>>,
+  key: K,
+  draftValue: string,
+): boolean {
+  const value = blankToAbsent(draftValue)
+  if (value === blankToAbsent(state[key])) return false
+  if (value === undefined) delete state[key]
+  else state[key] = value
+  return true
+}
+
 function cleanList(values: readonly string[] | undefined): string[] {
   return (values ?? []).map((v) => v.trim()).filter((v) => v !== '')
 }
@@ -103,14 +115,16 @@ function normalizedStackables(
   return out
 }
 
-function sameRecord(a: Readonly<Record<string, number>>, b: Readonly<Record<string, number>>) {
+function sameRecord(
+  a: Readonly<Record<string, number>>,
+  b: Readonly<Record<string, number>>,
+): boolean {
   const keys = Object.keys(a)
   return (
     keys.length === Object.keys(b).length && keys.every((k) => Object.hasOwn(b, k) && a[k] === b[k])
   )
 }
 
-/** Normalized on both sides: the classifier's verbatim text must not read as a user edit. */
 /**
  * The stored list with the user's changes against `base` applied: their removals dropped, their
  * additions appended, their spelling of a kept term used. As edited while nothing moved underneath.
@@ -129,6 +143,7 @@ function mergedKeywords(
   return [...kept, ...newTerms(kept, newTerms(base, draft))]
 }
 
+/** Normalized on both sides: the classifier's verbatim text must not read as a user edit. */
 function columnPatch(
   row: Entity,
   draft: EntityBaseDraft,
@@ -157,11 +172,7 @@ function characterState(current: CharacterState, draft: CharacterDraft): Charact
   const next: CharacterState = { ...current, visual: { ...current.visual } }
   let changed = false
   for (const [field, key] of VISUAL_DRAFT_FIELDS) {
-    const value = blankToAbsent(draft[field])
-    if (value === blankToAbsent(current.visual[key])) continue
-    if (value === undefined) delete next.visual[key]
-    else next.visual[key] = value
-    changed = true
+    if (writeText(next.visual, key, draft[field])) changed = true
   }
   const traits = cleanList(draft.traits)
   if (!sameList(traits, cleanList(current.traits))) {
@@ -173,12 +184,7 @@ function characterState(current: CharacterState, draft: CharacterDraft): Charact
     next.drives = drives
     changed = true
   }
-  const voice = blankToAbsent(draft.voice)
-  if (voice !== blankToAbsent(current.voice)) {
-    if (voice === undefined) delete next.voice
-    else next.voice = voice
-    changed = true
-  }
+  if (writeText(next, 'voice', draft.voice)) changed = true
   if (draft.currentLocationId !== (current.current_location_id ?? null)) {
     next.current_location_id = draft.currentLocationId
     changed = true
@@ -195,9 +201,7 @@ function characterState(current: CharacterState, draft: CharacterDraft): Charact
     next.inventory = [...draft.inventory]
     changed = true
   }
-  const stackables = normalizedStackables(
-    draft.stackables.map((s: StackableDraft) => [s.key, s.count] as const),
-  )
+  const stackables = normalizedStackables(draft.stackables.map((s) => [s.key, s.count] as const))
   if (!sameRecord(stackables, normalizedStackables(Object.entries(current.stackables ?? {})))) {
     if (Object.keys(stackables).length === 0) delete next.stackables
     else next.stackables = stackables
@@ -213,12 +217,7 @@ function locationState(current: LocationState, draft: LocationDraft): LocationSt
     next.parent_location_id = draft.parentLocationId
     changed = true
   }
-  const condition = blankToAbsent(draft.condition)
-  if (condition !== blankToAbsent(current.condition)) {
-    if (condition === undefined) delete next.condition
-    else next.condition = condition
-    changed = true
-  }
+  if (writeText(next, 'condition', draft.condition)) changed = true
   return changed ? next : null
 }
 
@@ -229,24 +228,14 @@ function itemState(current: ItemState, draft: ItemDraft): ItemState | null {
     next.at_location_id = draft.atLocationId
     changed = true
   }
-  const condition = blankToAbsent(draft.condition)
-  if (condition !== blankToAbsent(current.condition)) {
-    if (condition === undefined) delete next.condition
-    else next.condition = condition
-    changed = true
-  }
+  if (writeText(next, 'condition', draft.condition)) changed = true
   return changed ? next : null
 }
 
 function factionState(current: FactionState, draft: FactionDraft): FactionState | null {
   const next: FactionState = { ...current }
   let changed = false
-  const standing = blankToAbsent(draft.standing)
-  if (standing !== blankToAbsent(current.standing)) {
-    if (standing === undefined) delete next.standing
-    else next.standing = standing
-    changed = true
-  }
+  if (writeText(next, 'standing', draft.standing)) changed = true
   const agenda = cleanList(draft.agenda)
   if (!sameList(agenda, cleanList(current.agenda))) {
     if (agenda.length === 0) delete next.agenda
