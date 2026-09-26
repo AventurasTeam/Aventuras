@@ -4,6 +4,7 @@ import { BIND_CHUNK, deltas, type Delta } from '@/lib/db'
 
 import { isUserOriginatedSource, type DbCtx } from '../types'
 import { PAYLOAD_META_PREFIX } from './delta-encoding'
+import type { LockedTable } from './row-locks'
 
 /** Noop reason for a classifier write a newer user edit of the same field outranks. */
 export const USER_EDITED_SINCE_PROSE = 'user-edited-since-prose'
@@ -73,7 +74,7 @@ async function rowDeltasAfter(
 export function userEditsSince(
   ctx: DbCtx,
   branchId: string,
-  targetTable: string,
+  targetTable: LockedTable,
   targetId: string,
   since: number,
 ): Promise<Delta[]> {
@@ -84,7 +85,7 @@ export function userEditsSince(
 export async function userEditsSinceProse(
   ctx: DbCtx,
   branchId: string,
-  targetTable: string,
+  targetTable: LockedTable,
   targetId: string,
   proseEntryId: string,
 ): Promise<Delta[]> {
@@ -140,7 +141,7 @@ export async function userEditsOutliving(
 export function rowDeltasSince(
   ctx: DbCtx,
   branchId: string,
-  targetTable: string,
+  targetTable: LockedTable,
   targetId: string,
   since: number,
 ): Promise<Delta[]> {

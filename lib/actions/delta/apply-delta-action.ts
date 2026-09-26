@@ -16,20 +16,20 @@ import {
 import { deltaRowOp } from './delta-row'
 import { withKeyLock, withKeyLocks } from './key-lock'
 import { resolveByActionKind, resolveByTable, type HandlerOutcome } from './registry'
-import { entityRowLockKey, relationshipsLockKey } from './row-locks'
+import { rowLock, type RowLockKey } from './row-locks'
 
 type Args = { action: PipelineAction; actionId: string; branchId: string; entryId?: string | null }
 
 type ProductionKind = keyof PipelineActionMap
 type LockKey<K extends ProductionKind> =
-  | ((payload: PipelineActionMap[K]['payload']) => string)
+  | ((payload: PipelineActionMap[K]['payload']) => RowLockKey)
   | null
 
-const entityRow = (p: { branchId: string; id: string }) => entityRowLockKey(p.branchId, p.id)
-const relationships = (p: { branchId: string }) => relationshipsLockKey(p.branchId)
+const entityRow = rowLock('entities')
+const relationships = rowLock('character_relationships')
 
 // Handlers read before they commit, so a racing classifier/user write to one row must
-// serialize: entities lock per row, relationships lock per branch.
+// serialize. Keys come from rowLock, which reversals of the same tables lock by too.
 const LOCK_KEY: { [K in ProductionKind]: LockKey<K> } = {
   createStoryEntry: null,
   updateStoryEntryMetadata: null,
@@ -85,13 +85,13 @@ function isProductionAction(
 function lockKeyOf<K extends ProductionKind>(
   kind: K,
   payload: PipelineActionMap[K]['payload'],
-): string | null {
+): RowLockKey | null {
   const key: LockKey<K> = LOCK_KEY[kind]
   return key === null ? null : key(payload)
 }
 
 // The single and group paths both derive keys here, so they serialize against each other.
-function lockKeyFor(action: PipelineAction): string | null {
+function lockKeyFor(action: PipelineAction): RowLockKey | null {
   return isProductionAction(action) ? lockKeyOf(action.kind, action.payload) : null
 }
 
