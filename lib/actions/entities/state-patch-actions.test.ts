@@ -386,6 +386,9 @@ type Ctx = Awaited<ReturnType<typeof setup>>['ctx']
 const apply = (ctx: Ctx, action: PipelineAction, actionId: string) =>
   applyDeltaAction({ action, actionId, branchId: 'br_1' }, ctx)
 
+const create = (ctx: Ctx, entry: NewEntity) =>
+  apply(ctx, { kind: 'createEntity', source: 'user_edit', payload: { entry } }, 'act_c')
+
 const userPatch = (patch: Record<string, unknown>): PipelineAction => ({
   kind: 'updateEntity',
   source: 'user_edit',
@@ -401,15 +404,7 @@ describe('appendEntityKeywords', () => {
 
   it('appends only what the live row lacks, keeping an alias the user added mid-pass', async () => {
     const { db, ctx } = await setup()
-    await apply(
-      ctx,
-      {
-        kind: 'createEntity',
-        source: 'user_edit',
-        payload: { entry: { ...CHAR, keywords: ['the knight'] } },
-      },
-      'act_c',
-    )
+    await create(ctx, { ...CHAR, keywords: ['the knight'] })
     expect(
       (await apply(ctx, userPatch({ keywords: ['the knight', 'ser kael'] }), 'act_u')).status,
     ).toBe('ok')
@@ -429,15 +424,7 @@ describe('appendEntityKeywords', () => {
 
   it('extends the live list, so an alias removed mid-pass stays out when the payload omits it', async () => {
     const { db, ctx } = await setup()
-    await apply(
-      ctx,
-      {
-        kind: 'createEntity',
-        source: 'user_edit',
-        payload: { entry: { ...CHAR, keywords: ['the knight', 'the drunk'] } },
-      },
-      'act_c',
-    )
+    await create(ctx, { ...CHAR, keywords: ['the knight', 'the drunk'] })
     expect((await apply(ctx, userPatch({ keywords: ['the knight'] }), 'act_u')).status).toBe('ok')
     await apply(ctx, append(['the wanderer']), 'act_k')
     expect((await rowFor(db, 'char_1')).keywords).toEqual(['the knight', 'the wanderer'])
@@ -445,15 +432,7 @@ describe('appendEntityKeywords', () => {
 
   it('no-ops when every term is already held', async () => {
     const { ctx } = await setup()
-    await apply(
-      ctx,
-      {
-        kind: 'createEntity',
-        source: 'user_edit',
-        payload: { entry: { ...CHAR, keywords: ['the knight'] } },
-      },
-      'act_c',
-    )
+    await create(ctx, { ...CHAR, keywords: ['the knight'] })
     expect(await apply(ctx, append([' THE KNIGHT ']), 'act_k')).toEqual({
       status: 'rejected',
       reason: 'no-new-keywords',
@@ -463,15 +442,7 @@ describe('appendEntityKeywords', () => {
 
   it('reverses to the list it extended', async () => {
     const { db, ctx } = await setup()
-    await apply(
-      ctx,
-      {
-        kind: 'createEntity',
-        source: 'user_edit',
-        payload: { entry: { ...CHAR, keywords: ['the knight'] } },
-      },
-      'act_c',
-    )
+    await create(ctx, { ...CHAR, keywords: ['the knight'] })
     await apply(ctx, append(['the wanderer']), 'act_k')
     expect(await reverseReplayDeltas('act_k', ctx)).toBe(1)
     expect((await rowFor(db, 'char_1')).keywords).toEqual(['the knight'])
@@ -488,15 +459,7 @@ describe('appendEntityKeywords', () => {
 
   it('serializes two concurrent appends onto the same row: both land, in either order', async () => {
     const { db, ctx } = await setup()
-    await apply(
-      ctx,
-      {
-        kind: 'createEntity',
-        source: 'user_edit',
-        payload: { entry: { ...CHAR, keywords: ['the knight'] } },
-      },
-      'act_c',
-    )
+    await create(ctx, { ...CHAR, keywords: ['the knight'] })
     await Promise.all([
       apply(ctx, append(['the wanderer']), 'act_k1'),
       apply(ctx, append(['the drunk']), 'act_k2'),
@@ -517,11 +480,7 @@ describe('retireEntity', () => {
 
   it('retires an active entity with its reason', async () => {
     const { db, ctx } = await setup()
-    await apply(
-      ctx,
-      { kind: 'createEntity', source: 'user_edit', payload: { entry: ACTIVE } },
-      'act_c',
-    )
+    await create(ctx, ACTIVE)
     expect((await apply(ctx, retire('fell at the ford'), 'act_r')).status).toBe('ok')
     const row = await rowFor(db, 'char_1')
     expect(row.status).toBe('retired')
@@ -532,26 +491,14 @@ describe('retireEntity', () => {
 
   it('clears a leftover retiredReason when retiring with no reason given', async () => {
     const { db, ctx } = await setup()
-    await apply(
-      ctx,
-      {
-        kind: 'createEntity',
-        source: 'user_edit',
-        payload: { entry: { ...ACTIVE, retiredReason: 'old' } },
-      },
-      'act_c',
-    )
+    await create(ctx, { ...ACTIVE, retiredReason: 'old' })
     expect((await apply(ctx, retire(null), 'act_r')).status).toBe('ok')
     expect((await rowFor(db, 'char_1')).retiredReason).toBeNull()
   })
 
   it("no-ops on a row the user retired mid-pass, keeping the user's reason", async () => {
     const { db, ctx } = await setup()
-    await apply(
-      ctx,
-      { kind: 'createEntity', source: 'user_edit', payload: { entry: ACTIVE } },
-      'act_c',
-    )
+    await create(ctx, ACTIVE)
     expect(
       (await apply(ctx, userPatch({ status: 'retired', retiredReason: 'exiled' }), 'act_u')).status,
     ).toBe('ok')
@@ -565,11 +512,7 @@ describe('retireEntity', () => {
 
   it('no-ops on a staged row', async () => {
     const { ctx } = await setup()
-    await apply(
-      ctx,
-      { kind: 'createEntity', source: 'user_edit', payload: { entry: CHAR } },
-      'act_c',
-    )
+    await create(ctx, CHAR)
     expect(await apply(ctx, retire(null), 'act_r')).toEqual({
       status: 'rejected',
       reason: 'not-active',
@@ -579,11 +522,7 @@ describe('retireEntity', () => {
 
   it('reverses to the prior status and reason', async () => {
     const { db, ctx } = await setup()
-    await apply(
-      ctx,
-      { kind: 'createEntity', source: 'user_edit', payload: { entry: ACTIVE } },
-      'act_c',
-    )
+    await create(ctx, ACTIVE)
     await apply(ctx, retire('fell at the ford'), 'act_r')
     expect(await reverseReplayDeltas('act_r', ctx)).toBe(1)
     const row = await rowFor(db, 'char_1')
@@ -623,8 +562,6 @@ describe('user edits newer than the prose', () => {
       },
       'act_prose',
     )
-  const create = (ctx: Ctx, entry: NewEntity) =>
-    apply(ctx, { kind: 'createEntity', source: 'user_edit', payload: { entry } }, 'act_c')
   const retire: PipelineAction = {
     kind: 'retireEntity',
     source: 'periodic_classifier',
