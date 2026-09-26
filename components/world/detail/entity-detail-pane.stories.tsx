@@ -19,6 +19,8 @@ const WAIT = { timeout: 3000 }
 const DAY = 86_400
 const BLOCKED_REASON = 'Generation is in flight. Cancel to edit.'
 const PARENT_CYCLE_TEXT = 'That parent would make this location part of itself.'
+const PARENT_CHAIN_BROKEN_TEXT =
+  "That parent's own chain of parents loops back or runs too deep. Fix that chain first."
 
 // Stories fall under the lib public-API rule, so the unit fixtures' makeEntity is out of reach.
 function makeEntity(overrides: Partial<Entity> & Pick<Entity, 'id' | 'kind' | 'name'>): Entity {
@@ -768,6 +770,17 @@ export const RelationshipWithoutAViewBlocksSave: Story = {
   },
 }
 
+async function expectParentRefusal(onRejected: HarnessProps['onRejected'], text: string) {
+  await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
+  await userEvent.click(await screen.findByRole('button', { name: 'Part of' }, WAIT))
+  await userEvent.click(await screen.findByRole('option', { name: /The Drowned Market/ }, WAIT))
+  const bar = await screen.findByTestId('save-bar', {}, WAIT)
+  await userEvent.click(within(bar).getByRole('button', { name: /^Save/ }))
+  await expect(await screen.findByText(text, {}, WAIT)).toBeVisible()
+  await expect(within(saveBar()).getByRole('button', { name: /^Save/ })).toBeDisabled()
+  await expect(onRejected).toHaveBeenCalledWith(text)
+}
+
 /** The handler's parent-cycle refusal surfaces as a field error on Connections. */
 export const ParentCycleFieldError: Story = {
   args: {
@@ -776,14 +789,7 @@ export const ParentCycleFieldError: Story = {
     saveResult: { status: 'rejected', reason: 'parent-cycle', code: 'parent-cycle' },
   },
   play: async ({ args }) => {
-    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
-    await userEvent.click(await screen.findByRole('button', { name: 'Part of' }, WAIT))
-    await userEvent.click(await screen.findByRole('option', { name: /The Drowned Market/ }, WAIT))
-    const bar = await screen.findByTestId('save-bar', {}, WAIT)
-    await userEvent.click(within(bar).getByRole('button', { name: /^Save/ }))
-    await expect(await screen.findByText(PARENT_CYCLE_TEXT, {}, WAIT)).toBeVisible()
-    await expect(within(saveBar()).getByRole('button', { name: /^Save/ })).toBeDisabled()
-    await expect(args.onRejected).toHaveBeenCalledWith(PARENT_CYCLE_TEXT)
+    await expectParentRefusal(args.onRejected, PARENT_CYCLE_TEXT)
   },
 }
 
@@ -821,16 +827,7 @@ export const ParentChainBrokenFieldError: Story = {
     saveResult: { status: 'rejected', reason: 'parent-chain-broken', code: 'parent-chain-broken' },
   },
   play: async ({ args }) => {
-    const text =
-      "That parent's own chain of parents loops back or runs too deep. Fix that chain first."
-    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
-    await userEvent.click(await screen.findByRole('button', { name: 'Part of' }, WAIT))
-    await userEvent.click(await screen.findByRole('option', { name: /The Drowned Market/ }, WAIT))
-    const bar = await screen.findByTestId('save-bar', {}, WAIT)
-    await userEvent.click(within(bar).getByRole('button', { name: /^Save/ }))
-    await expect(await screen.findByText(text, {}, WAIT)).toBeVisible()
-    await expect(within(saveBar()).getByRole('button', { name: /^Save/ })).toBeDisabled()
-    await expect(args.onRejected).toHaveBeenCalledWith(text)
+    await expectParentRefusal(args.onRejected, PARENT_CHAIN_BROKEN_TEXT)
   },
 }
 

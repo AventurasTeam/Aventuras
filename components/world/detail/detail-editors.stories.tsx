@@ -334,22 +334,19 @@ export const RelationshipRemovedExternallyReturnsCollapsed: Story = {
   },
 }
 
+const DUPLICATE = 'This quantity is already listed.'
+
 export const StackablesDuplicateKey: Story = {
   args: { editor: 'stackables', stackables: [{ key: 'Gold', count: 5 }] },
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Add quantity' }, WAIT))
     const row = within(await screen.findByTestId('stackable-1', {}, WAIT))
     await userEvent.type(row.getByRole('textbox', { name: 'Quantity' }), 'gold ')
-    await expect(await row.findByText('This quantity is already listed.', {}, WAIT)).toBeVisible()
+    await expect(await row.findByText(DUPLICATE, {}, WAIT)).toBeVisible()
     await userEvent.click(row.getByRole('button', { name: 'Remove gold' }))
-    await waitFor(
-      () => expect(screen.queryByText('This quantity is already listed.')).toBeNull(),
-      WAIT,
-    )
+    await waitFor(() => expect(screen.queryByText(DUPLICATE)).toBeNull(), WAIT)
   },
 }
-
-const DUPLICATE = 'This quantity is already listed.'
 
 async function addDuplicateGold() {
   await userEvent.click(await screen.findByRole('button', { name: 'Add quantity' }, WAIT))
