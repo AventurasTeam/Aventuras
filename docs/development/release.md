@@ -330,7 +330,7 @@ merges them into the built app idempotently, so a fresh scaffold needs no hand-e
 
 ```bash
 # macOS only, from the repo root
-npx tauri ios init --ci --skip-targets-install   # first time only (or bootstrap workflow)
+npx tauri ios init --skip-targets-install        # first time only (or bootstrap workflow)
 
 # Unsigned release .ipa (any --config args are forwarded, e.g. the CI version rule)
 scripts/build-ios-unsigned.sh --config src-tauri/tauri.release.conf.json
@@ -353,8 +353,11 @@ Mechanics worth knowing:
   `npx tauri ios dev --config src-tauri/tauri.release.conf.json`.
 
 CI builds iOS in `.github/workflows/build-ios.yml` (reusable, on `macos-15`), wired into
-`release.yml`, `pre-release.yml` and `ci.yml` exactly like the Android leg, and fails with
-a pointer to the bootstrap workflow if `gen/apple` is not committed.
+`release.yml`, `pre-release.yml` and `ci.yml` exactly like the Android leg. If `gen/apple`
+is not committed, that workflow runs `tauri ios init` on the runner itself — builds work
+from a bare checkout — but a committed scaffold (via the bootstrap workflow) is the
+preferred, reviewed state. Both workflows install XcodeGen (`brew install xcodegen`) when
+missing: the Tauri CLI only auto-installs it interactively, which a runner cannot do.
 
 ### Building Android
 

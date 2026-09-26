@@ -51,20 +51,26 @@ jobs:
           key: ios
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
+      # tauri ios init/build drive XcodeGen, which the CLI only auto-installs
+      # interactively — not an option on a runner.
+      - name: Ensure XcodeGen
+        run: command -v xcodegen >/dev/null 2>&1 || brew install xcodegen
+
       - name: Resolve build version
         id: version
         uses: ./.github/actions/build-version
         with:
           publish: ${{ inputs.publish }}
 
-      # gen/apple is a tracked scaffold generated once by bootstrap-ios.yml (see its
-      # header) and committed. Fail here — with the fix spelled out — rather than
-      # mid-build.
-      - name: Check for committed iOS scaffold
+      # The Xcode scaffold is normally committed under src-tauri/gen/apple (generated
+      # once by bootstrap-ios.yml). When it is absent — first run, or a fork — generate
+      # it here instead of failing: the runner is a Mac, so init costs seconds and the
+      # Info.plist keys the build needs are merged by the build script regardless.
+      - name: Generate iOS scaffold if not committed
         run: |
           if [ ! -f src-tauri/gen/apple/project.yml ]; then
-            echo "::error::src-tauri/gen/apple is not committed. Run the 'Bootstrap iOS scaffold' workflow and commit its ios-xcode-scaffold artifact (excluding files its .gitignore lists)." >&2
-            exit 1
+            echo "::notice::src-tauri/gen/apple is not committed; running tauri ios init (a committed scaffold is preferred — run the 'Bootstrap iOS scaffold' workflow and commit its ios-xcode-scaffold artifact)."
+            npx tauri ios init --skip-targets-install
           fi
 
       # Produces Aventuras_v<version>_ios-arm64-unsigned.ipa: an unsigned,

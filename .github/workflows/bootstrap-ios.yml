@@ -30,10 +30,15 @@ jobs:
         with:
           targets: aarch64-apple-ios
 
+      # tauri ios init drives XcodeGen, which the CLI only auto-installs
+      # interactively — not an option on a runner.
+      - name: Ensure XcodeGen
+        run: command -v xcodegen >/dev/null 2>&1 || brew install xcodegen
+
       - name: Generate iOS Xcode scaffold
-        # --ci: skip interactive prompts; --skip-targets-install: the toolchain is
-        # already installed above.
-        run: npx tauri ios init --ci --skip-targets-install
+        # --skip-targets-install: the toolchain is already installed above. (tauri ios
+        # init has no --ci flag — that belongs to tauri init.)
+        run: npx tauri ios init --skip-targets-install
 
       - name: Smoke-test unsigned .ipa build
         run: scripts/build-ios-unsigned.sh --config src-tauri/tauri.release.conf.json

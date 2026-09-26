@@ -39,9 +39,13 @@ echo "🚀 Building unsigned iOS archive (aarch64-apple-ios)..."
 # CODE_SIGNING_REQUIRED=NO and CODE_SIGN_IDENTITY="" to xcodebuild.
 npx tauri ios build --target aarch64-apple-ios --archive-only "$@"
 
-ARCHIVE="$(find src-tauri/gen/apple/build -maxdepth 2 -name '*_iOS.xcarchive' -type d 2>/dev/null | sort | tail -n1)"
+ARCHIVE="$(find src-tauri/gen/apple/build -name '*_iOS.xcarchive' -type d 2>/dev/null | sort | tail -n1)"
 if [[ -z "$ARCHIVE" ]]; then
-    echo "Error: no *_iOS.xcarchive found under src-tauri/gen/apple/build." >&2
+    # cargo-mobile2 sometimes archives into DerivedData instead of gen/apple/build.
+    ARCHIVE="$(find "$HOME/Library/Developer/Xcode/DerivedData" -name '*_iOS.xcarchive' -type d 2>/dev/null | sort | tail -n1)"
+fi
+if [[ -z "$ARCHIVE" ]]; then
+    echo "Error: no *_iOS.xcarchive found under src-tauri/gen/apple/build or Xcode DerivedData." >&2
     exit 1
 fi
 APP="$(find "$ARCHIVE/Products/Applications" -maxdepth 1 -name '*.app' -type d 2>/dev/null | head -n1)"
