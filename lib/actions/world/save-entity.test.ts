@@ -87,6 +87,7 @@ describe('saveEntity', () => {
           kind: 'character',
           branchId: 'br_1',
           row,
+          keywordsBase: row.keywords,
           draft: characterDraftFrom(null, []),
           relationships: [],
           relationshipsBase: [],
@@ -119,6 +120,7 @@ describe('saveEntity', () => {
           kind: 'character',
           branchId: 'br_1',
           row,
+          keywordsBase: row.keywords,
           draft,
           relationships: [],
           relationshipsBase: [],
@@ -155,6 +157,7 @@ describe('saveEntity', () => {
         kind: 'location',
         branchId: 'br_1',
         row: null,
+        keywordsBase: [],
         draft: { ...locationDraftFrom(null), name: 'The Salt Wells' },
       },
       ctx,
@@ -175,6 +178,7 @@ describe('saveEntity', () => {
         kind: 'location',
         branchId: 'br_1',
         row,
+        keywordsBase: row.keywords,
         draft: { ...locationDraftFrom(row), parentLocationId: 'loc_b' },
       },
       ctx,
@@ -205,7 +209,15 @@ describe('saveEntity', () => {
       ],
     }
     await saveEntity(
-      { kind: 'character', branchId: 'br_1', row, draft, relationships: [], relationshipsBase: [] },
+      {
+        kind: 'character',
+        branchId: 'br_1',
+        row,
+        keywordsBase: row.keywords,
+        draft,
+        relationships: [],
+        relationshipsBase: [],
+      },
       ctx,
     )
     const rels = await db.select().from(characterRelationships)
@@ -233,7 +245,15 @@ describe('saveEntity', () => {
       ],
     }
     await saveEntity(
-      { kind: 'character', branchId: 'br_1', row, draft, relationships: [], relationshipsBase: [] },
+      {
+        kind: 'character',
+        branchId: 'br_1',
+        row,
+        keywordsBase: row.keywords,
+        draft,
+        relationships: [],
+        relationshipsBase: [],
+      },
       ctx,
     )
     // Kael is b: Aria's view of Kael lands in `kind` (a's view of b).
@@ -251,6 +271,7 @@ describe('saveEntity', () => {
         kind: 'character',
         branchId: 'br_1',
         row: null,
+        keywordsBase: [],
         draft: {
           ...characterDraftFrom(null, []),
           name: 'Sable',
@@ -340,6 +361,7 @@ describe('saveEntity', () => {
           kind: 'character',
           branchId: 'br_1',
           row,
+          keywordsBase: row.keywords,
           draft,
           relationships: current,
           relationshipsBase: base,
@@ -372,6 +394,7 @@ describe('saveEntity', () => {
         kind: 'character',
         branchId: 'br_1',
         row,
+        keywordsBase: row.keywords,
         draft: { ...characterDraftFrom(row, []), keywords: ['Grey Wolf', 'grey wolf'] },
         relationships: [],
         relationshipsBase: [],
@@ -392,6 +415,7 @@ describe('saveEntity', () => {
         kind: 'character',
         branchId: 'br_1',
         row,
+        keywordsBase: row.keywords,
         draft: { ...characterDraftFrom(row, []), description: 'x' },
         relationships: [],
         relationshipsBase: [],

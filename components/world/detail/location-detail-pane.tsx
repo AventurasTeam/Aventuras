@@ -53,7 +53,7 @@ export function LocationDetailPane({
     resolver,
     fieldLabel,
     issueText: entityIssueText,
-    onSave: (draft) => onSave({ kind: 'location', draft }),
+    onSave: (draft, keywordsBase) => onSave({ kind: 'location', draft, keywordsBase }),
     onSaved,
     onRejected,
     onSession,

@@ -131,6 +131,40 @@ describe('useEntityRowSession', () => {
     expect(onRejected).not.toHaveBeenCalled()
   })
 
+  // A classifier alias landing while keywords are dirty must not become the Save's base.
+  it('saves against the keywords the draft was based on, not the list stored since', async () => {
+    const onSave = vi.fn(async () => ({ status: 'ok', id: 'loc_shop' }) as EntitySaveResult)
+    const based = { ...VALUES, keywords: ['the shop'] }
+    const hook = renderHook(
+      ({ values }: { values: LocationDraft }) =>
+        useEntityRowSession<LocationDraft>({
+          kind: 'location',
+          rowId: 'loc_shop',
+          values,
+          resolver,
+          fieldLabel: (field) => field,
+          issueText: (message) => message,
+          onSave,
+          onSaved: () => {},
+          onSession: () => {},
+        }),
+      { initialProps: { values: based } },
+    )
+    act(() => {
+      hook.result.current.form.setValue('keywords', ['the shop', 'the store'], {
+        shouldDirty: true,
+      })
+    })
+    hook.rerender({ values: { ...based, keywords: ['the shop', 'the old mill'] } })
+    await act(async () => {
+      await hook.result.current.save()
+    })
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ keywords: ['the shop', 'the store'] }),
+      ['the shop'],
+    )
+  })
+
   it('sets no field error for a refusal code with no field mapping', async () => {
     const { hook, onRejected } = setup({
       status: 'rejected',

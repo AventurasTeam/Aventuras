@@ -267,8 +267,11 @@ the asset gallery pass` / `lands in Slice 4.2b`).
   `useRowSaveSession` and Plot are unchanged (Plot's links-array case
   stays
   [parked](../../../../parked.md#a-dirty-links-array-on-save-overwrites-concurrent-link-writes)).
-  Touched `keywords` still overwrite a classifier append (accepted,
-  last writer wins).
+  Keywords merge the same way (developer decision, 2026-09-27): the
+  row session freezes the list's baseline once it goes dirty
+  (`useDraftBase`, shared with relationships), and `entityActions`
+  applies the user's additions and removals to the stored list, so a
+  classifier append made while the list was dirty survives the Save.
 - **Classifier writes against user edits (developer decisions,
   2026-09-25/26).** Status and keyword writes were built from the
   pass's snapshot, reverting a mid-pass World edit against

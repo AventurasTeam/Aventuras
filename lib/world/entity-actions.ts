@@ -9,7 +9,7 @@ import {
   type LocationState,
   type NewEntity,
 } from '@/lib/db'
-import { dedupeTerms } from '@/lib/keyword-terms'
+import { dedupeTerms, newTerms, normalizeTerm } from '@/lib/keyword-terms'
 
 import {
   stackableKey,
@@ -26,7 +26,7 @@ import {
   type StackableDraft,
 } from './entity-draft'
 
-export type EntitySaveInput =
+export type EntitySaveInput = (
   | {
       kind: 'character'
       draft: CharacterDraft
@@ -41,6 +41,13 @@ export type EntitySaveInput =
   | { kind: 'location'; draft: LocationDraft }
   | { kind: 'item'; draft: ItemDraft }
   | { kind: 'faction'; draft: FactionDraft }
+) & {
+  /**
+   * The stored keywords the draft's list was based on (frozen once dirty). A term the classifier
+   * appended since stays unless the user removed it.
+   */
+  keywordsBase: readonly string[]
+}
 
 type EntityActionArgs = EntitySaveInput & {
   branchId: string
@@ -104,7 +111,29 @@ function sameRecord(a: Readonly<Record<string, number>>, b: Readonly<Record<stri
 }
 
 /** Normalized on both sides: the classifier's verbatim text must not read as a user edit. */
-function columnPatch(row: Entity, draft: EntityBaseDraft): ColumnPatch {
+/**
+ * The stored list with the user's changes against `base` applied: their removals dropped, their
+ * additions appended, their spelling of a kept term used. As edited while nothing moved underneath.
+ */
+function mergedKeywords(
+  stored: readonly string[],
+  base: readonly string[],
+  draft: readonly string[],
+): string[] {
+  if (sameList(stored, base)) return [...draft]
+  const drafted = new Map(draft.map((term) => [normalizeTerm(term), term]))
+  const removed = new Set(base.map(normalizeTerm).filter((key) => !drafted.has(key)))
+  const kept = stored
+    .filter((term) => !removed.has(normalizeTerm(term)))
+    .map((term) => drafted.get(normalizeTerm(term)) ?? term)
+  return [...kept, ...newTerms(kept, newTerms(base, draft))]
+}
+
+function columnPatch(
+  row: Entity,
+  draft: EntityBaseDraft,
+  keywordsBase: readonly string[],
+): ColumnPatch {
   const patch: ColumnPatch = {}
   const name = draft.name.trim()
   if (name !== row.name.trim()) patch.name = name
@@ -116,8 +145,9 @@ function columnPatch(row: Entity, draft: EntityBaseDraft): ColumnPatch {
   if (draft.injectionMode !== row.injectionMode) patch.injectionMode = draft.injectionMode
   const tags = cleanList(draft.tags)
   if (!sameList(tags, cleanList(row.tags))) patch.tags = tags
-  const keywords = dedupeTerms(draft.keywords)
-  if (!sameList(keywords, dedupeTerms(row.keywords))) patch.keywords = keywords
+  const stored = dedupeTerms(row.keywords)
+  const keywords = mergedKeywords(stored, dedupeTerms(keywordsBase), dedupeTerms(draft.keywords))
+  if (!sameList(keywords, stored)) patch.keywords = keywords
   if (draft.priority !== row.priority) patch.priority = draft.priority
   return patch
 }
@@ -336,7 +366,10 @@ export function entityActions(args: EntityActionArgs): PipelineAction[] {
     }
     actions.push({ kind: 'createEntity', source: 'user_edit', payload: { entry } })
   } else {
-    const patch = { ...columnPatch(row, draft), ...(state != null ? { state } : {}) }
+    const patch = {
+      ...columnPatch(row, draft, args.keywordsBase),
+      ...(state != null ? { state } : {}),
+    }
     if (Object.keys(patch).length > 0) {
       actions.push({
         kind: 'updateEntity',

@@ -310,13 +310,12 @@ What stays open:
   happening on abort or recovery or a happening on a prose edit,
   deletes the user's edits to it too, and leaves their deltas pointing
   at nothing.
-- A World Save writes the values the pane rendered, so it overwrites a
-  classifier write made since to a field the Save writes. A keyword
-  list the user touched loses an alias the classifier appended while
-  the pane was open, and because the Save's undo payload holds the
-  appended list, that alias then counts as one the user removed, so
-  older prose cannot re-add it. An edited relationship pair sends its
-  untouched view as rendered, which reverts a classifier write to that
-  view landing between the render and the Save. `entities.state` is
-  written whole, which holds only while no writer outside the hard
-  gate touches it.
+- A World Save merges keywords and relationships three-way against
+  the stored row, so a classifier write made while the pane was open
+  survives unless the user changed the same term or view. What it
+  merges against is the row as the pane rendered it at Save, so a
+  classifier write landing in the milliseconds between that render and
+  the Save's commit is still overwritten: a keyword appended then, or
+  the untouched view of an edited pair. `entities.state` is written
+  whole, which holds only while no writer outside the hard gate
+  touches it.

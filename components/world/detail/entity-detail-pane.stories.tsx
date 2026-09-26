@@ -172,6 +172,8 @@ type HarnessProps = {
   links?: RelationshipLink[]
   /** A pair the harness's button writes to the store, as the periodic classifier would. */
   storeLink?: RelationshipLink
+  /** A keyword the harness's button appends to the stored row, as the periodic classifier would. */
+  storeKeyword?: string
   /** An ok character Save writes its pairs to the store before resolving, as the delta layer does. */
   commitLinks?: boolean
   /** Save stays pending until the harness's `Finish save` button. */
@@ -193,6 +195,7 @@ function Harness({
   saveResult,
   links: initialLinks,
   storeLink,
+  storeKeyword,
   commitLinks = false,
   holdSave = false,
   onSave,
@@ -282,6 +285,19 @@ function Harness({
             {`store pairs: ${data.relationships.length}`}
           </Text>
         </View>
+      ) : null}
+      {storeKeyword != null ? (
+        <Button
+          variant="secondary"
+          size="sm"
+          onPress={() =>
+            setRow((prev) =>
+              prev == null ? prev : { ...prev, keywords: [...prev.keywords, storeKeyword] },
+            )
+          }
+        >
+          <Text>Classifier appends a keyword</Text>
+        </Button>
       ) : null}
       {holdSave ? (
         <Button
@@ -767,6 +783,32 @@ export const ParentCycleFieldError: Story = {
     await expect(await screen.findByText(PARENT_CYCLE_TEXT, {}, WAIT)).toBeVisible()
     await expect(within(saveBar()).getByRole('button', { name: /^Save/ })).toBeDisabled()
     await expect(args.onRejected).toHaveBeenCalledWith(PARENT_CYCLE_TEXT)
+  },
+}
+
+/** A keyword the classifier appends while the list is dirty doesn't become the Save's base. */
+export const KeywordsBaseFrozenWhileDirty: Story = {
+  args: {
+    kind: 'location',
+    row: { ...HOLLOW, keywords: ['the hollow'] },
+    storeKeyword: 'the dell',
+  },
+  play: async ({ args }) => {
+    await userEvent.click(await screen.findByRole('tab', { name: /^Settings/ }, WAIT))
+    await userEvent.type(
+      await screen.findByRole('textbox', { name: 'Keywords' }, WAIT),
+      'veil{Enter}',
+    )
+    await waitFor(() => expect(saveBar()).toHaveTextContent('Keywords'), WAIT)
+    await userEvent.click(screen.getByRole('button', { name: 'Classifier appends a keyword' }))
+    await userEvent.click(within(saveBar()).getByRole('button', { name: /^Save/ }))
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1), WAIT)
+    await expect(args.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        keywordsBase: ['the hollow'],
+        draft: expect.objectContaining({ keywords: ['the hollow', 'veil'] }),
+      }),
+    )
   },
 }
 

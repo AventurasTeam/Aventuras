@@ -41,7 +41,7 @@ export function ItemDetailPane({
     resolver,
     fieldLabel,
     issueText: entityIssueText,
-    onSave: (draft) => onSave({ kind: 'item', draft }),
+    onSave: (draft, keywordsBase) => onSave({ kind: 'item', draft, keywordsBase }),
     onSaved,
     onRejected,
     onSession,
