@@ -5,7 +5,10 @@ import { deltas, embeddedFieldsForTable, isEmbeddedSourceTable } from '@/lib/db'
 
 import type { DbCtx } from '../types'
 import { applyUndoPayload, isPayloadMetaKey } from './delta-encoding'
+import { withKeyLocks } from './key-lock'
 import { resolveByTable, whereForDelta, type StorePatch } from './registry'
+import { deltaLockKeys } from './row-locks'
+import { userEditsOutliving, wroteColumn } from './user-precedence'
 
 /**
  * `transaction`: nothing landed. `store-sync`: the DB write landed and the in-memory sync after it
@@ -83,17 +86,22 @@ function undoDirtiesVector(targetTable: string, payloadKeys: readonly string[]):
   return fields !== undefined && payloadKeys.some((key) => fields.includes(key))
 }
 
-// Build undo ops for one action's deltas (already in log_position DESC order).
-// A per-row working copy threads each op=update undo onto the prior one so multiple
-// updates to the SAME row — even touching disjoint sub-keys of a JSON column —
-// compose correctly instead of clobbering via stale-base whole-column overwrites.
+// A per-row working copy threads each update undo onto the prior one, so multiple updates to
+// the SAME row (even disjoint JSON sub-keys) compose instead of clobbering via a stale base.
+// A machine delta's undo skips columns a later `user_edit` outside `rows` wrote
+// (generation-pipeline.md → Reverse-replay).
 async function buildUndoOps(
   rows: Delta[],
   ctx: DbCtx,
 ): Promise<{ ops: SqlOp[]; patches: PatchEmission[] }> {
   const working = new Map<string, Record<string, unknown>>()
+  // A tombstone keeps the deleted row so an older undo giving back a row-keeping column
+  // re-inserts it; an absent row (never existed) stays out.
+  const tombstones = new Set<string>()
+  const absent = new Set<string>()
   const ops: SqlOp[] = []
   const patches: PatchEmission[] = []
+  const laterUserEdits = await userEditsOutliving(ctx, rows, readsUserEdits)
 
   for (const delta of rows) {
     const entry = resolveByTable(delta.targetTable)
@@ -101,17 +109,76 @@ async function buildUndoOps(
     const { table } = entry.descriptor
     const where = whereForDelta(entry.descriptor, delta)
     const key = `${delta.targetTable}:${delta.branchId}:${delta.targetId}`
+    const userEdits = laterUserEdits.get(delta.id) ?? []
 
-    // No cascade on purpose: an actionId-scoped set already carries the children's deltas;
-    // an entry-scoped caller owes the closure by hand (generation-pipeline.md → Reverse-replay).
-    if (delta.op === 'create') {
-      working.delete(key)
+    const workingRow = async (): Promise<Record<string, unknown>> => {
+      let row = working.get(key)
+      if (!row) {
+        const [current] = (await ctx.db.select().from(table).where(where)) as Record<
+          string,
+          unknown
+        >[]
+        if (!current) absent.add(key)
+        row = { ...(current ?? {}) }
+        working.set(key, row)
+      }
+      return row
+    }
+
+    const emitUpdate = (restored: Record<string, unknown>, row: Record<string, unknown>) => {
+      // Revalidation (app-deps.ts) only clears this flag — setting it dirty here self-corrects.
+      if (undoDirtiesVector(delta.targetTable, Object.keys(restored))) {
+        restored.embeddingStale = 1
+        row.embeddingStale = 1
+      }
+      ops.push(ctx.db.update(table).set(restored).where(where).toSQL())
+      patches.push({
+        table: delta.targetTable,
+        branchId: delta.branchId,
+        patch: { op: 'update', id: delta.targetId, columns: restored },
+      })
+    }
+
+    const emitDelete = () => {
       ops.push(ctx.db.delete(table).where(where).toSQL())
       patches.push({
         table: delta.targetTable,
         branchId: delta.branchId,
         patch: { op: 'delete', id: delta.targetId },
       })
+    }
+
+    const emitInsert = (row: Record<string, unknown>) => {
+      if (isEmbeddedSourceTable(delta.targetTable)) row.embeddingStale = 1
+      ops.push(ctx.db.insert(table).values(row).toSQL())
+      patches.push({
+        table: delta.targetTable,
+        branchId: delta.branchId,
+        patch: { op: 'create', id: delta.targetId, row: { ...row } },
+      })
+    }
+
+    // No cascade on purpose: an actionId-scoped set already carries the children's deltas;
+    // an entry-scoped caller owes the closure itself (generation-pipeline.md → Reverse-replay).
+    if (delta.op === 'create') {
+      const keeping = entry.rowKeepingColumns ?? []
+      const userKept = keeping.filter((col) => wroteColumn(userEdits, col))
+      if (userKept.length > 0) {
+        const row = await workingRow()
+        const restored: Record<string, unknown> = {}
+        for (const col of keeping) {
+          if (!userKept.includes(col) && row[col] != null) restored[col] = null
+        }
+        if (userKept.some((col) => row[col] != null)) {
+          Object.assign(row, restored)
+          if (Object.keys(restored).length > 0) emitUpdate(restored, row)
+          continue
+        }
+      }
+      working.set(key, {})
+      absent.add(key)
+      tombstones.delete(key)
+      emitDelete()
       continue
     }
     if (delta.op === 'delete') {
@@ -129,6 +196,8 @@ async function buildUndoOps(
       if (isEmbeddedSourceTable(delta.targetTable)) rowData.embeddingStale = 1
 
       working.set(key, { ...rowData })
+      absent.delete(key)
+      tombstones.delete(key)
       ops.push(ctx.db.insert(table).values(rowData).toSQL())
       patches.push({
         table: delta.targetTable,
@@ -159,17 +228,16 @@ async function buildUndoOps(
       continue
     }
 
-    let row = working.get(key)
-    if (!row) {
-      const [current] = (await ctx.db.select().from(table).where(where)) as Record<
-        string,
-        unknown
-      >[]
-      row = { ...(current ?? {}) }
-      working.set(key, row)
-    }
     const payload = (delta.undoPayload ?? {}) as Record<string, unknown>
-    const columns = Object.keys(payload).filter((key) => !isPayloadMetaKey(key))
+    // A schema-backed column's undo restores sub-fields — a user write to one doesn't cover
+    // the others this delta changed.
+    const columns = Object.keys(payload).filter(
+      (col) =>
+        !isPayloadMetaKey(col) &&
+        (Object.hasOwn(entry.columnSchemas, col) || !wroteColumn(userEdits, col)),
+    )
+    if (columns.length === 0) continue
+    const row = await workingRow()
     const restored: Record<string, unknown> = {}
     for (const col of columns) {
       const partial = payload[col]
@@ -188,21 +256,26 @@ async function buildUndoOps(
       restored[col] = value
       row[col] = value // thread into the working copy for later-in-DESC undos
     }
-    // Revalidation (app-deps.ts) only ever CLEARS this flag, so nothing outside a writer
-    // like this one sets it back to 1 — erring dirty is the self-correcting direction.
-    if (undoDirtiesVector(delta.targetTable, columns)) {
-      restored.embeddingStale = 1
-      row.embeddingStale = 1
-    }
-    ops.push(ctx.db.update(table).set(restored).where(where).toSQL())
-    patches.push({
-      table: delta.targetTable,
-      branchId: delta.branchId,
-      patch: { op: 'update', id: delta.targetId, columns: restored },
-    })
+    const keeping = entry.rowKeepingColumns
+    const keepsNone = keeping !== undefined && keeping.every((col) => row[col] == null)
+    if (tombstones.has(key)) {
+      if (!keepsNone) {
+        tombstones.delete(key)
+        emitInsert(row)
+      }
+    } else if (keepsNone && !absent.has(key)) {
+      tombstones.add(key)
+      emitDelete()
+    } else emitUpdate(restored, row)
   }
 
   return { ops, patches }
+}
+
+// Only an update's undo, or a create's on a table with row-keeping columns, reads later user edits.
+function readsUserEdits(delta: Delta): boolean {
+  if (delta.op === 'update') return true
+  return delta.op === 'create' && resolveByTable(delta.targetTable)?.rowKeepingColumns != null
 }
 
 export async function reverseAndPruneDeltaRows(
@@ -212,20 +285,22 @@ export async function reverseAndPruneDeltaRows(
 ): Promise<number> {
   if (rows.length === 0 && extraOps.length === 0) return 0
   const actionId = rows[0]?.actionId ?? 'rollback'
-  let patches: PatchEmission[]
-  try {
-    const plan = await buildReverseAndPrunePlan(rows, ctx)
-    patches = plan.patches
-    await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...extraOps])
-  } catch (e) {
-    throw new DeltaReplayError('Reverse-and-prune failed', {
-      cause: e,
-      actionId,
-      stage: 'transaction',
-    })
-  }
-  emitCommittedPatches(patches, actionId)
-  return rows.length
+  return withKeyLocks(deltaLockKeys(rows), async () => {
+    let patches: PatchEmission[]
+    try {
+      const plan = await buildReverseAndPrunePlan(rows, ctx)
+      patches = plan.patches
+      await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...extraOps])
+    } catch (e) {
+      throw new DeltaReplayError('Reverse-and-prune failed', {
+        cause: e,
+        actionId,
+        stage: 'transaction',
+      })
+    }
+    emitCommittedPatches(patches, actionId)
+    return rows.length
+  })
 }
 
 /**
@@ -238,28 +313,32 @@ export async function reverseReplayDeltas(
   ctx: DbCtx,
   settleOps: (deltaCount: number) => readonly SqlOp[] = () => [],
 ): Promise<number> {
+  const fail = (e: unknown) =>
+    new DeltaReplayError('Reverse-replay failed', { cause: e, actionId, stage: 'transaction' })
   let rows: Delta[]
-  let patches: PatchEmission[]
   try {
     rows = (await ctx.db
       .select()
       .from(deltas)
       .where(eq(deltas.actionId, actionId))
       .orderBy(desc(deltas.logPosition))) as Delta[]
-    const settle = settleOps(rows.length)
-    if (rows.length === 0 && settle.length === 0) return 0
-
-    const plan = await buildReverseAndPrunePlan(rows, ctx)
-    patches = plan.patches
-    await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...settle])
   } catch (e) {
-    throw new DeltaReplayError('Reverse-replay failed', {
-      cause: e,
-      actionId,
-      stage: 'transaction',
-    })
+    throw fail(e)
   }
-  // Action layer owns the patch: invert in the held-branch store after the tx.
-  emitCommittedPatches(patches, actionId)
-  return rows.length
+  return withKeyLocks(deltaLockKeys(rows), async () => {
+    let patches: PatchEmission[]
+    try {
+      const settle = settleOps(rows.length)
+      if (rows.length === 0 && settle.length === 0) return 0
+
+      const plan = await buildReverseAndPrunePlan(rows, ctx)
+      patches = plan.patches
+      await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...settle])
+    } catch (e) {
+      throw fail(e)
+    }
+    // Action layer owns the patch: invert in the held-branch store after the tx.
+    emitCommittedPatches(patches, actionId)
+    return rows.length
+  })
 }

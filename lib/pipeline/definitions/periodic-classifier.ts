@@ -21,7 +21,13 @@ import {
 import { branches, storyEntries, type ClassifierStatus, type StoryEntry } from '@/lib/db'
 import { generateId, IdBiMap } from '@/lib/ids'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
-import { appSettingsStore, currentStoryStore, entitiesStore, happeningsStore } from '@/lib/stores'
+import {
+  appSettingsStore,
+  characterRelationshipsStore,
+  currentStoryStore,
+  entitiesStore,
+  happeningsStore,
+} from '@/lib/stores'
 
 import { buildClassifierContext } from './classifier-context'
 import { definePipeline } from '../authoring/define'
@@ -87,6 +93,11 @@ async function readStatus(ctx: StatusCtx): Promise<ClassifierStatus> {
   return row?.classifierStatus ?? idleStatus()
 }
 
+async function recordFailure(ctx: StatusCtx, detail: string): Promise<void> {
+  const { status } = nextStatusOnFailure(await readStatus(ctx), { error: detail, at: Date.now() })
+  await writeStatus(ctx, status)
+}
+
 async function writeStatus(ctx: StatusCtx, status: ClassifierStatus): Promise<void> {
   // branches is not delta-logged (classifier.md -> Persistence), so this is a
   // direct row write. Key-scoped json_set because the reversal clamp owns
@@ -146,6 +157,9 @@ export async function* periodicClassifierPhase(
   const entities = [...entitiesStore.getEntities().values()].filter(
     (e) => e.branchId === ctx.branchId,
   )
+  const relationships = [...characterRelationshipsStore.getRelationshipRows().values()].filter(
+    (r) => r.branchId === ctx.branchId,
+  )
   const idMap = new IdBiMap()
   const prompt = renderTemplate(
     TEMPLATE_IDS.periodicClassifier,
@@ -155,6 +169,7 @@ export async function* periodicClassifierPhase(
       happenings: [...happeningsStore.getHappenings().values()].filter(
         (h) => h.branchId === ctx.branchId,
       ),
+      relationships,
       idMap,
     }),
   )
@@ -273,12 +288,11 @@ export function ensurePeriodicClassifierPipelineRegistered(): void {
       affordance: 'pill-only',
       onPreflightFailure: async (ctx, error) => {
         const detail = error.kind === 'config-resolver' ? error.failure : error.detail
-        const { status } = nextStatusOnFailure(await readStatus(ctx), {
-          error: `classifier: ${detail}`,
-          at: Date.now(),
-        })
-        await writeStatus(ctx, status)
+        await recordFailure(ctx, `classifier: ${detail}`)
       },
+      // A rejected write throws past the phase (orchestrator.ts runPhases) rather than
+      // returning `{ status: 'failed' }`, so this hook is what persists the failure.
+      onPhaseException: (ctx, error) => recordFailure(ctx, `classifier: ${error.detail}`),
       gateBehavior: 'no-gate',
       concurrencyPolicy: { blockedBy: [PERIODIC_CLASSIFIER_KIND, 'chapter-close'] },
     })

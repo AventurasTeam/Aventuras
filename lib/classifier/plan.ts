@@ -1,6 +1,6 @@
 import type { PipelineAction } from '@/lib/actions'
 import type { Entity } from '@/lib/db'
-import { normalizeTerm } from '@/lib/keyword-terms'
+import { dedupeTerms, newTerms } from '@/lib/keyword-terms'
 
 import type { ReconcileDecision } from './reconcile'
 import type { ClassifierExtraction } from './schema'
@@ -73,22 +73,6 @@ export function clampEmbeddedCharacter(candidate: { name: string; description: s
   }
 }
 
-/**
- * retrieval.md → Keywords schema: append-only, de-duped under matchTerms' normalization — authored
- * aliases must survive every pass. null when nothing is new, so a repeated name writes no delta.
- */
-function appendKeywords(current: readonly string[], incoming: readonly string[]): string[] | null {
-  const seen = new Set(current.map(normalizeTerm))
-  const added: string[] = []
-  for (const term of incoming) {
-    const key = normalizeTerm(term)
-    if (key === '' || seen.has(key)) continue
-    seen.add(key)
-    added.push(term)
-  }
-  return added.length === 0 ? null : [...current, ...added]
-}
-
 export function buildClassifierActions(
   extraction: ClassifierExtraction,
   deps: PlanDeps,
@@ -103,6 +87,14 @@ export function buildClassifierActions(
     const { entryId, fellBack } = window.resolveHandle(turn)
     if (fellBack) fellBackCount++
     return entryId
+  }
+
+  // An unattributed fact's prose dates to the window's oldest turn while its survival
+  // anchor stays the newest: dating the prose too late would outrank the user's edits.
+  const oldestEntryId = window.turns[0]?.entryId ?? ''
+  const proseSource = (turn: string | undefined): string => {
+    const { entryId, fellBack } = window.resolveHandle(turn)
+    return fellBack ? oldestEntryId : entryId
   }
 
   // Mutable, not a frozen snapshot: rows this pass plans are visible to later
@@ -140,43 +132,49 @@ export function buildClassifierActions(
       continue
     }
     const entryId = anchor(candidate.sourceTurn)
+    const proseEntryId = proseSource(candidate.sourceTurn)
+    // New terms only: resending a held one would restore an alias the user removed mid-pass.
     if (decision.kind === 'promote') {
       handleMap.set(candidate.handle, decision.entityId)
       const promoted = index.get(decision.entityId)
-      const merged = appendKeywords(promoted?.keywords ?? [], candidate.keywords)
+      const added = newTerms(promoted?.keywords ?? [], candidate.keywords)
       if (promoted != null)
         index.set(decision.entityId, {
           ...promoted,
           status: 'active',
-          keywords: merged ?? promoted.keywords,
+          keywords: [...promoted.keywords, ...added],
         })
       planned.push({
         action: {
-          kind: 'updateEntity',
+          kind: 'promoteStagedEntity',
           source: SOURCE,
-          payload: {
-            branchId,
-            id: decision.entityId,
-            patch: merged == null ? { status: 'active' } : { status: 'active', keywords: merged },
-          },
+          payload: { branchId, id: decision.entityId, proseEntryId },
         },
         entryId,
       })
+      if (added.length > 0)
+        planned.push({
+          action: {
+            kind: 'appendEntityKeywords',
+            source: SOURCE,
+            payload: { branchId, id: decision.entityId, keywords: added, proseEntryId },
+          },
+          entryId,
+        })
       continue
     }
-    // A known character writes only when the prose named it by something new: keywords aren't
-    // frozen after introduction, but a recurring name must not cost a delta row per pass.
     if (decision.kind === 'known') {
       handleMap.set(candidate.handle, decision.entityId)
       const known = index.get(decision.entityId)
-      const merged = appendKeywords(known?.keywords ?? [], candidate.keywords)
-      if (merged != null) {
-        if (known != null) index.set(decision.entityId, { ...known, keywords: merged })
+      const added = newTerms(known?.keywords ?? [], candidate.keywords)
+      if (added.length > 0) {
+        if (known != null)
+          index.set(decision.entityId, { ...known, keywords: [...known.keywords, ...added] })
         planned.push({
           action: {
-            kind: 'updateEntity',
+            kind: 'appendEntityKeywords',
             source: SOURCE,
-            payload: { branchId, id: decision.entityId, patch: { keywords: merged } },
+            payload: { branchId, id: decision.entityId, keywords: added, proseEntryId },
           },
           entryId,
         })
@@ -185,7 +183,7 @@ export function buildClassifierActions(
     }
     const id = newId('char')
     const timestamp = now()
-    const keywords = appendKeywords([], candidate.keywords) ?? []
+    const keywords = dedupeTerms(candidate.keywords)
     const stored = clampEmbeddedCharacter(candidate)
     handleMap.set(candidate.handle, id)
     index.set(id, { kind: 'character', status: 'active', keywords })
@@ -309,13 +307,22 @@ export function buildClassifierActions(
     const subjectId = resolveRef(relationship.subject, 'character')
     const objectId = resolveRef(relationship.object, 'character')
     if (subjectId == null || objectId == null || subjectId === objectId) continue
+    // A blank kind would be rejected or stored as whitespace; drop the fact instead of failing.
+    const kind = nonBlank(relationship.kind)
+    if (kind == null) continue
     planned.push({
       action: {
         kind: 'upsertCharacterRelationship',
         source: SOURCE,
         // Canonical a_id < b_id ordering and the POV merge live in the action
         // (lib/actions/relationships/register.ts) — emit the raw perspective.
-        payload: { branchId, subjectId, objectId, kind: relationship.kind },
+        payload: {
+          branchId,
+          subjectId,
+          objectId,
+          kind,
+          proseEntryId: proseSource(relationship.sourceTurn),
+        },
       },
       entryId: anchor(relationship.sourceTurn),
     })
@@ -331,19 +338,25 @@ export function buildClassifierActions(
     if (flip.to === 'active' && current.status !== 'staged') continue
     if (flip.to === 'retired' && current.status !== 'active') continue
     index.set(id, { ...current, status: flip.to })
+    const proseEntryId = proseSource(flip.sourceTurn)
     planned.push({
-      action: {
-        kind: 'updateEntity',
-        source: SOURCE,
-        payload: {
-          branchId,
-          id,
-          patch:
-            flip.to === 'retired'
-              ? { status: 'retired', retiredReason: nonBlank(flip.reason) ?? null }
-              : { status: 'active' },
-        },
-      },
+      action:
+        flip.to === 'retired'
+          ? {
+              kind: 'retireEntity',
+              source: SOURCE,
+              payload: {
+                branchId,
+                id,
+                retiredReason: nonBlank(flip.reason) ?? null,
+                proseEntryId,
+              },
+            }
+          : {
+              kind: 'promoteStagedEntity',
+              source: SOURCE,
+              payload: { branchId, id, proseEntryId },
+            },
       entryId: anchor(flip.sourceTurn),
     })
   }

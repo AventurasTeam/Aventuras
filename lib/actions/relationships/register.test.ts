@@ -3,16 +3,20 @@ import { describe, expect, it } from 'vitest'
 
 import { branches, characterRelationships, deltas, stories } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { characterRelationshipsStore } from '@/lib/stores'
+import { characterRelationshipsStore, entriesStore, undoRedoStore } from '@/lib/stores'
 
 import { registerCharacterRelationships } from './register'
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { __resetRegistry } from '../delta/registry'
 import { reverseReplayDeltas } from '../delta/reverse-replay'
+import { USER_EDITED_SINCE_PROSE } from '../delta/user-precedence'
+import { registerStoryEntries } from '../story-entries/register'
+import { redoLastAction, undoLastAction } from '../story-entries/undo'
 
 async function setup() {
   __resetRegistry()
   registerCharacterRelationships()
+  registerStoryEntries()
   const { db, runInTransaction } = await createTestDb()
   await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
   await db.insert(branches).values({ id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 })
@@ -84,6 +88,80 @@ describe('character_relationships upsert', () => {
     expect(rows.length).toBe(1)
     expect(rows[0].kind).toBeNull()
     expect(rows[0].inverseKind).toBe('sister')
+  })
+
+  it('is a no-op when the subject-as-a write repeats the stored view', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(upsert('char_aria', 'char_kael', 'brother', 'act_1'), ctx)
+    const result = await applyDeltaAction(upsert('char_aria', 'char_kael', 'brother', 'act_2'), ctx)
+    expect(result).toEqual({
+      status: 'rejected',
+      reason: 'relationship unchanged',
+      code: 'noop',
+    })
+    const rows = await pairRow(db, 'char_aria', 'char_kael')
+    expect(rows[0].kind).toBe('brother')
+    expect(await deltasFor(db, 'act_2')).toHaveLength(0)
+  })
+
+  it('is a no-op when the subject-as-b write repeats the stored view', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(upsert('char_kael', 'char_aria', 'sister', 'act_1'), ctx)
+    const result = await applyDeltaAction(upsert('char_kael', 'char_aria', 'sister', 'act_2'), ctx)
+    expect(result).toEqual({
+      status: 'rejected',
+      reason: 'relationship unchanged',
+      code: 'noop',
+    })
+    const rows = await pairRow(db, 'char_aria', 'char_kael')
+    expect(rows[0].inverseKind).toBe('sister')
+    expect(await deltasFor(db, 'act_2')).toHaveLength(0)
+  })
+
+  it('is a no-op when the write is a case variant of the stored view', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(upsert('char_aria', 'char_kael', 'sister', 'act_1'), ctx)
+    const result = await applyDeltaAction(upsert('char_aria', 'char_kael', 'Sister', 'act_2'), ctx)
+    expect(result).toEqual({
+      status: 'rejected',
+      reason: 'relationship unchanged',
+      code: 'noop',
+    })
+    const rows = await pairRow(db, 'char_aria', 'char_kael')
+    expect(rows[0].kind).toBe('sister')
+    expect(await deltasFor(db, 'act_2')).toHaveLength(0)
+  })
+
+  it('is a no-op when the write is a whitespace variant of the stored view', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(upsert('char_aria', 'char_kael', 'sister', 'act_1'), ctx)
+    const result = await applyDeltaAction(
+      upsert('char_aria', 'char_kael', ' sister ', 'act_2'),
+      ctx,
+    )
+    expect(result).toEqual({
+      status: 'rejected',
+      reason: 'relationship unchanged',
+      code: 'noop',
+    })
+    const rows = await pairRow(db, 'char_aria', 'char_kael')
+    expect(rows[0].kind).toBe('sister')
+    expect(await deltasFor(db, 'act_2')).toHaveLength(0)
+  })
+
+  it('is a no-op when a single-perspective clear targets an already-null view', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(upsert('char_kael', 'char_aria', 'sister', 'act_1'), ctx)
+    const result = await applyDeltaAction(upsert('char_aria', 'char_kael', null, 'act_2'), ctx)
+    expect(result).toEqual({
+      status: 'rejected',
+      reason: 'relationship unchanged',
+      code: 'noop',
+    })
+    const rows = await pairRow(db, 'char_aria', 'char_kael')
+    expect(rows[0].kind).toBeNull()
+    expect(rows[0].inverseKind).toBe('sister')
+    expect(await deltasFor(db, 'act_2')).toHaveLength(0)
   })
 
   it('rejects a null-POV write against a non-existent pair', async () => {
@@ -281,5 +359,240 @@ describe('both-perspective upsert (World relationship editor)', () => {
       ctx,
     )
     expect(result).toMatchObject({ status: 'rejected', code: 'noop' })
+  })
+})
+
+// cadence.md → User edits and classifier writes.
+// char_kael < char_mira, so `kind` here is Kael's view of Mira.
+describe('single-perspective upsert against a user edit newer than the prose', () => {
+  const PROSE = 'e_prose'
+  const writeProse = (ctx: Awaited<ReturnType<typeof setup>>['ctx'], id = PROSE, position = 1) =>
+    applyDeltaAction(
+      {
+        action: {
+          kind: 'createStoryEntry',
+          source: 'ai_classifier',
+          payload: {
+            entry: {
+              id,
+              branchId: 'br_1',
+              position,
+              kind: 'ai_reply',
+              content: 'Kael swore himself to Mira.',
+              createdAt: 1,
+            },
+          },
+        },
+        actionId: `act_${id}`,
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+  const classify = (kind: string | null, actionId: string, proseEntryId = PROSE) => ({
+    action: {
+      kind: 'upsertCharacterRelationship' as const,
+      source: 'periodic_classifier' as const,
+      payload: {
+        branchId: 'br_1',
+        subjectId: 'char_kael',
+        objectId: 'char_mira',
+        kind,
+        proseEntryId,
+      },
+    },
+    actionId,
+    branchId: 'br_1',
+  })
+  const views = (kael: string | null, mira: string | null, actionId: string) =>
+    upsertBoth('char_kael', 'char_mira', kael, mira, actionId)
+  const userWon = { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
+
+  it("keeps Kael's view of Mira that the user set after the prose", async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(views('friend', 'friend', 'act_0'), ctx)
+    await writeProse(ctx)
+    await applyDeltaAction(views('rival', 'friend', 'act_u'), ctx)
+    expect(await applyDeltaAction(classify('ally', 'act_k'), ctx)).toEqual(userWon)
+    expect((await pairRow(db, 'char_kael', 'char_mira'))[0].kind).toBe('rival')
+  })
+
+  it("writes Kael's view when the user changed only Mira's after the prose", async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(views('friend', 'friend', 'act_0'), ctx)
+    await writeProse(ctx)
+    await applyDeltaAction(views('friend', 'wary', 'act_u'), ctx)
+    expect((await applyDeltaAction(classify('ally', 'act_k'), ctx)).status).toBe('ok')
+    expect((await pairRow(db, 'char_kael', 'char_mira'))[0]).toMatchObject({
+      kind: 'ally',
+      inverseKind: 'wary',
+    })
+  })
+
+  it('creates nothing for a pair the user deleted after the prose', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(views('friend', 'friend', 'act_0'), ctx)
+    await writeProse(ctx)
+    const [row] = await pairRow(db, 'char_kael', 'char_mira')
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'deleteCharacterRelationship',
+          source: 'user_edit',
+          payload: { branchId: 'br_1', id: row.id },
+        },
+        actionId: 'act_u',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect(await applyDeltaAction(classify('ally', 'act_k'), ctx)).toEqual(userWon)
+    expect(await pairRow(db, 'char_kael', 'char_mira')).toHaveLength(0)
+  })
+
+  it('keeps a view the user set creating the pair after the prose', async () => {
+    const { db, ctx } = await setup()
+    await writeProse(ctx)
+    await applyDeltaAction(views('rival', 'wary', 'act_u'), ctx)
+    expect(await applyDeltaAction(classify('ally', 'act_k'), ctx)).toEqual(userWon)
+    expect((await pairRow(db, 'char_kael', 'char_mira'))[0].kind).toBe('rival')
+  })
+
+  it('fills a view the user left blank creating the pair after the prose', async () => {
+    const { db, ctx } = await setup()
+    await writeProse(ctx)
+    await applyDeltaAction(views(null, 'wary', 'act_u'), ctx)
+    expect((await applyDeltaAction(classify('ally', 'act_k'), ctx)).status).toBe('ok')
+    expect((await pairRow(db, 'char_kael', 'char_mira'))[0]).toMatchObject({
+      kind: 'ally',
+      inverseKind: 'wary',
+    })
+  })
+
+  it('fills a view the user left blank re-creating a pair they deleted after the prose', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(views('friend', 'friend', 'act_0'), ctx)
+    await writeProse(ctx)
+    const [row] = await pairRow(db, 'char_kael', 'char_mira')
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'deleteCharacterRelationship',
+          source: 'user_edit',
+          payload: { branchId: 'br_1', id: row.id },
+        },
+        actionId: 'act_d',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    await applyDeltaAction(views(null, 'wary', 'act_u'), ctx)
+    expect((await applyDeltaAction(classify('ally', 'act_k'), ctx)).status).toBe('ok')
+    expect((await pairRow(db, 'char_kael', 'char_mira'))[0]).toMatchObject({
+      kind: 'ally',
+      inverseKind: 'wary',
+    })
+  })
+
+  it('keeps older prose off a pair the user deleted, after newer prose re-created it', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(views('friend', 'friend', 'act_0'), ctx)
+    await writeProse(ctx, 'e_old', 1)
+    const [row] = await pairRow(db, 'char_kael', 'char_mira')
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'deleteCharacterRelationship',
+          source: 'user_edit',
+          payload: { branchId: 'br_1', id: row.id },
+        },
+        actionId: 'act_d',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    await writeProse(ctx, 'e_new', 2)
+    expect((await applyDeltaAction(classify('ally', 'act_k1', 'e_new'), ctx)).status).toBe('ok')
+    const miraView = await applyDeltaAction(
+      {
+        action: {
+          kind: 'upsertCharacterRelationship',
+          source: 'periodic_classifier',
+          payload: {
+            branchId: 'br_1',
+            subjectId: 'char_mira',
+            objectId: 'char_kael',
+            kind: 'sister',
+            proseEntryId: 'e_old',
+          },
+        },
+        actionId: 'act_k2',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect(miraView).toEqual(userWon)
+    expect((await pairRow(db, 'char_kael', 'char_mira'))[0]).toMatchObject({
+      kind: 'ally',
+      inverseKind: null,
+    })
+  })
+
+  // A live-row read would see `friend` at the second write and credit it to the user's create.
+  it('reads a blank view at create from the chain after an older fact filled it', async () => {
+    const { db, ctx } = await setup()
+    await writeProse(ctx, 'e_p0', 1)
+    await writeProse(ctx, 'e_p', 2)
+    await applyDeltaAction(views(null, 'wary', 'act_u'), ctx)
+    expect((await applyDeltaAction(classify('friend', 'act_k0', 'e_p0'), ctx)).status).toBe('ok')
+    expect((await applyDeltaAction(classify('ally', 'act_k1', 'e_p'), ctx)).status).toBe('ok')
+    expect((await pairRow(db, 'char_kael', 'char_mira'))[0].kind).toBe('ally')
+  })
+
+  // Redo re-inserts the create at the log head, above the fill its snapshot absorbed.
+  it('reads a blank view at create through an undo and redo of the create', async () => {
+    const { db, ctx } = await setup()
+    entriesStore.hydrate('br_1', [])
+    undoRedoStore.clear()
+    await writeProse(ctx, 'e_p0', 1)
+    await applyDeltaAction(views(null, 'wary', 'act_u'), ctx)
+    expect((await applyDeltaAction(classify('friend', 'act_k0', 'e_p0'), ctx)).status).toBe('ok')
+    expect(await undoLastAction('br_1', ctx)).toEqual({ status: 'ok' })
+    expect(await pairRow(db, 'char_kael', 'char_mira')).toHaveLength(0)
+    expect(await redoLastAction('br_1', ctx)).toEqual({ status: 'ok' })
+    expect((await pairRow(db, 'char_kael', 'char_mira'))[0].kind).toBe('friend')
+
+    expect((await applyDeltaAction(classify('ally', 'act_k1', 'e_p0'), ctx)).status).toBe('ok')
+    expect((await pairRow(db, 'char_kael', 'char_mira'))[0].kind).toBe('ally')
+    entriesStore.__reset()
+  })
+
+  it("does not count the classifier's own delete of the pair as the user's", async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(views('friend', null, 'act_0'), ctx)
+    await writeProse(ctx)
+    expect((await applyDeltaAction(classify(null, 'act_k0'), ctx)).status).toBe('ok')
+    expect(await pairRow(db, 'char_kael', 'char_mira')).toHaveLength(0)
+    expect((await applyDeltaAction(classify('ally', 'act_k1'), ctx)).status).toBe('ok')
+    expect((await pairRow(db, 'char_kael', 'char_mira'))[0].kind).toBe('ally')
+  })
+
+  it('overwrites a view the user set before the prose', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(views('friend', 'friend', 'act_0'), ctx)
+    await applyDeltaAction(views('rival', 'friend', 'act_u'), ctx)
+    await writeProse(ctx)
+    expect((await applyDeltaAction(classify('ally', 'act_k'), ctx)).status).toBe('ok')
+    expect((await pairRow(db, 'char_kael', 'char_mira'))[0].kind).toBe('ally')
+  })
+
+  it("lets the prose through once the user's newer edit is undone", async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(views('friend', 'friend', 'act_0'), ctx)
+    await writeProse(ctx)
+    await applyDeltaAction(views('rival', 'friend', 'act_u'), ctx)
+    expect(await applyDeltaAction(classify('ally', 'act_k1'), ctx)).toEqual(userWon)
+    expect(await reverseReplayDeltas('act_u', ctx)).toBe(1)
+    expect((await applyDeltaAction(classify('ally', 'act_k2'), ctx)).status).toBe('ok')
+    expect((await pairRow(db, 'char_kael', 'char_mira'))[0].kind).toBe('ally')
   })
 })

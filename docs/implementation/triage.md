@@ -104,3 +104,115 @@ slice-planning gate forces its resolution before that slice is planned.
   in e.g. German), and `overview.within` is a joiner fragment. Per-tier
   whole-sentence keys fix it. Revisit trigger: the first non-English
   locale.
+
+- **World and Plot's pill Cancel misses a sibling branch's run.** The
+  pill's foreground kind is story-keyed
+  (`selectStorySettingsGenerationRunKind`, `generation-run.ts:25`), but
+  `onCancel` passes the route's branch to `awaitRunTerminal`
+  (`app/world/[branchId].tsx:448`, `app/plot/[branchId].tsx:372`),
+  which matches kind and branch. A foreground run on a sibling branch
+  shows in the pill, and its Cancel does nothing. Not reachable through
+  shipped navigation until M6 branch switching; in dev a
+  `/world/<other branch>` link reaches it, since `useColdOpenStory`
+  opens the branch without checking for a run. Revisit trigger: M6
+  planning.
+
+- **Whether `updating-memory` blocks branch switching.**
+  [`branch-navigator.md → During generation`](../ui/screens/reader-composer/branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked)
+  pauses switch, delete and create while the pill is active ("any
+  pipeline phase", line 116) and sends the user to wait or cancel from
+  `Send → Cancel` (lines 120-123). Its phase list doesn't name the
+  periodic classifier's `updating-memory`, which the pill now shows and
+  which can't be cancelled, so the rule either parks switching behind
+  an uncancellable pass or doesn't cover it. Not reachable until M6
+  ships switching. Revisit trigger: M6 planning.
+
+- **Reconciliation matches against the pass's snapshot.** Namesakes
+  come from the entity snapshot the pass read before its model call
+  (`reconcile.ts:54-57`, read by `periodicClassifierPhase`), so a
+  character the user creates in World mid-pass is invisible to it. If
+  the pass's prose introduces the same name, it creates a second row
+  with `nameCollisionFlag` 0 (`buildClassifierActions`'s create path),
+  and World's collision
+  review lists flagged rows only (`collisions.ts:27`), so nobody is
+  asked about the duplicate. Reachable today: World create is gated
+  only by `hard-gate` runs.
+
+- **A reversal can still drop a later user edit.** Reversing a machine
+  write skips each column a later `user_edit` outside the reversed set
+  wrote
+  ([`generation-pipeline.md → Reverse-replay`](../generation-pipeline.md#reverse-replay)),
+  with gaps left. Reversing a classifier `create` deletes the row,
+  and a user edit made to it since goes with it, its delta left
+  pointing at nothing. A prose edit reverses a happening's create
+  (`isReversible` in `story-entries/classifier-facts.ts` spares only
+  entities'), and a failed pass's `abortRun` or boot recovery reverses
+  both kinds. Reachable today: edit in Plot a happening the head
+  turn's pass created, then edit that turn's prose. And a schema-backed
+  column (`entities.state`, `story_entries.metadata`) still restores
+  the sub-fields its delta changed over a later user write to the same
+  sub-field. That one is latent: only hard-gated runs write either
+  column, so no user edit lands while such a run can abort, and a
+  rollback or regenerate that reverses their deltas later sweeps the
+  user's edits after them too. Both deletes, a reversed create's and a
+  character relationship left with no view, strand the user deltas on
+  the row, a user create included, pointing at a row that is gone.
+  CTRL-Z of such an edit reports a reversal and prunes it, but the row
+  stays gone: a silent no-op undo. `reverse-replay-user-writes.test.ts`
+  ("deletes a pair the reversal would leave with no view") pins this
+  current behaviour. And `abortRun` or boot recovery of a pass that
+  created a happening leaves an involvement or awareness row the user
+  added under it standing with no parent, since `happening_id` carries
+  no foreign key; reasoned from the code, not reproduced.
+
+- **A recurring classifier failure reaches `failed-persistent`
+  invisibly.** The backoff
+  ([`classifier.md → Auto-retry policy`](../memory/classifier.md#auto-retry-policy))
+  exhausts in about 7.5 minutes (30s + 2m + 5m) against a repeating
+  apply-time rejection, and `failed-persistent` survives a restart —
+  boot recovery (`resetStuckClassifierRunState`) resets only
+  `'running'`. Nothing in `app/`, `components/` or `hooks/` reads
+  classifier status or calls `runNow` (`scheduler.ts:85`) today, so a
+  branch can stop updating memory with no visible signal until M7.2
+  builds Settings → Memory's `[Retry]` / `[Run classifier now]`
+  ([`story-settings.md → Classifier`](../ui/screens/story-settings/story-settings.md#classifier)).
+  Revisit trigger: M7.2 planning.
+
+- **A blank happening title or new-character name still reaches a
+  row.** `classifierExtractionSchema` gives both `happening.title` and
+  `newCharacters[].name` a bare `z.string()` (`schema.ts:20`, `:58`),
+  and neither `happeningWriteObject` nor `entityWriteSchema` adds the
+  `.min(1)` that `characterRelationshipWriteSchema` gives `kind`, so
+  the write layer accepts an empty string. `plan.ts` routes neither
+  field through `nonBlank`, only through `clampEmbedded` (a length
+  cap, not a blank check), contradicting the "a blank never reaches a
+  row" comment at `plan.ts:40` — true only for the fields the planner
+  does route through `nonBlank`. Revisit trigger: a happening or
+  character surfacing with an empty name/title in World or Plot.
+
+- **The classifier prompt has no token budget beyond
+  `classifierWindowMaxEntries`.** That knob bounds only the turns
+  block; the entity, happening and relationship lists grow unbounded
+  with the branch, and `generateStructured` (`lib/ai/generate.ts`)
+  passes the rendered prompt straight to the provider with no length
+  guard. Revisit trigger: the first long-story prompt-size or cost
+  signal.
+
+- **Redo applies a snapshot read before the classifier drain.**
+  `redoLastAction` (`lib/actions/story-entries/undo.ts`) reads its redo
+  snapshot before `bracketProseReversal` drains the in-flight classifier
+  pass and never re-checks the stack afterwards. A classifier write
+  that commits during the drain clears the redo stack, yet redo still
+  restores its whole-row snapshot over that write. Fix: peek the
+  snapshot inside the bracket body, after the drain, and refuse if it
+  changed. Needs a redo while a pass commits to the same row; predates
+  the memory-update guard.
+
+- **Undo captures its redo snapshot outside the row locks.**
+  `undoLastAction` takes the redo snapshot before
+  `reverseAndPruneDeltaRows` acquires the row locks, so a user write
+  that took its lock and passed the reversal barrier just before the
+  flag went up can land in between. The result is a stale redo
+  snapshot, not a lost write at undo time. Closing it needs a
+  lock-free variant of the reversal that the undo body calls under
+  locks it already holds.

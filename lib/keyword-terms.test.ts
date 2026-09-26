@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { dedupeTerms } from './keyword-terms'
+import { dedupeTerms, newTerms } from './keyword-terms'
 
 describe('dedupeTerms', () => {
   it('collapses case variants to the first spelling', () => {
@@ -18,5 +18,21 @@ describe('dedupeTerms', () => {
       'the innkeeper',
       'your brother',
     ])
+  })
+})
+
+describe('newTerms', () => {
+  it('keeps only terms the current list lacks, case and spacing aside', () => {
+    expect(
+      newTerms(['The Grey Wolf'], [' the grey wolf ', ' the innkeeper ', 'The Innkeeper', '']),
+    ).toEqual(['the innkeeper'])
+  })
+
+  it('returns nothing when every term is already held', () => {
+    expect(newTerms(['a', 'b'], ['A', ' b'])).toEqual([])
+  })
+
+  it('matches the current list under the same normalization as incoming', () => {
+    expect(newTerms([' The Grey Wolf ', 'Café'], ['the grey wolf', 'Café'])).toEqual([])
   })
 })

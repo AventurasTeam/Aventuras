@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, getTableColumns } from 'drizzle-orm'
 import type { SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core'
 import type { ZodType } from 'zod'
 
@@ -77,6 +77,12 @@ export type DomainRegistration = {
   patcher?: StorePatcher
   restoreCascade?: CascadeRestore
   cascadeDeleteOps?: CascadeDeleteOps
+  /**
+   * Row exists while any of these is non-null; a reversal nulling them all deletes the row
+   * instead (a reversal restores a machine write column by column around later user writes,
+   * so no other invariant may span columns). See `docs/generation-pipeline.md` → Reverse-replay.
+   */
+  rowKeepingColumns?: readonly string[]
 }
 
 type TableEntry = Omit<DomainRegistration, 'handlers'>
@@ -85,6 +91,14 @@ const actionRegistry = new Map<string, { table: string; handler: ActionHandler }
 const tableRegistry = new Map<string, TableEntry>()
 
 export function register(reg: DomainRegistration): void {
+  // A misspelled name reads as null on every row, turning each update reversal into a delete.
+  if (reg.rowKeepingColumns) {
+    const columns = getTableColumns(reg.descriptor.table)
+    for (const col of reg.rowKeepingColumns) {
+      if (!Object.hasOwn(columns, col))
+        throw new Error(`register: ${reg.table} has no column ${col} to keep rows by`)
+    }
+  }
   const { handlers, ...tableEntry } = reg
   tableRegistry.set(reg.table, tableEntry)
   for (const [kind, handler] of Object.entries(handlers)) {

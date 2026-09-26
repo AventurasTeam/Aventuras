@@ -1,19 +1,23 @@
 // @vitest-environment jsdom
-import { cleanup, render } from '@testing-library/react'
+import { act, cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { generationStore, type RunState, type TxState } from '@/lib/stores'
 
 import {
   generationGateReason,
+  selectStoryClassifierRunning,
   selectStorySettingsGenerationRunKind,
+  storyPillPhase,
   storySettingsGenerationPhase,
+  useStoryGenerationGate,
 } from './generation-run'
 
 function run(
   kind: string,
   storyId = 'story-1',
   gateBehavior: RunState['gateBehavior'] = 'hard-gate',
+  branchId = 'branch-1',
 ): RunState {
   return {
     runId: `run-${kind}`,
@@ -21,7 +25,7 @@ function run(
     gateBehavior,
     actionId: `action-${kind}`,
     storyId,
-    branchId: 'branch-1',
+    branchId,
     abortController: new AbortController(),
     currentPhase: 'running',
     intermediates: {},
@@ -36,6 +40,20 @@ function tx(...runs: RunState[]): TxState {
 
 function Probe() {
   generationStore.useGeneration((s) => selectStorySettingsGenerationRunKind(s.txState, 'story-1'))
+  return null
+}
+
+function GateProbe({
+  storyId,
+  branchId,
+  onResult,
+}: {
+  storyId: string
+  branchId?: string
+  onResult: (classifierRunning: boolean) => void
+}) {
+  const { classifierRunning } = useStoryGenerationGate(storyId, branchId)
+  onResult(classifierRunning)
   return null
 }
 
@@ -87,6 +105,57 @@ describe('storySettingsGenerationPhase', () => {
     expect(storySettingsGenerationPhase('chapter-close')).toBe('closing-chapter')
     expect(storySettingsGenerationPhase('suggestion-refresh')).toBe('refreshing-suggestions')
     expect(storySettingsGenerationPhase('per-turn')).toBe('generating-narrative')
+  })
+})
+
+describe('selectStoryClassifierRunning', () => {
+  it("is true only for the story's own no-gate classifier run", () => {
+    expect(
+      selectStoryClassifierRunning(tx(run('periodic-classifier', 'story-1', 'no-gate')), 'story-1'),
+    ).toBe(true)
+    expect(
+      selectStoryClassifierRunning(tx(run('periodic-classifier', 'story-2', 'no-gate')), 'story-1'),
+    ).toBe(false)
+    expect(selectStoryClassifierRunning(tx(run('per-turn')), 'story-1')).toBe(false)
+  })
+})
+
+describe('storyPillPhase', () => {
+  it('shows a foreground run over the classifier pass', () => {
+    expect(storyPillPhase('chapter-close', true)).toBe('closing-chapter')
+  })
+
+  it('shows the classifier pass as updating memory when nothing else runs', () => {
+    expect(storyPillPhase(null, true)).toBe('updating-memory')
+    expect(storyPillPhase(null, false)).toBeUndefined()
+  })
+})
+
+describe('useStoryGenerationGate classifier running', () => {
+  // The probe stays mounted across the store update so the assertion exercises the
+  // live subscription, not a selector re-evaluated by a fresh render.
+  it("flips the same mounted probe from true to false when the branch's classifier run finishes", () => {
+    generationStore.startRun(run('periodic-classifier', 'story-1', 'no-gate', 'branch-1'))
+    const captured: boolean[] = []
+    render(<GateProbe storyId="story-1" branchId="branch-1" onResult={(v) => captured.push(v)} />)
+    expect(captured.at(-1)).toBe(true)
+
+    act(() => {
+      generationStore.finishRun('run-periodic-classifier')
+    })
+    expect(captured.at(-1)).toBe(false)
+  })
+
+  it('keys by branch when branchId is given, and by story when it is not', () => {
+    generationStore.startRun(run('periodic-classifier', 'story-1', 'no-gate', 'branch-2'))
+
+    let byBranch = false
+    render(<GateProbe storyId="story-1" branchId="branch-1" onResult={(v) => (byBranch = v)} />)
+    expect(byBranch).toBe(false)
+
+    let byStory = false
+    render(<GateProbe storyId="story-1" onResult={(v) => (byStory = v)} />)
+    expect(byStory).toBe(true)
   })
 })
 

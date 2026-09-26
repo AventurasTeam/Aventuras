@@ -263,11 +263,27 @@ the asset gallery pass` / `lands in Slice 4.2b`).
   its stored value. The diff's current links are the ones rendered
   when Save was pressed, so a classifier write landing during Save's
   validation can still be overwritten on an edited pair's untouched
-  view — a narrow window. `useRowSaveSession` and Plot are unchanged (Plot's
-  links-array case stays
+  view — a narrow window the guard below does not close.
+  `useRowSaveSession` and Plot are unchanged (Plot's links-array case
+  stays
   [parked](../../../../parked.md#a-dirty-links-array-on-save-overwrites-concurrent-link-writes)).
   Touched `keywords` still overwrite a classifier append (accepted,
   last writer wins).
+- **Classifier writes against user edits (developer decisions,
+  2026-09-25/26).** Status and keyword writes were built from the
+  pass's snapshot, reverting a mid-pass World edit against
+  `classifier.md`'s alias-survives promise; `promoteStagedEntity`,
+  `retireEntity` and `appendEntityKeywords` now re-read the live row,
+  and the relationship-view upsert reads the pair's stored views. A
+  status, removed alias or view the user wrote after the fact's prose
+  wins, ordered by the delta log; reversing a machine write keeps a
+  later user write, and a pass failing mid-apply takes the regular
+  retry path
+  ([`cadence.md → User edits and classifier writes`](../../../../memory/cadence.md#user-edits-and-classifier-writes)).
+  `updating-memory` shows on World and Plot per branch and on Story
+  Settings per story; a Save confirm for a dirty Relationships save
+  mid-pass was designed and dropped once this precedence closed the
+  overwrite. Remaining gaps are in [`triage.md`](../../../triage.md).
 - **Overview regions are single targets; entity navigation lives in
   Connections (manual review, 2026-09-25).** The first cut made each
   entity name a link beside a region label that opened Connections;

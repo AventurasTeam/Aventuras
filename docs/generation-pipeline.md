@@ -62,6 +62,12 @@ interface Pipeline {
   gateBehavior: 'hard-gate' | 'no-gate' // 'scoped-gate' deferred
   concurrencyPolicy: ConcurrencyPolicy
   chainsTo?: (run: RunState) => string | null // consulted at commit; sources its own deps
+  onPreflightFailure?: (ctx, error: PipelineError) => Promise<void> // pre-flight halts before phase 0, so only this hook ever sees that failure
+  // a phase threw; runs once its rollback has committed, before the run releases
+  onPhaseException?: (
+    ctx,
+    error: Extract<PipelineError, { kind: 'action-layer' | 'orchestrator' }>,
+  ) => Promise<void>
 }
 
 export const pipelines: ReadonlyMap<string, Pipeline>
@@ -880,6 +886,12 @@ COMMIT;
 
 Either both rows write or neither. SQLite commit before Zustand
 store update — if SQLite fails, store stays consistent with disk.
+The handler reads the rows it decides from before that transaction
+opens. A write to an existing `entities` row, and any
+`character_relationships` write, holds a key lock across that read and
+its commit, since the classifier and a World Save both write those
+rows
+([`memory/cadence.md → Concurrency`](./memory/cadence.md#concurrency)).
 
 ### Performance — no batching needed
 
@@ -920,11 +932,16 @@ in-progress (currentPhase iterates)
    │                                                          │  emit run_complete (outcome: 'completed')
    │
    ├── phase returns failed ────────────────────► abortRun (reason: phase-failure)
+   ├── phase throws (action-layer rejection,
+   │   orchestrator error) ─────────────────────► abortRun (reason: phase-failure, thrown: true)
    └── user-initiated cancel ───────────────────► abortRun (reason: user-cancel)
                                                       │  abortController.abort()
                                                       │  drain in-flight phases (return aborted)
                                                       │  reverse-replay deltas and UPDATE pipeline_runs
                                                       │    SET finished_at, outcome (one SQLite txn)
+                                                      │  if thrown && rollback committed:
+                                                      │    pipeline.onPhaseException(ctx, error) —
+                                                      │    skipped when the rollback itself could not commit
                                                       │  remove run from txState
                                                       │  emit run_complete (outcome: 'aborted' | 'failed')
 ```
@@ -1261,7 +1278,32 @@ still reports the run failed, but does not leave it to boot recovery,
 since its marker settled with the reversal. `submitTurn` logs either
 kind and still returns the rejection.
 
-**Undoing a `create` is a bare row delete, and consults no cascade.**
+**A reversed machine write keeps a later user write.** Undoing a delta
+from a pipeline source skips each top-level column that a later
+`user_edit` delta on the same row wrote, by creating the row or
+changing that column, unless that delta is in the set being reversed
+too. A delta left with no column writes nothing and is still pruned.
+A `user_edit` inside the set restores as usual: a rollback or
+regenerate sweeps every null-anchored World edit after its target, so
+the row still returns to its prior value, and CTRL-Z of the user's own
+action is never filtered. CTRL-Z of a user edit the rule kept restores
+the value that edit overwrote, which may be the reversed fact's. The
+rule has two exceptions. A schema-backed JSON column such as an
+entity's `state` restores the sub-fields its delta changed as before,
+even over a later user write to the same sub-field. A machine `create`
+still deletes its row, since an entity or happening exists only
+because of the reversed write, except in a table that registers
+`rowKeepingColumns`: a character relationship whose view a later user
+write set keeps its row, with the views the user did not write nulled,
+and is deleted only once both are null. An update's reversal that
+would leave both views null deletes the row too, since the pair's
+one-view `CHECK` forbids it, and an older undo in the same reversal
+that gives it a view back re-inserts it. Restoring column by column
+assumes no other constraint spans a row's columns:
+`happenings_mutual_excl` would break if a machine write ever updated a
+happening.
+
+**Undoing a `create` consults no cascade.**
 A domain may register a cascade hook for its child rows, but that hook
 is **delete-op-only**: it replays a forward `delete`, so the undo of a
 `create` and the redo of a `delete` are the only arms that may read it.
@@ -1679,10 +1721,16 @@ user-originated. Pipeline-sourced writes are deliberately exempt from
 that last check: the in-flight classifier burst this barrier drains
 (the `'cancel'` abort never reaches the commit burst — see above) must
 still reach `applyDeltaAction` and commit. A rejection there instead
-throws inside the phase, aborting the run before it writes
-`classifier_status` back from `'running'` — a plain row, not
-delta-logged, so the sweep can't undo it — wedging `shouldCadenceFire`
-on that branch until the next app restart.
+throws inside the phase; the orchestrator reverse-replays the burst's
+deltas and, once that rollback commits, `onPhaseException`
+(see [Pipeline declaration](#pipeline-declaration) and
+[Run state transitions](#run-state-transitions)) records the failure
+through the classifier's ordinary retry status
+([`classifier.md → Auto-retry policy`](./memory/classifier.md#auto-retry-policy))
+— a failed run like any other, backed off the same way. Only when the
+rollback itself cannot commit does the branch stay at `'running'`,
+left for boot recovery (`resetStuckClassifierRunState`) rather than
+the ordinary backoff.
 The synchronous-`setState` invariant (see [Invariants](#invariants))
 closes the check-vs-register race the same way it does for chained
 transitions.

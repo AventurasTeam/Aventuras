@@ -347,6 +347,17 @@ are referenced.
   view the classifier changed meanwhile, and the user left alone,
   keeps its stored value.
 
+**Edits and memory updates.** A memory update never overwrites a
+status, a removed alias or a relationship view the user saved after the
+prose it processes, whether the save came before the pass started or
+while it ran, and it does not re-create a pair the user deleted after
+that prose
+([`cadence.md → User edits and classifier writes`](../../../memory/cadence.md#user-edits-and-classifier-writes)).
+Prose written after the user's edit can still revise it, per the
+authoring contract below. The generation status pill reads
+`updating memory…` while a pass runs
+([`generation-status-pill.md → Non-blocking phases`](../../patterns/generation-status-pill.md#non-blocking-phases)).
+
 **Empty state.** When the character has no recorded relationships,
 render the Relationships sub-section heading + an empty-state hint
 ("No relationships recorded yet") + the `+ Add relationship` row.

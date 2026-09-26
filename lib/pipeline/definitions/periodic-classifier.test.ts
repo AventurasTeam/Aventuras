@@ -1,11 +1,19 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { eq } from 'drizzle-orm'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { PipelineAction } from '@/lib/actions'
+import { applyDeltaAction as realApplyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
+import { describeDeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
 import { generateStructured } from '@/lib/ai'
 import { shouldCadenceFire, type EmbedDescriptions } from '@/lib/classifier'
 import {
   branches,
+  deltas,
+  entities,
+  happenings,
   stories,
   storyEntries,
+  type CharacterRelationship,
   type ClassifierStatus,
   type Entity,
   type StoryEntry,
@@ -13,10 +21,12 @@ import {
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { makeLogger } from '@/lib/diagnostics'
 import {
+  characterRelationshipsStore,
   currentStoryStore,
   entitiesStore,
   entriesStore,
   happeningsStore,
+  hydrateAppSettings,
   resetAllStores,
 } from '@/lib/stores'
 
@@ -29,6 +39,8 @@ import {
   periodicClassifierPhase,
 } from './periodic-classifier'
 import { __resetRegistry, getPipeline } from '../authoring/registry'
+import { configureDeltaActionPort } from '../runtime/action-port'
+import { runPipeline, type RunCtx } from '../runtime/orchestrator'
 import type { PhaseContext } from '../types'
 
 vi.mock('@/lib/ai', async (importOriginal) => ({
@@ -37,6 +49,31 @@ vi.mock('@/lib/ai', async (importOriginal) => ({
 }))
 
 const CHAR_KAEL = 'char_11111111-1111-1111-1111-111111111111'
+const CHAR_ARIA = 'char_22222222-2222-2222-2222-222222222222'
+
+const CLASSIFIER_WIRED_CONFIG = {
+  providers: [
+    {
+      id: 'prov-1',
+      type: 'openai-compatible' as const,
+      displayName: 'Local',
+      apiKey: 'k',
+      endpoint: 'http://x/v1',
+      favoriteModelIds: [] as string[],
+    },
+  ],
+  profiles: [
+    {
+      id: 'agent-1',
+      kind: 'agent' as const,
+      name: 'Agent',
+      modelRef: { providerId: 'prov-1', modelId: 'm' },
+    },
+  ],
+  assignments: { classifier: 'agent-1' },
+  defaultProviderId: 'prov-1',
+  diagnostics: { enabled: false, debug_level_enabled: false },
+}
 
 type Harness = {
   ctx: PhaseContext
@@ -52,6 +89,7 @@ async function ctxWith(opts: {
   headPosition: number
   entryKind?: StoryEntry['kind']
   entities?: Entity[]
+  relationships?: CharacterRelationship[]
   seedStatus?: Partial<ClassifierStatus>
   onWatermark?: (n: number) => void
 }): Promise<Harness> {
@@ -109,6 +147,7 @@ async function ctxWith(opts: {
   })
   entriesStore.hydrate('b1', entries)
   entitiesStore.hydrate('b1', opts.entities ?? [])
+  characterRelationshipsStore.hydrate('b1', opts.relationships ?? [])
   happeningsStore.hydrate('b1', [])
 
   const watermarks: number[] = []
@@ -216,6 +255,61 @@ describe('periodicClassifierPhase', () => {
     expect(prompt).not.toContain('turn 151')
     // maxEntries defaults to 20, so one pass claims 11..30 and the backlog drains.
     expect(h.status()?.processedThrough).toBe(30)
+  })
+
+  // Fails if the phase stops passing the store's rows or stops filtering them by branch.
+  it('shows the classifier only the stored relationship rows for its own branch', async () => {
+    const kael = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      status: 'active',
+      description: 'A courier.',
+    } as unknown as Entity
+    const aria = {
+      id: CHAR_ARIA,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Aria',
+      status: 'active',
+      description: 'His sister.',
+    } as unknown as Entity
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 2,
+      entities: [kael, aria],
+      relationships: [
+        {
+          id: 'rel_1',
+          branchId: 'b1',
+          aId: CHAR_KAEL,
+          bId: CHAR_ARIA,
+          kind: 'ally',
+          inverseKind: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+        {
+          id: 'rel_2',
+          branchId: 'other',
+          aId: CHAR_KAEL,
+          bId: CHAR_ARIA,
+          kind: 'rival',
+          inverseKind: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ] as CharacterRelationship[],
+    })
+    vi.mocked(generateStructured).mockResolvedValue({ status: 'ok', value: extraction() } as never)
+
+    await drain(h.ctx)
+
+    const prompt = vi.mocked(generateStructured).mock.calls[0][1] as string
+    expect(prompt).toContain('Kael sees')
+    expect(prompt).toContain('as: ally')
+    expect(prompt).not.toContain('rival')
   })
 
   it('advances past a window of only system entries, so the cadence cannot live-lock', async () => {
@@ -567,6 +661,7 @@ describe('periodicClassifierPhase', () => {
       name: 'Kael',
       status: 'staged',
       description: 'A courier.',
+      keywords: [],
     } as unknown as Entity
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
@@ -588,11 +683,11 @@ describe('periodicClassifierPhase', () => {
     const actions = events.map((e) => (e as { action: { kind: string; payload: unknown } }).action)
     // Promote, not create: the namesake exists and the descriptions match.
     expect(actions.map((a) => a.kind)).toEqual([
-      'updateEntity',
+      'promoteStagedEntity',
       'createHappening',
       'createHappeningInvolvement',
     ])
-    expect(actions[0].payload).toMatchObject({ id: CHAR_KAEL, patch: { status: 'active' } })
+    expect(actions[0].payload).toMatchObject({ id: CHAR_KAEL })
     expect(actions[2].payload).toMatchObject({ entry: { entityId: CHAR_KAEL } })
   })
 
@@ -700,5 +795,260 @@ describe('periodicClassifierPhase', () => {
     })
     // Idempotent: bootstrap and tests both call it.
     expect(() => ensurePeriodicClassifierPipelineRegistered()).not.toThrow()
+  })
+})
+
+// Drives the phase through runPipeline, not drain(): the apply-time rejection this guards
+// against only happens once a planned write reaches the action layer, which drain() skips.
+describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    __resetRegistry()
+    __resetClassifierEmbedder()
+  })
+
+  afterEach(() => {
+    configureDeltaActionPort({
+      applyDeltaAction: realApplyDeltaAction,
+      reverseReplayDeltas,
+      describeReplayError: describeDeltaReplayError,
+    })
+  })
+
+  async function seedApplyTimeHarness(): Promise<{
+    db: Awaited<ReturnType<typeof createTestDb>>['db']
+    runInTransaction: Awaited<ReturnType<typeof createTestDb>>['runInTransaction']
+  }> {
+    const { db, runInTransaction } = await createTestDb()
+    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
+    await db.insert(storyEntries).values({
+      id: 'e1',
+      branchId: 'b1',
+      position: 1,
+      kind: 'ai_reply',
+      content: 'turn 1',
+      chapterId: null,
+      metadata: {},
+      createdAt: 1,
+    } as never)
+
+    resetAllStores()
+    currentStoryStore.set({
+      storyId: 's1',
+      branchId: 'b1',
+      definition: {} as never,
+      settings: { models: {} } as never,
+    })
+    entitiesStore.hydrate('b1', [])
+    happeningsStore.hydrate('b1', [])
+    await hydrateAppSettings(async () => CLASSIFIER_WIRED_CONFIG)
+    return { db, runInTransaction }
+  }
+
+  it('routes a write the action layer rejects to the retry status instead of leaving running stuck', async () => {
+    const { db, runInTransaction } = await seedApplyTimeHarness()
+
+    // Fake handler stands in for any action-layer rejection (branch mismatch, invalid write,
+    // etc.); the guard must recover from all of them the same way.
+    configureDeltaActionPort({
+      applyDeltaAction: (args, applyCtx) =>
+        args.action.kind === 'createHappening'
+          ? Promise.resolve({ status: 'rejected', reason: 'forced test rejection' })
+          : realApplyDeltaAction(args, applyCtx),
+      reverseReplayDeltas,
+      describeReplayError: describeDeltaReplayError,
+    })
+
+    ensurePeriodicClassifierPipelineRegistered()
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({
+        happenings: [{ title: 'A', sourceTurn: 't1', involvements: [], awareness: [] }],
+      }),
+    })
+
+    const ctx: RunCtx = { storyId: 's1', branchId: 'b1', db, runInTransaction }
+    const result = await runPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
+    if (result.outcome === 'rejected') throw new Error('unexpected rejected start')
+    expect(result.outcome).toBe('failed')
+
+    const [row] = await db
+      .select({ status: branches.classifierStatus })
+      .from(branches)
+      .where(eq(branches.id, 'b1'))
+    expect(row.status).toMatchObject({ state: 'retrying', retryCount: 1 })
+    expect(row.status?.lastError).toBe('classifier: forced test rejection')
+  })
+
+  // If the reversal can't commit, the write attempt is still on disk; arming a retry would
+  // race a retry pass into re-reading it. Branch stays at `running` — only
+  // resetStuckClassifierRunState, not the ordinary backoff, reconciles it at the next boot.
+  it('leaves running when the reversal itself cannot commit, deferring to boot recovery', async () => {
+    const { db, runInTransaction } = await seedApplyTimeHarness()
+    const fixedActionId = 'act_classifier_poison'
+    await db.insert(deltas).values({
+      id: 'd_classifier_poison',
+      branchId: 'b1',
+      entryId: null,
+      actionId: fixedActionId,
+      logPosition: 900,
+      source: 'ai_classifier',
+      targetTable: 'not_a_registered_table',
+      targetId: 'x',
+      op: 'create',
+      undoPayload: null,
+      encodingVersion: 1,
+      createdAt: 1,
+    })
+
+    configureDeltaActionPort({
+      applyDeltaAction: (args, applyCtx) =>
+        args.action.kind === 'createHappening'
+          ? Promise.resolve({ status: 'rejected', reason: 'forced test rejection' })
+          : realApplyDeltaAction(args, applyCtx),
+      reverseReplayDeltas,
+      describeReplayError: describeDeltaReplayError,
+    })
+
+    ensurePeriodicClassifierPipelineRegistered()
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({
+        happenings: [{ title: 'A', sourceTurn: 't1', involvements: [], awareness: [] }],
+      }),
+    })
+
+    const ctx: RunCtx = {
+      storyId: 's1',
+      branchId: 'b1',
+      db,
+      runInTransaction,
+      actionId: fixedActionId,
+    }
+    const result = await runPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
+    if (result.outcome === 'rejected') throw new Error('unexpected rejected start')
+    expect(result.outcome).toBe('failed')
+
+    const [row] = await db
+      .select({ status: branches.classifierStatus })
+      .from(branches)
+      .where(eq(branches.id, 'b1'))
+    expect(row.status).toMatchObject({ state: 'running', retryCount: 0 })
+  })
+
+  // cadence.md → User edits and classifier writes.
+  it('completes a pass whose retire a newer user revive blocks, landing its other writes', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
+    resetAllStores()
+    currentStoryStore.set({
+      storyId: 's1',
+      branchId: 'b1',
+      definition: {} as never,
+      settings: { models: {} } as never,
+    })
+    entitiesStore.hydrate('b1', [])
+    happeningsStore.hydrate('b1', [])
+    await hydrateAppSettings(async () => CLASSIFIER_WIRED_CONFIG)
+
+    // Through the action layer, so the entry's create delta dates the prose in the real log.
+    const apply = async (action: PipelineAction, actionId: string) => {
+      const result = await realApplyDeltaAction(
+        { action, actionId, branchId: 'b1' },
+        { db, runInTransaction },
+      )
+      expect(result.status).toBe('ok')
+    }
+    await apply(
+      {
+        kind: 'createEntity',
+        source: 'user_edit',
+        payload: {
+          entry: {
+            id: CHAR_KAEL,
+            branchId: 'b1',
+            kind: 'character',
+            name: 'Kael',
+            description: 'A courier.',
+            status: 'retired',
+            retiredReason: 'lost at sea',
+            injectionMode: 'auto',
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        },
+      },
+      'act_kael',
+    )
+    await apply(
+      {
+        kind: 'createStoryEntry',
+        source: 'ai_classifier',
+        payload: {
+          entry: {
+            id: 'e1',
+            branchId: 'b1',
+            position: 1,
+            kind: 'ai_reply',
+            content: 'turn 1',
+            createdAt: 1,
+          },
+        },
+      },
+      'act_e1',
+    )
+    await apply(
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: {
+          branchId: 'b1',
+          id: CHAR_KAEL,
+          patch: { status: 'active', retiredReason: null },
+        },
+      },
+      'act_revive',
+    )
+
+    ensurePeriodicClassifierPipelineRegistered()
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({
+        statusFlips: [{ ref: 'c1', to: 'retired', reason: 'drowned', sourceTurn: 't1' }],
+        happenings: [{ title: 'A', sourceTurn: 't1', involvements: [], awareness: [] }],
+      }),
+    })
+
+    const result = await runPipeline(PERIODIC_CLASSIFIER_KIND, {
+      storyId: 's1',
+      branchId: 'b1',
+      db,
+      runInTransaction,
+    })
+    if (result.outcome === 'rejected') throw new Error('unexpected rejected start')
+    expect(result.outcome).toBe('completed')
+
+    const [kael] = await db.select().from(entities).where(eq(entities.id, CHAR_KAEL))
+    expect(kael).toMatchObject({ status: 'active', retiredReason: null })
+    const landed = await db.select().from(happenings).where(eq(happenings.branchId, 'b1'))
+    expect(landed.map((h) => h.title)).toEqual(['A'])
+    const classifierWrites = await db
+      .select({ targetTable: deltas.targetTable })
+      .from(deltas)
+      .where(eq(deltas.source, 'periodic_classifier'))
+    expect(classifierWrites.map((d) => d.targetTable)).toEqual(['happenings'])
+
+    const [row] = await db
+      .select({ status: branches.classifierStatus })
+      .from(branches)
+      .where(eq(branches.id, 'b1'))
+    expect(row.status).toMatchObject({
+      state: 'idle',
+      processedThrough: 1,
+      retryCount: 0,
+      lastError: null,
+    })
   })
 })

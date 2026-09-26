@@ -14,10 +14,7 @@ import { ScreenShell } from '@/components/shells/screen-shell'
 import { StorySettingsShell } from '@/components/shells/story-settings-shell'
 import { AboutPanel } from '@/components/story-settings/about-panel'
 import { AuthoringAidsPanel } from '@/components/story-settings/authoring-aids-panel'
-import {
-  storySettingsGenerationPhase,
-  useStoryGenerationGate,
-} from '@/components/story-settings/generation-run'
+import { storyPillPhase, useStoryGenerationGate } from '@/components/story-settings/generation-run'
 import { MemoryKnobsPanel } from '@/components/story-settings/memory-knobs-panel'
 import { MemoryPanel } from '@/components/story-settings/memory-panel'
 import { ModelsPanel } from '@/components/story-settings/models-panel'
@@ -201,7 +198,12 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
   )
   const settings = panelData.status === 'ready' ? panelData.settings : null
   const currentBranchId = row?.currentBranchId ?? null
-  const { activeRunKind, editBlocked, gateReason: disabledReason } = useStoryGenerationGate(storyId)
+  const {
+    activeRunKind,
+    editBlocked,
+    gateReason: disabledReason,
+    classifierRunning,
+  } = useStoryGenerationGate(storyId)
   // awaitRunTerminal is branch-scoped, and this screen has no branch param. Any
   // cancellable run for this story carries it: runs only exist for the open
   // story/branch.
@@ -366,9 +368,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
         <StoryStatusPill
           storyId={storyId ?? null}
           swapTarget={settings?.embedding_swap_target}
-          activePhase={
-            activeRunKind != null ? storySettingsGenerationPhase(activeRunKind) : undefined
-          }
+          activePhase={storyPillPhase(activeRunKind, classifierRunning)}
           onCancel={() => {
             if (activeRunKind != null && cancelBranchId != null) {
               void awaitRunTerminal(activeRunKind, cancelBranchId, 'cancel')

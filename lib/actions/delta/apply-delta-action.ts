@@ -6,6 +6,7 @@ import { logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { generationStore, undoRedoStore } from '@/lib/stores'
 
+import type { PipelineActionMap } from '../action-map'
 import {
   isUserOriginatedSource,
   type DbCtx,
@@ -13,41 +14,104 @@ import {
   type PipelineAction,
 } from '../types'
 import { deltaRowOp } from './delta-row'
-import { withKeyLock } from './key-lock'
+import { withKeyLock, withKeyLocks } from './key-lock'
 import { resolveByActionKind, resolveByTable, type HandlerOutcome } from './registry'
+import { entityRowLockKey, relationshipsLockKey } from './row-locks'
 
 type Args = { action: PipelineAction; actionId: string; branchId: string; entryId?: string | null }
 
-// Single and group commits must derive this identically or they stop serializing
-// against each other.
-function promoteStagedEntityLockKey(branchId: string, id: string): string {
-  return `promoteStagedEntity:${branchId}:${id}`
+type ProductionKind = keyof PipelineActionMap
+type LockKey<K extends ProductionKind> =
+  | ((payload: PipelineActionMap[K]['payload']) => string)
+  | null
+
+const entityRow = (p: { branchId: string; id: string }) => entityRowLockKey(p.branchId, p.id)
+const relationships = (p: { branchId: string }) => relationshipsLockKey(p.branchId)
+
+// Handlers read before they commit, so a racing classifier/user write to one row must
+// serialize: entities lock per row, relationships lock per branch.
+const LOCK_KEY: { [K in ProductionKind]: LockKey<K> } = {
+  createStoryEntry: null,
+  updateStoryEntryMetadata: null,
+  deleteStoryEntry: null,
+  createEntity: null,
+  updateEntity: entityRow,
+  deleteEntity: entityRow,
+  updateEntityVisualState: entityRow,
+  updateEntityInventory: entityRow,
+  updateEntityStackables: entityRow,
+  updateEntityLocationTracking: entityRow,
+  promoteStagedEntity: entityRow,
+  appendEntityKeywords: entityRow,
+  retireEntity: entityRow,
+  upsertCharacterRelationship: relationships,
+  deleteCharacterRelationship: relationships,
+  createLore: null,
+  updateLore: null,
+  deleteLore: null,
+  createThread: null,
+  updateThread: null,
+  deleteThread: null,
+  createHappening: null,
+  updateHappening: null,
+  deleteHappening: null,
+  createHappeningInvolvement: null,
+  updateHappeningInvolvement: null,
+  deleteHappeningInvolvement: null,
+  upsertHappeningAwareness: null,
+  deleteHappeningAwareness: null,
+  bumpAwarenessRetrieval: null,
+  createChapter: null,
+  updateChapter: null,
+  deleteChapter: null,
+  createBranchEraFlip: null,
+  updateBranchEraFlip: null,
+  deleteBranchEraFlip: null,
+  createEntryAsset: null,
+  updateEntryAsset: null,
+  deleteEntryAsset: null,
+  createTranslation: null,
+  updateTranslation: null,
+  deleteTranslation: null,
+}
+
+function isProductionAction(
+  a: PipelineAction,
+): a is Extract<PipelineAction, { kind: ProductionKind }> {
+  // False only for a TestPipelineActionMap kind.
+  return Object.hasOwn(LOCK_KEY, a.kind)
+}
+
+function lockKeyOf<K extends ProductionKind>(
+  kind: K,
+  payload: PipelineActionMap[K]['payload'],
+): string | null {
+  const key: LockKey<K> = LOCK_KEY[kind]
+  return key === null ? null : key(payload)
+}
+
+// The single and group paths both derive keys here, so they serialize against each other.
+function lockKeyFor(action: PipelineAction): string | null {
+  return isProductionAction(action) ? lockKeyOf(action.kind, action.payload) : null
 }
 
 export async function applyDeltaAction(args: Args, ctx: DbCtx): Promise<MutationResult> {
-  const { action } = args
-  // Defense in depth for the reversal barrier (prose-reversal.ts): rejecting a pipeline
-  // write here would abort it mid-commit, wedging cadence since 'running' isn't delta-logged.
+  const key = lockKeyFor(args.action)
+  const run = () => applyDeltaActionUnlocked(args, ctx)
+  return key === null ? run() : withKeyLock(key, run)
+}
+
+async function applyDeltaActionUnlocked(args: Args, ctx: DbCtx): Promise<MutationResult> {
+  const { action, actionId, branchId } = args
+  const entryId = args.entryId ?? null
+  // The barrier (prose-reversal.ts) sets reversalInProgress before draining the in-flight
+  // classifier burst, which must still commit — rejecting it here would burn a retry.
   if (isUserOriginatedSource(action.source) && generationStore.getTxState().reversalInProgress)
     return {
       status: 'rejected',
       code: 'reversal-in-progress',
       reason: 'prose reversal in progress',
     }
-  // Opting in here covers promoteStagedEntity because its read-then-decide
-  // (loadCurrent, then branch on status) lives inside its handler. An action
-  // whose read happens before dispatch must take the lock itself.
-  if (action.kind === 'promoteStagedEntity') {
-    return withKeyLock(promoteStagedEntityLockKey(action.payload.branchId, action.payload.id), () =>
-      applyDeltaActionUnlocked(args, ctx),
-    )
-  }
-  return applyDeltaActionUnlocked(args, ctx)
-}
-
-async function applyDeltaActionUnlocked(args: Args, ctx: DbCtx): Promise<MutationResult> {
-  const { action, actionId, branchId } = args
-  const entryId = args.entryId ?? null
 
   const resolved = resolveByActionKind(action.kind)
   if (!resolved) return { status: 'rejected', reason: `no handler registered for ${action.kind}` }
@@ -100,16 +164,6 @@ export type DeltaGroupResult =
 
 type GroupArgs = { actionId: string; branchId: string; entryId?: string | null }
 
-function promoteLockKeys(actions: readonly PipelineAction[]): string[] {
-  const keys = actions.flatMap((a) =>
-    a.kind === 'promoteStagedEntity'
-      ? [promoteStagedEntityLockKey(a.payload.branchId, a.payload.id)]
-      : [],
-  )
-  // Sorted so two groups sharing a subset of keys acquire them in the same order.
-  return [...new Set(keys)].sort()
-}
-
 /**
  * Commits several actions under one actionId as a SINGLE transaction, so a rejection
  * anywhere in the group leaves nothing behind. Sequential `applyDeltaAction` calls
@@ -127,18 +181,8 @@ export async function applyDeltaActionGroup(
   args: GroupArgs,
   ctx: DbCtx,
 ): Promise<DeltaGroupResult> {
-  return withKeyLocks(promoteLockKeys(actions), () =>
-    applyDeltaActionGroupUnlocked(actions, args, ctx),
-  )
-}
-
-function withKeyLocks(
-  keys: readonly string[],
-  run: () => Promise<DeltaGroupResult>,
-): Promise<DeltaGroupResult> {
-  const [first, ...rest] = keys
-  if (first === undefined) return run()
-  return withKeyLock(first, () => withKeyLocks(rest, run))
+  const keys = actions.map(lockKeyFor).filter((key) => key !== null)
+  return withKeyLocks(keys, () => applyDeltaActionGroupUnlocked(actions, args, ctx))
 }
 
 async function applyDeltaActionGroupUnlocked(

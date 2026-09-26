@@ -79,7 +79,7 @@ erDiagram
         text description
         text status "staged | active | retired"
         text retired_reason "free-form; only meaningful when status=retired. Hard-finality only — e.g. 'killed by Kael', 'temple destroyed in quake', 'faction disbanded after coup', 'exiled to the southern wastes'. Off-screen-but-alive characters stay status=active with stale lastSeenAt; see docs/memory/edge-cases.md → Retirement"
-        json keywords "string[]; aliases / epithets / relational references beyond the canonical name. User-authored, OR periodic-classifier-emitted at entity creation (append-only, never removes). Matched alongside name in the keyword pathway. See docs/memory/retrieval.md → Keywords schema"
+        json keywords "string[]; aliases / epithets / relational references beyond the canonical name. User-authored, OR periodic-classifier-emitted at entity creation and appended on later passes (append-only, never removes). Matched alongside name in the keyword pathway. See docs/memory/retrieval.md → Keywords schema"
         text injection_mode "always | auto | disabled; short-circuited by active+in-scene invariant"
         integer priority "0..100; orders keyword-inject overflow ONLY — unlike lore.priority it does not feed the ranker pin_signal, which stays 0 for entities. See docs/memory/retrieval.md → Keyword injection budget"
         integer name_collision_flag "0 | 1; 1 = same-name collision detected at classifier extraction; surfaces in World panel for review. See docs/memory/edge-cases.md → Name collision"
@@ -833,9 +833,9 @@ CREATE INDEX idx_char_rel_branch_b ON character_relationships(branch_id, b_id);
 
 **One row per pair.** Symmetric AND asymmetric relationships share the
 shape — `kind`/`inverse_kind` carry the two perspectives independently
-("Aria → Kael: sister", "Kael → Aria: brother") and either may be
-null until that POV is observed. Single row keeps lookups cheap and
-gives clean UPSERT semantics.
+("Aria sees Kael as: brother", "Kael sees Aria as: sister") and either
+may be null until that POV is observed. Single row keeps lookups cheap
+and gives clean UPSERT semantics.
 
 **Canonical ordering invariant: `a_id < b_id`.** Lexicographic string
 compare on the `char_${uuid}` IDs. Application write path always
@@ -911,7 +911,11 @@ isn't recorded yet").
 **Authoring policy: v1 lean — classifier wins on prose evidence.**
 Both classifier and user write; classifier UPSERTs on subsequent
 contradicting prose. User edits "stick" only until classifier reads
-contradicting prose. Same policy as the rest of CharacterState (see
+contradicting prose. "Subsequent" is enforced through the delta log's
+order: an upsert from prose older than the user's last write of that
+view, or than the user's deletion of the pair, no-ops
+([`memory/cadence.md → User edits and classifier writes`](./memory/cadence.md#user-edits-and-classifier-writes)).
+Same policy as the rest of CharacterState (see
 the authoring matrix under
 [World-state storage](#world-state-storage)). No per-field
 provenance in v1 — the parked v1.5

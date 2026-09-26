@@ -124,6 +124,7 @@ describe('isForegroundGenerating', () => {
     const tx = generationStore.getTxState()
     expect(isForegroundGenerating(tx, 'branch_1')).toBe(false)
     expect(backgroundClassifierRunning(tx, 'branch_1')).toBe(true)
+    expect(backgroundClassifierRunning(tx, 'branch_other')).toBe(false)
   })
 
   it('is true for a per-turn run on the same branch', () => {

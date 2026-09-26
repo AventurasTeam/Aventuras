@@ -167,9 +167,12 @@ field sets, with one documented overlap on `entities.status`.
 | `entities.state` (location, equipped, inventory, stackables, lastSeenAt) | ✓                                                   | —                                                    |
 | `entities.status`                                                        | ✓ (staged → active only, on `sceneEntities` ID hit) | ✓ (staged → active slow path; active → retired)      |
 | `entities.description`                                                   | —                                                   | ✓ (first introduction only; see authorship contract) |
+| `entities.keywords`                                                      | —                                                   | ✓ (append-only; new characters and later passes)     |
+| `entities.retired_reason`                                                | —                                                   | ✓ (with active → retired)                            |
 | `happenings`                                                             | —                                                   | ✓                                                    |
 | `happening_involvements`                                                 | —                                                   | ✓                                                    |
 | `happening_awareness`                                                    | —                                                   | ✓                                                    |
+| `character_relationships`                                                | —                                                   | ✓                                                    |
 
 **Field-overlap invariant.** `entities.status` is the only field
 both writers touch. They never collide on the same entity at the
@@ -180,36 +183,127 @@ reads `active` and no-ops. Piggyback never writes active→retired
 field, they cannot write the same row to different values.
 
 The only shared row is `entities`, and field-level disjointness
-holds for everything except the `status`-overlap above. With
-**per-field UPDATEs** (no row-level read-modify-write cycles) and
-the monotonic-status invariant, SQLite serializes the writes
-without clobbering even when both writers target the same row.
-The discipline at the action layer:
-
-```ts
-// Yes — independent UPDATE statements:
-db.execute('UPDATE entities SET status = ? WHERE id = ?', [...])
-db.execute('UPDATE entities SET state = json_patch(state, ?) WHERE id = ?', [...])
-
-// No — read-modify-write loses concurrent writes:
-const entity = db.queryOne('SELECT * FROM entities WHERE id = ?', [id])
-entity.status = 'active'
-entity.state = { ...entity.state, ...patches }
-db.execute('UPDATE entities SET status = ?, state = ? WHERE id = ?', [entity.status, entity.state, id])
-```
-
-Zustand actions enforce per-field-or-per-state-patch updates, so the
-underlying SQLite UPDATEs are independent. Optimistic concurrency
-(detect rare conflict, retry) covers the residual collision case.
+holds for everything except the `status`-overlap above. Each action
+writes only the columns it changes but computes them from a read of
+the row, so every delta-logged write to an existing `entities` row,
+and every reversal of one, serializes on a lock keyed by that row: one
+writer's read and commit never straddle another's, whether that is
+the piggyback, the classifier or a user edit.
+`character_relationships` writes serialize on one key per branch,
+since a delete names a row id, not a pair. A shared JSON column such
+as `branches.classifier_status`, which the reversal clamp and the
+classifier pipeline both write, is written with key-scoped `json_set`,
+never a whole-blob read-modify-write.
 
 ### Single-writer-per-write-set in v1
 
 The background classifier is the first agent that runs concurrent
 with the per-turn pipeline. The user-edit gate (UI-side disabling of
-controls during pipeline runs) does **not** relax — user edits already
-operate at field granularity and respect the same write-set
-boundaries.
+controls during `hard-gate` pipeline runs) does **not** relax. The
+classifier itself is `no-gate`, and its write set is not disjoint from
+user edits: both write entity status (with its retired reason),
+keywords and character relationships. [User edits and classifier writes](#user-edits-and-classifier-writes)
+covers how those overlaps resolve.
 
 `'concurrent-allowed'` was previously theoretical in
 [`architecture.md`](../architecture.md); the periodic classifier is its
 first real consumer and triggers documenting the value.
+
+### User edits and classifier writes
+
+The periodic classifier is `no-gate`, so World stays editable while a
+pass runs. A user edit can meet a classifier write in two ways. It can
+land during the pass: the pass reads its entity snapshot before the
+model call and writes only after the model call and reconciliation
+return, which can be minutes later. Or it can predate the pass but
+postdate the prose the pass processes, since a pass works through the
+backlog of turns written since the last one. The classifier's writes
+to an existing entity's status and keywords, and to a relationship
+view, resolve both. Each decides and commits under the lock a World
+Save takes too ([Concurrency](#concurrency)), so a Save cannot land
+between a write's check and its commit.
+
+**Live-row guards.** Status and keyword writes check the row as it
+stands when the write lands, not only the pass's snapshot:
+
+- Promotion goes through `promoteStagedEntity`. The pass plans it only
+  for a row its snapshot holds as `staged`, and the handler no-ops
+  unless the live row is still `staged` when the write lands.
+- Retirement goes through `retireEntity`. The pass plans it only for a
+  row active in its snapshot or made active earlier in the same pass,
+  and the handler no-ops unless the live row is still `active` when
+  the write lands, so a user's own status and retired reason stand.
+- Keywords go through `appendEntityKeywords`, in two parts. The pass
+  sends only terms new against its snapshot, so an alias the user
+  removed mid-pass is not re-sent; the handler appends only terms the
+  live list lacks, so one the user added is not duplicated.
+
+**User precedence.** A field the user wrote after the prose a fact
+came from keeps the user's value. The classifier's status, keyword and
+relationship writes carry the fact's source entry, and the delta log
+already orders both writers, so nothing new is stored:
+
+- The prose's position is the log position of the entry's latest
+  create or content-edit delta. An entry with neither predates the
+  log, so every user edit outranks it.
+- The user wrote a field after that prose when a `user_edit` delta on
+  the same row, logged later, created the row or changed that column.
+  `updateEntity` drops the columns a patch leaves unchanged, so an edit
+  to a description does not shield the status.
+- A status the user wrote after the prose stands: promotion and
+  retirement no-op. The scene editor's staged-to-active promotion of an
+  entity it brings into the scene is a user status write too.
+- An alias the user removed after the prose stays removed. The same
+  write's other new aliases still land.
+
+Undoing the user's edit removes its delta, which lifts the protection
+for any pass that reads the prose afterwards. A pass the edit already
+blocked has advanced its watermark past that prose, so the undo leaves
+the field at its value from before the edit, not the prose's.
+A later content edit of the source entry makes that prose newer than
+the user's edit, so its facts win again when a pass re-reads the
+entry: an edit to the head turn reopens it
+([`data-model.md → Entry mutability & rollback`](../data-model.md#entry-mutability--rollback)),
+and an entry still in the backlog is read anyway. An edit to an entry
+a pass already processed, off the head turn, is not re-read.
+
+**Relationship views.** The classifier's upsert writes one
+perspective into the pair's row, and a view the user wrote after the
+fact's prose stands: the upsert no-ops when a user write after that
+prose created the row with that perspective set, or set that
+perspective later. A pair the user deleted after the prose stays
+deleted, since the upsert does not re-create it. A create that left
+this perspective blank, or a user write of only the other one, leaves
+it to the classifier; whether the create set it is read from the delta
+chain, since the live row may hold a value the classifier filled in
+since. This is how the authoring contract, where the classifier
+updates a view on subsequent contradicting prose, is enforced
+([`data-model.md → Character-to-character relationships`](../data-model.md#character-to-character-relationships)).
+
+**Reversals.** Reversing a classifier fact for a prose edit, its undo
+or redo, or a failed or interrupted pass keeps each field the user
+wrote after the fact on a row the reversal leaves standing, so the
+precedence above never leaves a value neither the user nor the prose
+chose. A pair the classifier created keeps a view the user added since
+and loses the classifier's, and a pair the reversal would leave with no
+view is deleted. A row the reversal deletes takes the user's edits to
+it along too; the cases are below, under what stays open. A rollback or
+regenerate differs: a World edit has no entry to survive on, so the
+user's later edits reverse along with the fact and the field returns
+to its value before it
+([`generation-pipeline.md → Reverse-replay`](../generation-pipeline.md#reverse-replay)).
+
+What stays open:
+
+- Prose written after the user's edit can still revise the field. That
+  is the authoring contract, not a gap.
+- A fact whose source turn doesn't resolve keeps the window's newest
+  turn as its survival anchor
+  ([`classifier.md → Provenance attribution`](./classifier.md#provenance-attribution)),
+  but its prose dates to the window's oldest turn. A user edit made
+  after that turn then outranks it even when the real source is
+  later, an error in the user's favor.
+- A reversal that deletes a row the machine created, an entity or
+  happening on abort or recovery or a happening on a prose edit,
+  deletes the user's edits to it too, and leaves their deltas pointing
+  at nothing.

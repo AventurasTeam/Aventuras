@@ -3,8 +3,10 @@ import { deltas, isEmbeddedSourceTable } from '@/lib/db'
 
 import type { DbCtx } from '../types'
 import { nextLogPosition } from './delta-row'
+import { withKeyLocks } from './key-lock'
 import { resolveByTable, whereForDelta } from './registry'
 import { buildReverseAndPrunePlan, DeltaReplayError, emitPatches } from './reverse-replay'
+import { deltaLockKeys } from './row-locks'
 
 export type RedoSnapshot = {
   delta: Delta
@@ -48,10 +50,19 @@ export type RedoInvalidation = { rows: Delta[]; extraOps: readonly SqlOp[] }
 const NO_INVALIDATION: RedoInvalidation = { rows: [], extraOps: [] }
 
 // Re-inserts the original delta row so a subsequent CTRL-Z can undo the redo again.
-export async function applyRedo(
+export function applyRedo(
   snapshots: readonly RedoSnapshot[],
   ctx: DbCtx,
   invalidation: RedoInvalidation = NO_INVALIDATION,
+): Promise<void> {
+  const keys = deltaLockKeys([...snapshots.map((s) => s.delta), ...invalidation.rows])
+  return withKeyLocks(keys, () => applyRedoLocked(snapshots, ctx, invalidation))
+}
+
+async function applyRedoLocked(
+  snapshots: readonly RedoSnapshot[],
+  ctx: DbCtx,
+  invalidation: RedoInvalidation,
 ): Promise<void> {
   const ops = []
   const restoredDeltas: Delta[] = []

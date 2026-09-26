@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import { characterRelationships } from '@/lib/db'
+
 import { __resetRegistry, register, resolveByActionKind, resolveByTable } from './registry'
 import type { ActionHandler } from './registry'
 
@@ -25,5 +27,20 @@ describe('delta registry', () => {
     expect(resolveByActionKind('fixtureCreate')?.table).toBe('fixtures')
     expect(resolveByTable('fixtures')?.table).toBe('fixtures')
     expect(resolveByTable('nope')).toBeUndefined()
+  })
+
+  it('refuses a row-keeping column the table does not have', () => {
+    __resetRegistry()
+    const reg = (rowKeepingColumns: string[]) => () =>
+      register({
+        table: 'character_relationships',
+        descriptor: { table: characterRelationships, idCol: characterRelationships.id },
+        columnSchemas: {},
+        handlers: {},
+        rowKeepingColumns,
+      })
+    expect(reg(['kind', 'inverse_kind'])).toThrow(/inverse_kind/)
+    expect(resolveByTable('character_relationships')).toBeUndefined()
+    expect(reg(['kind', 'inverseKind'])).not.toThrow()
   })
 })

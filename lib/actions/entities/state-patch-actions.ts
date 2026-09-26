@@ -4,13 +4,16 @@ import {
   entities,
   entityStateColumnSchema,
   type CharacterState,
+  type Delta,
   type Entity,
   type EntityState,
 } from '@/lib/db'
+import { newTerms, normalizeTerm } from '@/lib/keyword-terms'
 import { entitiesStore } from '@/lib/stores'
 
 import { computeUndoPayload } from '../delta/delta-encoding'
 import type { ActionHandler } from '../delta/registry'
+import { USER_EDITED_SINCE_PROSE, userEditsSinceProse, wroteColumn } from '../delta/user-precedence'
 import type { DbCtx, DeltaSource } from '../types'
 
 declare module '@/lib/actions/action-map' {
@@ -43,9 +46,33 @@ declare module '@/lib/actions/action-map' {
     }
     promoteStagedEntity: {
       source: DeltaSource
-      payload: { branchId: string; id: string }
+      payload: {
+        branchId: string
+        id: string
+        /** Classifier only: a field the user wrote after this prose's entry keeps its value. */
+        proseEntryId?: string
+      }
+    }
+    appendEntityKeywords: {
+      source: DeltaSource
+      payload: { branchId: string; id: string; keywords: string[]; proseEntryId?: string }
+    }
+    retireEntity: {
+      source: DeltaSource
+      payload: { branchId: string; id: string; retiredReason: string | null; proseEntryId?: string }
     }
   }
+}
+
+// Matched only against terms the live list lacks, so a hit is one the user removed.
+function priorTerms(edits: readonly Delta[]): Set<string> {
+  const terms = new Set<string>()
+  for (const edit of edits) {
+    const prior = edit.undoPayload?.keywords
+    if (!Array.isArray(prior)) continue
+    for (const term of prior) if (typeof term === 'string') terms.add(normalizeTerm(term))
+  }
+  return terms
 }
 
 async function loadCurrent(branchId: string, id: string, ctx: DbCtx): Promise<Entity | undefined> {
@@ -183,15 +210,24 @@ export const updateEntityLocationTrackingHandler: ActionHandler = async (action,
 export const promoteStagedEntityHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'promoteStagedEntity')
     throw new Error(`handler/kind mismatch: expected 'promoteStagedEntity', got '${action.kind}'`)
-  const { branchId: bid, id } = action.payload
+  const { branchId: bid, id, proseEntryId } = action.payload
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const current = await loadCurrent(bid, id, ctx)
   if (!current)
-    return { status: 'rejected', reason: `promote target entities ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `promote target entities ${bid}:${id} not found`,
+      code: 'noop',
+    }
   const storeEntity = entitiesStore.getById(id)
   if (current.status !== 'staged' || (storeEntity !== undefined && storeEntity.status !== 'staged'))
     return { status: 'rejected', reason: 'not-staged', code: 'noop' }
+  if (
+    proseEntryId !== undefined &&
+    wroteColumn(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId), 'status')
+  )
+    return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
   return {
     status: 'ok',
     targetTable: 'entities',
@@ -206,5 +242,86 @@ export const promoteStagedEntityHandler: ActionHandler = async (action, branchId
         .toSQL(),
     ],
     patch: { op: 'update', id, columns: { status: 'active' } },
+  }
+}
+
+/**
+ * Appends only the payload terms the live row lacks, so a mid-pass removal stays removed;
+ * with `proseEntryId`, a term the user removed after that prose also stays removed.
+ */
+export const appendEntityKeywordsHandler: ActionHandler = async (action, branchId, ctx) => {
+  if (action.kind !== 'appendEntityKeywords')
+    throw new Error(`handler/kind mismatch: expected 'appendEntityKeywords', got '${action.kind}'`)
+  const { branchId: bid, id, keywords, proseEntryId } = action.payload
+  if (bid !== branchId)
+    return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
+  const current = await loadCurrent(bid, id, ctx)
+  if (!current)
+    return {
+      status: 'rejected',
+      reason: `keyword target entities ${bid}:${id} not found`,
+      code: 'noop',
+    }
+  let added = newTerms(current.keywords, keywords)
+  if (added.length === 0) return { status: 'rejected', reason: 'no-new-keywords', code: 'noop' }
+  if (proseEntryId !== undefined) {
+    const removed = priorTerms(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId))
+    added = added.filter((term) => !removed.has(normalizeTerm(term)))
+    if (added.length === 0)
+      return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
+  }
+  const next = [...current.keywords, ...added]
+  return {
+    status: 'ok',
+    targetTable: 'entities',
+    targetId: id,
+    op: 'update',
+    undoPayload: { keywords: current.keywords },
+    ops: [
+      ctx.db
+        .update(entities)
+        .set({ keywords: next })
+        .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
+        .toSQL(),
+    ],
+    patch: { op: 'update', id, columns: { keywords: next } },
+  }
+}
+
+/** active → retired only: a row moved since the pass read it keeps the user's status. */
+export const retireEntityHandler: ActionHandler = async (action, branchId, ctx) => {
+  if (action.kind !== 'retireEntity')
+    throw new Error(`handler/kind mismatch: expected 'retireEntity', got '${action.kind}'`)
+  const { branchId: bid, id, retiredReason, proseEntryId } = action.payload
+  if (bid !== branchId)
+    return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
+  const current = await loadCurrent(bid, id, ctx)
+  if (!current)
+    return {
+      status: 'rejected',
+      reason: `retire target entities ${bid}:${id} not found`,
+      code: 'noop',
+    }
+  if (current.status !== 'active') return { status: 'rejected', reason: 'not-active', code: 'noop' }
+  if (
+    proseEntryId !== undefined &&
+    wroteColumn(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId), 'status')
+  )
+    return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
+  const columns = { status: 'retired' as const, retiredReason }
+  return {
+    status: 'ok',
+    targetTable: 'entities',
+    targetId: id,
+    op: 'update',
+    undoPayload: { status: current.status, retiredReason: current.retiredReason },
+    ops: [
+      ctx.db
+        .update(entities)
+        .set(columns)
+        .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
+        .toSQL(),
+    ],
+    patch: { op: 'update', id, columns },
   }
 }

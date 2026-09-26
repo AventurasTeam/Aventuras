@@ -21,6 +21,14 @@ declaration values.
     [Staged-entity promotion](./edge-cases.md#staged-entity-promotion)).
   - `active → retired` on hard finality signals only (death, exile,
     faction-disbanded). Conservative bias.
+
+  Both are checked against the pass's view — its snapshot plus what
+  earlier facts in the same reply changed — when planned, and against
+  the row as it stands when the write lands, so a status the user
+  changed mid-pass stands. A status the user wrote after the flip's
+  prose stands too, even when written before the pass started (see
+  [`cadence.md → User edits and classifier writes`](./cadence.md#user-edits-and-classifier-writes)).
+
 - **First-introduction descriptions** — when the classifier extracts
   a genuinely new character (no name match against existing
   entities), it authors the initial `description` from prose. After
@@ -36,8 +44,23 @@ declaration values.
   [`retrieval.md → Keywords schema`](./retrieval.md#keywords-schema).
   Unlike `description`, keywords are **not** frozen after first
   introduction: later passes may append newly-observed references.
-  Writes are strictly append-and-deduplicate and never remove, so
-  user-authored aliases survive every subsequent pass.
+  Writes are strictly append-and-deduplicate against the row as it
+  stands when the write lands, and never remove, so user-authored
+  aliases survive every subsequent pass, including one added while the
+  pass ran. An alias the user removed after the fact's prose is not
+  re-added ([user precedence](./cadence.md#user-edits-and-classifier-writes)).
+- **Character relationships** — `character_relationships`. One
+  perspective per fact, the subject's view of the object and never the
+  inferred inverse, upserted into the pair's row as it stands when the
+  write lands. The prompt shows the classifier the stored view for
+  every stored pair on the branch whose two characters exist (one
+  line per non-null perspective), and it is told to emit a fact only
+  when the prose establishes a view or changes one already listed. A
+  write repeating the stored view, ignoring case and surrounding
+  whitespace, is rejected as a no-op at the action layer — it writes
+  no delta. So is one against a view the user wrote, or a pair the user
+  deleted, after the fact's prose
+  ([user precedence](./cadence.md#user-edits-and-classifier-writes)).
 
 ## Provenance attribution
 
@@ -79,7 +102,7 @@ underlying `char_<uuid>` / `loc_<uuid>` / etc. forms — the
 substitution layer swaps both directions
 (see [`generation-pipeline.md → ID placeholder substitution`](../generation-pipeline.md#id-placeholder-substitution)).
 The placeholder universe shown to the classifier covers entities
-in the prompt's structured entity/lore/happening lists.
+in the prompt's structured entity/lore/happening/relationship lists.
 
 When the classifier creates a brand-new entity, it emits the
 entity as a **full object with no `id` field** — name, description,
@@ -115,10 +138,10 @@ blocking failure path applies. No classifier-specific deferral
 mechanism — same path as any other dirty row.
 
 The classifier does not modify already-embedded fields on existing
-rows. Status flips touch `entities.status` only, which isn't
-embedded. If a future extension lets the classifier modify an
-embedded field, it flags the row dirty the same way — no special
-path required.
+rows. Status flips (with a retirement's `retired_reason`) and keyword
+appends touch no embedded field. If a future extension lets the
+classifier modify an embedded field, it flags the row dirty the same
+way — no special path required.
 
 The transient embedding computed in the disambiguation flow below
 (extracted description for the similarity check) is a decision-time
@@ -157,13 +180,13 @@ The periodic classifier runs as a background pipeline — a Pipeline
 declaration in the framework's registry, same shape as per-turn and
 chapter-close but with different concurrency / gating values:
 
-| Field                           | Value                                                                                                                    |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `kind`                          | `'periodic-classifier'`                                                                                                  |
-| `gateBehavior`                  | `'no-gate'` — doesn't block user-source writes                                                                           |
-| `concurrencyPolicy`             | `{ blockedBy: ['periodic-classifier', 'chapter-close'] }` — no double passes; blocked from starting during chapter-close |
-| `affordance`                    | `'pill-only'` — folds into the generation indicator at low priority (see below)                                          |
-| Write set (prose, not declared) | happenings, happening_involvements, happening_awareness, entity status flips, first-introduction entity descriptions     |
+| Field                           | Value                                                                                                                                                                                                                                 |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`                          | `'periodic-classifier'`                                                                                                                                                                                                               |
+| `gateBehavior`                  | `'no-gate'` — doesn't block user-source writes                                                                                                                                                                                        |
+| `concurrencyPolicy`             | `{ blockedBy: ['periodic-classifier', 'chapter-close'] }` — no double passes; blocked from starting during chapter-close                                                                                                              |
+| `affordance`                    | `'pill-only'` — folds into the generation indicator at low priority (see below)                                                                                                                                                       |
+| Write set (prose, not declared) | happenings, happening_involvements, happening_awareness, new character entities (first-introduction description, keywords, collision flag), entity status flips with retired reasons, entity keyword appends, character relationships |
 
 Write-set boundaries between the classifier and the piggyback / per-turn
 pipeline are enforced via narrow action functions named for field-set
@@ -171,8 +194,9 @@ scope (see
 [`generation-pipeline.md → Narrow action functions over write-set declarations`](../generation-pipeline.md#narrow-action-functions-over-write-set-declarations)),
 not a typed declaration. The single-writer invariant relaxes to
 **single-writer-per-write-set** in v1; piggyback's write-set and the
-classifier's write-set are disjoint at the row-and-field granularity
-(see [`cadence.md → Concurrency`](./cadence.md#concurrency)).
+classifier's write-set are disjoint at the row-and-field granularity,
+apart from the monotonic `entities.status` overlap (see
+[`cadence.md → Concurrency`](./cadence.md#concurrency)).
 
 If the user starts a new turn while the classifier is mid-run, both
 proceed. The classifier holds its own `actionId` for its writes; the
@@ -259,7 +283,9 @@ limit, network drop, provider 5xx). Errors that aren't transient
 failed-persistent on the original failure plus the three retries
 just like any other; the user resolves at the source (re-key,
 swap profile, etc.) rather than waiting for retries to magically
-succeed.
+succeed. A failure while the pass applies its planned writes (a
+rejected write rolls the whole pass back) is a failed run too and
+takes the same backoff.
 
 ### Persistence
 

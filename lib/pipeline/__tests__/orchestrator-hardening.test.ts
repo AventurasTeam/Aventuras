@@ -86,6 +86,12 @@ async function* failsCleanly(): AsyncGenerator<never, PhaseResult> {
   return { status: 'failed', error: { kind: 'phase-logic', detail: 'clean fail' } }
 }
 
+// Same error kind a throw produces, but returned — only `cause.thrown` (not
+// the error-kind filter) keeps onPhaseException from firing on this one.
+async function* failsCleanlyWithHookEligibleKind(): AsyncGenerator<never, PhaseResult> {
+  return { status: 'failed', error: { kind: 'orchestrator', detail: 'clean fail' } }
+}
+
 describe('orchestrator hardening', () => {
   beforeEach(() => resetSingletons())
   afterEach(() => resetSingletons())
@@ -120,6 +126,121 @@ describe('orchestrator hardening', () => {
 
     expect(result.outcome).toBe('failed')
     expect(result.error?.kind).toBe('action-layer')
+  })
+
+  it('runs onPhaseException for a rejected write, after rollback but before the run is released', async () => {
+    const { ctx } = await makeHarness()
+    const seen: { kind?: string; runStillRegistered: boolean }[] = []
+    definePipeline({
+      kind: 'phase-exception',
+      phases: [{ name: 'p', run: updateMissing }],
+      onPhaseException: async (_hookCtx, error) => {
+        // Recorded as data: an expect() here is swallowed by the orchestrator's own
+        // try/catch and would never fail this test.
+        seen.push({
+          kind: error.kind,
+          runStillRegistered: generationStore.getTxState().runs.size > 0,
+        })
+      },
+      ...base,
+    })
+
+    const result = expectRan(await runPipeline('phase-exception', ctx))
+
+    expect(seen).toEqual([{ kind: 'action-layer', runStillRegistered: true }])
+    expect(result.outcome).toBe('failed')
+  })
+
+  it('winds the run down even when onPhaseException throws', async () => {
+    const { ctx } = await makeHarness()
+    definePipeline({
+      kind: 'phase-exception-throws',
+      phases: [{ name: 'p', run: updateMissing }],
+      onPhaseException: async () => {
+        throw new Error('boom')
+      },
+      ...base,
+    })
+
+    const result = expectRan(await runPipeline('phase-exception-throws', ctx))
+
+    expect(result.outcome).toBe('failed')
+    expect(generationStore.getTxState().runs.size).toBe(0)
+  })
+
+  // Recovery, not a retry, must own writes from a reversal that never committed — a retry
+  // could re-read them. So the hook must not fire when the reversal itself fails to commit.
+  it('does not run onPhaseException when the reversal itself cannot commit', async () => {
+    const { db, ctx } = await makeHarness()
+    // Fixed so the seeded poison delta shares this run's actionId — abortRun reverses by actionId.
+    const fixedActionId = 'act_poison_throw'
+    await db.insert(deltas).values({
+      id: 'd_poison_throw',
+      branchId: 'b1',
+      entryId: null,
+      actionId: fixedActionId,
+      logPosition: 900,
+      source: 'ai_classifier',
+      targetTable: 'not_a_registered_table',
+      targetId: 'x',
+      op: 'create',
+      undoPayload: null,
+      encodingVersion: 1,
+      createdAt: 1,
+    })
+    let called = false
+    definePipeline({
+      kind: 'phase-exception-reversal-fails',
+      phases: [{ name: 'p', run: throwsDirectly }],
+      onPhaseException: async () => {
+        called = true
+      },
+      ...base,
+    })
+
+    const result = expectRan(
+      await runPipeline('phase-exception-reversal-fails', { ...ctx, actionId: fixedActionId }),
+    )
+
+    expect(called).toBe(false)
+    expect(result.outcome).toBe('failed')
+    expect(generationStore.getTxState().runs.size).toBe(0)
+  })
+
+  it('does not run onPhaseException for a phase that returns its own failed result', async () => {
+    const { ctx } = await makeHarness()
+    let called = false
+    definePipeline({
+      kind: 'phase-exception-clean-fail',
+      phases: [{ name: 'p', run: failsCleanly }],
+      onPhaseException: async () => {
+        called = true
+      },
+      ...base,
+    })
+
+    const result = expectRan(await runPipeline('phase-exception-clean-fail', ctx))
+
+    expect(called).toBe(false)
+    expect(result.outcome).toBe('failed')
+  })
+
+  it('does not run onPhaseException for a returned failure whose kind the hook would otherwise accept', async () => {
+    const { ctx } = await makeHarness()
+    let called = false
+    definePipeline({
+      kind: 'phase-exception-clean-fail-hook-kind',
+      phases: [{ name: 'p', run: failsCleanlyWithHookEligibleKind }],
+      onPhaseException: async () => {
+        called = true
+      },
+      ...base,
+    })
+
+    const result = expectRan(await runPipeline('phase-exception-clean-fail-hook-kind', ctx))
+
+    expect(called).toBe(false)
+    expect(result.outcome).toBe('failed')
   })
 
   // A model restating current state is ordinary, and an unmarked rejection cost

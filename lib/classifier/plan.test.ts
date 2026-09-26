@@ -137,9 +137,9 @@ describe('buildClassifierActions', () => {
     expect(
       payloadOf<{ source?: string }>(byKind('upsertHappeningAwareness')).source,
     ).toBeUndefined()
-    expect(payloadOf<{ patch: object }>(byKind('updateEntity')).patch).toMatchObject({
-      retiredReason: null,
-    })
+    expect(
+      payloadOf<{ retiredReason: string | null }>(byKind('retireEntity')).retiredReason,
+    ).toBeNull()
   })
 
   it('clamps an out-of-range severity into [0, 1]', () => {
@@ -228,6 +228,39 @@ describe('buildClassifierActions', () => {
     })
   })
 
+  it('plans nothing for a relationship whose kind is blank', () => {
+    const { planned } = buildClassifierActions(
+      {
+        happenings: [],
+        relationships: [
+          { subject: 'char_kael', object: 'char_aria', kind: '   ', sourceTurn: 't1' },
+        ],
+        statusFlips: [],
+        newCharacters: [],
+      },
+      base,
+    )
+    expect(planned).toEqual([])
+  })
+
+  it('trims a relationship kind before writing it', () => {
+    const { planned } = buildClassifierActions(
+      {
+        happenings: [],
+        relationships: [
+          { subject: 'char_kael', object: 'char_aria', kind: ' ally ', sourceTurn: 't1' },
+        ],
+        statusFlips: [],
+        newCharacters: [],
+      },
+      base,
+    )
+    expect(planned[0].action).toMatchObject({
+      kind: 'upsertCharacterRelationship',
+      payload: { kind: 'ally' },
+    })
+  })
+
   it('writes a retirement only for the retired transition and carries the reason', () => {
     const { planned } = buildClassifierActions(
       {
@@ -241,11 +274,8 @@ describe('buildClassifierActions', () => {
       base,
     )
     expect(planned[0].action).toMatchObject({
-      kind: 'updateEntity',
-      payload: {
-        id: 'char_kael',
-        patch: { status: 'retired', retiredReason: 'killed at the ford' },
-      },
+      kind: 'retireEntity',
+      payload: { id: 'char_kael', retiredReason: 'killed at the ford' },
     })
     expect(planned[0].entryId).toBe('e2')
   })
@@ -304,8 +334,8 @@ describe('buildClassifierActions', () => {
     )
     expect(planned).toHaveLength(1)
     expect(planned[0].action).toMatchObject({
-      kind: 'updateEntity',
-      payload: { id: 'char_1', patch: { status: 'active' } },
+      kind: 'promoteStagedEntity',
+      payload: { id: 'char_1' },
     })
   })
 
@@ -591,8 +621,8 @@ describe('buildClassifierActions', () => {
     it('promotes a staged entity to active', () => {
       const { planned } = flip('char_s', 'active', [entityRow('char_s', 'staged')])
       expect(planned[0].action).toMatchObject({
-        kind: 'updateEntity',
-        payload: { id: 'char_s', patch: { status: 'active' } },
+        kind: 'promoteStagedEntity',
+        payload: { id: 'char_s' },
       })
     })
 
@@ -603,6 +633,11 @@ describe('buildClassifierActions', () => {
 
     it('never revives a retired entity', () => {
       const { planned } = flip('char_r', 'active', [entityRow('char_r', 'retired')])
+      expect(planned).toHaveLength(0)
+    })
+
+    it('skips a retire flip when the snapshot status is staged, not active', () => {
+      const { planned } = flip('char_s', 'retired', [entityRow('char_s', 'staged')])
       expect(planned).toHaveLength(0)
     })
 
@@ -637,9 +672,9 @@ describe('buildClassifierActions', () => {
         },
         { ...base, decisions, entities: [entityRow('char_s', 'staged')] },
       )
-      expect(planned.map((p) => p.action.kind)).toEqual(['updateEntity', 'updateEntity'])
+      expect(planned.map((p) => p.action.kind)).toEqual(['promoteStagedEntity', 'retireEntity'])
       expect(planned[1].action).toMatchObject({
-        payload: { id: 'char_s', patch: { status: 'retired', retiredReason: 'fell' } },
+        payload: { id: 'char_s', retiredReason: 'fell' },
       })
     })
 
@@ -660,8 +695,8 @@ describe('buildClassifierActions', () => {
       )
       const createdId = payloadOf<{ entry: { id: string } }>(planned[0]).entry.id
       expect(planned[1].action).toMatchObject({
-        kind: 'updateEntity',
-        payload: { id: createdId, patch: { status: 'retired' } },
+        kind: 'retireEntity',
+        payload: { id: createdId },
       })
     })
   })
@@ -688,17 +723,41 @@ describe('entity keywords', () => {
     ])
   })
 
-  // Append-and-dedupe, never remove — authored aliases survive every pass.
-  it('appends to a known entity without dropping its authored aliases', () => {
-    const { planned } = buildClassifierActions(candidate(['the grey wolf']), {
+  // The payload carries only terms new against the pass's snapshot, so an alias the user removed
+  // mid-pass isn't re-sent; the handler merges into the live list, so one they added survives.
+  it('sends a known entity only the terms its snapshot lacks', () => {
+    const { planned } = buildClassifierActions(candidate(['the grey wolf', 'The Innkeeper']), {
       ...base,
       entities: [entityRow('char_kael', 'active', 'Kael', ['the innkeeper'])] as never[],
       decisions: decide({ kind: 'known', entityId: 'char_kael', similarity: 0.9 }),
     })
-    expect(payloadOf<{ patch: { keywords: string[] } }>(planned[0]).patch.keywords).toEqual([
-      'the innkeeper',
-      'the grey wolf',
+    expect(planned).toHaveLength(1)
+    expect(planned[0].action).toMatchObject({
+      kind: 'appendEntityKeywords',
+      payload: { id: 'char_kael', keywords: ['the grey wolf'] },
+    })
+  })
+
+  it('sends a promoted entity only the terms its snapshot lacks', () => {
+    const { planned } = buildClassifierActions(candidate(['the grey wolf', 'The Innkeeper']), {
+      ...base,
+      entities: [entityRow('char_kael', 'staged', 'Kael', ['the innkeeper'])] as never[],
+      decisions: decide({ kind: 'promote', entityId: 'char_kael', similarity: 0.9 }),
+    })
+    expect(planned.map((p) => p.action.kind)).toEqual([
+      'promoteStagedEntity',
+      'appendEntityKeywords',
     ])
+    expect(payloadOf<{ keywords: string[] }>(planned[1]).keywords).toEqual(['the grey wolf'])
+  })
+
+  it('trims the terms it sends', () => {
+    const { planned } = buildClassifierActions(candidate(['  the grey wolf ']), {
+      ...base,
+      entities: [entityRow('char_kael', 'active', 'Kael')] as never[],
+      decisions: decide({ kind: 'known', entityId: 'char_kael', similarity: 0.9 }),
+    })
+    expect(payloadOf<{ keywords: string[] }>(planned[0]).keywords).toEqual(['the grey wolf'])
   })
 
   // Dedupe runs under matchTerms' normalization, so a case variant is not a second
@@ -712,18 +771,205 @@ describe('entity keywords', () => {
     expect(planned).toEqual([])
   })
 
-  // A promote already writes status; keywords ride the same patch, not a second delta.
-  it('carries keywords on the promote patch', () => {
-    const { planned } = buildClassifierActions(candidate(['the grey wolf']), {
-      ...base,
-      entities: [entityRow('char_kael', 'staged', 'Kael')] as never[],
-      decisions: decide({ kind: 'promote', entityId: 'char_kael', similarity: 0.9 }),
-    })
-    expect(planned).toHaveLength(1)
-    expect(payloadOf<{ patch: Record<string, unknown> }>(planned[0]).patch).toEqual({
-      status: 'active',
+  // The index tracks each append in turn, so a second candidate for the same entity
+  // filters against what the first one just added, not just the pass's opening snapshot.
+  it("filters a second candidate against the first candidate's keywords in the same reply", () => {
+    const { planned } = buildClassifierActions(
+      {
+        happenings: [],
+        relationships: [],
+        statusFlips: [],
+        newCharacters: [
+          {
+            handle: 'new:k1',
+            name: 'Kael',
+            description: 'A courier.',
+            keywords: ['the grey wolf'],
+          },
+          {
+            handle: 'new:k2',
+            name: 'Kael',
+            description: 'A courier.',
+            keywords: ['The Grey Wolf', 'the innkeeper'],
+          },
+        ],
+      },
+      {
+        ...base,
+        entities: [entityRow('char_kael', 'active', 'Kael')] as never[],
+        decisions: new Map<string, ReconcileDecision>([
+          ['new:k1', { kind: 'known', entityId: 'char_kael', similarity: 0.9 }],
+          ['new:k2', { kind: 'known', entityId: 'char_kael', similarity: 0.9 }],
+        ]),
+      },
+    )
+    const appends = planned.filter((p) => p.action.kind === 'appendEntityKeywords')
+    expect(appends).toHaveLength(2)
+    expect(payloadOf<{ keywords: string[] }>(appends[1]).keywords).toEqual(['the innkeeper'])
+  })
+
+  // Reconciliation decides every namesake against the same snapshot status (reconcile.ts):
+  // two candidates for one staged entity always agree — never split 'promote' vs 'known'.
+  it('plans a repeated promote for a staged entity reconciliation decides promote twice, filtering the second append against the first', () => {
+    const { planned } = buildClassifierActions(
+      {
+        happenings: [],
+        relationships: [],
+        statusFlips: [],
+        newCharacters: [
+          {
+            handle: 'new:k1',
+            name: 'Kael',
+            description: 'A courier.',
+            keywords: ['the grey wolf'],
+          },
+          {
+            handle: 'new:k2',
+            name: 'Kael',
+            description: 'A courier.',
+            keywords: ['the grey wolf', 'the innkeeper'],
+          },
+        ],
+      },
+      {
+        ...base,
+        entities: [entityRow('char_kael', 'staged', 'Kael')] as never[],
+        decisions: new Map<string, ReconcileDecision>([
+          ['new:k1', { kind: 'promote', entityId: 'char_kael', similarity: 0.9 }],
+          ['new:k2', { kind: 'promote', entityId: 'char_kael', similarity: 0.9 }],
+        ]),
+      },
+    )
+    expect(planned.map((p) => p.action.kind)).toEqual([
+      'promoteStagedEntity',
+      'appendEntityKeywords',
+      'promoteStagedEntity',
+      'appendEntityKeywords',
+    ])
+    expect(payloadOf<{ keywords: string[] }>(planned[3]).keywords).toEqual(['the innkeeper'])
+  })
+
+  // Two guarded writes: a promotion the user pre-empted no-ops while the aliases still land.
+  it('promotes and appends keywords as separate writes', () => {
+    const { planned } = buildClassifierActions(
+      {
+        happenings: [],
+        relationships: [],
+        statusFlips: [],
+        newCharacters: [
+          {
+            handle: 'new:k',
+            name: 'Kael',
+            description: 'A courier.',
+            keywords: ['the grey wolf'],
+            sourceTurn: 't1',
+          },
+        ],
+      },
+      {
+        ...base,
+        entities: [entityRow('char_kael', 'staged', 'Kael')] as never[],
+        decisions: decide({ kind: 'promote', entityId: 'char_kael', similarity: 0.9 }),
+      },
+    )
+    expect(planned.map((p) => p.action.kind)).toEqual([
+      'promoteStagedEntity',
+      'appendEntityKeywords',
+    ])
+    expect(planned.map((p) => p.entryId)).toEqual(['e1', 'e1'])
+    expect(payloadOf<{ id: string }>(planned[0]).id).toBe('char_kael')
+    expect(payloadOf<{ id: string; keywords: string[] }>(planned[1])).toMatchObject({
+      id: 'char_kael',
       keywords: ['the grey wolf'],
     })
+  })
+})
+
+// cadence.md → User edits and classifier writes.
+describe('prose source on guarded writes', () => {
+  it("stamps each guarded write with its own fact's anchor as proseEntryId", () => {
+    const { planned } = buildClassifierActions(
+      {
+        happenings: [],
+        relationships: [
+          { subject: 'char_kael', object: 'char_aria', kind: 'sister', sourceTurn: 't3' },
+        ],
+        statusFlips: [
+          { ref: 'char_s', to: 'active', sourceTurn: 't2' },
+          { ref: 'char_a', to: 'retired', sourceTurn: 't1' },
+        ],
+        newCharacters: [
+          { handle: 'h1', name: 'P', description: 'x', keywords: ['the keeper'], sourceTurn: 't1' },
+          { handle: 'h2', name: 'A', description: 'x', keywords: ['the wolf'], sourceTurn: 't2' },
+        ],
+      },
+      {
+        ...base,
+        entities: [
+          entityRow('char_p', 'staged'),
+          entityRow('char_s', 'staged'),
+          entityRow('char_a'),
+          entityRow('char_kael'),
+          entityRow('char_aria'),
+        ] as never[],
+        decisions: new Map<string, ReconcileDecision>([
+          ['h1', { kind: 'promote', entityId: 'char_p', similarity: 0.9 }],
+          ['h2', { kind: 'known', entityId: 'char_a', similarity: 0.95 }],
+        ]),
+      },
+    )
+    expect(
+      planned.map((p) => [
+        p.action.kind,
+        payloadOf<{ proseEntryId?: string }>(p).proseEntryId,
+        p.entryId,
+      ]),
+    ).toEqual([
+      ['promoteStagedEntity', 'e1', 'e1'],
+      ['appendEntityKeywords', 'e1', 'e1'],
+      ['appendEntityKeywords', 'e2', 'e2'],
+      ['upsertCharacterRelationship', 'e3', 'e3'],
+      ['promoteStagedEntity', 'e2', 'e2'],
+      ['retireEntity', 'e1', 'e1'],
+    ])
+  })
+
+  // The survival anchor falls back to the newest turn; precedence must not date the
+  // prose that late, or a user edit made after its real source would lose.
+  it('dates an unattributed fact by the oldest window turn, keeping the head as its anchor', () => {
+    const { planned, fellBackCount } = buildClassifierActions(
+      {
+        happenings: [],
+        relationships: [{ subject: 'char_kael', object: 'char_aria', kind: 'sister' }],
+        statusFlips: [{ ref: 'char_a', to: 'retired' }],
+        newCharacters: [{ handle: 'h1', name: 'P', description: 'x', keywords: ['the keeper'] }],
+      },
+      {
+        ...base,
+        entities: [
+          entityRow('char_p', 'staged'),
+          entityRow('char_a'),
+          entityRow('char_kael'),
+          entityRow('char_aria'),
+        ] as never[],
+        decisions: new Map<string, ReconcileDecision>([
+          ['h1', { kind: 'promote', entityId: 'char_p', similarity: 0.9 }],
+        ]),
+      },
+    )
+    expect(
+      planned.map((p) => [
+        p.action.kind,
+        payloadOf<{ proseEntryId?: string }>(p).proseEntryId,
+        p.entryId,
+      ]),
+    ).toEqual([
+      ['promoteStagedEntity', 'e1', 'e3'],
+      ['appendEntityKeywords', 'e1', 'e3'],
+      ['upsertCharacterRelationship', 'e1', 'e3'],
+      ['retireEntity', 'e1', 'e3'],
+    ])
+    expect(fellBackCount).toBe(3)
   })
 })
 

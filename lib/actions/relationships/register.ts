@@ -6,6 +6,14 @@ import { generateId } from '@/lib/ids'
 import { characterRelationshipsStore } from '@/lib/stores'
 
 import { register, type ActionHandler, type HandlerOutcome } from '../delta/registry'
+import {
+  carriesColumn,
+  proseLogPosition,
+  rowDeltasSince,
+  USER_EDITED_SINCE_PROSE,
+  userDeletedPairSince,
+  userEditsSince,
+} from '../delta/user-precedence'
 import type { DbCtx, DeltaSource } from '../types'
 
 declare module '@/lib/actions/action-map' {
@@ -21,6 +29,8 @@ declare module '@/lib/actions/action-map' {
         /** The object's view of the subject; omitted leaves it as stored (the classifier's write).
          * When present, both null is refused, not a delete: use `deleteCharacterRelationship`. */
         inverseKind?: string | null
+        /** Classifier only: a view the user wrote after this prose's entry keeps its value. */
+        proseEntryId?: string
       }
     }
     deleteCharacterRelationship: { source: DeltaSource; payload: { branchId: string; id: string } }
@@ -28,6 +38,39 @@ declare module '@/lib/actions/action-map' {
 }
 
 type Pair = { aId: string; bId: string; subjectIsA: boolean }
+
+// Read from the log's start, not the create's position: a redo re-inserts the create above
+// the deltas its snapshot absorbed, so the live row may hold a view the classifier filled in since.
+async function viewAtCreate(
+  ctx: DbCtx,
+  branchId: string,
+  current: CharacterRelationship,
+  povCol: 'kind' | 'inverseKind',
+): Promise<unknown> {
+  const history = await rowDeltasSince(ctx, branchId, 'character_relationships', current.id, 0)
+  const first = history.find((d) => carriesColumn(d, povCol))
+  return first == null ? current[povCol] : first.undoPayload?.[povCol]
+}
+
+async function userWroteViewSince(
+  ctx: DbCtx,
+  branchId: string,
+  pair: { aId: string; bId: string },
+  current: CharacterRelationship | undefined,
+  povCol: 'kind' | 'inverseKind',
+  proseEntryId: string,
+): Promise<boolean> {
+  const since = await proseLogPosition(ctx, branchId, proseEntryId)
+  if (current) {
+    const edits = await userEditsSince(ctx, branchId, 'character_relationships', current.id, since)
+    if (edits.some((d) => d.op === 'update' && carriesColumn(d, povCol))) return true
+    // Only the user's own re-create outranks their delete; a classifier re-create from newer
+    // prose still leaves older prose facing the delete.
+    if (edits.some((d) => d.op === 'create'))
+      return (await viewAtCreate(ctx, branchId, current, povCol)) !== null
+  }
+  return userDeletedPairSince(ctx, branchId, pair.aId, pair.bId, since)
+}
 
 // Grouped handlers read pre-group state: two single-POV writes to a new pair would both insert.
 function bothPovOutcome(
@@ -102,7 +145,7 @@ function bothPovOutcome(
 const upsertHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'upsertCharacterRelationship')
     throw new Error(`handler/kind mismatch: ${action.kind}`)
-  const { branchId: bid, subjectId, objectId, kind, inverseKind } = action.payload
+  const { branchId: bid, subjectId, objectId, kind, inverseKind, proseEntryId } = action.payload
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   if (subjectId === objectId) return { status: 'rejected', reason: 'self-relationship not allowed' }
@@ -130,6 +173,16 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx) => {
 
   if (inverseKind !== undefined)
     return bothPovOutcome(ctx, bid, { aId, bId, subjectIsA }, current, kind, inverseKind)
+
+  // Only the classifier reaches this path; a case/whitespace-only repeat is the same view.
+  if (current && current[povCol]?.trim().toLowerCase() === kind?.trim().toLowerCase())
+    return { status: 'rejected', reason: 'relationship unchanged', code: 'noop' }
+
+  if (
+    proseEntryId !== undefined &&
+    (await userWroteViewSince(ctx, bid, { aId, bId }, current, povCol, proseEntryId))
+  )
+    return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
 
   if (!current) {
     if (kind === null) return { status: 'rejected', reason: 'no relationship to clear' }
@@ -240,5 +293,6 @@ export function registerCharacterRelationships(): void {
       deleteCharacterRelationship: deleteHandler,
     },
     patcher: (branchId, p) => characterRelationshipsStore.patch(branchId, p),
+    rowKeepingColumns: ['kind', 'inverseKind'],
   })
 }

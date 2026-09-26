@@ -172,6 +172,11 @@ It is deliberately a separate phase from `classifying`, which is the
 per-turn piggyback fallback: same work, opposite answer to "can I keep
 writing?".
 
+World, Plot and Story Settings resolve it too, not only the reader:
+World and Plot while their branch's periodic-classifier run is in
+flight, Story Settings while any of the story's is, each only when
+no foreground run holds the pill.
+
 Blocking is tracked per phase rather than inferred from a phase having
 no cancel label. The two coincide today only because the one background
 phase is also the one nothing can cancel; a blocking phase that is
@@ -242,9 +247,10 @@ props on every render.
   node name to a `GenerationPhase` — exhaustively over the per-turn
   phase-name union, so a phase added to that pipeline fails the
   build until it is labelled, and with a generic-label fallback so an
-  unmapped name never blanks the pill mid-run. Story Settings and
-  World still derive their phase from the run's _kind_; Plot and
-  Chapter Timeline are unwired.
+  unmapped name never blanks the pill mid-run. Story Settings, World
+  and Plot still derive their phase from the run's _kind_, falling
+  back to the periodic classifier's `updating-memory`; Chapter
+  Timeline is unwired.
 - **Memory error observation.** `memory-incomplete` from staleness
   detection per
   [`memory/model-management.md → Staleness UI`](../../memory/model-management.md#staleness-ui)
@@ -261,5 +267,5 @@ props on every render.
 - **Top-bar consumer wiring.** Render the pill on Reader, World,
   Plot, Story Settings, Chapter Timeline per
   [`principles.md → Universal in-story chrome`](../principles.md#universal-in-story-chrome).
-  Done for Reader, World and Story Settings, each tapping its error
-  through to Story Settings · Memory.
+  Done for Reader, World, Plot and Story Settings, each tapping its
+  error through to Story Settings · Memory.

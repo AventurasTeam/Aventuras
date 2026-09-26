@@ -25,10 +25,7 @@ import { usePlotDeepLink } from '@/components/plot/use-plot-deep-link'
 import { usePlotSelection } from '@/components/plot/use-plot-selection'
 import { MasterDetailLayout } from '@/components/shells/master-detail-layout'
 import { ScreenShell } from '@/components/shells/screen-shell'
-import {
-  storySettingsGenerationPhase,
-  useStoryGenerationGate,
-} from '@/components/story-settings/generation-run'
+import { storyPillPhase, useStoryGenerationGate } from '@/components/story-settings/generation-run'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { KeyboardInsetColumn } from '@/components/ui/keyboard-inset-column'
@@ -140,7 +137,10 @@ export default function PlotRoute() {
     [selectedHappeningId, branchId, involvementRows, awarenessRows],
   )
 
-  const { activeRunKind, editBlocked, gateReason } = useStoryGenerationGate(storyId ?? undefined)
+  const { activeRunKind, editBlocked, gateReason, classifierRunning } = useStoryGenerationGate(
+    storyId ?? undefined,
+    branchId,
+  )
   const openRegionPct = useOpenRegionTokens(storyId)
 
   // save-sessions.md → Navigate-away guard: every in-surface transition routes through here.
@@ -367,9 +367,7 @@ export default function PlotRoute() {
         <StoryStatusPill
           storyId={storyId}
           swapTarget={open?.settings.embedding_swap_target}
-          activePhase={
-            activeRunKind != null ? storySettingsGenerationPhase(activeRunKind) : undefined
-          }
+          activePhase={storyPillPhase(activeRunKind, classifierRunning)}
           onCancel={() => {
             if (activeRunKind != null) void awaitRunTerminal(activeRunKind, branchId, 'cancel')
           }}

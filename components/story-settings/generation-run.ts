@@ -1,6 +1,14 @@
+import type { GenerationPhase } from '@/components/compounds/generation-status-pill'
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { t } from '@/lib/i18n'
 import { SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
-import { generationStore, isBackgroundKind, isUserEditBlocked, type TxState } from '@/lib/stores'
+import {
+  backgroundClassifierRunning,
+  generationStore,
+  isBackgroundKind,
+  isUserEditBlocked,
+  type TxState,
+} from '@/lib/stores'
 
 type StorySettingsGenerationPhase =
   | 'generating-narrative'
@@ -42,20 +50,47 @@ export function generationGateReason(
   return t(runKind === 'chapter-close' ? 'generationGate.chapterClose' : 'generationGate.inFlight')
 }
 
-/** The run the story's status pill describes, and whether and why in-story edits are blocked. */
-export function useStoryGenerationGate(storyId: string | undefined) {
+/** Whether the story has an in-flight periodic-classifier run. */
+export function selectStoryClassifierRunning(
+  txState: TxState,
+  storyId: string | undefined,
+): boolean {
+  for (const run of txState.runs.values())
+    if (run.storyId === storyId && run.kind === PERIODIC_CLASSIFIER_KIND) return true
+  return false
+}
+
+/**
+ * The pill's run, whether the classifier pass is in flight, and why edits are blocked.
+ * `branchId` scopes the classifier check to a branch (World, Plot); omitted, to the whole story.
+ */
+export function useStoryGenerationGate(storyId: string | undefined, branchId?: string) {
   const activeRunKind = generationStore.useGeneration((s) =>
     selectStorySettingsGenerationRunKind(s.txState, storyId),
   )
+  const classifierRunning = generationStore.useGeneration((s) =>
+    branchId != null
+      ? backgroundClassifierRunning(s.txState, branchId)
+      : selectStoryClassifierRunning(s.txState, storyId),
+  )
   const editBlocked = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
   const gateReason = generationGateReason(editBlocked, activeRunKind)
-  return { activeRunKind, editBlocked, gateReason }
+  return { activeRunKind, editBlocked, gateReason, classifierRunning }
 }
 
 export function storySettingsGenerationPhase(kind: string): StorySettingsGenerationPhase {
   if (kind === 'chapter-close') return 'closing-chapter'
   if (kind === SUGGESTION_REFRESH_KIND) return 'refreshing-suggestions'
   return 'generating-narrative'
+}
+
+/** The status pill's phase: a foreground run's, else the classifier pass's non-blocking one. */
+export function storyPillPhase(
+  activeRunKind: string | null,
+  classifierRunning: boolean,
+): GenerationPhase | undefined {
+  if (activeRunKind != null) return storySettingsGenerationPhase(activeRunKind)
+  return classifierRunning ? 'updating-memory' : undefined
 }
 
 export type { StorySettingsGenerationPhase }
