@@ -94,11 +94,6 @@ async function readStatus(ctx: StatusCtx): Promise<ClassifierStatus> {
   return row?.classifierStatus ?? idleStatus()
 }
 
-async function recordFailure(ctx: StatusCtx, detail: string): Promise<void> {
-  const { status } = nextStatusOnFailure(await readStatus(ctx), { error: detail, at: Date.now() })
-  await writeStatus(ctx, status)
-}
-
 // branches is not delta-logged (classifier.md -> Persistence), so these are direct
 // row writes. Key-scoped json_set because the reversal clamp owns $.processedThrough
 // and can commit between this run's read and its write.
@@ -110,20 +105,29 @@ async function patchStatus(ctx: StatusCtx, keys: SQL): Promise<void> {
   )
 }
 
-const lifecycleKeys = (status: ClassifierStatus) =>
-  sql`'$.state', ${status.state}, '$.lastSuccessAt', ${status.lastSuccessAt},
+function lifecycleKeys(status: ClassifierStatus): SQL {
+  return sql`'$.state', ${status.state}, '$.lastSuccessAt', ${status.lastSuccessAt},
       '$.lastError', ${status.lastError}, '$.retryCount', ${status.retryCount}`
+}
 
 // MAX-guarded, and never from this run's snapshot of the lifecycle keys.
-const watermarkKey = (coversThrough: number) =>
-  sql`'$.processedThrough',
+function watermarkKey(coversThrough: number): SQL {
+  return sql`'$.processedThrough',
       MAX(COALESCE(json_extract(classifier_status, '$.processedThrough'), 0), ${coversThrough})`
+}
 
-const writeStatus = (ctx: StatusCtx, status: ClassifierStatus) =>
-  patchStatus(ctx, lifecycleKeys(status))
+function writeStatus(ctx: StatusCtx, status: ClassifierStatus): Promise<void> {
+  return patchStatus(ctx, lifecycleKeys(status))
+}
 
-const advanceWatermark = (ctx: StatusCtx, coversThrough: number) =>
-  patchStatus(ctx, watermarkKey(coversThrough))
+function advanceWatermark(ctx: StatusCtx, coversThrough: number): Promise<void> {
+  return patchStatus(ctx, watermarkKey(coversThrough))
+}
+
+async function recordFailure(ctx: StatusCtx, detail: string): Promise<void> {
+  const { status } = nextStatusOnFailure(await readStatus(ctx), { error: detail, at: Date.now() })
+  await writeStatus(ctx, status)
+}
 
 export async function* periodicClassifierPhase(
   ctx: PhaseContext,
