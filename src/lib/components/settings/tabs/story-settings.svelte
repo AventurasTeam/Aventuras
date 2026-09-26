@@ -62,6 +62,19 @@
       ],
     },
     {
+      group: 'Narration',
+      vars: [
+        {
+          name: 'targetResponseLength',
+          desc: 'Response length: dynamic, short, medium or long (branch on it)',
+        },
+        {
+          name: 'narratorReinforcement',
+          desc: 'Narrator reinforcement: full, minimal or none (branch on it)',
+        },
+      ],
+    },
+    {
       group: 'Memory & Context',
       vars: [
         { name: 'tieredContextBlock', desc: 'Recent story memory injected by the memory system' },

@@ -1,16 +1,16 @@
 import { describe, it, expect } from 'vitest'
-import { narratorSettingAvailability } from './narratorSettingAvailability'
+import { narratorSettingReasons } from './narratorSettingReasons'
 import { storyTemplates } from './narrative'
 
 const LENGTH = `{% case targetResponseLength %}{% when 'short' %}x{% endcase %}`
 const REINFORCEMENT = `{% if narratorReinforcement == 'full' %}x{% endif %}`
 const PLAIN = 'You are the narrator.'
 
-describe('narratorSettingAvailability', () => {
+describe('narratorSettingReasons', () => {
   it('reports both settings available on the shipped pack', () => {
     for (const template of storyTemplates) {
       expect(
-        narratorSettingAvailability({
+        narratorSettingReasons({
           userTemplate: template.userContent,
           systemTemplate: template.content,
           customSystemPrompt: undefined,
@@ -21,7 +21,7 @@ describe('narratorSettingAvailability', () => {
 
   it('finds each setting in whichever half carries it', () => {
     expect(
-      narratorSettingAvailability({
+      narratorSettingReasons({
         userTemplate: LENGTH,
         systemTemplate: REINFORCEMENT,
         customSystemPrompt: undefined,
@@ -30,7 +30,7 @@ describe('narratorSettingAvailability', () => {
   })
 
   it('reads a custom system prompt in place of the pack system half', () => {
-    const result = narratorSettingAvailability({
+    const result = narratorSettingReasons({
       userTemplate: PLAIN,
       systemTemplate: LENGTH + REINFORCEMENT,
       customSystemPrompt: REINFORCEMENT,
@@ -40,7 +40,7 @@ describe('narratorSettingAvailability', () => {
   })
 
   it('names the pack when no custom prompt is set', () => {
-    const result = narratorSettingAvailability({
+    const result = narratorSettingReasons({
       userTemplate: PLAIN,
       systemTemplate: PLAIN,
       customSystemPrompt: undefined,
@@ -52,7 +52,7 @@ describe('narratorSettingAvailability', () => {
 
   it('does not count the former composed length variable', () => {
     expect(
-      narratorSettingAvailability({
+      narratorSettingReasons({
         userTemplate: PLAIN,
         systemTemplate: '{{ lengthInstruction }}',
         customSystemPrompt: undefined,

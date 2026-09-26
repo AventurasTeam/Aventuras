@@ -1,8 +1,15 @@
 import { describe, it, expect } from 'vitest'
 import {
-  templateUsesTargetResponseLength,
-  targetResponseLengthIsHonoured,
-} from './targetResponseLength'
+  templateReferencesVariable,
+  variableIsHonoured,
+  type NarratorPrompts,
+} from './templateReferences'
+import { TARGET_RESPONSE_LENGTH_VAR } from './narratorSettingReasons'
+
+const templateUsesTargetResponseLength = (content: string | null | undefined) =>
+  templateReferencesVariable(content, TARGET_RESPONSE_LENGTH_VAR)
+const targetResponseLengthIsHonoured = (prompts: NarratorPrompts) =>
+  variableIsHonoured(TARGET_RESPONSE_LENGTH_VAR, prompts)
 
 describe('templateUsesTargetResponseLength', () => {
   it('sees the length branched on in a conditional', () => {
@@ -64,6 +71,27 @@ describe('templateUsesTargetResponseLength', () => {
 
   it('counts an assignment that reads the variable', () => {
     expect(templateUsesTargetResponseLength(`{% assign len = targetResponseLength %}`)).toBe(true)
+  })
+
+  it('does not count a name the setting does not reach', () => {
+    expect(templateUsesTargetResponseLength('{{ story.targetResponseLength }}')).toBe(false)
+    expect(templateUsesTargetResponseLength('{{ targetResponseLength-x }}')).toBe(false)
+    expect(templateUsesTargetResponseLength('{% increment targetResponseLength %}')).toBe(false)
+    expect(
+      templateUsesTargetResponseLength("{% liquid\n  assign targetResponseLength = 'x'\n%}"),
+    ).toBe(false)
+  })
+
+  it('counts a read after a conditional assignment, which may not run', () => {
+    expect(
+      templateUsesTargetResponseLength(
+        "{% if x %}{% assign targetResponseLength = 'short' %}{% endif %}{{ targetResponseLength }}",
+      ),
+    ).toBe(true)
+  })
+
+  it('counts a template that does not parse, so the setting is not disabled on a guess', () => {
+    expect(templateUsesTargetResponseLength('{% if %}')).toBe(true)
   })
 
   it('ignores the name written as prose or quoted as a string', () => {

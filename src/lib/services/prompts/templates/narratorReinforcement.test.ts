@@ -1,9 +1,16 @@
 import { describe, it, expect } from 'vitest'
 import {
-  templateUsesNarratorReinforcement,
-  narratorReinforcementIsHonoured,
-} from './narratorReinforcement'
+  templateReferencesVariable,
+  variableIsHonoured,
+  type NarratorPrompts,
+} from './templateReferences'
+import { NARRATOR_REINFORCEMENT_VAR } from './narratorSettingReasons'
 import { storyTemplates } from './narrative'
+
+const templateUsesNarratorReinforcement = (content: string | null | undefined) =>
+  templateReferencesVariable(content, NARRATOR_REINFORCEMENT_VAR)
+const narratorReinforcementIsHonoured = (prompts: NarratorPrompts) =>
+  variableIsHonoured(NARRATOR_REINFORCEMENT_VAR, prompts)
 
 describe('templateUsesNarratorReinforcement', () => {
   it('sees the level branched on in a conditional', () => {

@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { Liquid } from 'liquidjs'
 import { storyTemplates } from './narrative'
-import { targetResponseLengthIsHonoured } from './targetResponseLength'
+import { variableIsHonoured } from './templateReferences'
+import { TARGET_RESPONSE_LENGTH_VAR } from './narratorSettingReasons'
 
 const engine = new Liquid()
 
@@ -322,7 +323,7 @@ describe.each(['adventure', 'creative-writing'])('%s — target response length'
   it('is honoured by the shipped pack', () => {
     const template = storyTemplates.find((t) => t.id === id)
     expect(
-      targetResponseLengthIsHonoured({
+      variableIsHonoured(TARGET_RESPONSE_LENGTH_VAR, {
         userTemplate: template?.userContent,
         systemTemplate: template?.content,
         customSystemPrompt: undefined,

@@ -13,7 +13,7 @@
   import { hasRequiredCredentials } from '$lib/services/ai/image'
   import {
     resolveNarratorSettingAvailability,
-    type NarratorSettingAvailability,
+    type NarratorSettingReasons,
   } from '$lib/services/context'
   import type { VaultCharacter } from '$lib/types'
 
@@ -124,7 +124,7 @@
     }
   })
 
-  let narratorSettings = $state<NarratorSettingAvailability>({})
+  let narratorSettings = $state<NarratorSettingReasons>({})
   $effect(() => {
     const packId = wizard.selectedPackId
     const mode = wizard.narrative.selectedMode

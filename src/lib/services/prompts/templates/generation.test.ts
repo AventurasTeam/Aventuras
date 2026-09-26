@@ -11,8 +11,7 @@ const actionChoices = () => {
 }
 
 describe('action-choices user prompt', () => {
-  // The choice-length hint used to arrive as `{{ lengthInstruction }}`, a constant the
-  // service supplied. It is the template's own text now, so a pack can edit it.
+  // The choice-length hint is template text, not a context variable.
   it('carries its own choice-length guidance', async () => {
     const out = await engine.parseAndRender(actionChoices(), { protagonistName: 'Aria' })
 

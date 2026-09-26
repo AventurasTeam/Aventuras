@@ -3,5 +3,5 @@ export type { RenderResult } from './types'
 export { WizardStep } from './types'
 export {
   resolveNarratorSettingAvailability,
-  type NarratorSettingAvailability,
+  type NarratorSettingReasons,
 } from './narratorSettingAvailability'
