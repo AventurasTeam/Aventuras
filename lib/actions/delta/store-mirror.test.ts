@@ -21,7 +21,7 @@ const widgets = sqliteTable('widgets', {
 type WidgetRow = { id: string; branchId: string; label: string; createdAt: number }
 
 declare module '@/lib/actions/action-map' {
-  interface PipelineActionMap {
+  interface TestPipelineActionMap {
     widgetCreate: { source: 'user_edit'; payload: { row: WidgetRow } }
     widgetUpdate: { source: 'user_edit'; payload: { branchId: string; id: string; label: string } }
     widgetDelete: { source: 'user_edit'; payload: { branchId: string; id: string } }

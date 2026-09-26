@@ -6,6 +6,7 @@ import { logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { generationStore, undoRedoStore } from '@/lib/stores'
 
+import type { PipelineActionMap } from '../action-map'
 import {
   isUserOriginatedSource,
   type DbCtx,
@@ -18,30 +19,90 @@ import { resolveByActionKind, resolveByTable, type HandlerOutcome } from './regi
 
 type Args = { action: PipelineAction; actionId: string; branchId: string; entryId?: string | null }
 
-// Read-then-decide entity handlers that concurrent writers can race; the lock
-// covers only a read made inside the handler.
-const GUARDED_ENTITY_KINDS = [
-  'promoteStagedEntity',
-  'appendEntityKeywords',
-  'retireEntity',
-] as const satisfies readonly PipelineAction['kind'][]
-type GuardedEntityKind = (typeof GUARDED_ENTITY_KINDS)[number]
-const GUARDED_ENTITY_KIND_SET: ReadonlySet<string> = new Set(GUARDED_ENTITY_KINDS)
+type ProductionKind = keyof PipelineActionMap
+type LockKey<K extends ProductionKind> =
+  | ((payload: PipelineActionMap[K]['payload']) => string)
+  | null
 
-function isGuardedEntityAction(
-  a: PipelineAction,
-): a is Extract<PipelineAction, { kind: GuardedEntityKind }> {
-  return GUARDED_ENTITY_KIND_SET.has(a.kind)
+const entityRow = (p: { branchId: string; id: string }) => `entities:${p.branchId}:${p.id}`
+const relationships = (p: { branchId: string }) => `character_relationships:${p.branchId}`
+
+// Handlers read before they commit, so a write the classifier and a user Save can both make
+// to one row serializes: entities per row, relationships per branch (a delete names no pair).
+const LOCK_KEY: { [K in ProductionKind]: LockKey<K> } = {
+  createStoryEntry: null,
+  updateStoryEntryMetadata: null,
+  deleteStoryEntry: null,
+  createEntity: null,
+  updateEntity: entityRow,
+  deleteEntity: entityRow,
+  updateEntityVisualState: entityRow,
+  updateEntityInventory: entityRow,
+  updateEntityStackables: entityRow,
+  updateEntityLocationTracking: entityRow,
+  promoteStagedEntity: entityRow,
+  appendEntityKeywords: entityRow,
+  retireEntity: entityRow,
+  upsertCharacterRelationship: relationships,
+  deleteCharacterRelationship: relationships,
+  createLore: null,
+  updateLore: null,
+  deleteLore: null,
+  createThread: null,
+  updateThread: null,
+  deleteThread: null,
+  createHappening: null,
+  updateHappening: null,
+  deleteHappening: null,
+  createHappeningInvolvement: null,
+  updateHappeningInvolvement: null,
+  deleteHappeningInvolvement: null,
+  upsertHappeningAwareness: null,
+  deleteHappeningAwareness: null,
+  bumpAwarenessRetrieval: null,
+  createChapter: null,
+  updateChapter: null,
+  deleteChapter: null,
+  createBranchEraFlip: null,
+  updateBranchEraFlip: null,
+  deleteBranchEraFlip: null,
+  createEntryAsset: null,
+  updateEntryAsset: null,
+  deleteEntryAsset: null,
+  createTranslation: null,
+  updateTranslation: null,
+  deleteTranslation: null,
 }
 
-// Single and group commits must derive this identically or they stop serializing
-// against each other.
-function guardedEntityLockKey(kind: GuardedEntityKind, branchId: string, id: string): string {
-  return `${kind}:${branchId}:${id}`
+function isProductionAction(
+  a: PipelineAction,
+): a is Extract<PipelineAction, { kind: ProductionKind }> {
+  // False only for a TestPipelineActionMap kind.
+  return Object.hasOwn(LOCK_KEY, a.kind)
+}
+
+function lockKeyOf<K extends ProductionKind>(
+  kind: K,
+  payload: PipelineActionMap[K]['payload'],
+): string | null {
+  const key: LockKey<K> = LOCK_KEY[kind]
+  return key === null ? null : key(payload)
+}
+
+// The single and group paths both derive keys here, so they serialize against each other.
+function lockKeyFor(action: PipelineAction): string | null {
+  return isProductionAction(action) ? lockKeyOf(action.kind, action.payload) : null
 }
 
 export async function applyDeltaAction(args: Args, ctx: DbCtx): Promise<MutationResult> {
-  const { action } = args
+  const key = lockKeyFor(args.action)
+  const run = () => applyDeltaActionUnlocked(args, ctx)
+  return key === null ? run() : withKeyLock(key, run)
+}
+
+async function applyDeltaActionUnlocked(args: Args, ctx: DbCtx): Promise<MutationResult> {
+  const { action, actionId, branchId } = args
+  const entryId = args.entryId ?? null
   // The barrier (prose-reversal.ts) sets reversalInProgress before draining
   // the in-flight classifier, whose burst must still commit; rejecting a
   // pipeline write here would roll that burst back and burn a retry.
@@ -51,19 +112,6 @@ export async function applyDeltaAction(args: Args, ctx: DbCtx): Promise<Mutation
       code: 'reversal-in-progress',
       reason: 'prose reversal in progress',
     }
-  // An action whose read happens before dispatch must take the lock itself.
-  if (isGuardedEntityAction(action)) {
-    return withKeyLock(
-      guardedEntityLockKey(action.kind, action.payload.branchId, action.payload.id),
-      () => applyDeltaActionUnlocked(args, ctx),
-    )
-  }
-  return applyDeltaActionUnlocked(args, ctx)
-}
-
-async function applyDeltaActionUnlocked(args: Args, ctx: DbCtx): Promise<MutationResult> {
-  const { action, actionId, branchId } = args
-  const entryId = args.entryId ?? null
 
   const resolved = resolveByActionKind(action.kind)
   if (!resolved) return { status: 'rejected', reason: `no handler registered for ${action.kind}` }
@@ -116,11 +164,10 @@ export type DeltaGroupResult =
 
 type GroupArgs = { actionId: string; branchId: string; entryId?: string | null }
 
-function guardedEntityLockKeys(actions: readonly PipelineAction[]): string[] {
-  const keys = actions
-    .filter(isGuardedEntityAction)
-    .map((a) => guardedEntityLockKey(a.kind, a.payload.branchId, a.payload.id))
-  // Sorted so two groups sharing a subset of keys acquire them in the same order.
+function lockKeysFor(actions: readonly PipelineAction[]): string[] {
+  const keys = actions.map(lockKeyFor).filter((key) => key !== null)
+  // Deduped because withKeyLock is not reentrant; sorted so two groups sharing keys take
+  // them in the same order.
   return [...new Set(keys)].sort()
 }
 
@@ -141,9 +188,7 @@ export async function applyDeltaActionGroup(
   args: GroupArgs,
   ctx: DbCtx,
 ): Promise<DeltaGroupResult> {
-  return withKeyLocks(guardedEntityLockKeys(actions), () =>
-    applyDeltaActionGroupUnlocked(actions, args, ctx),
-  )
+  return withKeyLocks(lockKeysFor(actions), () => applyDeltaActionGroupUnlocked(actions, args, ctx))
 }
 
 function withKeyLocks(

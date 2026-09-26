@@ -1,4 +1,4 @@
-import type { PipelineActionMap } from './action-map'
+import type { PipelineActionMap, TestPipelineActionMap } from './action-map'
 
 export type { DbCtx } from '@/lib/db'
 
@@ -27,9 +27,11 @@ export function isUserOriginatedSource(source: DeltaSource): boolean {
   return DELTA_SOURCE_ORIGIN[source] === 'user'
 }
 
+type ActionMap = PipelineActionMap & TestPipelineActionMap
+
 export type PipelineAction = {
-  [K in keyof PipelineActionMap]: { kind: K } & PipelineActionMap[K]
-}[keyof PipelineActionMap]
+  [K in keyof ActionMap]: { kind: K } & ActionMap[K]
+}[keyof ActionMap]
 
 export type MutationResult =
   // Null when the post-commit readback missed: the write is durable regardless,
