@@ -37,7 +37,9 @@ echo "🚀 Building unsigned iOS archive (aarch64-apple-ios)..."
 # (which requires signing assets we deliberately do not have). With no signing
 # configuration, the Tauri CLI itself passes CODE_SIGNING_ALLOWED=NO,
 # CODE_SIGNING_REQUIRED=NO and CODE_SIGN_IDENTITY="" to xcodebuild.
-npx tauri ios build --target aarch64-apple-ios --archive-only "$@"
+# --target aarch64: iOS device ARM64 (the CLI's shorthand for aarch64-apple-ios;
+# it also accepts aarch64-sim and x86_64).
+npx tauri ios build --target aarch64 --archive-only "$@"
 
 ARCHIVE="$(find src-tauri/gen/apple/build -name '*_iOS.xcarchive' -type d 2>/dev/null | sort | tail -n1)"
 if [[ -z "$ARCHIVE" ]]; then

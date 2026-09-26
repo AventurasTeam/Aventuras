@@ -342,9 +342,9 @@ The `.ipa` is written to the repo root as
 
 Mechanics worth knowing:
 
-- The script calls `tauri ios build --archive-only`, which stops after `xcodebuild
-  archive` and skips the CLI's IPA-export phase (the part that requires signing). With
-  no signing configuration, the CLI itself passes `CODE_SIGNING_ALLOWED=NO`,
+- The script calls `tauri ios build --target aarch64 --archive-only`, which stops after
+  `xcodebuild archive` and skips the CLI's IPA-export phase (the part that requires
+  signing). With no signing configuration, the CLI itself passes `CODE_SIGNING_ALLOWED=NO`,
   `CODE_SIGNING_REQUIRED=NO` and `CODE_SIGN_IDENTITY=""`.
 - The archive lands at `src-tauri/gen/apple/build/<target>_iOS.xcarchive`, and the app
   bundle at `Products/Applications/Aventuras.app` inside it.
