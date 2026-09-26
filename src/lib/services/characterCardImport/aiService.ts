@@ -129,9 +129,10 @@ export async function clean(
   jsonString: string,
   genre: Genre = 'fantasy',
 ): Promise<CardImportResult> {
-  const card = parseJson(jsonString)
+  // Before card parsing: a marked file with a top-level name and description would pass as V1.
+  const redirect = exchangeImportRedirect(jsonString)
+  const card = redirect ? null : parseJson(jsonString)
   if (!card) {
-    const redirect = exchangeImportRedirect(jsonString)
     return {
       success: false,
       settingSeed: '',

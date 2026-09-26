@@ -341,12 +341,16 @@ export class STImportWizardStore {
 
       const jsonString = await CharacterCardImport.readFile(file)
       this.cardRawJson = jsonString
-      const parsed = CharacterCardImport.parseJson(jsonString)
 
+      const redirect = exchangeImportRedirect(jsonString)
+      if (redirect) {
+        this.cardFileError = redirect
+        return
+      }
+
+      const parsed = CharacterCardImport.parseJson(jsonString)
       if (!parsed) {
-        this.cardFileError =
-          exchangeImportRedirect(jsonString) ??
-          'Could not parse character card. Unsupported format.'
+        this.cardFileError = 'Could not parse character card. Unsupported format.'
         return
       }
 

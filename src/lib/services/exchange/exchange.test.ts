@@ -183,6 +183,18 @@ describe('exchange / card-only importers', () => {
     expect(exchangeImportRedirect(text)).toMatch(/Aventuras scenario export.*Vault/)
   })
 
+  it('catches a marked file that would also pass as a V1 card', () => {
+    const text = JSON.stringify({
+      format: EXCHANGE_FORMAT,
+      formatVersion: '1.0.0',
+      entity: 'character',
+      name: 'Mira',
+      description: 'A wandering cartographer.',
+      data: {},
+    })
+    expect(exchangeImportRedirect(text)).toMatch(/Aventuras character export/)
+  })
+
   it('stays silent for anything else', () => {
     expect(exchangeImportRedirect('{"name":"Mira","description":"x"}')).toBeNull()
     expect(exchangeImportRedirect('not json')).toBeNull()
