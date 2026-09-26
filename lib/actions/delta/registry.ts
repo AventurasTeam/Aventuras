@@ -78,13 +78,10 @@ export type DomainRegistration = {
   restoreCascade?: CascadeRestore
   cascadeDeleteOps?: CascadeDeleteOps
   /**
-   * Columns the row exists for while any is non-null. A reversal that would null them all
-   * deletes the row but keeps it as a tombstone: an older undo in the same plan that gives
-   * one a value back re-inserts the whole row. Reversing a machine `create` keeps a row a
-   * later user write set one of them on, nulling only the rest. Reversal restores a
-   * machine write column by column around later user writes, which assumes no invariant
-   * spans columns beyond these: `happenings_mutual_excl` would break if a machine write
-   * ever updated a happening. Checked against the table's columns at `register()`.
+   * Columns the row exists for while any is non-null: a reversal that would null them all
+   * deletes the row instead. No other invariant may span columns, since a reversal restores
+   * a machine write column by column around later user writes. Checked against the table's
+   * columns at `register()`; see `docs/generation-pipeline.md` → Reverse-replay.
    */
   rowKeepingColumns?: readonly string[]
 }

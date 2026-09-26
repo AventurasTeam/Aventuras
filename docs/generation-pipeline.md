@@ -1292,7 +1292,10 @@ write set keeps its row, with the views the user did not write nulled,
 and is deleted only once both are null. An update's reversal that
 would leave both views null deletes the row too, since the pair's
 one-view `CHECK` forbids it, and an older undo in the same reversal
-that gives it a view back re-inserts it.
+that gives it a view back re-inserts it. Restoring column by column
+assumes no other constraint spans a row's columns:
+`happenings_mutual_excl` would break if a machine write ever updated a
+happening.
 
 **Undoing a `create` consults no cascade.**
 A domain may register a cascade hook for its child rows, but that hook

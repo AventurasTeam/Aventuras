@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { PipelineAction } from '@/lib/actions'
 import { applyDeltaAction as realApplyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { describeDeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
 import { generateStructured } from '@/lib/ai'
@@ -8,6 +9,8 @@ import { shouldCadenceFire, type EmbedDescriptions } from '@/lib/classifier'
 import {
   branches,
   deltas,
+  entities,
+  happenings,
   stories,
   storyEntries,
   type CharacterRelationship,
@@ -935,5 +938,121 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
       .from(branches)
       .where(eq(branches.id, 'b1'))
     expect(row.status).toMatchObject({ state: 'running', retryCount: 0 })
+  })
+
+  // cadence.md → User edits and classifier writes: a write the user's newer edit outranks
+  // no-ops, so the rest of the pass still lands and the pass completes.
+  it('completes a pass whose retire a newer user revive blocks, landing its other writes', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
+    resetAllStores()
+    currentStoryStore.set({
+      storyId: 's1',
+      branchId: 'b1',
+      definition: {} as never,
+      settings: { models: {} } as never,
+    })
+    entitiesStore.hydrate('b1', [])
+    happeningsStore.hydrate('b1', [])
+    await hydrateAppSettings(async () => CLASSIFIER_WIRED_CONFIG)
+
+    // Through the action layer, so the entry's create delta dates the prose in the real log.
+    const apply = async (action: PipelineAction, actionId: string) => {
+      const result = await realApplyDeltaAction(
+        { action, actionId, branchId: 'b1' },
+        { db, runInTransaction },
+      )
+      expect(result.status).toBe('ok')
+    }
+    await apply(
+      {
+        kind: 'createEntity',
+        source: 'user_edit',
+        payload: {
+          entry: {
+            id: CHAR_KAEL,
+            branchId: 'b1',
+            kind: 'character',
+            name: 'Kael',
+            description: 'A courier.',
+            status: 'retired',
+            retiredReason: 'lost at sea',
+            injectionMode: 'auto',
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        },
+      },
+      'act_kael',
+    )
+    await apply(
+      {
+        kind: 'createStoryEntry',
+        source: 'ai_classifier',
+        payload: {
+          entry: {
+            id: 'e1',
+            branchId: 'b1',
+            position: 1,
+            kind: 'ai_reply',
+            content: 'turn 1',
+            createdAt: 1,
+          },
+        },
+      },
+      'act_e1',
+    )
+    await apply(
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: {
+          branchId: 'b1',
+          id: CHAR_KAEL,
+          patch: { status: 'active', retiredReason: null },
+        },
+      },
+      'act_revive',
+    )
+
+    ensurePeriodicClassifierPipelineRegistered()
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({
+        statusFlips: [{ ref: 'c1', to: 'retired', reason: 'drowned', sourceTurn: 't1' }],
+        happenings: [{ title: 'A', sourceTurn: 't1', involvements: [], awareness: [] }],
+      }),
+    })
+
+    const result = await runPipeline(PERIODIC_CLASSIFIER_KIND, {
+      storyId: 's1',
+      branchId: 'b1',
+      db,
+      runInTransaction,
+    })
+    if (result.outcome === 'rejected') throw new Error('unexpected rejected start')
+    expect(result.outcome).toBe('completed')
+
+    const [kael] = await db.select().from(entities).where(eq(entities.id, CHAR_KAEL))
+    expect(kael).toMatchObject({ status: 'active', retiredReason: null })
+    const landed = await db.select().from(happenings).where(eq(happenings.branchId, 'b1'))
+    expect(landed.map((h) => h.title)).toEqual(['A'])
+    const classifierWrites = await db
+      .select({ targetTable: deltas.targetTable })
+      .from(deltas)
+      .where(eq(deltas.source, 'periodic_classifier'))
+    expect(classifierWrites.map((d) => d.targetTable)).toEqual(['happenings'])
+
+    const [row] = await db
+      .select({ status: branches.classifierStatus })
+      .from(branches)
+      .where(eq(branches.id, 'b1'))
+    expect(row.status).toMatchObject({
+      state: 'idle',
+      processedThrough: 1,
+      retryCount: 0,
+      lastError: null,
+    })
   })
 })

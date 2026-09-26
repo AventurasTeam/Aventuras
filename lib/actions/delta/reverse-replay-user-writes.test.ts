@@ -244,6 +244,29 @@ describe('reversing a machine write under a later user write', () => {
     expect((await pair(db))[0].kind).toBe('rival')
   })
 
+  it('is not held back by a user edit of another row in the same table', async () => {
+    const { db, ctx } = await setup()
+    await createKael(ctx, { status: 'staged' })
+    await apply(
+      ctx,
+      {
+        kind: 'createEntity',
+        source: 'user_edit',
+        payload: { entry: { ...KAEL, id: 'char_mira', status: 'staged' } },
+      },
+      'act_0m',
+    )
+    await apply(ctx, promote, 'act_c')
+    await apply(ctx, { ...promote, payload: { branchId: 'b1', id: 'char_mira' } }, 'act_c')
+    await apply(ctx, userPatch({ status: 'retired' }), 'act_u')
+
+    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+
+    expect((await kael(db)).status).toBe('retired')
+    const [mira] = await db.select().from(entities).where(eq(entities.id, 'char_mira'))
+    expect(mira.status).toBe('staged')
+  })
+
   it('is not held back by a later machine write', async () => {
     const { db, ctx } = await setup()
     await apply(ctx, userViews('friend', 'friend'), 'act_0')

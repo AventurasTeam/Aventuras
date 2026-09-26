@@ -139,8 +139,7 @@ export type PreflightFailureHook = (
  *
  * Caveat: a parallel group's `Promise.all` rejects on the first sibling to
  * throw while the rest keep running, so a sibling's later `{ status:
- * 'failed' }` isn't synchronized with this hook (no pipeline uses parallel
- * groups today).
+ * 'failed' }` isn't synchronized with this hook.
  */
 export type PhaseExceptionHook = (
   ctx: Pick<PhaseContext, 'db' | 'branchId'>,

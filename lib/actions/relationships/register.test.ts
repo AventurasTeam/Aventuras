@@ -468,6 +468,31 @@ describe('single-perspective upsert against a user edit newer than the prose', (
     })
   })
 
+  it('fills a view the user left blank re-creating a pair they deleted after the prose', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(views('friend', 'friend', 'act_0'), ctx)
+    await writeProse(ctx)
+    const [row] = await pairRow(db, 'char_kael', 'char_mira')
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'deleteCharacterRelationship',
+          source: 'user_edit',
+          payload: { branchId: 'br_1', id: row.id },
+        },
+        actionId: 'act_d',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    await applyDeltaAction(views(null, 'wary', 'act_u'), ctx)
+    expect((await applyDeltaAction(classify('ally', 'act_k'), ctx)).status).toBe('ok')
+    expect((await pairRow(db, 'char_kael', 'char_mira'))[0]).toMatchObject({
+      kind: 'ally',
+      inverseKind: 'wary',
+    })
+  })
+
   // A live-row read would see `friend` at the second write and credit it to the user's create.
   it('reads a blank view at create from the chain after an older fact filled it', async () => {
     const { db, ctx } = await setup()

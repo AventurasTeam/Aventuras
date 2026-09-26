@@ -12,7 +12,7 @@ import {
   rowDeltasSince,
   USER_EDITED_SINCE_PROSE,
   userDeletedPairSince,
-  userEditsSince,
+  userEditsSinceProse,
 } from '../delta/user-precedence'
 import type { DbCtx, DeltaSource } from '../types'
 
@@ -61,10 +61,18 @@ async function userWroteViewSince(
   povCol: 'kind' | 'inverseKind',
   proseEntryId: string,
 ): Promise<boolean> {
-  const since = await proseLogPosition(ctx, branchId, proseEntryId)
-  if (await userDeletedPairSince(ctx, branchId, pair.aId, pair.bId, since)) return true
-  if (!current) return false
-  const edits = await userEditsSince(ctx, branchId, 'character_relationships', current.id, since)
+  // A pair re-created since the delete is judged by its own create, not by the delete.
+  if (!current) {
+    const since = await proseLogPosition(ctx, branchId, proseEntryId)
+    return userDeletedPairSince(ctx, branchId, pair.aId, pair.bId, since)
+  }
+  const edits = await userEditsSinceProse(
+    ctx,
+    branchId,
+    'character_relationships',
+    current.id,
+    proseEntryId,
+  )
   if (edits.some((d) => d.op === 'update' && carriesColumn(d, povCol))) return true
   if (!edits.some((d) => d.op === 'create')) return false
   return (await viewAtCreate(ctx, branchId, current, povCol)) !== null

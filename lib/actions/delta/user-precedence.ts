@@ -1,6 +1,6 @@
-import { and, asc, desc, eq, gt, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, inArray, or, sql } from 'drizzle-orm'
 
-import { deltas, type Delta } from '@/lib/db'
+import { BIND_CHUNK, deltas, type Delta } from '@/lib/db'
 
 import { isUserOriginatedSource, type DbCtx } from '../types'
 
@@ -40,7 +40,7 @@ async function rowDeltasAfter(
   ctx: DbCtx,
   branchId: string,
   targetTable: string,
-  targetId: string,
+  targetIds: readonly string[],
   since: number,
   userOnly: boolean,
 ): Promise<Delta[]> {
@@ -50,7 +50,7 @@ async function rowDeltasAfter(
     .where(
       and(
         eq(deltas.branchId, branchId),
-        eq(deltas.targetId, targetId),
+        inArray(deltas.targetId, [...targetIds]),
         gt(deltas.logPosition, since),
         eq(deltas.targetTable, targetTable),
         userOnly ? eq(deltas.source, 'user_edit') : undefined,
@@ -67,10 +67,32 @@ export function userEditsSince(
   targetId: string,
   since: number,
 ): Promise<Delta[]> {
-  return rowDeltasAfter(ctx, branchId, targetTable, targetId, since, true)
+  return rowDeltasAfter(ctx, branchId, targetTable, [targetId], since, true)
+}
+
+/** `user_edit` deltas on one row logged after the source entry's prose, oldest first. */
+export async function userEditsSinceProse(
+  ctx: DbCtx,
+  branchId: string,
+  targetTable: string,
+  targetId: string,
+  proseEntryId: string,
+): Promise<Delta[]> {
+  const since = await proseLogPosition(ctx, branchId, proseEntryId)
+  return userEditsSince(ctx, branchId, targetTable, targetId, since)
 }
 
 const rowKey = (d: Delta) => `${d.targetTable}:${d.branchId}:${d.targetId}`
+
+function groupBy(items: readonly Delta[], key: (d: Delta) => string): Map<string, Delta[]> {
+  const groups = new Map<string, Delta[]>()
+  for (const item of items) {
+    const group = groups.get(key(item))
+    if (group) group.push(item)
+    else groups.set(key(item), [item])
+  }
+  return groups
+}
 
 /**
  * Maps each machine delta in `rows` that `wanted` accepts, by id, to the `user_edit` deltas
@@ -83,24 +105,26 @@ export async function userEditsOutliving(
   wanted: (delta: Delta) => boolean,
 ): Promise<ReadonlyMap<string, Delta[]>> {
   const reversed = new Set(rows.map((r) => r.id))
-  const machineByRow = new Map<string, Delta[]>()
-  for (const d of rows) {
-    if (isUserOriginatedSource(d.source) || !wanted(d)) continue
-    machineByRow.set(rowKey(d), [...(machineByRow.get(rowKey(d)) ?? []), d])
-  }
-  const byDelta = new Map<string, Delta[]>()
-  for (const machine of machineByRow.values()) {
-    const { branchId, targetTable, targetId } = machine[0]
-    const since = Math.min(...machine.map((d) => d.logPosition))
-    const edits = (await userEditsSince(ctx, branchId, targetTable, targetId, since)).filter(
-      (e) => !reversed.has(e.id),
-    )
-    for (const d of machine) {
-      const later = edits.filter((e) => e.logPosition > d.logPosition)
-      byDelta.set(d.id, later)
+  const machine = rows.filter((d) => !isUserOriginatedSource(d.source) && wanted(d))
+  const edits: Delta[] = []
+  for (const group of groupBy(machine, (d) => `${d.branchId}:${d.targetTable}`).values()) {
+    const { branchId, targetTable } = group[0]
+    // One bound per table; each machine write below keeps only its own row's later edits.
+    const since = group.reduce((min, d) => Math.min(min, d.logPosition), Infinity)
+    const ids = [...new Set(group.map((d) => d.targetId))]
+    for (let i = 0; i < ids.length; i += BIND_CHUNK) {
+      const chunk = ids.slice(i, i + BIND_CHUNK)
+      edits.push(...(await rowDeltasAfter(ctx, branchId, targetTable, chunk, since, true)))
     }
   }
-  return byDelta
+  const outliving = edits.filter((e) => !reversed.has(e.id))
+  const editsByRow = groupBy(outliving, rowKey)
+  return new Map(
+    machine.map((d) => [
+      d.id,
+      (editsByRow.get(rowKey(d)) ?? []).filter((e) => e.logPosition > d.logPosition),
+    ]),
+  )
 }
 
 /** Deltas of any source on one row logged after `since`, oldest first. */
@@ -111,7 +135,7 @@ export function rowDeltasSince(
   targetId: string,
   since: number,
 ): Promise<Delta[]> {
-  return rowDeltasAfter(ctx, branchId, targetTable, targetId, since, false)
+  return rowDeltasAfter(ctx, branchId, targetTable, [targetId], since, false)
 }
 
 /**

@@ -13,12 +13,7 @@ import { entitiesStore } from '@/lib/stores'
 
 import { computeUndoPayload } from '../delta/delta-encoding'
 import type { ActionHandler } from '../delta/registry'
-import {
-  proseLogPosition,
-  USER_EDITED_SINCE_PROSE,
-  userEditsSince,
-  wroteColumn,
-} from '../delta/user-precedence'
+import { USER_EDITED_SINCE_PROSE, userEditsSinceProse, wroteColumn } from '../delta/user-precedence'
 import type { DbCtx, DeltaSource } from '../types'
 
 declare module '@/lib/actions/action-map' {
@@ -67,16 +62,6 @@ declare module '@/lib/actions/action-map' {
       payload: { branchId: string; id: string; retiredReason: string | null; proseEntryId?: string }
     }
   }
-}
-
-async function userEditsSinceProse(
-  ctx: DbCtx,
-  branchId: string,
-  id: string,
-  proseEntryId: string,
-): Promise<Delta[]> {
-  const since = await proseLogPosition(ctx, branchId, proseEntryId)
-  return userEditsSince(ctx, branchId, 'entities', id, since)
 }
 
 // Matched only against terms the live list lacks, so a hit is one the user removed.
@@ -240,7 +225,7 @@ export const promoteStagedEntityHandler: ActionHandler = async (action, branchId
     return { status: 'rejected', reason: 'not-staged', code: 'noop' }
   if (
     proseEntryId !== undefined &&
-    wroteColumn(await userEditsSinceProse(ctx, bid, id, proseEntryId), 'status')
+    wroteColumn(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId), 'status')
   )
     return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
   return {
@@ -281,7 +266,7 @@ export const appendEntityKeywordsHandler: ActionHandler = async (action, branchI
   let added = newTerms(current.keywords, keywords)
   if (added.length === 0) return { status: 'rejected', reason: 'no-new-keywords', code: 'noop' }
   if (proseEntryId !== undefined) {
-    const removed = priorTerms(await userEditsSinceProse(ctx, bid, id, proseEntryId))
+    const removed = priorTerms(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId))
     added = added.filter((term) => !removed.has(normalizeTerm(term)))
     if (added.length === 0)
       return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
@@ -321,7 +306,7 @@ export const retireEntityHandler: ActionHandler = async (action, branchId, ctx) 
   if (current.status !== 'active') return { status: 'rejected', reason: 'not-active', code: 'noop' }
   if (
     proseEntryId !== undefined &&
-    wroteColumn(await userEditsSinceProse(ctx, bid, id, proseEntryId), 'status')
+    wroteColumn(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId), 'status')
   )
     return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
   const columns = { status: 'retired' as const, retiredReason }
