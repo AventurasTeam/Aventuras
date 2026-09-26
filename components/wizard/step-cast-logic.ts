@@ -1,4 +1,5 @@
-import type { WizardCastDraft, WizardCharacterDraft } from '@/lib/db'
+import type { WizardCastDraft, WizardCharacterDraft, WizardLocationDraft } from '@/lib/db'
+import { checkParentChain } from '@/lib/world'
 
 /**
  * Single-member today, and callers lean on that: both the compact row and the
@@ -48,4 +49,23 @@ export function castStepValid(
  */
 export function canSetLead(row: WizardCastDraft, leadEntityId: string | null): boolean {
   return row.kind === 'character' && row.status === 'active' && row.id !== leadEntityId
+}
+
+/**
+ * Locations `row` may take as its parent: none whose own chain already leads back to it, so the
+ * picker can't build the loop Finish refuses. The current parent stays, so a stored loop still
+ * shows what it points at.
+ */
+export function parentCandidates(
+  row: WizardLocationDraft,
+  cast: readonly WizardCastDraft[],
+): WizardLocationDraft[] {
+  const locations = cast.filter((r): r is WizardLocationDraft => r.kind === 'location')
+  const parents = new Map(locations.map((r) => [r.id, r.parentLocationId]))
+  const parentOf = (id: string) => parents.get(id) ?? null
+  return locations.filter(
+    (r) =>
+      r.id !== row.id &&
+      (r.id === row.parentLocationId || checkParentChain(row.id, r.id, parentOf) === 'ok'),
+  )
 }
