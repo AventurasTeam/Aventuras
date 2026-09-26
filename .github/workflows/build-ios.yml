@@ -81,12 +81,14 @@ jobs:
         run: scripts/build-ios-unsigned.sh ${{ steps.version.outputs.config-args }}
 
       # Deliberately publish workflow artifacts for every build, matching the
-      # Android leg.
+      # Android leg. Glob rather than an exact name: the CLI stamps the iOS
+      # project with the base semver (the -sha suffix is not a valid
+      # CFBundleShortVersionString), so the two versions can differ on CI runs.
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v7
         with:
           name: ios-ipa
-          path: Aventuras_v${{ steps.version.outputs.version }}_ios-arm64-unsigned.ipa
+          path: Aventuras_v*_ios-arm64-unsigned.ipa
           archive: false
 
       # Only upload to a GitHub Release when publishing a new version. draft is
@@ -100,4 +102,4 @@ jobs:
           tag_name: v${{ steps.version.outputs.version }}
           draft: true
           prerelease: ${{ inputs.prerelease }}
-          files: Aventuras_v${{ steps.version.outputs.version }}_ios-arm64-unsigned.ipa
+          files: Aventuras_v*_ios-arm64-unsigned.ipa

@@ -110,7 +110,11 @@ inject_plist ITSAppUsesNonExemptEncryption bool false
 "$PLIST_BUDDY" -c "Add :NSAppTransportSecurity dict" "$INFO_PLIST" 2>/dev/null || true
 "$PLIST_BUDDY" -c "Add :NSAppTransportSecurity:NSAllowsLocalNetworking bool true" "$INFO_PLIST" 2>/dev/null || true
 
-VERSION="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+# The app's Info.plist carries the RESOLVED version (the CLI sets it from the
+# merged --config list), which on CI builds is the base version plus a -sha
+# suffix. Naming from the plist keeps the .ipa in step with what the workflow's
+# upload steps expect.
+VERSION="$("$PLIST_BUDDY" -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")"
 IPA_NAME="Aventuras_v${VERSION}_ios-arm64-unsigned.ipa"
 rm -rf Payload "$IPA_NAME"
 mkdir Payload
