@@ -1,0 +1,58 @@
+name: Bootstrap iOS scaffold
+
+# One-shot: generates src-tauri/gen/apple (the iOS Xcode scaffold) and uploads it
+# as a workflow artifact for a maintainer to commit, mirroring the tracked
+# gen/android convention. It also runs the full unsigned .ipa build as a smoke
+# test, so the committed scaffold is known-good. Re-run after major Tauri CLI
+# upgrades to refresh the scaffold.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    name: Bootstrap iOS scaffold
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install npm dependencies
+        uses: ./.github/actions/npm-install
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+
+      - name: Generate iOS Xcode scaffold
+        # --ci: skip interactive prompts; --skip-targets-install: the toolchain is
+        # already installed above.
+        run: npx tauri ios init --ci --skip-targets-install
+
+      - name: Smoke-test unsigned .ipa build
+        run: scripts/build-ios-unsigned.sh --config src-tauri/tauri.release.conf.json
+
+      # upload-artifact does not respect .gitignore, so the scaffold's build output
+      # is excluded explicitly here; the committed gen/apple/.gitignore still covers
+      # whatever the scaffold regenerates.
+      - name: Upload Xcode scaffold
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-xcode-scaffold
+          path: |
+            src-tauri/gen/apple
+            !src-tauri/gen/apple/build
+          archive: false
+
+      - name: Upload smoke-test IPA
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-smoke-ipa
+          path: Aventuras_v*_ios-arm64-unsigned.ipa
+          archive: false

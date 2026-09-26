@@ -23,6 +23,7 @@ aventuras/
 │   ├── capabilities/        # Tauri ACL/permission definitions
 │   ├── icons/               # App icons per platform (incl. iOS)
 │   ├── gen/android/         # Android scaffold files (tracked in git — DO NOT OVERWRITE)
+│   ├── gen/apple/           # iOS Xcode scaffold (tracked in git — DO NOT OVERWRITE)
 │   ├── Cargo.toml           # Rust dependencies
 │   └── tauri.conf.json      # Tauri configuration
 ├── static/                  # Static web assets

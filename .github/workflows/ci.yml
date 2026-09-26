@@ -29,6 +29,9 @@ on:
       - '.github/actions/**'
       - 'scripts/ci/**'
       - 'src-tauri/gen/android/**/*.gradle*'
+      - 'src-tauri/gen/apple/**'
+      - 'src-tauri/icons/ios/**'
+      - 'scripts/build-ios-unsigned.sh'
   workflow_dispatch:
 
 permissions:
@@ -57,6 +60,13 @@ jobs:
   build-android:
     if: "github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore: bump version')"
     uses: ./.github/workflows/build-android.yml
+    with:
+      publish: false
+    secrets: inherit
+
+  build-ios:
+    if: "github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore: bump version')"
+    uses: ./.github/workflows/build-ios.yml
     with:
       publish: false
     secrets: inherit

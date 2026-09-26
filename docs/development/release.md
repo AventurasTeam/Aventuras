@@ -21,20 +21,24 @@ GitHub Actions workflows in `.github/workflows/`:
 - **`pre-release.yml`** ("Pre-release") - triggered by pushing a pre-release tag (`vX.Y.Z-pre.N`).
   Builds as a draft, without updater metadata, and its own `publish` job turns it into a
   **pre-release** once every build has succeeded.
-- **`build-desktop.yml`** and **`build-android.yml`** - reusable workflows that hold the build jobs for
-  both of the above, switched by a single `prerelease` input. Desktop builds signed binaries for Linux,
-  Windows and macOS (Intel + Apple Silicon) via `tauri-apps/tauri-action`; Android builds, lints and
-  signs the APK. Both also take a `publish` input (default `true`); `false` skips the GitHub Release
-  upload, which is what `ci.yml` uses. Both workflows always upload their build output as a
-  workflow-run Artifact regardless of `publish` — desktop via `tauri-action`'s
-  `uploadWorkflowArtifacts`, Android via its own `actions/upload-artifact` step — so even a
+- **`build-desktop.yml`**, **`build-android.yml`** and **`build-ios.yml`** - reusable workflows that hold the
+  build jobs for all of the above, switched by a single `prerelease` input. Desktop builds signed binaries
+  for Linux, Windows and macOS (Intel + Apple Silicon) via `tauri-apps/tauri-action`; Android builds,
+  lints and signs the APK; iOS builds an unsigned device `.ipa` (`build-ios.yml` also takes a
+  `prerelease` input, but no signing inputs at all). All take a `publish` input (default `true`);
+  `false` skips the GitHub Release upload, which is what `ci.yml` uses. Every workflow uploads its
+  build output as a workflow-run Artifact regardless of `publish` — desktop via `tauri-action`'s
+  `uploadWorkflowArtifacts`, Android and iOS via their own `actions/upload-artifact` steps — so even a
   non-publishing run leaves every platform's build downloadable from the run summary.
+- **`bootstrap-ios.yml`** - one-shot manual-dispatch workflow that regenerates the tracked
+  `src-tauri/gen/apple` Xcode scaffold (see [Building iOS](#building-ios)).
 - **`ci.yml`** - builds `master` with `publish: false` so the Rust, Gradle and npm caches a
   release restores from are warm, and so every push/schedule leaves downloadable per-platform builds.
   See [Build caching and speed](#build-caching-and-speed) and [Build version](#build-version).
 
 Both release workflows expect `TAURI_SIGNING_PRIVATE_KEY(_PASSWORD)` and the `ANDROID_KEYSTORE_*` /
-`ANDROID_KEY_*` secrets to be configured on the repository.
+`ANDROID_KEY_*` secrets to be configured on the repository. The iOS build needs none — it is
+unsigned by design.
 
 Both `release.yml` and `pre-release.yml` run a `create-release` job before the build matrix, which creates (or
 reuses) the GitHub release for the tag and passes its numeric ID to `build-desktop.yml` as `releaseId`.
@@ -90,6 +94,8 @@ against, so `build-desktop.yml`'s matrix pins its runners rather than tracking `
   a future move to a newer image is a deliberate version bump rather than a silent one.
 
 Android and the lint job stay on `ubuntu-latest`: their output doesn't depend on the host OS.
+iOS builds pin `macos-15` like the macOS desktop legs: the archive must be produced by a
+Xcode version the project is actually tested against.
 
 Dependabot (`.github/dependabot.yml`) opens one grouped PR a month for `github-actions` updates, so
 action versions don't drift the way the runner pins are meant to prevent.
@@ -198,15 +204,16 @@ for it. `UpdateInfo.canInstallInApp` is the flag that tells them apart, and the 
 `updater.endpoints` entry in `tauri.conf.json`, verifies its signature against the `pubkey`
 there, and installs the new build itself.
 
-**Android has no updater at all, and this is not a configuration problem.**
-`tauri-plugin-updater` declares Android support level `none`, and its `updater_os()` has
-branches for linux/macos/windows only — on Android `target_os` is `"android"`, so `check()`
-returns `UnsupportedOs` before a single request is sent. There is no install path either: an
-APK is installed by the system package installer, not by the app it replaces. The Android
-path therefore calls the GitHub Releases API directly, compares the tag against `getVersion()`
-using `src/lib/utils/version.ts`, and opens the `.apk` asset in the browser. String comparison
-is not adequate for that — `'0.10.0' > '0.9.0'` is false lexically — which is why the
-comparison is a tested module of its own.
+**Mobile has no updater at all, and this is not a configuration problem.**
+`tauri-plugin-updater` declares Android support level `none` and has no iOS support either
+(its `updater_os()` has branches for linux/macos/windows only), so `check()` fails with
+`UnsupportedOs` before a single request is sent. There is no install path either: an APK/IPA
+is installed by the system (package installer, sideloading tool), not by the app it replaces.
+The mobile path therefore calls the GitHub Releases API directly, compares the tag against
+`getVersion()` using `src/lib/utils/version.ts`, and opens the platform's own package asset
+(`.apk` on Android, `.ipa` on iOS) in the browser. String comparison is not adequate for
+that — `'0.10.0' > '0.9.0'` is false lexically — which is why the comparison is a tested
+module of its own.
 
 Two things must stay in step, or the platforms will offer different versions to their users:
 the `RELEASE_REPO` constant in `updater.ts` and the `updater.endpoints` URL in
@@ -258,7 +265,7 @@ not fire there.
 
 `.rpm` currently still installs in place, through the same privileged-helper chain.
 
-One more limit: **the Android check is unauthenticated**, so it shares GitHub's per-IP rate
+One more limit: **the mobile check is unauthenticated**, so it shares GitHub's per-IP rate
 limit. A 403 is reported as a network-kind error.
 
 ## Building Release Binaries
@@ -289,7 +296,7 @@ Pushing a stable tag (`vX.Y.Z`) triggers `release.yml`; pushing a pre-release ta
 `prerelease` bump type) triggers `pre-release.yml`. See [Continuous Integration](#continuous-integration).
 
 **The script does not finish the release.** `release.yml` publishes a **draft**, and a draft is
-invisible to `/releases/latest` — which is where both the desktop updater and the Android check
+invisible to `/releases/latest` — which is where the desktop updater and the mobile check
 look. Publishing the draft on GitHub is the step that actually ships it; until then no existing
 install will see the new version. See [The Updater](#the-updater).
 
@@ -301,6 +308,53 @@ install will see the new version. See [The Updater](#the-updater).
 ```bash
 npx tauri build
 ```
+
+### Building iOS
+
+The iOS build produces an **unsigned** ARM64 device `.ipa`: no Apple certificates,
+provisioning profiles or signing secrets are involved at any step, and none are configured
+in CI. An unsigned `.ipa` cannot be installed with Xcode or Finder — it targets
+sideloading tools (AltStore, Sideloadly, TrollStore) or a future signing step.
+
+**The Xcode scaffold (`src-tauri/gen/apple/`) is tracked in git, like `gen/android/`.**
+Do NOT run `npx tauri ios init` on a working tree that already has it. To (re)generate it —
+first setup, or after a major Tauri CLI upgrade — run the **"Bootstrap iOS scaffold"**
+workflow (`.github/workflows/bootstrap-ios.yml`, manual dispatch): it runs `tauri ios init`
+on `macos-15`, smoke-tests a full unsigned build, and uploads the scaffold plus the test
+`.ipa` as workflow artifacts for a maintainer to commit.
+
+The iOS-specific `Info.plist` keys (camera permission for QR pairing, local-network
+permission and the `NSAllowsLocalNetworking` ATS exception for LAN sync and local LLM
+servers, export-compliance) are **not** committed into the scaffold: the build script
+merges them into the built app idempotently, so a fresh scaffold needs no hand-editing.
+
+```bash
+# macOS only, from the repo root
+npx tauri ios init --ci --skip-targets-install   # first time only (or bootstrap workflow)
+
+# Unsigned release .ipa (any --config args are forwarded, e.g. the CI version rule)
+scripts/build-ios-unsigned.sh --config src-tauri/tauri.release.conf.json
+```
+
+The `.ipa` is written to the repo root as
+`Aventuras_v<version>_ios-arm64-unsigned.ipa` and verified (arm64 binary, unsigned,
+`Payload/` layout) before the script exits 0.
+
+Mechanics worth knowing:
+
+- The script calls `tauri ios build --archive-only`, which stops after `xcodebuild
+  archive` and skips the CLI's IPA-export phase (the part that requires signing). With
+  no signing configuration, the CLI itself passes `CODE_SIGNING_ALLOWED=NO`,
+  `CODE_SIGNING_REQUIRED=NO` and `CODE_SIGN_IDENTITY=""`.
+- The archive lands at `src-tauri/gen/apple/build/<target>_iOS.xcarchive`, and the app
+  bundle at `Products/Applications/Aventuras.app` inside it.
+- **Local `tauri ios dev` does not work with the `devtools` feature**
+  (`tauri-plugin-devtools` is desktop-only). Pass the release config to drop the feature:
+  `npx tauri ios dev --config src-tauri/tauri.release.conf.json`.
+
+CI builds iOS in `.github/workflows/build-ios.yml` (reusable, on `macos-15`), wired into
+`release.yml`, `pre-release.yml` and `ci.yml` exactly like the Android leg, and fails with
+a pointer to the bootstrap workflow if `gen/apple` is not committed.
 
 ### Building Android
 

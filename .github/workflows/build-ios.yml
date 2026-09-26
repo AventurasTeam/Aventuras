@@ -1,0 +1,97 @@
+name: Build iOS
+
+on:
+  workflow_call:
+    inputs:
+      prerelease:
+        description: 'Only read when publish is true; kept for symmetry with the other build workflows.'
+        type: boolean
+        required: false
+        default: false
+      publish:
+        description: 'Upload the .ipa to the release; false to just build and warm caches'
+        type: boolean
+        required: false
+        default: true
+
+jobs:
+  build:
+    name: Build iOS
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      CARGO_TERM_COLOR: always
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install npm dependencies
+        uses: ./.github/actions/npm-install
+
+      # "Re-run failed jobs" skips create-release, so a leg re-run after a release is
+      # published would otherwise overwrite its assets.
+      - name: Refuse a published release
+        if: inputs.publish
+        uses: ./.github/actions/release-guard
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+
+      # Same cache discipline as the desktop/Android legs: saved from master only
+      # (ci.yml), restored everywhere else.
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          key: ios
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+
+      - name: Resolve build version
+        id: version
+        uses: ./.github/actions/build-version
+        with:
+          publish: ${{ inputs.publish }}
+
+      # gen/apple is a tracked scaffold generated once by bootstrap-ios.yml (see its
+      # header) and committed. Fail here — with the fix spelled out — rather than
+      # mid-build.
+      - name: Check for committed iOS scaffold
+        run: |
+          if [ ! -f src-tauri/gen/apple/project.yml ]; then
+            echo "::error::src-tauri/gen/apple is not committed. Run the 'Bootstrap iOS scaffold' workflow and commit its ios-xcode-scaffold artifact (excluding files its .gitignore lists)." >&2
+            exit 1
+          fi
+
+      # Produces Aventuras_v<version>_ios-arm64-unsigned.ipa: an unsigned,
+      # ARM64 device build. No Apple certificates, profiles or signing secrets are
+      # used anywhere — the CLI archives with CODE_SIGNING_ALLOWED=NO, and the
+      # script packages the .app itself instead of running the signed export.
+      - name: Build unsigned IPA
+        run: scripts/build-ios-unsigned.sh ${{ steps.version.outputs.config-args }}
+
+      # Deliberately publish workflow artifacts for every build, matching the
+      # Android leg.
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-ipa
+          path: Aventuras_v${{ steps.version.outputs.version }}_ios-arm64-unsigned.ipa
+          archive: false
+
+      # Only upload to a GitHub Release when publishing a new version. draft is
+      # always true: create-release leaves every release (stable and pre-release) as
+      # a draft until its own publish step confirms every build succeeded — see
+      # docs/development/release.md.
+      - name: Upload to Release
+        if: inputs.publish
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          draft: true
+          prerelease: ${{ inputs.prerelease }}
+          files: Aventuras_v${{ steps.version.outputs.version }}_ios-arm64-unsigned.ipa

@@ -81,6 +81,7 @@ The index is [docs/README.md](docs/README.md).
 
 - Migrations are checksummed by `sqlx`: LF line endings only, and never edit a migration
   that has shipped — add a new one.
-- `src-tauri/gen/android/` is tracked in git. Do not run `tauri android init`.
+- `src-tauri/gen/android/` and `src-tauri/gen/apple/` are tracked in git. Do not run
+  `tauri android init` / `tauri ios init` on a working tree that already has them.
 - There is no DOM in the test environment, so a Svelte-level mistake passes `check`, `lint`
   and the whole suite and only fails when the app runs.

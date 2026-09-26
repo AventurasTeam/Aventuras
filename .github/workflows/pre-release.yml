@@ -60,8 +60,15 @@ jobs:
       prerelease: true
     secrets: inherit
 
+  build-ios:
+    needs: create-release
+    uses: ./.github/workflows/build-ios.yml
+    with:
+      prerelease: true
+    secrets: inherit
+
   publish:
-    needs: [create-release, build-desktop, build-android]
+    needs: [create-release, build-desktop, build-android, build-ios]
     runs-on: ubuntu-latest
     steps:
       - name: Publish the pre-release
