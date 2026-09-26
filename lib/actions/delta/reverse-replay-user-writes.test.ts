@@ -319,6 +319,8 @@ describe('reversing a machine view update', () => {
     await apply(ctx, userViews(null, 'friend'), 'act_0')
     const [created] = await pair(db)
     await apply(ctx, classifyMiraView('wary'), 'act_c')
+    // A third, still-older delta on the same pair: it must land quietly after the revival.
+    await apply(ctx, classifyMiraView('hostile'), 'act_c')
     await apply(ctx, classifyView('ally'), 'act_c')
     await apply(
       ctx,

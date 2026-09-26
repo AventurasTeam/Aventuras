@@ -292,11 +292,10 @@ precedence above never leaves a value neither the user nor the prose
 chose. A pair the classifier created keeps a view the user added since
 and loses the classifier's, and a pair the reversal would leave with no
 view is deleted. A row the reversal deletes takes the user's edits to
-it along: an entity or happening a failed or interrupted pass created,
-or a happening a prose edit reverses. A rollback or regenerate differs:
-a World edit has no entry to survive on, so the user's later edits
-reverse along with the fact and the field returns to its value before
-it
+it along too; the cases are below, under what stays open. A rollback or
+regenerate differs: a World edit has no entry to survive on, so the
+user's later edits reverse along with the fact and the field returns
+to its value before it
 ([`generation-pipeline.md → Reverse-replay`](../generation-pipeline.md#reverse-replay)).
 
 What stays open:
