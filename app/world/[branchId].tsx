@@ -38,11 +38,9 @@ import { useIsRouteFocused } from '@/hooks/use-is-route-focused'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
 import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
 import { useRouteLink } from '@/hooks/use-route-link'
-import type { RowSessionHandle } from '@/hooks/use-row-save-session'
+import { useRowSessionGuard } from '@/hooks/use-row-session-guard'
 import { useRowSignals } from '@/hooks/use-row-signals'
-import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
 import { useTier } from '@/hooks/use-tier'
-import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard'
 import { saveEntity, setStoryLead } from '@/lib/actions'
 import { DEFAULT_CALENDAR_ID, resolveCalendar } from '@/lib/calendar'
 import { db, runInTransaction } from '@/lib/db'
@@ -66,7 +64,6 @@ const ctx = { db, runInTransaction }
 
 export default function WorldRoute() {
   const router = useRouter()
-  const surfaceNavigate = useSurfaceNavigate()
   const isPhone = useTier() === 'phone'
   const focused = useIsRouteFocused()
   const params = useLocalSearchParams<{
@@ -89,7 +86,6 @@ export default function WorldRoute() {
   const [filter, setFilter] = useState<EntityFilter>('all')
   const [search, setSearch] = useState('')
   const [addOpen, setAddOpen] = useState(false)
-  const [session, setSession] = useState<RowSessionHandle | null>(null)
   const listRef = useRef<WorldListPaneHandle>(null)
 
   const open = useColdOpenStory(branchId, 'world')
@@ -172,19 +168,7 @@ export default function WorldRoute() {
   )
   const openRegionPct = useOpenRegionTokens(storyId)
 
-  // save-sessions.md → Navigate-away guard: every in-surface transition routes through here.
-  const guard = useCallback(
-    (proceed: () => void) => {
-      if (session == null) proceed()
-      else session.requestLeave(proceed)
-    },
-    [session],
-  )
-  useUnsavedChangesGuard(session?.dirty ?? false, guard)
-  const navigateGuarded = useCallback(
-    (path: string) => guard(() => surfaceNavigate(path)),
-    [guard, surfaceNavigate],
-  )
+  const { onSession, guard, navigateGuarded } = useRowSessionGuard()
 
   const switchCategory = useCallback(
     (next: WorldCategory) => {
@@ -433,7 +417,7 @@ export default function WorldRoute() {
         onSave={saveRow}
         onSaved={onSaved}
         onRejected={onRejected}
-        onSession={setSession}
+        onSession={onSession}
         onOpenEntity={openEntity}
         onOpenHappening={openHappening}
         onSetLead={onSetLead}

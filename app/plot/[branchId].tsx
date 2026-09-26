@@ -36,11 +36,9 @@ import { useIsRouteFocused } from '@/hooks/use-is-route-focused'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
 import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
 import { useRouteLink } from '@/hooks/use-route-link'
-import type { RowSessionHandle } from '@/hooks/use-row-save-session'
+import { useRowSessionGuard } from '@/hooks/use-row-session-guard'
 import { useRowSignals } from '@/hooks/use-row-signals'
-import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
 import { useTier } from '@/hooks/use-tier'
-import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard'
 import { saveHappening, saveThread } from '@/lib/actions'
 import { db, runInTransaction, type Entity } from '@/lib/db'
 import { t } from '@/lib/i18n'
@@ -61,7 +59,6 @@ const ctx = { db, runInTransaction }
 
 export default function PlotRoute() {
   const router = useRouter()
-  const surfaceNavigate = useSurfaceNavigate()
   const isPhone = useTier() === 'phone'
   const focused = useIsRouteFocused()
   const params = useLocalSearchParams<{
@@ -86,7 +83,6 @@ export default function PlotRoute() {
   const [happeningFilter, setHappeningFilter] = useState<HappeningFilter>('all')
   const [search, setSearch] = useState('')
   const [addOpen, setAddOpen] = useState(false)
-  const [session, setSession] = useState<RowSessionHandle | null>(null)
   const listRef = useRef<PlotListPaneHandle>(null)
 
   const open = useColdOpenStory(branchId, 'plot')
@@ -149,19 +145,7 @@ export default function PlotRoute() {
   )
   const openRegionPct = useOpenRegionTokens(storyId)
 
-  // save-sessions.md → Navigate-away guard: every in-surface transition routes through here.
-  const guard = useCallback(
-    (proceed: () => void) => {
-      if (session == null) proceed()
-      else session.requestLeave(proceed)
-    },
-    [session],
-  )
-  useUnsavedChangesGuard(session?.dirty ?? false, guard)
-  const navigateGuarded = useCallback(
-    (path: string) => guard(() => surfaceNavigate(path)),
-    [guard, surfaceNavigate],
-  )
+  const { onSession, guard, navigateGuarded } = useRowSessionGuard()
 
   const switchKind = useCallback(
     (next: PlotKind) => {
@@ -339,7 +323,7 @@ export default function PlotRoute() {
         }
         onSaved={onSaved}
         onRejected={onRejected}
-        onSession={setSession}
+        onSession={onSession}
         onOpenEntity={openEntity}
         hotkeysEnabled={focused}
       />
@@ -368,7 +352,7 @@ export default function PlotRoute() {
         }
         onSaved={onSaved}
         onRejected={onRejected}
-        onSession={setSession}
+        onSession={onSession}
         hotkeysEnabled={focused}
       />
     )
