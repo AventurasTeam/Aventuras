@@ -886,6 +886,12 @@ COMMIT;
 
 Either both rows write or neither. SQLite commit before Zustand
 store update — if SQLite fails, store stays consistent with disk.
+The handler reads the rows it decides from before that transaction
+opens. A write to an existing `entities` row, and any
+`character_relationships` write, holds a key lock across that read and
+its commit, since the classifier and a World Save both write those
+rows
+([`memory/cadence.md → Concurrency`](./memory/cadence.md#concurrency)).
 
 ### Performance — no batching needed
 

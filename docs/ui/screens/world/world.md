@@ -356,8 +356,7 @@ that prose
 Prose written after the user's edit can still revise it, per the
 authoring contract below. The generation status pill reads
 `updating memory…` while a pass runs
-([`generation-status-pill.md → Non-blocking phases`](../../patterns/generation-status-pill.md#non-blocking-phases));
-Save never asks for confirmation first.
+([`generation-status-pill.md → Non-blocking phases`](../../patterns/generation-status-pill.md#non-blocking-phases)).
 
 **Empty state.** When the character has no recorded relationships,
 render the Relationships sub-section heading + an empty-state hint

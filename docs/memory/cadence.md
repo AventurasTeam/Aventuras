@@ -183,27 +183,13 @@ reads `active` and no-ops. Piggyback never writes active→retired
 field, they cannot write the same row to different values.
 
 The only shared row is `entities`, and field-level disjointness
-holds for everything except the `status`-overlap above. With
-**per-field UPDATEs** (no row-level read-modify-write cycles) and
-the monotonic-status invariant, SQLite serializes the writes
-without clobbering even when both writers target the same row.
-The discipline at the action layer:
-
-```ts
-// Yes — independent UPDATE statements:
-db.execute('UPDATE entities SET status = ? WHERE id = ?', [...])
-db.execute('UPDATE entities SET state = json_patch(state, ?) WHERE id = ?', [...])
-
-// No — read-modify-write loses concurrent writes:
-const entity = db.queryOne('SELECT * FROM entities WHERE id = ?', [id])
-entity.status = 'active'
-entity.state = { ...entity.state, ...patches }
-db.execute('UPDATE entities SET status = ?, state = ? WHERE id = ?', [entity.status, entity.state, id])
-```
-
-Zustand actions enforce per-field-or-per-state-patch updates, so the
-underlying SQLite UPDATEs are independent. Optimistic concurrency
-(detect rare conflict, retry) covers the residual collision case.
+holds for everything except the `status`-overlap above. Each action
+writes only the columns it changes but computes them from a read of
+the row, so every delta-logged write to an existing `entities` row
+serializes on a lock keyed by that row: one writer's read and commit
+never straddle another's, whether that is the piggyback, the
+classifier or a user edit. `character_relationships` writes serialize
+on one key per branch, since a delete names a row id, not a pair.
 
 ### Single-writer-per-write-set in v1
 
@@ -229,7 +215,9 @@ return, which can be minutes later. Or it can predate the pass but
 postdate the prose the pass processes, since a pass works through the
 backlog of turns written since the last one. The classifier's writes
 to an existing entity's status and keywords, and to a relationship
-view, resolve both.
+view, resolve both. Each decides and commits under the lock a World
+Save takes too ([Concurrency](#concurrency)), so a Save cannot land
+between a write's check and its commit.
 
 **Live-row guards.** Status and keyword writes check the row as it
 stands when the write lands, not only the pass's snapshot:
@@ -264,7 +252,10 @@ already orders both writers, so nothing new is stored:
 - An alias the user removed after the prose stays removed. The same
   write's other new aliases still land.
 
-Undoing the user's edit removes its delta, which lifts the protection.
+Undoing the user's edit removes its delta, which lifts the protection
+for any pass that reads the prose afterwards. A pass the edit already
+blocked has advanced its watermark past that prose, so the undo leaves
+the field at its value from before the edit, not the prose's.
 A later content edit of the source entry makes that prose newer than
 the user's edit, so its facts win again when a pass re-reads the
 entry: an edit to the head turn reopens it

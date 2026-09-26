@@ -129,7 +129,7 @@ slice-planning gate forces its resolution before that slice is planned.
 
 - **Reconciliation matches against the pass's snapshot.** Namesakes
   come from the entity snapshot the pass read before its model call
-  (`reconcile.ts:54-57`, read at `periodic-classifier.ts:146`), so a
+  (`reconcile.ts:54-57`, read by `periodicClassifierPhase`), so a
   character the user creates in World mid-pass is invisible to it. If
   the pass's prose introduces the same name, it creates a second row
   with `nameCollisionFlag` 0 (`buildClassifierActions`'s create path),
