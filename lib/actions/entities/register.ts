@@ -176,11 +176,19 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     }
   }
 
+  const named = UPDATABLE.filter((col) => col in patch)
+  // A patch that parsed but touched no updatable column would reach Drizzle's
+  // .set({}) and throw "No values to set" — reject instead.
+  if (named.length === 0)
+    return {
+      status: 'rejected',
+      reason: `update patch for entities ${bid}:${id} has no updatable fields`,
+    }
+
   // Unchanged columns are dropped, not recorded: user precedence reads an undo payload's
   // keys as the columns the user wrote (user-precedence.ts).
   const set: Record<string, unknown> = {}
   const undoPayload: Record<string, unknown> = {}
-  const named = UPDATABLE.filter((col) => col in patch)
   for (const col of named) {
     if (col === 'state') {
       const prior = (current.state ?? emptyEntityState(current.kind)) as Record<string, unknown>
@@ -199,13 +207,6 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
       undoPayload[col] = prior
     }
   }
-  // A patch that parsed but touched no updatable column would reach Drizzle's
-  // .set({}) and throw "No values to set" — reject instead.
-  if (named.length === 0)
-    return {
-      status: 'rejected',
-      reason: `update patch for entities ${bid}:${id} has no updatable fields`,
-    }
   if (Object.keys(set).length === 0)
     return { status: 'rejected', reason: 'no-op entity patch', code: 'noop' }
 
