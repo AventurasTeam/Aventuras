@@ -74,10 +74,13 @@ environment: the `storybook-mcp` URL in `.mcp.json`, and `adb`.
 - **`pnpm dev:android`** — Metro on the slot's port, reusing one that
   `pnpm desktop` already runs there, so one debug APK serves every
   slot. Slot 0 reverses `8081` to the attached device (or
-  `ANDROID_SERIAL` when several are attached), as before. A worker
-  slot boots its own AVD headless (software rendering) when it is not
-  running, reverses its Metro port, and stops the app to point it
-  there through React Native's `debug_http_host` dev setting. The
+  `ANDROID_SERIAL` when several are attached), as before, and clears
+  a worker slot's address left in the app by an earlier run on that
+  device: that slot's reverse outlives its run, so the app would
+  quietly load the worker's bundle. An address set by hand stays. A
+  worker slot boots its own AVD headless (software rendering) when it
+  is not running, reverses its Metro port, and stops the app to point
+  it there through React Native's `debug_http_host` dev setting. The
   reverse alone is not enough on an emulator: the debug build asks
   `10.0.2.2:8081`, the host's loopback, which `adb reverse` never
   sees. The APK must already be installed.

@@ -3,7 +3,12 @@ import { openSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { withDebugHttpHost } from './android-prefs'
+import {
+  debugHttpHost,
+  withDebugHttpHost,
+  withoutDebugHttpHost,
+  workerSlotOf,
+} from './android-prefs'
 import { resolveDevSlot } from './resolve'
 
 // `pnpm dev:android`: Metro on this slot's port, and the device pointed at it, so one debug APK
@@ -55,20 +60,47 @@ async function bootEmulator(avd: string, consolePort: number, serial: string): P
   }
 }
 
-/** Points the stopped app's bundler address at `host`; false when the app isn't installed. */
-function setDebugHttpHost(serial: string, host: string): boolean {
-  if (!adb(serial, ['shell', 'pm', 'path', APP_ID]).stdout.includes('package:')) return false
-  // A running app would keep its cached address and rewrite the prefs on exit.
-  adb(serial, ['shell', 'am', 'force-stop', APP_ID])
+function appInstalled(serial: string | undefined): boolean {
+  return adb(serial, ['shell', 'pm', 'path', APP_ID]).stdout.includes('package:')
+}
+
+/** The app's dev-settings prefs; undefined when it has none or run-as can't enter a release build. */
+function readPrefs(serial: string | undefined): string | undefined {
   const read = adb(serial, ['shell', 'run-as', APP_ID, 'cat', PREFS])
-  const xml = withDebugHttpHost(read.status === 0 ? read.stdout : undefined, host)
+  return read.status === 0 ? read.stdout : undefined
+}
+
+function writePrefs(serial: string | undefined, xml: string): void {
   const write = adb(
     serial,
     ['shell', `run-as ${APP_ID} sh -c 'mkdir -p shared_prefs && cat > ${PREFS}'`],
     xml,
   )
   if (write.status !== 0) throw new Error(`could not write ${PREFS}: ${write.stderr.trim()}`)
+}
+
+/** Points the stopped app's bundler address at `host`; false when the app isn't installed. */
+function setDebugHttpHost(serial: string, host: string): boolean {
+  if (!appInstalled(serial)) return false
+  // A running app would keep its cached address and rewrite the prefs on exit.
+  adb(serial, ['shell', 'am', 'force-stop', APP_ID])
+  writePrefs(serial, withDebugHttpHost(readPrefs(serial), host))
   return true
+}
+
+/**
+ * Slot 0 on a device a worker slot used: the app would still ask that slot's Metro, whose reverse
+ * outlives the worker's run, and silently load another branch's bundle. An address set by hand is
+ * left alone.
+ */
+function clearWorkerDebugHttpHost(serial: string | undefined): void {
+  if (!appInstalled(serial)) return
+  const xml = readPrefs(serial)
+  const worker = workerSlotOf(debugHttpHost(xml))
+  if (xml === undefined || worker === undefined) return
+  adb(serial, ['shell', 'am', 'force-stop', APP_ID])
+  writePrefs(serial, withoutDebugHttpHost(xml))
+  console.log(`[dev:android] cleared slot ${worker}'s Metro address from ${APP_ID}`)
 }
 
 async function main(): Promise<void> {
@@ -81,7 +113,9 @@ async function main(): Promise<void> {
   }
   const reverse = adb(serial, ['reverse', port, port])
   if (reverse.status !== 0) throw new Error(`adb reverse failed: ${reverse.stderr.trim()}`)
-  if (android && !setDebugHttpHost(android.serial, `localhost:${ports.metro}`)) {
+  if (!android) {
+    clearWorkerDebugHttpHost(serial)
+  } else if (!setDebugHttpHost(android.serial, `localhost:${ports.metro}`)) {
     console.warn(
       `[dev:android] ${APP_ID} is not installed on ${android.serial}; install the debug APK and rerun.`,
     )
