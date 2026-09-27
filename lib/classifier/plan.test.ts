@@ -142,6 +142,41 @@ describe('buildClassifierActions', () => {
     ).toBeNull()
   })
 
+  it('drops a happening whose title is blank, along with the rows nested under it', () => {
+    const { planned, fellBackCount } = buildClassifierActions(
+      {
+        happenings: [
+          {
+            title: ' \n',
+            involvements: [{ ref: 'char_a' }],
+            awareness: [{ ref: 'char_b', source: 'saw it', severity: 0.5 }],
+          },
+          { title: 'B', sourceTurn: 't1', involvements: [], awareness: [] },
+        ],
+        relationships: [],
+        statusFlips: [],
+        newCharacters: [],
+      },
+      base,
+    )
+    expect(planned.map((p) => p.action.kind)).toEqual(['createHappening'])
+    expect(payloadOf<{ entry: { title: string } }>(planned[0]).entry.title).toBe('B')
+    expect(fellBackCount).toBe(0)
+  })
+
+  it('trims the whitespace around a happening title', () => {
+    const { planned } = buildClassifierActions(
+      {
+        happenings: [{ title: '  The ford  ', sourceTurn: 't1', involvements: [], awareness: [] }],
+        relationships: [],
+        statusFlips: [],
+        newCharacters: [],
+      },
+      base,
+    )
+    expect(payloadOf<{ entry: { title: string } }>(planned[0]).entry.title).toBe('The ford')
+  })
+
   it('clamps an out-of-range severity into [0, 1]', () => {
     const { planned } = buildClassifierActions(
       {
@@ -541,6 +576,22 @@ describe('buildClassifierActions', () => {
       )
       expect(planned).toHaveLength(0)
       expect(unresolvedRefs).toEqual(['h9'])
+    })
+
+    it('drops a blank-named character even when reconcile decided create', () => {
+      const { planned, unresolvedRefs } = buildClassifierActions(
+        {
+          happenings: [],
+          relationships: [],
+          statusFlips: [],
+          newCharacters: [
+            { handle: 'h1', name: '  ', description: 'x', keywords: [], sourceTurn: 't1' },
+          ],
+        },
+        { ...base, decisions: new Map([['h1', { kind: 'create', flagged: false }]]) },
+      )
+      expect(planned).toHaveLength(0)
+      expect(unresolvedRefs).toEqual(['h1'])
     })
 
     it('emits nothing for a known decision but still resolves the handle', () => {
@@ -1028,6 +1079,11 @@ describe('embedded-column bounds', () => {
 
   // slice() alone would leave the cut sitting on whitespace, which renders as a
   // trailing space everywhere the name is shown.
+  it('trims the whitespace around a character name', () => {
+    const { planned } = buildClassifierActions(character(' Eldrin\n', 'A dragon.'), deps)
+    expect(entryOf(planned as PlannedWrite[]).name).toBe('Eldrin')
+  })
+
   it('drops whitespace the cut lands on', () => {
     const { planned } = buildClassifierActions(
       character('A'.repeat(119) + ' ' + 'B'.repeat(80), 'A dragon.'),

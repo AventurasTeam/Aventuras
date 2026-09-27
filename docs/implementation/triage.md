@@ -178,18 +178,6 @@ slice-planning gate forces its resolution before that slice is planned.
   ([`story-settings.md → Classifier`](../ui/screens/story-settings/story-settings.md#classifier)).
   Revisit trigger: M7.2 planning.
 
-- **A blank happening title or new-character name still reaches a
-  row.** `classifierExtractionSchema` gives both `happening.title` and
-  `newCharacters[].name` a bare `z.string()` (`schema.ts:20`, `:58`),
-  and neither `happeningWriteObject` nor `entityWriteSchema` adds the
-  `.min(1)` that `characterRelationshipWriteSchema` gives `kind`, so
-  the write layer accepts an empty string. `plan.ts` routes neither
-  field through `nonBlank`, only through `clampEmbedded` (a length
-  cap, not a blank check), contradicting the "a blank never reaches a
-  row" comment at `plan.ts:40` — true only for the fields the planner
-  does route through `nonBlank`. Revisit trigger: a happening or
-  character surfacing with an empty name/title in World or Plot.
-
 - **The classifier prompt has no token budget beyond
   `classifierWindowMaxEntries`.** That knob bounds only the turns
   block; the entity, happening and relationship lists grow unbounded

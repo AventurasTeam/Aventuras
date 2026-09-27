@@ -691,6 +691,33 @@ describe('periodicClassifierPhase', () => {
     expect(actions[2].payload).toMatchObject({ entry: { entityId: CHAR_KAEL } })
   })
 
+  it('never reconciles a blank-named candidate against a blank-named row', async () => {
+    const embedder = vi.fn(async () => ({ vectors: [], dim: 3 }))
+    configureClassifierEmbedder(embedder)
+    const blankRow = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: '',
+      status: 'staged',
+      description: 'A courier.',
+      keywords: [],
+    } as unknown as Entity
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({
+        newCharacters: [{ handle: 'nc1', name: ' ', description: 'Someone.', keywords: [] }],
+      }),
+    })
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [blankRow] })
+    const { events } = await drain(h.ctx)
+
+    expect(embedder).not.toHaveBeenCalled()
+    const kinds = events.map((e) => (e as { action?: { kind: string } }).action?.kind)
+    expect(kinds).not.toContain('promoteStagedEntity')
+    expect(kinds).not.toContain('createEntity')
+  })
+
   // The reconcile key must be bounded like the stored name, or an over-long name never
   // matches the row it created and the character is introduced again every pass.
   it('matches a stored name against the bounded form of an over-long candidate', async () => {

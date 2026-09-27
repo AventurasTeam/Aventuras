@@ -240,14 +240,14 @@ export async function* periodicClassifierPhase(
 
   const decisions = new Map<string, ReconcileDecision>()
   for (const candidate of substituted.newCharacters) {
+    // Reconcile the clamped row, not the raw reply: plan.ts bounds both embedded
+    // fields, so a key built from an unbounded one measures text no row holds.
+    const stored = clampEmbeddedCharacter(candidate)
+    // The planner drops a blank name, and its empty key would match any blank-named row.
+    if (stored.name === '') continue
     decisions.set(
       candidate.handle,
-      // Reconcile the clamped row, not the raw reply: plan.ts bounds both embedded
-      // fields, so a key built from an unbounded one measures text no row holds.
-      await reconcileNewCharacter(clampEmbeddedCharacter(candidate), {
-        entities,
-        embedDescriptions,
-      }),
+      await reconcileNewCharacter(stored, { entities, embedDescriptions }),
     )
   }
 
