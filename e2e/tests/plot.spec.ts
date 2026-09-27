@@ -416,7 +416,7 @@ test.describe.serial('Plot panel', () => {
     await expect(world.subHeader(page)).toContainText('Kael')
 
     await world.tab(page, 'involvements').click()
-    await world.row(page, 'The alley ambush').click()
+    await world.involvementRow(page, 'The alley ambush', 'target').click()
     await page.waitForURL(/\/plot\//)
     await expect(plot.subHeader(page)).toContainText('The alley ambush')
     await expect(plot.tab(page, 'involvements')).toHaveAttribute('aria-selected', 'true')
