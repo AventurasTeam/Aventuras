@@ -386,6 +386,38 @@ describe('buildPiggybackActions', () => {
     ])
   })
 
+  it("folds a holder's mixed-case stackable keys into one on the first transfer that touches it", () => {
+    const holder = mockEntity({
+      id: 'char_1',
+      state: {
+        visual: {},
+        traits: [],
+        drives: [],
+        current_location_id: null,
+        equipped_items: [],
+        inventory: [],
+        stackables: { Gold: 3, gold: 4, ' ': 2 },
+        faction_id: null,
+        lastSeenAt: null,
+      },
+    })
+    const result = buildPiggybackActions({
+      source: 'ai_classifier',
+      entryId: 'entry_1',
+      block: { transfers: { items: [], stackables: [{ key: 'gold', amount: 1, to: 'char_1' }] } },
+      entities: [holder],
+      previousMetadata,
+      branchId: 'main',
+    })
+    expect(result.actions.filter((a) => a.kind === 'updateEntityStackables')).toEqual([
+      {
+        kind: 'updateEntityStackables',
+        source: 'ai_classifier',
+        payload: { branchId: 'main', id: 'char_1', stackables: { gold: 8 } },
+      },
+    ])
+  })
+
   it('handles stackable transfers and key removal when amount reaches zero', () => {
     const char1 = mockEntity({
       id: 'char_1',

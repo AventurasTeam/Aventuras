@@ -72,13 +72,6 @@ slice-planning gate forces its resolution before that slice is planned.
   Unreachable today — the classifier writes no location parents.
   Revisit trigger: the classifier gains parent writes.
 
-- **Stackable writer hygiene.** The piggyback path stores stackable
-  keys verbatim (mixed case, blank) and accepts non-integer/negative
-  counts; the state-patch handlers never validate the merged state.
-  The World draft stays strict, so a legacy row refuses Save with an
-  issue (duplicate key) the user must resolve. Revisit trigger: users
-  hitting duplicate-key issues on untouched quantities.
-
 - **Retired/staged characters in derived lists.** World's Overview
   ("Characters here", Members) and Connections list retired and staged
   characters unfiltered, while

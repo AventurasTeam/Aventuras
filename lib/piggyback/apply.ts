@@ -1,6 +1,7 @@
 import type { DeltaSource, PipelineAction } from '@/lib/actions'
 import type { CharacterState, Entity, EntryMetadata } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
+import { normalizeTerm } from '@/lib/keyword-terms'
 
 import { dedupeSceneEntities, scenePromotionActions, sceneTrackingActions } from './scene-tracking'
 import { MAX_RETRIEVAL_QUERIES, type ParsedStateBlock } from './types'
@@ -159,8 +160,17 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   // Stackable transfers
   const stackablePatches = new Map<string, Record<string, number>>()
   const currentStackables = (id: string): Record<string, number> => {
+    const patched = stackablePatches.get(id)
+    if (patched) return { ...patched }
+    // A row written before keys were normalized can hold "Gold" beside "gold"; fold
+    // them here so the first transfer to touch the holder heals it.
     const state = byId.get(id)?.state as CharacterState | undefined
-    return { ...(state?.stackables ?? {}), ...(stackablePatches.get(id) ?? {}) }
+    const folded: Record<string, number> = {}
+    for (const [raw, count] of Object.entries(state?.stackables ?? {})) {
+      const key = normalizeTerm(raw)
+      if (key !== '' && count > 0) folded[key] = (folded[key] ?? 0) + count
+    }
+    return folded
   }
 
   for (const transfer of block.transfers?.stackables ?? []) {
