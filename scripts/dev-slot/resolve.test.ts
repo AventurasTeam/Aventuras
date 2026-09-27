@@ -62,6 +62,18 @@ describe('resolveDevSlot', () => {
     expect(existsSync(join(main, '.git', 'aventuras-dev-slots'))).toBe(false)
   })
 
+  it('keeps and wipes slot data where Electron keeps it', () => {
+    const xdg = join(root, 'xdg')
+    const env = { AVENTURAS_DEV_SLOT: 'auto', XDG_CONFIG_HOME: xdg }
+    const gone = addWorktree('gone')
+    expect(resolveDevSlot({ env, cwd: gone, home }).dataDir).toBe(join(xdg, 'aventuras-dev-slot1'))
+    mkdirSync(join(xdg, 'aventuras-dev-slot1'), { recursive: true })
+    rmSync(gone, { recursive: true, force: true })
+
+    resolveDevSlot({ env, cwd: addWorktree('next'), home })
+    expect(existsSync(join(xdg, 'aventuras-dev-slot1'))).toBe(false)
+  })
+
   it('gives each worktree its own sticky slot, from any directory inside it', () => {
     const wt = addWorktree('wt1')
     mkdirSync(join(wt, 'sub'))

@@ -1,3 +1,5 @@
+import { join } from 'node:path'
+
 import { describe, expect, it } from 'vitest'
 
 import { parseSlotSetting, slotAndroid, slotDataDir, slotPorts } from './slot'
@@ -31,9 +33,28 @@ describe('slotPorts', () => {
 })
 
 describe('slotDataDir', () => {
+  const linux = { home: '/home/u', env: {}, platform: 'linux' } as const
+
   it('keeps slot 0 on the dev userData dir and gives each worker its own', () => {
-    expect(slotDataDir(0, '/home/u')).toBe('/home/u/.config/aventuras-dev')
-    expect(slotDataDir(2, '/home/u')).toBe('/home/u/.config/aventuras-dev-slot2')
+    expect(slotDataDir(0, linux)).toBe(join('/home/u', '.config', 'aventuras-dev'))
+    expect(slotDataDir(2, linux)).toBe(join('/home/u', '.config', 'aventuras-dev-slot2'))
+  })
+
+  it('follows XDG_CONFIG_HOME on Linux, as Electron does', () => {
+    const env = { XDG_CONFIG_HOME: '/xdg' }
+    expect(slotDataDir(0, { ...linux, env })).toBe(join('/xdg', 'aventuras-dev'))
+  })
+
+  it('uses Electron’s app data dir on macOS and Windows', () => {
+    expect(slotDataDir(0, { home: '/Users/u', env: {}, platform: 'darwin' })).toBe(
+      join('/Users/u', 'Library', 'Application Support', 'aventuras-dev'),
+    )
+    expect(
+      slotDataDir(1, { home: 'C:/Users/u', env: { APPDATA: 'D:/Roaming' }, platform: 'win32' }),
+    ).toBe(join('D:/Roaming', 'aventuras-dev-slot1'))
+    expect(slotDataDir(1, { home: 'C:/Users/u', env: {}, platform: 'win32' })).toBe(
+      join('C:/Users/u', 'AppData', 'Roaming', 'aventuras-dev-slot1'),
+    )
   })
 })
 

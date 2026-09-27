@@ -10,6 +10,8 @@ import {
   slotDataDir,
   slotPorts,
   type AndroidSlot,
+  type DataDirEnv,
+  type DataDirOptions,
   type SlotPorts,
 } from './slot'
 
@@ -39,11 +41,11 @@ function liveWorktrees(cwd: string): Set<string> {
   return live
 }
 
-function describe(slot: number, home: string): DevSlot {
+function describe(slot: number, paths: DataDirOptions): DevSlot {
   return {
     slot,
     ports: slotPorts(slot),
-    dataDir: slotDataDir(slot, home),
+    dataDir: slotDataDir(slot, paths),
     android: slotAndroid(slot),
   }
 }
@@ -60,7 +62,7 @@ function writeEnvFile(worktree: string, { ports, android }: DevSlot): void {
   if (!existsSync(file) || readFileSync(file, 'utf8') !== content) writeFileSync(file, content)
 }
 
-function claimForWorktree(cwd: string, home: string): number {
+function claimForWorktree(cwd: string, paths: DataDirOptions): number {
   const worktree = realpathSync(git(cwd, 'rev-parse', '--show-toplevel'))
   const commonDir = git(cwd, 'rev-parse', '--path-format=absolute', '--git-common-dir')
   const live = liveWorktrees(cwd)
@@ -70,9 +72,9 @@ function claimForWorktree(cwd: string, home: string): number {
     isLive: (path) => live.has(path),
     // A slot changing hands keeps nothing from the last branch: its DB may carry migrations
     // this one has never heard of.
-    onFreshClaim: (fresh) => rmSync(slotDataDir(fresh, home), { recursive: true, force: true }),
+    onFreshClaim: (fresh) => rmSync(slotDataDir(fresh, paths), { recursive: true, force: true }),
   })
-  writeEnvFile(worktree, describe(slot, home))
+  writeEnvFile(worktree, describe(slot, paths))
   return slot
 }
 
@@ -82,11 +84,12 @@ function claimForWorktree(cwd: string, home: string): number {
  * docs/dev-environment.md.
  */
 export function resolveDevSlot(
-  opts: { env?: { AVENTURAS_DEV_SLOT?: string }; cwd?: string; home?: string } = {},
+  opts: { env?: { AVENTURAS_DEV_SLOT?: string } & DataDirEnv; cwd?: string; home?: string } = {},
 ): DevSlot {
   const { env = process.env, cwd = process.cwd(), home = homedir() } = opts
+  const paths = { home, env }
   const setting = parseSlotSetting(env.AVENTURAS_DEV_SLOT)
-  if (setting.kind === 'off') return describe(0, home)
-  if (setting.kind === 'fixed') return describe(setting.slot, home)
-  return describe(claimForWorktree(cwd, home), home)
+  if (setting.kind === 'off') return describe(0, paths)
+  if (setting.kind === 'fixed') return describe(setting.slot, paths)
+  return describe(claimForWorktree(cwd, paths), paths)
 }

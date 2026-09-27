@@ -28,9 +28,30 @@ export function slotPorts(slot: number): SlotPorts {
   }
 }
 
-/** Electron userData for the slot; slot 0 is the dir `app.setName('aventuras-dev')` resolves to on Linux. */
-export function slotDataDir(slot: number, home = homedir()): string {
-  return join(home, '.config', slot === 0 ? 'aventuras-dev' : `aventuras-dev-slot${slot}`)
+/** The environment Electron's paths depend on; any process env satisfies it. */
+export type DataDirEnv = {
+  XDG_CONFIG_HOME?: string
+  APPDATA?: string
+  [name: string]: string | undefined
+}
+
+export type DataDirOptions = { home?: string; env?: DataDirEnv; platform?: NodeJS.Platform }
+
+// Electron's `appData`, which userData sits in: Chromium resolves it this way per platform.
+function appDataDir(home: string, env: DataDirEnv, platform: NodeJS.Platform): string {
+  if (platform === 'win32') return env.APPDATA || join(home, 'AppData', 'Roaming')
+  if (platform === 'darwin') return join(home, 'Library', 'Application Support')
+  return env.XDG_CONFIG_HOME || join(home, '.config')
+}
+
+/**
+ * Electron userData for the slot. Slot 0 is where `app.setName('aventuras-dev')` puts the dev app;
+ * a worker slot is passed to Electron explicitly, beside it.
+ */
+export function slotDataDir(slot: number, opts: DataDirOptions = {}): string {
+  const { home = homedir(), env = process.env, platform = process.platform } = opts
+  const name = slot === 0 ? 'aventuras-dev' : `aventuras-dev-slot${slot}`
+  return join(appDataDir(home, env, platform), name)
 }
 
 export function slotAndroid(slot: number): AndroidSlot | null {

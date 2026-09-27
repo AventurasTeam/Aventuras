@@ -39,6 +39,13 @@ shares slot 0 and the one dev DB, as before.
 | `userData`        | `~/.config/aventuras-dev` | `~/.config/aventuras-dev-slotN`                       |
 | Android           | the attached device       | AVD `Aventuras_Slot_N`, serial `emulator-<5552 + 2N>` |
 
+The `userData` paths are Linux's. `~/.config` stands for Electron's
+app data directory, which is `$XDG_CONFIG_HOME` when that is set,
+`~/Library/Application Support` on macOS and `%APPDATA%` on Windows.
+Slot 0 lands where Electron puts the dev app by itself, so
+`pnpm db:seed` and `pnpm db:studio:desktop` open the same database the
+app does.
+
 The DevTools port is what the `electron-app` MCP server attaches to:
 `.mcp.json` points it at `AVENTURAS_DEVTOOLS_PORT`, defaulting to 9222,
 so each worker's agent drives its own app. A tool that discovers apps
@@ -91,8 +98,6 @@ environment: the `storybook-mcp` URL in `.mcp.json`, and `adb`.
   the seeded provider at the slot's mock LLM. An explicit path or
   `AVENTURAS_DB_PATH` bypasses the slot, which is how the E2E harness
   calls it.
-
-Paths assume Linux, like the `db:seed` default always has.
 
 ### Setting up a worker machine
 

@@ -12,8 +12,8 @@ import { dbSchema } from '../../lib/db/schema'
 import { resolveDevSlot } from '../dev-slot/resolve'
 import { slotPorts } from '../dev-slot/slot'
 
-// Default is the dev slot's userData DB — slot 0 mirrors drizzle.studio.config.ts, the Linux
-// Electron dev DB. Override with AVENTURAS_DB_PATH or a positional arg for another OS / file.
+// Default is the dev slot's userData DB — slot 0 is the one drizzle.studio.config.ts browses.
+// Override with AVENTURAS_DB_PATH or a positional arg for another file.
 function resolveTarget(): { dbPath: string; mockPort?: number } {
   const arg = process.argv[2]
   if (arg && !arg.startsWith('-')) return { dbPath: arg }
