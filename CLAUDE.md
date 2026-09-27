@@ -23,6 +23,9 @@ vars, no BaaS.
 - [`docs/testing.md`](./docs/testing.md) — the E2E layer:
   Playwright/Electron harness, fixture/seed contract, mock LLM,
   selector strategy; when a slice warrants an E2E test.
+- [`docs/dev-environment.md`](./docs/dev-environment.md) — dev slots:
+  per-worktree ports and `userData` for parallel workers on one
+  machine.
 - [`docs/generation-pipeline.md`](./docs/generation-pipeline.md) —
   pipeline framework: phases, orchestrator, action layer, event bus,
   transactions, concurrency model.
@@ -78,27 +81,33 @@ pnpm 10. Vitest. Full details in
 Two project MCP servers are configured in
 [`.mcp.json`](./.mcp.json):
 
-### electron-mcp-server
+### electron-app
 
-Inspects and controls the Electron window during development. Useful
-for debugging desktop-specific behavior, capturing screenshots of the
-running app, and reading main-process logs.
+Playwright MCP (`@playwright/mcp`) attached over CDP to the running
+desktop dev app — the smoke check at the end of a slice. It drives the
+app by accessibility snapshot, the same role-and-name approach the E2E
+suite uses. Common tools:
 
-Available tools:
+- `browser_tabs` — list and select pages
+- `browser_snapshot` — ARIA tree with element refs to act on
+- `browser_click` / `browser_type` / `browser_fill_form` — act on refs
+- `browser_take_screenshot` — saved under `.playwright-mcp/` or
+  elsewhere in the workspace, never outside it
+- `browser_evaluate` / `browser_console_messages` — renderer state
 
-- `get_electron_window_info` — window state, dimensions, URL
-- `read_electron_logs` — main-process console output
-- `send_command_to_electron` — invoke commands in the renderer
-- `take_screenshot` — capture the running window
-
-Spawns automatically via `npx` on tool invocation. Requires the
-desktop app to be running (`pnpm desktop`); otherwise window-targeted
-tools have nothing to attach to.
+Requires `pnpm desktop` to be running first. It attaches to
+`AVENTURAS_DEVTOOLS_PORT` (default 9222), so in a worker dev slot it
+reaches that slot's app only (see
+[`docs/dev-environment.md`](./docs/dev-environment.md#what-a-slot-owns)).
+**On slot 0 the detached DevTools window is the first tab**: run
+`browser_tabs` and select the `Aventuras` tab before snapshotting or
+clicking. Worker slots open no DevTools window.
 
 ### storybook-mcp
 
 Component-aware MCP for the Storybook design system, exposed at
-`http://localhost:6006/mcp` by `@storybook/addon-mcp`.
+`http://localhost:6006/mcp` by `@storybook/addon-mcp` (the slot's
+Storybook port in a worker dev slot).
 
 **The Storybook dev server MUST be running first.** Without it, every
 MCP tool call fails with a connection error. Start it in a separate

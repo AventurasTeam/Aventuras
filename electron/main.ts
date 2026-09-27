@@ -267,7 +267,10 @@ function createWindow(): void {
 
   if (isDev) {
     win.loadURL(process.env.EXPO_WEB_URL ?? 'http://localhost:8081')
-    win.webContents.openDevTools({ mode: 'detach' })
+    // Headless worker slots (scripts/desktop.ts) have no one to look at it.
+    if (!app.commandLine.hasSwitch('aventuras-no-devtools-window')) {
+      win.webContents.openDevTools({ mode: 'detach' })
+    }
   } else {
     win.loadURL(`${APP_SCHEME}://${APP_HOST}/`)
   }

@@ -1,5 +1,4 @@
 import { mkdirSync } from 'node:fs'
-import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
@@ -8,17 +7,32 @@ import { drizzle } from 'drizzle-orm/sqlite-proxy'
 import { migrate } from 'drizzle-orm/sqlite-proxy/migrator'
 import { getLoadablePath } from 'sqlite-vec'
 
-import { buildSeedSteps } from '../../lib/db/devtools/seed-dataset'
+import { buildSeedSteps, type SeedStep } from '../../lib/db/devtools/seed-dataset'
 import { dbSchema } from '../../lib/db/schema'
+import { resolveDevSlot } from '../dev-slot/resolve'
+import { slotPorts } from '../dev-slot/slot'
 
-// Default mirrors drizzle.studio.config.ts: the Linux Electron dev userData DB.
-// Override with AVENTURAS_DB_PATH or a positional arg for another OS / file.
-function resolveDbPath(): string {
+// Default is the dev slot's userData DB — slot 0 is the one drizzle.studio.config.ts browses.
+// Override with AVENTURAS_DB_PATH or a positional arg for another file.
+function resolveTarget(): { dbPath: string; mockPort?: number } {
   const arg = process.argv[2]
-  if (arg && !arg.startsWith('-')) return arg
-  return (
-    process.env.AVENTURAS_DB_PATH ?? join(homedir(), '.config', 'aventuras-dev', 'aventuras.db')
-  )
+  if (arg && !arg.startsWith('-')) return { dbPath: arg }
+  if (process.env.AVENTURAS_DB_PATH) return { dbPath: process.env.AVENTURAS_DB_PATH }
+  const { slot, dataDir, ports } = resolveDevSlot()
+  return { dbPath: join(dataDir, 'aventuras.db'), mockPort: slot === 0 ? undefined : ports.mock }
+}
+
+// The dataset's provider points at the slot-0 mock; a worker slot runs its own.
+function repointSeedProvider(steps: SeedStep[], port: number): void {
+  const seeded = `http://localhost:${slotPorts(0).mock}/v1`
+  for (const step of steps) {
+    if (getTableName(step.table) !== 'app_settings') continue
+    for (const row of step.rows as { providers?: { endpoint?: string }[] }[]) {
+      for (const provider of row.providers ?? []) {
+        if (provider.endpoint === seeded) provider.endpoint = `http://localhost:${port}/v1`
+      }
+    }
+  }
 }
 
 // node:sqlite returns row objects; sqlite-proxy needs positional arrays. 'get'
@@ -37,7 +51,7 @@ function makeProxy(sqlite: DatabaseSync) {
 }
 
 async function main() {
-  const dbPath = resolveDbPath()
+  const { dbPath, mockPort } = resolveTarget()
   mkdirSync(dirname(dbPath), { recursive: true })
   console.log(`[seed] target DB: ${dbPath}`)
 
@@ -60,6 +74,10 @@ async function main() {
   })
 
   const steps = buildSeedSteps()
+  if (mockPort !== undefined) {
+    repointSeedProvider(steps, mockPort)
+    console.log(`[seed] provider endpoint: http://localhost:${mockPort}/v1`)
+  }
 
   // Wipe with FKs off (order-independent), then insert with FKs on so any broken
   // reference in the dataset surfaces as an error rather than landing silently.

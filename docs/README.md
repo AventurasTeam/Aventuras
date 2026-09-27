@@ -57,3 +57,6 @@ implementation, and the open questions tracked across the project.
   target, harness structure, fixture/seed contract, embedder seeding,
   mock LLM, and the DB-first selector strategy. Unit + component
   discipline stays in code-conventions.md.
+- **[dev-environment.md](./dev-environment.md)** — dev slots: how dev
+  servers and the desktop dev app pick ports and `userData`, and how
+  parallel worktrees share one machine.

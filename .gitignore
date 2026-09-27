@@ -54,6 +54,8 @@ app-example
 /playwright-report
 /blob-report
 /.playwright
+# Playwright MCP console logs, snapshots and screenshots
+.playwright-mcp/
 
 # IDE stuff
 .vscode/

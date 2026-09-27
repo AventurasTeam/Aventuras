@@ -1,14 +1,16 @@
 {
   "mcpServers": {
-    "electron-mcp-server": {
+    "electron-app": {
       "command": "npx",
-      "args": ["-y", "electron-mcp-server"],
-      "env": {
-        "SCREENSHOT_ENCRYPTION_KEY": "c10837a4f6096580903abab290d43e602878ce4e50c1075fe9d3938c7c93c66c"
-      }
+      "args": [
+        "-y",
+        "@playwright/mcp@0.0.82",
+        "--cdp-endpoint",
+        "http://127.0.0.1:${AVENTURAS_DEVTOOLS_PORT:-9222}"
+      ]
     },
     "storybook-mcp": {
-      "url": "http://localhost:6006/mcp",
+      "url": "http://localhost:${AVENTURAS_STORYBOOK_PORT:-6006}/mcp",
       "type": "http"
     }
   }
