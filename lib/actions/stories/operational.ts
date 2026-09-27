@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm'
 import {
   branches,
   chapters,
+  characterRelationships,
   entities,
   happeningAwareness,
   happeningInvolvements,
@@ -17,6 +18,7 @@ import { logger } from '@/lib/diagnostics'
 import { kickStoryDrain } from '@/lib/embedder-swap'
 import {
   chaptersStore,
+  characterRelationshipsStore,
   currentStoryStore,
   entitiesStore,
   entriesStore,
@@ -159,6 +161,11 @@ async function loadAndPublish(
   if (!isCurrentRequest()) return { status: 'cancelled' }
   const chapterRows = await ctx.db.select().from(chapters).where(eq(chapters.branchId, branchId))
   if (!isCurrentRequest()) return { status: 'cancelled' }
+  const relationshipRows = await ctx.db
+    .select()
+    .from(characterRelationships)
+    .where(eq(characterRelationships.branchId, branchId))
+  if (!isCurrentRequest()) return { status: 'cancelled' }
 
   storiesStore.clearOpenFailure(row.storyId)
   entriesStore.hydrate(branchId, entryRows)
@@ -169,6 +176,7 @@ async function loadAndPublish(
   happeningInvolvementsStore.hydrate(branchId, involvementRows)
   happeningAwarenessStore.hydrate(branchId, awarenessRows)
   chaptersStore.hydrate(branchId, chapterRows)
+  characterRelationshipsStore.hydrate(branchId, relationshipRows)
   publish({ storyId: row.storyId, branchId, definition, settings })
   // Warm the vec cache for a story opened with pre-existing stale rows; no-op
   // until boot wires the drain controller, and the sync stage owns correctness.

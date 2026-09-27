@@ -78,7 +78,8 @@
       "lead": "a lead character",
       "effectiveDim": "a valid effective dim",
       "cast": "cast (every entry needs a name)",
-      "lore": "lore (every entry needs a title and a body)"
+      "lore": "lore (every entry needs a title and a body)",
+      "parentCycle": "location parents that don't loop back on themselves"
     },
     "failed": "Couldn't create the story.",
     "createdNotOpened": "Your story was created, but it couldn't be opened. Find it on your story list.",

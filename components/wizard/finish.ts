@@ -33,6 +33,7 @@ import {
   resolveEmbedderGate,
   type EmbedderGateResult,
 } from '@/lib/embedder'
+import { checkParentChain, parentOfLocations } from '@/lib/world'
 
 import { clampEffectiveDim } from './memory-cost-logic'
 import { activeLead, invalidCastRowIds } from './step-cast-logic'
@@ -172,6 +173,17 @@ function castEntityInput(
   }
 }
 
+// data-model.md → LocationState: the walk the entity handler runs. createStoryWithBranch inserts
+// the cast directly, so Finish is the only gate this path has.
+function castParentCycle(rows: readonly WizardCastEntityInput[]): boolean {
+  const parentOf = parentOfLocations(rows)
+  return rows.some(
+    (r) =>
+      r.kind === 'location' &&
+      checkParentChain(r.id, r.state.parent_location_id, parentOf) !== 'ok',
+  )
+}
+
 export async function finishWizard(
   s: WizardWorkingState,
   ctx: DbCtx,
@@ -239,6 +251,8 @@ export async function finishWizard(
   ) {
     reasons.push('cast')
   }
+
+  if (castParentCycle(castRows)) reasons.push('parentCycle')
 
   if (reasons.length > 0) return { status: 'invalid', reasons }
 

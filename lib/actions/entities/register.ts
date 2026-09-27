@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 
-import type { Entity, EntityState, NewEntity } from '@/lib/db'
+import type { Entity, EntityState, LocationState, NewEntity } from '@/lib/db'
 import {
   emptyEntityState,
   entities,
@@ -9,11 +9,13 @@ import {
   entityWriteSchema,
   KIND_FIELDS,
 } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { entitiesStore } from '@/lib/stores'
+import { checkParentChain, PARENT_CYCLE, parentOfLocations } from '@/lib/world'
 
 import { computeUndoPayload } from '../delta/delta-encoding'
-import { register, type ActionHandler } from '../delta/registry'
-import type { DeltaSource } from '../types'
+import { register, type ActionHandler, type HandlerOutcome } from '../delta/registry'
+import type { DbCtx, DeltaSource } from '../types'
 import {
   promoteStagedEntityHandler,
   updateEntityInventoryHandler,
@@ -82,7 +84,26 @@ function fullRow(entry: NewEntity): Entity {
   }
 }
 
-const createHandler: ActionHandler = (action, branchId, ctx) => {
+// data-model.md → LocationState: the pre-commit walk, on every entity-handler write.
+async function refuseParentCycle(
+  branchId: string,
+  id: string,
+  proposed: string | null,
+  ctx: DbCtx,
+): Promise<HandlerOutcome | null> {
+  if (proposed == null) return null
+  const rows = await ctx.db
+    .select({ id: entities.id, kind: entities.kind, state: entities.state })
+    .from(entities)
+    .where(and(eq(entities.branchId, branchId), eq(entities.kind, 'location')))
+  const check = checkParentChain(id, proposed, parentOfLocations(rows))
+  if (check === 'ok') return null
+  if (check === 'cap-hit')
+    logger.error('action_layer.parent_chain_cap_hit', { branchId, id, parentId: proposed })
+  return { status: 'rejected', reason: PARENT_CYCLE, code: PARENT_CYCLE }
+}
+
+const createHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'createEntity')
     throw new Error(`handler/kind mismatch: expected 'createEntity', got '${action.kind}'`)
   const { entry } = action.payload
@@ -98,6 +119,15 @@ const createHandler: ActionHandler = (action, branchId, ctx) => {
   const parsed = entityStateSchemaForKind(row.kind).safeParse(row.state)
   if (!parsed.success)
     return { status: 'rejected', reason: `invalid ${row.kind} state: ${parsed.error.message}` }
+  if (row.kind === 'location') {
+    const refused = await refuseParentCycle(
+      branchId,
+      row.id,
+      (row.state as LocationState).parent_location_id,
+      ctx,
+    )
+    if (refused) return refused
+  }
   return {
     status: 'ok',
     targetTable: 'entities',
@@ -133,6 +163,15 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
         status: 'rejected',
         reason: `invalid ${current.kind} state: ${parsed.error.message}`,
       }
+  }
+
+  if (patch.state !== undefined && current.kind === 'location') {
+    const proposed = (patch.state as LocationState).parent_location_id
+    const prior = (current.state as LocationState | null)?.parent_location_id ?? null
+    if (proposed !== prior) {
+      const refused = await refuseParentCycle(bid, id, proposed, ctx)
+      if (refused) return refused
+    }
   }
 
   const set: Record<string, unknown> = {}
