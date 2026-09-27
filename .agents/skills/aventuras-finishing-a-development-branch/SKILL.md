@@ -225,7 +225,7 @@ When your task prompt makes you a dispatched worker (aventuras-subagent-driven-d
 2. **Comment audit: run it whenever the finder reports candidate blocks.** Don't offer it; commit it as Step 1.6 says.
 3. **The PR is the only option.** Never merge, never keep. Before pushing, merge `origin/main` in with a new commit if the branch conflicts with it, and if `git diff --name-only origin/main...HEAD | wc -l` is over 100 (CodeRabbit's cap), ask through the channel about splitting. Then push and create the PR (Option 2). Its body adds, after Summary, one section per non-empty label from the ledger:
 
-   ```
+   ```markdown
    ## Decisions pending
    - [ ] <question> → <provisional choice> (alternative: <…>)
 
@@ -236,7 +236,7 @@ When your task prompt makes you a dispatched worker (aventuras-subagent-driven-d
    Record the PR URL in the ledger.
 
 4. **Review loop.** Wait until every check has finished, CodeRabbit's included (`gh pr checks <n> --watch`, in the background: the E2E suite outlasts a foreground command). Then handle every CodeRabbit comment — inline threads and those in its review body (`gh pr view <n> --json reviews`) — with aventuras-receiving-code-review, which has its own Dispatched worker section. A failed check is a bug: fix it with aventuras-systematic-debugging. Fixes are new commits, never amend or force-push; each push restarts this step. CodeRabbit answers your replies: reply again only where it raises something new.
-5. **Done** when all checks pass and every review comment has your reply: in its thread, or, for comments in the review body, in your PR comment. Then report completion once, through the channel your prompt names, with the PR URL. Never clean up the worktree: fixes from the developer's review land in it later.
+5. **Done** when all checks pass and every review comment has your reply: in its thread, or, for comments in the review body, in your PR comment. Then report completion once, with the PR URL, in the form your prompt gives for reporting completion; the question channel blocks for a reply and is not it. Never clean up the worktree: fixes from the developer's review land in it later.
 
 ## Quick Reference
 
