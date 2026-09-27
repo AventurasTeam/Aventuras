@@ -95,6 +95,8 @@ const stackablesSchema = z.array(stackableSchema).superRefine(
 )
 
 const relationshipSchema = z.object({
+  /** The card's identity across form resets: the committed row id, or a draft-only id. */
+  cardKey: z.string(),
   otherId: z.string({ error: WORLD_ISSUE.characterRequired }).min(1, WORLD_ISSUE.characterRequired),
   selfToOther: z.string(),
   otherToSelf: z.string(),
@@ -226,6 +228,7 @@ export function characterDraftFrom(
       row == null
         ? []
         : relationships.map((r) => ({
+            cardKey: r.rowId,
             otherId: r.otherId,
             selfToOther: r.selfToOther ?? '',
             otherToSelf: r.otherToSelf ?? '',

@@ -168,7 +168,7 @@ erDiagram
         integer updated_at
     }
     %% CHECK (a_id < b_id) — canonical ordering invariant, enforced at write time + as DB backstop
-    %% CHECK (kind IS NOT NULL OR inverse_kind IS NOT NULL) — at least one POV must be known; UI delete = both nulled = row removed
+    %% CHECK (kind IS NOT NULL OR inverse_kind IS NOT NULL) — at least one POV must be known; UI delete removes the row (deleteCharacterRelationship), a write leaving both POVs null deletes the row only on the single-POV path
     %% UNIQUE(branch_id, a_id, b_id) — one row per pair per branch; gives clean UPSERT semantics in classifier and user-edit paths
 
     chapters {

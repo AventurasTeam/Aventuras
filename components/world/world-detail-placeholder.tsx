@@ -4,15 +4,14 @@ import { DetailPane } from '@/components/shells/detail-pane'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
-import type { Entity, Lore } from '@/lib/db'
+import type { Lore } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import type { RecentlyClassified } from '@/lib/row-signals'
 
-/** An entity's kind lives only on its row, so no copy of it can disagree. */
-export type WorldDetailSelection = { type: 'entity'; row: Entity } | { type: 'lore'; row: Lore }
+export type WorldPlaceholderSelection = { type: 'lore'; row: Lore }
 
 type WorldDetailPlaceholderProps = {
-  selection: WorldDetailSelection | null
+  selection: WorldPlaceholderSelection | null
   /** Mirrors the row tint in the head (patterns/entity.md → Detail-pane mirroring). */
   recentlyClassified?: RecentlyClassified
 }
@@ -28,21 +27,11 @@ export function WorldDetailPlaceholder({
       </View>
     )
   }
-  const head =
-    selection.type === 'lore'
-      ? {
-          name: selection.row.title,
-          placeholder: t('world:detail.lorePlaceholder'),
-        }
-      : {
-          name: selection.row.name,
-          placeholder: t('world:detail.entityPlaceholder'),
-        }
   return (
     <DetailPane
       nameSlot={
         <Text testID="world-detail-name" size="lg" className="font-semibold" numberOfLines={1}>
-          {head.name}
+          {selection.row.title}
         </Text>
       }
       badges={
@@ -53,7 +42,10 @@ export function WorldDetailPlaceholder({
       overflowMenu={null}
       tabs={null}
     >
-      <EmptyState title={head.placeholder} subtext={t('world:detail.placeholderBody')} />
+      <EmptyState
+        title={t('world:detail.lorePlaceholder')}
+        subtext={t('world:detail.placeholderBody')}
+      />
     </DetailPane>
   )
 }

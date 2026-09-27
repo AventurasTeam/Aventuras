@@ -35,8 +35,9 @@ export function DetailTabs({ tabs, value, onValueChange, selectLabel }: DetailTa
   }
   return (
     // flex-1 fills the shell's horizontal tabs ScrollView, which otherwise sizes the Select to
-    // its content; py-2 keeps it off the header divider the strip variant sits flush against.
-    <View className="flex-1 py-2">
+    // its content; pt-2 keeps it off the header divider the strip variant sits flush against.
+    // Below it, the content's own top padding spaces it, as it does under the strip.
+    <View className="flex-1 pt-2">
       <Select
         label={selectLabel}
         size="sm"

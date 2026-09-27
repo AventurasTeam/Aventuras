@@ -55,7 +55,7 @@ describe('lib/i18n', () => {
     expect(t('world:search.placeholder', { category: 'characters' })).toBe('Search characters…')
     expect(t('world:collision.needReview', { count: 1 })).toBe('1 needs review')
     expect(t('world:collision.needReview', { count: 3 })).toBe('3 need review')
-    expect(t('world:addMenu.blankEntityReason')).toBe('Lands in Slice 4.2a')
+    expect(t('world:addMenu.blankLoreReason')).toBe('Lands in Slice 4.2b')
     expect(t('chrome.goTo.header')).toBe('Go to')
     expect(t('chrome.goTo.openWorld')).toBe('Open World')
     expect(t('chrome.goTo.openPlot')).toBe('Open Plot')

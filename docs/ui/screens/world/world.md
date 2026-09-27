@@ -75,8 +75,9 @@ updating as the user clicks list rows.
 
 ## Detail head structure
 
-Status selector is NOT chrome on the detail head; it's a typed form
-field inside the Overview tab. The detail head carries only:
+Status is NOT chrome on the detail head: it is edited on the
+[Settings](#settings--entity-management-chrome) tab and mirrored as
+a pill on the Overview. The detail head carries only:
 
 - The entity name (inline-editable with pencil)
 - A `Recently classified` badge — per
@@ -85,7 +86,11 @@ field inside the Overview tab. The detail head carries only:
 
 The overflow menu holds rare-but-important actions:
 
-- **Set as lead** (sets `stories.definition.leadEntityId`)
+- **Set as lead** (sets `stories.definition.leadEntityId`;
+  characters only, and enabled only for an active character that is
+  not already the lead — a staged or retired character can't lead,
+  per
+  [wizard.md → Status field](../wizard/wizard.md#status-field--active--staged))
 - **Export entity as JSON** (single-entity export)
 - **View raw JSON** (debug/dev affordance)
 - **Delete entity** (destructive; needs confirmation pass)
@@ -119,7 +124,11 @@ Other tabs render for every kind with kind-specific content.
 ### Overview — glance summary, read-mostly
 
 The Overview tab is a glance summary card, not the full form.
-Click any region to route to the relevant edit tab. Doubles as
+Click any region to route to the relevant edit tab. Entity names
+inside a region are text, not links: each region is one target,
+and moving to a related entity happens in
+[Connections](#connections--positional--compositional--affiliation--relationships).
+Doubles as
 the [peek-drawer body](../reader-composer/reader-composer.md#peek-drawer--lead-affordance-for-characters)
 at narrower (440px) width — same content, no duplicated design.
 
@@ -144,10 +153,12 @@ treatment used by `retired_reason` (visible only when
   `·`. Click → Identity / Visual.
 - `TRAITS` and `DRIVES` chip rows — first ~3 of each with `+ N` overflow
   indicator. Click → Identity / Personality.
-- `IN <location>` (current_location_id link) `· last seen N days ago`
-  (from `lastSeenAt`). Click location → that entity's detail pane.
-- `WITH <faction>` (faction_id link). Click → that faction's detail
-  pane.
+- `IN <location>` (current_location_id) `· last seen N days ago`
+  (from `lastSeenAt`). Click → Connections. The span is in-world
+  time since `lastSeenAt.worldTime`, counted in the calendar's
+  largest unit of fixed length (days on Gregorian, never months); a
+  span running backwards is omitted.
+- `WITH <faction>` (faction_id). Click → Connections.
 - Carrying summary — top stackables by quantity + equipped/carried
   counts in one line. Click → Carrying tab.
 - Tags chip row — read-only on Overview; edits live on the
@@ -162,7 +173,8 @@ treatment used by `retired_reason` (visible only when
 - Parent chain — breadcrumb (`Shop in Town Square in City`) per
   [`LocationState.parent_location_id`](../../../data-model.md#locationstate-shape)
 - `condition` — single line if populated
-- "Characters here" count + first 3 portraits (links)
+- "Characters here" count + first 3 names (portraits once the
+  asset gallery lands)
 - "Items here" count + first few names
 - Portrait slot
 - Tags
@@ -172,7 +184,7 @@ treatment used by `retired_reason` (visible only when
 - Status pill + item icon
 - Description prose
 - `condition` — single line if populated
-- Position — `at_location_id` link OR "Held by `<character>`"
+- Position — `at_location_id` OR "Held by `<character>`"
   inverse-derived from any character's `equipped_items` /
   `inventory`
 - Portrait slot
@@ -184,8 +196,8 @@ treatment used by `retired_reason` (visible only when
 - Description prose
 - `standing` — single line if populated
 - Top agenda chips — top ~3 with overflow indicator
-- Member count + first few member portraits (links from
-  inverse-derived `character.faction_id`)
+- Member count + first few member names (portraits once the asset
+  gallery lands) from inverse-derived `character.faction_id`
 - Portrait slot
 - Tags
 
@@ -203,7 +215,7 @@ top-down:
 - Description (textarea)
 - `Visual` sub-section: `visual.physique`, `visual.face`,
   `visual.hair`, `visual.eyes`, `visual.attire` (live current —
-  classifier-updated), `visual.distinguishing[]` (chip list)
+  classifier-updated), `visual.distinguishing` (single string)
 - `Personality` sub-section: `traits[]`, `drives[]`, `voice`
 
 **Location Identity**:
@@ -237,10 +249,12 @@ portrait slot.
 
 Composition (in order):
 
-- `stackables` (`Record<string, number>`): chip row,
-  `<key> × <count>` chips with `+ add`. Footnote retained
-  ("Carried quantities — tracked on the character, not on
-  container items").
+- `stackables` (`Record<string, number>`): editable rows of quantity
+  name and count, with `Add quantity`. Keys are stored trimmed and
+  lowercased, a duplicate key is a draft issue that disables Save,
+  and a count of 0 removes the quantity; the Overview keeps the
+  one-line glance. Footnote retained ("Carried quantities — tracked
+  on the character, not on container items").
 - `equipped_items[]`: entity-ref list (picker-backed), labeled
   `Equipped`.
 - `inventory[]`: entity-ref list, labeled `Carried`.
@@ -257,6 +271,14 @@ Per-kind sub-labels:
 | **Location**  | `Compositional` (parent_location_id) · `Characters here` · `Items here` (inverse)                                       |
 | **Item**      | `Positional` (at_location_id) · `Held by` (inverse from `character.equipped_items` / `inventory`)                       |
 | **Faction**   | `Members` (inverse from `character.faction_id`) · inter-faction (deferred)                                              |
+
+Connections is where entity navigation lives. A picker holding an
+entity (current location, faction, parent location, an item's
+location) carries an open action — an external-link icon before
+its clear `×`, spaced so their phone touch zones don't overlap —
+that opens that entity's detail pane; it stays live while edits
+are blocked, since navigating isn't editing. The inverse lists
+link each name.
 
 The tab name **Connections** is the umbrella for both structural
 links (positional, affiliation) and social bonds. It was originally
@@ -287,7 +309,7 @@ so the divergence — when present — is legible at a glance.
   character's view comes first; the other character's view second,
   prefixed for disambiguation. Null perspectives render as "not
   recorded" rather than blank — the gap is information.
-- `trailing` — chevron (whole-row tap opens the edit sheet).
+- `trailing` — chevron (whole-row tap expands the inline edit card).
 
 **Three perspective states** (mirrors the schema's `kind` /
 `inverse_kind` nullability):
@@ -306,15 +328,24 @@ are referenced.
 **Affordances:**
 
 - **Add** — `+ Add relationship` row pinned at the bottom of the
-  Relationships sub-section. Opens an edit sheet (composed from
-  existing primitives): an `Autocomplete` over branch-scoped
-  characters (excluding the current one) plus two text fields for
-  `kind` (your view) and `inverse_kind` (their view). At least one of the two must be non-empty per the DB
-  `CHECK` constraint; the form gates Save accordingly.
-- **Edit** — whole-row tap opens the same sheet pre-filled.
-- **Delete** — destructive action inside the edit sheet.
-  Consistent with edit affordances elsewhere on World — destructive
-  actions live in the editor, not on the row.
+  Relationships sub-section. Appends an inline edit card: the entity
+  picker over branch-scoped characters (excluding the current one and
+  those already related), plus two text fields for `kind` (your view)
+  and `inverse_kind` (their view). At least one of the two must be
+  non-empty per the DB `CHECK` constraint; an empty pair is a draft
+  issue that disables Save. The card is inline rather than a sheet: the
+  picker is itself a Sheet on phone, and
+  [a Sheet may not open over a Sheet](../../foundations/mobile/layout.md#stacking).
+- **Edit** — whole-row tap expands the same card, pre-filled.
+- **Delete** — destructive action inside the card. Consistent with
+  edit affordances elsewhere on World — destructive actions live in
+  the editor, not on the row.
+- **Save** — relationship edits join the pane's save session: one Save
+  commits them with the rest of the pane under one `action_id`, each
+  pair as a single write carrying both perspectives. Only the user's
+  own changes relative to what the pane showed are written; a pair or
+  view the classifier changed meanwhile, and the user left alone,
+  keeps its stored value.
 
 **Empty state.** When the character has no recorded relationships,
 render the Relationships sub-section heading + an empty-state hint
@@ -369,7 +400,8 @@ Unchanged from prior design.
 - **Assets** — attached images / audio / files via `entry_assets`.
   Drop upload, pick from gallery, remove.
 - **Involvements** — `happening_involvements` table for this
-  entity. Rows link to happenings.
+  entity. Rows are read-only here and open the happening in Plot, on
+  its Involvements tab.
 - **History** — delta log filtered to this entity. See
   [History tab](#history-tab) section below.
 
@@ -963,13 +995,13 @@ overflows.
   full-width row first and the filter and sort chips wrapping
   beneath. Prevents the search field from collapsing to a
   multi-line vertical block at narrow widths.
-- **Save bar on phone** stays at the bottom edge of the
-  detail-route's scroll region per
-  [`patterns/save-sessions.md`](../../patterns/save-sessions.md);
-  hides while the keyboard is open per
-  [`mobile/touch.md → Save bar on phone`](../../foundations/mobile/touch.md#save-bar-on-phone),
-  reappears on field blur. Navigate-away guard stays active
-  throughout including during keyboard-open.
+- **Save bar on phone** stays at the bottom edge of the detail
+  route's scroll region per
+  [`patterns/save-sessions.md`](../../patterns/save-sessions.md) and
+  rides above the soft keyboard per
+  [`mobile/touch.md → Save bar on phone`](../../foundations/mobile/touch.md#save-bar-on-phone):
+  the route reserves the keyboard's height. Navigate-away guard stays
+  active throughout, including while the keyboard is open.
 - **Stack-aware Return** binds the chrome `←`, Android
   `BackHandler`, and iOS swipe-back to the existing pop-one-level
   semantics per

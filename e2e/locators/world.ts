@@ -1,5 +1,7 @@
 import type { Locator, Page } from '@playwright/test'
 
+import type { EntityTab } from '@/components/world/detail/entity-tabs'
+
 import { t } from '../harness/i18n'
 
 // World panel (app/world/[branchId].tsx). testing.md → Selector strategy (Tier 2 default);
@@ -58,8 +60,39 @@ export const world = {
   recentlyClassifiedBadge: (page: Page): Locator =>
     page.getByText(t('world:detail.recentlyClassified'), { exact: true }),
 
-  // ImporterMenu options (importer-menu.tsx); every world option is present-but-disabled, so its
-  // accessible name resolves to the disabled reason — assert the visible label text instead.
+  // ImporterMenu options (importer-menu.tsx). A disabled option's accessible name resolves to its
+  // reason, and Blank is enabled only on entity categories — assert the visible label text instead.
   addMenuOption: (page: Page, key: 'blank' | 'fromJson' | 'fromVault'): Locator =>
     page.getByText(t(`world:addMenu.${key}`), { exact: true }),
+
+  // Tab triggers may carry a `(n)` count suffix.
+  tab: (page: Page, tab: EntityTab): Locator =>
+    page.getByRole('tab', { name: new RegExp(`^${t(`world:detail.tabs.${tab}`)}`) }),
+
+  description: (page: Page): Locator =>
+    page.getByRole('textbox', { name: t('world:fields.description'), exact: true }),
+  visualField: (page: Page, key: 'hair' | 'face' | 'eyes'): Locator =>
+    page.getByRole('textbox', { name: t(`world:fields.visual.${key}`), exact: true }),
+  // TagInput's inner text input carries the field label as its accessible name.
+  tagsInput: (page: Page): Locator =>
+    page.getByRole('textbox', { name: t('world:fields.tags'), exact: true }),
+
+  addTrigger: (page: Page, category: 'character' | 'location' | 'item' | 'faction'): Locator =>
+    page.getByRole('button', { name: t(`world:add.${category}`), exact: true }),
+  addMenuBlank: (page: Page): Locator =>
+    page.getByRole('menuitem', { name: t('world:addMenu.blank'), exact: true }),
+
+  // InlineEditableName: empty and not editing, a button named by its placeholder.
+  nameTrigger: (page: Page): Locator =>
+    page.getByRole('button', { name: t('world:detail.namePlaceholder'), exact: true }),
+  nameInput: (page: Page): Locator => page.getByPlaceholder(t('world:detail.namePlaceholder')),
+
+  moreActions: (page: Page): Locator =>
+    page.getByRole('button', { name: t('world:detail.menu.label'), exact: true }),
+  menuItem: (page: Page, key: 'setLead' | 'viewJson'): Locator =>
+    page.getByRole('menuitem', { name: t(`world:detail.menu.${key}`), exact: true }),
+
+  // The list row's lead Tag (entity-row.tsx meta slot).
+  leadTag: (page: Page, name: string): Locator =>
+    world.row(page, name).getByText(t('world:lead.you'), { exact: true }),
 }

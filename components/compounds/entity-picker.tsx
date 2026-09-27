@@ -32,6 +32,10 @@ type EntityPickerProps = {
   clearable?: boolean
   'aria-invalid'?: boolean | 'true' | 'false'
   testID?: string
+  /** A muted note after a row's name — an item's current whereabouts, say. */
+  rowHint?: (entity: Entity) => string | undefined
+  /** Adds a `↗` that opens the picked entity; hidden while the value is empty or dangling. */
+  onOpen?: (id: string) => void
 }
 
 const KIND_ORDER: readonly EntityKind[] = ['character', 'location', 'item', 'faction']
@@ -57,6 +61,8 @@ export function EntityPicker({
   clearable = true,
   'aria-invalid': ariaInvalid,
   testID,
+  rowHint,
+  onOpen,
 }: EntityPickerProps) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
@@ -122,6 +128,10 @@ export function EntityPicker({
           aria-invalid={ariaInvalid}
           testID={testID}
           onClear={clearable ? () => onChange(null) : undefined}
+          openLabel={
+            onOpen == null ? undefined : t('picker.open', { name: selected?.name ?? label })
+          }
+          onOpen={onOpen == null || selected == null ? undefined : () => onOpen(selected.id)}
         >
           {!hasValue ? null : selected != null ? (
             <View className="min-w-0 flex-1 flex-row items-center gap-2">
@@ -149,25 +159,36 @@ export function EntityPicker({
           )}
         </PickerField>
       )}
-      renderRow={(row) => (
-        <View className="w-full flex-row items-center gap-2">
-          <View className="shrink-0">
-            <EntityKindIcon kind={row.data.kind} />
-          </View>
-          <View className="min-w-0 flex-1">
-            <Text size="sm" className="shrink" numberOfLines={1}>
-              {row.data.name}
-            </Text>
-          </View>
-          {row.data.status !== 'active' ? (
+      renderRow={(row) => {
+        const hint = rowHint?.(row.data)
+        return (
+          <View className="w-full flex-row items-center gap-2">
             <View className="shrink-0">
-              <Tag tone={ENTITY_STATUS_TONE[row.data.status]}>
-                {t(`world:status.${row.data.status}`)}
-              </Tag>
+              <EntityKindIcon kind={row.data.kind} />
             </View>
-          ) : null}
-        </View>
-      )}
+            <View className="min-w-0 flex-1">
+              <Text size="sm" className="shrink" numberOfLines={1}>
+                {row.data.name}
+              </Text>
+            </View>
+            {/* Capped so a long "held by A, B, C" truncates itself, not the name. */}
+            {hint ? (
+              <View className="min-w-0 max-w-[50%] shrink">
+                <Text size="xs" variant="muted" numberOfLines={1}>
+                  {hint}
+                </Text>
+              </View>
+            ) : null}
+            {row.data.status !== 'active' ? (
+              <View className="shrink-0">
+                <Tag tone={ENTITY_STATUS_TONE[row.data.status]}>
+                  {t(`world:status.${row.data.status}`)}
+                </Tag>
+              </View>
+            ) : null}
+          </View>
+        )
+      }}
       renderEmpty={(activeQuery) => (
         <Text size="sm" variant="muted" className="p-3">
           {activeQuery ? t('picker.entityNoResults') : t('picker.entityNone')}

@@ -49,8 +49,8 @@ describe('useWorldSelection', () => {
   // An undo or a reversed run can remove the row; a redo restores it under the same id.
   it('drops a selection whose row disappears, so its return does not reselect it', () => {
     const { rerender } = render(<Probe entities={[KAEL]} />)
-    act(() => latest?.setSelectedId('char_kael'))
-    expect(latest?.selection?.row).toBe(KAEL)
+    act(() => latest?.select('char_kael'))
+    expect(latest?.selection).toEqual({ type: 'entity', row: KAEL })
     rerender(<Probe entities={[]} />)
     expect(latest?.selectedId).toBeNull()
     rerender(<Probe entities={[KAEL]} />)
@@ -69,5 +69,21 @@ describe('useWorldSelection', () => {
     render(<Probe entities={[KAEL]} category="location" initialId="char_kael" />)
     expect(latest?.selection).toBeNull()
     expect(latest?.selectedId).toBeNull()
+  })
+
+  it('startCreate opens create mode for the entity category, and a repeat bumps its seq', () => {
+    render(<Probe entities={[KAEL]} />)
+    act(() => latest?.startCreate())
+    expect(latest?.selection).toEqual({ type: 'create', kind: 'character', seq: 1 })
+    act(() => latest?.startCreate())
+    expect(latest?.selection).toEqual({ type: 'create', kind: 'character', seq: 2 })
+    act(() => latest?.select('char_kael'))
+    expect(latest?.selection).toEqual({ type: 'entity', row: KAEL })
+  })
+
+  it('never creates on the Lore category', () => {
+    render(<Probe category="lore" />)
+    act(() => latest?.startCreate())
+    expect(latest?.selection).toBeNull()
   })
 })

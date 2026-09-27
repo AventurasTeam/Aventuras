@@ -250,7 +250,8 @@ chapters` (deferred by canon), and `retrieval_count` review — M5.
   `EntityPicker` (`components/compounds/`) and `OverflowMenu`
   (`components/compounds/overflow-menu.tsx`) at the milestone's pinned
   shapes. [Slice 4.2a](./02a-entity-detail.md) now adopts these shipped
-  shapes rather than authoring them — see its Open questions.
+  shapes rather than authoring them — see
+  [its Implementation notes](./02a-entity-detail.md#implementation-notes).
 - **Entity picker built on `SearchableOverlayList`, not
   `Autocomplete`.** The milestone's C8 text names an Autocomplete, but
   `Autocomplete` resolves by string and the branch can hold two

@@ -57,6 +57,11 @@ const TONE_CLASSES: Record<TagTone, { container: string; label: string; filled: 
 // and Android clips it at the parent's bounds. Sideways stays small: adjacent pills sit 8px apart.
 export const TAG_HIT_SLOP = { top: 11, bottom: 11, left: 4, right: 4 }
 
+// Android can draw a label a sub-pixel wider than the frame Yoga gave it and wrap the last word
+// into clipped space. A trailing hair space hangs past the line end, so it buys ~1dp of slack.
+// See lessons-learned/android-text-subpixel-wrap.md.
+const ANDROID_LABEL_SLACK = '\u200A'
+
 type TagProps = {
   /**
    * Visual tone:
@@ -142,7 +147,7 @@ export function Tag({
   const label =
     typeof children === 'string' ? (
       <Text size="xs" className={labelClass}>
-        {children}
+        {Platform.OS === 'android' ? `${children}${ANDROID_LABEL_SLACK}` : children}
       </Text>
     ) : (
       <TextClassContext.Provider value={labelClass}>{children}</TextClassContext.Provider>
