@@ -108,6 +108,11 @@ environment: the `storybook-mcp` URL in `.mcp.json`, and `adb`.
    `pnpm install`, so the env file exists before an agent's shell
    starts.
 3. Source `.env.dev-slot.local` from the shell's startup file when the
-   shell starts inside a worktree.
+   shell starts inside a worktree with `AVENTURAS_DEV_SLOT` set. A
+   shell without it, such as an SSH login, runs the scripts on slot 0,
+   and the file would point its tools at the worktree's claimed slot
+   instead. Slots being off in one process says nothing about the
+   worktree, so nothing deletes the file: the agent working there
+   still needs it.
 4. Create one AVD per slot you expect to use, named
    `Aventuras_Slot_N`.
