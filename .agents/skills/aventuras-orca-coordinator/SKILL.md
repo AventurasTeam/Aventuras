@@ -45,16 +45,17 @@ orca orchestration check --run <run> [--ack <delivery_id>] --wait --types "worke
 
 Never wait in the foreground; you would miss the developer. Read the output with `grep -v _keepalive`: Orca writes a keepalive line every 15 s. A wait that ends within seconds with an error is a failure to read and fix, not a timeout; don't restart it blindly.
 
-**A timeout is a checkpoint.** Run `orca orchestration worker-list --run <run> --include-remote --json` and act on what needs attention, as the guide says. Check every `PR #n ready` slice with `gh pr view <n> --json state`; a merged one is `merged` in the ledger, and a slice queued behind it starts now. Then restart the wait.
+**A timeout is a checkpoint.** Run `orca orchestration worker-list --run <run> --include-remote --json` and act on what needs attention, as the guide says. Check every `PR #n ready` slice with `gh pr view <n> --json state`; a merged one is `merged` in the ledger, and a slice queued behind it, or whose Execution gate now holds, starts now. If another unmerged slice also changes the schema, start a follow-up worker in its worktree (Review follow-ups) to merge `origin/main` in and regenerate its migration with drizzle-kit. Then restart the wait.
 
 ## Dispatching a slice
 
 On "Dispatch slice `<milestone>/<stem>`: plan at `<path>`":
 
-1. Read the plan at that absolute path: its slice doc link, which must match the dispatch line (ask the developer if not), and whether any task touches `lib/db/schema.ts` or `lib/db/migrations/`.
-2. If it changes the schema while another unmerged slice does too, queue it, record that, and tell the developer; it starts when that slice's PR merges. An answer that makes a running slice change the schema updates its ledger entry the same way.
-3. `git fetch origin` (worktrees branch from `origin/main`).
-4. Start the worker:
+1. Read the plan at that absolute path: its slice doc link, which must match the dispatch line (ask the developer if not), its Execution gate, and whether any task touches `lib/db/schema.ts` or `lib/db/migrations/`.
+2. If the gate isn't `none` and its condition doesn't hold yet, queue the slice, record the gate, and tell the developer. It starts at the checkpoint where the condition holds.
+3. If it changes the schema while another unmerged slice does too, queue it, record that, and tell the developer; it starts when that slice's PR merges.
+4. `git fetch origin` (worktrees branch from `origin/main`).
+5. Start the worker:
 
    ```bash
    orca orchestration worker-start --run <run> --worktree new-top-level --repo id:<repo-id> --name <milestone>-<stem> --setup run --agent claude --task-title "<milestone>/<stem>" --spec "<spec>" --json
@@ -64,7 +65,7 @@ On "Dispatch slice `<milestone>/<stem>`: plan at `<path>`":
 
    > **Target:** the plan at `<path>`, executed in your new worktree. **Change:** execute it with aventuras-subagent-driven-development as a dispatched worker (see its Dispatched worker section) and finish with aventuras-finishing-a-development-branch. **Constraints:** the plan is read-only; your ledger is `<plan-stem>.worker.md` next to it; your escalation channel is the `ask` command in your preamble, with `--timeout-ms 540000` (your shell tool stops a command at 600000, which would lose the message ID a timeout prints); replying in the review threads of your own PR is part of the task, not contacting a human; never merge, never push to main. **Ownership:** your worktree and your ledger file. **Acceptance:** an open PR against main with every check passing and every review comment replied to; your worker_done carries the PR URL.
 
-5. Record the IDs. Tell the developer the worktree name.
+6. Record the IDs. Tell the developer the worktree name.
 
 ## Questions
 
@@ -87,7 +88,7 @@ When the plan and the docs disagree, the slice doc and canon win, unless the pla
 
 That worker waits; the others carry on.
 
-**The developer's answer** is a message in this session. Match it to its `Q<n>` (ask if it's ambiguous), then reply to the worker: `DEVELOPER: <the chosen option, normalised>. Developer's words: "<verbatim>"`. Update the ledger.
+**The developer's answer** is a message in this session. Match it to its `Q<n>` (ask if it's ambiguous), then reply to the worker: `DEVELOPER: <the chosen option, normalised>. Developer's words: "<verbatim>"`. Update the ledger. If the answer makes the slice change the schema while another unmerged slice does too, mark it in the ledger and tell the developer now: both keep running, and whichever merges second gets its migration regenerated (see the timeout checkpoint).
 
 ## Worker messages
 
