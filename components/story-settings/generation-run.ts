@@ -3,10 +3,12 @@ import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { t } from '@/lib/i18n'
 import { SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
 import {
+  awaitRunTerminal,
   backgroundClassifierRunning,
   generationStore,
   isBackgroundKind,
   isUserEditBlocked,
+  type RunState,
   type TxState,
 } from '@/lib/stores'
 
@@ -16,16 +18,11 @@ type StorySettingsGenerationPhase =
   | 'refreshing-suggestions'
 
 /**
- * Resolves the kind of the one run represented by Story Settings' universal
- * status pill. Narrative and chapter-close work take precedence over suggestion
- * refresh so the displayed action always cancels the run the pill is describing.
- *
- * @returns The run's kind, or null when no run covers the story.
+ * The one run represented by the story's universal status pill. Narrative and
+ * chapter-close work take precedence over suggestion refresh so the displayed
+ * action always cancels the run the pill is describing.
  */
-export function selectStorySettingsGenerationRunKind(
-  txState: TxState,
-  storyId: string | undefined,
-): string | null {
+function storyPillRun(txState: TxState, storyId: string | undefined): RunState | undefined {
   const storyRuns = [...txState.runs.values()].filter(
     (run) => run.storyId === storyId && !isBackgroundKind(run.kind),
   )
@@ -34,11 +31,28 @@ export function selectStorySettingsGenerationRunKind(
       (candidate) =>
         candidate.gateBehavior === 'hard-gate' && candidate.kind !== SUGGESTION_REFRESH_KIND,
     ) ?? storyRuns.find((candidate) => candidate.gateBehavior === 'hard-gate')
-  const run =
+  return (
     hardGateRun ??
     storyRuns.find((candidate) => candidate.kind !== SUGGESTION_REFRESH_KIND) ??
     storyRuns[0]
-  return run?.kind ?? null
+  )
+}
+
+/** @returns The pill run's kind, or null when no run covers the story. */
+export function selectStorySettingsGenerationRunKind(
+  txState: TxState,
+  storyId: string | undefined,
+): string | null {
+  return storyPillRun(txState, storyId)?.kind ?? null
+}
+
+/**
+ * Cancels the pill's run on the branch it runs on. The pill is story-keyed, so the
+ * route's branch can name a sibling of the run, which awaitRunTerminal then misses.
+ */
+export function cancelStoryPillRun(storyId: string | undefined): void {
+  const run = storyPillRun(generationStore.getTxState(), storyId)
+  if (run != null) void awaitRunTerminal(run.kind, run.branchId, 'cancel')
 }
 
 /** Why an in-story edit is blocked right now, or undefined when it isn't. */

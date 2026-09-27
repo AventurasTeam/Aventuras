@@ -14,7 +14,11 @@ import { ScreenShell } from '@/components/shells/screen-shell'
 import { StorySettingsShell } from '@/components/shells/story-settings-shell'
 import { AboutPanel } from '@/components/story-settings/about-panel'
 import { AuthoringAidsPanel } from '@/components/story-settings/authoring-aids-panel'
-import { storyPillPhase, useStoryGenerationGate } from '@/components/story-settings/generation-run'
+import {
+  cancelStoryPillRun,
+  storyPillPhase,
+  useStoryGenerationGate,
+} from '@/components/story-settings/generation-run'
 import { MemoryKnobsPanel } from '@/components/story-settings/memory-knobs-panel'
 import { MemoryPanel } from '@/components/story-settings/memory-panel'
 import { ModelsPanel } from '@/components/story-settings/models-panel'
@@ -52,13 +56,7 @@ import {
 import { db, runInTransaction } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
-import {
-  awaitRunTerminal,
-  generationStore,
-  isBackgroundKind,
-  rehydrateStories,
-  storiesStore,
-} from '@/lib/stores'
+import { rehydrateStories, storiesStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
 const ctx = { db, runInTransaction }
@@ -204,14 +202,6 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
     gateReason: disabledReason,
     classifierRunning,
   } = useStoryGenerationGate(storyId)
-  // awaitRunTerminal is branch-scoped, and this screen has no branch param. Any
-  // cancellable run for this story carries it: runs only exist for the open
-  // story/branch.
-  const cancelBranchId = generationStore.useGeneration(
-    (s) =>
-      [...s.txState.runs.values()].find((r) => r.storyId === storyId && !isBackgroundKind(r.kind))
-        ?.branchId ?? null,
-  )
 
   // Scoped to THIS route's story: the open story survives navigation, so an
   // unscoped read would show whichever story the session last opened in the
@@ -369,11 +359,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
           storyId={storyId ?? null}
           swapTarget={settings?.embedding_swap_target}
           activePhase={storyPillPhase(activeRunKind, classifierRunning)}
-          onCancel={() => {
-            if (activeRunKind != null && cancelBranchId != null) {
-              void awaitRunTerminal(activeRunKind, cancelBranchId, 'cancel')
-            }
-          }}
+          onCancel={() => cancelStoryPillRun(storyId)}
           onOpenMemory={() => selectTab('memory')}
         />
       }

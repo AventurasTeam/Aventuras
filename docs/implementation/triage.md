@@ -98,18 +98,6 @@ slice-planning gate forces its resolution before that slice is planned.
   whole-sentence keys fix it. Revisit trigger: the first non-English
   locale.
 
-- **World and Plot's pill Cancel misses a sibling branch's run.** The
-  pill's foreground kind is story-keyed
-  (`selectStorySettingsGenerationRunKind`, `generation-run.ts:25`), but
-  `onCancel` passes the route's branch to `awaitRunTerminal`
-  (`app/world/[branchId].tsx:448`, `app/plot/[branchId].tsx:372`),
-  which matches kind and branch. A foreground run on a sibling branch
-  shows in the pill, and its Cancel does nothing. Not reachable through
-  shipped navigation until M6 branch switching; in dev a
-  `/world/<other branch>` link reaches it, since `useColdOpenStory`
-  opens the branch without checking for a run. Revisit trigger: M6
-  planning.
-
 - **Whether `updating-memory` blocks branch switching.**
   [`branch-navigator.md → During generation`](../ui/screens/reader-composer/branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked)
   pauses switch, delete and create while the pill is active ("any

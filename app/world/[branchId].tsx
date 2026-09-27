@@ -10,7 +10,11 @@ import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { plotHref } from '@/components/plot/plot-selection'
 import { MasterDetailLayout } from '@/components/shells/master-detail-layout'
 import { ScreenShell } from '@/components/shells/screen-shell'
-import { storyPillPhase, useStoryGenerationGate } from '@/components/story-settings/generation-run'
+import {
+  cancelStoryPillRun,
+  storyPillPhase,
+  useStoryGenerationGate,
+} from '@/components/story-settings/generation-run'
 import { EmptyState } from '@/components/ui/empty-state'
 import { KeyboardInsetColumn } from '@/components/ui/keyboard-inset-column'
 import { CollisionReviewPill } from '@/components/world/collision-review-pill'
@@ -51,7 +55,6 @@ import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { isEntityCategory, type EntityFilter, type WorldCategory } from '@/lib/list-modules'
 import {
-  awaitRunTerminal,
   characterRelationshipsStore,
   entitiesStore,
   entriesStore,
@@ -456,9 +459,7 @@ export default function WorldRoute() {
             storyId={storyId}
             swapTarget={open?.settings.embedding_swap_target}
             activePhase={storyPillPhase(activeRunKind, classifierRunning)}
-            onCancel={() => {
-              if (activeRunKind != null) void awaitRunTerminal(activeRunKind, branchId, 'cancel')
-            }}
+            onCancel={() => cancelStoryPillRun(storyId ?? undefined)}
             onOpenMemory={() => {
               if (storyId != null) navigateGuarded(`/story-settings/${storyId}?tab=memory`)
             }}
