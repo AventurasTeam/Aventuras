@@ -123,8 +123,9 @@ two the harness absorbs:
   conclusion that then gets written down. Recompile between every
   mutation and its run.
 - **Every launch picks its own DevTools port.** Dev-mode
-  `electron/main.ts` claims `127.0.0.1:9222` for `electron-mcp-server`
-  only when its command line carries no `--remote-debugging-port`.
+  `electron/main.ts` claims `127.0.0.1:9222`, where the Playwright MCP
+  server attaches, only when its command line carries no
+  `--remote-debugging-port`.
   `electron.launch` passes `0`, and `spawnAppProcess` passes `0` in dev,
   so the suite runs beside `pnpm desktop` and beside a second suite on
   the same machine. `devtools-port.spec.ts` holds the port itself and

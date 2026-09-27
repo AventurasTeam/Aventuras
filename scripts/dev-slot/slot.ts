@@ -23,7 +23,7 @@ export function slotPorts(slot: number): SlotPorts {
     metro: 8081 + slot,
     storybook: 6006 + slot,
     mock: 4319 + slot,
-    // Workers sit outside electron-mcp-server's scan list, which starts at 9222.
+    // Workers stay clear of 9222-9225, the range CDP tooling probes by default.
     devtools: slot === 0 ? 9222 : 9230 + slot,
   }
 }

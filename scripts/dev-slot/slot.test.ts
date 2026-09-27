@@ -28,16 +28,6 @@ describe('slotPorts', () => {
     const all = Array.from({ length: 10 }, (_, slot) => Object.values(slotPorts(slot))).flat()
     expect(new Set(all).size).toBe(all.length)
   })
-
-  // electron-mcp-server scans these and drives the first app it finds; a worker's app in the list
-  // would be driven by whichever agent asked first.
-  it('keeps worker DevTools ports out of electron-mcp-server’s scan list', () => {
-    const scanned = [
-      9222, 9223, 9224, 9225, 9200, 9201, 9202, 9203, 9204, 9205, 9300, 9301, 9302, 9303, 9304,
-      9305, 9400, 9401, 9402, 9403, 9404, 9405,
-    ]
-    for (let slot = 1; slot <= 9; slot++) expect(scanned).not.toContain(slotPorts(slot).devtools)
-  })
 })
 
 describe('slotDataDir', () => {

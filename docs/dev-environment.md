@@ -39,10 +39,12 @@ shares slot 0 and the one dev DB, as before.
 | `userData`        | `~/.config/aventuras-dev` | `~/.config/aventuras-dev-slotN`                       |
 | Android           | the attached device       | AVD `Aventuras_Slot_N`, serial `emulator-<5552 + 2N>` |
 
-Worker DevTools ports sit outside the list `electron-mcp-server` scans,
-because it drives the **first** app it finds: with two workers' apps
-in range, one agent would click through the other's. That server
-therefore only ever reaches slot 0.
+The DevTools port is what the `electron-app` MCP server attaches to:
+`.mcp.json` points it at `AVENTURAS_DEVTOOLS_PORT`, defaulting to 9222,
+so each worker's agent drives its own app. A tool that discovers apps
+by scanning ports instead cannot do that — `electron-mcp-server`, which
+this replaced, drove the first app it found, so a worker would have
+clicked through another worker's app.
 
 ### Claiming
 
