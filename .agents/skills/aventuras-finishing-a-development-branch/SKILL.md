@@ -101,9 +101,9 @@ This determines which menu to show and how cleanup works:
 
 | State                                  | Menu                         | Cleanup                         |
 | -------------------------------------- | ---------------------------- | ------------------------------- |
-| `GIT_DIR == GIT_COMMON` (normal repo)  | Standard 4 options           | No worktree to clean up         |
-| `GIT_DIR != GIT_COMMON`, named branch  | Standard 4 options           | Provenance-based (see Step 6)   |
-| `GIT_DIR != GIT_COMMON`, detached HEAD | Reduced 3 options (no merge) | No cleanup (externally managed) |
+| `GIT_DIR == GIT_COMMON` (normal repo)  | Standard 3 options           | No worktree to clean up         |
+| `GIT_DIR != GIT_COMMON`, named branch  | Standard 3 options           | Provenance-based (see Step 6)   |
+| `GIT_DIR != GIT_COMMON`, detached HEAD | Reduced 2 options (no merge) | No cleanup (externally managed) |
 
 ### Step 3: Determine Base Branch
 
@@ -113,6 +113,8 @@ git merge-base HEAD main 2>/dev/null || git merge-base HEAD master 2>/dev/null
 ```
 
 Or ask: "This branch split from main - is that correct?"
+
+The base is `main`, the v2 trunk. GitHub's default branch is `master` (legacy v1), so every `gh pr create` below passes `--base <base-branch>` explicitly; without it the PR targets `master`, where CI never runs.
 
 ### Step 4: Present Options
 
@@ -174,7 +176,7 @@ git branch -d <feature-branch>
 git push -u origin <feature-branch>
 
 # Create PR
-gh pr create --title "<title>" --body "$(cat <<'EOF'
+gh pr create --base <base-branch> --title "<title>" --body "$(cat <<'EOF'
 ## Summary
 <2-3 bullets of what changed>
 
@@ -194,7 +196,7 @@ Report: "Keeping branch <name>. Worktree preserved at <path>."
 
 ### Step 6: Cleanup Workspace
 
-**Only runs for Options 1 and 4.** Options 2 and 3 always preserve the worktree.
+**Only runs for Option 1.** Options 2 and 3 always preserve the worktree.
 
 ```bash
 GIT_DIR=$(cd "$(git rev-parse --git-dir)" 2>/dev/null && pwd -P)
@@ -215,6 +217,27 @@ git worktree prune  # Self-healing: clean up any stale registrations
 
 **Otherwise:** The host environment (harness) owns this workspace. Do NOT remove it. If your platform provides a workspace-exit tool, use it. Otherwise, leave the workspace in place.
 
+## Dispatched worker
+
+When your task prompt makes you a dispatched worker (aventuras-subagent-driven-development → Dispatched worker), nobody answers a prompt. Steps 1–3 run as written; the base is `main`, so don't ask about it. Run `git fetch origin` first and use `origin/main` wherever a step names the base: a stale local `main` pulls other slices' commits into every range. Then:
+
+1. **Step 1.5 draws on your worker ledger too.** Every `DEVELOPER:` answer goes into Implementation notes; every `PROVISIONAL:` answer goes in marked provisional. An answer that changes what a canon doc says (`docs/data-model.md`, a contract) also updates that doc on this branch.
+2. **Comment audit: run it whenever the finder reports candidate blocks.** Don't offer it; commit it as Step 1.6 says.
+3. **The PR is the only option.** Never merge, never keep. Before pushing, merge `origin/main` in with a new commit if the branch conflicts with it, and if `git diff --name-only origin/main...HEAD | wc -l` is over 100 (CodeRabbit's cap), ask through the channel about splitting. Then push and create the PR (Option 2). Its body adds, after Summary, one section per non-empty label from the ledger:
+
+   ```
+   ## Decisions pending
+   - [ ] <question> → <provisional choice> (alternative: <…>)
+
+   ## Decided during the run
+   - <question> → <developer's decision>
+   ```
+
+   Record the PR URL in the ledger.
+
+4. **Review loop.** Wait until every check has finished, CodeRabbit's included (`gh pr checks <n> --watch`, in the background: the E2E suite outlasts a foreground command). Then handle every CodeRabbit comment — inline threads and those in its review body (`gh pr view <n> --json reviews`) — with aventuras-receiving-code-review, which has its own Dispatched worker section. A failed check is a bug: fix it with aventuras-systematic-debugging. Fixes are new commits, never amend or force-push; each push restarts this step. CodeRabbit answers your replies: reply again only where it raises something new.
+5. **Done** when all checks pass and every review comment has your reply: in its thread, or, for comments in the review body, in your PR comment. Then report completion once, through the channel your prompt names, with the PR URL. Never clean up the worktree: fixes from the developer's review land in it later.
+
 ## Quick Reference
 
 | Option           | Merge | Push | Keep Worktree | Cleanup Branch |
@@ -233,12 +256,12 @@ git worktree prune  # Self-healing: clean up any stale registrations
 **Open-ended questions**
 
 - **Problem:** "What should I do next?" is ambiguous
-- **Fix:** Present exactly 4 structured options (or 3 for detached HEAD)
+- **Fix:** Present exactly 3 structured options (or 2 for detached HEAD)
 
 **Cleaning up worktree for Option 2**
 
 - **Problem:** Remove worktree user needs for PR iteration
-- **Fix:** Only cleanup for Options 1 and 4
+- **Fix:** Only cleanup for Option 1
 
 **Deleting branch before removing worktree**
 
@@ -271,8 +294,8 @@ git worktree prune  # Self-healing: clean up any stale registrations
 
 - Verify tests before offering options
 - Detect environment before presenting menu
-- Present exactly 4 options (or 3 for detached HEAD)
-- Get typed confirmation for Option 4
-- Clean up worktree for Options 1 & 4 only
+- Present exactly 3 options (or 2 for detached HEAD)
+- Pass `--base` to `gh pr create`
+- Clean up worktree for Option 1 only
 - `cd` to main repo root before worktree removal
 - Run `git worktree prune` after removal
