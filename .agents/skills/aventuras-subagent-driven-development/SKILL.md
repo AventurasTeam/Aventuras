@@ -150,6 +150,7 @@ You are a **dispatched worker** when your task prompt says so and names an escal
 - header: slice, branch, worktree
 - per task: `dispatched <base-sha>`, `implemented <sha>`, `spec ✅`, `quality ✅ <sha>`, `complete`; or `blocked: <reason>`, with any partial commits
 - per question: the text; its message ID as soon as the channel returns one, before you wait; then the answer with its label
+- the final whole-implementation review: `final review ✅ <sha>`
 - review-round entries (aventuras-receiving-code-review) and the PR URL
 
 **At start and after any compaction, resume from the ledger,** checked against `git log`. A task without `complete` is not complete. A question with a message ID and no answer is still open: resume it with the channel's resume form. Never ask it again; if the ID is missing, find the question through the channel before asking anything.
