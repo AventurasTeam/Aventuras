@@ -2771,6 +2771,25 @@ are the treatment to reuse if badging wins.
 Parked 2026-09-27 from triage; the signal is a retired character read
 as present, or a staged one read as established.
 
+#### Sentence composition in World's copy
+
+`overview.lastSeen` ("last seen {{span}} ago") and `connections.ago`
+("{{span}} ago in-world") splice a separately pluralised span
+(`overview.span.*`, or `overview.spanFallback`'s
+"{{count}} × {{tier}}" for a custom-calendar tier) into a sentence
+frame, which breaks agreement in languages whose case depends on the
+frame (German's "vor drei Tagen"). `overview.within` is a bare joiner
+("in") between two names. Per-tier whole-sentence keys fix the first
+two, keeping a fallback sentence for custom tiers — the tiers are the
+story calendar's, which `Intl.RelativeTimeFormat` can't express — and a
+key taking both names fixes the joiner.
+[`code-conventions.md → i18n discipline`](./code-conventions.md#i18n-discipline)
+requires `t()` but says nothing against composing fragments; add that
+rule when this lands. Only `locales/en` ships.
+
+Parked 2026-09-27 from triage; the signal is the first non-English
+locale.
+
 ### Code structure (parked)
 
 #### Unsaved-changes guard folder placement

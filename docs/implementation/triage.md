@@ -64,12 +64,6 @@ slice-planning gate forces its resolution before that slice is planned.
   user-edit rule. Revisit trigger: users hitting double-positioned items,
   or the prompt context rendering one item as both loose and held.
 
-- **i18n composition in World copy.** `overview.lastSeen` and
-  `connections.ago` splice a pluralised span into "… ago" (breaks case
-  in e.g. German), and `overview.within` is a joiner fragment. Per-tier
-  whole-sentence keys fix it. Revisit trigger: the first non-English
-  locale.
-
 - **A reversal can still drop a later user edit.** Reversing a machine
   write skips each column a later `user_edit` outside the reversed set
   wrote

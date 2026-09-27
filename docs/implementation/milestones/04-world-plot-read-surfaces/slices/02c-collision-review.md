@@ -196,6 +196,17 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   re-keyed pair should read as a user-authored view: it is a user
   create, so each view it carries over non-null blocks upserts from
   older prose even though the classifier wrote it.
+- **The dialog's chrome isn't routed through `t()`.**
+  `components/compounds/collision-resolve-dialog.tsx` holds about twenty
+  raw English strings — mode labels, buttons, the field-label map, the
+  merge-count lines, the keep-as-distinct warning — and `formatAgo`
+  returns "just now", "N min ago", "N h ago" and "N d ago" as literals,
+  spliced into "Older · …" and "Newer · …", against
+  [`code-conventions.md → i18n discipline`](../../../../code-conventions.md#i18n-discipline).
+  The dialog has no live caller until this slice gives it drivers, so
+  route it through `t()` here; relative times want whole-sentence keys
+  (see [`parked.md → Sentence composition in World's copy`](../../../../parked.md#sentence-composition-in-worlds-copy)).
+  Found by the 2026-09-27 triage pass.
 
 ## Implementation notes
 
