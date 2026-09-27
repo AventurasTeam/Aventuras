@@ -29,9 +29,10 @@ export type DevSlot = {
 const git = (cwd: string, ...args: string[]) =>
   execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
 
-function liveWorktrees(cwd: string): Set<string> {
+/** Linked worktrees that still exist. The main checkout, always listed first, never holds a slot. */
+function liveLinkedWorktrees(cwd: string): Set<string> {
   const live = new Set<string>()
-  for (const block of git(cwd, 'worktree', 'list', '--porcelain').split('\n\n')) {
+  for (const block of git(cwd, 'worktree', 'list', '--porcelain').split('\n\n').slice(1)) {
     const lines = block.split('\n')
     const path = lines.find((line) => line.startsWith('worktree '))?.slice('worktree '.length)
     if (path && !lines.some((line) => line.startsWith('prunable')) && existsSync(path)) {
@@ -73,8 +74,20 @@ function writeEnvFile(worktree: string, { ports, android }: DevSlot): void {
 
 function claimForWorktree(cwd: string, paths: DataDirOptions): number {
   const worktree = realpathSync(git(cwd, 'rev-parse', '--show-toplevel'))
-  const commonDir = git(cwd, 'rev-parse', '--path-format=absolute', '--git-common-dir')
-  const live = liveWorktrees(cwd)
+  const [gitDir, commonDir] = git(
+    cwd,
+    'rev-parse',
+    '--path-format=absolute',
+    '--git-dir',
+    '--git-common-dir',
+  ).split('\n')
+  // The main checkout is the machine's own working copy, not a worker, and it is never removed:
+  // a claim would hold its slot for good.
+  if (gitDir === commonDir) {
+    writeEnvFile(worktree, describe(0, paths))
+    return 0
+  }
+  const live = liveLinkedWorktrees(cwd)
   const slot = claimSlot({
     dir: join(commonDir, 'aventuras-dev-slots'),
     worktree,
@@ -89,8 +102,8 @@ function claimForWorktree(cwd: string, paths: DataDirOptions): number {
 
 /**
  * This checkout's dev slot, from `AVENTURAS_DEV_SLOT`. Off (the default) is slot 0, the ports and
- * userData the tooling always used; `auto` claims a sticky slot per worktree. See
- * docs/dev-environment.md.
+ * userData the tooling always used; `auto` claims a sticky slot per linked worktree and keeps the
+ * main checkout on slot 0. See docs/dev-environment.md.
  */
 export function resolveDevSlot(
   opts: { env?: { AVENTURAS_DEV_SLOT?: string } & DataDirEnv; cwd?: string; home?: string } = {},

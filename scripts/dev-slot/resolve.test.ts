@@ -63,9 +63,10 @@ describe('resolveDevSlot', () => {
   })
 
   it('writes a pinned slot’s env file over one an earlier claim left', () => {
-    auto(main)
-    resolveDevSlot({ env: { AVENTURAS_DEV_SLOT: '3' }, cwd: main, home })
-    const env = readFileSync(join(main, ENV_FILE), 'utf8')
+    const wt = addWorktree('wt1')
+    auto(wt)
+    resolveDevSlot({ env: { AVENTURAS_DEV_SLOT: '3' }, cwd: wt, home })
+    const env = readFileSync(join(wt, ENV_FILE), 'utf8')
     expect(env).toContain('export AVENTURAS_DEVTOOLS_PORT=9233\n')
     expect(env).toContain('export ANDROID_SERIAL=emulator-5558\n')
   })
@@ -90,17 +91,37 @@ describe('resolveDevSlot', () => {
   })
 
   it('gives each worktree its own sticky slot, from any directory inside it', () => {
-    const wt = addWorktree('wt1')
-    mkdirSync(join(wt, 'sub'))
-    expect(auto(main).slot).toBe(1)
-    expect(auto(join(wt, 'sub')).slot).toBe(2)
-    expect(auto(main).slot).toBe(1)
-    expect(auto(wt).slot).toBe(2)
+    const wt1 = addWorktree('wt1')
+    const wt2 = addWorktree('wt2')
+    mkdirSync(join(wt2, 'sub'))
+    expect(auto(wt1).slot).toBe(1)
+    expect(auto(join(wt2, 'sub')).slot).toBe(2)
+    expect(auto(wt1).slot).toBe(1)
+    expect(auto(wt2).slot).toBe(2)
+  })
+
+  it('keeps the main checkout on slot 0 without claiming', () => {
+    expect(auto(main).slot).toBe(0)
+    expect(auto(addWorktree('wt1')).slot).toBe(1)
+    const env = readFileSync(join(main, ENV_FILE), 'utf8')
+    expect(env).toContain('export AVENTURAS_DEVTOOLS_PORT=9222\n')
+    expect(env).not.toContain('ANDROID_SERIAL')
+  })
+
+  it('frees a slot the main checkout claimed before it kept to slot 0', () => {
+    const registry = join(main, '.git', 'aventuras-dev-slots')
+    mkdirSync(registry)
+    writeFileSync(join(registry, '1'), main)
+    const stale = join(home, '.config', 'aventuras-dev-slot1')
+    mkdirSync(stale, { recursive: true })
+
+    expect(auto(addWorktree('wt1')).slot).toBe(1)
+    expect(existsSync(stale)).toBe(false)
   })
 
   it('writes the env file tools that cannot resolve a slot read', () => {
-    const wt = addWorktree('wt1')
-    auto(main)
+    auto(addWorktree('wt1'))
+    const wt = addWorktree('wt2')
     auto(wt)
     const env = readFileSync(join(wt, ENV_FILE), 'utf8')
     expect(env).toContain('export AVENTURAS_DEVTOOLS_PORT=9232\n')
