@@ -18,7 +18,7 @@ const DIST = join(REPO_ROOT, 'dist')
 //              unpacked native modules, and extraResources migrations.
 type Mode = 'dev' | 'packaged'
 
-function currentMode(): Mode {
+export function currentMode(): Mode {
   return test.info().project.name === 'packaged' ? 'packaged' : 'dev'
 }
 
@@ -187,7 +187,8 @@ export function spawnAppProcess(userDataDir: string): SpawnedApp {
   const proc =
     currentMode() === 'packaged'
       ? spawn(PACKAGED_APP, args, { env, stdio })
-      : spawn(DEV_ELECTRON, ['electron/dist/main.js', ...args], {
+      : // Without an explicit port, dev main claims 9222 (electron/main.ts).
+        spawn(DEV_ELECTRON, ['electron/dist/main.js', '--remote-debugging-port=0', ...args], {
           cwd: REPO_ROOT,
           env: { ...env, EXPO_WEB_URL: 'http://127.0.0.1:9' },
           stdio,

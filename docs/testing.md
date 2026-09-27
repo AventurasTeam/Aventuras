@@ -101,8 +101,8 @@ the `asarUnpack` native modules (`sqlite-vec`, `onnxruntime-node`),
 and the `extraResources` migrations — the code paths that break in
 production and nowhere else.
 
-Three launch gotchas — the first is yours to handle, the other two the
-harness absorbs:
+Four launch gotchas — the first and last are yours to handle, the middle
+two the harness absorbs:
 
 - **Neither suite builds anything.** There is no `globalSetup` and no
   pretest hook in either project, so both run whatever artifact is
@@ -122,18 +122,17 @@ harness absorbs:
   "this branch is uncovered" — the opposite of the truth, and a
   conclusion that then gets written down. Recompile between every
   mutation and its run.
-- **A running `pnpm desktop` breaks the whole suite.** The dev app holds
-  the default remote-debugging port (`127.0.0.1:9222`), and a suite
-  launched alongside it fails **every** spec in `beforeAll` — Electron
-  logs `bind() failed: Address already in use (98)` /
-  `Cannot start http server for devtools`, then `electron.launch` times
-  out after 60s. The list reporter shows every test at `0ms`, which reads
-  like a mass product failure rather than a port collision. State is not
-  the problem (the harness seeds its own `--user-data-dir`, so the dev DB
-  is untouched) — only the port is. Close the desktop app before running
-  the suite, and check `ss -tlnp | grep 9222` if launches time out. Note
-  a crashed or backgrounded run can leave the port held by an orphan;
-  `pgrep -f electron/dist/main.js` finds it.
+- **Every launch picks its own DevTools port.** Dev-mode
+  `electron/main.ts` claims `127.0.0.1:9222` for `electron-mcp-server`
+  only when its command line carries no `--remote-debugging-port`.
+  `electron.launch` passes `0`, and `spawnAppProcess` passes `0` in dev,
+  so the suite runs beside `pnpm desktop` and beside a second suite on
+  the same machine. `devtools-port.spec.ts` holds the port itself and
+  pins both paths. A new launch path that omits the switch brings the
+  collision back: Electron logs `bind() failed` and
+  `Cannot start http server for devtools`, and every `electron.launch`
+  times out after 60s — a mass failure that reads like a product bug
+  rather than a port problem.
 - **`firstWindow()` is unreliable in unpackaged/dev mode.** Dev-mode
   `electron/main.ts` opens a detached DevTools window that races the
   app window. Select the app window by URL prefix, not by first-open

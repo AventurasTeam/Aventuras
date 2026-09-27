@@ -60,13 +60,13 @@ when it's false. Mock the LLM with the local HTTP server + a seeded
 `openai-compatible` provider. See
 [testing.md → Mock LLM](../../docs/testing.md#mock-llm).
 
-## Close `pnpm desktop` before running the suite
+## New launch paths pass their own DevTools port
 
-The dev app holds `127.0.0.1:9222`; a suite launched alongside it fails
-**every** spec in `beforeAll` with `electron.launch` timing out, reported
-as `0ms` per test — which reads like a mass product failure, not a port
-collision. Check `ss -tlnp | grep 9222` when launches time out, and
-`pgrep -f electron/dist/main.js` for an orphan from a killed run. See
+Dev main claims `127.0.0.1:9222` unless its launcher passes
+`--remote-debugging-port`; both harness launch paths pass `0`, which is
+what lets the suite run beside `pnpm desktop` or a second suite. A path
+that omits the switch times out every `electron.launch` whenever the
+port is held — a mass failure that reads like a product bug. See
 [testing.md → Launch modes](../../docs/testing.md#launch-modes).
 
 ## E2E runs the artifact, not your edit
