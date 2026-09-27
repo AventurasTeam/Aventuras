@@ -70,11 +70,11 @@ On "Dispatch slice `<milestone>/<stem>`: plan at `<path>`":
 
 Record the question in the ledger as `Q<n>`, then classify it:
 
-| Class        | Test                                                                                                                | Reply                                                                      |
-| ------------ | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Settled      | The plan, slice doc or canon docs answer it; quote them                                                              | `ANSWER: <answer> (<doc> → <section>)`                                    |
-| Reversible   | Local and cheap to change later; nothing later work builds on                                                        | `PROVISIONAL: <choice>. Alternative: <other>.`                             |
-| Load-bearing | Schema, contracts between modules, product behaviour, anything later tasks build on, overturning a recorded decision | Nothing yet: the developer decides                                         |
+| Class        | Test                                                                                                                 | Reply                                          |
+| ------------ | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| Settled      | The plan, slice doc or canon docs answer it; quote them                                                              | `ANSWER: <answer> (<doc> → <section>)`         |
+| Reversible   | Local and cheap to change later; nothing later work builds on                                                        | `PROVISIONAL: <choice>. Alternative: <other>.` |
+| Load-bearing | Schema, contracts between modules, product behaviour, anything later tasks build on, overturning a recorded decision | Nothing yet: the developer decides             |
 
 When the plan and the docs disagree, the slice doc and canon win, unless the plan's Decisions section records a developer decision on the point. Between reversible and load-bearing, choose load-bearing. Reply with `orca orchestration reply --id <message_id> --body "<reply>" --json`.
 
@@ -107,4 +107,4 @@ On "address review on PR #n", start a fresh worker in that slice's existing work
 - Relaying the developer's words without the normalised option
 - Starting a second schema-changing slice
 - Acting on what you remember instead of the ledger after a compaction
-- Editing repository files, merging, or telling a worker to merge
+- Editing tracked repository files (the git-ignored ledger is yours), merging, or telling a worker to merge
