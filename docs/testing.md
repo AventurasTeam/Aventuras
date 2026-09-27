@@ -129,11 +129,11 @@ two the harness absorbs:
   so the suite runs beside `pnpm desktop` and beside a second suite on
   the same machine. `devtools-port.spec.ts` holds the port itself and
   pins both paths, in the `dev` project only: packaged builds open no
-  DevTools port, so CI's packaged job skips it. A new launch path that omits the switch brings the
-  collision back: Electron logs `bind() failed` and
-  `Cannot start http server for devtools`, and every `electron.launch`
-  times out after 60s — a mass failure that reads like a product bug
-  rather than a port problem.
+  DevTools port, so CI's packaged job skips it. A new launch path that
+  omits the switch brings the collision back: Electron logs
+  `bind() failed` and `Cannot start http server for devtools`, and
+  every `electron.launch` times out after 60s — a mass failure that
+  reads like a product bug rather than a port problem.
 - **`firstWindow()` is unreliable in unpackaged/dev mode.** Dev-mode
   `electron/main.ts` opens a detached DevTools window that races the
   app window. Select the app window by URL prefix, not by first-open
