@@ -50,6 +50,15 @@ function describe(slot: number, paths: DataDirOptions): DevSlot {
   }
 }
 
+/** The checkout's root, or undefined outside a git work tree. */
+function worktreeRoot(cwd: string): string | undefined {
+  try {
+    return realpathSync(git(cwd, 'rev-parse', '--show-toplevel'))
+  } catch {
+    return undefined
+  }
+}
+
 function writeEnvFile(worktree: string, { ports, android }: DevSlot): void {
   const lines = [
     '# Written by scripts/dev-slot for this worktree; worker shells source it.',
@@ -90,6 +99,12 @@ export function resolveDevSlot(
   const paths = { home, env }
   const setting = parseSlotSetting(env.AVENTURAS_DEV_SLOT)
   if (setting.kind === 'off') return describe(0, paths)
-  if (setting.kind === 'fixed') return describe(setting.slot, paths)
+  if (setting.kind === 'fixed') {
+    const fixed = describe(setting.slot, paths)
+    // Replaces what an earlier `auto` claim wrote, so env-reading tools follow the pinned slot.
+    const worktree = worktreeRoot(cwd)
+    if (worktree) writeEnvFile(worktree, fixed)
+    return fixed
+  }
   return describe(claimForWorktree(cwd, paths), paths)
 }

@@ -62,6 +62,21 @@ describe('resolveDevSlot', () => {
     expect(existsSync(join(main, '.git', 'aventuras-dev-slots'))).toBe(false)
   })
 
+  it('writes a pinned slot’s env file over one an earlier claim left', () => {
+    auto(main)
+    resolveDevSlot({ env: { AVENTURAS_DEV_SLOT: '3' }, cwd: main, home })
+    const env = readFileSync(join(main, ENV_FILE), 'utf8')
+    expect(env).toContain('export AVENTURAS_DEVTOOLS_PORT=9233\n')
+    expect(env).toContain('export ANDROID_SERIAL=emulator-5558\n')
+  })
+
+  it('pins a slot outside any checkout, with no env file to write', () => {
+    const outside = join(root, 'outside')
+    mkdirSync(outside)
+    expect(resolveDevSlot({ env: { AVENTURAS_DEV_SLOT: '3' }, cwd: outside, home }).slot).toBe(3)
+    expect(existsSync(join(outside, ENV_FILE))).toBe(false)
+  })
+
   it('keeps and wipes slot data where Electron keeps it', () => {
     const xdg = join(root, 'xdg')
     const env = { AVENTURAS_DEV_SLOT: 'auto', XDG_CONFIG_HOME: xdg }

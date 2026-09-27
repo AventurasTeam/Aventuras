@@ -68,8 +68,9 @@ Slot data is disposable; `pnpm db:seed` refills it.
 reading). It also writes `.env.dev-slot.local` in the worktree
 (gitignored), which exports `AVENTURAS_DEVTOOLS_PORT`,
 `AVENTURAS_STORYBOOK_PORT` and, for worker slots, `ANDROID_SERIAL`.
-The repo's own scripts never read that file — they resolve the slot
-from the worktree path — it exists for tools that only read the
+A pinned slot writes the file too, replacing one an earlier claim
+left. The repo's own scripts never read that file — they resolve the
+slot from the worktree path — it exists for tools that only read the
 environment: the `storybook-mcp` URL in `.mcp.json`, and `adb`.
 
 ### Slot-aware commands
