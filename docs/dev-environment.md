@@ -61,10 +61,11 @@ any slot-aware command runs, and records it in
 the clone. The claim is keyed on the worktree path, so it survives
 restarts. The main checkout never claims and stays on slot 0: it is
 the machine's own working copy rather than a worker, and it is never
-removed, so a claim would hold its slot for good. A slot whose worktree has been removed, or deleted without
-git, is free again, and handing it over **wipes its `userData`**: the
-last branch's DB may carry migrations the next one does not know.
-Slot data is disposable; `pnpm db:seed` refills it.
+removed, so a claim would hold its slot for good. A slot whose
+worktree has been removed, or deleted without git, is free again, and
+handing it over **wipes its `userData`**: the last branch's DB may
+carry migrations the next one does not know. Slot data is disposable;
+`pnpm db:seed` refills it.
 
 `pnpm dev:slot` claims and prints the slot (`--json` for a machine
 reading). It also writes `.env.dev-slot.local` in the worktree
