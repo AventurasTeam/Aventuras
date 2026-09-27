@@ -62,7 +62,8 @@ app.on('second-instance', () => {
 const APP_SCHEME = 'app'
 const APP_HOST = 'bundle'
 
-if (isDev) {
+// A launcher's own port wins (Playwright passes 0), so parallel suites and `pnpm desktop` coexist.
+if (isDev && !app.commandLine.hasSwitch('remote-debugging-port')) {
   app.commandLine.appendSwitch('remote-debugging-port', '9222')
 }
 
