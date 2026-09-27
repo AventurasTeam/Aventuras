@@ -71,7 +71,7 @@ reading). It also writes `.env.dev-slot.local` in the worktree
 A pinned slot writes the file too, replacing one an earlier claim
 left. The repo's own scripts never read that file — they resolve the
 slot from the worktree path — it exists for tools that only read the
-environment: the `storybook-mcp` URL in `.mcp.json`, and `adb`.
+environment: the MCP servers in `.mcp.json`, and `adb`.
 
 ### Slot-aware commands
 
@@ -105,14 +105,17 @@ environment: the `storybook-mcp` URL in `.mcp.json`, and `adb`.
 1. Set `AVENTURAS_DEV_SLOT=auto` in the environment agents run
    under, such as the service that hosts them.
 2. Run `pnpm dev:slot` in the worktree setup hook, after
-   `pnpm install`, so the env file exists before an agent's shell
-   starts.
-3. Source `.env.dev-slot.local` from the shell's startup file when the
-   shell starts inside a worktree with `AVENTURAS_DEV_SLOT` set. A
-   shell without it, such as an SSH login, runs the scripts on slot 0,
-   and the file would point its tools at the worktree's claimed slot
-   instead. Slots being off in one process says nothing about the
-   worktree, so nothing deletes the file: the agent working there
-   still needs it.
+   `pnpm install`, so the env file exists before the agent starts.
+3. Load `.env.dev-slot.local` into the agent's environment as the
+   agent starts inside a worktree with `AVENTURAS_DEV_SLOT` set, for
+   instance from a wrapper around the agent command; the agent hands
+   it on to its MCP servers and shell commands. Reading it when the
+   shell starts is not enough: a host can start the agent's shell
+   before setup writes the file and launch the agent in it afterwards,
+   as Orca does. A process without `AVENTURAS_DEV_SLOT`, such as an
+   SSH login shell, runs the scripts on slot 0, and the file would
+   point its tools at the worktree's claimed slot instead. Slots being
+   off in one process says nothing about the worktree, so nothing
+   deletes the file: the agent working there still needs it.
 4. Create one AVD per slot you expect to use, named
    `Aventuras_Slot_N`.
