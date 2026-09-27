@@ -109,16 +109,19 @@ Component-aware MCP for the Storybook design system, exposed at
 `http://localhost:6006/mcp` by `@storybook/addon-mcp` (the slot's
 Storybook port in a worker dev slot).
 
-**The Storybook dev server MUST be running first.** Without it, every
-MCP tool call fails with a connection error. Start it in a separate
-terminal before using any storybook-mcp tool:
+**The Storybook dev server MUST be running before the session
+starts.** Claude Code connects to this server at startup, retries a
+refused connection only briefly, then marks it failed, and the session
+has no storybook-mcp tools at all. Start it in a separate terminal
+first:
 
 ```sh
 pnpm storybook
 ```
 
-If a tool call returns a connection / fetch error, the most likely
-cause is the server isn't running yet — start it and retry.
+If Storybook came up after the session started, reconnect the server
+from `/mcp`. An unattended worker can't do that, so it goes without
+this server unless Storybook was already running when it launched.
 
 ## Workflow rules
 
