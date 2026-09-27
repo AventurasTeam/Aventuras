@@ -7,7 +7,7 @@ The fenced block is the plan's full structure — its sections and their order. 
 ```markdown
 # [Slice name] Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: implement this plan task-by-task with the executor named in this plan's Recommended Executor section — aventuras-subagent-driven-development or aventuras-executing-plans. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: implement this plan task-by-task with the executor named in this plan's Recommended Executor section — aventuras-subagent-driven-development or aventuras-executing-plans. Steps use checkbox (`- [ ]`) syntax for tracking; a dispatched worker tracks progress in its ledger instead and never edits this file.
 
 Slice: [Slice N.M](../docs/implementation/milestones/NN-name/slices/NN-name.md)
 Milestone: [Milestone N](../docs/implementation/milestones/NN-name/milestone.md)

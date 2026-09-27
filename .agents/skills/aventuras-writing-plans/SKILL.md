@@ -179,19 +179,26 @@ If you find issues, fix them inline. No need to re-review — just fix and move 
 
 After saving the plan, recommend an executor — then let the developer choose.
 
-Assess the plan: a small, single-task, or tightly-coupled plan whose tasks must stay coherent suits inline execution; a larger, multi-task plan where fresh context per task and review between tasks de-risk the work suits subagent-driven execution. Record this recommendation and a one-line reason in the plan's Recommended Executor section.
+Assess the plan: a small, single-task, or tightly-coupled plan whose tasks must stay coherent suits inline execution; a larger, multi-task plan where fresh context per task and review between tasks de-risk the work suits subagent-driven execution. Record this recommendation and a one-line reason in the plan's Recommended Executor section. A plan handed off to a worker always records subagent-driven (see below).
 
-Then present both options with the recommendation:
+Then present the options with the recommendation:
 
-**"Plan complete and saved to `.impl-plans/<filename>.md`. Two execution options:**
+**"Plan complete and saved to `<absolute path to the plan>`. Execution options:**
 
 **1. Subagent-Driven** — a fresh subagent per task, two-stage review on review-tier tasks, fast iteration.
 
 **2. Inline Execution** — tasks executed in this session, batched with review checkpoints.
 
+**3. Hand off to a worker** — this session stops here; the plan runs unattended in another session that dispatches a worker.
+
 **I recommend [option] — [reason]. Which would you like?"**
 
-Wait for the developer's answer; do not invoke an executor before they choose. Once they choose:
+Wait for the developer's answer; do not invoke an executor before they choose. If they already said execution happens elsewhere, that is the answer — go straight to the hand-off without asking. Once they choose:
 
 - **Subagent-Driven** → **REQUIRED SUB-SKILL:** Use aventuras-subagent-driven-development
 - **Inline Execution** → **REQUIRED SUB-SKILL:** Use aventuras-executing-plans
+- **Hand off to a worker** → invoke no executor. Record aventuras-subagent-driven-development in Recommended Executor — nobody watches a worker, and aventuras-executing-plans stops to ask a human. End the session with the line the developer passes on, verbatim:
+
+  `Dispatch slice <milestone>/<slice-stem>: plan at <absolute path to the plan>`
+
+  Leave the plan where it is. `.impl-plans/` is git-ignored, so a worker's new worktree has no copy; the worker, on this same machine, reads the plan by absolute path and never edits it.
