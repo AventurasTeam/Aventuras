@@ -294,6 +294,7 @@
     "add": "Add relationship",
     "empty": "No relationships recorded yet",
     "unnamed": "New relationship",
+    "rowNameWithStatus": "{{name}}, {{status}}",
     "character": "Character",
     "characterPlaceholder": "Pick a character",
     "your": "Your view",

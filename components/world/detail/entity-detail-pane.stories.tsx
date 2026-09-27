@@ -558,6 +558,12 @@ export const RelationshipPartnerStatusBadged: Story = {
     const retired = await screen.findByTestId('relationship-1', {}, WAIT)
     await expect(within(retired).getByText('retired')).toBeVisible()
     await expect(
+      within(retired).getByRole('button', { name: 'Brannoc, retired' }),
+    ).toBeInTheDocument()
+    await expect(
+      within(screen.getByTestId('relationship-0')).getByRole('button', { name: 'Mira' }),
+    ).toBeInTheDocument()
+    await expect(
       within(screen.getByTestId('relationship-0')).queryByText('active'),
     ).not.toBeInTheDocument()
   },

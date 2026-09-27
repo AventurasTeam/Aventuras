@@ -103,18 +103,24 @@ export function RelationshipsEditor({
         // which would collapse and remount the card being edited.
         const key = row?.cardKey ?? field.id
         const expanded = open.has(key)
+        const status =
+          other != null && other.status !== 'active' ? t(`world:status.${other.status}`) : null
         return (
           <View key={key} className="gap-2" testID={`relationship-${index}`}>
             <ListRow
               label={name}
+              // The row's name hides the badge from assistive tech, so the name carries it.
+              accessibilityLabel={
+                status == null
+                  ? undefined
+                  : t('world:relationships.rowNameWithStatus', { name, status })
+              }
               description={relationshipDescription(row?.selfToOther, row?.otherToSelf)}
               leading={<EntityKindIcon kind="character" />}
               // data-model.md → Character-to-character relationships: retired participants are badged.
               meta={
-                other != null && other.status !== 'active' ? (
-                  <Tag tone={ENTITY_STATUS_TONE[other.status]}>
-                    {t(`world:status.${other.status}`)}
-                  </Tag>
+                other != null && status != null ? (
+                  <Tag tone={ENTITY_STATUS_TONE[other.status]}>{status}</Tag>
                 ) : undefined
               }
               trailing={
