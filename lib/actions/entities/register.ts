@@ -11,13 +11,15 @@ import {
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { entitiesStore } from '@/lib/stores'
-import { checkParentChain, PARENT_CYCLE, parentOfLocations } from '@/lib/world'
+import { checkParentChain, PARENT_CHAIN_BROKEN, PARENT_CYCLE, parentOfLocations } from '@/lib/world'
 
-import { computeUndoPayload } from '../delta/delta-encoding'
+import { computeUndoPayload, deepEqual } from '../delta/delta-encoding'
 import { register, type ActionHandler, type HandlerOutcome } from '../delta/registry'
 import type { DbCtx, DeltaSource } from '../types'
 import {
+  appendEntityKeywordsHandler,
   promoteStagedEntityHandler,
+  retireEntityHandler,
   updateEntityInventoryHandler,
   updateEntityLocationTrackingHandler,
   updateEntityStackablesHandler,
@@ -98,9 +100,9 @@ async function refuseParentCycle(
     .where(and(eq(entities.branchId, branchId), eq(entities.kind, 'location')))
   const check = checkParentChain(id, proposed, parentOfLocations(rows))
   if (check === 'ok') return null
-  if (check === 'cap-hit')
-    logger.error('action_layer.parent_chain_cap_hit', { branchId, id, parentId: proposed })
-  return { status: 'rejected', reason: PARENT_CYCLE, code: PARENT_CYCLE }
+  if (check === 'cycle') return { status: 'rejected', reason: PARENT_CYCLE, code: PARENT_CYCLE }
+  logger.error('action_layer.parent_chain_cap_hit', { branchId, id, parentId: proposed })
+  return { status: 'rejected', reason: PARENT_CHAIN_BROKEN, code: PARENT_CHAIN_BROKEN }
 }
 
 const createHandler: ActionHandler = async (action, branchId, ctx) => {
@@ -174,29 +176,38 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     }
   }
 
-  const set: Record<string, unknown> = {}
-  const undoPayload: Record<string, unknown> = {}
-  for (const col of UPDATABLE) {
-    if (!(col in patch)) continue
-    set[col] = patch[col]
-    if (col === 'state') {
-      const prior = (current.state ?? emptyEntityState(current.kind)) as Record<string, unknown>
-      undoPayload.state = computeUndoPayload(
-        entityStateColumnSchema,
-        prior,
-        patch.state as Record<string, unknown>,
-      )
-    } else {
-      undoPayload[col] = current[col as keyof Entity]
-    }
-  }
-  // A patch that parsed but touched no updatable column would reach Drizzle's
-  // .set({}) and throw "No values to set" — reject instead.
-  if (Object.keys(set).length === 0)
+  const named = UPDATABLE.filter((col) => col in patch)
+  // No updatable column → Drizzle's .set({}) would throw "No values to set"; reject instead.
+  if (named.length === 0)
     return {
       status: 'rejected',
       reason: `update patch for entities ${bid}:${id} has no updatable fields`,
     }
+
+  // Unchanged columns are dropped, not recorded: user precedence reads an undo payload's
+  // keys as the columns the user wrote (user-precedence.ts).
+  const set: Record<string, unknown> = {}
+  const undoPayload: Record<string, unknown> = {}
+  for (const col of named) {
+    if (col === 'state') {
+      const prior = (current.state ?? emptyEntityState(current.kind)) as Record<string, unknown>
+      const partial = computeUndoPayload(
+        entityStateColumnSchema,
+        prior,
+        patch.state as Record<string, unknown>,
+      )
+      if (Object.keys(partial).length === 0) continue
+      set.state = patch.state
+      undoPayload.state = partial
+    } else {
+      const prior = current[col as keyof Entity]
+      if (deepEqual(patch[col], prior)) continue
+      set[col] = patch[col]
+      undoPayload[col] = prior
+    }
+  }
+  if (Object.keys(set).length === 0)
+    return { status: 'rejected', reason: 'no-op entity patch', code: 'noop' }
 
   // Only KIND_FIELDS is embedded — status/tags/state edits deliberately don't flip the flag.
   // The compare errs dirty on null-vs-'' (compositeText treats them alike): never a stale one.
@@ -268,6 +279,8 @@ export function registerEntities(): void {
       updateEntityStackables: updateEntityStackablesHandler,
       updateEntityLocationTracking: updateEntityLocationTrackingHandler,
       promoteStagedEntity: promoteStagedEntityHandler,
+      appendEntityKeywords: appendEntityKeywordsHandler,
+      retireEntity: retireEntityHandler,
     },
     patcher: (branchId, p) => entitiesStore.patch(branchId, p),
   })

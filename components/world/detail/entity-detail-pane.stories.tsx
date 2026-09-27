@@ -19,6 +19,8 @@ const WAIT = { timeout: 3000 }
 const DAY = 86_400
 const BLOCKED_REASON = 'Generation is in flight. Cancel to edit.'
 const PARENT_CYCLE_TEXT = 'That parent would make this location part of itself.'
+const PARENT_CHAIN_BROKEN_TEXT =
+  "That parent's own chain of parents loops back or runs too deep. Fix that chain first."
 
 // Stories fall under the lib public-API rule, so the unit fixtures' makeEntity is out of reach.
 function makeEntity(overrides: Partial<Entity> & Pick<Entity, 'id' | 'kind' | 'name'>): Entity {
@@ -172,6 +174,8 @@ type HarnessProps = {
   links?: RelationshipLink[]
   /** A pair the harness's button writes to the store, as the periodic classifier would. */
   storeLink?: RelationshipLink
+  /** A keyword the harness's button appends to the stored row, as the periodic classifier would. */
+  storeKeyword?: string
   /** An ok character Save writes its pairs to the store before resolving, as the delta layer does. */
   commitLinks?: boolean
   /** Save stays pending until the harness's `Finish save` button. */
@@ -193,6 +197,7 @@ function Harness({
   saveResult,
   links: initialLinks,
   storeLink,
+  storeKeyword,
   commitLinks = false,
   holdSave = false,
   onSave,
@@ -282,6 +287,19 @@ function Harness({
             {`store pairs: ${data.relationships.length}`}
           </Text>
         </View>
+      ) : null}
+      {storeKeyword != null ? (
+        <Button
+          variant="secondary"
+          size="sm"
+          onPress={() =>
+            setRow((prev) =>
+              prev == null ? prev : { ...prev, keywords: [...prev.keywords, storeKeyword] },
+            )
+          }
+        >
+          <Text>Classifier appends a keyword</Text>
+        </Button>
       ) : null}
       {holdSave ? (
         <Button
@@ -614,6 +632,7 @@ export const CreateLocation: Story = {
     // The whole create draft — schema defaults plus the name — so a create can't carry stray state.
     await expect(args.onSave).toHaveBeenCalledWith({
       kind: 'location',
+      keywordsBase: [],
       draft: {
         name: 'The Salt Wells',
         description: '',
@@ -656,6 +675,7 @@ export const EveryControlBlocked: Story = {
     const name = within(await screen.findByTestId('world-detail-name', {}, WAIT))
     await expect(name.getByText('Kael')).toBeVisible()
     await expect(name.queryByRole('button')).toBeNull()
+    await expectGateReason(name.getByText('Kael'))
     await userEvent.click(await screen.findByRole('tab', { name: /^Identity/ }, WAIT))
     await expect(await screen.findByRole('textbox', { name: 'Description' }, WAIT)).toHaveAttribute(
       'readonly',
@@ -700,6 +720,7 @@ export const EveryControlBlocked: Story = {
     // A disabled ListRow drops its button role (list-row.stories.tsx → DisabledDoesNotFire).
     await expect(screen.getByText('Add relationship')).toBeVisible()
     await expect(screen.queryByRole('button', { name: 'Add relationship' })).not.toBeInTheDocument()
+    await expectGateReason(screen.getByText('Add relationship'))
     await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
     await expect(
       await screen.findByRole('menuitem', { name: /Set as lead/ }, WAIT),
@@ -749,6 +770,17 @@ export const RelationshipWithoutAViewBlocksSave: Story = {
   },
 }
 
+async function expectParentRefusal(onRejected: HarnessProps['onRejected'], text: string) {
+  await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
+  await userEvent.click(await screen.findByRole('button', { name: 'Part of' }, WAIT))
+  await userEvent.click(await screen.findByRole('option', { name: /The Drowned Market/ }, WAIT))
+  const bar = await screen.findByTestId('save-bar', {}, WAIT)
+  await userEvent.click(within(bar).getByRole('button', { name: /^Save/ }))
+  await expect(await screen.findByText(text, {}, WAIT)).toBeVisible()
+  await expect(within(saveBar()).getByRole('button', { name: /^Save/ })).toBeDisabled()
+  await expect(onRejected).toHaveBeenCalledWith(text)
+}
+
 /** The handler's parent-cycle refusal surfaces as a field error on Connections. */
 export const ParentCycleFieldError: Story = {
   args: {
@@ -757,14 +789,45 @@ export const ParentCycleFieldError: Story = {
     saveResult: { status: 'rejected', reason: 'parent-cycle', code: 'parent-cycle' },
   },
   play: async ({ args }) => {
-    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
-    await userEvent.click(await screen.findByRole('button', { name: 'Part of' }, WAIT))
-    await userEvent.click(await screen.findByRole('option', { name: /The Drowned Market/ }, WAIT))
-    const bar = await screen.findByTestId('save-bar', {}, WAIT)
-    await userEvent.click(within(bar).getByRole('button', { name: /^Save/ }))
-    await expect(await screen.findByText(PARENT_CYCLE_TEXT, {}, WAIT)).toBeVisible()
-    await expect(within(saveBar()).getByRole('button', { name: /^Save/ })).toBeDisabled()
-    await expect(args.onRejected).toHaveBeenCalledWith(PARENT_CYCLE_TEXT)
+    await expectParentRefusal(args.onRejected, PARENT_CYCLE_TEXT)
+  },
+}
+
+/** A keyword the classifier appends while the list is dirty doesn't become the Save's base. */
+export const KeywordsBaseFrozenWhileDirty: Story = {
+  args: {
+    kind: 'location',
+    row: { ...HOLLOW, keywords: ['the hollow'] },
+    storeKeyword: 'the dell',
+  },
+  play: async ({ args }) => {
+    await userEvent.click(await screen.findByRole('tab', { name: /^Settings/ }, WAIT))
+    await userEvent.type(
+      await screen.findByRole('textbox', { name: 'Keywords' }, WAIT),
+      'veil{Enter}',
+    )
+    await waitFor(() => expect(saveBar()).toHaveTextContent('Keywords'), WAIT)
+    await userEvent.click(screen.getByRole('button', { name: 'Classifier appends a keyword' }))
+    await userEvent.click(within(saveBar()).getByRole('button', { name: /^Save/ }))
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1), WAIT)
+    await expect(args.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        keywordsBase: ['the hollow'],
+        draft: expect.objectContaining({ keywords: ['the hollow', 'veil'] }),
+      }),
+    )
+  },
+}
+
+/** A cap-hit refusal names the chain above the parent, still on the parent field. */
+export const ParentChainBrokenFieldError: Story = {
+  args: {
+    kind: 'location',
+    row: HOLLOW,
+    saveResult: { status: 'rejected', reason: 'parent-chain-broken', code: 'parent-chain-broken' },
+  },
+  play: async ({ args }) => {
+    await expectParentRefusal(args.onRejected, PARENT_CHAIN_BROKEN_TEXT)
   },
 }
 

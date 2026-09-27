@@ -3,8 +3,8 @@ import type { CalendarSystem } from './calendar-schema'
 export type WholeTierSpan = { tier: string; count: number }
 
 /**
- * `elapsedSeconds` counted in the largest tier whose length never varies (Gregorian `day`, not
- * `month`), floored. Zero of the smallest tier below one of it; null for a negative span.
+ * `elapsedSeconds` in the largest fixed-length tier it fills at least once (up to Gregorian `day`,
+ * never `month`), floored. Zero of the smallest tier below one of it; null for a negative span.
  */
 export function largestWholeTier(
   calendar: CalendarSystem,

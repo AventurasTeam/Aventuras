@@ -78,6 +78,8 @@ export type CastImportResult = {
    * none" rather than "yours were thrown away".
    */
   unresolved: UnresolvedCastRef[]
+  /** Parents that matched but would have closed a loop, so they were left blank. */
+  looped: UnresolvedCastRef[]
 }
 
 /**
@@ -199,6 +201,7 @@ export function resolveCastImports(
   // data-model.md → LocationState: an imported pointer that closes a loop is dropped and left
   // blank, so Finish never meets a cycle the import itself introduced. First-come wins.
   const parents = new Map<string, string | null>()
+  const looped: UnresolvedCastRef[] = []
   const acyclic = rows.map((row, i) => {
     if (row.kind !== 'location' || row.parentLocationId == null) return row
     if (checkParentChain(row.id, row.parentLocationId, (id) => parents.get(id) ?? null) === 'ok') {
@@ -208,9 +211,9 @@ export function resolveCastImports(
     const suggestion = minted[i].suggestion
     const wantedName =
       suggestion.kind === 'location' ? (suggestion.parent_location_name ?? '').trim() : ''
-    unresolved.push({ rowName: row.name, field: 'parentLocation', wantedName })
+    looped.push({ rowName: row.name, field: 'parentLocation', wantedName })
     return { ...row, parentLocationId: null, unresolvedParentLocationName: '' }
   })
 
-  return { rows: acyclic, unresolved }
+  return { rows: acyclic, unresolved, looped }
 }

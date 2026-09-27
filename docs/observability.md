@@ -171,19 +171,25 @@ Illustrative, not exhaustive. The contract is the **shape**
 convention, and the expectation that subsystems route through
 `logger` from their first commit:
 
-- `pipeline.*` — `phase_failed`, `run_aborted`, `recovered`
+- `pipeline.*` — `phase_failed`, `run_aborted`, `recovered`,
+  `phase_exception_hook_failed` (error: a pipeline's failure hook threw
+  after its rollback committed; for the periodic classifier both record
+  attempts failed, and the branch stays `running` until boot recovery)
 - `action_layer.*` — `user_write_rejected`, `constraint_violation`,
   `story_settings_repaired` (the corrupt-blob repair: carries the failing
   key paths, since the blob it describes is overwritten in the same call),
   `thread_save_rejected` / `happening_save_rejected` / `entity_save_rejected`
   (warn: the in-flight refusal, which the disabled UI should make
   unreachable, or a rejected write), `thread_save_failed` /
-  `happening_save_failed` / `entity_save_failed` (error: a thrown write,
-  logged with the Save's action kinds, then rethrown), `parent_chain_cap_hit`
+  `happening_save_failed` / `entity_save_failed` (error: a Save whose
+  actions threw while building or writing, logged with its action kinds
+  once built, then rethrown), `parent_chain_cap_hit`
   (error: a `parent_location_id` walk hit the depth cap, meaning a loop
   already exists in the stored chain), `story_lead_rejected` (warn: the lead
   mutator refused, logged with its code)
-- `classifier.*` — `delta_clamped`, `schema_repair`, `empty_output`
+- `classifier.*` — `delta_clamped`, `schema_repair`, `empty_output`,
+  `failure_record_retried` (warn: the first attempt to record a failed
+  pass threw, and the hook tried once more)
 - `retrieval.*` — `row_skipped_stale`, `empty_pool`, `knn_error`
 - `provider.*` — `retry_succeeded`, `rate_limited`,
   `stream_interrupted`, `request_failed`, `url_redaction_failed`

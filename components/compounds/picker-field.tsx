@@ -23,7 +23,7 @@ type PickerFieldProps = TriggerProps & {
   label: string
   /** Renders a `×` beside a set value that clears without opening the overlay. */
   onClear?: () => void
-  /** Renders a `↗` before the `×`, named by this label; kept in layout, hidden while `onOpen` is unset. */
+  /** Renders a named `↗` before the `×`; kept in layout, hidden while `onOpen` is unset. */
   openLabel?: string
   /** Opens the value elsewhere (not the overlay). */
   onOpen?: () => void

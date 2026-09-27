@@ -9,7 +9,7 @@ import {
   type LocationState,
   type NewEntity,
 } from '@/lib/db'
-import { dedupeTerms } from '@/lib/keyword-terms'
+import { dedupeTerms, newTerms, normalizeTerm } from '@/lib/keyword-terms'
 
 import {
   stackableKey,
@@ -21,25 +21,32 @@ import {
   type ItemDraft,
   type LocationDraft,
   type RelationshipDraft,
+  type RelationshipBaseLink,
   type RelationshipLink,
-  type StackableDraft,
 } from './entity-draft'
 
-export type EntitySaveInput =
+export type EntitySaveInput = (
   | {
       kind: 'character'
       draft: CharacterDraft
       /** The committed links at Save. */
       relationships: readonly RelationshipLink[]
       /**
-       * Committed links the draft was based on (frozen once dirty); defaults to `relationships`.
+       * Committed links the draft was based on (frozen once dirty; `relationships` while clean).
        * Untouched pairs/views keep what is stored; an edited pair whose row is gone is rewritten.
        */
-      relationshipsBase?: readonly RelationshipLink[]
+      relationshipsBase: readonly RelationshipBaseLink[]
     }
   | { kind: 'location'; draft: LocationDraft }
   | { kind: 'item'; draft: ItemDraft }
   | { kind: 'faction'; draft: FactionDraft }
+) & {
+  /**
+   * The stored keywords the draft's list was based on (frozen once dirty). A term the classifier
+   * appended since stays unless the user removed it.
+   */
+  keywordsBase: readonly string[]
+}
 
 type EntityActionArgs = EntitySaveInput & {
   branchId: string
@@ -75,6 +82,19 @@ function blankToAbsent(value: string | undefined): string | undefined {
   return trimmed === '' ? undefined : trimmed
 }
 
+/** Sets `key` to the draft's text, or removes it when blank; false when it already reads so. */
+function writeText<K extends string>(
+  state: Partial<Record<K, string>>,
+  key: K,
+  draftValue: string,
+): boolean {
+  const value = blankToAbsent(draftValue)
+  if (value === blankToAbsent(state[key])) return false
+  if (value === undefined) delete state[key]
+  else state[key] = value
+  return true
+}
+
 function cleanList(values: readonly string[] | undefined): string[] {
   return (values ?? []).map((v) => v.trim()).filter((v) => v !== '')
 }
@@ -95,15 +115,40 @@ function normalizedStackables(
   return out
 }
 
-function sameRecord(a: Readonly<Record<string, number>>, b: Readonly<Record<string, number>>) {
+function sameRecord(
+  a: Readonly<Record<string, number>>,
+  b: Readonly<Record<string, number>>,
+): boolean {
   const keys = Object.keys(a)
   return (
     keys.length === Object.keys(b).length && keys.every((k) => Object.hasOwn(b, k) && a[k] === b[k])
   )
 }
 
+/**
+ * The stored list with the user's changes against `base` applied: their removals dropped, their
+ * additions appended, their spelling of a kept term used. As edited while nothing moved underneath.
+ */
+function mergedKeywords(
+  stored: readonly string[],
+  base: readonly string[],
+  draft: readonly string[],
+): string[] {
+  if (sameList(stored, base)) return [...draft]
+  const drafted = new Map(draft.map((term) => [normalizeTerm(term), term]))
+  const removed = new Set(base.map(normalizeTerm).filter((key) => !drafted.has(key)))
+  const kept = stored
+    .filter((term) => !removed.has(normalizeTerm(term)))
+    .map((term) => drafted.get(normalizeTerm(term)) ?? term)
+  return [...kept, ...newTerms(kept, newTerms(base, draft))]
+}
+
 /** Normalized on both sides: the classifier's verbatim text must not read as a user edit. */
-function columnPatch(row: Entity, draft: EntityBaseDraft): ColumnPatch {
+function columnPatch(
+  row: Entity,
+  draft: EntityBaseDraft,
+  keywordsBase: readonly string[],
+): ColumnPatch {
   const patch: ColumnPatch = {}
   const name = draft.name.trim()
   if (name !== row.name.trim()) patch.name = name
@@ -115,8 +160,9 @@ function columnPatch(row: Entity, draft: EntityBaseDraft): ColumnPatch {
   if (draft.injectionMode !== row.injectionMode) patch.injectionMode = draft.injectionMode
   const tags = cleanList(draft.tags)
   if (!sameList(tags, cleanList(row.tags))) patch.tags = tags
-  const keywords = dedupeTerms(draft.keywords)
-  if (!sameList(keywords, dedupeTerms(row.keywords))) patch.keywords = keywords
+  const stored = dedupeTerms(row.keywords)
+  const keywords = mergedKeywords(stored, dedupeTerms(keywordsBase), dedupeTerms(draft.keywords))
+  if (!sameList(keywords, stored)) patch.keywords = keywords
   if (draft.priority !== row.priority) patch.priority = draft.priority
   return patch
 }
@@ -126,11 +172,7 @@ function characterState(current: CharacterState, draft: CharacterDraft): Charact
   const next: CharacterState = { ...current, visual: { ...current.visual } }
   let changed = false
   for (const [field, key] of VISUAL_DRAFT_FIELDS) {
-    const value = blankToAbsent(draft[field])
-    if (value === blankToAbsent(current.visual[key])) continue
-    if (value === undefined) delete next.visual[key]
-    else next.visual[key] = value
-    changed = true
+    if (writeText(next.visual, key, draft[field])) changed = true
   }
   const traits = cleanList(draft.traits)
   if (!sameList(traits, cleanList(current.traits))) {
@@ -142,12 +184,7 @@ function characterState(current: CharacterState, draft: CharacterDraft): Charact
     next.drives = drives
     changed = true
   }
-  const voice = blankToAbsent(draft.voice)
-  if (voice !== blankToAbsent(current.voice)) {
-    if (voice === undefined) delete next.voice
-    else next.voice = voice
-    changed = true
-  }
+  if (writeText(next, 'voice', draft.voice)) changed = true
   if (draft.currentLocationId !== (current.current_location_id ?? null)) {
     next.current_location_id = draft.currentLocationId
     changed = true
@@ -164,9 +201,7 @@ function characterState(current: CharacterState, draft: CharacterDraft): Charact
     next.inventory = [...draft.inventory]
     changed = true
   }
-  const stackables = normalizedStackables(
-    draft.stackables.map((s: StackableDraft) => [s.key, s.count] as const),
-  )
+  const stackables = normalizedStackables(draft.stackables.map((s) => [s.key, s.count] as const))
   if (!sameRecord(stackables, normalizedStackables(Object.entries(current.stackables ?? {})))) {
     if (Object.keys(stackables).length === 0) delete next.stackables
     else next.stackables = stackables
@@ -182,12 +217,7 @@ function locationState(current: LocationState, draft: LocationDraft): LocationSt
     next.parent_location_id = draft.parentLocationId
     changed = true
   }
-  const condition = blankToAbsent(draft.condition)
-  if (condition !== blankToAbsent(current.condition)) {
-    if (condition === undefined) delete next.condition
-    else next.condition = condition
-    changed = true
-  }
+  if (writeText(next, 'condition', draft.condition)) changed = true
   return changed ? next : null
 }
 
@@ -198,24 +228,14 @@ function itemState(current: ItemState, draft: ItemDraft): ItemState | null {
     next.at_location_id = draft.atLocationId
     changed = true
   }
-  const condition = blankToAbsent(draft.condition)
-  if (condition !== blankToAbsent(current.condition)) {
-    if (condition === undefined) delete next.condition
-    else next.condition = condition
-    changed = true
-  }
+  if (writeText(next, 'condition', draft.condition)) changed = true
   return changed ? next : null
 }
 
 function factionState(current: FactionState, draft: FactionDraft): FactionState | null {
   const next: FactionState = { ...current }
   let changed = false
-  const standing = blankToAbsent(draft.standing)
-  if (standing !== blankToAbsent(current.standing)) {
-    if (standing === undefined) delete next.standing
-    else next.standing = standing
-    changed = true
-  }
+  if (writeText(next, 'standing', draft.standing)) changed = true
   const agenda = cleanList(draft.agenda)
   if (!sameList(agenda, cleanList(current.agenda))) {
     if (agenda.length === 0) delete next.agenda
@@ -241,7 +261,7 @@ function nextState(args: EntityActionArgs): EntityState | null {
 /** Whether the user edited a view relative to the baseline, and the value Save sends for it. */
 function viewWrite(
   draft: RelationshipDraft,
-  was: RelationshipLink | undefined,
+  was: RelationshipBaseLink | undefined,
   now: RelationshipLink | undefined,
   view: 'selfToOther' | 'otherToSelf',
 ): { edited: boolean; value: string | null } {
@@ -263,7 +283,7 @@ function relationshipActions(
   branchId: string,
   selfId: string,
   current: readonly RelationshipLink[],
-  base: readonly RelationshipLink[],
+  base: readonly RelationshipBaseLink[],
   drafts: readonly RelationshipDraft[],
 ): PipelineAction[] {
   const actions: PipelineAction[] = []
@@ -335,7 +355,10 @@ export function entityActions(args: EntityActionArgs): PipelineAction[] {
     }
     actions.push({ kind: 'createEntity', source: 'user_edit', payload: { entry } })
   } else {
-    const patch = { ...columnPatch(row, draft), ...(state != null ? { state } : {}) }
+    const patch = {
+      ...columnPatch(row, draft, args.keywordsBase),
+      ...(state != null ? { state } : {}),
+    }
     if (Object.keys(patch).length > 0) {
       actions.push({
         kind: 'updateEntity',
@@ -350,7 +373,7 @@ export function entityActions(args: EntityActionArgs): PipelineAction[] {
         branchId,
         id,
         row == null ? [] : args.relationships,
-        row == null ? [] : (args.relationshipsBase ?? args.relationships),
+        row == null ? [] : args.relationshipsBase,
         args.draft.relationships,
       ),
     )

@@ -34,9 +34,8 @@ export function DetailTabs({ tabs, value, onValueChange, selectLabel }: DetailTa
     )
   }
   return (
-    // flex-1 fills the shell's horizontal tabs ScrollView, which otherwise sizes the Select to
-    // its content; pt-2 keeps it off the header divider the strip variant sits flush against.
-    // Below it, the content's own top padding spaces it, as it does under the strip.
+    // flex-1: the shell's horizontal tabs ScrollView otherwise sizes the Select to its content.
+    // pt-2 clears the header divider the strip sits flush on; content padding spaces below it.
     <View className="flex-1 pt-2">
       <Select
         label={selectLabel}

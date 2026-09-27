@@ -4,6 +4,7 @@ import { Platform, Pressable, type TextInputKeyPressEvent, View } from 'react-na
 
 import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
+import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
@@ -20,6 +21,8 @@ type InlineEditableNameProps = {
   savedValue?: string
   placeholder?: string
   disabled?: boolean
+  /** Explains a disabled name through its accessibility hint and a web tooltip. */
+  disabledReason?: string
   /**
    * Text size variant — applies to both the read label and the
    * edit input. Default `'md'`. The detail head consumer will use
@@ -54,6 +57,7 @@ export function InlineEditableName({
   savedValue,
   placeholder,
   disabled = false,
+  disabledReason,
   size = 'md',
   className,
 }: InlineEditableNameProps) {
@@ -94,17 +98,23 @@ export function InlineEditableName({
 
   if (disabled) {
     return (
-      <View className={cn('flex-row items-center', GAP[size], className)}>
-        {value === '' ? (
-          <Text variant="muted" size={TEXT_SIZE[size]}>
-            {placeholder ?? ''}
-          </Text>
-        ) : (
-          <Text variant="disabled" size={TEXT_SIZE[size]}>
-            {value}
-          </Text>
-        )}
-      </View>
+      <ReasonTooltip reason={disabledReason}>
+        <View
+          accessible
+          accessibilityHint={disabledReason}
+          className={cn('flex-row items-center', GAP[size], className)}
+        >
+          {value === '' ? (
+            <Text variant="muted" size={TEXT_SIZE[size]}>
+              {placeholder ?? ''}
+            </Text>
+          ) : (
+            <Text variant="disabled" size={TEXT_SIZE[size]}>
+              {value}
+            </Text>
+          )}
+        </View>
+      </ReasonTooltip>
     )
   }
 

@@ -22,7 +22,7 @@ const fixtures = sqliteTable('fixtures', {
 type FixtureRow = { id: string; branchId: string; label: string; createdAt: number }
 
 declare module '@/lib/actions/action-map' {
-  interface PipelineActionMap {
+  interface TestPipelineActionMap {
     fixtureCreate: { source: 'user_edit'; payload: { row: FixtureRow } }
     fixtureUpdate: { source: 'user_edit'; payload: { branchId: string; id: string; label: string } }
     fixtureDelete: { source: 'user_edit'; payload: { branchId: string; id: string } }

@@ -38,14 +38,15 @@ export async function commitRowSave(
     return { status: 'rejected', reason: 'generation in flight', code: ROW_SAVE_REJECTION.inFlight }
   }
   const id = rowId ?? generateId(idPrefix)
-  const actions = build(id)
-  if (actions.length === 0) {
-    if (rowId == null) throw new Error('commitRowSave: a create built no actions')
-    return { status: 'ok', id }
-  }
-  const context = { branchId, id, create: rowId == null, actions: actions.map((a) => a.kind) }
+  const context: Record<string, unknown> = { branchId, id, create: rowId == null }
   let result
   try {
+    const actions = build(id)
+    if (actions.length === 0) {
+      if (rowId == null) throw new Error('commitRowSave: a create built no actions')
+      return { status: 'ok', id }
+    }
+    context.actions = actions.map((a) => a.kind)
     result = await applyDeltaActionGroup(actions, { actionId: generateId('act'), branchId }, ctx)
   } catch (error) {
     logger.error(`action_layer.${rowKind}_save_failed`, {

@@ -263,11 +263,30 @@ the asset gallery pass` / `lands in Slice 4.2b`).
   its stored value. The diff's current links are the ones rendered
   when Save was pressed, so a classifier write landing during Save's
   validation can still be overwritten on an edited pair's untouched
-  view — a narrow window. `useRowSaveSession` and Plot are unchanged (Plot's
-  links-array case stays
+  view — a narrow window the guard below does not close.
+  `useRowSaveSession` and Plot are unchanged (Plot's links-array case
+  stays
   [parked](../../../../parked.md#a-dirty-links-array-on-save-overwrites-concurrent-link-writes)).
-  Touched `keywords` still overwrite a classifier append (accepted,
-  last writer wins).
+  Keywords merge the same way (developer decision, 2026-09-27): the
+  row session freezes the list's baseline once it goes dirty
+  (`useDraftBase`, shared with relationships), and `entityActions`
+  applies the user's additions and removals to the stored list, so a
+  classifier append made while the list was dirty survives the Save.
+- **Classifier writes against user edits (developer decisions,
+  2026-09-25/26).** Status and keyword writes were built from the
+  pass's snapshot, reverting a mid-pass World edit against
+  `classifier.md`'s alias-survives promise; `promoteStagedEntity`,
+  `retireEntity` and `appendEntityKeywords` now re-read the live row,
+  and the relationship-view upsert reads the pair's stored views. A
+  status, removed alias or view the user wrote after the fact's prose
+  wins, ordered by the delta log; reversing a machine write keeps a
+  later user write, and a pass failing mid-apply takes the regular
+  retry path
+  ([`cadence.md → User edits and classifier writes`](../../../../memory/cadence.md#user-edits-and-classifier-writes)).
+  `updating-memory` shows on World and Plot per branch and on Story
+  Settings per story; a Save confirm for a dirty Relationships save
+  mid-pass was designed and dropped once this precedence closed the
+  overwrite. Remaining gaps are in [`triage.md`](../../../triage.md).
 - **Overview regions are single targets; entity navigation lives in
   Connections (manual review, 2026-09-25).** The first cut made each
   entity name a link beside a region label that opened Connections;
@@ -283,9 +302,11 @@ the asset gallery pass` / `lands in Slice 4.2b`).
   `world.md` amended.
 - **Last seen is in-world.** Elapsed seconds since
   `lastSeenAt.worldTime`, counted in the calendar's largest
-  fixed-length tier (`largestWholeTier`); a backwards span is omitted.
-  On Gregorian every span therefore reads in days, two years as "730
-  days ago in-world": a duration floor, not a date difference.
+  fixed-length tier the span fills at least once (`largestWholeTier`);
+  a backwards span is omitted. On Gregorian a span of a day or more
+  therefore reads in days, two years as "730 days ago in-world": a
+  duration floor, not a date difference. A shorter one reads in hours,
+  minutes or seconds.
 - **`setStoryLead` refuses a non-active character** (`not-active`,
   now in
   [C5](../milestone.md#c5--story-definition-lead-mutator)), extending
@@ -328,9 +349,15 @@ the asset gallery pass` / `lands in Slice 4.2b`).
   sized as the gallery pass will fill it; the tap is inert because no
   portrait assets exist yet, so `world.md`'s "tap the portrait to view
   it full-size" waits for the asset gallery pass.
-- **Deep-link tab is one-shot** (`useWorldDeepLink`, mirroring Plot's
-  `usePlotDeepLink`): only the mount that reads the link opens on its
-  tab. A deep-linked row is still not revealed in the list, which
+- **Route links are followed** (pulled in from 4.5b's Open questions,
+  developer decision 2026-09-27). `useSurfaceNavigate` sets a link's
+  query on a matched screen before popping to it (`setParams` targeted
+  by route key; link keys the new link omits are cleared), and World
+  and Plot follow a link set on their mounted screen (`useRouteLink`):
+  it selects through the guard and remounts the pane so it opens on the
+  link's tab. Only the mount a link arrives for opens on its tab.
+  Producers build URLs with `worldHref` and `plotHref`. A deep-linked
+  World row is still not revealed in the list, which
   [4.5b's Open questions](./05b-peek-drawer.md#open-questions) record.
 - **Deferred to [`triage.md`](../../../triage.md):** classifier
   parent-cycle surfacing, stackable-writer hygiene, retired and staged

@@ -23,6 +23,13 @@ export function parseWorldSelection(params: {
   return tab == null ? { category: kind, id } : { category: kind, id, tab }
 }
 
+/** The World route selecting `link`; producers build it here rather than by hand. */
+export function worldHref(branchId: string, link: WorldSelection): string {
+  const query = new URLSearchParams({ kind: link.category, id: link.id })
+  if (link.tab != null) query.set('tab', link.tab)
+  return `/world/${branchId}?${query.toString()}`
+}
+
 export function worldCategoryLabel(category: WorldCategory): string {
   return t(`world:categories.${category}`)
 }

@@ -8,6 +8,7 @@ import {
   castRowErrors,
   castStepValid,
   invalidCastRowIds,
+  parentCandidates,
 } from './step-cast-logic'
 
 const char = (id: string, name = 'Aria', status: 'active' | 'staged' = 'active') => ({
@@ -46,5 +47,29 @@ describe('cast validation gates', () => {
     expect(canSetLead(a, 'a')).toBe(false) // a already is the lead
     expect(canSetLead(char('c', 'X', 'staged'), null)).toBe(false)
     expect(canSetLead(emptyCastDraft('item', 'i'), null)).toBe(false)
+  })
+})
+
+describe('parentCandidates', () => {
+  const place = (id: string, parentLocationId: string | null = null) => ({
+    ...emptyCastDraft('location', id),
+    name: id,
+    parentLocationId,
+  })
+
+  it('offers every other location when no chain leads back', () => {
+    const cast = [place('city'), place('market', 'city'), place('shop')]
+    expect(parentCandidates(cast[2], cast).map((r) => r.id)).toEqual(['city', 'market'])
+  })
+
+  it('leaves out the location itself and any location whose chain leads back to it', () => {
+    const cast = [place('city'), place('market', 'city'), place('stall', 'market')]
+    expect(parentCandidates(cast[0], cast).map((r) => r.id)).toEqual([])
+    expect(parentCandidates(cast[1], cast).map((r) => r.id)).toEqual(['city'])
+  })
+
+  it('keeps the current parent listed even when a stored loop runs through it', () => {
+    const cast = [place('a', 'b'), place('b', 'a')]
+    expect(parentCandidates(cast[0], cast).map((r) => r.id)).toEqual(['b'])
   })
 })

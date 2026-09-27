@@ -204,6 +204,19 @@ handler, which is where the sweep must therefore live.
   delete/merge also cover reversing the group that created the
   current lead? Nothing outside the wizard reads the lead before
   4.5a.
+- **Deleting an entity while a classifier pass is in flight.** The
+  pass is `no-gate`, so a delete can land between its snapshot and its
+  writes. The three guarded entity actions no-op on the missing row,
+  but `happening_involvements`, `happening_awareness` and
+  `character_relationships` are all FK-less
+  (`happenings.table.ts:53`, `:69`; the `resolveRef` comment in
+  `lib/classifier/plan.ts`), so the pass writes orphan rows naming the
+  dead id and completes. A new character reconciled as `known` or
+  `promote` to the deleted row binds its handle to that id too. Decide
+  whether the delete awaits or cancels the pass first
+  (`bracketProseReversal` is the precedent: it lands a pass past its
+  model call before the body runs, so the cascade sweeps its rows), or
+  whether these writes get a guard.
 
 ## Implementation notes
 

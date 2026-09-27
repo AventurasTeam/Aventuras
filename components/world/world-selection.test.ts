@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { parseWorldSelection, worldAddLabel, worldCategoryLabel } from './world-selection'
+import {
+  parseWorldSelection,
+  worldAddLabel,
+  worldCategoryLabel,
+  worldHref,
+} from './world-selection'
 
 describe('parseWorldSelection', () => {
   it('parses kind + id, carrying tab when present', () => {
@@ -35,5 +40,22 @@ describe('labels', () => {
   it('resolves the surface-owned category and add labels', () => {
     expect(worldCategoryLabel('location')).toBe('Locations')
     expect(worldAddLabel('lore')).toBe('New lore')
+  })
+})
+
+describe('worldHref', () => {
+  const query = (href: string) => Object.fromEntries(new URLSearchParams(href.split('?')[1]))
+
+  it('builds the route with the link as its query, round-tripping through the parser', () => {
+    const link = { category: 'character', id: 'char_kael', tab: 'connections' } as const
+    const href = worldHref('br_1', link)
+    expect(href.split('?')[0]).toBe('/world/br_1')
+    expect(parseWorldSelection(query(href))).toEqual(link)
+  })
+
+  it('leaves out a tab the link has none of', () => {
+    expect(worldHref('br_1', { category: 'lore', id: 'lore_1' })).toBe(
+      '/world/br_1?kind=lore&id=lore_1',
+    )
   })
 })

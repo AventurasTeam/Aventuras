@@ -49,6 +49,13 @@ export function RelationshipsEditor({
   const { fields, append, remove } = useFieldArray({ control, name: 'relationships' })
   const rows = useWatch({ control, name: 'relationships' }) ?? []
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set())
+  // Both characters of a pair key its card by the row id, and a same-kind row switch keeps
+  // this editor mounted, so the other character would open on the card left expanded.
+  const [openFor, setOpenFor] = useState(selfId)
+  if (openFor !== selfId) {
+    setOpenFor(selfId)
+    setOpen(new Set())
+  }
   // A key that left the draft (Delete, undo, classifier removal) may return, and must return
   // collapsed. Prune only keys seen in `rows`: a just-added one may reach `rows` a render late.
   const keys = rows.map((r) => r.cardKey)
@@ -203,6 +210,7 @@ export function RelationshipsEditor({
         label={t('world:relationships.add')}
         leading={<Icon as={Plus} aria-hidden size="sm" />}
         disabled={blocked}
+        disabledReason={blockedReason}
         onPress={() => {
           const cardKey = generateId('reldraft')
           setOpen((prev) => new Set(prev).add(cardKey))

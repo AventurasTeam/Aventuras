@@ -33,6 +33,7 @@ const ISSUE_TAB: Partial<Record<WorldIssue, EntityTab>> = {
   relationshipPovRequired: 'connections',
   duplicateRelationship: 'connections',
   parentCycle: 'connections',
+  parentChainBroken: 'connections',
   stackableKeyRequired: 'carrying',
   stackableCount: 'carrying',
   duplicateStackable: 'carrying',
@@ -52,6 +53,7 @@ export function entityIssueText(message: string): string {
 export function saveRejectionText(code: string | undefined): string {
   if (code === ENTITY_REJECTION.inFlight) return t('world:save.inFlight')
   if (code === ENTITY_REJECTION.parentCycle) return t('world:save.parentCycle')
+  if (code === ENTITY_REJECTION.parentChainBroken) return t('world:save.parentChainBroken')
   return t('world:save.failed')
 }
 
@@ -221,18 +223,19 @@ export function lastSeenText(span: WholeTierSpan | null): string | null {
   return t('world:overview.lastSeen', { span: spanText(span) })
 }
 
+function agoText(span: WholeTierSpan | null): string | undefined {
+  if (span == null) return undefined
+  if (span.count === 0) return t('world:connections.justNow')
+  return t('world:connections.ago', { span: spanText(span) })
+}
+
 /** Connections → Last seen: `<location> · entry #n · N … ago in-world`, from the parts known. */
 export function lastSeenDetail(parts: {
   location: string | undefined
   position: number | undefined
   span: WholeTierSpan | null
 }): string {
-  const ago =
-    parts.span == null
-      ? undefined
-      : parts.span.count === 0
-        ? t('world:connections.justNow')
-        : t('world:connections.ago', { span: spanText(parts.span) })
+  const ago = agoText(parts.span)
   const entry =
     parts.position == null ? undefined : t('world:connections.entry', { position: parts.position })
   return [parts.location, entry, ago].filter((p): p is string => p != null && p !== '').join(' · ')

@@ -155,9 +155,10 @@ treatment used by `retired_reason` (visible only when
   indicator. Click → Identity / Personality.
 - `IN <location>` (current_location_id) `· last seen N days ago`
   (from `lastSeenAt`). Click → Connections. The span is in-world
-  time since `lastSeenAt.worldTime`, counted in the calendar's
-  largest unit of fixed length (days on Gregorian, never months); a
-  span running backwards is omitted.
+  time since `lastSeenAt.worldTime`, counted in the largest
+  fixed-length unit of the calendar that the span fills at least once
+  (at most days on Gregorian, never months, so a same-day span reads in
+  hours, minutes or seconds); a span running backwards is omitted.
 - `WITH <faction>` (faction_id). Click → Connections.
 - Carrying summary — top stackables by quantity + equipped/carried
   counts in one line. Click → Carrying tab.
@@ -346,6 +347,21 @@ are referenced.
   own changes relative to what the pane showed are written; a pair or
   view the classifier changed meanwhile, and the user left alone,
   keeps its stored value.
+
+**Edits and memory updates.** A memory update never overwrites a
+status, a removed alias or a relationship view the user saved after the
+prose it processes, whether the save came before the pass started or
+while it ran, and it does not re-create a pair the user deleted after
+that prose
+([`cadence.md → User edits and classifier writes`](../../../memory/cadence.md#user-edits-and-classifier-writes)).
+Prose written after the user's edit can still revise it, per the
+authoring contract below. A Save leaves a pass's writes alone the same
+way: keywords, like relationships, merge three-way, so the Save applies
+only the terms the user added or removed to the stored list, and an
+alias a pass appended while the list was dirty stays. The generation
+status pill reads
+`updating memory…` while a pass runs
+([`generation-status-pill.md → Non-blocking phases`](../../patterns/generation-status-pill.md#non-blocking-phases)).
 
 **Empty state.** When the character has no recorded relationships,
 render the Relationships sub-section heading + an empty-state hint

@@ -79,7 +79,7 @@ type RegionProps = {
   testID: string
 }
 
-/** A region with no links: the whole region routes to its edit tab (world.md → Overview). */
+/** An Overview region: the whole region routes to its edit tab (world.md → Overview). */
 export function Region({
   label,
   tab,
@@ -190,6 +190,47 @@ export function NamesRegion({
       )}
     </Region>
   )
+}
+
+const PREVIEW = 3
+
+type DerivedNamesRegionProps = {
+  label: string
+  onRegionPress: RegionPress
+  entities: readonly Entity[]
+  testID: string
+}
+
+/** An inverse list: its count in the label, the first few names, then how many more. */
+export function DerivedNamesRegion({
+  label,
+  onRegionPress,
+  entities,
+  testID,
+}: DerivedNamesRegionProps) {
+  return (
+    <NamesRegion
+      label={t('labelWithCount', { label, value: entities.length })}
+      tab="connections"
+      onRegionPress={onRegionPress}
+      targets={entities.slice(0, PREVIEW)}
+      meta={
+        entities.length > PREVIEW
+          ? t('world:overview.more', { count: entities.length - PREVIEW })
+          : undefined
+      }
+      derived
+      testID={testID}
+    />
+  )
+}
+
+/** A single reference as region targets: none while unset, a null entry for a dangling id. */
+export function refTargets(
+  id: string | null | undefined,
+  entities: readonly Entity[],
+): (Entity | null)[] {
+  return id == null ? [] : [entities.find((e) => e.id === id) ?? null]
 }
 
 export function ChipRow({ preview }: { preview: ChipPreview }) {

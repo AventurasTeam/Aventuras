@@ -186,6 +186,16 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   valid reparent sequence (A.parent := null; B.parent := A while
   A.parent = B) is refused. Does the merge rewrite need a group-aware
   pass?
+- **Merge writes count as user edits for precedence.** The merge
+  driver's `updateEntity` and its re-keyed relationship writes are
+  `user_edit`, so they count toward
+  [user precedence](../../../../memory/cadence.md#user-edits-and-classifier-writes):
+  a classifier fact from older prose no longer overwrites a column or
+  view they wrote. `updateEntity` now drops unchanged columns, so only
+  the scalars the merge actually changes count. Decide whether a
+  re-keyed pair should read as a user-authored view: it is a user
+  create, so each view it carries over non-null blocks upserts from
+  older prose even though the classifier wrote it.
 
 ## Implementation notes
 

@@ -684,6 +684,16 @@ wizard) or _when_ it was last touched. Two real costs:
   classifier could honor user-asserted values until prose
   explicitly contradicts.
 
+User-edit precedence for `status`, keywords and relationship views
+has landed without this sidecar, through the delta log's order
+([`memory/cadence.md → User edits and classifier writes`](./memory/cadence.md#user-edits-and-classifier-writes)).
+What remains here is stale detection, and honoring a user's
+`entities.state` value until prose explicitly contradicts it. Ordering
+alone can't do that for state: piggyback, its per-turn writer, always
+reads the newest prose. Chapter-close identity compaction, once built,
+is the exception, since it reads a whole chapter whose prose can
+predate the user's edit.
+
 Sketch shape (v1.5):
 
 ```ts

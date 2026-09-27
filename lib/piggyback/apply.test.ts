@@ -179,7 +179,7 @@ describe('buildPiggybackActions', () => {
       {
         kind: 'promoteStagedEntity',
         source: 'ai_classifier',
-        payload: { branchId: 'main', id: 'char_staged' },
+        payload: { branchId: 'main', id: 'char_staged', proseEntryId: null },
       },
     ])
   })
@@ -204,7 +204,7 @@ describe('buildPiggybackActions', () => {
       {
         kind: 'promoteStagedEntity',
         source: 'ai_classifier',
-        payload: { branchId: 'main', id: 'char_staged' },
+        payload: { branchId: 'main', id: 'char_staged', proseEntryId: null },
       },
     ])
     // First-occurrence order, not sorted: the state panel renders emission order.
@@ -599,7 +599,7 @@ describe('buildPiggybackActions', () => {
       {
         kind: 'promoteStagedEntity',
         source: 'ai_classifier',
-        payload: { branchId: 'main', id: 'char_staged' },
+        payload: { branchId: 'main', id: 'char_staged', proseEntryId: null },
       },
     ])
 

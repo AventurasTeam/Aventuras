@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, sql } from 'drizzle-orm'
+import { and, asc, eq, gt, sql, type SQL } from 'drizzle-orm'
 
 import { boundedSignal } from '@/lib/abort'
 import { generateStructured } from '@/lib/ai'
@@ -19,9 +19,16 @@ import {
   type ReconcileDecision,
 } from '@/lib/classifier'
 import { branches, storyEntries, type ClassifierStatus, type StoryEntry } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { generateId, IdBiMap } from '@/lib/ids'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
-import { appSettingsStore, currentStoryStore, entitiesStore, happeningsStore } from '@/lib/stores'
+import {
+  appSettingsStore,
+  characterRelationshipsStore,
+  currentStoryStore,
+  entitiesStore,
+  happeningsStore,
+} from '@/lib/stores'
 
 import { buildClassifierContext } from './classifier-context'
 import { definePipeline } from '../authoring/define'
@@ -87,30 +94,38 @@ async function readStatus(ctx: StatusCtx): Promise<ClassifierStatus> {
   return row?.classifierStatus ?? idleStatus()
 }
 
-async function writeStatus(ctx: StatusCtx, status: ClassifierStatus): Promise<void> {
-  // branches is not delta-logged (classifier.md -> Persistence), so this is a
-  // direct row write. Key-scoped json_set because the reversal clamp owns
-  // $.processedThrough and can commit between this run's read and this write.
+// Direct row writes: branches isn't delta-logged (classifier.md -> Persistence). Key-scoped
+// json_set: the reversal clamp owns $.processedThrough and can commit between read and write.
+async function patchStatus(ctx: StatusCtx, keys: SQL): Promise<void> {
   await ctx.db.run(
     sql`UPDATE ${branches} SET classifier_status = json_set(
-          COALESCE(classifier_status, ${IDLE_STATUS_JSON}),
-          '$.state', ${status.state},
-          '$.lastSuccessAt', ${status.lastSuccessAt},
-          '$.lastError', ${status.lastError},
-          '$.retryCount', ${status.retryCount}
+          COALESCE(classifier_status, ${IDLE_STATUS_JSON}), ${keys}
         ) WHERE ${branches.id} = ${ctx.branchId}`,
   )
 }
 
-// Its own key-scoped write, for the mirror reason: it must not carry this run's
-// snapshot of the lifecycle keys.
-async function advanceWatermark(ctx: PhaseContext, coversThrough: number): Promise<void> {
-  await ctx.db.run(
-    sql`UPDATE ${branches} SET classifier_status = json_set(
-          COALESCE(classifier_status, ${IDLE_STATUS_JSON}), '$.processedThrough',
-          MAX(COALESCE(json_extract(classifier_status, '$.processedThrough'), 0), ${coversThrough})
-        ) WHERE ${branches.id} = ${ctx.branchId}`,
-  )
+function lifecycleKeys(status: ClassifierStatus): SQL {
+  return sql`'$.state', ${status.state}, '$.lastSuccessAt', ${status.lastSuccessAt},
+      '$.lastError', ${status.lastError}, '$.retryCount', ${status.retryCount}`
+}
+
+// MAX-guarded, and never from this run's snapshot of the lifecycle keys.
+function watermarkKey(coversThrough: number): SQL {
+  return sql`'$.processedThrough',
+      MAX(COALESCE(json_extract(classifier_status, '$.processedThrough'), 0), ${coversThrough})`
+}
+
+function writeStatus(ctx: StatusCtx, status: ClassifierStatus): Promise<void> {
+  return patchStatus(ctx, lifecycleKeys(status))
+}
+
+function advanceWatermark(ctx: StatusCtx, coversThrough: number): Promise<void> {
+  return patchStatus(ctx, watermarkKey(coversThrough))
+}
+
+async function recordFailure(ctx: StatusCtx, detail: string): Promise<void> {
+  const { status } = nextStatusOnFailure(await readStatus(ctx), { error: detail, at: Date.now() })
+  await writeStatus(ctx, status)
 }
 
 export async function* periodicClassifierPhase(
@@ -146,6 +161,9 @@ export async function* periodicClassifierPhase(
   const entities = [...entitiesStore.getEntities().values()].filter(
     (e) => e.branchId === ctx.branchId,
   )
+  const relationships = [...characterRelationshipsStore.getRelationshipRows().values()].filter(
+    (r) => r.branchId === ctx.branchId,
+  )
   const idMap = new IdBiMap()
   const prompt = renderTemplate(
     TEMPLATE_IDS.periodicClassifier,
@@ -155,6 +173,7 @@ export async function* periodicClassifierPhase(
       happenings: [...happeningsStore.getHappenings().values()].filter(
         (h) => h.branchId === ctx.branchId,
       ),
+      relationships,
       idMap,
     }),
   )
@@ -250,10 +269,9 @@ export async function* periodicClassifierPhase(
   }
 
   const next = nextStatusOnSuccess(status, { coversThrough: window.coversThrough, at: Date.now() })
-  // writeStatus persists the lifecycle keys only; next.processedThrough is not
-  // one of them — the watermark lands below, key-scoped and MAX-guarded in SQL.
-  await writeStatus(ctx, next)
-  await advanceWatermark(ctx, window.coversThrough)
+  // One statement: a success recorded without its watermark would reset the retry count on a
+  // pass that then fails and reverses, and retry it at the first backoff forever.
+  await patchStatus(ctx, sql`${lifecycleKeys(next)}, ${watermarkKey(window.coversThrough)}`)
   return { status: 'completed' }
 }
 
@@ -273,11 +291,22 @@ export function ensurePeriodicClassifierPipelineRegistered(): void {
       affordance: 'pill-only',
       onPreflightFailure: async (ctx, error) => {
         const detail = error.kind === 'config-resolver' ? error.failure : error.detail
-        const { status } = nextStatusOnFailure(await readStatus(ctx), {
-          error: `classifier: ${detail}`,
-          at: Date.now(),
-        })
-        await writeStatus(ctx, status)
+        await recordFailure(ctx, `classifier: ${detail}`)
+      },
+      // A rejected write throws past the phase (orchestrator.ts runPhases) rather than
+      // returning `{ status: 'failed' }`, so this hook is what persists the failure.
+      onPhaseException: async (ctx, error) => {
+        const detail = `classifier: ${error.detail}`
+        try {
+          await recordFailure(ctx, detail)
+        } catch (e) {
+          // A failed attempt lands nothing; unrecorded, the branch stays running until boot.
+          logger.warn('classifier.failure_record_retried', {
+            branchId: ctx.branchId,
+            error: e instanceof Error ? e.message : String(e),
+          })
+          await recordFailure(ctx, detail)
+        }
       },
       gateBehavior: 'no-gate',
       concurrencyPolicy: { blockedBy: [PERIODIC_CLASSIFIER_KIND, 'chapter-close'] },

@@ -292,14 +292,38 @@ async function commitRun(
   return { tx: { runId: run.runId, actionId: run.actionId, outcome: 'completed' }, successor }
 }
 
-async function abortRun(
+async function runPhaseExceptionHook(
   run: RunState,
   ctx: RunCtx,
-  cause: { reason: 'user-cancel' | 'phase-failure' | 'preflight-failure'; error?: PipelineError },
-): Promise<TxResult> {
+  error: PipelineError,
+): Promise<void> {
+  if (error.kind !== 'action-layer' && error.kind !== 'orchestrator') return
+  const onPhaseException = getPipeline(run.kind).onPhaseException
+  if (!onPhaseException) return
+  try {
+    await onPhaseException(ctx, error)
+  } catch (hookError) {
+    logger.error(
+      'pipeline.phase_exception_hook_failed',
+      {
+        runId: run.runId,
+        error: hookError instanceof Error ? hookError.message : String(hookError),
+      },
+      { actionId: run.actionId },
+    )
+  }
+}
+
+type AbortCause =
+  | { reason: 'user-cancel' }
+  | { reason: 'preflight-failure'; error: PipelineError }
+  // `threw`: thrown, not returned as failed — onPhaseException's only trigger (see ../types.ts).
+  | { reason: 'phase-failure'; error: PipelineError; threw: boolean }
+
+async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<TxResult> {
   run.abortController.abort()
   let outcome: 'aborted' | 'failed' = cause.reason === 'user-cancel' ? 'aborted' : 'failed'
-  let error = cause.error
+  let error = cause.reason === 'user-cancel' ? undefined : cause.error
   const markerOp = (settled: 'aborted' | 'failed') =>
     ctx.db
       .update(pipelineRuns)
@@ -317,6 +341,11 @@ async function abortRun(
     outcome = 'failed'
     reversalFailed = !failure.committed
   }
+  // Must run once the rollback has committed: arming a retry over writes still on disk would
+  // race it into re-reading them; an uncommitted reversal leaves recovery to own the branch.
+  // Must precede generationStore.abortRun below — that release drops the gate serializing this.
+  if (cause.reason === 'phase-failure' && cause.threw && !reversalFailed)
+    await runPhaseExceptionHook(run, ctx, cause.error)
   generationStore.abortRun(run.runId)
   // Uncommitted: the marker rolled back with the reversal, so boot recovery still owns the run.
   if (reversalFailed)
@@ -348,10 +377,6 @@ async function abortRun(
   return { runId: run.runId, actionId: run.actionId, outcome, ...(error ? { error } : {}) }
 }
 
-type AbortCause = {
-  reason: 'user-cancel' | 'phase-failure' | 'preflight-failure'
-  error?: PipelineError
-}
 type PhaseOutcome = { kind: 'completed' } | { kind: 'aborted'; cause: AbortCause }
 
 async function runPhases(run: RunState, ctx: RunCtx): Promise<PhaseOutcome> {
@@ -370,7 +395,10 @@ async function runPhases(run: RunState, ctx: RunCtx): Promise<PhaseOutcome> {
           },
           { actionId: run.actionId },
         )
-        return { kind: 'aborted', cause: { reason: 'phase-failure', error: result.error } }
+        return {
+          kind: 'aborted',
+          cause: { reason: 'phase-failure', error: result.error, threw: false },
+        }
       }
       if (result.status === 'aborted') return { kind: 'aborted', cause: { reason: 'user-cancel' } }
     }
@@ -384,7 +412,7 @@ async function runPhases(run: RunState, ctx: RunCtx): Promise<PhaseOutcome> {
       { runId: run.runId, errorKind: error.kind, errorDetail: error.detail },
       { actionId: run.actionId },
     )
-    return { kind: 'aborted', cause: { reason: 'phase-failure', error } }
+    return { kind: 'aborted', cause: { reason: 'phase-failure', error, threw: true } }
   }
   return { kind: 'completed' }
 }

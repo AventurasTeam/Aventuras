@@ -246,6 +246,11 @@ to a fixed parent.
 - **Pop semantics**: Return = pop one level. The previous screen
   is whatever the user came from, even if that's a sibling rather
   than a hierarchical parent.
+- **A link to a surface already open**: an in-story link or `GO TO`
+  whose target surface is already in the stack pops back to that
+  screen instead of pushing a second one, and hands it the link's
+  selection (row, tab), which the screen then shows. A surface with a
+  dirty save session raises its navigate-away guard first.
 - **One-shot return targets**: certain entry paths may register an
   override consumed by the next Return. **None is registered today.**
   `Edit info` on a story-list card — the case this provision was

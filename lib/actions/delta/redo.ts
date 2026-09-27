@@ -1,10 +1,13 @@
 import type { Delta, SqlOp } from '@/lib/db'
 import { deltas, isEmbeddedSourceTable } from '@/lib/db'
 
-import type { DbCtx } from '../types'
+import { isUserOriginatedSource, type DbCtx } from '../types'
 import { nextLogPosition } from './delta-row'
+import { withKeyLocks } from './key-lock'
 import { resolveByTable, whereForDelta } from './registry'
 import { buildReverseAndPrunePlan, DeltaReplayError, emitPatches } from './reverse-replay'
+import { deltaLockKeys } from './row-locks'
+import { FIRST_LOGGED_AT, firstLoggedAt } from './user-precedence'
 
 export type RedoSnapshot = {
   delta: Delta
@@ -47,11 +50,27 @@ export type RedoInvalidation = { rows: Delta[]; extraOps: readonly SqlOp[] }
 
 const NO_INVALIDATION: RedoInvalidation = { rows: [], extraOps: [] }
 
+// Reversal precedence weighs a user write by where it first logged, not the head slot it
+// re-logs at, which sits above the machine writes it preceded.
+function relogPayload(delta: Delta): Delta['undoPayload'] {
+  if (!isUserOriginatedSource(delta.source)) return delta.undoPayload
+  return { ...delta.undoPayload, [FIRST_LOGGED_AT]: firstLoggedAt(delta) }
+}
+
 // Re-inserts the original delta row so a subsequent CTRL-Z can undo the redo again.
-export async function applyRedo(
+export function applyRedo(
   snapshots: readonly RedoSnapshot[],
   ctx: DbCtx,
   invalidation: RedoInvalidation = NO_INVALIDATION,
+): Promise<void> {
+  const keys = deltaLockKeys([...snapshots.map((s) => s.delta), ...invalidation.rows])
+  return withKeyLocks(keys, () => applyRedoLocked(snapshots, ctx, invalidation))
+}
+
+async function applyRedoLocked(
+  snapshots: readonly RedoSnapshot[],
+  ctx: DbCtx,
+  invalidation: RedoInvalidation,
 ): Promise<void> {
   const ops = []
   const restoredDeltas: Delta[] = []
@@ -100,7 +119,11 @@ export async function applyRedo(
   const deltaOps = restoredDeltas.map((delta) =>
     ctx.db
       .insert(deltas)
-      .values({ ...delta, logPosition: nextLogPosition(delta.branchId) })
+      .values({
+        ...delta,
+        logPosition: nextLogPosition(delta.branchId),
+        undoPayload: relogPayload(delta),
+      })
       .toSQL(),
   )
   // Reversal after the redo's own ops: a restore writes the whole row, so a targeted

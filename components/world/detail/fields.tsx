@@ -40,36 +40,24 @@ export function TextField<D extends FieldValues>({
     <Controller
       control={control}
       name={name}
-      render={({ field, fieldState }) => (
-        <FormRow label={label} hint={hint} error={issueLabel(fieldState.error?.message)}>
-          {multiline ? (
-            <Textarea
-              value={field.value}
-              onChangeText={field.onChange}
-              onBlur={field.onBlur}
-              rows={4}
-              maxLength={maxLength}
-              placeholder={placeholder}
-              editable={canEdit}
-              accessibilityHint={blocked ? blockedReason : undefined}
-              aria-label={label}
-              aria-invalid={fieldState.error != null}
-            />
-          ) : (
-            <Input
-              value={field.value}
-              onChangeText={field.onChange}
-              onBlur={field.onBlur}
-              maxLength={maxLength}
-              placeholder={placeholder}
-              editable={canEdit}
-              accessibilityHint={blocked ? blockedReason : undefined}
-              aria-label={label}
-              aria-invalid={fieldState.error != null}
-            />
-          )}
-        </FormRow>
-      )}
+      render={({ field, fieldState }) => {
+        const inputProps = {
+          value: field.value,
+          onChangeText: field.onChange,
+          onBlur: field.onBlur,
+          maxLength,
+          placeholder,
+          editable: canEdit,
+          accessibilityHint: blocked ? blockedReason : undefined,
+          'aria-label': label,
+          'aria-invalid': fieldState.error != null,
+        }
+        return (
+          <FormRow label={label} hint={hint} error={issueLabel(fieldState.error?.message)}>
+            {multiline ? <Textarea {...inputProps} rows={4} /> : <Input {...inputProps} />}
+          </FormRow>
+        )
+      }}
     />
   )
 }

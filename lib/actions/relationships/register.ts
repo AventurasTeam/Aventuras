@@ -6,7 +6,15 @@ import { generateId } from '@/lib/ids'
 import { characterRelationshipsStore } from '@/lib/stores'
 
 import { register, type ActionHandler, type HandlerOutcome } from '../delta/registry'
-import type { DbCtx, DeltaSource } from '../types'
+import {
+  carriesColumn,
+  proseLogPosition,
+  rowDeltasSince,
+  USER_EDITED_SINCE_PROSE,
+  userDeletedPairSince,
+  userEditsSince,
+} from '../delta/user-precedence'
+import type { DbCtx, DeltaSource, ProseEntryId } from '../types'
 
 declare module '@/lib/actions/action-map' {
   interface PipelineActionMap {
@@ -18,16 +26,85 @@ declare module '@/lib/actions/action-map' {
         objectId: string
         /** The subject's view of the object; null clears it. */
         kind: string | null
-        /** The object's view of the subject; omitted leaves it as stored (the classifier's write).
-         * When present, both null is refused, not a delete: use `deleteCharacterRelationship`. */
-        inverseKind?: string | null
-      }
+      } & (
+        | {
+            /** The object's view of the subject. Both null is refused, not a delete: use
+             * `deleteCharacterRelationship`. */
+            inverseKind: string | null
+            proseEntryId?: never
+          }
+        | {
+            /** Leaves the object's view as stored: the classifier's single-view write. */
+            inverseKind?: never
+            proseEntryId: ProseEntryId
+          }
+      )
     }
     deleteCharacterRelationship: { source: DeltaSource; payload: { branchId: string; id: string } }
   }
 }
 
 type Pair = { aId: string; bId: string; subjectIsA: boolean }
+
+// Read from the log's start, not the create's position: a redo re-inserts the create above
+// the deltas its snapshot absorbed, so the live row may hold a view the classifier filled in since.
+async function viewAtCreate(
+  ctx: DbCtx,
+  branchId: string,
+  current: CharacterRelationship,
+  povCol: 'kind' | 'inverseKind',
+): Promise<unknown> {
+  const history = await rowDeltasSince(ctx, branchId, 'character_relationships', current.id, 0)
+  const first = history.find((d) => carriesColumn(d, povCol))
+  return first == null ? current[povCol] : first.undoPayload?.[povCol]
+}
+
+async function userWroteViewSince(
+  ctx: DbCtx,
+  branchId: string,
+  pair: { aId: string; bId: string },
+  current: CharacterRelationship | undefined,
+  povCol: 'kind' | 'inverseKind',
+  proseEntryId: string,
+): Promise<boolean> {
+  const since = await proseLogPosition(ctx, branchId, proseEntryId)
+  if (current) {
+    const edits = await userEditsSince(ctx, branchId, 'character_relationships', current.id, since)
+    if (edits.some((d) => d.op === 'update' && carriesColumn(d, povCol))) return true
+    // Only the user's own re-create outranks their delete; a classifier re-create from newer
+    // prose still leaves older prose facing the delete.
+    if (edits.some((d) => d.op === 'create'))
+      return (await viewAtCreate(ctx, branchId, current, povCol)) !== null
+  }
+  return userDeletedPairSince(ctx, branchId, pair.aId, pair.bId, since)
+}
+
+function createOutcome(
+  ctx: DbCtx,
+  branchId: string,
+  pair: { aId: string; bId: string },
+  views: Pick<CharacterRelationship, 'kind' | 'inverseKind'>,
+): HandlerOutcome {
+  const now = Date.now()
+  const row: CharacterRelationship = {
+    id: generateId('rel'),
+    branchId,
+    aId: pair.aId,
+    bId: pair.bId,
+    ...views,
+    createdAt: now,
+    updatedAt: now,
+  }
+  return {
+    status: 'ok',
+    targetTable: 'character_relationships',
+    targetId: row.id,
+    op: 'create',
+    undoPayload: null,
+    ops: [ctx.db.insert(characterRelationships).values(row).toSQL()],
+    patch: { op: 'create', id: row.id, row },
+  }
+}
 
 // Grouped handlers read pre-group state: two single-POV writes to a new pair would both insert.
 function bothPovOutcome(
@@ -44,27 +121,7 @@ function bothPovOutcome(
   }
   if (columns.kind === null && columns.inverseKind === null)
     return { status: 'rejected', reason: 'a relationship needs at least one perspective' }
-  if (!current) {
-    const now = Date.now()
-    const row: CharacterRelationship = {
-      id: generateId('rel'),
-      branchId,
-      aId: pair.aId,
-      bId: pair.bId,
-      ...columns,
-      createdAt: now,
-      updatedAt: now,
-    }
-    return {
-      status: 'ok',
-      targetTable: 'character_relationships',
-      targetId: row.id,
-      op: 'create',
-      undoPayload: null,
-      ops: [ctx.db.insert(characterRelationships).values(row).toSQL()],
-      patch: { op: 'create', id: row.id, row },
-    }
-  }
+  if (!current) return createOutcome(ctx, branchId, pair, columns)
   const set: Partial<Pick<CharacterRelationship, 'kind' | 'inverseKind'>> = {}
   const undoPayload: Record<string, unknown> = {}
   if (columns.kind !== current.kind) {
@@ -102,7 +159,7 @@ function bothPovOutcome(
 const upsertHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'upsertCharacterRelationship')
     throw new Error(`handler/kind mismatch: ${action.kind}`)
-  const { branchId: bid, subjectId, objectId, kind, inverseKind } = action.payload
+  const { branchId: bid, subjectId, objectId, kind, inverseKind, proseEntryId } = action.payload
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   if (subjectId === objectId) return { status: 'rejected', reason: 'self-relationship not allowed' }
@@ -131,28 +188,24 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx) => {
   if (inverseKind !== undefined)
     return bothPovOutcome(ctx, bid, { aId, bId, subjectIsA }, current, kind, inverseKind)
 
+  // Only the classifier reaches this path; a case/whitespace-only repeat is the same view.
+  if (current && current[povCol]?.trim().toLowerCase() === kind?.trim().toLowerCase())
+    return { status: 'rejected', reason: 'relationship unchanged', code: 'noop' }
+
+  if (
+    proseEntryId != null &&
+    (await userWroteViewSince(ctx, bid, { aId, bId }, current, povCol, proseEntryId))
+  )
+    return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
+
   if (!current) {
     if (kind === null) return { status: 'rejected', reason: 'no relationship to clear' }
-    const now = Date.now()
-    const row: CharacterRelationship = {
-      id: generateId('rel'),
-      branchId: bid,
-      aId,
-      bId,
-      kind: subjectIsA ? kind : null,
-      inverseKind: subjectIsA ? null : kind,
-      createdAt: now,
-      updatedAt: now,
-    }
-    return {
-      status: 'ok',
-      targetTable: 'character_relationships',
-      targetId: row.id,
-      op: 'create',
-      undoPayload: null,
-      ops: [ctx.db.insert(characterRelationships).values(row).toSQL()],
-      patch: { op: 'create', id: row.id, row },
-    }
+    return createOutcome(
+      ctx,
+      bid,
+      { aId, bId },
+      { kind: subjectIsA ? kind : null, inverseKind: subjectIsA ? null : kind },
+    )
   }
 
   // Nulling the last remaining POV would leave the row both-null (CHECK fails) → delete it.
@@ -208,8 +261,14 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     .select()
     .from(characterRelationships)
     .where(and(eq(characterRelationships.branchId, bid), eq(characterRelationships.id, id)))
+  // Only the user deletes a pair, and a pair already gone is the state they asked for; a
+  // refusal would fail the rest of their Save with it.
   if (!current)
-    return { status: 'rejected', reason: `delete target relationship ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `delete target relationship ${bid}:${id} not found`,
+      code: 'noop',
+    }
   return {
     status: 'ok',
     targetTable: 'character_relationships',
@@ -240,5 +299,6 @@ export function registerCharacterRelationships(): void {
       deleteCharacterRelationship: deleteHandler,
     },
     patcher: (branchId, p) => characterRelationshipsStore.patch(branchId, p),
+    rowKeepingColumns: ['kind', 'inverseKind'],
   })
 }

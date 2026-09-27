@@ -327,7 +327,7 @@ describe('applyDeltaActionGroup', () => {
   const promote = (id: string): PipelineAction => ({
     kind: 'promoteStagedEntity',
     source: 'user_edit',
-    payload: { branchId: 'b1', id },
+    payload: { branchId: 'b1', id, proseEntryId: null },
   })
 
   // The group takes each promote key the single-action path takes, and takes them in

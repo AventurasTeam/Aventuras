@@ -173,8 +173,7 @@ function castEntityInput(
   }
 }
 
-// data-model.md → LocationState: the walk the entity handler runs. createStoryWithBranch inserts
-// the cast directly, so Finish is the only gate this path has.
+// data-model.md → LocationState. Sole gate: createStoryWithBranch skips the handler's walk.
 function castParentCycle(rows: readonly WizardCastEntityInput[]): boolean {
   const parentOf = parentOfLocations(rows)
   return rows.some(

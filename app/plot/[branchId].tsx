@@ -21,29 +21,24 @@ import {
   type PlotSelection,
 } from '@/components/plot/plot-selection'
 import { ThreadDetailPane } from '@/components/plot/thread-detail-pane'
-import { usePlotDeepLink } from '@/components/plot/use-plot-deep-link'
 import { usePlotSelection } from '@/components/plot/use-plot-selection'
 import { MasterDetailLayout } from '@/components/shells/master-detail-layout'
 import { ScreenShell } from '@/components/shells/screen-shell'
-import {
-  storySettingsGenerationPhase,
-  useStoryGenerationGate,
-} from '@/components/story-settings/generation-run'
+import { storyPillPhase, useStoryGenerationGate } from '@/components/story-settings/generation-run'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { KeyboardInsetColumn } from '@/components/ui/keyboard-inset-column'
 import { Text } from '@/components/ui/text'
-import { single as singleParam } from '@/components/world/world-selection'
+import { single as singleParam, worldHref } from '@/components/world/world-selection'
 import { useColdOpenStory } from '@/hooks/use-cold-open-story'
 import { useEntryIndex } from '@/hooks/use-entry-index'
 import { useIsRouteFocused } from '@/hooks/use-is-route-focused'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
 import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
-import type { RowSessionHandle } from '@/hooks/use-row-save-session'
+import { useRouteLink } from '@/hooks/use-route-link'
+import { useRowSessionGuard } from '@/hooks/use-row-session-guard'
 import { useRowSignals } from '@/hooks/use-row-signals'
-import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
 import { useTier } from '@/hooks/use-tier'
-import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard'
 import { saveHappening, saveThread } from '@/lib/actions'
 import { db, runInTransaction, type Entity } from '@/lib/db'
 import { t } from '@/lib/i18n'
@@ -64,7 +59,6 @@ const ctx = { db, runInTransaction }
 
 export default function PlotRoute() {
   const router = useRouter()
-  const surfaceNavigate = useSurfaceNavigate()
   const isPhone = useTier() === 'phone'
   const focused = useIsRouteFocused()
   const params = useLocalSearchParams<{
@@ -74,16 +68,21 @@ export default function PlotRoute() {
     tab?: string | string[]
   }>()
   const branchId = singleParam(params.branchId) ?? ''
-  // Params seed the initial state only; `tab` opens the linked row's detail on that tab.
-  const [initialSelection] = useState(() =>
-    parsePlotSelection({ kind: params.kind, id: params.id, tab: params.tab }),
+  const linkKind = singleParam(params.kind)
+  const linkId = singleParam(params.id)
+  const linkTab = singleParam(params.tab)
+  const link = useMemo(
+    () => parsePlotSelection({ kind: linkKind, id: linkId, tab: linkTab }),
+    [linkKind, linkId, linkTab],
   )
+  // The link seeds the initial state, and `tab` opens its row's detail on that tab; one set on
+  // this mounted screen later is followed below.
+  const [initialSelection] = useState(link)
   const [kind, setKind] = useState<PlotKind>(initialSelection?.kind ?? 'thread')
   const [threadFilter, setThreadFilter] = useState<ThreadFilter>('all')
   const [happeningFilter, setHappeningFilter] = useState<HappeningFilter>('all')
   const [search, setSearch] = useState('')
   const [addOpen, setAddOpen] = useState(false)
-  const [session, setSession] = useState<RowSessionHandle | null>(null)
   const listRef = useRef<PlotListPaneHandle>(null)
 
   const open = useColdOpenStory(branchId, 'plot')
@@ -140,22 +139,13 @@ export default function PlotRoute() {
     [selectedHappeningId, branchId, involvementRows, awarenessRows],
   )
 
-  const { activeRunKind, editBlocked, gateReason } = useStoryGenerationGate(storyId ?? undefined)
+  const { activeRunKind, editBlocked, gateReason, classifierRunning } = useStoryGenerationGate(
+    storyId ?? undefined,
+    branchId,
+  )
   const openRegionPct = useOpenRegionTokens(storyId)
 
-  // save-sessions.md → Navigate-away guard: every in-surface transition routes through here.
-  const guard = useCallback(
-    (proceed: () => void) => {
-      if (session == null) proceed()
-      else session.requestLeave(proceed)
-    },
-    [session],
-  )
-  useUnsavedChangesGuard(session?.dirty ?? false, guard)
-  const navigateGuarded = useCallback(
-    (path: string) => guard(() => surfaceNavigate(path)),
-    [guard, surfaceNavigate],
-  )
+  const { onSession, guard, navigateGuarded } = useRowSessionGuard()
 
   const switchKind = useCallback(
     (next: PlotKind) => {
@@ -196,7 +186,25 @@ export default function PlotRoute() {
   const revealLink = useCallback((link: PlotSelection) => {
     listRef.current?.revealRow(link.kind, link.id)
   }, [])
-  const pendingLink = usePlotDeepLink(initialSelection, panesReady, revealLink)
+  // A link set on this mounted screen (useSurfaceNavigate reuses it) selects its row, and
+  // remounts the pane so it opens on the link's tab.
+  const [linkMount, setLinkMount] = useState(0)
+  const followLink = useCallback(
+    (target: PlotSelection, atMount: boolean) => {
+      if (atMount) {
+        revealLink(target)
+        return
+      }
+      guard(() => {
+        if (target.kind !== kind) switchKind(target.kind)
+        select(target.id)
+        setLinkMount((n) => n + 1)
+        revealLink(target)
+      })
+    },
+    [kind, guard, switchKind, select, revealLink],
+  )
+  const pendingLink = useRouteLink(link, panesReady, followLink)
 
   // The popover measures its trigger on open, and phone hides the list (and its `[+]`) while
   // a row is selected. Opening the menu alone drops nothing, so only a kind switch, or phone's
@@ -250,7 +258,8 @@ export default function PlotRoute() {
   // The save bar's notice is an icon with no visible text, so a refused save also toasts.
   const onRejected = toast.error
   const openEntity = useCallback(
-    (entity: Entity) => navigateGuarded(`/world/${branchId}?kind=${entity.kind}&id=${entity.id}`),
+    (entity: Entity) =>
+      navigateGuarded(worldHref(branchId, { category: entity.kind, id: entity.id })),
     [navigateGuarded, branchId],
   )
 
@@ -282,6 +291,7 @@ export default function PlotRoute() {
     ) : selection.type === 'happening' ||
       (selection.type === 'create' && selection.kind === 'happening') ? (
       <HappeningDetailPane
+        key={linkMount}
         row={selection.type === 'happening' ? selection.row : null}
         createSeq={selection.type === 'create' ? selection.seq : undefined}
         links={links}
@@ -313,12 +323,13 @@ export default function PlotRoute() {
         }
         onSaved={onSaved}
         onRejected={onRejected}
-        onSession={setSession}
+        onSession={onSession}
         onOpenEntity={openEntity}
         hotkeysEnabled={focused}
       />
     ) : (
       <ThreadDetailPane
+        key={linkMount}
         row={selection.type === 'thread' ? selection.row : null}
         createSeq={selection.type === 'create' ? selection.seq : undefined}
         entryIndex={entryIndex.index}
@@ -341,7 +352,7 @@ export default function PlotRoute() {
         }
         onSaved={onSaved}
         onRejected={onRejected}
-        onSession={setSession}
+        onSession={onSession}
         hotkeysEnabled={focused}
       />
     )
@@ -367,9 +378,7 @@ export default function PlotRoute() {
         <StoryStatusPill
           storyId={storyId}
           swapTarget={open?.settings.embedding_swap_target}
-          activePhase={
-            activeRunKind != null ? storySettingsGenerationPhase(activeRunKind) : undefined
-          }
+          activePhase={storyPillPhase(activeRunKind, classifierRunning)}
           onCancel={() => {
             if (activeRunKind != null) void awaitRunTerminal(activeRunKind, branchId, 'cancel')
           }}

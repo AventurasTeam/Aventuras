@@ -250,6 +250,14 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       description: 'Existing happenings, so the model can reference rather than duplicate them.',
       required: false,
     },
+    {
+      name: 'relationships',
+      type: '{ subject, subjectName, object, objectName, kind }[]',
+      category: 'Entities',
+      description:
+        "Stored character-to-character views, one per perspective: the subject's view of the object, with both names inlined so the model doesn't have to cross-reference the entity list. The author's edits live here too.",
+      required: false,
+    },
   ],
   wizard: [
     {
@@ -359,6 +367,7 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'worldTimeDeltaBasis',
     'leadEntityId',
     'cast',
+    'relationships',
   ],
   Plot: ['happenings'],
   Retrieval: [

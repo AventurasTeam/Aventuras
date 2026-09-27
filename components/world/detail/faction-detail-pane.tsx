@@ -41,7 +41,7 @@ export function FactionDetailPane({
     resolver,
     fieldLabel,
     issueText: entityIssueText,
-    onSave: (draft) => onSave({ kind: 'faction', draft }),
+    onSave: (draft, keywordsBase) => onSave({ kind: 'faction', draft, keywordsBase }),
     onSaved,
     onRejected,
     onSession,

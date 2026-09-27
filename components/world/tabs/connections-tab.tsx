@@ -50,7 +50,7 @@ function LinkList({
   )
 }
 
-// world.md → Connections, Character: Positional, Affiliation, Relationships, Last seen (read-only).
+// world.md → Connections, Character.
 export function CharacterConnections({
   control,
   trigger,

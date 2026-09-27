@@ -1,6 +1,11 @@
 export { isWorldIssue, WORLD_ISSUE } from './issues'
 export type { WorldIssue } from './issues'
-export { checkParentChain, PARENT_CYCLE, parentOfLocations } from './parent-chain'
+export {
+  checkParentChain,
+  PARENT_CHAIN_BROKEN,
+  PARENT_CYCLE,
+  parentOfLocations,
+} from './parent-chain'
 export {
   characterDraftFrom,
   characterDraftSchema,
@@ -22,6 +27,7 @@ export type {
   ItemDraft,
   LocationDraft,
   RelationshipDraft,
+  RelationshipBaseLink,
   RelationshipLink,
   StackableDraft,
 } from './entity-draft'

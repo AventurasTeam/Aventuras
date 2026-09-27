@@ -79,7 +79,7 @@ erDiagram
         text description
         text status "staged | active | retired"
         text retired_reason "free-form; only meaningful when status=retired. Hard-finality only — e.g. 'killed by Kael', 'temple destroyed in quake', 'faction disbanded after coup', 'exiled to the southern wastes'. Off-screen-but-alive characters stay status=active with stale lastSeenAt; see docs/memory/edge-cases.md → Retirement"
-        json keywords "string[]; aliases / epithets / relational references beyond the canonical name. User-authored, OR periodic-classifier-emitted at entity creation (append-only, never removes). Matched alongside name in the keyword pathway. See docs/memory/retrieval.md → Keywords schema"
+        json keywords "string[]; aliases / epithets / relational references beyond the canonical name. User-authored, OR periodic-classifier-emitted at entity creation and appended on later passes (append-only, never removes). Matched alongside name in the keyword pathway. See docs/memory/retrieval.md → Keywords schema"
         text injection_mode "always | auto | disabled; short-circuited by active+in-scene invariant"
         integer priority "0..100; orders keyword-inject overflow ONLY — unlike lore.priority it does not feed the ranker pin_signal, which stays 0 for entities. See docs/memory/retrieval.md → Keyword injection budget"
         integer name_collision_flag "0 | 1; 1 = same-name collision detected at classifier extraction; surfaces in World panel for review. See docs/memory/edge-cases.md → Name collision"
@@ -168,7 +168,7 @@ erDiagram
         integer updated_at
     }
     %% CHECK (a_id < b_id) — canonical ordering invariant, enforced at write time + as DB backstop
-    %% CHECK (kind IS NOT NULL OR inverse_kind IS NOT NULL) — at least one POV must be known; UI delete removes the row (deleteCharacterRelationship), a write leaving both POVs null deletes the row only on the single-POV path
+    %% CHECK (kind IS NOT NULL OR inverse_kind IS NOT NULL) — at least one POV must be known; UI delete removes the row (deleteCharacterRelationship), a write leaving both POVs null deletes the row only on the single-POV path, as does a reversal (generation-pipeline.md → Reverse-replay)
     %% UNIQUE(branch_id, a_id, b_id) — one row per pair per branch; gives clean UPSERT semantics in classifier and user-edit paths
 
     chapters {
@@ -744,7 +744,9 @@ updated. Depth-cap at 100 with an error log on cap-hit (shouldn't
 happen in real data).
 
 **Failure mode.** Rejected writes return
-`{ status: 'rejected', reason: 'parent-cycle' }` (mirrors the
+`{ status: 'rejected', reason: 'parent-cycle' }`, or
+`reason: 'parent-chain-broken'` on a cap-hit, where the fault is a loop
+already stored above the proposed parent rather than the write (mirrors the
 gate-rejection shape at
 [`generation-pipeline.md → Action rejection`](./generation-pipeline.md#action-rejection--defense-in-depth)).
 Classifier writes hitting the rejection surface as a phase-level
@@ -833,9 +835,9 @@ CREATE INDEX idx_char_rel_branch_b ON character_relationships(branch_id, b_id);
 
 **One row per pair.** Symmetric AND asymmetric relationships share the
 shape — `kind`/`inverse_kind` carry the two perspectives independently
-("Aria → Kael: sister", "Kael → Aria: brother") and either may be
-null until that POV is observed. Single row keeps lookups cheap and
-gives clean UPSERT semantics.
+("Aria sees Kael as: brother", "Kael sees Aria as: sister") and either
+may be null until that POV is observed. Single row keeps lookups cheap
+and gives clean UPSERT semantics.
 
 **Canonical ordering invariant: `a_id < b_id`.** Lexicographic string
 compare on the `char_${uuid}` IDs. Application write path always
@@ -911,7 +913,11 @@ isn't recorded yet").
 **Authoring policy: v1 lean — classifier wins on prose evidence.**
 Both classifier and user write; classifier UPSERTs on subsequent
 contradicting prose. User edits "stick" only until classifier reads
-contradicting prose. Same policy as the rest of CharacterState (see
+contradicting prose. "Subsequent" is enforced through the delta log's
+order: an upsert from prose older than the user's last write of that
+view, or than the user's deletion of the pair, no-ops
+([`memory/cadence.md → User edits and classifier writes`](./memory/cadence.md#user-edits-and-classifier-writes)).
+Same policy as the rest of CharacterState (see
 the authoring matrix under
 [World-state storage](#world-state-storage)). No per-field
 provenance in v1 — the parked v1.5
@@ -2339,6 +2345,8 @@ arbitrary editing.
   be namespaced out of that walk or it reaches a `SET` clause and the store
   patch beside it. The prefix cannot collide with a column, because column
   keys are identifiers. `$invalidationScope` is the first such key.
+  `$firstLoggedAt` is the second: the position a redone `user_edit`
+  delta held before its first undo (see `log_position` assignment).
 - **The reversal set closes over the happening → link-row relation**, not
   over the anchor alone. Undoing a `create` is a plain row delete with no
   cascade — only the explicit `deleteHappening` action carries one — and a
@@ -2422,7 +2430,11 @@ uniqueness backstop below and wedge the redo stack, since the snapshot
 is only popped on a post-commit failure. Re-assigning also keeps the
 restored delta at the log head, so a following CTRL-Z reaches it rather
 than whatever ran in the gap. A group re-inserts in ascending original
-order, which preserves its internal ordering.
+order, which preserves its internal ordering. The head slot would also
+rank a restored user write above the machine writes it preceded, so a
+redo stamps a `user_edit` delta with `$firstLoggedAt`, and reversal
+precedence orders by that
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
 
 Invariant: monotonically increasing within branch. Gaps are fine
 (rollback, fork copy, delete deltas — so gaps occur naturally; the

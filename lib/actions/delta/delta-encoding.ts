@@ -35,7 +35,7 @@ function classify(schema: ZodType): Node {
   return { kind: 'leaf', isOptional, isNullable }
 }
 
-function deepEqual(a: unknown, b: unknown): boolean {
+export function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true
   if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false
   const ak = Object.keys(a as object)

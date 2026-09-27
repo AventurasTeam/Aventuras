@@ -468,7 +468,10 @@ Description [textarea]
 
 Maps to [`LocationState`](../../../data-model.md#locationstate-shape).
 `parent_location_id` enables containment hierarchy at creation;
-picker reads currently-authored locations only.
+picker reads currently-authored locations only, leaving out the
+location itself and any location whose chain of parents already
+leads back to it, so the cast can't loop. Finish still refuses a
+loop as a backstop.
 
 ### Item editor
 
@@ -614,7 +617,10 @@ it the discard is invisible: the row imports unaffiliated and the
 editor's picker reads `No factions yet`, which the user takes to
 mean they have none rather than that the AI's answer was dropped.
 A reference the model simply omitted is not counted — only one it
-supplied and the wizard could not honour.
+supplied and the wizard could not honour. A parent that matched but
+would close a loop is left blank too and counted apart
+(`N location parents would have made a loop and were left blank.`),
+since the name did match.
 
 The toast is transient, so the **row keeps the ask** and warns
 inline in the compact list until the field is decided. The name is

@@ -446,8 +446,8 @@ describe('unresolved reference reporting', () => {
     expect(unresolved).toEqual([])
   })
 
-  it('drops an imported parent that would close a loop, and reports it', () => {
-    const { rows, unresolved } = resolveCastImports(
+  it('drops an imported parent that would close a loop, and reports it as looped', () => {
+    const { rows, unresolved, looped } = resolveCastImports(
       [
         {
           kind: 'location',
@@ -472,7 +472,9 @@ describe('unresolved reference reporting', () => {
     expect(upper?.kind === 'location' && upper.parentLocationId).toBe(lower?.id)
     expect(lower?.kind === 'location' && lower.parentLocationId).toBeNull()
     expect(lower?.kind === 'location' && lower.unresolvedParentLocationName).toBe('')
-    expect(unresolved).toEqual([{ rowName: 'Lower', field: 'parentLocation', wantedName: 'Upper' }])
+    // Matched, then dropped: not the "couldn't be matched" count.
+    expect(unresolved).toEqual([])
+    expect(looped).toEqual([{ rowName: 'Lower', field: 'parentLocation', wantedName: 'Upper' }])
   })
 
   it('keeps a three-location chain that never returns', () => {

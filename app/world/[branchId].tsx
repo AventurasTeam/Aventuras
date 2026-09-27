@@ -7,12 +7,10 @@ import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { Breadcrumb, type BreadcrumbSegment } from '@/components/compounds/breadcrumb'
 import { ImporterMenu } from '@/components/compounds/importer-menu'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
+import { plotHref } from '@/components/plot/plot-selection'
 import { MasterDetailLayout } from '@/components/shells/master-detail-layout'
 import { ScreenShell } from '@/components/shells/screen-shell'
-import {
-  storySettingsGenerationPhase,
-  useStoryGenerationGate,
-} from '@/components/story-settings/generation-run'
+import { storyPillPhase, useStoryGenerationGate } from '@/components/story-settings/generation-run'
 import { EmptyState } from '@/components/ui/empty-state'
 import { KeyboardInsetColumn } from '@/components/ui/keyboard-inset-column'
 import { CollisionReviewPill } from '@/components/world/collision-review-pill'
@@ -21,8 +19,10 @@ import { EntityDetailPane } from '@/components/world/detail/entity-detail-pane'
 import type { EntityPaneData } from '@/components/world/detail/entity-pane-props'
 import { entityTabOf } from '@/components/world/detail/entity-tabs'
 import { firstFlaggedRow } from '@/components/world/first-flagged-row'
-import { useWorldDeepLink } from '@/components/world/use-world-deep-link'
-import { useWorldSelection } from '@/components/world/use-world-selection'
+import {
+  useWorldSelection,
+  type WorldDetailSelection,
+} from '@/components/world/use-world-selection'
 import { worldAddOptions } from '@/components/world/world-add-options'
 import { leadRejectionText } from '@/components/world/world-copy'
 import { WorldDetailPlaceholder } from '@/components/world/world-detail-placeholder'
@@ -33,17 +33,17 @@ import {
   single as singleParam,
   worldAddLabel,
   worldCategoryLabel,
+  type WorldSelection,
 } from '@/components/world/world-selection'
 import { useColdOpenStory } from '@/hooks/use-cold-open-story'
 import { useEntryIndex } from '@/hooks/use-entry-index'
 import { useIsRouteFocused } from '@/hooks/use-is-route-focused'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
 import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
-import type { RowSessionHandle } from '@/hooks/use-row-save-session'
+import { useRouteLink } from '@/hooks/use-route-link'
+import { useRowSessionGuard } from '@/hooks/use-row-session-guard'
 import { useRowSignals } from '@/hooks/use-row-signals'
-import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
 import { useTier } from '@/hooks/use-tier'
-import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard'
 import { saveEntity, setStoryLead } from '@/lib/actions'
 import { DEFAULT_CALENDAR_ID, resolveCalendar } from '@/lib/calendar'
 import { db, runInTransaction } from '@/lib/db'
@@ -65,9 +65,20 @@ import { branchWorldTime, type EntitySaveInput } from '@/lib/world'
 
 const ctx = { db, runInTransaction }
 
+function selectionName(selection: WorldDetailSelection | null): string | null {
+  if (selection == null) return null
+  switch (selection.type) {
+    case 'create':
+      return t(`world:detail.newEntity.${selection.kind}`)
+    case 'lore':
+      return selection.row.title
+    case 'entity':
+      return selection.row.name
+  }
+}
+
 export default function WorldRoute() {
   const router = useRouter()
-  const surfaceNavigate = useSurfaceNavigate()
   const isPhone = useTier() === 'phone'
   const focused = useIsRouteFocused()
   const params = useLocalSearchParams<{
@@ -77,15 +88,19 @@ export default function WorldRoute() {
     tab?: string | string[]
   }>()
   const branchId = singleParam(params.branchId) ?? ''
-  // Params seed the initial state only (the story-settings `?tab=` precedent).
-  const [initialSelection] = useState(() =>
-    parseWorldSelection({ kind: params.kind, id: params.id, tab: params.tab }),
+  const linkKind = singleParam(params.kind)
+  const linkId = singleParam(params.id)
+  const linkTab = singleParam(params.tab)
+  const link = useMemo(
+    () => parseWorldSelection({ kind: linkKind, id: linkId, tab: linkTab }),
+    [linkKind, linkId, linkTab],
   )
+  // The link seeds the initial state; one set on this mounted screen later is followed below.
+  const [initialSelection] = useState(link)
   const [category, setCategory] = useState<WorldCategory>(initialSelection?.category ?? 'character')
   const [filter, setFilter] = useState<EntityFilter>('all')
   const [search, setSearch] = useState('')
   const [addOpen, setAddOpen] = useState(false)
-  const [session, setSession] = useState<RowSessionHandle | null>(null)
   const listRef = useRef<WorldListPaneHandle>(null)
 
   const open = useColdOpenStory(branchId, 'world')
@@ -134,8 +149,6 @@ export default function WorldRoute() {
   })
   const detailOpen = isPhone && selection != null
   const selectedEntity = selection?.type === 'entity' ? selection.row : null
-  // Stores hydrate before `open` publishes, so the linked row's pane mounts in that same commit.
-  const pendingLink = useWorldDeepLink(initialSelection, open != null)
 
   const relationships = useMemo(
     () =>
@@ -164,22 +177,13 @@ export default function WorldRoute() {
     [entities, relationships, involvements, entryIndex.index, worldTime, calendar, leadId],
   )
 
-  const { activeRunKind, editBlocked, gateReason } = useStoryGenerationGate(storyId ?? undefined)
+  const { activeRunKind, editBlocked, gateReason, classifierRunning } = useStoryGenerationGate(
+    storyId ?? undefined,
+    branchId,
+  )
   const openRegionPct = useOpenRegionTokens(storyId)
 
-  // save-sessions.md → Navigate-away guard: every in-surface transition routes through here.
-  const guard = useCallback(
-    (proceed: () => void) => {
-      if (session == null) proceed()
-      else session.requestLeave(proceed)
-    },
-    [session],
-  )
-  useUnsavedChangesGuard(session?.dirty ?? false, guard)
-  const navigateGuarded = useCallback(
-    (path: string) => guard(() => surfaceNavigate(path)),
-    [guard, surfaceNavigate],
-  )
+  const { onSession, guard, navigateGuarded } = useRowSessionGuard()
 
   const switchCategory = useCallback(
     (next: WorldCategory) => {
@@ -215,27 +219,41 @@ export default function WorldRoute() {
     },
     [selectedId, guard, select],
   )
-  // Overview and Connections links may cross kinds; the list pane reveals in the same update.
+  // Connections links may cross kinds; the list pane reveals in the same update.
   const openEntity = useCallback(
     (id: string) => {
       const target = entities.find((e) => e.id === id)
       if (target == null) return
       guard(() => {
-        if (target.kind !== category) {
-          setCategory(target.kind)
-          setFilter('all')
-          setSearch('')
-        }
+        if (target.kind !== category) switchCategory(target.kind)
         select(id)
         listRef.current?.revealRow(id)
       })
     },
-    [entities, category, guard, select],
+    [entities, category, guard, switchCategory, select],
   )
   const openHappening = useCallback(
-    (id: string) => navigateGuarded(`/plot/${branchId}?kind=happening&id=${id}&tab=involvements`),
+    (id: string) =>
+      navigateGuarded(plotHref(branchId, { kind: 'happening', id, tab: 'involvements' })),
     [navigateGuarded, branchId],
   )
+  // A link set on this mounted screen (useSurfaceNavigate reuses it) selects as openEntity does,
+  // and remounts the pane so it opens on the link's tab.
+  const [linkMount, setLinkMount] = useState(0)
+  const followLink = useCallback(
+    (target: WorldSelection, atMount: boolean) => {
+      if (atMount) return
+      guard(() => {
+        if (target.category !== category) switchCategory(target.category)
+        select(target.id)
+        setLinkMount((n) => n + 1)
+        listRef.current?.revealRow(target.id)
+      })
+    },
+    [category, guard, switchCategory, select],
+  )
+  // Stores hydrate before `open` publishes, so the linked row's pane mounts in that same commit.
+  const pendingLink = useRouteLink(link, open != null, followLink)
 
   // One synchronous handler: the pane drops a reveal whose row isn't mounted in the same commit.
   // Phone hides the list under a selection, so deselect. A bare reveal drops no draft: unguarded.
@@ -356,14 +374,7 @@ export default function WorldRoute() {
     [storyId, entities],
   )
 
-  const selectedName =
-    selection == null
-      ? null
-      : selection.type === 'create'
-        ? t(`world:detail.newEntity.${selection.kind}`)
-        : selection.type === 'lore'
-          ? selection.row.title
-          : selection.row.name
+  const selectedName = selectionName(selection)
 
   // principles.md → Master-detail sub-header: the top bar stays screen-level on every tier.
   const titleSegments: BreadcrumbSegment[] = [
@@ -394,6 +405,7 @@ export default function WorldRoute() {
       />
     ) : (
       <EntityDetailPane
+        key={linkMount}
         kind={selection.type === 'create' ? selection.kind : selection.row.kind}
         row={selection.type === 'entity' ? selection.row : null}
         createSeq={selection.type === 'create' ? selection.seq : undefined}
@@ -413,7 +425,7 @@ export default function WorldRoute() {
         onSave={saveRow}
         onSaved={onSaved}
         onRejected={onRejected}
-        onSession={setSession}
+        onSession={onSession}
         onOpenEntity={openEntity}
         onOpenHappening={openHappening}
         onSetLead={onSetLead}
@@ -443,9 +455,7 @@ export default function WorldRoute() {
           <StoryStatusPill
             storyId={storyId}
             swapTarget={open?.settings.embedding_swap_target}
-            activePhase={
-              activeRunKind != null ? storySettingsGenerationPhase(activeRunKind) : undefined
-            }
+            activePhase={storyPillPhase(activeRunKind, classifierRunning)}
             onCancel={() => {
               if (activeRunKind != null) void awaitRunTerminal(activeRunKind, branchId, 'cancel')
             }}

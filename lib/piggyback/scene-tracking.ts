@@ -50,7 +50,14 @@ export function scenePromotionActions(args: {
   const byId = new Map(entities.map((e) => [e.id, e]))
   return sceneEntities
     .filter((id) => byId.get(id)?.status === 'staged')
-    .map((id) => ({ kind: 'promoteStagedEntity', source, payload: { branchId, id } }) as const)
+    .map(
+      (id) =>
+        ({
+          kind: 'promoteStagedEntity',
+          source,
+          payload: { branchId, id, proseEntryId: null },
+        }) as const,
+    )
 }
 
 /**

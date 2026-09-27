@@ -30,7 +30,7 @@ import { cn } from '@/lib/utils'
 import { CAST_SOFT_CAPS } from '@/lib/wizard'
 
 import { FIELD_MAX, VOICE_MAX } from './cast-import'
-import { canSetLead } from './step-cast-logic'
+import { canSetLead, parentCandidates } from './step-cast-logic'
 
 const STATUS_OPTIONS: SelectOption[] = [
   { value: 'active', label: t('wizard:cast.editor.statusActive') },
@@ -268,9 +268,7 @@ export function CharacterEditor({
 }
 
 export function LocationEditor({ row, invalid, cast }: CommonEditorProps<WizardLocationDraft>) {
-  const locationCandidates = cast.filter(
-    (r): r is WizardLocationDraft => r.kind === 'location' && r.id !== row.id,
-  )
+  const locationCandidates = parentCandidates(row, cast)
   return (
     <>
       <NameStatusRow row={row} invalid={invalid} />

@@ -246,12 +246,14 @@ export function CastList({ onSetupAssist, assist }: CastListProps) {
           // the kind-scoped dedupe deliberately allows.
           excludeLabel={(item) => `${item.name.trim()} (${item.payload.kind})`}
           onImport={(payloads) => {
-            const { rows, unresolved } = resolveCastImports(payloads, cast)
+            const { rows, unresolved, looped } = resolveCastImports(payloads, cast)
             wizardStore.importCast(rows)
             // Otherwise the discard is invisible: the editors render a missing
             // faction as "No factions yet", which reads as "you have none".
             if (unresolved.length > 0)
               toast.info(t('wizard:cast.importRefsDropped', { count: unresolved.length }))
+            if (looped.length > 0)
+              toast.info(t('wizard:cast.importParentsLooped', { count: looped.length }))
           }}
           onSetup={handleSetup}
         />

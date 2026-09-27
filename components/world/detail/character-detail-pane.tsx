@@ -49,10 +49,11 @@ export function CharacterDetailPane({
     fieldLabel,
     issueText: entityIssueText,
     // Runs at save time; `relationshipsBase` below needs this session's dirty fields.
-    onSave: async (draft) => {
+    onSave: async (draft, keywordsBase) => {
       const result = await onSave({
         kind: 'character',
         draft,
+        keywordsBase,
         relationships: data.relationships,
         relationshipsBase: relationshipsBase.base,
       })

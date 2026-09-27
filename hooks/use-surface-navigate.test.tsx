@@ -9,7 +9,12 @@ import { routePathname, stackIndexOfPath, useSurfaceNavigate } from './use-surfa
 // Stubbed: the real package reaches react-native's Flow source, which the unit bundler can't parse.
 vi.mock('@react-navigation/native', async () => {
   const { createContext } = await import('react')
-  return { NavigationContext: createContext<unknown>(undefined) }
+  return {
+    NavigationContext: createContext<unknown>(undefined),
+    CommonActions: {
+      setParams: (params: object) => ({ type: 'SET_PARAMS', payload: { params } }),
+    },
+  }
 })
 
 const router = vi.hoisted(() => ({
@@ -21,10 +26,10 @@ vi.mock('expo-router', () => ({ useRouter: () => router }))
 type NavigationValue = ComponentProps<typeof NavigationContext.Provider>['value']
 
 // Only the slice the hook touches; cast at the Provider, which wants a full NavigationProp.
-function withNavigation(getState: () => unknown) {
+function withNavigation(getState: () => unknown, dispatch: (action: unknown) => void = () => {}) {
   return function Wrapper({ children }: { children: ReactNode }) {
     return (
-      <NavigationContext.Provider value={{ getState } as unknown as NavigationValue}>
+      <NavigationContext.Provider value={{ getState, dispatch } as unknown as NavigationValue}>
         {children}
       </NavigationContext.Provider>
     )
@@ -158,5 +163,75 @@ describe('useSurfaceNavigate', () => {
     result.current('/world/br_1')
     expect(router.push).toHaveBeenCalledWith('/world/br_1')
     expect(router.dismiss).not.toHaveBeenCalled()
+  })
+})
+
+describe('useSurfaceNavigate — a link to a screen already on the stack', () => {
+  const reader = { key: 'r0', name: 'reader-composer/[branchId]', params: { branchId: 'br_1' } }
+  const plot = (params: object) => ({
+    key: 'p1',
+    name: 'plot/[branchId]',
+    params: { branchId: 'br_1', ...params },
+  })
+  const world = { key: 'w2', name: 'world/[branchId]', params: { branchId: 'br_1' } }
+
+  function navigate(state: unknown, path: string) {
+    const dispatch = vi.fn()
+    const { result } = renderHook(() => useSurfaceNavigate(), {
+      wrapper: withNavigation(() => state, dispatch),
+    })
+    result.current(path)
+    return dispatch
+  }
+
+  it("sets the link's params on that screen, then pops to it", () => {
+    const state = { index: 2, routes: [reader, plot({ kind: 'happening', id: 'hap_1' }), world] }
+    const dispatch = navigate(state, '/plot/br_1?kind=happening&id=hap_2&tab=involvements')
+    expect(dispatch).toHaveBeenCalledWith({
+      type: 'SET_PARAMS',
+      payload: { params: { kind: 'happening', id: 'hap_2', tab: 'involvements' } },
+      source: 'p1',
+    })
+    expect(router.dismiss).toHaveBeenCalledWith(1)
+    expect(dispatch.mock.invocationCallOrder[0]).toBeLessThan(
+      router.dismiss.mock.invocationCallOrder[0],
+    )
+  })
+
+  it('clears a link param the new link omits, and leaves path and router params alone', () => {
+    const stale = plot({
+      kind: 'happening',
+      id: 'hap_1',
+      tab: 'awareness',
+      __internal_expo_router_no_animation: true,
+    })
+    const dispatch = navigate(
+      { index: 2, routes: [reader, stale, world] },
+      '/plot/br_1?kind=thread&id=thr_1',
+    )
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: { params: { tab: undefined, kind: 'thread', id: 'thr_1' } },
+      }),
+    )
+  })
+
+  it('sets the link on the current top without popping', () => {
+    const dispatch = navigate(
+      { index: 1, routes: [reader, plot({ kind: 'thread', id: 'thr_1' })] },
+      '/plot/br_1?kind=happening&id=hap_2',
+    )
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ source: 'p1' }))
+    expect(router.dismiss).not.toHaveBeenCalled()
+    expect(router.push).not.toHaveBeenCalled()
+  })
+
+  it('leaves the params alone for a path with no query', () => {
+    const dispatch = navigate(
+      { index: 2, routes: [reader, plot({ kind: 'thread', id: 'thr_1' }), world] },
+      '/plot/br_1',
+    )
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(router.dismiss).toHaveBeenCalledWith(1)
   })
 })

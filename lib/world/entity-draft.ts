@@ -18,9 +18,7 @@ export const ENTITY_STATUSES = [
   'retired',
 ] as const satisfies readonly Entity['status'][]
 
-// Drift guard, both directions: `satisfies` above only proves ENTITY_STATUSES stays inside
-// Entity['status']; this closes the other side so a status the column adds can't go missing
-// from the Settings select without failing here first.
+// Reverse of the `satisfies`: fails when the column gains a status the Settings select lacks.
 type _StatusesMatch = [Entity['status']] extends [(typeof ENTITY_STATUSES)[number]]
   ? [(typeof ENTITY_STATUSES)[number]] extends [Entity['status']]
     ? true
@@ -36,6 +34,9 @@ export type RelationshipLink = {
   selfToOther: string | null
   otherToSelf: string | null
 }
+
+/** The views a Relationships draft was based on; a Save's baseline names no row. */
+export type RelationshipBaseLink = Omit<RelationshipLink, 'rowId'>
 
 // data-model.md → Soft caps: the Zod degradation bounds the state schema enforces.
 const text = (max: number) => z.string().max(max, WORLD_ISSUE.tooLong)
