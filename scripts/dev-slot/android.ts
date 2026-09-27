@@ -71,6 +71,16 @@ async function main(): Promise<void> {
   console.log(`[dev:android] slot ${slot}: device localhost:8081 -> Metro :${ports.metro}`)
   console.log(`[dev:android] launch: adb ${target}shell am start -n ${APP_ID}/.MainActivity`)
 
+  // `pnpm desktop` in the same worktree already runs Metro on this port; it serves Android too.
+  const status = await fetch(`http://localhost:${ports.metro}/status`).then(
+    (res) => res.text(),
+    () => '',
+  )
+  if (status.includes('packager-status:running')) {
+    console.log(`[dev:android] reusing the Metro already running on :${ports.metro}`)
+    return
+  }
+
   const metro = spawn('expo', ['start', '--dev-client', '--port', String(ports.metro)], {
     stdio: 'inherit',
     shell: process.platform === 'win32',
