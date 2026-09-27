@@ -127,17 +127,6 @@ slice-planning gate forces its resolution before that slice is planned.
   an uncancellable pass or doesn't cover it. Not reachable until M6
   ships switching. Revisit trigger: M6 planning.
 
-- **Reconciliation matches against the pass's snapshot.** Namesakes
-  come from the entity snapshot the pass read before its model call
-  (`reconcile.ts:54-57`, read by `periodicClassifierPhase`), so a
-  character the user creates in World mid-pass is invisible to it. If
-  the pass's prose introduces the same name, it creates a second row
-  with `nameCollisionFlag` 0 (`buildClassifierActions`'s create path),
-  and World's collision
-  review lists flagged rows only (`collisions.ts:27`), so nobody is
-  asked about the duplicate. Reachable today: World create is gated
-  only by `hard-gate` runs.
-
 - **A reversal can still drop a later user edit.** Reversing a machine
   write skips each column a later `user_edit` outside the reversed set
   wrote

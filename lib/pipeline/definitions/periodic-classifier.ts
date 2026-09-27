@@ -238,6 +238,11 @@ export async function* periodicClassifierPhase(
     new Set(extraction.newCharacters.map((c) => c.handle)),
   )
 
+  // Re-read after the model call: World edits run under a no-gate pass, so the prompt's
+  // snapshot misses a character the user created mid-call and still holds one deleted.
+  const current = [...entitiesStore.getEntities().values()].filter(
+    (e) => e.branchId === ctx.branchId,
+  )
   const decisions = new Map<string, ReconcileDecision>()
   for (const candidate of substituted.newCharacters) {
     // Reconcile the clamped row, not the raw reply: plan.ts bounds both embedded
@@ -247,14 +252,14 @@ export async function* periodicClassifierPhase(
     if (stored.name === '') continue
     decisions.set(
       candidate.handle,
-      await reconcileNewCharacter(stored, { entities, embedDescriptions }),
+      await reconcileNewCharacter(stored, { entities: current, embedDescriptions }),
     )
   }
 
   const plan = buildClassifierActions(substituted, {
     branchId: ctx.branchId,
     window,
-    entities,
+    entities: current,
     decisions,
     now: () => Date.now(),
     newId: (kind) => generateId(kind),

@@ -691,6 +691,67 @@ describe('periodicClassifierPhase', () => {
     expect(actions[2].payload).toMatchObject({ entry: { entityId: CHAR_KAEL } })
   })
 
+  describe('entities that change during the model call', () => {
+    const character = (id: string, name: string) =>
+      ({
+        id,
+        branchId: 'b1',
+        kind: 'character',
+        name,
+        status: 'active',
+        description: `${name}, described.`,
+        keywords: [],
+      }) as unknown as Entity
+
+    it('flags a new character against a namesake the user created mid-call', async () => {
+      // Orthogonal vectors: a distinct namesake, which reconcile creates with a flag.
+      configureClassifierEmbedder(
+        vi.fn(async () => ({
+          vectors: [Float32Array.from([1, 0, 0]), Float32Array.from([0, 1, 0])],
+          dim: 3,
+        })),
+      )
+      vi.mocked(generateStructured).mockImplementation(async () => {
+        entitiesStore.hydrate('b1', [character('char_user', 'Mara')])
+        return {
+          status: 'ok',
+          value: extraction({
+            newCharacters: [{ handle: 'nc1', name: 'Mara', description: 'A smith.', keywords: [] }],
+          }),
+        }
+      })
+      const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
+      const { events } = await drain(h.ctx)
+
+      const created = events.find(
+        (e) => (e as { action: { kind: string } }).action.kind === 'createEntity',
+      ) as { action: { payload: { entry: { nameCollisionFlag: number } } } }
+      expect(created.action.payload.entry.nameCollisionFlag).toBe(1)
+    })
+
+    it('drops a fact about a character the user deleted mid-call', async () => {
+      vi.mocked(generateStructured).mockImplementation(async () => {
+        entitiesStore.hydrate('b1', [])
+        return {
+          status: 'ok',
+          value: extraction({
+            statusFlips: [{ ref: 'char_gone', to: 'retired', sourceTurn: 't1' }],
+          }),
+        }
+      })
+      const h = await ctxWith({
+        processedThrough: 0,
+        headPosition: 2,
+        entities: [character('char_gone', 'Oswin')],
+      })
+      const { events, result } = await drain(h.ctx)
+
+      const kinds = events.map((e) => (e as { action?: { kind: string } }).action?.kind)
+      expect(kinds).not.toContain('retireEntity')
+      expect(result).toEqual({ status: 'completed' })
+    })
+  })
+
   it('never reconciles a blank-named candidate against a blank-named row', async () => {
     const embedder = vi.fn(async () => ({ vectors: [], dim: 3 }))
     configureClassifierEmbedder(embedder)
