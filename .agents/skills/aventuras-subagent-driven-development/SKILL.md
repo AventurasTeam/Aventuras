@@ -13,7 +13,7 @@ Execute plan by dispatching a fresh subagent per task. Review-tier tasks get a t
 
 **Core principle:** Fresh subagent per task + verification calibrated to the task's tier (two-stage review where it earns its cost) = high quality, fast iteration
 
-**Continuous execution:** Do not pause to check in with your human partner between tasks. Execute all tasks from the plan without stopping. The only reasons to stop are: BLOCKED status you cannot resolve, ambiguity that genuinely prevents progress, or all tasks complete. "Should I continue?" prompts and progress summaries waste their time — they asked you to execute the plan, so execute it.
+**Continuous execution:** Do not pause to check in with your human partner between tasks. Execute all tasks from the plan without stopping. The only reasons to stop are: BLOCKED status you cannot resolve, ambiguity that genuinely prevents progress, or all tasks complete. "Should I continue?" prompts and progress summaries waste their time — they asked you to execute the plan, so execute it. A dispatched worker never stops to ask a human; see Dispatched worker.
 
 ## When to Use
 
@@ -135,9 +135,37 @@ Implementer subagents report one of four statuses. Handle each appropriately:
 1. If it's a context problem, provide more context and re-dispatch with the same model
 2. If the task requires more reasoning, re-dispatch with a more capable model
 3. If the task is too large, break it into smaller pieces
-4. If the plan itself is wrong, escalate to the human
+4. If the plan itself is wrong, escalate to the human (a dispatched worker escalates through its channel)
 
 **Never** ignore an escalation or force the same model to retry without changes. If the implementer said it's stuck, something needs to change.
+
+## Dispatched worker
+
+You are a **dispatched worker** when your task prompt says so and names an escalation channel: a command that sends a question to a coordinator and blocks until it answers. Nobody watches your terminal. Everything this skill and the skills it calls send to "your human partner" or "the human" goes through that channel instead. Never open an interactive question prompt; nobody can answer it and the run hangs.
+
+**The plan is read-only.** Read it by the absolute path your prompt gives. Never edit it, checkboxes included.
+
+**Keep a ledger; your context can be compacted at any point.** Create `<plan-stem>.worker.md` next to the plan file. You are its only writer. Write each entry before moving on, not at the end:
+
+- header: slice, branch, worktree
+- per task: `dispatched <base-sha>`, `implemented <sha>`, `spec ✅`, `quality ✅ <sha>`, `complete`; or `blocked: <reason>`, with any partial commits
+- per question: the text; its message ID as soon as the channel returns one, before you wait; then the answer with its label
+- the final whole-implementation review: `final review ✅ <sha>`
+- review-round entries (aventuras-receiving-code-review) and the PR URL
+
+**At start and after any compaction, resume from the ledger,** checked against `git log`. A task without `complete` is not complete. A question with a message ID and no answer is still open: resume it with the channel's resume form. Never ask it again; if the ID is missing, find the question through the channel before asking anything.
+
+**Before asking,** finish any in-flight review loop of an implemented task, and sweep the remaining tasks for the same issue so one question covers it. Give the coordinator what it needs to answer without your context: slice and task, the conflict quoted from the plan and the doc it cites, the options, and which later tasks depend on the answer. Then wait on the channel, resuming after each timeout. Start no new task while a question is open, even an independent one: this worker waits, and other workers keep the machine busy.
+
+**Answers come labelled.** Record the label with the answer. An answer that overrides the plan goes, quoted with its label, into every later implementer and spec-reviewer prompt it touches; otherwise the reviewer flags it as a deviation.
+
+| Label          | Meaning                                  | Ends up in                                                    |
+| -------------- | ---------------------------------------- | ------------------------------------------------------------- |
+| `ANSWER:`      | settled by the plan, slice doc or canon  | nothing extra                                                 |
+| `PROVISIONAL:` | a reversible choice the coordinator made | the PR's Decisions pending                                    |
+| `DEVELOPER:`   | the developer decided                    | the PR's decisions list, the slice doc's Implementation notes |
+
+**Finish** with aventuras-finishing-a-development-branch; its Dispatched worker section replaces the options menu.
 
 ## Prompt Templates
 

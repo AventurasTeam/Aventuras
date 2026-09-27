@@ -219,6 +219,21 @@ You understand 1,2,3,6. Unclear on 4,5.
 ✅ "Understand 1,2,3,6. Need clarification on 4 and 5 before implementing."
 ```
 
+## Dispatched worker
+
+When your task prompt makes you a dispatched worker (aventuras-subagent-driven-development → Dispatched worker), "your human partner" means your escalation channel, and this section replaces the stop-and-ask rules above. Nobody answers at your terminal, so never stop there to wait for the developer; waiting on the channel is right, even when it relays your question to them. Sort every comment first:
+
+| Comment                                                                                                      | Action                                                                                          |
+| ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| Clear fix: a verified bug, a valid nit, a harmless improvement                                               | Fix it (one commit per item, tested as usual), reply in its thread: "Fixed in `<sha>`. <what>" |
+| Needs a real decision, or contradicts the plan, the slice doc, canon docs or a decision recorded in them     | Ask through the channel, even when you're sure the recorded decision stands                     |
+| Technically wrong for this codebase, and you can show why (a failing test, a broken caller, an unused path) | Reply in its thread with that evidence; no question needed                                      |
+| You can't verify it                                                                                          | Investigate; if it's still unclear, ask through the channel                                     |
+
+Ask even when the docs settle it: a question the docs answer comes back within seconds, and the answer goes on record for the PR. Declining on your own means the developer first learns of it in review.
+
+Fix and push the clear ones first, then ask once for everything left in this round. Each push starts a new review round, and a round's new comments get their own question. When the answer comes, act on it and reply in each thread, citing the decision ("Keeping the separate table: the developer decided this for this slice; see the slice doc's Implementation notes."). Comments in the review body have no thread: answer them all in one PR comment (`gh pr comment`), one line per item with its outcome. Record each comment and its outcome in your ledger, and each answer with its label, as aventuras-subagent-driven-development describes. Leave threads unresolved; the developer resolves them in review.
+
 ## GitHub Thread Replies
 
 When replying to inline review comments on GitHub, reply in the comment thread (`gh api repos/{owner}/{repo}/pulls/{pr}/comments/{id}/replies`), not as a top-level PR comment.
