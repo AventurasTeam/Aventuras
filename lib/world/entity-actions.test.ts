@@ -137,6 +137,16 @@ describe('entityActions — update', () => {
     )
   })
 
+  it('stores a quantity keyed like an Object.prototype member', () => {
+    const [action] = update({
+      ...characterDraftFrom(KAEL, [MIRA_LINK]),
+      stackables: [{ key: '__proto__', count: 3 }],
+    })
+    const state =
+      action.kind === 'updateEntity' ? (action.payload.patch.state as CharacterState) : null
+    expect(Object.entries(state?.stackables ?? {})).toEqual([['__proto__', 3]])
+  })
+
   it('collapses keyword case variants on commit', () => {
     const [action] = update({
       ...characterDraftFrom(KAEL, [MIRA_LINK]),

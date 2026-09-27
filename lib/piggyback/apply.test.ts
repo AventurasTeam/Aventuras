@@ -386,6 +386,54 @@ describe('buildPiggybackActions', () => {
     ])
   })
 
+  it('counts a stackable keyed like an Object.prototype member', () => {
+    const state = (stackables: Record<string, number>): CharacterState => ({
+      visual: {},
+      traits: [],
+      drives: [],
+      current_location_id: null,
+      equipped_items: [],
+      inventory: [],
+      stackables,
+      faction_id: null,
+      lastSeenAt: null,
+    })
+    const result = buildPiggybackActions({
+      source: 'ai_classifier',
+      entryId: 'entry_1',
+      block: {
+        transfers: {
+          items: [],
+          stackables: [
+            { key: 'constructor', amount: 1, from: 'char_1', to: 'char_2' },
+            { key: '__proto__', amount: 2, to: 'char_2' },
+          ],
+        },
+      },
+      entities: [
+        mockEntity({ id: 'char_1', state: state({ constructor: 2 }) }),
+        mockEntity({ id: 'char_2', state: state({}) }),
+      ],
+      previousMetadata,
+      branchId: 'main',
+    })
+    const counts = result.actions.flatMap((a) =>
+      a.kind === 'updateEntityStackables'
+        ? [[a.payload.id, Object.entries(a.payload.stackables)]]
+        : [],
+    )
+    expect(counts).toEqual([
+      ['char_1', [['constructor', 1]]],
+      [
+        'char_2',
+        [
+          ['constructor', 1],
+          ['__proto__', 2],
+        ],
+      ],
+    ])
+  })
+
   it("folds a holder's mixed-case stackable keys into one on the first transfer that touches it", () => {
     const holder = mockEntity({
       id: 'char_1',

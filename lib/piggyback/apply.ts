@@ -179,37 +179,35 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
       })
   }
 
-  // Stackable transfers
-  const stackablePatches = new Map<string, Record<string, number>>()
-  const currentStackables = (id: string): Record<string, number> => {
+  // Stackable transfers. Maps, not records: a key is model output, and "constructor" or
+  // "__proto__" on a plain object reads or writes the prototype instead of a count.
+  const stackablePatches = new Map<string, Map<string, number>>()
+  const currentStackables = (id: string): Map<string, number> => {
     const patched = stackablePatches.get(id)
-    if (patched) return { ...patched }
+    if (patched) return new Map(patched)
     // A row written before keys were normalized can hold "Gold" beside "gold"; fold
     // them here so the first transfer to touch the holder heals it.
     const state = byId.get(id)?.state as CharacterState | undefined
-    const folded: Record<string, number> = {}
+    const folded = new Map<string, number>()
     for (const [raw, count] of Object.entries(state?.stackables ?? {})) {
       const key = normalizeTerm(raw)
-      if (key !== '' && count > 0) folded[key] = (folded[key] ?? 0) + count
+      if (key !== '' && count > 0) folded.set(key, (folded.get(key) ?? 0) + count)
     }
     return folded
   }
 
   for (const transfer of block.transfers?.stackables ?? []) {
     if (transfer.from !== undefined && isCharacter(transfer.from)) {
-      const cur = currentStackables(transfer.from)
-      const next = { ...cur }
-      const remaining = Math.max(0, (cur[transfer.key] ?? 0) - transfer.amount)
-      if (remaining === 0) delete next[transfer.key]
-      else next[transfer.key] = remaining
+      const next = currentStackables(transfer.from)
+      const remaining = Math.max(0, (next.get(transfer.key) ?? 0) - transfer.amount)
+      if (remaining === 0) next.delete(transfer.key)
+      else next.set(transfer.key, remaining)
       stackablePatches.set(transfer.from, next)
     }
     if (transfer.to !== undefined && isCharacter(transfer.to)) {
-      const cur = currentStackables(transfer.to)
-      stackablePatches.set(transfer.to, {
-        ...cur,
-        [transfer.key]: (cur[transfer.key] ?? 0) + transfer.amount,
-      })
+      const next = currentStackables(transfer.to)
+      next.set(transfer.key, (next.get(transfer.key) ?? 0) + transfer.amount)
+      stackablePatches.set(transfer.to, next)
     }
   }
   for (const [id, stackables] of stackablePatches) {
@@ -217,7 +215,7 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
       actions.push({
         kind: 'updateEntityStackables',
         source,
-        payload: { branchId, id, stackables },
+        payload: { branchId, id, stackables: Object.fromEntries(stackables) },
       })
     }
   }

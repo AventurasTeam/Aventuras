@@ -108,13 +108,14 @@ function sameList(a: readonly string[], b: readonly string[]): boolean {
 function normalizedStackables(
   entries: Iterable<readonly [string, number]>,
 ): Record<string, number> {
-  const out: Record<string, number> = {}
+  // A Map, so a "__proto__" key is stored rather than setting the record's prototype.
+  const out = new Map<string, number>()
   for (const [raw, count] of entries) {
     const key = stackableKey(raw)
     // data-model.md → Stackable items: depletion to 0 removes the key.
-    if (key !== '' && count > 0) out[key] = count
+    if (key !== '' && count > 0) out.set(key, count)
   }
-  return out
+  return Object.fromEntries(out)
 }
 
 function sameRecord(
