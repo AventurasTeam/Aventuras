@@ -53,7 +53,10 @@ if ! cp "$PROJECT_YML" "$PROJECT_YML_BACKUP"; then
     rm -f "$PROJECT_YML_BACKUP"
     exit 1
 fi
-trap 'if [[ -f "$PROJECT_YML_BACKUP" ]]; then mv "$PROJECT_YML_BACKUP" "$PROJECT_YML"; echo "project.yml restored"; fi' EXIT
+# BUILD_START (created below, before the build) is removed here too; guarded so
+# the trap stays valid before it exists.
+trap 'if [[ -f "$PROJECT_YML_BACKUP" ]]; then mv "$PROJECT_YML_BACKUP" "$PROJECT_YML"; echo "project.yml restored"; fi
+if [[ -n "${BUILD_START:-}" ]]; then rm -f "$BUILD_START"; fi' EXIT
 python3 - "$PROJECT_YML" <<'PYEOF'
 import sys
 path = sys.argv[1]
@@ -87,15 +90,28 @@ echo "🚀 Building unsigned iOS archive (aarch64)..."
 # (which requires signing assets we deliberately do not have).
 # --target aarch64: iOS device ARM64 (the CLI's shorthand for aarch64-apple-ios;
 # it also accepts aarch64-sim and x86_64).
+# BUILD_START scopes archive selection to THIS invocation: only an archive whose
+# Info.plist was written after this point qualifies, so a stale archive left in
+# a reused workspace (while the fresh one lands in DerivedData) can never be
+# packaged by mistake.
+BUILD_START="$(mktemp)"
 npx tauri ios build --target aarch64 --archive-only "$@"
 
-ARCHIVE="$(find src-tauri/gen/apple/build -name '*_iOS.xcarchive' -type d 2>/dev/null | sort | tail -n1)"
+# cargo-mobile2 sometimes archives into DerivedData instead of gen/apple/build,
+# so search both in one pass. An archive qualifies only through a file written
+# inside it during this run (every xcarchive has an Info.plist at its root) —
+# not by directory mtime, which a reused workspace may have touched, and not by
+# searching one location before the other, which let a stale build-dir archive
+# win over the fresh DerivedData one.
+ARCHIVE="$(
+    find src-tauri/gen/apple/build "$HOME/Library/Developer/Xcode/DerivedData" \
+        -name '*_iOS.xcarchive' -type d 2>/dev/null | while IFS= read -r d; do
+        f="${d%/}/Info.plist"
+        if [[ -f "$f" && "$f" -nt "$BUILD_START" ]]; then printf '%s\n' "$d"; fi
+    done | sort | tail -n1
+)"
 if [[ -z "$ARCHIVE" ]]; then
-    # cargo-mobile2 sometimes archives into DerivedData instead of gen/apple/build.
-    ARCHIVE="$(find "$HOME/Library/Developer/Xcode/DerivedData" -name '*_iOS.xcarchive' -type d 2>/dev/null | sort | tail -n1)"
-fi
-if [[ -z "$ARCHIVE" ]]; then
-    echo "Error: no *_iOS.xcarchive found under src-tauri/gen/apple/build or Xcode DerivedData." >&2
+    echo "Error: no *_iOS.xcarchive from this build found under src-tauri/gen/apple/build or Xcode DerivedData (archives from earlier runs are ignored)." >&2
     exit 1
 fi
 APP="$(find "$ARCHIVE/Products/Applications" -maxdepth 1 -name '*.app' -type d 2>/dev/null | head -n1)"
