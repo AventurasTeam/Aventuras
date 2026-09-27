@@ -7,6 +7,7 @@ import type { DbCtx } from '../types'
 import { applyUndoPayload, isPayloadMetaKey } from './delta-encoding'
 import { withKeyLocks } from './key-lock'
 import { resolveByTable, whereForDelta, type StorePatch } from './registry'
+import { closeOverRemovedRows } from './row-closure'
 import { deltaLockKeys } from './row-locks'
 import { userEditsOutliving, wroteColumn } from './user-precedence'
 
@@ -156,8 +157,8 @@ async function buildUndoOps(
       })
     }
 
-    // No cascade on purpose: an actionId-scoped set already carries the children's deltas;
-    // an entry-scoped caller owes the closure itself (generation-pipeline.md → Reverse-replay).
+    // No cascade on purpose: the caller's set already carries the children's deltas
+    // (row-closure.ts; generation-pipeline.md → Reverse-replay).
     if (delta.op === 'create') {
       const keeping = entry.rowKeepingColumns ?? []
       const userKept = keeping.filter((col) => wroteColumn(userEdits, col))
@@ -315,11 +316,14 @@ export async function reverseReplayDeltas(
     new DeltaReplayError('Reverse-replay failed', { cause: e, actionId, stage: 'transaction' })
   let rows: Delta[]
   try {
-    rows = (await ctx.db
-      .select()
-      .from(deltas)
-      .where(eq(deltas.actionId, actionId))
-      .orderBy(desc(deltas.logPosition))) as Delta[]
+    rows = await closeOverRemovedRows(
+      (await ctx.db
+        .select()
+        .from(deltas)
+        .where(eq(deltas.actionId, actionId))
+        .orderBy(desc(deltas.logPosition))) as Delta[],
+      ctx,
+    )
   } catch (e) {
     throw fail(e)
   }

@@ -64,33 +64,6 @@ slice-planning gate forces its resolution before that slice is planned.
   user-edit rule. Revisit trigger: users hitting double-positioned items,
   or the prompt context rendering one item as both loose and held.
 
-- **A reversal can still drop a later user edit.** Reversing a machine
-  write skips each column a later `user_edit` outside the reversed set
-  wrote
-  ([`generation-pipeline.md → Reverse-replay`](../generation-pipeline.md#reverse-replay)),
-  with gaps left. Reversing a classifier `create` deletes the row,
-  and a user edit made to it since goes with it, its delta left
-  pointing at nothing. A prose edit reverses a happening's create
-  (`isReversible` in `story-entries/classifier-facts.ts` spares only
-  entities'), and a failed pass's `abortRun` or boot recovery reverses
-  both kinds. Reachable today: edit in Plot a happening the head
-  turn's pass created, then edit that turn's prose. And a schema-backed
-  column (`entities.state`, `story_entries.metadata`) still restores
-  the sub-fields its delta changed over a later user write to the same
-  sub-field. That one is latent: only hard-gated runs write either
-  column, so no user edit lands while such a run can abort, and a
-  rollback or regenerate that reverses their deltas later sweeps the
-  user's edits after them too. Both deletes, a reversed create's and a
-  character relationship left with no view, strand the user deltas on
-  the row, a user create included, pointing at a row that is gone.
-  CTRL-Z of such an edit reports a reversal and prunes it, but the row
-  stays gone: a silent no-op undo. `reverse-replay-user-writes.test.ts`
-  ("deletes a pair the reversal would leave with no view") pins this
-  current behaviour. And `abortRun` or boot recovery of a pass that
-  created a happening leaves an involvement or awareness row the user
-  added under it standing with no parent, since `happening_id` carries
-  no foreign key; reasoned from the code, not reproduced.
-
 - **A recurring classifier failure reaches `failed-persistent`
   invisibly.** The backoff
   ([`classifier.md → Auto-retry policy`](../memory/classifier.md#auto-retry-policy))

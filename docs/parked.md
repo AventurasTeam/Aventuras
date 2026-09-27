@@ -694,6 +694,16 @@ reads the newest prose. Chapter-close identity compaction, once built,
 is the exception, since it reads a whole chapter whose prose can
 predate the user's edit.
 
+Reverse-replay's schema-backed-column exception is the same gap from
+the undo side: reversing a machine delta on `entities.state` or
+`story_entries.metadata` restores the sub-fields it changed, even over
+a later user write to one of them
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
+Latent: only hard-gated runs write either column, so no user edit lands
+while such a run can abort, and a rollback or regenerate that reverses
+them sweeps the user's later edits too. Provenance would let the undo
+skip a sub-field the user wrote. Added 2026-09-27 from triage.
+
 Sketch shape (v1.5):
 
 ```ts
@@ -994,6 +1004,29 @@ Parked 2026-09-13 from the PR #513 review; a delta-patched store
 gaining a synchronous subscriber or patch logic that can throw
 (validation, a must-exist invariant), or anything starting to read
 `pipeline_runs.outcome`, is the signal to revisit.
+
+#### A pair deleted for having no view strands its user deltas
+
+Reversing a machine view update that would leave a character
+relationship with neither view deletes the pair, since its one-view
+`CHECK` forbids an empty row
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
+User deltas on that pair stay in the log pointing at a row that is gone,
+a user `create` of the pair included, and CTRL-Z of one reports an undo
+that changes nothing. `reverse-replay-user-writes.test.ts` ("deletes a
+pair the reversal would leave with no view") pins the current behaviour.
+The closure that sweeps a removed row's later writes skips the table on
+purpose: its create-undo keeps a pair the user wrote a view to. Two
+fixes are open: sweep the pair's user deltas when the no-view delete
+fires, or have CTRL-Z refuse an edit whose row is gone. The second
+changes the undo contract — a refusal at the head of the stack blocks
+every older undo behind it — so it wants a decision, not a patch.
+Reachable through a prose edit, reasoned from the code rather than
+reproduced: clear your view of a pair whose other view a pass wrote,
+then edit that pass's prose.
+
+Parked 2026-09-27 from triage; the signal is a user-visible undo that
+does nothing on a relationship.
 
 ### Memory pipeline (parked)
 
