@@ -46,9 +46,14 @@ if [[ ! -f "$PROJECT_YML" ]]; then
     echo "Error: $PROJECT_YML not found (run 'tauri ios init' first)." >&2
     exit 1
 fi
+# The restore trap is registered only after the backup copy succeeds: an empty
+# or partial mktemp file must never be moved over the original on a failed run.
 PROJECT_YML_BACKUP="$(mktemp)"
+if ! cp "$PROJECT_YML" "$PROJECT_YML_BACKUP"; then
+    rm -f "$PROJECT_YML_BACKUP"
+    exit 1
+fi
 trap 'if [[ -f "$PROJECT_YML_BACKUP" ]]; then mv "$PROJECT_YML_BACKUP" "$PROJECT_YML"; echo "project.yml restored"; fi' EXIT
-cp "$PROJECT_YML" "$PROJECT_YML_BACKUP"
 python3 - "$PROJECT_YML" <<'PYEOF'
 import sys
 path = sys.argv[1]
