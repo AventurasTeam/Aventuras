@@ -45,7 +45,7 @@ orca orchestration check --run <run> [--ack <delivery_id>] --wait --types "worke
 
 Never wait in the foreground; you would miss the developer. Read the output with `grep -v _keepalive`: Orca writes a keepalive line every 15 s. A wait that ends within seconds with an error is a failure to read and fix, not a timeout; don't restart it blindly.
 
-**A timeout is a checkpoint.** Run `orca orchestration worker-list --run <run> --include-remote --json` and act on what needs attention, as the guide says. Check every `PR #n ready` slice with `gh pr view <n> --json state`; a merged one is `merged` in the ledger, and a slice queued behind it, or whose Execution gate now holds, starts now. If another unmerged slice also changes the schema, start a follow-up worker in its worktree (Review follow-ups) to merge `origin/main` in and regenerate its migration with drizzle-kit. Then restart the wait.
+**A timeout is a checkpoint.** Run `orca orchestration worker-list --run <run> --include-remote --json` and act on what needs attention, as the guide says. Check every `PR #n ready` slice with `gh pr view <n> --json state`; a merged one is `merged` in the ledger, and a slice queued behind it, or whose Execution gate now holds, starts now. If another unmerged slice also changes the schema, mark it `needs its migration regenerated` in the ledger: a follow-up worker in its worktree (Review follow-ups) merges `origin/main` in and regenerates the migration with drizzle-kit. Start that follow-up only once the slice's own worker has reported done and been released; two agents in one worktree commit over each other. Then restart the wait.
 
 ## Dispatching a slice
 
@@ -92,7 +92,7 @@ That worker waits; the others carry on.
 
 ## Worker messages
 
-- **worker_done, succeeded:** `gh pr view <url> --json baseRefName,state,statusCheckRollup,body`. Check that it's open, with every check passed. A wrong base: `gh pr edit <n> --base main`. Every `PROVISIONAL:` and `DEVELOPER:` reply in your ledger for that slice must appear in the body; add any missing ones with `gh pr edit <n> --body`. Then `worker-release --dispatch <id>`; it closes the worker's terminal and keeps its worktree. If a check failed or is still pending, start a follow-up worker in that worktree (Review follow-ups) to get it green, and push nothing yet. Otherwise ledger `PR #n ready` and push `<slice> PR #<n> ready for review`.
+- **worker_done, succeeded:** `gh pr view <url> --json baseRefName,state,statusCheckRollup,body`. Check that it's open, with every check passed. A wrong base: `gh pr edit <n> --base main`. Every `PROVISIONAL:` and `DEVELOPER:` reply in your ledger for that slice must appear in the body; add any missing ones with `gh pr edit <n> --body`. Then `worker-release --dispatch <id>`; it closes the worker's terminal and keeps its worktree. If a check failed or is still pending, or the ledger says the slice needs its migration regenerated, start a follow-up worker in that worktree (Review follow-ups) for it, and push nothing yet. Otherwise ledger `PR #n ready` and push `<slice> PR #<n> ready for review`.
 - **worker_done, failed, or an escalation:** ledger it and push `<slice> failed: <reason>`. Keep the worktree.
 - **Silence:** a worker inside a long subagent run can't heartbeat. Act only on Orca's liveness verdicts, as the guide describes.
 
