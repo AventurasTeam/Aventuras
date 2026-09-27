@@ -72,13 +72,6 @@ slice-planning gate forces its resolution before that slice is planned.
   Unreachable today — the classifier writes no location parents.
   Revisit trigger: the classifier gains parent writes.
 
-- **Retired/staged characters in derived lists.** World's Overview
-  ("Characters here", Members) and Connections list retired and staged
-  characters unfiltered, while
-  [`data-model.md → Character-to-character relationships`](../data-model.md#character-to-character-relationships)
-  says the UI dims or badges retired participants. Revisit trigger: a
-  dead character counted as present.
-
 - **C5 lead mutator follow-ups for M7.2.** "Current branch" is
   `stories.currentBranchId` (written only at create) while World shows
   the route's `[branchId]`; `rehydrateStories` is unchecked (Story

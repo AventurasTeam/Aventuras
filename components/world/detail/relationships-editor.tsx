@@ -13,10 +13,12 @@ import { EntityPicker } from '@/components/compounds/entity-picker'
 import { FormRow } from '@/components/compounds/form-row'
 import { ListRow } from '@/components/compounds/list-row'
 import { EntityKindIcon } from '@/components/entity/entity-kind-icon'
+import { ENTITY_STATUS_TONE } from '@/components/entity/entity-row'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { IconAction } from '@/components/ui/icon-action'
 import { Input } from '@/components/ui/input'
+import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
 import type { Entity, EntityKind } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
@@ -107,6 +109,14 @@ export function RelationshipsEditor({
               label={name}
               description={relationshipDescription(row?.selfToOther, row?.otherToSelf)}
               leading={<EntityKindIcon kind="character" />}
+              // data-model.md → Character-to-character relationships: retired participants are badged.
+              meta={
+                other != null && other.status !== 'active' ? (
+                  <Tag tone={ENTITY_STATUS_TONE[other.status]}>
+                    {t(`world:status.${other.status}`)}
+                  </Tag>
+                ) : undefined
+              }
               trailing={
                 <Icon
                   as={expanded ? ChevronDown : ChevronRight}

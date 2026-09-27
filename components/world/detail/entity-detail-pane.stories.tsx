@@ -550,6 +550,19 @@ const pressSave = async () =>
     within(await screen.findByTestId('save-bar', {}, WAIT)).getByRole('button', { name: /^Save/ }),
   )
 
+/** data-model.md → Character-to-character relationships: a retired partner is badged. */
+export const RelationshipPartnerStatusBadged: Story = {
+  args: { links: [MIRA_LINK, { ...VORNE_LINK, rowId: 'rel_3', otherId: 'char_brannoc' }] },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
+    const retired = await screen.findByTestId('relationship-1', {}, WAIT)
+    await expect(within(retired).getByText('retired')).toBeVisible()
+    await expect(
+      within(screen.getByTestId('relationship-0')).queryByText('active'),
+    ).not.toBeInTheDocument()
+  },
+}
+
 /** A Save that leaves Relationships clean hands the base back to the store it wrote. */
 export const RelationshipsBaseFollowsStoreAfterSave: Story = {
   args: { links: [MIRA_LINK], commitLinks: true },

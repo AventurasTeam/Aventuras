@@ -2754,6 +2754,23 @@ Parked 2026-09-24; revisit when testing on real devices shows the Plot
 screen stalling on a large rich story, or when the entry index gains a
 consumer outside Plot.
 
+#### Retired and staged characters in World's derived lists
+
+World's Overview ("Characters here", Members) and Connections' Held by
+list retired and staged characters with no status treatment. Canon is
+silent there:
+[`data-model.md → Character-to-character relationships`](./data-model.md#character-to-character-relationships)
+asks the UI to dim or badge retired participants in relationships only
+(the Relationships editor now does), and
+[`world.md`](./ui/screens/world/world.md) gives these lists no status
+rule. Filtering, dimming or badging each one is a product call, and
+staged has no rule anywhere. The status pill tones in
+[`entity.md → Entity row indicators`](./ui/patterns/entity.md#entity-row-indicators--four-orthogonal-channels)
+are the treatment to reuse if badging wins.
+
+Parked 2026-09-27 from triage; the signal is a retired character read
+as present, or a staged one read as established.
+
 ### Code structure (parked)
 
 #### Unsaved-changes guard folder placement
