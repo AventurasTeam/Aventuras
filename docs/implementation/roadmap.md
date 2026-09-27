@@ -971,6 +971,30 @@ code before it moved; resolve with the slice it names.
   the retry budget toward `failed-persistent`. Revisit trigger: the
   first long-story prompt-size or cost signal. Routed from triage
   2026-09-27.
+- **M7.2 — A recurring classifier failure reaches `failed-persistent`
+  invisibly.** The backoff
+  ([`classifier.md → Auto-retry policy`](../memory/classifier.md#auto-retry-policy))
+  exhausts in about 7.5 minutes (30s + 2m + 5m) against a repeating
+  apply-time rejection, and `failed-persistent` survives a restart —
+  boot recovery (`resetStuckClassifierRunState`) resets only
+  `'running'`. Nothing in `app/`, `components/` or `hooks/` reads
+  classifier status or calls `runNow` (`scheduler.ts:85`) today, so a
+  branch can stop updating memory with no visible signal until this
+  slice builds Settings → Memory's `[Retry]` / `[Run classifier now]`
+  ([`story-settings.md → Classifier`](../ui/screens/story-settings/story-settings.md#classifier)).
+  Verified 2026-09-27, which added: a pass whose attempts time out
+  takes up to about 27.5 minutes to get there (four five-minute calls
+  plus the waits); the scheduler instance is local to
+  `wireClassifierScheduler` (`lib/boot/bootstrap.ts`), so the buttons
+  need a handle exported before they can call `runNow`; a branch whose
+  orphan reversal threw at boot stays `'running'` for good, which
+  suspends the cadence just as silently; the backoff timers live in
+  memory, so after a restart a `retrying` branch waits for the next
+  cadence tick; and the top-bar error pill canon promises for
+  `failed-persistent` is unbuilt — the story pill's error slot knows
+  only `swap-paused` and `memory-incomplete`. Reachable on any build
+  whose provider or apply step fails repeatedly. The developer chose
+  not to pull an interim pill forward. Routed from triage 2026-09-27.
 
 **Gates.** M6 (settings should reflect real branching + multi-
 story behavior; diagnostics should inspect real branch-aware

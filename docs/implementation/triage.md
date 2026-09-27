@@ -53,16 +53,3 @@ slice-planning gate forces its resolution before that slice is planned.
   to get. Held rather than routed in the 2026-09-09 triage pass, which
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
-
-- **A recurring classifier failure reaches `failed-persistent`
-  invisibly.** The backoff
-  ([`classifier.md → Auto-retry policy`](../memory/classifier.md#auto-retry-policy))
-  exhausts in about 7.5 minutes (30s + 2m + 5m) against a repeating
-  apply-time rejection, and `failed-persistent` survives a restart —
-  boot recovery (`resetStuckClassifierRunState`) resets only
-  `'running'`. Nothing in `app/`, `components/` or `hooks/` reads
-  classifier status or calls `runNow` (`scheduler.ts:85`) today, so a
-  branch can stop updating memory with no visible signal until M7.2
-  builds Settings → Memory's `[Retry]` / `[Run classifier now]`
-  ([`story-settings.md → Classifier`](../ui/screens/story-settings/story-settings.md#classifier)).
-  Revisit trigger: M7.2 planning.
