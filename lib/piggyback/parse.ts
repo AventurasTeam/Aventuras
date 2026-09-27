@@ -144,7 +144,7 @@ function parseTransfers(segment: string): ParsedTransfers {
     // transfer moves a positive whole count (a negative `to` would store a debt).
     const key = normalizeTerm(attrs.key)
     const amount = Number(attrs.amount)
-    if (key === '' || key.length > 40 || !Number.isInteger(amount) || amount <= 0) continue
+    if (key === '' || key.length > 40 || !Number.isSafeInteger(amount) || amount <= 0) continue
     stackables.push({
       key,
       amount,
