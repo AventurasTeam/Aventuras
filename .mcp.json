@@ -8,7 +8,7 @@
       }
     },
     "storybook-mcp": {
-      "url": "http://localhost:6006/mcp",
+      "url": "http://localhost:${AVENTURAS_STORYBOOK_PORT:-6006}/mcp",
       "type": "http"
     }
   }

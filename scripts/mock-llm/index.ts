@@ -1,12 +1,12 @@
 import { startMockServer } from './server'
 import { flushState, STATE_PATH } from './state'
+import { resolveDevSlot } from '../dev-slot/resolve'
 
-export const DEFAULT_PORT = 4319
-
+// Without --port or MOCK_LLM_PORT, the checkout's dev slot picks it: 4319 unless slots are on.
 function resolvePort(): number {
   const flag = process.argv.indexOf('--port')
   const raw = flag !== -1 ? process.argv[flag + 1] : process.env.MOCK_LLM_PORT
-  const port = raw !== undefined ? Number(raw) : DEFAULT_PORT
+  const port = raw !== undefined ? Number(raw) : resolveDevSlot().ports.mock
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
     throw new Error(`Invalid port: ${String(raw)}`)
   }
