@@ -23,6 +23,9 @@ vars, no BaaS.
 - [`docs/testing.md`](./docs/testing.md) — the E2E layer:
   Playwright/Electron harness, fixture/seed contract, mock LLM,
   selector strategy; when a slice warrants an E2E test.
+- [`docs/dev-environment.md`](./docs/dev-environment.md) — dev slots:
+  per-worktree ports and `userData` for parallel workers on one
+  machine.
 - [`docs/generation-pipeline.md`](./docs/generation-pipeline.md) —
   pipeline framework: phases, orchestrator, action layer, event bus,
   transactions, concurrency model.
@@ -94,11 +97,15 @@ Available tools:
 Spawns automatically via `npx` on tool invocation. Requires the
 desktop app to be running (`pnpm desktop`); otherwise window-targeted
 tools have nothing to attach to.
+It only reaches the slot-0 app: worker dev slots keep their DevTools
+port out of its scan range (see
+[`docs/dev-environment.md`](./docs/dev-environment.md#what-a-slot-owns)).
 
 ### storybook-mcp
 
 Component-aware MCP for the Storybook design system, exposed at
-`http://localhost:6006/mcp` by `@storybook/addon-mcp`.
+`http://localhost:6006/mcp` by `@storybook/addon-mcp` (the slot's
+Storybook port in a worker dev slot).
 
 **The Storybook dev server MUST be running first.** Without it, every
 MCP tool call fails with a connection error. Start it in a separate
