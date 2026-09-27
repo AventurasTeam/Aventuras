@@ -58,3 +58,10 @@ jobs:
     with:
       prerelease: false
     secrets: inherit
+
+  build-ios:
+    needs: create-release
+    uses: ./.github/workflows/build-ios.yml
+    with:
+      prerelease: false
+    secrets: inherit

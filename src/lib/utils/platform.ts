@@ -13,6 +13,16 @@ export function isAndroid(): boolean {
 }
 
 /**
+ * Returns `true` when running inside an iOS WebView (user-agent based). iPadOS 13+
+ * defaulting to a desktop UA in Safari is not a concern here: inside a WKWebView the
+ * app's own UA always matches.
+ */
+export function isIos(): boolean {
+  if (typeof navigator === 'undefined') return false
+  return /iPad|iPhone|iPod/i.test(navigator.userAgent)
+}
+
+/**
  * Returns `true` when the primary input can hover, i.e. when a `title` tooltip can
  * actually explain a control. This is a capability, not a screen size: a desktop window
  * dragged narrow still hovers, a tablet at 1024px never does.

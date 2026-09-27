@@ -1,0 +1,67 @@
+name: Bootstrap iOS scaffold
+
+# One-shot: generates src-tauri/gen/apple (the iOS Xcode scaffold) and uploads it
+# as a workflow artifact for a maintainer to commit, mirroring the tracked
+# gen/android convention. It also runs the full unsigned .ipa build as a smoke
+# test, so the committed scaffold is known-good. Re-run after major Tauri CLI
+# upgrades to refresh the scaffold.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    name: Bootstrap iOS scaffold
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install npm dependencies
+        uses: ./.github/actions/npm-install
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+
+      # tauri ios init drives XcodeGen, which the CLI only auto-installs
+      # interactively — not an option on a runner.
+      - name: Ensure XcodeGen
+        run: command -v xcodegen >/dev/null 2>&1 || brew install xcodegen
+
+      # --skip-targets-install: the toolchain is already installed above.
+      - name: Generate iOS Xcode scaffold
+        run: npx tauri ios init --skip-targets-install
+
+      # Uploaded BEFORE the smoke test, so the artifact a maintainer commits is the
+      # pristine scaffold: the build script below patches project.yml with signing-
+      # disabled settings (a committed copy would break signed builds / tauri ios dev
+      # until reverted by hand) and leaves compiled outputs (Externals/*.a) behind.
+      # Archive (the default): the scaffold is a directory tree, which upload-artifact
+      # rejects under `archive: false` (multiple files). include-hidden-files: the
+      # scaffold's own .gitignore must survive into the artifact — the action drops
+      # hidden files unless told otherwise.
+      - name: Upload pristine Xcode scaffold
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-xcode-scaffold
+          path: src-tauri/gen/apple
+          include-hidden-files: true
+
+      - name: Smoke-test unsigned .ipa build
+        run: scripts/build-ios-unsigned.sh --config src-tauri/tauri.release.conf.json
+        env:
+          IPA_VERSION: 0.0.0-bootstrap
+
+      - name: Upload smoke-test IPA
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-smoke-ipa
+          path: Aventuras_v*_ios-arm64-unsigned.ipa
+          archive: false

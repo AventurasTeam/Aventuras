@@ -28,7 +28,7 @@ import { relaunch } from '@tauri-apps/plugin-process'
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { getVersion, getBundleType, type BundleType } from '@tauri-apps/api/app'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { isAndroid } from '$lib/utils/platform'
+import { isAndroid, isIos } from '$lib/utils/platform'
 import { isNewerVersion } from '$lib/utils/version'
 
 /**
@@ -163,7 +163,7 @@ class UpdaterService {
 
   private async runCheck(): Promise<UpdateInfo> {
     try {
-      const info = isAndroid() ? await this.checkViaGitHub() : await this.checkViaTauri()
+      const info = isAndroid() || isIos() ? await this.checkViaGitHub() : await this.checkViaTauri()
       this.lastInfo = info
       return info
     } catch (error) {
@@ -309,7 +309,7 @@ class UpdaterService {
     }
   }
 
-  /** Android: read the release list ourselves and compare the tag with the running build. */
+  /** Mobile: read the release list ourselves and compare the tag with the running build. */
   private async checkViaGitHub(): Promise<UpdateInfo> {
     this.updateAvailable = null
 
@@ -324,9 +324,11 @@ class UpdaterService {
       return { available: false, currentVersion, canInstallInApp: false }
     }
 
-    // Prefer the APK itself; fall back to the release page so the user is never left
-    // without somewhere to go when the asset is named unexpectedly.
-    const apk = release.assets?.find((asset) => asset.name?.toLowerCase().endsWith('.apk'))
+    // Prefer the platform's own package (APK on Android, unsigned IPA on iOS); fall
+    // back to the release page so the user is never left without somewhere to go
+    // when the asset is named unexpectedly.
+    const wanted = isIos() ? '.ipa' : '.apk'
+    const pkg = release.assets?.find((asset) => asset.name?.toLowerCase().endsWith(wanted))
 
     return {
       available: true,
@@ -334,7 +336,7 @@ class UpdaterService {
       currentVersion,
       body: release.body ?? undefined,
       date: release.published_at ?? undefined,
-      downloadUrl: apk?.browser_download_url ?? release.html_url ?? RELEASES_PAGE,
+      downloadUrl: pkg?.browser_download_url ?? release.html_url ?? RELEASES_PAGE,
       canInstallInApp: false,
       manualInstallReason: 'mobile-platform',
     }

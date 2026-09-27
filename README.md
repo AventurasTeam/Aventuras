@@ -41,13 +41,14 @@ Pre-built binaries are on the [Releases](https://github.com/AventurasTeam/Aventu
 | macOS    | `Aventuras_vX.Y.Z_x64.dmg` / `_aarch64.dmg`                  |
 | Linux    | `Aventuras_vX.Y.Z_amd64.deb` / `.AppImage`, or `_x86_64.rpm` |
 | Android  | `Aventuras_vX.Y.Z.apk`                                       |
+| iOS      | `Aventuras_vX.Y.Z_ios-arm64-unsigned.ipa` (sideload; unsigned) |
 
 No API keys in config files — providers are set up in the app, under Settings → API Settings.
 
 ## Build from source
 
-Requires the Node.js version in [`.nvmrc`](.nvmrc), the latest stable Rust, and (for Android)
-the Android SDK, NDK r27d and JDK 21–24.
+Requires the Node.js version in [`.nvmrc`](.nvmrc), the latest stable Rust, (for Android) the
+Android SDK, NDK r27d and JDK 21–24, and (for iOS) a Mac with Xcode.
 
 ```bash
 git clone https://github.com/AventurasTeam/Aventuras.git
@@ -67,8 +68,11 @@ npx tauri dev
 | `npm run format`  | Prettier                        |
 | `npm run release` | version bump, tag and push      |
 
-Desktop builds are `npx tauri build`; Android is documented in
-[docs/development/release.md](docs/development/release.md).
+Desktop builds are `npx tauri build`; Android and iOS are documented in
+[docs/development/release.md](docs/development/release.md). iOS produces an **unsigned**
+device `.ipa` (no Apple certificates or signing secrets — see
+[docs/development/ios-build-target.md](docs/development/ios-build-target.md) for the full
+account of how the target was added and how the unsigned CI pipeline works).
 
 ## Tech stack
 

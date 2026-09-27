@@ -1,0 +1,117 @@
+name: Build iOS
+
+on:
+  workflow_call:
+    inputs:
+      prerelease:
+        description: 'Only read when publish is true; kept for symmetry with the other build workflows.'
+        type: boolean
+        required: false
+        default: false
+      publish:
+        description: 'Upload the .ipa to the release; false to just build and warm caches'
+        type: boolean
+        required: false
+        default: true
+
+jobs:
+  build:
+    name: Build iOS
+    # iOS is best-effort: continue-on-error reports success to the callers
+    # (ci.yml, release.yml, pre-release.yml), so an iOS-only failure — brew, a
+    # runner-image change, the init fallback — leaves those runs green and never
+    # blocks a release or marks master red. The job still shows its failure in
+    # the run's checks; callers just don't inherit it.
+    continue-on-error: true
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      CARGO_TERM_COLOR: always
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install npm dependencies
+        uses: ./.github/actions/npm-install
+
+      # "Re-run failed jobs" skips create-release, so a leg re-run after a release is
+      # published would otherwise overwrite its assets.
+      - name: Refuse a published release
+        if: inputs.publish
+        uses: ./.github/actions/release-guard
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+
+      # Same cache discipline as the desktop/Android legs: saved from master only
+      # (ci.yml), restored everywhere else.
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          key: ios
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+
+      # tauri ios init/build drive XcodeGen, which the CLI only auto-installs
+      # interactively — not an option on a runner.
+      - name: Ensure XcodeGen
+        run: command -v xcodegen >/dev/null 2>&1 || brew install xcodegen
+
+      - name: Resolve build version
+        id: version
+        uses: ./.github/actions/build-version
+        with:
+          publish: ${{ inputs.publish }}
+
+      # The Xcode scaffold is normally committed under src-tauri/gen/apple (generated
+      # once by bootstrap-ios.yml). When it is absent — first run, or a fork — generate
+      # it here instead of failing: the runner is a Mac, so init costs seconds, and the
+      # Info.plist keys come from src-tauri/Info.ios.plist, which the CLI merges into
+      # every build regardless of how the scaffold got there.
+      - name: Generate iOS scaffold if not committed
+        run: |
+          if [ ! -f src-tauri/gen/apple/project.yml ]; then
+            echo "::notice::src-tauri/gen/apple is not committed; running tauri ios init (a committed scaffold is preferred — run the 'Bootstrap iOS scaffold' workflow and commit its ios-xcode-scaffold artifact)."
+            npx tauri ios init --skip-targets-install
+          fi
+
+      # Produces Aventuras_v<version>_ios-arm64-unsigned.ipa: an unsigned,
+      # ARM64 device build. No Apple certificates, profiles or signing secrets are
+      # used anywhere — the script disables signing via a temporary project.yml
+      # patch (the CLI's own CODE_SIGNING_* settings don't reach xcodebuild archive)
+      # and packages the .app itself instead of running the signed export. The
+      # resolved version (base + -sha on CI builds) is passed explicitly: the CLI
+      # writes only the base semver into CFBundleShortVersionString, so the name
+      # must come from the same source as every other platform.
+      - name: Build unsigned IPA
+        run: scripts/build-ios-unsigned.sh ${{ steps.version.outputs.config-args }}
+        env:
+          IPA_VERSION: ${{ steps.version.outputs.version }}
+
+      # Deliberately publish workflow artifacts for every build, matching the
+      # Android leg. The exact name is safe: the script names the .ipa from
+      # IPA_VERSION, which this workflow sets from the same version output.
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-ipa
+          path: Aventuras_v${{ steps.version.outputs.version }}_ios-arm64-unsigned.ipa
+          archive: false
+
+      # Only upload to a GitHub Release when publishing a new version. draft is
+      # always true: create-release leaves every release (stable and pre-release) as
+      # a draft until its own publish step confirms every build succeeded — see
+      # docs/development/release.md.
+      - name: Upload to Release
+        if: inputs.publish
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          draft: true
+          prerelease: ${{ inputs.prerelease }}
+          files: Aventuras_v${{ steps.version.outputs.version }}_ios-arm64-unsigned.ipa
