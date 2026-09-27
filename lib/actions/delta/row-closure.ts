@@ -1,4 +1,4 @@
-import { and, eq, inArray, ne } from 'drizzle-orm'
+import { and, eq, inArray, ne, sql } from 'drizzle-orm'
 
 import { deltas, happeningAwareness, happeningInvolvements, type Delta } from '@/lib/db'
 
@@ -15,11 +15,11 @@ const CHILD_TABLES = {
 
 /**
  * `rows` widened by every delta on a row one of its `create`s will delete, whatever that delta's
- * source: the row's own later writes, and its child rows' writes. Left out, a later user edit is
- * stranded in the log pointing at nothing (generation-pipeline.md → Reverse-replay). A later
- * `delete` of the row stays out, since undoing it would restore children under a parent the
- * create's undo then deletes; so does a table whose create-undo keeps rows a user wrote to.
- * Sorted newest-first for replay.
+ * source: the row's own later writes, and its child rows' writes, a deleted child's included.
+ * Left out, a later user edit is stranded in the log pointing at nothing (generation-pipeline.md
+ * → Reverse-replay). A later `delete` of the row stays out, since undoing it would restore
+ * children under a parent the create's undo then deletes; so does a table whose create-undo keeps
+ * rows a user wrote to. Sorted newest-first for replay.
  */
 export async function closeOverRemovedRows(rows: readonly Delta[], ctx: DbCtx): Promise<Delta[]> {
   const removed = rows.filter(
@@ -53,12 +53,24 @@ export async function closeOverRemovedRows(rows: readonly Delta[], ctx: DbCtx): 
         )) as Delta[],
     )
     for (const child of CHILD_TABLES[targetTable as keyof typeof CHILD_TABLES] ?? []) {
-      const childIds = (
-        await ctx.db
-          .select({ id: child.table.id })
-          .from(child.table)
-          .where(and(eq(child.table.branchId, branchId), inArray(child.table.happeningId, ids)))
-      ).map((r) => r.id)
+      const live = await ctx.db
+        .select({ id: child.table.id })
+        .from(child.table)
+        .where(and(eq(child.table.branchId, branchId), inArray(child.table.happeningId, ids)))
+      // A child the user already deleted is gone from its table; its delete's undo payload
+      // still names the parent, and leaving its history out strands that delete.
+      const deleted = await ctx.db
+        .select({ id: deltas.targetId })
+        .from(deltas)
+        .where(
+          and(
+            eq(deltas.branchId, branchId),
+            eq(deltas.targetTable, child.name),
+            eq(deltas.op, 'delete'),
+            inArray(sql`json_extract(${deltas.undoPayload}, '$.happeningId')`, ids),
+          ),
+        )
+      const childIds = [...new Set([...live, ...deleted].map((r) => r.id))]
       if (childIds.length === 0) continue
       add(
         (await ctx.db

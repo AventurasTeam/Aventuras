@@ -1331,7 +1331,9 @@ provenance entry
 ([`classifier.md → Provenance attribution`](./memory/classifier.md#provenance-attribution)).
 So both scopes widen their set before replaying it: for each `create`
 it holds, every later delta on that row, and for a happening every
-delta on its involvement and awareness rows, whatever their source.
+delta on its involvement and awareness rows, whatever their source —
+a child the user already deleted included, found through its delete's
+`undo_payload`.
 Left out, a user edit would stay in the log pointing at a row that is
 gone, and CTRL-Z of it would report an undo that changed nothing. Two
 exclusions: a later `delete` of the row, whose undo would restore

@@ -71,6 +71,39 @@ describe('closeOverRemovedRows', () => {
     expect(await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))).toEqual([])
   })
 
+  it('sweeps a child the user added and then deleted, finding it through its delete', async () => {
+    const { db, ctx } = await seed()
+    await db
+      .insert(happeningInvolvements)
+      .values({ id: 'hinv_gone', branchId: 'b1', happeningId: 'hap_run', entityId: 'char_m' })
+    const [gone] = await db
+      .select()
+      .from(happeningInvolvements)
+      .where(eq(happeningInvolvements.id, 'hinv_gone'))
+    await db.delete(happeningInvolvements).where(eq(happeningInvolvements.id, 'hinv_gone'))
+    await db.insert(deltas).values([
+      delta('d_gone_create', 4, {
+        actionId: 'act_user3',
+        source: 'user_edit',
+        targetTable: 'happening_involvements',
+        targetId: 'hinv_gone',
+      }),
+      delta('d_gone_delete', 5, {
+        actionId: 'act_user4',
+        source: 'user_edit',
+        op: 'delete',
+        targetTable: 'happening_involvements',
+        targetId: 'hinv_gone',
+        undoPayload: { ...gone },
+      }),
+    ])
+
+    expect(await reverseReplayDeltas('act_run', ctx)).toBe(5)
+
+    expect(await db.select().from(happeningInvolvements)).toEqual([])
+    expect(await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))).toEqual([])
+  })
+
   it("leaves out a later delete of the row, whose undo would restore the row's children", async () => {
     const { db, ctx } = await seed()
     const userDelete = delta('d_delete', 4, {
