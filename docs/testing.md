@@ -128,7 +128,8 @@ two the harness absorbs:
   `electron.launch` passes `0`, and `spawnAppProcess` passes `0` in dev,
   so the suite runs beside `pnpm desktop` and beside a second suite on
   the same machine. `devtools-port.spec.ts` holds the port itself and
-  pins both paths. A new launch path that omits the switch brings the
+  pins both paths, in the `dev` project only: packaged builds open no
+  DevTools port, so CI's packaged job skips it. A new launch path that omits the switch brings the
   collision back: Electron logs `bind() failed` and
   `Cannot start http server for devtools`, and every `electron.launch`
   times out after 60s — a mass failure that reads like a product bug
