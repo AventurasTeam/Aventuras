@@ -728,6 +728,27 @@ describe('updateStoryEntryContent classifier invalidation', () => {
     expect(contentDeltas(remaining)).toHaveLength(1)
   })
 
+  it("takes the user's later edit of a happening down with it, leaving no delta behind", async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedClassifiedTail(db)
+    await db.update(happenings).set({ title: 'renamed in Plot' }).where(eq(happenings.id, 'hap_2'))
+    await db.insert(deltas).values({
+      ...classifierDelta('d_rename', 6, 'happenings', 'hap_2', 'e2'),
+      actionId: 'act_user',
+      source: 'user_edit',
+      op: 'update',
+      entryId: null,
+      undoPayload: { title: 'derived from e2' },
+    })
+
+    expect((await updateStoryEntryContent('b1', 'e2', 'new', ctx)).status).toBe('ok')
+
+    expect((await db.select().from(happenings)).map((h) => h.id)).toEqual(['hap_1'])
+    const remaining = (await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))) as Delta[]
+    expect(seededDeltaIds(remaining)).toEqual(['d_hap1', 'd_meta2'])
+  })
+
   it('spares an entity the pass introduced, whose references sit outside the anchor set', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }

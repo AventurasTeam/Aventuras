@@ -1296,7 +1296,9 @@ rule has two exceptions. A schema-backed JSON column such as an
 entity's `state` restores the sub-fields its delta changed as before,
 even over a later user write to the same sub-field. A machine `create`
 still deletes its row, since an entity or happening exists only
-because of the reversed write, except in a table that registers
+because of the reversed write, and takes every later write to that row
+with it, whatever its source (see the closure below), except in a
+table that registers
 `rowKeepingColumns`: a character relationship whose view a later user
 write set keeps its row, with the views the user did not write nulled,
 and is deleted only once both are null. An update's reversal that
@@ -1311,29 +1313,35 @@ happening.
 A domain may register a cascade hook for its child rows, but that hook
 is **delete-op-only**: it replays a forward `delete`, so the undo of a
 `create` and the redo of a `delete` are the only arms that may read it.
-Reversing a `create` deliberately does not, and the reason is that the
-child rows are never the engine's to find. Under the actionId scope
-they are already in the set — every write a run makes shares the run's
-`actionId`, so a child's own `create` delta reverses itself — and an
-engine cascade on top would delete the same rows twice and emit
-duplicate store patches for them.
+Reversing a `create` deliberately does not, because the closure has to
+gather **deltas**, not rows, so they are pruned from the log with the
+parent's. A cascade that deleted the rows would leave their deltas
+behind, pointing at nothing, and a later redo would re-insert children
+under a parent that is gone.
 
-**An entry-scoped reversal owes the closure by hand.** Selecting deltas
-by `entryId` rather than by `actionId` breaks the guarantee above,
-because a child row does not have to share its parent's anchor —
-awareness anchors to the turn that narrated the learning, which can sit
-either side of the happening's own provenance entry
+**Abort, boot recovery and a prose edit close over the rows their
+creates delete.** Neither selection scope guarantees the set holds every write to such a row. An
+`actionId` scope holds a run's own writes, but not a user edit made to
+a row the run created while a no-gate pass was running — a rename, or
+an involvement added under its happening. An `entryId` scope misses
+child rows even from the same pass, because a child does not have to
+share its parent's anchor: awareness anchors to the turn that narrated
+the learning, which can sit either side of the happening's own
+provenance entry
 ([`classifier.md → Provenance attribution`](./memory/classifier.md#provenance-attribution)).
-Reversing by anchor alone therefore deletes a happening and leaves its
-awareness rows pointing at nothing. The caller must widen its own
-selection to the child rows' deltas, which is also why the engine hook
-would not serve: the closure has to gather **deltas**, not rows, so
-they are pruned from the log with the parent's. A cascade that deleted
-the rows would leave their `create` deltas behind, and a later redo
-would re-insert children under a parent that is gone.
-`resolveClassifierFactDeltas` (`lib/actions/story-entries/classifier-facts.ts`)
-is the shipped instance; a second entry-scoped caller inherits the same
-obligation.
+So both scopes widen their set before replaying it: for each `create`
+it holds, every later delta on that row, and for a happening every
+delta on its involvement and awareness rows, whatever their source —
+a child the user already deleted included, found through its delete's
+`undo_payload`.
+Left out, a user edit would stay in the log pointing at a row that is
+gone, and CTRL-Z of it would report an undo that changed nothing. Two
+exclusions: a later `delete` of the row, whose undo would restore
+children under a parent the create's undo then deletes; and a table
+registering `rowKeepingColumns`, whose create-undo already keeps a row
+the user wrote to. `closeOverRemovedRows`
+(`lib/actions/delta/row-closure.ts`) is the closure; `reverseReplayDeltas`
+and `resolveClassifierFactDeltas` both apply it.
 
 Abort is conceptually identical to user CTRL-Z — same
 `undo_payload` primitive, same reverse-replay path, and the replayed

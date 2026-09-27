@@ -749,10 +749,17 @@ happen in real data).
 already stored above the proposed parent rather than the write (mirrors the
 gate-rejection shape at
 [`generation-pipeline.md → Action rejection`](./generation-pipeline.md#action-rejection--defense-in-depth)).
-Classifier writes hitting the rejection surface as a phase-level
-`recoverable_error` (the retry tier handles LLM mistakes). User
-edits surface as a form-validation error in the World panel —
-user fixes or leaves it.
+A classifier writer never lets a looping parent reach the mutator: its
+planner runs the same walk against the branch's locations and drops the
+fact, the way the periodic planner drops a ref it can't resolve. A
+rejection that did reach the orchestrator would fail the whole run
+(see the run state transitions in
+[`generation-pipeline.md → Transaction lifecycle`](./generation-pipeline.md#transaction-lifecycle)),
+and neither the phase nor the LLM retry tier can recover it — the retry
+finishes before any write is emitted, and a phase never sees a write's
+result. No classifier path writes `parent_location_id` in v1. User
+edits surface as a form-validation error in the World panel — user
+fixes or leaves it.
 
 **Why so few fields.** Locations are dramatically less dynamic than
 characters. Type, appearance, atmosphere, landmark features all
@@ -781,6 +788,17 @@ held direction (character arrays are canonical for held items); no
 back-pointer on item to drift against. Cost: "who holds the silver
 coin?" requires scanning characters' equipped + inventory arrays.
 Acceptable for v1 scale; FTS5 upgrade applies if it bites.
+
+**One position per item.** An item lies at one location or sits in one
+character's `equipped_items` or `inventory`, never several. Every
+writer moves it rather than adding a second position: putting it in a
+holder's slot removes it from the holder's other slot and from every
+other holder, and clears `at_location_id`; setting `at_location_id`
+removes it from every holder. The piggyback `transfers` writer applies
+this whatever `from` names, and a World Save applies it to the items
+the Save newly holds or places, touching the other rows in the same
+action. A row left doubled by an older write is shown as it stands
+until one of those writes moves the item.
 
 **Why so few fields.** What an item _is_ (type, material, properties,
 magical traits, history, value) fits cleanly in description prose.

@@ -154,6 +154,77 @@ describe('updateEntityInventory', () => {
   })
 })
 
+describe('updateItemPosition', () => {
+  const ROPE: NewEntity = {
+    ...CHAR,
+    id: 'item_rope',
+    kind: 'item',
+    name: 'Rope',
+    state: { at_location_id: 'loc_hollow' },
+  }
+
+  it("sets an item's position, leaving its other state keys", async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'createEntity',
+          source: 'user_edit',
+          payload: {
+            entry: { ...ROPE, state: { at_location_id: 'loc_hollow', condition: 'frayed' } },
+          },
+        },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    const result = await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateItemPosition',
+          source: 'ai_classifier',
+          payload: { branchId: 'br_1', id: 'item_rope', atLocationId: null },
+        },
+        actionId: 'act_p',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect(result.status).toBe('ok')
+    expect((await rowFor(db, 'item_rope')).state).toEqual({
+      at_location_id: null,
+      condition: 'frayed',
+    })
+  })
+
+  it('refuses a target that is not an item', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: { kind: 'createEntity', source: 'user_edit', payload: { entry: CHAR } },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    const result = await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateItemPosition',
+          source: 'ai_classifier',
+          payload: { branchId: 'br_1', id: 'char_1', atLocationId: null },
+        },
+        actionId: 'act_p',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect(result.status).toBe('rejected')
+    expect((await rowFor(db, 'char_1')).state).not.toHaveProperty('at_location_id')
+  })
+})
+
 describe('updateEntityStackables', () => {
   it('replaces the stackables record', async () => {
     const { db, ctx } = await setup()

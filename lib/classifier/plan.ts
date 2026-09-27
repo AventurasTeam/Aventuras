@@ -68,7 +68,7 @@ export function clampEmbeddedCharacter(candidate: { name: string; description: s
   description: string
 } {
   return {
-    name: clampEmbedded(candidate.name, MAX_EMBEDDED_NAME),
+    name: clampEmbedded(candidate.name.trim(), MAX_EMBEDDED_NAME),
     description: clampEmbedded(candidate.description, MAX_EMBEDDED_BODY),
   }
 }
@@ -120,6 +120,10 @@ export function buildClassifierActions(
   // New characters first: later refs in the same reply resolve through handleMap,
   // and involvements/awareness rows must not precede the row they point at.
   for (const candidate of extraction.newCharacters) {
+    if (nonBlank(candidate.name) == null) {
+      unresolvedRefs.push(candidate.handle)
+      continue
+    }
     const decision = decisions.get(candidate.handle)
     if (!decision) {
       unresolvedRefs.push(candidate.handle)
@@ -216,6 +220,9 @@ export function buildClassifierActions(
   }
 
   for (const happening of extraction.happenings) {
+    // Its involvements and awareness nest under it, so dropping it strands nothing.
+    const title = nonBlank(happening.title)
+    if (title == null) continue
     const parentAnchor = anchor(happening.sourceTurn)
     const happeningId = newId('hap')
     const timestamp = now()
@@ -238,7 +245,7 @@ export function buildClassifierActions(
           entry: {
             id: happeningId,
             branchId,
-            title: clampEmbedded(happening.title, MAX_EMBEDDED_NAME),
+            title: clampEmbedded(title, MAX_EMBEDDED_NAME),
             description: description == null ? null : clampEmbedded(description, MAX_EMBEDDED_BODY),
             // Mutually exclusive per the table CHECK: an entry ref wins.
             temporal: occurredAtEntryId == null ? (nonBlank(happening.temporal) ?? null) : null,

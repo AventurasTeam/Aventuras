@@ -24,6 +24,7 @@ import {
   updateEntityLocationTrackingHandler,
   updateEntityStackablesHandler,
   updateEntityVisualStateHandler,
+  updateItemPositionHandler,
 } from './state-patch-actions'
 
 type EntityUpdatePatch = Partial<{
@@ -277,6 +278,7 @@ export function registerEntities(): void {
       updateEntityVisualState: updateEntityVisualStateHandler,
       updateEntityInventory: updateEntityInventoryHandler,
       updateEntityStackables: updateEntityStackablesHandler,
+      updateItemPosition: updateItemPositionHandler,
       updateEntityLocationTracking: updateEntityLocationTrackingHandler,
       promoteStagedEntity: promoteStagedEntityHandler,
       appendEntityKeywords: appendEntityKeywordsHandler,

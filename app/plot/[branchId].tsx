@@ -24,7 +24,11 @@ import { ThreadDetailPane } from '@/components/plot/thread-detail-pane'
 import { usePlotSelection } from '@/components/plot/use-plot-selection'
 import { MasterDetailLayout } from '@/components/shells/master-detail-layout'
 import { ScreenShell } from '@/components/shells/screen-shell'
-import { storyPillPhase, useStoryGenerationGate } from '@/components/story-settings/generation-run'
+import {
+  cancelStoryPillRun,
+  storyPillPhase,
+  useStoryGenerationGate,
+} from '@/components/story-settings/generation-run'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { KeyboardInsetColumn } from '@/components/ui/keyboard-inset-column'
@@ -44,7 +48,6 @@ import { db, runInTransaction, type Entity } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import type { HappeningFilter, PlotKind, PlotListSignals, ThreadFilter } from '@/lib/list-modules'
 import {
-  awaitRunTerminal,
   chaptersStore,
   entitiesStore,
   happeningAwarenessStore,
@@ -379,9 +382,7 @@ export default function PlotRoute() {
           storyId={storyId}
           swapTarget={open?.settings.embedding_swap_target}
           activePhase={storyPillPhase(activeRunKind, classifierRunning)}
-          onCancel={() => {
-            if (activeRunKind != null) void awaitRunTerminal(activeRunKind, branchId, 'cancel')
-          }}
+          onCancel={() => cancelStoryPillRun(storyId ?? undefined)}
           onOpenMemory={() => {
             if (storyId != null) navigateGuarded(`/story-settings/${storyId}?tab=memory`)
           }}

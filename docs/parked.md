@@ -694,6 +694,16 @@ reads the newest prose. Chapter-close identity compaction, once built,
 is the exception, since it reads a whole chapter whose prose can
 predate the user's edit.
 
+Reverse-replay's schema-backed-column exception is the same gap from
+the undo side: reversing a machine delta on `entities.state` or
+`story_entries.metadata` restores the sub-fields it changed, even over
+a later user write to one of them
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
+Latent: only hard-gated runs write either column, so no user edit lands
+while such a run can abort, and a rollback or regenerate that reverses
+them sweeps the user's later edits too. Provenance would let the undo
+skip a sub-field the user wrote. Added 2026-09-27 from triage.
+
 Sketch shape (v1.5):
 
 ```ts
@@ -994,6 +1004,29 @@ Parked 2026-09-13 from the PR #513 review; a delta-patched store
 gaining a synchronous subscriber or patch logic that can throw
 (validation, a must-exist invariant), or anything starting to read
 `pipeline_runs.outcome`, is the signal to revisit.
+
+#### A pair deleted for having no view strands its user deltas
+
+Reversing a machine view update that would leave a character
+relationship with neither view deletes the pair, since its one-view
+`CHECK` forbids an empty row
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
+User deltas on that pair stay in the log pointing at a row that is gone,
+a user `create` of the pair included, and CTRL-Z of one reports an undo
+that changes nothing. `reverse-replay-user-writes.test.ts` ("deletes a
+pair the reversal would leave with no view") pins the current behaviour.
+The closure that sweeps a removed row's later writes skips the table on
+purpose: its create-undo keeps a pair the user wrote a view to. Two
+fixes are open: sweep the pair's user deltas when the no-view delete
+fires, or have CTRL-Z refuse an edit whose row is gone. The second
+changes the undo contract — a refusal at the head of the stack blocks
+every older undo behind it — so it wants a decision, not a patch.
+Reachable through a prose edit, reasoned from the code rather than
+reproduced: clear your view of a pair whose other view a pass wrote,
+then edit that pass's prose.
+
+Parked 2026-09-27 from triage; the signal is a user-visible undo that
+does nothing on a relationship.
 
 ### Memory pipeline (parked)
 
@@ -2753,6 +2786,42 @@ read never blocks frames for its whole length.
 Parked 2026-09-24; revisit when testing on real devices shows the Plot
 screen stalling on a large rich story, or when the entry index gains a
 consumer outside Plot.
+
+#### Retired and staged characters in World's derived lists
+
+World's Overview ("Characters here", Members) and Connections' Held by
+list retired and staged characters with no status treatment. Canon is
+silent there:
+[`data-model.md → Character-to-character relationships`](./data-model.md#character-to-character-relationships)
+asks the UI to dim or badge retired participants in relationships only
+(the Relationships editor now does), and
+[`world.md`](./ui/screens/world/world.md) gives these lists no status
+rule. Filtering, dimming or badging each one is a product call, and
+staged has no rule anywhere. The status pill tones in
+[`entity.md → Entity row indicators`](./ui/patterns/entity.md#entity-row-indicators--four-orthogonal-channels)
+are the treatment to reuse if badging wins.
+
+Parked 2026-09-27 from triage; the signal is a retired character read
+as present, or a staged one read as established.
+
+#### Sentence composition in World's copy
+
+`overview.lastSeen` ("last seen {{span}} ago") and `connections.ago`
+("{{span}} ago in-world") splice a separately pluralised span
+(`overview.span.*`, or `overview.spanFallback`'s
+"{{count}} × {{tier}}" for a custom-calendar tier) into a sentence
+frame, which breaks agreement in languages whose case depends on the
+frame (German's "vor drei Tagen"). `overview.within` is a bare joiner
+("in") between two names. Per-tier whole-sentence keys fix the first
+two, keeping a fallback sentence for custom tiers — the tiers are the
+story calendar's, which `Intl.RelativeTimeFormat` can't express — and a
+key taking both names fixes the joiner.
+[`code-conventions.md → i18n discipline`](./code-conventions.md#i18n-discipline)
+requires `t()` but says nothing against composing fragments; add that
+rule when this lands. Only `locales/en` ships.
+
+Parked 2026-09-27 from triage; the signal is the first non-English
+locale.
 
 ### Code structure (parked)
 

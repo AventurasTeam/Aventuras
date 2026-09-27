@@ -8,6 +8,7 @@ import {
   type EntityKind,
   type EntityStateByKind,
 } from '@/lib/db'
+import { normalizeTerm } from '@/lib/keyword-terms'
 
 import { WORLD_ISSUE } from './issues'
 
@@ -59,10 +60,8 @@ const baseShape = {
 
 export type EntityBaseDraft = z.infer<z.ZodObject<typeof baseShape>>
 
-/** data-model.md → Stackable items: keys are stored lowercase. */
-export function stackableKey(raw: string): string {
-  return raw.trim().toLowerCase()
-}
+/** data-model.md → Stackable items: keys are stored lowercase, under the keyword-term shape. */
+export const stackableKey = normalizeTerm
 
 const stackableSchema = z.object({
   key: z.string().trim().min(1, WORLD_ISSUE.stackableKeyRequired).max(40, WORLD_ISSUE.tooLong),

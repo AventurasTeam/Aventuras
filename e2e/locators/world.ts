@@ -15,6 +15,12 @@ export const world = {
 
   // ListRow's Pressable carries the label as its accessible name.
   row: (page: Page, name: string): Locator => page.getByRole('button', { name, exact: true }),
+  // An Involvements row is named by its title and role together (involvements-tab.tsx).
+  involvementRow: (page: Page, title: string, role: string): Locator =>
+    page.getByRole('button', {
+      name: t('world:involvements.rowName', { title, role }),
+      exact: true,
+    }),
 
   // `⚠ N need review` — pressable Tag whose accessible name drops the glyph
   // (collision-review-pill.tsx); the same name on every tier.

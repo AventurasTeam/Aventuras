@@ -75,7 +75,9 @@ until the classifier has created it as an entity):
 - `<item id="..." to="..." from="..." slot="equipped_items | inventory" />`
   moves a unique item between character inventories. `from` is
   optional (omitted = no specific prior holder tracked, e.g. picked
-  up loose).
+  up loose). Taking an item moves it from wherever else it sits,
+  whatever `from` names, per
+  [`data-model.md → ItemState`](../data-model.md#itemstate-shape).
 - `<stackable key="..." amount="..." to="..." from="..." />` moves a
   quantity (gold, arrows, supplies) between characters' `stackables`
   records. Either `to` or `from` may be omitted (gained from

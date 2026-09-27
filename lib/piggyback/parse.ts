@@ -1,6 +1,7 @@
 import { jsonrepair } from 'jsonrepair'
 
 import type { StoryEntry } from '@/lib/db'
+import { normalizeTerm } from '@/lib/keyword-terms'
 
 import {
   RETRIEVAL_QUERY_ITEM_TAG,
@@ -139,10 +140,13 @@ function parseTransfers(segment: string): ParsedTransfers {
     if (attrText === undefined) continue
     const attrs = parseAttributes(attrText)
     if (attrs.key === undefined || attrs.amount === undefined) continue
+    // data-model.md → Stackable items: lowercase keys of at most 40 characters, and a
+    // transfer moves a positive whole count (a negative `to` would store a debt).
+    const key = normalizeTerm(attrs.key)
     const amount = Number(attrs.amount)
-    if (!Number.isFinite(amount)) continue
+    if (key === '' || key.length > 40 || !Number.isSafeInteger(amount) || amount <= 0) continue
     stackables.push({
-      key: attrs.key,
+      key,
       amount,
       ...(attrs.to !== undefined ? { to: attrs.to } : {}),
       ...(attrs.from !== undefined ? { from: attrs.from } : {}),

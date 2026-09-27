@@ -25,15 +25,20 @@ export function InvolvementsTab({
     )
   return (
     <View className="gap-1" testID="involvements">
-      {rows.map((row) => (
-        <ListRow
-          key={row.id}
-          label={row.title}
-          description={row.role?.trim() || t('world:involvements.noRole')}
-          trailing={<Icon as={ChevronRight} aria-hidden size="sm" className="text-fg-muted" />}
-          onPress={() => onOpenHappening(row.happeningId)}
-        />
-      ))}
+      {rows.map((row) => {
+        const role = row.role?.trim() || t('world:involvements.noRole')
+        return (
+          <ListRow
+            key={row.id}
+            label={row.title}
+            // Titles repeat, and one happening can involve the entity twice: the role tells them apart.
+            accessibilityLabel={t('world:involvements.rowName', { title: row.title, role })}
+            description={role}
+            trailing={<Icon as={ChevronRight} aria-hidden size="sm" className="text-fg-muted" />}
+            onPress={() => onOpenHappening(row.happeningId)}
+          />
+        )
+      })}
     </View>
   )
 }

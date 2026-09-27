@@ -47,6 +47,21 @@ describe('parseStateBlock', () => {
     })
   })
 
+  it('lowercases stackable keys and drops a blank, over-long, non-positive-whole or unsafe transfer', () => {
+    const result = parseStateBlock(`<state>
+  <transfers>
+    <stackable key=" Gold " amount="5" to="c1" />
+    <stackable key="  " amount="5" to="c1" />
+    <stackable key="${'k'.repeat(41)}" amount="5" to="c1" />
+    <stackable key="arrows" amount="-3" to="c1" />
+    <stackable key="arrows" amount="0" to="c1" />
+    <stackable key="arrows" amount="2.5" to="c1" />
+    <stackable key="arrows" amount="9007199254740993" to="c1" />
+  </transfers>
+</state>`)
+    expect(result.block.transfers?.stackables).toEqual([{ key: 'gold', amount: 5, to: 'c1' }])
+  })
+
   it('reports blockFound=false and no failures when no <state> tag exists', () => {
     const result = parseStateBlock('Just narrative prose, no trailing block at all.')
     expect(result.blockFound).toBe(false)

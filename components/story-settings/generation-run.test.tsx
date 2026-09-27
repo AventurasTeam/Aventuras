@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { generationStore, type RunState, type TxState } from '@/lib/stores'
 
 import {
+  cancelStoryPillRun,
   generationGateReason,
   selectStoryClassifierRunning,
   selectStorySettingsGenerationRunKind,
@@ -169,5 +170,31 @@ describe('generationGateReason', () => {
     )
     expect(generationGateReason(true, 'per-turn')).toBe('Generation is in flight. Cancel to edit.')
     expect(generationGateReason(true, null)).toBe('Generation is in flight. Cancel to edit.')
+  })
+})
+
+describe('cancelStoryPillRun', () => {
+  it("aborts the pill's run on its own branch, not a sibling's run of another kind", () => {
+    const refresh = run('suggestion-refresh', 'story-1', 'no-gate', 'branch-1')
+    const turn = run('per-turn', 'story-1', 'hard-gate', 'branch-2')
+    generationStore.startRun(refresh)
+    generationStore.startRun(turn)
+
+    cancelStoryPillRun('story-1')
+
+    expect(turn.abortController.signal.aborted).toBe(true)
+    expect(refresh.abortController.signal.aborted).toBe(false)
+  })
+
+  it('leaves another story and the background classifier running', () => {
+    const other = run('per-turn', 'story-2', 'hard-gate', 'branch-9')
+    const classifier = run('periodic-classifier', 'story-1', 'no-gate', 'branch-1')
+    generationStore.startRun(other)
+    generationStore.startRun(classifier)
+
+    cancelStoryPillRun('story-1')
+
+    expect(other.abortController.signal.aborted).toBe(false)
+    expect(classifier.abortController.signal.aborted).toBe(false)
   })
 })

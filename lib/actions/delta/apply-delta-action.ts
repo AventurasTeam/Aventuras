@@ -40,6 +40,7 @@ const LOCK_KEY: { [K in ProductionKind]: LockKey<K> } = {
   updateEntityVisualState: entityRow,
   updateEntityInventory: entityRow,
   updateEntityStackables: entityRow,
+  updateItemPosition: entityRow,
   updateEntityLocationTracking: entityRow,
   promoteStagedEntity: entityRow,
   appendEntityKeywords: entityRow,
