@@ -432,6 +432,33 @@ verified against the code first. Resolve with the slice each names.
   existing effect; the second keeps the mount stable for the keyboard
   handling around it. Surfaced resolving the failed-turn custody
   followup (2026-09-09).
+- **M6.3 — `setStoryLead` checks its target against
+  `stories.currentBranchId`, not the branch World shows.** The C5 lead
+  mutator (`lib/actions/stories/set-lead.ts`) reads "current branch" as
+  `stories.currentBranchId`, written only at create
+  (`lib/actions/stories/create-story.ts`), while World acts on the
+  route's `[branchId]`. A story has one branch today, so the two agree;
+  once switching lands, `Set as lead` on another branch's character is
+  refused as `wrong-branch`. Pass the caller's branch in, or have
+  switching write `currentBranchId`, which `openStory` already routes
+  through. Raised by Slice 4.2a against M7.2; routed from triage
+  2026-09-27, retargeted to the slice that makes it reachable.
+- **M6.3 — Whether `updating-memory` blocks branch switching.**
+  [`branch-navigator.md → During generation`](../ui/screens/reader-composer/branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked)
+  pauses switch, delete and create while the pill is active ("any
+  pipeline phase", line 116) and sends the user to wait or cancel from
+  `Send → Cancel` (lines 120-123). Its phase list doesn't name the
+  periodic classifier's `updating-memory`, which the pill now shows and
+  which can't be cancelled, so the rule either parks switching behind
+  an uncancellable pass or doesn't cover it. The list is stale beyond
+  that — it lacks `recalling-memory` and `refreshing-suggestions`, and
+  its `classifying` is the per-turn piggyback fallback — and a pass can
+  hold the pill for five minutes or more (`CALL_TIMEOUT_MS`, then
+  apply). Two shapes: exempt background phases, since the pass writes
+  only its own branch; or cancel it the way prose reversal does
+  (`awaitRunTerminal(PERIODIC_CLASSIFIER_KIND, branchId, 'cancel')`),
+  which discards a pass before its commit burst and lets one already
+  committing land. Routed from triage 2026-09-27.
 
 **Gates.** M5 (chapter-close writes that branches must respect
 need to exist first).
@@ -914,6 +941,36 @@ code before it moved; resolve with the slice it names.
   after a catalog refresh drops a model. Settle the wording with the
   providers tab, then fix (about 8 lines) with a play on a
   non-first-provider story. Raised 2026-09-22 by Slice 4.3.
+- **M7.2 — The lead mutator's store refresh and whole-blob
+  `definition` write.** `setStoryLead` (`lib/actions/stories/set-lead.ts`)
+  ignores `rehydrateStories`' result, where `updateStorySettings` throws
+  `StorySettingsStaleStoreError`. Harmless today: every lead reader goes
+  through `currentStoryStore`, which the mutator patches directly, but
+  this slice's lead picker reads the stories-store row. Throwing after
+  the committed write would report a `Set as lead` that succeeded as
+  failed, so settle the failure shape with the picker. The whole-blob
+  `definition` write should become `json_set`, as the periodic
+  classifier's status write already is, once this slice adds a second
+  concurrent `definition` writer; the wizard is the only other writer
+  and touches drafts only, which the mutator refuses. Raised by Slice
+  4.2a; routed from triage 2026-09-27.
+- **M7.2 — The classifier prompt has no token budget beyond
+  `classifierWindowMaxEntries`.** That knob bounds only the turns
+  block; the entity, happening and relationship lists grow unbounded
+  with the branch — every entity, staged and retired included, with its
+  full description — and `generateStructured` (`lib/ai/generate.ts`)
+  passes the rendered prompt straight to the provider with no length
+  guard. No memory doc sets a classifier-prompt budget;
+  [`architecture.md → Settings`](../architecture.md#settings-strict-types-defaults-at-load)
+  names app-scope "classifier truncation caps", of which only the entry
+  cap was built. A token-accurate budget needs the per-model input
+  window the window-level accounting entry above lacks, so the two land
+  together. A window-free interim (drop retired entities, cap each
+  description) is there if a long story reaches a provider's prompt
+  limit first, which today surfaces as a provider failure that spends
+  the retry budget toward `failed-persistent`. Revisit trigger: the
+  first long-story prompt-size or cost signal. Routed from triage
+  2026-09-27.
 
 **Gates.** M6 (settings should reflect real branching + multi-
 story behavior; diagnostics should inspect real branch-aware

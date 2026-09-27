@@ -72,28 +72,11 @@ slice-planning gate forces its resolution before that slice is planned.
   Unreachable today — the classifier writes no location parents.
   Revisit trigger: the classifier gains parent writes.
 
-- **C5 lead mutator follow-ups for M7.2.** "Current branch" is
-  `stories.currentBranchId` (written only at create) while World shows
-  the route's `[branchId]`; `rehydrateStories` is unchecked (Story
-  Settings reads the stories-store row); and the whole-blob
-  `definition` write should become `json_set` once M7 adds a
-  concurrent definition writer. Revisit trigger: M7.2 planning.
-
 - **i18n composition in World copy.** `overview.lastSeen` and
   `connections.ago` splice a pluralised span into "… ago" (breaks case
   in e.g. German), and `overview.within` is a joiner fragment. Per-tier
   whole-sentence keys fix it. Revisit trigger: the first non-English
   locale.
-
-- **Whether `updating-memory` blocks branch switching.**
-  [`branch-navigator.md → During generation`](../ui/screens/reader-composer/branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked)
-  pauses switch, delete and create while the pill is active ("any
-  pipeline phase", line 116) and sends the user to wait or cancel from
-  `Send → Cancel` (lines 120-123). Its phase list doesn't name the
-  periodic classifier's `updating-memory`, which the pill now shows and
-  which can't be cancelled, so the rule either parks switching behind
-  an uncancellable pass or doesn't cover it. Not reachable until M6
-  ships switching. Revisit trigger: M6 planning.
 
 - **A reversal can still drop a later user edit.** Reversing a machine
   write skips each column a later `user_edit` outside the reversed set
@@ -134,11 +117,3 @@ slice-planning gate forces its resolution before that slice is planned.
   builds Settings → Memory's `[Retry]` / `[Run classifier now]`
   ([`story-settings.md → Classifier`](../ui/screens/story-settings/story-settings.md#classifier)).
   Revisit trigger: M7.2 planning.
-
-- **The classifier prompt has no token budget beyond
-  `classifierWindowMaxEntries`.** That knob bounds only the turns
-  block; the entity, happening and relationship lists grow unbounded
-  with the branch, and `generateStructured` (`lib/ai/generate.ts`)
-  passes the rendered prompt straight to the provider with no length
-  guard. Revisit trigger: the first long-story prompt-size or cost
-  signal.
