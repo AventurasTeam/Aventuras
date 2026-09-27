@@ -10,6 +10,8 @@ import { cn } from '@/lib/utils'
 type ListRowProps = {
   /** Primary text — entity name, thread title, happening summary. */
   label: string
+  /** The row's accessible name, when the label alone can't tell two rows apart. */
+  accessibilityLabel?: string
   /**
    * Optional secondary line below the label — short blurb,
    * description, role label. Truncates to two lines when long.
@@ -55,6 +57,7 @@ type ListRowProps = {
 
 export function ListRow({
   label,
+  accessibilityLabel,
   description,
   leading,
   meta,
@@ -78,7 +81,7 @@ export function ListRow({
         disabled={!interactive}
         accessibilityRole={interactive ? 'button' : undefined}
         accessibilityHint={reason}
-        aria-label={label}
+        aria-label={accessibilityLabel ?? label}
         aria-selected={selected}
         className={cn(
           'relative flex-row items-center gap-3 px-row-x-md py-row-y-md',

@@ -79,12 +79,6 @@ slice-planning gate forces its resolution before that slice is planned.
   says the UI dims or badges retired participants. Revisit trigger: a
   dead character counted as present.
 
-- **Involvement row names.** World's Involvements rows are named by
-  the happening title only; titles can repeat, and the role (the
-  distinguishing part) sits in the description. A `ListRow` label
-  override would fix it. Revisit trigger: two involvements in
-  happenings with the same title.
-
 - **C5 lead mutator follow-ups for M7.2.** "Current branch" is
   `stories.currentBranchId` (written only at create) while World shows
   the route's `[branchId]`; `rehydrateStories` is unchecked (Story

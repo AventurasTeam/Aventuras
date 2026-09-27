@@ -155,6 +155,7 @@ const KAEL_LINKS: RelationshipLink[] = [MIRA_LINK, VORNE_LINK]
 const NO_LINKS: RelationshipLink[] = []
 const KAEL_INVOLVEMENTS: EntityInvolvement[] = [
   { id: 'hinv_1', happeningId: 'hap_fire', title: 'The market fire', role: 'witness' },
+  { id: 'hinv_2', happeningId: 'hap_fire_2', title: 'The market fire', role: null },
 ]
 const NO_INVOLVEMENTS: EntityInvolvement[] = []
 const ENTRY_INDEX: EntryIndex = new Map(
@@ -965,8 +966,11 @@ export const InvolvementsAndPlaceholders: Story = {
   play: async ({ args }) => {
     await userEvent.click(await screen.findByRole('tab', { name: /^Involvements/ }, WAIT))
     await expect(await screen.findByText('witness', {}, WAIT)).toBeVisible()
-    await userEvent.click(screen.getByRole('button', { name: 'The market fire' }))
+    // Same-titled rows are named apart by role.
+    await userEvent.click(screen.getByRole('button', { name: 'The market fire, witness' }))
     await expect(args.onOpenHappening).toHaveBeenCalledWith('hap_fire')
+    await userEvent.click(screen.getByRole('button', { name: 'The market fire, no role recorded' }))
+    await expect(args.onOpenHappening).toHaveBeenLastCalledWith('hap_fire_2')
     await userEvent.click(tab(/^Assets/))
     await expect(
       await screen.findByText('Assets land with the asset gallery pass', {}, WAIT),

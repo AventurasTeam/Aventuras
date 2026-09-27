@@ -310,6 +310,7 @@
   "involvements": {
     "empty": "No involvements yet.",
     "emptyBody": "The classifier writes these as happenings involve this entity; add them from a happening's Involvements tab.",
-    "noRole": "no role recorded"
+    "noRole": "no role recorded",
+    "rowName": "{{title}}, {{role}}"
   }
 }
