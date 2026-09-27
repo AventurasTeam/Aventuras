@@ -52,6 +52,8 @@ type EntityActionArgs = EntitySaveInput & {
   branchId: string
   /** The store's current row at Save (never the row at load); null in create mode. */
   row: Entity | null
+  /** The branch's entities at Save, for moving an item out of its other position. */
+  branchEntities: readonly Entity[]
   /** The row id — pre-generated in create mode so relationship writes can reference it. */
   id: string
   now: number
@@ -328,6 +330,61 @@ function relationshipActions(
   return actions
 }
 
+function heldItems(state: Pick<CharacterState, 'equipped_items' | 'inventory'>): string[] {
+  return [...(state.equipped_items ?? []), ...(state.inventory ?? [])]
+}
+
+/**
+ * data-model.md → ItemState: an item has one position. Holding it clears where it lay and
+ * takes it off every other holder; placing it takes it off every holder.
+ */
+function positionActions(args: EntityActionArgs): PipelineAction[] {
+  const { branchId, id, branchEntities } = args
+  const items = new Set<string>()
+  let clearLocation = false
+  if (args.kind === 'character') {
+    const before = new Set(heldItems(stateOf(args.row, 'character')))
+    for (const itemId of [...args.draft.equippedItems, ...args.draft.inventory])
+      if (!before.has(itemId)) items.add(itemId)
+    clearLocation = true
+  } else if (args.kind === 'item') {
+    const placed = args.draft.atLocationId
+    if (placed != null && placed !== (stateOf(args.row, 'item').at_location_id ?? null))
+      items.add(id)
+  }
+  if (items.size === 0) return []
+
+  const actions: PipelineAction[] = []
+  for (const other of branchEntities) {
+    if (other.kind !== 'character') continue
+    const state = other.state as CharacterState
+    const held = heldItems(state)
+    if (!held.some((itemId) => items.has(itemId))) continue
+    actions.push({
+      kind: 'updateEntityInventory',
+      source: 'user_edit',
+      payload: {
+        branchId,
+        id: other.id,
+        equipped_items: (state.equipped_items ?? []).filter((itemId) => !items.has(itemId)),
+        inventory: (state.inventory ?? []).filter((itemId) => !items.has(itemId)),
+      },
+    })
+  }
+  if (clearLocation) {
+    for (const item of branchEntities) {
+      if (!items.has(item.id) || item.kind !== 'item') continue
+      if ((item.state as ItemState).at_location_id == null) continue
+      actions.push({
+        kind: 'updateItemPosition',
+        source: 'user_edit',
+        payload: { branchId, id: item.id, atLocationId: null },
+      })
+    }
+  }
+  return actions
+}
+
 /** A create or the changed columns and state paths of an update, plus relationship writes. */
 export function entityActions(args: EntityActionArgs): PipelineAction[] {
   const { branchId, row, id, now, draft } = args
@@ -367,6 +424,7 @@ export function entityActions(args: EntityActionArgs): PipelineAction[] {
       })
     }
   }
+  actions.push(...positionActions(args))
   if (args.kind === 'character') {
     actions.push(
       ...relationshipActions(

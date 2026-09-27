@@ -35,6 +35,10 @@ declare module '@/lib/actions/action-map' {
       source: DeltaSource
       payload: { branchId: string; id: string; stackables: Record<string, number> }
     }
+    updateItemPosition: {
+      source: DeltaSource
+      payload: { branchId: string; id: string; atLocationId: string | null }
+    }
     updateEntityLocationTracking: {
       source: DeltaSource
       payload: {
@@ -183,6 +187,20 @@ export const updateEntityStackablesHandler: ActionHandler = async (action, branc
   if (!current)
     return { status: 'rejected', reason: `update target entities ${bid}:${id} not found` }
   return buildStatePatchOutcome(bid, id, current, { stackables }, ctx)
+}
+
+export const updateItemPositionHandler: ActionHandler = async (action, branchId, ctx) => {
+  if (action.kind !== 'updateItemPosition')
+    throw new Error(`handler/kind mismatch: expected 'updateItemPosition', got '${action.kind}'`)
+  const { branchId: bid, id, atLocationId } = action.payload
+  if (bid !== branchId)
+    return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
+  const current = await loadCurrent(bid, id, ctx)
+  if (!current)
+    return { status: 'rejected', reason: `update target entities ${bid}:${id} not found` }
+  if (current.kind !== 'item')
+    return { status: 'rejected', reason: `updateItemPosition target ${bid}:${id} is not an item` }
+  return buildStatePatchOutcome(bid, id, current, { at_location_id: atLocationId }, ctx)
 }
 
 export const updateEntityLocationTrackingHandler: ActionHandler = async (action, branchId, ctx) => {

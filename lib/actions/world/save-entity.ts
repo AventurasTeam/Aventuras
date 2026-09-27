@@ -1,5 +1,5 @@
 import type { Entity } from '@/lib/db'
-import { CAST_ID_PREFIX } from '@/lib/stores'
+import { CAST_ID_PREFIX, entitiesStore } from '@/lib/stores'
 import { entityActions, PARENT_CHAIN_BROKEN, PARENT_CYCLE, type EntitySaveInput } from '@/lib/world'
 
 import { commitRowSave, ROW_SAVE_REJECTION, type RowSaveResult } from '../row-save/commit-row-save'
@@ -23,7 +23,15 @@ export function saveEntity(args: SaveEntityArgs, ctx: DbCtx): Promise<EntitySave
       branchId: args.branchId,
       rowId: args.row?.id ?? null,
       idPrefix: CAST_ID_PREFIX[args.kind],
-      build: (id) => entityActions({ ...args, id, now: Date.now() }),
+      build: (id) =>
+        entityActions({
+          ...args,
+          id,
+          now: Date.now(),
+          branchEntities: [...entitiesStore.getEntities().values()].filter(
+            (e) => e.branchId === args.branchId,
+          ),
+        }),
     },
     ctx,
   )

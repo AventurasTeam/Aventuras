@@ -1,5 +1,5 @@
 import type { DeltaSource, PipelineAction } from '@/lib/actions'
-import type { CharacterState, Entity, EntryMetadata } from '@/lib/db'
+import type { CharacterState, Entity, EntryMetadata, ItemState } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { normalizeTerm } from '@/lib/keyword-terms'
 
@@ -131,20 +131,33 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
     }
   }
 
+  const release = (holderId: string, itemId: string) => {
+    const cur = currentInventory(holderId)
+    inventoryPatches.set(holderId, {
+      equipped_items: cur.equipped_items.filter((i) => i !== itemId),
+      inventory: cur.inventory.filter((i) => i !== itemId),
+    })
+  }
+  const holds = (holderId: string, itemId: string): boolean => {
+    if (!isCharacter(holderId)) return false
+    const cur = currentInventory(holderId)
+    return cur.equipped_items.includes(itemId) || cur.inventory.includes(itemId)
+  }
+  const pickedUp = new Set<string>()
   for (const item of block.transfers?.items ?? []) {
-    if (item.from !== undefined && isCharacter(item.from)) {
-      const cur = currentInventory(item.from)
-      inventoryPatches.set(item.from, {
-        equipped_items: cur.equipped_items.filter((i) => i !== item.id),
-        inventory: cur.inventory.filter((i) => i !== item.id),
-      })
-    }
+    if (item.from !== undefined && isCharacter(item.from)) release(item.from, item.id)
     if (item.to !== undefined && isCharacter(item.to)) {
+      // data-model.md → ItemState: an item has one position, so taking it moves it from
+      // wherever else it sits, whatever `from` named.
+      for (const holder of entities)
+        if (holder.id !== item.to && holds(holder.id, item.id)) release(holder.id, item.id)
       const cur = currentInventory(item.to)
+      const other = item.slot === 'equipped_items' ? 'inventory' : 'equipped_items'
       inventoryPatches.set(item.to, {
-        ...cur,
+        [other]: cur[other].filter((i) => i !== item.id),
         [item.slot]: [...cur[item.slot].filter((i) => i !== item.id), item.id],
-      })
+      } as { equipped_items: string[]; inventory: string[] })
+      pickedUp.add(item.id)
     }
   }
   for (const [id, patch] of inventoryPatches) {
@@ -155,6 +168,15 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
         payload: { branchId, id, ...patch },
       })
     }
+  }
+  for (const id of pickedUp) {
+    const item = byId.get(id)
+    if (item?.kind === 'item' && (item.state as ItemState).at_location_id != null)
+      actions.push({
+        kind: 'updateItemPosition',
+        source,
+        payload: { branchId, id, atLocationId: null },
+      })
   }
 
   // Stackable transfers

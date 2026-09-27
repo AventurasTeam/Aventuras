@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { Entity } from '@/lib/db'
+import type { CharacterState, Entity } from '@/lib/db'
 
 import { buildPiggybackActions } from './apply'
 import { parseStateBlock } from './parse'
@@ -416,6 +416,89 @@ describe('buildPiggybackActions', () => {
         payload: { branchId: 'main', id: 'char_1', stackables: { gold: 8 } },
       },
     ])
+  })
+
+  describe('one position per item', () => {
+    const holding = (id: string, over: Partial<CharacterState>) =>
+      mockEntity({
+        id,
+        state: {
+          visual: {},
+          traits: [],
+          drives: [],
+          current_location_id: null,
+          equipped_items: [],
+          inventory: [],
+          stackables: {},
+          faction_id: null,
+          lastSeenAt: null,
+          ...over,
+        },
+      })
+    const run = (block: ParsedStateBlock, entities: Entity[]) =>
+      buildPiggybackActions({
+        source: 'ai_classifier',
+        entryId: 'entry_1',
+        block,
+        entities,
+        previousMetadata,
+        branchId: 'main',
+      }).actions
+
+    it('takes the item off a holder `from` did not name and clears where it lay', () => {
+      const rope = mockEntity({
+        id: 'item_rope',
+        kind: 'item',
+        state: { at_location_id: 'loc_hollow' },
+      })
+      const actions = run(
+        {
+          transfers: {
+            items: [{ id: 'item_rope', to: 'char_2', slot: 'inventory' }],
+            stackables: [],
+          },
+        },
+        [holding('char_2', {}), holding('char_3', { inventory: ['item_rope', 'item_key'] }), rope],
+      )
+      expect(
+        actions.filter((a) => a.kind !== 'updateEntityInventory' || a.payload.id !== 'char_2'),
+      ).toEqual([
+        {
+          kind: 'updateEntityInventory',
+          source: 'ai_classifier',
+          payload: { branchId: 'main', id: 'char_3', equipped_items: [], inventory: ['item_key'] },
+        },
+        {
+          kind: 'updateItemPosition',
+          source: 'ai_classifier',
+          payload: { branchId: 'main', id: 'item_rope', atLocationId: null },
+        },
+      ])
+    })
+
+    it("moves an item between one holder's slots instead of listing it in both", () => {
+      const actions = run(
+        {
+          transfers: {
+            items: [{ id: 'item_blade', to: 'char_2', slot: 'equipped_items' }],
+            stackables: [],
+          },
+        },
+        [holding('char_2', { inventory: ['item_blade'] })],
+      )
+      expect(actions).toEqual([
+        {
+          kind: 'updateEntityInventory',
+          source: 'ai_classifier',
+          payload: {
+            branchId: 'main',
+            id: 'char_2',
+            equipped_items: ['item_blade'],
+            inventory: [],
+          },
+        },
+      ])
+    })
   })
 
   it('handles stackable transfers and key removal when amount reaches zero', () => {

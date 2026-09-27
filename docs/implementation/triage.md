@@ -54,16 +54,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **What a user edit should do to an item's other position.** World's
-  Carrying and Connections editors (Slice 4.2a) write only the row being
-  edited, so linking an item that lies `at` a location into a character's
-  Carrying, or into a second character's, leaves the item in two places;
-  the panes show both facts rather than fixing either. Canon specifies
-  transfers only for classifier writes, and
-  [`data-model.md → ItemState`](../data-model.md#itemstate-shape) has no
-  user-edit rule. Revisit trigger: users hitting double-positioned items,
-  or the prompt context rendering one item as both loose and held.
-
 - **A recurring classifier failure reaches `failed-persistent`
   invisibly.** The backoff
   ([`classifier.md → Auto-retry policy`](../memory/classifier.md#auto-retry-policy))

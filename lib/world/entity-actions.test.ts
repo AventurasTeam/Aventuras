@@ -69,6 +69,7 @@ function remove(id: string) {
 
 function update(draft: ReturnType<typeof characterDraftFrom>, links = [MIRA_LINK]) {
   return entityActions({
+    branchEntities: [],
     kind: 'character',
     row: KAEL,
     keywordsBase: KAEL.keywords,
@@ -158,6 +159,7 @@ describe('entityActions — update', () => {
     const draft = { ...itemDraftFrom(rope), condition: '' }
     expect(
       entityActions({
+        branchEntities: [],
         kind: 'item',
         row: rope,
         keywordsBase: rope.keywords,
@@ -189,6 +191,7 @@ describe('entityActions — update', () => {
     const draft = { ...factionDraftFrom(guild), agenda: [] }
     expect(
       entityActions({
+        branchEntities: [],
         kind: 'faction',
         row: guild,
         keywordsBase: guild.keywords,
@@ -208,6 +211,7 @@ describe('entityActions — update', () => {
   it('refuses a row saved as another kind', () => {
     expect(() =>
       entityActions({
+        branchEntities: [],
         kind: 'location',
         row: KAEL,
         keywordsBase: KAEL.keywords,
@@ -286,6 +290,7 @@ describe('entityActions — relationships, three-way', () => {
     base: readonly RelationshipLink[],
   ) {
     return entityActions({
+      branchEntities: [],
       kind: 'character',
       row: KAEL,
       keywordsBase: KAEL.keywords,
@@ -404,6 +409,7 @@ describe('entityActions — create', () => {
     const draft = { ...locationDraftFrom(null), name: ' The Salt Wells ' }
     expect(
       entityActions({
+        branchEntities: [],
         kind: 'location',
         row: null,
         keywordsBase: [],
@@ -441,6 +447,7 @@ describe('entityActions — create', () => {
 
   it('creates an untouched character over the empty character state', () => {
     const actions = entityActions({
+      branchEntities: [],
       kind: 'character',
       row: null,
       keywordsBase: [],
@@ -466,6 +473,7 @@ describe('entityActions — create', () => {
       ],
     }
     const actions = entityActions({
+      branchEntities: [],
       kind: 'character',
       row: null,
       keywordsBase: [],
@@ -496,6 +504,7 @@ describe('entityActions — keywords against the stored list', () => {
   const savedKeywords = (stored: string[], base: string[], draft: string[]) => {
     const row = place(stored)
     const [action] = entityActions({
+      branchEntities: [],
       kind: 'location',
       row,
       draft: { ...locationDraftFrom(row), keywords: draft },
@@ -532,5 +541,100 @@ describe('entityActions — keywords against the stored list', () => {
 
   it('writes nothing when the merge leaves the stored list as it is', () => {
     expect(savedKeywords(['a', 'z'], ['a'], ['a', 'z'])).toBeUndefined()
+  })
+})
+
+describe('one position per item', () => {
+  const MIRA: Entity = {
+    ...KAEL,
+    id: 'char_mira',
+    name: 'Mira',
+    state: { ...KAEL_STATE, equipped_items: [], inventory: ['item_rope', 'item_key'] },
+  }
+  const ROPE: Entity = {
+    ...KAEL,
+    id: 'item_rope',
+    kind: 'item',
+    name: 'Rope',
+    state: { at_location_id: 'loc_hollow' },
+  }
+  const BLADE: Entity = {
+    ...ROPE,
+    id: 'item_blade',
+    name: 'Blade',
+    state: { at_location_id: null },
+  }
+  const positions = (actions: ReturnType<typeof entityActions>) =>
+    actions.filter((a) => a.kind === 'updateItemPosition' || a.kind === 'updateEntityInventory')
+
+  it('takes an item a character picks up off its other holder and out of where it lay', () => {
+    const draft = { ...characterDraftFrom(KAEL, []), inventory: ['item_rope'] }
+    expect(
+      positions(
+        entityActions({
+          branchEntities: [KAEL, MIRA, ROPE, BLADE],
+          kind: 'character',
+          row: KAEL,
+          keywordsBase: KAEL.keywords,
+          draft,
+          relationships: [],
+          relationshipsBase: [],
+          ...AT,
+        }),
+      ),
+    ).toStrictEqual([
+      {
+        kind: 'updateEntityInventory',
+        source: 'user_edit',
+        payload: { branchId: 'br_1', id: 'char_mira', equipped_items: [], inventory: ['item_key'] },
+      },
+      {
+        kind: 'updateItemPosition',
+        source: 'user_edit',
+        payload: { branchId: 'br_1', id: 'item_rope', atLocationId: null },
+      },
+    ])
+  })
+
+  it('leaves an item the character already held where the other rows put it', () => {
+    const doubled: Entity = { ...MIRA, state: { ...KAEL_STATE, equipped_items: ['item_blade'] } }
+    const draft = { ...characterDraftFrom(KAEL, []), traits: ['bold'] }
+    expect(
+      positions(
+        entityActions({
+          branchEntities: [KAEL, doubled, BLADE],
+          kind: 'character',
+          row: KAEL,
+          keywordsBase: KAEL.keywords,
+          draft,
+          relationships: [],
+          relationshipsBase: [],
+          ...AT,
+        }),
+      ),
+    ).toStrictEqual([])
+  })
+
+  it('takes an item placed at a location off every holder', () => {
+    const draft = { ...itemDraftFrom(BLADE), atLocationId: 'loc_hollow' }
+    expect(
+      positions(
+        entityActions({
+          branchEntities: [KAEL, MIRA, BLADE],
+          kind: 'item',
+          row: BLADE,
+          keywordsBase: BLADE.keywords,
+          draft,
+          ...AT,
+          id: 'item_blade',
+        }),
+      ),
+    ).toStrictEqual([
+      {
+        kind: 'updateEntityInventory',
+        source: 'user_edit',
+        payload: { branchId: 'br_1', id: 'char_kael', equipped_items: [], inventory: [] },
+      },
+    ])
   })
 })

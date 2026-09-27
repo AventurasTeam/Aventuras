@@ -789,6 +789,17 @@ back-pointer on item to drift against. Cost: "who holds the silver
 coin?" requires scanning characters' equipped + inventory arrays.
 Acceptable for v1 scale; FTS5 upgrade applies if it bites.
 
+**One position per item.** An item lies at one location or sits in one
+character's `equipped_items` or `inventory`, never several. Every
+writer moves it rather than adding a second position: putting it in a
+holder's slot removes it from the holder's other slot and from every
+other holder, and clears `at_location_id`; setting `at_location_id`
+removes it from every holder. The piggyback `transfers` writer applies
+this whatever `from` names, and a World Save applies it to the items
+the Save newly holds or places, touching the other rows in the same
+action. A row left doubled by an older write is shown as it stands
+until one of those writes moves the item.
+
 **Why so few fields.** What an item _is_ (type, material, properties,
 magical traits, history, value) fits cleanly in description prose.
 Position and dynamic condition are the two things that genuinely
