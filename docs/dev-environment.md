@@ -19,11 +19,11 @@ each get their own.
 Slots are **off unless a machine opts in** through
 `AVENTURAS_DEV_SLOT`:
 
-| Value      | Effect                                                    |
-| ---------- | --------------------------------------------------------- |
-| unset / "" | Slot 0: the ports and `userData` the tooling always used. |
-| `auto`     | The worktree claims a slot from 1 to 9 and keeps it.      |
-| `0`-`9`    | That slot, with no claim. For manual use.                 |
+| Value      | Effect                                                                                |
+| ---------- | ------------------------------------------------------------------------------------- |
+| unset / "" | Slot 0: the ports and `userData` the tooling always used.                             |
+| `auto`     | A worktree claims a slot from 1 to 9 and keeps it; the main checkout stays on slot 0. |
+| `0`-`9`    | That slot, with no claim. For manual use.                                             |
 
 Leaving it unset keeps a developer machine unchanged: every worktree
 shares slot 0 and the one dev DB, as before.
@@ -59,7 +59,9 @@ Under `auto`, a worktree claims the lowest free slot the first time
 any slot-aware command runs, and records it in
 `<git-common-dir>/aventuras-dev-slots/`, shared by every worktree of
 the clone. The claim is keyed on the worktree path, so it survives
-restarts. A slot whose worktree has been removed, or deleted without
+restarts. The main checkout never claims and stays on slot 0: it is
+the machine's own working copy rather than a worker, and it is never
+removed, so a claim would hold its slot for good. A slot whose worktree has been removed, or deleted without
 git, is free again, and handing it over **wipes its `userData`**: the
 last branch's DB may carry migrations the next one does not know.
 Slot data is disposable; `pnpm db:seed` refills it.
