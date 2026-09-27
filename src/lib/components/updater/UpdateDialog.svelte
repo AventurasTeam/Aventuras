@@ -50,7 +50,7 @@
     unpackaged:
       'This is an unpackaged development build, so Aventuras will not install over it — on Linux that would replace the binary you just built. The releases page will open in your browser instead.',
     'mobile-platform':
-      'Aventuras cannot install its own updates on Android. The download will open in your browser.',
+      'Aventuras cannot install its own updates on Android or iOS. The download will open in your browser.',
   }
 
   const HANDED_OFF_NOTES: Record<ManualInstallReason, string> = {
@@ -58,7 +58,7 @@
       'The releases page has opened in your browser. Download the new .deb and install it to finish updating.',
     unpackaged: 'The releases page has opened in your browser.',
     'mobile-platform':
-      'The download has opened in your browser. Once it finishes, open the file to install the update — Android will ask you to confirm.',
+      'The download has opened in your browser. Once it finishes, open the file to install the update — Android will ask you to confirm. iOS requires you to sideload the .ipa again.',
   }
 
   const manualInstallNote = $derived(
