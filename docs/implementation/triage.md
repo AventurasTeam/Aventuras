@@ -64,14 +64,6 @@ slice-planning gate forces its resolution before that slice is planned.
   user-edit rule. Revisit trigger: users hitting double-positioned items,
   or the prompt context rendering one item as both loose and held.
 
-- **Classifier parent-cycle refusals aren't a recoverable error yet.**
-  [`data-model.md → LocationState`](../data-model.md#locationstate-shape)
-  says a refused classifier write surfaces as a phase-level
-  `recoverable_error`, but `orchestrator.ts` treats every non-noop
-  rejection as `ActionRejectedError`, failing the run instead.
-  Unreachable today — the classifier writes no location parents.
-  Revisit trigger: the classifier gains parent writes.
-
 - **i18n composition in World copy.** `overview.lastSeen` and
   `connections.ago` splice a pluralised span into "… ago" (breaks case
   in e.g. German), and `overview.within` is a joiner fragment. Per-tier
