@@ -12,7 +12,9 @@ const electronArgs =
     ? []
     : [
         `--remote-debugging-port=${ports.devtools}`,
-        `--user-data-dir=${JSON.stringify(dataDir)}`,
+        // The command runs through a shell; a quoted-in path could still expand `$` or backticks,
+        // while a substituted variable arrives verbatim.
+        '--user-data-dir="$AVENTURAS_USER_DATA_DIR"',
         '--aventuras-no-devtools-window',
       ]
 
@@ -31,7 +33,7 @@ const { result } = concurrently(
         'pnpm electron:compile',
         ['electron electron/dist/main.js', ...electronArgs].join(' '),
       ].join(' && '),
-      env: { EXPO_WEB_URL: web },
+      env: { EXPO_WEB_URL: web, AVENTURAS_USER_DATA_DIR: dataDir },
       prefixColor: 'magenta',
     },
   ],
