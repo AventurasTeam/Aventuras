@@ -17,9 +17,10 @@ happened_.
   with **no Apple certificates, provisioning profiles, or signing secrets** anywhere.
 - **Zero regressions** to the existing platforms: Windows (`nsis`), Linux (`.deb`,
   `.AppImage`, `.rpm`), Android (signed `.apk`), macOS desktop (`.dmg`, Intel + ARM64).
-- Keep changes minimal and iOS-specific. In the end, **no file under `src-tauri/` was
-  modified at all** — no `Cargo.toml`, no `Cargo.lock`, no `tauri.conf.json`, no
-  capabilities, no Rust sources.
+- Keep changes minimal and iOS-specific. In the end, **no existing file under `src-tauri/` was
+  modified** — no `Cargo.toml`, no `Cargo.lock`, no `tauri.conf.json`, no capabilities, no Rust
+  sources. `src-tauri/Info.ios.plist` and `src-tauri/icons/ios/` were added, both new,
+  iOS-only files the CLI only reads for an iOS build (see §4).
 
 ## 2. The compatibility audit (what was already iOS-ready)
 
@@ -156,6 +157,22 @@ then smoke-test the full unsigned build and upload the test `.ipa`.
   (timeout, semver comparison, `manualInstallReason: 'mobile-platform'`) was already
   platform-agnostic.
 
+### New `src-tauri/` files
+
+- **`src-tauri/Info.ios.plist`** — see §4, item 4. Read only by `tauri ios *` commands.
+- **`src-tauri/icons/ios/`** — the full iOS icon set (`AppIcon-*.png`), consumed by
+  `scripts/sync-ios-icons.sh` into a freshly initialised `gen/apple` scaffold. Read only by
+  that script.
+- **`src-tauri/tauri.ios.conf.json`** — a Tauri v2 platform-config override, merged
+  automatically for every `tauri ios *` command (unlike `tauri.release.conf.json`, which only
+  applies when passed explicitly via `--config`). Sets `bundle.iOS.minimumSystemVersion` to
+  `16.4` (the frontend's actual WebKit floor — Tailwind v4's `@property`/cascade-layer usage
+  and `color-mix()` need it; Tauri's own default is lower) and empties `build.features`, so
+  the devtools-feature workaround below (§7) is no longer needed by hand.
+
+None of the three is referenced by, or changes the output of, a Windows, Linux, macOS-desktop
+or Android build.
+
 ### Docs
 
 - `docs/development/release.md`: "Building iOS" section, workflow list, runner-pinning
@@ -169,9 +186,10 @@ then smoke-test the full unsigned build and upload the test `.ipa`.
 ## 5. What deliberately did NOT change
 
 `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json`,
-`src-tauri/capabilities/`, and every Rust source. The regression surface for the five
-existing platforms is limited to three additive YAML job blocks and two additive TS
-branches guarded by user-agent checks.
+`src-tauri/capabilities/`, and every existing Rust source. The regression surface for the
+five existing platforms is limited to three additive YAML job blocks, two additive TS
+branches guarded by user-agent checks, and two new iOS-only files under `src-tauri/`
+(`Info.ios.plist`, `icons/ios/`) that no other platform's build reads.
 
 ## 6. Every CI failure, in order — and what each taught
 
@@ -226,8 +244,11 @@ all bundles had already succeeded; nothing in the iOS work touches that path.
   existing `unsupported` error kind covers any future platform gap.
 - **No background generation on iOS.** Android's `GenerationForegroundService` has no
   iOS equivalent (the Android-only Kotlin/bridge code is inert on iOS).
-- **Local `tauri ios dev`** requires `--config src-tauri/tauri.release.conf.json` to
-  drop the desktop-only devtools feature.
+- **Local `tauri ios dev`** used to require `--config src-tauri/tauri.release.conf.json` to
+  drop the desktop-only devtools feature; `src-tauri/tauri.ios.conf.json` (§4) now does this
+  automatically for every iOS command. The explicit `--config` flag still works and is
+  harmless to keep using, but should no longer be necessary — this has not been confirmed on
+  an actual `tauri ios dev` run, only against the CLI's documented config-merging behavior.
 - **Simulator builds** (`aarch64-sim`) are possible with the same script but are not
   wired into CI; only the device target is built.
 - **The committed `gen/apple` scaffold is still pending** — CI currently self-heals via

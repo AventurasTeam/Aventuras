@@ -16,6 +16,7 @@
     supportsDialogueVoice,
   } from '$lib/services/ai/utils/ttsText'
   import TTSVoiceSelector from './TTSVoiceSelector.svelte'
+  import { isIos } from '$lib/utils/platform'
 
   const PREVIEW_TEXT =
     'This is a preview of the selected voice. The story narration will sound like this.'
@@ -496,9 +497,19 @@
         <div>
           <Label>Volume Override</Label>
           <p class="text-muted-foreground text-xs">Manually control TTS narration volume.</p>
+          {#if isIos()}
+            <!-- iOS ignores HTMLMediaElement.volume by design, so this control has nothing to
+                 act on there -- only the hardware volume buttons change loudness. Disabled
+                 below rather than hidden, so a value set on another platform stays visible. -->
+            <p class="text-muted-foreground text-xs italic">
+              iOS does not allow apps to set playback volume in software; use the volume buttons
+              instead.
+            </p>
+          {/if}
         </div>
         <Switch
           checked={settings.systemServicesSettings.tts.volumeOverride}
+          disabled={isIos()}
           onCheckedChange={(v) => {
             settings.systemServicesSettings.tts.volumeOverride = v
             settings.saveSystemServicesSettings()
@@ -517,6 +528,7 @@
               settings.systemServicesSettings.tts.volume = v
               settings.saveSystemServicesSettings()
             }}
+            disabled={isIos()}
             type="single"
             min={0}
             max={1}

@@ -21,6 +21,7 @@
   } from '$lib/services/updater'
   import { updateNotifier } from '$lib/stores/updateNotifier.svelte'
   import { parseMarkdown } from '$lib/utils/markdown'
+  import { isIos } from '$lib/utils/platform'
 
   type Phase = 'idle' | 'downloading' | 'installed' | 'handedOff' | 'error'
 
@@ -61,10 +62,25 @@
       'The download has opened in your browser. Once it finishes, open the file to install the update — Android will ask you to confirm. iOS requires you to sideload the .ipa again.',
   }
 
+  // The iOS .ipa is unsigned by design (see docs/development/ios-build-target.md), so
+  // opening it in Safari just downloads a file Files.app cannot install -- it needs a
+  // sideloading tool. Android's install path (tap the .apk, confirm the system prompt)
+  // stays on the shared copy above.
+  const IOS_MOBILE_INSTALL_NOTE =
+    'Aventuras cannot install its own updates on iOS, and the download is an unsigned .ipa — Safari can only save it. Installing it needs a sideloading tool such as AltStore, Sideloadly or TrollStore.'
+  const IOS_MOBILE_HANDED_OFF_NOTE =
+    'The .ipa has downloaded to your device. It is unsigned, so opening it in Files will not install it — use a sideloading tool such as AltStore, Sideloadly or TrollStore.'
+
   const manualInstallNote = $derived(
-    MANUAL_INSTALL_NOTES[info?.manualInstallReason ?? 'mobile-platform'],
+    info?.manualInstallReason === 'mobile-platform' && isIos()
+      ? IOS_MOBILE_INSTALL_NOTE
+      : MANUAL_INSTALL_NOTES[info?.manualInstallReason ?? 'mobile-platform'],
   )
-  const handedOffNote = $derived(HANDED_OFF_NOTES[info?.manualInstallReason ?? 'mobile-platform'])
+  const handedOffNote = $derived(
+    info?.manualInstallReason === 'mobile-platform' && isIos()
+      ? IOS_MOBILE_HANDED_OFF_NOTE
+      : HANDED_OFF_NOTES[info?.manualInstallReason ?? 'mobile-platform'],
+  )
 
   const releasedOn = $derived.by(() => {
     if (!info?.date) return null
