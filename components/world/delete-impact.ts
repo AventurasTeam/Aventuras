@@ -8,7 +8,14 @@ import type {
 import { resolveHeadTurn } from '@/lib/head-turn'
 import { entityDeleteActions } from '@/lib/world'
 
-import type { EntityDeleteImpact } from './delete-copy'
+export type EntityDeleteImpact = {
+  awareness: number
+  involvements: number
+  relationships: number
+  references: number
+  unplacedItems: number
+  tailScene: boolean
+}
 
 type ImpactInput = {
   branchId: string
@@ -27,7 +34,12 @@ function count<T>(rows: Iterable<T>, match: (row: T) => boolean): number {
   return n
 }
 
-/** The confirm's counts, from the same builder the delete runs (`entityDeleteActions`). */
+/**
+ * The confirm's counts. `references` / `unplacedItems` / `tailScene` come straight from
+ * `entityDeleteActions` (the same builder the delete runs); `awareness` / `involvements` /
+ * `relationships` repeat its cascade's predicates against the stores it doesn't touch directly —
+ * a new cascade table needs a matching count here.
+ */
 export function entityDeleteImpact({
   branchId,
   row,

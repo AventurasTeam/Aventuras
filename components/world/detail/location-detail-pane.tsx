@@ -11,11 +11,12 @@ import {
   type LocationDraft,
 } from '@/lib/world'
 
+import { deleteDisabledReason } from '../delete-copy'
 import { LocationConnections } from '../tabs/connections-tab'
 import { LocationIdentity } from '../tabs/identity-tab'
 import { SettingsTab } from '../tabs/settings-tab'
 import { useEntityRowSession } from '../use-entity-row-session'
-import { deleteDisabledReason, entityFieldLabel, entityIssueText } from '../world-copy'
+import { entityFieldLabel, entityIssueText } from '../world-copy'
 import { OverviewTab, TrailingTabs } from './common-tabs'
 import { asBaseControl, EntityDetailFrame, useEntityTab } from './entity-detail-frame'
 import type { EntityPaneProps } from './entity-pane-props'

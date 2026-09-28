@@ -5,18 +5,13 @@ import { useWatch } from 'react-hook-form'
 import { TabsContent } from '@/components/ui/tabs'
 import { characterDraftFrom, characterDraftSchema, stateOf, type CharacterDraft } from '@/lib/world'
 
+import { deleteDisabledReason } from '../delete-copy'
 import { CarryingTab } from '../tabs/carrying-tab'
 import { CharacterConnections } from '../tabs/connections-tab'
 import { CharacterIdentity } from '../tabs/identity-tab'
 import { SettingsTab } from '../tabs/settings-tab'
 import { useEntityRowSession } from '../use-entity-row-session'
-import {
-  deleteDisabledReason,
-  entityFieldLabel,
-  entityIssueText,
-  lastSeenLine,
-  leadDisabledReason,
-} from '../world-copy'
+import { entityFieldLabel, entityIssueText, lastSeenLine, leadDisabledReason } from '../world-copy'
 import { OverviewTab, TrailingTabs } from './common-tabs'
 import { asBaseControl, EntityDetailFrame, useEntityTab } from './entity-detail-frame'
 import type { EntityPaneProps } from './entity-pane-props'

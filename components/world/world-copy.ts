@@ -172,6 +172,21 @@ export function loreFieldLabel(field: string): string {
 type LeadEntry = { onSetLead: () => void; disabledReason?: string }
 type RemoveEntry = { onDelete: () => void; disabledReason?: string }
 
+/** The `Delete …` entry both entity and lore menus share, or none while there's no row yet. */
+function deleteEntry(label: string, remove: RemoveEntry | undefined): OverflowMenuEntry[] {
+  if (remove == null) return []
+  return [
+    {
+      key: 'delete',
+      label,
+      destructive: true,
+      disabled: remove.disabledReason != null,
+      disabledReason: remove.disabledReason,
+      onPress: remove.onDelete,
+    },
+  ]
+}
+
 /** world.md → Detail head structure. */
 export function entityMenuEntries(
   kind: EntityKind,
@@ -199,18 +214,7 @@ export function entityMenuEntries(
       onPress: () => {},
     },
     { key: 'json', label: t('world:detail.menu.viewJson'), onPress: onViewJson },
-    ...(remove == null
-      ? []
-      : [
-          {
-            key: 'delete',
-            label: t('world:detail.menu.deleteEntity'),
-            destructive: true,
-            disabled: remove.disabledReason != null,
-            disabledReason: remove.disabledReason,
-            onPress: remove.onDelete,
-          },
-        ]),
+    ...deleteEntry(t('world:detail.menu.deleteEntity'), remove),
   ]
 }
 
@@ -231,31 +235,8 @@ export function loreMenuEntries({
       onPress: () => {},
     },
     { key: 'json', label: t('world:detail.menu.viewJson'), onPress: onViewJson },
-    ...(remove == null
-      ? []
-      : [
-          {
-            key: 'delete',
-            label: t('world:detail.menu.deleteLore'),
-            destructive: true,
-            disabled: remove.disabledReason != null,
-            disabledReason: remove.disabledReason,
-            onPress: remove.onDelete,
-          },
-        ]),
+    ...deleteEntry(t('world:detail.menu.deleteLore'), remove),
   ]
-}
-
-/** Why `Delete entity` is unavailable for this row, or undefined when it is available. */
-export function deleteDisabledReason(
-  row: Entity,
-  leadId: string | null,
-  blocked: boolean,
-  blockedReason?: string,
-): string | undefined {
-  if (blocked) return blockedReason ?? t('common:generationGate.inFlight')
-  if (row.id === leadId) return t('world:delete.leadReason')
-  return undefined
 }
 
 /** Why `Set as lead` is unavailable for this committed row, or undefined when it is. */

@@ -3,14 +3,7 @@ import { ENTITY_DELETE_CODES } from '@/lib/actions'
 import type { Entity, Lore } from '@/lib/db'
 import { t } from '@/lib/i18n'
 
-export type EntityDeleteImpact = {
-  awareness: number
-  involvements: number
-  relationships: number
-  references: number
-  unplacedItems: number
-  tailScene: boolean
-}
+import type { EntityDeleteImpact } from './delete-impact'
 
 /** world.md → Delete: what goes with an entity, before the user confirms. */
 export function entityDeleteCopy(row: Entity, impact: EntityDeleteImpact): DeleteConfirmCopy {
@@ -47,4 +40,16 @@ export function deleteRejectionText(code: string | undefined): string {
   if (code === ENTITY_DELETE_CODES.inFlight) return t('world:delete.inFlight')
   if (code === ENTITY_DELETE_CODES.leadEntity) return t('world:delete.leadReason')
   return t('world:delete.failed')
+}
+
+/** Why `Delete entity` is unavailable for this row, or undefined when it is available. */
+export function deleteDisabledReason(
+  row: Entity,
+  leadId: string | null,
+  blocked: boolean,
+  blockedReason?: string,
+): string | undefined {
+  if (blocked) return blockedReason ?? t('common:generationGate.inFlight')
+  if (row.id === leadId) return t('world:delete.leadReason')
+  return undefined
 }
