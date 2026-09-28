@@ -222,7 +222,9 @@ convention, and the expectation that subsystems route through
   already landed), `entity_saved_handler_failed`
   (`components/world/use-entity-row-session.ts` — its World twin,
   an `EntityRowSessionOptions.onSaved` that throws after the write
-  already landed), `world_set_lead_failed` (`app/world/[branchId].tsx`
+  already landed), `lore_saved_handler_failed`
+  (`components/world/use-lore-row-session.ts` — the lore pane's
+  twin), `world_set_lead_failed` (`app/world/[branchId].tsx`
   — a `⋯ → Set as lead` whose `setStoryLead` threw rather than
   refused), `plot_link_revalidate_failed`
   (`components/plot/link-card.tsx` — the revalidation after a link row's
