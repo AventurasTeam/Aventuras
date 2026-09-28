@@ -42,4 +42,17 @@ export function wrapComposerText(rawText: string, opts: WrapOptions): string {
   return `*${text}* ${subject} thought.`
 }
 
+/**
+ * Whether do / say / think can wrap right now: the first-person wrap says "I" and needs
+ * no lead, so only a non-first wrap with an unresolved lead disables the modes.
+ */
+export function composerModesUnavailableReason(
+  modesEnabled: boolean,
+  pov: ComposerWrapPov,
+  leadName: string | null,
+  reason: string,
+): string | undefined {
+  return modesEnabled && pov !== 'first' && leadName == null ? reason : undefined
+}
+
 export type { WrapOptions as ComposerWrapOptions }

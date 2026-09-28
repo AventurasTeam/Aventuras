@@ -68,7 +68,7 @@ import {
   storiesStore,
 } from '@/lib/stores'
 import { toast } from '@/lib/toast'
-import { branchWorldTime, type EntitySaveInput, type LoreDraft } from '@/lib/world'
+import { branchWorldTime, resolveLead, type EntitySaveInput, type LoreDraft } from '@/lib/world'
 
 const ctx = { db, runInTransaction }
 
@@ -145,7 +145,10 @@ export default function WorldRoute() {
   const calendar = useMemo(() => resolveCalendar(calendarId), [calendarId])
   const signals = useRowSignals(branchId)
   const collisions = useMemo(() => deriveCollisions(entities), [entities])
-  const leadId = open?.definition.leadEntityId ?? null
+  const leadId = useMemo(
+    () => resolveLead(open?.definition.leadEntityId, entityRows, branchId)?.id ?? null,
+    [open, entityRows, branchId],
+  )
   const leadLabel =
     open == null ? null : open.definition.mode === 'adventure' ? 'you' : 'protagonist'
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { wrapComposerText } from './index'
+import { composerModesUnavailableReason, wrapComposerText } from './index'
 
 describe('wrapComposerText', () => {
   it('wraps Do in first person verbatim', () => {
@@ -57,5 +57,23 @@ describe('wrapComposerText', () => {
     expect(
       wrapComposerText('reach for the blade.', { mode: 'do', pov: 'first', leadName: 'Aria' }),
     ).toBe('I reach for the blade.')
+  })
+})
+
+describe('composerModesUnavailableReason', () => {
+  it('returns the reason for a third-person wrap with no resolved lead', () => {
+    expect(composerModesUnavailableReason(true, 'third', null, 'no lead')).toBe('no lead')
+  })
+
+  it('returns undefined for a first-person wrap even with no resolved lead', () => {
+    expect(composerModesUnavailableReason(true, 'first', null, 'no lead')).toBeUndefined()
+  })
+
+  it('returns undefined once the lead resolves', () => {
+    expect(composerModesUnavailableReason(true, 'third', 'Aria', 'no lead')).toBeUndefined()
+  })
+
+  it('returns undefined when modes are not enabled at all', () => {
+    expect(composerModesUnavailableReason(false, 'third', null, 'no lead')).toBeUndefined()
   })
 })

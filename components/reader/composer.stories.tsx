@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { createRef } from 'react'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
-import { Composer } from './composer'
+import { Composer, type ComposerHandle } from './composer'
 
 const meta = {
   title: 'Compounds/Reader/Composer',
@@ -75,5 +76,32 @@ export const EmptyDraftDoesNotSend: Story = {
     // (rn-primitives doesn't reliably block disabled clicks on web).
     expect(getComputedStyle(send).pointerEvents).toBe('none')
     expect(args.onSend).not.toHaveBeenCalled()
+  },
+}
+
+const leadMissingRef = createRef<ComposerHandle>()
+
+/** A dangling lead leaves the third-person wrap with no subject: modes disable, sends go free. */
+export const LeadMissing: Story = {
+  args: {
+    modesEnabled: true,
+    isGenerating: false,
+    modesUnavailableReason: "The story's lead no longer exists. Set a new lead in World.",
+  },
+  render: (args) => <Composer ref={leadMissingRef} {...args} />,
+  play: async ({ args, canvasElement }) => {
+    // The trigger's accessible name is the label plus the selected option's text; with
+    // modes unusable the value falls back to 'free' ("Mode Free"), read off ModesVisible.
+    const mode = await screen.findByRole('button', { name: 'Mode Free' })
+    expect(mode).toHaveAttribute('aria-disabled', 'true')
+    const input = canvasElement.querySelector('textarea')
+    if (input == null) throw new Error('composer input not found')
+    // Seed a non-free mode directly (the picker is inert while unavailable, so nothing in the
+    // UI can do this) — proves the send-time gate, not just the picker's own default, forces
+    // 'free': a dropped gate would leave this send going out as 'do'.
+    leadMissingRef.current?.restoreDraft('draw my blade', 'do')
+    await waitFor(() => expect(input.value).toBe('draw my blade'))
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(args.onSend).toHaveBeenCalledWith('draw my blade', 'free'))
   },
 }

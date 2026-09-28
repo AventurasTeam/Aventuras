@@ -36,6 +36,11 @@ type ComposerProps = {
   sendBlocked?: boolean
   /** Rendered under the composer when `disabled`; the Send hint in either case. */
   disabledReason?: string
+  /**
+   * Why do / say / think can't wrap right now (the lead the wrap names is gone). The picker
+   * disables with this reason and every send goes out as free text.
+   */
+  modesUnavailableReason?: string
   onSend: (rawText: string, mode: ComposerMode) => void
   onCancel: () => void
 }
@@ -83,6 +88,7 @@ export const Composer = forwardRef(function Composer(
     disabled = false,
     sendBlocked = false,
     disabledReason,
+    modesUnavailableReason,
     onSend,
     onCancel,
   }: ComposerProps,
@@ -134,6 +140,7 @@ export const Composer = forwardRef(function Composer(
 
   const canSend = text.trim().length > 0
   const sendDisabled = disabled || sendBlocked || !canSend
+  const modesUsable = modesEnabled && modesUnavailableReason == null
 
   function handleSubmit() {
     if (!canSend) return
@@ -141,7 +148,7 @@ export const Composer = forwardRef(function Composer(
     // input under a hidden keyboard is the state a tap won't reopen. The guard
     // is a no-op on web and with a hardware keyboard.
     if (isKeyboardVisible()) void dismissKeyboard()
-    onSend(text, modesEnabled ? mode : 'free')
+    onSend(text, modesUsable ? mode : 'free')
     setText('')
     setLints([])
   }
@@ -165,11 +172,12 @@ export const Composer = forwardRef(function Composer(
           {modesEnabled ? (
             <Select
               options={getModeOptions()}
-              value={mode}
+              value={modesUsable ? mode : 'free'}
               onValueChange={(value) => setMode(value as ComposerMode)}
               mode="dropdown"
               size="sm"
-              disabled={disabled}
+              disabled={disabled || modesUnavailableReason != null}
+              disabledReason={modesUnavailableReason}
               label={t('reader:composerModeLabel')}
               renderTrigger={({ selected }) => (
                 <View className="flex-row items-baseline gap-1.5">
