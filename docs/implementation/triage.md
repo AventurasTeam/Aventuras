@@ -159,3 +159,13 @@ slice-planning gate forces its resolution before that slice is planned.
   [link-row union](../parked.md#history-shows-link-row-edits) or a
   global delta surface (Diagnostics Hub delta log) lands. Read, not
   verified (2026-09-28, raised by 4.2b).
+- **The composer's Send-blocked reason is invisible to sighted Android
+  users.** While a turn generates or suggestions refresh, the reader
+  passes `sendBlocked` and the "blocked while generating" reason
+  reaches only Send's tooltip and `accessibilityHint`; web shows it on
+  hover or focus, native shows nothing on screen. Canon keeps it off
+  the visible reason line
+  ([`principles.md → What's not gated`](../ui/principles.md#whats-not-gated)
+  and its disabled-controls tooltip rule under
+  [Affordance loci](../ui/principles.md#affordance-loci)); the gap is
+  native-only and pre-existing (2026-09-28, raised by 4.2b review).
