@@ -1,3 +1,4 @@
+import { logger } from '@/lib/diagnostics'
 import { entitiesStore } from '@/lib/stores'
 import { entityDeleteActions, type DeleteTail } from '@/lib/world'
 
@@ -33,8 +34,15 @@ async function deleteEntityLocked(
   ctx: DbCtx,
 ): Promise<RowDeleteResult> {
   const head = await loadHeadTurn(branchId, ctx)
-  if ((head?.tail.id ?? null) !== lockedTail)
+  if ((head?.tail.id ?? null) !== lockedTail) {
+    logger.warn('action_layer.entity_delete_rejected', {
+      branchId,
+      id,
+      code: ROW_DELETE_REJECTION.inFlight,
+      reason: 'tail moved',
+    })
     return { status: 'rejected', reason: 'tail moved', code: ROW_DELETE_REJECTION.inFlight }
+  }
   // The store read, the plan build and commitRowDelete's synchronous in-flight check must run
   // with no await between them, or a hard-gate run finishing in that window commits over a
   // working-set snapshot it has since staled.

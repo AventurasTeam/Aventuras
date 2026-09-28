@@ -26,6 +26,7 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { entitiesStore, generationStore } from '@/lib/stores'
 
 import { deleteEntityRow } from './delete-entity'
+import { ROW_DELETE_REJECTION } from './delete-row'
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { applyRedo, snapshotForRedo } from '../delta/redo'
 import { reverseAndPruneDeltaRows } from '../delta/reverse-replay'
@@ -42,6 +43,7 @@ const headTurnHook = vi.hoisted(() => ({
 vi.mock('../story-entries/head-turn', async (importOriginal) => {
   const real = (await importOriginal()) as { loadHeadTurn: typeof LoadHeadTurn }
   return {
+    ...real,
     loadHeadTurn: async (...args: Parameters<typeof LoadHeadTurn>) => {
       headTurnHook.calls += 1
       if (headTurnHook.calls === 2 && headTurnHook.onSecond) await headTurnHook.onSecond()
@@ -93,6 +95,11 @@ function vectorCount(): number {
 }
 
 beforeEach(async () => {
+  // A failing race test can otherwise leave a hard-gate run or a stale hook state that
+  // cascades rejections into every test that runs after it.
+  headTurnHook.calls = 0
+  headTurnHook.onSecond = null
+  generationStore.__reset()
   const test = await createTestDb()
   ctx = { db: test.db, runInTransaction: test.runInTransaction }
   sqlite = test.sqlite
@@ -295,8 +302,6 @@ describe('deleteEntityRow — C3 acceptance', () => {
 
 describe('deleteEntityRow — races closed by the in-lock re-read', () => {
   it('a hard-gate run finishing during the in-lock head read keeps its state write', async () => {
-    headTurnHook.calls = 0
-    generationStore.__reset()
     generationStore.startRun({
       runId: 'r1',
       kind: 'turn',
@@ -333,8 +338,6 @@ describe('deleteEntityRow — races closed by the in-lock re-read', () => {
   })
 
   it('a new tail landing between the outer and inner head reads is never edited under the stale lock', async () => {
-    headTurnHook.calls = 0
-    generationStore.__reset()
     let sceneEdit: Promise<unknown> = Promise.resolve()
     headTurnHook.onSecond = async () => {
       await ctx.db.insert(storyEntries).values({
@@ -366,7 +369,11 @@ describe('deleteEntityRow — races closed by the in-lock re-read', () => {
     expect(edit).toEqual({ status: 'ok' })
     // No lost update: either the delete refused (the tail moved under it), or it ran
     // after the edit committed and so still dropped char_x from the edited scene.
-    if (result.status === 'ok') expect([...scene].sort()).toEqual(['char_lead', 'char_o'])
-    else expect([...scene].sort()).toEqual(['char_lead', 'char_o', 'char_x'])
+    if (result.status === 'ok') {
+      expect([...scene].sort()).toEqual(['char_lead', 'char_o'])
+    } else {
+      expect(result).toMatchObject({ code: ROW_DELETE_REJECTION.inFlight })
+      expect([...scene].sort()).toEqual(['char_lead', 'char_o', 'char_x'])
+    }
   })
 })
