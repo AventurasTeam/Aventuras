@@ -16,12 +16,12 @@ import {
   cascadePatches,
   payloadFromChildren,
   restoreChildren,
-  translationCascade,
-  vecSweepOps,
-  vecTableLister,
+  rowCascade,
 } from '../delta/delete-cascade'
 import { register, type ActionHandler, type CascadeDeleteOps } from '../delta/registry'
 import type { DeltaSource } from '../types'
+
+const ownCascade = rowCascade('happenings', 'happening')
 
 type HappeningUpdatePatch = Partial<{
   title: string
@@ -164,8 +164,9 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   }
 }
 
-// Reads the children, then deletes them in the delete's transaction. deleteHappening and every
-// link writer hold the branch's happening_links key, so no child can land between the two.
+// Reads the link rows, then deletes them in the delete's transaction — deleteHappening and every
+// link writer hold the branch's happening_links key, so no involvement or awareness row can land
+// between the two. Translations carry no such lock; see rowCascade below.
 const happeningCascade: CascadeDeleteOps = async (branchId, happeningId, ctx) => {
   const involvements = await ctx.db
     .select()
@@ -185,8 +186,7 @@ const happeningCascade: CascadeDeleteOps = async (branchId, happeningId, ctx) =>
         eq(happeningAwareness.happeningId, happeningId),
       ),
     )
-  const own = await translationCascade(ctx, branchId, [{ kind: 'happening', ids: [happeningId] }])
-  const vectors = await vecSweepOps('happenings', branchId, happeningId, vecTableLister(ctx))
+  const own = await ownCascade(branchId, happeningId, ctx)
   return {
     ops: [
       ctx.db
@@ -208,7 +208,6 @@ const happeningCascade: CascadeDeleteOps = async (branchId, happeningId, ctx) =>
         )
         .toSQL(),
       ...own.ops,
-      ...vectors,
     ],
     children: {
       happening_involvements: involvements,
