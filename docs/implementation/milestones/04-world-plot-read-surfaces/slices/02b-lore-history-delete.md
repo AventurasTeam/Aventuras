@@ -7,19 +7,22 @@
   save-session host, C11 overflow menu, the History placeholder this
   slice fills)
 - **Blocks:** [Slice 4.2c](./02c-collision-review.md) (the merge's
-  losing row deletes through C3), the History tab and delete entries
-  of [Slice 4.3](./03-plot-panel.md) (C4 and C3 — partial),
-  [Slice 4.6](./06-import-export.md) (lore export host — partial)
+  losing row deletes through C3), [Slice 4.6](./06-import-export.md)
+  (lore export host — partial). This slice also replaces
+  [Slice 4.3](./03-plot-panel.md)'s History placeholder with the real
+  `HistoryTab` and flips its disabled thread and happening delete
+  entries (C4, C3).
 
 ## Goal
 
 Lore gets its detail pane (Body / Settings / History), the delta-log
 History tab lands as a shared module (C4) that also fills 4.2a's
-placeholder, and the first delete surfaces ship — `Delete entity` and
-`Delete` on lore — over hardened delete arms (C3): the entity link
-cascade, inverse-ref rewrite, tail-metadata drop, lead refusal, the
-happening cascade's critical section, and the vector sweep on forward
-delete and redo for every embedded kind.
+placeholder and mounts on Plot's thread and happening panes, and the
+first delete surfaces ship — `Delete entity`, lore `Delete`, and
+`Delete thread` / `Delete happening` — over hardened delete arms (C3):
+the entity link cascade, inverse-ref rewrite, tail-metadata drop, lead
+refusal, the happening cascade's critical section, and the vector
+sweep on forward delete and redo for every embedded kind.
 
 ## Background
 
@@ -101,8 +104,10 @@ handler, which is where the sweep must therefore live.
   sort, `Load older`, the read-only empty state, and controls that
   reflow on narrow widths; mounted on the lore pane and on 4.2a's four
   entity panes (replacing the placeholder), and renderable for the
-  `threads` and `happenings` target tables so 4.3 mounts it unchanged.
-  Rows show `entry #n` as meta text and are not pressable.
+  `threads` and `happenings` target tables — 4.2b itself mounts it on
+  Plot's thread and happening panes too, replacing 4.3's History
+  placeholder there. Rows show `entry #n` as meta text and are not
+  pressable.
 - **C3 delete arms**, per the milestone's pinned mechanism: the
   grouped entity delete — one merged `updateEntity` per referencing
   entity, one `updateStoryEntryMetadata` for the tail scene drop, then
@@ -130,7 +135,7 @@ handler, which is where the sweep must therefore live.
   the wrap has no lead to name.
 - **Storybook:** lore pane states (populated / empty body / create),
   History tab states (rows per op and source, empty, loading older),
-  delete confirm and lead refusal.
+  delete confirm and the lead-disabled `⋯` entry.
 
 ## Scope: out
 
@@ -189,7 +194,7 @@ handler, which is where the sweep must therefore live.
   (search shapes, op filter, sort, cursor), humanizer per op, source
   and target table.
 - Component tests: lore pane, required body, History tab controls,
-  delete confirm and refusal.
+  delete confirm and the lead-disabled `⋯` entry.
 - Storybook: the matrix above.
 - E2E (desktop): delete entity → undo → redo, asserting vec rows and
   link rows in the DB.
@@ -201,17 +206,18 @@ handler, which is where the sweep must therefore live.
   key — no per-happening key existed, and a read can't sit inside a
   proxy transaction.
 - **Group ordering.** **Resolved at planning (2026-09-28):**
-  order-independent — every handler in a group reads pre-group state
-  and the delete group's rows are disjoint, so the builder still emits
-  the delete last by convention, pinned by a test.
+  order-independent — every handler in a group reads pre-group state,
+  and the delete group's rows are disjoint. The builder still emits
+  the delete last, by convention, pinned by a test.
 - **Lead removed by a reversal.** **Resolved at planning
   (2026-09-28):** reversals are never refused; the interim
   `resolveLead` reads a dangling lead as absent, and a per-branch,
   delta-logged lead is filed to M6.
 - **Deleting an entity while a classifier pass is in flight.**
   **Resolved at planning (2026-09-28):** live-row guards on the three
-  link writers under the link keys — a create re-reads the entity and
-  the happening it names and no-ops when either is gone.
+  link writers under the link keys — a create re-reads the rows it
+  names, the entity and the happening, or both ends of a pair, and
+  no-ops when one is gone.
 
 ## Implementation notes
 

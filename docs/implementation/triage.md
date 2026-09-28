@@ -63,14 +63,16 @@ slice-planning gate forces its resolution before that slice is planned.
   error. Options: clamp or validate on the piggyback write path, or a
   merge-style ref-clearing handler that doesn't re-validate unrelated
   fields (2026-09-28, raised by 4.2b).
-- **Thread and happening update handlers record every column named in
-  the patch.** Entity and lore updates drop unchanged ones. Safe today
-  because `threadPatch` and `happeningPatch` pre-filter, but a future
-  unfiltered writer would make History list unchanged fields and feed
-  extra keys to user precedence (2026-09-28, raised by 4.2b).
-- **Translation writers take no row lock.** No `translations` key
-  exists in `row-locks.ts`, so a delete's "children read under the
-  locks" doesn't hold for translations. Latent until the translation
-  phase ships a writer: a translation written between a cascade's read
-  and its commit would orphan, and could collide with
-  `translations_natural_uniq` on undo (2026-09-28, raised by 4.2b).
+- **`row-closure.ts`'s `CHILD_TABLES` widens a reversal set only for
+  happenings' children.** A reversal deleting a character a create made
+  orphans relationship, involvement or awareness rows naming it that
+  were written in a different action group. Read, not reproduced;
+  pre-existing (2026-09-28, raised by 4.2b).
+- **`commitRowDelete` and `commitRowSave` check the generation gate
+  before taking row locks.** A turn starting while a user write waits
+  on a lock can write a referenced entity's `state` that the user
+  write's full-`state` patch (built from an earlier snapshot) then
+  overwrites. Re-checking the gate after the locks are held would close
+  it for both; alternatively, turn admission could await
+  `settleUserWrites()` first, as the prose-reversal barrier already
+  does. Reasoned, not reproduced (2026-09-28, raised by 4.2b).

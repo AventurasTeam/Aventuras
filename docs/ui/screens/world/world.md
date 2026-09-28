@@ -477,12 +477,16 @@ prose, then hands pre-formatted strings to the compound.
   rendered change-summary text. `op` matches its rendered label
   (word-start) or the raw enum; the field-path and free-text arms
   apply to `update` deltas only, since a delete's undo payload is the
-  full row and would match every path. A field path is tested via
+  full row and would match every path. The free-text arm is a `LIKE`
+  over the raw `undo_payload` JSON, so it matches the value from
+  before the change, not the new one. A field path is tested via
   `json_type(undo_payload, '$.<path>') IS NOT NULL`, not
-  `json_extract` (which misses a `null` pre-change value); `target_table`
-  is never matched, since it's constant within a per-row tab. SQLite
-  filters server-side; lazy-loaded delta log doesn't need to be fully
-  in memory.
+  `json_extract` (which misses a `null` pre-change value); a search
+  term also resolves against the field-path label vocabulary, so
+  typing a rendered label (not just its raw path) matches the paths
+  it names. `target_table` is never matched, since it's constant
+  within a per-row tab. SQLite filters server-side; lazy-loaded delta
+  log doesn't need to be fully in memory.
 - **Op filter** — all / create / update / delete
 - **Sort** — newest-first (default) or oldest-first
 - **Load-older chunking** — log-shaped data; uses the

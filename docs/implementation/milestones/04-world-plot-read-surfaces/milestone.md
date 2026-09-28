@@ -144,8 +144,8 @@ to one implicit bucket on every real M4 story.
   `Set as lead` (C5), raw JSON, cycle guard, entity picker (C8 half),
   overflow menu (C11 half)
 - [Slice 4.2b](./slices/02b-lore-history-delete.md) — lore detail,
-  shared History tab module (C4), entity and lore delete with cascade
-  and vector sweep (C3)
+  shared History tab module (C4) mounted on Plot's panes too, entity,
+  lore, thread and happening delete with cascade and vector sweep (C3)
 - [Slice 4.2c](./slices/02c-collision-review.md) — collision review
   drivers: merge / rename / keep under one `action_id`,
   `InjectionMode` and `ScalarField` drift fixes
@@ -321,30 +321,47 @@ mechanism where the shipped runner forces it:
 - Deleting the **lead character** is refused with a named rejection
   (`lead-entity`) rather than nulling `definition.leadEntityId`, which
   the schema's `needsLead` refine forbids in adventure or first- and
-  second-person stories; the `⋯` entry is disabled with a reason that
-  points at `Set as lead` (4.2b planning); the arm's refusal backs it.
-  The same refusal applies to a merge whose losing row is the lead.
+  second-person stories. **Resolved in 4.2b planning (2026-09-28):**
+  the `⋯` entry is disabled for the lead, reason pointing at
+  `Set as lead`; the arm's refusal backs it. The same refusal applies
+  to a merge whose losing row is the lead.
 - Deleting a **lore**, **thread** or **happening** row deletes the row
-  and its cascade. Because 4.3 makes the user a second writer of `happening_involvements` and `happening_awareness`, every link writer and the happening delete hold one per-branch `happening_links` key, and an entity delete also holds the relationships key, so the cascade's child read and its commit are one critical section. The link writers re-check that the entity and the happening they name still exist, so a no-gate classifier pass can't write an orphan after a delete. Resolved at 4.2b planning (2026-09-28): no per-happening key existed, and a read inside the delete's transaction is impossible over sqlite-proxy.
+  and its cascade. Because 4.3 makes the user a second writer of
+  `happening_involvements` and `happening_awareness`, every
+  involvement and awareness writer and the happening delete hold one
+  per-branch `happening_links` key, and an entity delete also holds the
+  relationships key, so the cascade's link-row read and its commit are
+  one critical section. The link writers re-check that the entity and
+  the happening they name still exist, so a no-gate classifier pass
+  can't write an orphan after a delete. **Resolved in 4.2b planning
+  (2026-09-28):** no per-happening key existed, and a read inside the
+  delete's transaction is impossible over sqlite-proxy.
 - Every delete — forward, and again on **redo** — leaves zero vec0
   rows for the id across every dim family. The sweep lives in
   `cascadeDeleteOps` via `deleteVecOps`, because `applyRedo` rebuilds
   a delete from the descriptor plus that hook and never re-runs the
   handler. Reverse-replay restores the row `embedding_stale` so the
-  drain re-embeds it (already shipped). Every delete also removes its
-  row's translations, and the embedder's vector insert is conditional
-  on the source row, so an embed racing a delete writes nothing.
+  drain re-embeds it (already shipped). Reversing a create sweeps its
+  vectors too. Every embedded kind's delete arm (entity, lore, thread,
+  happening and chapter), forward and on redo, also removes its row's
+  translations; the embedder's vector insert is conditional on the
+  source row, so an
+  embed racing a delete writes nothing.
+- The group runner rejects a group that both deletes a row and writes
+  a link naming it, or that targets a child row a delete's cascade
+  removes — 4.2c's merge must re-key the loser's links another way
+  (4.2c Open questions).
 
-Consumers: 4.2c (the merge's losing row goes through the entity arm,
-never a bespoke delete), 4.3 (thread and happening delete — its
-entries ship disabled until 4.2b), and any later delete surface. A
+Consumers: 4.2b itself (thread and happening delete surfaces, wiring
+4.3's disabled entries), 4.2c (the merge's losing row goes through the
+entity arm, never a bespoke delete), and any later delete surface. A
 delete that bypasses the arm is a contract violation.
 
 ### C4 — History tab module
 
 [Slice 4.2b](./slices/02b-lore-history-delete.md) owns the delta-log
 History tab every detail pane shares. Pinned surface: a branch-scoped
-**query** taking `{ targetTable, targetId, op?, search?, sort, cursor }`
+**query** taking `{ targetTable, targetId, op?, search?, labelPaths?, sort, cursor }`
 and returning one load-older chunk (search matches `op` by its rendered
 label, word-start, or the raw enum; the field-path and free-text arms
 apply to `update` deltas only, since a delete's undo payload is the
@@ -363,12 +380,11 @@ taking `{ branchId, targetTable, targetId }` that composes search,
 op-filter chips, sort, the load-older list and the read-only empty
 state. The humanizer owns the field-path label vocabulary: a later
 slice that adds a delta-logged column (4.2c adds `nameCollisionFlag`)
-also adds its label. Consumers: 4.2b itself (entity and lore), 4.3
-(thread and happening — partial gate). Names fixed in 4.2b's first
-commit. Rows are not pressable in M4: the reader has no entry deep
-link, so `entry #n` renders as meta text (4.2b planning, 2026-09-28;
-the link is an M7.3 carried deferral). 4.2b mounted the tab on Plot's
-panes too, since 4.3 had merged.
+also adds its label. Consumers: 4.2b itself — entity and lore, and
+4.3's thread and happening panes. Names fixed in 4.2b's first commit.
+**Resolved in 4.2b planning (2026-09-28):** rows are not pressable in
+M4 — the reader has no entry deep link, so `entry #n` renders as meta
+text; the link is an M7.3 carried deferral.
 
 ### C5 — Story-definition lead mutator
 

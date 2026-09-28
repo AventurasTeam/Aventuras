@@ -777,26 +777,29 @@ type ItemState = {
   at_location_id: EntityId | null // location of item if loose;
   // null when held by a character
   // (look up via character.equipped_items / inventory)
+  // or unplaced (in neither array)
   condition?: string // dynamic state ("intact", "broken",
   //                "cursed", "activated")
 }
 ```
 
-**Position convention.** `at_location_id = null` means "held by a
-character — find via character arrays." Single source of truth in the
-held direction (character arrays are canonical for held items); no
-back-pointer on item to drift against. Cost: "who holds the silver
-coin?" requires scanning characters' equipped + inventory arrays.
-Acceptable for v1 scale; FTS5 upgrade applies if it bites.
+**Position convention.** `at_location_id = null` means either "held by
+a character — find via character arrays" or unplaced (present in
+neither array). Single source of truth in the held direction
+(character arrays are canonical for held items); no back-pointer on
+item to drift against. Cost: "who holds the silver coin?" requires
+scanning characters' equipped + inventory arrays. Acceptable for v1
+scale; FTS5 upgrade applies if it bites.
 
 **An item can also be unplaced**: `at_location_id = null` with no
-holder. The wizard writes every item it doesn't hand to a character this
-way, and deleting a location or a holder leaves the items it placed or
-held unplaced rather than inventing a position the prose never stated.
-The item Overview renders the position as empty.
+holder. The wizard writes every item this way; deleting a location or
+a holder leaves the items it placed or held unplaced rather than
+inventing a position the prose never stated. The item Overview renders
+the position as empty.
 
-**One position per item.** An item lies at one location or sits in one
-character's `equipped_items` or `inventory`, never several. Every
+**At most one position per item.** An item lies at one location, sits
+in one character's `equipped_items` or `inventory`, or is unplaced —
+never several at once. Every
 writer moves it rather than adding a second position: putting it in a
 holder's slot removes it from the holder's other slot and from every
 other holder, and clears `at_location_id`; setting `at_location_id`
