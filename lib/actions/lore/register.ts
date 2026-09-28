@@ -4,8 +4,16 @@ import type { Lore, NewLore } from '@/lib/db'
 import { KIND_FIELDS, lore, loreWriteSchema } from '@/lib/db'
 import { loreStore } from '@/lib/stores'
 
+import {
+  cascadePatches,
+  payloadFromChildren,
+  restoreChildren,
+  rowCascade,
+} from '../delta/delete-cascade'
 import { register, type ActionHandler } from '../delta/registry'
 import type { DeltaSource } from '../types'
+
+const cascade = rowCascade('lore', 'lore')
 
 type LoreUpdatePatch = Partial<{
   title: string
@@ -149,20 +157,23 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     .from(lore)
     .where(and(eq(lore.branchId, bid), eq(lore.id, id)))
   if (!current) return { status: 'rejected', reason: `delete target lore ${bid}:${id} not found` }
+  const { ops: childOps, children } = await cascade(bid, id, ctx)
   return {
     status: 'ok',
     targetTable: 'lore',
     targetId: id,
     op: 'delete',
     // Full row so reverse-replay rebuilds both the SQLite re-insert and the store create-patch.
-    undoPayload: { ...current },
+    undoPayload: { ...current, ...payloadFromChildren(children) },
     ops: [
+      ...childOps,
       ctx.db
         .delete(lore)
         .where(and(eq(lore.branchId, bid), eq(lore.id, id)))
         .toSQL(),
     ],
     patch: { op: 'delete', id },
+    cascadePatches: cascadePatches(children),
   }
 }
 
@@ -173,5 +184,7 @@ export function registerLore(): void {
     columnSchemas: {},
     handlers: { createLore: createHandler, updateLore: updateHandler, deleteLore: deleteHandler },
     patcher: (branchId, p) => loreStore.patch(branchId, p),
+    restoreCascade: restoreChildren(['translations']),
+    cascadeDeleteOps: cascade,
   })
 }

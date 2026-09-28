@@ -13,12 +13,15 @@ import { happeningsStore } from '@/lib/stores'
 
 import { nullifyRef } from '../coerce'
 import {
-  register,
-  type ActionHandler,
-  type CascadeRestore,
-  type CascadeDeleteOps,
-} from '../delta/registry'
-import type { DbCtx, DeltaSource } from '../types'
+  cascadePatches,
+  payloadFromChildren,
+  restoreChildren,
+  translationCascade,
+  vecSweepOps,
+  vecTableLister,
+} from '../delta/delete-cascade'
+import { register, type ActionHandler, type CascadeDeleteOps } from '../delta/registry'
+import type { DeltaSource } from '../types'
 
 type HappeningUpdatePatch = Partial<{
   title: string
@@ -161,12 +164,9 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   }
 }
 
-// Reads the children, then deletes them in a later transaction. Safe only while
-// the classifier is the sole writer of these tables and only ever attaches rows
-// to happenings it creates in the same plan — nothing can add a child to an
-// existing happening mid-delete. A user-facing "add involvement" affordance
-// breaks that premise and needs this read and delete in one critical section.
-async function buildChildDeleteOps(branchId: string, happeningId: string, ctx: DbCtx) {
+// Reads the children, then deletes them in the delete's transaction. deleteHappening and every
+// link writer hold the branch's happening_links key, so no child can land between the two.
+const happeningCascade: CascadeDeleteOps = async (branchId, happeningId, ctx) => {
   const involvements = await ctx.db
     .select()
     .from(happeningInvolvements)
@@ -185,32 +185,35 @@ async function buildChildDeleteOps(branchId: string, happeningId: string, ctx: D
         eq(happeningAwareness.happeningId, happeningId),
       ),
     )
-
-  const ops = [
-    ctx.db
-      .delete(happeningInvolvements)
-      .where(
-        and(
-          eq(happeningInvolvements.branchId, branchId),
-          eq(happeningInvolvements.happeningId, happeningId),
-        ),
-      )
-      .toSQL(),
-    ctx.db
-      .delete(happeningAwareness)
-      .where(
-        and(
-          eq(happeningAwareness.branchId, branchId),
-          eq(happeningAwareness.happeningId, happeningId),
-        ),
-      )
-      .toSQL(),
-  ]
+  const own = await translationCascade(ctx, branchId, [{ kind: 'happening', ids: [happeningId] }])
+  const vectors = await vecSweepOps('happenings', branchId, happeningId, vecTableLister(ctx))
   return {
-    ops,
+    ops: [
+      ctx.db
+        .delete(happeningInvolvements)
+        .where(
+          and(
+            eq(happeningInvolvements.branchId, branchId),
+            eq(happeningInvolvements.happeningId, happeningId),
+          ),
+        )
+        .toSQL(),
+      ctx.db
+        .delete(happeningAwareness)
+        .where(
+          and(
+            eq(happeningAwareness.branchId, branchId),
+            eq(happeningAwareness.happeningId, happeningId),
+          ),
+        )
+        .toSQL(),
+      ...own.ops,
+      ...vectors,
+    ],
     children: {
       happening_involvements: involvements,
       happening_awareness: awareness,
+      ...own.children,
     },
   }
 }
@@ -228,7 +231,7 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
   if (!current)
     return { status: 'rejected', reason: `delete target happening ${bid}:${id} not found` }
 
-  const { ops: childDeleteOps, children } = await buildChildDeleteOps(bid, id, ctx)
+  const { ops: childOps, children } = await happeningCascade(bid, id, ctx)
 
   return {
     status: 'ok',
@@ -237,39 +240,18 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     op: 'delete',
     // The link rows have no delta of their own here, so the parent's payload is
     // the only place reverse-replay can rebuild them from.
-    undoPayload: {
-      ...current,
-      involvements: children.happening_involvements,
-      awareness: children.happening_awareness,
-    },
+    undoPayload: { ...current, ...payloadFromChildren(children) },
     ops: [
-      ...childDeleteOps,
+      ...childOps,
       ctx.db
         .delete(happenings)
         .where(and(eq(happenings.branchId, bid), eq(happenings.id, id)))
         .toSQL(),
     ],
     patch: { op: 'delete', id },
+    cascadePatches: cascadePatches(children),
   }
 }
-
-const restoreCascade: CascadeRestore = (undoPayload) => {
-  const involvements = undoPayload.involvements as Record<string, unknown>[] | undefined
-  const awareness = undoPayload.awareness as Record<string, unknown>[] | undefined
-
-  // Both halves declared unconditionally — the engine skips the empty ones. An
-  // empty array is still a key the parent row must not carry into the re-insert
-  // or the store patch, so the cascade shape must not depend on the row counts.
-  return {
-    children: [
-      { table: 'happening_involvements', rows: involvements ?? [] },
-      { table: 'happening_awareness', rows: awareness ?? [] },
-    ],
-    cascadeKeys: ['involvements', 'awareness'],
-  }
-}
-
-const cascadeDeleteOps: CascadeDeleteOps = buildChildDeleteOps
 
 export function registerHappenings(): void {
   register({
@@ -282,7 +264,11 @@ export function registerHappenings(): void {
       deleteHappening: deleteHandler,
     },
     patcher: (branchId, p) => happeningsStore.patch(branchId, p),
-    restoreCascade,
-    cascadeDeleteOps,
+    restoreCascade: restoreChildren([
+      'happening_involvements',
+      'happening_awareness',
+      'translations',
+    ]),
+    cascadeDeleteOps: happeningCascade,
   })
 }
