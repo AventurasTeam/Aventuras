@@ -543,8 +543,6 @@ export const Menu: Story = {
   },
 }
 
-/** A deep link's unknown `tab` falls back to Overview rather than an empty pane. */
-
 const phoneHistoryLoader = fn(async (): Promise<HistoryChunk> => ({ rows: [], nextCursor: null }))
 
 /** Phone: two tabs go to the Select's segment, not a tab strip; History targets this thread. */

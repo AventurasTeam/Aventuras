@@ -39,7 +39,7 @@ export function OverviewTab({
   )
 }
 
-/** world.md → Assets, Involvements, History. Assets is a placeholder. */
+/** world.md → Assets, Involvements, History. */
 export function TrailingTabs({
   row,
   data,

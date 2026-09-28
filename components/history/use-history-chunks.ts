@@ -27,9 +27,8 @@ function message(error: unknown): string {
 }
 
 /**
- * patterns/lists.md → Load-older: the first chunk reloads on any query change and whenever
- * `version` changes; `loadMore` appends the next chunk. Nothing loads on scroll. `labelPaths`
- * must be referentially stable, or every render reloads.
+ * patterns/lists.md → Load-older: reloads on any query or `version` change, not on scroll.
+ * `labelPaths` must be referentially stable, or every render reloads.
  */
 export function useHistoryChunks(
   query: Omit<HistoryQuery, 'cursor' | 'limit'>,
@@ -52,7 +51,7 @@ export function useHistoryChunks(
     [load, branchId, targetTable, targetId, op, search, labelPaths, sort, version, attempt],
   )
   const [shownFor, setShownFor] = useState(request)
-  // Reset while rendering, not in the effect, so the old query's rows never commit under the new one.
+  // Reset during render, not in the effect, so the old query's rows never commit under the new one.
   if (shownFor !== request) {
     setShownFor(request)
     setState(LOADING)

@@ -198,7 +198,7 @@ export function LoreDetailPane({
   )
 }
 
-// world.md → Body tab — lore: the category, then the body.
+// world.md → Body tab — lore.
 function LoreBody({
   control,
   categories,

@@ -21,7 +21,7 @@ const SEARCH_DEBOUNCE_MS = 250
 
 export type HistoryTabProps = { branchId: string; targetTable: HistoryTable; targetId: string }
 
-/** C4: one row's delta log; keyed by target so a host that reuses this across rows resets on switch. */
+/** C4: one row's delta log; keyed by target so switching rows remounts and resets it. */
 export function HistoryTab(props: HistoryTabProps) {
   return <HistoryTabForTarget key={`${props.targetTable}:${props.targetId}`} {...props} />
 }
@@ -33,7 +33,7 @@ function HistoryTabForTarget({ branchId, targetTable, targetId }: HistoryTabProp
   const [sort, setSort] = useState<HistorySort>('newest')
   const row = useHistoryTarget(targetTable, targetId)
   const settleCount = generationStore.useGeneration((s) => s.settleCount)
-  // A fresh identity whenever the row is patched or a run or reversal settles: the log may have moved.
+  // Fresh identity when the row is patched or a run/reversal settles: the log may have moved.
   const version = useMemo(() => ({ row, settleCount }), [row, settleCount])
   const labelPaths = useMemo(() => pathsMatchingLabel(targetTable, search), [targetTable, search])
   const chunks = useHistoryChunks(

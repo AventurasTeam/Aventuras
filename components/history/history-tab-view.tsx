@@ -73,7 +73,7 @@ function HistoryBody({ rows, status, hasMore, sort, onLoadMore, onRetry, filtere
   )
 }
 
-/** world.md → History tab: read-only rows under search, op chips and sort; more rows on demand. */
+/** world.md → History tab. */
 export function HistoryTabView({
   rows,
   status,

@@ -337,8 +337,7 @@ const meta: Meta<typeof Harness> = {
     onOpenHappening: fn(),
     onSetLead: fn(),
   },
-  // The real db loader and React Query are unavailable in Storybook; a story opening History
-  // overrides this with its own provider nested closer to the tree.
+  // No real db loader or React Query in Storybook; History stories supply their own provider.
   decorators: [
     (Story) => (
       <HistoryLoaderProvider value={async () => ({ rows: [], nextCursor: null })}>
