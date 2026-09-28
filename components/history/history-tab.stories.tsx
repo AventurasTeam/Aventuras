@@ -1,13 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
 import { View } from 'react-native'
-import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import type { Delta, Happening, Thread } from '@/lib/db'
 import type { HistoryChunk, HistoryQuery, HistoryTable } from '@/lib/history'
-import { happeningsStore, threadsStore } from '@/lib/stores'
+import { generationStore, happeningsStore, threadsStore } from '@/lib/stores'
 
 import { HistoryLoaderProvider } from './history-loader'
 import { HistoryTab } from './history-tab'
@@ -87,6 +87,7 @@ function hydrateTargets(): () => void {
   return () => {
     threadsStore.__reset()
     happeningsStore.__reset()
+    generationStore.__reset()
   }
 }
 
@@ -215,5 +216,56 @@ export const SwitchingTargetsResetsFilters: Story = {
     expect(screen.getByRole('button', { name: 'Deleted' })).toHaveAttribute('aria-pressed', 'false')
     const [row] = await screen.findAllByTestId('delta-log-row', {}, WAIT)
     expect(within(row).getByText('The keep burns')).toBeVisible()
+  },
+}
+
+const reloadSpy = fn(
+  async (_query: HistoryQuery): Promise<HistoryChunk> => ({
+    rows: [delta('threads', 'thread_amulet', { status: 'pending' })],
+    nextCursor: null,
+  }),
+)
+
+/** `version` gets a fresh identity — and the log reloads from `cursor: null` — on a same-row
+ * patch or a run/reversal settle, not just on mount. */
+export const ReloadsOnRowPatchAndRunSettle: Story = {
+  args: { branchId: 'br_1', targetTable: 'threads', targetId: 'thread_amulet' },
+  decorators: [
+    (Story) => (
+      <HistoryLoaderProvider value={reloadSpy}>
+        <Story />
+      </HistoryLoaderProvider>
+    ),
+  ],
+  play: async () => {
+    await screen.findAllByTestId('delta-log-row', {}, WAIT)
+    await waitFor(() => expect(reloadSpy).toHaveBeenCalledTimes(1), WAIT)
+    expect(reloadSpy.mock.calls[0][0]).toEqual(expect.objectContaining({ cursor: null }))
+
+    threadsStore.patch('br_1', {
+      op: 'update',
+      id: 'thread_amulet',
+      columns: { title: 'What the amulet truly wants' },
+    })
+    await waitFor(() => expect(reloadSpy).toHaveBeenCalledTimes(2), WAIT)
+    expect(reloadSpy.mock.calls[1][0]).toEqual(expect.objectContaining({ cursor: null }))
+
+    const runId = 'run_settle_test'
+    generationStore.startRun({
+      runId,
+      kind: 'test_run',
+      gateBehavior: 'no-gate',
+      actionId: 'act_settle',
+      storyId: null,
+      branchId: 'br_1',
+      abortController: new AbortController(),
+      currentPhase: 'test',
+      intermediates: {},
+      terminal: Promise.resolve(),
+      resolveTerminal: () => {},
+    })
+    generationStore.finishRun(runId)
+    await waitFor(() => expect(reloadSpy).toHaveBeenCalledTimes(3), WAIT)
+    expect(reloadSpy.mock.calls[2][0]).toEqual(expect.objectContaining({ cursor: null }))
   },
 }
