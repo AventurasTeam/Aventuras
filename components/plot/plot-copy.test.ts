@@ -4,7 +4,6 @@ import {
   happeningIssueText,
   iconFromOption,
   iconOptionValue,
-  plotDeleteDisabledReason,
   plotIconOptions,
   plotMenuEntries,
   saveRejectionText,
@@ -84,23 +83,6 @@ describe('plotMenuEntries', () => {
     expect(remove?.disabled).toBe(false)
     remove?.onPress()
     expect(onDelete).toHaveBeenCalledTimes(1)
-  })
-})
-
-describe('plotDeleteDisabledReason', () => {
-  it('returns the blocked reason when one is given', () => {
-    expect(plotDeleteDisabledReason(true, 'Chapter close in progress. Cancel to edit.')).toBe(
-      'Chapter close in progress. Cancel to edit.',
-    )
-  })
-
-  it('falls back to the generation-gate text when blocked with no reason given', () => {
-    expect(plotDeleteDisabledReason(true)).toBe('Generation is in flight. Cancel to edit.')
-  })
-
-  it('is available when not blocked', () => {
-    expect(plotDeleteDisabledReason(false)).toBeUndefined()
-    expect(plotDeleteDisabledReason(false, 'ignored while not blocked')).toBeUndefined()
   })
 })
 

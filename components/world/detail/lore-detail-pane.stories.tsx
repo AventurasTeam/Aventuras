@@ -53,6 +53,7 @@ type HarnessProps = {
   row: Lore | null
   recentlyClassified?: RecentlyClassified
   blocked?: boolean
+  blockedReason?: string
   onSave: (draft: LoreDraft) => void
   onSaved: (id: string) => void
   onDelete: (row: Lore) => void
@@ -63,6 +64,7 @@ function Harness({
   row: initialRow,
   recentlyClassified,
   blocked = false,
+  blockedReason,
   onSave,
   onSaved,
   onDelete,
@@ -103,7 +105,7 @@ function Harness({
           categories={CATEGORIES}
           recentlyClassified={recentlyClassified}
           blocked={blocked}
-          blockedReason={BLOCKED_REASON}
+          blockedReason={blockedReason}
           onSave={save}
           onSaved={saved}
           onDelete={onDelete}
@@ -128,7 +130,13 @@ const meta: Meta<typeof Harness> = {
   title: 'Compounds/World/LoreDetailPane',
   component: Harness,
   parameters: { layout: 'padded' },
-  args: { row: AETHERIUM, onSave: fn(), onSaved: fn(), onDelete: fn() },
+  args: {
+    row: AETHERIUM,
+    blockedReason: BLOCKED_REASON,
+    onSave: fn(),
+    onSaved: fn(),
+    onDelete: fn(),
+  },
   // The real db loader and React Query are unavailable in Storybook; a story opening History
   // overrides this with its own provider nested closer to the tree.
   decorators: [
@@ -378,6 +386,20 @@ export const Blocked: Story = {
     for (const label of ['Priority', 'Keywords', 'Tags']) {
       await expect(screen.getByRole('textbox', { name: label })).toHaveAttribute('readonly')
     }
+  },
+}
+
+/** A blocked pane with no explicit reason still disables Delete — it must not fall through enabled. */
+export const BlockedWithoutReason: Story = {
+  args: { blocked: true, blockedReason: undefined },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'More actions' }, WAIT))
+    const remove = await screen.findByRole(
+      'menuitem',
+      { name: 'Delete, Generation is in flight. Cancel to edit.' },
+      WAIT,
+    )
+    await expect(remove).toHaveAttribute('aria-disabled', 'true')
   },
 }
 

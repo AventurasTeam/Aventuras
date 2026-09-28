@@ -1,3 +1,4 @@
+import { gateDisabledReason } from '@/components/compounds/generation-gate-copy'
 import {
   destructiveEntry,
   type OverflowMenuEntry,
@@ -245,7 +246,8 @@ export function leadDisabledReason(
   blocked: boolean,
   blockedReason?: string,
 ): string | undefined {
-  if (blocked) return blockedReason ?? t('common:generationGate.inFlight')
+  const gateReason = gateDisabledReason(blocked, blockedReason)
+  if (gateReason != null) return gateReason
   if (row.id === leadId) return t('world:detail.menu.setLeadAlready')
   if (row.status !== 'active') return t('world:detail.menu.setLeadInactive')
   return undefined

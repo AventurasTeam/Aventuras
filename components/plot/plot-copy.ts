@@ -99,14 +99,6 @@ function deleteEntry(label: string, remove: RemoveEntry | undefined): OverflowMe
   )
 }
 
-/** Why `Delete thread`/`Delete happening` is unavailable, or undefined while it's available. */
-export function plotDeleteDisabledReason(
-  blocked: boolean,
-  blockedReason?: string,
-): string | undefined {
-  return blocked ? (blockedReason ?? t('common:generationGate.inFlight')) : undefined
-}
-
 export function plotMenuEntries(
   kind: PlotKind,
   onViewJson: () => void,

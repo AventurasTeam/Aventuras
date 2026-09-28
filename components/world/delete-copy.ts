@@ -1,4 +1,5 @@
 import { deleteUndoHint, type DeleteConfirmCopy } from '@/components/compounds/delete-confirm-copy'
+import { gateDisabledReason } from '@/components/compounds/generation-gate-copy'
 import { ENTITY_DELETE_CODES } from '@/lib/actions'
 import type { Entity, Lore } from '@/lib/db'
 import { t } from '@/lib/i18n'
@@ -49,7 +50,8 @@ export function deleteDisabledReason(
   blocked: boolean,
   blockedReason?: string,
 ): string | undefined {
-  if (blocked) return blockedReason ?? t('common:generationGate.inFlight')
+  const gateReason = gateDisabledReason(blocked, blockedReason)
+  if (gateReason != null) return gateReason
   if (row.id === leadId) return t('world:delete.leadReason')
   return undefined
 }

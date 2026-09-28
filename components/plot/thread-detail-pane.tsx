@@ -5,6 +5,7 @@ import { View } from 'react-native'
 
 import { DetailTabs } from '@/components/compounds/detail-tabs'
 import { FormRow } from '@/components/compounds/form-row'
+import { gateDisabledReason } from '@/components/compounds/generation-gate-copy'
 import { JSONViewer } from '@/components/compounds/json-viewer'
 import { OverflowMenu } from '@/components/compounds/overflow-menu'
 import { RowLeaveDialog, RowSaveBar } from '@/components/compounds/row-save-session-chrome'
@@ -31,7 +32,6 @@ import {
   categoryTailLabel,
   iconFromOption,
   iconOptionValue,
-  plotDeleteDisabledReason,
   plotIconOptions,
   plotMenuEntries,
   threadFieldLabel,
@@ -144,7 +144,7 @@ export function ThreadDetailPane({
                   ? undefined
                   : {
                       onDelete: () => onDelete(row),
-                      disabledReason: plotDeleteDisabledReason(blocked, blockedReason),
+                      disabledReason: gateDisabledReason(blocked, blockedReason),
                     },
               )}
               disabled={row == null}
