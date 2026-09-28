@@ -64,15 +64,18 @@ function makeEmbedRows(
     rows.forEach((row, i) => {
       const composite = compositeText(row.fields)
       ops.push(
-        ...upsertVecOps({
-          kind: row.kind,
-          id: row.id,
-          branchId: row.branchId,
-          modelId: config.modelId,
-          dim,
-          sourceHash: sourceHash(composite),
-          vector: fakeVec(dim, i),
-        }),
+        ...upsertVecOps(
+          {
+            kind: row.kind,
+            id: row.id,
+            branchId: row.branchId,
+            modelId: config.modelId,
+            dim,
+            sourceHash: sourceHash(composite),
+            vector: fakeVec(dim, i),
+          },
+          { fields: row.fields },
+        ),
         clearEmbeddingStaleOp(row),
       )
     })
