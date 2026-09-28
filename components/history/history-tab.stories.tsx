@@ -1,15 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { QueryClientProvider } from '@tanstack/react-query'
-import { useState, type ReactNode } from 'react'
 import { expect, screen, within } from 'storybook/test'
 
-import { createQueryClient } from '@/lib/cache'
 import type { Delta, Happening, Thread } from '@/lib/db'
 import type { HistoryChunk, HistoryQuery } from '@/lib/history'
 import { happeningsStore, threadsStore } from '@/lib/stores'
 
 import { HistoryLoaderProvider } from './history-loader'
 import { HistoryTab } from './history-tab'
+import { withQueryClient } from './with-query-client'
 
 const delta = (
   targetTable: string,
@@ -79,12 +77,6 @@ function hydrateTargets(): () => void {
   }
 }
 
-// useEntryIndex reads through React Query, which the preview doesn't provide.
-function WithQueryClient({ children }: { children: ReactNode }) {
-  const [client] = useState(createQueryClient)
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
-}
-
 const meta: Meta<typeof HistoryTab> = {
   title: 'Compounds/History/HistoryTab',
   component: HistoryTab,
@@ -93,12 +85,11 @@ const meta: Meta<typeof HistoryTab> = {
   beforeEach: hydrateTargets,
   decorators: [
     (Story) => (
-      <WithQueryClient>
-        <HistoryLoaderProvider value={load}>
-          <Story />
-        </HistoryLoaderProvider>
-      </WithQueryClient>
+      <HistoryLoaderProvider value={load}>
+        <Story />
+      </HistoryLoaderProvider>
     ),
+    withQueryClient,
   ],
 }
 export default meta
