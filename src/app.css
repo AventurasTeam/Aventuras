@@ -1,7 +1,14 @@
 @import 'tailwindcss';
 
 @custom-variant dark (&:is(.dark *));
-@custom-variant can-hover (@media (hover: hover));
+/* Hide-until-hover applies only where the primary input hovers and no input is a finger. */
+@custom-variant can-hover {
+  @media (hover: hover) {
+    @media not all and (any-pointer: coarse) {
+      @slot;
+    }
+  }
+}
 
 @theme {
   /* Radius (for rounded-*) */
