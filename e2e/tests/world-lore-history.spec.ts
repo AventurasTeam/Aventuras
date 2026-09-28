@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 import { currentBranchId, queryApp } from '../harness/db'
+import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { suppressNativeUnloadDialogRace } from '../harness/reload'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
@@ -57,10 +58,10 @@ test.describe.serial('World lore', () => {
 
     await world.loreTab(page, 'history').click()
     await expect(world.historyRows(page)).toHaveCount(1)
-    await expect(world.historyRows(page).first()).toContainText('create')
-    await expect(world.historyRows(page).first()).toContainText('user')
-    expect(await queryApp(page, `SELECT op FROM deltas WHERE target_id = ?`, [id])).toEqual([
-      ['create'],
-    ])
+    await expect(world.historyRows(page).first()).toContainText('The Drowned Bell')
+    await expect(world.historyRows(page).first()).toContainText(t('history:op.create'))
+    expect(
+      await queryApp(page, `SELECT op, source, target_table FROM deltas WHERE target_id = ?`, [id]),
+    ).toEqual([['create', 'user_edit', 'lore']])
   })
 })

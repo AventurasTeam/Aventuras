@@ -102,13 +102,12 @@ export const world = {
   leadTag: (page: Page, name: string): Locator =>
     world.row(page, name).getByText(t('world:lead.you'), { exact: true }),
 
-  // Lore's own tab strip (lore-detail-pane.tsx): Body / Settings / History, distinct from the
-  // entity `tab` above.
+  // Lore's own tab strip (lore-detail-pane.tsx), not the entity `tab` above.
   loreTab: (page: Page, tab: 'body' | 'settings' | 'history'): Locator =>
-    page.getByRole('tab', { name: new RegExp(`^${t(`world:lore.tabs.${tab}`)}`) }),
+    page.getByRole('tab', { name: t(`world:lore.tabs.${tab}`), exact: true }),
   loreBody: (page: Page): Locator =>
     page.getByRole('textbox', { name: t('world:lore.fields.body'), exact: true }),
 
-  // A row's delta log (history-tab.tsx); scope anchor per testing.md → Selector strategy.
+  // No role or label to query by (testing.md → Selector strategy, Tier 3).
   historyRows: (page: Page): Locator => page.getByTestId('delta-log-row'),
 }
