@@ -10,6 +10,7 @@ import {
   restoreChildren,
   rowCascade,
 } from '../delta/delete-cascade'
+import { deepEqual } from '../delta/delta-encoding'
 import { register, type ActionHandler } from '../delta/registry'
 import type { DeltaSource } from '../types'
 
@@ -104,21 +105,26 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     .where(and(eq(lore.branchId, bid), eq(lore.id, id)))
   if (!current) return { status: 'rejected', reason: `update target lore ${bid}:${id} not found` }
 
-  const set: Record<string, unknown> = {}
-  const undoPayload: Record<string, unknown> = {}
-  for (const col of UPDATABLE) {
-    if (!(col in patch)) continue
-    set[col] = patch[col]
-    // No columnSchemas registered: flat arrays + scalars take the whole prior value as undo.
-    undoPayload[col] = current[col as keyof Lore]
-  }
-  // A patch that parsed but touched no updatable column would reach Drizzle's
-  // .set({}) and throw "No values to set" — reject instead.
-  if (Object.keys(set).length === 0)
+  const named = UPDATABLE.filter((col) => col in patch)
+  // A patch naming no updatable column would reach Drizzle's .set({}) and throw — reject instead.
+  if (named.length === 0)
     return {
       status: 'rejected',
       reason: `update patch for lore ${bid}:${id} has no updatable fields`,
     }
+
+  // Unchanged columns are dropped, not recorded: History reads an undo payload's keys as the
+  // fields a write changed.
+  const set: Record<string, unknown> = {}
+  const undoPayload: Record<string, unknown> = {}
+  for (const col of named) {
+    const prior = current[col as keyof Lore]
+    if (deepEqual(patch[col], prior)) continue
+    set[col] = patch[col]
+    undoPayload[col] = prior
+  }
+  if (Object.keys(set).length === 0)
+    return { status: 'rejected', reason: 'no-op lore patch', code: 'noop' }
 
   // Embedded-column change flips the flag; see entities/register.ts for the reasoning.
   const [firstField, secondField] = KIND_FIELDS.lore

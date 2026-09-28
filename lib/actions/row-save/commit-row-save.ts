@@ -11,7 +11,7 @@ export type RowSaveResult =
 
 export const ROW_SAVE_REJECTION = { inFlight: 'in-flight' } as const
 
-export type RowSaveKind = 'thread' | 'happening' | 'entity'
+export type RowSaveKind = 'thread' | 'happening' | 'entity' | 'lore'
 
 type CommitRowSaveArgs = {
   branchId: string

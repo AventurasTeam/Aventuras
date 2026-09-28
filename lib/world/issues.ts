@@ -11,6 +11,8 @@ export const WORLD_ISSUE = {
   duplicateRelationship: 'duplicateRelationship',
   parentCycle: 'parentCycle',
   parentChainBroken: 'parentChainBroken',
+  titleRequired: 'titleRequired',
+  bodyRequired: 'bodyRequired',
 } as const
 
 export type WorldIssue = (typeof WORLD_ISSUE)[keyof typeof WORLD_ISSUE]
