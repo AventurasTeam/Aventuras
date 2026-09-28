@@ -234,7 +234,7 @@ handler, which is where the sweep must therefore live.
   per-branch, delta-logged lead is filed to
   [M6](../../../roadmap.md#m6--branches--diff-cache);
   [`data-model.md → Story settings shape`](../../../../data-model.md#story-settings-shape)
-  records the two readers that still see the raw id as harmless until
+  records the one reader that still sees the raw id as harmless until
   then.
 - **Plot's History tab and delete entries ship in 4.2b, not deferred
   (developer decision, 2026-09-28).** 4.3 merged both disabled
