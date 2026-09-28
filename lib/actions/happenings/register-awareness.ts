@@ -64,6 +64,7 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
       ),
     )
 
+  // An existing link implies both rows live: their deletes cascade it under this lock.
   if (current) {
     const set: Record<string, unknown> = {}
     const undoPayload: Record<string, unknown> = {}

@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import {
@@ -16,9 +16,9 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { applyDeltaAction, applyDeltaActionGroup } from './apply-delta-action'
 import type { DbCtx } from '../types'
 
-const character = (id: string, name: string): NewEntity => ({
+const characterOn = (branchId: string, id: string, name: string): NewEntity => ({
   id,
-  branchId: 'b1',
+  branchId,
   kind: 'character',
   name,
   status: 'active',
@@ -26,6 +26,8 @@ const character = (id: string, name: string): NewEntity => ({
   createdAt: 1,
   updatedAt: 1,
 })
+
+const character = (id: string, name: string): NewEntity => characterOn('b1', id, name)
 
 let ctx: DbCtx
 
@@ -44,42 +46,98 @@ const one = (action: Parameters<typeof applyDeltaAction>[0]['action']) =>
   applyDeltaAction({ action, actionId: 'act_1', branchId: 'b1' }, ctx)
 
 describe('link writers refuse a row that is gone', () => {
-  it('drops an awareness row naming a deleted character', async () => {
-    const result = await one({
-      kind: 'upsertHappeningAwareness',
-      source: 'periodic_classifier',
-      payload: { branchId: 'b1', characterId: 'char_gone', happeningId: 'hap_1' },
-    })
+  it.each([
+    {
+      name: 'an involvement naming a deleted happening',
+      table: happeningInvolvements,
+      action: {
+        kind: 'createHappeningInvolvement' as const,
+        source: 'periodic_classifier' as const,
+        payload: {
+          entry: { id: 'hinv_1', branchId: 'b1', happeningId: 'hap_gone', entityId: 'char_a' },
+        },
+      },
+    },
+    {
+      name: 'an involvement naming a deleted entity',
+      table: happeningInvolvements,
+      action: {
+        kind: 'createHappeningInvolvement' as const,
+        source: 'periodic_classifier' as const,
+        payload: {
+          entry: { id: 'hinv_1', branchId: 'b1', happeningId: 'hap_1', entityId: 'char_gone' },
+        },
+      },
+    },
+    {
+      name: 'an awareness row naming a deleted character',
+      table: happeningAwareness,
+      action: {
+        kind: 'upsertHappeningAwareness' as const,
+        source: 'periodic_classifier' as const,
+        payload: { branchId: 'b1', characterId: 'char_gone', happeningId: 'hap_1' },
+      },
+    },
+    {
+      name: 'an awareness row naming a deleted happening',
+      table: happeningAwareness,
+      action: {
+        kind: 'upsertHappeningAwareness' as const,
+        source: 'periodic_classifier' as const,
+        payload: { branchId: 'b1', characterId: 'char_a', happeningId: 'hap_gone' },
+      },
+    },
+    {
+      name: 'a relationship naming a deleted subject',
+      table: characterRelationships,
+      action: {
+        kind: 'upsertCharacterRelationship' as const,
+        source: 'periodic_classifier' as const,
+        payload: {
+          branchId: 'b1',
+          subjectId: 'char_gone',
+          objectId: 'char_a',
+          kind: 'rival',
+          proseEntryId: null,
+        },
+      },
+    },
+    {
+      name: 'a relationship naming a deleted object',
+      table: characterRelationships,
+      action: {
+        kind: 'upsertCharacterRelationship' as const,
+        source: 'periodic_classifier' as const,
+        payload: {
+          branchId: 'b1',
+          subjectId: 'char_a',
+          objectId: 'char_gone',
+          kind: 'rival',
+          proseEntryId: null,
+        },
+      },
+    },
+  ])('drops $name', async ({ action, table }) => {
+    const result = await one(action)
     expect(result).toMatchObject({ status: 'rejected', code: 'noop' })
-    expect(await ctx.db.select().from(happeningAwareness)).toEqual([])
+    expect(await ctx.db.select().from(table)).toEqual([])
   })
+})
 
-  it('drops an involvement naming a deleted happening', async () => {
+describe('a row alive on another branch does not satisfy the guard', () => {
+  it('refuses an entity id that exists only on a sibling branch', async () => {
+    await ctx.db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'fork', createdAt: 1 })
+    await ctx.db.insert(entities).values(characterOn('b2', 'char_only_b2', 'Only on b2'))
+
     const result = await one({
       kind: 'createHappeningInvolvement',
       source: 'periodic_classifier',
       payload: {
-        entry: { id: 'hinv_1', branchId: 'b1', happeningId: 'hap_gone', entityId: 'char_a' },
+        entry: { id: 'hinv_1', branchId: 'b1', happeningId: 'hap_1', entityId: 'char_only_b2' },
       },
     })
     expect(result).toMatchObject({ status: 'rejected', code: 'noop' })
     expect(await ctx.db.select().from(happeningInvolvements)).toEqual([])
-  })
-
-  it('drops a relationship naming a deleted character', async () => {
-    const result = await one({
-      kind: 'upsertCharacterRelationship',
-      source: 'periodic_classifier',
-      payload: {
-        branchId: 'b1',
-        subjectId: 'char_a',
-        objectId: 'char_gone',
-        kind: 'rival',
-        proseEntryId: null,
-      },
-    })
-    expect(result).toMatchObject({ status: 'rejected', code: 'noop' })
-    expect(await ctx.db.select().from(characterRelationships)).toEqual([])
   })
 })
 
@@ -148,7 +206,7 @@ describe('a row created earlier in the same group counts as present', () => {
     const pairs = await ctx.db
       .select()
       .from(characterRelationships)
-      .where(and(eq(characterRelationships.branchId, 'b1')))
+      .where(eq(characterRelationships.branchId, 'b1'))
     expect(pairs).toHaveLength(1)
   })
 })

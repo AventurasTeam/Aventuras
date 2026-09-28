@@ -1,5 +1,5 @@
 import { sqliteTable, text } from 'drizzle-orm/sqlite-core'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import {
   branches,
@@ -124,6 +124,14 @@ const run = (action: PipelineAction, ctx: Awaited<ReturnType<typeof createTestDb
   applyDeltaAction({ action, actionId: `act_${action.kind}`, branchId: 'b1' }, ctx)
 
 describe('runner lock acquisition', () => {
+  // registerProbes swaps in fakes under real domain kinds; later tests in this file need the
+  // real handlers back.
+  afterEach(() => {
+    __resetRegistry()
+    __resetRegistrationGuard()
+    registerAllDomains()
+  })
+
   it('holds relationship and happening-link writers off while an entity delete runs', async () => {
     const ctx = await createTestDb()
     const started: string[] = []
@@ -208,11 +216,6 @@ async function until(condition: () => boolean): Promise<void> {
 
 describe("a happening's delete and a link write can't interleave", () => {
   it('parks the link write until the delete commits, then drops it', async () => {
-    // Earlier tests in this file swap in probe handlers for these kinds; restore the real
-    // ones so the delete's cascade and the guard's live-row read run for real.
-    __resetRegistry()
-    __resetRegistrationGuard()
-    registerAllDomains()
     const { db, runInTransaction } = await createTestDb()
     await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
     await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
