@@ -16,6 +16,9 @@ function headersToRecord(headers: HeadersInit | undefined): Record<string, strin
 }
 
 async function captureRequestBody(requestClone: Request): Promise<string | undefined> {
+  // React Native's whatwg Request has no `body`, so `.text()` yields '' even for
+  // a GET, and OkHttp rejects a GET or HEAD carrying any body, empty included.
+  if (requestClone.method === 'GET' || requestClone.method === 'HEAD') return undefined
   if (requestClone.body === null) return undefined
   return requestClone.text()
 }
