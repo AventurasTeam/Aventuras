@@ -258,6 +258,11 @@ handler, which is where the sweep must therefore live.
   Carried to [M7.3](../../../roadmap.md#m7--app-settings--diagnostics--onboarding) —
   the Diagnostics Hub delta log wants the same link, and building one
   now would reach into the reader's scroll-compensation machinery.
+- **The three PRs form a native GitHub stack (developer decision,
+  2026-09-28).** Changes on a lower PR's branch carry up by merge; when
+  the lower branches were rebased onto `main` mid-run, the still
+  unpushed upper PR's commits were rebased onto the new head rather
+  than merging it in, which would have carried the pre-rebase commits.
 - **Entity cascade rides the delete delta's undo payload**, the same
   shape as `deleteHappening`'s (`involvements` / `awareness` /
   `relationships` / `translations` keys, `restoreCascade`, and the
