@@ -164,9 +164,8 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   }
 }
 
-// Reads the link rows, then deletes them in the delete's transaction — deleteHappening and every
-// link writer hold the branch's happening_links key, so no involvement or awareness row can land
-// between the two. Translations carry no such lock; see rowCascade below.
+// Link writers hold happening_links, so no involvement or awareness row lands between read
+// and delete; translations aren't locked.
 const happeningCascade: CascadeDeleteOps = async (branchId, happeningId, ctx) => {
   const involvements = await ctx.db
     .select()

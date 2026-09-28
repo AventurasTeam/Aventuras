@@ -82,7 +82,7 @@ export async function translationCascade(
   return { ops, children: { translations: rows } }
 }
 
-/** A lore, thread or chapter row's cascade: its translations and its vectors. */
+/** An embedded row's own cascade: its translations and its vectors. */
 export function rowCascade(table: string, kind: TranslationTargetKind): CascadeDeleteOps {
   return async (branchId, id, ctx) => {
     const own = await translationCascade(ctx, branchId, [{ kind, ids: [id] }])
