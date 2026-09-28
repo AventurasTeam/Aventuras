@@ -21,6 +21,7 @@ import UnetTxt2ImgWorkflow from './comfyWorkflows/unet-txt2img-workflow.json'
 import { specToPixels } from '$lib/utils/image'
 import { imageGetFetch } from './fetchAdapter'
 import { isIos } from '$lib/utils/platform'
+import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 
 const DEFAULT_BASE_URL = 'http://localhost:8188'
 
@@ -56,6 +57,10 @@ export async function fetchModelList(
       ? await imageGetFetch(`${baseUrl}/models/${type}`, undefined, {
           signal: controller.signal,
           serviceId: 'comfy-models',
+          // Without this, imageGetFetch falls back to its own 5-minute default -- shorter
+          // than this app's own default llmTimeoutMs (6 min) -- and its own timer fires
+          // first, so the caller's configured timeout is silently overridden.
+          timeoutMs,
         })
       : await fetch(`${baseUrl}/models/${type}`, { signal: controller.signal })
     if (!isIos() && !resp.ok) {
@@ -350,10 +355,39 @@ function buildOnFailedHandler(
   }
 }
 
+/** The slice of `ComfyApi`'s internals this file patches on iOS. Not part of the SDK's
+ *  public TS types, so accessed through a cast -- see the comment at the call site. */
+type ComfyApiFetchInternals = {
+  fetchApi: (path: string, options?: RequestInit) => Promise<Response>
+  apiURL: (path: string) => string
+  getCredentialHeaders: () => Record<string, string>
+}
+
 export function createComfyProvider(config: ImageProviderConfig): ImageProvider {
   const baseUrl = (config.baseUrl || DEFAULT_BASE_URL).trim()
 
   const api = new ComfyApi(baseUrl).init()
+
+  if (isIos()) {
+    // Every HTTP call the SDK makes -- checkpoints, samplers, prompt queueing, /view image
+    // retrieval, and its own /history polling fallback when the websocket can't connect --
+    // goes through this one method (confirmed by reading the pinned
+    // @saintno/comfyui-sdk@0.3.1 build output; it isn't exposed as a constructor option, so
+    // there's no supported way to inject this). It calls the WebView's global fetch()
+    // directly, which WKWebView's App Transport Security silently blocks on iOS for a
+    // plaintext http:// host outside the local-network exception (see
+    // docs/architecture/overview.md). Patching just this instance's method -- not the
+    // prototype -- routes those calls through Tauri's HTTP plugin instead, while mirroring
+    // the original's own logic (headers are replaced, not merged -- that's the SDK's
+    // existing behavior, kept as-is) so nothing else about how it talks to ComfyUI changes.
+    // Every other platform never runs this branch and keeps calling the SDK unmodified.
+    const internal = api as unknown as ComfyApiFetchInternals
+    internal.fetchApi = (path, options = {}) => {
+      options.headers = { ...internal.getCredentialHeaders() }
+      options.mode = 'cors'
+      return tauriHttpFetch(internal.apiURL(path), options)
+    }
+  }
 
   // Binds baseUrl + optional timeout so internal callers don't repeat them.
   const fetchModels = (type: string) => fetchModelList(baseUrl, type, config.timeoutMs)
