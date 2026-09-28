@@ -15,10 +15,12 @@ import {
 } from '../types'
 import { deltaRowOp } from './delta-row'
 import { withKeyLocks } from './key-lock'
+import { linkRefs } from './live-refs'
 import { createdKey, resolveByActionKind, resolveByTable, type HandlerOutcome } from './registry'
 import { entityCascadeKeys, rowLock, type RowLockKey } from './row-locks'
 
 type Args = { action: PipelineAction; actionId: string; branchId: string; entryId?: string | null }
+type OkOutcome = Extract<HandlerOutcome, { status: 'ok' }>
 
 type ProductionKind = keyof PipelineActionMap
 type LockKey<K extends ProductionKind> =
@@ -105,10 +107,7 @@ export function lockKeysFor(action: PipelineAction): readonly RowLockKey[] {
   return isProductionAction(action) ? lockKeysOf(action.kind, action.payload) : []
 }
 
-function emitOutcomePatches(
-  branchId: string,
-  outcome: Extract<HandlerOutcome, { status: 'ok' }>,
-): void {
+function emitOutcomePatches(branchId: string, outcome: OkOutcome): void {
   if (outcome.patch) resolveByTable(outcome.targetTable)?.patcher?.(branchId, outcome.patch)
   for (const child of outcome.cascadePatches ?? [])
     resolveByTable(child.table)?.patcher?.(branchId, child.patch)
@@ -202,6 +201,36 @@ export type DeltaGroupResult =
 type GroupArgs = { actionId: string; branchId: string; entryId?: string | null }
 
 /**
+ * Handlers read pre-group state, so a delete's cascade can't see the group's other writes: a
+ * second write to a cascaded row logs it twice (undo restores it twice and hits a unique
+ * constraint forever), and a link written to a deleted row passes the live-row guard and dangles.
+ */
+function groupConflict(outcomes: readonly OkOutcome[]): string | null {
+  const cascaded = new Set<string>()
+  const deleted = new Set<string>()
+  for (const outcome of outcomes) {
+    if (outcome.op === 'delete') deleted.add(createdKey(outcome.targetTable, outcome.targetId))
+    for (const child of outcome.cascadePatches ?? []) {
+      const key = createdKey(child.table, child.patch.id)
+      if (cascaded.has(key)) return `two deletes in the group cascade ${key}`
+      cascaded.add(key)
+    }
+  }
+  for (const outcome of outcomes) {
+    const target = createdKey(outcome.targetTable, outcome.targetId)
+    if (cascaded.has(target)) return `the group writes ${target}, which a delete in it cascades`
+    const { patch } = outcome
+    const written =
+      patch?.op === 'create' ? patch.row : patch?.op === 'update' ? patch.columns : undefined
+    for (const ref of written ? linkRefs(outcome.targetTable, written) : []) {
+      const named = createdKey(ref.table, ref.id)
+      if (deleted.has(named)) return `the group links ${target} to ${named}, which it deletes`
+    }
+  }
+  return null
+}
+
+/**
  * Commits actions under one actionId in a single transaction — a rejection anywhere leaves nothing
  * behind, unlike sequential `applyDeltaAction` calls, which each commit on their own.
  *
@@ -209,9 +238,8 @@ type GroupArgs = { actionId: string; branchId: string; entryId?: string | null }
  * earlier one's created row (only `GroupScope` names it); a same-column double-write on one row
  * is rejected here rather than left to callers.
  *
- * A group must not both delete a row and create/delete a link naming it: creating races the
- * live-row guard past the pre-group snapshot; deleting double-logs the cascade's own delete,
- * hitting a primary-key conflict when undo restores it twice.
+ * Rejected as `group-conflict`: a write to a row a delete in the group cascades (two deletes'
+ * cascades included), and a link write naming an entity or happening the group deletes.
  */
 export async function applyDeltaActionGroup(
   actions: readonly PipelineAction[],
@@ -231,11 +259,7 @@ async function applyDeltaActionGroupUnlocked(
   const { actionId, branchId } = args
   const entryId = args.entryId ?? null
 
-  type Prepared = {
-    deltaId: string
-    source: PipelineAction['source']
-    outcome: Extract<HandlerOutcome, { status: 'ok' }>
-  }
+  type Prepared = { deltaId: string; source: PipelineAction['source']; outcome: OkOutcome }
   const prepared: Prepared[] = []
   const pendingColumns = new Map<string, Set<string>>()
   const created = new Set<string>()
@@ -274,6 +298,8 @@ async function applyDeltaActionGroupUnlocked(
   }
 
   if (prepared.length === 0) return { status: 'ok' }
+  const conflict = groupConflict(prepared.map(({ outcome }) => outcome))
+  if (conflict !== null) return { status: 'rejected', reason: conflict, code: 'group-conflict' }
 
   const ops: SqlOp[] = prepared.flatMap(({ deltaId, source, outcome }) => [
     deltaRowOp(ctx, { deltaId, branchId, entryId, actionId, source, target: outcome }),
