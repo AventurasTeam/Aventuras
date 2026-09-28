@@ -26,6 +26,10 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+function sameInputs(a: readonly unknown[], b: readonly unknown[]): boolean {
+  return a.length === b.length && a.every((value, i) => Object.is(value, b[i]))
+}
+
 /**
  * patterns/lists.md → Load-older: the first chunk reloads on any query change and whenever
  * `version` changes; `loadMore` appends the next chunk. Nothing loads on scroll. `labelPaths`
@@ -42,11 +46,29 @@ export function useHistoryChunks(
   // Two loadMore calls before a re-render share one closure's state; this stops the second.
   const loadingMore = useRef(false)
   const { branchId, targetTable, targetId, op, search, labelPaths, sort } = query
+  // Must list exactly the load effect's deps.
+  const inputs = [
+    load,
+    branchId,
+    targetTable,
+    targetId,
+    op,
+    search,
+    labelPaths,
+    sort,
+    version,
+    attempt,
+  ]
+  const [shownFor, setShownFor] = useState(inputs)
+  // Reset while rendering, not in the effect, so the old query's rows never commit under the new one.
+  if (!sameInputs(shownFor, inputs)) {
+    setShownFor(inputs)
+    setState(LOADING)
+  }
 
   useEffect(() => {
     const mine = ++request.current
     loadingMore.current = false
-    setState(LOADING)
     load({ branchId, targetTable, targetId, op, search, labelPaths, sort, cursor: null }).then(
       (chunk) => {
         if (request.current === mine)

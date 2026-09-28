@@ -100,6 +100,40 @@ describe('useHistoryChunks', () => {
     expect(load).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: null }))
   })
 
+  it('reports loading, not the previous rows, as soon as the query or version changes', async () => {
+    const { load, calls } = manualLoader()
+    const { hook, version } = setup(load)
+    await waitFor(() => expect(calls).toHaveLength(1))
+    await act(async () => calls[0].resolve({ rows: [row(4), row(3)], nextCursor: 3 }))
+    expect(hook.result.current.status).toBe('ready')
+
+    hook.rerender({ search: 'traits', version })
+    expect(hook.result.current.status).toBe('loading')
+    expect(hook.result.current.rows).toEqual([])
+    expect(hook.result.current.hasMore).toBe(false)
+
+    await act(async () => calls[1].resolve({ rows: [row(4)], nextCursor: null }))
+    expect(hook.result.current.status).toBe('ready')
+    hook.rerender({ search: 'traits', version: {} })
+    expect(hook.result.current.status).toBe('loading')
+    expect(hook.result.current.rows).toEqual([])
+  })
+
+  it('fails the first chunk, then retries it from the top', async () => {
+    const { load, calls } = manualLoader()
+    const { hook } = setup(load)
+    await waitFor(() => expect(calls).toHaveLength(1))
+    await act(async () => calls[0].reject(new Error('read failed')))
+    expect(hook.result.current.status).toBe('failed')
+
+    act(() => hook.result.current.retry())
+    expect(hook.result.current.status).toBe('loading')
+    expect(calls).toHaveLength(2)
+    expect(calls[1].query.cursor).toBeNull()
+    await act(async () => calls[1].resolve({ rows: [row(4)], nextCursor: null }))
+    expect(positions(hook.result.current.rows)).toEqual([4])
+  })
+
   it('keeps the newer first chunk when the superseded one resolves after it', async () => {
     const { load, calls } = manualLoader()
     const { hook, version } = setup(load)

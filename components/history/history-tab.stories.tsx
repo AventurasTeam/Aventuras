@@ -155,8 +155,12 @@ export const ClearingASearch: Story = {
 
     // The wrong empty state would only flash for the debounce, so record every render of it.
     let sawEmpty = false
-    const observer = new MutationObserver(() => {
-      if (document.body.textContent?.includes('No history yet')) sawEmpty = true
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        const texts = Array.from(record.addedNodes, (node) => node.textContent ?? '')
+        if (record.type === 'characterData') texts.push(record.target.textContent ?? '')
+        if (texts.some((text) => text.includes('No history yet'))) sawEmpty = true
+      }
     })
     observer.observe(document.body, { childList: true, subtree: true, characterData: true })
     await userEvent.clear(input)
