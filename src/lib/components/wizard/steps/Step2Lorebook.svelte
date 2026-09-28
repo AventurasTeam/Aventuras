@@ -230,7 +230,7 @@
                 <Button
                   variant="ghost"
                   size="icon"
-                  class="text-muted-foreground hover:text-destructive h-8 w-8 transition-opacity group-hover:opacity-100 [@media(hover:hover)]:opacity-0"
+                  class="text-muted-foreground hover:text-destructive can-hover:opacity-0 h-8 w-8 transition-opacity group-hover:opacity-100"
                   onclick={() => onRemoveLorebook(lorebook.id)}
                   title="Remove"
                 >

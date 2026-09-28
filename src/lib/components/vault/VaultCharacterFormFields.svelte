@@ -186,7 +186,7 @@
           />
           <button
             type="button"
-            class="bg-destructive text-destructive-foreground hover:bg-destructive/90 absolute -top-2 -right-2 rounded-full p-1 shadow-sm transition-opacity group-hover:opacity-100 [@media(hover:hover)]:opacity-0"
+            class="bg-destructive text-destructive-foreground hover:bg-destructive/90 can-hover:opacity-0 absolute -top-2 -right-2 rounded-full p-1 shadow-sm transition-opacity group-hover:opacity-100"
             onclick={removePortrait}
           >
             <X class="h-3 w-3" />

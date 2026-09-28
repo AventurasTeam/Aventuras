@@ -362,7 +362,7 @@
                     )}
                     {@const deleteUnavailable = deleteBlockedReason !== null}
                     <div
-                      class="absolute top-1 right-1 flex transition-opacity group-hover:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:focus-within:opacity-100"
+                      class="can-hover:opacity-0 absolute top-1 right-1 flex transition-opacity group-hover:opacity-100 focus-within:opacity-100"
                     >
                       <button
                         class="text-surface-500 hover:text-surface-200 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 sm:min-h-0 sm:min-w-0 sm:p-0.5"
@@ -473,7 +473,7 @@
                       )}
                       {@const orphanDeleteUnavailable = orphanBlockedReason !== null}
                       <div
-                        class="absolute top-1 right-1 flex transition-opacity group-hover:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:focus-within:opacity-100"
+                        class="can-hover:opacity-0 absolute top-1 right-1 flex transition-opacity group-hover:opacity-100 focus-within:opacity-100"
                       >
                         <button
                           class="text-surface-500 hover:text-surface-200 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 sm:min-h-0 sm:min-w-0 sm:p-0.5"

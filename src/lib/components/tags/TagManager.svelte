@@ -136,7 +136,7 @@
                         class={`h-6 w-6 rounded-full bg-${editColor} ring-muted cursor-pointer ring-2`}
                       ></div>
                       <div
-                        class="bg-background absolute top-full left-0 z-10 mt-2 hidden w-48 flex-wrap gap-1 rounded-lg border p-2 shadow-xl group-hover:flex"
+                        class="bg-background can-hover:hidden absolute top-full left-0 z-10 mt-2 flex w-48 flex-wrap gap-1 rounded-lg border p-2 shadow-xl group-hover:flex"
                       >
                         {#each colors as color, i (color + i)}
                           <button
@@ -181,7 +181,7 @@
                   </div>
 
                   <div
-                    class="flex items-center gap-2 transition-opacity group-hover:opacity-100 [@media(hover:hover)]:opacity-0"
+                    class="can-hover:opacity-0 flex items-center gap-2 transition-opacity group-hover:opacity-100"
                   >
                     <Button
                       variant="ghost"

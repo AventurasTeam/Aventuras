@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 
 @custom-variant dark (&:is(.dark *));
+@custom-variant can-hover (@media (hover: hover));
 
 @theme {
   /* Radius (for rounded-*) */
