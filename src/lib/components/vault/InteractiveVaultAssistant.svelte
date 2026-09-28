@@ -1010,7 +1010,7 @@
                           </div>
                         </button>
                         <button
-                          class="text-surface-500 hover:bg-surface-600 hover:text-surface-200 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md transition-all focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                          class="text-surface-500 hover:bg-surface-600 hover:text-surface-200 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md transition-all group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:hover)]:opacity-0"
                           onclick={(e) => {
                             e.stopPropagation()
                             startRename(conv)
@@ -1020,7 +1020,7 @@
                           <Pencil class="h-3 w-3" />
                         </button>
                         <button
-                          class="text-surface-500 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md transition-all hover:bg-red-500/20 hover:text-red-400 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                          class="text-surface-500 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md transition-all group-hover:opacity-100 hover:bg-red-500/20 hover:text-red-400 focus-visible:opacity-100 [@media(hover:hover)]:opacity-0"
                           onclick={(e) => {
                             e.stopPropagation()
                             handleDeleteConversation(conv.id)
@@ -1105,7 +1105,7 @@
                       <!-- svelte-ignore a11y_no_static_element_interactions -->
                       <!-- svelte-ignore a11y_click_events_have_key_events -->
                       <div
-                        class="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
+                        class="flex items-center gap-1 transition-opacity group-hover:opacity-100 [@media(hover:hover)]:opacity-0"
                         onclick={(e) => e.stopPropagation()}
                       >
                         <button
@@ -1314,7 +1314,7 @@
                               </button>
                               {#if toolCall.imageId}
                                 <button
-                                  class="absolute right-1.5 bottom-1.5 flex items-center gap-1 rounded-md bg-black/70 px-1.5 py-1 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/90"
+                                  class="absolute right-1.5 bottom-1.5 flex items-center gap-1 rounded-md bg-black/70 px-1.5 py-1 text-[10px] text-white transition-opacity group-hover:opacity-100 hover:bg-black/90 [@media(hover:hover)]:opacity-0"
                                   onclick={(e) => {
                                     e.stopPropagation()
                                     handleReferenceImage(toolCall.imageId!)
@@ -1326,7 +1326,7 @@
                                 </button>
                                 {#if activeCharacterEntity}
                                   <button
-                                    class="absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-md bg-black/70 px-1.5 py-1 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/90"
+                                    class="absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-md bg-black/70 px-1.5 py-1 text-[10px] text-white transition-opacity group-hover:opacity-100 hover:bg-black/90 [@media(hover:hover)]:opacity-0"
                                     onclick={(e) => {
                                       e.stopPropagation()
                                       handleSetPortrait(toolCall.imageId!)

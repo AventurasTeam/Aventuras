@@ -39,7 +39,7 @@
 
   // The card reveals its actions on hover, so an open menu has to hold its trigger visible.
   const triggerClass = (open: boolean) =>
-    `h-8 w-8 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 ${open ? 'sm:opacity-100' : ''}`
+    `h-8 w-8 transition-opacity ${open ? '' : '[@media(hover:hover)]:opacity-0 group-hover:opacity-100'}`
 
   // The built-in pack is rewritten from the app's own templates on every launch, so it is
   // never a replacement target.
@@ -167,7 +167,7 @@
             <Button
               variant="ghost"
               size="icon"
-              class="text-destructive h-8 w-8 transition-opacity sm:opacity-0 sm:group-hover:opacity-100"
+              class="text-destructive h-8 w-8 transition-opacity group-hover:opacity-100 [@media(hover:hover)]:opacity-0"
               onclick={(e: MouseEvent) => {
                 e.stopPropagation()
                 onDelete?.()

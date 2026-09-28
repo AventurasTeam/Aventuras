@@ -407,7 +407,7 @@
               <span class="bg-accent-500 h-2 w-2 rounded-full" title="Current branch"></span>
             {/if}
             <button
-              class="text-surface-500 hover:text-surface-200 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 transition-opacity sm:min-h-0 sm:min-w-0 sm:p-0.5 sm:opacity-0 sm:group-hover:opacity-100"
+              class="text-surface-500 hover:text-surface-200 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 transition-opacity group-hover:opacity-100 sm:min-h-0 sm:min-w-0 sm:p-0.5 [@media(hover:hover)]:opacity-0"
               onclick={(e) => {
                 e.stopPropagation()
                 startRename(branch)
@@ -421,7 +421,7 @@
                 class="text-surface-500 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 transition-opacity sm:min-h-0 sm:min-w-0 sm:p-0.5 {children.length >
                 0
                   ? 'cursor-not-allowed opacity-30'
-                  : 'hover:text-red-400 sm:opacity-0 sm:group-hover:opacity-100'}"
+                  : 'group-hover:opacity-100 hover:text-red-400 [@media(hover:hover)]:opacity-0'}"
                 onclick={(e) => {
                   e.stopPropagation()
                   handleDeleteBranch(branch.id)
