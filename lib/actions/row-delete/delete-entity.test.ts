@@ -375,4 +375,43 @@ describe('deleteEntityRow — races closed by the in-lock re-read', () => {
       expect([...scene].sort()).toEqual(['char_lead', 'char_o', 'char_x'])
     }
   })
+
+  it("waits out a scene edit holding the tail's lock, then drops the target from the edited scene", async () => {
+    let release = () => {}
+    const commitGate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let parked = false
+    const gated: DbCtx = {
+      ...ctx,
+      runInTransaction: async (ops) => {
+        if (!parked) {
+          parked = true
+          await commitGate
+        }
+        return ctx.runInTransaction(ops)
+      },
+    }
+    const yieldToTimers = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+    const sceneEdit = updateEntrySceneFields(
+      'b1',
+      'entry_2',
+      { sceneEntities: ['char_x', 'char_o', 'char_lead'] },
+      gated,
+    )
+    await yieldToTimers()
+    expect(parked).toBe(true)
+    let deleteSettled = false
+    const deletion = deleteEntityRow('b1', 'char_x', gated).finally(() => {
+      deleteSettled = true
+    })
+    await yieldToTimers()
+    expect(deleteSettled).toBe(false)
+    release()
+
+    expect(await sceneEdit).toEqual({ status: 'ok' })
+    expect(await deletion).toEqual({ status: 'ok' })
+    expect([...(await tailScene())].sort()).toEqual(['char_lead', 'char_o'])
+  })
 })
