@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
 
-import { and, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
 import { branches, ensureVecTablesSql, stories, translations } from '@/lib/db'
@@ -85,7 +85,7 @@ describe('translationCascade', () => {
     const left = await db
       .select({ id: translations.id })
       .from(translations)
-      .where(and(eq(translations.branchId, 'b1')))
+      .where(eq(translations.branchId, 'b1'))
     expect(left.map((r) => r.id).sort()).toEqual(['tr_2', 'tr_3'])
   })
 
@@ -95,6 +95,52 @@ describe('translationCascade', () => {
       ops: [],
       children: { translations: [] },
     })
+  })
+
+  it("scopes reads and deletes to the target branch, leaving another branch's same-id rows", async () => {
+    const { db, sqlite, ctx } = await setup()
+    await db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'm2', createdAt: 1 })
+
+    const row = (branchId: string) => ({
+      id: 'tr_1',
+      branchId,
+      targetKind: 'lore' as const,
+      targetId: 'lore_1',
+      field: 'title',
+      language: 'cs',
+      translatedText: 'x',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await db.insert(translations).values([row('b1'), row('b2')])
+
+    const insertLoreVector = (branchId: string) =>
+      sqlite
+        .prepare(
+          `INSERT INTO lore_vec_8 (pk, branch_id, model_id, id, source_hash, embedding) VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          `${branchId}:lore_1:m8`,
+          branchId,
+          'm8',
+          'lore_1',
+          'h',
+          new Uint8Array(new Float32Array(8).buffer),
+        )
+    insertLoreVector('b1')
+    insertLoreVector('b2')
+
+    const cascade = await translationCascade(ctx, 'b1', [{ kind: 'lore', ids: ['lore_1'] }])
+    const vecOps = await vecSweepOps('lore', 'b1', 'lore_1', vecTableLister(ctx))
+    await ctx.runInTransaction([...cascade.ops, ...vecOps])
+
+    expect(cascade.children.translations.map((r) => r.branchId)).toEqual(['b1'])
+    const leftTranslations = await db.select({ branchId: translations.branchId }).from(translations)
+    expect(leftTranslations.map((r) => r.branchId)).toEqual(['b2'])
+    const leftVectors = sqlite.prepare('SELECT branch_id FROM lore_vec_8').all() as {
+      branch_id: string
+    }[]
+    expect(leftVectors.map((r) => r.branch_id)).toEqual(['b2'])
   })
 })
 

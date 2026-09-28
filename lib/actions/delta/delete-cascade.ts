@@ -91,12 +91,11 @@ export function rowCascade(table: string, kind: TranslationTargetKind): CascadeD
   }
 }
 
-// The undo-payload key each child table's rows ride under; `involvements` / `awareness` predate this.
+// Stored undo payloads fix these key names; other tables ride under their table name.
 const PAYLOAD_KEY: Record<string, string> = {
   happening_involvements: 'involvements',
   happening_awareness: 'awareness',
   character_relationships: 'relationships',
-  translations: 'translations',
 }
 
 function payloadKey(table: string): string {
