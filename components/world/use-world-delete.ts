@@ -11,6 +11,7 @@ import {
   entriesStore,
   happeningAwarenessStore,
   happeningInvolvementsStore,
+  loreStore,
 } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
@@ -18,6 +19,23 @@ import { deleteRejectionText, entityDeleteCopy, loreDeleteCopy } from './delete-
 import { entityDeleteImpact } from './delete-impact'
 
 export type WorldDeleteTarget = { kind: 'entity'; row: Entity } | { kind: 'lore'; row: Lore }
+
+/**
+ * Re-reads the target by id at proceed time (after a dirty-pane Save/Discard/Cancel resolves) —
+ * a Save can rename the row or a concurrent write can remove it before the confirm opens.
+ */
+export function freshDeleteTarget(
+  target: WorldDeleteTarget,
+  entities: ReadonlyMap<string, Entity>,
+  lore: ReadonlyMap<string, Lore>,
+): WorldDeleteTarget | null {
+  if (target.kind === 'lore') {
+    const row = lore.get(target.row.id)
+    return row == null ? null : { kind: 'lore', row }
+  }
+  const row = entities.get(target.row.id)
+  return row == null ? null : { kind: 'entity', row }
+}
 
 function confirmCopy(branchId: string, target: WorldDeleteTarget): DeleteConfirmCopy {
   if (target.kind === 'lore') return loreDeleteCopy(target.row)
@@ -45,7 +63,11 @@ export function useWorldDelete(branchId: string, ctx: DbCtx, guard: (proceed: ()
 
   const request = useCallback(
     (target: WorldDeleteTarget) =>
-      guard(() => setPending({ target, copy: confirmCopy(branchId, target) })),
+      guard(() => {
+        const fresh = freshDeleteTarget(target, entitiesStore.getEntities(), loreStore.getLore())
+        if (fresh == null) return
+        setPending({ target: fresh, copy: confirmCopy(branchId, fresh) })
+      }),
     [branchId, guard],
   )
   const cancel = useCallback(() => setPending(null), [])
