@@ -1,7 +1,10 @@
+import type { Delta } from '@/lib/db'
 import { t } from '@/lib/i18n'
 
 export const HISTORY_TABLES = ['entities', 'lore', 'threads', 'happenings'] as const
 export type HistoryTable = (typeof HISTORY_TABLES)[number]
+
+export const HISTORY_OPS = ['create', 'update', 'delete'] as const satisfies readonly Delta['op'][]
 
 type Labels = Readonly<Record<string, () => string>>
 
@@ -98,4 +101,34 @@ export function pathsMatchingLabel(table: HistoryTable, term: string): string[] 
   return Object.entries(LABELS[table])
     .filter(([, label]) => label().toLocaleLowerCase().includes(needle))
     .map(([path]) => path)
+}
+
+// Every rendered spelling of an op: its raw name, its filter-chip label, and the summary
+// text the humanizer prints for it — a search over the rendered summary must find them all.
+const OP_LABELS: Record<Delta['op'], () => string[]> = {
+  create: () => [
+    t('history:op.create'),
+    t('history:opFilter.create'),
+    t('history:summary.created'),
+  ],
+  update: () => [
+    t('history:op.update'),
+    t('history:opFilter.update'),
+    t('history:summary.modified'),
+    t('history:summary.modifiedUnknown'),
+  ],
+  delete: () => [
+    t('history:op.delete'),
+    t('history:opFilter.delete'),
+    t('history:summary.deleted'),
+  ],
+}
+
+/** Ops whose rendered label (op name, filter chip, or summary text) contains `term`. */
+export function opsMatchingLabel(term: string): Delta['op'][] {
+  const needle = term.trim().toLocaleLowerCase()
+  if (needle === '') return []
+  return HISTORY_OPS.filter((op) =>
+    OP_LABELS[op]().some((label) => label.toLocaleLowerCase().includes(needle)),
+  )
 }

@@ -1,8 +1,8 @@
-import { and, asc, desc, eq, gt, lt, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, inArray, lt, or, sql, type SQL } from 'drizzle-orm'
 
 import { deltas, type DbCtx, type Delta } from '@/lib/db'
 
-import type { HistoryTable } from './field-labels'
+import { HISTORY_OPS, opsMatchingLabel, type HistoryTable } from './field-labels'
 
 export type HistoryOp = Delta['op']
 export type HistorySort = 'newest' | 'oldest'
@@ -31,17 +31,33 @@ function likePattern(term: string): string {
   return `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
 }
 
-// docs/data-model.md → op=update encoding rule. json_type, not json_extract: a
-// pre-change null sentinel reads as SQL NULL through json_extract either way (absent
-// path or present-with-null), so a path the write set to null would never match.
-function searchCondition(term: string, labelPaths: readonly string[]): SQL {
+// json_type, not json_extract: json_extract can't distinguish an absent path from one
+// whose pre-change value was JSON null (the write set it FROM null) — both read as SQL NULL.
+function fieldSearchCondition(term: string, labelPaths: readonly string[]): SQL {
   const paths = new Set(labelPaths)
   if (PATH_TERM.test(term)) paths.add(term)
-  return or(
-    sql`${deltas.op} = ${term.toLowerCase()}`,
-    sql`${deltas.undoPayload} LIKE ${likePattern(term)} ESCAPE '\\'`,
-    ...[...paths].map((path) => sql`json_type(${deltas.undoPayload}, ${`$.${path}`}) IS NOT NULL`),
+  // A delete's undo payload is the full pre-delete row, so every column would read as
+  // present; gating on op=update keeps this arm to "does the change touch this field".
+  return and(
+    eq(deltas.op, 'update'),
+    or(
+      sql`${deltas.undoPayload} LIKE ${likePattern(term)} ESCAPE '\\'`,
+      ...[...paths].map(
+        (path) => sql`json_type(${deltas.undoPayload}, ${`$.${path}`}) IS NOT NULL`,
+      ),
+    ),
   ) as SQL
+}
+
+// world.md's scopeSummary: a term also matches an op whose rendered label (raw name,
+// filter chip, or summary text) contains it, so searching the summary's wording works.
+function searchCondition(term: string, labelPaths: readonly string[]): SQL {
+  const ops = new Set(opsMatchingLabel(term))
+  const lowered = term.toLowerCase()
+  if ((HISTORY_OPS as readonly string[]).includes(lowered)) ops.add(lowered as Delta['op'])
+  const conditions: SQL[] = [fieldSearchCondition(term, labelPaths)]
+  if (ops.size > 0) conditions.push(inArray(deltas.op, [...ops]))
+  return or(...conditions) as SQL
 }
 
 /** One load-older chunk of a row's delta log (C4). */

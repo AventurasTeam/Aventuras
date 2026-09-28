@@ -1,4 +1,10 @@
-export { fieldPathLabel, HISTORY_TABLES, pathsMatchingLabel } from './field-labels'
+export {
+  fieldPathLabel,
+  HISTORY_OPS,
+  HISTORY_TABLES,
+  opsMatchingLabel,
+  pathsMatchingLabel,
+} from './field-labels'
 export type { HistoryTable } from './field-labels'
 export { changedPaths, humanizeDelta } from './humanize'
 export type { HistoryRowView, HumanizeContext } from './humanize'
