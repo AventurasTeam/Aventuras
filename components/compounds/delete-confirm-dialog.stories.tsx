@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
+import { deleteUndoHint } from './delete-confirm-copy'
 import { DeleteConfirmDialog } from './delete-confirm-dialog'
 
 const WAIT = { timeout: 3000 }
@@ -13,7 +14,7 @@ const meta = {
     onOpenChange: fn(),
     onConfirm: fn(),
     title: 'Delete Mira?',
-    description: "This can be undone from the reader with Ctrl+Z (Undo in the reader's menu).",
+    description: deleteUndoHint(),
     impacts: [
       '2 awareness records',
       '1 happening involvement',
@@ -32,11 +33,7 @@ export const Character: Story = {
     await waitFor(() => {
       expect(within(dialog).getByText('• 2 awareness records')).toBeVisible()
       expect(within(dialog).getByText('• Removed from the current scene')).toBeVisible()
-      expect(
-        within(dialog).getByText(
-          "This can be undone from the reader with Ctrl+Z (Undo in the reader's menu).",
-        ),
-      ).toBeVisible()
+      expect(within(dialog).getByText(deleteUndoHint())).toBeVisible()
     }, WAIT)
     await userEvent.click(within(dialog).getByRole('button', { name: 'Delete character' }))
     expect(args.onConfirm).toHaveBeenCalledTimes(1)
