@@ -271,3 +271,44 @@ describe('model-aware vec identity', () => {
     expect(ops).toHaveLength(2)
   })
 })
+
+describe('upsertVecOps with a source guard', () => {
+  let db: DatabaseSync
+
+  beforeEach(async () => {
+    db = makeDb()
+    await ensureVecTables(384, async (sql) => {
+      db.exec(sql)
+    })
+    db.exec('CREATE TABLE entities (branch_id TEXT, id TEXT, name TEXT, description TEXT)')
+    db.prepare(`INSERT INTO entities VALUES ('b1', 'e1', 'Kael', NULL)`).run()
+  })
+
+  const write = (id: string) => ({
+    kind: 'entity' as const,
+    id,
+    branchId: 'b1',
+    modelId: 'm1',
+    dim: 384,
+    sourceHash: sourceHash('h'),
+    vector: vec(384, 0),
+  })
+  const ids = () =>
+    (db.prepare('select id from entities_vec_384').all() as { id: string }[]).map((r) => r.id)
+
+  it('lands while the row still holds the embedded text', () => {
+    runOps(db, upsertVecOps(write('e1'), { fields: ['Kael', null] }))
+    expect(ids()).toEqual(['e1'])
+  })
+
+  it('writes nothing for a row deleted mid-embed', () => {
+    runOps(db, upsertVecOps(write('e2'), { fields: ['Mira', null] }))
+    expect(ids()).toEqual([])
+  })
+
+  it('writes nothing for a row edited mid-embed, and drops the stale vector it replaced', () => {
+    runOps(db, upsertVecOps(write('e1')))
+    runOps(db, upsertVecOps(write('e1'), { fields: ['Kale', null] }))
+    expect(ids()).toEqual([])
+  })
+})
