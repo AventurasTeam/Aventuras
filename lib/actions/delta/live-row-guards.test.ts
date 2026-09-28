@@ -175,15 +175,13 @@ describe('a row alive on another branch does not satisfy the guard', () => {
 
   it('refuses a happening id that exists only on a sibling branch', async () => {
     await ctx.db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'fork', createdAt: 1 })
-    await ctx.db
-      .insert(happenings)
-      .values({
-        id: 'hap_only_b2',
-        branchId: 'b2',
-        title: 'Only on b2',
-        createdAt: 1,
-        updatedAt: 1,
-      })
+    await ctx.db.insert(happenings).values({
+      id: 'hap_only_b2',
+      branchId: 'b2',
+      title: 'Only on b2',
+      createdAt: 1,
+      updatedAt: 1,
+    })
 
     const result = await one({
       kind: 'createHappeningInvolvement',

@@ -11,18 +11,16 @@ describe('reverse-replay of a create', () => {
     for (const ddl of ensureVecTablesSql(8)) sqlite.exec(ddl)
     await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
     await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
-    await db
-      .insert(entities)
-      .values({
-        id: 'char_1',
-        branchId: 'b1',
-        kind: 'character',
-        name: 'Aria',
-        status: 'active',
-        injectionMode: 'auto',
-        createdAt: 1,
-        updatedAt: 1,
-      })
+    await db.insert(entities).values({
+      id: 'char_1',
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Aria',
+      status: 'active',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
     for (const dim of [384, 8]) {
       sqlite
         .prepare(
