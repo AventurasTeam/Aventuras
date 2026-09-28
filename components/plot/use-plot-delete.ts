@@ -52,8 +52,8 @@ export function plotLinkCounts(branchId: string, target: PlotDeleteTarget): Link
 }
 
 /**
- * Re-reads the target by id at proceed time (after a dirty-pane Save/Discard/Cancel resolves) —
- * a Save can rename the row or a concurrent write can remove it before the confirm opens.
+ * Re-reads the target by id at proceed time (after a dirty pane's Save or Discard): a Save can
+ * rename the row, or a concurrent write remove it, before the confirm opens.
  */
 export function freshDeleteTarget(
   target: PlotDeleteTarget,
@@ -76,8 +76,8 @@ export function plotDeleteRejectionText(code: string | undefined): string {
 }
 
 /**
- * world.md → Delete: the confirm, then the row's delete with its cascade (C3). The row leaving
- * the store clears the selection; CTRL-Z in the reader brings it back.
+ * world.md → Delete (confirm, then cascade delete C3).
+ * Row leaving the store clears selection; CTRL-Z in the reader restores it.
  */
 export function usePlotDelete(branchId: string, ctx: DbCtx, guard: (proceed: () => void) => void) {
   const [pending, setPending] = useState<{

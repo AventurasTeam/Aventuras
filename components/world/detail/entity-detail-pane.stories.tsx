@@ -945,7 +945,7 @@ export const DeleteHandsUpTheRow: Story = {
   },
 }
 
-/** The story's lead can't be deleted: the entry is disabled and says why (4.2b). */
+/** The story's lead can't be deleted: the entry is disabled and says why. */
 export const LeadCannotBeDeleted: Story = {
   args: { row: KAEL },
   play: async ({ args }) => {

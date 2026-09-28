@@ -21,7 +21,10 @@ export type { DeleteConfirmCopy } from './delete-confirm-copy'
 type DeleteConfirmDialogProps = DeleteConfirmCopy & {
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** Fires before the dialog's own `onOpenChange(false)` — hosts needn't close it; treat that close as harmless. */
+  /**
+   * Fires before the dialog's own `onOpenChange(false)` — hosts needn't close it; treat
+   * that close as harmless.
+   */
   onConfirm: () => void
 }
 

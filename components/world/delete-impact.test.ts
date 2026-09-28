@@ -114,9 +114,8 @@ describe('entityDeleteImpact', () => {
       involvements: [],
       relationships: [],
     })
-    // Distinct non-zero counts, so a references/unplacedItems mix-up shows up in the copy.
-    // The item counts twice over: it both loses its link (a reference, like the two characters)
-    // and separately ends up with neither a location nor a holder (unplaced).
+    // Distinct non-zero counts catch a references/unplacedItems mix-up: the item counts twice —
+    // it loses its link (a reference, like the two characters) and ends up unplaced too.
     expect(impact.references).toBe(3)
     expect(impact.unplacedItems).toBe(1)
     expect(entityDeleteCopy(hollow, impact).impacts).toEqual([

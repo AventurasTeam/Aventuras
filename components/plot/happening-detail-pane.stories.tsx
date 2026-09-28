@@ -873,7 +873,7 @@ export const LeaveGuard: Story = {
   },
 }
 
-/** Raw JSON: the row with its committed involvements and an awareness summary inline. Also exercises Delete. */
+/** Raw JSON: committed involvements/awareness inline; the menu's Delete fires onDelete too. */
 export const Menu: Story = {
   play: async ({ args }) => {
     await userEvent.click(await pane().findByRole('button', { name: 'More actions' }))

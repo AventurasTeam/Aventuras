@@ -17,9 +17,8 @@ import { world } from '../locators/world'
 const HERO_STORY = 'story_hero'
 const HERO_TITLE = 'The Veilstone Courier'
 
-// The delete's tail-scene drop needs Mira in the tail's scene; the seed leaves her out of it.
-// docs/implementation/lessons-learned/seed-tip-position-shifts-at-boot.md: the last ai_reply
-// is the tail boot recovery can't remove.
+// The delete's tail-scene drop needs Mira in the tail's scene; seed leaves her out of it.
+// See docs/implementation/lessons-learned/seed-tip-position-shifts-at-boot.md.
 function putInTailScene(dbPath: string, name: string): void {
   const db = new DatabaseSync(dbPath)
   try {
@@ -46,9 +45,8 @@ function putInTailScene(dbPath: string, name: string): void {
   }
 }
 
-// The fresh userData this spec launches has no embedder model installed, so nothing ever
-// drains — vectors seeded here only ever move by the delete/undo/redo under test, undo's
-// forced-zero holds, and a re-seed between undo and redo can't collide with a real embed.
+// No embedder model here, so nothing auto-drains — vectors only move via the delete/undo/redo
+// under test; undo's forced-zero holds, and a re-seed between undo/redo can't hit a real embed.
 async function seedVectors(page: Page, branchId: string, id: string): Promise<void> {
   for (const sql of ensureVecTablesSql(8)) await queryApp(page, sql)
   for (const dim of [384, 8]) {

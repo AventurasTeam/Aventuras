@@ -40,10 +40,8 @@ type ComposerProps = {
    */
   disabledReason?: string
   /**
-   * Why do / say / think can't wrap right now (the lead the wrap names is gone). The picker
-   * disables with this reason (web tooltip + a11y hint) and every send goes out as free
-   * text; also rendered as the visible reason line so a sighted Android user — who never
-   * sees a web tooltip — isn't left with a greyed picker and no explanation.
+   * Lead gone: do/say/think can't wrap, so the picker disables with this reason and sends fall
+   * back to free text; also the visible reason line, since Android has no web tooltip.
    */
   modesUnavailableReason?: string
   onSend: (rawText: string, mode: ComposerMode) => void

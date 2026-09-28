@@ -35,10 +35,8 @@ function count<T>(rows: Iterable<T>, match: (row: T) => boolean): number {
 }
 
 /**
- * The confirm's counts. `references` / `unplacedItems` / `tailScene` come straight from
- * `entityDeleteActions` (the same builder the delete runs); `awareness` / `involvements` /
- * `relationships` repeat its cascade's predicates against the stores it doesn't touch directly —
- * a new cascade table needs a matching count here.
+ * `references`/`unplacedItems`/`tailScene` mirror `entityDeleteActions`; the rest repeat its
+ * cascade predicates directly — a new cascade table needs a matching count here.
  */
 export function entityDeleteImpact({
   branchId,

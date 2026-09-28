@@ -21,8 +21,8 @@ import { entityDeleteImpact } from './delete-impact'
 export type WorldDeleteTarget = { kind: 'entity'; row: Entity } | { kind: 'lore'; row: Lore }
 
 /**
- * Re-reads the target by id at proceed time (after a dirty-pane Save/Discard/Cancel resolves) —
- * a Save can rename the row or a concurrent write can remove it before the confirm opens.
+ * Re-reads the target by id at proceed time (after a dirty pane's Save or Discard): a Save can
+ * rename the row, or a concurrent write remove it, before the confirm opens.
  */
 export function freshDeleteTarget(
   target: WorldDeleteTarget,
@@ -52,8 +52,8 @@ function confirmCopy(branchId: string, target: WorldDeleteTarget): DeleteConfirm
 }
 
 /**
- * world.md → Delete: the confirm, then one grouped delete. The row leaving the store clears the
- * selection (`useWorldSelection`); CTRL-Z in the reader brings it back.
+ * world.md → Delete. The row leaving the store clears the selection (`useWorldSelection`);
+ * CTRL-Z in the reader brings it back.
  */
 export function useWorldDelete(branchId: string, ctx: DbCtx, guard: (proceed: () => void) => void) {
   const [pending, setPending] = useState<{

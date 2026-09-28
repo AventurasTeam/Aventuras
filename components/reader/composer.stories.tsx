@@ -91,16 +91,14 @@ export const LeadMissing: Story = {
   },
   render: (args) => <Composer ref={leadMissingRef} {...args} />,
   play: async ({ args, canvasElement }) => {
-    // renderTrigger's label + selected-option spans compose into a single accessible name
-    // with no separator ("Mode" + "Free" → "Mode Free"); the value stays gated to 'free'
-    // whatever the underlying draft mode is, so the name never becomes "Mode Do" below.
+    // renderTrigger's label + selected-option compose with no separator ('Mode'+'Free' → 'Mode Free');
+    // value stays gated to 'free' regardless of draft mode, so the name never becomes 'Mode Do'.
     const mode = await screen.findByRole('button', { name: 'Mode Free' })
     expect(mode).toHaveAttribute('aria-disabled', 'true')
     const input = canvasElement.querySelector('textarea')
     if (input == null) throw new Error('composer input not found')
-    // Seed a non-free mode directly (the picker is inert while unavailable, so nothing in the
-    // UI can do this) — proves the picker's display gate and the send-time gate both hold
-    // against the underlying draft state, not just against the picker's own default.
+    // Seeds a non-free mode directly (picker is inert while unavailable, UI can't do this) — proves
+    // both gates hold against the real draft state, not just the picker's own default value.
     leadMissingRef.current?.restoreDraft('draw my blade', 'do')
     await waitFor(() => expect(input.value).toBe('draw my blade'))
     expect(screen.getByRole('button', { name: 'Mode Free' })).toHaveAttribute(
