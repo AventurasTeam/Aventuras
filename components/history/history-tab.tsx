@@ -21,8 +21,12 @@ const SEARCH_DEBOUNCE_MS = 250
 
 export type HistoryTabProps = { branchId: string; targetTable: HistoryTable; targetId: string }
 
-/** C4: one row's delta log. */
-export function HistoryTab({ branchId, targetTable, targetId }: HistoryTabProps) {
+/** C4: one row's delta log; keyed by target so a host that reuses this across rows resets on switch. */
+export function HistoryTab(props: HistoryTabProps) {
+  return <HistoryTabForTarget key={`${props.targetTable}:${props.targetId}`} {...props} />
+}
+
+function HistoryTabForTarget({ branchId, targetTable, targetId }: HistoryTabProps) {
   const [searchInput, setSearchInput] = useState('')
   const search = useDebouncedValue(searchInput.trim(), SEARCH_DEBOUNCE_MS)
   const [op, setOp] = useState<HistoryOp | null>(null)

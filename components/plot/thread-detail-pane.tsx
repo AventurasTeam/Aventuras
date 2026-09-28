@@ -171,12 +171,7 @@ export function ThreadDetailPane({
                 subtext={t('history:tab.afterSaveBody')}
               />
             ) : (
-              <HistoryTab
-                key={row.id}
-                branchId={branchId}
-                targetTable="threads"
-                targetId={row.id}
-              />
+              <HistoryTab branchId={branchId} targetTable="threads" targetId={row.id} />
             )}
           </TabsContent>
         </DetailPane>

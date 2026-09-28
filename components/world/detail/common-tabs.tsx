@@ -67,12 +67,7 @@ export function TrailingTabs({
             body={t('history:tab.afterSaveBody')}
           />
         ) : (
-          <HistoryTab
-            key={row.id}
-            branchId={data.branchId}
-            targetTable="entities"
-            targetId={row.id}
-          />
+          <HistoryTab branchId={data.branchId} targetTable="entities" targetId={row.id} />
         )}
       </TabsContent>
     </>

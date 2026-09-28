@@ -249,12 +249,7 @@ export function HappeningDetailPane({
                 subtext={t('history:tab.afterSaveBody')}
               />
             ) : (
-              <HistoryTab
-                key={row.id}
-                branchId={branchId}
-                targetTable="happenings"
-                targetId={row.id}
-              />
+              <HistoryTab branchId={branchId} targetTable="happenings" targetId={row.id} />
             )}
           </TabsContent>
         </DetailPane>

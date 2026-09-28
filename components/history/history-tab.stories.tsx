@@ -1,8 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { useState } from 'react'
+import { View } from 'react-native'
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
 
+import { Button } from '@/components/ui/button'
+import { Text } from '@/components/ui/text'
 import type { Delta, Happening, Thread } from '@/lib/db'
-import type { HistoryChunk, HistoryQuery } from '@/lib/history'
+import type { HistoryChunk, HistoryQuery, HistoryTable } from '@/lib/history'
 import { happeningsStore, threadsStore } from '@/lib/stores'
 
 import { HistoryLoaderProvider } from './history-loader'
@@ -171,5 +175,45 @@ export const ClearingASearch: Story = {
     await screen.findAllByTestId('delta-log-row', {}, WAIT)
     observer.disconnect()
     expect(sawEmpty).toBe(false)
+  },
+}
+
+function SwitchTargetHarness() {
+  const [target, setTarget] = useState<{ targetTable: HistoryTable; targetId: string }>({
+    targetTable: 'threads',
+    targetId: 'thread_amulet',
+  })
+  return (
+    <View className="gap-3">
+      <Button
+        variant="secondary"
+        size="sm"
+        onPress={() => setTarget({ targetTable: 'happenings', targetId: 'hap_fire' })}
+      >
+        <Text>Switch to the happening</Text>
+      </Button>
+      <HistoryTab branchId="br_1" targetTable={target.targetTable} targetId={target.targetId} />
+    </View>
+  )
+}
+
+/** A target switch on the same mounted host drops the prior row's search and op filter. */
+export const SwitchingTargetsResetsFilters: Story = {
+  render: () => <SwitchTargetHarness />,
+  play: async () => {
+    await screen.findAllByTestId('delta-log-row', {}, WAIT)
+    await userEvent.type(screen.getByPlaceholderText('Search fields, changes…'), 'status')
+    await userEvent.click(screen.getByRole('button', { name: 'Deleted' }))
+    await waitFor(() => expect(screen.getByText('No changes match')).toBeVisible(), WAIT)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Switch to the happening' }))
+    await waitFor(
+      () => expect(screen.getByPlaceholderText('Search fields, changes…')).toHaveValue(''),
+      WAIT,
+    )
+    expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Deleted' })).toHaveAttribute('aria-pressed', 'false')
+    const [row] = await screen.findAllByTestId('delta-log-row', {}, WAIT)
+    expect(within(row).getByText('The keep burns')).toBeVisible()
   },
 }
