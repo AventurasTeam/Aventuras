@@ -220,6 +220,12 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   some other shape? Whatever 4.2c settles on,
   [`world.md → Reversibility`](../../../../ui/screens/world/world.md#reversibility)'s
   merge write list must be amended to match.
+- **Reuse the delete confirm's link counts** (4.2b):
+  `components/world/delete-impact.ts` repeats the entity cascade's
+  awareness / involvement / relationship predicates against the
+  stores; 4.2c's merge summary needs the same counts over the same
+  tables — move them into `lib/world` beside `entityDeleteActions`
+  rather than writing a third copy.
 
 ## Implementation notes
 

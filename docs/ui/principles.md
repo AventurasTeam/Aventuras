@@ -762,9 +762,10 @@ mode — the text goes out verbatim. A visible reason line under the
 composer (not just a web tooltip, since Android has none) reads the
 `reader:composerLeadMissing` copy: "The story's lead isn't on this
 branch, so actions can't be written for them. Set a new lead in
-World." The composer's own disabled reason (generation in flight)
-wins over this one in the reason line when both apply, since Send is
-already refused outright. A first-person wrap is unaffected — `I`
+World." When the whole composer is disabled (the story still
+loading, or an embedder swap pending), that reason wins the reason
+line. While a turn is generating only Send is refused, and the
+lead-missing line stays. A first-person wrap is unaffected — `I`
 needs no lead name.
 
 **Four modes** (adventure only):

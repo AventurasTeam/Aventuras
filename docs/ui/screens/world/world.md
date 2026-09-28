@@ -444,13 +444,14 @@ drawer. No World-specific deviation.
 
 Shared spec for World (entity, lore) and Plot (thread, happening —
 [`plot.md → Detail-head overflow menu`](../plot/plot.md#detail-head-overflow-menu)).
-`⋯ → Delete entity` (or `Delete` on lore / thread / happening) routes
-through the pane's Save / Discard / Cancel guard first when the row is
-dirty, on both screens, then raises a confirm built from the row
-re-read by id. A resolved Save can rename or remove it. Its impact
-counts are a snapshot at that moment, not a live read — the arm
-re-reads the cascade again at apply time regardless. A pending confirm
-is cancelled when the screen loses focus, on both screens.
+`⋯ → Delete entity` (or `Delete` on lore, `Delete thread` /
+`Delete happening` on Plot) routes through the pane's Save / Discard /
+Cancel guard first when the row is dirty, on both screens, then raises
+a confirm built from the row re-read by id. A resolved Save can rename
+or remove it. Its impact counts are a snapshot at that moment, not a
+live read — the arm re-reads the cascade at apply time regardless. A
+pending confirm is cancelled when the screen loses focus, on both
+screens.
 
 The confirm's description reads "You can undo this from the reader:
 Undo last action in its menu, or Cmd/Ctrl-Z," naming the reader's own
@@ -472,28 +473,26 @@ exists (a separate reversal can have removed the far end first), and,
 for an entity, the refs it cleared and the tail scene. What each kind's
 cascade covers:
 
-An entity:
-
-- The row, its `happening_involvements`, `happening_awareness` and
-  `character_relationships` rows, its translations and those of the
-  relationships, and its vectors in every dim family.
-- Every other entity's reference to it — `current_location_id`,
-  `parent_location_id`, `at_location_id`, `faction_id`,
-  `equipped_items[]`, `inventory[]` — cleared in one `state` patch per
-  entity. Items at a deleted location, or held by a deleted character,
-  are left unplaced (no position is invented).
-- **The tail entry's scene.** The id leaves the tail's `sceneEntities`,
-  and a deleted location stops being its `currentLocationId`, so the
-  next turn doesn't inherit it. Earlier entries keep the id and render
-  it as an Unknown-entity chip
-  ([`entry-card.md → World-state panel`](../../patterns/entry-card.md#world-state-panel)).
-
+- **An entity.**
+  - The row, its `happening_involvements`, `happening_awareness` and
+    `character_relationships` rows, its translations and those of the
+    relationships, and its vectors in every dim family.
+  - Every other entity's reference to it — `current_location_id`,
+    `parent_location_id`, `at_location_id`, `faction_id`,
+    `equipped_items[]`, `inventory[]` — cleared in one `state` patch
+    per entity. Items at a deleted location, or held by a deleted
+    character, are left unplaced (no position is invented).
+  - **The tail entry's scene.** The id leaves the tail's
+    `sceneEntities`, and a deleted location stops being its
+    `currentLocationId`, so the next turn doesn't inherit it. Earlier
+    entries keep the id and render it as an Unknown-entity chip
+    ([`entry-card.md → World-state panel`](../../patterns/entry-card.md#world-state-panel)).
 - **Lore.** The row, its translations and its vectors in every dim
   family.
 - **A thread.** The row, its translations and its vectors in every
   dim family.
 - **A happening.** The row, its `happening_involvements` and
-  `happening_awareness` rows, their translations, and its vectors in
+  `happening_awareness` rows, its translations, and its vectors in
   every dim family.
 
 **The lead can't be deleted.** The action refuses it (`lead-entity`)
@@ -985,9 +984,8 @@ Merge writes:
 - `entities` op=`update` on every other entity that held an
   inverse ref to non-canonical (state JSON paths rewritten).
 - `translations` op=`update` per affected row.
-- The loser is dropped from the tail scene, same as a standalone
-  delete ([Delete](#delete)'s C3 arm) — not rewritten to the
-  canonical.
+- The loser is dropped from the tail scene, as the entity
+  [delete](#delete) arm does — not rewritten to the canonical.
 
 Embeddings are not delta-logged
 ([`data-model.md → embeddings`](../../../data-model.md#diagram)) —

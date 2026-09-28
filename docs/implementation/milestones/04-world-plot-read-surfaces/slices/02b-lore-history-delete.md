@@ -222,9 +222,10 @@ handler, which is where the sweep must therefore live.
 ## Implementation notes
 
 - **A row created earlier in the same action group counts as present
-  for the happening cascade's live-row guards** (developer decision,
-  2026-09-28), on top of the per-branch lock and re-read-and-no-op
-  shape the Critical-section-shape open question above resolved.
+  for the three link writers' live-row guards** (relationships
+  included; developer decision, 2026-09-28), on top of the per-branch
+  lock and re-read-and-no-op shape the "Deleting an entity while a
+  classifier pass is in flight" open question above resolved.
 - **Reversals are never refused; the lead can dangle (developer
   decision, 2026-09-28).** `resolveLead` (`lib/world`) is the interim:
   World and the composer read the lead through it and treat a
