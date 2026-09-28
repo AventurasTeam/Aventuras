@@ -90,7 +90,7 @@ export function HistoryTabView({
 }: HistoryTabViewProps) {
   return (
     <View className="gap-3">
-      <Toolbar narrow>
+      <Toolbar>
         <Toolbar.Search
           value={search}
           onChange={onSearchChange}

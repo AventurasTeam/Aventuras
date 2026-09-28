@@ -51,14 +51,18 @@ type HarnessProps = Omit<
   'filtered' | 'search' | 'onSearchChange' | 'op' | 'onOpChange' | 'sort' | 'onSortChange'
 > & {
   onOp: (op: HistoryOp | null) => void
+  /** Default previews the narrow host layout; a play clicking the toolbar needs it past
+   * Toolbar's 1024px threshold, or the desktop-viewport guess remounts the chip mid-click
+   * (lessons-learned/formrow-narrow-story-remount.md, same mechanism for Toolbar). */
+  boxWidth?: number
 }
 
-function Harness(props: HarnessProps) {
+function Harness({ boxWidth = 520, ...props }: HarnessProps) {
   const [search, setSearch] = useState('')
   const [op, setOp] = useState<HistoryOp | null>(null)
   const [sort, setSort] = useState<HistorySort>('newest')
   return (
-    <View className="w-full max-w-[520px]">
+    <View style={{ width: '100%', maxWidth: boxWidth }}>
       <HistoryTabView
         {...props}
         filtered={search.trim() !== '' || op != null}
@@ -87,6 +91,7 @@ type Story = StoryObj<typeof Harness>
 
 /** Every op and several sources; `entry #n` is meta text and rows aren't pressable. */
 export const Populated: Story = {
+  args: { boxWidth: 1100 },
   play: async ({ args }) => {
     const rows = await screen.findAllByTestId('delta-log-row')
     expect(rows).toHaveLength(4)
@@ -119,7 +124,7 @@ export const Empty: Story = {
 
 /** An active filter turns the empty list into "no match", not "no history". */
 export const NoResults: Story = {
-  args: { rows: [], hasMore: false },
+  args: { rows: [], hasMore: false, boxWidth: 1100 },
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Deleted' }))
     expect(await screen.findByText('No changes match')).toBeVisible()
