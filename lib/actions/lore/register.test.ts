@@ -94,6 +94,8 @@ describe('lore CRUD arms', () => {
       ctx,
     )
     expect(result.status).toBe('rejected')
+    // A malformed patch is a hard rejection, not the changed-nothing noop code.
+    expect(result.status === 'rejected' && result.code).not.toBe('noop')
     expect((await rowFor(db, 'lore_1')).title).toBe('Aether') // unchanged
     expect((await db.select().from(deltas)).length).toBe(1) // only the create delta
   })
