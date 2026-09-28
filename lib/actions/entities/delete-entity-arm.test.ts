@@ -354,8 +354,8 @@ describe('deleteEntity', () => {
 
   it('scopes the lead lookup to the target branch, ignoring another story that claims char_x as lead', async () => {
     // s2/b3's own lead really is char_x; b1's lead is char_lead. Dropping the branch filter on
-    // the lead lookup makes it read whichever row the unfiltered join returns first (b1's, since
-    // it was inserted first) instead of the target branch's own row.
+    // the lead lookup makes it read whichever row the unfiltered join returns first, instead
+    // of the target branch's own row.
     await ctx.db.insert(stories).values({
       id: 's2',
       title: 'T2',

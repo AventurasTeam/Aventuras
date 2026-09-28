@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm'
+import { desc, eq, getTableColumns } from 'drizzle-orm'
 
 import type { Delta, SqlOp } from '@/lib/db'
 import { deltas, embeddedFieldsForTable, isEmbeddedSourceTable, rowsPerInsert } from '@/lib/db'
@@ -217,7 +217,9 @@ async function buildUndoOps(
           : childRows
         // A wide child table times a large row count can overrun SQLite's per-statement
         // bind cap in one INSERT; split across statements that stay in the same batch.
-        const chunkSize = rowsPerInsert(Object.keys(restoredChildren[0]).length)
+        // Counted from the table, not a row's own keys — drizzle binds one value per
+        // column, defaulted or not, whether or not the row carries it.
+        const chunkSize = rowsPerInsert(Object.keys(getTableColumns(childTable)).length)
         for (let i = 0; i < restoredChildren.length; i += chunkSize) {
           ops.push(
             ctx.db

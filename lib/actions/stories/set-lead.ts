@@ -64,9 +64,8 @@ export async function setStoryLead(
       .where(eq(stories.id, storyId))
       .toSQL(),
   ])
-  // A redo re-inserting a since-deleted entity must not resurrect it as the lead of a stale
-  // group; every new write invalidates redo (apply-delta-action.ts's choke point covers only
-  // delta-logged writes, so this direct one clears it itself).
+  // Redo replays deletes without the arm's lead refusal; this direct write must invalidate
+  // redo like every delta-logged one.
   undoRedoStore.clear()
   const open = currentStoryStore.getCurrentStory()
   if (open?.storyId === storyId) currentStoryStore.set({ ...open, definition: next.data })
