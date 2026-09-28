@@ -110,3 +110,24 @@ export const LeadMissing: Story = {
     await waitFor(() => expect(args.onSend).toHaveBeenCalledWith('draw my blade', 'free'))
   },
 }
+
+/**
+ * A pending embedder swap on a third-person story with no lead sets both reasons — e.g. the
+ * reader route's `disabled={!hydrationSucceeded || swapPending}`. The disabled reason wins.
+ */
+export const DisabledReasonWinsOverLeadMissing: Story = {
+  args: {
+    modesEnabled: true,
+    isGenerating: false,
+    disabled: true,
+    disabledReason: 'Switching writer models…',
+    modesUnavailableReason:
+      "The story's lead isn't on this branch, so actions can't be written for them. Set a new lead in World.",
+  },
+  play: async ({ args }) => {
+    await waitFor(() => expect(screen.getByText(args.disabledReason as string)).toBeVisible(), {
+      timeout: 3000,
+    })
+    expect(screen.queryByText(args.modesUnavailableReason as string)).not.toBeInTheDocument()
+  },
+}

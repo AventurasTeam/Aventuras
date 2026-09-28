@@ -17,7 +17,9 @@ import { LoreDetailPane } from './lore-detail-pane'
 
 const WAIT = { timeout: 5000 }
 const NEW_ID = 'lore_new'
-const BLOCKED_REASON = 'Generation is in flight. Cancel to edit.'
+// Deliberately distinct from the pane's real fallback text, so BlockedWithoutReason (which
+// unsets this) can only pass by the fallback actually firing, not by this default leaking through.
+const BLOCKED_REASON = 'Story harness: generation blocked.'
 const CATEGORIES = ['cosmology', 'religion']
 
 const AETHERIUM: Lore = {
