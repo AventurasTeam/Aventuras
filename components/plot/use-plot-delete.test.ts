@@ -1,15 +1,18 @@
 // @vitest-environment jsdom
-import { act, cleanup, renderHook } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { deleteUndoHint } from '@/components/compounds/delete-confirm-copy'
 import { ROW_DELETE_REJECTION, type DbCtx } from '@/lib/actions'
 import type { Happening, HappeningAwareness, HappeningInvolvement, Thread } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import {
   happeningAwarenessStore,
   happeningInvolvementsStore,
   happeningsStore,
   threadsStore,
 } from '@/lib/stores'
+import { toast } from '@/lib/toast'
 
 import {
   freshDeleteTarget,
@@ -18,6 +21,13 @@ import {
   plotLinkCounts,
   usePlotDelete,
 } from './use-plot-delete'
+
+const deleteRow = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/actions', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  deleteRow,
+}))
+vi.mock('@/lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 const ctx = {} as DbCtx
 const BRANCH = 'br_1'
@@ -107,9 +117,15 @@ describe('plotDeleteCopy', () => {
 
   it('reads the same undo copy World uses', () => {
     const copy = plotDeleteCopy({ kind: 'thread', row: DEBT }, { involvements: 0, awareness: 0 })
-    expect(copy.description).toBe(
-      'You can undo this from the reader: Undo last action in its menu, or Cmd/Ctrl-Z.',
+    expect(copy.description).toBe(deleteUndoHint())
+  })
+
+  it('lists nothing for a happening with no links', () => {
+    const copy = plotDeleteCopy(
+      { kind: 'happening', row: AMBUSH },
+      { involvements: 0, awareness: 0 },
     )
+    expect(copy.impacts).toEqual([])
   })
 })
 
@@ -220,5 +236,97 @@ describe('usePlotDelete', () => {
     act(() => proceed?.())
 
     expect(result.current.copy).toBeNull()
+  })
+
+  it('builds the confirm copy for a happening, re-read from the store, with its own-branch link counts', () => {
+    happeningInvolvementsStore.hydrate(BRANCH, [
+      involvement('inv_1', AMBUSH.id),
+      involvement('inv_2', 'hap_other'),
+      involvement('inv_3', AMBUSH.id, { branchId: 'br_2' }),
+    ])
+    happeningAwarenessStore.hydrate(BRANCH, [awareness('aw_1', AMBUSH.id)])
+    const guard = (fn: () => void) => fn()
+    const { result } = renderHook(() => usePlotDelete(BRANCH, ctx, guard))
+
+    act(() => result.current.request({ kind: 'happening', row: AMBUSH }))
+
+    expect(result.current.copy?.title).toBe('Delete The fire?')
+    expect(result.current.copy?.impacts).toEqual(['1 involvement', '1 awareness record'])
+  })
+})
+
+describe('usePlotDelete → confirm', () => {
+  const guard = (fn: () => void) => fn()
+
+  beforeEach(() => {
+    threadsStore.hydrate(BRANCH, [DEBT])
+    happeningsStore.hydrate(BRANCH, [AMBUSH])
+    deleteRow.mockReset()
+    vi.mocked(toast.success).mockClear()
+    vi.mocked(toast.error).mockClear()
+    vi.spyOn(logger, 'error').mockImplementation(() => {})
+  })
+  afterEach(() => vi.restoreAllMocks())
+
+  it('deletes a thread through deleteRow with the thread kind', () => {
+    deleteRow.mockResolvedValue({ status: 'ok' })
+    const { result } = renderHook(() => usePlotDelete(BRANCH, ctx, guard))
+    act(() => result.current.request({ kind: 'thread', row: DEBT }))
+    act(() => result.current.confirm())
+    expect(deleteRow).toHaveBeenCalledWith('thread', BRANCH, DEBT.id, ctx)
+  })
+
+  it('deletes a happening through deleteRow with the happening kind', () => {
+    deleteRow.mockResolvedValue({ status: 'ok' })
+    const { result } = renderHook(() => usePlotDelete(BRANCH, ctx, guard))
+    act(() => result.current.request({ kind: 'happening', row: AMBUSH }))
+    act(() => result.current.confirm())
+    expect(deleteRow).toHaveBeenCalledWith('happening', BRANCH, AMBUSH.id, ctx)
+  })
+
+  it('toasts success on an ok result', async () => {
+    deleteRow.mockResolvedValue({ status: 'ok' })
+    const { result } = renderHook(() => usePlotDelete(BRANCH, ctx, guard))
+    act(() => result.current.request({ kind: 'thread', row: DEBT }))
+    act(() => result.current.confirm())
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Deleted The debt.'))
+  })
+
+  it('toasts the in-flight refusal', async () => {
+    deleteRow.mockResolvedValue({
+      status: 'rejected',
+      reason: 'generation in flight',
+      code: ROW_DELETE_REJECTION.inFlight,
+    })
+    const { result } = renderHook(() => usePlotDelete(BRANCH, ctx, guard))
+    act(() => result.current.request({ kind: 'thread', row: DEBT }))
+    act(() => result.current.confirm())
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("Couldn't delete while generation is in flight."),
+    )
+  })
+
+  it('toasts the generic failure for any other refusal code', async () => {
+    deleteRow.mockResolvedValue({ status: 'rejected', reason: 'gone', code: 'not-found' })
+    const { result } = renderHook(() => usePlotDelete(BRANCH, ctx, guard))
+    act(() => result.current.request({ kind: 'happening', row: AMBUSH }))
+    act(() => result.current.confirm())
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Couldn't delete that."))
+  })
+
+  it('logs and toasts the generic failure when deleteRow throws', async () => {
+    deleteRow.mockRejectedValue(new Error('SQLITE_BUSY: database is locked'))
+    const { result } = renderHook(() => usePlotDelete(BRANCH, ctx, guard))
+    act(() => result.current.request({ kind: 'thread', row: DEBT }))
+    act(() => result.current.confirm())
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Couldn't delete that."))
+    expect(logger.error).toHaveBeenCalledWith(
+      'app.plot_delete_failed',
+      expect.objectContaining({
+        branchId: BRANCH,
+        id: DEBT.id,
+        error: 'SQLITE_BUSY: database is locked',
+      }),
+    )
   })
 })
