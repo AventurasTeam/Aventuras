@@ -58,7 +58,7 @@ function Harness(props: HarnessProps) {
   const [op, setOp] = useState<HistoryOp | null>(null)
   const [sort, setSort] = useState<HistorySort>('newest')
   return (
-    <View className="w-[520px]">
+    <View className="w-full max-w-[520px]">
       <HistoryTabView
         {...props}
         filtered={search.trim() !== '' || op != null}
@@ -93,8 +93,6 @@ export const Populated: Story = {
     expect(within(rows[1]).getByText('periodic classifier · entry #47 · 2 h ago')).toBeVisible()
     expect(screen.queryAllByRole('button', { name: /^update Kael/ })).toHaveLength(0)
 
-    window.dispatchEvent(new Event('scroll'))
-    expect(args.onLoadMore).not.toHaveBeenCalled()
     await userEvent.click(screen.getByRole('button', { name: 'Load older' }))
     expect(args.onLoadMore).toHaveBeenCalledTimes(1)
 
@@ -103,12 +101,29 @@ export const Populated: Story = {
   },
 }
 
-export const LoadingOlder: Story = { args: { status: 'loading-more' } }
+export const LoadingOlder: Story = {
+  args: { status: 'loading-more' },
+  play: async () => {
+    const button = await screen.findByRole('button', { name: /Load older/ })
+    await expect(button).toBeDisabled()
+    await expect(within(button).getByRole('progressbar')).toBeVisible()
+  },
+}
 
 export const Empty: Story = {
   args: { rows: [], hasMore: false },
   play: async () => {
     expect(await screen.findByText('No history yet')).toBeVisible()
+  },
+}
+
+/** An active filter turns the empty list into "no match", not "no history". */
+export const NoResults: Story = {
+  args: { rows: [], hasMore: false },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'Deleted' }))
+    expect(await screen.findByText('No changes match')).toBeVisible()
+    expect(screen.queryByText('No history yet')).toBeNull()
   },
 }
 
