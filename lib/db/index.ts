@@ -192,7 +192,7 @@ export type {
   VaultCalendar,
   WizardSession,
 } from './types'
-export { BIND_CHUNK } from './bind-limit'
+export { BIND_CHUNK, rowsPerInsert } from './bind-limit'
 export { runInTransaction } from './runtime/transaction'
 export { execRaw, listTableNames, queryRows } from './runtime/exec'
 export { rowQuery } from './types'

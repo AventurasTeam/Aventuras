@@ -1,7 +1,7 @@
 import { desc, eq } from 'drizzle-orm'
 
 import type { Delta, SqlOp } from '@/lib/db'
-import { deltas, embeddedFieldsForTable, isEmbeddedSourceTable } from '@/lib/db'
+import { deltas, embeddedFieldsForTable, isEmbeddedSourceTable, rowsPerInsert } from '@/lib/db'
 
 import type { DbCtx } from '../types'
 import { applyUndoPayload, isPayloadMetaKey } from './delta-encoding'
@@ -215,7 +215,17 @@ async function buildUndoOps(
         const restoredChildren: Record<string, unknown>[] = childIsEmbedded
           ? childRows.map((childRow) => ({ ...childRow, embeddingStale: 1 }))
           : childRows
-        ops.push(ctx.db.insert(childTable).values(restoredChildren).toSQL())
+        // A wide child table times a large row count can overrun SQLite's per-statement
+        // bind cap in one INSERT; split across statements that stay in the same batch.
+        const chunkSize = rowsPerInsert(Object.keys(restoredChildren[0]).length)
+        for (let i = 0; i < restoredChildren.length; i += chunkSize) {
+          ops.push(
+            ctx.db
+              .insert(childTable)
+              .values(restoredChildren.slice(i, i + chunkSize))
+              .toSQL(),
+          )
+        }
         for (const childRow of restoredChildren) {
           patches.push({
             table: childTableName,
