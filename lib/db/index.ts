@@ -19,6 +19,7 @@ export {
   entityStateColumnSchema,
   entityStateSchemaForKind,
   VISUAL_CATEGORIES,
+  VISUAL_TEXT_MAX,
 } from './entities/entity-state-schema'
 export type { EntityKind } from './entities/entity-state-schema'
 export { characterRelationshipWriteSchema } from './entities/character-relationship-schema'

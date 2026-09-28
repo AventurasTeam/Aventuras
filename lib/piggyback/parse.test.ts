@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
+import {
+  emptyEntityState,
+  entityStateSchemaForKind,
+  VISUAL_TEXT_MAX as SCHEMA_VISUAL_TEXT_MAX,
+} from '@/lib/db'
 import { MAX_EMITTED_QUERIES } from '@/lib/retrieval'
 
 import { parseStateBlock, parseSuggestionsBlock, stripTrailingBlocks } from './parse'
-import { MAX_RETRIEVAL_QUERIES } from './types'
+import { MAX_RETRIEVAL_QUERIES, VISUAL_TEXT_MAX } from './types'
 
 const WELL_FORMED = `Some narrative prose here.
 <state>
@@ -112,6 +117,48 @@ describe('parseStateBlock', () => {
       { id: 'c1', type: 'attire', text: 'a leather jacket' },
     ])
     expect(result.failures).toEqual([])
+  })
+
+  // Q1 (4.2b, developer decision 2026-09-28): truncate rather than drop, so an over-long note
+  // never blocks an unrelated later updateEntity write that re-validates the whole state.
+  describe('<visual_changes> text cap', () => {
+    const noteFor = (text: string) => {
+      const raw = `<state><visual_changes><entity id="c1" type="physique">${text}</entity></visual_changes></state>`
+      return parseStateBlock(raw).block.visualChanges?.[0]
+    }
+    // Validates the note the way updateEntity actually would: against the whole
+    // entity state, not just the one field, since that's what an over-long note breaks.
+    const stateWithPhysique = (text: string) => ({
+      ...emptyEntityState('character'),
+      visual: { physique: text },
+    })
+
+    it('truncates an over-cap note to exactly the schema cap and keeps it schema-valid', () => {
+      const note = noteFor('a'.repeat(600))
+      expect(note?.text).toHaveLength(500)
+      expect(
+        entityStateSchemaForKind('character').safeParse(stateWithPhysique(note?.text ?? ''))
+          .success,
+      ).toBe(true)
+    })
+
+    it('leaves a note at exactly the cap unchanged', () => {
+      const exact = 'b'.repeat(500)
+      const note = noteFor(exact)
+      expect(note?.text).toBe(exact)
+    })
+
+    it('does not split a surrogate pair when the cut lands mid-emoji', () => {
+      const emoji = '\u{1F600}' // 2 UTF-16 units; index 499 is the high surrogate
+      const note = noteFor('a'.repeat(499) + emoji)
+      expect(note?.text).toBe('a'.repeat(499))
+    })
+
+    // The cap lives in two modules that can't import each other (see VISUAL_TEXT_MAX in
+    // ./types.ts) — drift here means the parser truncates to a length the schema still rejects.
+    it('caps at the same length the schema enforces', () => {
+      expect(VISUAL_TEXT_MAX).toBe(SCHEMA_VISUAL_TEXT_MAX)
+    })
   })
 
   it('isolates a truncated <transfers> segment without blocking sceneEntities', () => {

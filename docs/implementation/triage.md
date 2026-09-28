@@ -54,15 +54,14 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **Piggyback entity visual text is uncapped.** `parseVisualChanges`
-  only trims, and `buildStatePatchOutcome` never validates, but
-  `updateEntity` re-validates the whole state against
-  `characterStateSchema` (500-char visual caps), so an over-long field
-  on an unrelated entity that references a deleted location, character
-  or faction makes the delete fail with an opaque schema-validation
-  error. Options: clamp or validate on the piggyback write path, or a
-  merge-style ref-clearing handler that doesn't re-validate unrelated
-  fields (2026-09-28, raised by 4.2b).
+- **Piggyback entity visual text was uncapped; new writes now
+  truncate.** `parseVisualChanges` now truncates a note to
+  `VISUAL_TEXT_MAX`, matching `characterStateSchema`'s 500-char visual
+  caps (4.2b, developer decision 2026-09-28). Still open: an entity
+  that already holds an over-long visual field from before this fix
+  still fails a later `updateEntity` that re-validates its whole
+  state — e.g. a delete clearing a ref to it. No repair of existing
+  rows.
 - **`row-closure.ts`'s `CHILD_TABLES` widens a reversal set only for
   happenings' children.** A reversal deleting a character a create made
   orphans relationship, involvement or awareness rows naming it that

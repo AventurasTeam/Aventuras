@@ -11,7 +11,7 @@ import {
   SUGGESTIONS_ROOT_TAG,
   TRAILING_ROOT_TAGS,
 } from './tags'
-import { MAX_RETRIEVAL_QUERIES, VISUAL_CHANGE_TYPES } from './types'
+import { MAX_RETRIEVAL_QUERIES, VISUAL_CHANGE_TYPES, VISUAL_TEXT_MAX } from './types'
 import type {
   ItemTransfer,
   SuggestionRef,
@@ -96,6 +96,17 @@ function assertNotTruncated(segment: string, extractedCount: number, tagLabel: s
   }
 }
 
+// characterStateSchema's visual fields cap at VISUAL_TEXT_MAX (data-model.md → Soft caps and
+// compaction discipline), and updateEntity re-validates the whole entity state on every write —
+// so an untruncated note here would fail an unrelated later write to this entity. Cut by UTF-16
+// code unit (Zod's `.length`), then trimmed one further unit if the cut lands mid-surrogate-pair.
+function truncateVisualText(text: string): string {
+  if (text.length <= VISUAL_TEXT_MAX) return text
+  const cut = text.slice(0, VISUAL_TEXT_MAX)
+  const lastUnit = cut.charCodeAt(cut.length - 1)
+  return lastUnit >= 0xd800 && lastUnit <= 0xdbff ? cut.slice(0, -1) : cut
+}
+
 // <entity id="..." type="...">text</entity> — full-replace visual change,
 // one entry per changed category (docs/memory/piggyback.md → Trailing block format).
 function parseVisualChanges(segment: string): VisualChangeNote[] {
@@ -107,7 +118,7 @@ function parseVisualChanges(segment: string): VisualChangeNote[] {
     const attrs = parseAttributes(attrText)
     if (attrs.id === undefined || attrs.type === undefined || !isVisualChangeType(attrs.type))
       continue
-    notes.push({ id: attrs.id, type: attrs.type, text: text.trim() })
+    notes.push({ id: attrs.id, type: attrs.type, text: truncateVisualText(text.trim()) })
   }
   assertNotTruncated(segment, notes.length, 'visual_changes')
   return notes
