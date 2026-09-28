@@ -54,6 +54,27 @@ describe('vecSweepOps', () => {
     const { ctx } = await setup()
     expect(await vecSweepOps('story_entries', 'b1', 'entry_1', vecTableLister(ctx))).toEqual([])
   })
+
+  it('discovers dim families created after the first call', async () => {
+    const { db, sqlite, ctx } = await setup()
+    await db.insert(stories).values({ id: 's2', title: 'T2', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values({ id: 'b2', storyId: 's2', name: 'm', createdAt: 1 })
+    const lister1 = vecTableLister(ctx)
+    await lister1() // Consume once to seed the memo
+
+    // Create a new dim family and insert a vector
+    for (const ddl of ensureVecTablesSql(16)) sqlite.exec(ddl)
+    insertVector(sqlite, 'entities_vec_16', 16, 'char_3')
+
+    // A fresh lister discovers the new family
+    const lister2 = vecTableLister(ctx)
+    await ctx.runInTransaction(await vecSweepOps('entities', 'b1', 'char_3', lister2))
+
+    const left = sqlite.prepare('SELECT count(*) AS n FROM entities_vec_16').all() as {
+      n: number
+    }[]
+    expect(left[0].n).toBe(0)
+  })
 })
 
 describe('translationCascade', () => {

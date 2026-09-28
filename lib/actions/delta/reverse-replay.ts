@@ -159,7 +159,7 @@ async function buildUndoOps(
       })
     }
 
-    // No cascade on purpose: the caller's set already carries the children's deltas
+    // No child-row cascade on purpose: the caller's set already carries the children's deltas
     // (row-closure.ts; generation-pipeline.md → Reverse-replay).
     if (delta.op === 'create') {
       const keeping = entry.rowKeepingColumns ?? []
@@ -180,7 +180,7 @@ async function buildUndoOps(
       absent.add(key)
       tombstones.delete(key)
       emitDelete()
-      // retrieval.md → Compute lifecycle: a reversal deleting a row takes its vectors too.
+      // Vectors carry no deltas, so the closure can't reach them (retrieval.md → Compute lifecycle).
       ops.push(
         ...(await vecSweepOps(delta.targetTable, delta.branchId, delta.targetId, listVecTables)),
       )

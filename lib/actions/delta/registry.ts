@@ -3,6 +3,7 @@ import type { SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core'
 import type { ZodType } from 'zod'
 
 import type { Delta, SqlOp } from '@/lib/db'
+import { isEmbeddedSourceTable } from '@/lib/db'
 
 import type { DbCtx, PipelineAction } from '../types'
 
@@ -105,6 +106,11 @@ const tableRegistry = new Map<string, TableEntry>()
 export function register(reg: DomainRegistration): void {
   // A misspelled name, or none, reads as null on every row: each update reversal would delete.
   if (reg.rowKeepingColumns) {
+    // Embedded tables' reversals sweep vectors instead of keeping rows by nullable columns.
+    if (isEmbeddedSourceTable(reg.table))
+      throw new Error(
+        `register: ${reg.table} is embedded and cannot declare rowKeepingColumns (vectors are swept on reversal)`,
+      )
     if (reg.rowKeepingColumns.length === 0)
       throw new Error(`register: ${reg.table} lists no row-keeping column`)
     const columns = getTableColumns(reg.descriptor.table)

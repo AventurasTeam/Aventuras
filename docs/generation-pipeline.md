@@ -1317,7 +1317,8 @@ Reversing a `create` deliberately does not, because the closure has to
 gather **deltas**, not rows, so they are pruned from the log with the
 parent's. A cascade that deleted the rows would leave their deltas
 behind, pointing at nothing, and a later redo would re-insert children
-under a parent that is gone.
+under a parent that is gone. The reversal still sweeps the row's vectors,
+which carry no deltas and would be orphaned otherwise.
 
 **Abort, boot recovery and a prose edit close over the rows their
 creates delete.** Neither selection scope guarantees the set holds every write to such a row. An
