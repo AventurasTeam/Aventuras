@@ -19,6 +19,8 @@ import BasicTxt2ImgWorkflow from './comfyWorkflows/basic-txt2img-workflow.json'
 import LoraTxt2ImgWorkflow from './comfyWorkflows/lora-txt2img-workflow.json'
 import UnetTxt2ImgWorkflow from './comfyWorkflows/unet-txt2img-workflow.json'
 import { specToPixels } from '$lib/utils/image'
+import { imageGetFetch } from './fetchAdapter'
+import { isIos } from '$lib/utils/platform'
 
 const DEFAULT_BASE_URL = 'http://localhost:8188'
 
@@ -45,8 +47,18 @@ export async function fetchModelList(
   const controller = new AbortController()
   const timerId = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : null
   try {
-    const resp = await fetch(`${baseUrl}/models/${type}`, { signal: controller.signal })
-    if (!resp.ok) {
+    // iOS only: a plain browser fetch() to a plaintext http:// ComfyUI host is subject to
+    // WKWebView's App Transport Security there and gets silently blocked for anything
+    // outside the local-network exception (see docs/architecture/overview.md).
+    // imageGetFetch routes through Tauri's HTTP plugin instead, and throws its own
+    // descriptive error on a non-ok response. Every other platform keeps the plain fetch.
+    const resp = isIos()
+      ? await imageGetFetch(`${baseUrl}/models/${type}`, undefined, {
+          signal: controller.signal,
+          serviceId: 'comfy-models',
+        })
+      : await fetch(`${baseUrl}/models/${type}`, { signal: controller.signal })
+    if (!isIos() && !resp.ok) {
       const body = await resp.text().catch(() => '')
       throw new Error(`ComfyUI /models/${type} responded ${resp.status}: ${body}`)
     }
