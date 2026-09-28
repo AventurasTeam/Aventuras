@@ -35,7 +35,7 @@
   import { Separator } from '$lib/components/ui/separator'
   import * as Dialog from '$lib/components/ui/dialog'
   import { database } from '$lib/services/database'
-  import { isAndroid } from '$lib/utils/platform'
+  import { isAndroid, isIos } from '$lib/utils/platform'
   import { autosize } from '$lib/utils/autosize'
   import { ask, open } from '@tauri-apps/plugin-dialog'
   import { openFilters } from '$lib/utils/dialogFilters'
@@ -147,7 +147,8 @@
     showRestoreConfirm = false
     restoreError = null
 
-    // Pick the backup file. On Android this returns a SAF content:// URI; on desktop a real path.
+    // Pick the backup file: a SAF content:// URI on Android, a file:// URL on iOS, a real path on
+    // desktop.
     const selected = await open({
       title: 'Select Aventura Backup to Restore',
       // openFilters drops these on Android. It matters here: SAF appends " (1)" AFTER ".zip" for
@@ -163,9 +164,9 @@
     if (!selected) return
 
     let zipPath = selected as string
-    // Android: the picked content:// URI can't be std::fs-opened by the native restore, so stream
-    // it into a real temp file first (natively — no bytes cross the JS bridge), then restore that.
-    if (isAndroid()) {
+    // Mobile: the picked URI can't be std::fs-opened by the native restore, so stream it into a
+    // real temp file first (natively — no bytes cross the JS bridge), then restore that.
+    if (isAndroid() || isIos()) {
       isRestoring = true
       try {
         zipPath = await invoke<string>('import_saf_to_temp', { srcUri: selected })
