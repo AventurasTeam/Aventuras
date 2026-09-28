@@ -13,23 +13,31 @@ export const ENTITY_DELETE_CODES = { ...ROW_DELETE_REJECTION, ...ENTITY_DELETE_R
 /**
  * world.md → Delete: the entity with its link rows and vectors, every other entity's ref to it, and
  * the tail scene's mention, under one `action_id`. Holds the tail's metadata lock as the scene
- * editor does, so the scene drop can't race a scene edit.
+ * editor does, so the scene drop can't race a scene edit. The outer read only picks the lock key;
+ * the locked body re-reads the tail once granted and refuses if it moved in the meantime.
  */
 export async function deleteEntityRow(
   branchId: string,
   id: string,
   ctx: DbCtx,
 ): Promise<RowDeleteResult> {
-  const head = await loadHeadTurn(branchId, ctx)
-  const run = () => deleteEntityLocked(branchId, id, ctx)
-  return head == null ? run() : withKeyLock(entryMetadataLockKey(branchId, head.tail.id), run)
+  const lockedTail = (await loadHeadTurn(branchId, ctx))?.tail.id ?? null
+  const run = () => deleteEntityLocked(branchId, id, lockedTail, ctx)
+  return lockedTail == null ? run() : withKeyLock(entryMetadataLockKey(branchId, lockedTail), run)
 }
 
 async function deleteEntityLocked(
   branchId: string,
   id: string,
+  lockedTail: string | null,
   ctx: DbCtx,
 ): Promise<RowDeleteResult> {
+  const head = await loadHeadTurn(branchId, ctx)
+  if ((head?.tail.id ?? null) !== lockedTail)
+    return { status: 'rejected', reason: 'tail moved', code: ROW_DELETE_REJECTION.inFlight }
+  // The store read, the plan build and commitRowDelete's synchronous in-flight check must run
+  // with no await between them, or a hard-gate run finishing in that window commits over a
+  // working-set snapshot it has since staled.
   const branchEntities = [...entitiesStore.getEntities().values()].filter(
     (e) => e.branchId === branchId,
   )
@@ -40,7 +48,6 @@ async function deleteEntityLocked(
       reason: `entity ${id} not found`,
       code: ROW_DELETE_REJECTION.notFound,
     }
-  const head = await loadHeadTurn(branchId, ctx)
   const metadata = head?.tail.metadata
   const tail: DeleteTail | null =
     head == null || metadata == null

@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 
 import { desc, eq } from 'drizzle-orm'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   branches,
@@ -23,13 +23,32 @@ import {
   type StoryDefinition,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { entitiesStore } from '@/lib/stores'
+import { entitiesStore, generationStore } from '@/lib/stores'
 
+import { deleteEntityRow } from './delete-entity'
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { applyRedo, snapshotForRedo } from '../delta/redo'
 import { reverseAndPruneDeltaRows } from '../delta/reverse-replay'
+import type { loadHeadTurn as LoadHeadTurn } from '../story-entries/head-turn'
+import { updateEntrySceneFields } from '../story-entries/scene-fields'
 import type { DbCtx } from '../types'
-import { deleteEntityRow } from './delete-entity'
+
+// Fires `onSecond` from inside the SECOND `loadHeadTurn` call of a test — the in-lock re-read —
+// so a probe can land a concurrent write exactly in the window the fix closes.
+const headTurnHook = vi.hoisted(() => ({
+  calls: 0,
+  onSecond: null as (() => Promise<void>) | null,
+}))
+vi.mock('../story-entries/head-turn', async (importOriginal) => {
+  const real = (await importOriginal()) as { loadHeadTurn: typeof LoadHeadTurn }
+  return {
+    loadHeadTurn: async (...args: Parameters<typeof LoadHeadTurn>) => {
+      headTurnHook.calls += 1
+      if (headTurnHook.calls === 2 && headTurnHook.onSecond) await headTurnHook.onSecond()
+      return real.loadHeadTurn(...args)
+    },
+  }
+})
 
 let ctx: DbCtx
 let sqlite: DatabaseSync
@@ -271,5 +290,83 @@ describe('deleteEntityRow — C3 acceptance', () => {
     expect(awareness).toMatchObject({ status: 'rejected', code: 'noop' })
     expect(relationship).toMatchObject({ status: 'rejected', code: 'noop' })
     expect(await linkCounts()).toMatchObject({ awareness: 0, relationships: 0 })
+  })
+})
+
+describe('deleteEntityRow — races closed by the in-lock re-read', () => {
+  it('a hard-gate run finishing during the in-lock head read keeps its state write', async () => {
+    headTurnHook.calls = 0
+    generationStore.__reset()
+    generationStore.startRun({
+      runId: 'r1',
+      kind: 'turn',
+      gateBehavior: 'hard-gate',
+      actionId: 'act_r1',
+      storyId: 's1',
+      branchId: 'b1',
+      abortController: new AbortController(),
+      currentPhase: 'commit',
+      intermediates: {},
+      terminal: Promise.resolve(),
+      resolveTerminal: () => {},
+    })
+    headTurnHook.onSecond = async () => {
+      const written = await applyDeltaAction(
+        {
+          action: {
+            kind: 'updateEntityInventory',
+            source: 'piggyback_tagged_block',
+            payload: { branchId: 'b1', id: 'char_o', inventory: ['char_x', 'item_y'] },
+          },
+          actionId: 'act_r1',
+          branchId: 'b1',
+        },
+        ctx,
+      )
+      expect(written.status).toBe('ok')
+      generationStore.finishRun('r1')
+    }
+    const result = await deleteEntityRow('b1', 'char_x', ctx)
+    headTurnHook.onSecond = null
+    expect(result).toEqual({ status: 'ok' })
+    expect((await otherState()).inventory).toEqual(['item_y'])
+  })
+
+  it('a new tail landing between the outer and inner head reads is never edited under the stale lock', async () => {
+    headTurnHook.calls = 0
+    generationStore.__reset()
+    let sceneEdit: Promise<unknown> = Promise.resolve()
+    headTurnHook.onSecond = async () => {
+      await ctx.db.insert(storyEntries).values({
+        id: 'entry_3',
+        branchId: 'b1',
+        position: 3,
+        kind: 'ai_reply',
+        content: 'Now.',
+        metadata: {
+          sceneEntities: ['char_x', 'char_o'],
+          currentLocationId: null,
+          worldTime: 0,
+        } as EntryMetadata,
+        createdAt: 3,
+      })
+      sceneEdit = updateEntrySceneFields(
+        'b1',
+        'entry_3',
+        { sceneEntities: ['char_x', 'char_o', 'char_lead'] },
+        ctx,
+      )
+    }
+    const result = await deleteEntityRow('b1', 'char_x', ctx)
+    const edit = await sceneEdit
+    headTurnHook.onSecond = null
+    const [row] = await ctx.db.select().from(storyEntries).where(eq(storyEntries.id, 'entry_3'))
+
+    const scene = (row.metadata as EntryMetadata).sceneEntities
+    expect(edit).toEqual({ status: 'ok' })
+    // No lost update: either the delete refused (the tail moved under it), or it ran
+    // after the edit committed and so still dropped char_x from the edited scene.
+    if (result.status === 'ok') expect([...scene].sort()).toEqual(['char_lead', 'char_o'])
+    else expect([...scene].sort()).toEqual(['char_lead', 'char_o', 'char_x'])
   })
 })
