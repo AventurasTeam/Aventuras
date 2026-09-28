@@ -7,6 +7,6 @@ pre-commit:
 pre-push:
   commands:
     lint:
-      run: NODE_OPTIONS="--max-old-space-size=8192" npm run lint
+      run: NODE_OPTIONS="--max-old-space-size=8192" node scripts/pm.js run lint
     check:
-      run: npm run check
+      run: node scripts/pm.js run check
