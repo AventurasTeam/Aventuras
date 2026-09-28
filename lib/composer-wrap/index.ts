@@ -23,8 +23,11 @@ function conjugateFirstWord(text: string): string {
   return [conjugateThirdPersonPresent(first), ...rest].join(' ')
 }
 
-/** The first-person wrap says "I" and needs no lead; any other wrap names the lead. */
-export function wrapHasSubject(pov: ComposerWrapPov, leadName: string | null): boolean {
+/**
+ * The first-person wrap says "I" and needs no lead; any other wrap names the lead. Narrows
+ * `leadName` to non-null: the `pov === 'first'` disjunct never reaches the branch that reads it.
+ */
+export function wrapHasSubject(pov: ComposerWrapPov, leadName: string | null): leadName is string {
   return pov === 'first' || leadName != null
 }
 
@@ -35,7 +38,7 @@ export function wrapComposerText(rawText: string, opts: WrapOptions): string {
   if (mode === 'free' || !wrapHasSubject(pov, leadName)) return rawText
 
   const text = rawText.trim()
-  const subject = pov === 'first' ? 'I' : leadName!
+  const subject = pov === 'first' ? 'I' : leadName
   if (mode === 'do') {
     const body = pov === 'first' ? text : conjugateFirstWord(text)
     return ensureTrailingPeriod(`${subject} ${body}`)
