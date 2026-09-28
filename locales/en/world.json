@@ -122,9 +122,7 @@
     "overviewAfterSave": "Save to see the overview",
     "overviewAfterSaveBody": "The glance card reads the saved entity.",
     "assetsPlaceholder": "Assets land with the asset gallery pass",
-    "assetsPlaceholderBody": "Portraits and attachments for entities aren't stored yet.",
-    "historyPlaceholder": "History lands in Slice 4.2b",
-    "historyPlaceholderBody": "Edits and rollbacks will appear here as they happen."
+    "assetsPlaceholderBody": "Portraits and attachments for entities aren't stored yet."
   },
   "fields": {
     "name": "Name",

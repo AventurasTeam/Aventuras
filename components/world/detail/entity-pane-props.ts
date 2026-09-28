@@ -11,6 +11,8 @@ import type { EntityTab } from './entity-tabs'
 
 /** What the route reads from the working set for one pane. */
 export type EntityPaneData = {
+  /** For the History tab's query. */
+  branchId: string
   entities: readonly Entity[]
   /** The selected character's committed relationships; empty for other kinds. */
   relationships: readonly RelationshipLink[]

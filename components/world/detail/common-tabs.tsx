@@ -1,3 +1,4 @@
+import { HistoryTab } from '@/components/history/history-tab'
 import { TabsContent } from '@/components/ui/tabs'
 import type { Entity } from '@/lib/db'
 import { t } from '@/lib/i18n'
@@ -38,11 +39,13 @@ export function OverviewTab({
   )
 }
 
-/** world.md → Assets, Involvements, History. Assets and History are placeholders. */
+/** world.md → Assets, Involvements, History. Assets is a placeholder. */
 export function TrailingTabs({
+  row,
   data,
   onOpenHappening,
 }: {
+  row: Entity | null
   data: EntityPaneData
   onOpenHappening: (id: string) => void
 }) {
@@ -58,10 +61,19 @@ export function TrailingTabs({
         <InvolvementsTab rows={data.involvements} onOpenHappening={onOpenHappening} />
       </TabsContent>
       <TabsContent value="history">
-        <PlaceholderTab
-          title={t('world:detail.historyPlaceholder')}
-          body={t('world:detail.historyPlaceholderBody')}
-        />
+        {row == null ? (
+          <PlaceholderTab
+            title={t('history:tab.afterSave')}
+            body={t('history:tab.afterSaveBody')}
+          />
+        ) : (
+          <HistoryTab
+            key={row.id}
+            branchId={data.branchId}
+            targetTable="entities"
+            targetId={row.id}
+          />
+        )}
       </TabsContent>
     </>
   )

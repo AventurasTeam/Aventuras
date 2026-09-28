@@ -221,6 +221,7 @@ function Harness({
   }, [])
   const data = useMemo<EntityPaneData>(
     () => ({
+      branchId: 'br_1',
       entities: ENTITIES,
       relationships: links ?? (row?.id === 'char_kael' ? KAEL_LINKS : NO_LINKS),
       involvements: row?.id === 'char_kael' ? KAEL_INVOLVEMENTS : NO_INVOLVEMENTS,

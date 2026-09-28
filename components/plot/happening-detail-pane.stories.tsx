@@ -261,6 +261,7 @@ function Harness({
       <HappeningDetailPane
         row={row}
         createSeq={row == null ? createSeq : undefined}
+        branchId="br_1"
         links={links}
         entities={ENTITIES}
         entries={ENTRIES}

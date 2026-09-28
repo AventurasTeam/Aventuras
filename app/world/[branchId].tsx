@@ -169,6 +169,7 @@ export default function WorldRoute() {
   )
   const paneData = useMemo<EntityPaneData>(
     () => ({
+      branchId,
       entities,
       relationships,
       involvements,
@@ -177,7 +178,16 @@ export default function WorldRoute() {
       calendar,
       leadId,
     }),
-    [entities, relationships, involvements, entryIndex.index, worldTime, calendar, leadId],
+    [
+      branchId,
+      entities,
+      relationships,
+      involvements,
+      entryIndex.index,
+      worldTime,
+      calendar,
+      leadId,
+    ],
   )
 
   const { activeRunKind, editBlocked, gateReason, classifierRunning } = useStoryGenerationGate(

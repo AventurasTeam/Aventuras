@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
+import { HistoryLoaderProvider } from '@/components/history/history-loader'
+import { withQueryClient } from '@/components/history/with-query-client'
 import type { RowSessionHandle } from '@/hooks/use-row-save-session'
 import type { PlotSaveResult } from '@/lib/actions'
 import type { Thread } from '@/lib/db'
@@ -174,6 +176,7 @@ function Harness({
       <ThreadDetailPane
         row={row}
         createSeq={row == null ? createSeq : undefined}
+        branchId="br_1"
         entryIndex={ENTRY_INDEX}
         categories={CATEGORIES}
         recentlyClassified={recentlyClassified}
@@ -534,11 +537,19 @@ export const Menu: Story = {
 /** Phone: two tabs go to the Select's segment, not a tab strip. */
 export const Phone: Story = {
   globals: { viewport: { value: 'mobile1' } },
+  decorators: [
+    (Story) => (
+      <HistoryLoaderProvider value={async () => ({ rows: [], nextCursor: null })}>
+        <Story />
+      </HistoryLoaderProvider>
+    ),
+    withQueryClient,
+  ],
   play: async () => {
     const segment = await waitFor(() => screen.getByRole('radiogroup', { name: 'Section' }), WAIT)
     expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
     expect(within(segment).getByRole('radio', { name: 'Overview' })).toBeChecked()
     await userEvent.click(within(segment).getByRole('radio', { name: 'History' }))
-    expect(await screen.findByText('History lands in Slice 4.2b', {}, WAIT)).toBeVisible()
+    expect(await screen.findByText('No history yet', {}, WAIT)).toBeVisible()
   },
 }
