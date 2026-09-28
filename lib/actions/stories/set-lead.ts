@@ -2,7 +2,7 @@ import { and, eq } from 'drizzle-orm'
 
 import { entities, stories, storyDefinitionSchema, type DbCtx } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
-import { currentStoryStore, generationStore, rehydrateStories } from '@/lib/stores'
+import { currentStoryStore, generationStore, rehydrateStories, undoRedoStore } from '@/lib/stores'
 
 export const LEAD_REJECTION = {
   inFlight: 'in-flight',
@@ -64,6 +64,10 @@ export async function setStoryLead(
       .where(eq(stories.id, storyId))
       .toSQL(),
   ])
+  // A redo re-inserting a since-deleted entity must not resurrect it as the lead of a stale
+  // group; every new write invalidates redo (apply-delta-action.ts's choke point covers only
+  // delta-logged writes, so this direct one clears it itself).
+  undoRedoStore.clear()
   const open = currentStoryStore.getCurrentStory()
   if (open?.storyId === storyId) currentStoryStore.set({ ...open, definition: next.data })
   await rehydrateStories(ctx.db)
