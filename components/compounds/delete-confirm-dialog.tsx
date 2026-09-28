@@ -27,6 +27,7 @@ export type DeleteConfirmCopy = {
 type DeleteConfirmDialogProps = DeleteConfirmCopy & {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Fires before the dialog's own `onOpenChange(false)` — hosts needn't close it; treat that close as harmless. */
   onConfirm: () => void
 }
 
@@ -49,8 +50,8 @@ export function DeleteConfirmDialog({
         </AlertDialogHeader>
         {impacts.length > 0 ? (
           <View className="gap-1" testID="delete-impacts">
-            {impacts.map((line) => (
-              <Text key={line} size="sm">
+            {impacts.map((line, index) => (
+              <Text key={index} size="sm">
                 {`• ${line}`}
               </Text>
             ))}
