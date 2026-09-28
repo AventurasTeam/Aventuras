@@ -240,6 +240,16 @@ stands when the write lands, not only the pass's snapshot:
   sends only terms new against its snapshot, so an alias the user
   removed mid-pass is not re-sent; the handler appends only terms the
   live list lacks, so one the user added is not duplicated.
+- Link rows go through `createHappeningInvolvement`,
+  `upsertHappeningAwareness` and `upsertCharacterRelationship`. A create
+  re-reads the entity and the happening it names and no-ops when either is
+  gone, so a delete landing after the pass's post-call re-read leaves no
+  orphan row; a row created earlier in the same Save counts as present.
+  A new character reconciled to a row deleted in that window is dropped
+  for the pass. Every link writer and every delete of an entity or a
+  happening holds the branch's `happening_links` key (involvement and
+  awareness writes) or the relationships key, so a delete's child read and
+  its commit never straddle a link write.
 
 **User precedence.** A field the user wrote after the prose a fact
 came from keeps the user's value. The classifier's status, keyword and

@@ -53,3 +53,24 @@ slice-planning gate forces its resolution before that slice is planned.
   to get. Held rather than routed in the 2026-09-09 triage pass, which
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
+
+- **Piggyback entity visual text is uncapped.** `parseVisualChanges`
+  only trims, and `buildStatePatchOutcome` never validates, but
+  `updateEntity` re-validates the whole state against
+  `characterStateSchema` (500-char visual caps), so an over-long field
+  on an unrelated entity that references a deleted location, character
+  or faction makes the delete fail with an opaque schema-validation
+  error. Options: clamp or validate on the piggyback write path, or a
+  merge-style ref-clearing handler that doesn't re-validate unrelated
+  fields (2026-09-28, raised by 4.2b).
+- **Thread and happening update handlers record every column named in
+  the patch.** Entity and lore updates drop unchanged ones. Safe today
+  because `threadPatch` and `happeningPatch` pre-filter, but a future
+  unfiltered writer would make History list unchanged fields and feed
+  extra keys to user precedence (2026-09-28, raised by 4.2b).
+- **Translation writers take no row lock.** No `translations` key
+  exists in `row-locks.ts`, so a delete's "children read under the
+  locks" doesn't hold for translations. Latent until the translation
+  phase ships a writer: a translation written between a cascade's read
+  and its commit would orphan, and could collide with
+  `translations_natural_uniq` on undo (2026-09-28, raised by 4.2b).

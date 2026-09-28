@@ -789,6 +789,12 @@ back-pointer on item to drift against. Cost: "who holds the silver
 coin?" requires scanning characters' equipped + inventory arrays.
 Acceptable for v1 scale; FTS5 upgrade applies if it bites.
 
+**An item can also be unplaced**: `at_location_id = null` with no
+holder. The wizard writes every item it doesn't hand to a character this
+way, and deleting a location or a holder leaves the items it placed or
+held unplaced rather than inventing a position the prose never stated.
+The item Overview renders the position as empty.
+
 **One position per item.** An item lies at one location or sits in one
 character's `equipped_items` or `inventory`, never several. Every
 writer moves it rather than adding a second position: putting it in a

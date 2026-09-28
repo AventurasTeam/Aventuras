@@ -474,10 +474,15 @@ resolves target display names and renders the diff summary
 prose, then hands pre-formatted strings to the compound.
 
 - **Search** — structured: `field-path strings`, `op`, and the
-  rendered change-summary text. Backed by `LIKE` on
-  `target_table` + `op` columns and `json_extract` over the
-  `undo_payload` JSON. SQLite filters server-side; lazy-loaded
-  delta log doesn't need to be fully in memory.
+  rendered change-summary text. `op` matches its rendered label
+  (word-start) or the raw enum; the field-path and free-text arms
+  apply to `update` deltas only, since a delete's undo payload is the
+  full row and would match every path. A field path is tested via
+  `json_type(undo_payload, '$.<path>') IS NOT NULL`, not
+  `json_extract` (which misses a `null` pre-change value); `target_table`
+  is never matched, since it's constant within a per-row tab. SQLite
+  filters server-side; lazy-loaded delta log doesn't need to be fully
+  in memory.
 - **Op filter** — all / create / update / delete
 - **Sort** — newest-first (default) or oldest-first
 - **Load-older chunking** — log-shaped data; uses the

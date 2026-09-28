@@ -271,6 +271,14 @@ delete. Re-embedding is the next sync stage's job. (An
 embed-on-write contract would have forced reverse-replay through the
 embed path for every restored row.)
 
+**A vector lands only for the text it was computed from.** The sync
+stage's insert is conditional on the source row still holding the
+embedded fields it read, so an embed that races a delete writes no
+orphan vector and one that races an edit writes none either — the row
+stays flagged and the next sync embeds the new text. Every delete
+sweeps the row's vectors from every dim family, on the forward delete,
+on redo, and when a reversal deletes a row a create made.
+
 **`embedding_stale` is one flag, one meaning: "needs embed."** It
 covers ordinary deferred writes, creates, and failures alike — a
 dirty row stays flagged until a sync stage successfully embeds it,
