@@ -226,7 +226,7 @@ describe('deleteEntity', () => {
     expect(payload.relationships).toHaveLength(1)
     expect(payload.translations).toHaveLength(2)
 
-    await expect(reverseAndPruneDeltaRows(rows, ctx)).resolves.not.toThrow()
+    await reverseAndPruneDeltaRows(rows, ctx)
     expect(
       await ctx.db
         .select()
@@ -296,5 +296,80 @@ describe('deleteEntity', () => {
     }
     await applyRedo(snapshot, ctx)
     expect(vectorCount()).toBe(0)
+  })
+
+  it('cascades a relationship where the deleted entity is the aId side, and restores it on undo', async () => {
+    // Pairs store aId < bId (char_rel_canonical_order); char_x sits on the aId side here,
+    // pinning the `or(aId, bId)` cascade's other arm.
+    await ctx.db.insert(entities).values(character('char_z', 'b1', 'Zed'))
+    const pair2 = {
+      id: 'rel_2',
+      branchId: 'b1',
+      aId: 'char_x',
+      bId: 'char_z',
+      kind: 'rival',
+      inverseKind: null,
+      createdAt: 1,
+      updatedAt: 1,
+    }
+    await ctx.db.insert(characterRelationships).values(pair2)
+    await ctx.db.insert(translations).values({
+      id: 'tr_3',
+      branchId: 'b1',
+      targetKind: 'character_relationship',
+      targetId: 'rel_2',
+      field: 'kind',
+      language: 'cs',
+      translatedText: 'y',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+
+    expect(await remove('char_x')).toMatchObject({ status: 'ok' })
+    expect(
+      await ctx.db
+        .select()
+        .from(characterRelationships)
+        .where(eq(characterRelationships.id, 'rel_2')),
+    ).toEqual([])
+    expect(await ctx.db.select().from(translations).where(eq(translations.id, 'tr_3'))).toEqual([])
+
+    const rows = (await ctx.db
+      .select()
+      .from(deltas)
+      .where(eq(deltas.actionId, 'act_del'))
+      .orderBy(desc(deltas.logPosition))) as Delta[]
+    await reverseAndPruneDeltaRows(rows, ctx)
+
+    expect(
+      await ctx.db
+        .select()
+        .from(characterRelationships)
+        .where(eq(characterRelationships.id, 'rel_2')),
+    ).toHaveLength(1)
+    expect(
+      await ctx.db.select().from(translations).where(eq(translations.id, 'tr_3')),
+    ).toHaveLength(1)
+  })
+
+  it('scopes the lead lookup to the target branch, ignoring another story that claims char_x as lead', async () => {
+    // s2/b3's own lead really is char_x; b1's lead is char_lead. Dropping the branch filter on
+    // the lead lookup makes it read whichever row the unfiltered join returns first (b1's, since
+    // it was inserted first) instead of the target branch's own row.
+    await ctx.db.insert(stories).values({
+      id: 's2',
+      title: 'T2',
+      definition: { leadEntityId: 'char_x' } as StoryDefinition,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await ctx.db.insert(branches).values({ id: 'b3', storyId: 's2', name: 'm3', createdAt: 1 })
+    await ctx.db.insert(entities).values(character('char_x', 'b3', 'Mira'))
+
+    expect(await remove('char_x', 'b1')).toMatchObject({ status: 'ok' })
+    expect(await remove('char_x', 'b3')).toMatchObject({
+      status: 'rejected',
+      code: ENTITY_DELETE_REJECTION.leadEntity,
+    })
   })
 })

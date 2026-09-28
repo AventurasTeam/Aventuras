@@ -11,15 +11,15 @@ import { translationCascade, vecSweepOps, vecTableLister } from '../delta/delete
 import type { CascadeDeleteOps } from '../delta/registry'
 
 function byIds<T extends { id: string }>(
-  ids: readonly T[],
+  rows: readonly T[],
   build: (ids: string[]) => SqlOp,
 ): SqlOp[] {
-  return ids.length === 0 ? [] : [build(ids.map((row) => row.id))]
+  return rows.length === 0 ? [] : [build(rows.map((row) => row.id))]
 }
 
 /**
- * C3's entity cascade: the three FK-less link tables, their translations and the entity's own,
- * and every vector. Read under the delete's locks and deleted by the ids read.
+ * C3's entity cascade: the three FK-less link tables, the entity's own translations, the
+ * removed relationships' translations, and every vector.
  */
 export const entityCascade: CascadeDeleteOps = async (branchId, id, ctx) => {
   const involvements = await ctx.db

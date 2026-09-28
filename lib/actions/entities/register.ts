@@ -264,7 +264,8 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
   if (!current)
     return { status: 'rejected', reason: `delete target entities ${bid}:${id} not found` }
-  // data-model.md → Story settings shape: `needsLead` forbids nulling the lead, so it can't go.
+  // Interim until the lead is per-branch and delta-logged (M6 deferral): deleting it would
+  // dangle the story-level lead pointer with no reversal path.
   if (await isStoryLead(ctx, bid, id))
     return {
       status: 'rejected',
