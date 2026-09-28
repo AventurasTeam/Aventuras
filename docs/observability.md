@@ -236,7 +236,9 @@ convention, and the expectation that subsystems route through
   (`components/world/use-lore-row-session.ts` — the lore pane's
   twin), `world_set_lead_failed` (`app/world/[branchId].tsx`
   — a `⋯ → Set as lead` whose `setStoryLead` threw rather than
-  refused), `plot_link_revalidate_failed`
+  refused), `world_delete_failed` (`components/world/use-world-delete.ts`
+  — a confirmed `⋯ → Delete entity` / `Delete` whose `deleteEntityRow` /
+  `deleteRow` threw rather than refused), `plot_link_revalidate_failed`
   (`components/plot/link-card.tsx` — the revalidation after a link row's
   removal rejected, leaving a stale duplicate error blocking Save) and
   its World twins `world_relationships_revalidate_failed`

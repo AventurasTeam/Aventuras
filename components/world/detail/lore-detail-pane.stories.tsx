@@ -55,6 +55,7 @@ type HarnessProps = {
   blocked?: boolean
   onSave: (draft: LoreDraft) => void
   onSaved: (id: string) => void
+  onDelete: (row: Lore) => void
 }
 
 /** Mimics the route: a save's row lands by `onSaved`; `Blank` is a `[+] Blank` (a new `seq`). */
@@ -64,6 +65,7 @@ function Harness({
   blocked = false,
   onSave,
   onSaved,
+  onDelete,
 }: HarnessProps) {
   const [row, setRow] = useState(initialRow)
   const [createSeq, setCreateSeq] = useState(1)
@@ -104,6 +106,7 @@ function Harness({
           blockedReason={BLOCKED_REASON}
           onSave={save}
           onSaved={saved}
+          onDelete={onDelete}
           onSession={onSession}
         />
       </View>
@@ -125,7 +128,7 @@ const meta: Meta<typeof Harness> = {
   title: 'Compounds/World/LoreDetailPane',
   component: Harness,
   parameters: { layout: 'padded' },
-  args: { row: AETHERIUM, onSave: fn(), onSaved: fn() },
+  args: { row: AETHERIUM, onSave: fn(), onSaved: fn(), onDelete: fn() },
   // The real db loader and React Query are unavailable in Storybook; a story opening History
   // overrides this with its own provider nested closer to the tree.
   decorators: [

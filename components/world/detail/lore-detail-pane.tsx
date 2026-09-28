@@ -71,6 +71,8 @@ export type LoreDetailPaneProps = {
   onSaved: (id: string) => void
   /** A save failed, with its translated reason — the bar's notice has no visible text. */
   onRejected?: (reason: string) => void
+  /** `⋯ → Delete`; the surface raises the confirm. */
+  onDelete: (row: Lore) => void
   /** The surface routes row switches, `←`, category switches and GO TO through this. */
   onSession: (handle: RowSessionHandle | null) => void
   /** The host screen's focus state, for the save bar's Cmd/Ctrl-S. */
@@ -89,6 +91,7 @@ export function LoreDetailPane({
   onSave,
   onSaved,
   onRejected,
+  onDelete,
   onSession,
   hotkeysEnabled = true,
 }: LoreDetailPaneProps) {
@@ -151,7 +154,16 @@ export function LoreDetailPane({
           overflowMenu={
             <OverflowMenu
               label={t('world:detail.menu.label')}
-              entries={loreMenuEntries({ onViewJson: () => setJsonOpen(true) })}
+              entries={loreMenuEntries({
+                onViewJson: () => setJsonOpen(true),
+                remove:
+                  row == null
+                    ? undefined
+                    : {
+                        onDelete: () => onDelete(row),
+                        disabledReason: blocked ? blockedReason : undefined,
+                      },
+              })}
               disabled={row == null}
             />
           }

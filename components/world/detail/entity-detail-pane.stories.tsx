@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
-import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
+import { expect, fireEvent, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { HistoryLoaderProvider } from '@/components/history/history-loader'
 import { withQueryClient } from '@/components/history/with-query-client'
@@ -190,6 +190,7 @@ type HarnessProps = {
   onOpenEntity: (id: string) => void
   onOpenHappening: (id: string) => void
   onSetLead: (id: string) => void
+  onDelete: (row: Entity) => void
 }
 
 /** Route-shaped: create selects the saved row; capture-phase F2 flips `blocked` (run starting). */
@@ -210,6 +211,7 @@ function Harness({
   onOpenEntity,
   onOpenHappening,
   onSetLead,
+  onDelete,
 }: HarnessProps) {
   const [row, setRow] = useState(initialRow)
   const [blocked, setBlocked] = useState(initialBlocked)
@@ -277,6 +279,7 @@ function Harness({
           onOpenEntity={onOpenEntity}
           onOpenHappening={onOpenHappening}
           onSetLead={onSetLead}
+          onDelete={onDelete}
         />
       </View>
       {storeLink != null ? (
@@ -336,6 +339,7 @@ const meta: Meta<typeof Harness> = {
     onOpenEntity: fn(),
     onOpenHappening: fn(),
     onSetLead: fn(),
+    onDelete: fn(),
   },
   // No real db loader or React Query in Storybook; History stories supply their own provider.
   decorators: [
@@ -909,7 +913,7 @@ export const ParentChainBrokenFieldError: Story = {
   },
 }
 
-/** Set as lead (characters only), plus Export and Delete disabled with reasons. */
+/** Set as lead (characters only), plus Export disabled and Delete enabled. */
 export const OverflowMenuForAnActiveCharacter: Story = {
   args: { row: MIRA },
   play: async ({ args }) => {
@@ -920,11 +924,44 @@ export const OverflowMenuForAnActiveCharacter: Story = {
     await expect(
       screen.getByRole('menuitem', { name: 'Export entity as JSON, Lands in Slice 4.6' }),
     ).toHaveAttribute('aria-disabled', 'true')
-    await expect(
-      screen.getByRole('menuitem', { name: 'Delete entity, Lands in Slice 4.2b' }),
-    ).toHaveAttribute('aria-disabled', 'true')
+    await expect(screen.getByRole('menuitem', { name: 'Delete entity' })).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
     await userEvent.click(setLead)
     await expect(args.onSetLead).toHaveBeenCalledWith('char_mira')
+  },
+}
+
+/** A non-lead's Delete entity hands the row to the surface, which raises the confirm. */
+export const DeleteHandsUpTheRow: Story = {
+  args: { row: MIRA },
+  play: async ({ args }) => {
+    await userEvent.click(await screen.findByRole('button', { name: 'More actions' }, WAIT))
+    const remove = await screen.findByRole('menuitem', { name: 'Delete entity' }, WAIT)
+    await waitFor(() => expect(remove).toBeVisible(), WAIT)
+    await userEvent.click(remove)
+    await expect(args.onDelete).toHaveBeenCalledWith(expect.objectContaining({ id: 'char_mira' }))
+  },
+}
+
+/** The story's lead can't be deleted: the entry is disabled and says why (4.2b). */
+export const LeadCannotBeDeleted: Story = {
+  args: { row: KAEL },
+  play: async ({ args }) => {
+    await userEvent.click(await screen.findByRole('button', { name: 'More actions' }, WAIT))
+    const remove = await screen.findByRole(
+      'menuitem',
+      {
+        name: "Delete entity, The story's lead can't be deleted — set another character as lead first.",
+      },
+      WAIT,
+    )
+    await expect(remove).toHaveAttribute('aria-disabled', 'true')
+    // RN-Web's Pressable blocks pointer-events when disabled; userEvent respects that, fireEvent
+    // bypasses it — pins the onPress guard itself, not a CSS accident, as what blocks the entry.
+    fireEvent.click(remove)
+    await expect(args.onDelete).not.toHaveBeenCalled()
   },
 }
 

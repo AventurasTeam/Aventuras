@@ -10,7 +10,13 @@ import { CharacterConnections } from '../tabs/connections-tab'
 import { CharacterIdentity } from '../tabs/identity-tab'
 import { SettingsTab } from '../tabs/settings-tab'
 import { useEntityRowSession } from '../use-entity-row-session'
-import { entityFieldLabel, entityIssueText, lastSeenLine, leadDisabledReason } from '../world-copy'
+import {
+  deleteDisabledReason,
+  entityFieldLabel,
+  entityIssueText,
+  lastSeenLine,
+  leadDisabledReason,
+} from '../world-copy'
 import { OverviewTab, TrailingTabs } from './common-tabs'
 import { asBaseControl, EntityDetailFrame, useEntityTab } from './entity-detail-frame'
 import type { EntityPaneProps } from './entity-pane-props'
@@ -34,6 +40,7 @@ export function CharacterDetailPane({
   onOpenEntity,
   onOpenHappening,
   onSetLead,
+  onDelete,
   hotkeysEnabled = true,
 }: EntityPaneProps) {
   const values = useMemo(
@@ -97,6 +104,14 @@ export function CharacterDetailPane({
           : {
               onSetLead: () => onSetLead(row.id),
               disabledReason: leadDisabledReason(row, data.leadId, blocked, blockedReason),
+            }
+      }
+      remove={
+        row == null
+          ? undefined
+          : {
+              onDelete: () => onDelete(row),
+              disabledReason: deleteDisabledReason(row, data.leadId, blocked, blockedReason),
             }
       }
       hotkeysEnabled={hotkeysEnabled}

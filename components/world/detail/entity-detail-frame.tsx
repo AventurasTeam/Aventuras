@@ -64,6 +64,8 @@ type EntityDetailFrameProps<Draft extends EntityBaseDraft> = {
   recentlyClassified?: RecentlyClassified
   /** Characters only; absent in create mode. */
   lead?: { onSetLead: () => void; disabledReason?: string }
+  /** Absent in create mode. */
+  remove?: { onDelete: () => void; disabledReason?: string }
   blocked: boolean
   blockedReason?: string
   hotkeysEnabled: boolean
@@ -82,6 +84,7 @@ export function EntityDetailFrame<Draft extends EntityBaseDraft>({
   tabCounts,
   recentlyClassified,
   lead,
+  remove,
   blocked,
   blockedReason,
   hotkeysEnabled,
@@ -127,7 +130,11 @@ export function EntityDetailFrame<Draft extends EntityBaseDraft>({
           overflowMenu={
             <OverflowMenu
               label={t('world:detail.menu.label')}
-              entries={entityMenuEntries(kind, { onViewJson: () => setJsonOpen(true), lead })}
+              entries={entityMenuEntries(kind, {
+                onViewJson: () => setJsonOpen(true),
+                lead,
+                remove,
+              })}
               disabled={row == null}
             />
           }

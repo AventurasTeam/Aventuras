@@ -170,11 +170,12 @@ export function loreFieldLabel(field: string): string {
 }
 
 type LeadEntry = { onSetLead: () => void; disabledReason?: string }
+type RemoveEntry = { onDelete: () => void; disabledReason?: string }
 
 /** world.md → Detail head structure. */
 export function entityMenuEntries(
   kind: EntityKind,
-  { onViewJson, lead }: { onViewJson: () => void; lead?: LeadEntry },
+  { onViewJson, lead, remove }: { onViewJson: () => void; lead?: LeadEntry; remove?: RemoveEntry },
 ): OverflowMenuEntry[] {
   const leadEntries: OverflowMenuEntry[] =
     kind === 'character' && lead != null
@@ -198,19 +199,29 @@ export function entityMenuEntries(
       onPress: () => {},
     },
     { key: 'json', label: t('world:detail.menu.viewJson'), onPress: onViewJson },
-    {
-      key: 'delete',
-      label: t('world:detail.menu.deleteEntity'),
-      destructive: true,
-      disabled: true,
-      disabledReason: t('world:detail.menu.deleteReason'),
-      onPress: () => {},
-    },
+    ...(remove == null
+      ? []
+      : [
+          {
+            key: 'delete',
+            label: t('world:detail.menu.deleteEntity'),
+            destructive: true,
+            disabled: remove.disabledReason != null,
+            disabledReason: remove.disabledReason,
+            onPress: remove.onDelete,
+          },
+        ]),
   ]
 }
 
 /** world.md → Detail head — lore: no `Set as lead`. */
-export function loreMenuEntries({ onViewJson }: { onViewJson: () => void }): OverflowMenuEntry[] {
+export function loreMenuEntries({
+  onViewJson,
+  remove,
+}: {
+  onViewJson: () => void
+  remove?: RemoveEntry
+}): OverflowMenuEntry[] {
   return [
     {
       key: 'export',
@@ -220,7 +231,31 @@ export function loreMenuEntries({ onViewJson }: { onViewJson: () => void }): Ove
       onPress: () => {},
     },
     { key: 'json', label: t('world:detail.menu.viewJson'), onPress: onViewJson },
+    ...(remove == null
+      ? []
+      : [
+          {
+            key: 'delete',
+            label: t('world:detail.menu.deleteLore'),
+            destructive: true,
+            disabled: remove.disabledReason != null,
+            disabledReason: remove.disabledReason,
+            onPress: remove.onDelete,
+          },
+        ]),
   ]
+}
+
+/** Why `Delete entity` is unavailable for this row, or undefined when it is available. */
+export function deleteDisabledReason(
+  row: Entity,
+  leadId: string | null,
+  blocked: boolean,
+  blockedReason?: string,
+): string | undefined {
+  if (blocked) return blockedReason ?? t('common:generationGate.inFlight')
+  if (row.id === leadId) return t('world:delete.leadReason')
+  return undefined
 }
 
 /** Why `Set as lead` is unavailable for this committed row, or undefined when it is. */

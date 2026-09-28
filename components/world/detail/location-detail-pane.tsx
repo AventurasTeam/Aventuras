@@ -15,7 +15,7 @@ import { LocationConnections } from '../tabs/connections-tab'
 import { LocationIdentity } from '../tabs/identity-tab'
 import { SettingsTab } from '../tabs/settings-tab'
 import { useEntityRowSession } from '../use-entity-row-session'
-import { entityFieldLabel, entityIssueText } from '../world-copy'
+import { deleteDisabledReason, entityFieldLabel, entityIssueText } from '../world-copy'
 import { OverviewTab, TrailingTabs } from './common-tabs'
 import { asBaseControl, EntityDetailFrame, useEntityTab } from './entity-detail-frame'
 import type { EntityPaneProps } from './entity-pane-props'
@@ -42,6 +42,7 @@ export function LocationDetailPane({
   onSession,
   onOpenEntity,
   onOpenHappening,
+  onDelete,
   hotkeysEnabled = true,
 }: EntityPaneProps) {
   const values = useMemo(() => locationDraftFrom(row), [row])
@@ -72,6 +73,14 @@ export function LocationDetailPane({
       onTabChange={setTab}
       tabCounts={{ involvements: data.involvements.length }}
       recentlyClassified={recentlyClassified}
+      remove={
+        row == null
+          ? undefined
+          : {
+              onDelete: () => onDelete(row),
+              disabledReason: deleteDisabledReason(row, data.leadId, blocked, blockedReason),
+            }
+      }
       hotkeysEnabled={hotkeysEnabled}
       {...gate}
     >
