@@ -8,7 +8,7 @@ in
 [Entry mutability & rollback](../../data-model.md#entry-mutability--rollback))
 — op, target,
 field path (when applicable), pre-rendered diff summary, source,
-entry link, and timestamp. Read-only by design.
+entry ref, and timestamp. Read-only by design.
 
 Sister patterns:
 
@@ -127,7 +127,7 @@ upgrades to the rich prose on populate. The pattern's
 Muted foreground (`text-fg-muted text-xs`), middle-dot separators:
 
 - **Source label** — compound owns the enum → label mapping, through
-  the `history` namespace's `source.*` keys (`t('history:source.<enum>')`):
+  `t('history:source.<enum>')`:
   - `ai_classifier` → `classifier`
   - `piggyback_tagged_block` → `piggyback`
   - `per_turn_classifier` → `per-turn classifier`

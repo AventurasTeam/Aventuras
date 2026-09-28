@@ -408,8 +408,8 @@ inherit unchanged.
   unchanged on phone.
 - **History tab controls reflow on narrow widths** identically to
   World — search input takes its own full-width row first;
-  filter and sort chips wrap beneath. Same `flex-wrap` rule on
-  `.history-controls` per
+  filter and sort chips wrap beneath. Same container-keyed Toolbar
+  rule per
   [the World mobile expression](../world/world.md#mobile-expression).
   History rows themselves render via the
   [DeltaLogRow pattern](../../patterns/delta-log-row.md); the

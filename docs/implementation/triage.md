@@ -131,8 +131,8 @@ slice-planning gate forces its resolution before that slice is planned.
   needs the same save-time patch (2026-09-28, raised by 4.2b).
 - **The History tab's `Deleted` op chip likely never matches in a
   per-row tab.** A deleted row can't be selected to open its
-  History tab, and undoing its delete prunes the delta, so no row
-  session is likely to ever see a `Deleted` chip produce a result —
+  History tab, and undoing its delete prunes the delta, so no row's
+  History tab is likely to ever see a `Deleted` chip produce a result —
   until the parked
   [link-row union](../parked.md#history-shows-link-row-edits) or a
   global delta surface (Diagnostics Hub delta log) lands. Read, not

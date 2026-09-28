@@ -171,8 +171,9 @@ scope. Same contract across all shapes:
   "Add one with **+ Add** below." For read-only tables (History):
   "Every change to this row, by you or the memory pipeline,
   appears here. History is read-only; undo lives in the reader."
-  A reversal (CTRL-Z, rollback) prunes the deltas it undoes, so an
-  entirely-undone row's History can return to this empty state.
+  A reversal (CTRL-Z, rollback) prunes the deltas it undoes, so a
+  wizard-created row (it has no create delta) can return to this
+  empty state.
 - **No CTA inside the placeholder.** The host surface already
   exposes the affordance (`+ New` footer, `+ Add involvement`
   button, etc.) — placeholder doesn't duplicate it. Keeps the

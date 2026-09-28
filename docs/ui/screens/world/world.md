@@ -493,9 +493,9 @@ prose, then hands pre-formatted strings to the compound.
   [load-older pattern](../../patterns/lists.md#load-older--log-shaped-unbounded-lists)
   (`Load older` under newest-first sort, `Load newer` under
   oldest-first), not virtualization.
-- **Failed load** — a failed chunk load or load-more shows a
-  failed state with Retry; a failed load-more keeps the rows
-  already shown and toasts.
+- **Failed load** — a failed first-chunk load shows a failed
+  state with Retry; a failed load-more keeps the rows already
+  shown, toasts, and leaves `Load older` to try again.
 - **Before the first save** — an unsaved row's tab reads "History
   starts at the first save" instead of an empty log.
 - **Resets on row change** — search, op filter and sort return to
