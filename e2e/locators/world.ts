@@ -101,4 +101,14 @@ export const world = {
   // The list row's lead Tag (entity-row.tsx meta slot).
   leadTag: (page: Page, name: string): Locator =>
     world.row(page, name).getByText(t('world:lead.you'), { exact: true }),
+
+  // Lore's own tab strip (lore-detail-pane.tsx): Body / Settings / History, distinct from the
+  // entity `tab` above.
+  loreTab: (page: Page, tab: 'body' | 'settings' | 'history'): Locator =>
+    page.getByRole('tab', { name: new RegExp(`^${t(`world:lore.tabs.${tab}`)}`) }),
+  loreBody: (page: Page): Locator =>
+    page.getByRole('textbox', { name: t('world:lore.fields.body'), exact: true }),
+
+  // A row's delta log (history-tab.tsx); scope anchor per testing.md → Selector strategy.
+  historyRows: (page: Page): Locator => page.getByTestId('delta-log-row'),
 }
