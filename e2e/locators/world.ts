@@ -108,6 +108,6 @@ export const world = {
   loreBody: (page: Page): Locator =>
     page.getByRole('textbox', { name: t('world:lore.fields.body'), exact: true }),
 
-  // No role or label to query by (testing.md → Selector strategy, Tier 3).
+  // Rows share one role and similar labels; the testID anchors counting them (testing.md → Selector strategy, Tier 3).
   historyRows: (page: Page): Locator => page.getByTestId('delta-log-row'),
 }
