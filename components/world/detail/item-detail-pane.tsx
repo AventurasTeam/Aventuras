@@ -4,7 +4,6 @@ import { useMemo } from 'react'
 import { TabsContent } from '@/components/ui/tabs'
 import { itemDraftFrom, itemDraftSchema, type ItemDraft } from '@/lib/world'
 
-import { deleteDisabledReason } from '../delete-copy'
 import { ItemConnections } from '../tabs/connections-tab'
 import { ItemIdentity } from '../tabs/identity-tab'
 import { SettingsTab } from '../tabs/settings-tab'
@@ -61,14 +60,8 @@ export function ItemDetailPane({
       onTabChange={setTab}
       tabCounts={{ involvements: data.involvements.length }}
       recentlyClassified={recentlyClassified}
-      remove={
-        row == null
-          ? undefined
-          : {
-              onDelete: () => onDelete(row),
-              disabledReason: deleteDisabledReason(row, data.leadId, blocked, blockedReason),
-            }
-      }
+      leadId={data.leadId}
+      onDelete={onDelete}
       hotkeysEnabled={hotkeysEnabled}
       {...gate}
     >

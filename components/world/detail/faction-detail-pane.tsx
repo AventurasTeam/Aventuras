@@ -4,7 +4,6 @@ import { useMemo } from 'react'
 import { TabsContent } from '@/components/ui/tabs'
 import { factionDraftFrom, factionDraftSchema, type FactionDraft } from '@/lib/world'
 
-import { deleteDisabledReason } from '../delete-copy'
 import { FactionConnections } from '../tabs/connections-tab'
 import { FactionIdentity } from '../tabs/identity-tab'
 import { SettingsTab } from '../tabs/settings-tab'
@@ -61,14 +60,8 @@ export function FactionDetailPane({
       onTabChange={setTab}
       tabCounts={{ involvements: data.involvements.length }}
       recentlyClassified={recentlyClassified}
-      remove={
-        row == null
-          ? undefined
-          : {
-              onDelete: () => onDelete(row),
-              disabledReason: deleteDisabledReason(row, data.leadId, blocked, blockedReason),
-            }
-      }
+      leadId={data.leadId}
+      onDelete={onDelete}
       hotkeysEnabled={hotkeysEnabled}
       {...gate}
     >

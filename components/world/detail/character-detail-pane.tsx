@@ -5,7 +5,6 @@ import { useWatch } from 'react-hook-form'
 import { TabsContent } from '@/components/ui/tabs'
 import { characterDraftFrom, characterDraftSchema, stateOf, type CharacterDraft } from '@/lib/world'
 
-import { deleteDisabledReason } from '../delete-copy'
 import { CarryingTab } from '../tabs/carrying-tab'
 import { CharacterConnections } from '../tabs/connections-tab'
 import { CharacterIdentity } from '../tabs/identity-tab'
@@ -101,14 +100,8 @@ export function CharacterDetailPane({
               disabledReason: leadDisabledReason(row, data.leadId, blocked, blockedReason),
             }
       }
-      remove={
-        row == null
-          ? undefined
-          : {
-              onDelete: () => onDelete(row),
-              disabledReason: deleteDisabledReason(row, data.leadId, blocked, blockedReason),
-            }
-      }
+      leadId={data.leadId}
+      onDelete={onDelete}
       hotkeysEnabled={hotkeysEnabled}
       {...gate}
     >

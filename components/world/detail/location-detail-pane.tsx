@@ -11,7 +11,6 @@ import {
   type LocationDraft,
 } from '@/lib/world'
 
-import { deleteDisabledReason } from '../delete-copy'
 import { LocationConnections } from '../tabs/connections-tab'
 import { LocationIdentity } from '../tabs/identity-tab'
 import { SettingsTab } from '../tabs/settings-tab'
@@ -74,14 +73,8 @@ export function LocationDetailPane({
       onTabChange={setTab}
       tabCounts={{ involvements: data.involvements.length }}
       recentlyClassified={recentlyClassified}
-      remove={
-        row == null
-          ? undefined
-          : {
-              onDelete: () => onDelete(row),
-              disabledReason: deleteDisabledReason(row, data.leadId, blocked, blockedReason),
-            }
-      }
+      leadId={data.leadId}
+      onDelete={onDelete}
       hotkeysEnabled={hotkeysEnabled}
       {...gate}
     >
