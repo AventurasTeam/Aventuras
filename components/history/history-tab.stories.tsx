@@ -1,0 +1,123 @@
+import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { useState, type ReactNode } from 'react'
+import { expect, screen, within } from 'storybook/test'
+
+import { createQueryClient } from '@/lib/cache'
+import type { Delta, Happening, Thread } from '@/lib/db'
+import type { HistoryChunk, HistoryQuery } from '@/lib/history'
+import { happeningsStore, threadsStore } from '@/lib/stores'
+
+import { HistoryLoaderProvider } from './history-loader'
+import { HistoryTab } from './history-tab'
+
+const delta = (
+  targetTable: string,
+  targetId: string,
+  undoPayload: Record<string, unknown>,
+): Delta => ({
+  id: `delta_${targetId}`,
+  branchId: 'br_1',
+  entryId: null,
+  actionId: 'act_1',
+  logPosition: 1,
+  source: 'periodic_classifier',
+  targetTable,
+  targetId,
+  op: 'update',
+  undoPayload,
+  encodingVersion: 1,
+  createdAt: Date.now() - 60_000,
+})
+
+const load = async (query: HistoryQuery): Promise<HistoryChunk> => ({
+  rows: [
+    query.targetTable === 'threads'
+      ? delta('threads', 'thread_amulet', { status: 'pending' })
+      : delta('happenings', 'hap_fire', { commonKnowledge: 0 }),
+  ],
+  nextCursor: null,
+})
+
+function hydrateTargets(): () => void {
+  threadsStore.hydrate('br_1', [
+    {
+      id: 'thread_amulet',
+      branchId: 'br_1',
+      title: 'What the amulet wants',
+      description: null,
+      category: null,
+      icon: null,
+      status: 'active',
+      injectionMode: 'auto',
+      triggeredAtEntryId: null,
+      resolvedAtEntryId: null,
+      embeddingStale: 0,
+      createdAt: 1,
+      updatedAt: 1,
+    } satisfies Thread,
+  ])
+  happeningsStore.hydrate('br_1', [
+    {
+      id: 'hap_fire',
+      branchId: 'br_1',
+      title: 'The keep burns',
+      description: null,
+      category: null,
+      icon: null,
+      temporal: null,
+      occurredAtEntryId: null,
+      commonKnowledge: 1,
+      embeddingStale: 0,
+      createdAt: 1,
+      updatedAt: 1,
+    } satisfies Happening,
+  ])
+  return () => {
+    threadsStore.__reset()
+    happeningsStore.__reset()
+  }
+}
+
+// useEntryIndex reads through React Query, which the preview doesn't provide.
+function WithQueryClient({ children }: { children: ReactNode }) {
+  const [client] = useState(createQueryClient)
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+}
+
+const meta: Meta<typeof HistoryTab> = {
+  title: 'Compounds/History/HistoryTab',
+  component: HistoryTab,
+  parameters: { layout: 'padded' },
+  // Per story, with cleanup, so the hydrated rows can't leak into another file's stories.
+  beforeEach: hydrateTargets,
+  decorators: [
+    (Story) => (
+      <WithQueryClient>
+        <HistoryLoaderProvider value={load}>
+          <Story />
+        </HistoryLoaderProvider>
+      </WithQueryClient>
+    ),
+  ],
+}
+export default meta
+type Story = StoryObj<typeof HistoryTab>
+
+export const ThreadRow: Story = {
+  args: { branchId: 'br_1', targetTable: 'threads', targetId: 'thread_amulet' },
+  play: async () => {
+    const [row] = await screen.findAllByTestId('delta-log-row')
+    expect(within(row).getByText('What the amulet wants')).toBeVisible()
+    expect(within(row).getByText('Modified Status')).toBeVisible()
+  },
+}
+
+export const HappeningRow: Story = {
+  args: { branchId: 'br_1', targetTable: 'happenings', targetId: 'hap_fire' },
+  play: async () => {
+    const [row] = await screen.findAllByTestId('delta-log-row')
+    expect(within(row).getByText('The keep burns')).toBeVisible()
+    expect(within(row).getByText('Modified Common knowledge')).toBeVisible()
+  },
+}
