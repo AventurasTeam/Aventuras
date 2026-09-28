@@ -18,6 +18,7 @@ import { LoreDetailPane } from './lore-detail-pane'
 const WAIT = { timeout: 5000 }
 const NEW_ID = 'lore_new'
 const BLOCKED_REASON = 'Generation is in flight. Cancel to edit.'
+const CATEGORIES = ['cosmology', 'religion']
 
 const AETHERIUM: Lore = {
   id: 'lore_aetherium',
@@ -97,7 +98,7 @@ function Harness({
           branchId="br_1"
           row={row}
           createSeq={row == null ? createSeq : undefined}
-          categories={['cosmology', 'religion']}
+          categories={CATEGORIES}
           recentlyClassified={recentlyClassified}
           blocked={blocked}
           blockedReason={BLOCKED_REASON}
@@ -388,5 +389,23 @@ export const Phone: Story = {
     await waitFor(() => expect(history).toBeVisible(), WAIT)
     await userEvent.click(history)
     await expect(await screen.findByText('No history yet', {}, WAIT)).toBeVisible()
+  },
+}
+
+/** A category typed in another casing and never picked from the list saves in the branch's. */
+export const TypedCategorySavesCanonical: Story = {
+  play: async ({ args }) => {
+    const category = await screen.findByRole('combobox', { name: 'Category' }, WAIT)
+    await userEvent.click(category)
+    await userEvent.clear(category)
+    await userEvent.type(category, 'Religion')
+    await userEvent.click(body())
+    await waitFor(() => expect(saveButton()).toBeEnabled(), WAIT)
+    await expect(category).toHaveValue('Religion')
+    await userEvent.click(saveButton())
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1), WAIT)
+    await expect(args.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ category: 'religion' }),
+    )
   },
 }

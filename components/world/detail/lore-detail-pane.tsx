@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Controller, type Control } from 'react-hook-form'
 import { View } from 'react-native'
 
@@ -33,6 +33,13 @@ const resolver = zodResolver(loreDraftSchema)
 
 export const LORE_TABS = ['body', 'settings', 'history'] as const
 export type LoreTab = (typeof LORE_TABS)[number]
+
+// The Autocomplete canonicalizes only a committed pick; a variant typed and left must match too,
+// or the branch lists `Cosmology` beside `cosmology`.
+function canonicalCategory(category: string, categories: readonly string[]): string {
+  const typed = category.trim().toLowerCase()
+  return categories.find((c) => c.toLowerCase() === typed) ?? category
+}
 
 /** A new `[+] Blank` (create `seq`) lands on Body, whichever tab the previous row was on. */
 function useLoreTab(createSeq: number | undefined) {
@@ -86,12 +93,17 @@ export function LoreDetailPane({
   hotkeysEnabled = true,
 }: LoreDetailPaneProps) {
   const values = useMemo(() => loreDraftFrom(row), [row])
+  const save = useCallback(
+    (draft: LoreDraft) =>
+      onSave({ ...draft, category: canonicalCategory(draft.category, categories) }),
+    [onSave, categories],
+  )
   const session = useLoreRowSession({
     rowId: row?.id ?? null,
     createSeq,
     values,
     resolver,
-    onSave,
+    onSave: save,
     onSaved,
     onRejected,
     onSession,
