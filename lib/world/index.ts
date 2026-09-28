@@ -33,6 +33,8 @@ export type {
 } from './entity-draft'
 export { entityActions } from './entity-actions'
 export type { EntitySaveInput } from './entity-actions'
+export { entityDeleteActions } from './entity-delete'
+export type { DeleteTail, EntityDeleteInput, EntityDeletePlan } from './entity-delete'
 export {
   branchWorldTime,
   carryingSummary,

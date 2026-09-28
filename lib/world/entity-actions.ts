@@ -11,6 +11,7 @@ import {
 } from '@/lib/db'
 import { dedupeTerms, newTerms, normalizeTerm } from '@/lib/keyword-terms'
 
+import { blankToNull, cleanList, sameList } from './draft-text'
 import {
   stackableKey,
   stateOf,
@@ -73,12 +74,6 @@ type ColumnPatch = Partial<
   >
 >
 
-// Free text is stored as NULL (columns) or an absent key (state), never ''.
-function blankToNull(value: string): string | null {
-  const trimmed = value.trim()
-  return trimmed === '' ? null : trimmed
-}
-
 function blankToAbsent(value: string | undefined): string | undefined {
   const trimmed = (value ?? '').trim()
   return trimmed === '' ? undefined : trimmed
@@ -95,14 +90,6 @@ function writeText<K extends string>(
   if (value === undefined) delete state[key]
   else state[key] = value
   return true
-}
-
-function cleanList(values: readonly string[] | undefined): string[] {
-  return (values ?? []).map((v) => v.trim()).filter((v) => v !== '')
-}
-
-function sameList(a: readonly string[], b: readonly string[]): boolean {
-  return a.length === b.length && a.every((value, i) => value === b[i])
 }
 
 function normalizedStackables(
