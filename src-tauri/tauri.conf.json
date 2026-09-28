@@ -4,9 +4,9 @@
   "version": "0.7.11",
   "identifier": "com.karelian.aventura",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "node scripts/pm.js run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "node scripts/pm.js run build",
     "frontendDist": "../build",
     "features": ["devtools"]
   },
