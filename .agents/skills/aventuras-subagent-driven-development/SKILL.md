@@ -149,7 +149,7 @@ You are a **dispatched worker** when your task prompt says so and names an escal
 
 - header: slice, branch, worktree
 - per task: `dispatched <base-sha>`, `implemented <sha>`, `spec ✅`, `quality ✅ <sha>`, `complete`; or `blocked: <reason>`, with any partial commits
-- per question: the text; its message ID as soon as the channel returns one, before you wait; then the answer with its label
+- per question: the text, before you send it; its message ID whenever the channel returns one (a timeout does; an answer that arrives in time may come without one); then the answer with its label
 - the final whole-implementation review: `final review ✅ <sha>`
 - review-round entries (aventuras-receiving-code-review) and the PR URL
 
