@@ -34,8 +34,7 @@ function without(ids: readonly string[] | undefined, id: string): string[] | nul
 
 /**
  * The stored state with every ref to `id` cleared, or null when none named it. Reads through
- * `stateOf` (not the raw `entity.state`) so a legacy row missing a key the schema now requires
- * (e.g. an old character row with no `lastSeenAt`) still produces a schema-valid patch.
+ * `stateOf`, not the raw `state`, so a legacy row missing a key still produces a schema-valid patch.
  */
 function stateWithout(entity: Entity, id: string): EntityState | null {
   switch (entity.kind) {
@@ -109,13 +108,11 @@ function tailActions(branchId: string, tail: DeleteTail | null, id: string): Pip
 }
 
 /**
- * world.md → Delete: one merged `state` patch per entity naming the target (the runner rejects two
- * writes to one row's column), the tail scene's mention, then the delete — last by convention; the
- * group's handlers all read pre-group state, so order doesn't change what they write.
+ * world.md → Delete: one merged `state` patch per referencing entity, the tail mention, then the
+ * delete last — handlers read pre-group state, so order doesn't matter.
  *
- * Each patch replaces the whole `state` from this call's snapshot, so only a writer that blocks
- * user edits (today: the piggyback and per-turn classifier runs) may write `state` concurrently —
- * anything else racing this snapshot would have its write clobbered.
+ * Replaces the whole `state` from this snapshot, so a `state` write landing in between is lost: safe
+ * only while nothing that runs alongside user edits writes `state` (the periodic classifier doesn't).
  */
 export function entityDeleteActions({
   branchId,
