@@ -95,12 +95,13 @@ export class NarrativePhase {
       // An attempt is its own step: the loop is otherwise silent, so three empty responses
       // read as one long wait with nothing to show for it.
       const attemptId = activity.startStep(
-        retryCount > 0 ? `Attempt ${retryCount + 1}` : 'Generating',
-        { parentId: narrativeStepId, isLLM: true },
+        retryCount > 0 ? `Attempt ${retryCount + 1}` : 'Request',
+        { parentId: narrativeStepId },
       )
-      // Closed at the first chunk carrying anything, so the wait for the model is separable
-      // from the time spent streaming.
+      // The wait gives way to streaming at the first chunk carrying anything, so the two are
+      // consecutive children of the attempt.
       let waitId = activity.startStep('Waiting for model', { parentId: attemptId })
+      let streamId = ''
 
       try {
         for await (const chunk of this.deps.streamNarrative(
@@ -115,6 +116,7 @@ export class NarrativePhase {
         )) {
           if (abortSignal?.aborted) {
             activity.endStep(waitId, 'skipped')
+            activity.endStep(streamId, 'skipped')
             activity.endStep(attemptId, 'skipped')
             activity.endStep(narrativeStepId, 'skipped')
             yield { type: 'aborted', phase: 'narrative' } satisfies AbortedEvent
@@ -124,6 +126,7 @@ export class NarrativePhase {
           if (waitId && (chunk.content || chunk.reasoning)) {
             activity.endStep(waitId)
             waitId = ''
+            streamId = activity.startStep('Generating', { parentId: attemptId, isLLM: true })
           }
 
           chunkCount++
@@ -151,8 +154,9 @@ export class NarrativePhase {
         }
 
         activity.endStep(waitId, 'done', 'no tokens')
+        activity.endStep(streamId, 'done', `${chunkCount} chunks`)
         if (fullResponse.trim()) {
-          activity.endStep(attemptId, 'done', `${chunkCount} chunks`)
+          activity.endStep(attemptId)
           break // Success
         }
         activity.endStep(attemptId, 'done', 'empty response')
@@ -160,6 +164,7 @@ export class NarrativePhase {
       } catch (error) {
         const aborted = error instanceof Error && error.name === 'AbortError'
         activity.endStep(waitId, aborted ? 'skipped' : 'failed')
+        activity.endStep(streamId, aborted ? 'skipped' : 'failed')
         activity.endStep(attemptId, aborted ? 'skipped' : 'failed')
         activity.endStep(narrativeStepId, aborted ? 'skipped' : 'failed')
         if (aborted) {

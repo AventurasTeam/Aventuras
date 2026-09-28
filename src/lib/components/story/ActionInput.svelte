@@ -542,6 +542,10 @@
     ui.clearGenerationError()
     ui.clearActionChoices(story.currentStory.id)
     ui.startStreaming(visualProseMode, streamingEntryId)
+    ui.setStreamingNarrationEntry(narrationEntryId)
+    // Show where the narration appears, whatever the auto-scroll setting.
+    ui.resetScrollBreak()
+    ui.requestStoryEndScroll()
 
     const currentStoryRef = story.currentStory
     // The branch this generation is bound to. Read from the lease, not the live store: the

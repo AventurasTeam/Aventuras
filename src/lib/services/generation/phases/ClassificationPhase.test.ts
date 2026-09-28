@@ -130,3 +130,36 @@ describe('ClassificationPhase', () => {
     })
   })
 })
+
+describe('ClassificationPhase activity reporting', () => {
+  it('reports the world update as a step that spans the consumer applying the result', async () => {
+    const steps: { id: string; label: string; status?: string }[] = []
+    const activity = {
+      startStep: (label: string) => {
+        const id = `s${steps.length + 1}`
+        steps.push({ id, label })
+        return id
+      },
+      endStep: (id: string, status = 'done') => {
+        const step = steps.find((s) => s.id === id)
+        if (step && !step.status) step.status = status
+      },
+      recordStep: () => '',
+    }
+    const gen = new ClassificationPhase({ classifyResponse: async () => classification }).execute(
+      makeInput({ activity, activityParentId: 'phase' }),
+    )
+
+    let next = await gen.next()
+    while (!next.done && next.value.type !== 'classification_complete') next = await gen.next()
+
+    // Held by the consumer: the call is over, the world update is still running.
+    expect(steps.map((s) => [s.label, s.status])).toEqual([
+      ['Classifying', 'done'],
+      ['Updating world', undefined],
+    ])
+
+    await drain(gen)
+    expect(steps.find((s) => s.label === 'Updating world')?.status).toBe('done')
+  })
+})

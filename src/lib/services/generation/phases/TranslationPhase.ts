@@ -126,11 +126,18 @@ export class TranslationPhase {
         targetLanguage,
       }
 
-      yield {
-        type: 'phase_complete',
-        phase: 'translation',
-        result,
-      } satisfies PhaseCompleteEvent
+      // The phase stays suspended at this yield while the consumer stores the translation, so
+      // the step spans exactly that work.
+      const saveId = activity.startStep('Saving translation', { parentId: input.activityParentId })
+      try {
+        yield {
+          type: 'phase_complete',
+          phase: 'translation',
+          result,
+        } satisfies PhaseCompleteEvent
+      } finally {
+        activity.endStep(saveId)
+      }
 
       return result
     } catch (error) {

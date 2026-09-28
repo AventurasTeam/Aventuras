@@ -39,8 +39,8 @@ class ActivityStore {
    * one, which is what keeps the post-narrative steps on screen.
    *
    * Each map holds only what the reader has actually chosen. Absent means "whatever the
-   * default is here", which differs by context -- the report shows itself while a turn runs
-   * and hides once it is over, while the tree follows the reporting setting.
+   * default is here": the report shows itself, and the tree follows the reporting setting while
+   * it is the latest turn, and is the line once a newer turn has started.
    */
   private reportVisible = new SvelteMap<string, boolean>()
   private treeExpanded = new SvelteMap<string, boolean>()
@@ -59,9 +59,9 @@ class ActivityStore {
     this.version++
   }
 
-  /** Whether the report shows at all. `whileRunning` is the default before the reader chooses. */
-  isReportVisible(entryId: string, whileRunning: boolean): boolean {
-    return this.reportVisible.get(entryId) ?? whileRunning
+  /** Whether the report shows at all. Shown until the reader hides it. */
+  isReportVisible(entryId: string): boolean {
+    return this.reportVisible.get(entryId) ?? true
   }
 
   setReportVisible(entryId: string, visible: boolean) {
@@ -69,8 +69,13 @@ class ActivityStore {
   }
 
   /** Whether the report is showing the full timeline rather than the line. */
-  isTreeExpanded(entryId: string): boolean {
-    return this.treeExpanded.get(entryId) ?? this.reporting === 'tree'
+  isTreeExpanded(turn: ActivityTurn): boolean {
+    return this.treeExpanded.get(turn.entryId) ?? (this.isLatest(turn) && this.reporting === 'tree')
+  }
+
+  private isLatest(turn: ActivityTurn): boolean {
+    void this.version
+    return this.recorder.latestTurn === turn
   }
 
   setTreeExpanded(entryId: string, expanded: boolean) {
@@ -158,6 +163,11 @@ class ActivityStore {
   tree(turn: ActivityTurn): ActivityNode[] {
     void this.version
     return buildTree(turn.steps)
+  }
+
+  hasEnded(turn: ActivityTurn): boolean {
+    void this.version
+    return turn.endedAt !== undefined
   }
 
   deepestRunning(turn: ActivityTurn): ActivityStep | null {

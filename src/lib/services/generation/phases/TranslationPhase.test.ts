@@ -149,3 +149,36 @@ describe('TranslationPhase', () => {
     })
   })
 })
+
+describe('TranslationPhase activity reporting', () => {
+  it('reports saving the translation as a step that spans the consumer storing it', async () => {
+    const steps: { id: string; label: string; status?: string }[] = []
+    const activity = {
+      startStep: (label: string) => {
+        const id = `s${steps.length + 1}`
+        steps.push({ id, label })
+        return id
+      },
+      endStep: (id: string, status = 'done') => {
+        const step = steps.find((s) => s.id === id)
+        if (step && !step.status) step.status = status
+      },
+      recordStep: () => '',
+    }
+    const translateNarration = vi.fn().mockResolvedValue({ translatedContent: 'Il drago cadde.' })
+    const gen = new TranslationPhase({ translateNarration }).execute(
+      makeInput({ activity, activityParentId: 'phase' }),
+    )
+
+    let next = await gen.next()
+    while (!next.done && next.value.type !== 'phase_complete') next = await gen.next()
+
+    expect(steps.map((s) => [s.label, s.status])).toEqual([
+      ['Translating to it', 'done'],
+      ['Saving translation', undefined],
+    ])
+
+    await drain(gen)
+    expect(steps.find((s) => s.label === 'Saving translation')?.status).toBe('done')
+  })
+})

@@ -51,9 +51,9 @@
   // starts arriving -- below the text, so it never displaces what is being written.
   let reportingEnabled = $derived(settings.uiSettings.activityReporting !== 'off')
   let activeTurn = $derived(activity.activeTurn)
-  // Shown by default while the turn runs; the header badge hides it.
+  // Shown by default; the header badge hides it.
   let showActivity = $derived(
-    reportingEnabled && activeTurn !== null && activity.isReportVisible(activeTurn.entryId, true),
+    reportingEnabled && activeTurn !== null && activity.isReportVisible(activeTurn.entryId),
   )
 </script>
 

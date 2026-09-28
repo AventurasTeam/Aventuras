@@ -191,14 +191,20 @@ describe('NarrativePhase', () => {
 describe('NarrativePhase activity reporting', () => {
   /** Records what the phase reported, in order, as `label` + final status. */
   function recordingReporter() {
-    const steps: { id: string; label: string; status?: string; detail?: string }[] = []
+    const steps: {
+      id: string
+      label: string
+      status?: string
+      detail?: string
+      isLLM?: boolean
+    }[] = []
     let n = 0
     return {
       steps,
       reporter: {
         startStep: (label: string, options: any = {}) => {
           const id = `s${++n}`
-          steps.push({ id, label, detail: options.detail })
+          steps.push({ id, label, detail: options.detail, isLLM: options.isLLM })
           return id
         },
         endStep: (id: string, status = 'done', detail?: string) => {
@@ -225,11 +231,25 @@ describe('NarrativePhase activity reporting', () => {
 
     await drain(phaseReporting(stream, reporter).execute(makeInput()))
 
-    expect(steps.map((s) => s.label)).toEqual(['Narrative', 'Generating', 'Waiting for model'])
+    // In the order they happen: the wait, then the streaming it gives way to.
+    expect(steps.map((s) => s.label)).toEqual([
+      'Narrative',
+      'Request',
+      'Waiting for model',
+      'Generating',
+    ])
     const wait = steps.find((s) => s.label === 'Waiting for model')!
     expect(wait.status).toBe('done')
     // Ended by the reasoning chunk, so it is not still open when content arrives.
     expect(wait.detail).toBeUndefined()
+  })
+
+  it('opens no streaming step when the model never produces anything', async () => {
+    const { steps, reporter } = recordingReporter()
+
+    await drain(phaseReporting(streamOf(chunk({ done: true })), reporter).execute(makeInput()))
+
+    expect(steps.some((s) => s.label === 'Generating')).toBe(false)
   })
 
   it('marks the wait as having produced no tokens when the stream is empty', async () => {
@@ -240,15 +260,19 @@ describe('NarrativePhase activity reporting', () => {
     expect(steps.find((s) => s.label === 'Waiting for model')?.detail).toBe('no tokens')
   })
 
-  it('reports the generating attempt as an LLM step with its chunk count', async () => {
+  it('reports the streaming as the LLM step, with the chunk count', async () => {
     const { steps, reporter } = recordingReporter()
     const stream = streamOf(chunk({ content: 'Hi.' }), chunk({ done: true }))
 
     await drain(phaseReporting(stream, reporter).execute(makeInput()))
 
-    const attempt = steps.find((s) => s.label === 'Generating')!
-    expect(attempt.status).toBe('done')
-    expect(attempt.detail).toBe('2 chunks')
+    expect(steps.find((s) => s.label === 'Request')).toMatchObject({ status: 'done' })
+    expect(steps.find((s) => s.label === 'Request')?.isLLM).toBeFalsy()
+    expect(steps.find((s) => s.label === 'Generating')).toMatchObject({
+      status: 'done',
+      detail: '2 chunks',
+      isLLM: true,
+    })
   })
 
   it('reports each empty attempt separately without changing the retry loop', async () => {
@@ -264,10 +288,8 @@ describe('NarrativePhase activity reporting', () => {
     expect(result).toBeNull()
     expect(events.at(-1)).toMatchObject({ type: 'error', phase: 'narrative', fatal: true })
 
-    const attempts = steps.filter(
-      (s) => s.label.startsWith('Generating') || s.label.startsWith('Attempt'),
-    )
-    expect(attempts.map((s) => s.label)).toEqual(['Generating', 'Attempt 2', 'Attempt 3'])
+    const attempts = steps.filter((s) => s.label === 'Request' || s.label.startsWith('Attempt'))
+    expect(attempts.map((s) => s.label)).toEqual(['Request', 'Attempt 2', 'Attempt 3'])
     expect(attempts.every((s) => s.detail === 'empty response')).toBe(true)
     expect(steps.find((s) => s.label === 'Narrative')).toMatchObject({
       status: 'failed',

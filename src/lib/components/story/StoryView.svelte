@@ -350,6 +350,15 @@
     isAtPhysicalBottom = nearBottom
   }
 
+  // Gone in the same render its narration entry arrives in. Rendered side by side for a
+  // moment, the entry pushes the stream down, scroll anchoring follows it, and removing the
+  // stream then leaves the view at the end of the new entry.
+  const showStreamingEntry = $derived.by(() => {
+    if (!ui.isStreaming) return false
+    const id = ui.streamingNarrationEntryId
+    return !id || !story.entries.some((e) => e.id === id)
+  })
+
   // Disabled when truly at the very start/end of the entire story
   const atVeryTop = $derived(displayedEntries.hiddenAtTop === 0 && !userScrolledDown)
   const atVeryBottom = $derived(displayedEntries.hiddenAtBottom === 0 && isAtPhysicalBottom)
@@ -447,6 +456,19 @@
     }
   })
 
+  // A regenerate starts where the discarded narration was; follow it there even with
+  // auto-scroll off, or the removal leaves the view part-way up the entry before it.
+  let lastEndScrollRequest = ui.storyEndScrollRequest
+  $effect(() => {
+    const request = ui.storyEndScrollRequest
+    if (request === lastEndScrollRequest || ui.activePanel !== 'story' || !storyContainer) return
+    lastEndScrollRequest = request
+    untrack(() => {
+      anchorToBottom(story.entries.length)
+      tick().then(() => performScroll())
+    })
+  })
+
   // The same request, arriving while the story panel is already up — the effect above
   // won't re-run, since neither activePanel nor storyContainer changed. Declared after
   // it so that on a remount the panel effect takes the request first and this one finds
@@ -535,7 +557,7 @@
         {/each}
 
         <!-- Show streaming entry while generating -->
-        {#if ui.isStreaming}
+        {#if showStreamingEntry}
           <StreamingEntry />
         {/if}
 

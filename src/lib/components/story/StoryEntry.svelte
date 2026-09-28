@@ -69,7 +69,8 @@
   import { database } from '$lib/services/database'
   import { onMount } from 'svelte'
   import ReasoningBlock from './ReasoningBlock.svelte'
-  import ActivityStatus from './ActivityStatus.svelte'
+  import ActivitySummary from './ActivitySummary.svelte'
+  import ActivityTimeline from './ActivityTimeline.svelte'
   import { activity } from '$lib/stores/activity.svelte'
   import { formatDuration, turnDuration } from '$lib/services/activity'
   import { countTokens } from '$lib/services/tokenizer'
@@ -145,12 +146,9 @@
       ? activity.recordFor(entry.id)
       : null,
   )
-  // Held in the store, keyed by entry: a report opened while the streaming entry was on screen
-  // has to survive this entry replacing it, or it closes mid-turn. Shown by default until the
-  // turn's last task finishes, hidden by default once it has.
-  const showActivityRecord = $derived(
-    !!activityRecord && activity.isReportVisible(entry.id, !activityRecord.endedAt),
-  )
+  // Held in the store, keyed by entry: a choice made while the streaming entry was on screen
+  // has to survive this entry replacing it.
+  const showActivityRecord = $derived(!!activityRecord && activity.isReportVisible(entry.id))
 
   // The duration chip and its fallback in Response info must never both be absent. The fallback
   // renders in a portal outside the card, where a container query cannot reach, so one measured
@@ -387,6 +385,13 @@
 
   // Checkpoint creation state
   let isCreatingCheckpoint = $state(false)
+
+  // The activity report is rendered only while the entry shows its text: editing, deleting,
+  // branching and checkpointing take the content area, and the report gives way as the text does.
+  const showReport = $derived(
+    showActivityRecord && !isEditing && !isDeleting && !isBranching && !isCreatingCheckpoint,
+  )
+
   let adjustmentsOpen = $state(false)
   /** Outlives the submenu by one tap: the click that closed it must not land on a live item. */
   let menuLocked = $state(false)
@@ -1487,7 +1492,7 @@
       <div class="-ml-2 flex shrink-0 items-center gap-0.5">
         {#snippet copyIcon()}
           {#if isCopied}
-            <Check class="h-4 w-4 text-green-500" />
+            <Check class="h-4 w-4 text-green-700 dark:text-green-500" />
           {:else}
             <Copy class="h-4 w-4" />
           {/if}
@@ -1602,7 +1607,7 @@
             variant="text"
             size="icon"
             onclick={() => ui.triggerRetryLastMessage()}
-            class="h-7 w-7 text-amber-500 hover:text-amber-600"
+            class="h-7 w-7 text-amber-700 hover:text-amber-800 dark:text-amber-500 dark:hover:text-amber-600"
             title="Generate a different response"
           >
             <RotateCcw class="h-4 w-4" />
@@ -1612,7 +1617,7 @@
             variant="text"
             size="icon"
             onclick={() => ui.triggerRegenerateNarration(entry.id)}
-            class="h-7 w-7 text-amber-500 hover:text-amber-600"
+            class="h-7 w-7 text-amber-700 hover:text-amber-800 dark:text-amber-500 dark:hover:text-amber-600"
             title="Generate a different response"
           >
             <RotateCcw class="h-4 w-4" />
@@ -1623,7 +1628,7 @@
             variant="text"
             size="icon"
             onclick={() => (isBranching = true)}
-            class="hidden h-7 w-7 text-amber-500 hover:text-amber-600 @min-[23rem]:flex"
+            class="hidden h-7 w-7 text-amber-700 hover:text-amber-800 @min-[23rem]:flex dark:text-amber-500 dark:hover:text-amber-600"
             title="Branch from here"
           >
             <GitBranch class="h-4 w-4" />
@@ -1634,7 +1639,7 @@
             variant="text"
             size="icon"
             onclick={() => (isCreatingCheckpoint = true)}
-            class="hidden h-7 w-7 text-blue-500 hover:text-blue-600 @min-[23rem]:flex"
+            class="hidden h-7 w-7 text-blue-700 hover:text-blue-800 @min-[23rem]:flex dark:text-blue-500 dark:hover:text-blue-600"
             title="Create checkpoint"
           >
             <Bookmark class="h-4 w-4" />
@@ -1650,7 +1655,7 @@
                   variant="text"
                   size="icon"
                   class="hidden h-7 w-7 @min-[23rem]:flex {story.timeAnchorFor(entry.id)
-                    ? 'text-amber-500 hover:text-amber-600'
+                    ? 'text-amber-700 hover:text-amber-800 dark:text-amber-500 dark:hover:text-amber-600'
                     : 'text-muted-foreground hover:text-foreground'}"
                   title="Timeline adjustments"
                 >
@@ -1674,7 +1679,7 @@
           {#if isGeneratingTTS}
             <Loader2 class="h-4 w-4 animate-spin" />
           {:else if isPlayingTTS}
-            <X class="h-4 w-4 text-red-500" />
+            <X class="h-4 w-4 text-red-700 dark:text-red-500" />
           {:else}
             <Volume2 class="h-4 w-4" />
           {/if}
@@ -1720,7 +1725,7 @@
           size="icon"
           onclick={() => (isDeleting = true)}
           disabled={entriesLocked}
-          class="text-muted-foreground h-7 w-7 hover:text-red-500"
+          class="text-muted-foreground h-7 w-7 hover:text-red-700 dark:hover:text-red-500"
           title={entriesLocked ? 'Cannot delete during generation or retry' : 'Delete'}
         >
           <Trash2 class="h-4 w-4" />
@@ -1842,9 +1847,37 @@
     </div>
   {/snippet}
 
-  {#if showEntryMeta}
-    <div class="mb-2 flex justify-end @min-[41rem]:hidden">
-      {@render storyTimeChip()}
+  <!-- Below 41rem the story time has this row to itself, and the report's line shares it
+       rather than taking a second one; from 41rem the time is in the header and the line has
+       the row alone. The report sits above the reasoning, where the streaming entry has it, so
+       it does not jump when this entry replaces that one. Each part is a bystander to the
+       entry: a fault rendering it must not take the narration with it. -->
+  {#if showReport || showEntryMeta}
+    <div class="mb-2 flex items-center gap-2 {showReport ? '' : '@min-[41rem]:hidden'}">
+      {#if showReport && activityRecord}
+        <div class="min-w-0 flex-1">
+          <svelte:boundary
+            onerror={(error) => console.warn('[activity] Report failed to render:', error)}
+          >
+            <ActivitySummary turn={activityRecord} />
+          </svelte:boundary>
+        </div>
+      {/if}
+      {#if showEntryMeta}
+        <div class="ml-auto shrink-0 @min-[41rem]:hidden">
+          {@render storyTimeChip()}
+        </div>
+      {/if}
+    </div>
+  {/if}
+
+  {#if showReport && activityRecord && activity.isTreeExpanded(activityRecord)}
+    <div class="mb-2">
+      <svelte:boundary
+        onerror={(error) => console.warn('[activity] Report failed to render:', error)}
+      >
+        <ActivityTimeline turn={activityRecord} now={activity.now} />
+      </svelte:boundary>
     </div>
   {/if}
 
@@ -1971,18 +2004,6 @@
           showToggleOnly={false}
         />
       {/if}
-
-      <!-- The report is a bystander to the entry: a fault rendering it must not
-         take the narration with it. -->
-      <svelte:boundary
-        onerror={(error) => console.warn('[activity] Report failed to render:', error)}
-      >
-        {#if activityRecord && showActivityRecord}
-          <div class="mb-2">
-            <ActivityStatus turn={activityRecord} />
-          </div>
-        {/if}
-      </svelte:boundary>
 
       <div
         bind:this={storyTextContainer}
@@ -2134,7 +2155,7 @@
             size="sm"
             onclick={handleRetryFromEntry}
             disabled={entriesLocked}
-            class="h-8 border-red-500/30 px-3 text-red-500 hover:border-red-400/50 hover:bg-red-500/10 hover:text-red-400"
+            class="h-8 border-red-500/30 px-3 text-red-700 hover:border-red-400/50 hover:bg-red-500/10 hover:text-red-800 dark:text-red-500 dark:hover:text-red-400"
           >
             <RefreshCw class="h-3.5 w-3.5" />
             Retry
@@ -2144,7 +2165,7 @@
             size="sm"
             onclick={handleDismissError}
             disabled={entriesLocked}
-            class="text-muted-foreground border-border h-8 px-3 hover:border-red-400/50 hover:bg-red-500/10 hover:text-red-400"
+            class="text-muted-foreground border-border h-8 px-3 hover:border-red-400/50 hover:bg-red-500/10 hover:text-red-700 dark:hover:text-red-400"
           >
             <Trash2 class="h-3.5 w-3.5" />
             Dismiss

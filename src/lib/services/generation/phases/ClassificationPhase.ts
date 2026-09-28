@@ -115,11 +115,17 @@ export class ClassificationPhase {
         return null
       }
 
-      // Emit classification complete event
-      yield {
-        type: 'classification_complete',
-        result: classificationResult,
-      } satisfies ClassificationCompleteEvent
+      // The phase stays suspended at this yield while the consumer applies the result, so the
+      // step spans exactly that work.
+      const applyId = activity.startStep('Updating world', { parentId: input.activityParentId })
+      try {
+        yield {
+          type: 'classification_complete',
+          result: classificationResult,
+        } satisfies ClassificationCompleteEvent
+      } finally {
+        activity.endStep(applyId)
+      }
 
       const result: ClassificationPhaseResult = {
         classificationResult,

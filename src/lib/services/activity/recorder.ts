@@ -147,6 +147,11 @@ export class ActivityRecorder {
     return this.current
   }
 
+  /** The most recently started turn, running or not, or null when none is retained. */
+  get latestTurn(): ActivityTurn | null {
+    return this.turns.at(-1) ?? null
+  }
+
   /**
    * The retained record for an entry, or null once evicted. The live turn, not a copy out of
    * `snapshot()`: callers key their reactivity off its identity.

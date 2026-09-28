@@ -1,6 +1,11 @@
 <script lang="ts">
   import { activity } from '$lib/stores/activity.svelte'
-  import { flattenTree, formatStepDuration, type ActivityTurn } from '$lib/services/activity'
+  import {
+    flattenTree,
+    formatDuration,
+    stepDuration,
+    type ActivityTurn,
+  } from '$lib/services/activity'
   import { Sparkles } from '@lucide/svelte'
 
   let { turn, now }: { turn: ActivityTurn; now: number } = $props()
@@ -21,40 +26,42 @@
       running: step.status === 'running',
       skipped: step.status === 'skipped',
       failed: step.status === 'failed',
-      time: formatStepDuration(step, now) ?? '',
+      time: formatDuration(stepDuration(step, now)),
     })),
   )
 </script>
 
-<!-- Capped: a deep retrieval run is tens of rows, and the report must not push the
-     narration off the screen to show them. -->
-<div
-  class="border-border/50 bg-muted/30 mt-1 max-h-64 overflow-y-auto rounded-md border px-2 py-1.5"
->
+<!-- Uncapped, like the reasoning block: a long turn is read by scrolling the story, not through
+     a window of its own. While the narration streams few steps run beside it, so the report
+     rarely grows under the reader. -->
+<div class="border-border/50 bg-muted/30 mt-1 rounded-md border px-2 py-1.5">
   {#each rows as row (row.id)}
     <div
       class="flex items-baseline gap-1.5 py-0.5 text-[11px] leading-tight"
       style="padding-left: {row.level * 0.75}rem"
     >
-      <!-- Fixed width: the column stays a column when a step has no measured duration. -->
+      <!-- Fixed width, so the labels start in one column. -->
       <span
-        class="w-11 shrink-0 text-right tabular-nums"
+        class="inline-flex w-12 shrink-0 items-baseline justify-end tabular-nums"
         class:text-muted-foreground={!row.running}
         class:text-primary={row.running}
       >
+        {#if row.isLLM}
+          <Sparkles
+            class="mr-1 h-2.5 w-2.5 shrink-0 translate-y-px text-amber-700 dark:text-amber-500"
+          />
+        {/if}
         {row.time}
       </span>
 
-      {#if row.isLLM}
-        <Sparkles class="text-primary/70 h-2.5 w-2.5 shrink-0 translate-y-px" />
-      {/if}
-
+      <!-- One colour per outcome, never two: same-property utilities are resolved by the order
+           Tailwind emits them, not the order written, and muted is emitted after destructive. -->
       <span
         class="min-w-0 truncate"
         class:text-foreground={row.running}
-        class:text-muted-foreground={!row.running}
-        class:line-through={row.skipped}
         class:text-destructive={row.failed}
+        class:text-muted-foreground={!row.running && !row.failed}
+        class:line-through={row.skipped}
       >
         {row.label}
       </span>

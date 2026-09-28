@@ -9,7 +9,7 @@ export type { ActivityStep, ActivityTurn, ActivityNode, ActivityRow, ActivitySta
 
 export { buildTree, flattenTree, deepestRunningStep, rootStep } from './tree'
 
-export { stepDuration, turnDuration, formatDuration, formatStepDuration } from './duration'
+export { stepDuration, turnDuration, formatDuration } from './duration'
 
 export { retainTurns, findTurnByEntryId, RETAINED_TURNS } from './retention'
 

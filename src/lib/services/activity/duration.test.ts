@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatDuration, formatStepDuration, stepDuration, turnDuration } from './duration'
+import { formatDuration, stepDuration, turnDuration } from './duration'
 import type { ActivityStep, ActivityTurn } from './types'
 
 const base: ActivityStep = {
@@ -38,41 +38,19 @@ describe('turnDuration', () => {
 })
 
 describe('formatDuration', () => {
-  it('reports sub-second times in milliseconds', () => {
-    expect(formatDuration(0)).toBe('0ms')
-    expect(formatDuration(42)).toBe('42ms')
-    expect(formatDuration(999)).toBe('999ms')
-  })
-
-  it('reports whole seconds, so a dozen rows do not tick a decimal each', () => {
-    expect(formatDuration(1_000)).toBe('1s')
+  it('rounds to the nearest second', () => {
+    expect(formatDuration(0)).toBe('0s')
+    expect(formatDuration(499)).toBe('0s')
+    expect(formatDuration(500)).toBe('1s')
     expect(formatDuration(6_240)).toBe('6s')
-    expect(formatDuration(59_900)).toBe('59s')
+    expect(formatDuration(1_999)).toBe('2s')
   })
 
-  it('truncates rather than rounding, so it never reports time that has not passed', () => {
-    expect(formatDuration(1_999)).toBe('1s')
-    expect(formatDuration(119_800)).toBe('1m 59s')
-  })
-
-  it('reports minutes and seconds beyond a minute', () => {
-    expect(formatDuration(60_000)).toBe('1m 0s')
+  it('reports minutes and seconds beyond a minute, rounding across the boundary', () => {
+    expect(formatDuration(59_400)).toBe('59s')
+    expect(formatDuration(59_600)).toBe('1m 0s')
     expect(formatDuration(95_000)).toBe('1m 35s')
+    expect(formatDuration(119_800)).toBe('2m 0s')
     expect(formatDuration(600_000)).toBe('10m 0s')
-  })
-})
-
-describe('formatStepDuration', () => {
-  it('shows nothing for a finished step that was never timed', () => {
-    // Most retrieval tool calls carry no duration; a column of "0ms" is all this avoids.
-    expect(formatStepDuration({ ...base, endedAt: base.startedAt }, 9_999)).toBeNull()
-  })
-
-  it('shows a finished step that took measurable time', () => {
-    expect(formatStepDuration({ ...base, endedAt: base.startedAt + 6_240 }, 9_999)).toBe('6s')
-  })
-
-  it('shows a running step from its first tick, including at zero', () => {
-    expect(formatStepDuration({ ...base, status: 'running' }, base.startedAt)).toBe('0ms')
   })
 })

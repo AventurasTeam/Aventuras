@@ -259,3 +259,18 @@ describe('recording', () => {
     expect(onChange).toHaveBeenCalledTimes(4)
   })
 })
+
+describe('latestTurn', () => {
+  it('is the most recently started turn, still after it ends, until a newer one starts', () => {
+    const { recorder } = recorderAt()
+    recorder.setReporting('line')
+    expect(recorder.latestTurn).toBeNull()
+
+    recorder.startTurn('entry-1')
+    recorder.endTurn()
+    expect(recorder.latestTurn?.entryId).toBe('entry-1')
+
+    recorder.startTurn('entry-2')
+    expect(recorder.latestTurn?.entryId).toBe('entry-2')
+  })
+})
