@@ -215,7 +215,7 @@ function Harness({
           <ImporterMenu
             trigger="icon"
             label={worldAddLabel(category)}
-            options={worldAddOptions(category, () => {}, {})}
+            options={worldAddOptions(() => {}, {})}
             open={addOpen}
             onOpenChange={setAddOpen}
           />

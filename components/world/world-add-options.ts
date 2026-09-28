@@ -1,14 +1,9 @@
 import type { ImporterMenuOption } from '@/components/compounds/importer-menu'
 import { t } from '@/lib/i18n'
-import type { WorldCategory } from '@/lib/list-modules'
 
 type BlankGate = { disabled?: boolean; disabledReason?: string }
 
-export function worldAddOptions(
-  category: WorldCategory,
-  onBlank: () => void,
-  blank: BlankGate,
-): ImporterMenuOption[] {
+export function worldAddOptions(onBlank: () => void, blank: BlankGate): ImporterMenuOption[] {
   return [
     {
       key: 'blank',

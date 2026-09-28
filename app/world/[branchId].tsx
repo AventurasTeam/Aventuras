@@ -536,7 +536,7 @@ export default function WorldRoute() {
                   <ImporterMenu
                     trigger="icon"
                     label={worldAddLabel(category)}
-                    options={worldAddOptions(category, () => guard(startCreate), {
+                    options={worldAddOptions(() => guard(startCreate), {
                       disabled: editBlocked,
                       disabledReason: gateReason,
                     })}
