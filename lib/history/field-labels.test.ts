@@ -1,44 +1,18 @@
 import { describe, expect, it } from 'vitest'
 
+import { UPDATABLE as ENTITY_UPDATABLE } from '@/lib/actions/entities/register'
+import { UPDATABLE as HAPPENING_UPDATABLE } from '@/lib/actions/happenings/register-happenings'
+import { UPDATABLE as LORE_UPDATABLE } from '@/lib/actions/lore/register'
+import { UPDATABLE as THREAD_UPDATABLE } from '@/lib/actions/threads/register'
 import { entityStateColumnSchema } from '@/lib/db'
 
-import { fieldPathLabel, HISTORY_TABLES } from './field-labels'
+import { fieldPathLabel, HISTORY_TABLES, opsMatchingLabel } from './field-labels'
 
-// Mirrors each handler's UPDATABLE array (lib/actions/{entities,lore,threads,happenings}/
-// register*.ts) — not importable here: those consts are file-local, not part of lib/actions'
-// public API (its index.ts). Keep this list in sync when a handler's UPDATABLE array changes.
 const UPDATABLE_BY_TABLE: Record<(typeof HISTORY_TABLES)[number], readonly string[]> = {
-  entities: [
-    'name',
-    'description',
-    'status',
-    'retiredReason',
-    'injectionMode',
-    'tags',
-    'keywords',
-    'priority',
-    'state',
-  ],
-  lore: ['title', 'body', 'category', 'tags', 'keywords', 'injectionMode', 'priority'],
-  threads: [
-    'title',
-    'description',
-    'category',
-    'icon',
-    'status',
-    'injectionMode',
-    'triggeredAtEntryId',
-    'resolvedAtEntryId',
-  ],
-  happenings: [
-    'title',
-    'description',
-    'category',
-    'icon',
-    'temporal',
-    'occurredAtEntryId',
-    'commonKnowledge',
-  ],
+  entities: ENTITY_UPDATABLE,
+  lore: LORE_UPDATABLE,
+  threads: THREAD_UPDATABLE,
+  happenings: HAPPENING_UPDATABLE,
 }
 
 describe('field-labels vocabulary coverage', () => {
@@ -50,12 +24,21 @@ describe('field-labels vocabulary coverage', () => {
     }
   })
 
-  it("labels every path in entities' state column schema, including state.visual's keys", () => {
+  it("labels every path in entities' state column schema, distinctly from its parent's label", () => {
+    const stateLabel = fieldPathLabel('entities', 'state')
+    const visualLabel = fieldPathLabel('entities', 'state.visual')
     for (const key of Object.keys(entityStateColumnSchema.shape)) {
-      expect(fieldPathLabel('entities', `state.${key}`)).not.toBe(`state.${key}`)
+      expect(fieldPathLabel('entities', `state.${key}`)).not.toBe(stateLabel)
     }
     for (const key of Object.keys(entityStateColumnSchema.shape.visual.shape)) {
-      expect(fieldPathLabel('entities', `state.visual.${key}`)).not.toBe(`state.visual.${key}`)
+      expect(fieldPathLabel('entities', `state.visual.${key}`)).not.toBe(visualLabel)
     }
+  })
+})
+
+describe('opsMatchingLabel', () => {
+  it('matches a label by word start, not by substring anywhere', () => {
+    expect(opsMatchingLabel('date')).toEqual([])
+    expect(opsMatchingLabel('cre')).toEqual(['create'])
   })
 })

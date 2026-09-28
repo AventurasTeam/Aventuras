@@ -38,7 +38,7 @@ declare module '@/lib/actions/action-map' {
 }
 
 // Delta-logged columns.
-const UPDATABLE = [
+export const UPDATABLE = [
   'title',
   'body',
   'category',

@@ -105,6 +105,8 @@ export function pathsMatchingLabel(table: HistoryTable, term: string): string[] 
 
 // Every rendered spelling of an op: its raw name, its filter-chip label, and the summary
 // text the humanizer prints for it — a search over the rendered summary must find them all.
+// `summary.modified` is excluded: unrendered ("Modified {{fields}}"), it would match any
+// term found in "fields" or "{{" — modifiedUnknown ("Modified") already covers the word.
 const OP_LABELS: Record<Delta['op'], () => string[]> = {
   create: () => [
     t('history:op.create'),
@@ -114,7 +116,6 @@ const OP_LABELS: Record<Delta['op'], () => string[]> = {
   update: () => [
     t('history:op.update'),
     t('history:opFilter.update'),
-    t('history:summary.modified'),
     t('history:summary.modifiedUnknown'),
   ],
   delete: () => [
@@ -124,11 +125,18 @@ const OP_LABELS: Record<Delta['op'], () => string[]> = {
   ],
 }
 
-/** Ops whose rendered label (op name, filter chip, or summary text) contains `term`. */
+// Word-start, not substring-anywhere: "date" must not hit "upDATEd", "eat" must not hit
+// "crEATed", "let" must not hit "deLETed" — all real labels, all single words today.
+function startsWithWord(label: string, needle: string): boolean {
+  return label
+    .toLocaleLowerCase()
+    .split(/\s+/)
+    .some((word) => word.startsWith(needle))
+}
+
+/** Ops whose rendered label (op name, filter chip, or summary text) starts a word with `term`. */
 export function opsMatchingLabel(term: string): Delta['op'][] {
   const needle = term.trim().toLocaleLowerCase()
   if (needle === '') return []
-  return HISTORY_OPS.filter((op) =>
-    OP_LABELS[op]().some((label) => label.toLocaleLowerCase().includes(needle)),
-  )
+  return HISTORY_OPS.filter((op) => OP_LABELS[op]().some((label) => startsWithWord(label, needle)))
 }

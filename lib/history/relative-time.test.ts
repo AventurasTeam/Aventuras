@@ -8,6 +8,10 @@ describe('relativeTimeLabel', () => {
     expect(relativeTimeLabel(10_000, 0)).toBe('just now')
   })
 
+  it('reads "1 min ago" at exactly 60 seconds, not "just now"', () => {
+    expect(relativeTimeLabel(0, 60_000)).toBe('1 min ago')
+  })
+
   it('crosses from minutes to hours at 60 minutes', () => {
     expect(relativeTimeLabel(0, 59 * 60_000)).toBe('59 min ago')
     expect(relativeTimeLabel(0, 60 * 60_000)).toBe('1 h ago')
