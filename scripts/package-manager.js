@@ -8,21 +8,15 @@ import fs from 'fs'
 import path from 'path'
 import { spawnSync } from 'child_process'
 
-/** `aube` iff it did the install (marker present) and it is still on PATH. Otherwise `npm`. */
-export function pickPackageManager({ aubeOnPath, aubeInstalled }) {
-  return aubeOnPath && aubeInstalled ? 'aube' : 'npm'
-}
-
 /**
- * `aubeInstalled` is read from disk; `aubeOnPath` is only probed when that marker is present,
- * since there is nothing to fall back from otherwise.
+ * `aube` iff it did the install (marker present) and is still on PATH. Otherwise `npm`. The
+ * probe only runs when the marker is present, since there is nothing to fall back from
+ * otherwise.
  */
 export function detectPackageManager(rootDir = process.cwd()) {
-  const aubeInstalled = fs.existsSync(path.join(rootDir, 'node_modules', '.aube-state'))
-  const probe = aubeInstalled && spawnSync('aube', ['--version'], { stdio: 'ignore' })
-  const aubeOnPath = Boolean(probe && !probe.error && probe.status === 0)
-
-  return pickPackageManager({ aubeOnPath, aubeInstalled })
+  if (!fs.existsSync(path.join(rootDir, 'node_modules', '.aube-state'))) return 'npm'
+  const probe = spawnSync('aube', ['--version'], { stdio: 'ignore' })
+  return !probe.error && probe.status === 0 ? 'aube' : 'npm'
 }
 
 /**

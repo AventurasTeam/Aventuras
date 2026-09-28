@@ -1,19 +1,14 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
-import { pickPackageManager, commandFor, detectPackageManager } from './package-manager.js'
+import { spawnSync } from 'child_process'
+import { commandFor, detectPackageManager } from './package-manager.js'
 
-describe('pickPackageManager', () => {
-  it.each([
-    [{ aubeOnPath: true, aubeInstalled: true }, 'aube'],
-    [{ aubeOnPath: true, aubeInstalled: false }, 'npm'],
-    [{ aubeOnPath: false, aubeInstalled: true }, 'npm'],
-    [{ aubeOnPath: false, aubeInstalled: false }, 'npm'],
-  ])('picks %o -> %s', (input, expected) => {
-    expect(pickPackageManager(input)).toBe(expected)
-  })
-})
+vi.mock('child_process', async (importOriginal) => ({
+  ...(await importOriginal()),
+  spawnSync: vi.fn(),
+}))
 
 describe('commandFor', () => {
   it('runs npm through cmd.exe on win32, DEP0190-safe', () => {
@@ -45,12 +40,42 @@ describe('commandFor', () => {
 })
 
 describe('detectPackageManager', () => {
-  it('picks npm when the install marker is absent, without probing aube', () => {
+  function withRootDir(hasAubeState, fn) {
     const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-test-'))
     try {
-      expect(detectPackageManager(rootDir)).toBe('npm')
+      if (hasAubeState)
+        fs.mkdirSync(path.join(rootDir, 'node_modules', '.aube-state'), { recursive: true })
+      fn(rootDir)
     } finally {
       fs.rmSync(rootDir, { recursive: true, force: true })
     }
+  }
+
+  it('picks npm when the install marker is absent, without probing aube', () => {
+    withRootDir(false, (rootDir) => {
+      expect(detectPackageManager(rootDir)).toBe('npm')
+      expect(spawnSync).not.toHaveBeenCalled()
+    })
+  })
+
+  it('picks aube when the marker is present and the probe succeeds', () => {
+    vi.mocked(spawnSync).mockReturnValue({ status: 0 })
+    withRootDir(true, (rootDir) => {
+      expect(detectPackageManager(rootDir)).toBe('aube')
+    })
+  })
+
+  it('picks npm when the marker is present but aube is not on PATH', () => {
+    vi.mocked(spawnSync).mockReturnValue({ error: new Error('ENOENT') })
+    withRootDir(true, (rootDir) => {
+      expect(detectPackageManager(rootDir)).toBe('npm')
+    })
+  })
+
+  it('picks npm when the marker is present but the probe exits non-zero', () => {
+    vi.mocked(spawnSync).mockReturnValue({ status: 1 })
+    withRootDir(true, (rootDir) => {
+      expect(detectPackageManager(rootDir)).toBe('npm')
+    })
   })
 })
