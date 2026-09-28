@@ -11,23 +11,13 @@ vi.mock('child_process', async (importOriginal) => ({
 }))
 
 describe('commandFor', () => {
-  it('runs npm through cmd.exe on win32, DEP0190-safe', () => {
-    expect(commandFor('npm', ['run', 'lint'], 'win32')).toEqual([
-      'cmd.exe',
-      ['/c', 'npm', 'run', 'lint'],
-    ])
-  })
-
-  it('runs npm directly on non-win32 platforms', () => {
-    expect(commandFor('npm', ['run', 'lint'], 'linux')).toEqual(['npm', ['run', 'lint']])
-  })
-
-  it('runs aube directly on win32, since it is a real executable there', () => {
-    expect(commandFor('aube', ['run', 'lint'], 'win32')).toEqual(['aube', ['run', 'lint']])
-  })
-
-  it('runs aube directly on non-win32 platforms', () => {
-    expect(commandFor('aube', ['run', 'lint'], 'linux')).toEqual(['aube', ['run', 'lint']])
+  it.each([
+    ['npm', 'win32', ['cmd.exe', ['/c', 'npm', 'run', 'lint']]],
+    ['npm', 'linux', ['npm', ['run', 'lint']]],
+    ['aube', 'win32', ['aube', ['run', 'lint']]],
+    ['aube', 'linux', ['aube', ['run', 'lint']]],
+  ])('builds the command for %s on %s', (pm, platform, expected) => {
+    expect(commandFor(pm, ['run', 'lint'], platform)).toEqual(expected)
   })
 
   it.each([
@@ -67,24 +57,14 @@ describe('detectPackageManager', () => {
     })
   })
 
-  it('picks aube when the marker is present and the probe succeeds', () => {
-    vi.mocked(spawnSync).mockReturnValue({ status: 0 })
+  it.each([
+    ['aube', { status: 0 }],
+    ['npm', { error: new Error('ENOENT') }],
+    ['npm', { status: 1 }],
+  ])('picks %s when the marker is present and the probe returns %o', (expected, probeResult) => {
+    vi.mocked(spawnSync).mockReturnValue(probeResult)
     withRootDir(true, (rootDir) => {
-      expect(detectPackageManager(rootDir)).toBe('aube')
-    })
-  })
-
-  it('picks npm when the marker is present but aube is not on PATH', () => {
-    vi.mocked(spawnSync).mockReturnValue({ error: new Error('ENOENT') })
-    withRootDir(true, (rootDir) => {
-      expect(detectPackageManager(rootDir)).toBe('npm')
-    })
-  })
-
-  it('picks npm when the marker is present but the probe exits non-zero', () => {
-    vi.mocked(spawnSync).mockReturnValue({ status: 1 })
-    withRootDir(true, (rootDir) => {
-      expect(detectPackageManager(rootDir)).toBe('npm')
+      expect(detectPackageManager(rootDir)).toBe(expected)
     })
   })
 })
