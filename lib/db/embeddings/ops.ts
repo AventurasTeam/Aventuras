@@ -1,6 +1,6 @@
 import type { SqlOp } from '../types'
 import type { SourceHash } from './source-hash'
-import { KIND_COLUMNS, SOURCE_TABLES } from './stale'
+import { embeddedSourceGuard, SOURCE_TABLES } from './stale'
 import { familyTablesFor, vecRowPk, vecTableName, type VecTargetKind } from './vec-tables'
 
 export type VecWrite = {
@@ -46,12 +46,16 @@ export function upsertVecOps(w: VecWrite, source?: VecSourceGuard): SqlOp[] {
       remove,
       { sql: `INSERT INTO ${table} ${columns} VALUES (?, ?, ?, ?, ?, ?)`, params: values },
     ]
-  const [first, second] = KIND_COLUMNS[w.kind]
+  const guard = embeddedSourceGuard(w.kind, {
+    id: w.id,
+    branchId: w.branchId,
+    fields: source.fields,
+  })
   return [
     remove,
     {
-      sql: `INSERT INTO ${table} ${columns} SELECT ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM ${SOURCE_TABLES[w.kind]} WHERE branch_id = ? AND id = ? AND ${first} IS ? AND ${second} IS ?)`,
-      params: [...values, w.branchId, w.id, source.fields[0] ?? null, source.fields[1] ?? null],
+      sql: `INSERT INTO ${table} ${columns} SELECT ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM ${SOURCE_TABLES[w.kind]} WHERE ${guard.sql})`,
+      params: [...values, ...guard.params],
     },
   ]
 }
