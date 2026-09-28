@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { expect, screen, within } from 'storybook/test'
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import type { Delta, Happening, Thread } from '@/lib/db'
 import type { HistoryChunk, HistoryQuery } from '@/lib/history'
@@ -28,14 +28,21 @@ const delta = (
   createdAt: Date.now() - 60_000,
 })
 
-const load = async (query: HistoryQuery): Promise<HistoryChunk> => ({
-  rows: [
-    query.targetTable === 'threads'
-      ? delta('threads', 'thread_amulet', { status: 'pending' })
-      : delta('happenings', 'hap_fire', { commonKnowledge: 0 }),
-  ],
-  nextCursor: null,
-})
+const queries: HistoryQuery[] = []
+
+// A filtered query matches nothing, so the no-match state is reachable.
+const load = async (query: HistoryQuery): Promise<HistoryChunk> => {
+  queries.push(query)
+  if (query.op != null || (query.search ?? '') !== '') return { rows: [], nextCursor: null }
+  return {
+    rows: [
+      query.targetTable === 'threads'
+        ? delta('threads', 'thread_amulet', { status: 'pending' })
+        : delta('happenings', 'hap_fire', { commonKnowledge: 0 }),
+    ],
+    nextCursor: null,
+  }
+}
 
 function hydrateTargets(): () => void {
   threadsStore.hydrate('br_1', [
@@ -82,7 +89,10 @@ const meta: Meta<typeof HistoryTab> = {
   component: HistoryTab,
   parameters: { layout: 'padded' },
   // Per story, with cleanup, so the hydrated rows can't leak into another file's stories.
-  beforeEach: hydrateTargets,
+  beforeEach: () => {
+    queries.length = 0
+    return hydrateTargets()
+  },
   decorators: [
     (Story) => (
       <HistoryLoaderProvider value={load}>
@@ -110,5 +120,27 @@ export const HappeningRow: Story = {
     const [row] = await screen.findAllByTestId('delta-log-row')
     expect(within(row).getByText('The keep burns')).toBeVisible()
     expect(within(row).getByText('Modified Common knowledge')).toBeVisible()
+  },
+}
+
+/** The op chip and the debounced search both reach the query, each from the first chunk. */
+export const FiltersReachTheQuery: Story = {
+  args: { branchId: 'br_1', targetTable: 'threads', targetId: 'thread_amulet' },
+  play: async () => {
+    await screen.findAllByTestId('delta-log-row')
+    await userEvent.click(screen.getByRole('button', { name: 'Deleted' }))
+    await waitFor(() => expect(queries.at(-1)).toMatchObject({ op: 'delete', cursor: null }))
+    expect(await screen.findByText('No changes match')).toBeVisible()
+
+    await userEvent.click(screen.getByRole('button', { name: 'All' }))
+    await userEvent.type(screen.getByPlaceholderText('Search fields, changes…'), 'status')
+    await waitFor(() =>
+      expect(queries.at(-1)).toMatchObject({
+        search: 'status',
+        labelPaths: ['status'],
+        cursor: null,
+      }),
+    )
+    expect(queries.at(-1)?.op).toBeUndefined()
   },
 }
