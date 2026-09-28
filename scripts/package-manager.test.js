@@ -14,7 +14,7 @@ describe('commandFor', () => {
   it.each([
     ['npm', 'win32', ['cmd.exe', ['/c', 'npm', 'run', 'lint']]],
     ['npm', 'linux', ['npm', ['run', 'lint']]],
-    ['aube', 'win32', ['aube', ['run', 'lint']]],
+    ['aube', 'win32', ['cmd.exe', ['/c', 'aube', 'run', 'lint']]],
     ['aube', 'linux', ['aube', ['run', 'lint']]],
   ])('builds the command for %s on %s', (pm, platform, expected) => {
     expect(commandFor(pm, ['run', 'lint'], platform)).toEqual(expected)
@@ -65,6 +65,17 @@ describe('detectPackageManager', () => {
     vi.mocked(spawnSync).mockReturnValue(probeResult)
     withRootDir(true, (rootDir) => {
       expect(detectPackageManager(rootDir)).toBe(expected)
+    })
+  })
+
+  it('probes aube through commandFor', () => {
+    vi.mocked(spawnSync).mockReturnValue({ status: 0 })
+    withRootDir(true, (rootDir) => {
+      detectPackageManager(rootDir)
+      expect(spawnSync).toHaveBeenCalledWith(
+        ...commandFor('aube', ['--version']),
+        expect.anything(),
+      )
     })
   })
 })
