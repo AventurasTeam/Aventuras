@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
-import { branches, characterRelationships, stories, type NewEntity } from '@/lib/db'
+import { branches, characterRelationships, entities, stories, type NewEntity } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { characterRelationshipsStore, entitiesStore, entriesStore } from '@/lib/stores'
 
@@ -85,6 +85,10 @@ const deletePair = (id: string): PipelineAction => ({
   payload: { branchId: 'br_1', id },
 })
 
+async function seedChars(ctx: Ctx, ...ids: string[]): Promise<void> {
+  await ctx.db.insert(entities).values(ids.map((id) => ({ ...CHAR, id })))
+}
+
 const relate = (subjectId: string, objectId: string): PipelineAction => ({
   kind: 'upsertCharacterRelationship',
   source: 'user_edit',
@@ -158,6 +162,7 @@ describe('wroteColumn', () => {
 describe('userDeletedPairSince', () => {
   it("matches a user delete of the pair's row and ignores another pair's delete", async () => {
     const { ctx } = await setup()
+    await seedChars(ctx, 'char_kael', 'char_mira', 'char_zed')
     await apply(ctx, relate('char_kael', 'char_mira'), 'a0')
     await apply(ctx, relate('char_kael', 'char_zed'), 'a1')
     const since = await apply(ctx, createEntry('e_1', 1), 'a2')
@@ -168,6 +173,7 @@ describe('userDeletedPairSince', () => {
 
   it('ignores a user delete at or before the given position', async () => {
     const { ctx } = await setup()
+    await seedChars(ctx, 'char_kael', 'char_mira')
     await apply(ctx, relate('char_kael', 'char_mira'), 'a0')
     const deleted = await apply(
       ctx,

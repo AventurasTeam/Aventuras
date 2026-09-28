@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
-import { branches, characterRelationships, deltas, stories } from '@/lib/db'
+import { branches, characterRelationships, deltas, entities, stories } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { characterRelationshipsStore, entriesStore, undoRedoStore } from '@/lib/stores'
 
@@ -20,6 +20,18 @@ async function setup() {
   const { db, runInTransaction } = await createTestDb()
   await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
   await db.insert(branches).values({ id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 })
+  await db.insert(entities).values(
+    ['char_aria', 'char_kael', 'char_mira'].map((id) => ({
+      id,
+      branchId: 'br_1',
+      kind: 'character' as const,
+      name: id,
+      status: 'active' as const,
+      injectionMode: 'auto' as const,
+      createdAt: 1,
+      updatedAt: 1,
+    })),
+  )
   characterRelationshipsStore.__reset()
   characterRelationshipsStore.hydrate('br_1', [])
   return { db, ctx: { db, runInTransaction } }

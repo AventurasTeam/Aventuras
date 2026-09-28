@@ -5,6 +5,7 @@ import { characterRelationships, characterRelationshipWriteSchema } from '@/lib/
 import { generateId } from '@/lib/ids'
 import { characterRelationshipsStore } from '@/lib/stores'
 
+import { missingRef, MISSING_REF } from '../delta/live-refs'
 import { register, type ActionHandler, type HandlerOutcome } from '../delta/registry'
 import {
   carriesColumn,
@@ -156,7 +157,7 @@ function bothPovOutcome(
   }
 }
 
-const upsertHandler: ActionHandler = async (action, branchId, ctx) => {
+const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
   if (action.kind !== 'upsertCharacterRelationship')
     throw new Error(`handler/kind mismatch: ${action.kind}`)
   const { branchId: bid, subjectId, objectId, kind, inverseKind, proseEntryId } = action.payload
@@ -184,6 +185,12 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx) => {
         eq(characterRelationships.bId, bId),
       ),
     )
+
+  const refs = [
+    { table: 'entities', id: subjectId },
+    { table: 'entities', id: objectId },
+  ] as const
+  if (!current && (await missingRef(ctx, bid, refs, group))) return MISSING_REF
 
   if (inverseKind !== undefined)
     return bothPovOutcome(ctx, bid, { aId, bId, subjectIsA }, current, kind, inverseKind)

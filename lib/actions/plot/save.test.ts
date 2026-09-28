@@ -5,6 +5,7 @@ import type { Delta, Thread } from '@/lib/db'
 import {
   branches,
   deltas,
+  entities,
   happeningAwareness,
   happeningInvolvements,
   happenings,
@@ -35,6 +36,18 @@ async function setup() {
   const { db, runInTransaction } = await createTestDb()
   await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
   await db.insert(branches).values({ id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 })
+  await db.insert(entities).values(
+    ['char_kael', 'char_mira'].map((id) => ({
+      id,
+      branchId: 'br_1',
+      kind: 'character' as const,
+      name: id,
+      status: 'active' as const,
+      injectionMode: 'auto' as const,
+      createdAt: 1,
+      updatedAt: 1,
+    })),
+  )
   return { db, ctx: { db, runInTransaction } }
 }
 

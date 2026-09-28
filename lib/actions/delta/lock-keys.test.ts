@@ -1,11 +1,19 @@
 import { sqliteTable, text } from 'drizzle-orm/sqlite-core'
 import { describe, expect, it } from 'vitest'
 
-import type { Delta } from '@/lib/db'
+import {
+  branches,
+  entities,
+  happeningInvolvements,
+  happenings,
+  stories,
+  type Delta,
+} from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
 import type { PipelineAction } from '../types'
 import { applyDeltaAction, applyDeltaActionGroup, lockKeysFor } from './apply-delta-action'
+import { __resetRegistrationGuard, registerAllDomains } from './registrations'
 import { __resetRegistry, register, type HandlerOutcome } from './registry'
 import { deltaLockKeys } from './row-locks'
 
@@ -189,5 +197,92 @@ describe('runner lock acquisition', () => {
       'upsertHappeningAwareness',
       'deleteHappening',
     ])
+  })
+})
+
+async function until(condition: () => boolean): Promise<void> {
+  for (let i = 0; i < 200 && !condition(); i++)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  expect(condition()).toBe(true)
+}
+
+describe("a happening's delete and a link write can't interleave", () => {
+  it('parks the link write until the delete commits, then drops it', async () => {
+    // Earlier tests in this file swap in probe handlers for these kinds; restore the real
+    // ones so the delete's cascade and the guard's live-row read run for real.
+    __resetRegistry()
+    __resetRegistrationGuard()
+    registerAllDomains()
+    const { db, runInTransaction } = await createTestDb()
+    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
+    await db.insert(entities).values({
+      id: 'char_a',
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Aria',
+      status: 'active',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await db
+      .insert(happenings)
+      .values({ id: 'hap_1', branchId: 'b1', title: 'Fire', createdAt: 1, updatedAt: 1 })
+    await db
+      .insert(happeningInvolvements)
+      .values({ id: 'hinv_1', branchId: 'b1', happeningId: 'hap_1', entityId: 'char_a' })
+
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let parked = false
+    const gatedCtx = {
+      db,
+      runInTransaction: async (ops: Parameters<typeof runInTransaction>[0]) => {
+        if (!parked) {
+          parked = true
+          await gate
+        }
+        return runInTransaction(ops)
+      },
+    }
+
+    const deleting = applyDeltaAction(
+      {
+        action: {
+          kind: 'deleteHappening',
+          source: 'user_edit',
+          payload: { branchId: 'b1', id: 'hap_1' },
+        },
+        actionId: 'act_1',
+        branchId: 'b1',
+      },
+      gatedCtx,
+    )
+    await until(() => parked)
+    const linking = applyDeltaAction(
+      {
+        action: {
+          kind: 'createHappeningInvolvement',
+          source: 'user_edit',
+          payload: {
+            entry: { id: 'hinv_2', branchId: 'b1', happeningId: 'hap_1', entityId: 'char_a' },
+          },
+        },
+        actionId: 'act_2',
+        branchId: 'b1',
+      },
+      gatedCtx,
+    )
+    for (let i = 0; i < 20; i++) await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(await db.select().from(happeningInvolvements)).toHaveLength(1)
+
+    release()
+    const [deleted, linked] = await Promise.all([deleting, linking])
+    expect(deleted).toMatchObject({ status: 'ok' })
+    expect(linked).toMatchObject({ status: 'rejected', code: 'noop' })
+    expect(await db.select().from(happeningInvolvements)).toEqual([])
   })
 })

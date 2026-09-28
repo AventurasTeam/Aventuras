@@ -1,7 +1,14 @@
 import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
-import { branches, happeningInvolvements, stories, type NewHappeningInvolvement } from '@/lib/db'
+import {
+  branches,
+  entities,
+  happenings,
+  happeningInvolvements,
+  stories,
+  type NewHappeningInvolvement,
+} from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { happeningInvolvementsStore } from '@/lib/stores'
 
@@ -16,6 +23,19 @@ async function setup() {
   const { db, runInTransaction } = await createTestDb()
   await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
   await db.insert(branches).values({ id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 })
+  await db.insert(entities).values({
+    id: 'char_1',
+    branchId: 'br_1',
+    kind: 'character',
+    name: 'Char',
+    status: 'active',
+    injectionMode: 'auto',
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  await db
+    .insert(happenings)
+    .values({ id: 'hap_1', branchId: 'br_1', title: 'The fire', createdAt: 1, updatedAt: 1 })
   happeningInvolvementsStore.__reset()
   happeningInvolvementsStore.hydrate('br_1', [])
   return { db, ctx: { db, runInTransaction } }

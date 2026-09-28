@@ -4,6 +4,7 @@ import type { HappeningInvolvement, NewHappeningInvolvement } from '@/lib/db'
 import { happeningInvolvements, happeningInvolvementWriteSchema } from '@/lib/db'
 import { happeningInvolvementsStore } from '@/lib/stores'
 
+import { missingRef, MISSING_REF } from '../delta/live-refs'
 import { register, type ActionHandler } from '../delta/registry'
 import type { DeltaSource } from '../types'
 
@@ -28,7 +29,7 @@ function fullRow(entry: NewHappeningInvolvement): HappeningInvolvement {
   }
 }
 
-const createHandler: ActionHandler = (action, branchId, ctx) => {
+const createHandler: ActionHandler = async (action, branchId, ctx, group) => {
   if (action.kind !== 'createHappeningInvolvement')
     throw new Error(`handler/kind mismatch: ${action.kind}`)
   const { entry } = action.payload
@@ -41,6 +42,11 @@ const createHandler: ActionHandler = (action, branchId, ctx) => {
   const parsed = happeningInvolvementWriteSchema.safeParse(row)
   if (!parsed.success)
     return { status: 'rejected', reason: `invalid involvement: ${parsed.error.message}` }
+  const refs = [
+    { table: 'happenings', id: row.happeningId },
+    { table: 'entities', id: row.entityId },
+  ] as const
+  if (await missingRef(ctx, branchId, refs, group)) return MISSING_REF
   return {
     status: 'ok',
     targetTable: 'happening_involvements',
