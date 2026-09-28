@@ -238,7 +238,10 @@ convention, and the expectation that subsystems route through
   — a `⋯ → Set as lead` whose `setStoryLead` threw rather than
   refused), `world_delete_failed` (`components/world/use-world-delete.ts`
   — a confirmed `⋯ → Delete entity` / `Delete` whose `deleteEntityRow` /
-  `deleteRow` threw rather than refused), `plot_link_revalidate_failed`
+  `deleteRow` threw rather than refused), `plot_delete_failed`
+  (`components/plot/use-plot-delete.ts` — its Plot twin, a confirmed
+  `⋯ → Delete thread` / `Delete happening` whose `deleteRow` threw
+  rather than refused), `plot_link_revalidate_failed`
   (`components/plot/link-card.tsx` — the revalidation after a link row's
   removal rejected, leaving a stale duplicate error blocking Save) and
   its World twins `world_relationships_revalidate_failed`
