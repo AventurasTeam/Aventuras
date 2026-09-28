@@ -8,7 +8,6 @@ import { embedViaProvider } from '@/lib/ai'
 import type { ProviderInstanceWithStub } from '@/lib/ai'
 import {
   compositeText,
-  KIND_FIELDS,
   packFloat32,
   SOURCE_TABLES,
   sourceHash,
@@ -20,6 +19,7 @@ import {
   type VecTargetKind,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { KIND_COLUMNS } from '@/lib/db/embeddings/stale'
 import { logger } from '@/lib/diagnostics'
 
 import { embedLocal } from './local/runtime'
@@ -734,7 +734,7 @@ describe('embedRowsToVecOps — per-kind guard against a source row that moved o
     // A user edit landing after assembly read the row but before this commit —
     // the guard must see it and refuse the insert.
     for (const kind of KINDS) {
-      const column = KIND_FIELDS[kind][1]
+      const column = KIND_COLUMNS[kind][1]
       sqlite
         .prepare(
           `update ${SOURCE_TABLES[kind]} set ${column} = 'edited', embedding_stale = 1 where branch_id = 'b1'`,
@@ -761,10 +761,20 @@ describe('embedRowsToVecOps — per-kind guard against a source row that moved o
     }
   })
 
-  it('a row deleted between assembly and commit lands no vector on its branch, leaving a same-id fork untouched', async () => {
+  it('a row deleted between assembly and commit lands no vector on its branch, leaving a same-id fork already embedded untouched', async () => {
     const { sqlite, runInTransaction } = await createTestDb()
     seedKindRows(sqlite, 'b1', true)
     seedKindRows(sqlite, 'b2', false)
+
+    // b2 is embedded first so the assertion below can fail: the DELETE half of
+    // b1's upsert is scoped to branch_id too, not just id — an unscoped delete
+    // would remove this same-id row on the other branch.
+    const b2 = await embedRowsToVecOps(
+      cfg,
+      loadStale(sqlite, 'b2'),
+      async (sql) => void sqlite.exec(sql),
+    )
+    await runInTransaction(b2.ops)
 
     const rows = loadStale(sqlite, 'b1')
     const { ops } = await embedRowsToVecOps(cfg, rows, async (sql) => void sqlite.exec(sql))
@@ -776,7 +786,7 @@ describe('embedRowsToVecOps — per-kind guard against a source row that moved o
 
     for (const kind of KINDS) {
       expect(vecIds(sqlite, kind, 'b1'), kind).toEqual([])
-      expect(vecIds(sqlite, kind, 'b2'), kind).toEqual([])
+      expect(vecIds(sqlite, kind, 'b2'), kind).toEqual(['x1'])
     }
   })
 })

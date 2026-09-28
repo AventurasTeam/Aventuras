@@ -95,13 +95,8 @@ export function isEmbeddedSourceTable(table: string): boolean {
 }
 
 /**
- * The `branch_id`/`id`/embedded-columns predicate that pins a write to a row
- * that still holds the text it was read with. Shared by clearEmbeddingStaleOp
- * and ops.ts's guarded vec insert — a guard stricter on one side than the
- * other would leave a row clean with no vector, permanently.
- *
- * `IS`, not `=`: these columns are nullable and `NULL = NULL` is NULL, which
- * would fail the guard on every row with an empty description.
+ * One predicate for both the insert and the stale-clear — a stricter side
+ * would leave a row clean with no vector, permanently. `IS`, so a null field matches.
  */
 export function embeddedSourceGuard(
   kind: VecTargetKind,
