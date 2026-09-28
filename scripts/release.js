@@ -249,8 +249,10 @@ try {
   // touch. Deliberate, but never silent: anything beyond the version files is named below.
   console.log('Formatting and linting...')
   const pm = detectPackageManager(rootDir)
-  run(...commandFor(pm, ['run', 'format']), { stdio: 'inherit' })
-  run(...commandFor(pm, ['run', 'lint:fix']), { stdio: 'inherit' })
+  // npm owns package-lock.json and has just rewritten it; aube must not install or re-resolve.
+  const runArgs = pm === 'aube' ? ['run', '--no-install', '--frozen-lockfile'] : ['run']
+  run(...commandFor(pm, [...runArgs, 'format']), { stdio: 'inherit' })
+  run(...commandFor(pm, [...runArgs, 'lint:fix']), { stdio: 'inherit' })
 
   const expected = new Set([
     'package.json',

@@ -14,7 +14,9 @@ Managed by [lefthook](https://github.com/evilmartians/lefthook) (`lefthook.yml`)
 (`node_modules/.aube-state` exists) and is still on `PATH`, `npm` otherwise. It also drives
 Tauri's `beforeDevCommand`/`beforeBuildCommand` and the `format`/`lint:fix` steps in
 `scripts/release.js`, so those work unchanged for npm users and route through aube wherever
-aube did the install.
+aube did the install. `scripts/release.js` always bumps the version with npm directly, so when
+it hands `format`/`lint:fix` to aube it adds `--no-install --frozen-lockfile`, keeping aube from
+re-resolving the `package-lock.json` npm just wrote.
 
 ## Continuous Integration
 
