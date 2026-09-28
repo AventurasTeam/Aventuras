@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
@@ -45,6 +45,10 @@ describe('commandFor', () => {
 })
 
 describe('detectPackageManager', () => {
+  beforeEach(() => {
+    vi.mocked(spawnSync).mockReset()
+  })
+
   function withRootDir(hasAubeState, fn) {
     const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-test-'))
     try {
