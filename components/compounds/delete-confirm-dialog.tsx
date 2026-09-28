@@ -16,8 +16,6 @@ import { t } from '@/lib/i18n'
 
 import type { DeleteConfirmCopy } from './delete-confirm-copy'
 
-export type { DeleteConfirmCopy } from './delete-confirm-copy'
-
 type DeleteConfirmDialogProps = DeleteConfirmCopy & {
   open: boolean
   onOpenChange: (open: boolean) => void

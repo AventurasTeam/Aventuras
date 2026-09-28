@@ -9,7 +9,7 @@ export type OverflowMenuEntry = {
   onPress: () => void
 }
 
-export type DestructiveEntryAction = { onPress: () => void; disabledReason?: string }
+type DestructiveEntryAction = { onPress: () => void; disabledReason?: string }
 
 /** A single destructive entry (e.g. `Delete …`), or none while the action isn't available yet. */
 export function destructiveEntry(
