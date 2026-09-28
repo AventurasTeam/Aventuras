@@ -353,6 +353,11 @@ Mechanics worth knowing:
   disables signing, and it is restored on exit.
 - The archive lands at `src-tauri/gen/apple/build/<target>_iOS.xcarchive`, and the app
   bundle at `Products/Applications/Aventuras.app` inside it.
+- The app icon comes from **`src-tauri/icons/ios/`**. `tauri ios init` fills
+  `gen/apple/Assets.xcassets/AppIcon.appiconset` with Tauri's placeholder logo, so
+  `scripts/sync-ios-icons.sh` copies the Aventuras set over it; the build script and the
+  bootstrap workflow both run it. Run it yourself before a local `tauri ios dev` or Xcode
+  build on a freshly initialised scaffold.
 - **Local `tauri ios dev` does not work with the `devtools` feature**
   (`tauri-plugin-devtools` is desktop-only). Pass the release config to drop the feature:
   `npx tauri ios dev --config src-tauri/tauri.release.conf.json`.

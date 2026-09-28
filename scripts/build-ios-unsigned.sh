@@ -84,6 +84,7 @@ with open(path, 'w') as f:
     f.writelines(lines)
 print('Patched project.yml for unsigned build (restored on exit)')
 PYEOF
+scripts/sync-ios-icons.sh
 (cd src-tauri/gen/apple && xcodegen generate)
 echo "🚀 Building unsigned iOS archive (aarch64)..."
 # --archive-only: stop after `xcodebuild archive`, skip the CLI's IPA-export phase
