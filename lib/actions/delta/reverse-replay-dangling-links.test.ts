@@ -1,5 +1,5 @@
 import { desc, eq } from 'drizzle-orm'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   branches,
@@ -273,5 +273,39 @@ describe('undoing a delete whose link names a row a later reversal removed', () 
 
     expect(await ctx.db.select().from(happenings)).toEqual([])
     expect(await danglingInvolvements()).toEqual([])
+  })
+
+  it('reads the named rows in one query per table, however many links the undo restores', async () => {
+    const extras = ['char_a', 'char_b', 'char_c']
+    await ctx.db.insert(entities).values(extras.map((id) => character(id, id)))
+    await ctx.db.insert(happenings).values(
+      ['hap_one', 'hap_many'].map((id) => ({
+        id,
+        branchId: 'b1',
+        title: id,
+        createdAt: 1,
+        updatedAt: 1,
+      })),
+    )
+    await ctx.db.insert(happeningInvolvements).values([
+      { id: 'hinv_one', branchId: 'b1', happeningId: 'hap_one', entityId: 'char_x' },
+      ...['char_x', ...extras].map((entityId) => ({
+        id: `hinv_${entityId}`,
+        branchId: 'b1',
+        happeningId: 'hap_many',
+        entityId,
+      })),
+    ])
+    const selectsToUndo = async (id: string): Promise<number> => {
+      expect(await deleteRow('happening', 'b1', id, ctx)).toEqual({ status: 'ok' })
+      const select = vi.spyOn(ctx.db, 'select')
+      await undoHead()
+      const count = select.mock.calls.length
+      select.mockRestore()
+      return count
+    }
+
+    expect(await selectsToUndo('hap_many')).toBe(await selectsToUndo('hap_one'))
+    expect(await ctx.db.select().from(happeningInvolvements)).toHaveLength(5)
   })
 })
