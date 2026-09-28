@@ -161,7 +161,9 @@ export function LoreDetailPane({
                     ? undefined
                     : {
                         onDelete: () => onDelete(row),
-                        disabledReason: blocked ? blockedReason : undefined,
+                        disabledReason: blocked
+                          ? (blockedReason ?? t('common:generationGate.inFlight'))
+                          : undefined,
                       },
               })}
               disabled={row == null}
