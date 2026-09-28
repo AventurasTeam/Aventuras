@@ -222,6 +222,7 @@ export {
   flagBranchesEmbeddingStaleOps,
   KIND_FIELDS,
   knnQuery,
+  listVecFamilyTables,
   packFloat32,
   partitionByStoredVector,
   recomputeStaleOps,

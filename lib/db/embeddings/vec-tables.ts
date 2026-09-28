@@ -1,4 +1,7 @@
-import type { SqlOp } from '../types'
+import { eq } from 'drizzle-orm'
+import { sqliteTable, text } from 'drizzle-orm/sqlite-core'
+
+import type { DbCtx, SqlOp } from '../types'
 
 export type VecTargetKind = 'entity' | 'lore' | 'happening' | 'thread' | 'chapter'
 
@@ -17,6 +20,22 @@ const VEC_FAMILY_TABLE_RE = new RegExp(`^(?:${Object.values(VEC_FAMILIES).join('
 
 export function isVecFamilyTable(name: string): boolean {
   return VEC_FAMILY_TABLE_RE.test(name)
+}
+
+// Selected through the caller's own drizzle handle so the proxy's positional rows and expo's
+// objects normalize alike; not in schema.ts, so drizzle-kit never treats it as an app table.
+const sqliteMaster = sqliteTable('sqlite_master', {
+  type: text('type').notNull(),
+  name: text('name').notNull(),
+})
+
+/** Every dim family table that exists now; a row's vectors can sit in any of them. */
+export async function listVecFamilyTables(db: DbCtx['db']): Promise<string[]> {
+  const rows = await db
+    .select({ name: sqliteMaster.name })
+    .from(sqliteMaster)
+    .where(eq(sqliteMaster.type, 'table'))
+  return rows.map((row) => row.name).filter(isVecFamilyTable)
 }
 
 /**

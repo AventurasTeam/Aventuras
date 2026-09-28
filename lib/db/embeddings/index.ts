@@ -9,6 +9,7 @@ export {
   familyTablesFor,
   findVecDims,
   isVecFamilyTable,
+  listVecFamilyTables,
   vecRowPk,
   vecTableName,
 } from './vec-tables'
