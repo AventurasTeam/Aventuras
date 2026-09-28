@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { emptyEntityState, type Entity, type EntityKind, type EntityState } from '@/lib/db'
+import {
+  emptyEntityState,
+  entityStateSchemaForKind,
+  type Entity,
+  type EntityKind,
+  type EntityState,
+} from '@/lib/db'
 
 import { entityDeleteActions } from './entity-delete'
 
@@ -30,7 +36,15 @@ describe('entityDeleteActions', () => {
     const target = entity('char_x', 'character')
     const other = entity('char_o', 'character', {
       current_location_id: 'char_x',
+      faction_id: 'fact_1',
+      equipped_items: ['char_x'],
       inventory: ['char_x', 'item_1'],
+      traits: ['brave'],
+      drives: ['revenge'],
+      voice: 'gravelly',
+      visual: { physique: 'tall', hair: 'black' },
+      stackables: { gold: 5 },
+      lastSeenAt: { entryId: 'entry_1', locationId: 'loc_1', worldTime: 3 },
     })
     const plan = entityDeleteActions({
       branchId: 'b1',
@@ -40,13 +54,26 @@ describe('entityDeleteActions', () => {
     })
 
     expect(plan.actions).toHaveLength(2)
-    expect(plan.actions[0]).toMatchObject({
+    expect(plan.actions[0]).toEqual({
       kind: 'updateEntity',
       source: 'user_edit',
       payload: {
         branchId: 'b1',
         id: 'char_o',
-        patch: { state: { current_location_id: null, inventory: ['item_1'] } },
+        patch: {
+          state: {
+            visual: { physique: 'tall', hair: 'black' },
+            traits: ['brave'],
+            drives: ['revenge'],
+            voice: 'gravelly',
+            current_location_id: null,
+            equipped_items: [],
+            inventory: ['item_1'],
+            stackables: { gold: 5 },
+            faction_id: 'fact_1',
+            lastSeenAt: { entryId: 'entry_1', locationId: 'loc_1', worldTime: 3 },
+          },
+        },
       },
     })
     expect(plan.actions.at(-1)).toEqual({
@@ -55,6 +82,36 @@ describe('entityDeleteActions', () => {
       payload: { branchId: 'b1', id: 'char_x' },
     })
     expect(plan.references).toBe(1)
+  })
+
+  it('fills a legacy character state missing lastSeenAt before clearing its ref, keeping the patch schema-valid', () => {
+    const target = entity('char_x', 'character')
+    const legacy: Entity = {
+      ...entity('char_o', 'character'),
+      // Predates the lastSeenAt field: a raw stored state, never merged over emptyEntityState.
+      state: {
+        current_location_id: 'char_x',
+        equipped_items: [],
+        inventory: [],
+        traits: [],
+        drives: [],
+        visual: {},
+        faction_id: null,
+      } as unknown as EntityState,
+    }
+    const plan = entityDeleteActions({
+      branchId: 'b1',
+      target,
+      branchEntities: [target, legacy],
+      tail: null,
+    })
+    const update = plan.actions.find((a) => a.kind === 'updateEntity')
+    expect(update).toBeDefined()
+    expect(
+      entityStateSchemaForKind('character').safeParse(
+        (update as { payload: { patch: { state: unknown } } }).payload.patch.state,
+      ).success,
+    ).toBe(true)
   })
 
   it('clears a deleted location from characters, child locations and items, and counts the items left unplaced', () => {
@@ -68,9 +125,31 @@ describe('entityDeleteActions', () => {
       branchEntities: [place, child, walker, loose],
       tail: null,
     })
-    const patched = plan.actions.filter((a) => a.kind === 'updateEntity').map((a) => a.payload.id)
-    expect(patched.sort()).toEqual(['char_1', 'item_1', 'loc_2'])
+    const updates = plan.actions.filter((a) => a.kind === 'updateEntity')
+    expect(updates.map((a) => a.payload.id).sort()).toEqual(['char_1', 'item_1', 'loc_2'])
+    expect(updates.find((a) => a.payload.id === 'loc_2')).toMatchObject({
+      payload: { patch: { state: { parent_location_id: null } } },
+    })
+    expect(updates.find((a) => a.payload.id === 'item_1')).toMatchObject({
+      payload: { patch: { state: { at_location_id: null } } },
+    })
+    expect(updates.find((a) => a.payload.id === 'char_1')).toMatchObject({
+      payload: { patch: { state: { current_location_id: null } } },
+    })
     expect(plan.unplacedItems).toBe(1)
+  })
+
+  it('does not count an item at a deleted location that a surviving character also holds', () => {
+    const place = entity('loc_1', 'location')
+    const survivor = entity('char_1', 'character', { equipped_items: ['item_1'] })
+    const carried = entity('item_1', 'item', { at_location_id: 'loc_1' })
+    const plan = entityDeleteActions({
+      branchId: 'b1',
+      target: place,
+      branchEntities: [place, survivor, carried],
+      tail: null,
+    })
+    expect(plan.unplacedItems).toBe(0)
   })
 
   it('counts a deleted holder’s items unplaced unless another character also holds them', () => {
@@ -105,6 +184,7 @@ describe('entityDeleteActions', () => {
       },
     })
     expect(plan.tailScene).toBe(true)
+    expect(plan.references).toBe(0)
   })
 
   it('writes no tail action when the tail never named the id', () => {
