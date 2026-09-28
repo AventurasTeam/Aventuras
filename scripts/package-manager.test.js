@@ -30,12 +30,17 @@ describe('commandFor', () => {
     expect(commandFor('aube', ['run', 'lint'], 'linux')).toEqual(['aube', ['run', 'lint']])
   })
 
-  it('defaults the platform to process.platform', () => {
-    // aube's result is the same on every platform, so this uses npm, whose result differs on
-    // win32 -- a wrong default would show up here even though it wouldn't with aube.
-    expect(commandFor('npm', ['run', 'lint'])).toEqual(
-      commandFor('npm', ['run', 'lint'], process.platform),
-    )
+  it.each([
+    ['win32', ['cmd.exe', ['/c', 'npm', 'run', 'lint']]],
+    ['linux', ['npm', ['run', 'lint']]],
+  ])('defaults the platform to process.platform (%s)', (platform, expected) => {
+    const original = Object.getOwnPropertyDescriptor(process, 'platform')
+    Object.defineProperty(process, 'platform', { value: platform, configurable: true })
+    try {
+      expect(commandFor('npm', ['run', 'lint'])).toEqual(expected)
+    } finally {
+      Object.defineProperty(process, 'platform', original)
+    }
   })
 })
 
