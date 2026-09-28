@@ -1,6 +1,7 @@
 import { and, eq, inArray, or } from 'drizzle-orm'
 
 import {
+  deleteVecIdsOps,
   deleteVecOps,
   listVecFamilyTables,
   SOURCE_TABLES,
@@ -41,6 +42,19 @@ export async function vecSweepOps(
 ): Promise<SqlOp[]> {
   const kind = VEC_KIND_BY_TABLE.get(table)
   return kind === undefined ? [] : deleteVecOps(kind, id, branchId, await listTables())
+}
+
+/** `vecSweepOps` for many rows of one table and branch: one statement per dim family. */
+export async function vecSweepIdsOps(
+  table: string,
+  branchId: string,
+  ids: readonly string[],
+  listTables: () => Promise<string[]>,
+): Promise<SqlOp[]> {
+  const kind = VEC_KIND_BY_TABLE.get(table)
+  return kind === undefined || ids.length === 0
+    ? []
+    : deleteVecIdsOps(kind, ids, branchId, await listTables())
 }
 
 /** Translations of the named targets, deleted by the ids read so the payload holds exactly what went. */

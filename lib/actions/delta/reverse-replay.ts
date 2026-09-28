@@ -4,7 +4,7 @@ import type { Delta, SqlOp } from '@/lib/db'
 import { deltas, embeddedFieldsForTable, isEmbeddedSourceTable, rowsPerInsert } from '@/lib/db'
 
 import type { DbCtx } from '../types'
-import { vecSweepOps, vecTableLister } from './delete-cascade'
+import { vecSweepIdsOps, vecTableLister } from './delete-cascade'
 import { applyUndoPayload, isPayloadMetaKey } from './delta-encoding'
 import { withKeyLocks } from './key-lock'
 import { liveLinkFilter } from './live-link-filter'
@@ -105,6 +105,8 @@ async function buildUndoOps(
   const listVecTables = vecTableLister(ctx)
   const laterUserEdits = await userEditsOutliving(ctx, rows, readsUserEdits)
   const liveLinks = await liveLinkFilter(rows, ctx)
+  // Vectors carry no deltas, so the closure can't reach them (retrieval.md → Compute lifecycle).
+  const swept = new Map<string, { table: string; branchId: string; ids: string[] }>()
 
   for (const delta of rows) {
     const entry = resolveByTable(delta.targetTable)
@@ -181,10 +183,16 @@ async function buildUndoOps(
       absent.add(key)
       tombstones.delete(key)
       emitDelete()
-      // Vectors carry no deltas, so the closure can't reach them (retrieval.md → Compute lifecycle).
-      ops.push(
-        ...(await vecSweepOps(delta.targetTable, delta.branchId, delta.targetId, listVecTables)),
-      )
+      if (isEmbeddedSourceTable(delta.targetTable)) {
+        const sweepKey = `${delta.targetTable}:${delta.branchId}`
+        const sweep = swept.get(sweepKey) ?? {
+          table: delta.targetTable,
+          branchId: delta.branchId,
+          ids: [],
+        }
+        sweep.ids.push(delta.targetId)
+        swept.set(sweepKey, sweep)
+      }
       continue
     }
     if (delta.op === 'delete') {
@@ -285,6 +293,10 @@ async function buildUndoOps(
       emitDelete()
     } else emitUpdate(restored, row)
   }
+
+  // One vec0 scan per family table, not per row: each statement scans the whole table.
+  for (const { table, branchId, ids } of swept.values())
+    ops.push(...(await vecSweepIdsOps(table, branchId, ids, listVecTables)))
 
   return { ops, patches }
 }

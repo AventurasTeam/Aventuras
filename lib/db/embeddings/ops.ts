@@ -1,3 +1,4 @@
+import { BIND_CHUNK } from '../bind-limit'
 import type { SqlOp } from '../types'
 import type { SourceHash } from './source-hash'
 import { embeddedSourceGuard, SOURCE_TABLES } from './stale'
@@ -72,4 +73,29 @@ export function deleteVecOps(
     sql: `DELETE FROM ${table} WHERE branch_id = ? AND id = ?`,
     params: [branchId, id],
   }))
+}
+
+/**
+ * `deleteVecOps` for many ids: vec0 scans the whole table for a branch_id + id match, so one
+ * `id IN` statement per table (per `BIND_CHUNK` ids) replaces a scan per id. Never `pk IN` —
+ * vec0 answers it with no rows.
+ */
+export function deleteVecIdsOps(
+  kind: VecTargetKind,
+  ids: readonly string[],
+  branchId: string,
+  tableNames: readonly string[],
+): SqlOp[] {
+  if (ids.length === 0) return []
+  return familyTablesFor(kind, tableNames).flatMap((table) => {
+    const ops: SqlOp[] = []
+    for (let i = 0; i < ids.length; i += BIND_CHUNK) {
+      const chunk = ids.slice(i, i + BIND_CHUNK)
+      ops.push({
+        sql: `DELETE FROM ${table} WHERE branch_id = ? AND id IN (${chunk.map(() => '?').join(', ')})`,
+        params: [branchId, ...chunk],
+      })
+    }
+    return ops
+  })
 }

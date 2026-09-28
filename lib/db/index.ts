@@ -209,6 +209,7 @@ export {
   countEmbeddableRows,
   deleteBranchModelVecOps,
   deleteBranchVecOps,
+  deleteVecIdsOps,
   deleteVecOps,
   embeddedFieldsForTable,
   isEmbeddedSourceTable,

@@ -4,7 +4,7 @@ import { getLoadablePath } from 'sqlite-vec'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import type { SqlOp } from '../types'
-import { deleteVecOps, upsertVecOps } from './ops'
+import { deleteVecIdsOps, deleteVecOps, upsertVecOps } from './ops'
 import { sourceHash } from './source-hash'
 import { deleteBranchModelVecOps, ensureVecTables, vecRowPk } from './vec-tables'
 
@@ -259,6 +259,54 @@ describe('model-aware vec identity', () => {
     expect(ops.map((o) => o.sql)).toEqual([
       'DELETE FROM entities_vec_384 WHERE branch_id = ? AND id = ?',
       'DELETE FROM entities_vec_768 WHERE branch_id = ? AND id = ?',
+    ])
+  })
+
+  it('deleteVecIdsOps sweeps many ids with one statement per family table', () => {
+    const tables = ['entities_vec_384', 'entities_vec_768', 'lore_vec_384']
+    const ops = deleteVecIdsOps('entity', ['e1', 'e2'], 'b1', tables)
+    expect(ops).toEqual([
+      {
+        sql: 'DELETE FROM entities_vec_384 WHERE branch_id = ? AND id IN (?, ?)',
+        params: ['b1', 'e1', 'e2'],
+      },
+      {
+        sql: 'DELETE FROM entities_vec_768 WHERE branch_id = ? AND id IN (?, ?)',
+        params: ['b1', 'e1', 'e2'],
+      },
+    ])
+    expect(deleteVecIdsOps('entity', [], 'b1', tables)).toEqual([])
+  })
+
+  it('deleteVecIdsOps splits an id set past the bind cap and still removes every listed row', async () => {
+    const db = makeDb()
+    await ensureVecTables(384, async (sql) => {
+      db.exec(sql)
+    })
+    // 40000 ids overrun SQLite's 32766-bind cap in a single statement.
+    const ids = Array.from({ length: 40000 }, (_, i) => `e${i}`)
+    const put = (branchId: string, id: string) =>
+      runOps(
+        db,
+        upsertVecOps({
+          kind: 'entity',
+          id,
+          branchId,
+          modelId: 'm1',
+          dim: 384,
+          sourceHash: sourceHash(id),
+          vector: vec(384, 0),
+        }),
+      )
+    for (const id of ['e0', 'e20000', 'e39999', 'kept']) put('b1', id)
+    put('b2', 'e0')
+
+    runOps(db, deleteVecIdsOps('entity', ids, 'b1', ['entities_vec_384']))
+
+    const left = db.prepare('select branch_id, id from entities_vec_384 order by id').all()
+    expect(left).toEqual([
+      { branch_id: 'b2', id: 'e0' },
+      { branch_id: 'b1', id: 'kept' },
     ])
   })
 

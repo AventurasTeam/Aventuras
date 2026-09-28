@@ -2,10 +2,10 @@ import type { DatabaseSync } from 'node:sqlite'
 
 import { describe, expect, it } from 'vitest'
 
-import { branches, ensureVecTablesSql, entities, stories } from '@/lib/db'
+import { branches, ensureVecTablesSql, entities, lore, stories, type Delta } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
-import { reverseAndPruneDeltaRows } from './reverse-replay'
+import { buildReverseAndPrunePlan, reverseAndPruneDeltaRows } from './reverse-replay'
 
 function insertEntity(db: any, branchId: string, id: string): Promise<void> {
   return db.insert(entities).values({
@@ -20,10 +20,16 @@ function insertEntity(db: any, branchId: string, id: string): Promise<void> {
   })
 }
 
-function insertVector(sqlite: DatabaseSync, branchId: string, dim: number, id: string): void {
+function insertVector(
+  sqlite: DatabaseSync,
+  branchId: string,
+  dim: number,
+  id: string,
+  family = 'entities_vec',
+): void {
   sqlite
     .prepare(
-      `INSERT INTO entities_vec_${dim} (pk, branch_id, model_id, id, source_hash, embedding) VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO ${family}_${dim} (pk, branch_id, model_id, id, source_hash, embedding) VALUES (?, ?, ?, ?, ?, ?)`,
     )
     .run(
       `${branchId}:${id}:m${dim}`,
@@ -72,6 +78,63 @@ describe('reverse-replay of a create', () => {
       )
       .all() as { n: number }[]
     expect(left[0].n).toBe(0)
+  })
+
+  it('sweeps several created rows with one statement per family table', async () => {
+    const { db, sqlite, runInTransaction } = await createTestDb()
+    for (const ddl of ensureVecTablesSql(8)) sqlite.exec(ddl)
+    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
+    await db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'm', createdAt: 1 })
+    const ids = ['char_1', 'char_2', 'char_3']
+    for (const id of ids) await insertEntity(db, 'b1', id)
+    await db.insert(lore).values({
+      id: 'lore_1',
+      branchId: 'b1',
+      title: 'Vael',
+      body: 'b',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    for (const dim of [384, 8]) {
+      for (const id of ids) insertVector(sqlite, 'b1', dim, id)
+      insertVector(sqlite, 'b1', dim, 'lore_1', 'lore_vec')
+    }
+    insertVector(sqlite, 'b2', 8, 'char_1')
+    const creates: Delta[] = [...ids, 'lore_1'].map((id, i) => ({
+      id: `delta_${i}`,
+      branchId: 'b1',
+      entryId: null,
+      actionId: 'act_1',
+      logPosition: 10 - i,
+      source: 'periodic_classifier',
+      targetTable: id.startsWith('lore') ? 'lore' : 'entities',
+      targetId: id,
+      op: 'create',
+      undoPayload: null,
+      encodingVersion: 1,
+      createdAt: 1,
+    }))
+    const ctx = { db, runInTransaction }
+
+    const plan = await buildReverseAndPrunePlan(creates, ctx)
+    const sweeps = plan.ops.map((op) => op.sql).filter((sql) => /_vec_\d+ WHERE/.test(sql))
+    expect(sweeps.map((sql) => sql.split(' WHERE')[0]).sort()).toEqual([
+      'DELETE FROM entities_vec_384',
+      'DELETE FROM entities_vec_8',
+      'DELETE FROM lore_vec_384',
+      'DELETE FROM lore_vec_8',
+    ])
+
+    await reverseAndPruneDeltaRows(creates, ctx)
+    const left = sqlite
+      .prepare(
+        `SELECT branch_id, id FROM entities_vec_384 UNION ALL SELECT branch_id, id FROM entities_vec_8
+         UNION ALL SELECT branch_id, id FROM lore_vec_384 UNION ALL SELECT branch_id, id FROM lore_vec_8`,
+      )
+      .all()
+    expect(left).toEqual([{ branch_id: 'b2', id: 'char_1' }])
   })
 
   it('leaves vectors with same id in other branches', async () => {
