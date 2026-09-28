@@ -6,18 +6,37 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Delta } from '@/lib/db'
 import type { HistoryChunk, HistoryQuery } from '@/lib/history'
 
-import { HistoryLoaderProvider } from './history-loader'
+import { HistoryLoaderProvider, type HistoryLoader } from './history-loader'
 import { useHistoryChunks } from './use-history-chunks'
 
 const row = (logPosition: number) => ({ id: `delta_${logPosition}`, logPosition }) as Delta
 
-function setup() {
-  const load = vi.fn(
+const positions = (rows: readonly Delta[]) => rows.map((r) => r.logPosition)
+
+function autoLoader() {
+  return vi.fn(
     async (query: HistoryQuery): Promise<HistoryChunk> =>
       query.cursor == null
         ? { rows: [row(4), row(3)], nextCursor: 3 }
         : { rows: [row(2)], nextCursor: null },
   )
+}
+
+/** Each call waits until the test settles it, so responses can land out of order. */
+function manualLoader() {
+  const calls: {
+    query: HistoryQuery
+    resolve: (chunk: HistoryChunk) => void
+    reject: (error: Error) => void
+  }[] = []
+  const load = vi.fn(
+    (query: HistoryQuery) =>
+      new Promise<HistoryChunk>((resolve, reject) => calls.push({ query, resolve, reject })),
+  )
+  return { load, calls }
+}
+
+function setup(load: HistoryLoader = autoLoader()) {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <HistoryLoaderProvider value={load}>{children}</HistoryLoaderProvider>
   )
@@ -75,5 +94,34 @@ describe('useHistoryChunks', () => {
     await waitFor(() => expect(hook.result.current.rows.map((r) => r.logPosition)).toEqual([4, 3]))
     expect(load).toHaveBeenCalledTimes(3)
     expect(load).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: null }))
+  })
+
+  it('keeps the newer first chunk when the superseded one resolves after it', async () => {
+    const { load, calls } = manualLoader()
+    const { hook, version } = setup(load)
+    await waitFor(() => expect(calls).toHaveLength(1))
+    hook.rerender({ search: 'traits', version })
+    await waitFor(() => expect(calls).toHaveLength(2))
+
+    await act(async () => calls[1].resolve({ rows: [row(9)], nextCursor: null }))
+    await act(async () => calls[0].resolve({ rows: [row(4), row(3)], nextCursor: 3 }))
+    expect(positions(hook.result.current.rows)).toEqual([9])
+    expect(hook.result.current.hasMore).toBe(false)
+  })
+
+  it('drops a loadMore that resolves after the query changed', async () => {
+    const { load, calls } = manualLoader()
+    const { hook, version } = setup(load)
+    await waitFor(() => expect(calls).toHaveLength(1))
+    await act(async () => calls[0].resolve({ rows: [row(4), row(3)], nextCursor: 3 }))
+    act(() => hook.result.current.loadMore())
+    expect(calls[1].query.cursor).toBe(3)
+
+    hook.rerender({ search: 'traits', version })
+    await waitFor(() => expect(calls).toHaveLength(3))
+    await act(async () => calls[2].resolve({ rows: [row(8)], nextCursor: null }))
+    await act(async () => calls[1].resolve({ rows: [row(2)], nextCursor: null }))
+    expect(positions(hook.result.current.rows)).toEqual([8])
+    expect(hook.result.current.status).toBe('ready')
   })
 })
