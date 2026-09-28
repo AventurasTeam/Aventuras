@@ -126,7 +126,7 @@
   "delete": {
     "entityTitle": "Delete {{name}}?",
     "loreTitle": "Delete {{name}}?",
-    "description": "You can undo this from the reader with Ctrl+Z (Undo in the reader's menu).",
+    "description": "You can undo this from the reader: Undo last action in its menu, or Cmd/Ctrl-Z.",
     "awareness_one": "{{count}} awareness record",
     "awareness_other": "{{count}} awareness records",
     "involvements_one": "{{count}} happening involvement",
