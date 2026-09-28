@@ -28,10 +28,11 @@ function message(error: unknown): string {
 
 /**
  * patterns/lists.md → Load-older: the first chunk reloads on any query change and whenever
- * `version` changes; `loadMore` appends the next chunk. Nothing loads on scroll.
+ * `version` changes; `loadMore` appends the next chunk. Nothing loads on scroll. `labelPaths`
+ * must be referentially stable, or every render reloads.
  */
 export function useHistoryChunks(
-  query: Omit<HistoryQuery, 'cursor'>,
+  query: Omit<HistoryQuery, 'cursor' | 'limit'>,
   version: unknown,
 ): HistoryChunks {
   const load = useHistoryLoader()
