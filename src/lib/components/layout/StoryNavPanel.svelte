@@ -362,18 +362,18 @@
                     )}
                     {@const deleteUnavailable = deleteBlockedReason !== null}
                     <div
-                      class="absolute top-1 right-1 flex transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100"
+                      class="can-hover:opacity-0 absolute top-1 right-1 flex transition-opacity group-hover:opacity-100 focus-within:opacity-100"
                     >
                       <button
-                        class="text-surface-500 hover:text-surface-200 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 sm:min-h-0 sm:min-w-0 sm:p-0.5"
+                        class="text-surface-500 hover:text-surface-200 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 pointer-fine:min-h-0 pointer-fine:min-w-0 pointer-fine:p-0.5"
                         onclick={() => startRename(landmark.checkpointId!, landmark.label)}
                         title="Rename"
                         aria-label="Rename checkpoint"
                       >
-                        <Edit2 class="h-4 w-4 sm:h-3 sm:w-3" />
+                        <Edit2 class="h-4 w-4 pointer-fine:h-3 pointer-fine:w-3" />
                       </button>
                       <button
-                        class="flex min-h-[32px] min-w-[32px] items-center justify-center p-1 sm:min-h-0 sm:min-w-0 sm:p-0.5 {deleteUnavailable
+                        class="flex min-h-[32px] min-w-[32px] items-center justify-center p-1 pointer-fine:min-h-0 pointer-fine:min-w-0 pointer-fine:p-0.5 {deleteUnavailable
                           ? 'text-surface-600 cursor-not-allowed'
                           : 'text-surface-500 hover:text-destructive'}"
                         onclick={() =>
@@ -390,7 +390,7 @@
                           : 'Delete checkpoint'}
                         aria-disabled={deleteUnavailable}
                       >
-                        <Trash2 class="h-4 w-4 sm:h-3 sm:w-3" />
+                        <Trash2 class="h-4 w-4 pointer-fine:h-3 pointer-fine:w-3" />
                       </button>
                     </div>
                   {/if}
@@ -473,18 +473,18 @@
                       )}
                       {@const orphanDeleteUnavailable = orphanBlockedReason !== null}
                       <div
-                        class="absolute top-1 right-1 flex transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100"
+                        class="can-hover:opacity-0 absolute top-1 right-1 flex transition-opacity group-hover:opacity-100 focus-within:opacity-100"
                       >
                         <button
-                          class="text-surface-500 hover:text-surface-200 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 sm:min-h-0 sm:min-w-0 sm:p-0.5"
+                          class="text-surface-500 hover:text-surface-200 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 pointer-fine:min-h-0 pointer-fine:min-w-0 pointer-fine:p-0.5"
                           onclick={() => startRename(orphan.checkpointId, orphan.label)}
                           title="Rename"
                           aria-label="Rename checkpoint"
                         >
-                          <Edit2 class="h-4 w-4 sm:h-3 sm:w-3" />
+                          <Edit2 class="h-4 w-4 pointer-fine:h-3 pointer-fine:w-3" />
                         </button>
                         <button
-                          class="flex min-h-[32px] min-w-[32px] items-center justify-center p-1 sm:min-h-0 sm:min-w-0 sm:p-0.5 {orphanDeleteUnavailable
+                          class="flex min-h-[32px] min-w-[32px] items-center justify-center p-1 pointer-fine:min-h-0 pointer-fine:min-w-0 pointer-fine:p-0.5 {orphanDeleteUnavailable
                             ? 'text-surface-600 cursor-not-allowed'
                             : 'text-surface-500 hover:text-destructive'}"
                           onclick={() =>
@@ -501,7 +501,7 @@
                             : 'Delete checkpoint'}
                           aria-disabled={orphanDeleteUnavailable}
                         >
-                          <Trash2 class="h-4 w-4 sm:h-3 sm:w-3" />
+                          <Trash2 class="h-4 w-4 pointer-fine:h-3 pointer-fine:w-3" />
                         </button>
                       </div>
                     {/if}

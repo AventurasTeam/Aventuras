@@ -223,7 +223,7 @@
              screen has no hover to reveal it, so there it is red from the start. -->
         <Button
           variant="outline"
-          class="[@media(hover:hover)]:text-foreground w-full text-red-500 hover:text-red-500 sm:w-auto [@media(hover:hover)]:hover:text-red-500"
+          class="can-hover:text-foreground w-full text-red-500 hover:text-red-500 sm:w-auto"
           disabled={saving}
           onclick={remove}
         >

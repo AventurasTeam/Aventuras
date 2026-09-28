@@ -391,7 +391,7 @@
                 </div>
 
                 <div
-                  class="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100"
+                  class="can-hover:opacity-0 flex items-center gap-0.5 transition-opacity group-hover:opacity-100"
                 >
                   <Button
                     variant="ghost"
