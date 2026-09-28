@@ -70,11 +70,7 @@ import {
   type RollbackCounts,
   type StoryEntryRejection,
 } from '@/lib/actions'
-import {
-  composerModesUnavailableReason,
-  wrapComposerText,
-  type ComposerMode,
-} from '@/lib/composer-wrap'
+import { wrapComposerText, wrapHasSubject, type ComposerMode } from '@/lib/composer-wrap'
 import {
   branches,
   db,
@@ -270,12 +266,8 @@ export default function ReaderComposerRoute() {
     openForBranch?.settings.composerModesEnabled === true &&
     openForBranch.definition.mode === 'adventure'
   const wrapPov = openForBranch?.settings.composerWrapPov ?? 'first'
-  const modesUnavailableReason = composerModesUnavailableReason(
-    modesEnabled,
-    wrapPov,
-    leadName,
-    t('reader:composerLeadMissing'),
-  )
+  const modesUnavailableReason =
+    modesEnabled && !wrapHasSubject(wrapPov, leadName) ? t('reader:composerLeadMissing') : undefined
 
   const {
     worldTimeFrame,
@@ -1347,11 +1339,7 @@ export default function ReaderComposerRoute() {
                 })}
                 modesUnavailableReason={modesUnavailableReason}
                 onSend={(rawText, mode) => {
-                  const wrapped = wrapComposerText(rawText, {
-                    mode,
-                    pov: wrapPov,
-                    leadName: leadName ?? '',
-                  })
+                  const wrapped = wrapComposerText(rawText, { mode, pov: wrapPov, leadName })
                   void runSubmit(wrapped, mode, { text: rawText, mode })
                 }}
                 onCancel={() =>

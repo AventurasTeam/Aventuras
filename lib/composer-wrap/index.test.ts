@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { composerModesUnavailableReason, wrapComposerText } from './index'
+import { wrapComposerText, wrapHasSubject } from './index'
 
 describe('wrapComposerText', () => {
   it('wraps Do in first person verbatim', () => {
@@ -58,22 +58,30 @@ describe('wrapComposerText', () => {
       wrapComposerText('reach for the blade.', { mode: 'do', pov: 'first', leadName: 'Aria' }),
     ).toBe('I reach for the blade.')
   })
+
+  it('returns the raw text verbatim for a non-first wrap with no resolved lead', () => {
+    expect(wrapComposerText('  draw my blade', { mode: 'do', pov: 'third', leadName: null })).toBe(
+      '  draw my blade',
+    )
+  })
+
+  it('returns the raw text verbatim for Say with no resolved lead', () => {
+    expect(wrapComposerText("who's asking?", { mode: 'say', pov: 'third', leadName: null })).toBe(
+      "who's asking?",
+    )
+  })
 })
 
-describe('composerModesUnavailableReason', () => {
-  it('returns the reason for a third-person wrap with no resolved lead', () => {
-    expect(composerModesUnavailableReason(true, 'third', null, 'no lead')).toBe('no lead')
+describe('wrapHasSubject', () => {
+  it('is true in first person regardless of the lead', () => {
+    expect(wrapHasSubject('first', null)).toBe(true)
   })
 
-  it('returns undefined for a first-person wrap even with no resolved lead', () => {
-    expect(composerModesUnavailableReason(true, 'first', null, 'no lead')).toBeUndefined()
+  it('is true in third person once the lead resolves', () => {
+    expect(wrapHasSubject('third', 'Aria')).toBe(true)
   })
 
-  it('returns undefined once the lead resolves', () => {
-    expect(composerModesUnavailableReason(true, 'third', 'Aria', 'no lead')).toBeUndefined()
-  })
-
-  it('returns undefined when modes are not enabled at all', () => {
-    expect(composerModesUnavailableReason(false, 'third', null, 'no lead')).toBeUndefined()
+  it('is false in third person with no resolved lead', () => {
+    expect(wrapHasSubject('third', null)).toBe(false)
   })
 })
