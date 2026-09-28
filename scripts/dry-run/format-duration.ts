@@ -14,3 +14,11 @@ export function formatDuration(ms: number): string {
   }
   return parts.length > 0 ? parts.join(' ') : '0s'
 }
+
+export function formatClock(ms: number): string {
+  const total = Math.floor(ms / 1000)
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const seconds = total % 60
+  return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatDuration } from './format-duration'
+import { formatClock, formatDuration } from './format-duration'
 
 describe('formatDuration', () => {
   it('formats hours, minutes and seconds', () => {
@@ -14,5 +14,12 @@ describe('formatDuration', () => {
 
   it('formats zero as 0s', () => {
     expect(formatDuration(0)).toBe('0s')
+  })
+})
+
+describe('formatClock', () => {
+  it('formats a clock time with padded minutes and seconds', () => {
+    expect(formatClock(3_723_000)).toBe('1:02:03')
+    expect(formatClock(59_000)).toBe('0:00:59')
   })
 })
