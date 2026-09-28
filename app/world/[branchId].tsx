@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View } from 'react-native'
 
 import type { ActionGroup } from '@/components/compounds/actions-menu'
@@ -206,6 +206,11 @@ export default function WorldRoute() {
 
   const { onSession, guard, navigateGuarded } = useRowSessionGuard()
   const worldDelete = useWorldDelete(branchId, ctx, guard)
+  const cancelDelete = worldDelete.cancel
+  // A pending confirm's counts go stale off-screen (another surface can delete/rename the row).
+  useEffect(() => {
+    if (!focused) cancelDelete()
+  }, [focused, cancelDelete])
 
   const switchCategory = useCallback(
     (next: WorldCategory) => {
