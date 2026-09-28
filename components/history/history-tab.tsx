@@ -21,7 +21,7 @@ const SEARCH_DEBOUNCE_MS = 250
 
 export type HistoryTabProps = { branchId: string; targetTable: HistoryTable; targetId: string }
 
-/** C4: one row's delta log, for every World and Plot detail pane. */
+/** C4: one row's delta log. */
 export function HistoryTab({ branchId, targetTable, targetId }: HistoryTabProps) {
   const [searchInput, setSearchInput] = useState('')
   const search = useDebouncedValue(searchInput.trim(), SEARCH_DEBOUNCE_MS)

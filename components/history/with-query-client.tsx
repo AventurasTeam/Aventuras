@@ -9,10 +9,7 @@ function WithQueryClient({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>
 }
 
-/**
- * Stories only: a fresh React Query client per story, for trees that read through React Query
- * (`useEntryIndex`), since the Storybook preview provides none.
- */
+/** Stories only: a fresh React Query client per story; the Storybook preview provides none. */
 export const withQueryClient: Decorator = (Story) => (
   <WithQueryClient>
     <Story />
