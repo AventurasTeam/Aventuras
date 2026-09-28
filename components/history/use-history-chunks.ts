@@ -38,10 +38,13 @@ export function useHistoryChunks(
   const [state, setState] = useState<ChunkState>(LOADING)
   const [attempt, setAttempt] = useState(0)
   const request = useRef(0)
+  // Two loadMore calls before a re-render share one closure's state; this stops the second.
+  const loadingMore = useRef(false)
   const { branchId, targetTable, targetId, op, search, labelPaths, sort } = query
 
   useEffect(() => {
     const mine = ++request.current
+    loadingMore.current = false
     setState(LOADING)
     load({ branchId, targetTable, targetId, op, search, labelPaths, sort, cursor: null }).then(
       (chunk) => {
@@ -54,24 +57,31 @@ export function useHistoryChunks(
         setState({ rows: [], nextCursor: null, status: 'failed' })
       },
     )
+    // Unmount and every reload orphan whatever is still in flight.
+    return () => {
+      request.current += 1
+    }
   }, [load, branchId, targetTable, targetId, op, search, labelPaths, sort, version, attempt])
 
   const loadMore = useCallback(() => {
-    if (state.status !== 'ready' || state.nextCursor == null) return
+    if (loadingMore.current || state.status !== 'ready' || state.nextCursor == null) return
+    loadingMore.current = true
     const mine = request.current
     const cursor = state.nextCursor
     setState((current) => ({ ...current, status: 'loading-more' }))
     load({ branchId, targetTable, targetId, op, search, labelPaths, sort, cursor }).then(
       (chunk) => {
-        if (request.current === mine)
-          setState((current) => ({
-            rows: [...current.rows, ...chunk.rows],
-            nextCursor: chunk.nextCursor,
-            status: 'ready',
-          }))
+        if (request.current !== mine) return
+        loadingMore.current = false
+        setState((current) => ({
+          rows: [...current.rows, ...chunk.rows],
+          nextCursor: chunk.nextCursor,
+          status: 'ready',
+        }))
       },
       (error: unknown) => {
         if (request.current !== mine) return
+        loadingMore.current = false
         logger.error('app.history_load_more_failed', {
           targetTable,
           targetId,

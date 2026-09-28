@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Delta } from '@/lib/db'
 import type { HistoryChunk, HistoryQuery } from '@/lib/history'
+import { toast } from '@/lib/toast'
 
 import { HistoryLoaderProvider, type HistoryLoader } from './history-loader'
 import { useHistoryChunks } from './use-history-chunks'
@@ -52,7 +53,10 @@ function setup(load: HistoryLoader = autoLoader()) {
   return { load, hook, version }
 }
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+})
 
 describe('useHistoryChunks', () => {
   it('loads the first chunk once and appends the next only on loadMore', async () => {
@@ -119,9 +123,61 @@ describe('useHistoryChunks', () => {
 
     hook.rerender({ search: 'traits', version })
     await waitFor(() => expect(calls).toHaveLength(3))
-    await act(async () => calls[2].resolve({ rows: [row(8)], nextCursor: null }))
+    await act(async () => calls[2].resolve({ rows: [row(8)], nextCursor: 8 }))
     await act(async () => calls[1].resolve({ rows: [row(2)], nextCursor: null }))
     expect(positions(hook.result.current.rows)).toEqual([8])
     expect(hook.result.current.status).toBe('ready')
+
+    act(() => hook.result.current.loadMore())
+    expect(calls).toHaveLength(4)
+    expect(calls[3].query).toMatchObject({ search: 'traits', cursor: 8 })
+  })
+
+  it('fires one load for two loadMore calls before a re-render', async () => {
+    const { load, calls } = manualLoader()
+    const { hook } = setup(load)
+    await waitFor(() => expect(calls).toHaveLength(1))
+    await act(async () => calls[0].resolve({ rows: [row(4), row(3)], nextCursor: 3 }))
+    act(() => {
+      hook.result.current.loadMore()
+      hook.result.current.loadMore()
+    })
+    expect(calls).toHaveLength(2)
+    await act(async () => calls[1].resolve({ rows: [row(2)], nextCursor: 2 }))
+    expect(positions(hook.result.current.rows)).toEqual([4, 3, 2])
+
+    act(() => hook.result.current.loadMore())
+    expect(calls).toHaveLength(3)
+    expect(calls[2].query.cursor).toBe(2)
+  })
+
+  it('keeps the loaded rows and toasts when a loadMore fails, then loads again', async () => {
+    const toastError = vi.spyOn(toast, 'error')
+    const { load, calls } = manualLoader()
+    const { hook } = setup(load)
+    await waitFor(() => expect(calls).toHaveLength(1))
+    await act(async () => calls[0].resolve({ rows: [row(4), row(3)], nextCursor: 3 }))
+    act(() => hook.result.current.loadMore())
+    await act(async () => calls[1].reject(new Error('read failed')))
+    expect(toastError).toHaveBeenCalledTimes(1)
+    expect(positions(hook.result.current.rows)).toEqual([4, 3])
+    expect(hook.result.current.status).toBe('ready')
+
+    act(() => hook.result.current.loadMore())
+    expect(calls).toHaveLength(3)
+    expect(calls[2].query.cursor).toBe(3)
+  })
+
+  it('stays silent when a loadMore fails after unmount', async () => {
+    const toastError = vi.spyOn(toast, 'error')
+    const { load, calls } = manualLoader()
+    const { hook } = setup(load)
+    await waitFor(() => expect(calls).toHaveLength(1))
+    await act(async () => calls[0].resolve({ rows: [row(4), row(3)], nextCursor: 3 }))
+    act(() => hook.result.current.loadMore())
+
+    hook.unmount()
+    await act(async () => calls[1].reject(new Error('read failed')))
+    expect(toastError).not.toHaveBeenCalled()
   })
 })
