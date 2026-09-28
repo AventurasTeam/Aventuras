@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { Delta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
@@ -26,10 +26,6 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function sameInputs(a: readonly unknown[], b: readonly unknown[]): boolean {
-  return a.length === b.length && a.every((value, i) => Object.is(value, b[i]))
-}
-
 /**
  * patterns/lists.md → Load-older: the first chunk reloads on any query change and whenever
  * `version` changes; `loadMore` appends the next chunk. Nothing loads on scroll. `labelPaths`
@@ -42,59 +38,60 @@ export function useHistoryChunks(
   const load = useHistoryLoader()
   const [state, setState] = useState<ChunkState>(LOADING)
   const [attempt, setAttempt] = useState(0)
-  const request = useRef(0)
+  const generation = useRef(0)
   // Two loadMore calls before a re-render share one closure's state; this stops the second.
   const loadingMore = useRef(false)
   const { branchId, targetTable, targetId, op, search, labelPaths, sort } = query
-  // Must list exactly the load effect's deps.
-  const inputs = [
-    load,
-    branchId,
-    targetTable,
-    targetId,
-    op,
-    search,
-    labelPaths,
-    sort,
-    version,
-    attempt,
-  ]
-  const [shownFor, setShownFor] = useState(inputs)
+  const request = useMemo(
+    () => ({
+      load,
+      query: { branchId, targetTable, targetId, op, search, labelPaths, sort },
+      version,
+      attempt,
+    }),
+    [load, branchId, targetTable, targetId, op, search, labelPaths, sort, version, attempt],
+  )
+  const [shownFor, setShownFor] = useState(request)
   // Reset while rendering, not in the effect, so the old query's rows never commit under the new one.
-  if (!sameInputs(shownFor, inputs)) {
-    setShownFor(inputs)
+  if (shownFor !== request) {
+    setShownFor(request)
     setState(LOADING)
   }
 
+  // Read the query only through `request`: its identity is what resets the rows.
   useEffect(() => {
-    const mine = ++request.current
+    const mine = ++generation.current
     loadingMore.current = false
-    load({ branchId, targetTable, targetId, op, search, labelPaths, sort, cursor: null }).then(
+    request.load({ ...request.query, cursor: null }).then(
       (chunk) => {
-        if (request.current === mine)
+        if (generation.current === mine)
           setState({ rows: chunk.rows, nextCursor: chunk.nextCursor, status: 'ready' })
       },
       (error: unknown) => {
-        if (request.current !== mine) return
-        logger.error('app.history_load_failed', { targetTable, targetId, error: message(error) })
+        if (generation.current !== mine) return
+        logger.error('app.history_load_failed', {
+          targetTable: request.query.targetTable,
+          targetId: request.query.targetId,
+          error: message(error),
+        })
         setState({ rows: [], nextCursor: null, status: 'failed' })
       },
     )
     // Unmount and every reload orphan whatever is still in flight.
     return () => {
-      request.current += 1
+      generation.current += 1
     }
-  }, [load, branchId, targetTable, targetId, op, search, labelPaths, sort, version, attempt])
+  }, [request])
 
   const loadMore = useCallback(() => {
     if (loadingMore.current || state.status !== 'ready' || state.nextCursor == null) return
     loadingMore.current = true
-    const mine = request.current
+    const mine = generation.current
     const cursor = state.nextCursor
     setState((current) => ({ ...current, status: 'loading-more' }))
-    load({ branchId, targetTable, targetId, op, search, labelPaths, sort, cursor }).then(
+    request.load({ ...request.query, cursor }).then(
       (chunk) => {
-        if (request.current !== mine) return
+        if (generation.current !== mine) return
         loadingMore.current = false
         setState((current) => ({
           rows: [...current.rows, ...chunk.rows],
@@ -103,18 +100,18 @@ export function useHistoryChunks(
         }))
       },
       (error: unknown) => {
-        if (request.current !== mine) return
+        if (generation.current !== mine) return
         loadingMore.current = false
         logger.error('app.history_load_more_failed', {
-          targetTable,
-          targetId,
+          targetTable: request.query.targetTable,
+          targetId: request.query.targetId,
           error: message(error),
         })
         setState((current) => ({ ...current, status: 'ready' }))
         toast.error(t('history:tab.failed'))
       },
     )
-  }, [state, load, branchId, targetTable, targetId, op, search, labelPaths, sort])
+  }, [state, request])
 
   const retry = useCallback(() => setAttempt((n) => n + 1), [])
 
