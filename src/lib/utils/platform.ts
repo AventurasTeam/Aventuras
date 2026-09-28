@@ -13,13 +13,13 @@ export function isAndroid(): boolean {
 }
 
 /**
- * Returns `true` when running inside an iOS WebView (user-agent based). iPadOS 13+
- * defaulting to a desktop UA in Safari is not a concern here: inside a WKWebView the
- * app's own UA always matches.
+ * Returns `true` when running inside an iOS or iPadOS WebView (user-agent based). An iPad's
+ * WKWebView reports a Mac UA by default, so a Mac UA with touch points counts as iPadOS.
  */
 export function isIos(): boolean {
   if (typeof navigator === 'undefined') return false
-  return /iPad|iPhone|iPod/i.test(navigator.userAgent)
+  if (/iPad|iPhone|iPod/i.test(navigator.userAgent)) return true
+  return /Macintosh/i.test(navigator.userAgent) && (navigator.maxTouchPoints ?? 0) > 1
 }
 
 /**

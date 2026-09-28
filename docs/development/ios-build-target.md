@@ -32,7 +32,7 @@ the app was unusually close to iOS-ready:
 | Crate types | [`src-tauri/Cargo.toml`](../src-tauri/Cargo.toml) already built `staticlib` (required by the iOS Xcode project to link the Rust library). |
 | Rust dependencies | `ring` (via rustls), `sqlx`/libsqlite3-sys, `axum`, `tokio`, `reqwest` (rustls-no-provider), `zip`, `image`, `local-ip-address`, `qrcode`, `uuid` — all support `aarch64-apple-ios`. Nothing to change. |
 | iOS icons | `src-tauri/icons/ios/AppIcon-*.png` — the full set was already generated. |
-| Frontend | `viewport-fit=cover` in `src/app.html`; the `AndroidBridge` insets script no-ops when the bridge is absent; `swipe.ts` already matched iPhone/iPad user agents; layout hooks are capability-based, not platform-based. |
+| Frontend | `viewport-fit=cover` in `src/app.html`; the `AndroidBridge` insets script no-ops when the bridge is absent; `swipe.ts` matches iPhone user agents and defers to `isIos()` for iPads; layout hooks are capability-based, not platform-based. |
 | Updater | `tauri-plugin-updater` has no iOS support, but `src/lib/services/updater.ts` already mapped `UnsupportedOs` to a graceful "not supported here" error, and the mobile path (GitHub Releases API + manual install) is platform-agnostic. |
 | Capabilities | The permission list in `src-tauri/capabilities/default.json` resolves on mobile — proven daily by Android building with the identical list. |
 | Desktop-only code | Already gated: `is_nvidia_wayland` under `#[cfg(target_os = "linux")]`, the devtools plugin under `debug_assertions` + feature flag. |
@@ -147,8 +147,9 @@ then smoke-test the full unsigned build and upload the test `.ipa`.
 ### Frontend (additive branch, no behavior change elsewhere)
 
 - [`src/lib/utils/platform.ts`](../../src/lib/utils/platform.ts): `isIos()` — UA-based,
-  same style as the existing `isAndroid()`. (WKWebView always sends an iOS UA, so the
-  iPadOS desktop-UA caveat doesn't apply inside the app.)
+  same style as the existing `isAndroid()`. An iPad's WKWebView sends a Mac UA by default,
+  so a `Macintosh` UA with `maxTouchPoints > 1` also counts as iOS. Backup restore routes
+  the picked `file://` URL through `import_saf_to_temp`, as Android does with `content://`.
 - [`src/lib/services/updater.ts`](../../src/lib/services/updater.ts): the mobile update
   check (`checkViaGitHub`) now dispatches on `isAndroid() || isIos()` and picks the
   release asset by platform — `.apk` on Android, `.ipa` on iOS. Everything else
