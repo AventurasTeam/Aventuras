@@ -1,7 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { expect, fn, screen, userEvent, within } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { DeleteConfirmDialog } from './delete-confirm-dialog'
+
+const WAIT = { timeout: 3000 }
 
 const meta = {
   title: 'Compounds/DeleteConfirmDialog',
@@ -27,8 +29,10 @@ type Story = StoryObj<typeof meta>
 export const Character: Story = {
   play: async ({ args }) => {
     const dialog = await screen.findByRole('alertdialog')
-    expect(within(dialog).getByText(/2 awareness records/)).toBeInTheDocument()
-    expect(within(dialog).getByText(/Removed from the current scene/)).toBeInTheDocument()
+    await waitFor(() => {
+      expect(within(dialog).getByText('• 2 awareness records')).toBeVisible()
+      expect(within(dialog).getByText('• Removed from the current scene')).toBeVisible()
+    }, WAIT)
     await userEvent.click(within(dialog).getByRole('button', { name: 'Delete character' }))
     expect(args.onConfirm).toHaveBeenCalledTimes(1)
   },
