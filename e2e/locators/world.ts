@@ -116,5 +116,7 @@ export const world = {
     page.getByRole('menuitem', { name: new RegExp(`^${t('world:detail.menu.deleteEntity')}`) }),
   deleteDialog: (page: Page): Locator => page.getByRole('alertdialog'),
   deleteConfirm: (page: Page, kind: 'character' | 'location' | 'item' | 'faction'): Locator =>
-    world.deleteDialog(page).getByRole('button', { name: t(`world:delete.confirm.${kind}`) }),
+    world
+      .deleteDialog(page)
+      .getByRole('button', { name: t(`world:delete.confirm.${kind}`), exact: true }),
 }

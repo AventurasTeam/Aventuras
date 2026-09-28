@@ -1,7 +1,8 @@
-// e2e/tests/world-delete-undo.spec.ts
 import { DatabaseSync } from 'node:sqlite'
 
 import { expect, test, type Page } from '@playwright/test'
+
+import { ensureVecTablesSql, type EntryMetadata } from '@/lib/db'
 
 import { currentBranchId, queryApp, tailMetadata } from '../harness/db'
 import { t } from '../harness/i18n'
@@ -17,7 +18,8 @@ const HERO_STORY = 'story_hero'
 const HERO_TITLE = 'The Veilstone Courier'
 
 // The delete's tail-scene drop needs Mira in the tail's scene; the seed leaves her out of it.
-// lessons-learned → seed tip: the last ai_reply is the tail boot recovery can't remove.
+// docs/implementation/lessons-learned/seed-tip-position-shifts-at-boot.md: the last ai_reply
+// is the tail boot recovery can't remove.
 function putInTailScene(dbPath: string, name: string): void {
   const db = new DatabaseSync(dbPath)
   try {
@@ -44,11 +46,11 @@ function putInTailScene(dbPath: string, name: string): void {
   }
 }
 
+// The fresh userData this spec launches has no embedder model installed, so nothing ever
+// drains — vectors seeded here only ever move by the delete/undo/redo under test, undo's
+// forced-zero holds, and a re-seed between undo and redo can't collide with a real embed.
 async function seedVectors(page: Page, branchId: string, id: string): Promise<void> {
-  await queryApp(
-    page,
-    `CREATE VIRTUAL TABLE IF NOT EXISTS entities_vec_8 USING vec0(pk text primary key, branch_id text partition key, model_id text, id text, +source_hash text, embedding float[8])`,
-  )
+  for (const sql of ensureVecTablesSql(8)) await queryApp(page, sql)
   for (const dim of [384, 8]) {
     await queryApp(
       page,
@@ -76,6 +78,12 @@ async function footprint(page: Page, branchId: string, id: string) {
       branchId,
       id,
     ]),
+    // -1 once the row is gone, so an absent entity can't be confused with a real stale=0.
+    stale: await scalar(
+      page,
+      `SELECT COALESCE((SELECT embedding_stale FROM entities WHERE branch_id = ? AND id = ?), -1)`,
+      [branchId, id],
+    ),
     awareness: await scalar(
       page,
       `SELECT count(*) FROM happening_awareness WHERE branch_id = ? AND character_id = ?`,
@@ -91,27 +99,39 @@ async function footprint(page: Page, branchId: string, id: string) {
       `SELECT count(*) FROM character_relationships WHERE branch_id = ? AND (a_id = ? OR b_id = ?)`,
       [branchId, id, id],
     ),
-    vectors:
-      (await scalar(page, `SELECT count(*) FROM entities_vec_384 WHERE branch_id = ? AND id = ?`, [
-        branchId,
-        id,
-      ])) +
-      (await scalar(page, `SELECT count(*) FROM entities_vec_8 WHERE branch_id = ? AND id = ?`, [
-        branchId,
-        id,
-      ])),
-    inTailScene: ((await tailMetadata(page, branchId))?.sceneEntities ?? []).includes(id),
+    translations: await scalar(
+      page,
+      `SELECT count(*) FROM translations WHERE branch_id = ? AND target_kind = 'entity' AND target_id = ?`,
+      [branchId, id],
+    ),
+    vec384: await scalar(
+      page,
+      `SELECT count(*) FROM entities_vec_384 WHERE branch_id = ? AND id = ?`,
+      [branchId, id],
+    ),
+    vec8: await scalar(page, `SELECT count(*) FROM entities_vec_8 WHERE branch_id = ? AND id = ?`, [
+      branchId,
+      id,
+    ]),
   }
 }
 
-async function readerAction(page: Page, row: 'undoRow' | 'redoRow'): Promise<void> {
+// Combines footprint with the tail's whole metadata, not just sceneEntities membership, so a poll
+// catches a handler that touched a field the delete shouldn't (e.g. currentLocationId, worldTime).
+async function snapshot(page: Page, branchId: string, id: string) {
+  return { ...(await footprint(page, branchId, id)), meta: await tailMetadata(page, branchId) }
+}
+
+async function undoFromReader(page: Page): Promise<void> {
   await chrome.actionsTrigger(page).click()
   await chrome.goToReaderRow(page).click()
   await page.waitForURL(/\/reader-composer\//)
   await chrome.actionsTrigger(page).click()
-  await reader[row](page).click()
+  await reader.undoRow(page).click()
 }
 
+// Serial suite, one shared app: test 2 continues from test 1's navigation state (still on World,
+// menu closed), mirroring world.spec.ts.
 test.describe.serial('World delete', () => {
   let app: LaunchedApp
   let userDataDir: string
@@ -144,6 +164,7 @@ test.describe.serial('World delete', () => {
 
   test('delete sweeps links, vectors and the tail scene; undo restores them; redo sweeps again', async () => {
     const page = app.window
+    await expect(world.row(page, 'Mira')).toBeVisible()
     const branchId = await currentBranchId(page, HERO_STORY)
     const [[mira]] = await queryApp(
       page,
@@ -152,15 +173,37 @@ test.describe.serial('World delete', () => {
     )
     const id = mira as string
     await seedVectors(page, branchId, id)
+    // The seed leaves every entity stale (1) — force 0 so undo's forced 1 (below) is provably
+    // the handler's doing, not a coincidence of the fixture's own default.
+    await queryApp(page, `UPDATE entities SET embedding_stale = 0 WHERE branch_id = ? AND id = ?`, [
+      branchId,
+      id,
+    ])
+    await queryApp(
+      page,
+      `INSERT INTO translations (id, branch_id, target_kind, target_id, field, language, translated_text, created_at, updated_at)
+       VALUES (?, ?, 'entity', ?, 'description', 'es', 'La mercader.', 1, 1)`,
+      ['e2e_translation_mira', branchId, id],
+    )
+    const metaBefore = await tailMetadata(page, branchId)
+    if (metaBefore == null) throw new Error(`branch ${branchId} has no tail metadata`)
+    const metaAfterDelete: EntryMetadata = {
+      ...metaBefore,
+      sceneEntities: metaBefore.sceneEntities.filter((other) => other !== id),
+    }
+
     const before = await footprint(page, branchId, id)
     expect(before).toEqual({
       entity: 1,
+      stale: 0,
       awareness: 2,
       involvements: 1,
       relationships: 2,
-      vectors: 2,
-      inTailScene: true,
+      translations: 1,
+      vec384: 1,
+      vec8: 1,
     })
+    expect(metaBefore.sceneEntities).toContain(id)
     const headBefore = await scalar(
       page,
       `SELECT COALESCE(MAX(log_position), 0) FROM deltas WHERE branch_id = ?`,
@@ -175,14 +218,17 @@ test.describe.serial('World delete', () => {
     await world.deleteConfirm(page, 'character').click()
 
     await expect
-      .poll(() => footprint(page, branchId, id), { timeout: 15_000 })
+      .poll(() => snapshot(page, branchId, id), { timeout: 15_000 })
       .toEqual({
         entity: 0,
+        stale: -1,
         awareness: 0,
         involvements: 0,
         relationships: 0,
-        vectors: 0,
-        inTailScene: false,
+        translations: 0,
+        vec384: 0,
+        vec8: 0,
+        meta: metaAfterDelete,
       })
     expect(
       await scalar(
@@ -192,31 +238,43 @@ test.describe.serial('World delete', () => {
       ),
     ).toBe(1)
 
-    await readerAction(page, 'undoRow')
+    await undoFromReader(page)
     await expect
-      .poll(() => footprint(page, branchId, id), { timeout: 30_000 })
+      .poll(() => snapshot(page, branchId, id), { timeout: 30_000 })
       .toEqual({
         entity: 1,
+        // Reverse-replay forces every restored row's embedding_stale back to 1 (its vectors
+        // are gone), regardless of the value the delete's undoPayload captured.
+        stale: 1,
         awareness: 2,
         involvements: 1,
         relationships: 2,
-        vectors: 0,
-        inTailScene: true,
+        translations: 1,
+        vec384: 0,
+        vec8: 0,
+        meta: metaBefore,
       })
 
     // A re-embed between undo and redo: the redo must sweep what it finds, not what the delete saw.
     await seedVectors(page, branchId, id)
+    const preRedo = await footprint(page, branchId, id)
+    expect(preRedo.vec384).toBe(1)
+    expect(preRedo.vec8).toBe(1)
+
     await chrome.actionsTrigger(page).click()
     await reader.redoRow(page).click()
     await expect
-      .poll(() => footprint(page, branchId, id), { timeout: 30_000 })
+      .poll(() => snapshot(page, branchId, id), { timeout: 30_000 })
       .toEqual({
         entity: 0,
+        stale: -1,
         awareness: 0,
         involvements: 0,
         relationships: 0,
-        vectors: 0,
-        inTailScene: false,
+        translations: 0,
+        vec384: 0,
+        vec8: 0,
+        meta: metaAfterDelete,
       })
   })
 })
