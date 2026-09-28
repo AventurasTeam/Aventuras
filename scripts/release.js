@@ -17,6 +17,7 @@ import { execFileSync } from 'child_process'
 import path from 'path'
 import { bumpVersion, isValidVersion, compareVersions } from './version.js'
 import { pickReleaseRemote } from './remote.js'
+import { detectPackageManager, commandFor } from './package-manager.js'
 
 const rootDir = process.cwd()
 
@@ -44,13 +45,11 @@ function git(...gitArgs) {
 }
 
 /**
- * Run npm. On Windows it is `npm.cmd`, which `execFile` cannot launch, so it goes through
- * `cmd.exe`. Not `shell: true`: Node deprecated that for this case (DEP0190).
+ * Run npm. `aube version` only bumps `package.json`, not `package-lock.json`, so the version
+ * bump stays on npm regardless of which package manager installed `node_modules`.
  */
 function npm(npmArgs, opts = {}) {
-  return process.platform === 'win32'
-    ? run('cmd.exe', ['/c', 'npm', ...npmArgs], opts)
-    : run('npm', npmArgs, opts)
+  return run(...commandFor('npm', npmArgs), opts)
 }
 
 /**
@@ -249,8 +248,9 @@ try {
   // Formatting runs over the whole repo, so it can sweep in files this release did not
   // touch. Deliberate, but never silent: anything beyond the version files is named below.
   console.log('Formatting and linting...')
-  npm(['run', 'format'], { stdio: 'inherit' })
-  npm(['run', 'lint:fix'], { stdio: 'inherit' })
+  const pm = detectPackageManager(rootDir)
+  run(...commandFor(pm, ['run', 'format']), { stdio: 'inherit' })
+  run(...commandFor(pm, ['run', 'lint:fix']), { stdio: 'inherit' })
 
   const expected = new Set([
     'package.json',

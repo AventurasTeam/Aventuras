@@ -12,8 +12,9 @@ Managed by [lefthook](https://github.com/evilmartians/lefthook) (`lefthook.yml`)
 
 `scripts/pm.js` picks the package manager at run time: `aube` when it did the install
 (`node_modules/.aube-state` exists) and is still on `PATH`, `npm` otherwise. It also drives
-Tauri's `beforeDevCommand`/`beforeBuildCommand`, so those work unchanged for npm users and
-route through aube wherever aube did the install.
+Tauri's `beforeDevCommand`/`beforeBuildCommand` and the `format`/`lint:fix` steps in
+`scripts/release.js`, so those work unchanged for npm users and route through aube wherever
+aube did the install.
 
 ## Continuous Integration
 
