@@ -11,17 +11,15 @@ describe('updateLore', () => {
     const ctx = { db, runInTransaction }
     await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
     await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
-    await db
-      .insert(lore)
-      .values({
-        id: 'lore_1',
-        branchId: 'b1',
-        title: 'Vael',
-        body: 'A city.',
-        injectionMode: 'auto',
-        createdAt: 1,
-        updatedAt: 1,
-      })
+    await db.insert(lore).values({
+      id: 'lore_1',
+      branchId: 'b1',
+      title: 'Vael',
+      body: 'A city.',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
     const update = (patch: Record<string, unknown>) =>
       applyDeltaAction(
         {
