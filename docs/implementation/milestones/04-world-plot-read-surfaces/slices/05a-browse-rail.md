@@ -194,6 +194,9 @@ chip, whose tint is the aggregate classifier signal.
   the rail inherits the same lowercasing; the likelier fix is the
   surface passing finished copy strings, which pairs with the question
   above. Only `en` ships today.
+- **Read the lead through `resolveLead`** (4.2b): a reversal can leave
+  `leadEntityId` dangling, and the You badge / peek `Set as lead` must
+  treat it as absent.
 
 ## Implementation notes
 

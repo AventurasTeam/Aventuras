@@ -327,8 +327,10 @@ minus `Set as lead` (threads and happenings have no lead concept):
 - `View raw JSON` — live; a happening's viewer merges its
   involvements and awareness rows, per
   [Detail pane — raw JSON viewer](#detail-pane--raw-json-viewer) above.
-- `Delete thread` / `Delete happening` — disabled, reason "Lands in
-  Slice 4.2b".
+- `Delete thread` / `Delete happening` — a confirm naming a
+  happening's involvement and awareness counts, then the row and its
+  cascade under one `action_id`
+  ([`world.md → Delete`](../world/world.md#delete)).
 
 ## Save session
 

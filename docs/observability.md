@@ -186,7 +186,13 @@ convention, and the expectation that subsystems route through
   once built, then rethrown), `parent_chain_cap_hit`
   (error: a `parent_location_id` walk hit the depth cap, meaning a loop
   already exists in the stored chain), `story_lead_rejected` (warn: the lead
-  mutator refused, logged with its code)
+  mutator refused, logged with its code), `entity_delete_rejected` /
+  `lore_delete_rejected` / `thread_delete_rejected` /
+  `happening_delete_rejected` (warn: a confirmed delete refused —
+  in-flight, not-found, or (entity only) the lead or a tail race) /
+  `entity_delete_failed` / `lore_delete_failed` / `thread_delete_failed` /
+  `happening_delete_failed` (error: the delete's delta group threw) —
+  `lib/actions/row-delete/delete-row.ts`
 - `classifier.*` — `delta_clamped`, `schema_repair`, `empty_output`,
   `failure_record_retried` (warn: the first attempt to record a failed
   pass threw, and the hook tried once more)

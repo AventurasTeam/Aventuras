@@ -1206,6 +1206,19 @@ sufficient to require a lead. Wizard rejects commit; Story Settings
 rejects save. Creative + third-person + null lead remains valid (the
 omniscient-narrator ensemble case).
 
+**The lead can dangle.** The lead is story-level while entities are
+per branch, and a reversal of the lead's create (CTRL-Z of a Blank
+create, a rollback past a classifier-created lead) keeps the id, so
+every UI reader resolves it through `resolveLead` and treats a
+dangling lead as absent — the composer disables its third-person wrap
+until a new lead is set. Two readers still see the raw id: `isStoryLead`
+(`lib/actions/entities/register.ts`) only matches it against a live row,
+so a dangling id is harmless there; the generation template context
+(`lib/pipeline/definitions/generation-context.ts`) spreads `definition`
+as-is, and no bundled template reads `leadEntityId`. Deleting the lead
+is refused. A per-branch, delta-logged lead is an M6 carried
+deferral.
+
 **`stories.settings` shape (operational only):**
 
 ```ts

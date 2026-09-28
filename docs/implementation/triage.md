@@ -129,6 +129,14 @@ slice-planning gate forces its resolution before that slice is planned.
   suggestions. The next consumer of `Autocomplete` with
   `casingNormalization="canonical"` won't get this for free and
   needs the same save-time patch (2026-09-28, raised by 4.2b).
+- **AlertDialog impact lists aren't announced by screen readers.**
+  The bulleted impact list (`DeleteConfirmDialog`'s `delete-impacts`
+  View, `alert-dialog.md`'s own rollback example) is plain `Text` rows
+  with no list role; `AlertDialogDescription` is the only body content
+  wired into the dialog's `aria-describedby`, and the leading `•`
+  glyph is read aloud as a character rather than a list marker.
+  Pattern-wide — every AlertDialog consumer with an impact list, not
+  just World / Plot delete (2026-09-28, raised by 4.2b).
 - **The History tab's `Deleted` op chip likely never matches in a
   per-row tab.** A deleted row can't be selected to open its
   History tab, and undoing its delete prunes the delta, so no row's

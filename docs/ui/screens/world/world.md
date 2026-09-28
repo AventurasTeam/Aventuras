@@ -93,7 +93,8 @@ The overflow menu holds rare-but-important actions:
   [wizard.md → Status field](../wizard/wizard.md#status-field--active--staged))
 - **Export entity as JSON** (single-entity export)
 - **View raw JSON** (debug/dev affordance)
-- **Delete entity** (destructive; needs confirmation pass)
+- **Delete entity** (destructive; confirms — see [Delete](#delete);
+  disabled for the lead)
 
 Raw JSON lives here (not as a prominent link) because it's
 power-user/debug territory. One consistent pattern: ⋯ menus are where
@@ -438,6 +439,40 @@ Affordances (placeholder + tooltip + ⓘ help icon) follow the
 The `⋯ → View raw JSON` action opens the shared
 [Raw JSON viewer](../../patterns/data.md#raw-json-viewer--shared-modal-pattern)
 drawer. No World-specific deviation.
+
+## Delete
+
+`⋯ → Delete entity` (or `Delete` on lore) routes through the pane's
+Save / Discard / Cancel guard first when the row is dirty, then raises
+a confirm built from the row re-read by id — a resolved Save can
+rename or remove it — so its impact counts are a snapshot at that
+moment, not a live read. The confirm's description reads "You can
+undo this from the reader: Undo last action in its menu, or
+Cmd/Ctrl-Z." (shared `common:deleteUndoHint`, interpolating the
+reader's own undo label, so the copy can't drift from the reader's
+menu). A pending confirm is cancelled when the screen loses focus.
+Confirming writes one delta group under one `action_id`, so CTRL-Z in
+the reader restores all of it:
+
+- The row, its `happening_involvements`, `happening_awareness` and
+  `character_relationships` rows, its translations and those of the
+  relationships, and its vectors in every dim family.
+- Every other entity's reference to it — `current_location_id`,
+  `parent_location_id`, `at_location_id`, `faction_id`,
+  `equipped_items[]`, `inventory[]` — cleared in one `state` patch per
+  entity. Items at a deleted location, or held by a deleted character,
+  are left unplaced (no position is invented).
+- **The tail entry's scene.** The id leaves the tail's `sceneEntities`,
+  and a deleted location stops being its `currentLocationId`, so the
+  next turn doesn't inherit it. Earlier entries keep the id and render
+  it as an Unknown-entity chip
+  ([`entry-card.md → World-state panel`](../../patterns/entry-card.md#world-state-panel)).
+
+**The lead can't be deleted.** `stories.definition` requires a lead in
+adventure and first- or second-person stories, so the entry is disabled
+with a reason pointing at `Set as lead`; the action refuses it too. A
+regenerate or rollback that reaches a turn before the delete brings the
+row back, like any World edit.
 
 ## Per-row import
 
@@ -916,6 +951,8 @@ Merge writes:
 - `entities` op=`update` on every other entity that held an
   inverse ref to non-canonical (state JSON paths rewritten).
 - `translations` op=`update` per affected row.
+- `story_entries` op=`update` on the tail entry when its scene named
+  the non-canonical (the id is rewritten to the canonical).
 
 Embeddings are not delta-logged
 ([`data-model.md → embeddings`](../../../data-model.md#diagram)) —

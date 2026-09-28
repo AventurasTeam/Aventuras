@@ -667,6 +667,9 @@ use.
   ([`world.md → Reversibility`](../../../ui/screens/world/world.md#reversibility)
   lists the merge writes without it). 4.2b's PR amends `world.md` to
   record the rule, or records the deviation if review rejects it.
+  Resolved in 4.2b (2026-09-28): kept, and recorded in
+  [`world.md → Delete`](../../../ui/screens/world/world.md#delete) and
+  its merge list.
 - **Plot chapter buckets before M5.** No chapter is opened in M4, so
   the chapter-keyed grouping is seed-only. Default: one implicit bucket
   and a hidden `This chapter` chip while the branch has no open

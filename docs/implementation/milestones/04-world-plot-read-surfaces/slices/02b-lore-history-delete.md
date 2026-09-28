@@ -221,5 +221,96 @@ handler, which is where the sweep must therefore live.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved
-developer decisions._
+- **Critical section for the happening cascade (developer decision,
+  2026-09-28).** A per-branch `happening_links:{branch}` lock plus
+  live-row guards on the three link writers — no per-happening lock
+  existed, and a read can't sit inside a sqlite-proxy transaction; a
+  create re-reads the row(s) it names and no-ops when one is gone, and
+  a row created earlier in the same action group counts as present.
+- **Reversals are never refused; the lead can dangle (developer
+  decision, 2026-09-28).** `resolveLead` (`lib/world`) is the interim:
+  World and the composer read the lead through it and treat a
+  dangling id as absent, disabling do / say / think with a visible
+  reason (not only a web tooltip) when there's no lead to name. A
+  per-branch, delta-logged lead is filed to
+  [M6](../../../roadmap.md#m6--branches--diff-cache);
+  [`data-model.md → Story settings shape`](../../../../data-model.md#story-settings-shape)
+  records the two readers that still see the raw id as harmless until
+  then.
+- **Plot's History tab and delete entries ship in 4.2b, not deferred
+  (developer decision, 2026-09-28).** 4.3 merged both disabled
+  ("Lands in Slice 4.2b"); the slice's Scope is amended so shipped
+  copy doesn't point at a merged slice.
+- **Lead delete UI (developer decision, 2026-09-28).** `Delete entity`
+  disables for the resolved lead with a reason pointing at
+  `Set as lead`; the arm still refuses `lead-entity` underneath, so a
+  refusal that races past the UI toasts rather than silently no-oping.
+- **Items at a deleted location, or held by a deleted character, stay
+  unplaced (developer decision, 2026-09-28).** No position is
+  invented; the confirm names the count, and `data-model.md`'s
+  `ItemState` gains the sentence.
+- **Piggyback visual-change text is truncated to the schema's 500-char
+  cap (developer decision, Q1, 2026-09-28).** An over-long note
+  previously blocked any later `updateEntity` of that entity,
+  including a delete clearing a ref to it. Existing over-long rows
+  aren't repaired — [`triage.md`](../../../triage.md).
+- **Reader jump-to-entry from History is descoped (developer decision,
+  2026-09-28).** Rows aren't pressable; `entry #n` is meta text.
+  Carried to [M7.3](../../../roadmap.md#m7--app-settings--diagnostics--onboarding) —
+  the Diagnostics Hub delta log wants the same link, and building one
+  now would reach into the reader's scroll-compensation machinery.
+- **Entity cascade rides the delete delta's undo payload**, the same
+  shape as `deleteHappening`'s (`involvements` / `awareness` /
+  `relationships` / `translations` keys, `restoreCascade`, and the
+  forward handler registered as `cascadeDeleteOps` so redo replays
+  it) — one delta per deleted row would have bloated History and the
+  undo group.
+- **`HandlerOutcome.cascadePatches` closes a latent bug.** The runner
+  previously emitted only the parent's store patch, so a forward
+  cascade left dead link rows in the working-set stores until a
+  production delete caller existed to exercise it.
+- **A group mixing a delete with a write to a row the delete cascades
+  is rejected up front as `group-conflict`.** Otherwise it would
+  commit and then fail undo forever on a UNIQUE re-insert; 4.2c's
+  merge needs the same shape for its re-keyed link rows.
+- **History search matches `json_type`, not `json_extract`**, since
+  the latter can't tell an absent path from a stored `null`; the
+  field-path and free-text arms apply to `update` deltas only (a
+  delete's payload is the full row). Known limitation: the free-text
+  `LIKE` arm matches the undo payload's pre-change value, so it finds
+  the edit that replaced a value, not the one that set it — until
+  M6.4's diff cache.
+- **Lore's update handler drops unchanged columns**, like the entity
+  handler, so History never lists a field that didn't change.
+- **The confirm's copy is built after the dirty-pane guard resolves**,
+  from the row re-read by id, and its impact counts are a snapshot at
+  that moment — a classifier write while the confirm is open isn't
+  reflected; the arm re-reads the cascade at apply time regardless. A
+  pending confirm is cancelled when the screen loses focus
+  (`open={focused}`).
+- **World and Plot share `destructiveEntry` and one
+  `common:deleteUndoHint`** that interpolates the reader's own undo
+  label, so the confirm's copy can't drift from the reader's menu.
+- **Impact counts for awareness / involvements / relationships repeat
+  the entity cascade's predicates against the stores** (only
+  references / unplaced items / tail scene come straight from
+  `entityDeleteActions`) — a future cascade table needs a matching
+  count in `delete-impact.ts`.
+- **Monitor items that materialized.** Regenerate or rollback after a
+  delete resurrects the row, as expected for any World edit; a
+  third-person story whose lead is its only character can never
+  delete that character (`setStoryLead` can't clear the lead, and the
+  arm refuses `lead-entity`); `Set as lead` on one branch also dangles
+  the lead on any other branch lacking the character, folded into the
+  [M6 roadmap entry](../../../roadmap.md#m6--branches--diff-cache); a
+  classifier candidate reconciled to a row deleted after the pass's
+  re-read is dropped for that pass, recorded in
+  [`cadence.md`'s Live-row guards bullet](../../../../memory/cadence.md#user-edits-and-classifier-writes).
+- **Deferred to [`triage.md`](../../../triage.md):** HistoryTab's
+  settle-count reload, the lore create session's whole-draft
+  validation gap on Entity / Plot creates, the lore body textarea not
+  filling the pane, `Autocomplete`'s uncommitted-casing gap, the
+  AlertDialog impact list's missing screen-reader semantics, and the
+  History `Deleted` chip's near-unreachability. Link-row edits in
+  History stay
+  [parked](../../../../parked.md#history-shows-link-row-edits).
