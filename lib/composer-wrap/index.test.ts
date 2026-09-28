@@ -70,6 +70,12 @@ describe('wrapComposerText', () => {
       "who's asking?",
     )
   })
+
+  it('wraps in first person with a null lead without throwing', () => {
+    expect(
+      wrapComposerText('reach for the blade', { mode: 'do', pov: 'first', leadName: null }),
+    ).toBe('I reach for the blade.')
+  })
 })
 
 describe('wrapHasSubject', () => {
