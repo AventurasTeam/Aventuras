@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { EARTH_GREGORIAN } from '@/lib/calendar'
 import type { CharacterState } from '@/lib/db'
@@ -16,6 +16,8 @@ import {
   lastSeenText,
   leadDisabledReason,
   leadRejectionText,
+  loreFieldLabel,
+  loreMenuEntries,
   relationshipDescription,
   saveRejectionText,
 } from './world-copy'
@@ -112,6 +114,12 @@ describe('labels and issues', () => {
     for (const [kind, field] of fields) expect(entityFieldLabel(kind, field)).not.toBe(field)
   })
 
+  it('labels lore draft fields with their pane names', () => {
+    expect(loreFieldLabel('injectionMode')).toBe('Injection')
+    expect(loreFieldLabel('body')).toBe('Body')
+    expect(loreFieldLabel('unknown')).toBe('unknown')
+  })
+
   it('names the tab a link-row or quantity issue lives on', () => {
     expect(entityIssueText('relationshipPovRequired')).toBe(
       'Connections: Fill in at least one view.',
@@ -186,6 +194,17 @@ describe('overflow menu', () => {
         (e) => e.key,
       ),
     ).toEqual(['export', 'json', 'delete'])
+  })
+
+  it('offers lore no Set as lead: export disabled with its reason, and View raw JSON', () => {
+    const onViewJson = vi.fn()
+    const entries = loreMenuEntries({ onViewJson })
+    expect(entries.map((e) => [e.key, e.label, e.disabled ?? false, e.disabledReason])).toEqual([
+      ['export', 'Export lore as JSON', true, 'Lands in Slice 4.6'],
+      ['json', 'View raw JSON', false, undefined],
+    ])
+    entries.find((e) => e.key === 'json')?.onPress?.()
+    expect(onViewJson).toHaveBeenCalledTimes(1)
   })
 
   it('disables the lead entry with its reason, and omits it for non-characters', () => {

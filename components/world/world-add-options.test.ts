@@ -20,8 +20,11 @@ describe('worldAddOptions', () => {
     expect([blank.disabled, blank.disabledReason]).toEqual([true, 'busy'])
   })
 
-  it('keeps Blank disabled on Lore until 4.2b', () => {
-    const [blank] = worldAddOptions('lore', () => {}, {})
-    expect([blank.disabled, blank.disabledReason]).toEqual([true, 'Lands in Slice 4.2b'])
+  it('offers Blank on lore like any category', () => {
+    const onBlank = vi.fn()
+    const [blank] = worldAddOptions('lore', onBlank, {})
+    expect(blank).toMatchObject({ key: 'blank', disabled: undefined })
+    blank.onPress?.()
+    expect(onBlank).toHaveBeenCalledTimes(1)
   })
 })

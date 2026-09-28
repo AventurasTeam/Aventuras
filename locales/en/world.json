@@ -17,7 +17,6 @@
   },
   "addMenu": {
     "blank": "Blank",
-    "blankLoreReason": "Lands in Slice 4.2b",
     "fromJson": "From JSON file…",
     "fromJsonReason": "Lands in Slice 4.6",
     "fromVault": "From Vault…",
@@ -87,8 +86,6 @@
   "detail": {
     "selectRow": "Select a row",
     "selectRowBody": "Pick an entity or lore entry from the list to see it here.",
-    "lorePlaceholder": "Details land in Slice 4.2b",
-    "placeholderBody": "Tabs and editors for this row aren't available yet.",
     "recentlyClassified": "Recently classified",
     "namePlaceholder": "Unnamed",
     "newEntity": {
@@ -97,6 +94,7 @@
       "item": "New item",
       "faction": "New faction"
     },
+    "newLore": "New lore",
     "tabSelect": "Section",
     "tabs": {
       "overview": "Overview",
@@ -114,6 +112,7 @@
       "setLeadAlready": "Already the lead",
       "setLeadInactive": "Only an active character can be the lead",
       "exportEntity": "Export entity as JSON",
+      "exportLore": "Export lore as JSON",
       "exportReason": "Lands in Slice 4.6",
       "viewJson": "View raw JSON",
       "deleteEntity": "Delete entity",
@@ -176,6 +175,33 @@
     "equipped": "Equipped",
     "carried": "Carried",
     "relationships": "Relationships"
+  },
+  "lore": {
+    "tabs": {
+      "body": "Body",
+      "settings": "Settings",
+      "history": "History"
+    },
+    "fields": {
+      "title": "Title",
+      "category": "Category",
+      "categoryPlaceholder": "— uncategorized —",
+      "categoryTail": "+ Add new: \"{{value}}\"",
+      "body": "Body",
+      "injectionMode": "Injection",
+      "priority": "Priority",
+      "priorityHint": "Higher priority makes this lore more likely to be picked when it's relevant. It won't surface lore the scene isn't about — use Always for that.",
+      "keywords": "Keywords",
+      "keywordsHint": "Proper nouns and in-world terms this lore should be found by. Tags label; keywords retrieve.",
+      "keywordsPlaceholder": "Add a keyword",
+      "tags": "Tags",
+      "tagsPlaceholder": "Add a tag"
+    },
+    "injection": {
+      "alwaysHelp": "Injected into every prompt. Use sparingly — it costs tokens every turn.",
+      "autoHelp": "Surfaced when retrieval finds it relevant to the scene.",
+      "disabledHelp": "Never injected; reference material for you only."
+    }
   },
   "sections": {
     "visual": "Visual",

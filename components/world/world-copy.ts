@@ -13,6 +13,7 @@ import {
   type FactionDraft,
   type ItemDraft,
   type LocationDraft,
+  type LoreDraft,
   type WorldIssue,
 } from '@/lib/world'
 
@@ -137,6 +138,21 @@ export function entityFieldLabel(kind: EntityKind, field: string): string {
   return Object.hasOwn(labels, field) ? labels[field]() : field
 }
 
+const LORE_LABEL: Record<keyof LoreDraft, () => string> = {
+  title: () => t('world:lore.fields.title'),
+  body: () => t('world:lore.fields.body'),
+  category: () => t('world:lore.fields.category'),
+  injectionMode: () => t('world:lore.fields.injectionMode'),
+  priority: () => t('world:lore.fields.priority'),
+  keywords: () => t('world:lore.fields.keywords'),
+  tags: () => t('world:lore.fields.tags'),
+}
+
+/** save-sessions.md → Save bar: user-recognizable field names. */
+export function loreFieldLabel(field: string): string {
+  return Object.hasOwn(LORE_LABEL, field) ? LORE_LABEL[field as keyof LoreDraft]() : field
+}
+
 type LeadEntry = { onSetLead: () => void; disabledReason?: string }
 
 /** world.md → Detail head structure. */
@@ -174,6 +190,20 @@ export function entityMenuEntries(
       disabledReason: t('world:detail.menu.deleteReason'),
       onPress: () => {},
     },
+  ]
+}
+
+/** world.md → Detail head — lore: no `Set as lead`. */
+export function loreMenuEntries({ onViewJson }: { onViewJson: () => void }): OverflowMenuEntry[] {
+  return [
+    {
+      key: 'export',
+      label: t('world:detail.menu.exportLore'),
+      disabled: true,
+      disabledReason: t('world:detail.menu.exportReason'),
+      onPress: () => {},
+    },
+    { key: 'json', label: t('world:detail.menu.viewJson'), onPress: onViewJson },
   ]
 }
 

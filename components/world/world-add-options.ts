@@ -10,20 +10,13 @@ export function worldAddOptions(
   blank: BlankGate,
 ): ImporterMenuOption[] {
   return [
-    category === 'lore'
-      ? {
-          key: 'blank',
-          label: t('world:addMenu.blank'),
-          disabled: true,
-          disabledReason: t('world:addMenu.blankLoreReason'),
-        }
-      : {
-          key: 'blank',
-          label: t('world:addMenu.blank'),
-          disabled: blank.disabled,
-          disabledReason: blank.disabledReason,
-          onPress: onBlank,
-        },
+    {
+      key: 'blank',
+      label: t('world:addMenu.blank'),
+      disabled: blank.disabled,
+      disabledReason: blank.disabledReason,
+      onPress: onBlank,
+    },
     {
       key: 'json',
       label: t('world:addMenu.fromJson'),

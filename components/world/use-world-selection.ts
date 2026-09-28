@@ -8,6 +8,7 @@ export type WorldDetailSelection =
   | { type: 'lore'; row: Lore }
   /** `seq` bumps per `[+] Blank`, so a repeat create resets a draft already in create mode. */
   | { type: 'create'; kind: EntityKind; seq: number }
+  | { type: 'create-lore'; seq: number }
 
 type WorldSelectionInput = {
   initialId: string | null
@@ -31,8 +32,10 @@ export function useWorldSelection({
   const [createSeq, setCreateSeq] = useState(0)
 
   const selection = useMemo<WorldDetailSelection | null>(() => {
-    if (creating && isEntityCategory(category))
-      return { type: 'create', kind: category, seq: createSeq }
+    if (creating)
+      return isEntityCategory(category)
+        ? { type: 'create', kind: category, seq: createSeq }
+        : { type: 'create-lore', seq: createSeq }
     if (selectedId == null) return null
     if (isEntityCategory(category)) {
       const row = entities.find((e) => e.id === selectedId && e.kind === category)

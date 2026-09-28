@@ -81,9 +81,13 @@ describe('useWorldSelection', () => {
     expect(latest?.selection).toEqual({ type: 'entity', row: KAEL })
   })
 
-  it('never creates on the Lore category', () => {
-    render(<Probe category="lore" />)
+  it('enters lore create mode from the lore category, and a repeat bumps its seq', () => {
+    render(<Probe lore={[VEIL]} category="lore" />)
     act(() => latest?.startCreate())
-    expect(latest?.selection).toBeNull()
+    expect(latest?.selection).toEqual({ type: 'create-lore', seq: 1 })
+    act(() => latest?.startCreate())
+    expect(latest?.selection).toEqual({ type: 'create-lore', seq: 2 })
+    act(() => latest?.select('lore_veil'))
+    expect(latest?.selection).toEqual({ type: 'lore', row: VEIL })
   })
 })
