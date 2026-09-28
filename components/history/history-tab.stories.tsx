@@ -230,6 +230,10 @@ const reloadSpy = fn(
  * patch or a run/reversal settle, not just on mount. */
 export const ReloadsOnRowPatchAndRunSettle: Story = {
   args: { branchId: 'br_1', targetTable: 'threads', targetId: 'thread_amulet' },
+  // The play counts calls from mount; a re-run or CI retry must start at zero.
+  beforeEach: () => {
+    reloadSpy.mockClear()
+  },
   decorators: [
     (Story) => (
       <HistoryLoaderProvider value={reloadSpy}>
