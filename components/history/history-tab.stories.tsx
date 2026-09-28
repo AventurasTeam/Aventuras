@@ -28,6 +28,8 @@ const delta = (
   createdAt: Date.now() - 60_000,
 })
 
+const WAIT = { timeout: 3000 }
+
 const queries: HistoryQuery[] = []
 
 // A filtered query matches nothing, so the no-match state is reachable.
@@ -127,19 +129,21 @@ export const HappeningRow: Story = {
 export const FiltersReachTheQuery: Story = {
   args: { branchId: 'br_1', targetTable: 'threads', targetId: 'thread_amulet' },
   play: async () => {
-    await screen.findAllByTestId('delta-log-row')
+    await screen.findAllByTestId('delta-log-row', {}, WAIT)
     await userEvent.click(screen.getByRole('button', { name: 'Deleted' }))
-    await waitFor(() => expect(queries.at(-1)).toMatchObject({ op: 'delete', cursor: null }))
-    expect(await screen.findByText('No changes match')).toBeVisible()
+    await waitFor(() => expect(queries.at(-1)).toMatchObject({ op: 'delete', cursor: null }), WAIT)
+    expect(await screen.findByText('No changes match', {}, WAIT)).toBeVisible()
 
     await userEvent.click(screen.getByRole('button', { name: 'All' }))
     await userEvent.type(screen.getByPlaceholderText('Search fields, changes…'), 'status')
-    await waitFor(() =>
-      expect(queries.at(-1)).toMatchObject({
-        search: 'status',
-        labelPaths: ['status'],
-        cursor: null,
-      }),
+    await waitFor(
+      () =>
+        expect(queries.at(-1)).toMatchObject({
+          search: 'status',
+          labelPaths: ['status'],
+          cursor: null,
+        }),
+      WAIT,
     )
     expect(queries.at(-1)?.op).toBeUndefined()
   },
@@ -149,11 +153,11 @@ export const FiltersReachTheQuery: Story = {
 export const ClearingASearch: Story = {
   args: { branchId: 'br_1', targetTable: 'threads', targetId: 'thread_amulet' },
   play: async () => {
-    const input = await screen.findByPlaceholderText('Search fields, changes…')
+    const input = await screen.findByPlaceholderText('Search fields, changes…', {}, WAIT)
     await userEvent.type(input, 'zzz')
-    expect(await screen.findByText('No changes match')).toBeVisible()
+    expect(await screen.findByText('No changes match', {}, WAIT)).toBeVisible()
 
-    // The wrong empty state would only flash for the debounce, so record every render of it.
+    // The wrong empty state may render for as little as one commit, so read every mutation record.
     let sawEmpty = false
     const observer = new MutationObserver((records) => {
       for (const record of records) {
@@ -164,7 +168,7 @@ export const ClearingASearch: Story = {
     })
     observer.observe(document.body, { childList: true, subtree: true, characterData: true })
     await userEvent.clear(input)
-    await screen.findAllByTestId('delta-log-row')
+    await screen.findAllByTestId('delta-log-row', {}, WAIT)
     observer.disconnect()
     expect(sawEmpty).toBe(false)
   },
