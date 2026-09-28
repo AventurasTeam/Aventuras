@@ -84,6 +84,7 @@
   import { SvelteMap, SvelteSet } from 'svelte/reactivity'
   import { escapeHtml } from '$lib/utils/inlineImageParser'
   import { extractSentenceAt, expandRangeBidirectional } from '$lib/utils/text'
+  import { storyImageMode } from '$lib/utils/image'
 
   let { entry }: { entry: StoryEntry } = $props()
 
@@ -328,7 +329,7 @@
 
   const hasEmbeddedImages = $derived(embeddedImages.length > 0)
   const canGenerateStoryImages = $derived(
-    entry.type === 'narration' && story.currentStory?.settings?.imageGenerationMode === 'agentic',
+    entry.type === 'narration' && storyImageMode(story.currentStory?.settings) === 'agentic',
   )
   const storyImagesLabel = $derived(
     hasEmbeddedImages ? 'Images already generated' : 'Generate story images',
@@ -1339,7 +1340,7 @@
         presentCharacters: story.characters,
         referenceMode: story.currentStory.settings?.referenceMode ?? false,
         translatedNarrative: entry.translatedContent ?? undefined,
-        imageGenerationMode: story.currentStory.settings?.imageGenerationMode,
+        imageGenerationMode: storyImageMode(story.currentStory.settings),
         allCharacters: story.characters,
         imageSettings: settings.systemServicesSettings.imageGeneration,
         getImageProfile: (id: string) => settings.getImageProfile(id),

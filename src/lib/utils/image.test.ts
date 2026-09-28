@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import type { StorySettings } from '$lib/types'
 import {
   parseImageSpec,
   specFromPixels,
@@ -7,6 +8,8 @@ import {
   specToRatioString,
   expectedPixels,
   normalizeImageDataUrl,
+  savedImageMode,
+  storyImageMode,
   IMAGE_ORIENTATIONS,
   IMAGE_SIZE_TIERS,
 } from './image'
@@ -189,5 +192,29 @@ describe('normalizeImageDataUrl', () => {
 
   it('prefixes bare base64, which is how older saves stored it', () => {
     expect(normalizeImageDataUrl('AAA')).toBe('data:image/png;base64,AAA')
+  })
+})
+
+describe('savedImageMode and storyImageMode', () => {
+  it('return a current mode as saved', () => {
+    for (const mode of ['none', 'agentic', 'inline'] as const) {
+      expect(savedImageMode({ imageGenerationMode: mode })).toBe(mode)
+      expect(storyImageMode({ imageGenerationMode: mode })).toBe(mode)
+    }
+  })
+
+  it('treat a missing, older or unknown mode as no choice that generates as Text Only', () => {
+    const unset: Array<StorySettings | null | undefined> = [
+      undefined,
+      null,
+      {},
+      { imageGenerationMode: 'auto' } as unknown as StorySettings,
+      { imageGenerationMode: 'sometimes' } as unknown as StorySettings,
+      { inlineImageMode: true } as unknown as StorySettings,
+    ]
+    for (const settings of unset) {
+      expect(savedImageMode(settings)).toBeNull()
+      expect(storyImageMode(settings)).toBe('none')
+    }
   })
 })

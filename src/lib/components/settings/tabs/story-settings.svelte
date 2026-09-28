@@ -12,6 +12,7 @@
   import { Textarea } from '$lib/components/ui/textarea'
   import { Button } from '$lib/components/ui/button'
   import { Label } from '$lib/components/ui/label'
+  import { savedImageMode } from '$lib/utils/image'
 
   // Static — defined at module scope so they aren't re-created per component instance
   const KNOWN_VARIABLES = new Set([
@@ -250,7 +251,7 @@
     imageGenerationEnabled={imageGenEnabled}
     {backgroundImagesAvailable}
     {portraitReferenceAvailable}
-    imageGenerationMode={storySettings.imageGenerationMode ?? 'none'}
+    imageGenerationMode={savedImageMode(storySettings)}
     backgroundImagesEnabled={storySettings.backgroundImagesEnabled ?? false}
     referenceMode={storySettings.referenceMode ?? false}
     targetLength={storySettings.targetLength ?? 'dynamic'}

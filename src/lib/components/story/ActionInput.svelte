@@ -60,6 +60,7 @@
   } from '$lib/services/generation'
   import { InlineImageTracker } from '$lib/services/ai/image'
   import type { GenerationLease } from '$lib/utils/generationLease'
+  import { storyImageMode } from '$lib/utils/image'
 
   function log(...args: any[]) {
     console.log('[ActionInput]', ...args)
@@ -300,7 +301,7 @@
       generateImagesForNarrative: (ctx) =>
         aiService.generateImagesForNarrative({
           ...ctx,
-          imageGenerationMode: story.currentStory?.settings?.imageGenerationMode,
+          imageGenerationMode: storyImageMode(story.currentStory?.settings),
           allCharacters: story.characters,
           imageSettings: settings.systemServicesSettings.imageGeneration,
           getImageProfile: (id) => settings.getImageProfile(id),
@@ -517,7 +518,7 @@
     activeAbortController = new AbortController()
 
     const visualProseMode = story.currentStory.settings?.visualProseMode ?? false
-    const inlineImageMode = story.currentStory.settings?.imageGenerationMode === 'inline'
+    const inlineImageMode = storyImageMode(story.currentStory.settings) === 'inline'
     const streamingEntryId = crypto.randomUUID()
     const narrationEntryId = crypto.randomUUID()
 
@@ -614,7 +615,7 @@
         activationTracker,
         translationSettings: settings.translationSettings,
         imageSettings: {
-          imageGenerationMode: currentStoryRef.settings?.imageGenerationMode ?? 'agentic',
+          imageGenerationMode: storyImageMode(currentStoryRef.settings),
           backgroundImagesEnabled: currentStoryRef.settings?.backgroundImagesEnabled ?? false,
           referenceMode: currentStoryRef.settings?.referenceMode ?? false,
         },

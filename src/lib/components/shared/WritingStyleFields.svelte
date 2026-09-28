@@ -24,7 +24,8 @@
     backgroundImagesAvailable?: boolean
     /** Portrait or reference slot is usable. Defaults to `imageGenerationEnabled`. */
     portraitReferenceAvailable?: boolean
-    imageGenerationMode: ImageGenerationMode
+    /** `null` when the story holds no valid mode: nothing is selected and it runs as Text Only. */
+    imageGenerationMode: ImageGenerationMode | null
     backgroundImagesEnabled: boolean
     referenceMode: boolean
     targetLength?: TargetLength
@@ -353,7 +354,7 @@
     {/if}
 
     <RadioGroup.Root
-      value={imageGenerationMode}
+      value={imageGenerationMode ?? ''}
       onValueChange={(v) => onImageGenerationModeChange(v as ImageGenerationMode)}
       class="grid grid-cols-1 gap-4 md:grid-cols-3"
     >
@@ -380,6 +381,13 @@
         </div>
       {/each}
     </RadioGroup.Root>
+
+    {#if imageGenerationMode === null}
+      <p class="text-muted-foreground text-xs">
+        This story has no image mode set, or its saved mode isn't recognized. It runs as Text Only
+        until you choose one.
+      </p>
+    {/if}
 
     <!-- Extra Image Toggles -->
     <div class="grid grid-cols-1 gap-4 pt-2 md:grid-cols-2">

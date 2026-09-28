@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { ImageProfileSlot } from './imageUtils'
+import type { StorySettings } from '$lib/types'
 
 const state = {
   imageGeneration: {
@@ -113,6 +114,15 @@ describe('isImageGenerationEnabled', () => {
     // background is exempt from the story-level mode.
     expect(isImageGenerationEnabled({ imageGenerationMode: 'none' }, 'background')).toBe(true)
   })
+
+  it('treats a missing or unrecognised mode as none', () => {
+    setSlotIds('p-std', 'p-bg', null, null)
+
+    for (const storySettings of [{}, { imageGenerationMode: 'auto' } as unknown as StorySettings]) {
+      expect(isImageGenerationEnabled(storySettings, 'standard')).toBe(false)
+      expect(isImageGenerationEnabled(storySettings, 'background')).toBe(true)
+    }
+  })
 })
 
 describe('agreement between isImageGenerationEnabled and hasRequiredCredentials', () => {
@@ -150,7 +160,9 @@ describe('agreement between isImageGenerationEnabled and hasRequiredCredentials'
       it(`agree for ${slot} — ${scenario.name}`, () => {
         scenario.apply()
 
-        expect(isImageGenerationEnabled({}, slot)).toBe(hasRequiredCredentials(slot))
+        expect(isImageGenerationEnabled({ imageGenerationMode: 'agentic' }, slot)).toBe(
+          hasRequiredCredentials(slot),
+        )
       })
     }
   }
