@@ -172,7 +172,6 @@
   "delete": {
     "threadTitle": "Delete {{name}}?",
     "happeningTitle": "Delete {{name}}?",
-    "description": "You can undo this from the reader: Undo last action in its menu, or Cmd/Ctrl-Z.",
     "involvements_one": "{{count}} involvement",
     "involvements_other": "{{count}} involvements",
     "awareness_one": "{{count}} awareness record",

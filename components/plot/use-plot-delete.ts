@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 
-import type { DeleteConfirmCopy } from '@/components/compounds/delete-confirm-dialog'
+import { deleteUndoHint, type DeleteConfirmCopy } from '@/components/compounds/delete-confirm-copy'
 import { deleteRow, ROW_DELETE_REJECTION, type DbCtx } from '@/lib/actions'
 import type { Happening, Thread } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
@@ -20,23 +20,24 @@ export type PlotDeleteTarget =
 type LinkCounts = { involvements: number; awareness: number }
 
 export function plotDeleteCopy(target: PlotDeleteTarget, links: LinkCounts): DeleteConfirmCopy {
+  if (target.kind === 'thread') {
+    return {
+      title: t('plot:delete.threadTitle', { name: target.row.title }),
+      description: deleteUndoHint(),
+      impacts: [],
+      confirmLabel: t('plot:delete.confirmThread'),
+    }
+  }
   const impacts: string[] = []
   if (links.involvements > 0)
     impacts.push(t('plot:delete.involvements', { count: links.involvements }))
   if (links.awareness > 0) impacts.push(t('plot:delete.awareness', { count: links.awareness }))
-  return target.kind === 'thread'
-    ? {
-        title: t('plot:delete.threadTitle', { name: target.row.title }),
-        description: t('plot:delete.description'),
-        impacts: [],
-        confirmLabel: t('plot:delete.confirmThread'),
-      }
-    : {
-        title: t('plot:delete.happeningTitle', { name: target.row.title }),
-        description: t('plot:delete.description'),
-        impacts,
-        confirmLabel: t('plot:delete.confirmHappening'),
-      }
+  return {
+    title: t('plot:delete.happeningTitle', { name: target.row.title }),
+    description: deleteUndoHint(),
+    impacts,
+    confirmLabel: t('plot:delete.confirmHappening'),
+  }
 }
 
 /** A happening's committed link-row counts, scoped to this branch and this row. Threads have none. */
@@ -75,7 +76,7 @@ export function plotDeleteRejectionText(code: string | undefined): string {
 }
 
 /**
- * plot.md → Delete: the confirm, then the row's delete with its cascade (C3). The row leaving
+ * world.md → Delete: the confirm, then the row's delete with its cascade (C3). The row leaving
  * the store clears the selection; CTRL-Z in the reader brings it back.
  */
 export function usePlotDelete(branchId: string, ctx: DbCtx, guard: (proceed: () => void) => void) {

@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 
-import type { DeleteConfirmCopy } from '@/components/compounds/delete-confirm-dialog'
+import type { DeleteConfirmCopy } from '@/components/compounds/delete-confirm-copy'
 import { deleteEntityRow, deleteRow, type DbCtx, type RowDeleteResult } from '@/lib/actions'
 import type { Entity, Lore } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { deleteUndoHint } from '@/components/compounds/delete-confirm-copy'
 import { ENTITY_DELETE_CODES } from '@/lib/actions'
 import { emptyEntityState, type Entity, type Lore } from '@/lib/db'
 
@@ -54,8 +55,7 @@ describe('loreDeleteCopy', () => {
     const veil = { id: 'lore_veil', branchId: 'b1', title: 'The Veil' } as Lore
     expect(loreDeleteCopy(veil)).toEqual({
       title: 'Delete The Veil?',
-      description:
-        'You can undo this from the reader: Undo last action in its menu, or Cmd/Ctrl-Z.',
+      description: deleteUndoHint(),
       impacts: [],
       confirmLabel: 'Delete lore',
     })

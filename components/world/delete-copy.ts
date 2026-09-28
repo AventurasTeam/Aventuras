@@ -1,4 +1,4 @@
-import type { DeleteConfirmCopy } from '@/components/compounds/delete-confirm-dialog'
+import { deleteUndoHint, type DeleteConfirmCopy } from '@/components/compounds/delete-confirm-copy'
 import { ENTITY_DELETE_CODES } from '@/lib/actions'
 import type { Entity, Lore } from '@/lib/db'
 import { t } from '@/lib/i18n'
@@ -20,7 +20,7 @@ export function entityDeleteCopy(row: Entity, impact: EntityDeleteImpact): Delet
   if (impact.tailScene) impacts.push(t('world:delete.tailScene'))
   return {
     title: t('world:delete.entityTitle', { name: row.name }),
-    description: t('world:delete.description'),
+    description: deleteUndoHint(),
     impacts,
     confirmLabel: t(`world:delete.confirm.${row.kind}`),
   }
@@ -29,7 +29,7 @@ export function entityDeleteCopy(row: Entity, impact: EntityDeleteImpact): Delet
 export function loreDeleteCopy(row: Lore): DeleteConfirmCopy {
   return {
     title: t('world:delete.loreTitle', { name: row.title }),
-    description: t('world:delete.description'),
+    description: deleteUndoHint(),
     impacts: [],
     confirmLabel: t('world:delete.confirm.lore'),
   }

@@ -45,6 +45,7 @@ import {
   iconFromOption,
   iconOptionValue,
   issueLabel,
+  plotDeleteDisabledReason,
   plotIconOptions,
   plotMenuEntries,
 } from './plot-copy'
@@ -191,9 +192,7 @@ export function HappeningDetailPane({
                   ? undefined
                   : {
                       onDelete: () => onDelete(row),
-                      disabledReason: blocked
-                        ? (blockedReason ?? t('common:generationGate.inFlight'))
-                        : undefined,
+                      disabledReason: plotDeleteDisabledReason(blocked, blockedReason),
                     },
               )}
               disabled={row == null}

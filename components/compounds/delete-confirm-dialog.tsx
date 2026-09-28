@@ -14,15 +14,9 @@ import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
 
-export type DeleteConfirmCopy = {
-  /** Ends with `?` (alert-dialog.md → Copy contract). */
-  title: string
-  description: string
-  /** What goes with the row, one line each. */
-  impacts: readonly string[]
-  /** Verb-shaped: `Delete character`, never `OK`. */
-  confirmLabel: string
-}
+import type { DeleteConfirmCopy } from './delete-confirm-copy'
+
+export type { DeleteConfirmCopy } from './delete-confirm-copy'
 
 type DeleteConfirmDialogProps = DeleteConfirmCopy & {
   open: boolean

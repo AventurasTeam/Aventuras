@@ -31,6 +31,7 @@ import {
   categoryTailLabel,
   iconFromOption,
   iconOptionValue,
+  plotDeleteDisabledReason,
   plotIconOptions,
   plotMenuEntries,
   threadFieldLabel,
@@ -143,9 +144,7 @@ export function ThreadDetailPane({
                   ? undefined
                   : {
                       onDelete: () => onDelete(row),
-                      disabledReason: blocked
-                        ? (blockedReason ?? t('common:generationGate.inFlight'))
-                        : undefined,
+                      disabledReason: plotDeleteDisabledReason(blocked, blockedReason),
                     },
               )}
               disabled={row == null}

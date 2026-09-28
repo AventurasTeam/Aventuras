@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
+import { deleteUndoHint } from '@/components/compounds/delete-confirm-copy'
 import { emptyEntityState, type Entity, type StoryEntry } from '@/lib/db'
 
 import { entityDeleteCopy } from './delete-copy'
 import { entityDeleteImpact } from './delete-impact'
-
-const UNDO_DESCRIPTION =
-  'You can undo this from the reader: Undo last action in its menu, or Cmd/Ctrl-Z.'
 
 const mira = {
   id: 'char_mira',
@@ -54,7 +52,7 @@ describe('entityDeleteImpact', () => {
     })
     expect(entityDeleteCopy(mira, impact)).toEqual({
       title: 'Delete Mira?',
-      description: UNDO_DESCRIPTION,
+      description: deleteUndoHint(),
       impacts: [
         '2 awareness records',
         '1 happening involvement',

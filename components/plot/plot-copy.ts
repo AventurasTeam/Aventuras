@@ -1,4 +1,7 @@
-import type { OverflowMenuEntry } from '@/components/compounds/overflow-menu'
+import {
+  destructiveEntry,
+  type OverflowMenuEntry,
+} from '@/components/compounds/overflow-menu-entry'
 import type { SelectOption } from '@/components/ui/select'
 import { PLOT_REJECTION } from '@/lib/actions'
 import { t } from '@/lib/i18n'
@@ -87,17 +90,21 @@ type RemoveEntry = { onDelete: () => void; disabledReason?: string }
 
 /** The `Delete …` entry, or none while there's no row yet. */
 function deleteEntry(label: string, remove: RemoveEntry | undefined): OverflowMenuEntry[] {
-  if (remove == null) return []
-  return [
-    {
-      key: 'delete',
-      label,
-      destructive: true,
-      disabled: remove.disabledReason != null,
-      disabledReason: remove.disabledReason,
-      onPress: remove.onDelete,
-    },
-  ]
+  return destructiveEntry(
+    'delete',
+    label,
+    remove == null
+      ? undefined
+      : { onPress: remove.onDelete, disabledReason: remove.disabledReason },
+  )
+}
+
+/** Why `Delete thread`/`Delete happening` is unavailable, or undefined while it's available. */
+export function plotDeleteDisabledReason(
+  blocked: boolean,
+  blockedReason?: string,
+): string | undefined {
+  return blocked ? (blockedReason ?? t('common:generationGate.inFlight')) : undefined
 }
 
 export function plotMenuEntries(

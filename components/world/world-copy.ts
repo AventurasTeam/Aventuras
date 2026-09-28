@@ -1,4 +1,7 @@
-import type { OverflowMenuEntry } from '@/components/compounds/overflow-menu'
+import {
+  destructiveEntry,
+  type OverflowMenuEntry,
+} from '@/components/compounds/overflow-menu-entry'
 import { ENTITY_REJECTION, LEAD_REJECTION, type LeadRejectionCode } from '@/lib/actions'
 import type { WholeTierSpan } from '@/lib/calendar'
 import type { CharacterState, Entity, EntityKind } from '@/lib/db'
@@ -174,17 +177,13 @@ type RemoveEntry = { onDelete: () => void; disabledReason?: string }
 
 /** The `Delete …` entry both entity and lore menus share, or none while there's no row yet. */
 function deleteEntry(label: string, remove: RemoveEntry | undefined): OverflowMenuEntry[] {
-  if (remove == null) return []
-  return [
-    {
-      key: 'delete',
-      label,
-      destructive: true,
-      disabled: remove.disabledReason != null,
-      disabledReason: remove.disabledReason,
-      onPress: remove.onDelete,
-    },
-  ]
+  return destructiveEntry(
+    'delete',
+    label,
+    remove == null
+      ? undefined
+      : { onPress: remove.onDelete, disabledReason: remove.disabledReason },
+  )
 }
 
 /** world.md → Detail head structure. */

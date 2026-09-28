@@ -11,16 +11,7 @@ import { useTier } from '@/hooks/use-tier'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
-type OverflowMenuEntry = {
-  /** Stable identifier — the React key. */
-  key: string
-  label: string
-  disabled?: boolean
-  /** Web title tooltip, native inline hint, while disabled. */
-  disabledReason?: string
-  destructive?: boolean
-  onPress: () => void
-}
+import type { OverflowMenuEntry } from './overflow-menu-entry'
 
 type OverflowMenuProps = {
   /** The trigger's accessible name and the phone Sheet's aria label, e.g. `More actions`. */
