@@ -101,6 +101,8 @@ export type HappeningDetailPaneProps = {
   onSession: (handle: RowSessionHandle | null) => void
   /** A link row's `Open in World`; the route navigates through the session's leave guard. */
   onOpenEntity: (entity: Entity) => void
+  /** `⋯ → Delete happening`; the surface raises the confirm and owns the cascade. */
+  onDelete: (row: Happening) => void
   /** The host screen's focus state, for the save bar's Cmd/Ctrl-S. */
   hotkeysEnabled?: boolean
 }
@@ -122,6 +124,7 @@ export function HappeningDetailPane({
   onRejected,
   onSession,
   onOpenEntity,
+  onDelete,
   hotkeysEnabled = true,
 }: HappeningDetailPaneProps) {
   const values = useMemo(() => happeningDraftFrom(row, links), [row, links])
@@ -181,7 +184,18 @@ export function HappeningDetailPane({
           overflowMenu={
             <OverflowMenu
               label={t('plot:detail.menu.label')}
-              entries={plotMenuEntries('happening', () => setJsonOpen(true))}
+              entries={plotMenuEntries(
+                'happening',
+                () => setJsonOpen(true),
+                row == null
+                  ? undefined
+                  : {
+                      onDelete: () => onDelete(row),
+                      disabledReason: blocked
+                        ? (blockedReason ?? t('common:generationGate.inFlight'))
+                        : undefined,
+                    },
+              )}
               disabled={row == null}
             />
           }

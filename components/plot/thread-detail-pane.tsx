@@ -65,6 +65,8 @@ export type ThreadDetailPaneProps = {
   onRejected?: (reason: string) => void
   /** The surface routes row switches, `←`, segment switches and GO TO through this. */
   onSession: (handle: RowSessionHandle | null) => void
+  /** `⋯ → Delete thread`; the surface raises the confirm and owns the cascade. */
+  onDelete: (row: Thread) => void
   /** The host screen's focus state, for the save bar's Cmd/Ctrl-S. */
   hotkeysEnabled?: boolean
 }
@@ -83,6 +85,7 @@ export function ThreadDetailPane({
   onSaved,
   onRejected,
   onSession,
+  onDelete,
   hotkeysEnabled = true,
 }: ThreadDetailPaneProps) {
   const values = useMemo(() => threadDraftFrom(row), [row])
@@ -133,7 +136,18 @@ export function ThreadDetailPane({
           overflowMenu={
             <OverflowMenu
               label={t('plot:detail.menu.label')}
-              entries={plotMenuEntries('thread', () => setJsonOpen(true))}
+              entries={plotMenuEntries(
+                'thread',
+                () => setJsonOpen(true),
+                row == null
+                  ? undefined
+                  : {
+                      onDelete: () => onDelete(row),
+                      disabledReason: blocked
+                        ? (blockedReason ?? t('common:generationGate.inFlight'))
+                        : undefined,
+                    },
+              )}
               disabled={row == null}
             />
           }

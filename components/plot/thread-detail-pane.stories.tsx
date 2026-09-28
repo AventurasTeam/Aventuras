@@ -104,6 +104,7 @@ type HarnessProps = {
   initialTab?: ThreadTab
   onSave: (draft: ThreadDraft) => void
   onRejected: (reason: string) => void
+  onDelete: (row: Thread) => void
   /** What a leave requested through the pane's session handle runs once released. */
   onLeave: () => void
 }
@@ -123,6 +124,7 @@ function Harness({
   initialTab,
   onSave,
   onRejected,
+  onDelete,
   onLeave,
 }: HarnessProps) {
   const [row, setRow] = useState(initialRow)
@@ -188,6 +190,7 @@ function Harness({
         onSaved={onSaved}
         onRejected={onRejected}
         onSession={onSession}
+        onDelete={onDelete}
       />
     </View>
   )
@@ -197,7 +200,7 @@ const meta: Meta<typeof Harness> = {
   title: 'Compounds/Plot/ThreadDetailPane',
   component: Harness,
   parameters: { layout: 'padded' },
-  args: { row: AMULET, onSave: fn(), onRejected: fn(), onLeave: fn() },
+  args: { row: AMULET, onSave: fn(), onRejected: fn(), onDelete: fn(), onLeave: fn() },
   // The real db loader and React Query are unavailable in Storybook; a story opening History
   // overrides this with its own provider nested closer to the tree.
   decorators: [
@@ -525,7 +528,7 @@ export const LeaveGuard: Story = {
 }
 
 export const Menu: Story = {
-  play: async () => {
+  play: async ({ args }) => {
     await userEvent.click(await screen.findByRole('button', { name: 'More actions' }))
     const viewJson = await screen.findByRole('menuitem', { name: 'View raw JSON' })
     await waitFor(() => expect(viewJson).toBeVisible(), WAIT)
@@ -533,13 +536,23 @@ export const Menu: Story = {
     expect(
       screen.getByRole('menuitem', { name: 'Export thread as JSON, Lands in Slice 4.6' }),
     ).toHaveAttribute('aria-disabled', 'true')
-    expect(
-      screen.getByRole('menuitem', { name: 'Delete thread, Lands in Slice 4.2b' }),
-    ).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('menuitem', { name: 'Delete thread' })).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
 
     await userEvent.click(viewJson)
     expect(await screen.findByRole('button', { name: 'Close raw JSON viewer' }, WAIT)).toBeVisible()
     expect(screen.getByText(/"thread_amulet"/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Close raw JSON viewer' }))
+
+    await userEvent.click(await screen.findByRole('button', { name: 'More actions' }, WAIT))
+    const remove = await screen.findByRole('menuitem', { name: 'Delete thread' }, WAIT)
+    await waitFor(() => expect(remove).toBeVisible(), WAIT)
+    await userEvent.click(remove)
+    await expect(args.onDelete).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'thread_amulet' }),
+    )
   },
 }
 

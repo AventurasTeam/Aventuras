@@ -83,7 +83,28 @@ export function happeningIssueText(message: string): string {
     : t('plot:validation.inTab', { tab: happeningFieldLabel(tab), issue: text })
 }
 
-export function plotMenuEntries(kind: PlotKind, onViewJson: () => void): OverflowMenuEntry[] {
+type RemoveEntry = { onDelete: () => void; disabledReason?: string }
+
+/** The `Delete …` entry, or none while there's no row yet. */
+function deleteEntry(label: string, remove: RemoveEntry | undefined): OverflowMenuEntry[] {
+  if (remove == null) return []
+  return [
+    {
+      key: 'delete',
+      label,
+      destructive: true,
+      disabled: remove.disabledReason != null,
+      disabledReason: remove.disabledReason,
+      onPress: remove.onDelete,
+    },
+  ]
+}
+
+export function plotMenuEntries(
+  kind: PlotKind,
+  onViewJson: () => void,
+  remove?: RemoveEntry,
+): OverflowMenuEntry[] {
   return [
     {
       key: 'export',
@@ -96,17 +117,12 @@ export function plotMenuEntries(kind: PlotKind, onViewJson: () => void): Overflo
       onPress: () => {},
     },
     { key: 'json', label: t('plot:detail.menu.viewJson'), onPress: onViewJson },
-    {
-      key: 'delete',
-      label:
-        kind === 'thread'
-          ? t('plot:detail.menu.deleteThread')
-          : t('plot:detail.menu.deleteHappening'),
-      destructive: true,
-      disabled: true,
-      disabledReason: t('plot:detail.menu.deleteReason'),
-      onPress: () => {},
-    },
+    ...deleteEntry(
+      kind === 'thread'
+        ? t('plot:detail.menu.deleteThread')
+        : t('plot:detail.menu.deleteHappening'),
+      remove,
+    ),
   ]
 }
 
