@@ -42,6 +42,7 @@ import type {
   Character,
   EmbeddedImage,
   Entry,
+  ImageGenerationMode,
   ImageProfile,
   LoreChange,
   LoreManagementResult,
@@ -163,7 +164,7 @@ export interface ImageGenerationContext {
   translationLanguage?: string
   referenceMode: boolean
   /** Story-level image generation mode — supplied by caller to avoid store access */
-  imageGenerationMode?: string | null
+  imageGenerationMode: ImageGenerationMode
   /** All story characters — supplied by caller for portrait/reference lookups */
   allCharacters?: Character[]
   /** System image generation service settings — supplied by caller */
@@ -853,6 +854,11 @@ class AIService {
       hasTranslation: !!context.translatedNarrative,
       translationLanguage: context.translationLanguage,
     })
+
+    if (context.imageGenerationMode === 'none') {
+      log('Image generation off for this story')
+      return
+    }
 
     if (!this.isImageGenerationEnabled(undefined, 'standard')) {
       log('Image generation not enabled or not configured')

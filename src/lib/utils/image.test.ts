@@ -7,6 +7,7 @@ import {
   specToRatioString,
   expectedPixels,
   normalizeImageDataUrl,
+  storyImageMode,
   IMAGE_ORIENTATIONS,
   IMAGE_SIZE_TIERS,
 } from './image'
@@ -189,5 +190,18 @@ describe('normalizeImageDataUrl', () => {
 
   it('prefixes bare base64, which is how older saves stored it', () => {
     expect(normalizeImageDataUrl('AAA')).toBe('data:image/png;base64,AAA')
+  })
+})
+
+describe('storyImageMode', () => {
+  it.each(['none', 'agentic', 'inline'] as const)('returns a saved %s as is', (mode) => {
+    expect(storyImageMode({ imageGenerationMode: mode })).toBe(mode)
+  })
+
+  it.each([
+    ['no settings', null],
+    ['settings without a mode', {}],
+  ])('treats %s as Text Only', (_, settings) => {
+    expect(storyImageMode(settings)).toBe('none')
   })
 })

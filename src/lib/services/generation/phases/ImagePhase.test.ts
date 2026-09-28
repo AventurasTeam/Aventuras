@@ -83,13 +83,6 @@ describe('ImagePhase', () => {
       })
     })
 
-    it('reports agentic_generate_off for any other mode', async () => {
-      expect(await skipped({} as ImageInput['imageSettings'])).toEqual({
-        started: false,
-        skippedReason: 'agentic_generate_off',
-      })
-    })
-
     it('reports not_configured when no profile can serve standard images', async () => {
       const deps = makeDeps({ isImageGenerationEnabled: () => false })
 

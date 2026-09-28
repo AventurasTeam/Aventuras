@@ -5,6 +5,7 @@
   import { Input } from '$lib/components/ui/input'
   import { Switch } from '$lib/components/ui/switch'
   import { BookOpen, User, Eye, AlignLeft, Repeat } from '@lucide/svelte'
+  import { IMAGE_GENERATION_MODES } from '$lib/utils/storySettings'
   import type {
     POV,
     Tense,
@@ -24,7 +25,8 @@
     backgroundImagesAvailable?: boolean
     /** Portrait or reference slot is usable. Defaults to `imageGenerationEnabled`. */
     portraitReferenceAvailable?: boolean
-    imageGenerationMode: ImageGenerationMode
+    /** `null` when the story holds no valid mode: nothing is selected and it runs as Text Only. */
+    imageGenerationMode: ImageGenerationMode | null
     backgroundImagesEnabled: boolean
     referenceMode: boolean
     targetLength?: TargetLength
@@ -78,23 +80,21 @@
     disabledReason,
   }: Props = $props()
 
-  const IMAGE_MODES: { value: ImageGenerationMode; label: string; description: string }[] = [
-    {
-      value: 'none',
+  const IMAGE_MODE_TEXT: Record<ImageGenerationMode, { label: string; description: string }> = {
+    none: {
       label: 'Text Only',
       description: 'Pure text adventure. No images will be generated.',
     },
-    {
-      value: 'agentic',
+    agentic: {
       label: 'Agent Mode',
       description: 'AI decides when to generate images based on the story.',
     },
-    {
-      value: 'inline',
+    inline: {
       label: 'Inline Mode',
       description: 'Images are embedded directly in the text flow.',
     },
-  ]
+  }
+  const IMAGE_MODES = IMAGE_GENERATION_MODES.map((value) => ({ value, ...IMAGE_MODE_TEXT[value] }))
 
   const backgroundAvailable = $derived(backgroundImagesAvailable ?? imageGenerationEnabled)
   const portraitAvailable = $derived(portraitReferenceAvailable ?? imageGenerationEnabled)
@@ -353,7 +353,7 @@
     {/if}
 
     <RadioGroup.Root
-      value={imageGenerationMode}
+      value={imageGenerationMode ?? ''}
       onValueChange={(v) => onImageGenerationModeChange(v as ImageGenerationMode)}
       class="grid grid-cols-1 gap-4 md:grid-cols-3"
     >
@@ -380,6 +380,13 @@
         </div>
       {/each}
     </RadioGroup.Root>
+
+    {#if imageGenerationMode === null}
+      <p class="text-muted-foreground text-xs">
+        This story has no image mode set, or its saved mode isn't recognized. It runs as Text Only
+        until you choose one.
+      </p>
+    {/if}
 
     <!-- Extra Image Toggles -->
     <div class="grid grid-cols-1 gap-4 pt-2 md:grid-cols-2">

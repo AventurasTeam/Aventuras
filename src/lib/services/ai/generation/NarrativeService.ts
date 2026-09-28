@@ -18,6 +18,7 @@ import { templateEngine } from '$lib/services/templates/engine'
 import { createLogger } from '$lib/log'
 import { stripPicTags } from '$lib/utils/inlineImageParser'
 import { formatTimeSpan } from '$lib/utils/storyTime'
+import { storyImageMode } from '$lib/utils/image'
 import type { StreamChunk } from '../core/types'
 import type {
   Story,
@@ -318,7 +319,7 @@ export class NarrativeService {
 
     // Build the user prompt from entries
     const mode = story?.mode ?? 'adventure'
-    const inlineImageMode = story?.settings?.imageGenerationMode === 'inline'
+    const inlineImageMode = storyImageMode(story?.settings) === 'inline'
     const userPrompt = this.buildUserPrompt(entries, mode, inlineImageMode)
 
     try {
@@ -376,7 +377,7 @@ export class NarrativeService {
     )
 
     const mode = story?.mode ?? 'adventure'
-    const inlineImageMode = story?.settings?.imageGenerationMode === 'inline'
+    const inlineImageMode = storyImageMode(story?.settings) === 'inline'
     const userPrompt = this.buildUserPrompt(entries, mode, inlineImageMode)
 
     return generateNarrative({

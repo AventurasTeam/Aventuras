@@ -45,6 +45,7 @@ import {
   shippedTemplateStatements,
 } from '$lib/services/packs/replace-statements'
 import type { PackExport } from '$lib/services/packs/validation'
+import { readStorySettings } from '$lib/utils/storySettings'
 
 /**
  * A runtime variable's slot in an entity's metadata JSON.
@@ -2707,7 +2708,7 @@ class DatabaseService {
       mode: row.mode || 'adventure',
       createdAt: row.created_at,
       updatedAt: row.updated_at,
-      settings: row.settings ? JSON.parse(row.settings) : null,
+      settings: row.settings ? readStorySettings(JSON.parse(row.settings)) : null,
       memoryConfig: row.memory_config ? JSON.parse(row.memory_config) : null,
       retryState,
       styleReviewState: row.style_review_state ? JSON.parse(row.style_review_state) : null,

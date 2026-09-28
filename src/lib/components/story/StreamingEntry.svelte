@@ -6,6 +6,7 @@
   import ReasoningBlock from './ReasoningBlock.svelte'
   import { settings } from '$lib/stores/settings.svelte'
   import { replacePicTagsWithPlaceholders } from '$lib/utils/inlineImageParser'
+  import { storyImageMode } from '$lib/utils/image'
   import { activity } from '$lib/stores/activity.svelte'
   import { formatDuration, turnDuration } from '$lib/services/activity'
   import ActivityStatus from './ActivityStatus.svelte'
@@ -16,8 +17,7 @@
   // Check if streaming in Visual Prose mode
   let isVisualProse = $derived(ui.isVisualProseStreaming())
 
-  // Check if inline image mode is enabled
-  let inlineImageMode = $derived(story.currentStory?.settings?.imageGenerationMode === 'inline')
+  let inlineImageMode = $derived(storyImageMode(story.currentStory?.settings) === 'inline')
 
   // For Visual Prose, content is already wrapped HTML; for regular, parse as markdown
   // Also process <pic> tags to show generating placeholders when inline mode is enabled
