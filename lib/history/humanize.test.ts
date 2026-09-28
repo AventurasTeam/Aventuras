@@ -109,4 +109,19 @@ describe('humanizeDelta', () => {
       }).summary,
     ).toBe('Modified Common knowledge')
   })
+
+  it('lists a shared label once when two changed paths fall back to the same ancestor', () => {
+    const view = humanizeDelta(
+      delta({ undoPayload: { state: { visual: { customA: 'x', customB: 'y' } } } }),
+      context,
+    )
+    expect(view.fieldPath).toBe('state.visual.customA, state.visual.customB')
+    expect(view.summary).toBe('Modified Appearance')
+  })
+
+  it('falls back to "Modified" with no field path when an update carries no readable columns', () => {
+    const view = humanizeDelta(delta({ undoPayload: {} }), context)
+    expect(view.summary).toBe('Modified')
+    expect(view.fieldPath).toBeNull()
+  })
 })
