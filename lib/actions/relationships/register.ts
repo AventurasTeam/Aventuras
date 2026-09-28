@@ -128,8 +128,8 @@ async function bothPovOutcome(
   }
   if (columns.kind === null && columns.inverseKind === null)
     return { status: 'rejected', reason: 'a relationship needs at least one perspective' }
+  // An existing link implies both rows live: their deletes cascade it under this lock.
   if (!current) {
-    // An existing link implies both rows live: their deletes cascade it under this lock.
     const refs = [
       { table: 'entities', id: pair.aId },
       { table: 'entities', id: pair.bId },

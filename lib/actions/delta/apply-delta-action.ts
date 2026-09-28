@@ -213,9 +213,11 @@ type GroupArgs = { actionId: string; branchId: string; entryId?: string | null }
  * would build payloads from the same snapshot, so the later silently drops the earlier. The
  * second is rejected here rather than left to each caller to reason about.
  *
- * A third: a group must not both delete a row and create or delete a link naming it — the
- * live-row guard and the delete's cascade both read that same pre-group snapshot, so the guard
- * would see the row still there and the cascade would never learn of the link to sweep it.
+ * A third: a group must not both delete a row and create or delete a link naming it. Creating
+ * one races the same pre-group snapshot — the live-row guard would see the row still there, and
+ * the delete's cascade would never learn of the link to sweep it. Deleting one duplicates the
+ * cascade's own delete of that link, so the group logs it twice and undo tries to restore it
+ * twice — a primary-key conflict.
  */
 export async function applyDeltaActionGroup(
   actions: readonly PipelineAction[],

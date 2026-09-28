@@ -117,6 +117,39 @@ describe('link writers refuse a row that is gone', () => {
         },
       },
     },
+    // Every World Save relationship write sends inverseKind, routing through bothPovOutcome's
+    // own guard rather than the single-POV one above. The pair sorts by id, so one dead id
+    // before 'char_a' and one after exercise both pair.aId and pair.bId.
+    {
+      name: 'a two-view relationship naming a dead id sorted before the pair',
+      table: characterRelationships,
+      action: {
+        kind: 'upsertCharacterRelationship' as const,
+        source: 'periodic_classifier' as const,
+        payload: {
+          branchId: 'b1',
+          subjectId: 'a_gone',
+          objectId: 'char_a',
+          kind: 'brother',
+          inverseKind: 'sister',
+        },
+      },
+    },
+    {
+      name: 'a two-view relationship naming a dead id sorted after the pair',
+      table: characterRelationships,
+      action: {
+        kind: 'upsertCharacterRelationship' as const,
+        source: 'periodic_classifier' as const,
+        payload: {
+          branchId: 'b1',
+          subjectId: 'char_a',
+          objectId: 'char_gone',
+          kind: 'brother',
+          inverseKind: 'sister',
+        },
+      },
+    },
   ])('drops $name', async ({ action, table }) => {
     const result = await one(action)
     expect(result).toMatchObject({ status: 'rejected', code: 'noop' })
@@ -134,6 +167,29 @@ describe('a row alive on another branch does not satisfy the guard', () => {
       source: 'periodic_classifier',
       payload: {
         entry: { id: 'hinv_1', branchId: 'b1', happeningId: 'hap_1', entityId: 'char_only_b2' },
+      },
+    })
+    expect(result).toMatchObject({ status: 'rejected', code: 'noop' })
+    expect(await ctx.db.select().from(happeningInvolvements)).toEqual([])
+  })
+
+  it('refuses a happening id that exists only on a sibling branch', async () => {
+    await ctx.db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'fork', createdAt: 1 })
+    await ctx.db
+      .insert(happenings)
+      .values({
+        id: 'hap_only_b2',
+        branchId: 'b2',
+        title: 'Only on b2',
+        createdAt: 1,
+        updatedAt: 1,
+      })
+
+    const result = await one({
+      kind: 'createHappeningInvolvement',
+      source: 'periodic_classifier',
+      payload: {
+        entry: { id: 'hinv_1', branchId: 'b1', happeningId: 'hap_only_b2', entityId: 'char_a' },
       },
     })
     expect(result).toMatchObject({ status: 'rejected', code: 'noop' })

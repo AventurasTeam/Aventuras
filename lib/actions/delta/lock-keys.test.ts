@@ -111,7 +111,7 @@ function registerProbes(started: string[], gate: Promise<void>) {
       },
       deleteCharacterRelationship: record('deleteCharacterRelationship'),
       upsertHappeningAwareness: record('upsertHappeningAwareness'),
-      deleteHappening: record('deleteHappening'),
+      deleteHappeningInvolvement: record('deleteHappeningInvolvement'),
       createHappeningInvolvement: record('createHappeningInvolvement'),
     },
   })
@@ -193,7 +193,11 @@ describe('runner lock acquisition', () => {
           source: 'user_edit',
           payload: { branchId: 'b1', characterId: 'c1', happeningId: 'hap_1' },
         },
-        { kind: 'deleteHappening', source: 'user_edit', payload: { branchId: 'b1', id: 'hap_1' } },
+        {
+          kind: 'deleteHappeningInvolvement',
+          source: 'user_edit',
+          payload: { branchId: 'b1', id: 'hinv_1' },
+        },
       ],
       { actionId: 'act_1', branchId: 'b1' },
       ctx,
@@ -203,7 +207,7 @@ describe('runner lock acquisition', () => {
     expect(started).toEqual([
       'createHappeningInvolvement',
       'upsertHappeningAwareness',
-      'deleteHappening',
+      'deleteHappeningInvolvement',
     ])
   })
 })
