@@ -2823,6 +2823,18 @@ rule when this lands. Only `locales/en` ships.
 Parked 2026-09-27 from triage; the signal is the first non-English
 locale.
 
+#### History shows link-row edits
+
+A character's History tab omits relationship edits, and a happening's
+omits involvement / awareness edits, because those are deltas on the
+link row itself (`character_relationships`, `happening_involvements`,
+`happening_awareness`), keyed by the link row's own id, not the
+target's. The fix unions deltas of link rows naming the target — live
+rows plus delete payloads.
+
+Parked 2026-09-28 from 4.2b planning; the signal is a user asking
+where a relationship edit went.
+
 ### Code structure (parked)
 
 #### Unsaved-changes guard folder placement

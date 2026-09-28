@@ -492,6 +492,10 @@ prose, then hands pre-formatted strings to the compound.
 - **Load-older chunking** — log-shaped data; uses the
   [load-older pattern](../../patterns/lists.md#load-older--log-shaped-unbounded-lists)
   (explicit button), not virtualization.
+- **Reads the row's own deltas.** Relationship, awareness and
+  involvement edits are their link rows' deltas and don't show here
+  (parked).
+- **Rows aren't pressable in M4.** `entry #n` is meta text.
 
 Involvements table gets the same load-older pattern eventually; list
 pane is fine unpaginated for normal stories (filter chips + search
@@ -536,7 +540,6 @@ subject matter, not identity. `Body` matches the schema field name
 
 Mirrors the [entity detail head pattern](#detail-head-structure):
 
-- Breadcrumb strip: kind-icon + "Lore"
 - **Title** (inline-editable with pencil) — equivalent of the entity
   name slot. Edits dirty the save session.
 - **Recently-classified badge** — per

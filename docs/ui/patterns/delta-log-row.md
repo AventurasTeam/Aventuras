@@ -127,7 +127,8 @@ upgrades to the rich prose on populate. The pattern's
 
 Muted foreground (`text-fg-muted text-xs`), middle-dot separators:
 
-- **Source label** — compound owns the enum → label mapping:
+- **Source label** — compound owns the enum → label mapping, through
+  the `history` namespace's `source.*` keys (`t('history:source.<enum>')`):
   - `ai_classifier` → `classifier`
   - `piggyback_tagged_block` → `piggyback`
   - `per_turn_classifier` → `per-turn classifier`
@@ -152,15 +153,18 @@ Muted foreground (`text-fg-muted text-xs`), middle-dot separators:
 When `onPress` is undefined, the row is non-interactive (no
 hover, no press affordance).
 
+M4's History tabs pass no `onPress`: rows are read-only and
+`entry #n` is meta text, since the reader has no entry deep link
+yet (an M7.3 carried deferral).
+
 ## Storybook (DeltaLogRow)
 
 Live demos: each op color (create / update / delete), each
 source label, with-and-without `entryId`, with-and-without
 `fieldPath`, very long target name (truncation), very long
 summary (2-line ellipsis), non-interactive variant
-(`onPress` undefined). Belongs in
-`Patterns/History/DeltaLogRow` when component implementation
-begins.
+(`onPress` undefined). Lives at `Compounds/DeltaLogRow` (what
+shipped).
 
 ## What this design defers
 

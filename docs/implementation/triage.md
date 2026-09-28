@@ -75,3 +75,44 @@ slice-planning gate forces its resolution before that slice is planned.
   it for both; alternatively, turn admission could await
   `settleUserWrites()` first, as the prose-reversal barrier already
   does. Reasoned, not reproduced (2026-09-28, raised by 4.2b).
+- **HistoryTab reloads its first chunk on every `settleCount`
+  change.** Any run settling (any kind, any branch) collapses the
+  list to a spinner and drops the older chunks the user loaded, so
+  the scroll position jumps. Every delta writer checked patches the
+  target row after commit, so the row identity may already cover it —
+  checked by grep, not proven. Options: drop `settleCount` from the
+  version, or keep rows during a version-only reload and refetch up
+  to the loaded count. Read, not reproduced (2026-09-28, raised by
+  4.2b).
+- **`Button`'s `loading` state doesn't reach assistive tech on
+  web.** React Native Web drops `accessibilityState.busy`, so no
+  `aria-busy` renders. Seen testing History's Load older: the button
+  disables and shows a progressbar spinner, with nothing announcing
+  "busy" to a screen reader (2026-09-28, raised by 4.2b).
+- **Plot panes keep their tab when `[+] Blank` starts a create.**
+  Thread and happening panes hold the tab in
+  `useState(initialTab ?? 'overview')`, without the render-time
+  `createSeq` reset the entity panes' `useEntityTab` and the lore
+  pane have, so a Blank started from a row open on History lands on
+  History's "History starts at the first save" instead of Overview.
+  Pre-existing from 4.3 (2026-09-28, raised by 4.2b).
+- **Row save sessions leave Save enabled while an untouched field is
+  invalid.** react-hook-form's `onChange` validation merges only the
+  edited field's error, so `useRowSaveSession`'s `invalidReason`
+  stays null (its TSDoc says "null while the draft is writable") —
+  e.g. an entity or Plot create enables Save with an empty name after
+  editing another field; Save then refuses. The lore session runs a
+  one-shot whole-draft check on the first edit; lifting that into the
+  shared hook broke no test but shows errors on fields the user
+  hasn't touched, a product call (2026-09-28, raised by 4.2b).
+- **`LoreDetailPane` duplicates `EntityDetailFrame`.** The head, tab
+  list, menu and JSON viewer wiring, plus the tab-reset hook, are a
+  near-copy (~100 lines) of `EntityDetailFrame` / `useEntityTab`;
+  generalizing the frame would let menu changes (Delete lands on both
+  in 4.2b's PR 3) happen once (2026-09-28, raised by 4.2b).
+- **The lore body textarea doesn't fill the pane.** Canon
+  (world.md → Body tab — lore) and the slice say the body fills the
+  remaining height; it ships as a 12–40-row `EmbedWindowTextarea`,
+  because filling needs the shared `DetailPane` scroller to let
+  content grow (every pane, phone keyboard layout) (2026-09-28,
+  raised by 4.2b).
