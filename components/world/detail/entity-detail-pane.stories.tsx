@@ -3,12 +3,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
+import { HistoryLoaderProvider } from '@/components/history/history-loader'
+import { withQueryClient } from '@/components/history/with-query-client'
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import type { EntitySaveResult } from '@/lib/actions'
 import { EARTH_GREGORIAN } from '@/lib/calendar'
 import type { CharacterState, Entity, EntityKind } from '@/lib/db'
 import type { EntryIndex, EntryRef } from '@/lib/entry-refs'
+import type { HistoryChunk } from '@/lib/history'
 import type { EntitySaveInput, RelationshipLink } from '@/lib/world'
 
 import type { EntityInvolvement } from '../world-route-data'
@@ -334,6 +337,16 @@ const meta: Meta<typeof Harness> = {
     onOpenHappening: fn(),
     onSetLead: fn(),
   },
+  // The real db loader and React Query are unavailable in Storybook; a story opening History
+  // overrides this with its own provider nested closer to the tree.
+  decorators: [
+    (Story) => (
+      <HistoryLoaderProvider value={async () => ({ rows: [], nextCursor: null })}>
+        <Story />
+      </HistoryLoaderProvider>
+    ),
+    withQueryClient,
+  ],
 }
 export default meta
 type Story = StoryObj<typeof Harness>
@@ -669,6 +682,51 @@ export const CreateLocation: Story = {
     })
     await waitFor(() => expect(args.onSaved).toHaveBeenCalledWith('location_new'), WAIT)
     await expect(await screen.findByRole('button', { name: 'More actions' }, WAIT)).toBeEnabled()
+  },
+}
+
+const entityHistoryLoader = fn(async (): Promise<HistoryChunk> => ({ rows: [], nextCursor: null }))
+
+/** A create's History tab targets the saved row's id, not stale create-mode state. */
+export const CreateThenHistoryTargetsTheSavedRow: Story = {
+  args: { kind: 'location', row: null },
+  decorators: [
+    (Story) => (
+      <HistoryLoaderProvider value={entityHistoryLoader}>
+        <Story />
+      </HistoryLoaderProvider>
+    ),
+  ],
+  play: async ({ args }) => {
+    await userEvent.click(tab(/^History/))
+    await expect(
+      await screen.findByText('History starts at the first save', {}, WAIT),
+    ).toBeVisible()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Unnamed' }))
+    await userEvent.type(
+      await screen.findByPlaceholderText('Unnamed', {}, WAIT),
+      'The Salt Wells{Enter}',
+    )
+    await userEvent.click(
+      within(await screen.findByTestId('save-bar', {}, WAIT)).getByRole('button', {
+        name: /^Save/,
+      }),
+    )
+    await waitFor(() => expect(args.onSaved).toHaveBeenCalledWith('location_new'), WAIT)
+
+    await expect(await screen.findByText('No history yet', {}, WAIT)).toBeVisible()
+    await waitFor(
+      () =>
+        expect(entityHistoryLoader).toHaveBeenCalledWith(
+          expect.objectContaining({
+            branchId: 'br_1',
+            targetTable: 'entities',
+            targetId: 'location_new',
+          }),
+        ),
+      WAIT,
+    )
   },
 }
 

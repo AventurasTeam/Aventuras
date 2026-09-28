@@ -3,10 +3,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
+import { HistoryLoaderProvider } from '@/components/history/history-loader'
+import { withQueryClient } from '@/components/history/with-query-client'
 import type { RowSessionHandle } from '@/hooks/use-row-save-session'
 import type { PlotSaveResult } from '@/lib/actions'
 import type { Entity, Happening } from '@/lib/db'
 import type { EntryRef } from '@/lib/entry-refs'
+import type { HistoryChunk } from '@/lib/history'
 import { t } from '@/lib/i18n'
 import type { HappeningDraft, HappeningLinks } from '@/lib/plot'
 import type { RecentlyClassified } from '@/lib/row-signals'
@@ -292,6 +295,16 @@ const meta: Meta<typeof Harness> = {
     onOpenEntity: fn(),
     onLeave: fn(),
   },
+  // The real db loader and React Query are unavailable in Storybook; a story opening History
+  // overrides this with its own provider nested closer to the tree.
+  decorators: [
+    (Story) => (
+      <HistoryLoaderProvider value={async () => ({ rows: [], nextCursor: null })}>
+        <Story />
+      </HistoryLoaderProvider>
+    ),
+    withQueryClient,
+  ],
 }
 export default meta
 type Story = StoryObj<typeof Harness>
@@ -620,6 +633,47 @@ export const Create: Story = {
     expect(within(saved).getByRole('textbox', { name: 'Role' })).toHaveValue('actor')
     expect(tab('Involvements')).toHaveTextContent(/^Involvements\s*\(1\)$/)
     expect(pane().getByRole('button', { name: 'More actions' })).toBeEnabled()
+  },
+}
+
+const happeningHistoryLoader = fn(
+  async (): Promise<HistoryChunk> => ({ rows: [], nextCursor: null }),
+)
+
+/** A create's History tab targets the saved row's id, not stale create-mode state. */
+export const CreateThenHistoryTargetsTheSavedRow: Story = {
+  args: { row: null, links: NO_LINKS },
+  decorators: [
+    (Story) => (
+      <HistoryLoaderProvider value={happeningHistoryLoader}>
+        <Story />
+      </HistoryLoaderProvider>
+    ),
+  ],
+  play: async () => {
+    await openTab('History')
+    expect(await pane().findByText('History starts at the first save', {}, WAIT)).toBeVisible()
+
+    await userEvent.click(pane().getByRole('button', { name: 'Untitled' }))
+    await userEvent.type(
+      await pane().findByPlaceholderText('Untitled'),
+      'Smoke over the docks{Enter}',
+    )
+    await userEvent.click(await waitFor(() => saveButton(), WAIT))
+    await waitFor(() => expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument(), WAIT)
+
+    expect(await pane().findByText('No history yet', {}, WAIT)).toBeVisible()
+    await waitFor(
+      () =>
+        expect(happeningHistoryLoader).toHaveBeenCalledWith(
+          expect.objectContaining({
+            branchId: 'br_1',
+            targetTable: 'happenings',
+            targetId: NEW_ID,
+          }),
+        ),
+      WAIT,
+    )
   },
 }
 

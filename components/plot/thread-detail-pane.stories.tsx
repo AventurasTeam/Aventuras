@@ -9,6 +9,7 @@ import type { RowSessionHandle } from '@/hooks/use-row-save-session'
 import type { PlotSaveResult } from '@/lib/actions'
 import type { Thread } from '@/lib/db'
 import type { EntryIndex, EntryRef } from '@/lib/entry-refs'
+import type { HistoryChunk } from '@/lib/history'
 import type { ThreadDraft } from '@/lib/plot'
 import type { RecentlyClassified } from '@/lib/row-signals'
 
@@ -197,6 +198,16 @@ const meta: Meta<typeof Harness> = {
   component: Harness,
   parameters: { layout: 'padded' },
   args: { row: AMULET, onSave: fn(), onRejected: fn(), onLeave: fn() },
+  // The real db loader and React Query are unavailable in Storybook; a story opening History
+  // overrides this with its own provider nested closer to the tree.
+  decorators: [
+    (Story) => (
+      <HistoryLoaderProvider value={async () => ({ rows: [], nextCursor: null })}>
+        <Story />
+      </HistoryLoaderProvider>
+    ),
+    withQueryClient,
+  ],
 }
 export default meta
 type Story = StoryObj<typeof Harness>
@@ -534,16 +545,17 @@ export const Menu: Story = {
 
 /** A deep link's unknown `tab` falls back to Overview rather than an empty pane. */
 
-/** Phone: two tabs go to the Select's segment, not a tab strip. */
+const phoneHistoryLoader = fn(async (): Promise<HistoryChunk> => ({ rows: [], nextCursor: null }))
+
+/** Phone: two tabs go to the Select's segment, not a tab strip; History targets this thread. */
 export const Phone: Story = {
   globals: { viewport: { value: 'mobile1' } },
   decorators: [
     (Story) => (
-      <HistoryLoaderProvider value={async () => ({ rows: [], nextCursor: null })}>
+      <HistoryLoaderProvider value={phoneHistoryLoader}>
         <Story />
       </HistoryLoaderProvider>
     ),
-    withQueryClient,
   ],
   play: async () => {
     const segment = await waitFor(() => screen.getByRole('radiogroup', { name: 'Section' }), WAIT)
@@ -551,5 +563,12 @@ export const Phone: Story = {
     expect(within(segment).getByRole('radio', { name: 'Overview' })).toBeChecked()
     await userEvent.click(within(segment).getByRole('radio', { name: 'History' }))
     expect(await screen.findByText('No history yet', {}, WAIT)).toBeVisible()
+    await waitFor(
+      () =>
+        expect(phoneHistoryLoader).toHaveBeenCalledWith(
+          expect.objectContaining({ targetTable: 'threads', targetId: AMULET.id }),
+        ),
+      WAIT,
+    )
   },
 }
