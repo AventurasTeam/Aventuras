@@ -4,6 +4,7 @@ import type { Delta, SqlOp } from '@/lib/db'
 import { deltas, embeddedFieldsForTable, isEmbeddedSourceTable, rowsPerInsert } from '@/lib/db'
 
 import type { DbCtx } from '../types'
+import { vecSweepOps, vecTableLister } from './delete-cascade'
 import { applyUndoPayload, isPayloadMetaKey } from './delta-encoding'
 import { withKeyLocks } from './key-lock'
 import { resolveByTable, whereForDelta, type StorePatch } from './registry'
@@ -100,6 +101,7 @@ async function buildUndoOps(
   const absent = new Set<string>()
   const ops: SqlOp[] = []
   const patches: PatchEmission[] = []
+  const listVecTables = vecTableLister(ctx)
   const laterUserEdits = await userEditsOutliving(ctx, rows, readsUserEdits)
 
   for (const delta of rows) {
@@ -178,6 +180,10 @@ async function buildUndoOps(
       absent.add(key)
       tombstones.delete(key)
       emitDelete()
+      // retrieval.md → Compute lifecycle: a reversal deleting a row takes its vectors too.
+      ops.push(
+        ...(await vecSweepOps(delta.targetTable, delta.branchId, delta.targetId, listVecTables)),
+      )
       continue
     }
     if (delta.op === 'delete') {
