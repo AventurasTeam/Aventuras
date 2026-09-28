@@ -8,6 +8,7 @@ import {
   chapters,
   deltas,
   ensureVecTablesSql,
+  entities,
   happeningAwareness,
   happeningInvolvements,
   happenings,
@@ -203,6 +204,18 @@ describe('delete happening — link rows', () => {
       { id: 'hap_1', branchId: 'b1', title: 'Fire', createdAt: 1, updatedAt: 1 },
       { id: 'hap_1', branchId: 'b2', title: 'Fire', createdAt: 1, updatedAt: 1 },
     ])
+    await ctx.db.insert(entities).values(
+      ['b1', 'b2'].map((branchId) => ({
+        id: 'char_a',
+        branchId,
+        kind: 'character' as const,
+        name: 'Aria',
+        status: 'active' as const,
+        injectionMode: 'auto' as const,
+        createdAt: 1,
+        updatedAt: 1,
+      })),
+    )
     const involvementB1 = {
       id: 'hinv_1',
       branchId: 'b1',

@@ -760,6 +760,7 @@ describe('reverse-replay and embedding_stale', () => {
     happeningInvolvementsStore.hydrate('b1', [])
     happeningAwarenessStore.hydrate('b1', [])
     await apply(ctx, STALE_CASES_BY_KIND.happening.create, 'act_create')
+    await db.insert(entities).values(KNIGHT)
     await db.insert(happeningInvolvements).values({
       id: 'inv_1',
       branchId: 'b1',

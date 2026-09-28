@@ -11,6 +11,7 @@ import {
   entities,
   happeningAwareness,
   happeningInvolvements,
+  happenings,
   stories,
   translations,
   type Delta,
@@ -56,6 +57,9 @@ beforeEach(async () => {
   await ctx.db
     .insert(entities)
     .values([character('char_lead', 'b1', 'Kael'), character('char_x', 'b1', 'Mira')])
+  await ctx.db
+    .insert(happenings)
+    .values({ id: 'hap_1', branchId: 'b1', title: 'Fire', createdAt: 1, updatedAt: 1 })
   await ctx.db
     .insert(happeningInvolvements)
     .values({ id: 'hinv_1', branchId: 'b1', happeningId: 'hap_1', entityId: 'char_x' })

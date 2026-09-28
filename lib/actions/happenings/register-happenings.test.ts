@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import {
   branches,
   deltas,
+  entities,
   happenings,
   happeningInvolvements,
   happeningAwareness,
@@ -31,6 +32,16 @@ async function setup() {
   const { db, runInTransaction } = await createTestDb()
   await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
   await db.insert(branches).values({ id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 })
+  await db.insert(entities).values({
+    id: 'char_1',
+    branchId: 'br_1',
+    kind: 'character',
+    name: 'Kael',
+    status: 'active',
+    injectionMode: 'auto',
+    createdAt: 1,
+    updatedAt: 1,
+  })
   happeningsStore.__reset()
   happeningsStore.hydrate('br_1', [])
   happeningInvolvementsStore.__reset()

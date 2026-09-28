@@ -1,3 +1,5 @@
+import type { DatabaseSync } from 'node:sqlite'
+
 import { and, eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
@@ -10,12 +12,21 @@ import type { DbCtx } from '../types'
 // 8 cols → floor(32766/8)=4095 max rows/INSERT; 4200 rows forces a multi-statement restore.
 const AWARENESS_ROW_COUNT = 4200
 
+// The undo skips a link naming a missing row, so every aware character must exist.
+function seedCharacters(sqlite: DatabaseSync): void {
+  sqlite.exec(`
+    WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < ${AWARENESS_ROW_COUNT - 1})
+    INSERT INTO entities (id, branch_id, kind, name, status, injection_mode, created_at, updated_at)
+    SELECT 'char_' || i, 'b1', 'character', 'c', 'active', 'auto', 1, 1 FROM n`)
+}
+
 describe('reverse-replay of a delete cascade wider than the bind cap', () => {
   it('restores every child row across chunked statements', async () => {
-    const { db, runInTransaction } = await createTestDb()
+    const { db, sqlite, runInTransaction } = await createTestDb()
     const ctx: DbCtx = { db, runInTransaction }
     await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
     await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
+    seedCharacters(sqlite)
 
     const awareness = Array.from({ length: AWARENESS_ROW_COUNT }, (_, i) => ({
       id: `haw_${i}`,
@@ -70,10 +81,11 @@ describe('reverse-replay of a delete cascade wider than the bind cap', () => {
 
   it('restores every child row when the payload rows omit a defaulted column', async () => {
     // Binds per table column, not row key — a row-keys chunk size undercounts an omitted default.
-    const { db, runInTransaction } = await createTestDb()
+    const { db, sqlite, runInTransaction } = await createTestDb()
     const ctx: DbCtx = { db, runInTransaction }
     await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
     await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
+    seedCharacters(sqlite)
 
     const awareness = Array.from({ length: AWARENESS_ROW_COUNT }, (_, i) => ({
       id: `haw_${i}`,

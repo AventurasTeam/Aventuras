@@ -7,6 +7,29 @@ import { createdKey, type GroupScope, type HandlerOutcome } from './registry'
 
 export type LiveRef = { table: 'entities' | 'happenings'; id: string }
 
+const LINK_REF_COLUMNS: Record<string, readonly (readonly [string, LiveRef['table']])[]> = {
+  happening_involvements: [
+    ['happeningId', 'happenings'],
+    ['entityId', 'entities'],
+  ],
+  happening_awareness: [
+    ['happeningId', 'happenings'],
+    ['characterId', 'entities'],
+  ],
+  character_relationships: [
+    ['aId', 'entities'],
+    ['bId', 'entities'],
+  ],
+}
+
+/** The rows a link-table row names; none for any other table, or a row lacking the columns. */
+export function linkRefs(table: string, row: Record<string, unknown>): LiveRef[] {
+  return (LINK_REF_COLUMNS[table] ?? []).flatMap(([column, refTable]) => {
+    const id = row[column]
+    return typeof id === 'string' ? [{ table: refTable, id }] : []
+  })
+}
+
 async function exists(ctx: DbCtx, branchId: string, ref: LiveRef): Promise<boolean> {
   if (ref.table === 'entities') {
     const [row] = await ctx.db

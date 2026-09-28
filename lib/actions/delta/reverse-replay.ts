@@ -7,6 +7,7 @@ import type { DbCtx } from '../types'
 import { vecSweepOps, vecTableLister } from './delete-cascade'
 import { applyUndoPayload, isPayloadMetaKey } from './delta-encoding'
 import { withKeyLocks } from './key-lock'
+import { liveLinkFilter } from './live-link-filter'
 import { resolveByTable, whereForDelta, type StorePatch } from './registry'
 import { closeOverRemovedRows } from './row-closure'
 import { deltaLockKeys } from './row-locks'
@@ -103,6 +104,7 @@ async function buildUndoOps(
   const patches: PatchEmission[] = []
   const listVecTables = vecTableLister(ctx)
   const laterUserEdits = await userEditsOutliving(ctx, rows, readsUserEdits)
+  const liveLinks = await liveLinkFilter(rows, ctx)
 
   for (const delta of rows) {
     const entry = resolveByTable(delta.targetTable)
@@ -187,9 +189,10 @@ async function buildUndoOps(
     }
     if (delta.op === 'delete') {
       const full = (delta.undoPayload ?? {}) as Record<string, unknown>
-      const { children, cascadeKeys } = entry.restoreCascade
+      const { children: captured, cascadeKeys } = entry.restoreCascade
         ? entry.restoreCascade(full)
         : { children: [], cascadeKeys: [] }
+      const children = liveLinks(delta.branchId, captured)
 
       const rowData = { ...full }
       for (const key of Object.keys(rowData)) {
