@@ -302,7 +302,9 @@ describe('upsertVecOps with a source guard', () => {
   })
 
   it('writes nothing for a row deleted mid-embed', () => {
-    runOps(db, upsertVecOps(write('e2'), { fields: ['Mira', null] }))
+    // e1's own live text, not e2's — pins the guard's `id = ?`: a guard that
+    // matched on columns alone would find e1's row and land a vector for e2.
+    runOps(db, upsertVecOps(write('e2'), { fields: ['Kael', null] }))
     expect(ids()).toEqual([])
   })
 
