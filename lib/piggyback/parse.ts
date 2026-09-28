@@ -96,10 +96,8 @@ function assertNotTruncated(segment: string, extractedCount: number, tagLabel: s
   }
 }
 
-// characterStateSchema's visual fields cap at VISUAL_TEXT_MAX (data-model.md → Soft caps and
-// compaction discipline), and updateEntity re-validates the whole entity state on every write —
-// so an untruncated note here would fail an unrelated later write to this entity. Cut by UTF-16
-// code unit (Zod's `.length`), then trimmed one further unit if the cut lands mid-surrogate-pair.
+// updateEntity re-validates the whole state against the schema's cap, so an over-long note fails
+// every later write to this entity. Cut by UTF-16 unit (Zod's `.length`), never mid-surrogate.
 function truncateVisualText(text: string): string {
   if (text.length <= VISUAL_TEXT_MAX) return text
   const cut = text.slice(0, VISUAL_TEXT_MAX)
