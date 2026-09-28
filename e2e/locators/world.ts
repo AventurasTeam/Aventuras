@@ -110,4 +110,11 @@ export const world = {
 
   // Rows share one role and similar labels; the testID anchors counting them (testing.md → Selector strategy, Tier 3).
   historyRows: (page: Page): Locator => page.getByTestId('delta-log-row'),
+
+  // The ⋯ entry; a disabled one's accessible name carries its reason (common:disabledWithReason).
+  deleteEntityItem: (page: Page): Locator =>
+    page.getByRole('menuitem', { name: new RegExp(`^${t('world:detail.menu.deleteEntity')}`) }),
+  deleteDialog: (page: Page): Locator => page.getByRole('alertdialog'),
+  deleteConfirm: (page: Page, kind: 'character' | 'location' | 'item' | 'faction'): Locator =>
+    world.deleteDialog(page).getByRole('button', { name: t(`world:delete.confirm.${kind}`) }),
 }
