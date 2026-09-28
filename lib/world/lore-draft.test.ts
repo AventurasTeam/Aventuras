@@ -32,7 +32,7 @@ describe('loreDraftSchema', () => {
 })
 
 describe('loreActions', () => {
-  it('creates with trimmed text, normalized keywords and a blank category as null', () => {
+  it('creates with trimmed text, normalized keywords, cleaned tags and a blank category as null', () => {
     const [action] = loreActions({
       branchId: 'b1',
       row: null,
@@ -42,40 +42,88 @@ describe('loreActions', () => {
         body: ' A city. ',
         category: ' ',
         keywords: ['Vael', 'vael ', ' '],
+        tags: [' myth ', ''],
       },
       id: 'lore_2',
       now: 5,
     })
-    expect(action).toMatchObject({
+    expect(action).toEqual({
       kind: 'createLore',
       source: 'user_edit',
       payload: {
         entry: {
           id: 'lore_2',
+          branchId: 'b1',
           title: 'Vael',
           body: 'A city.',
           category: null,
+          injectionMode: 'auto',
+          priority: 0,
           keywords: ['Vael'],
+          tags: ['myth'],
           embeddingStale: 1,
+          createdAt: 5,
+          updatedAt: 5,
         },
       },
     })
   })
 
-  it('writes only the columns the draft changed, and nothing when none did', () => {
+  it('emits nothing when the draft equals the row', () => {
+    expect(
+      loreActions({ branchId: 'b1', row: ROW, draft: loreDraftFrom(ROW), id: ROW.id, now: 5 }),
+    ).toEqual([])
+  })
+
+  it('emits nothing when the committed title, body, category, tags and keywords carry whitespace or casing the draft normalizes away', () => {
+    const untrimmedRow: Lore = {
+      ...ROW,
+      title: '  The Aetherium ',
+      body: ' A sea of light.\n',
+      category: ' cosmology ',
+      tags: [' core '],
+      keywords: ['Aetherium', 'aetherium '],
+    }
+    expect(
+      loreActions({
+        branchId: 'b1',
+        row: untrimmedRow,
+        draft: loreDraftFrom(untrimmedRow),
+        id: untrimmedRow.id,
+        now: 5,
+      }),
+    ).toEqual([])
+  })
+
+  it('writes only the columns the draft changed', () => {
     const draft = loreDraftFrom(ROW)
-    expect(loreActions({ branchId: 'b1', row: ROW, draft, id: ROW.id, now: 5 })).toEqual([])
-    const [update] = loreActions({
-      branchId: 'b1',
-      row: ROW,
-      draft: { ...draft, body: 'A sea of dark.', priority: 10 },
-      id: ROW.id,
-      now: 5,
-    })
+    const changed = {
+      ...draft,
+      title: '  The Aetherium, Reborn  ',
+      body: ' A sea of dark. ',
+      category: ' ', // blank clears to null
+      keywords: ['Mana', 'mana ', 'Aetherium'], // internal duplicate + a real change
+      tags: ['core', ' myth ', ''],
+      injectionMode: 'always' as const,
+      priority: 42,
+    }
+    const [update] = loreActions({ branchId: 'b1', row: ROW, draft: changed, id: ROW.id, now: 5 })
     expect(update).toEqual({
       kind: 'updateLore',
       source: 'user_edit',
-      payload: { branchId: 'b1', id: 'lore_1', patch: { body: 'A sea of dark.' } },
+      payload: {
+        branchId: 'b1',
+        id: 'lore_1',
+        patch: {
+          title: 'The Aetherium, Reborn',
+          body: 'A sea of dark.',
+          category: null,
+          keywords: ['Mana', 'Aetherium'],
+          tags: ['core', 'myth'],
+          injectionMode: 'always',
+          priority: 42,
+        },
+      },
     })
   })
 })

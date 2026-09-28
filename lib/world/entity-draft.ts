@@ -43,6 +43,13 @@ export type RelationshipBaseLink = Omit<RelationshipLink, 'rowId'>
 const text = (max: number) => z.string().max(max, WORLD_ISSUE.tooLong)
 const list = z.array(z.string()).max(50, WORLD_ISSUE.tooLong)
 
+/** Shared by every draft schema with a priority column (entity, lore). */
+export const prioritySchema = z
+  .number({ error: WORLD_ISSUE.priorityRange })
+  .int(WORLD_ISSUE.priorityRange)
+  .min(0, WORLD_ISSUE.priorityRange)
+  .max(100, WORLD_ISSUE.priorityRange)
+
 const baseShape = {
   name: z.string().trim().min(1, WORLD_ISSUE.nameRequired),
   description: z.string(),
@@ -51,11 +58,7 @@ const baseShape = {
   injectionMode: z.enum(INJECTION_MODES),
   keywords: z.array(z.string()),
   tags: z.array(z.string()),
-  priority: z
-    .number({ error: WORLD_ISSUE.priorityRange })
-    .int(WORLD_ISSUE.priorityRange)
-    .min(0, WORLD_ISSUE.priorityRange)
-    .max(100, WORLD_ISSUE.priorityRange),
+  priority: prioritySchema,
 }
 
 export type EntityBaseDraft = z.infer<z.ZodObject<typeof baseShape>>

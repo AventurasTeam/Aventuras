@@ -5,6 +5,7 @@ import { INJECTION_MODES, type Lore, type NewLore } from '@/lib/db'
 import { dedupeTerms } from '@/lib/keyword-terms'
 
 import { blankToNull, cleanList, sameList } from './draft-text'
+import { prioritySchema } from './entity-draft'
 import { WORLD_ISSUE } from './issues'
 
 // world.md → Required body: the Body tab and create mode share this rule.
@@ -13,11 +14,7 @@ export const loreDraftSchema = z.object({
   body: z.string().trim().min(1, WORLD_ISSUE.bodyRequired),
   category: z.string(),
   injectionMode: z.enum(INJECTION_MODES),
-  priority: z
-    .number({ error: WORLD_ISSUE.priorityRange })
-    .int(WORLD_ISSUE.priorityRange)
-    .min(0, WORLD_ISSUE.priorityRange)
-    .max(100, WORLD_ISSUE.priorityRange),
+  priority: prioritySchema,
   keywords: z.array(z.string()),
   tags: z.array(z.string()),
 })
@@ -61,7 +58,7 @@ function lorePatch(row: Lore, draft: LoreDraft): LorePatch {
   if (category !== blankToNull(row.category ?? '')) patch.category = category
   if (draft.injectionMode !== row.injectionMode) patch.injectionMode = draft.injectionMode
   if (draft.priority !== row.priority) patch.priority = draft.priority
-  // C12: one vocabulary with the classifier's append path and matchTerms.
+  // Normalized as matchTerms reads them, so case/whitespace variants aren't edits.
   const keywords = dedupeTerms(draft.keywords)
   if (!sameList(keywords, dedupeTerms(row.keywords))) patch.keywords = keywords
   const tags = cleanList(draft.tags)
