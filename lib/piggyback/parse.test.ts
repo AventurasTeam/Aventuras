@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  emptyEntityState,
-  entityStateSchemaForKind,
-  VISUAL_TEXT_MAX as SCHEMA_VISUAL_TEXT_MAX,
-} from '@/lib/db'
+import { emptyEntityState, entityStateSchemaForKind, VISUAL_CATEGORIES } from '@/lib/db'
 import { MAX_EMITTED_QUERIES } from '@/lib/retrieval'
 
 import { parseStateBlock, parseSuggestionsBlock, stripTrailingBlocks } from './parse'
@@ -154,11 +150,24 @@ describe('parseStateBlock', () => {
       expect(note?.text).toBe('a'.repeat(499))
     })
 
-    // The cap lives in two modules that can't import each other (see VISUAL_TEXT_MAX in
-    // ./types.ts) — drift here means the parser truncates to a length the schema still rejects.
-    it('caps at the same length the schema enforces', () => {
-      expect(VISUAL_TEXT_MAX).toBe(SCHEMA_VISUAL_TEXT_MAX)
-    })
+    // Pins the schema cap to the parser's constant from the other side: a schema cap lower
+    // than VISUAL_TEXT_MAX would still fail updateEntity on a note the parser calls in-bounds.
+    it.each(VISUAL_CATEGORIES)(
+      'accepts %s at VISUAL_TEXT_MAX and rejects one character more',
+      (category) => {
+        const schema = entityStateSchemaForKind('character')
+        const atCap = {
+          ...emptyEntityState('character'),
+          visual: { [category]: 'a'.repeat(VISUAL_TEXT_MAX) },
+        }
+        const overCap = {
+          ...emptyEntityState('character'),
+          visual: { [category]: 'a'.repeat(VISUAL_TEXT_MAX + 1) },
+        }
+        expect(schema.safeParse(atCap).success).toBe(true)
+        expect(schema.safeParse(overCap).success).toBe(false)
+      },
+    )
   })
 
   it('isolates a truncated <transfers> segment without blocking sceneEntities', () => {

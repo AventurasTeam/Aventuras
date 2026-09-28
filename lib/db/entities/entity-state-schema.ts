@@ -29,17 +29,13 @@ export const VISUAL_CATEGORIES = [
   'distinguishing',
 ] as const
 
-// Zod degradation bound (data-model.md → Soft caps + compaction discipline) — much higher than
-// the classifier's own prompt-discipline soft caps; this just guards against pathological values.
-export const VISUAL_TEXT_MAX = 500
-
 const visualSchema = z.object({
-  physique: z.string().max(VISUAL_TEXT_MAX).optional(),
-  face: z.string().max(VISUAL_TEXT_MAX).optional(),
-  hair: z.string().max(VISUAL_TEXT_MAX).optional(),
-  eyes: z.string().max(VISUAL_TEXT_MAX).optional(),
-  attire: z.string().max(VISUAL_TEXT_MAX).optional(),
-  distinguishing: z.string().max(VISUAL_TEXT_MAX).optional(),
+  physique: z.string().max(500).optional(),
+  face: z.string().max(500).optional(),
+  hair: z.string().max(500).optional(),
+  eyes: z.string().max(500).optional(),
+  attire: z.string().max(500).optional(),
+  distinguishing: z.string().max(500).optional(),
 })
 
 // Drift guard, both directions. Kept a literal tuple rather than derived from the shape:
