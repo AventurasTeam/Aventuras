@@ -21,7 +21,7 @@
     "think": "internal monologue",
     "free": "no wrapping"
   },
-  "composerLeadMissing": "The story's lead no longer exists, so actions can't be written for them. Set a new lead in World.",
+  "composerLeadMissing": "The story's lead isn't on this branch, so actions can't be written for them. Set a new lead in World.",
   "suggestions": {
     "title": "Suggestions",
     "refresh": "Refresh suggestions",

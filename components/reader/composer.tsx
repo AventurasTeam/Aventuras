@@ -34,11 +34,16 @@ type ComposerProps = {
    * is not one).
    */
   sendBlocked?: boolean
-  /** Rendered under the composer when `disabled`; the Send hint in either case. */
+  /**
+   * Rendered under the composer when `disabled`; the Send hint in either case. Wins over
+   * `modesUnavailableReason` in the reason line when both are set.
+   */
   disabledReason?: string
   /**
    * Why do / say / think can't wrap right now (the lead the wrap names is gone). The picker
-   * disables with this reason and every send goes out as free text.
+   * disables with this reason (web tooltip + a11y hint) and every send goes out as free
+   * text; also rendered as the visible reason line so a sighted Android user — who never
+   * sees a web tooltip — isn't left with a greyed picker and no explanation.
    */
   modesUnavailableReason?: string
   onSend: (rawText: string, mode: ComposerMode) => void
@@ -141,6 +146,12 @@ export const Composer = forwardRef(function Composer(
   const canSend = text.trim().length > 0
   const sendDisabled = disabled || sendBlocked || !canSend
   const modesUsable = modesEnabled && modesUnavailableReason == null
+  const reasonLine =
+    disabled && disabledReason != null && disabledReason.length > 0
+      ? disabledReason
+      : modesUnavailableReason != null && modesUnavailableReason.length > 0
+        ? modesUnavailableReason
+        : undefined
 
   function handleSubmit() {
     if (!canSend) return
@@ -223,9 +234,9 @@ export const Composer = forwardRef(function Composer(
         </View>
       </View>
 
-      {disabled && disabledReason != null && disabledReason.length > 0 ? (
+      {reasonLine != null ? (
         <Text size="xs" variant="muted">
-          {disabledReason}
+          {reasonLine}
         </Text>
       ) : null}
     </View>

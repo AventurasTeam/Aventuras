@@ -86,21 +86,28 @@ export const LeadMissing: Story = {
   args: {
     modesEnabled: true,
     isGenerating: false,
-    modesUnavailableReason: "The story's lead no longer exists. Set a new lead in World.",
+    modesUnavailableReason:
+      "The story's lead isn't on this branch, so actions can't be written for them. Set a new lead in World.",
   },
   render: (args) => <Composer ref={leadMissingRef} {...args} />,
   play: async ({ args, canvasElement }) => {
-    // The trigger's accessible name is the label plus the selected option's text; with
-    // modes unusable the value falls back to 'free' ("Mode Free"), read off ModesVisible.
+    // renderTrigger's label + selected-option spans compose into a single accessible name
+    // with no separator ("Mode" + "Free" → "Mode Free"); the value stays gated to 'free'
+    // whatever the underlying draft mode is, so the name never becomes "Mode Do" below.
     const mode = await screen.findByRole('button', { name: 'Mode Free' })
     expect(mode).toHaveAttribute('aria-disabled', 'true')
     const input = canvasElement.querySelector('textarea')
     if (input == null) throw new Error('composer input not found')
     // Seed a non-free mode directly (the picker is inert while unavailable, so nothing in the
-    // UI can do this) — proves the send-time gate, not just the picker's own default, forces
-    // 'free': a dropped gate would leave this send going out as 'do'.
+    // UI can do this) — proves the picker's display gate and the send-time gate both hold
+    // against the underlying draft state, not just against the picker's own default.
     leadMissingRef.current?.restoreDraft('draw my blade', 'do')
     await waitFor(() => expect(input.value).toBe('draw my blade'))
+    expect(screen.getByRole('button', { name: 'Mode Free' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+    expect(screen.getByText(args.modesUnavailableReason as string)).toBeVisible()
     await userEvent.click(screen.getByRole('button', { name: 'Send' }))
     await waitFor(() => expect(args.onSend).toHaveBeenCalledWith('draw my blade', 'free'))
   },
