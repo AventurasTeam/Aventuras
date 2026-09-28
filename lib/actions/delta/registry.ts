@@ -39,6 +39,15 @@ export type CascadeDeleteOps = (
   children: Record<string, Record<string, unknown>[]>
 }>
 
+/**
+ * Rows created earlier in the same action group, as `createdKey`s — handlers read pre-group state.
+ */
+export type GroupScope = { readonly created: ReadonlySet<string> }
+
+export function createdKey(table: string, id: string): string {
+  return `${table}:${id}`
+}
+
 export type HandlerOutcome =
   // Deliberately a bare string: each action family funnels its OWN rejection vocabulary
   // through here, so a single union would couple taxonomies with no reason to agree.
@@ -51,12 +60,16 @@ export type HandlerOutcome =
       undoPayload: Record<string, unknown> | null
       ops: SqlOp[]
       patch: StorePatch | null
+      /** Rows a delete's cascade removed; the runner patches their stores after the commit. */
+      cascadePatches?: readonly { table: string; patch: StorePatch }[]
     }
 
 export type ActionHandler = (
   action: PipelineAction,
   branchId: string,
   ctx: DbCtx,
+  /** Present on the group path only. */
+  group?: GroupScope,
 ) => Promise<HandlerOutcome> | HandlerOutcome
 
 export type TableDescriptor = { table: SQLiteTable; idCol: SQLiteColumn; branchCol?: SQLiteColumn }
