@@ -54,6 +54,7 @@ export function HistoryTab({ branchId, targetTable, targetId }: HistoryTabProps)
       rows={rows}
       status={chunks.status}
       hasMore={chunks.hasMore}
+      filtered={search !== '' || op != null}
       search={searchInput}
       onSearchChange={setSearchInput}
       op={op}

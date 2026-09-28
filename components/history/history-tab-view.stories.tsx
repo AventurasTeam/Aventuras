@@ -48,7 +48,7 @@ const ROWS: HistoryRowView[] = [
 
 type HarnessProps = Omit<
   HistoryTabViewProps,
-  'search' | 'onSearchChange' | 'op' | 'onOpChange' | 'sort' | 'onSortChange'
+  'filtered' | 'search' | 'onSearchChange' | 'op' | 'onOpChange' | 'sort' | 'onSortChange'
 > & {
   onOp: (op: HistoryOp | null) => void
 }
@@ -61,6 +61,7 @@ function Harness(props: HarnessProps) {
     <View className="w-[520px]">
       <HistoryTabView
         {...props}
+        filtered={search.trim() !== '' || op != null}
         search={search}
         onSearchChange={setSearch}
         op={op}

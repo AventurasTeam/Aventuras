@@ -144,3 +144,24 @@ export const FiltersReachTheQuery: Story = {
     expect(queries.at(-1)?.op).toBeUndefined()
   },
 }
+
+/** Clearing a no-match search keeps "No changes match" until the unfiltered log arrives. */
+export const ClearingASearch: Story = {
+  args: { branchId: 'br_1', targetTable: 'threads', targetId: 'thread_amulet' },
+  play: async () => {
+    const input = await screen.findByPlaceholderText('Search fields, changes…')
+    await userEvent.type(input, 'zzz')
+    expect(await screen.findByText('No changes match')).toBeVisible()
+
+    // The wrong empty state would only flash for the debounce, so record every render of it.
+    let sawEmpty = false
+    const observer = new MutationObserver(() => {
+      if (document.body.textContent?.includes('No history yet')) sawEmpty = true
+    })
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+    await userEvent.clear(input)
+    await screen.findAllByTestId('delta-log-row')
+    observer.disconnect()
+    expect(sawEmpty).toBe(false)
+  },
+}

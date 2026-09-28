@@ -16,6 +16,8 @@ export type HistoryTabViewProps = {
   rows: readonly HistoryRowView[]
   status: HistoryStatus
   hasMore: boolean
+  /** A search or op filter is applied to `rows`, so an empty list reads as "no match". */
+  filtered: boolean
   search: string
   onSearchChange: (search: string) => void
   op: HistoryOp | null
@@ -28,10 +30,8 @@ export type HistoryTabViewProps = {
 
 type BodyProps = Pick<
   HistoryTabViewProps,
-  'rows' | 'status' | 'hasMore' | 'sort' | 'onLoadMore' | 'onRetry'
-> & {
-  filtered: boolean
-}
+  'rows' | 'status' | 'hasMore' | 'filtered' | 'sort' | 'onLoadMore' | 'onRetry'
+>
 
 function HistoryBody({ rows, status, hasMore, sort, onLoadMore, onRetry, filtered }: BodyProps) {
   if (status === 'loading')
@@ -78,6 +78,7 @@ export function HistoryTabView({
   rows,
   status,
   hasMore,
+  filtered,
   search,
   onSearchChange,
   op,
@@ -127,7 +128,7 @@ export function HistoryTabView({
         sort={sort}
         onLoadMore={onLoadMore}
         onRetry={onRetry}
-        filtered={search.trim() !== '' || op != null}
+        filtered={filtered}
       />
     </View>
   )
