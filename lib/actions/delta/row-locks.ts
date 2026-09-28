@@ -33,8 +33,8 @@ function isLockedTable(table: string): table is LockedTable {
 }
 
 /**
- * A delete of an entity, or a reversal that removes or restores one, touches rows naming it in
- * both link families.
+ * Both link-family keys: an entity delete holds them, and so does every reversal or redo of an
+ * entities delta — updates included, though only a removal or restore touches the row's links.
  */
 export function entityCascadeKeys(row: Pick<RowRef, 'branchId'>): RowLockKey[] {
   return [LOCK_BY_TABLE.character_relationships(row), happeningLinks(row)]

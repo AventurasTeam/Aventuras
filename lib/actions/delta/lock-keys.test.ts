@@ -158,7 +158,7 @@ describe('runner lock acquisition', () => {
     ])
   })
 
-  it('takes a key its group derives twice only once', async () => {
+  it('completes a group whose actions share a key', async () => {
     const ctx = await createTestDb()
     const started: string[] = []
     registerProbes(started, Promise.resolve())

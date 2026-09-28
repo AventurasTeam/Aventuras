@@ -105,7 +105,10 @@ export function lockKeysFor(action: PipelineAction): readonly RowLockKey[] {
   return isProductionAction(action) ? lockKeysOf(action.kind, action.payload) : []
 }
 
-function emitPatches(branchId: string, outcome: Extract<HandlerOutcome, { status: 'ok' }>): void {
+function emitOutcomePatches(
+  branchId: string,
+  outcome: Extract<HandlerOutcome, { status: 'ok' }>,
+): void {
   if (outcome.patch) resolveByTable(outcome.targetTable)?.patcher?.(branchId, outcome.patch)
   for (const child of outcome.cascadePatches ?? [])
     resolveByTable(child.table)?.patcher?.(branchId, child.patch)
@@ -174,7 +177,7 @@ async function applyDeltaActionUnlocked(args: Args, ctx: DbCtx): Promise<Mutatio
   undoRedoStore.clear()
 
   // Action layer owns the store mirror; the patcher branch-guards internally.
-  emitPatches(branchId, outcome)
+  emitOutcomePatches(branchId, outcome)
 
   // Read back by this delta's own id: a multi-delta action shares one actionId,
   // so an actionId lookup would return an arbitrary row's position.
@@ -255,7 +258,7 @@ async function applyDeltaActionGroupUnlocked(
       return { status: 'rejected', reason: outcome.reason, code: outcome.code }
     }
 
-    const rowKey = `${outcome.targetTable}:${outcome.targetId}`
+    const rowKey = createdKey(outcome.targetTable, outcome.targetId)
     const columns = outcome.patch?.op === 'update' ? Object.keys(outcome.patch.columns) : []
     const claimed = pendingColumns.get(rowKey) ?? new Set<string>()
     if (columns.some((column) => claimed.has(column)))
@@ -267,7 +270,7 @@ async function applyDeltaActionGroupUnlocked(
     pendingColumns.set(rowKey, claimed)
 
     prepared.push({ deltaId: generateId('delta'), source: action.source, outcome })
-    if (outcome.op === 'create') created.add(createdKey(outcome.targetTable, outcome.targetId))
+    if (outcome.op === 'create') created.add(rowKey)
   }
 
   if (prepared.length === 0) return { status: 'ok' }
@@ -279,6 +282,6 @@ async function applyDeltaActionGroupUnlocked(
 
   await ctx.runInTransaction(ops)
   undoRedoStore.clear()
-  for (const { outcome } of prepared) emitPatches(branchId, outcome)
+  for (const { outcome } of prepared) emitOutcomePatches(branchId, outcome)
   return { status: 'ok' }
 }
