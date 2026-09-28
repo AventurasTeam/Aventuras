@@ -11,7 +11,7 @@ import type { LoreSaveResult } from '@/lib/actions'
 import { logger } from '@/lib/diagnostics'
 import type { LoreDraft } from '@/lib/world'
 
-import { loreFieldLabel, saveFailureText, saveRejectionText, validationText } from './world-copy'
+import { loreFieldLabel, loreIssueText, saveFailureText, saveRejectionText } from './world-copy'
 
 type LoreRowSessionOptions = {
   /** Null in create mode. */
@@ -65,7 +65,7 @@ export function useLoreRowSession({
     values,
     resolver,
     fieldLabel: loreFieldLabel,
-    issueText: validationText,
+    issueText: loreIssueText,
     failureText: saveFailureText,
     commit,
     onRejected,

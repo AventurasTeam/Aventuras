@@ -19,6 +19,7 @@ import {
 
 import type { EntityPaneData } from './detail/entity-pane-props'
 import type { EntityTab } from './detail/entity-tabs'
+import type { LoreTab } from './detail/lore-detail-pane'
 
 /** A draft-schema issue message (a key) → its text; unknown messages pass through. */
 export function validationText(message: string): string {
@@ -48,6 +49,21 @@ export function entityIssueText(message: string): string {
   return tab == null
     ? text
     : t('world:validation.inTab', { tab: t(`world:detail.tabs.${tab}`), issue: text })
+}
+
+// The title is the head's name slot, on every tab, so its issue names no tab.
+const LORE_ISSUE_TAB: Partial<Record<WorldIssue, LoreTab>> = {
+  bodyRequired: 'body',
+  priorityRange: 'settings',
+}
+
+/** The lore save bar's notice, naming the tab an issue lives on as entityIssueText does. */
+export function loreIssueText(message: string): string {
+  const text = validationText(message)
+  const tab = isWorldIssue(message) ? LORE_ISSUE_TAB[message] : undefined
+  return tab == null
+    ? text
+    : t('world:validation.inTab', { tab: t(`world:lore.tabs.${tab}`), issue: text })
 }
 
 /** A refused save's user-facing text; the actions' own reasons are developer strings. */

@@ -176,12 +176,33 @@ export const EmptyBody: Story = {
   play: async ({ args }) => {
     await userEvent.clear(await screen.findByRole('textbox', { name: 'Body' }, WAIT))
     await waitFor(() => expect(saveButton()).toBeDisabled(), WAIT)
-    await expect(saveButton().closest('[title]')).toHaveAttribute('title', 'Lore needs a body.')
+    await expect(saveButton().closest('[title]')).toHaveAttribute(
+      'title',
+      'Body: Lore needs a body.',
+    )
     await expect(screen.getByText('Lore needs a body.')).toBeVisible()
-    // The shortcut skips the disabled button, so the bar's own gate is what refuses it.
+    // The Save shortcut can't write the invalid draft either.
     await userEvent.keyboard('{Control>}s{/Control}')
     await expect(args.onSave).not.toHaveBeenCalled()
     await expect(body()).toHaveValue('')
+  },
+}
+
+/** An issue on a tab the user has left names that tab on the save bar. */
+export const PriorityIssueNamesItsTab: Story = {
+  play: async () => {
+    await userEvent.click(await screen.findByRole('tab', { name: 'Settings' }, WAIT))
+    const priority = await screen.findByRole('textbox', { name: 'Priority' }, WAIT)
+    await userEvent.clear(priority)
+    await userEvent.type(priority, '150')
+    await userEvent.click(screen.getByRole('tab', { name: 'Body' }))
+    await expect(await screen.findByRole('textbox', { name: 'Body' }, WAIT)).toBeVisible()
+    const issue = 'Settings: Enter a whole number from 0 to 100.'
+    await waitFor(() => expect(saveButton()).toBeDisabled(), WAIT)
+    await expect(saveButton().closest('[title]')).toHaveAttribute('title', issue)
+    await expect(
+      within(screen.getByTestId('save-bar')).getByRole('button', { name: issue }),
+    ).toBeVisible()
   },
 }
 

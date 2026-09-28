@@ -101,7 +101,7 @@ describe('useLoreRowSession', () => {
       }),
     )
     await waitFor(() =>
-      expect(hook.result.current.session.invalidReason).toBe('Lore needs a body.'),
+      expect(hook.result.current.session.invalidReason).toBe('Body: Lore needs a body.'),
     )
   })
 

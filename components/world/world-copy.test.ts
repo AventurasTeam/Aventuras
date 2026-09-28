@@ -17,6 +17,7 @@ import {
   leadDisabledReason,
   leadRejectionText,
   loreFieldLabel,
+  loreIssueText,
   loreMenuEntries,
   relationshipDescription,
   saveRejectionText,
@@ -118,6 +119,13 @@ describe('labels and issues', () => {
     expect(loreFieldLabel('injectionMode')).toBe('Injection')
     expect(loreFieldLabel('body')).toBe('Body')
     expect(loreFieldLabel('unknown')).toBe('unknown')
+  })
+
+  it('names the lore tab an issue lives on; the head title names none', () => {
+    expect(loreIssueText('priorityRange')).toBe('Settings: Enter a whole number from 0 to 100.')
+    expect(loreIssueText('bodyRequired')).toBe('Body: Lore needs a body.')
+    expect(loreIssueText('titleRequired')).toBe('A title is required.')
+    expect(loreIssueText('Expected number, received nan')).toBe('Expected number, received nan')
   })
 
   it('names the tab a link-row or quantity issue lives on', () => {
