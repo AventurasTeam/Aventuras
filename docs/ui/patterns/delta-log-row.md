@@ -8,8 +8,7 @@ in
 [Entry mutability & rollback](../../data-model.md#entry-mutability--rollback))
 — op, target,
 field path (when applicable), pre-rendered diff summary, source,
-entry link, and timestamp. Read-only by design; rollback lives
-in the reader's per-entry path.
+entry link, and timestamp. Read-only by design.
 
 Sister patterns:
 
@@ -21,7 +20,7 @@ Sister patterns:
 Used by:
 
 - [World — history tab](../screens/world/world.md#history-tab) —
-  delta log filtered to one entity (or branch-scoped view).
+  delta log filtered to one entity.
 - [Plot — history tab](../screens/plot/plot.md#mobile-expression) —
   delta log filtered to threads and happenings.
 - [Diagnostics Hub · Delta log tab](../screens/diagnostics/diagnostics.md#tab-5--delta-log)
@@ -29,8 +28,8 @@ Used by:
   First consumer adopting the table-type `targetDisplayName`
   prefixing variant (`Entity · Kael`, `Thread · Iron Pact`, etc.);
   host wires `onPress` to open the [Raw JSON viewer Sheet](./data.md#raw-json-viewer--shared-modal-pattern)
-  with the row's `undo_payload`, diverging from World/Plot's
-  open-in-detail-pane wiring.
+  with the row's `undo_payload`, diverging from World's and Plot's
+  History tabs, which wire no press.
 - [Diagnostics Hub · Per-turn inspector — Deltas section](../screens/diagnostics/diagnostics.md#deltas-per-turn-inspector)
   — the deltas emitted during a turn (pipeline emissions +
   user-edit deltas), turn- or run-scoped; `source`-labeled per row,
@@ -136,9 +135,10 @@ Muted foreground (`text-fg-muted text-xs`), middle-dot separators:
   - `user_edit` → `user`
   - `lore_agent` → `lore agent`
   - `chapter_close` → `chapter close`
-- **Entry link** — `entry #<n>` when `entryId` non-null; omitted
-  when null. Host supplies the pre-formatted "entry #47" via the
-  entry's position.
+- **Entry ref** — `entry #<n>` when `entryId` non-null; omitted
+  when null. Plain meta text, not a link — see
+  [Click behavior](#click-behavior). Host supplies the
+  pre-formatted "entry #47" via the entry's position.
 - **Time** — `createdAtRelative` opaque.
 
 ## Click behavior
@@ -153,18 +153,19 @@ Muted foreground (`text-fg-muted text-xs`), middle-dot separators:
 When `onPress` is undefined, the row is non-interactive (no
 hover, no press affordance).
 
-M4's History tabs pass no `onPress`: rows are read-only and
-`entry #n` is meta text, since the reader has no entry deep link
-yet (an M7.3 carried deferral).
+World's and Plot's History tabs pass no `onPress`: rows are
+non-interactive. The target row is already open on the pane the
+tab lives in, and the entry link waits on the reader's entry deep
+link, an
+[M7 carried deferral](../../implementation/roadmap.md#m7--app-settings--diagnostics--onboarding).
 
 ## Storybook (DeltaLogRow)
 
-Live demos: each op color (create / update / delete), each
-source label, with-and-without `entryId`, with-and-without
+Live demos: each op color (create / update / delete), 5 of the 7
+source labels, with-and-without `entryId`, with-and-without
 `fieldPath`, very long target name (truncation), very long
 summary (2-line ellipsis), non-interactive variant
-(`onPress` undefined). Lives at `Compounds/DeltaLogRow` (what
-shipped).
+(`onPress` undefined). Lives at `Compounds/DeltaLogRow`.
 
 ## What this design defers
 

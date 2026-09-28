@@ -134,7 +134,10 @@ collision (see
 When it does, the surface refuses the save: **Save and the
 `Cmd/Ctrl-S` shortcut both disable**, and the reason renders in the
 same `⚠` slot the informational notes above use — a second kind of
-content for the one slot, not a second state.
+content for the one slot, not a second state. A detail pane with
+tabs (World's entity and lore panes) prefixes the reason with its
+tab name (`Settings: …`, `Body: …`) so the user can find the
+invalid field without hunting every tab.
 
 **The slot carries session state, not field consequences.** Both kinds
 of content it takes describe the session as a whole — this draft can't

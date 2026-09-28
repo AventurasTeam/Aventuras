@@ -57,10 +57,13 @@ Where it applies in v1:
 
 ### Load-older — log-shaped, unbounded lists
 
-Append behavior. Recent items render first; **`Load older` button**
-pulls the next chunk on explicit click. Never auto-loads on
-scroll-to-bottom — looking at recent context shouldn't trigger
-surprise loads of older content.
+Append behavior. Recent items render first under the default
+newest-first sort (a surface offering oldest-first, like History's
+Sort control, renders oldest first instead); **`Load older`
+button** (or `Load newer` under oldest-first) pulls the next chunk
+on explicit click. Never auto-loads on scroll-to-bottom — looking
+at recent context shouldn't trigger surprise loads of older
+content.
 
 Use when: shape is log-like (event stream, history, deltas), no
 meaningful total count, user reads recent and occasionally walks
@@ -166,7 +169,10 @@ scope. Same contract across all shapes:
   automatically as the story progresses. You can also add them
   manually with **+ New** below." For user-authored kinds:
   "Add one with **+ Add** below." For read-only tables (History):
-  "Edits and rollbacks will appear here as they happen."
+  "Every change to this row, by you or the memory pipeline,
+  appears here. History is read-only; undo lives in the reader."
+  A reversal (CTRL-Z, rollback) prunes the deltas it undoes, so an
+  entirely-undone row's History can return to this empty state.
 - **No CTA inside the placeholder.** The host surface already
   exposes the affordance (`+ New` footer, `+ Add involvement`
   button, etc.) — placeholder doesn't duplicate it. Keeps the

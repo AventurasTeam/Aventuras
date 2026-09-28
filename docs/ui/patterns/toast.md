@@ -31,8 +31,8 @@ Toasts deliberately do **not** cover:
 - **Reader peek lead change** — re-anchored narration is the
   feedback ([reader-composer.md](../screens/reader-composer/reader-composer.md)).
 - **Persistent errors** — banners.
-- **Undo affordance** — not a v1 UI pattern; rollback lives in the
-  History tab.
+- **Undo affordance** — not a v1 UI pattern; rollback happens in
+  the reader. History is read-only.
 
 ## Placement
 
