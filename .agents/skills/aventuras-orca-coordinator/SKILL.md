@@ -40,7 +40,7 @@ You are its only writer. Update it before acting and before every acknowledgemen
 Keep exactly one consuming wait, always in the background (`run_in_background`), then end your turn. You wake on a worker message or on a developer message.
 
 ```bash
-orca orchestration check --run <run> [--ack <delivery_id>] --wait --types "worker_done,escalation,question" --timeout-ms 3600000 --json
+orca orchestration check --run <run> [--ack <delivery_id>] --wait --types "worker_done,escalation,question" --timeout-ms 3300000 --json
 ```
 
 Never wait in the foreground; you would miss the developer. Read the output with `grep -v _keepalive`: Orca writes a keepalive line every 15 s. A wait that ends within seconds with an error is a failure to read and fix, not a timeout; don't restart it blindly.
