@@ -115,8 +115,8 @@ describe('parseStateBlock', () => {
     expect(result.failures).toEqual([])
   })
 
-  // Q1 (4.2b, developer decision 2026-09-28): truncate rather than drop, so an over-long note
-  // never blocks an unrelated later updateEntity write that re-validates the whole state.
+  // Truncate rather than drop: an over-long note must never block an unrelated later
+  // updateEntity write that re-validates the whole state.
   describe('<visual_changes> text cap', () => {
     const noteFor = (text: string) => {
       const raw = `<state><visual_changes><entity id="c1" type="physique">${text}</entity></visual_changes></state>`
