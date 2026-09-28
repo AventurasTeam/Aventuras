@@ -100,7 +100,7 @@ describe('useHistoryChunks', () => {
     expect(load).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: null }))
   })
 
-  it('reports loading, not the previous rows, as soon as the query or version changes', async () => {
+  it('shows loading with no rows while a changed query or version reloads (same-commit reset: ClearingASearch story)', async () => {
     const { load, calls } = manualLoader()
     const { hook, version } = setup(load)
     await waitFor(() => expect(calls).toHaveLength(1))
