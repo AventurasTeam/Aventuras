@@ -1,6 +1,7 @@
 import { Platform, Pressable, View } from 'react-native'
 
 import { Text } from '@/components/ui/text'
+import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 type DeltaOp = 'create' | 'update' | 'delete'
@@ -53,22 +54,13 @@ const OP_STYLES: Record<DeltaOp, { container: string; label: string }> = {
   delete: { container: 'bg-danger', label: 'text-danger-fg' },
 }
 
-const SOURCE_LABEL: Record<DeltaSource, string> = {
-  ai_classifier: 'classifier',
-  piggyback_tagged_block: 'piggyback',
-  per_turn_classifier: 'per-turn classifier',
-  periodic_classifier: 'periodic classifier',
-  user_edit: 'user',
-  lore_agent: 'lore agent',
-  chapter_close: 'chapter close',
-}
-
 export function DeltaLogRow({ delta, onPress, className }: DeltaLogRowProps) {
   const interactive = onPress != null
   const op = OP_STYLES[delta.op]
+  const opLabel = t(`history:op.${delta.op}`)
 
   const metaParts = [
-    SOURCE_LABEL[delta.source],
+    t(`history:source.${delta.source}`),
     delta.entryId != null ? delta.entryId : null,
     delta.createdAtRelative,
   ].filter((part): part is string => part != null)
@@ -78,7 +70,8 @@ export function DeltaLogRow({ delta, onPress, className }: DeltaLogRowProps) {
       onPress={interactive ? onPress : undefined}
       disabled={!interactive}
       accessibilityRole={interactive ? 'button' : undefined}
-      aria-label={`${delta.op} ${delta.targetDisplayName}`}
+      testID="delta-log-row"
+      aria-label={t('history:rowLabel', { op: opLabel, name: delta.targetDisplayName })}
       className={cn(
         'flex-row items-start gap-2.5 px-row-x-md py-row-y-md',
         interactive && 'active:bg-tint-press',
@@ -87,7 +80,7 @@ export function DeltaLogRow({ delta, onPress, className }: DeltaLogRowProps) {
       )}
     >
       <View className={cn('mt-0.5 shrink-0 rounded-full px-2 py-0.5', op.container)}>
-        <Text className={cn('text-xs font-medium', op.label)}>{delta.op}</Text>
+        <Text className={cn('text-xs font-medium', op.label)}>{opLabel}</Text>
       </View>
 
       <View className="min-w-0 flex-1 gap-0.5">
