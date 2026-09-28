@@ -301,7 +301,6 @@
       generateImagesForNarrative: (ctx) =>
         aiService.generateImagesForNarrative({
           ...ctx,
-          imageGenerationMode: storyImageMode(story.currentStory?.settings),
           allCharacters: story.characters,
           imageSettings: settings.systemServicesSettings.imageGeneration,
           getImageProfile: (id) => settings.getImageProfile(id),
@@ -518,7 +517,8 @@
     activeAbortController = new AbortController()
 
     const visualProseMode = story.currentStory.settings?.visualProseMode ?? false
-    const inlineImageMode = storyImageMode(story.currentStory.settings) === 'inline'
+    const imageMode = storyImageMode(story.currentStory.settings)
+    const inlineImageMode = imageMode === 'inline'
     const streamingEntryId = crypto.randomUUID()
     const narrationEntryId = crypto.randomUUID()
 
@@ -615,7 +615,7 @@
         activationTracker,
         translationSettings: settings.translationSettings,
         imageSettings: {
-          imageGenerationMode: storyImageMode(currentStoryRef.settings),
+          imageGenerationMode: imageMode,
           backgroundImagesEnabled: currentStoryRef.settings?.backgroundImagesEnabled ?? false,
           referenceMode: currentStoryRef.settings?.referenceMode ?? false,
         },

@@ -5,6 +5,7 @@
   import { Input } from '$lib/components/ui/input'
   import { Switch } from '$lib/components/ui/switch'
   import { BookOpen, User, Eye, AlignLeft, Repeat } from '@lucide/svelte'
+  import { IMAGE_GENERATION_MODES } from '$lib/utils/storySettings'
   import type {
     POV,
     Tense,
@@ -79,23 +80,21 @@
     disabledReason,
   }: Props = $props()
 
-  const IMAGE_MODES: { value: ImageGenerationMode; label: string; description: string }[] = [
-    {
-      value: 'none',
+  const IMAGE_MODE_TEXT: Record<ImageGenerationMode, { label: string; description: string }> = {
+    none: {
       label: 'Text Only',
       description: 'Pure text adventure. No images will be generated.',
     },
-    {
-      value: 'agentic',
+    agentic: {
       label: 'Agent Mode',
       description: 'AI decides when to generate images based on the story.',
     },
-    {
-      value: 'inline',
+    inline: {
       label: 'Inline Mode',
       description: 'Images are embedded directly in the text flow.',
     },
-  ]
+  }
+  const IMAGE_MODES = IMAGE_GENERATION_MODES.map((value) => ({ value, ...IMAGE_MODE_TEXT[value] }))
 
   const backgroundAvailable = $derived(backgroundImagesAvailable ?? imageGenerationEnabled)
   const portraitAvailable = $derived(portraitReferenceAvailable ?? imageGenerationEnabled)

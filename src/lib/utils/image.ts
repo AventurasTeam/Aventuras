@@ -216,20 +216,7 @@ export function describeImageSpec(spec: ImageSpec): string {
   return `${spec.orientation} ${spec.size} (${width}x${height})`
 }
 
-const IMAGE_GENERATION_MODES: readonly ImageGenerationMode[] = ['none', 'agentic', 'inline']
-
-/**
- * The story's saved image mode, or `null` when it is missing or not a current mode (values
- * from older versions included). For presentation: a `null` here is shown as no choice.
- */
-export function savedImageMode(
-  settings: StorySettings | null | undefined,
-): ImageGenerationMode | null {
-  const mode = settings?.imageGenerationMode
-  return mode && IMAGE_GENERATION_MODES.includes(mode) ? mode : null
-}
-
-/** The image mode a story generates under. Every reader that acts on the mode goes through this. */
+/** The image mode a story generates under: its saved mode, or Text Only when none is chosen. */
 export function storyImageMode(settings: StorySettings | null | undefined): ImageGenerationMode {
-  return savedImageMode(settings) ?? 'none'
+  return settings?.imageGenerationMode ?? 'none'
 }

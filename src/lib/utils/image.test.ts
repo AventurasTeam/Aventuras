@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest'
-import type { StorySettings } from '$lib/types'
 import {
   parseImageSpec,
   specFromPixels,
@@ -8,7 +7,6 @@ import {
   specToRatioString,
   expectedPixels,
   normalizeImageDataUrl,
-  savedImageMode,
   storyImageMode,
   IMAGE_ORIENTATIONS,
   IMAGE_SIZE_TIERS,
@@ -195,26 +193,15 @@ describe('normalizeImageDataUrl', () => {
   })
 })
 
-describe('savedImageMode and storyImageMode', () => {
-  it('return a current mode as saved', () => {
-    for (const mode of ['none', 'agentic', 'inline'] as const) {
-      expect(savedImageMode({ imageGenerationMode: mode })).toBe(mode)
-      expect(storyImageMode({ imageGenerationMode: mode })).toBe(mode)
-    }
+describe('storyImageMode', () => {
+  it.each(['none', 'agentic', 'inline'] as const)('returns a saved %s as is', (mode) => {
+    expect(storyImageMode({ imageGenerationMode: mode })).toBe(mode)
   })
 
-  it('treat a missing, older or unknown mode as no choice that generates as Text Only', () => {
-    const unset: Array<StorySettings | null | undefined> = [
-      undefined,
-      null,
-      {},
-      { imageGenerationMode: 'auto' } as unknown as StorySettings,
-      { imageGenerationMode: 'sometimes' } as unknown as StorySettings,
-      { inlineImageMode: true } as unknown as StorySettings,
-    ]
-    for (const settings of unset) {
-      expect(savedImageMode(settings)).toBeNull()
-      expect(storyImageMode(settings)).toBe('none')
-    }
+  it.each([
+    ['no settings', null],
+    ['settings without a mode', {}],
+  ])('treats %s as Text Only', (_, settings) => {
+    expect(storyImageMode(settings)).toBe('none')
   })
 })

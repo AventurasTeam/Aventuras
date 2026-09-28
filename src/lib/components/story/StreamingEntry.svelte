@@ -17,7 +17,6 @@
   // Check if streaming in Visual Prose mode
   let isVisualProse = $derived(ui.isVisualProseStreaming())
 
-  // Check if inline image mode is enabled
   let inlineImageMode = $derived(storyImageMode(story.currentStory?.settings) === 'inline')
 
   // For Visual Prose, content is already wrapped HTML; for regular, parse as markdown

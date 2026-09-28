@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { ImageProfileSlot } from './imageUtils'
-import type { StorySettings } from '$lib/types'
 
 const state = {
   imageGeneration: {
@@ -115,13 +114,11 @@ describe('isImageGenerationEnabled', () => {
     expect(isImageGenerationEnabled({ imageGenerationMode: 'none' }, 'background')).toBe(true)
   })
 
-  it('treats a missing or unrecognised mode as none', () => {
+  it('treats a story with no mode as none', () => {
     setSlotIds('p-std', 'p-bg', null, null)
 
-    for (const storySettings of [{}, { imageGenerationMode: 'auto' } as unknown as StorySettings]) {
-      expect(isImageGenerationEnabled(storySettings, 'standard')).toBe(false)
-      expect(isImageGenerationEnabled(storySettings, 'background')).toBe(true)
-    }
+    expect(isImageGenerationEnabled({}, 'standard')).toBe(false)
+    expect(isImageGenerationEnabled({}, 'background')).toBe(true)
   })
 })
 

@@ -30,7 +30,7 @@ export interface BackgroundImageDependencies {
 /** Settings needed for image phase decision making */
 export interface BackgroundImageSettings {
   backgroundImagesEnabled?: boolean
-  imageGenerationMode?: ImageGenerationMode
+  imageGenerationMode: ImageGenerationMode
 }
 
 /** Input for the image phase */
