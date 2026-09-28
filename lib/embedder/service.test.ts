@@ -731,8 +731,7 @@ describe('embedRowsToVecOps — per-kind guard against a source row that moved o
 
     const rows = loadStale(sqlite, 'b1')
     const { ops } = await embedRowsToVecOps(cfg, rows, async (sql) => void sqlite.exec(sql))
-    // A user edit landing after assembly read the row but before this commit —
-    // the guard must see it and refuse the insert.
+    // A user edit landing after assembly but before commit — the guard must refuse the insert.
     for (const kind of KINDS) {
       const column = KIND_COLUMNS[kind][1]
       sqlite
@@ -766,9 +765,8 @@ describe('embedRowsToVecOps — per-kind guard against a source row that moved o
     seedKindRows(sqlite, 'b1', true)
     seedKindRows(sqlite, 'b2', false)
 
-    // b2 is embedded first so the assertion below can fail: the DELETE half of
-    // b1's upsert is scoped to branch_id too, not just id — an unscoped delete
-    // would remove this same-id row on the other branch.
+    // b2 embeds first so this can fail: the upsert's DELETE half is scoped to branch_id too, not
+    // just id — unscoped, it would delete this same-id row on the other branch.
     const b2 = await embedRowsToVecOps(
       cfg,
       loadStale(sqlite, 'b2'),

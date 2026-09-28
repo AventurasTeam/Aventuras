@@ -12,10 +12,8 @@ import { commitRowDelete, ROW_DELETE_REJECTION, type RowDeleteResult } from './d
 export const ENTITY_DELETE_CODES = { ...ROW_DELETE_REJECTION, ...ENTITY_DELETE_REJECTION } as const
 
 /**
- * world.md → Delete: the entity with its link rows and vectors, every other entity's ref to it, and
- * the tail scene's mention, under one `action_id`. Holds the tail's metadata lock as the scene
- * editor does, so the scene drop can't race a scene edit. The outer read only picks the lock key;
- * the locked body re-reads the tail once granted and refuses if it moved in the meantime.
+ * world.md → Delete. Holds the tail's metadata lock like the scene editor, so the drop can't race
+ * a scene edit — the locked body re-reads the tail and refuses if it moved since locking.
  */
 export async function deleteEntityRow(
   branchId: string,
@@ -43,9 +41,8 @@ async function deleteEntityLocked(
     })
     return { status: 'rejected', reason: 'tail moved', code: ROW_DELETE_REJECTION.inFlight }
   }
-  // The store read, the plan build and commitRowDelete's synchronous in-flight check must run
-  // with no await between them, or a hard-gate run finishing in that window commits over a
-  // working-set snapshot it has since staled.
+  // Store read, plan build, and commitRowDelete's in-flight check must run with no await between
+  // them — a hard-gate run finishing in that gap would commit over a staled snapshot.
   const branchEntities = [...entitiesStore.getEntities().values()].filter(
     (e) => e.branchId === branchId,
   )

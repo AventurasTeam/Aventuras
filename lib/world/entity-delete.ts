@@ -33,8 +33,8 @@ function without(ids: readonly string[] | undefined, id: string): string[] | nul
 }
 
 /**
- * The stored state with every ref to `id` cleared, or null when none named it. Reads through
- * `stateOf`, not the raw `state`, so a legacy row missing a key still produces a schema-valid patch.
+ * Reads through `stateOf`, not raw `state`: a legacy row missing a key still produces a
+ * schema-valid patch.
  */
 function stateWithout(entity: Entity, id: string): EntityState | null {
   switch (entity.kind) {
@@ -108,11 +108,9 @@ function tailActions(branchId: string, tail: DeleteTail | null, id: string): Pip
 }
 
 /**
- * world.md → Delete: one merged `state` patch per referencing entity, the tail mention, then the
- * delete last — handlers read pre-group state, so order doesn't matter.
- *
- * Replaces the whole `state` from this snapshot, so a `state` write landing in between is lost: safe
- * only while nothing that runs alongside user edits writes `state` (the periodic classifier doesn't).
+ * world.md → Delete order: handlers read pre-group state, so patch/tail/delete order doesn't matter.
+ * Replaces the whole `state` from this snapshot, so a write landing in between is lost — safe only
+ * while nothing else writes `state` alongside user edits (the periodic classifier doesn't).
  */
 export function entityDeleteActions({
   branchId,

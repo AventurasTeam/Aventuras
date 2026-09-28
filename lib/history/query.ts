@@ -31,13 +31,11 @@ function likePattern(term: string): string {
   return `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
 }
 
-// json_type, not json_extract: json_extract can't distinguish an absent path from one
-// whose pre-change value was JSON null (the write set it FROM null) — both read as SQL NULL.
+// json_type, not json_extract — json_extract can't tell an absent path from a stored JSON null.
 function fieldSearchCondition(term: string, labelPaths: readonly string[]): SQL {
   const paths = new Set(labelPaths)
   if (PATH_TERM.test(term)) paths.add(term)
-  // A delete's undo payload is the full pre-delete row, so every column would read as
-  // present; gating on op=update keeps this arm to "does the change touch this field".
+  // op=update gate: a delete's payload is the full row, so every field would else match.
   return and(
     eq(deltas.op, 'update'),
     or(
@@ -49,8 +47,7 @@ function fieldSearchCondition(term: string, labelPaths: readonly string[]): SQL 
   ) as SQL
 }
 
-// world.md's scopeSummary: a term also matches an op whose rendered label (raw name,
-// filter chip, or summary text) contains it, so searching the summary's wording works.
+// world.md → scopeSummary: term also matches an op via its rendered label (name/chip/summary).
 function searchCondition(term: string, labelPaths: readonly string[]): SQL {
   const ops = new Set(opsMatchingLabel(term))
   const lowered = term.toLowerCase()

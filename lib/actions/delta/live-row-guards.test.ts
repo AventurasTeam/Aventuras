@@ -117,9 +117,8 @@ describe('link writers refuse a row that is gone', () => {
         },
       },
     },
-    // Every World Save relationship write sends inverseKind, routing through bothPovOutcome's
-    // own guard rather than the single-POV one above. The pair sorts by id, so one dead id
-    // before 'char_a' and one after exercise both pair.aId and pair.bId.
+    // World Save relationship writes always send inverseKind, hitting bothPovOutcome's own guard,
+    // not the single-POV one above; the pair sorts by id, so the two cases below hit both sides.
     {
       name: 'a two-view relationship naming a dead id sorted before the pair',
       table: characterRelationships,

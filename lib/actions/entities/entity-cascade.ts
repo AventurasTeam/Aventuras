@@ -17,10 +17,7 @@ function byIds<T extends { id: string }>(
   return rows.length === 0 ? [] : [build(rows.map((row) => row.id))]
 }
 
-/**
- * C3's entity cascade: the three FK-less link tables, the entity's own translations, the
- * removed relationships' translations, and every vector.
- */
+/** milestone.md → C3 entity cascade: link tables + translations + vectors. */
 export const entityCascade: CascadeDeleteOps = async (branchId, id, ctx) => {
   const involvements = await ctx.db
     .select()

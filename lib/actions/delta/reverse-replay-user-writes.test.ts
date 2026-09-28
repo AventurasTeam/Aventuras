@@ -87,8 +87,8 @@ async function kael(db: Db) {
   return row
 }
 
-// For tests that write a relationship directly, without routing either side through
-// createKael — the live-row guard needs both entities to exist first.
+// Seeds both entities directly, bypassing createKael — the live-row guard needs both to exist
+// before a relationship write.
 async function seedChars(db: Db): Promise<void> {
   await db.insert(entities).values([KAEL, { ...KAEL, id: 'char_mira', name: 'Mira' }])
 }

@@ -61,7 +61,7 @@ function summary(delta: Delta, table: HistoryTable): string {
     : t('history:summary.modified', { fields: labels.join(', ') })
 }
 
-/** The C4 host humanizer: M4's interim summary from `undo_payload` keys (M6.4's cache upgrades it). */
+/** Humanizes a delta to a display row, from `undo_payload` keys (C4). */
 export function humanizeDelta(delta: Delta, context: HumanizeContext): HistoryRowView {
   const paths = changedPaths(delta)
   return {

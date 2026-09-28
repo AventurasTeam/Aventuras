@@ -103,10 +103,8 @@ export function pathsMatchingLabel(table: HistoryTable, term: string): string[] 
     .map(([path]) => path)
 }
 
-// Every rendered spelling of an op: its raw name, its filter-chip label, and the summary
-// text the humanizer prints for it — a search over the rendered summary must find them all.
-// `summary.modified` is excluded: unrendered ("Modified {{fields}}"), it would match any
-// term found in "fields" or "{{" — modifiedUnknown ("Modified") already covers the word.
+// Every rendered spelling of an op (name, filter label, summary) that a search must match.
+// `summary.modified` is excluded — unrendered "{{fields}}" would false-match; modifiedUnknown covers it.
 const OP_LABELS: Record<Delta['op'], () => string[]> = {
   create: () => [
     t('history:op.create'),
@@ -125,8 +123,7 @@ const OP_LABELS: Record<Delta['op'], () => string[]> = {
   ],
 }
 
-// Word-start, not substring-anywhere: "date" must not hit "upDATEd", "eat" must not hit
-// "crEATed", "let" must not hit "deLETed" — all real labels, all single words today.
+// Word-start match only — "eat"/"date"/"let" must not hit "created"/"updated"/"deleted".
 function startsWithWord(label: string, needle: string): boolean {
   return label
     .toLocaleLowerCase()

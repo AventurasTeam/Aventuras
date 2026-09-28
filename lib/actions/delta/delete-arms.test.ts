@@ -197,8 +197,7 @@ describe.each(CASES)('delete $kind', ({ family, translationKind, insert, remove,
 
 describe('delete happening — link rows', () => {
   it('scopes the cascade to the branch, mirrors both link stores, and logs one delta', async () => {
-    // b2 shares every id with b1 (story, happening, involvement, awareness) so a cascade
-    // that drops its branch filter reads or deletes the sibling's rows instead of the target's.
+    // b2 shares every id with b1 so a branch-filter-dropping cascade would hit the sibling's rows.
     await ctx.db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'm2', createdAt: 1 })
     await ctx.db.insert(happenings).values([
       { id: 'hap_1', branchId: 'b1', title: 'Fire', createdAt: 1, updatedAt: 1 },

@@ -7,8 +7,7 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { reverseAndPruneDeltaRows } from './reverse-replay'
 import type { DbCtx } from '../types'
 
-// happening_awareness has 8 columns; floor(32766 / 8) = 4095 rows is the most one INSERT can
-// bind, so 4200 rows forces the restore across more than one statement.
+// 8 cols → floor(32766/8)=4095 max rows/INSERT; 4200 rows forces a multi-statement restore.
 const AWARENESS_ROW_COUNT = 4200
 
 describe('reverse-replay of a delete cascade wider than the bind cap', () => {
@@ -70,8 +69,7 @@ describe('reverse-replay of a delete cascade wider than the bind cap', () => {
   })
 
   it('restores every child row when the payload rows omit a defaulted column', async () => {
-    // drizzle binds one value per TABLE column, not per key on the row object — a chunk size
-    // read off a row's own keys undercounts whenever a defaulted column is left out of it.
+    // Binds per table column, not row key — a row-keys chunk size undercounts an omitted default.
     const { db, runInTransaction } = await createTestDb()
     const ctx: DbCtx = { db, runInTransaction }
     await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })

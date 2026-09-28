@@ -95,8 +95,7 @@ function vectorCount(): number {
 }
 
 beforeEach(async () => {
-  // A failing race test can otherwise leave a hard-gate run or a stale hook state that
-  // cascades rejections into every test that runs after it.
+  // A failing race test can leave a stale hard-gate run or hook state, cascading into later tests.
   headTurnHook.calls = 0
   headTurnHook.onSecond = null
   generationStore.__reset()

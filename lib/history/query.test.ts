@@ -29,9 +29,8 @@ function delta(
   }
 }
 
-// A delete's undo payload is the full pre-delete row (docs/data-model.md → Delta storage
-// economy) — every entity column, including createdAt/updatedAt, echoing "create" and a
-// state.traits key. Regression fixture for the op=update gate on the field-search arm.
+// Full pre-delete row (data-model.md → Delta storage economy), incl. a state.traits key —
+// regression fixture pinning the op=update gate so field-search skips this delete echo.
 const FULL_ROW_DELETE_PAYLOAD = {
   id: 'char_1',
   branchId: 'b1',

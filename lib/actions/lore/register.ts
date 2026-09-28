@@ -113,8 +113,7 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
       reason: `update patch for lore ${bid}:${id} has no updatable fields`,
     }
 
-  // Unchanged columns are dropped, not recorded: History reads an undo payload's keys as the
-  // fields a write changed.
+  // Unchanged columns are dropped: History reads an undo payload's keys as fields that changed.
   const set: Record<string, unknown> = {}
   const undoPayload: Record<string, unknown> = {}
   for (const col of named) {

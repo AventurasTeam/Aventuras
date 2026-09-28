@@ -145,8 +145,7 @@ describe('deleteEntity', () => {
   })
 
   it('scopes the cascade to the branch, leaving a sibling branch untouched, and undoes without a PK conflict', async () => {
-    // b2 shares every id with b1 (entities, link rows, relationship, translations) so a cascade
-    // that drops its branch filter reads or deletes the sibling's rows instead of the target's.
+    // b2 shares every id with b1, so a missing branch filter would leak into the sibling's rows.
     await ctx.db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'm2', createdAt: 1 })
     await ctx.db
       .insert(entities)
@@ -299,8 +298,7 @@ describe('deleteEntity', () => {
   })
 
   it('cascades a relationship where the deleted entity is the aId side, and restores it on undo', async () => {
-    // Pairs store aId < bId (char_rel_canonical_order); char_x sits on the aId side here,
-    // pinning the `or(aId, bId)` cascade's other arm.
+    // Pairs store aId < bId; char_x on the aId side here pins the `or(aId, bId)` cascade's other arm.
     await ctx.db.insert(entities).values(character('char_z', 'b1', 'Zed'))
     const pair2 = {
       id: 'rel_2',
@@ -353,9 +351,8 @@ describe('deleteEntity', () => {
   })
 
   it('scopes the lead lookup to the target branch, ignoring another story that claims char_x as lead', async () => {
-    // s2/b3's own lead really is char_x; b1's lead is char_lead. Dropping the branch filter on
-    // the lead lookup makes it read whichever row the unfiltered join returns first, instead
-    // of the target branch's own row.
+    // s2/b3's lead really is char_x; b1's is char_lead — dropping the branch filter on the lead
+    // lookup would read whichever row the unfiltered join returns first, not the target's own.
     await ctx.db.insert(stories).values({
       id: 's2',
       title: 'T2',

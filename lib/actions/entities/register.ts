@@ -264,8 +264,7 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
   if (!current)
     return { status: 'rejected', reason: `delete target entities ${bid}:${id} not found` }
-  // Interim until the lead is per-branch and delta-logged (M6 deferral): deleting it would
-  // dangle the story-level lead pointer.
+  // Interim: lead isn't per-branch/delta-logged yet (M6) — deleting it would dangle the pointer.
   if (await isStoryLead(ctx, bid, id))
     return {
       status: 'rejected',

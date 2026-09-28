@@ -202,22 +202,16 @@ export type DeltaGroupResult =
 type GroupArgs = { actionId: string; branchId: string; entryId?: string | null }
 
 /**
- * Commits several actions under one actionId as a SINGLE transaction, so a rejection
- * anywhere in the group leaves nothing behind. Sequential `applyDeltaAction` calls
- * cannot give that: each commits on its own, so a caller learns of a failure only once
- * the earlier writes are durable and the stores are patched.
+ * Commits actions under one actionId in a single transaction — a rejection anywhere leaves nothing
+ * behind, unlike sequential `applyDeltaAction` calls, which each commit on their own.
  *
- * Handlers run before the transaction opens, so every one reads pre-group state. Two
- * consequences bind callers: an action cannot read a row an earlier action in the group
- * creates (its `GroupScope` only names it), and two actions writing one row's same column
- * would build payloads from the same snapshot, so the later silently drops the earlier. The
- * second is rejected here rather than left to each caller to reason about.
+ * Handlers run before the transaction opens and read pre-group state: an action can't read an
+ * earlier one's created row (only `GroupScope` names it); a same-column double-write on one row
+ * is rejected here rather than left to callers.
  *
- * A third: a group must not both delete a row and create or delete a link naming it. Creating
- * one races the same pre-group snapshot — the live-row guard would see the row still there, and
- * the delete's cascade would never learn of the link to sweep it. Deleting one duplicates the
- * cascade's own delete of that link, so the group logs it twice and undo tries to restore it
- * twice — a primary-key conflict.
+ * A group must not both delete a row and create/delete a link naming it: creating races the
+ * live-row guard past the pre-group snapshot; deleting double-logs the cascade's own delete,
+ * hitting a primary-key conflict when undo restores it twice.
  */
 export async function applyDeltaActionGroup(
   actions: readonly PipelineAction[],

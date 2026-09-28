@@ -124,8 +124,7 @@ const run = (action: PipelineAction, ctx: Awaited<ReturnType<typeof createTestDb
   applyDeltaAction({ action, actionId: `act_${action.kind}`, branchId: 'b1' }, ctx)
 
 describe('runner lock acquisition', () => {
-  // registerProbes swaps in fakes under real domain kinds; later tests in this file need the
-  // real handlers back.
+  // registerProbes swaps in fakes; later tests need the real handlers restored.
   afterEach(() => {
     __resetRegistry()
     __resetRegistrationGuard()
