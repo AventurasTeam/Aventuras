@@ -1,12 +1,7 @@
 import type { PipelineAction } from '@/lib/actions'
-import {
-  emptyEntityState,
-  type CharacterState,
-  type Entity,
-  type EntityState,
-  type ItemState,
-  type LocationState,
-} from '@/lib/db'
+import type { Entity, EntityState } from '@/lib/db'
+
+import { heldItems, stateOf } from './entity-draft'
 
 export type DeleteTail = {
   id: string
@@ -33,21 +28,20 @@ export type EntityDeletePlan = {
   tailScene: boolean
 }
 
-function storedState(entity: Entity): EntityState {
-  return (entity.state ?? emptyEntityState(entity.kind)) as EntityState
-}
-
 function without(ids: readonly string[] | undefined, id: string): string[] | null {
   return ids != null && ids.includes(id) ? ids.filter((other) => other !== id) : null
 }
 
-/** The stored state with every ref to `id` cleared, or null when none named it. */
+/**
+ * The stored state with every ref to `id` cleared, or null when none named it. Reads through
+ * `stateOf` (not the raw `entity.state`) so a legacy row missing a key the schema now requires
+ * (e.g. an old character row with no `lastSeenAt`) still produces a schema-valid patch.
+ */
 function stateWithout(entity: Entity, id: string): EntityState | null {
-  const state = storedState(entity)
   switch (entity.kind) {
     case 'character': {
-      const current = state as CharacterState
-      const next: CharacterState = { ...current }
+      const current = stateOf(entity, 'character')
+      const next = { ...current }
       let changed = false
       if (current.current_location_id === id) {
         next.current_location_id = null
@@ -70,11 +64,11 @@ function stateWithout(entity: Entity, id: string): EntityState | null {
       return changed ? next : null
     }
     case 'location': {
-      const current = state as LocationState
+      const current = stateOf(entity, 'location')
       return current.parent_location_id === id ? { ...current, parent_location_id: null } : null
     }
     case 'item': {
-      const current = state as ItemState
+      const current = stateOf(entity, 'item')
       return current.at_location_id === id ? { ...current, at_location_id: null } : null
     }
     case 'faction':
@@ -83,9 +77,7 @@ function stateWithout(entity: Entity, id: string): EntityState | null {
 }
 
 function heldBy(entity: Entity): string[] {
-  if (entity.kind !== 'character') return []
-  const state = storedState(entity) as CharacterState
-  return [...(state.equipped_items ?? []), ...(state.inventory ?? [])]
+  return entity.kind === 'character' ? heldItems(stateOf(entity, 'character')) : []
 }
 
 function unplacedItems(target: Entity, branchEntities: readonly Entity[]): number {
@@ -95,7 +87,7 @@ function unplacedItems(target: Entity, branchEntities: readonly Entity[]): numbe
   )
   return branchEntities.filter((item) => {
     if (item.kind !== 'item' || heldElsewhere.has(item.id)) return false
-    const at = (storedState(item) as ItemState).at_location_id
+    const at = stateOf(item, 'item').at_location_id
     return (heldByTarget.has(item.id) && at == null) || at === target.id
   }).length
 }
@@ -120,6 +112,10 @@ function tailActions(branchId: string, tail: DeleteTail | null, id: string): Pip
  * world.md → Delete: one merged `state` patch per entity naming the target (the runner rejects two
  * writes to one row's column), the tail scene's mention, then the delete — last by convention; the
  * group's handlers all read pre-group state, so order doesn't change what they write.
+ *
+ * Each patch replaces the whole `state` from this call's snapshot, so only a writer that blocks
+ * user edits (today: the piggyback and per-turn classifier runs) may write `state` concurrently —
+ * anything else racing this snapshot would have its write clobbered.
  */
 export function entityDeleteActions({
   branchId,

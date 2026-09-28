@@ -189,6 +189,10 @@ export function stateOf<K extends EntityKind>(
   return { ...emptyEntityState(kind), ...(row?.state ?? {}) } as EntityStateByKind[K]
 }
 
+export function heldItems(state: Pick<CharacterState, 'equipped_items' | 'inventory'>): string[] {
+  return [...(state.equipped_items ?? []), ...(state.inventory ?? [])]
+}
+
 function baseDraftFrom(row: Entity | null): EntityBaseDraft {
   return {
     name: row?.name ?? '',

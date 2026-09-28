@@ -13,6 +13,7 @@ import { dedupeTerms, newTerms, normalizeTerm } from '@/lib/keyword-terms'
 
 import { blankToNull, cleanList, sameList } from './draft-text'
 import {
+  heldItems,
   stackableKey,
   stateOf,
   VISUAL_DRAFT_FIELDS,
@@ -74,6 +75,7 @@ type ColumnPatch = Partial<
   >
 >
 
+/** State free text is stored as an absent key when blank, never `''`. */
 function blankToAbsent(value: string | undefined): string | undefined {
   const trimmed = (value ?? '').trim()
   return trimmed === '' ? undefined : trimmed
@@ -316,10 +318,6 @@ function relationshipActions(
     if (now != null) actions.push(remove(now.rowId))
   }
   return actions
-}
-
-function heldItems(state: Pick<CharacterState, 'equipped_items' | 'inventory'>): string[] {
-  return [...(state.equipped_items ?? []), ...(state.inventory ?? [])]
 }
 
 /**
