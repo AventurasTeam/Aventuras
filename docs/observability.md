@@ -189,7 +189,10 @@ convention, and the expectation that subsystems route through
   mutator refused, logged with its code), `entity_delete_rejected` /
   `lore_delete_rejected` / `thread_delete_rejected` /
   `happening_delete_rejected` (warn: a confirmed delete refused —
-  in-flight, not-found, or (entity only) the lead or a tail race) /
+  in-flight, not-found, or (entity only) the lead or a tail race; an
+  entity's store-miss not-found (`delete-entity.ts`, `target == null`)
+  returns before this log fires, so it covers not-found only on the
+  handler path) /
   `entity_delete_failed` / `lore_delete_failed` / `thread_delete_failed` /
   `happening_delete_failed` (error: the delete's delta group threw) —
   `lib/actions/row-delete/delete-row.ts`

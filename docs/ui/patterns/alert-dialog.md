@@ -18,7 +18,7 @@ Used by:
 - [Crash recovery modal](../../generation-pipeline.md#recovery-modal) — `Last action reverted after interrupted shutdown` with kind-aware story-named copy. Single OK action; fires on the first user-facing surface after boot when startup recovery undid at least one orphan.
 - [Provider / profile deletion](../screens/app-settings/app-settings.md#provider-menu-) — confirm-with-impact dialog enumerating broken-reference counts (profile / agent-default), destructive CTA. Blocker-dialog variant (single OK action) fires when an active default or per-story embedder anchors the deletion. Rules in [data-model.md → App settings storage](../../data-model.md#app-settings-storage); UX surface in app-settings.md.
 - [Memory probe](../screens/memory-probe/memory-probe.md) — `Clear all captures` destructive confirm. Default CTA.
-- [World / Plot delete confirm](../screens/world/world.md#delete) (`DeleteConfirmDialog`) — entity, lore, thread and happening row deletes, with a per-source bulleted impact list. Destructive CTA.
+- [World / Plot delete confirm](../screens/world/world.md#delete) (`DeleteConfirmDialog`) — entity, lore, thread and happening row deletes; entity and happening confirms list what goes, lore and thread confirms list nothing. Destructive CTA.
 
 Branch-row and per-row destructive actions inside overlays / panels
 use the lighter [`inline-delete-confirm.md`](./inline-delete-confirm.md)

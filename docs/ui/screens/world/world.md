@@ -442,17 +442,37 @@ drawer. No World-specific deviation.
 
 ## Delete
 
-`⋯ → Delete entity` (or `Delete` on lore) routes through the pane's
-Save / Discard / Cancel guard first when the row is dirty, then raises
-a confirm built from the row re-read by id — a resolved Save can
-rename or remove it — so its impact counts are a snapshot at that
-moment, not a live read. The confirm's description reads "You can
-undo this from the reader: Undo last action in its menu, or
-Cmd/Ctrl-Z." (shared `common:deleteUndoHint`, interpolating the
-reader's own undo label, so the copy can't drift from the reader's
-menu). A pending confirm is cancelled when the screen loses focus.
+Shared spec for World (entity, lore) and Plot (thread, happening —
+[`plot.md → Detail-head overflow menu`](../plot/plot.md#detail-head-overflow-menu)).
+`⋯ → Delete entity` (or `Delete` on lore / thread / happening) routes
+through the pane's Save / Discard / Cancel guard first when the row is
+dirty, on both screens, then raises a confirm built from the row
+re-read by id. A resolved Save can rename or remove it. Its impact
+counts are a snapshot at that moment, not a live read — the arm
+re-reads the cascade again at apply time regardless. A pending confirm
+is cancelled when the screen loses focus, on both screens.
+
+The confirm's description reads "You can undo this from the reader:
+Undo last action in its menu, or Cmd/Ctrl-Z," naming the reader's own
+undo label so the copy can't drift from the reader's menu — one shared
+string (`common:deleteUndoHint`) across every kind. What else it lists
+is per kind: an entity's awareness, involvement and relationship
+counts, other entities losing their link to it, items left unplaced,
+and "Removed from the current scene" when the tail scene names it; a
+happening's involvement and awareness counts; nothing beyond the title
+for lore or a thread. The CTA is per kind too — `Delete character`,
+`Delete location`, `Delete item`, `Delete faction`, `Delete lore`,
+`Delete thread`, `Delete happening`.
+
 Confirming writes one delta group under one `action_id`, so CTRL-Z in
-the reader restores all of it:
+the reader restores the row (marked `embedding_stale`, so it
+re-embeds at the next sync — vectors aren't delta-logged; see
+[Reversibility](#reversibility)), its link rows whose other end still
+exists (a separate reversal can have removed the far end first), and,
+for an entity, the refs it cleared and the tail scene. What each kind's
+cascade covers:
+
+An entity:
 
 - The row, its `happening_involvements`, `happening_awareness` and
   `character_relationships` rows, its translations and those of the
@@ -468,11 +488,25 @@ the reader restores all of it:
   it as an Unknown-entity chip
   ([`entry-card.md → World-state panel`](../../patterns/entry-card.md#world-state-panel)).
 
-**The lead can't be deleted.** `stories.definition` requires a lead in
-adventure and first- or second-person stories, so the entry is disabled
-with a reason pointing at `Set as lead`; the action refuses it too. A
-regenerate or rollback that reaches a turn before the delete brings the
-row back, like any World edit.
+- **Lore.** The row, its translations and its vectors in every dim
+  family.
+- **A thread.** The row, its translations and its vectors in every
+  dim family.
+- **A happening.** The row, its `happening_involvements` and
+  `happening_awareness` rows, their translations, and its vectors in
+  every dim family.
+
+**The lead can't be deleted.** The action refuses it (`lead-entity`)
+and the overflow entry disables with a reason pointing at `Set as
+lead`. The reason isn't the definitional lead requirement — a
+creative third-person story, where a lead is optional, still can't
+delete one once set — it's that the lead is story-level, not
+per-branch or delta-logged
+([`data-model.md → Story settings shape`](../../../data-model.md#story-settings-shape)),
+and `setStoryLead` has no path to clear it back to null.
+
+A regenerate or rollback that reaches a turn before the delete brings
+the row back, like any World edit.
 
 ## Per-row import
 
@@ -593,7 +627,7 @@ Mirrors the [entity detail head pattern](#detail-head-structure):
   [`data-model.md → Chapters / memory system`](../../../data-model.md#chapters--memory-system));
   the same accent rule applies.
 - **Overflow menu (⋯)**: `Export lore as JSON`, `View raw JSON`,
-  `Delete`. **No `Set as lead`** — lead is a character-only concept
+  [`Delete`](#delete). **No `Set as lead`** — lead is a character-only concept
   per [`principles → Mode, lead, and narration`](../../principles.md#mode-lead-and-narration--three-orthogonal-concepts).
 
 ### Body tab — lore
@@ -951,8 +985,9 @@ Merge writes:
 - `entities` op=`update` on every other entity that held an
   inverse ref to non-canonical (state JSON paths rewritten).
 - `translations` op=`update` per affected row.
-- `story_entries` op=`update` on the tail entry when its scene named
-  the non-canonical (the id is rewritten to the canonical).
+- The loser is dropped from the tail scene, same as a standalone
+  delete ([Delete](#delete)'s C3 arm) — not rewritten to the
+  canonical.
 
 Embeddings are not delta-logged
 ([`data-model.md → embeddings`](../../../data-model.md#diagram)) —

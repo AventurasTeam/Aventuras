@@ -129,14 +129,28 @@ slice-planning gate forces its resolution before that slice is planned.
   suggestions. The next consumer of `Autocomplete` with
   `casingNormalization="canonical"` won't get this for free and
   needs the same save-time patch (2026-09-28, raised by 4.2b).
-- **AlertDialog impact lists aren't announced by screen readers.**
-  The bulleted impact list (`DeleteConfirmDialog`'s `delete-impacts`
-  View, `alert-dialog.md`'s own rollback example) is plain `Text` rows
-  with no list role; `AlertDialogDescription` is the only body content
-  wired into the dialog's `aria-describedby`, and the leading `•`
-  glyph is read aloud as a character rather than a list marker.
-  Pattern-wide — every AlertDialog consumer with an impact list, not
-  just World / Plot delete (2026-09-28, raised by 4.2b).
+- **AlertDialog impact lists aren't in the dialog's accessible
+  description.** The bulleted impact list (`DeleteConfirmDialog`'s
+  `delete-impacts` View, and the shipped
+  `RollbackConfirm` — `components/reader/rollback-confirm.tsx`) is a
+  plain `Text` sibling of `AlertDialogDescription`, the only body
+  content wired into the dialog's `aria-describedby`; a screen reader
+  can still browse to the sibling rows, it just doesn't announce them
+  with the description, and the leading `•` glyph reads as a
+  character rather than a list marker. `DefinitionalChangeDialog`
+  puts its bullets inside the description instead — a working
+  alternative already shipped. Pattern-wide — every AlertDialog
+  consumer with an impact list, not just World / Plot delete. Read,
+  not verified with a screen reader (2026-09-28, raised by 4.2b).
+- **A creative third-person story whose lead is its only character can
+  never delete that character.** Creative + third-person is the one
+  mode/narration combination where a lead is optional
+  ([`data-model.md → Story settings shape`](../data-model.md#story-settings-shape)),
+  but once one is set, deleting it is refused (`lead-entity`) and
+  `setStoryLead` has no path to clear it back to null. M6's
+  per-branch, delta-logged lead
+  ([roadmap.md](./roadmap.md#m6--branches--diff-cache)) is the likely
+  home (2026-09-28, raised by 4.2b).
 - **The History tab's `Deleted` op chip likely never matches in a
   per-row tab.** A deleted row can't be selected to open its
   History tab, and undoing its delete prunes the delta, so no row's

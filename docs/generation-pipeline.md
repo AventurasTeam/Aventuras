@@ -887,7 +887,12 @@ COMMIT;
 Either both rows write or neither. SQLite commit before Zustand
 store update — if SQLite fails, store stays consistent with disk.
 The handler reads the rows it decides from before that transaction
-opens. A write to an existing `entities` row, any
+opens. A group of actions under one `action_id`
+(`applyDeltaActionGroup`) commits as one transaction too, and the
+runner rejects a group up front: writing the same row's column twice,
+or writing a row that a delete in the same group cascades
+(`apply-delta-action.ts`'s `groupConflict` / same-column check). A
+write to an existing `entities` row, any
 `character_relationships` write, and any `happening_involvements` /
 `happening_awareness` write or happening delete, holds a key lock
 across that read and its commit, since the classifier and a World or

@@ -669,7 +669,8 @@ use.
   record the rule, or records the deviation if review rejects it.
   Resolved in 4.2b (2026-09-28): kept, and recorded in
   [`world.md → Delete`](../../../ui/screens/world/world.md#delete) and
-  its merge list.
+  the merge-writes list in
+  [`world.md → Reversibility`](../../../ui/screens/world/world.md#reversibility).
 - **Plot chapter buckets before M5.** No chapter is opened in M4, so
   the chapter-keyed grouping is seed-only. Default: one implicit bucket
   and a hidden `This chapter` chip while the branch has no open

@@ -752,6 +752,21 @@ want voice-matched entries can pick a wrap POV that aligns or use
 If either condition hides the picker, the composer reduces to
 textarea + regen + send.
 
+**A dangling lead disables third-person wrapping.** A non-first-person
+wrap (`third`) names the lead (`Aria reaches for the blade`); when
+`resolveLead` reads the story's lead as absent on this branch
+(per [`data-model.md → Story settings shape`](../data-model.md#story-settings-shape)),
+there's no name to wrap around. The mode picker then disables
+and shows `Free`, and Send wraps as `Free` regardless of the selected
+mode — the text goes out verbatim. A visible reason line under the
+composer (not just a web tooltip, since Android has none) reads the
+`reader:composerLeadMissing` copy: "The story's lead isn't on this
+branch, so actions can't be written for them. Set a new lead in
+World." The composer's own disabled reason (generation in flight)
+wins over this one in the reason line when both apply, since Send is
+already refused outright. A first-person wrap is unaffected — `I`
+needs no lead name.
+
 **Four modes** (adventure only):
 
 | Mode    | Purpose                      |

@@ -462,9 +462,8 @@ verified against the code first. Resolve with the slice each names.
 - **M6 — The lead must be per-branch and delta-logged.** Two branches
   with different leads is a valid use case (developer, 2026-09-28), and
   a story-level `definition.leadEntityId` dangles on any branch lacking
-  the character — including `Set as lead` itself: the id is story-level,
-  so setting it on one branch leaves it dangling on any other branch
-  that lacks the same character, not only on a reversal. Logging the
+  the character — after a reversal of the lead's create, or when
+  `Set as lead` names a character another branch lacks. Logging the
   lead change also makes CTRL-Z undo it before the create it depends on
   and makes rollback / regenerate sweep it. Needs a design session
   before M6.1 / M6.3 are authored; 4.2b's `resolveLead` interim is what
