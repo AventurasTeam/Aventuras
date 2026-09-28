@@ -60,7 +60,7 @@ describe('delta registry', () => {
     expect(resolveByTable('character_relationships')).toBeUndefined()
   })
 
-  it('refuses rowKeepingColumns on embedded tables (vectors swept on reversal)', () => {
+  it('refuses rowKeepingColumns on embedded tables; a tombstone reversal would orphan vectors', () => {
     __resetRegistry()
     expect(() =>
       register({
@@ -70,7 +70,7 @@ describe('delta registry', () => {
         handlers: {},
         rowKeepingColumns: ['name'],
       }),
-    ).toThrow(/embedded.*cannot declare rowKeepingColumns/)
+    ).toThrow(/tombstone reversal would orphan/)
     expect(resolveByTable('entities')).toBeUndefined()
   })
 })

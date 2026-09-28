@@ -1,3 +1,5 @@
+import type { DatabaseSync } from 'node:sqlite'
+
 import { describe, expect, it } from 'vitest'
 
 import { branches, ensureVecTablesSql, entities, stories } from '@/lib/db'
@@ -5,35 +7,43 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 
 import { reverseAndPruneDeltaRows } from './reverse-replay'
 
+function insertEntity(db: any, branchId: string, id: string): Promise<void> {
+  return db.insert(entities).values({
+    id,
+    branchId,
+    kind: 'character',
+    name: 'Aria',
+    status: 'active',
+    injectionMode: 'auto',
+    createdAt: 1,
+    updatedAt: 1,
+  })
+}
+
+function insertVector(sqlite: DatabaseSync, branchId: string, dim: number, id: string): void {
+  sqlite
+    .prepare(
+      `INSERT INTO entities_vec_${dim} (pk, branch_id, model_id, id, source_hash, embedding) VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      `${branchId}:${id}:m${dim}`,
+      branchId,
+      `m${dim}`,
+      id,
+      'h',
+      new Uint8Array(new Float32Array(dim).buffer),
+    )
+}
+
 describe('reverse-replay of a create', () => {
   it("sweeps the deleted row's vectors from every dim family", async () => {
     const { db, sqlite, runInTransaction } = await createTestDb()
     for (const ddl of ensureVecTablesSql(8)) sqlite.exec(ddl)
     await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
     await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
-    await db.insert(entities).values({
-      id: 'char_1',
-      branchId: 'b1',
-      kind: 'character',
-      name: 'Aria',
-      status: 'active',
-      injectionMode: 'auto',
-      createdAt: 1,
-      updatedAt: 1,
-    })
+    await insertEntity(db, 'b1', 'char_1')
     for (const dim of [384, 8]) {
-      sqlite
-        .prepare(
-          `INSERT INTO entities_vec_${dim} (pk, branch_id, model_id, id, source_hash, embedding) VALUES (?, ?, ?, ?, ?, ?)`,
-        )
-        .run(
-          `b1:char_1:m${dim}`,
-          'b1',
-          `m${dim}`,
-          'char_1',
-          'h',
-          new Uint8Array(new Float32Array(dim).buffer),
-        )
+      insertVector(sqlite, 'b1', dim, 'char_1')
     }
 
     await reverseAndPruneDeltaRows(
@@ -70,39 +80,11 @@ describe('reverse-replay of a create', () => {
     await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
     await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
     await db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'm', createdAt: 1 })
-    await db.insert(entities).values({
-      id: 'char_1',
-      branchId: 'b1',
-      kind: 'character',
-      name: 'Aria',
-      status: 'active',
-      injectionMode: 'auto',
-      createdAt: 1,
-      updatedAt: 1,
-    })
-    await db.insert(entities).values({
-      id: 'char_1',
-      branchId: 'b2',
-      kind: 'character',
-      name: 'Aria',
-      status: 'active',
-      injectionMode: 'auto',
-      createdAt: 1,
-      updatedAt: 1,
-    })
-    // Insert vectors in both branches
-    sqlite
-      .prepare(
-        `INSERT INTO entities_vec_8 (pk, branch_id, model_id, id, source_hash, embedding) VALUES (?, ?, ?, ?, ?, ?)`,
-      )
-      .run('b1:char_1:m8', 'b1', 'm8', 'char_1', 'h', new Uint8Array(new Float32Array(8).buffer))
-    sqlite
-      .prepare(
-        `INSERT INTO entities_vec_8 (pk, branch_id, model_id, id, source_hash, embedding) VALUES (?, ?, ?, ?, ?, ?)`,
-      )
-      .run('b2:char_1:m8', 'b2', 'm8', 'char_1', 'h', new Uint8Array(new Float32Array(8).buffer))
+    await insertEntity(db, 'b1', 'char_1')
+    await insertEntity(db, 'b2', 'char_1')
+    insertVector(sqlite, 'b1', 8, 'char_1')
+    insertVector(sqlite, 'b2', 8, 'char_1')
 
-    // Reverse the create in b1
     await reverseAndPruneDeltaRows(
       [
         {
@@ -123,7 +105,6 @@ describe('reverse-replay of a create', () => {
       { db, runInTransaction },
     )
 
-    // b1's vector should be gone, b2's should remain
     const b1Count = sqlite
       .prepare(`SELECT count(*) AS n FROM entities_vec_8 WHERE branch_id = 'b1'`)
       .all() as { n: number }[]

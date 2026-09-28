@@ -1311,14 +1311,14 @@ happening.
 
 **Undoing a `create` consults no cascade.**
 A domain may register a cascade hook for its child rows, but that hook
-is **delete-op-only**: it replays a forward `delete`, so the undo of a
-`create` and the redo of a `delete` are the only arms that may read it.
-Reversing a `create` deliberately does not, because the closure has to
-gather **deltas**, not rows, so they are pruned from the log with the
-parent's. A cascade that deleted the rows would leave their deltas
-behind, pointing at nothing, and a later redo would re-insert children
-under a parent that is gone. The reversal still sweeps the row's vectors,
-which carry no deltas and would be orphaned otherwise.
+is **delete-op-only**: the forward `delete` and the redo of a `delete`
+are the only arms that may read it. Reversing a `create` deliberately
+does not, because the closure has to gather **deltas**, not rows, so they
+are pruned from the log with the parent's. A cascade that deleted the rows
+would leave their deltas behind, pointing at nothing, and a later redo
+would re-insert children under a parent that is gone. The reversal still
+sweeps the row's vectors, which carry no deltas and would be orphaned
+otherwise.
 
 **Abort, boot recovery and a prose edit close over the rows their
 creates delete.** Neither selection scope guarantees the set holds every write to such a row. An

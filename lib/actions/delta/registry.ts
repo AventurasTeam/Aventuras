@@ -104,13 +104,14 @@ const actionRegistry = new Map<string, { table: string; handler: ActionHandler }
 const tableRegistry = new Map<string, TableEntry>()
 
 export function register(reg: DomainRegistration): void {
+  // The tombstone arm deletes without a vector sweep, so an embedded table here would orphan vectors.
+  if (reg.rowKeepingColumns && isEmbeddedSourceTable(reg.table))
+    throw new Error(
+      `register: ${reg.table} declares rowKeepingColumns; a tombstone reversal would orphan its vectors`,
+    )
+
   // A misspelled name, or none, reads as null on every row: each update reversal would delete.
   if (reg.rowKeepingColumns) {
-    // Embedded tables' reversals sweep vectors instead of keeping rows by nullable columns.
-    if (isEmbeddedSourceTable(reg.table))
-      throw new Error(
-        `register: ${reg.table} is embedded and cannot declare rowKeepingColumns (vectors are swept on reversal)`,
-      )
     if (reg.rowKeepingColumns.length === 0)
       throw new Error(`register: ${reg.table} lists no row-keeping column`)
     const columns = getTableColumns(reg.descriptor.table)
