@@ -1,12 +1,20 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
-import { t } from '@/lib/i18n'
+import { i18n } from '@/lib/i18n'
 
 import { deleteUndoHint } from './delete-confirm-copy'
 
+const UNDO_KEY = 'actions.undo'
+const shippedUndo = i18n.getResource('en', 'reader', UNDO_KEY) as string
+
 describe('deleteUndoHint', () => {
-  it("composes the reader's own undo label, so a label change can't silently desync", () => {
-    expect(deleteUndoHint()).toBe(t('common:deleteUndoHint', { action: t('reader:actions.undo') }))
+  afterEach(() => {
+    i18n.addResource('en', 'reader', UNDO_KEY, shippedUndo)
+  })
+
+  it("names whatever the reader's undo label reads, so a relabel can't desync the hint", () => {
+    i18n.addResource('en', 'reader', UNDO_KEY, 'SENTINEL-UNDO')
+    expect(deleteUndoHint()).toContain('SENTINEL-UNDO')
   })
 
   it('reads as this exact sentence today', () => {
