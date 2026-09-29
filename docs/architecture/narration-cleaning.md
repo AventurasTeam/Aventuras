@@ -147,9 +147,10 @@ cleaner can be routed around without a release. Off means `CLEAN_NONE`, which ru
   copying `marked`'s inline `tag` rule, and a test checks the two agree. In Visual Prose the
   browser parses the raw content and is stricter, so the difference only exists where the model
   broke the "valid HTML" instruction; the cleaner errs toward showing the reviewer more text.
-- **`<pic>` must be removed before the parse.** It is not a void element, so the parser would nest
-  all the prose after it inside it. With `pic: 'keep'` and `html: 'unwrap'` the tag is dropped as
-  an unknown element and the prose after it is kept.
+- **`<pic>` is removed before the parse.** It is not a void element, and HTML ignores the `/` in
+  `<pic … />`, so the parser nests the prose after it inside it. With `pic: 'keep'` and
+  `html: 'unwrap'` the tag is still dropped, as an unknown element, and its children are kept.
+  `keep` does not survive `html: 'unwrap'`.
 - **Whitespace is tidied only in text that had tags.** Runs collapse and line edges are trimmed,
   table cells are separated by a space, and prose without tags keeps its own spacing.
 - **A whole-line bold label is a heading.** With `boldLines: 'remove'`, a speaker or name line such
