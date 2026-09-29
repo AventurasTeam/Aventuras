@@ -37,6 +37,14 @@ describe('loreDraftSchema', () => {
   })
 })
 
+describe('loreDraftFrom', () => {
+  it('hands each blank draft lists of its own', () => {
+    loreDraftFrom(null).keywords.push('Vael')
+    loreDraftFrom(null).tags.push('myth')
+    expect(loreDraftFrom(null)).toMatchObject({ keywords: [], tags: [] })
+  })
+})
+
 describe('loreActions', () => {
   it('creates with trimmed text, normalized keywords, cleaned tags and a blank category as null', () => {
     const [action] = loreActions({

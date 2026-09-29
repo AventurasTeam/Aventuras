@@ -20,7 +20,7 @@ export const loreDraftSchema = z.object({
 })
 export type LoreDraft = z.infer<typeof loreDraftSchema>
 
-export const EMPTY_LORE_DRAFT: LoreDraft = {
+export const EMPTY_LORE_DRAFT: Readonly<LoreDraft> = Object.freeze({
   title: '',
   body: '',
   category: '',
@@ -28,10 +28,11 @@ export const EMPTY_LORE_DRAFT: LoreDraft = {
   priority: 0,
   keywords: [],
   tags: [],
-}
+})
 
 export function loreDraftFrom(row: Lore | null): LoreDraft {
-  if (row == null) return EMPTY_LORE_DRAFT
+  // New lists: the freeze is shallow, so a spread alone would share the constant's arrays.
+  if (row == null) return { ...EMPTY_LORE_DRAFT, keywords: [], tags: [] }
   return {
     title: row.title,
     body: row.body ?? '',
