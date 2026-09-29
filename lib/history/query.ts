@@ -7,6 +7,7 @@ import {
   HISTORY_OPS,
   opsMatchingLabel,
   pathsMatchingLabel,
+  summaryFieldTerms,
   type HistoryTable,
 } from './field-labels'
 
@@ -69,6 +70,10 @@ function searchCondition(table: HistoryTable, term: string): SQL {
   if ((HISTORY_OPS as readonly string[]).includes(lowered)) ops.add(lowered as Delta['op'])
   const conditions: SQL[] = [fieldSearchCondition(table, term)]
   if (ops.size > 0) conditions.push(inArray(deltas.op, [...ops]))
+  // A typed update summary: every field it names must match, each searched as if typed alone.
+  const named = summaryFieldTerms(term)
+  if (named != null)
+    conditions.push(and(...named.map((field) => fieldSearchCondition(table, field))) as SQL)
   return or(...conditions) as SQL
 }
 

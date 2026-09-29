@@ -4,6 +4,7 @@ import { FIRST_LOGGED_AT } from '@/lib/actions/delta/user-precedence'
 import { branches, deltas, stories, type DbCtx, type NewDelta } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
+import { humanizeDelta } from './humanize'
 import { loadHistoryChunk, type HistoryQuery } from './query'
 
 let db: DbCtx['db']
@@ -118,6 +119,35 @@ describe('loadHistoryChunk', () => {
   it('matches a translated op / filter-chip / summary label typed into search', async () => {
     expect(await positions({ search: 'Created' })).toEqual([1])
     expect(await positions({ search: 'modified' })).toEqual([5, 4, 3, 2])
+  })
+
+  it('matches a whole update summary typed into search, narrowed to updates', async () => {
+    await db
+      .insert(deltas)
+      .values(delta(9, 'update', { state: { traits: ['calm'], drives: ['vengeance'] } }))
+    expect(await positions({ search: 'Modified Traits' })).toEqual([9, 4, 2])
+    expect(await positions({ search: 'modified traits, drives' })).toEqual([9])
+    expect(await positions({ search: 'Traits' })).toEqual([9, 4, 2])
+  })
+
+  it('finds every row by the summary it renders', async () => {
+    await db
+      .insert(deltas)
+      .values(delta(9, 'update', { state: { traits: ['calm'], drives: ['vengeance'] } }))
+    const { rows } = await loadHistoryChunk(db, base)
+    const context = {
+      targetTable: base.targetTable,
+      targetName: 'Kael',
+      entryLabel: () => null,
+      nowMs: 0,
+    }
+    for (const row of rows) {
+      const { summary } = humanizeDelta(row, context)
+      expect({ summary, found: await positions({ search: summary }) }).toEqual({
+        summary,
+        found: expect.arrayContaining([row.logPosition]),
+      })
+    }
   })
 
   it('pages by log position in either sort, and reports the end', async () => {
