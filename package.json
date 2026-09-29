@@ -106,7 +106,7 @@
   "devEngines": {
     "runtime": {
       "name": "node",
-      "version": "^24.0.0",
+      "version": "^24.15.0",
       "onFail": "error"
     }
   },
