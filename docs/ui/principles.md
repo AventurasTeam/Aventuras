@@ -757,9 +757,9 @@ wrap (`third`) names the lead (`Aria reaches for the blade`); when
 `resolveLead` reads the story's lead as absent on this branch
 (per [`data-model.md → Story settings shape`](../data-model.md#story-settings-shape)),
 there's no name to wrap around. The mode picker then disables
-and shows `Free`, and Send wraps as `Free` regardless of the selected
-mode — the text goes out verbatim. A visible reason line under the
-composer (not just a web tooltip, since Android has none) reads the
+and shows `Free`, and Send wraps as `Free` — the text goes out
+verbatim. A visible reason line under the composer (not just a web
+tooltip, since Android has none) reads the
 `reader:composerLeadMissing` copy: "The story's lead isn't on this
 branch, so actions can't be written for them. Set a new lead in
 World." When the whole composer is disabled (the story still
@@ -767,6 +767,12 @@ loading, or an embedder swap pending), that reason wins the reason
 line. While a turn is generating only Send is refused, and the
 lead-missing line stays. A first-person wrap is unaffected — `I`
 needs no lead name.
+
+**The mode resets to `Free` while the lead is missing.** The selected
+mode isn't kept under the disabled picker: when the lead resolves
+again (a reader undo or redo, or `Set as lead` in World), the picker
+re-enables on `Free`, and the user re-picks. A draft typed while the
+picker read `Free` never goes out wrapped.
 
 **Four modes** (adventure only):
 

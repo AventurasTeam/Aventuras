@@ -40,8 +40,9 @@ type ComposerProps = {
    */
   disabledReason?: string
   /**
-   * Lead gone: do/say/think can't wrap, so the picker disables with this reason and sends fall
-   * back to free text; also the visible reason line, since Android has no web tooltip.
+   * Lead gone: do/say/think can't wrap, so the picker disables with this reason and the mode
+   * resets to free (it stays free once the lead is back); also the visible reason line, since
+   * Android has no web tooltip.
    */
   modesUnavailableReason?: string
   onSend: (rawText: string, mode: ComposerMode) => void
@@ -100,6 +101,10 @@ export const Composer = forwardRef(function Composer(
   const [text, setText] = useState('')
   const [mode, setMode] = useState<ComposerMode>('free')
   const [lints, setLints] = useState<Lint[]>([])
+
+  // Reset, not masked: the lead coming back (undo, Set as lead) must not re-arm a
+  // mode under a draft typed while the picker read Free (principles.md → Composer mode).
+  if (modesUnavailableReason != null && mode !== 'free') setMode('free')
 
   // Mirrored during render: the handle is built once, so reading `text` /
   // `mode` through its closure would hand back mount-time values forever.
