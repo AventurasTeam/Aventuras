@@ -55,13 +55,18 @@ slice-planning gate forces its resolution before that slice is planned.
   `edce17b8`.
 
 - **Piggyback entity visual text was uncapped; new writes now
-  truncate.** `parseVisualChanges` now truncates a note to
+  truncate.** `buildPiggybackActions` truncates a note to
   `VISUAL_TEXT_MAX`, matching `characterStateSchema`'s 500-char visual
-  caps (4.2b, developer decision 2026-09-28). Still open: an entity
-  that already holds an over-long visual field from before this fix
-  still fails a later `updateEntity` that re-validates its whole
-  state — e.g. a delete clearing a ref to it. No repair of existing
-  rows.
+  caps, so notes from the tagged block and from the fallback
+  classifier are both cut (4.2b, developer decision 2026-09-28). Still
+  open: an entity that already holds an over-long visual field from
+  before this fix still fails a later `updateEntity` that re-validates
+  its whole state — e.g. a delete clearing a ref to it. No repair of
+  existing rows. The fallback classifier path also accepts stackable
+  keys and amounts that the tagged-block parser's `parseTransfers`
+  rejects — a blank or over-long key, a fractional or negative amount —
+  and those fail the same whole-state re-validation; pre-existing, not
+  fixed.
 - **`row-closure.ts`'s `CHILD_TABLES` widens a reversal set only for
   happenings' children.** A reversal deleting a character a create made
   orphans relationship, involvement or awareness rows naming it that

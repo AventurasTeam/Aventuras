@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
-import type { CharacterState, Entity } from '@/lib/db'
+import {
+  emptyEntityState,
+  entityStateSchemaForKind,
+  type CharacterState,
+  type Entity,
+} from '@/lib/db'
 
 import { buildPiggybackActions } from './apply'
 import { parseStateBlock } from './parse'
-import type { ParsedStateBlock } from './types'
+import { VISUAL_TEXT_MAX, type ParsedStateBlock } from './types'
 
 function mockEntity(overrides: Partial<Entity>): Entity {
   return {
@@ -312,6 +317,58 @@ describe('buildPiggybackActions', () => {
         payload: { branchId: 'main', id: 'char_1', visual: { face: 'Scarred cheek' } },
       },
     ])
+  })
+
+  // Truncate rather than drop: an over-long note would fail every later updateEntity that
+  // re-validates the whole state, a delete's ref clear included.
+  describe('visual text cap', () => {
+    const visualText = (block: ParsedStateBlock): string | undefined => {
+      const [action] = buildPiggybackActions({
+        source: 'per_turn_classifier',
+        entryId: 'entry_1',
+        block,
+        entities: [mockEntity({ id: 'char_1' })],
+        previousMetadata,
+        branchId: 'main',
+      }).actions.filter((a) => a.kind === 'updateEntityVisualState')
+      return action?.kind === 'updateEntityVisualState' ? action.payload.visual.physique : undefined
+    }
+    // The fallback classifier's schema leaves `text` a bare string, so its block reaches
+    // apply.ts with the note exactly as the model wrote it.
+    const fallbackBlock = (text: string): ParsedStateBlock => ({
+      sceneEntities: ['char_1'],
+      worldTimeDelta: 0,
+      visualChanges: [{ id: 'char_1', type: 'physique', text }],
+      transfers: { items: [], stackables: [] },
+    })
+
+    it('truncates an over-cap fallback classifier note to the schema cap', () => {
+      const text = visualText(fallbackBlock('a'.repeat(600)))
+      expect(text).toHaveLength(VISUAL_TEXT_MAX)
+      expect(
+        entityStateSchemaForKind('character').safeParse({
+          ...emptyEntityState('character'),
+          visual: { physique: text },
+        }).success,
+      ).toBe(true)
+    })
+
+    it('truncates an over-cap tagged-block note to the schema cap', () => {
+      const { block } = parseStateBlock(
+        `<state><visual_changes><entity id="char_1" type="physique">${'a'.repeat(600)}</entity></visual_changes></state>`,
+      )
+      expect(visualText(block)).toHaveLength(VISUAL_TEXT_MAX)
+    })
+
+    it('leaves a note at exactly the cap unchanged', () => {
+      const exact = 'b'.repeat(VISUAL_TEXT_MAX)
+      expect(visualText(fallbackBlock(exact))).toBe(exact)
+    })
+
+    it('does not split a surrogate pair when the cut lands mid-emoji', () => {
+      const emoji = '\u{1F600}' // 2 UTF-16 units; index 499 is the high surrogate
+      expect(visualText(fallbackBlock('a'.repeat(499) + emoji))).toBe('a'.repeat(499))
+    })
   })
 
   it('handles item transfers between characters', () => {

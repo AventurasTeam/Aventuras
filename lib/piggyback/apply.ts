@@ -4,7 +4,7 @@ import { logger } from '@/lib/diagnostics'
 import { normalizeTerm } from '@/lib/keyword-terms'
 
 import { dedupeSceneEntities, scenePromotionActions, sceneTrackingActions } from './scene-tracking'
-import { MAX_RETRIEVAL_QUERIES, type ParsedStateBlock } from './types'
+import { MAX_RETRIEVAL_QUERIES, VISUAL_TEXT_MAX, type ParsedStateBlock } from './types'
 import { resolvePiggybackWorldTimeDelta } from './world-time'
 
 // Two producers write this field; only the tagged-block parser filters itself (trims,
@@ -13,6 +13,16 @@ import { resolvePiggybackWorldTimeDelta } from './world-time'
 function normalizeRetrievalQueries(queries: readonly string[]): string[] {
   const distinct = new Set(queries.map((q) => q.trim()).filter((q) => q !== ''))
   return [...distinct].slice(0, MAX_RETRIEVAL_QUERIES)
+}
+
+// Both producers arrive here uncapped. An over-long note fails the whole-state re-validation of
+// every later updateEntity carrying `state`, a delete's ref clear among them. Cut by UTF-16 unit
+// (Zod's `.length`), never mid-surrogate.
+function truncateVisualText(text: string): string {
+  if (text.length <= VISUAL_TEXT_MAX) return text
+  const cut = text.slice(0, VISUAL_TEXT_MAX)
+  const lastUnit = cut.charCodeAt(cut.length - 1)
+  return lastUnit >= 0xd800 && lastUnit <= 0xdbff ? cut.slice(0, -1) : cut
 }
 
 type PreviousMetadata = {
@@ -108,13 +118,14 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   // Visual changes
   for (const note of block.visualChanges ?? []) {
     if (isCharacter(note.id)) {
+      const text = truncateVisualText(note.text)
       actions.push({
         kind: 'updateEntityVisualState',
         source,
         payload: {
           branchId,
           id: note.id,
-          visual: { [note.type]: note.text } as Partial<CharacterState['visual']>,
+          visual: { [note.type]: text } as Partial<CharacterState['visual']>,
         },
       })
     }
