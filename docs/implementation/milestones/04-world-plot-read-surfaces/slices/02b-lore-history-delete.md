@@ -320,5 +320,6 @@ handler, which is where the sweep must therefore live.
   textarea not filling the pane, `Autocomplete`'s uncommitted-casing
   gap, the AlertDialog impact list's missing accessible-description
   wiring, and the History `Deleted` chip's near-unreachability.
-  Link-row edits in History stay
-  [parked](../../../../parked.md#history-shows-link-row-edits).
+  Link-row edits in History moved to
+  [Slice 4.2c](./02c-collision-review.md#scope-in) on the stack's
+  manual review.

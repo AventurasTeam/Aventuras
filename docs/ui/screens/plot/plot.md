@@ -201,10 +201,10 @@ per the
   `source` (free-form text descriptor). Add / remove rows.
 - **History** — delta log filtered to this happening. Involvement
   and awareness edits are their link rows' deltas, not the
-  happening's, so they don't show here — a links-only Save shows
+  happening's, so they don't show here yet — a links-only Save shows
   nothing new in History. See
-  [World — History tab](../world/world.md#history-tab) and the
-  [parked fix](../../../parked.md#history-shows-link-row-edits).
+  [World — History tab](../world/world.md#history-tab) and the fix
+  [scheduled for Slice 4.2c](../../../implementation/milestones/04-world-plot-read-surfaces/slices/02c-collision-review.md#scope-in).
 
 ### Entry-ref picker
 

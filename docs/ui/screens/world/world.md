@@ -574,8 +574,8 @@ prose, then hands pre-formatted strings to the compound.
 - **Resets on row change** — search, op filter and sort return to
   their defaults when the tab is keyed to a new row.
 - **Reads the row's own deltas.** Relationship, awareness and
-  involvement edits are their link rows' deltas and don't show here
-  ([parked](../../../parked.md#history-shows-link-row-edits)).
+  involvement edits are their link rows' deltas and don't show here yet
+  ([Slice 4.2c](../../../implementation/milestones/04-world-plot-read-surfaces/slices/02c-collision-review.md#scope-in)).
 - **Rows aren't pressable.** `entry #n` is meta text; see
   [DeltaLogRow → Click behavior](../../patterns/delta-log-row.md#click-behavior).
 

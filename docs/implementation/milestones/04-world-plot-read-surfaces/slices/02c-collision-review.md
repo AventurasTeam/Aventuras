@@ -20,7 +20,8 @@ awareness / involvement / relationship reattachment with the UNIQUE
 rule, inverse-ref rewrite, translations move, keyword and tag union),
 **rename** (both rows, flag clear), **keep as distinct** (flag clear
 only). The dialog's drifted `InjectionMode` and `ScalarField` unions
-are fixed first.
+are fixed first. The History tab also starts listing edits to the link
+rows that name its row: relationships, involvements, awareness.
 
 ## Background
 
@@ -58,6 +59,8 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   — the rows that move with the canonical id.
 - [`memory/retrieval.md → Keywords schema`](../../../../memory/retrieval.md#keywords-schema)
   — why keywords union and de-duplicate.
+- [`world.md → History tab`](../../../../ui/screens/world/world.md#history-tab)
+  — the query, search and op filter the link-row union extends.
 - [Milestone contracts C3, C4, C7, C12](../milestone.md#slice-contracts).
 
 ## Scope: in
@@ -98,6 +101,20 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   whose loser is the lead surfaces the `lead-entity` refusal inline;
   after a resolution the list re-derives (pill count drops, strip
   disappears, a remaining pair re-surfaces for 3+ collisions).
+- **History shows link-row edits** (moved from `parked.md` on the 4.2b
+  stack's manual review, 2026-09-30: the developer asked where a
+  relationship edit went, the entry's revisit signal). A character's
+  History tab omits relationship edits; an entity's omits its
+  involvement edits; a happening's omits involvement and awareness
+  edits; a character's also omits its own awareness edits. All four
+  are deltas on the link row itself (`character_relationships`,
+  `happening_involvements`, `happening_awareness`), keyed by the link
+  row's own id, not the target's. See
+  [World — History tab](../../../../ui/screens/world/world.md#history-tab).
+  The fix unions deltas of link rows naming the target — live rows
+  plus delete payloads — in C4's shared History module, so World's
+  entity panes and Plot's happening pane both get it. It overlaps the
+  merge driver, which reattaches these same link rows (Open questions).
 - **Storybook:** the dialog already has stories; add the `priority`
   radio row and the phone 3-line prose clamp state if the pattern's
   open item is picked up here.
@@ -141,6 +158,12 @@ to clear before wiring: `collision-resolve-diff.ts` declares
 - `tsc --noEmit` passes with the compound consuming the shipped
   `InjectionMode`, and a fixture pair differing only in `priority`
   renders one radio row (component test).
+- A character's History tab lists edits to the relationship and
+  awareness rows naming it, any entity's its involvement edits, and a
+  happening's its involvement and awareness edits, in log order among
+  the row's own deltas; a link row removed on its own still lists its
+  edits on those tabs, found through its delete delta's payload
+  (vitest on the History query over fixtures).
 
 ## Tests
 
@@ -148,8 +171,11 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   relationship self-collapse and pair-merge, inverse refs per field
   merged per row, translations, keyword and tag union normalization,
   lead refusal), rename and keep drivers, group reversibility,
-  projection counts.
-- Component tests: wiring gates, refusal copy, humanizer label.
+  projection counts, and the History link-row union (each link table
+  from each end it names, live and deleted link rows, search, op
+  filter and chunking over the unioned log).
+- Component tests: wiring gates, refusal copy, humanizer label, a
+  link-row History row's wording.
 - E2E (desktop): seeded pair → merge → undo, asserting rows in the DB.
 
 ## Open questions
@@ -227,6 +253,55 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   stores; 4.2c's merge summary needs the same counts over the same
   tables — move them into `lib/world` beside `entityDeleteActions`
   rather than writing a third copy.
+- **Link-row History, open from the 4.2b stack's manual review
+  (2026-09-30).** The parked entry fixed the rule, not these:
+  - **Wording on each side.** The humanizer names every row after the
+    tab's own row and labels its paths from the tab's table
+    (`lib/history/humanize.ts`), and a create reads `Created`, so on
+    Aria's tab a relationship made with Kael would read as Aria being
+    created. Decide what a link-row delta names (the other end, or the
+    link, as in "relationship with Kael"), how it names an other end
+    that no longer exists, and how a relationship's two views label on
+    each character's tab: `kind` is a's view of b, `inverseKind` b's
+    view of a, and which one a tab's character holds follows the
+    `a_id < b_id` ordering, not the tab.
+  - **Both characters of a relationship.** Naming the target puts
+    every relationship edit on both characters' tabs, an edit to only
+    the other's view included. Keep that, or list a one-view edit only
+    on the tab of the character whose view changed? Involvement and
+    awareness rows have no such split.
+  - **Search, op filter and the field-path vocabulary.** The label
+    vocabulary (`lib/history/field-labels.ts`) is keyed by
+    `HistoryTable`, which lists no link table, so link-row paths would
+    render raw (`inverseKind`, `decayResistance`) and search would
+    reach them only by raw path: add their labels, and resolve each
+    term against the labels of the table a delta belongs to. The op
+    chips then count link rows too: `Created` on a character's tab
+    would also list the relationships made, and `Deleted` gets its
+    first per-row matches (closing its [`triage.md`](../../../triage.md)
+    entry). The search bullet's "`target_table` is never matched,
+    since it's constant within a per-row tab" in
+    [`world.md → History tab`](../../../../ui/screens/world/world.md#history-tab)
+    and C4's single-target query stop holding; amend both with the
+    union.
+  - **Which delete payloads.** A link row removed on its own leaves a
+    `delete` delta whose payload names both ends. One that an entity or
+    happening delete cascaded has no delta of its own: it rides in that
+    delete's payload under `relationships`, `involvements` or
+    `awareness` (`lib/actions/delta/delete-cascade.ts`), and its create
+    payload is null and its updates carry only changed columns.
+    Deleting Kael leaves no live link row and no link delete delta
+    naming Aria, so the relationship's edits drop out of her tab
+    unless the union also reads cascade payloads. Decide whether it
+    does, and how the cascade reads on the surviving end.
+  - **Overlap with the merge.** The merge reattaches the loser's link
+    rows to the canonical, in a shape the re-key question above leaves
+    open. Moved in place, a row names the canonical and brings its
+    earlier edits along; rewritten as new rows with the originals
+    cascaded, those edits sit in the loser's delete payload and reach
+    the canonical's tab only if the union reads cascade payloads.
+    Settle the two together, and give the union's fixtures a merged
+    pair.
 
 ## Implementation notes
 
