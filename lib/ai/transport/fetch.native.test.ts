@@ -18,6 +18,8 @@ vi.mock('expo/fetch', () => ({ fetch: expoFetch }))
 vi.mock('./platform-fetch', () => import('./platform-fetch.native'))
 vi.mock('@/lib/diagnostics', () => ({ httpCallSink: sink }))
 
+const CHAT_URL = 'http://10.0.2.2:4319/v1/chat/completions'
+
 // React Native's global Request is whatwg-fetch's, which defines no `body`
 // property: it reads undefined, never null, even on a GET.
 class WhatwgShapedRequest extends Request {
@@ -26,8 +28,11 @@ class WhatwgShapedRequest extends Request {
     Object.defineProperty(this, 'body', { value: undefined })
   }
 
+  // Copy-constructing would consume this body under undici; whatwg's clone doesn't.
   override clone(): Request {
-    return new WhatwgShapedRequest(this)
+    const copy = super.clone()
+    Object.defineProperty(copy, 'body', { value: undefined })
+    return copy
   }
 }
 
@@ -41,36 +46,39 @@ describe('createFetchWithCapture over the native transport', () => {
     vi.unstubAllGlobals()
   })
 
-  it.each(['GET', 'HEAD'])('sends a %s without a body', async (method) => {
+  it.each(['GET', 'HEAD'])('sends and captures a %s without a body', async (method) => {
     await createFetchWithCapture({ source: 'unit-test' })('http://10.0.2.2:4319/v1/models', {
       method,
     })
 
     expect(expoFetch).toHaveBeenCalledOnce()
     expect(expoFetch.mock.calls[0]?.[1]?.body ?? null).toBeNull()
-  })
-
-  it('captures no request body for a GET', async () => {
-    await createFetchWithCapture({ source: 'unit-test' })('http://10.0.2.2:4319/v1/models', {
-      method: 'GET',
-    })
-
     expect(sink.beginCall).toHaveBeenCalledWith(
-      expect.objectContaining({ method: 'GET', requestBody: undefined }),
+      expect.objectContaining({ method, requestBody: undefined }),
     )
   })
 
-  it('still captures and sends a POST body', async () => {
-    await createFetchWithCapture({ source: 'unit-test' })(
-      new WhatwgShapedRequest('http://10.0.2.2:4319/v1/chat/completions', {
-        method: 'POST',
-        body: 'hello',
-      }),
-    )
-
+  function expectPostBodyCapturedAndSent() {
     expect(sink.beginCall).toHaveBeenCalledWith(
       expect.objectContaining({ method: 'POST', requestBody: 'hello' }),
     )
     expect(expoFetch.mock.calls[0]?.[1]?.body).toBe('hello')
+  }
+
+  it('still captures and sends a POST body passed in init', async () => {
+    await createFetchWithCapture({ source: 'unit-test' })(CHAT_URL, {
+      method: 'POST',
+      body: 'hello',
+    })
+
+    expectPostBodyCapturedAndSent()
+  })
+
+  it('still captures and sends a POST body carried by a Request', async () => {
+    await createFetchWithCapture({ source: 'unit-test' })(
+      new WhatwgShapedRequest(CHAT_URL, { method: 'POST', body: 'hello' }),
+    )
+
+    expectPostBodyCapturedAndSent()
   })
 })
