@@ -19,6 +19,9 @@ import BasicTxt2ImgWorkflow from './comfyWorkflows/basic-txt2img-workflow.json'
 import LoraTxt2ImgWorkflow from './comfyWorkflows/lora-txt2img-workflow.json'
 import UnetTxt2ImgWorkflow from './comfyWorkflows/unet-txt2img-workflow.json'
 import { specToPixels } from '$lib/utils/image'
+import { imageGetFetch } from './fetchAdapter'
+import type { ComfyApiFetchInternals } from './comfyFetchMembers'
+import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 
 const DEFAULT_BASE_URL = 'http://localhost:8188'
 
@@ -42,23 +45,12 @@ export async function fetchModelList(
   type: string,
   timeoutMs?: number,
 ): Promise<string[]> {
-  const controller = new AbortController()
-  const timerId = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : null
-  try {
-    const resp = await fetch(`${baseUrl}/models/${type}`, { signal: controller.signal })
-    if (!resp.ok) {
-      const body = await resp.text().catch(() => '')
-      throw new Error(`ComfyUI /models/${type} responded ${resp.status}: ${body}`)
-    }
-    return (await resp.json()) as string[]
-  } catch (err) {
-    if (err instanceof DOMException && err.name === 'AbortError') {
-      throw new Error(`ComfyUI /models/${type} timed out after ${timeoutMs}ms`)
-    }
-    throw err
-  } finally {
-    if (timerId !== null) clearTimeout(timerId)
-  }
+  // Tauri HTTP, not the WebView's fetch (docs/architecture/overview.md, "Local image servers").
+  const resp = await imageGetFetch(`${baseUrl}/models/${type}`, undefined, {
+    serviceId: 'comfy-models',
+    timeoutMs,
+  })
+  return (await resp.json()) as string[]
 }
 
 export function clearComfyCacheForUrl(baseUrl: string): void {
@@ -341,7 +333,19 @@ function buildOnFailedHandler(
 export function createComfyProvider(config: ImageProviderConfig): ImageProvider {
   const baseUrl = (config.baseUrl || DEFAULT_BASE_URL).trim()
 
-  const api = new ComfyApi(baseUrl).init()
+  const api = new ComfyApi(baseUrl)
+
+  // Routes every SDK request through Tauri HTTP (docs/architecture/overview.md, "Local image
+  // servers"); headers are replaced, not merged, as in the SDK.
+  const internal = api as unknown as ComfyApiFetchInternals
+  internal.fetchApi = (path, options = {}) => {
+    options.headers = { ...internal.getCredentialHeaders() }
+    options.mode = 'cors'
+    return tauriHttpFetch(internal.apiURL(path), options)
+  }
+
+  // init() issues its first request synchronously, so the patch above must already be in place.
+  api.init()
 
   // Binds baseUrl + optional timeout so internal callers don't repeat them.
   const fetchModels = (type: string) => fetchModelList(baseUrl, type, config.timeoutMs)

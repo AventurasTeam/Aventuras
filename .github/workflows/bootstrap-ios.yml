@@ -39,6 +39,9 @@ jobs:
       - name: Generate iOS Xcode scaffold
         run: npx tauri ios init --skip-targets-install
 
+      - name: Use the Aventuras app icons
+        run: scripts/sync-ios-icons.sh
+
       # Uploaded BEFORE the smoke test, so the artifact a maintainer commits is the
       # pristine scaffold: the build script below patches project.yml with signing-
       # disabled settings (a committed copy would break signed builds / tauri ios dev

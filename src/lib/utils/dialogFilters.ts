@@ -6,7 +6,7 @@ export interface DialogFilter {
 }
 
 /**
- * Filters for a native open dialog, made safe for Android.
+ * Filters for a native open dialog, dropped on mobile (`isMobileDevice`, so Android and iOS).
  *
  * Android cannot filter by extension. The dialog plugin maps each one to a MIME type with
  * `MimeTypeMap.getMimeTypeFromExtension`, which returns null for anything the platform does not
@@ -21,7 +21,8 @@ export interface DialogFilter {
  * backup that SAF renamed to `backup.zip (1)` when resolving a duplicate, which is confirmed
  * unselectable on-device with a zip filter.
  *
- * Desktop has no such quirk, so it keeps the filters and their dropdown.
+ * The reasoning above is Android's; iOS takes the same path so its picker is never narrower than
+ * the user needs. Desktop has no such quirk, so it keeps the filters and their dropdown.
  */
 export function openFilters(filters: DialogFilter[]): DialogFilter[] | undefined {
   return isMobileDevice() ? undefined : filters

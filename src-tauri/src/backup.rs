@@ -102,18 +102,25 @@ pub async fn backup_database(
 #[tauri::command]
 pub async fn restore_database(app: AppHandle, zip_path: String) -> Result<(), String> {
     let target = db_path(&app)?;
-    restore_db_from_zip(&zip_path, &target)
+    tauri::async_runtime::spawn_blocking(move || {
+        let (file, staged) = open_src(&app, &zip_path)?;
+        let result = restore_db_from_file(file, &target);
+        if let Some(staged) = staged {
+            let _ = std::fs::remove_file(staged);
+        }
+        result
+    })
+    .await
+    .map_err(|e| format!("restore task failed: {e}"))?
 }
 
-/// The restore itself, in terms of plain paths so it can be exercised without an `AppHandle`.
-fn restore_db_from_zip(zip_path: &str, target: &Path) -> Result<(), String> {
+/// The restore itself, on an already-open archive so it can be exercised without an `AppHandle`.
+fn restore_db_from_file(file: File, target: &Path) -> Result<(), String> {
     let app_dir = target
         .parent()
         .ok_or_else(|| "invalid db path".to_string())?
         .to_path_buf();
 
-    let file =
-        File::open(zip_path).map_err(|e| format!("failed to open backup {zip_path}: {e}"))?;
     let mut archive = ZipArchive::new(file).map_err(|e| format!("invalid backup archive: {e}"))?;
 
     // 1. Stage the extracted DB next to the target (same filesystem, so the swap below can be a
@@ -400,31 +407,65 @@ pub async fn export_story_avt(
     Ok(dest_path)
 }
 
-/// Copy a user-picked SAF `content://` source (the backup chosen via the open dialog on Android)
-/// into a real temp file in the app dir, and return its path. Restore needs a real, seekable file:
-/// the picked URI cannot be `std::fs::open`ed, so we stream it in natively via the fs plugin's
-/// content-URI file descriptor (no bytes cross the JS bridge).
+/// Open the backup to restore, returning a seekable `File` plus the temp copy to delete afterwards.
 ///
-/// These temps are full copies of the user's backup (hundreds of MB), so stale ones are swept
-/// here, on the way in. Cleaning up after a restore instead would not work: the app calls
-/// `exit(0)` on success, so a post-restore cleanup would never run in the normal case — and it
-/// would still leak if the OS killed the app mid-restore.
-#[tauri::command]
-pub fn import_saf_to_temp(app: AppHandle, src_uri: String) -> Result<String, String> {
+/// `src` is whatever the open dialog returned: a real path (desktop), a `file://` URL (iOS, opened
+/// directly with security-scoped access by the fs plugin) or a `content://` SAF URI (Android),
+/// whose descriptor is not reliably seekable, so only that shape is staged into a temp file.
+fn open_src(app: &AppHandle, src: &str) -> Result<(File, Option<PathBuf>), String> {
     use std::str::FromStr;
     use tauri_plugin_fs::{FilePath, FsExt, OpenOptions};
 
-    // Stage into the app's INTERNAL cache dir: always writable via std::fs. (The app-specific
-    // external dir /sdcard/Android/data/<id>/files is NOT reliably creatable under scoped storage
-    // and gave ENOENT.) This temp is internal-only; the user's backup itself lives wherever they
-    // picked it and is read via the SAF fd below.
+    let mut opts = OpenOptions::new();
+    opts.read(true);
+
+    // Infallible: yields Url for `scheme://…`, Path otherwise.
+    match FilePath::from_str(src).unwrap() {
+        FilePath::Path(p) => File::open(&p)
+            .map(|f| (f, None))
+            .map_err(|e| format!("failed to open backup {}: {e}", p.display())),
+        FilePath::Url(url) if url.scheme() == "file" => app
+            .fs()
+            .open(FilePath::Url(url), opts)
+            .map(|f| (f, None))
+            .map_err(|e| format!("failed to open backup: {e}")),
+        FilePath::Url(url) => {
+            let mut from = app
+                .fs()
+                .open(FilePath::Url(url), opts)
+                .map_err(|e| format!("failed to open backup: {e}"))?;
+            let staged = stage_path(app)?;
+            let copied = File::create(&staged)
+                .map_err(|e| format!("failed to create temp restore file: {e}"))
+                .and_then(|mut out| {
+                    io::copy(&mut from, &mut out)
+                        .and_then(|_| out.flush())
+                        .map_err(|e| format!("failed to copy backup: {e}"))
+                })
+                .and_then(|_| {
+                    File::open(&staged).map_err(|e| format!("failed to reopen temp copy: {e}"))
+                });
+            match copied {
+                Ok(file) => Ok((file, Some(staged))),
+                Err(e) => {
+                    let _ = std::fs::remove_file(&staged);
+                    Err(e)
+                }
+            }
+        }
+    }
+}
+
+/// A fresh temp path in the app's internal cache dir (always writable via `std::fs`, unlike the
+/// app-specific external dir under scoped storage). Temps left by an app killed mid-restore are
+/// swept here, since they are full copies of the user's backup.
+fn stage_path(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app
         .path()
         .app_cache_dir()
         .map_err(|e| format!("no cache dir: {e}"))?;
     std::fs::create_dir_all(&dir).ok();
 
-    // Sweep temps left behind by earlier restores (see the note above on why cleanup lives here).
     if let Ok(entries) = std::fs::read_dir(&dir) {
         for entry in entries.flatten() {
             let path = entry.path();
@@ -442,21 +483,7 @@ pub fn import_saf_to_temp(app: AppHandle, src_uri: String) -> Result<String, Str
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis())
         .unwrap_or(0);
-    let dest_path = dir.join(format!(".tmp-restore-{millis}.zip"));
-
-    let src_fp = FilePath::from_str(&src_uri).map_err(|e| format!("invalid source uri: {e}"))?;
-    let mut opts = OpenOptions::new();
-    opts.read(true);
-    let mut src = app
-        .fs()
-        .open(src_fp, opts)
-        .map_err(|e| format!("failed to open source: {e}"))?;
-    let mut out =
-        File::create(&dest_path).map_err(|e| format!("failed to create temp restore file: {e}"))?;
-    io::copy(&mut src, &mut out).map_err(|e| format!("failed to copy source: {e}"))?;
-    out.flush()
-        .map_err(|e| format!("failed to flush temp: {e}"))?;
-    Ok(dest_path.to_string_lossy().into_owned())
+    Ok(dir.join(format!(".tmp-restore-{millis}.zip")))
 }
 
 #[cfg(test)]
@@ -518,7 +545,7 @@ mod tests {
         std::fs::write(&target, fake_db_bytes("old")).unwrap();
         write_zip(&zip, &[("aventura.db", &fake_db_bytes("new"))]);
 
-        restore_db_from_zip(zip.to_str().unwrap(), &target).unwrap();
+        restore_db_from_file(File::open(&zip).unwrap(), &target).unwrap();
 
         assert_eq!(read(&target), fake_db_bytes("new"));
         assert_eq!(
@@ -546,7 +573,7 @@ mod tests {
         bytes[len / 2] ^= 0xFF;
         std::fs::write(&zip, &bytes).unwrap();
 
-        let err = restore_db_from_zip(zip.to_str().unwrap(), &target).unwrap_err();
+        let err = restore_db_from_file(File::open(&zip).unwrap(), &target).unwrap_err();
 
         // The whole point: a failed restore must not cost the user their database.
         assert_eq!(read(&target), precious, "live DB was damaged: {err}");
@@ -569,7 +596,7 @@ mod tests {
         let bytes = read(&zip);
         std::fs::write(&zip, &bytes[..bytes.len() / 2]).unwrap();
 
-        let err = restore_db_from_zip(zip.to_str().unwrap(), &target).unwrap_err();
+        let err = restore_db_from_file(File::open(&zip).unwrap(), &target).unwrap_err();
         assert_eq!(read(&target), precious, "live DB was damaged: {err}");
     }
 
@@ -581,7 +608,7 @@ mod tests {
         std::fs::write(&target, fake_db_bytes("precious")).unwrap();
         write_zip(&zip, &[("aventura.db", b"this is not a database")]);
 
-        let err = restore_db_from_zip(zip.to_str().unwrap(), &target).unwrap_err();
+        let err = restore_db_from_file(File::open(&zip).unwrap(), &target).unwrap_err();
 
         assert!(
             err.contains("not a valid SQLite file"),
@@ -598,7 +625,7 @@ mod tests {
         std::fs::write(&target, fake_db_bytes("precious")).unwrap();
         write_zip(&zip, &[("metadata.json", b"{}")]);
 
-        let err = restore_db_from_zip(zip.to_str().unwrap(), &target).unwrap_err();
+        let err = restore_db_from_file(File::open(&zip).unwrap(), &target).unwrap_err();
 
         assert!(
             err.contains("does not contain aventura.db"),
@@ -618,7 +645,7 @@ mod tests {
         std::fs::write(dir.join("aventura.db-shm"), b"stale shm").unwrap();
         write_zip(&zip, &[("aventura.db", &fake_db_bytes("new"))]);
 
-        restore_db_from_zip(zip.to_str().unwrap(), &target).unwrap();
+        restore_db_from_file(File::open(&zip).unwrap(), &target).unwrap();
 
         assert!(!dir.join("aventura.db-wal").exists());
         assert!(!dir.join("aventura.db-shm").exists());
