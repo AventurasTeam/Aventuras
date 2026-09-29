@@ -366,7 +366,7 @@ type ComfyApiFetchInternals = {
 export function createComfyProvider(config: ImageProviderConfig): ImageProvider {
   const baseUrl = (config.baseUrl || DEFAULT_BASE_URL).trim()
 
-  const api = new ComfyApi(baseUrl).init()
+  const api = new ComfyApi(baseUrl)
 
   if (isIos()) {
     // Every HTTP call the SDK makes -- checkpoints, samplers, prompt queueing, /view image
@@ -388,6 +388,9 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
       return tauriHttpFetch(internal.apiURL(path), options)
     }
   }
+
+  // init() issues its first request synchronously, so the patch above must already be in place.
+  api.init()
 
   // Binds baseUrl + optional timeout so internal callers don't repeat them.
   const fetchModels = (type: string) => fetchModelList(baseUrl, type, config.timeoutMs)
