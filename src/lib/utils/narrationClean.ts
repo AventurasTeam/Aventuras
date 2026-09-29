@@ -147,7 +147,7 @@ export function cleanNarration(content: string, options: NarrationCleanOptions):
   if (options.html === 'unwrap') text = unwrapHtml(text)
   text = cleanLayout(text, options)
   if (options.inlineEmphasis === 'unwrap') text = unwrapInlineEmphasis(text)
-  return text.replace(/\n{3,}/g, '\n\n').trim()
+  return text.replace(/(?:\r?\n){3,}/g, '\n\n').trim()
 }
 
 export function narrationCleaner(options: NarrationCleanOptions): (content: string) => string {

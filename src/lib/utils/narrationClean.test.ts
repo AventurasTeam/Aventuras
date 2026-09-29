@@ -325,6 +325,10 @@ describe('CLEAN_FOR_CLASSIFICATION', () => {
     expect(classify('**Morning** at **the pool**')).toBe('**Morning** at **the pool**')
   })
 
+  it('collapses CRLF blank lines', () => {
+    expect(classify('### Title\r\n\r\n\r\n\r\ntext')).toBe('Title\n\ntext')
+  })
+
   it('collapses the gaps a dropped rule leaves behind', () => {
     expect(classify('# Title\n\n***\n\nProse.')).toBe('Title\n\nProse.')
   })
