@@ -84,6 +84,17 @@ describe('createFetchWithCapture', () => {
     expect(await response.text()).toBe('ok')
   })
 
+  it('records no request body for a bodyless DELETE', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response('ok'))
+    const wrappedFetch = createFetchWithCapture({ source: 'unit-test', fetchImpl })
+
+    await wrappedFetch('https://example.test/v1/models/m1', { method: 'DELETE' })
+
+    expect(sink.beginCall).toHaveBeenCalledWith(
+      expect.objectContaining({ method: 'DELETE', requestBody: undefined }),
+    )
+  })
+
   it('fails call and rethrows when fetch throws', async () => {
     const error = new Error('network down')
     const fetchImpl = vi.fn<typeof fetch>().mockRejectedValue(error)
