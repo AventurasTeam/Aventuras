@@ -96,6 +96,10 @@ async function updateEntrySceneFieldsLocked(
   const branchEntities = [...entitiesStore.getEntities().values()].filter(
     (e) => e.branchId === branchId,
   )
+  // An entity delete clears only the tail's scene fields; the entries before it keep the id,
+  // and tracking anchored there would write the deleted location back.
+  const live = new Set(branchEntities.map((e) => e.id))
+  const previousLocationId = previousMetadata?.currentLocationId ?? null
   const group: PipelineAction[] = [
     {
       kind: 'updateStoryEntryMetadata',
@@ -116,8 +120,11 @@ async function updateEntrySceneFieldsLocked(
       entities: branchEntities,
       previous: {
         entryId: previousEntry?.id ?? id,
-        sceneEntities: previousMetadata?.sceneEntities ?? [],
-        currentLocationId: previousMetadata?.currentLocationId ?? null,
+        sceneEntities: (previousMetadata?.sceneEntities ?? []).filter((sceneId) =>
+          live.has(sceneId),
+        ),
+        currentLocationId:
+          previousLocationId != null && live.has(previousLocationId) ? previousLocationId : null,
         worldTime: previousMetadata?.worldTime ?? 0,
       },
       before,
