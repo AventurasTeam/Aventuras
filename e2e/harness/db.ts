@@ -3,7 +3,13 @@ import { DatabaseSync } from 'node:sqlite'
 import { expect, type Page } from '@playwright/test'
 import { gunzipSync } from 'fflate'
 
-import type { EntryMetadata, ProbeCapturePayload } from '@/lib/db'
+import {
+  ensureVecTablesSql,
+  vecTableName,
+  type EntryMetadata,
+  type ProbeCapturePayload,
+  type VecTargetKind,
+} from '@/lib/db'
 
 // Query the running app's own DB connection through the preload bridge
 // (window.aventurasDb). The faithful way to assert an in-app write: it reads
@@ -56,6 +62,56 @@ export async function tailMetadata(page: Page, branchId: string): Promise<EntryM
   const rows = await queryApp(page, TAIL_METADATA_SQL, [branchId])
   const raw = rows[0]?.[0] as string | null | undefined
   return raw ? (JSON.parse(raw) as EntryMetadata) : null
+}
+
+// The migrations' 384 family plus an 8-dim one seedVectors creates, so a sweep "in every dim
+// family" is checked across more than the one a fresh DB has.
+export const SEEDED_VEC_DIMS = [384, 8] as const
+
+/**
+ * One zero vector for `id` in each SEEDED_VEC_DIMS family. Only for specs with no embedder model
+ * installed: with none, nothing auto-drains, so vectors move only through the flow under test.
+ */
+export async function seedVectors(
+  page: Page,
+  kind: VecTargetKind,
+  branchId: string,
+  id: string,
+): Promise<void> {
+  for (const sql of ensureVecTablesSql(8)) await queryApp(page, sql)
+  for (const dim of SEEDED_VEC_DIMS) {
+    await queryApp(
+      page,
+      `INSERT INTO ${vecTableName(kind, dim)} (pk, branch_id, model_id, id, source_hash, embedding) VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        `${branchId}:${id}:e2e${dim}`,
+        branchId,
+        `e2e${dim}`,
+        id,
+        'h',
+        new Uint8Array(new Float32Array(dim).buffer),
+      ],
+    )
+  }
+}
+
+/** `id`'s vector count per SEEDED_VEC_DIMS family, keyed by dim. */
+export async function vecCounts(
+  page: Page,
+  kind: VecTargetKind,
+  branchId: string,
+  id: string,
+): Promise<Record<number, number>> {
+  const counts: Record<number, number> = {}
+  for (const dim of SEEDED_VEC_DIMS) {
+    const [[count]] = await queryApp(
+      page,
+      `SELECT count(*) FROM ${vecTableName(kind, dim)} WHERE branch_id = ? AND id = ?`,
+      [branchId, id],
+    )
+    counts[dim] = Number(count)
+  }
+  return counts
 }
 
 const LATEST_CAPTURE_SQL = `SELECT payload FROM probe_captures

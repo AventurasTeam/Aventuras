@@ -2,9 +2,9 @@ import { DatabaseSync } from 'node:sqlite'
 
 import { expect, test, type Page } from '@playwright/test'
 
-import { ensureVecTablesSql, type EntryMetadata } from '@/lib/db'
+import type { EntryMetadata } from '@/lib/db'
 
-import { currentBranchId, queryApp, tailMetadata } from '../harness/db'
+import { currentBranchId, queryApp, seedVectors, tailMetadata } from '../harness/db'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { suppressNativeUnloadDialogRace } from '../harness/reload'
@@ -42,26 +42,6 @@ function putInTailScene(dbPath: string, name: string): void {
     )
   } finally {
     db.close()
-  }
-}
-
-// No embedder model here, so nothing auto-drains — vectors only move via the delete/undo/redo
-// under test; undo's forced-zero holds, and a re-seed between undo/redo can't hit a real embed.
-async function seedVectors(page: Page, branchId: string, id: string): Promise<void> {
-  for (const sql of ensureVecTablesSql(8)) await queryApp(page, sql)
-  for (const dim of [384, 8]) {
-    await queryApp(
-      page,
-      `INSERT INTO entities_vec_${dim} (pk, branch_id, model_id, id, source_hash, embedding) VALUES (?, ?, ?, ?, ?, ?)`,
-      [
-        `${branchId}:${id}:e2e${dim}`,
-        branchId,
-        `e2e${dim}`,
-        id,
-        'h',
-        new Uint8Array(new Float32Array(dim).buffer),
-      ],
-    )
   }
 }
 
@@ -170,7 +150,7 @@ test.describe.serial('World delete', () => {
       [branchId, 'Mira'],
     )
     const id = mira as string
-    await seedVectors(page, branchId, id)
+    await seedVectors(page, 'entity', branchId, id)
     // The seed leaves every entity stale (1) — force 0 so undo's forced 1 (below) is provably
     // the handler's doing, not a coincidence of the fixture's own default.
     await queryApp(page, `UPDATE entities SET embedding_stale = 0 WHERE branch_id = ? AND id = ?`, [
@@ -254,7 +234,7 @@ test.describe.serial('World delete', () => {
       })
 
     // A re-embed between undo and redo: the redo must sweep what it finds, not what the delete saw.
-    await seedVectors(page, branchId, id)
+    await seedVectors(page, 'entity', branchId, id)
     const preRedo = await footprint(page, branchId, id)
     expect(preRedo.vec384).toBe(1)
     expect(preRedo.vec8).toBe(1)
