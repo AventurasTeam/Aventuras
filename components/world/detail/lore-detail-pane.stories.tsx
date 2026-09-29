@@ -243,6 +243,23 @@ export const SettingsSave: Story = {
   },
 }
 
+/** entity.md → Recently-classified: only the row tint decays; the head badge stays at full strength. */
+export const FadingBadgeAtFullStrength: Story = {
+  args: { recentlyClassified: 'fading' },
+  play: async ({ canvasElement }) => {
+    const label = await screen.findByText('Recently classified', {}, WAIT)
+    await expect(label).toBeVisible()
+    await expect(label.closest('.bg-recently-classified-bg')).not.toBeNull()
+    // A dimmed wrapper fades the badge as surely as a class on the badge does.
+    await waitFor(() => {
+      for (let node: Element | null = label; node !== canvasElement; node = node.parentElement) {
+        if (node == null) throw new Error('The badge is outside the story canvas.')
+        expect(getComputedStyle(node).opacity).toBe('1')
+      }
+    }, WAIT)
+  },
+}
+
 /** Create mode: a title alone can't save; a body enables it. */
 export const Create: Story = {
   args: { row: null },
