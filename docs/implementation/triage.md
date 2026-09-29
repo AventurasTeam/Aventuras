@@ -236,3 +236,12 @@ slice-planning gate forces its resolution before that slice is planned.
   scoped the translation cascade to the embedded kinds' delete arms,
   and the handler predates 4.2b (2026-09-30, raised by the 4.2b stack
   review).
+
+- **`reader-composer-modes.spec` can fail on its own locator.** After
+  Send it waits for `getByText('E2E-MODES', { exact: false })`, which
+  also matches the mock reply (`E2E-MODES-REPLY …`); when the reply
+  renders before the assertion runs, Playwright's strict mode sees two
+  elements and fails, and the retry passes. Seen once in two runs on
+  the 4.2b head; the spec is unchanged since 3.4b. A locator that can
+  only match the user action (the wrapped text, or `exact: true`) would
+  close it (2026-09-30, raised by the 4.2b stack-review follow-up).
