@@ -163,7 +163,8 @@ async function buildUndoOps(
       })
     }
 
-    // No child-row cascade: the caller's set already carries the children's deltas (row-closure.ts).
+    // No child-row cascade: a child goes only if its own create is in the set, and row-closure.ts
+    // adds children only for a happening's involvements and awareness; any other outlives the row.
     if (delta.op === 'create') {
       const keeping = entry.rowKeepingColumns ?? []
       const userKept = keeping.filter((col) => wroteColumn(userEdits, col))
@@ -232,7 +233,7 @@ async function buildUndoOps(
           ? childRows.map((childRow) => ({ ...childRow, embeddingStale: 1 }))
           : childRows
         // A wide child table × large row count can overrun SQLite's per-statement bind cap —
-        // chunk by the table's full column count (drizzle binds one per column, sparse or not).
+        // chunk by the table's full column count, an upper bound on drizzle's binds per row.
         const chunkSize = rowsPerInsert(Object.keys(getTableColumns(childTable)).length)
         for (let i = 0; i < restoredChildren.length; i += chunkSize) {
           ops.push(

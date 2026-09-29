@@ -102,7 +102,7 @@ export type HappeningDetailPaneProps = {
   onSession: (handle: RowSessionHandle | null) => void
   /** A link row's `Open in World`; the route navigates through the session's leave guard. */
   onOpenEntity: (entity: Entity) => void
-  /** `⋯ → Delete happening`; the surface raises the confirm and owns the cascade. */
+  /** `⋯ → Delete happening`; the surface raises the confirm. */
   onDelete: (row: Happening) => void
   /** The host screen's focus state, for the save bar's Cmd/Ctrl-S. */
   hotkeysEnabled?: boolean

@@ -35,8 +35,9 @@ function count<T>(rows: Iterable<T>, match: (row: T) => boolean): number {
 }
 
 /**
- * `references`/`unplacedItems`/`tailScene` mirror `entityDeleteActions`; the rest repeat its
- * cascade predicates directly — a new cascade table needs a matching count here.
+ * `references`/`unplacedItems`/`tailScene` mirror `entityDeleteActions`; the rest repeat
+ * `entityCascade`'s predicates (lib/actions/entities/entity-cascade.ts) — a new cascade table
+ * needs a matching count here.
  */
 export function entityDeleteImpact({
   branchId,

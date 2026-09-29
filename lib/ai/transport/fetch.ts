@@ -64,8 +64,8 @@ export function createFetchWithCapture(options: FetchWithCaptureOptions): typeof
 
     try {
       // The raw init body, not the captured text: a transport that re-sends the
-      // body itself must not round-trip a non-text one through `.text()`. Falls
-      // back to the captured text whenever init carries no body, Request input or not.
+      // body itself must not round-trip a non-text one through `.text()`. With no
+      // init body the captured text is sent, so capture must stay undefined for GET/HEAD.
       const outgoingBody = init?.body !== undefined ? init.body : requestBody
       const response =
         fetchImpl !== undefined

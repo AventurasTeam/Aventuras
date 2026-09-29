@@ -108,7 +108,7 @@ function tailActions(branchId: string, tail: DeleteTail | null, id: string): Pip
 }
 
 /**
- * world.md → Delete order: handlers read pre-group state, so patch/tail/delete order doesn't matter.
+ * world.md → Delete. Handlers read pre-group state, so patch/tail/delete order doesn't matter.
  * Replaces the whole `state` from this snapshot, so a write landing in between is lost — safe only
  * while nothing else writes `state` alongside user edits (the periodic classifier doesn't).
  */

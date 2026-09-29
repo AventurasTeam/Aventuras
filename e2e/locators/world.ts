@@ -61,13 +61,14 @@ export const world = {
 
   detailName: (page: Page): Locator => page.getByTestId('world-detail-name'),
 
-  // The detail pane's recently-classified badge (world-detail-placeholder.tsx)
+  // The detail pane's recently-classified badge (entity-detail-frame.tsx, lore-detail-pane.tsx)
   // — a plain Tag, no role of its own.
   recentlyClassifiedBadge: (page: Page): Locator =>
     page.getByText(t('world:detail.recentlyClassified'), { exact: true }),
 
   // ImporterMenu options (importer-menu.tsx). A disabled option's accessible name resolves to its
-  // reason, and Blank is enabled only on entity categories — assert the visible label text instead.
+  // reason, and From JSON / From vault are always disabled, Blank while an edit is blocked
+  // (world-add-options.ts) — assert the visible label text instead.
   addMenuOption: (page: Page, key: 'blank' | 'fromJson' | 'fromVault'): Locator =>
     page.getByText(t(`world:addMenu.${key}`), { exact: true }),
 

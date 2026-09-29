@@ -53,7 +53,7 @@ function confirmCopy(branchId: string, target: WorldDeleteTarget): DeleteConfirm
 
 /**
  * world.md → Delete. The row leaving the store clears the selection (`useWorldSelection`);
- * CTRL-Z in the reader brings it back.
+ * CTRL-Z in the reader restores the row, never the selection.
  */
 export function useWorldDelete(branchId: string, ctx: DbCtx, guard: (proceed: () => void) => void) {
   const [pending, setPending] = useState<{

@@ -128,7 +128,8 @@ async function bothPovOutcome(
   }
   if (columns.kind === null && columns.inverseKind === null)
     return { status: 'rejected', reason: 'a relationship needs at least one perspective' }
-  // An existing link implies both rows live: their deletes cascade it under this lock.
+  // A delete arm cascades the link under this lock, so an existing one skips the ref check;
+  // a create's reversal can still orphan it.
   if (!current) {
     const refs = [
       { table: 'entities', id: pair.aId },
@@ -213,7 +214,8 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
   )
     return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
 
-  // An existing link implies both rows live: their deletes cascade it under this lock.
+  // A delete arm cascades the link under this lock, so an existing one skips the ref check;
+  // a create's reversal can still orphan it.
   if (!current) {
     if (kind === null) return { status: 'rejected', reason: 'no relationship to clear' }
     const refs = [

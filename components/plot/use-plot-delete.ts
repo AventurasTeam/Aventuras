@@ -76,8 +76,8 @@ export function plotDeleteRejectionText(code: string | undefined): string {
 }
 
 /**
- * world.md → Delete (confirm, then cascade delete C3).
- * Row leaving the store clears selection; CTRL-Z in the reader restores it.
+ * world.md → Delete (confirm, then cascade delete C3). Row leaving the store clears selection;
+ * CTRL-Z in the reader restores the row, never the selection.
  */
 export function usePlotDelete(branchId: string, ctx: DbCtx, guard: (proceed: () => void) => void) {
   const [pending, setPending] = useState<{

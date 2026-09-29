@@ -66,7 +66,7 @@ export type ThreadDetailPaneProps = {
   onRejected?: (reason: string) => void
   /** The surface routes row switches, `←`, segment switches and GO TO through this. */
   onSession: (handle: RowSessionHandle | null) => void
-  /** `⋯ → Delete thread`; the surface raises the confirm and owns the cascade. */
+  /** `⋯ → Delete thread`; the surface raises the confirm. */
   onDelete: (row: Thread) => void
   /** The host screen's focus state, for the save bar's Cmd/Ctrl-S. */
   hotkeysEnabled?: boolean
