@@ -11,6 +11,14 @@
   }
 }
 
+/* An icon button: a 32px touch target, compact only where hovering can be relied on. */
+@utility tap-target {
+  @apply flex min-h-[32px] min-w-[32px] items-center justify-center p-1;
+  @variant can-hover {
+    @apply min-h-0 min-w-0 p-0.5;
+  }
+}
+
 @theme {
   /* Radius (for rounded-*) */
   --radius-sm: calc(var(--radius) - 4px);

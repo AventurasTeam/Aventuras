@@ -26,7 +26,7 @@ export function isIos(): boolean {
  * Returns `true` when hovering can be relied on: the primary input hovers and no input is a
  * finger, so a `title` tooltip can actually explain a control. A capability, not a screen
  * size: a desktop window dragged narrow still hovers, a tablet or a touchscreen laptop never
- * does. The same condition as the `can-hover` variant in `app.css`; change both together.
+ * does. The same condition as the `can-hover` variant in `app.css`, which `platform.test.ts` checks.
  */
 export function supportsHover(): boolean {
   if (typeof window === 'undefined') return true

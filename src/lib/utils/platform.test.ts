@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { supportsHover } from './platform'
 
@@ -15,7 +16,6 @@ function withInputs({ hover, coarse }: { hover: boolean; coarse: boolean }) {
   vi.stubGlobal('window', {
     matchMedia: (query: string) => ({ matches: matches[query] ?? false }),
   })
-  vi.stubGlobal('navigator', { userAgent: DESKTOP_UA })
 }
 
 afterEach(() => {
@@ -24,11 +24,11 @@ afterEach(() => {
 
 describe('supportsHover', () => {
   it.each([
-    ['a mouse or trackpad with no touch screen', { hover: true, coarse: false }, true],
-    ['a phone or tablet', { hover: false, coarse: true }, false],
-    ['a touchscreen laptop, trackpad primary', { hover: true, coarse: true }, false],
-    ['an input that neither hovers nor touches', { hover: false, coarse: false }, false],
-  ])('on %s is %s', (_, inputs, expected) => {
+    ['a mouse or trackpad with no touch screen', true, { hover: true, coarse: false }],
+    ['a phone or tablet', false, { hover: false, coarse: true }],
+    ['a touchscreen laptop, trackpad primary', false, { hover: true, coarse: true }],
+    ['an input that neither hovers nor touches', false, { hover: false, coarse: false }],
+  ])('on %s is %s', (_, expected, inputs) => {
     withInputs(inputs)
     expect(supportsHover()).toBe(expected)
   })
@@ -40,5 +40,13 @@ describe('supportsHover', () => {
     vi.stubGlobal('window', {})
     vi.stubGlobal('navigator', { userAgent })
     expect(supportsHover()).toBe(expected)
+  })
+})
+
+describe('the can-hover variant in app.css', () => {
+  it('tests the same condition as supportsHover', () => {
+    const css = readFileSync(new URL('../../app.css', import.meta.url), 'utf8')
+    expect(css).toContain('(hover: hover)')
+    expect(css).toContain('not all and (any-pointer: coarse)')
   })
 })
