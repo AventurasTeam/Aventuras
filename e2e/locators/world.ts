@@ -96,7 +96,7 @@ export const world = {
 
   moreActions: (page: Page): Locator =>
     page.getByRole('button', { name: t('world:detail.menu.label'), exact: true }),
-  menuItem: (page: Page, key: 'setLead' | 'viewJson'): Locator =>
+  menuItem: (page: Page, key: 'setLead' | 'viewJson' | 'deleteLore'): Locator =>
     page.getByRole('menuitem', { name: t(`world:detail.menu.${key}`), exact: true }),
 
   // The list row's lead Tag (entity-row.tsx meta slot).
@@ -116,7 +116,10 @@ export const world = {
   deleteEntityItem: (page: Page): Locator =>
     page.getByRole('menuitem', { name: new RegExp(`^${t('world:detail.menu.deleteEntity')}`) }),
   deleteDialog: (page: Page): Locator => page.getByRole('alertdialog'),
-  deleteConfirm: (page: Page, kind: 'character' | 'location' | 'item' | 'faction'): Locator =>
+  deleteConfirm: (
+    page: Page,
+    kind: 'character' | 'location' | 'item' | 'faction' | 'lore',
+  ): Locator =>
     world
       .deleteDialog(page)
       .getByRole('button', { name: t(`world:delete.confirm.${kind}`), exact: true }),
