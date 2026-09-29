@@ -101,6 +101,12 @@ describe('loreActions', () => {
     ).toEqual([])
   })
 
+  it('writes a re-cased keyword: its stored spelling changes though matching ignores case', () => {
+    const draft = { ...loreDraftFrom(ROW), keywords: ['aetherium'] }
+    const [update] = loreActions({ branchId: 'b1', row: ROW, draft, id: ROW.id, now: 5 })
+    expect(update).toMatchObject({ payload: { patch: { keywords: ['aetherium'] } } })
+  })
+
   it('writes only the columns the draft changed', () => {
     const draft = loreDraftFrom(ROW)
     const changed = {

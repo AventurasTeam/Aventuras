@@ -74,7 +74,7 @@ function lorePatch(row: Lore, draft: LoreDraft): LorePatch {
   if (category !== blankToNull(row.category ?? '')) patch.category = category
   if (draft.injectionMode !== row.injectionMode) patch.injectionMode = draft.injectionMode
   if (draft.priority !== row.priority) patch.priority = draft.priority
-  // Normalized as matchTerms reads them, so case/whitespace variants aren't edits.
+  // Deduped under normalizeTerm: padding and repeats aren't edits, but a re-cased term is.
   const keywords = dedupeTerms(draft.keywords)
   if (!sameList(keywords, dedupeTerms(row.keywords))) patch.keywords = keywords
   const tags = cleanList(draft.tags)
