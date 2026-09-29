@@ -14,6 +14,7 @@
     prepareTTSSegments,
     resolveDialogueVoice,
     supportsDialogueVoice,
+    supportsVolumeOverride,
   } from '$lib/services/ai/utils/ttsText'
   import TTSVoiceSelector from './TTSVoiceSelector.svelte'
   import { isIos } from '$lib/utils/platform'
@@ -70,6 +71,10 @@
       loadSystemVoices()
     }
   })
+
+  const volumeOverrideSupported = $derived(
+    supportsVolumeOverride(settings.systemServicesSettings.tts.provider, isIos()),
+  )
 
   const dialogueVoiceSupported = $derived(
     supportsDialogueVoice(settings.systemServicesSettings.tts.provider),
@@ -497,10 +502,11 @@
         <div>
           <Label>Volume Override</Label>
           <p class="text-muted-foreground text-xs">Manually control TTS narration volume.</p>
-          {#if isIos()}
+          {#if !volumeOverrideSupported}
             <!-- iOS ignores HTMLMediaElement.volume by design, so this control has nothing to
-                 act on there -- only the hardware volume buttons change loudness. Disabled
-                 below rather than hidden, so a value set on another platform stays visible. -->
+                 act on for these providers -- only the hardware volume buttons change loudness.
+                 Disabled below rather than hidden, so a value set on another platform stays
+                 visible. -->
             <p class="text-muted-foreground text-xs italic">
               iOS does not allow apps to set playback volume in software; use the volume buttons
               instead.
@@ -509,7 +515,7 @@
         </div>
         <Switch
           checked={settings.systemServicesSettings.tts.volumeOverride}
-          disabled={isIos()}
+          disabled={!volumeOverrideSupported}
           onCheckedChange={(v) => {
             settings.systemServicesSettings.tts.volumeOverride = v
             settings.saveSystemServicesSettings()
@@ -528,7 +534,7 @@
               settings.systemServicesSettings.tts.volume = v
               settings.saveSystemServicesSettings()
             }}
-            disabled={isIos()}
+            disabled={!volumeOverrideSupported}
             type="single"
             min={0}
             max={1}

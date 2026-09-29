@@ -95,3 +95,10 @@ The Google Translate provider is excluded: its "voice" is a language code, so a 
 one would read the dialogue in another language. `supportsDialogueVoice` is a single
 predicate shared by the settings UI that hides the control and the playback path that
 ignores the setting.
+
+## Volume override
+
+iOS ignores `HTMLMediaElement.volume`, so the override only applies there to the system-voice
+provider, which sets `utterance.volume` (not verified on a device). `supportsVolumeOverride` is
+shared by the settings UI and `TTSService`, so a `volumeOverride: true` restored from another
+platform's backup is ignored wherever the control is disabled.
