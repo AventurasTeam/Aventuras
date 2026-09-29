@@ -549,8 +549,10 @@ prose, then hands pre-formatted strings to the compound.
   over each `undo_payload` member's JSON text, skipping `$`-prefixed
   meta members, with the term JSON-escaped the same way, so it
   matches the value from before the change, not the new one. A whole
-  update summary typed as shown (`Modified Traits, Drives`) matches
-  when every field it names matches on its own. A field path is tested via
+  update summary typed as shown (`Modified Traits, Drives`) matches an
+  update when every field it names resolves, through the label
+  vocabulary or as a literal path, to a path in its undo payload —
+  field values never match a summary. A field path is tested via
   `json_type(undo_payload, '$.<path>') IS NOT NULL`, not
   `json_extract` (which misses a `null` pre-change value); a search
   term also resolves against the field-path label vocabulary, so
