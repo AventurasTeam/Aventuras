@@ -35,11 +35,10 @@
   import { Separator } from '$lib/components/ui/separator'
   import * as Dialog from '$lib/components/ui/dialog'
   import { database } from '$lib/services/database'
-  import { isAndroid, isIos } from '$lib/utils/platform'
+  import { isAndroid } from '$lib/utils/platform'
   import { autosize } from '$lib/utils/autosize'
   import { ask, open } from '@tauri-apps/plugin-dialog'
   import { openFilters } from '$lib/utils/dialogFilters'
-  import { invoke } from '@tauri-apps/api/core'
   import { errMessage } from '$lib/utils/error'
 
   // Local mirror so we can revert the visual state if the confirm dialog is cancelled
@@ -52,6 +51,8 @@
   let restoreError = $state<string | null>(null)
   let showBackupConfirm = $state(false)
   let showRestoreConfirm = $state(false)
+  let restoreDone = $state(false)
+  const RESTORE_EXIT_DELAY_MS = 3000
 
   // SQL Query Box state — initialized from module-level persisted values
   let sqlQuery = $state(_sqlQuery)
@@ -163,20 +164,8 @@
     })
     if (!selected) return
 
-    let zipPath = selected as string
-    // Mobile: the picked URI can't be std::fs-opened by the native restore, so stream it into a
-    // real temp file first (natively — no bytes cross the JS bridge), then restore that.
-    if (isAndroid() || isIos()) {
-      isRestoring = true
-      try {
-        zipPath = await invoke<string>('import_saf_to_temp', { srcUri: selected })
-      } catch (error) {
-        restoreError = errMessage(error)
-        isRestoring = false
-        return
-      }
-    }
-    await doRestore(zipPath)
+    // The native restore opens a path, file:// URL or content:// URI itself.
+    await doRestore(selected as string)
   }
 
   async function doRestore(zipPath: string) {
@@ -185,13 +174,20 @@
     try {
       const { backupService } = await import('$lib/services/backupService')
       await backupService.restoreFromBackup(zipPath)
-      // App will exit — we won't reach here
     } catch (error) {
       console.error('[ExperimentalSettings] Restore failed:', error)
       restoreError = errMessage(error)
-    } finally {
       isRestoring = false
+      return
     }
+
+    // The DB is closed and replaced; the blocking modal keeps anything from lazily reopening it.
+    restoreDone = true
+    // Give the modal time to paint before the process ends, so the exit doesn't read as a crash.
+    await new Promise((resolve) => setTimeout(resolve, RESTORE_EXIT_DELAY_MS))
+    // exit() rather than relaunch() avoids a Windows webview2 crash on teardown.
+    const { exit } = await import('@tauri-apps/plugin-process')
+    await exit(0)
   }
 
   async function handleStateTrackingToggle(checked: boolean) {
@@ -759,5 +755,21 @@
         Restore & Close App
       </Button>
     </Dialog.Footer>
+  </Dialog.Content>
+</Dialog.Root>
+
+<!-- Restore Complete: not dismissable; the app exits shortly -->
+<Dialog.Root open={restoreDone}>
+  <Dialog.Content
+    class="p-6 sm:max-w-md"
+    interactOutsideBehavior="ignore"
+    escapeKeydownBehavior="ignore"
+  >
+    <Dialog.Header>
+      <Dialog.Title>Restore complete</Dialog.Title>
+      <Dialog.Description class="pt-2">
+        Aventuras is closing. Reopen it to continue with the restored database.
+      </Dialog.Description>
+    </Dialog.Header>
   </Dialog.Content>
 </Dialog.Root>

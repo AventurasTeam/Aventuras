@@ -186,8 +186,5 @@ export function isTouchDevice(): boolean {
  */
 export function isMobileDevice(): boolean {
   if (typeof window === 'undefined') return false
-  return (
-    isIos() ||
-    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-  )
+  return isIos() || /Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
 }

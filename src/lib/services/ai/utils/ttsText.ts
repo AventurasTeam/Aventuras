@@ -86,6 +86,16 @@ export function supportsDialogueVoice(provider: string): boolean {
   return provider !== 'google'
 }
 
+/**
+ * Whether the volume override can take effect. iOS ignores `HTMLMediaElement.volume`, which
+ * every provider but the system voices (Web Speech, `utterance.volume`) plays through. The
+ * settings UI and playback share this so a restored `volumeOverride: true` cannot quietly
+ * apply where the control is unavailable.
+ */
+export function supportsVolumeOverride(provider: string, ios: boolean): boolean {
+  return !ios || provider === 'microsoft'
+}
+
 /** The dialogue voice actually in force, or undefined for single-voice playback. */
 export function resolveDialogueVoice(settings: {
   provider: string

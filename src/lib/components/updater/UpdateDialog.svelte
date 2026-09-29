@@ -21,7 +21,6 @@
   } from '$lib/services/updater'
   import { updateNotifier } from '$lib/stores/updateNotifier.svelte'
   import { parseMarkdown } from '$lib/utils/markdown'
-  import { isIos } from '$lib/utils/platform'
 
   type Phase = 'idle' | 'downloading' | 'installed' | 'handedOff' | 'error'
 
@@ -51,7 +50,11 @@
     unpackaged:
       'This is an unpackaged development build, so Aventuras will not install over it — on Linux that would replace the binary you just built. The releases page will open in your browser instead.',
     'mobile-platform':
-      'Aventuras cannot install its own updates on Android or iOS. The download will open in your browser.',
+      'Aventuras cannot install its own updates on Android. The download will open in your browser.',
+    // The iOS .ipa is unsigned by design (docs/development/ios-build-target.md), so Safari can
+    // only save it and Files.app cannot install it.
+    'ios-sideload':
+      'Aventuras cannot install its own updates on iOS, and the download is an unsigned .ipa — Safari can only save it. Installing it needs a sideloading tool such as AltStore, Sideloadly or TrollStore.',
   }
 
   const HANDED_OFF_NOTES: Record<ManualInstallReason, string> = {
@@ -59,28 +62,15 @@
       'The releases page has opened in your browser. Download the new .deb and install it to finish updating.',
     unpackaged: 'The releases page has opened in your browser.',
     'mobile-platform':
-      'The download has opened in your browser. Once it finishes, open the file to install the update — Android will ask you to confirm. iOS requires you to sideload the .ipa again.',
+      'The download has opened in your browser. Once it finishes, open the file to install the update — Android will ask you to confirm.',
+    'ios-sideload':
+      'The .ipa has downloaded to your device. It is unsigned, so opening it in Files will not install it — use a sideloading tool such as AltStore, Sideloadly or TrollStore.',
   }
 
-  // The iOS .ipa is unsigned by design (see docs/development/ios-build-target.md), so
-  // opening it in Safari just downloads a file Files.app cannot install -- it needs a
-  // sideloading tool. Android's install path (tap the .apk, confirm the system prompt)
-  // stays on the shared copy above.
-  const IOS_MOBILE_INSTALL_NOTE =
-    'Aventuras cannot install its own updates on iOS, and the download is an unsigned .ipa — Safari can only save it. Installing it needs a sideloading tool such as AltStore, Sideloadly or TrollStore.'
-  const IOS_MOBILE_HANDED_OFF_NOTE =
-    'The .ipa has downloaded to your device. It is unsigned, so opening it in Files will not install it — use a sideloading tool such as AltStore, Sideloadly or TrollStore.'
-
   const manualInstallNote = $derived(
-    info?.manualInstallReason === 'mobile-platform' && isIos()
-      ? IOS_MOBILE_INSTALL_NOTE
-      : MANUAL_INSTALL_NOTES[info?.manualInstallReason ?? 'mobile-platform'],
+    MANUAL_INSTALL_NOTES[info?.manualInstallReason ?? 'mobile-platform'],
   )
-  const handedOffNote = $derived(
-    info?.manualInstallReason === 'mobile-platform' && isIos()
-      ? IOS_MOBILE_HANDED_OFF_NOTE
-      : HANDED_OFF_NOTES[info?.manualInstallReason ?? 'mobile-platform'],
-  )
+  const handedOffNote = $derived(HANDED_OFF_NOTES[info?.manualInstallReason ?? 'mobile-platform'])
 
   const releasedOn = $derived.by(() => {
     if (!info?.date) return null
@@ -235,7 +225,8 @@
           <Button variant="outline" onclick={() => handleOpenChange(false)}>Not now</Button>
           <Button onclick={handleOpenInBrowser}>
             <ExternalLink class="mr-2 h-4 w-4" />
-            {info.manualInstallReason === 'mobile-platform'
+            {info.manualInstallReason === 'mobile-platform' ||
+            info.manualInstallReason === 'ios-sideload'
               ? 'Download update'
               : 'Open releases page'}
           </Button>
