@@ -202,14 +202,19 @@ type GroupArgs = { actionId: string; branchId: string; entryId?: string | null }
 
 /**
  * Handlers read pre-group state, so a delete's cascade can't see the group's other writes: a
- * second write to a cascaded row logs it twice (undo restores it twice and hits a unique
- * constraint forever), and a link written to a deleted row passes the live-row guard and dangles.
+ * second delete of a row, or a second write to a cascaded one, logs it twice (undo restores it
+ * twice and hits a unique constraint forever), and a link written to a deleted row passes the
+ * live-row guard and dangles.
  */
 function groupConflict(outcomes: readonly OkOutcome[]): string | null {
   const cascaded = new Set<string>()
   const deleted = new Set<string>()
   for (const outcome of outcomes) {
-    if (outcome.op === 'delete') deleted.add(createdKey(outcome.targetTable, outcome.targetId))
+    if (outcome.op === 'delete') {
+      const key = createdKey(outcome.targetTable, outcome.targetId)
+      if (deleted.has(key)) return `the group deletes ${key} twice`
+      deleted.add(key)
+    }
     for (const child of outcome.cascadePatches ?? []) {
       const key = createdKey(child.table, child.patch.id)
       if (cascaded.has(key)) return `two deletes in the group cascade ${key}`
@@ -238,8 +243,9 @@ function groupConflict(outcomes: readonly OkOutcome[]): string | null {
  * earlier one's created row (only `GroupScope` names it); a same-column double-write on one row
  * is rejected here rather than left to callers.
  *
- * Rejected as `group-conflict`: a write to a row a delete in the group cascades (two deletes'
- * cascades included), and a link write naming an entity or happening the group deletes.
+ * Rejected as `group-conflict`: a row deleted twice, a write to a row a delete in the group
+ * cascades (two deletes' cascades included), and a link write naming an entity or happening the
+ * group deletes.
  */
 export async function applyDeltaActionGroup(
   actions: readonly PipelineAction[],
