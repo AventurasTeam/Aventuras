@@ -1,6 +1,7 @@
 import {
-  destructiveEntry,
+  deleteEntry,
   type OverflowMenuEntry,
+  type RemoveEntry,
 } from '@/components/compounds/overflow-menu-entry'
 import type { SelectOption } from '@/components/ui/select'
 import { PLOT_REJECTION } from '@/lib/actions'
@@ -84,19 +85,6 @@ export function happeningIssueText(message: string): string {
   return tab == null
     ? text
     : t('plot:validation.inTab', { tab: happeningFieldLabel(tab), issue: text })
-}
-
-type RemoveEntry = { onDelete: () => void; disabledReason?: string }
-
-/** The `Delete …` entry, or none while there's no row yet. */
-function deleteEntry(label: string, remove: RemoveEntry | undefined): OverflowMenuEntry[] {
-  return destructiveEntry(
-    'delete',
-    label,
-    remove == null
-      ? undefined
-      : { onPress: remove.onDelete, disabledReason: remove.disabledReason },
-  )
 }
 
 export function plotMenuEntries(

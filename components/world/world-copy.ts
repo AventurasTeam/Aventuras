@@ -1,7 +1,8 @@
 import { gateDisabledReason } from '@/components/compounds/generation-gate-copy'
 import {
-  destructiveEntry,
+  deleteEntry,
   type OverflowMenuEntry,
+  type RemoveEntry,
 } from '@/components/compounds/overflow-menu-entry'
 import { ENTITY_REJECTION, LEAD_REJECTION, type LeadRejectionCode } from '@/lib/actions'
 import type { WholeTierSpan } from '@/lib/calendar'
@@ -174,18 +175,6 @@ export function loreFieldLabel(field: string): string {
 }
 
 type LeadEntry = { onSetLead: () => void; disabledReason?: string }
-type RemoveEntry = { onDelete: () => void; disabledReason?: string }
-
-/** The `Delete …` entry both entity and lore menus share, or none while there's no row yet. */
-function deleteEntry(label: string, remove: RemoveEntry | undefined): OverflowMenuEntry[] {
-  return destructiveEntry(
-    'delete',
-    label,
-    remove == null
-      ? undefined
-      : { onPress: remove.onDelete, disabledReason: remove.disabledReason },
-  )
-}
 
 /** world.md → Detail head structure. */
 export function entityMenuEntries(

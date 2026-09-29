@@ -29,3 +29,16 @@ export function destructiveEntry(
     },
   ]
 }
+
+export type RemoveEntry = { onDelete: () => void; disabledReason?: string }
+
+/** The `Delete …` entry, or none while there's no row yet. */
+export function deleteEntry(label: string, remove: RemoveEntry | undefined): OverflowMenuEntry[] {
+  return destructiveEntry(
+    'delete',
+    label,
+    remove == null
+      ? undefined
+      : { onPress: remove.onDelete, disabledReason: remove.disabledReason },
+  )
+}
