@@ -27,13 +27,6 @@ class WhatwgShapedRequest extends Request {
     super(input, init)
     Object.defineProperty(this, 'body', { value: undefined })
   }
-
-  // Copy-constructing would consume this body under undici; whatwg's clone doesn't.
-  override clone(): Request {
-    const copy = super.clone()
-    Object.defineProperty(copy, 'body', { value: undefined })
-    return copy
-  }
 }
 
 describe('createFetchWithCapture over the native transport', () => {
