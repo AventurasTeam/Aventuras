@@ -358,9 +358,8 @@ Mechanics worth knowing:
   `scripts/sync-ios-icons.sh` copies the Aventuras set over it; the build script and the
   bootstrap workflow both run it. Run it yourself before a local `tauri ios dev` or Xcode
   build on a freshly initialised scaffold.
-- **Local `tauri ios dev` does not work with the `devtools` feature**
-  (`tauri-plugin-devtools` is desktop-only). Pass the release config to drop the feature:
-  `npx tauri ios dev --config src-tauri/tauri.release.conf.json`.
+- `tauri ios dev` drops the desktop-only `devtools` feature automatically through
+  `src-tauri/tauri.ios.conf.json`, which Tauri merges into every `tauri ios` command.
 
 CI builds iOS in `.github/workflows/build-ios.yml` (reusable, on `macos-15`), wired into
 `release.yml`, `pre-release.yml` and `ci.yml` exactly like the Android leg. If `gen/apple`

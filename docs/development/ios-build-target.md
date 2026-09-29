@@ -19,8 +19,8 @@ happened_.
   `.AppImage`, `.rpm`), Android (signed `.apk`), macOS desktop (`.dmg`, Intel + ARM64).
 - Keep changes minimal and iOS-specific. In the end, **no existing file under `src-tauri/` was
   modified** — no `Cargo.toml`, no `Cargo.lock`, no `tauri.conf.json`, no capabilities, no Rust
-  sources. `src-tauri/Info.ios.plist` and `src-tauri/icons/ios/` were added, both new,
-  iOS-only files the CLI only reads for an iOS build (see §4).
+  sources. Everything added under `src-tauri/` is iOS-only and read only for an iOS build
+  (see §4).
 
 ## 2. The compatibility audit (what was already iOS-ready)
 
@@ -68,10 +68,9 @@ A third, discovered only in CI: **the CLI's signing defaults don't reach
   the Android leg's shape. iOS is best-effort: the CI leg runs
   `continue-on-error`, and the pre-release `publish` job gates only on the desktop and
   Android legs, so an iOS-only failure never blocks a release or marks `master` red.
-- **Devtools feature** — left alone. `tauri.release.conf.json` already empties
-  `build.features` for CI/release builds, and iOS only builds in CI. Local
-  `tauri ios dev` needs `--config src-tauri/tauri.release.conf.json` to drop the
-  desktop-only `tauri-plugin-devtools`.
+- **Devtools feature** — `tauri.release.conf.json` empties `build.features` for CI/release
+  builds, and `tauri.ios.conf.json` (§4) does the same for every `tauri ios` command, dropping
+  the desktop-only `tauri-plugin-devtools`.
 - **Pre-verification on Linux** — every CLI flag used was verified by inspecting the
   actual `@tauri-apps/cli-darwin-arm64@2.11.4` binary (downloaded via `npm pack` and
   examined with `grep`/`python` over its embedded strings) rather than guessed from
@@ -188,8 +187,8 @@ or Android build.
 `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json`,
 `src-tauri/capabilities/`, and every existing Rust source. The regression surface for the
 five existing platforms is limited to three additive YAML job blocks, two additive TS
-branches guarded by user-agent checks, and two new iOS-only files under `src-tauri/`
-(`Info.ios.plist`, `icons/ios/`) that no other platform's build reads.
+branches guarded by user-agent checks, and the iOS-only files under `src-tauri/` (§4) that no
+other platform's build reads.
 
 ## 6. Every CI failure, in order — and what each taught
 
@@ -244,11 +243,8 @@ all bundles had already succeeded; nothing in the iOS work touches that path.
   existing `unsupported` error kind covers any future platform gap.
 - **No background generation on iOS.** Android's `GenerationForegroundService` has no
   iOS equivalent (the Android-only Kotlin/bridge code is inert on iOS).
-- **Local `tauri ios dev`** used to require `--config src-tauri/tauri.release.conf.json` to
-  drop the desktop-only devtools feature; `src-tauri/tauri.ios.conf.json` (§4) now does this
-  automatically for every iOS command. The explicit `--config` flag still works and is
-  harmless to keep using, but should no longer be necessary — this has not been confirmed on
-  an actual `tauri ios dev` run, only against the CLI's documented config-merging behavior.
+- **`tauri ios dev` without `--config`** relies on `tauri.ios.conf.json` dropping the devtools
+  feature; this is untested on a real run.
 - **Simulator builds** (`aarch64-sim`) are possible with the same script but are not
   wired into CI; only the device target is built.
 - **The committed `gen/apple` scaffold is still pending** — CI currently self-heals via
