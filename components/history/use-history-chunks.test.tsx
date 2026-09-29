@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
-import type { ReactNode } from 'react'
+import { useLayoutEffect, useState, type ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Delta } from '@/lib/db'
@@ -145,6 +145,47 @@ describe('useHistoryChunks', () => {
     await act(async () => calls[0].resolve({ rows: [row(4), row(3)], nextCursor: 3 }))
     expect(positions(hook.result.current.rows)).toEqual([9])
     expect(hook.result.current.hasMore).toBe(false)
+  })
+
+  it('never shows a superseded first chunk as ready when it lands between the reset commit and its effects', async () => {
+    const { load, calls } = manualLoader()
+    const version = {}
+    const shown: { search: string; status: string; rows: number[] }[] = []
+    let setSearch: (search: string) => void = () => {}
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <HistoryLoaderProvider value={load}>{children}</HistoryLoaderProvider>
+    )
+    const hook = renderHook(
+      () => {
+        const [search, set] = useState('')
+        setSearch = set
+        const chunks = useHistoryChunks(
+          { branchId: 'b1', targetTable: 'entities', targetId: 'char_1', search, sort: 'newest' },
+          version,
+        )
+        shown.push({ search, status: chunks.status, rows: positions(chunks.rows) })
+        // Settles the old read inside the new query's commit, before its passive effects run.
+        useLayoutEffect(() => {
+          if (search === 'traits') calls[0].resolve({ rows: [row(4), row(3)], nextCursor: 3 })
+        }, [search])
+        return chunks
+      },
+      { wrapper },
+    )
+    await waitFor(() => expect(calls).toHaveLength(1))
+
+    // A debounced value lands from a timer, so React renders it at default priority.
+    setTimeout(() => setSearch('traits'), 0)
+    await waitFor(() => expect(calls).toHaveLength(2))
+    await act(async () => {})
+    expect(shown.filter((s) => s.search === 'traits' && s.status === 'ready')).toEqual([])
+    expect(hook.result.current.status).toBe('loading')
+
+    act(() => hook.result.current.loadMore())
+    expect(calls).toHaveLength(2)
+    await act(async () => calls[1].resolve({ rows: [row(9)], nextCursor: null }))
+    expect(hook.result.current.status).toBe('ready')
+    expect(positions(hook.result.current.rows)).toEqual([9])
   })
 
   it('drops a loadMore that resolves after the query changed', async () => {
