@@ -20,7 +20,6 @@ import LoraTxt2ImgWorkflow from './comfyWorkflows/lora-txt2img-workflow.json'
 import UnetTxt2ImgWorkflow from './comfyWorkflows/unet-txt2img-workflow.json'
 import { specToPixels } from '$lib/utils/image'
 import { imageGetFetch } from './fetchAdapter'
-import { isIos } from '$lib/utils/platform'
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 
 const DEFAULT_BASE_URL = 'http://localhost:8188'
@@ -331,8 +330,10 @@ function buildOnFailedHandler(
   }
 }
 
-/** The slice of `ComfyApi`'s internals this file patches on iOS. Not part of the SDK's
- *  public TS types, so accessed through a cast -- see the comment at the call site. */
+/** The `ComfyApi` members the fetch patch below replaces or calls. They are not in the SDK's
+ *  public types, so a test asserts they still exist on the prototype after an upgrade. */
+export const COMFY_API_FETCH_MEMBERS = ['fetchApi', 'apiURL', 'getCredentialHeaders'] as const
+
 type ComfyApiFetchInternals = {
   fetchApi: (path: string, options?: RequestInit) => Promise<Response>
   apiURL: (path: string) => string
@@ -344,25 +345,15 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
 
   const api = new ComfyApi(baseUrl)
 
-  if (isIos()) {
-    // Every HTTP call the SDK makes -- checkpoints, samplers, prompt queueing, /view image
-    // retrieval, and its own /history polling fallback when the websocket can't connect --
-    // goes through this one method (confirmed by reading the pinned
-    // @saintno/comfyui-sdk@0.3.1 build output; it isn't exposed as a constructor option, so
-    // there's no supported way to inject this). It calls the WebView's global fetch()
-    // directly, which WKWebView's App Transport Security silently blocks on iOS for a
-    // plaintext http:// host outside the local-network exception (see
-    // docs/architecture/overview.md). Patching just this instance's method -- not the
-    // prototype -- routes those calls through Tauri's HTTP plugin instead, while mirroring
-    // the original's own logic (headers are replaced, not merged -- that's the SDK's
-    // existing behavior, kept as-is) so nothing else about how it talks to ComfyUI changes.
-    // Every other platform never runs this branch and keeps calling the SDK unmodified.
-    const internal = api as unknown as ComfyApiFetchInternals
-    internal.fetchApi = (path, options = {}) => {
-      options.headers = { ...internal.getCredentialHeaders() }
-      options.mode = 'cors'
-      return tauriHttpFetch(internal.apiURL(path), options)
-    }
+  // The SDK has no injection point for its HTTP calls (checkpoints, prompt queueing, /view, the
+  // /history fallback all use fetchApi), so patch this instance to go through Tauri's HTTP plugin
+  // like the other providers; the WebView's fetch is blocked by iOS App Transport Security
+  // (docs/architecture/overview.md). Headers are replaced, not merged, as in the SDK.
+  const internal = api as unknown as ComfyApiFetchInternals
+  internal.fetchApi = (path, options = {}) => {
+    options.headers = { ...internal.getCredentialHeaders() }
+    options.mode = 'cors'
+    return tauriHttpFetch(internal.apiURL(path), options)
   }
 
   // init() issues its first request synchronously, so the patch above must already be in place.
