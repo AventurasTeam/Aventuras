@@ -100,9 +100,13 @@ describe('loadHistoryChunk', () => {
     expect(await positions({ search: 'state.voice' })).toEqual([5])
   })
 
-  it('matches free text and label paths', async () => {
+  it('matches free text', async () => {
     expect(await positions({ search: 'traits' })).toEqual([4, 2])
-    expect(await positions({ search: 'zzz', labelPaths: ['state.drives'] })).toEqual([3])
+  })
+
+  it('resolves a typed field label to the paths it names, though the payload never spells it', async () => {
+    await db.insert(deltas).values(delta(8, 'update', { state: { stackables: { arrows: 3 } } }))
+    expect(await positions({ search: 'quantities' })).toEqual([8])
   })
 
   it('filters by op, and matches an op typed into search, never a delete row echoing it', async () => {

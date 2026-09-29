@@ -2,7 +2,12 @@ import { and, asc, desc, eq, gt, inArray, lt, or, sql, type SQL } from 'drizzle-
 
 import { deltas, type DbCtx, type Delta } from '@/lib/db'
 
-import { HISTORY_OPS, opsMatchingLabel, type HistoryTable } from './field-labels'
+import {
+  HISTORY_OPS,
+  opsMatchingLabel,
+  pathsMatchingLabel,
+  type HistoryTable,
+} from './field-labels'
 
 export type HistoryOp = Delta['op']
 export type HistorySort = 'newest' | 'oldest'
@@ -15,8 +20,6 @@ export type HistoryQuery = {
   targetId: string
   op?: HistoryOp
   search?: string
-  /** Paths whose translated label matches `search` (`pathsMatchingLabel`). */
-  labelPaths?: readonly string[]
   sort: HistorySort
   /** The previous chunk's `nextCursor`; null for the first chunk. */
   cursor: number | null
@@ -32,8 +35,8 @@ function likePattern(term: string): string {
 }
 
 // json_type, not json_extract — json_extract can't tell an absent path from a stored JSON null.
-function fieldSearchCondition(term: string, labelPaths: readonly string[]): SQL {
-  const paths = new Set(labelPaths)
+function fieldSearchCondition(table: HistoryTable, term: string): SQL {
+  const paths = new Set(pathsMatchingLabel(table, term))
   if (PATH_TERM.test(term)) paths.add(term)
   // op=update gate: a delete's payload is the full row, so every field would else match.
   return and(
@@ -48,11 +51,11 @@ function fieldSearchCondition(term: string, labelPaths: readonly string[]): SQL 
 }
 
 // world.md → scopeSummary: term also matches an op via its rendered label (name/chip/summary).
-function searchCondition(term: string, labelPaths: readonly string[]): SQL {
+function searchCondition(table: HistoryTable, term: string): SQL {
   const ops = new Set(opsMatchingLabel(term))
   const lowered = term.toLowerCase()
   if ((HISTORY_OPS as readonly string[]).includes(lowered)) ops.add(lowered as Delta['op'])
-  const conditions: SQL[] = [fieldSearchCondition(term, labelPaths)]
+  const conditions: SQL[] = [fieldSearchCondition(table, term)]
   if (ops.size > 0) conditions.push(inArray(deltas.op, [...ops]))
   return or(...conditions) as SQL
 }
@@ -70,7 +73,7 @@ export async function loadHistoryChunk(
   ]
   if (query.op != null) where.push(eq(deltas.op, query.op))
   const term = query.search?.trim() ?? ''
-  if (term !== '') where.push(searchCondition(term, query.labelPaths ?? []))
+  if (term !== '') where.push(searchCondition(query.targetTable, term))
   if (query.cursor != null)
     where.push(
       query.sort === 'newest'

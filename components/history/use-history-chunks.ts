@@ -34,8 +34,8 @@ function message(error: unknown): string {
 }
 
 /**
- * patterns/lists.md → Load-older: reloads on any query or `version` change, not on scroll.
- * `labelPaths` must be referentially stable, or every render reloads.
+ * patterns/lists.md → Load-older: reloads from the first chunk whenever the query or `version`'s
+ * identity changes, so `version` must be memoized; a fresh one per render never settles.
  */
 export function useHistoryChunks(
   query: Omit<HistoryQuery, 'cursor' | 'limit'>,
@@ -47,15 +47,15 @@ export function useHistoryChunks(
   const generation = useRef(0)
   // Two loadMore calls before a re-render share one closure's state; this stops the second.
   const loadingMore = useRef(false)
-  const { branchId, targetTable, targetId, op, search, labelPaths, sort } = query
+  const { branchId, targetTable, targetId, op, search, sort } = query
   const request = useMemo<Request>(
     () => ({
       load,
-      query: { branchId, targetTable, targetId, op, search, labelPaths, sort },
+      query: { branchId, targetTable, targetId, op, search, sort },
       version,
       attempt,
     }),
-    [load, branchId, targetTable, targetId, op, search, labelPaths, sort, version, attempt],
+    [load, branchId, targetTable, targetId, op, search, sort, version, attempt],
   )
   // A superseded read can still land between the new request's commit and the effect cleanup
   // that orphans it, so rows carry the request they were read for and show only under it.

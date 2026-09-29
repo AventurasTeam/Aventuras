@@ -142,12 +142,7 @@ export const FiltersReachTheQuery: Story = {
     await userEvent.click(screen.getByRole('button', { name: 'All' }))
     await userEvent.type(screen.getByPlaceholderText('Search fields, changes…'), 'status')
     await waitFor(
-      () =>
-        expect(queries.at(-1)).toMatchObject({
-          search: 'status',
-          labelPaths: ['status'],
-          cursor: null,
-        }),
+      () => expect(queries.at(-1)).toMatchObject({ search: 'status', cursor: null }),
       WAIT,
     )
     expect(queries.at(-1)?.op).toBeUndefined()
