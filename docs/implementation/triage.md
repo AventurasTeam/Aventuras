@@ -174,3 +174,48 @@ slice-planning gate forces its resolution before that slice is planned.
   and its disabled-controls tooltip rule under
   [Affordance loci](../ui/principles.md#affordance-loci)); the gap is
   native-only and pre-existing (2026-09-28, raised by 4.2b review).
+- **A link an entity delete captured can come back with no delta.**
+  An entity delete keeps the link rows it cascades only in its own undo
+  payload. When a later reversal removes the machine write that created
+  one of them, that create-undo finds the row already gone and prunes
+  its delta; undoing the entity delete then restores the row through
+  the live-link filter, since both its ends are live, and nothing left
+  in the log can reverse it. Follow-up (developer decision on the 4.2b
+  stack review, R1 option a): a create-undo of a link row that is
+  already absent also strips that row from the delete payload that
+  captured it — the contract between the reverse-replay closure and
+  the delete cascade payload
+  ([generation-pipeline.md → Reverse-replay](../generation-pipeline.md#reverse-replay)).
+  Both triggers were probed with a scratch test on the 4.2b head:
+  - **A periodic pass reversed mid-burst.** The pass is abort-free
+    once its single model call returns, so the window is its write
+    burst: the user deletes a character between two of its writes,
+    then a later write fails (any rejection but a `noop`, or a throw,
+    aborts the run and reverse-replays it) or boot recovery reverses
+    the pass.
+    Reproduced for a relationship between two characters the pass
+    didn't create. Involvement and awareness rows can't hit it: the
+    classifier writes them only under a happening created in the same
+    pass, which the reversal deletes, so the live-link filter drops
+    them. CTRL-Z never reverses a pass's writes: its bracket cancels
+    an in-flight pass, which either stops before its first write or
+    lands its whole burst first.
+  - **A prose edit's sweep, with no timing window.** The user deletes
+    a character, then edits the head turn's prose, whose sweep reverses
+    the periodic facts anchored to it; CTRL-Z the edit, then CTRL-Z
+    the delete. Reproduced for a relationship anchored to the head turn
+    between characters that survive, and for awareness anchored to the
+    head turn under a happening anchored to an older turn, which the
+    sweep keeps. Not for an involvement: it shares its happening's
+    anchor, so the sweep deletes the happening too.
+
+  Option (a) as worded covers creates only. A swept pass update to a
+  captured row is pruned the same way: a relationship view the pass
+  changed from `ally` to `rival` comes back as `rival` when the
+  delete is undone, though that row keeps its older create delta. A
+  rerun doesn't duplicate a restored row: awareness and relationship
+  writes are upserts behind unique indexes (`haw_natural_uniq`,
+  `char_rel_pair_uniq`) and update it in place. `happening_involvements`
+  has no such index, and `createHappeningInvolvement` doesn't check for
+  an existing link, but the classifier emits involvements only under a
+  happening it creates (2026-09-30, raised by the 4.2b stack review).
