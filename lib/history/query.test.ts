@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
+import { FIRST_LOGGED_AT } from '@/lib/actions/delta/user-precedence'
 import { branches, deltas, stories, type DbCtx, type NewDelta } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
@@ -176,5 +177,28 @@ describe('LIKE escaping', () => {
         delta(23, 'update', { description: 'fileXname here' }),
       ])
     expect(await positions({ search: 'file_name' })).toEqual([22])
+  })
+
+  it('matches text the payload stores JSON-escaped, and a bare quote only where a value holds one', async () => {
+    await db
+      .insert(deltas)
+      .values([
+        delta(24, 'update', { description: 'she said "hi"' }),
+        delta(25, 'update', { description: 'C:\\maps\\north' }),
+      ])
+    expect(await positions({ search: '"hi"' })).toEqual([24])
+    expect(await positions({ search: '"' })).toEqual([24])
+    expect(await positions({ search: 'C:\\maps' })).toEqual([25])
+  })
+})
+
+describe('payload meta keys', () => {
+  it('never matches a meta key or its value, only the columns beside it', async () => {
+    await db
+      .insert(deltas)
+      .values(delta(30, 'update', { description: 'moonlit', [FIRST_LOGGED_AT]: 987654 }))
+    expect(await positions({ search: 'logged' })).toEqual([])
+    expect(await positions({ search: '987654' })).toEqual([])
+    expect(await positions({ search: 'moonlit' })).toEqual([30])
   })
 })

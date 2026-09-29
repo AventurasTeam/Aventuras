@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, gt, inArray, lt, or, sql, type SQL } from 'drizzle-orm'
 
+import { PAYLOAD_META_PREFIX } from '@/lib/actions'
 import { deltas, type DbCtx, type Delta } from '@/lib/db'
 
 import {
@@ -30,8 +31,19 @@ export type HistoryChunk = { rows: Delta[]; nextCursor: number | null }
 
 const PATH_TERM = /^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$/
 
+// The payload stores text JSON-escaped, so the term is escaped the same way before the LIKE
+// escaping, which then also covers the backslashes the JSON escaping added.
 function likePattern(term: string): string {
-  return `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
+  const escaped = JSON.stringify(term).slice(1, -1)
+  return `%${escaped.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
+}
+
+// Each member's `"key":value` text, skipping meta members: reversal facts, not columns.
+function freeTextCondition(term: string): SQL {
+  return sql`EXISTS (SELECT 1 FROM json_each(${deltas.undoPayload}) AS member
+    WHERE substr(member.key, 1, ${PAYLOAD_META_PREFIX.length}) <> ${PAYLOAD_META_PREFIX}
+      AND (json_quote(member.key) || ':' || (${deltas.undoPayload} -> member.fullkey))
+        LIKE ${likePattern(term)} ESCAPE '\\')`
 }
 
 // json_type, not json_extract — json_extract can't tell an absent path from a stored JSON null.
@@ -42,7 +54,7 @@ function fieldSearchCondition(table: HistoryTable, term: string): SQL {
   return and(
     eq(deltas.op, 'update'),
     or(
-      sql`${deltas.undoPayload} LIKE ${likePattern(term)} ESCAPE '\\'`,
+      freeTextCondition(term),
       ...[...paths].map(
         (path) => sql`json_type(${deltas.undoPayload}, ${`$.${path}`}) IS NOT NULL`,
       ),

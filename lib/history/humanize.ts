@@ -1,3 +1,4 @@
+import { isPayloadMetaKey } from '@/lib/actions'
 import type { Delta } from '@/lib/db'
 import { t } from '@/lib/i18n'
 
@@ -34,11 +35,11 @@ function nestedPaths(prefix: string, value: Record<string, unknown>): string[] {
   })
 }
 
-/** The field paths an update changed, read off its undo payload's keys; `$` keys are meta. */
+/** The field paths an update changed, read off its undo payload's keys, skipping meta keys. */
 export function changedPaths(delta: Pick<Delta, 'op' | 'undoPayload'>): string[] {
   if (delta.op !== 'update' || delta.undoPayload == null) return []
   return Object.entries(delta.undoPayload).flatMap(([key, value]) => {
-    if (key.startsWith('$')) return []
+    if (isPayloadMetaKey(key)) return []
     if (!NESTED_COLUMNS.has(key) || !isPlainObject(value)) return [key]
     const inner = nestedPaths(key, value)
     return inner.length > 0 ? inner : [key]
