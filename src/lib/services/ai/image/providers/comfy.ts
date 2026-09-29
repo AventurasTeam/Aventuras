@@ -45,37 +45,13 @@ export async function fetchModelList(
   type: string,
   timeoutMs?: number,
 ): Promise<string[]> {
-  const controller = new AbortController()
-  const timerId = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : null
-  try {
-    // iOS only: a plain browser fetch() to a plaintext http:// ComfyUI host is subject to
-    // WKWebView's App Transport Security there and gets silently blocked for anything
-    // outside the local-network exception (see docs/architecture/overview.md).
-    // imageGetFetch routes through Tauri's HTTP plugin instead, and throws its own
-    // descriptive error on a non-ok response. Every other platform keeps the plain fetch.
-    const resp = isIos()
-      ? await imageGetFetch(`${baseUrl}/models/${type}`, undefined, {
-          signal: controller.signal,
-          serviceId: 'comfy-models',
-          // Without this, imageGetFetch falls back to its own 5-minute default -- shorter
-          // than this app's own default llmTimeoutMs (6 min) -- and its own timer fires
-          // first, so the caller's configured timeout is silently overridden.
-          timeoutMs,
-        })
-      : await fetch(`${baseUrl}/models/${type}`, { signal: controller.signal })
-    if (!isIos() && !resp.ok) {
-      const body = await resp.text().catch(() => '')
-      throw new Error(`ComfyUI /models/${type} responded ${resp.status}: ${body}`)
-    }
-    return (await resp.json()) as string[]
-  } catch (err) {
-    if (err instanceof DOMException && err.name === 'AbortError') {
-      throw new Error(`ComfyUI /models/${type} timed out after ${timeoutMs}ms`)
-    }
-    throw err
-  } finally {
-    if (timerId !== null) clearTimeout(timerId)
-  }
+  // Tauri's HTTP plugin, not the WebView's fetch: on iOS, App Transport Security blocks plaintext
+  // http:// hosts outside the local-network exception (docs/architecture/overview.md).
+  const resp = await imageGetFetch(`${baseUrl}/models/${type}`, undefined, {
+    serviceId: 'comfy-models',
+    timeoutMs,
+  })
+  return (await resp.json()) as string[]
 }
 
 export function clearComfyCacheForUrl(baseUrl: string): void {
