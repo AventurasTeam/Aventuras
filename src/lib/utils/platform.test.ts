@@ -46,7 +46,8 @@ describe('supportsHover', () => {
 describe('the can-hover variant in app.css', () => {
   it('tests the same condition as supportsHover', () => {
     const css = readFileSync(new URL('../../app.css', import.meta.url), 'utf8')
-    expect(css).toContain('(hover: hover)')
-    expect(css).toContain('not all and (any-pointer: coarse)')
+    expect(css).toMatch(
+      /@custom-variant can-hover \{\s*@media \(hover: hover\) \{\s*@media not all and \(any-pointer: coarse\) \{\s*@slot;/,
+    )
   })
 })
