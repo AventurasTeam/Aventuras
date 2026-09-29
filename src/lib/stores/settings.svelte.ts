@@ -385,6 +385,7 @@ export interface StyleReviewerSettings {
   maxTokens: number
   triggerInterval: number
   recentEntriesCount: number
+  cleanInput: boolean // strip image tags, HTML and headings from the narration it reads
   reasoningEffort: ReasoningEffort
   manualBody: string
 }
@@ -406,6 +407,7 @@ export function getDefaultStyleReviewerSettingsForProvider(
     maxTokens: 8192,
     triggerInterval: 6,
     recentEntriesCount: 32,
+    cleanInput: true,
     reasoningEffort: preset.reasoningEffort,
     manualBody: '',
   }

@@ -74,7 +74,10 @@ export class ServiceFactory {
    * Create a style reviewer service instance.
    */
   createStyleReviewerService(): StyleReviewerService {
-    return new StyleReviewerService('styleReviewer')
+    return new StyleReviewerService(
+      'styleReviewer',
+      settings.systemServicesSettings.styleReviewer.cleanInput,
+    )
   }
 
   /**

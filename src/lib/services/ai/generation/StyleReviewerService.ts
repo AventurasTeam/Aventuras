@@ -11,6 +11,7 @@ import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { createLogger } from '$lib/log'
 import { styleReviewResultSchema, type PhraseAnalysis } from '../sdk/schemas/style'
+import { CLEAN_FOR_REVIEW, CLEAN_NONE } from '$lib/utils/narrationClean'
 import { buildReviewPassages } from './styleReviewPassages'
 
 const log = createLogger('StyleReviewer')
@@ -31,8 +32,11 @@ export interface StyleReviewResult {
  * Service that analyzes text for style issues.
  */
 export class StyleReviewerService extends BaseAIService {
-  constructor(serviceId: ServiceId) {
+  private readonly cleanInput: boolean
+
+  constructor(serviceId: ServiceId, cleanInput: boolean) {
     super(serviceId)
+    this.cleanInput = cleanInput
   }
 
   /**
@@ -79,7 +83,11 @@ export class StyleReviewerService extends BaseAIService {
   ): Promise<StyleReviewResult> {
     log('analyzeStyle', { entriesCount: entries.length })
 
-    const { passages, count } = buildReviewPassages(entries, recentEntriesCount)
+    const { passages, count } = buildReviewPassages(
+      entries,
+      recentEntriesCount,
+      this.cleanInput ? CLEAN_FOR_REVIEW : CLEAN_NONE,
+    )
     if (count === 0) {
       return {
         phrases: [],

@@ -91,6 +91,24 @@ The Style Reviewer's passages come from `buildReviewPassages`
 (`services/ai/generation/styleReviewPassages.ts`), which cleans each entry, skips one that cleans
 to nothing, and numbers the rest.
 
+## The Clean Input toggle
+
+Advanced Settings has one switch for the Style Reviewer, **Clean Input**
+(`systemServicesSettings.styleReviewer.cleanInput`, default on). It is there so a regression in the
+cleaner can be routed around without a release. Off means `CLEAN_NONE`, which runs through the same
+`buildReviewPassages` path rather than a second branch. The individual stages are not exposed.
+
+- **Default and load.** The loader merges the saved block over the defaults, so a save from before
+  the field existed reads as on. It needs no migration.
+- **Reading it.** `createStyleReviewerService` in `ai/core/factory.ts` passes the value into the
+  service's constructor, as it does for the classifier's window, and a service is built per call,
+  so a change applies to the next review.
+- **It can be reset.** `applyDefaultsIfUnchanged` replaces the whole system-services block with
+  defaults after a default-profile change, when the model, temperature and reasoning effort still
+  match the defaults. A user who turned the switch off and kept default models is put back on by
+  that. Every other field in the block behaves the same way.
+- **Only the Style Reviewer has one.** The other consumers have no evidence behind them yet.
+
 ## Constraints
 
 - **Keep it a plain `.ts` module.** A `*.svelte.ts` file cannot be imported by a test
