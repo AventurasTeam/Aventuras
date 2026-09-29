@@ -11,6 +11,7 @@ import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { createLogger } from '$lib/log'
 import { styleReviewResultSchema, type PhraseAnalysis } from '../sdk/schemas/style'
+import { buildReviewPassages } from './styleReviewPassages'
 
 const log = createLogger('StyleReviewer')
 
@@ -78,11 +79,8 @@ export class StyleReviewerService extends BaseAIService {
   ): Promise<StyleReviewResult> {
     log('analyzeStyle', { entriesCount: entries.length })
 
-    // Filter to narration entries only, keeping only the most recent window
-    const narrationEntries = entries
-      .filter((e) => e.type === 'narration')
-      .slice(-recentEntriesCount)
-    if (narrationEntries.length === 0) {
+    const { passages, count } = buildReviewPassages(entries, recentEntriesCount)
+    if (count === 0) {
       return {
         phrases: [],
         overallAssessment: 'No narration entries to analyze.',
@@ -91,17 +89,12 @@ export class StyleReviewerService extends BaseAIService {
       }
     }
 
-    // Format passages for analysis
-    const passages = narrationEntries
-      .map((e, i) => `--- Passage ${i + 1} ---\n${e.content}`)
-      .join('\n\n')
-
     const ctx = await ContextBuilder.forPack(storyId)
     ctx.add({
       mode,
       pov,
       tense,
-      passageCount: narrationEntries.length.toString(),
+      passageCount: count.toString(),
       passages,
     })
     const { system, user: prompt } = await ctx.render('style-reviewer')
@@ -113,7 +106,7 @@ export class StyleReviewerService extends BaseAIService {
 
       return {
         ...result,
-        reviewedEntryCount: narrationEntries.length,
+        reviewedEntryCount: count,
         timestamp: Date.now(),
       }
     } catch (error) {
@@ -121,7 +114,7 @@ export class StyleReviewerService extends BaseAIService {
       return {
         phrases: [],
         overallAssessment: 'Analysis failed.',
-        reviewedEntryCount: narrationEntries.length,
+        reviewedEntryCount: count,
         timestamp: Date.now(),
       }
     }
