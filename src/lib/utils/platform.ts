@@ -23,14 +23,18 @@ export function isIos(): boolean {
 }
 
 /**
- * Returns `true` when the primary input can hover, i.e. when a `title` tooltip can
- * actually explain a control. This is a capability, not a screen size: a desktop window
- * dragged narrow still hovers, a tablet at 1024px never does.
+ * Returns `true` when hovering can be relied on: the primary input hovers and no input is a
+ * finger, so a `title` tooltip can actually explain a control. A capability, not a screen
+ * size: a desktop window dragged narrow still hovers, a tablet or a touchscreen laptop never
+ * does. The same condition as the `can-hover` variant in `app.css`, which `platform.test.ts` checks.
  */
 export function supportsHover(): boolean {
   if (typeof window === 'undefined') return true
   if (typeof window.matchMedia !== 'function') return !isAndroid()
-  return !window.matchMedia('(hover: none)').matches
+  return (
+    window.matchMedia('(hover: hover)').matches &&
+    !window.matchMedia('(any-pointer: coarse)').matches
+  )
 }
 
 /** No-op off Android. Asks the WebView's keyboard not to learn from what is typed. */

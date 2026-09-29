@@ -1,12 +1,21 @@
 @import 'tailwindcss';
 
 @custom-variant dark (&:is(.dark *));
-/* Hide-until-hover applies only where the primary input hovers and no input is a finger. */
+/* Hovering can be relied on: the primary input hovers and no input is a finger. Governs
+   hide-until-hover and compact touch targets; supportsHover() in utils/platform.ts is the JS copy. */
 @custom-variant can-hover {
   @media (hover: hover) {
     @media not all and (any-pointer: coarse) {
       @slot;
     }
+  }
+}
+
+/* An icon button: a 32px touch target, compact only where hovering can be relied on. */
+@utility tap-target {
+  @apply flex min-h-[32px] min-w-[32px] items-center justify-center p-1;
+  @variant can-hover {
+    @apply min-h-0 min-w-0 p-0.5;
   }
 }
 
