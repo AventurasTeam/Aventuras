@@ -1,6 +1,6 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 
-import { currentBranchId, queryApp } from '../harness/db'
+import { currentBranchId, queryApp, seedVectors, vecCounts } from '../harness/db'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { reloadFromMain, suppressNativeUnloadDialogRace } from '../harness/reload'
@@ -14,6 +14,26 @@ import { world } from '../locators/world'
 
 const HERO_STORY = 'story_hero'
 const HERO_TITLE = 'The Veilstone Courier'
+
+// Whole rows, not counts, so undo is held to putting back exactly what the delete took.
+async function happeningFootprint(page: Page, branchId: string, id: string) {
+  const own = (table: string, column: string) =>
+    queryApp(page, `SELECT * FROM ${table} WHERE branch_id = ? AND ${column} = ? ORDER BY id`, [
+      branchId,
+      id,
+    ])
+  return {
+    happening: await own('happenings', 'id'),
+    involvements: await own('happening_involvements', 'happening_id'),
+    awareness: await own('happening_awareness', 'happening_id'),
+    translations: await queryApp(
+      page,
+      `SELECT * FROM translations WHERE branch_id = ? AND target_kind = 'happening' AND target_id = ? ORDER BY id`,
+      [branchId, id],
+    ),
+    vectors: await vecCounts(page, 'happening', branchId, id),
+  }
+}
 
 // Serial suite, one shared app: tests build on earlier ones' state. GO TO (useSurfaceNavigate)
 // matches stack entries by path: it pops to a screen already in the stack, which DISMISSES the
@@ -425,5 +445,80 @@ test.describe.serial('Plot panel', () => {
     // Popped to, not pushed: the same instance, search text and all.
     await expect(plot.search(page, 'happening')).toHaveValue('the')
     await plot.search(page, 'happening').fill('')
+  })
+
+  // No earlier test touches this row, and the undo leaves the suite on the reader.
+  test('Delete happening sweeps its links, translations and vectors; undo restores the rows', async () => {
+    const page = app.window
+    const title = 'The old betrayal'
+    // Via the reader, to drop the route-local state the prior test left on this Plot instance.
+    await chrome.actionsTrigger(page).click()
+    await chrome.goToReaderRow(page).click()
+    await page.waitForURL(/\/reader-composer\//)
+    await chrome.actionsTrigger(page).click()
+    await chrome.goToPlotRow(page).click()
+    await page.waitForURL(/\/plot\//)
+    await plot.segmentCell(page, 'happening').click()
+    // Lists the row whatever the session's bucket collapse state.
+    await plot.chip(page, 'out-of-narrative').click()
+
+    const [[hapId]] = await queryApp(
+      page,
+      `SELECT id FROM happenings WHERE branch_id = ? AND title = ?`,
+      [branchId, title],
+    )
+    const id = hapId as string
+    await seedVectors(page, 'happening', branchId, id)
+    await queryApp(
+      page,
+      `INSERT INTO translations (id, branch_id, target_kind, target_id, field, language, translated_text, created_at, updated_at)
+       VALUES (?, ?, 'happening', ?, 'description', 'es', 'La vieja traición.', 1, 1)`,
+      ['e2e_translation_betrayal', branchId, id],
+    )
+    const before = await happeningFootprint(page, branchId, id)
+    expect({
+      happening: before.happening.length,
+      involvements: before.involvements.length,
+      awareness: before.awareness.length,
+      translations: before.translations.length,
+      vectors: before.vectors,
+    }).toEqual({
+      happening: 1,
+      involvements: 1,
+      awareness: 1,
+      translations: 1,
+      vectors: { 384: 1, 8: 1 },
+    })
+
+    await plot.row(page, title).click()
+    await plot.moreActions(page).click()
+    await plot.deleteItem(page, 'happening').click()
+    await plot.deleteConfirm(page, 'happening').click()
+
+    await expect
+      .poll(() => happeningFootprint(page, branchId, id), { timeout: 15_000 })
+      .toEqual({
+        happening: [],
+        involvements: [],
+        awareness: [],
+        translations: [],
+        vectors: { 384: 0, 8: 0 },
+      })
+    // Link rows ride in the happening's own undo payload, so the whole delete is this one delta.
+    expect(
+      await queryApp(page, `SELECT target_table, op, source FROM deltas WHERE target_id = ?`, [id]),
+    ).toEqual([['happenings', 'delete', 'user_edit']])
+    await expect(plot.row(page, title)).toHaveCount(0)
+
+    await chrome.actionsTrigger(page).click()
+    await chrome.goToReaderRow(page).click()
+    await page.waitForURL(/\/reader-composer\//)
+    await chrome.actionsTrigger(page).click()
+    await reader.undoRow(page).click()
+    // Vectors aren't delta-logged: the restored row comes back stale (the seed's value already)
+    // and re-embeds at the next sync.
+    await expect
+      .poll(() => happeningFootprint(page, branchId, id), { timeout: 30_000 })
+      .toEqual({ ...before, vectors: { 384: 0, 8: 0 } })
   })
 })
