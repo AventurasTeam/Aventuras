@@ -676,25 +676,3 @@ export function sameEntityName(a: string, b: string): boolean {
   if (!folded) return false
   return folded === foldName(b)
 }
-
-/**
- * Strip the narrator's layout markers from a passage, keeping every word.
- *
- * The markers are for a reader; a model asked what happened in the passage only has to
- * parse them. The text under them is not decoration — a heading like
- * `### Late Morning | The Grotto Pool` carries the hour and the place, which is exactly
- * what the scene fields are for. Only a horizontal rule goes entirely, having no text.
- */
-export function stripNarratorMarkup(content: string): string {
-  return (
-    content
-      .replace(/^[ \t]*([*\-_])(?:[ \t]*\1){2,}[ \t]*$/gm, '')
-      .replace(/^#{1,6}[ \t]+(.*)$/gm, '$1')
-      // One span covering the whole line, so a line carrying two of them keeps both intact
-      // rather than surrendering its inner markers to a match that spans from the first
-      // opener to the last closer.
-      .replace(/^[ \t]*\*\*((?:(?!\*\*).)+)\*\*[ \t]*$/gm, '$1')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim()
-  )
-}

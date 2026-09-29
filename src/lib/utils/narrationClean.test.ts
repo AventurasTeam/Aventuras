@@ -246,3 +246,53 @@ describe('inlineEmphasis', () => {
     )
   })
 })
+
+describe('CLEAN_FOR_CLASSIFICATION', () => {
+  const classify = (content: string) => cleanNarration(content, CLEAN_FOR_CLASSIFICATION)
+
+  it('unwraps a heading rather than dropping it', () => {
+    // The heading carries the hour and the place — the two scene fields the classifier fills.
+    expect(classify('### Late Morning | The Grotto\n\nShe freezes.')).toBe(
+      'Late Morning | The Grotto\n\nShe freezes.',
+    )
+  })
+
+  it('unwraps a heading that is also bold', () => {
+    expect(classify('### **Mid-Morning | The Grotto Pool**')).toBe('Mid-Morning | The Grotto Pool')
+  })
+
+  it('drops horizontal rules, which carry no text', () => {
+    expect(classify('One.\n\n***\n\nTwo.\n\n---\n\nThree.\n\n___\n\nFour.')).toBe(
+      'One.\n\nTwo.\n\nThree.\n\nFour.',
+    )
+  })
+
+  it('unwraps a bold-only line, however heading-like', () => {
+    expect(classify('One.\n\n**The Assessment**\n\nTwo.')).toBe('One.\n\nThe Assessment\n\nTwo.')
+    expect(classify('**Late Morning | The Grotto Pool**')).toBe('Late Morning | The Grotto Pool')
+  })
+
+  it('leaves bold inside a sentence alone, and a line carrying two spans', () => {
+    expect(classify('She said **no** to the Empress.')).toBe('She said **no** to the Empress.')
+    expect(classify('**Morning** at **the pool**')).toBe('**Morning** at **the pool**')
+  })
+
+  it('collapses the gaps a dropped rule leaves behind', () => {
+    expect(classify('# Title\n\n***\n\nProse.')).toBe('Title\n\nProse.')
+  })
+
+  it('leaves ordinary prose and a bullet untouched', () => {
+    const prose = 'Morvana snorts.\n\n"Boring," she says.'
+    expect(classify(prose)).toBe(prose)
+    expect(classify('- a bullet')).toBe('- a bullet')
+  })
+
+  it('removes an image tag and unwraps Visual Prose HTML', () => {
+    expect(classify(PIC)).toBe(PLAIN)
+    expect(classify(HTML)).toBe(PLAIN)
+  })
+
+  it('unwraps HTML in a player action too, so it reads as the words typed', () => {
+    expect(classify('<em>I</em> draw my sword &amp; charge.')).toBe('*I* draw my sword & charge.')
+  })
+})

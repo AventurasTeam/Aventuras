@@ -11,8 +11,8 @@ Narration is written for a reader, not for a model. An entry can carry three kin
 - **Layout** — `### Time | Place` headers, `***` / `---` rules, bold heading lines.
 
 A service that sends `entry.content` unchanged sends all of it. The narrator strips `<pic>` from
-its own history when inline images are off (`NarrativeService.ts`), and the classifier has its own
-helper. Everything else reads raw content.
+its own history when inline images are off (`NarrativeService.ts`), and the classifier and the
+Style Reviewer use the presets below. Everything else reads raw content.
 
 ## Why the Style Reviewer cleans its input
 
@@ -83,9 +83,13 @@ Three presets:
 
 `inlineEmphasis: 'unwrap'` is implemented and tested, but no preset uses it yet.
 
-| Service        | Preset             |
-| -------------- | ------------------ |
-| Style Reviewer | `CLEAN_FOR_REVIEW` |
+| Service        | Preset                     |
+| -------------- | -------------------------- |
+| Style Reviewer | `CLEAN_FOR_REVIEW`         |
+| Classifier     | `CLEAN_FOR_CLASSIFICATION` |
+
+The classifier applies its preset to all three inputs it reads: the recent history, the
+narrator's response and the player's action.
 
 The Style Reviewer's passages come from `buildReviewPassages`
 (`services/ai/generation/styleReviewPassages.ts`), which cleans each entry, skips one that cleans
@@ -146,6 +150,9 @@ cleaner can be routed around without a release. Off means `CLEAN_NONE`, which ru
   entry does not use up one of the reviewer's `recentEntriesCount` slots, so the passage count and
   `reviewedEntryCount` can be lower than the entries fetched, and the numbering follows the
   passages actually sent.
+- **The classifier's preset unwraps HTML in the player's own action too.** It reads the typed
+  action through the same helper as the narration, so an `<em>` or an entity a player pasted is
+  turned into the words they meant.
 - **The cleaning also protects the narrator.** The review feeds `<style_guidance>`, and a
   degenerate review (one run returned 120 findings, padded with near-synonyms) puts every finding
   into the narrator's system prompt. Cleaning removes one trigger of that; it does not cap it.
