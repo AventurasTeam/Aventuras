@@ -34,7 +34,7 @@ no config plugin and no dev-client rebuild — unlike a third-party
 native module, see
 [native-module RN libs need a dev-client rebuild](./native-dep-expo-link.md).
 
-Two traps sit in the swap itself:
+Three traps sit in the swap itself:
 
 1. `expo/fetch` takes `(url, init)`, never a `Request`. Its
    `FetchRequestLike` needs a real `body` property and a whatwg
@@ -45,6 +45,12 @@ Two traps sit in the swap itself:
 2. `FetchResponse.clone()` throws `Not implemented`. Any wrapper that
    clones a response — the HTTP-capture wrapper did — breaks every
    native call, not only the streaming ones.
+3. A bodyless whatwg `Request` still reads `''` from `.text()`, and
+   its missing `body` slips past a `=== null` check. Sent on as the
+   outgoing body, that `''` reaches OkHttp, which rejects any body on
+   a GET or HEAD, so every model-list fetch fails. Skip body capture
+   for GET and HEAD by method; a loose `== null` check instead drops
+   every native POST body.
 
 ## How to apply
 
@@ -60,9 +66,10 @@ than clone where the body is finite (read the text, hand back a fresh
 not. Teeing works too, but it puts a synthetic response in the hot
 path of every call on the platform hardest to test.
 
-Guard the emptiness check as `!= null`, not `!== null`. The whatwg
-body is `undefined`, so a strict comparison declares a stream present
-and sends an unreadable response down the streaming path.
+Guard the response's emptiness check as `!= null`, not `!== null`.
+The whatwg body is `undefined`, so a strict comparison declares a
+stream present and sends an unreadable response down the streaming
+path. The request side is the opposite case: see the third trap.
 
 Finally, never log an AI SDK error as `.message`. Flatten the `cause`
 chain (`describeProviderError` in `lib/ai/transport/`) or the most
