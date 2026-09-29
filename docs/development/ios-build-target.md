@@ -154,8 +154,8 @@ then smoke-test the full unsigned build and upload the test `.ipa`.
 - [`src/lib/services/updater.ts`](../../src/lib/services/updater.ts): the mobile update
   check (`checkViaGitHub`) now dispatches on `isAndroid() || isIos()` and picks the
   release asset by platform — `.apk` on Android, `.ipa` on iOS. Everything else
-  (timeout, semver comparison, `manualInstallReason: 'mobile-platform'`) was already
-  platform-agnostic.
+  (timeout, semver comparison) was already platform-agnostic; the reason is
+  `'ios-sideload'` on iOS and `'mobile-platform'` on Android.
 
 ### New `src-tauri/` files
 
