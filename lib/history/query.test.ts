@@ -125,9 +125,20 @@ describe('loadHistoryChunk', () => {
     await db
       .insert(deltas)
       .values(delta(9, 'update', { state: { traits: ['calm'], drives: ['vengeance'] } }))
-    expect(await positions({ search: 'Modified Traits' })).toEqual([9, 4, 2])
+    expect(await positions({ search: 'Modified Traits' })).toEqual([9, 2])
     expect(await positions({ search: 'modified traits, drives' })).toEqual([9])
     expect(await positions({ search: 'Traits' })).toEqual([9, 4, 2])
+  })
+
+  it('matches a typed summary on the field paths it names only, never on payload values', async () => {
+    await db
+      .insert(deltas)
+      .values([
+        delta(9, 'update', { state: { traits: ['calm'], drives: ['vengeance'] } }),
+        delta(10, 'update', { description: 'Traits and Drives' }),
+      ])
+    expect(await positions({ search: 'Modified Traits, Drives' })).toEqual([9])
+    expect(await positions({ search: 'Modified Traits, No such field' })).toEqual([])
   })
 
   it('finds every row by the summary it renders', async () => {

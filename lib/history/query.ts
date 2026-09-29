@@ -47,20 +47,31 @@ function freeTextCondition(term: string): SQL {
         LIKE ${likePattern(term)} ESCAPE '\\')`
 }
 
-// json_type, not json_extract — json_extract can't tell an absent path from a stored JSON null.
-function fieldSearchCondition(table: HistoryTable, term: string): SQL {
+function termPaths(table: HistoryTable, term: string): string[] {
   const paths = new Set(pathsMatchingLabel(table, term))
   if (PATH_TERM.test(term)) paths.add(term)
-  // op=update gate: a delete's payload is the full row, so every field would else match.
+  return [...paths]
+}
+
+// json_type, not json_extract — json_extract can't tell an absent path from a stored JSON null.
+function pathPresent(path: string): SQL {
+  return sql`json_type(${deltas.undoPayload}, ${`$.${path}`}) IS NOT NULL`
+}
+
+// op=update gate: a delete's payload is the full row, so every field would else match.
+function fieldSearchCondition(table: HistoryTable, term: string): SQL {
   return and(
     eq(deltas.op, 'update'),
-    or(
-      freeTextCondition(term),
-      ...[...paths].map(
-        (path) => sql`json_type(${deltas.undoPayload}, ${`$.${path}`}) IS NOT NULL`,
-      ),
-    ),
+    or(freeTextCondition(term), ...termPaths(table, term).map(pathPresent)),
   ) as SQL
+}
+
+// A summary names fields, never values: each named field must resolve to a path the update changed.
+function summarySearchCondition(table: HistoryTable, fields: string[]): SQL {
+  const perField = fields.map(
+    (field) => or(...termPaths(table, field).map(pathPresent)) ?? sql`false`,
+  )
+  return and(eq(deltas.op, 'update'), ...perField) as SQL
 }
 
 // world.md → History tab: term also matches an op via its rendered label (name/chip/summary).
@@ -70,10 +81,8 @@ function searchCondition(table: HistoryTable, term: string): SQL {
   if ((HISTORY_OPS as readonly string[]).includes(lowered)) ops.add(lowered as Delta['op'])
   const conditions: SQL[] = [fieldSearchCondition(table, term)]
   if (ops.size > 0) conditions.push(inArray(deltas.op, [...ops]))
-  // A typed update summary: every field it names must match, each searched as if typed alone.
   const named = summaryFieldTerms(term)
-  if (named != null)
-    conditions.push(and(...named.map((field) => fieldSearchCondition(table, field))) as SQL)
+  if (named != null) conditions.push(summarySearchCondition(table, named))
   return or(...conditions) as SQL
 }
 
