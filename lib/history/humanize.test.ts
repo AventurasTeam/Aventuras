@@ -81,7 +81,7 @@ describe('humanizeDelta', () => {
       summary: 'Modified Traits, Drives',
       source: 'periodic_classifier',
       entryId: 'entry #47',
-      createdAtRelative: '2 h ago',
+      createdAtRelative: '2h ago',
     })
   })
 

@@ -6,6 +6,17 @@
   "labelWithCount": "{{label}} ({{value}})",
   "entryRef": "entry #{{n}}",
   "entryRefDangling": "Entry no longer exists",
+  "relativeTime": {
+    "justNow": "just now",
+    "minutes_one": "{{count}}m ago",
+    "minutes_other": "{{count}}m ago",
+    "hours_one": "{{count}}h ago",
+    "hours_other": "{{count}}h ago",
+    "days_one": "{{count}}d ago",
+    "days_other": "{{count}}d ago",
+    "date": "{{date, datetime(day: numeric)}} {{date, datetime(month: short)}}, {{date, datetime(hour: 2-digit; minute: 2-digit; hourCycle: h23)}}",
+    "dateWithYear": "{{date, datetime(day: numeric)}} {{date, datetime(month: short)}} {{date, datetime(year: numeric)}}, {{date, datetime(hour: 2-digit; minute: 2-digit; hourCycle: h23)}}"
+  },
   "entryKind": {
     "opening": "opening",
     "user_action": "action",
@@ -154,6 +165,7 @@
   "storyCard": {
     "genreNotSet": "Genre not set",
     "noDescription": "(no description yet)",
+    "neverOpened": "Never",
     "modeAdventure": "Adventure",
     "modeCreative": "Creative",
     "definitionCorrupt": "Couldn't open — story definition corrupted",

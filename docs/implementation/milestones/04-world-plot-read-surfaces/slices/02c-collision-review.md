@@ -204,7 +204,8 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   spliced into "Older · …" and "Newer · …", against
   [`code-conventions.md → i18n discipline`](../../../../code-conventions.md#i18n-discipline).
   The dialog has no live caller until this slice gives it drivers, so
-  route it through `t()` here; relative times want whole-sentence keys
+  route it through `t()` here (`relativeTimeLabel` in `lib/i18n` already
+  renders History's and the story card's "5m ago"); relative times want whole-sentence keys
   (see [`parked.md → Sentence composition in World's copy`](../../../../parked.md#sentence-composition-in-worlds-copy)).
   Found by the 2026-09-27 triage pass.
 - **How does the merge re-key the loser's link rows, given the entity

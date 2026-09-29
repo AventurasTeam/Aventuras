@@ -39,17 +39,6 @@
     "modified": "Modified {{fields}}",
     "modifiedUnknown": "Modified"
   },
-  "relative": {
-    "justNow": "just now",
-    "minutes_one": "{{count}} min ago",
-    "minutes_other": "{{count}} min ago",
-    "hours_one": "{{count}} h ago",
-    "hours_other": "{{count}} h ago",
-    "days_one": "{{count}} d ago",
-    "days_other": "{{count}} d ago",
-    "weeks_one": "{{count}} w ago",
-    "weeks_other": "{{count}} w ago"
-  },
   "field": {
     "name": "Name",
     "title": "Title",

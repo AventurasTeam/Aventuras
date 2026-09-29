@@ -1,9 +1,8 @@
 import { isPayloadMetaKey } from '@/lib/actions'
 import type { Delta } from '@/lib/db'
-import { t } from '@/lib/i18n'
+import { relativeTimeLabel, t } from '@/lib/i18n'
 
 import { fieldPathLabel, SUMMARY_FIELD_SEPARATOR, type HistoryTable } from './field-labels'
-import { relativeTimeLabel } from './relative-time'
 
 /** DeltaLogRow's `delta` prop, pre-formatted (patterns/delta-log-row.md → Compound API). */
 export type HistoryRowView = {

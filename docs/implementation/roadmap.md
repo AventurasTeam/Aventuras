@@ -1010,6 +1010,18 @@ code before it moved; resolve with the slice it names.
   want an entry link: an `entry` route param, load-older until the
   entry is present, scroll into view with a transient highlight.
   Surfaced by 4.2b planning (2026-09-28).
+- **M7.1 — A date-time format setting, independent of the UI
+  language.** Past a week, History rows and the story card show a date
+  and time from `relativeTimeLabel` (`lib/i18n`), in the shape its
+  locale string sets; English is pinned to day-month on a 24-hour clock
+  (`12 Apr, 14:33`). The format should be the user's choice apart from
+  the language — American English with a 24-hour clock and day-month
+  order, say — rather than en-US and en-GB shipping as separate
+  languages, each with its own format. This slice's setting then feeds
+  that helper's absolute form. Possibly overkill; it may tie into the
+  built-in Gregorian calendar (`earth-gregorian`,
+  [`calendar-systems/spec.md`](../calendar-systems/spec.md)). Developer
+  decision on the 4.2b stack review (2026-09-30).
 
 **Gates.** M6 (settings should reflect real branching + multi-
 story behavior; diagnostics should inspect real branch-aware

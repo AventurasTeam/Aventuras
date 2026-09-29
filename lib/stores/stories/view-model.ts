@@ -1,6 +1,5 @@
 import type { Story } from '@/lib/db'
-
-import { formatRelativeTime } from './relative-time'
+import { relativeTimeLabel, t } from '@/lib/i18n'
 
 export type StoryCardData = Story & { lastOpenedRelative: string; chapterLabel: string | null }
 
@@ -9,7 +8,10 @@ export type StoryCardData = Story & { lastOpenedRelative: string; chapterLabel: 
 export function toStoryCardData(row: Story, nowMs: number): StoryCardData {
   return {
     ...row,
-    lastOpenedRelative: formatRelativeTime(row.lastOpenedAt, nowMs),
+    lastOpenedRelative:
+      row.lastOpenedAt == null
+        ? t('storyCard.neverOpened')
+        : relativeTimeLabel(row.lastOpenedAt, nowMs),
     chapterLabel: null,
   }
 }
