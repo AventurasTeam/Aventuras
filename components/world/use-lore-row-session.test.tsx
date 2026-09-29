@@ -105,6 +105,30 @@ describe('useLoreRowSession', () => {
     )
   })
 
+  it('drops the whole-draft issues once an edit is undone and the draft is clean again', async () => {
+    const hook = renderHook(() => useHarness())
+    act(() => hook.result.current.world.startCreate())
+    // A Controller's edit path: the dirty flag and the field's own issue land in one update.
+    const { onChange } = hook.result.current.session.form.register('title')
+    const typeTitle = (value: string) =>
+      act(async () => {
+        await onChange({ target: { name: 'title', value }, type: 'change' })
+      })
+    await typeTitle('Vael')
+    await waitFor(() =>
+      expect(hook.result.current.session.invalidReason).toBe('Body: Lore needs a body.'),
+    )
+    await typeTitle('')
+    await waitFor(() => expect(hook.result.current.session.dirty).toBe(false))
+    expect(hook.result.current.session.form.formState.errors).toEqual({})
+    expect(hook.result.current.session.invalidReason).toBeNull()
+    // Editing again re-checks the whole draft.
+    await typeTitle('Vael')
+    await waitFor(() =>
+      expect(hook.result.current.session.invalidReason).toBe('Body: Lore needs a body.'),
+    )
+  })
+
   it('opens a blank draft when [+] Blank from a dirty create is answered with Save', async () => {
     const hook = renderHook(() => useHarness())
     act(() => hook.result.current.world.startCreate())
