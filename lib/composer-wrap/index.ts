@@ -23,22 +23,23 @@ function conjugateFirstWord(text: string): string {
   return [conjugateThirdPersonPresent(first), ...rest].join(' ')
 }
 
+function wrapSubject(pov: ComposerWrapPov, leadName: string | null): string | null {
+  return pov === 'first' ? 'I' : leadName
+}
+
 /** The first-person wrap says "I" and needs no lead; any other wrap names the lead. */
 export function wrapHasSubject(pov: ComposerWrapPov, leadName: string | null): boolean {
-  return pov === 'first' || leadName != null
+  return wrapSubject(pov, leadName) != null
 }
 
 export function wrapComposerText(rawText: string, opts: WrapOptions): string {
   const { mode, pov, leadName } = opts
+  const subject = wrapSubject(pov, leadName)
   // A caller sending a non-free mode with no subject to wrap around is a bug upstream —
   // fail safe to the raw text rather than emit e.g. " draw my blade.".
-  if (mode === 'free' || !wrapHasSubject(pov, leadName)) return rawText
+  if (mode === 'free' || subject == null) return rawText
 
   const text = rawText.trim()
-  const subject = pov === 'first' ? 'I' : leadName
-  // wrapHasSubject already ruled this out at runtime; it isn't a type guard, so re-check
-  // here rather than assert non-null.
-  if (subject == null) return rawText
   if (mode === 'do') {
     const body = pov === 'first' ? text : conjugateFirstWord(text)
     return ensureTrailingPeriod(`${subject} ${body}`)
