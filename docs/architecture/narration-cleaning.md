@@ -47,7 +47,8 @@ scoring (so contamination rates are a lower bound), and no run with the app's de
 - The mode for each kind of markup is chosen per service by a preset, so a service that needs the
   time and place in a header can keep it.
 - It runs in code, so it works on every model and needs no prompt-pack migration.
-- The functions are pure and live in a plain `.ts` module, so tests can import them.
+- The functions are pure and live in a plain `.ts` module. The HTML stage needs a `document`, so a
+  test that reaches it declares `// @vitest-environment jsdom`.
 
 ## Options
 
@@ -64,7 +65,7 @@ scoring (so contamination rates are a lower bound), and no run with the app's de
 | Option           | Modes                        | Acts on                                            |
 | ---------------- | ---------------------------- | -------------------------------------------------- |
 | `pic`            | `keep`, `remove`             | `<pic>` tags, prompt included                      |
-| `html`           | `keep`, `unwrap`             | HTML tags; `<style>` and `<script>` always go whole |
+| `html`           | `keep`, `unwrap`             | HTML tags; `<style>`, `<script>` and comments always go whole |
 | `headings`       | `keep`, `unwrap`, `remove`   | `### …` lines                                      |
 | `boldLines`      | `keep`, `unwrap`, `remove`   | lines that are one `**…**` span end to end         |
 | `rules`          | `keep`, `remove`             | `***`, `---`, `___`                                |
@@ -117,16 +118,15 @@ cleaner can be routed around without a release. Off means `CLEAN_NONE`, which ru
 
 - **Keep it a plain `.ts` module.** A `*.svelte.ts` file cannot be imported by a test
   ([testing.md](../development/testing.md)), and the strip is exactly the kind of logic that
-  needs one.
+  needs one. The DOM is fine here.
 - **Stage order is fixed**: `<pic>`, HTML, headings / bold lines / rules, inline emphasis,
   whitespace. `<pic>` goes first because a prompt can contain `<` and `>`. HTML goes before
   layout, so `<p>### Header</p>` becomes a real line start. Inline emphasis goes after bold-line
   detection, or it would erase the `**` that marks a bold heading.
-- **The HTML strip matches real element names only.** Visual Prose may emit any element, so the
-  list is the full HTML set, but `<Kael>` in prose is text and stays. A tag is also never allowed
-  to swallow a stray `<` up to a later `>`.
-- **Entities are decoded once, last**, after all tag matching, so a decoded `&lt;b&gt;` stays
-  literal text.
+- **The HTML stage parses with the DOM** (`template.innerHTML`), so it needs a `document`. The app
+  always has one (an SPA, `ssr = false`); a test declares `// @vitest-environment jsdom`, and one
+  that reaches the stage under `node` throws `ReferenceError` rather than falling back. Text with
+  no `<` or `&` skips the parse.
 - **Idempotence is not universal.** It holds for the tested fixtures, but text that contains
   entity-encoded markup changes again on a second pass (`&amp;lt;` decodes to `&lt;`, which
   decodes again). Clean once, from the raw content.
@@ -138,6 +138,22 @@ cleaner can be routed around without a release. Off means `CLEAN_NONE`, which ru
 - **Header text is content, not markup.** That is why the reviewer's preset removes headings
   instead of unwrapping them: removing only the `###` characters still left the reviewer a line
   to criticise.
+- **Well-formed unknown and custom tags vanish**, as they do on screen. `<Kael>` and `<Mark>` are
+  well-formed tags: `marked` passes them through and the browser hides them, and the reviewer
+  should read what the reader reads. Entities decode as the browser does (`&nbsp;` becomes a plain
+  space, an out-of-range code point becomes U+FFFD).
+- **A `<` that does not begin a well-formed tag is kept as text** (`3 < 5`, `x<y and then…`, a
+  truncated `<span sty`, `<https://example.com>`). The cleaner escapes it before the parse,
+  copying `marked`'s inline `tag` rule, and a test checks the two agree. In Visual Prose the
+  browser parses the raw content and is stricter, so the difference only exists where the model
+  broke the "valid HTML" instruction; the cleaner errs toward showing the reviewer more text.
+- **`<pic>` must be removed before the parse.** It is not a void element, so the parser would nest
+  all the prose after it inside it. With `pic: 'keep'` and `html: 'unwrap'` the tag is dropped as
+  an unknown element and the prose after it is kept.
+- **Whitespace is tidied only in text that had tags.** Runs collapse and line edges are trimmed,
+  table cells are separated by a space, and prose without tags keeps its own spacing.
+- **A whole-line bold label is a heading.** With `boldLines: 'remove'`, a speaker or name line such
+  as `**Kael**` goes with the headings; the Clean Input switch is the way around it.
 - **In-world HTML text is prose.** A sign written as `<div><h2>The Rusty Anchor</h2>…</div>` is
   something a character reads. Only its tags go.
 - **A short, unpunctuated bold line is a heading; anything else is emphasis.** With
@@ -162,7 +178,8 @@ cleaner can be routed around without a release. Off means `CLEAN_NONE`, which ru
 1. Pick one of the presets, or define a new options object next to them.
 2. Pass `narrationCleaner(preset)` as `recentContent`'s `transform`, or map entries through
    `cleanNarration` directly.
-3. Add a test that the passage the model receives has the markup you meant to drop.
+3. Add a test that the passage the model receives has the markup you meant to drop. If it reaches
+   the HTML stage, declare `// @vitest-environment jsdom` as the file's first line.
 
 ## Not done yet
 

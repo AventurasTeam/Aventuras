@@ -43,58 +43,74 @@ export const CLEAN_FOR_CLASSIFICATION: NarrationCleanOptions = {
 const HEADING_MAX_WORDS = 8
 const SENTENCE_END = /[.!?…"”]$/
 
-// Only real element names: `<Kael>` in prose is text, not markup.
-const HTML_TAGS =
-  'a abbr address area article aside audio b base bdi bdo blockquote body br button canvas caption cite code col colgroup data datalist dd del details dfn dialog div dl dt em embed fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 head header hgroup hr html i iframe img input ins kbd label legend li link main map mark menu meta meter nav noscript object ol optgroup option output p param picture pre progress q rp rt ruby s samp script search section select slot small source span strong style sub summary sup table tbody td template textarea tfoot th thead time title tr track u ul var video wbr'.replaceAll(
+// `marked`'s inline `tag` rule: the only `<` it passes through as HTML. Anything else it escapes.
+const ATTRIBUTE = String.raw`\s+[a-zA-Z:_][\w.:-]*(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>\x60]+))?`
+const WELL_FORMED_MARKUP = [
+  String.raw`<!--(?:-?>|[\s\S]*?-->)`,
+  String.raw`<\/[a-zA-Z][\w:-]*\s*>`,
+  String.raw`<[a-zA-Z][\w-]*(?:${ATTRIBUTE})*\s*\/?>`,
+  String.raw`<\?[\s\S]*?\?>`,
+  String.raw`<![a-zA-Z]+\s[\s\S]*?>`,
+  String.raw`<!\[CDATA\[[\s\S]*?\]\]>`,
+].join('|')
+const MARKUP_OR_ANGLE = new RegExp(`(?:${WELL_FORMED_MARKUP})|<`, 'g')
+
+const BLOCK_ELEMENTS = new Set(
+  'p div h1 h2 h3 h4 h5 h6 blockquote ul ol table pre section article header footer aside nav main figure dl details summary hr'.split(
     ' ',
-    '|',
-  )
+  ),
+)
+const LINE_ELEMENTS = new Set(['li', 'tr', 'dt', 'dd'])
+const CELL_ELEMENTS = new Set(['td', 'th'])
+const HIDDEN_ELEMENTS = new Set(['style', 'script'])
 
-const ATTRIBUTES = String.raw`(?:"[^"]*"|'[^']*'|[^<>"'])*`
-const BLOCK_SCRIPT = /<(style|script)\b[^<>]*>[\s\S]*?<\/\1\s*>/gi
-const ITALIC_PAIR = new RegExp(String.raw`<(em|i)\b${ATTRIBUTES}>([\s\S]+?)<\/\1\s*>`, 'gi')
-const BOLD_PAIR = new RegExp(String.raw`<(strong|b)\b${ATTRIBUTES}>([\s\S]+?)<\/\1\s*>`, 'gi')
-const PARAGRAPH_END = /<\/(?:p|div|h[1-6])\s*>/gi
-const LINE_BREAK = new RegExp(String.raw`<br\b${ATTRIBUTES}>|<\/li\s*>`, 'gi')
-const KNOWN_TAG = new RegExp(String.raw`<\/?(?:${HTML_TAGS})\b${ATTRIBUTES}>`, 'gi')
-const ENTITY = /&(#x[0-9a-f]+|#\d+|[a-z]+);/gi
+const ELEMENT_NODE = 1
+const TEXT_NODE = 3
 
-const NAMED_ENTITIES: Record<string, string> = {
-  amp: '&',
-  lt: '<',
-  gt: '>',
-  quot: '"',
-  apos: "'",
-  nbsp: ' ',
-  hellip: '…',
-  mdash: '—',
-  ndash: '–',
-  lsquo: '‘',
-  rsquo: '’',
-  ldquo: '“',
-  rdquo: '”',
+/** Escapes each `<` that does not begin a well-formed tag, so the parser sees what `marked` lets through. */
+export function escapeStrayAngles(content: string): string {
+  return content.replace(MARKUP_OR_ANGLE, (match) => (match === '<' ? '&lt;' : match))
 }
 
-function decodeEntities(text: string): string {
-  return text.replace(ENTITY, (whole, body: string) => {
-    if (body[0] !== '#') return NAMED_ENTITIES[body.toLowerCase()] ?? whole
-    const code =
-      body[1].toLowerCase() === 'x' ? parseInt(body.slice(2), 16) : parseInt(body.slice(1), 10)
-    return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole
-  })
+function childrenText(node: Node): string {
+  let text = ''
+  for (const child of node.childNodes) text += textOf(child)
+  return text
+}
+
+function emphasis(inner: string, marker: string): string {
+  const body = inner.trim()
+  if (!body) return inner
+  const start = inner.indexOf(body)
+  return inner.slice(0, start) + marker + body + marker + inner.slice(start + body.length)
+}
+
+function textOf(node: Node): string {
+  if (node.nodeType === TEXT_NODE) return (node.nodeValue ?? '').replaceAll(' ', ' ')
+  if (node.nodeType !== ELEMENT_NODE) return ''
+
+  const name = (node as Element).localName
+  if (HIDDEN_ELEMENTS.has(name)) return ''
+  if (name === 'br') return '\n'
+
+  const inner = childrenText(node)
+  if (name === 'em' || name === 'i') return emphasis(inner, '*')
+  if (name === 'strong' || name === 'b') return emphasis(inner, '**')
+  if (BLOCK_ELEMENTS.has(name)) return `\n\n${inner}\n\n`
+  if (LINE_ELEMENTS.has(name)) return `${inner}\n`
+  if (CELL_ELEMENTS.has(name)) return `${inner} `
+  return inner
 }
 
 function unwrapHtml(content: string): string {
-  const withoutTags = content
-    .replace(BLOCK_SCRIPT, '')
-    .replace(ITALIC_PAIR, '*$2*')
-    .replace(BOLD_PAIR, '**$2**')
-    .replace(PARAGRAPH_END, '\n\n')
-    .replace(LINE_BREAK, '\n')
-    .replace(KNOWN_TAG, '')
+  if (!/[<&]/.test(content)) return content
+  // A template's content is inert: no script runs and nothing loads.
+  const template = document.createElement('template')
+  template.innerHTML = escapeStrayAngles(content)
+  const text = childrenText(template.content)
   // Block markup leaves its source indentation behind; prose that had no tags keeps its own.
-  const tidy = withoutTags === content ? withoutTags : withoutTags.replace(/^[ \t]+|[ \t]+$/gm, '')
-  return decodeEntities(tidy)
+  if (!template.content.querySelector('*')) return text
+  return text.replace(/[ \t]{2,}/g, ' ').replace(/^[ \t]+|[ \t]+$/gm, '')
 }
 
 function isHeading(text: string): boolean {

@@ -1,9 +1,12 @@
+// @vitest-environment jsdom
+import { Lexer } from 'marked'
 import { describe, it, expect } from 'vitest'
 import {
   CLEAN_FOR_CLASSIFICATION,
   CLEAN_FOR_REVIEW,
   CLEAN_NONE,
   cleanNarration,
+  escapeStrayAngles,
   narrationCleaner,
   type NarrationCleanOptions,
 } from './narrationClean'
@@ -94,8 +97,13 @@ describe('pic', () => {
     expect(cleanNarration(content, only({ pic: 'remove' }))).toBe('One.  Two.')
   })
 
-  it('keeps it when asked to', () => {
-    expect(cleanNarration(PIC, only({ html: 'unwrap' }))).toContain('<pic prompt=')
+  it('drops it as an unknown element under html unwrap, keeping the prose after it', () => {
+    const content = 'One.<pic prompt="a dragon over the keep" />Two.'
+    expect(cleanNarration(content, only({ html: 'unwrap' }))).toBe('One.Two.')
+  })
+
+  it('keeps it when nothing else is asked for', () => {
+    expect(cleanNarration(PIC, CLEAN_NONE)).toContain('<pic prompt=')
   })
 })
 
@@ -114,15 +122,54 @@ describe('html', () => {
     expect(cleanNarration(sign, unwrap)).toBe('The Rusty Anchor\n\nEst. 1847')
   })
 
-  it('leaves text that only looks like a tag', () => {
-    const prose = 'Elena called <Kael> twice, and 3 < 5 held.'
-    expect(cleanNarration(prose, unwrap)).toBe(prose)
+  it('leaves a bracket that does not begin a tag', () => {
+    expect(cleanNarration('3 < 5 <3 ->', unwrap)).toBe('3 < 5 <3 ->')
+  })
+
+  it('drops an unknown element as the reader does', () => {
+    expect(cleanNarration('Elena called <Kael> twice', unwrap)).toBe('Elena called twice')
   })
 
   it('does not swallow a stray angle bracket up to a later tag', () => {
     expect(cleanNarration('If x <b then <em>y</em>', unwrap)).toBe('If x <b then *y*')
   })
 
+  it('keeps the rest of the entry after a bracket that opens no tag', () => {
+    expect(cleanNarration('x<y and then the rest', unwrap)).toBe('x<y and then the rest')
+  })
+
+  it('keeps a truncated tag at the end as text', () => {
+    expect(cleanNarration('She ran. <span sty', unwrap)).toBe('She ran. <span sty')
+  })
+
+  it('keeps an autolink as text', () => {
+    expect(cleanNarration('See <https://example.com> now', unwrap)).toBe(
+      'See <https://example.com> now',
+    )
+  })
+
+  it('unwraps names that collide with words, custom elements and any case', () => {
+    expect(cleanNarration('<Mark>Twain</Mark>', unwrap)).toBe('Twain')
+    expect(cleanNarration('<b-foo>kept</b-foo>', unwrap)).toBe('kept')
+    expect(cleanNarration('<P>One</P><DIV>Two</DIV>', unwrap)).toBe('One\n\nTwo')
+  })
+
+  it('breaks a paragraph at an opening <p> with no closing tag', () => {
+    expect(cleanNarration('<p>One<p>Two', unwrap)).toBe('One\n\nTwo')
+  })
+
+  it('moves whitespace inside an emphasis tag outside its markers', () => {
+    expect(cleanNarration('a<em> x </em>b', unwrap)).toBe('a *x* b')
+    expect(cleanNarration('<em> x </em>', unwrap)).toBe('*x*')
+  })
+
+  it('separates table cells with a space', () => {
+    expect(cleanNarration('<table><tr><td>Str</td><td>12</td></tr></table>', unwrap)).toBe('Str 12')
+  })
+
+  it('drops a comment', () => {
+    expect(cleanNarration('One.<!-- note -->Two.', unwrap)).toBe('One.Two.')
+  })
   it('converts emphasis tags to markdown', () => {
     expect(
       cleanNarration('<em>slow</em> and <i>low</i>, <strong>loud</strong>, <b>hard</b>', unwrap),
@@ -149,10 +196,11 @@ describe('html', () => {
       'Tom & Jerry\'s — "hi"…',
     )
     expect(cleanNarration('&amp;lt;b&amp;gt;', unwrap)).toBe('&lt;b&gt;')
+    expect(cleanNarration('a&nbsp;b &eacute;', unwrap)).toBe('a b é')
   })
 
-  it('leaves an unknown entity and an out-of-range code point alone', () => {
-    expect(cleanNarration('&bogus; &#99999999;', unwrap)).toBe('&bogus; &#99999999;')
+  it('leaves an unknown entity alone and replaces an out-of-range code point', () => {
+    expect(cleanNarration('&bogus; &#99999999;', unwrap)).toBe('&bogus; �')
   })
 
   it('keeps indentation in text that had no tags', () => {
@@ -294,5 +342,43 @@ describe('CLEAN_FOR_CLASSIFICATION', () => {
 
   it('unwraps HTML in a player action too, so it reads as the words typed', () => {
     expect(classify('<em>I</em> draw my sword &amp; charge.')).toBe('*I* draw my sword & charge.')
+  })
+})
+
+describe('escapeStrayAngles', () => {
+  // `marked` renders the raw HTML it tokenizes and escapes every other `<`. The cleaner must agree.
+  const INPUTS = [
+    'x<y and then the rest',
+    '3 < 5 and <3',
+    'a <b then <em>y</em>',
+    'end <span sty',
+    'See <https://example.com> now',
+    'Elena called <Kael> twice',
+    '<Mark>Twain</Mark> and <b-foo>x</b-foo>',
+    `<a href="x" title='y' hidden>link</a>`,
+    '<span class="a>b">text</span>',
+    '<br/> and <br />',
+    'one<!-- note -->two and <!-->three',
+    '<?php echo 1 ?>rest',
+    '<!DOCTYPE html>rest',
+    '<![CDATA[raw]]>rest',
+    '<= and <> and <-',
+    '</ p> and </p >',
+  ]
+
+  it.each(INPUTS)('agrees with marked on %j', (input) => {
+    const escaped = escapeStrayAngles(input)
+    const kept = [...escaped.matchAll(/<|&lt;/g)].map((m) => m[0] === '<')
+
+    const asHtml: boolean[] = []
+    let offset = 0
+    for (const token of Lexer.lexInline(input)) {
+      for (let i = 0; i < token.raw.length; i++) {
+        if (token.raw[i] === '<') asHtml.push(token.type === 'html' && i === 0)
+      }
+      offset += token.raw.length
+    }
+    expect(offset).toBe(input.length)
+    expect(kept).toEqual(asHtml)
   })
 })

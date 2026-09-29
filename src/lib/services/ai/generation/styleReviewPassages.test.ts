@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect } from 'vitest'
 import type { StoryEntry } from '$lib/types'
 import { CLEAN_NONE } from '$lib/utils/narrationClean'
