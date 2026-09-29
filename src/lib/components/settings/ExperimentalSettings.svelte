@@ -52,6 +52,8 @@
   let restoreError = $state<string | null>(null)
   let showBackupConfirm = $state(false)
   let showRestoreConfirm = $state(false)
+  let restoreDone = $state(false)
+  const RESTORE_EXIT_DELAY_MS = 3000
 
   // SQL Query Box state — initialized from module-level persisted values
   let sqlQuery = $state(_sqlQuery)
@@ -185,13 +187,20 @@
     try {
       const { backupService } = await import('$lib/services/backupService')
       await backupService.restoreFromBackup(zipPath)
-      // App will exit — we won't reach here
     } catch (error) {
       console.error('[ExperimentalSettings] Restore failed:', error)
       restoreError = errMessage(error)
-    } finally {
       isRestoring = false
+      return
     }
+
+    // The DB is closed and replaced; the blocking modal keeps anything from lazily reopening it.
+    restoreDone = true
+    // Give the modal time to paint before the process ends, so the exit doesn't read as a crash.
+    await new Promise((resolve) => setTimeout(resolve, RESTORE_EXIT_DELAY_MS))
+    // exit() rather than relaunch() avoids a Windows webview2 crash on teardown.
+    const { exit } = await import('@tauri-apps/plugin-process')
+    await exit(0)
   }
 
   async function handleStateTrackingToggle(checked: boolean) {
@@ -759,5 +768,21 @@
         Restore & Close App
       </Button>
     </Dialog.Footer>
+  </Dialog.Content>
+</Dialog.Root>
+
+<!-- Restore Complete: not dismissable; the app exits shortly -->
+<Dialog.Root open={restoreDone}>
+  <Dialog.Content
+    class="p-6 sm:max-w-md"
+    interactOutsideBehavior="ignore"
+    escapeKeydownBehavior="ignore"
+  >
+    <Dialog.Header>
+      <Dialog.Title>Restore complete</Dialog.Title>
+      <Dialog.Description class="pt-2">
+        Aventuras is closing. Reopen it to continue with the restored database.
+      </Dialog.Description>
+    </Dialog.Header>
   </Dialog.Content>
 </Dialog.Root>

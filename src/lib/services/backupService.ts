@@ -23,8 +23,6 @@ import { getVersion } from '@tauri-apps/api/app'
 import { database } from './database'
 import { resolveSaveTarget } from './exportTarget'
 import { errMessage } from '$lib/utils/error'
-import { isIos } from '$lib/utils/platform'
-import { ui } from '$lib/stores/ui.svelte'
 
 interface BackupMetadata {
   version: number
@@ -138,8 +136,8 @@ class BackupService {
 
   /**
    * Restore the application from a backup ZIP file.
-   * Replaces the current database with the one from the backup, then exits.
-   * The user must manually restart the app so migrations run on the restored DB.
+   * Replaces the current database with the one from the backup. The database is left closed, so
+   * the caller must block the UI and exit the app; the user restarts it to migrate the restored DB.
    * @param zipPath Path to the backup ZIP file (from a file picker dialog)
    */
   async restoreFromBackup(zipPath: string): Promise<void> {
@@ -156,23 +154,6 @@ class BackupService {
     //    Throws if the archive has no aventura.db entry.
     await invoke('restore_database', { zipPath })
     console.log('[Restore] Database file replaced.')
-
-    // 3. Exit the app — user must reopen so migrations run on the restored DB.
-    //    Using exit() instead of relaunch() to avoid Windows webview2 crash
-    //    (Chrome_WidgetWin_0 unregister error).
-    //
-    // iOS has no user-facing affordance for an app quitting itself the way desktop does, so
-    // a bare exit() there reads as a crash. Show what's happening first and give the toast
-    // time to paint before the process ends; desktop and Android exit immediately as before.
-    if (isIos()) {
-      const RESTORE_TOAST_MS = 3000
-      ui.showToast('Restore complete — reopen Aventuras to continue.', 'info', RESTORE_TOAST_MS)
-      await new Promise((resolve) => setTimeout(resolve, RESTORE_TOAST_MS))
-    }
-
-    console.log('[Restore] Exiting application. Please restart manually.')
-    const { exit } = await import('@tauri-apps/plugin-process')
-    await exit(0)
   }
 }
 
