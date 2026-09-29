@@ -698,7 +698,10 @@ export const RepeatBlankResetsCreate: Story = {
   },
 }
 
-/** Blocked from the start: no field on any tab can be edited; navigation stays live. */
+/**
+ * Blocked from the start: no field on any tab can be edited, nor the row deleted; navigation
+ * stays live.
+ */
 export const Blocked: Story = {
   args: { blocked: true },
   play: async () => {
@@ -772,6 +775,14 @@ export const Blocked: Story = {
       'true',
     )
     expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument()
+
+    await userEvent.click(pane().getByRole('button', { name: 'More actions' }))
+    const remove = await screen.findByRole(
+      'menuitem',
+      { name: `Delete happening, ${BLOCKED_REASON}` },
+      WAIT,
+    )
+    expect(remove).toHaveAttribute('aria-disabled', 'true')
   },
 }
 

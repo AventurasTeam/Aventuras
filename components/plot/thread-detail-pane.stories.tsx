@@ -339,7 +339,7 @@ export const RepeatBlankResetsCreate: Story = {
   },
 }
 
-/** Blocked from the start: nothing in the pane can be edited. */
+/** Blocked from the start: nothing in the pane can be edited or deleted. */
 export const Blocked: Story = {
   args: { blocked: true },
   play: async () => {
@@ -367,6 +367,14 @@ export const Blocked: Story = {
     await userEvent.type(description(), 'x')
     expect(description()).toHaveValue(AMULET.description)
     expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    const remove = await screen.findByRole(
+      'menuitem',
+      { name: `Delete thread, ${BLOCKED_REASON}` },
+      WAIT,
+    )
+    expect(remove).toHaveAttribute('aria-disabled', 'true')
   },
 }
 
