@@ -35,11 +35,10 @@
   import { Separator } from '$lib/components/ui/separator'
   import * as Dialog from '$lib/components/ui/dialog'
   import { database } from '$lib/services/database'
-  import { isAndroid, isIos } from '$lib/utils/platform'
+  import { isAndroid } from '$lib/utils/platform'
   import { autosize } from '$lib/utils/autosize'
   import { ask, open } from '@tauri-apps/plugin-dialog'
   import { openFilters } from '$lib/utils/dialogFilters'
-  import { invoke } from '@tauri-apps/api/core'
   import { errMessage } from '$lib/utils/error'
 
   // Local mirror so we can revert the visual state if the confirm dialog is cancelled
@@ -165,20 +164,8 @@
     })
     if (!selected) return
 
-    let zipPath = selected as string
-    // Mobile: the picked URI can't be std::fs-opened by the native restore, so stream it into a
-    // real temp file first (natively — no bytes cross the JS bridge), then restore that.
-    if (isAndroid() || isIos()) {
-      isRestoring = true
-      try {
-        zipPath = await invoke<string>('import_saf_to_temp', { srcUri: selected })
-      } catch (error) {
-        restoreError = errMessage(error)
-        isRestoring = false
-        return
-      }
-    }
-    await doRestore(zipPath)
+    // The native restore opens a path, file:// URL or content:// URI itself.
+    await doRestore(selected as string)
   }
 
   async function doRestore(zipPath: string) {

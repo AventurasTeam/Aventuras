@@ -149,8 +149,8 @@ then smoke-test the full unsigned build and upload the test `.ipa`.
 
 - [`src/lib/utils/platform.ts`](../../src/lib/utils/platform.ts): `isIos()` — UA-based,
   same style as the existing `isAndroid()`. An iPad's WKWebView sends a Mac UA by default,
-  so a `Macintosh` UA with `maxTouchPoints > 1` also counts as iOS. Backup restore routes
-  the picked `file://` URL through `import_saf_to_temp`, as Android does with `content://`.
+  so a `Macintosh` UA with `maxTouchPoints > 1` also counts as iOS. Backup restore opens
+  the picked `file://` URL directly (`open_src` in `backup.rs`); only `content://` is staged.
 - [`src/lib/services/updater.ts`](../../src/lib/services/updater.ts): the mobile update
   check (`checkViaGitHub`) now dispatches on `isAndroid() || isIos()` and picks the
   release asset by platform — `.apk` on Android, `.ipa` on iOS. Everything else

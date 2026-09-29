@@ -10,8 +10,7 @@ mod sync;
 mod time_anchors;
 
 use backup::{
-    backup_database, export_images_zip, export_single_image, export_story_avt, import_saf_to_temp,
-    restore_database,
+    backup_database, export_images_zip, export_single_image, export_story_avt, restore_database,
 };
 use sync::commands::{
     clear_received_stories, get_received_stories, start_sync_server, stop_sync_server,
@@ -308,7 +307,6 @@ pub fn run() {
             export_images_zip,
             export_single_image,
             export_story_avt,
-            import_saf_to_temp,
             avt_import::avt_read_light,
             avt_import::avt_import_images,
             db_tx::db_transaction,
