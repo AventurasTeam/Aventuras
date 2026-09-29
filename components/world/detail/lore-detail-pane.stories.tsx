@@ -53,6 +53,7 @@ function savedLore(id: string, draft: LoreDraft): Lore {
 
 type HarnessProps = {
   row: Lore | null
+  categories?: readonly string[]
   recentlyClassified?: RecentlyClassified
   blocked?: boolean
   blockedReason?: string
@@ -64,6 +65,7 @@ type HarnessProps = {
 /** Mimics the route: a save's row lands by `onSaved`; `Blank` is a `[+] Blank` (a new `seq`). */
 function Harness({
   row: initialRow,
+  categories = CATEGORIES,
   recentlyClassified,
   blocked = false,
   blockedReason,
@@ -104,7 +106,7 @@ function Harness({
           branchId="br_1"
           row={row}
           createSeq={row == null ? createSeq : undefined}
-          categories={CATEGORIES}
+          categories={categories}
           recentlyClassified={recentlyClassified}
           blocked={blocked}
           blockedReason={blockedReason}
@@ -433,6 +435,26 @@ export const TypedCategorySavesCanonical: Story = {
     await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1), WAIT)
     await expect(args.onSave).toHaveBeenCalledWith(
       expect.objectContaining({ category: 'religion' }),
+    )
+  },
+}
+
+/** A category left untouched saves as stored, though the branch also holds another casing of it. */
+export const UneditedCategoryKeepsItsCasing: Story = {
+  args: {
+    row: { ...AETHERIUM, category: 'Cosmology' },
+    categories: ['cosmology', 'Cosmology', 'religion'],
+  },
+  play: async ({ args }) => {
+    await userEvent.click(await screen.findByRole('tab', { name: 'Settings' }, WAIT))
+    const priority = await screen.findByRole('textbox', { name: 'Priority' }, WAIT)
+    await userEvent.clear(priority)
+    await userEvent.type(priority, '40')
+    await waitFor(() => expect(saveButton()).toBeEnabled(), WAIT)
+    await userEvent.click(saveButton())
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1), WAIT)
+    await expect(args.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ category: 'Cosmology', priority: 40 }),
     )
   },
 }
