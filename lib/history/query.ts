@@ -63,7 +63,7 @@ function fieldSearchCondition(table: HistoryTable, term: string): SQL {
   ) as SQL
 }
 
-// world.md → scopeSummary: term also matches an op via its rendered label (name/chip/summary).
+// world.md → History tab: term also matches an op via its rendered label (name/chip/summary).
 function searchCondition(table: HistoryTable, term: string): SQL {
   const ops = new Set(opsMatchingLabel(term))
   const lowered = term.toLowerCase()
@@ -77,7 +77,7 @@ function searchCondition(table: HistoryTable, term: string): SQL {
   return or(...conditions) as SQL
 }
 
-/** One load-older chunk of a row's delta log (C4). */
+/** One chunk of a row's delta log, paged in sort order (C4). */
 export async function loadHistoryChunk(
   db: DbCtx['db'],
   query: HistoryQuery,
