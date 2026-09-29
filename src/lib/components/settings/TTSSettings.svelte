@@ -503,10 +503,7 @@
           <Label>Volume Override</Label>
           <p class="text-muted-foreground text-xs">Manually control TTS narration volume.</p>
           {#if !volumeOverrideSupported}
-            <!-- iOS ignores HTMLMediaElement.volume by design, so this control has nothing to
-                 act on for these providers -- only the hardware volume buttons change loudness.
-                 Disabled below rather than hidden, so a value set on another platform stays
-                 visible. -->
+            <!-- Disabled rather than hidden, so a value set on another platform stays visible. -->
             <p class="text-muted-foreground text-xs italic">
               iOS does not allow apps to set playback volume in software; use the volume buttons
               instead.

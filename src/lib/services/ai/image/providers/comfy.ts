@@ -44,8 +44,7 @@ export async function fetchModelList(
   type: string,
   timeoutMs?: number,
 ): Promise<string[]> {
-  // Tauri's HTTP plugin, not the WebView's fetch: on iOS, App Transport Security blocks plaintext
-  // http:// hosts outside the local-network exception (docs/architecture/overview.md).
+  // Tauri HTTP, not the WebView's fetch (docs/architecture/overview.md, "Local image servers").
   const resp = await imageGetFetch(`${baseUrl}/models/${type}`, undefined, {
     serviceId: 'comfy-models',
     timeoutMs,
@@ -345,10 +344,8 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
 
   const api = new ComfyApi(baseUrl)
 
-  // The SDK has no injection point for its HTTP calls (checkpoints, prompt queueing, /view, the
-  // /history fallback all use fetchApi), so patch this instance to go through Tauri's HTTP plugin
-  // like the other providers; the WebView's fetch is blocked by iOS App Transport Security
-  // (docs/architecture/overview.md). Headers are replaced, not merged, as in the SDK.
+  // Routes every SDK request through Tauri HTTP (docs/architecture/overview.md, "Local image
+  // servers"); headers are replaced, not merged, as in the SDK.
   const internal = api as unknown as ComfyApiFetchInternals
   internal.fetchApi = (path, options = {}) => {
     options.headers = { ...internal.getCredentialHeaders() }
