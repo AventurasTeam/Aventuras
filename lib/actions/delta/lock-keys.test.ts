@@ -86,6 +86,13 @@ describe('lock keys', () => {
       LINKS,
     ])
   })
+
+  it('makes a reversal of a happening link delta hold the happening links', () => {
+    for (const targetTable of ['happening_involvements', 'happening_awareness']) {
+      const delta = { branchId: 'b1', targetTable, targetId: 'link_1' } as Delta
+      expect(deltaLockKeys([delta])).toEqual([LINKS])
+    }
+  })
 })
 
 const probeRows = sqliteTable('lock_probe_rows', { id: text('id').notNull() })
