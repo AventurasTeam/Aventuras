@@ -20,6 +20,7 @@ import LoraTxt2ImgWorkflow from './comfyWorkflows/lora-txt2img-workflow.json'
 import UnetTxt2ImgWorkflow from './comfyWorkflows/unet-txt2img-workflow.json'
 import { specToPixels } from '$lib/utils/image'
 import { imageGetFetch } from './fetchAdapter'
+import type { ComfyApiFetchInternals } from './comfyFetchMembers'
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 
 const DEFAULT_BASE_URL = 'http://localhost:8188'
@@ -327,16 +328,6 @@ function buildOnFailedHandler(
     }
     reject(new Error(message))
   }
-}
-
-/** The `ComfyApi` members the fetch patch below replaces or calls. They are not in the SDK's
- *  public types, so a test asserts they still exist on the prototype after an upgrade. */
-export const COMFY_API_FETCH_MEMBERS = ['fetchApi', 'apiURL', 'getCredentialHeaders'] as const
-
-type ComfyApiFetchInternals = {
-  fetchApi: (path: string, options?: RequestInit) => Promise<Response>
-  apiURL: (path: string) => string
-  getCredentialHeaders: () => Record<string, string>
 }
 
 export function createComfyProvider(config: ImageProviderConfig): ImageProvider {

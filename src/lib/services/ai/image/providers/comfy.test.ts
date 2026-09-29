@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ComfyApi } from '@saintno/comfyui-sdk'
-import { COMFY_API_FETCH_MEMBERS } from './comfy'
+import { COMFY_API_FETCH_MEMBERS } from './comfyFetchMembers'
 
 describe('ComfyApi fetch patch', () => {
   it.each(COMFY_API_FETCH_MEMBERS)('the SDK still defines %s', (member) => {
