@@ -223,9 +223,9 @@ slice-planning gate forces its resolution before that slice is planned.
 - **`blankToNull` has two copies.** `lib/world/draft-text.ts` and
   `lib/plot/thread-draft.ts` each define it (World's entity and lore
   drafts use the first, Plot's thread and happening drafts the second).
-  It wants a shared home such as `lib/text`, whose other consumers
-  are on main, so the move is a follow-up on main rather than in the
-  4.2b stack (2026-09-30, raised by the 4.2b stack review).
+  It wants a shared home such as `lib/text`. The 4.2b stack doesn't
+  touch Plot's copy or its callers, so the move is a follow-up on main
+  (2026-09-30, raised by the 4.2b stack review).
 - **Deleting a relationship leaves its translations.** The
   relationship delete handler (`lib/actions/relationships/register.ts`)
   doesn't cascade `character_relationship` translation rows, though
