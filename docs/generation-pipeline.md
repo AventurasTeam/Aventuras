@@ -1327,7 +1327,10 @@ are pruned from the log with the parent's. A cascade that deleted the rows
 would leave their deltas behind, pointing at nothing, and a later redo
 would re-insert children under a parent that is gone. The reversal still
 sweeps the row's vectors, which carry no deltas and would be orphaned
-otherwise.
+otherwise. The closure gathers child rows only for a happening, and only
+its involvement and awareness rows; any other child the set doesn't
+already hold — an entity's relationship, involvement or awareness rows,
+any row's translations — outlives the reversal.
 
 **Abort, boot recovery and a prose edit close over the rows their
 creates delete.** Neither selection scope guarantees the set holds every write to such a row. An

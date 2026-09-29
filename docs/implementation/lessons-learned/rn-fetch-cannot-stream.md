@@ -49,8 +49,11 @@ Three traps sit in the swap itself:
    its missing `body` slips past a `=== null` check. Sent on as the
    outgoing body, that `''` reaches OkHttp, which rejects any body on
    a GET or HEAD, so every model-list fetch fails. Skip body capture
-   for GET and HEAD by method; a loose `== null` check instead drops
-   every native POST body.
+   for GET and HEAD by method. A loose `== null` check instead skips
+   capture for every native request, since none has a `body`. A caller
+   passing a URL and init, as every caller here does, still sends its
+   POST body from `init.body` and loses only the diagnostic copy; a caller
+   passing a `Request` sends no body at all.
 
 ## How to apply
 
