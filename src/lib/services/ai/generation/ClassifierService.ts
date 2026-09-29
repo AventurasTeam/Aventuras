@@ -536,5 +536,6 @@ export class ClassifierService extends BaseAIService {
   }
 }
 
-/** Neither the image markup nor the narrator's layout is part of the passage to classify. */
+// Image tags, HTML and rules are dropped; header text is kept for the time and place fields.
+// See docs/architecture/narration-cleaning.md.
 const cleanForClassification = narrationCleaner(CLEAN_FOR_CLASSIFICATION)

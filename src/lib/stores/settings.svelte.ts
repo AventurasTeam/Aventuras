@@ -385,7 +385,7 @@ export interface StyleReviewerSettings {
   maxTokens: number
   triggerInterval: number
   recentEntriesCount: number
-  cleanInput: boolean // strip image tags, HTML and headings from the narration it reads
+  cleanInput: boolean
   reasoningEffort: ReasoningEffort
   manualBody: string
 }
