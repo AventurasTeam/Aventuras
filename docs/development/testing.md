@@ -10,9 +10,13 @@ extracted into a plain `.ts` module instead (`settingsMigrations.ts`, `advancedP
 `stickiness.ts`, `recentTail.ts` are all this pattern). Those modules are production code with real
 callers, not test scaffolding.
 
-There is also no DOM environment (`environment: 'node'`), so components are not rendered by any test. A
-Svelte-level mistake — a `bind:` to an undefined value, for instance — passes `check`, `lint` and the
-whole suite, and only fails when the app runs.
+The default environment is `node`, with no DOM, and no test renders a component. A Svelte-level mistake —
+a `bind:` to an undefined value, for instance — passes `check`, `lint` and the whole suite, and only
+fails when the app runs.
+
+A test whose code under test parses HTML with the DOM (`utils/narrationClean.ts`) opts in per file with
+`// @vitest-environment jsdom` as its first line. `jsdom` is a devDependency only, and every other file
+stays on `node`.
 
 ## Discovery provider tests
 
