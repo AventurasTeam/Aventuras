@@ -438,8 +438,8 @@ export const Phone: Story = {
   },
 }
 
-/** A category typed in another casing and never picked from the list saves in the branch's. */
-export const TypedCategorySavesCanonical: Story = {
+/** A category saves as typed, though the branch holds it in another casing. */
+export const TypedCategorySavesAsTyped: Story = {
   play: async ({ args }) => {
     const category = await screen.findByRole('combobox', { name: 'Category' }, WAIT)
     await userEvent.click(category)
@@ -447,31 +447,29 @@ export const TypedCategorySavesCanonical: Story = {
     await userEvent.type(category, 'Religion')
     await userEvent.click(body())
     await waitFor(() => expect(saveButton()).toBeEnabled(), WAIT)
-    await expect(category).toHaveValue('Religion')
     await userEvent.click(saveButton())
     await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1), WAIT)
     await expect(args.onSave).toHaveBeenCalledWith(
-      expect.objectContaining({ category: 'religion' }),
+      expect.objectContaining({ category: 'Religion' }),
     )
   },
 }
 
-/** A category left untouched saves as stored, though the branch also holds another casing of it. */
-export const UneditedCategoryKeepsItsCasing: Story = {
-  args: {
-    row: { ...AETHERIUM, category: 'Cosmology' },
-    categories: ['cosmology', 'Cosmology', 'religion'],
-  },
+/** Picking one casing of a category the branch holds in two commits that casing. */
+export const PickedCategoryKeepsItsCasing: Story = {
+  args: { categories: ['cosmology', 'Cosmology', 'religion'] },
   play: async ({ args }) => {
-    await userEvent.click(await screen.findByRole('tab', { name: 'Settings' }, WAIT))
-    const priority = await screen.findByRole('textbox', { name: 'Priority' }, WAIT)
-    await userEvent.clear(priority)
-    await userEvent.type(priority, '40')
+    const category = await screen.findByRole('combobox', { name: 'Category' }, WAIT)
+    await userEvent.click(category)
+    await userEvent.clear(category)
+    await userEvent.type(category, 'cosmo')
+    await userEvent.click(await screen.findByRole('option', { name: 'Cosmology' }, WAIT))
+    await waitFor(() => expect(category).toHaveValue('Cosmology'), WAIT)
     await waitFor(() => expect(saveButton()).toBeEnabled(), WAIT)
     await userEvent.click(saveButton())
     await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1), WAIT)
     await expect(args.onSave).toHaveBeenCalledWith(
-      expect.objectContaining({ category: 'Cosmology', priority: 40 }),
+      expect.objectContaining({ category: 'Cosmology' }),
     )
   },
 }

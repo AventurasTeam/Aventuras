@@ -44,22 +44,6 @@ export function loreDraftFrom(row: Lore | null): LoreDraft {
   }
 }
 
-/**
- * world.md → Body tab — lore: an edited category that case-matches a branch category saves in
- * the branch's casing (the Autocomplete canonicalizes only a committed pick). An unedited one is
- * kept, since a branch can already hold one category in several casings.
- */
-export function withCanonicalCategory(
-  draft: LoreDraft,
-  committed: LoreDraft,
-  categories: readonly string[],
-): LoreDraft {
-  const typed = draft.category.trim()
-  if (typed === committed.category.trim()) return draft
-  const match = categories.find((c) => c.toLowerCase() === typed.toLowerCase())
-  return match == null ? draft : { ...draft, category: match }
-}
-
 type LorePatch = Partial<
   Pick<Lore, 'title' | 'body' | 'category' | 'injectionMode' | 'priority' | 'keywords' | 'tags'>
 >

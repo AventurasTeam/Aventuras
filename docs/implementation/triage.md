@@ -128,16 +128,12 @@ slice-planning gate forces its resolution before that slice is planned.
   phone keyboard layout) (2026-09-28, raised by 4.2b).
 - **`Autocomplete`'s `casingNormalization` (default `'canonical'`)
   canonicalizes only a committed pick.** A variant typed and left uncommitted
-  keeps its own casing — the lore pane's Body tab patches this at
-  save (`withCanonicalCategory` in `lib/world/lore-draft.ts`, for an
-  edited category only), matching an existing category's casing even
-  when it wasn't picked from the suggestions. The next consumer of
-  `Autocomplete` with `casingNormalization="canonical"` won't get this
-  for free and needs the same save-time patch. The canonical match
-  also takes the first case-insensitive suggestion even when one
-  matches exactly, so on a branch holding both `Cosmology` and
-  `cosmology`, picking `Cosmology` commits `cosmology`
-  (2026-09-28, raised by 4.2b).
+  keeps its own casing. No shipped consumer uses `canonical` (the lore,
+  thread and happening categories are `as-typed`), so the next one
+  needs a save-time patch. The canonical match also takes the first
+  case-insensitive suggestion even when one matches exactly, so on a
+  list holding both `Cosmology` and `cosmology`, picking `Cosmology`
+  commits `cosmology` (2026-09-28, raised by 4.2b).
 - **AlertDialog impact lists aren't in the dialog's accessible
   description.** The bulleted impact list (`DeleteConfirmDialog`'s
   `delete-impacts` View, and the shipped

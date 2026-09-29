@@ -643,10 +643,8 @@ Two fields, no sub-sections.
   illustrative, not enumerated). On focus, a popover surfaces
   existing categories from this branch's lore as autocomplete
   suggestions, keeping casual taxonomy consistent without forcing
-  an enum. A typed case-variant of an existing category (e.g.
-  `Cosmology` where the branch already has `cosmology`) saves in
-  the branch's existing casing even when it isn't picked from the
-  suggestions. Empty = `— uncategorized —` placeholder.
+  an enum. A category saves exactly as typed or picked, casing
+  included. Empty = `— uncategorized —` placeholder.
 - **Body textarea** — fills the remaining vertical space. Plain
   text per the schema; no markdown rendering or rich-text in v1.
   Standard textarea grow / scroll behavior. **Body is required**

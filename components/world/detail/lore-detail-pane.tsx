@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useCallback, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Controller, type Control } from 'react-hook-form'
 import { View } from 'react-native'
 
@@ -23,7 +23,7 @@ import type { LoreSaveResult } from '@/lib/actions'
 import { INJECTION_MODES, type Lore } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import type { RecentlyClassified } from '@/lib/row-signals'
-import { loreDraftFrom, loreDraftSchema, withCanonicalCategory, type LoreDraft } from '@/lib/world'
+import { loreDraftFrom, loreDraftSchema, type LoreDraft } from '@/lib/world'
 
 import { PlaceholderTab } from '../tabs/placeholder-tab'
 import { useLoreRowSession } from '../use-lore-row-session'
@@ -90,16 +90,12 @@ export function LoreDetailPane({
   hotkeysEnabled = true,
 }: LoreDetailPaneProps) {
   const values = useMemo(() => loreDraftFrom(row), [row])
-  const save = useCallback(
-    (draft: LoreDraft) => onSave(withCanonicalCategory(draft, values, categories)),
-    [onSave, values, categories],
-  )
   const session = useLoreRowSession({
     rowId: row?.id ?? null,
     createSeq,
     values,
     resolver,
-    onSave: save,
+    onSave,
     onSaved,
     onRejected,
     onSession,
@@ -221,7 +217,7 @@ function LoreBody({
               value={field.value}
               onValueChange={field.onChange}
               sourceList={categories}
-              casingNormalization="canonical"
+              casingNormalization="as-typed"
               createTailLabel={(value) => t('world:lore.fields.categoryTail', { value })}
               label={t('world:lore.fields.category')}
               placeholder={t('world:lore.fields.categoryPlaceholder')}
