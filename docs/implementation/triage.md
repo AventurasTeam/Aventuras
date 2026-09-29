@@ -219,3 +219,20 @@ slice-planning gate forces its resolution before that slice is planned.
   has no such index, and `createHappeningInvolvement` doesn't check for
   an existing link, but the classifier emits involvements only under a
   happening it creates (2026-09-30, raised by the 4.2b stack review).
+
+- **`blankToNull` has two copies.** `lib/world/draft-text.ts` and
+  `lib/plot/thread-draft.ts` each define it (World's entity and lore
+  drafts use the first, Plot's thread and happening drafts the second).
+  It wants a shared home such as `lib/text`, whose other consumers
+  are on main, so the move is a follow-up on main rather than in the
+  4.2b stack (2026-09-30, raised by the 4.2b stack review).
+- **Deleting a relationship leaves its translations.** The
+  relationship delete handler (`lib/actions/relationships/register.ts`)
+  doesn't cascade `character_relationship` translation rows, though
+  an entity delete that cascades a relationship does drop them.
+  Harmless until a translation writer exists (none calls
+  `createTranslation` today);
+  [C3](./milestones/04-world-plot-read-surfaces/milestone.md#c3--delete-arm-hardening)
+  scoped the translation cascade to the embedded kinds' delete arms,
+  and the handler predates 4.2b (2026-09-30, raised by the 4.2b stack
+  review).
