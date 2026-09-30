@@ -209,6 +209,9 @@ module.exports = defineConfig([
       '.expo/**',
       'node_modules/**',
       '_tmp/**',
+      // Orca and agent-isolation worktrees: whole repo copies inside this checkout.
+      '.worktrees/**',
+      '.claude/worktrees/**',
       'lib/db/migrations/**',
     ],
   },
