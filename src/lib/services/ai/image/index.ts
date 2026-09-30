@@ -37,6 +37,9 @@ export {
   runImageGeneration,
 } from './imageUtils'
 
+// Portrait lookups for reference-mode scenes
+export { refreshCharacter } from './portraitReferences'
+
 // Style template resolution
 export { resolveStylePrompt, resolveStylePromptForPack } from './stylePrompt'
 

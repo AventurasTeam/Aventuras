@@ -64,6 +64,7 @@ import { serviceFactory } from './core/factory'
 import {
   inlineImageService,
   isImageGenerationEnabled as isImageGenerationEnabledUtil,
+  refreshCharacter,
   resolveStylePrompt,
   runImageGeneration,
 } from './image'
@@ -165,8 +166,8 @@ export interface ImageGenerationContext {
   referenceMode: boolean
   /** Story-level image generation mode — supplied by caller to avoid store access */
   imageGenerationMode: ImageGenerationMode
-  /** All story characters — supplied by caller for portrait/reference lookups */
-  allCharacters?: Character[]
+  /** Live story characters, read at the moment of use — supplied by caller for portrait/reference lookups */
+  getCharacters?: () => Character[]
   /** System image generation service settings — supplied by caller */
   imageSettings?: ImageGenerationServiceSettings
   /** Image profile lookup — supplied by caller */
@@ -906,16 +907,13 @@ class AIService {
       return
     }
     const referenceMode = context.referenceMode ?? false
-    const allCharacters = context.allCharacters ?? []
+    const liveCharacters = () => context.getCharacters?.() ?? []
+    const presentNow = () =>
+      context.presentCharacters.map((c) => refreshCharacter(c, liveCharacters()))
 
-    // Get characters with/without portraits
-    const presentCharacterNames = context.presentCharacters.map((c) => c.name.toLowerCase())
-    const charactersWithPortraits = allCharacters
-      .filter((c) => presentCharacterNames.includes(c.name.toLowerCase()) && c.portrait)
-      .map((c) => c.name)
-    const charactersWithoutPortraits = allCharacters
-      .filter((c) => presentCharacterNames.includes(c.name.toLowerCase()) && !c.portrait)
-      .map((c) => c.name)
+    const present = presentNow()
+    const charactersWithPortraits = present.filter((c) => c.portrait).map((c) => c.name)
+    const charactersWithoutPortraits = present.filter((c) => !c.portrait).map((c) => c.name)
 
     // Build style prompt
     const stylePrompt = await resolveStylePrompt(context.storyId, imageSettings.styleId)
@@ -925,7 +923,7 @@ class AIService {
       storyId: context.storyId,
       narrativeResponse: context.narrativeResponse,
       userAction: context.userAction,
-      presentCharacters: context.presentCharacters.map((c) => ({
+      presentCharacters: present.map((c) => ({
         name: c.name,
         visualDescriptors: c.visualDescriptors,
         isProtagonist: c.relationship === 'self',
@@ -981,13 +979,15 @@ class AIService {
     try {
       // Queue image generation for each scene
       const getImageProfile = context.getImageProfile ?? (() => undefined)
+      // Re-read: analysis takes long enough for a portrait from an earlier turn to land.
+      const presentAtQueue = presentNow()
       for (const scene of scenes) {
         await this.queueAnalyzedImageGeneration(
           context.storyId,
           context.entryId,
           scene,
           imageSettings,
-          context.presentCharacters,
+          presentAtQueue,
           referenceMode,
           getImageProfile,
           context.onPortraitGenerated,

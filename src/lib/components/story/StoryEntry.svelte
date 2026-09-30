@@ -1343,7 +1343,7 @@
         referenceMode: story.currentStory.settings?.referenceMode ?? false,
         translatedNarrative: entry.translatedContent ?? undefined,
         imageGenerationMode: storyImageMode(story.currentStory.settings),
-        allCharacters: story.characters,
+        getCharacters: () => story.characters,
         imageSettings: settings.systemServicesSettings.imageGeneration,
         getImageProfile: (id: string) => settings.getImageProfile(id),
         onPortraitGenerated: (character: Character, portrait: string) =>

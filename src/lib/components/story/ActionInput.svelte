@@ -302,7 +302,7 @@
       generateImagesForNarrative: (ctx) =>
         aiService.generateImagesForNarrative({
           ...ctx,
-          allCharacters: story.characters,
+          getCharacters: () => story.characters,
           imageSettings: settings.systemServicesSettings.imageGeneration,
           getImageProfile: (id) => settings.getImageProfile(id),
           onPortraitGenerated: (character, portrait) =>
