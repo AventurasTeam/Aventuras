@@ -2,6 +2,7 @@ import type { Delta, SqlOp } from '@/lib/db'
 import { deltas, isEmbeddedSourceTable } from '@/lib/db'
 
 import { isUserOriginatedSource, type DbCtx } from '../types'
+import { cascadePatches } from './delete-cascade'
 import { nextLogPosition } from './delta-row'
 import { withKeyLocks } from './key-lock'
 import { resolveByTable, whereForDelta } from './registry'
@@ -152,11 +153,8 @@ async function applyRedoLocked(
         entry?.patcher?.(delta.branchId, { op: 'delete', id: delta.targetId })
         const children = cascadeInfo.get(delta.targetId)
         if (children) {
-          for (const [childTableName, childRows] of Object.entries(children)) {
-            const childEntry = resolveByTable(childTableName)
-            for (const childRow of childRows) {
-              childEntry?.patcher?.(delta.branchId, { op: 'delete', id: childRow.id as string })
-            }
+          for (const { table, patch } of cascadePatches(children)) {
+            resolveByTable(table)?.patcher?.(delta.branchId, patch)
           }
         }
       } else if (row) {

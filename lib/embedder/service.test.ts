@@ -6,7 +6,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { embedViaProvider } from '@/lib/ai'
 import type { ProviderInstanceWithStub } from '@/lib/ai'
-import { compositeText, packFloat32, sourceHash, type EmbeddedFieldRow, type SqlOp } from '@/lib/db'
+import {
+  compositeText,
+  packFloat32,
+  SOURCE_TABLES,
+  sourceHash,
+  staleRowsQuery,
+  toEmbeddedFieldRow,
+  vecTableName,
+  type EmbeddedFieldRow,
+  type SqlOp,
+  type VecTargetKind,
+} from '@/lib/db'
+import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { KIND_COLUMNS } from '@/lib/db/embeddings/stale'
 import { logger } from '@/lib/diagnostics'
 
 import { embedLocal } from './local/runtime'
@@ -595,5 +608,183 @@ describe('truncation reporting', () => {
     } as never)
 
     await expect(embedRowsToVecOps(localConfig, rows, exec)).resolves.toBeDefined()
+  })
+})
+
+describe('embedRowsToVecOps — per-kind guard against a source row that moved on', () => {
+  const KINDS: VecTargetKind[] = ['entity', 'lore', 'happening', 'thread', 'chapter']
+  const cfg: EmbedderConfig = { backend: 'local', modelId: MINILM, dim: 384 }
+
+  beforeEach(() => {
+    vi.mocked(embedLocal).mockImplementation(async (_id, texts: string[]) => ({
+      vectors: texts.map((_, i) => {
+        const v = new Float32Array(384)
+        v[i % 384] = 1
+        return v
+      }),
+      dim: 384,
+      truncated: [],
+    }))
+  })
+
+  // One row per kind, id 'x1', on branch b1 — and the same id + text on a b2
+  // fork when withStory is false, so the delete test can assert b2 is untouched.
+  function seedKindRows(sqlite: DatabaseSync, branch: string, withStory: boolean): void {
+    const now = 1000
+    if (withStory) {
+      sqlite
+        .prepare('INSERT INTO stories (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)')
+        .run('s1', 'S', now, now)
+    }
+    sqlite
+      .prepare('INSERT INTO branches (id, story_id, name, created_at) VALUES (?, ?, ?, ?)')
+      .run(branch, 's1', branch, now)
+    sqlite
+      .prepare(
+        `INSERT INTO entities (id, branch_id, kind, name, description, status, injection_mode, embedding_stale, created_at, updated_at)
+         VALUES ('x1', ?, 'character', 'Kael', NULL, 'active', 'auto', 1, ?, ?)`,
+      )
+      .run(branch, now, now)
+    sqlite
+      .prepare(
+        `INSERT INTO lore (id, branch_id, title, body, injection_mode, embedding_stale, created_at, updated_at)
+         VALUES ('x1', ?, 'Lore One', 'Body one', 'auto', 1, ?, ?)`,
+      )
+      .run(branch, now, now)
+    sqlite
+      .prepare(
+        `INSERT INTO happenings (id, branch_id, title, description, embedding_stale, created_at, updated_at)
+         VALUES ('x1', ?, 'Happening One', 'It happened', 1, ?, ?)`,
+      )
+      .run(branch, now, now)
+    sqlite
+      .prepare(
+        `INSERT INTO threads (id, branch_id, title, description, status, injection_mode, embedding_stale, created_at, updated_at)
+         VALUES ('x1', ?, 'Thread One', 'A tension', 'active', 'auto', 1, ?, ?)`,
+      )
+      .run(branch, now, now)
+    sqlite
+      .prepare(
+        `INSERT INTO chapters (id, branch_id, sequence_number, title, summary, theme, start_entry_id, end_entry_id, token_count, closed_at, embedding_stale, created_at, updated_at)
+         VALUES ('x1', ?, 0, 'Chapter One', 'Chapter summary', 'A theme', 'x', 'y', 0, ?, 1, ?, ?)`,
+      )
+      .run(branch, now, now, now)
+  }
+
+  function loadStale(sqlite: DatabaseSync, branch: string): EmbeddedFieldRow[] {
+    const out: EmbeddedFieldRow[] = []
+    for (const kind of KINDS) {
+      const q = staleRowsQuery(kind, [branch])
+      const rows = (
+        sqlite.prepare(q.sql).all(...(q.params as never[])) as Record<string, unknown>[]
+      ).map((r) => Object.values(r))
+      out.push(...rows.map((r) => toEmbeddedFieldRow(kind, r)))
+    }
+    return out
+  }
+
+  const vecIds = (sqlite: DatabaseSync, kind: VecTargetKind, branch: string) =>
+    (
+      sqlite
+        .prepare(`select id from ${vecTableName(kind, 384)} where branch_id = ?`)
+        .all(branch) as { id: string }[]
+    ).map((r) => r.id)
+
+  const staleOf = (sqlite: DatabaseSync, kind: VecTargetKind, branch: string) =>
+    (
+      sqlite
+        .prepare(
+          `select embedding_stale s from ${SOURCE_TABLES[kind]} where branch_id = ? and id = 'x1'`,
+        )
+        .get(branch) as { s: number } | undefined
+    )?.s
+
+  it('lands a vector and clears the flag for every embedded kind', async () => {
+    const { sqlite, runInTransaction } = await createTestDb()
+    seedKindRows(sqlite, 'b1', true)
+
+    const rows = loadStale(sqlite, 'b1')
+    expect(rows).toHaveLength(5)
+    const { ops } = await embedRowsToVecOps(cfg, rows, async (sql) => void sqlite.exec(sql))
+    await runInTransaction(ops)
+
+    for (const kind of KINDS) {
+      expect(vecIds(sqlite, kind, 'b1'), kind).toEqual(['x1'])
+      expect(staleOf(sqlite, kind, 'b1'), kind).toBe(0)
+    }
+  })
+
+  it('a row edited between assembly and commit lands no vector and stays stale; the next drain lands it', async () => {
+    const { sqlite, runInTransaction } = await createTestDb()
+    seedKindRows(sqlite, 'b1', true)
+
+    const first = await embedRowsToVecOps(
+      cfg,
+      loadStale(sqlite, 'b1'),
+      async (sql) => void sqlite.exec(sql),
+    )
+    await runInTransaction(first.ops)
+    for (const kind of KINDS)
+      sqlite
+        .prepare(`update ${SOURCE_TABLES[kind]} set embedding_stale = 1 where branch_id = 'b1'`)
+        .run()
+
+    const rows = loadStale(sqlite, 'b1')
+    const { ops } = await embedRowsToVecOps(cfg, rows, async (sql) => void sqlite.exec(sql))
+    // A user edit landing after assembly but before commit — the guard must refuse the insert.
+    for (const kind of KINDS) {
+      const column = KIND_COLUMNS[kind][1]
+      sqlite
+        .prepare(
+          `update ${SOURCE_TABLES[kind]} set ${column} = 'edited', embedding_stale = 1 where branch_id = 'b1'`,
+        )
+        .run()
+    }
+    await runInTransaction(ops)
+
+    for (const kind of KINDS) {
+      expect(vecIds(sqlite, kind, 'b1'), kind).toEqual([])
+      expect(staleOf(sqlite, kind, 'b1'), kind).toBe(1)
+    }
+
+    const again = await embedRowsToVecOps(
+      cfg,
+      loadStale(sqlite, 'b1'),
+      async (sql) => void sqlite.exec(sql),
+    )
+    await runInTransaction(again.ops)
+
+    for (const kind of KINDS) {
+      expect(vecIds(sqlite, kind, 'b1'), kind).toEqual(['x1'])
+      expect(staleOf(sqlite, kind, 'b1'), kind).toBe(0)
+    }
+  })
+
+  it('a row deleted between assembly and commit lands no vector on its branch, leaving a same-id fork already embedded untouched', async () => {
+    const { sqlite, runInTransaction } = await createTestDb()
+    seedKindRows(sqlite, 'b1', true)
+    seedKindRows(sqlite, 'b2', false)
+
+    // b2 embeds first so this can fail: the upsert's DELETE half is scoped to branch_id too, not
+    // just id — unscoped, it would delete this same-id row on the other branch.
+    const b2 = await embedRowsToVecOps(
+      cfg,
+      loadStale(sqlite, 'b2'),
+      async (sql) => void sqlite.exec(sql),
+    )
+    await runInTransaction(b2.ops)
+
+    const rows = loadStale(sqlite, 'b1')
+    const { ops } = await embedRowsToVecOps(cfg, rows, async (sql) => void sqlite.exec(sql))
+    for (const kind of KINDS)
+      sqlite
+        .prepare(`delete from ${SOURCE_TABLES[kind]} where branch_id = 'b1' and id = 'x1'`)
+        .run()
+    await runInTransaction(ops)
+
+    for (const kind of KINDS) {
+      expect(vecIds(sqlite, kind, 'b1'), kind).toEqual([])
+      expect(vecIds(sqlite, kind, 'b2'), kind).toEqual(['x1'])
+    }
   })
 })

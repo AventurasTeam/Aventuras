@@ -16,6 +16,7 @@ type Translate = (key: string, options?: Record<string, unknown>) => string
 const NAMESPACES = [
   'common',
   'embedder',
+  'history',
   'landing',
   'plot',
   'reader',

@@ -95,6 +95,21 @@ export function isEmbeddedSourceTable(table: string): boolean {
 }
 
 /**
+ * One predicate for both the insert and the stale-clear — a stricter side
+ * would leave a row clean with no vector, permanently. `IS`, so a null field matches.
+ */
+export function embeddedSourceGuard(
+  kind: VecTargetKind,
+  row: { id: string; branchId: string; fields: readonly (string | null)[] },
+): { sql: string; params: unknown[] } {
+  const [first, second] = KIND_COLUMNS[kind]
+  return {
+    sql: `id = ? AND branch_id = ? AND ${first} IS ? AND ${second} IS ?`,
+    params: [row.id, row.branchId, row.fields[0] ?? null, row.fields[1] ?? null],
+  }
+}
+
+/**
  * Clears the flag for a row that was just embedded — but only if its embedded
  * columns still hold what the embed actually read.
  *
@@ -104,17 +119,12 @@ export function isEmbeddedSourceTable(table: string): boolean {
  * the flag outside an embedder swap, so that state is permanent, and it is a
  * lost update rather than writer negligence — the action-layer rule that every
  * embedded-field writer flips the flag cannot reach it.
- *
- * `IS`, not `=`: these columns are nullable and `NULL = NULL` is NULL, which
- * would fail the guard on every row with an empty description and leave it
- * dirty forever.
  */
 export function clearEmbeddingStaleOp(row: EmbeddedFieldRow): SqlOp {
-  const [first, second] = KIND_COLUMNS[row.kind]
+  const guard = embeddedSourceGuard(row.kind, row)
   return {
-    sql: `UPDATE ${SOURCE_TABLES[row.kind]} SET embedding_stale = 0
-          WHERE id = ? AND branch_id = ? AND ${first} IS ? AND ${second} IS ?`,
-    params: [row.id, row.branchId, row.fields[0] ?? null, row.fields[1] ?? null],
+    sql: `UPDATE ${SOURCE_TABLES[row.kind]} SET embedding_stale = 0 WHERE ${guard.sql}`,
+    params: guard.params,
   }
 }
 

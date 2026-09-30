@@ -202,15 +202,18 @@ export async function embedRowsToVecOps(
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]
     ops.push(
-      ...upsertVecOps({
-        kind: row.kind,
-        id: row.id,
-        branchId: row.branchId,
-        modelId: config.modelId,
-        dim,
-        sourceHash: sourceHash(composites[i]),
-        vector: packFloat32(vectors[i]),
-      }),
+      ...upsertVecOps(
+        {
+          kind: row.kind,
+          id: row.id,
+          branchId: row.branchId,
+          modelId: config.modelId,
+          dim,
+          sourceHash: sourceHash(composites[i]),
+          vector: packFloat32(vectors[i]),
+        },
+        { fields: row.fields },
+      ),
       clearEmbeddingStaleOp(row),
     )
   }

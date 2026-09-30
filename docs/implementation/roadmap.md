@@ -459,6 +459,14 @@ verified against the code first. Resolve with the slice each names.
   (`awaitRunTerminal(PERIODIC_CLASSIFIER_KIND, branchId, 'cancel')`),
   which discards a pass before its commit burst and lets one already
   committing land. Routed from triage 2026-09-27.
+- **M6 — The lead must be per-branch and delta-logged.** Two branches
+  with different leads is a valid use case (developer, 2026-09-28), and
+  a story-level `definition.leadEntityId` dangles on any branch lacking
+  the character. Logging the lead change also makes CTRL-Z undo it
+  before the create it depends on and makes rollback / regenerate sweep
+  it. Needs a design session before M6.1 / M6.3 are authored; 4.2b's
+  `resolveLead` interim is what it replaces. Surfaced by 4.2b planning
+  (2026-09-28).
 
 **Gates.** M5 (chapter-close writes that branches must respect
 need to exist first).
@@ -995,6 +1003,12 @@ code before it moved; resolve with the slice it names.
   only `swap-paused` and `memory-incomplete`. Reachable on any build
   whose provider or apply step fails repeatedly. The developer chose
   not to pull an interim pill forward. Routed from triage 2026-09-27.
+- **M7.3 — Reader jump-to-entry from a delta row.** The reader route
+  takes only `branchId` and `ReaderSurfaceHandle` exposes
+  `jumpToBottom`; History rows (4.2b) and the Diagnostics delta log
+  want an entry link: an `entry` route param, load-older until the
+  entry is present, scroll into view with a transient highlight.
+  Surfaced by 4.2b planning (2026-09-28).
 
 **Gates.** M6 (settings should reflect real branching + multi-
 story behavior; diagnostics should inspect real branch-aware
@@ -1078,6 +1092,17 @@ each names.
   finishing for a cancel to land in. Becomes real once the M8.1
   translation call replaces that no-op. Surfaced by M3.7a Task 7
   (2026-07-25).
+- **M8.1 — Translation writers take no row lock, and several delete
+  arms don't cascade translations at all.** No `translations` key
+  exists in `row-locks.ts`, so once a writer exists, a translation
+  written between a cascade's read of a row's translations and the
+  cascade's commit would orphan, and could collide with
+  `translations_natural_uniq` on undo. Latent until this slice ships
+  the first writer. Cascade coverage is also incomplete today:
+  `deleteCharacterRelationship`, the single-POV upsert that deletes a
+  relationship once nulling its last remaining view would leave both
+  views null, `deleteStoryEntry`, and reversing a create all leave the
+  rows' translations behind. Surfaced by 4.2b planning (2026-09-28).
 - **M8.3 — `getCalendar` consults only code builtins, never the
   `vault_calendars` table.** The registry holds only
   `earth-gregorian`, so a story configured with a `vault_calendars`

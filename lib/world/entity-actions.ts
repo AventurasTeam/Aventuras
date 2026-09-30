@@ -11,7 +11,9 @@ import {
 } from '@/lib/db'
 import { dedupeTerms, newTerms, normalizeTerm } from '@/lib/keyword-terms'
 
+import { blankToNull, cleanList, sameList } from './draft-text'
 import {
+  heldItems,
   stackableKey,
   stateOf,
   VISUAL_DRAFT_FIELDS,
@@ -73,12 +75,7 @@ type ColumnPatch = Partial<
   >
 >
 
-// Free text is stored as NULL (columns) or an absent key (state), never ''.
-function blankToNull(value: string): string | null {
-  const trimmed = value.trim()
-  return trimmed === '' ? null : trimmed
-}
-
+/** State free text is stored as an absent key when blank, never `''`. */
 function blankToAbsent(value: string | undefined): string | undefined {
   const trimmed = (value ?? '').trim()
   return trimmed === '' ? undefined : trimmed
@@ -95,14 +92,6 @@ function writeText<K extends string>(
   if (value === undefined) delete state[key]
   else state[key] = value
   return true
-}
-
-function cleanList(values: readonly string[] | undefined): string[] {
-  return (values ?? []).map((v) => v.trim()).filter((v) => v !== '')
-}
-
-function sameList(a: readonly string[], b: readonly string[]): boolean {
-  return a.length === b.length && a.every((value, i) => value === b[i])
 }
 
 function normalizedStackables(
@@ -329,10 +318,6 @@ function relationshipActions(
     if (now != null) actions.push(remove(now.rowId))
   }
   return actions
-}
-
-function heldItems(state: Pick<CharacterState, 'equipped_items' | 'inventory'>): string[] {
-  return [...(state.equipped_items ?? []), ...(state.inventory ?? [])]
 }
 
 /**

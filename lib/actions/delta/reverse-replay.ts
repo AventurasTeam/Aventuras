@@ -1,11 +1,13 @@
-import { desc, eq } from 'drizzle-orm'
+import { desc, eq, getTableColumns } from 'drizzle-orm'
 
 import type { Delta, SqlOp } from '@/lib/db'
-import { deltas, embeddedFieldsForTable, isEmbeddedSourceTable } from '@/lib/db'
+import { deltas, embeddedFieldsForTable, isEmbeddedSourceTable, rowsPerInsert } from '@/lib/db'
 
 import type { DbCtx } from '../types'
+import { vecSweepIdsOps, vecTableLister } from './delete-cascade'
 import { applyUndoPayload, isPayloadMetaKey } from './delta-encoding'
 import { withKeyLocks } from './key-lock'
+import { liveLinkFilter } from './live-link-filter'
 import { resolveByTable, whereForDelta, type StorePatch } from './registry'
 import { closeOverRemovedRows } from './row-closure'
 import { deltaLockKeys } from './row-locks'
@@ -100,7 +102,11 @@ async function buildUndoOps(
   const absent = new Set<string>()
   const ops: SqlOp[] = []
   const patches: PatchEmission[] = []
+  const listVecTables = vecTableLister(ctx)
   const laterUserEdits = await userEditsOutliving(ctx, rows, readsUserEdits)
+  const liveLinks = await liveLinkFilter(rows, ctx)
+  // Vectors carry no deltas, so the closure can't reach them (retrieval.md → Compute lifecycle).
+  const swept = new Map<string, { table: string; branchId: string; ids: string[] }>()
 
   for (const delta of rows) {
     const entry = resolveByTable(delta.targetTable)
@@ -157,8 +163,7 @@ async function buildUndoOps(
       })
     }
 
-    // No cascade on purpose: the caller's set already carries the children's deltas
-    // (row-closure.ts; generation-pipeline.md → Reverse-replay).
+    // No child-row cascade: the caller's set already carries the children's deltas (row-closure.ts).
     if (delta.op === 'create') {
       const keeping = entry.rowKeepingColumns ?? []
       const userKept = keeping.filter((col) => wroteColumn(userEdits, col))
@@ -178,13 +183,24 @@ async function buildUndoOps(
       absent.add(key)
       tombstones.delete(key)
       emitDelete()
+      if (isEmbeddedSourceTable(delta.targetTable)) {
+        const sweepKey = `${delta.targetTable}:${delta.branchId}`
+        const sweep = swept.get(sweepKey) ?? {
+          table: delta.targetTable,
+          branchId: delta.branchId,
+          ids: [],
+        }
+        sweep.ids.push(delta.targetId)
+        swept.set(sweepKey, sweep)
+      }
       continue
     }
     if (delta.op === 'delete') {
       const full = (delta.undoPayload ?? {}) as Record<string, unknown>
-      const { children, cascadeKeys } = entry.restoreCascade
+      const { children: captured, cascadeKeys } = entry.restoreCascade
         ? entry.restoreCascade(full)
         : { children: [], cascadeKeys: [] }
+      const children = liveLinks(delta.branchId, captured)
 
       const rowData = { ...full }
       for (const key of Object.keys(rowData)) {
@@ -215,7 +231,17 @@ async function buildUndoOps(
         const restoredChildren: Record<string, unknown>[] = childIsEmbedded
           ? childRows.map((childRow) => ({ ...childRow, embeddingStale: 1 }))
           : childRows
-        ops.push(ctx.db.insert(childTable).values(restoredChildren).toSQL())
+        // A wide child table × large row count can overrun SQLite's per-statement bind cap —
+        // chunk by the table's full column count (drizzle binds one per column, sparse or not).
+        const chunkSize = rowsPerInsert(Object.keys(getTableColumns(childTable)).length)
+        for (let i = 0; i < restoredChildren.length; i += chunkSize) {
+          ops.push(
+            ctx.db
+              .insert(childTable)
+              .values(restoredChildren.slice(i, i + chunkSize))
+              .toSQL(),
+          )
+        }
         for (const childRow of restoredChildren) {
           patches.push({
             table: childTableName,
@@ -267,6 +293,10 @@ async function buildUndoOps(
       emitDelete()
     } else emitUpdate(restored, row)
   }
+
+  // One vec0 scan per family table, not per row: each statement scans the whole table.
+  for (const { table, branchId, ids } of swept.values())
+    ops.push(...(await vecSweepIdsOps(table, branchId, ids, listVecTables)))
 
   return { ops, patches }
 }

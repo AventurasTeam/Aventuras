@@ -578,15 +578,18 @@ describe('createStoryWithBranch — embed step', () => {
       for (const row of rows) {
         const text = compositeText(row.fields)
         ops.push(
-          ...upsertVecOps({
-            kind: row.kind,
-            id: row.id,
-            branchId: row.branchId,
-            modelId: config.modelId,
-            dim: DIM,
-            sourceHash: sourceHash(text),
-            vector: packFloat32(new Float32Array(DIM).fill(0.1)),
-          }),
+          ...upsertVecOps(
+            {
+              kind: row.kind,
+              id: row.id,
+              branchId: row.branchId,
+              modelId: config.modelId,
+              dim: DIM,
+              sourceHash: sourceHash(text),
+              vector: packFloat32(new Float32Array(DIM).fill(0.1)),
+            },
+            { fields: row.fields },
+          ),
           clearEmbeddingStaleOp(row),
         )
       }

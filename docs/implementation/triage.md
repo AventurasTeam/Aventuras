@@ -53,3 +53,25 @@ slice-planning gate forces its resolution before that slice is planned.
   to get. Held rather than routed in the 2026-09-09 triage pass, which
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
+
+- **Piggyback entity visual text was uncapped; new writes now
+  truncate.** `parseVisualChanges` now truncates a note to
+  `VISUAL_TEXT_MAX`, matching `characterStateSchema`'s 500-char visual
+  caps (4.2b, developer decision 2026-09-28). Still open: an entity
+  that already holds an over-long visual field from before this fix
+  still fails a later `updateEntity` that re-validates its whole
+  state — e.g. a delete clearing a ref to it. No repair of existing
+  rows.
+- **`row-closure.ts`'s `CHILD_TABLES` widens a reversal set only for
+  happenings' children.** A reversal deleting a character a create made
+  orphans relationship, involvement or awareness rows naming it that
+  were written in a different action group. Read, not reproduced;
+  pre-existing (2026-09-28, raised by 4.2b).
+- **`commitRowDelete` and `commitRowSave` check the generation gate
+  before taking row locks.** A turn starting while a user write waits
+  on a lock can write a referenced entity's `state` that the user
+  write's full-`state` patch (built from an earlier snapshot) then
+  overwrites. Re-checking the gate after the locks are held would close
+  it for both; alternatively, turn admission could await
+  `settleUserWrites()` first, as the prose-reversal barrier already
+  does. Reasoned, not reproduced (2026-09-28, raised by 4.2b).

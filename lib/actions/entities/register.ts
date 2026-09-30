@@ -2,20 +2,24 @@ import { and, eq } from 'drizzle-orm'
 
 import type { Entity, EntityState, LocationState, NewEntity } from '@/lib/db'
 import {
+  branches,
   emptyEntityState,
   entities,
   entityStateColumnSchema,
   entityStateSchemaForKind,
   entityWriteSchema,
   KIND_FIELDS,
+  stories,
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { entitiesStore } from '@/lib/stores'
 import { checkParentChain, PARENT_CHAIN_BROKEN, PARENT_CYCLE, parentOfLocations } from '@/lib/world'
 
+import { cascadePatches, payloadFromChildren, restoreChildren } from '../delta/delete-cascade'
 import { computeUndoPayload, deepEqual } from '../delta/delta-encoding'
 import { register, type ActionHandler, type HandlerOutcome } from '../delta/registry'
 import type { DbCtx, DeltaSource } from '../types'
+import { entityCascade } from './entity-cascade'
 import {
   appendEntityKeywordsHandler,
   promoteStagedEntityHandler,
@@ -51,7 +55,7 @@ declare module '@/lib/actions/action-map' {
 }
 
 // Delta-logged columns.
-const UPDATABLE = [
+export const UPDATABLE = [
   'name',
   'description',
   'status',
@@ -237,6 +241,17 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   }
 }
 
+export const ENTITY_DELETE_REJECTION = { leadEntity: 'lead-entity' } as const
+
+async function isStoryLead(ctx: DbCtx, branchId: string, id: string): Promise<boolean> {
+  const [owner] = await ctx.db
+    .select({ definition: stories.definition })
+    .from(branches)
+    .innerJoin(stories, eq(stories.id, branches.storyId))
+    .where(eq(branches.id, branchId))
+  return owner?.definition?.leadEntityId === id
+}
+
 const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'deleteEntity')
     throw new Error(`handler/kind mismatch: expected 'deleteEntity', got '${action.kind}'`)
@@ -249,20 +264,30 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
   if (!current)
     return { status: 'rejected', reason: `delete target entities ${bid}:${id} not found` }
+  // Interim: lead isn't per-branch/delta-logged yet (M6) — deleting it would dangle the pointer.
+  if (await isStoryLead(ctx, bid, id))
+    return {
+      status: 'rejected',
+      reason: 'the story lead cannot be deleted',
+      code: ENTITY_DELETE_REJECTION.leadEntity,
+    }
+  const { ops: childOps, children } = await entityCascade(bid, id, ctx)
   return {
     status: 'ok',
     targetTable: 'entities',
     targetId: id,
     op: 'delete',
     // Full row so reverse-replay rebuilds both the SQLite re-insert and the store create-patch.
-    undoPayload: { ...current },
+    undoPayload: { ...current, ...payloadFromChildren(children) },
     ops: [
+      ...childOps,
       ctx.db
         .delete(entities)
         .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
         .toSQL(),
     ],
     patch: { op: 'delete', id },
+    cascadePatches: cascadePatches(children),
   }
 }
 
@@ -285,5 +310,12 @@ export function registerEntities(): void {
       retireEntity: retireEntityHandler,
     },
     patcher: (branchId, p) => entitiesStore.patch(branchId, p),
+    restoreCascade: restoreChildren([
+      'happening_involvements',
+      'happening_awareness',
+      'character_relationships',
+      'translations',
+    ]),
+    cascadeDeleteOps: entityCascade,
   })
 }

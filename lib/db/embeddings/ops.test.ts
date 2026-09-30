@@ -4,7 +4,7 @@ import { getLoadablePath } from 'sqlite-vec'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import type { SqlOp } from '../types'
-import { deleteVecOps, upsertVecOps } from './ops'
+import { deleteVecIdsOps, deleteVecOps, upsertVecOps } from './ops'
 import { sourceHash } from './source-hash'
 import { deleteBranchModelVecOps, ensureVecTables, vecRowPk } from './vec-tables'
 
@@ -262,6 +262,54 @@ describe('model-aware vec identity', () => {
     ])
   })
 
+  it('deleteVecIdsOps sweeps many ids with one statement per family table', () => {
+    const tables = ['entities_vec_384', 'entities_vec_768', 'lore_vec_384']
+    const ops = deleteVecIdsOps('entity', ['e1', 'e2'], 'b1', tables)
+    expect(ops).toEqual([
+      {
+        sql: 'DELETE FROM entities_vec_384 WHERE branch_id = ? AND id IN (?, ?)',
+        params: ['b1', 'e1', 'e2'],
+      },
+      {
+        sql: 'DELETE FROM entities_vec_768 WHERE branch_id = ? AND id IN (?, ?)',
+        params: ['b1', 'e1', 'e2'],
+      },
+    ])
+    expect(deleteVecIdsOps('entity', [], 'b1', tables)).toEqual([])
+  })
+
+  it('deleteVecIdsOps splits an id set past the bind cap and still removes every listed row', async () => {
+    const db = makeDb()
+    await ensureVecTables(384, async (sql) => {
+      db.exec(sql)
+    })
+    // 40000 ids overrun SQLite's 32766-bind cap in a single statement.
+    const ids = Array.from({ length: 40000 }, (_, i) => `e${i}`)
+    const put = (branchId: string, id: string) =>
+      runOps(
+        db,
+        upsertVecOps({
+          kind: 'entity',
+          id,
+          branchId,
+          modelId: 'm1',
+          dim: 384,
+          sourceHash: sourceHash(id),
+          vector: vec(384, 0),
+        }),
+      )
+    for (const id of ['e0', 'e20000', 'e39999', 'kept']) put('b1', id)
+    put('b2', 'e0')
+
+    runOps(db, deleteVecIdsOps('entity', ids, 'b1', ['entities_vec_384']))
+
+    const left = db.prepare('select branch_id, id from entities_vec_384 order by id').all()
+    expect(left).toEqual([
+      { branch_id: 'b2', id: 'e0' },
+      { branch_id: 'b1', id: 'kept' },
+    ])
+  })
+
   it('deleteBranchModelVecOps deletes one model across all families', () => {
     const ops = deleteBranchModelVecOps(['entities_vec_384', 'lore_vec_768'], ['b1', 'b2'], 'm1')
     expect(ops[0].sql).toBe(
@@ -269,5 +317,48 @@ describe('model-aware vec identity', () => {
     )
     expect(ops[0].params).toEqual(['b1', 'b2', 'm1'])
     expect(ops).toHaveLength(2)
+  })
+})
+
+describe('upsertVecOps with a source guard', () => {
+  let db: DatabaseSync
+
+  beforeEach(async () => {
+    db = makeDb()
+    await ensureVecTables(384, async (sql) => {
+      db.exec(sql)
+    })
+    db.exec('CREATE TABLE entities (branch_id TEXT, id TEXT, name TEXT, description TEXT)')
+    db.prepare(`INSERT INTO entities VALUES ('b1', 'e1', 'Kael', NULL)`).run()
+  })
+
+  const write = (id: string) => ({
+    kind: 'entity' as const,
+    id,
+    branchId: 'b1',
+    modelId: 'm1',
+    dim: 384,
+    sourceHash: sourceHash('h'),
+    vector: vec(384, 0),
+  })
+  const ids = () =>
+    (db.prepare('select id from entities_vec_384').all() as { id: string }[]).map((r) => r.id)
+
+  it('lands while the row still holds the embedded text', () => {
+    runOps(db, upsertVecOps(write('e1'), { fields: ['Kael', null] }))
+    expect(ids()).toEqual(['e1'])
+  })
+
+  it('writes nothing for a row deleted mid-embed', () => {
+    // e1's own live text, not e2's — pins the guard's `id = ?`: a guard that
+    // matched on columns alone would find e1's row and land a vector for e2.
+    runOps(db, upsertVecOps(write('e2'), { fields: ['Kael', null] }))
+    expect(ids()).toEqual([])
+  })
+
+  it('writes nothing for a row edited mid-embed, and drops the stale vector it replaced', () => {
+    runOps(db, upsertVecOps(write('e1')))
+    runOps(db, upsertVecOps(write('e1'), { fields: ['Kale', null] }))
+    expect(ids()).toEqual([])
   })
 })

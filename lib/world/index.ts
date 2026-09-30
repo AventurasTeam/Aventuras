@@ -33,6 +33,11 @@ export type {
 } from './entity-draft'
 export { entityActions } from './entity-actions'
 export type { EntitySaveInput } from './entity-actions'
+export { entityDeleteActions } from './entity-delete'
+export type { DeleteTail, EntityDeleteInput, EntityDeletePlan } from './entity-delete'
+export { EMPTY_LORE_DRAFT, loreActions, loreDraftFrom, loreDraftSchema } from './lore-draft'
+export type { LoreDraft } from './lore-draft'
+export { resolveLead } from './lead'
 export {
   branchWorldTime,
   carryingSummary,

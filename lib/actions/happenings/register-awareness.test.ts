@@ -2,7 +2,7 @@ import { and, asc, eq } from 'drizzle-orm'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { Delta, HappeningAwareness } from '@/lib/db'
-import { branches, deltas, happeningAwareness, stories } from '@/lib/db'
+import { branches, deltas, entities, happeningAwareness, happenings, stories } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { happeningAwarenessStore } from '@/lib/stores'
 
@@ -23,6 +23,19 @@ async function setup(rows: HappeningAwareness[] = []) {
     { id: BRANCH, storyId: 'story_1', name: 'main', createdAt: 1 },
     { id: OTHER_BRANCH, storyId: 'story_1', name: 'fork', createdAt: 1 },
   ])
+  await db.insert(entities).values({
+    id: 'char_a',
+    branchId: BRANCH,
+    kind: 'character',
+    name: 'Aria',
+    status: 'active',
+    injectionMode: 'auto',
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  await db
+    .insert(happenings)
+    .values({ id: 'hap_1', branchId: BRANCH, title: 'The fire', createdAt: 1, updatedAt: 1 })
   if (rows.length > 0) await db.insert(happeningAwareness).values(rows)
   happeningAwarenessStore.__reset()
   happeningAwarenessStore.hydrate(

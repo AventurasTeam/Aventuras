@@ -3,6 +3,7 @@ import type { SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core'
 import type { ZodType } from 'zod'
 
 import type { Delta, SqlOp } from '@/lib/db'
+import { isEmbeddedSourceTable } from '@/lib/db'
 
 import type { DbCtx, PipelineAction } from '../types'
 
@@ -39,6 +40,15 @@ export type CascadeDeleteOps = (
   children: Record<string, Record<string, unknown>[]>
 }>
 
+/**
+ * Rows created earlier in the same action group, as `createdKey`s — handlers read pre-group state.
+ */
+export type GroupScope = { readonly created: ReadonlySet<string> }
+
+export function createdKey(table: string, id: string): string {
+  return `${table}:${id}`
+}
+
 export type HandlerOutcome =
   // Deliberately a bare string: each action family funnels its OWN rejection vocabulary
   // through here, so a single union would couple taxonomies with no reason to agree.
@@ -51,12 +61,16 @@ export type HandlerOutcome =
       undoPayload: Record<string, unknown> | null
       ops: SqlOp[]
       patch: StorePatch | null
+      /** Rows a delete's cascade removed; the runner patches their stores after the commit. */
+      cascadePatches?: readonly { table: string; patch: StorePatch }[]
     }
 
 export type ActionHandler = (
   action: PipelineAction,
   branchId: string,
   ctx: DbCtx,
+  /** Present on the group path only. */
+  group?: GroupScope,
 ) => Promise<HandlerOutcome> | HandlerOutcome
 
 export type TableDescriptor = { table: SQLiteTable; idCol: SQLiteColumn; branchCol?: SQLiteColumn }
@@ -90,6 +104,12 @@ const actionRegistry = new Map<string, { table: string; handler: ActionHandler }
 const tableRegistry = new Map<string, TableEntry>()
 
 export function register(reg: DomainRegistration): void {
+  // The tombstone arm deletes without a vector sweep, so an embedded table here would orphan vectors.
+  if (reg.rowKeepingColumns && isEmbeddedSourceTable(reg.table))
+    throw new Error(
+      `register: ${reg.table} declares rowKeepingColumns; a tombstone reversal would orphan its vectors`,
+    )
+
   // A misspelled name, or none, reads as null on every row: each update reversal would delete.
   if (reg.rowKeepingColumns) {
     if (reg.rowKeepingColumns.length === 0)

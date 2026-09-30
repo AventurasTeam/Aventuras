@@ -9,11 +9,12 @@ export {
   familyTablesFor,
   findVecDims,
   isVecFamilyTable,
+  listVecFamilyTables,
   vecRowPk,
   vecTableName,
 } from './vec-tables'
-export type { VecWrite } from './ops'
-export { deleteVecOps, packFloat32, upsertVecOps } from './ops'
+export type { VecSourceGuard, VecWrite } from './ops'
+export { deleteVecIdsOps, deleteVecOps, packFloat32, upsertVecOps } from './ops'
 export type { KnnParams } from './knn'
 export { knnQuery, unpackFloat32, vectorsByIdQuery } from './knn'
 export type { EmbeddedFieldRow, StaleTargetRow } from './stale'

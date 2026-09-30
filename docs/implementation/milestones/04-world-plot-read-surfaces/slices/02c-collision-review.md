@@ -207,6 +207,19 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   route it through `t()` here; relative times want whole-sentence keys
   (see [`parked.md → Sentence composition in World's copy`](../../../../parked.md#sentence-composition-in-worlds-copy)).
   Found by the 2026-09-27 triage pass.
+- **How does the merge re-key the loser's link rows, given the entity
+  arm's constraints?** C3's `deleteEntity` cascade reads the loser's
+  involvement, awareness, relationship and translation rows pre-group
+  and deletes them by id, and the group runner rejects a group that
+  also targets one of those rows. The ref rewrite and tail-scene drop
+  live in `entityDeleteActions`, which nulls refs — the merge needs its
+  own rewrite-to-canonical, and one row can't carry both the rewrite
+  and the nulling patch in one group (the runner rejects a same-column
+  double write). Does the merge instead write new link rows for the
+  canonical entity and let the cascade remove the loser's originals, or
+  some other shape? Whatever 4.2c settles on,
+  [`world.md → Reversibility`](../../../../ui/screens/world/world.md#reversibility)'s
+  merge write list must be amended to match.
 
 ## Implementation notes
 

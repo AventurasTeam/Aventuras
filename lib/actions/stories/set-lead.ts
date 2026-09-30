@@ -2,7 +2,7 @@ import { and, eq } from 'drizzle-orm'
 
 import { entities, stories, storyDefinitionSchema, type DbCtx } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
-import { currentStoryStore, generationStore, rehydrateStories } from '@/lib/stores'
+import { currentStoryStore, generationStore, rehydrateStories, undoRedoStore } from '@/lib/stores'
 
 export const LEAD_REJECTION = {
   inFlight: 'in-flight',
@@ -64,6 +64,9 @@ export async function setStoryLead(
       .where(eq(stories.id, storyId))
       .toSQL(),
   ])
+  // Redo replays deletes without the arm's lead refusal; this direct write must invalidate
+  // redo like every delta-logged one.
+  undoRedoStore.clear()
   const open = currentStoryStore.getCurrentStory()
   if (open?.storyId === storyId) currentStoryStore.set({ ...open, definition: next.data })
   await rehydrateStories(ctx.db)

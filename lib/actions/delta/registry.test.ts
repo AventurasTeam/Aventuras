@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { characterRelationships } from '@/lib/db'
+import { characterRelationships, entities } from '@/lib/db'
 
 import { __resetRegistry, register, resolveByActionKind, resolveByTable } from './registry'
 import type { ActionHandler } from './registry'
@@ -58,5 +58,19 @@ describe('delta registry', () => {
       }),
     ).toThrow(/no row-keeping column/)
     expect(resolveByTable('character_relationships')).toBeUndefined()
+  })
+
+  it('refuses rowKeepingColumns on embedded tables; a tombstone reversal would orphan vectors', () => {
+    __resetRegistry()
+    expect(() =>
+      register({
+        table: 'entities',
+        descriptor: { table: entities, idCol: entities.id, branchCol: entities.branchId },
+        columnSchemas: {},
+        handlers: {},
+        rowKeepingColumns: ['name'],
+      }),
+    ).toThrow(/tombstone reversal would orphan/)
+    expect(resolveByTable('entities')).toBeUndefined()
   })
 })

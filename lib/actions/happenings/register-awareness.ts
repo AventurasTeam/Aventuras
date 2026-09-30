@@ -6,6 +6,7 @@ import { generateId } from '@/lib/ids'
 import { happeningAwarenessStore } from '@/lib/stores'
 
 import { nullifyRef } from '../coerce'
+import { missingRef, MISSING_REF } from '../delta/live-refs'
 import { register, type ActionHandler } from '../delta/registry'
 import { isUserOriginatedSource, type DeltaSource } from '../types'
 
@@ -29,7 +30,7 @@ declare module '@/lib/actions/action-map' {
   }
 }
 
-const upsertHandler: ActionHandler = async (action, branchId, ctx) => {
+const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
   if (action.kind !== 'upsertHappeningAwareness')
     throw new Error(`handler/kind mismatch: ${action.kind}`)
   const {
@@ -63,6 +64,7 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx) => {
       ),
     )
 
+  // An existing link implies both rows live: their deletes cascade it under this lock.
   if (current) {
     const set: Record<string, unknown> = {}
     const undoPayload: Record<string, unknown> = {}
@@ -99,6 +101,12 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx) => {
       patch: { op: 'update', id: current.id, columns: set },
     }
   }
+
+  const refs = [
+    { table: 'happenings', id: happeningId },
+    { table: 'entities', id: characterId },
+  ] as const
+  if (await missingRef(ctx, bid, refs, group)) return MISSING_REF
 
   const row: HappeningAwareness = {
     id: generateId('haw'),

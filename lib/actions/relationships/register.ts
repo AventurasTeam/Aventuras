@@ -5,7 +5,13 @@ import { characterRelationships, characterRelationshipWriteSchema } from '@/lib/
 import { generateId } from '@/lib/ids'
 import { characterRelationshipsStore } from '@/lib/stores'
 
-import { register, type ActionHandler, type HandlerOutcome } from '../delta/registry'
+import { missingRef, MISSING_REF } from '../delta/live-refs'
+import {
+  register,
+  type ActionHandler,
+  type GroupScope,
+  type HandlerOutcome,
+} from '../delta/registry'
 import {
   carriesColumn,
   proseLogPosition,
@@ -107,21 +113,30 @@ function createOutcome(
 }
 
 // Grouped handlers read pre-group state: two single-POV writes to a new pair would both insert.
-function bothPovOutcome(
+async function bothPovOutcome(
   ctx: DbCtx,
   branchId: string,
   pair: Pair,
   current: CharacterRelationship | undefined,
   kind: string | null,
   inverseKind: string | null,
-): HandlerOutcome {
+  group?: GroupScope,
+): Promise<HandlerOutcome> {
   const columns = {
     kind: pair.subjectIsA ? kind : inverseKind,
     inverseKind: pair.subjectIsA ? inverseKind : kind,
   }
   if (columns.kind === null && columns.inverseKind === null)
     return { status: 'rejected', reason: 'a relationship needs at least one perspective' }
-  if (!current) return createOutcome(ctx, branchId, pair, columns)
+  // An existing link implies both rows live: their deletes cascade it under this lock.
+  if (!current) {
+    const refs = [
+      { table: 'entities', id: pair.aId },
+      { table: 'entities', id: pair.bId },
+    ] as const
+    if (await missingRef(ctx, branchId, refs, group)) return MISSING_REF
+    return createOutcome(ctx, branchId, pair, columns)
+  }
   const set: Partial<Pick<CharacterRelationship, 'kind' | 'inverseKind'>> = {}
   const undoPayload: Record<string, unknown> = {}
   if (columns.kind !== current.kind) {
@@ -156,7 +171,7 @@ function bothPovOutcome(
   }
 }
 
-const upsertHandler: ActionHandler = async (action, branchId, ctx) => {
+const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
   if (action.kind !== 'upsertCharacterRelationship')
     throw new Error(`handler/kind mismatch: ${action.kind}`)
   const { branchId: bid, subjectId, objectId, kind, inverseKind, proseEntryId } = action.payload
@@ -186,7 +201,7 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx) => {
     )
 
   if (inverseKind !== undefined)
-    return bothPovOutcome(ctx, bid, { aId, bId, subjectIsA }, current, kind, inverseKind)
+    return bothPovOutcome(ctx, bid, { aId, bId, subjectIsA }, current, kind, inverseKind, group)
 
   // Only the classifier reaches this path; a case/whitespace-only repeat is the same view.
   if (current && current[povCol]?.trim().toLowerCase() === kind?.trim().toLowerCase())
@@ -198,8 +213,14 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx) => {
   )
     return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
 
+  // An existing link implies both rows live: their deletes cascade it under this lock.
   if (!current) {
     if (kind === null) return { status: 'rejected', reason: 'no relationship to clear' }
+    const refs = [
+      { table: 'entities', id: subjectId },
+      { table: 'entities', id: objectId },
+    ] as const
+    if (await missingRef(ctx, bid, refs, group)) return MISSING_REF
     return createOutcome(
       ctx,
       bid,

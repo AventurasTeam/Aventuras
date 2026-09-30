@@ -14,19 +14,28 @@ import {
   type PipelineAction,
 } from '../types'
 import { deltaRowOp } from './delta-row'
-import { withKeyLock, withKeyLocks } from './key-lock'
-import { resolveByActionKind, resolveByTable, type HandlerOutcome } from './registry'
-import { rowLock, type RowLockKey } from './row-locks'
+import { withKeyLocks } from './key-lock'
+import { linkRefs } from './live-refs'
+import { createdKey, resolveByActionKind, resolveByTable, type HandlerOutcome } from './registry'
+import { entityCascadeKeys, rowLock, type RowLockKey } from './row-locks'
 
 type Args = { action: PipelineAction; actionId: string; branchId: string; entryId?: string | null }
+type OkOutcome = Extract<HandlerOutcome, { status: 'ok' }>
 
 type ProductionKind = keyof PipelineActionMap
 type LockKey<K extends ProductionKind> =
-  | ((payload: PipelineActionMap[K]['payload']) => RowLockKey)
+  | ((payload: PipelineActionMap[K]['payload']) => RowLockKey | readonly RowLockKey[])
   | null
 
 const entityRow = rowLock('entities')
 const relationships = rowLock('character_relationships')
+// Involvements, awareness and happenings share one per-branch key (row-locks.ts).
+const happeningLinks = rowLock('happening_involvements')
+// C3: an entity delete cascades both link families, so it holds their writers off too.
+const entityDelete = (p: { branchId: string; id: string }) => [
+  entityRow(p),
+  ...entityCascadeKeys(p),
+]
 
 // Handlers read before they commit, so a racing classifier/user write to one row must
 // serialize. Keys come from rowLock, which reversals of the same tables lock by too.
@@ -36,7 +45,7 @@ const LOCK_KEY: { [K in ProductionKind]: LockKey<K> } = {
   deleteStoryEntry: null,
   createEntity: null,
   updateEntity: entityRow,
-  deleteEntity: entityRow,
+  deleteEntity: entityDelete,
   updateEntityVisualState: entityRow,
   updateEntityInventory: entityRow,
   updateEntityStackables: entityRow,
@@ -55,13 +64,13 @@ const LOCK_KEY: { [K in ProductionKind]: LockKey<K> } = {
   deleteThread: null,
   createHappening: null,
   updateHappening: null,
-  deleteHappening: null,
-  createHappeningInvolvement: null,
-  updateHappeningInvolvement: null,
-  deleteHappeningInvolvement: null,
-  upsertHappeningAwareness: null,
-  deleteHappeningAwareness: null,
-  bumpAwarenessRetrieval: null,
+  deleteHappening: happeningLinks,
+  createHappeningInvolvement: (p) => happeningLinks(p.entry),
+  updateHappeningInvolvement: happeningLinks,
+  deleteHappeningInvolvement: happeningLinks,
+  upsertHappeningAwareness: happeningLinks,
+  deleteHappeningAwareness: happeningLinks,
+  bumpAwarenessRetrieval: happeningLinks,
   createChapter: null,
   updateChapter: null,
   deleteChapter: null,
@@ -83,17 +92,25 @@ function isProductionAction(
   return Object.hasOwn(LOCK_KEY, a.kind)
 }
 
-function lockKeyOf<K extends ProductionKind>(
+function lockKeysOf<K extends ProductionKind>(
   kind: K,
   payload: PipelineActionMap[K]['payload'],
-): RowLockKey | null {
+): readonly RowLockKey[] {
   const key: LockKey<K> = LOCK_KEY[kind]
-  return key === null ? null : key(payload)
+  if (key === null) return []
+  const keys = key(payload)
+  return typeof keys === 'string' ? [keys] : keys
 }
 
 // The single and group paths both derive keys here, so they serialize against each other.
-function lockKeyFor(action: PipelineAction): RowLockKey | null {
-  return isProductionAction(action) ? lockKeyOf(action.kind, action.payload) : null
+export function lockKeysFor(action: PipelineAction): readonly RowLockKey[] {
+  return isProductionAction(action) ? lockKeysOf(action.kind, action.payload) : []
+}
+
+function emitOutcomePatches(branchId: string, outcome: OkOutcome): void {
+  if (outcome.patch) resolveByTable(outcome.targetTable)?.patcher?.(branchId, outcome.patch)
+  for (const child of outcome.cascadePatches ?? [])
+    resolveByTable(child.table)?.patcher?.(branchId, child.patch)
 }
 
 // A user write can pass the reversal barrier just before it rises; the reversal settles these
@@ -115,9 +132,8 @@ export async function settleUserWrites(): Promise<void> {
 }
 
 export async function applyDeltaAction(args: Args, ctx: DbCtx): Promise<MutationResult> {
-  const key = lockKeyFor(args.action)
   const run = () => applyDeltaActionUnlocked(args, ctx)
-  const write = key === null ? run() : withKeyLock(key, run)
+  const write = withKeyLocks(lockKeysFor(args.action), run)
   return isUserOriginatedSource(args.action.source) ? trackUserWrite(write) : write
 }
 
@@ -160,7 +176,7 @@ async function applyDeltaActionUnlocked(args: Args, ctx: DbCtx): Promise<Mutatio
   undoRedoStore.clear()
 
   // Action layer owns the store mirror; the patcher branch-guards internally.
-  if (outcome.patch) resolveByTable(outcome.targetTable)?.patcher?.(branchId, outcome.patch)
+  emitOutcomePatches(branchId, outcome)
 
   // Read back by this delta's own id: a multi-delta action shares one actionId,
   // so an actionId lookup would return an arbitrary row's position.
@@ -185,23 +201,52 @@ export type DeltaGroupResult =
 type GroupArgs = { actionId: string; branchId: string; entryId?: string | null }
 
 /**
- * Commits several actions under one actionId as a SINGLE transaction, so a rejection
- * anywhere in the group leaves nothing behind. Sequential `applyDeltaAction` calls
- * cannot give that: each commits on its own, so a caller learns of a failure only once
- * the earlier writes are durable and the stores are patched.
+ * Handlers read pre-group state, so a delete's cascade can't see the group's other writes: a
+ * second write to a cascaded row logs it twice (undo restores it twice and hits a unique
+ * constraint forever), and a link written to a deleted row passes the live-row guard and dangles.
+ */
+function groupConflict(outcomes: readonly OkOutcome[]): string | null {
+  const cascaded = new Set<string>()
+  const deleted = new Set<string>()
+  for (const outcome of outcomes) {
+    if (outcome.op === 'delete') deleted.add(createdKey(outcome.targetTable, outcome.targetId))
+    for (const child of outcome.cascadePatches ?? []) {
+      const key = createdKey(child.table, child.patch.id)
+      if (cascaded.has(key)) return `two deletes in the group cascade ${key}`
+      cascaded.add(key)
+    }
+  }
+  for (const outcome of outcomes) {
+    const target = createdKey(outcome.targetTable, outcome.targetId)
+    if (cascaded.has(target)) return `the group writes ${target}, which a delete in it cascades`
+    const { patch } = outcome
+    const written =
+      patch?.op === 'create' ? patch.row : patch?.op === 'update' ? patch.columns : undefined
+    for (const ref of written ? linkRefs(outcome.targetTable, written) : []) {
+      const named = createdKey(ref.table, ref.id)
+      if (deleted.has(named)) return `the group links ${target} to ${named}, which it deletes`
+    }
+  }
+  return null
+}
+
+/**
+ * Commits actions under one actionId in a single transaction — a rejection anywhere leaves nothing
+ * behind, unlike sequential `applyDeltaAction` calls, which each commit on their own.
  *
- * Handlers run before the transaction opens, so every one reads pre-group state. Two
- * consequences bind callers: an action cannot depend on a row an earlier action in the
- * group creates, and two actions writing one row's same column would build payloads from
- * the same snapshot, so the later silently drops the earlier. The second is rejected
- * here rather than left to each caller to reason about.
+ * Handlers run before the transaction opens and read pre-group state: an action can't read an
+ * earlier one's created row (only `GroupScope` names it); a same-column double-write on one row
+ * is rejected here rather than left to callers.
+ *
+ * Rejected as `group-conflict`: a write to a row a delete in the group cascades (two deletes'
+ * cascades included), and a link write naming an entity or happening the group deletes.
  */
 export async function applyDeltaActionGroup(
   actions: readonly PipelineAction[],
   args: GroupArgs,
   ctx: DbCtx,
 ): Promise<DeltaGroupResult> {
-  const keys = actions.map(lockKeyFor).filter((key) => key !== null)
+  const keys = actions.flatMap(lockKeysFor)
   const write = withKeyLocks(keys, () => applyDeltaActionGroupUnlocked(actions, args, ctx))
   return actions.some((a) => isUserOriginatedSource(a.source)) ? trackUserWrite(write) : write
 }
@@ -214,13 +259,10 @@ async function applyDeltaActionGroupUnlocked(
   const { actionId, branchId } = args
   const entryId = args.entryId ?? null
 
-  type Prepared = {
-    deltaId: string
-    source: PipelineAction['source']
-    outcome: Extract<HandlerOutcome, { status: 'ok' }>
-  }
+  type Prepared = { deltaId: string; source: PipelineAction['source']; outcome: OkOutcome }
   const prepared: Prepared[] = []
   const pendingColumns = new Map<string, Set<string>>()
+  const created = new Set<string>()
 
   for (const action of actions) {
     if (isUserOriginatedSource(action.source) && generationStore.getTxState().reversalInProgress)
@@ -233,14 +275,14 @@ async function applyDeltaActionGroupUnlocked(
     const resolved = resolveByActionKind(action.kind)
     if (!resolved) return { status: 'rejected', reason: `no handler registered for ${action.kind}` }
 
-    const outcome = await resolved.handler(action, branchId, ctx)
+    const outcome = await resolved.handler(action, branchId, ctx, { created })
     if (outcome.status === 'rejected') {
       // A no-op contributes nothing to commit, and a group cannot half-fail on one.
       if (outcome.code === 'noop') continue
       return { status: 'rejected', reason: outcome.reason, code: outcome.code }
     }
 
-    const rowKey = `${outcome.targetTable}:${outcome.targetId}`
+    const rowKey = createdKey(outcome.targetTable, outcome.targetId)
     const columns = outcome.patch?.op === 'update' ? Object.keys(outcome.patch.columns) : []
     const claimed = pendingColumns.get(rowKey) ?? new Set<string>()
     if (columns.some((column) => claimed.has(column)))
@@ -252,9 +294,12 @@ async function applyDeltaActionGroupUnlocked(
     pendingColumns.set(rowKey, claimed)
 
     prepared.push({ deltaId: generateId('delta'), source: action.source, outcome })
+    if (outcome.op === 'create') created.add(rowKey)
   }
 
   if (prepared.length === 0) return { status: 'ok' }
+  const conflict = groupConflict(prepared.map(({ outcome }) => outcome))
+  if (conflict !== null) return { status: 'rejected', reason: conflict, code: 'group-conflict' }
 
   const ops: SqlOp[] = prepared.flatMap(({ deltaId, source, outcome }) => [
     deltaRowOp(ctx, { deltaId, branchId, entryId, actionId, source, target: outcome }),
@@ -263,8 +308,6 @@ async function applyDeltaActionGroupUnlocked(
 
   await ctx.runInTransaction(ops)
   undoRedoStore.clear()
-  for (const { outcome } of prepared) {
-    if (outcome.patch) resolveByTable(outcome.targetTable)?.patcher?.(branchId, outcome.patch)
-  }
+  for (const { outcome } of prepared) emitOutcomePatches(branchId, outcome)
   return { status: 'ok' }
 }

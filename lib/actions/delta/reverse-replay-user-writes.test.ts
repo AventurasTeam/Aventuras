@@ -87,6 +87,12 @@ async function kael(db: Db) {
   return row
 }
 
+// Seeds both entities directly, bypassing createKael — the live-row guard needs both to exist
+// before a relationship write.
+async function seedChars(db: Db): Promise<void> {
+  await db.insert(entities).values([KAEL, { ...KAEL, id: 'char_mira', name: 'Mira' }])
+}
+
 const createKael = (ctx: Ctx, over: Partial<NewEntity> = {}) =>
   apply(
     ctx,
@@ -198,6 +204,7 @@ describe('reversing a machine write under a later user write', () => {
 
   it('keeps a view the user set after the classifier changed it', async () => {
     const { db, ctx } = await setup()
+    await seedChars(db)
     await apply(ctx, userViews('friend', 'friend'), 'act_0')
     await apply(ctx, classifyView('ally'), 'act_c')
     await apply(ctx, userViews('rival', 'friend'), 'act_u')
@@ -237,6 +244,7 @@ describe('reversing a machine write under a later user write', () => {
 
   it('restores as before when the user edit is reversed alongside', async () => {
     const { db, ctx } = await setup()
+    await seedChars(db)
     await apply(ctx, userViews('friend', 'friend'), 'act_0')
     await apply(ctx, classifyView('ally'), 'act_c')
     await apply(ctx, userViews('rival', 'friend'), 'act_u')
@@ -249,6 +257,7 @@ describe('reversing a machine write under a later user write', () => {
 
   it('weighs each machine write against the user edits after it alone', async () => {
     const { db, ctx } = await setup()
+    await seedChars(db)
     await apply(ctx, userViews('friend', 'friend'), 'act_0')
     await apply(ctx, classifyView('ally'), 'act_c1')
     await apply(ctx, userViews('rival', 'friend'), 'act_u')
@@ -289,6 +298,7 @@ describe('reversing a machine write under a later user write', () => {
 
   it('is not held back by a later machine write', async () => {
     const { db, ctx } = await setup()
+    await seedChars(db)
     await apply(ctx, userViews('friend', 'friend'), 'act_0')
     await apply(ctx, classifyView('ally'), 'act_c1')
     await apply(ctx, classifyView('enemy'), 'act_c2')
@@ -344,6 +354,7 @@ describe('reversing a machine write under a later user write', () => {
 describe('reversing a machine view update', () => {
   it('deletes a pair the reversal would leave with no view', async () => {
     const { db, ctx } = await setup()
+    await seedChars(db)
     await apply(ctx, userViews('ally', null), 'act_0')
     const [created] = await pair(db)
     await apply(ctx, classifyMiraView('wary'), 'act_c')
@@ -359,6 +370,7 @@ describe('reversing a machine view update', () => {
   // The classifier never clears a view today, but the upsert handler accepts a null one.
   it('re-inserts a pair an older undo in the same reversal gives a view back', async () => {
     const { db, ctx } = await setup()
+    await seedChars(db)
     await apply(ctx, userViews(null, 'friend'), 'act_0')
     const [created] = await pair(db)
     await apply(ctx, classifyMiraView('wary'), 'act_c')
@@ -390,6 +402,7 @@ describe('reversing a machine view update', () => {
 
   it('leaves a pair the user deleted since deleted', async () => {
     const { db, ctx } = await setup()
+    await seedChars(db)
     await apply(ctx, userViews(null, 'friend'), 'act_0')
     const [created] = await pair(db)
     await apply(ctx, classifyMiraView('wary'), 'act_c')
@@ -412,6 +425,7 @@ describe('reversing a machine view update', () => {
   // Out of order only after a redo re-inserts the create above deltas its snapshot absorbed.
   it('keeps a reversed create out even when older undos in the plan would give it a view', async () => {
     const { db, ctx } = await setup()
+    await seedChars(db)
     await apply(ctx, userViews('ally', null), 'act_0')
     const [row] = await pair(db)
     const delta = (
@@ -448,6 +462,7 @@ describe('reversing a machine view update', () => {
 
   it('updates a pair the reversal leaves with a view', async () => {
     const { db, ctx } = await setup()
+    await seedChars(db)
     await apply(ctx, userViews('ally', null), 'act_0')
     await apply(ctx, classifyMiraView('wary'), 'act_c')
 
@@ -462,6 +477,7 @@ describe('reversing a machine view update', () => {
 describe('reversing a machine create of a relationship', () => {
   it("keeps the pair with the user's later view and nulls the classifier's", async () => {
     const { db, ctx } = await setup()
+    await seedChars(db)
     await apply(ctx, classifyView('ally'), 'act_c')
     await apply(ctx, userViews('ally', 'wary'), 'act_u')
 
@@ -475,6 +491,7 @@ describe('reversing a machine create of a relationship', () => {
 
   it('leaves the pair as the user left it when the user wrote both views', async () => {
     const { db, ctx } = await setup()
+    await seedChars(db)
     await apply(ctx, classifyView('ally'), 'act_c')
     await apply(ctx, userViews('rival', 'wary'), 'act_u')
 
@@ -488,6 +505,7 @@ describe('reversing a machine create of a relationship', () => {
 
   it('deletes the pair once the user cleared the view they had added', async () => {
     const { db, ctx } = await setup()
+    await seedChars(db)
     await apply(ctx, classifyView('ally'), 'act_c')
     await apply(ctx, userViews('ally', 'wary'), 'act_u1')
     await apply(ctx, userViews('ally', null), 'act_u2')
@@ -499,6 +517,7 @@ describe('reversing a machine create of a relationship', () => {
 
   it('deletes the pair when no user edit followed', async () => {
     const { db, ctx } = await setup()
+    await seedChars(db)
     await apply(ctx, classifyView('ally'), 'act_c')
     const [created] = await pair(db)
 
@@ -512,6 +531,7 @@ describe('reversing a machine create of a relationship', () => {
 describe('a prose edit under a later user write', () => {
   it("keeps the view the user set after the reply's fact, and blocks its re-derivation", async () => {
     const { db, ctx } = await setup()
+    await seedChars(db)
     const entry = (id: string, position: number, kind: 'user_action' | 'ai_reply') => ({
       kind: 'createStoryEntry' as const,
       source: 'user_edit' as const,
@@ -564,6 +584,7 @@ describe('reversing a machine write after an undo and redo of the user write bef
 
   it('clears a view the classifier filled in on a pair the user created', async () => {
     const { db, ctx } = await setup()
+    await seedChars(db)
     await apply(ctx, userViews(null, 'wary'), 'act_u')
     await apply(ctx, classifyView('friend'), 'act_c')
     await undoThenRedo(ctx)

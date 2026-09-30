@@ -25,6 +25,9 @@ type _VisualCategoriesMatch = [VisualChangeType] extends [(typeof VISUAL_CATEGOR
 const _visualChecks: [_VisualCategoriesMatch] = [true]
 void _visualChecks
 
+// Mirrors entity-state-schema.ts's visual field `.max(500)`; parse.test.ts pins the pair.
+export const VISUAL_TEXT_MAX = 500
+
 // retrieval.md → Q4. Restated from lib/retrieval's MAX_EMITTED_QUERIES, which this module
 // cannot value-import for the reason above; parse.test.ts pins them equal.
 export const MAX_RETRIEVAL_QUERIES = 3

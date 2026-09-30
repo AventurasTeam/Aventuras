@@ -7,19 +7,22 @@
   save-session host, C11 overflow menu, the History placeholder this
   slice fills)
 - **Blocks:** [Slice 4.2c](./02c-collision-review.md) (the merge's
-  losing row deletes through C3), the History tab and delete entries
-  of [Slice 4.3](./03-plot-panel.md) (C4 and C3 — partial),
-  [Slice 4.6](./06-import-export.md) (lore export host — partial)
+  losing row deletes through C3), [Slice 4.6](./06-import-export.md)
+  (lore export host — partial). This slice also replaces
+  [Slice 4.3](./03-plot-panel.md)'s History placeholder with the real
+  `HistoryTab` and flips its disabled thread and happening delete
+  entries (C4, C3).
 
 ## Goal
 
 Lore gets its detail pane (Body / Settings / History), the delta-log
 History tab lands as a shared module (C4) that also fills 4.2a's
-placeholder, and the first delete surfaces ship — `Delete entity` and
-`Delete` on lore — over hardened delete arms (C3): the entity link
-cascade, inverse-ref rewrite, tail-metadata drop, lead refusal, the
-happening cascade's critical section, and the vector sweep on forward
-delete and redo for every embedded kind.
+placeholder and mounts on Plot's thread and happening panes, and the
+first delete surfaces ship — `Delete entity`, lore `Delete`, and
+`Delete thread` / `Delete happening` — over hardened delete arms (C3):
+the entity link cascade, inverse-ref rewrite, tail-metadata drop, lead
+refusal, the happening cascade's critical section, and the vector
+sweep on forward delete and redo for every embedded kind.
 
 ## Background
 
@@ -101,8 +104,10 @@ handler, which is where the sweep must therefore live.
   sort, `Load older`, the read-only empty state, and controls that
   reflow on narrow widths; mounted on the lore pane and on 4.2a's four
   entity panes (replacing the placeholder), and renderable for the
-  `threads` and `happenings` target tables so 4.3 mounts it unchanged.
-  Rows link to the reader entry when `entryId` is set.
+  `threads` and `happenings` target tables — 4.2b itself mounts it on
+  Plot's thread and happening panes too, replacing 4.3's History
+  placeholder there. Rows show `entry #n` as meta text and are not
+  pressable.
 - **C3 delete arms**, per the milestone's pinned mechanism: the
   grouped entity delete — one merged `updateEntity` per referencing
   entity, one `updateStoryEntryMetadata` for the tail scene drop, then
@@ -115,24 +120,33 @@ handler, which is where the sweep must therefore live.
   the tail-scene drop, or records the deviation if review rejects it.
 - **Delete surfaces:** `Delete entity` and lore `Delete` in the C11
   menus over an `AlertDialog` naming what goes with the row (link-row
-  counts, the tail-scene drop) or, for the lead, the refusal and a
-  pointer to `Set as lead`; gated while generation is in flight;
-  routed through the reader's CTRL-Z stack.
+  counts, the tail-scene drop); for the lead, `Delete entity` is
+  disabled with a reason pointing at `Set as lead`; gated while
+  generation is in flight; routed through the reader's CTRL-Z stack.
+- **Plot surfaces** (4.3 merged with both disabled): `HistoryTab` on
+  the thread and happening panes; `Delete thread` / `Delete happening`
+  over the shared confirm dialog.
+- **Completeness:** every delete arm cascades its row's translations;
+  reverse-replay of a create sweeps the row's vectors; the embedder's
+  vector insert is conditional on the source row; the runner patches
+  cascaded children's stores after commit.
+- **Lead interim:** `resolveLead` (a dangling lead reads as absent) in
+  World and the composer; do / say / think disable with a reason when
+  the wrap has no lead to name.
 - **Storybook:** lore pane states (populated / empty body / create),
   History tab states (rows per op and source, empty, loading older),
-  delete confirm and lead refusal.
+  delete confirm and the lead-disabled `⋯` entry.
 
 ## Scope: out
 
 - Entity panes and the save-session host — [Slice 4.2a](./02a-entity-detail.md).
 - The merge driver that consumes the delete arm — [Slice 4.2c](./02c-collision-review.md).
-- Thread and happening delete **surfaces** — [Slice 4.3](./03-plot-panel.md)
-  (the arms are hardened here; 4.3's entries stay disabled until this
-  slice merges).
 - The diff cache and rich diff prose — M6.4.
 - Lore Assets (parked), lore categories as dynamic chips (no
   followup until volume demands).
 - Global delta-log browser — M7.3 Diagnostics Hub.
+- Reader jump-to-entry from a History row — M7.3 (carried deferral).
+- A per-branch, delta-logged lead — M6 (carried deferral).
 
 ## Acceptance criteria
 
@@ -148,8 +162,9 @@ handler, which is where the sweep must therefore live.
   `embedding_stale = 1`; redo re-deletes and the vec tables are empty
   for the id again (vitest on reverse-replay and redo).
 - Deleting the story's lead character is refused with `lead-entity`
-  from the arm and the confirm dialog shows the refusal instead of the
-  cascade summary (vitest on the arm; component test on the dialog).
+  from the arm, and the `⋯` `Delete entity` entry is disabled for the
+  lead with a reason pointing at `Set as lead` (vitest on the arm;
+  component test on the menu entry).
 - Deleting a lore, thread or happening row leaves zero vec0 rows for
   the id; two concurrent writers on a happening's involvements cannot
   interleave with its delete (vitest per kind; vitest on the key lock).
@@ -166,10 +181,9 @@ handler, which is where the sweep must therefore live.
   `Load older` appends the next chunk and never auto-loads on scroll
   (vitest on the query; component test on the tab).
 - A `periodic_classifier` delta on the entity renders the
-  `periodic classifier` source label and `entry #n` link; clicking it
-  navigates to that entry in the reader; the `HistoryTab` renders a
-  `threads` and a `happenings` fixture delta with resolved names
-  (component test plus manual).
+  `periodic classifier` source label and `entry #n` as meta text; the
+  `HistoryTab` renders a `threads` and a `happenings` fixture delta
+  with resolved names (component test).
 - Every chrome string routes through `t()`; new compounds have stories.
 
 ## Tests
@@ -180,43 +194,30 @@ handler, which is where the sweep must therefore live.
   (search shapes, op filter, sort, cursor), humanizer per op, source
   and target table.
 - Component tests: lore pane, required body, History tab controls,
-  delete confirm and refusal.
+  delete confirm and the lead-disabled `⋯` entry.
 - Storybook: the matrix above.
 - E2E (desktop): delete entity → undo → redo, asserting vec rows and
   link rows in the DB.
 
 ## Open questions
 
-- **Critical-section shape for the happening cascade.** Whether the
-  child read moves inside the delete's transaction or the whole
-  `cascadeDeleteOps` call takes the per-happening key lock the
-  awareness arm already uses; either satisfies C3. Pick at planning.
-- **Group ordering.** The entity delete must come last in the group so
-  the referencing entities' `state` patches and the tail metadata
-  write are built against rows that still exist; confirm the runner's
-  pre-group-state rule makes the order irrelevant, or pin it.
-- **Lead removed by a reversal.** 4.2a's `Set as lead` (C5) can point
-  the lead at a character whose create is still undoable (World
-  `[+] Blank`, or a classifier-introduced character); CTRL-Z /
-  regenerate / rollback of that group deletes the row while
-  `stories.definition.leadEntityId` (not delta-logged) keeps the dead
-  id. Should the `lead-entity` refusal this slice adds for
-  delete/merge also cover reversing the group that created the
-  current lead? Nothing outside the wizard reads the lead before
-  4.5a.
-- **Deleting an entity while a classifier pass is in flight.** The
-  pass is `no-gate`, so a delete can land between its snapshot and its
-  writes. The three guarded entity actions no-op on the missing row,
-  but `happening_involvements`, `happening_awareness` and
-  `character_relationships` are all FK-less
-  (`happenings.table.ts:53`, `:69`; the `resolveRef` comment in
-  `lib/classifier/plan.ts`), so the pass writes orphan rows naming the
-  dead id and completes. A new character reconciled as `known` or
-  `promote` to the deleted row binds its handle to that id too. Decide
-  whether the delete awaits or cancels the pass first
-  (`bracketProseReversal` is the precedent: it lands a pass past its
-  model call before the body runs, so the cascade sweeps its rows), or
-  whether these writes get a guard.
+- **Critical-section shape for the happening cascade.**
+  **Resolved at planning (2026-09-28):** a per-branch `happening_links`
+  key — no per-happening key existed, and a read can't sit inside a
+  proxy transaction.
+- **Group ordering.** **Resolved at planning (2026-09-28):**
+  order-independent — every handler in a group reads pre-group state,
+  and the delete group's rows are disjoint. The builder still emits
+  the delete last, by convention, pinned by a test.
+- **Lead removed by a reversal.** **Resolved at planning
+  (2026-09-28):** reversals are never refused; the interim
+  `resolveLead` reads a dangling lead as absent, and a per-branch,
+  delta-logged lead is filed to M6.
+- **Deleting an entity while a classifier pass is in flight.**
+  **Resolved at planning (2026-09-28):** live-row guards on the three
+  link writers under the link keys — a create re-reads the rows it
+  names, the entity and the happening, or both ends of a pair, and
+  no-ops when one is gone.
 
 ## Implementation notes
 

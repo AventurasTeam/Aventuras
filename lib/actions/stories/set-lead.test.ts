@@ -11,7 +11,13 @@ import {
   type StoryDefinition,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { currentStoryStore, generationStore, resetAllStores, storiesStore } from '@/lib/stores'
+import {
+  currentStoryStore,
+  generationStore,
+  resetAllStores,
+  storiesStore,
+  undoRedoStore,
+} from '@/lib/stores'
 
 import { setStoryLead } from './set-lead'
 
@@ -211,5 +217,23 @@ describe('setStoryLead', () => {
   it('throws for a missing story', async () => {
     const { ctx } = await setup()
     await expect(setStoryLead('story_missing', 'char_mira', ctx)).rejects.toThrow('Story not found')
+  })
+
+  it('clears redo on a successful lead change', async () => {
+    const { ctx } = await setup()
+    undoRedoStore.pushRedoGroup([])
+    expect(undoRedoStore.hasRedo()).toBe(true)
+    expect(await setStoryLead('story_1', 'char_mira', ctx)).toEqual({ status: 'ok' })
+    expect(undoRedoStore.hasRedo()).toBe(false)
+  })
+
+  it('leaves redo intact when the lead change is refused', async () => {
+    const { ctx } = await setup()
+    undoRedoStore.pushRedoGroup([])
+    expect(await setStoryLead('story_1', 'loc_hollow', ctx)).toEqual({
+      status: 'rejected',
+      code: 'not-character',
+    })
+    expect(undoRedoStore.hasRedo()).toBe(true)
   })
 })

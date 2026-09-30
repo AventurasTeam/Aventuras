@@ -249,6 +249,9 @@ describe('a classifier write racing a user Save on one row', () => {
     const pairOf = (round: number) => ({ subjectId: `x_${round}`, objectId: `y_${round}` })
     await sweep(
       async (round) => {
+        await ctx.db
+          .insert(entities)
+          .values([character(`x_${round}`, 'active', []), character(`y_${round}`, 'active', [])])
         const created = await classify(
           {
             kind: 'upsertCharacterRelationship',
@@ -386,6 +389,9 @@ describe('a classifier write racing a user Save on one row', () => {
       const ctx = await setup()
       await sweep(
         async (round) => {
+          await ctx.db
+            .insert(entities)
+            .values([character(`x_${round}`, 'active', []), character(`y_${round}`, 'active', [])])
           const created = await classify(
             {
               kind: 'upsertCharacterRelationship',
@@ -496,6 +502,9 @@ describe('a classifier write racing a user Save on one row', () => {
     const ctx = await setup()
     await sweep(
       async (round) => {
+        await ctx.db
+          .insert(entities)
+          .values([character(`x_${round}`, 'active', []), character(`y_${round}`, 'active', [])])
         const pair = { branchId: BRANCH, subjectId: `x_${round}`, objectId: `y_${round}` }
         const created = await classify(
           {

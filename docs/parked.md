@@ -2902,3 +2902,15 @@ this counts two rather than three. Extract a small shared
 phone-wrap helper when a third caller appears, or the next time
 both need the same change in lockstep — not before. Surfaced by
 the Slice 3.6a Task 8 review (2026-08-10).
+
+#### Thread and happening update handlers record unchanged columns
+
+**Thread and happening update handlers record every column named in
+the patch, unlike the entity and lore handlers, which drop unchanged
+ones.** Safe today because `threadPatch` and `happeningPatch`
+pre-filter before the handler ever sees an unchanged column, but a
+future writer that skips that pre-filter would make History list a
+field that didn't change and feed the extra keys into user
+precedence. A writer sending thread or happening patches not
+pre-filtered against the row — a classifier status write, say — is
+the signal to revisit. Surfaced by 4.2b planning (2026-09-28).

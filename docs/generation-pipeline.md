@@ -887,11 +887,13 @@ COMMIT;
 Either both rows write or neither. SQLite commit before Zustand
 store update — if SQLite fails, store stays consistent with disk.
 The handler reads the rows it decides from before that transaction
-opens. A write to an existing `entities` row, and any
-`character_relationships` write, holds a key lock across that read and
-its commit, since the classifier and a World Save both write those
-rows
-([`memory/cadence.md → Concurrency`](./memory/cadence.md#concurrency)).
+opens. A write to an existing `entities` row, any
+`character_relationships` write, and any `happening_involvements` /
+`happening_awareness` write or happening delete, holds a key lock
+across that read and its commit, since the classifier and a World or
+Plot Save both write those rows — see
+[`memory/cadence.md → Concurrency`](./memory/cadence.md#concurrency)
+for the full lock-key contract.
 
 ### Performance — no batching needed
 
@@ -1311,13 +1313,14 @@ happening.
 
 **Undoing a `create` consults no cascade.**
 A domain may register a cascade hook for its child rows, but that hook
-is **delete-op-only**: it replays a forward `delete`, so the undo of a
-`create` and the redo of a `delete` are the only arms that may read it.
-Reversing a `create` deliberately does not, because the closure has to
-gather **deltas**, not rows, so they are pruned from the log with the
-parent's. A cascade that deleted the rows would leave their deltas
-behind, pointing at nothing, and a later redo would re-insert children
-under a parent that is gone.
+is **delete-op-only**: the forward `delete` and the redo of a `delete`
+are the only arms that may read it. Reversing a `create` deliberately
+does not, because the closure has to gather **deltas**, not rows, so they
+are pruned from the log with the parent's. A cascade that deleted the rows
+would leave their deltas behind, pointing at nothing, and a later redo
+would re-insert children under a parent that is gone. The reversal still
+sweeps the row's vectors, which carry no deltas and would be orphaned
+otherwise.
 
 **Abort, boot recovery and a prose edit close over the rows their
 creates delete.** Neither selection scope guarantees the set holds every write to such a row. An

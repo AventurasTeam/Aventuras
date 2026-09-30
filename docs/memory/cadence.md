@@ -193,7 +193,11 @@ values from the row as the pane rendered it, not from that read, so it
 can still overwrite a classifier write that landed after the render
 (see [User edits and classifier writes](#user-edits-and-classifier-writes)).
 `character_relationships` writes serialize on one key per branch,
-since a delete names a row id, not a pair. A shared JSON column such
+since a delete names a row id, not a pair. Involvement and awareness
+writes and a happening delete serialize on one per-branch
+`happening_links` key, for the same reason. An entity delete holds
+both link-family keys as well as its row key, and every reversal or
+redo of these tables takes the same keys. A shared JSON column such
 as `branches.classifier_status`, which the reversal clamp and the
 classifier pipeline both write, is written with key-scoped `json_set`,
 never a whole-blob read-modify-write.
@@ -226,8 +230,8 @@ view, resolve both. Each decides and commits under the lock a World
 Save takes too ([Concurrency](#concurrency)), so a Save cannot land
 between a write's check and its commit.
 
-**Live-row guards.** Status and keyword writes check the row as it
-stands when the write lands, not only the pass's snapshot:
+**Live-row guards.** Status, keyword and link writes check the row or
+rows as they stand when the write lands, not only the pass's snapshot:
 
 - Promotion goes through `promoteStagedEntity`. The pass plans it only
   for a row its snapshot holds as `staged`, and the handler no-ops
@@ -240,6 +244,14 @@ stands when the write lands, not only the pass's snapshot:
   sends only terms new against its snapshot, so an alias the user
   removed mid-pass is not re-sent; the handler appends only terms the
   live list lacks, so one the user added is not duplicated.
+- Link rows go through `createHappeningInvolvement`,
+  `upsertHappeningAwareness` and `upsertCharacterRelationship`. A create
+  re-reads the rows it names — the entity and the happening, or both
+  ends of a pair — and no-ops when one is gone, so a delete landing
+  after the pass's post-call re-read leaves no orphan row; a row
+  created earlier in the same action group counts as present. A new
+  character reconciled to a row deleted in that window is dropped for
+  the pass. Lock keys: [Concurrency](#concurrency).
 
 **User precedence.** A field the user wrote after the prose a fact
 came from keeps the user's value. The classifier's status, keyword and

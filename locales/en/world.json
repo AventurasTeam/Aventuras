@@ -207,6 +207,8 @@
     "duplicateRelationship": "This character already has a relationship here.",
     "parentCycle": "That parent would make this location part of itself.",
     "parentChainBroken": "That parent's own chain of parents loops back or runs too deep. Fix that chain first.",
+    "titleRequired": "A title is required.",
+    "bodyRequired": "Lore needs a body.",
     "inTab": "{{tab}}: {{issue}}"
   },
   "save": {
