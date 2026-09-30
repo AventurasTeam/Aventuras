@@ -6,7 +6,7 @@ export type ComposerWrapPov = 'first' | 'third'
 export type WrapOptions = {
   mode: ComposerMode
   pov: ComposerWrapPov
-  leadName: string
+  leadName: string | null
 }
 
 function ensureTrailingPeriod(text: string): string {
@@ -23,22 +23,29 @@ function conjugateFirstWord(text: string): string {
   return [conjugateThirdPersonPresent(first), ...rest].join(' ')
 }
 
+function wrapSubject(pov: ComposerWrapPov, leadName: string | null): string | null {
+  return pov === 'first' ? 'I' : leadName
+}
+
+/** The first-person wrap says "I" and needs no lead; any other wrap names the lead. */
+export function wrapHasSubject(pov: ComposerWrapPov, leadName: string | null): boolean {
+  return wrapSubject(pov, leadName) != null
+}
+
 export function wrapComposerText(rawText: string, opts: WrapOptions): string {
   const { mode, pov, leadName } = opts
-  if (mode === 'free') return rawText
+  const subject = wrapSubject(pov, leadName)
+  // A caller sending a non-free mode with no subject to wrap around is a bug upstream —
+  // fail safe to the raw text rather than emit e.g. " draw my blade.".
+  if (mode === 'free' || subject == null) return rawText
 
   const text = rawText.trim()
   if (mode === 'do') {
     const body = pov === 'first' ? text : conjugateFirstWord(text)
-    const subject = pov === 'first' ? 'I' : leadName
     return ensureTrailingPeriod(`${subject} ${body}`)
   }
-  if (mode === 'say') {
-    const subject = pov === 'first' ? 'I' : leadName
-    return `"${capitalizeFirst(text)}" ${subject} said.`
-  }
+  if (mode === 'say') return `"${capitalizeFirst(text)}" ${subject} said.`
   // mode === 'think'
-  const subject = pov === 'first' ? 'I' : leadName
   return `*${text}* ${subject} thought.`
 }
 

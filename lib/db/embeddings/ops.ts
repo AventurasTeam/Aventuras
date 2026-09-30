@@ -25,7 +25,7 @@ export function packFloat32(vec: Float32Array): Uint8Array {
 }
 
 // Scoped to (branch, id, model) so a swap's staged vector never deletes the old model's row.
-// `source` gates the insert on the row holding that text; a racing delete/edit writes nothing.
+// `source` gates the insert on the row holding that text; a racing delete/edit inserts nothing.
 export function upsertVecOps(w: VecWrite, source?: VecSourceGuard): SqlOp[] {
   const table = vecTableName(w.kind, w.dim)
   const values = [

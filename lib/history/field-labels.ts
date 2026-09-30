@@ -137,3 +137,32 @@ export function opsMatchingLabel(term: string): Delta['op'][] {
   if (needle === '') return []
   return HISTORY_OPS.filter((op) => OP_LABELS[op]().some((label) => startsWithWord(label, needle)))
 }
+
+/** Joins an update summary's field labels ("Modified Traits, Drives"). */
+export const SUMMARY_FIELD_SEPARATOR = ', '
+
+const FIELDS_SLOT = '\u0000'
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+// Split at the slot rather than hard-coding "Modified": a locale may put the fields first.
+function updateSummaryPattern(): RegExp | null {
+  const [lead, tail = ''] = t('history:summary.modified', { fields: FIELDS_SLOT })
+    .split(FIELDS_SLOT)
+    .map((part) => part.trim())
+  if (lead === '' && tail === '') return null
+  const before = lead === '' ? '' : `${escapeRegExp(lead)}\\s+`
+  const after = tail === '' ? '' : `\\s+${escapeRegExp(tail)}`
+  return new RegExp(`^${before}(.+?)${after}$`, 'iu')
+}
+
+/** The field labels a typed update summary names, or null when `term` isn't worded as one. */
+export function summaryFieldTerms(term: string): string[] | null {
+  const fields = updateSummaryPattern()?.exec(term.trim())?.[1]
+  if (fields == null) return null
+  const labels = fields
+    .split(SUMMARY_FIELD_SEPARATOR.trim())
+    .map((label) => label.trim())
+    .filter((label) => label !== '')
+  return labels.length > 0 ? labels : null
+}

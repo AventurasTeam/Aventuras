@@ -62,7 +62,8 @@ cascade and vector sweep (C3) that the roadmap's carried deferrals
 named. [Slice 4.2c](./slices/02c-collision-review.md) wires the
 shipped `CollisionResolveDialog` to real drivers: merge, rename and
 keep-as-distinct under one `action_id`, the dialog's drifted
-`InjectionMode` and `ScalarField` unions fixed as the first step.
+`InjectionMode` and `ScalarField` unions fixed as the first step. It
+also brings link-row edits into the History tab (C4).
 
 The **Plot track** is one slice. [Slice 4.3](./slices/03-plot-panel.md)
 lands the Plot route on the same shells with the Threads / Happenings
@@ -148,7 +149,8 @@ to one implicit bucket on every real M4 story.
   lore, thread and happening delete with cascade and vector sweep (C3)
 - [Slice 4.2c](./slices/02c-collision-review.md) — collision review
   drivers: merge / rename / keep under one `action_id`,
-  `InjectionMode` and `ScalarField` drift fixes
+  `InjectionMode` and `ScalarField` drift fixes, History link-row
+  union
 - [Slice 4.3](./slices/03-plot-panel.md) — Plot panel: threads and
   happenings lists and details, Involvements and Awareness editors,
   entry-ref picker (C8 half), overflow menu (C11 half)
@@ -667,6 +669,10 @@ use.
   ([`world.md → Reversibility`](../../../ui/screens/world/world.md#reversibility)
   lists the merge writes without it). 4.2b's PR amends `world.md` to
   record the rule, or records the deviation if review rejects it.
+  Resolved in 4.2b (2026-09-28): kept, and recorded in
+  [`world.md → Delete`](../../../ui/screens/world/world.md#delete) and
+  the merge-writes list in
+  [`world.md → Reversibility`](../../../ui/screens/world/world.md#reversibility).
 - **Plot chapter buckets before M5.** No chapter is opened in M4, so
   the chapter-keyed grouping is seed-only. Default: one implicit bucket
   and a hidden `This chapter` chip while the branch has no open

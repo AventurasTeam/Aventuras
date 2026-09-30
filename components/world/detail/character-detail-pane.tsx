@@ -34,6 +34,7 @@ export function CharacterDetailPane({
   onOpenEntity,
   onOpenHappening,
   onSetLead,
+  onDelete,
   hotkeysEnabled = true,
 }: EntityPaneProps) {
   const values = useMemo(
@@ -99,6 +100,8 @@ export function CharacterDetailPane({
               disabledReason: leadDisabledReason(row, data.leadId, blocked, blockedReason),
             }
       }
+      leadId={data.leadId}
+      onDelete={onDelete}
       hotkeysEnabled={hotkeysEnabled}
       {...gate}
     >

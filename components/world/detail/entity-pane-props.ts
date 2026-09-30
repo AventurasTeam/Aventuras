@@ -46,6 +46,8 @@ export type EntityPaneProps = {
   onOpenEntity: (id: string) => void
   onOpenHappening: (id: string) => void
   onSetLead: (id: string) => void
+  /** `⋯ → Delete entity`; the surface raises the confirm. */
+  onDelete: (row: Entity) => void
   /** The host screen's focus state, for the save bar's Cmd/Ctrl-S. */
   hotkeysEnabled?: boolean
 }

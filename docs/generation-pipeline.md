@@ -887,7 +887,14 @@ COMMIT;
 Either both rows write or neither. SQLite commit before Zustand
 store update — if SQLite fails, store stays consistent with disk.
 The handler reads the rows it decides from before that transaction
-opens. A write to an existing `entities` row, any
+opens. A group of actions under one `action_id`
+(`applyDeltaActionGroup`) commits as one transaction too, and the
+runner rejects a group up front: writing the same row's column twice
+(the same-column check), or, as `group-conflict`
+(`apply-delta-action.ts`'s `groupConflict`): two deletes whose
+cascades overlap, a write to a row that a delete in the group
+cascades, or a link write naming a row the group deletes. A
+write to an existing `entities` row, any
 `character_relationships` write, and any `happening_involvements` /
 `happening_awareness` write or happening delete, holds a key lock
 across that read and its commit, since the classifier and a World or
@@ -1320,7 +1327,10 @@ are pruned from the log with the parent's. A cascade that deleted the rows
 would leave their deltas behind, pointing at nothing, and a later redo
 would re-insert children under a parent that is gone. The reversal still
 sweeps the row's vectors, which carry no deltas and would be orphaned
-otherwise.
+otherwise. The closure gathers child rows only for a happening, and only
+its involvement and awareness rows; any other child the set doesn't
+already hold — an entity's relationship, involvement or awareness rows,
+any row's translations — outlives the reversal.
 
 **Abort, boot recovery and a prose edit close over the rows their
 creates delete.** Neither selection scope guarantees the set holds every write to such a row. An

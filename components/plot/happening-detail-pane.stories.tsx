@@ -182,6 +182,7 @@ type HarnessProps = {
   onSave: (draft: HappeningDraft) => void
   onRejected: (reason: string) => void
   onOpenEntity: (entity: Entity) => void
+  onDelete: (row: Happening) => void
   /** What a leave requested through the pane's session handle runs once released. */
   onLeave: () => void
 }
@@ -202,6 +203,7 @@ function Harness({
   onSave,
   onRejected,
   onOpenEntity,
+  onDelete,
   onLeave,
 }: HarnessProps) {
   const [row, setRow] = useState(initialRow)
@@ -278,6 +280,7 @@ function Harness({
         onRejected={onRejected}
         onSession={onSession}
         onOpenEntity={onOpenEntity}
+        onDelete={onDelete}
       />
     </View>
   )
@@ -293,6 +296,7 @@ const meta: Meta<typeof Harness> = {
     onSave: fn(),
     onRejected: fn(),
     onOpenEntity: fn(),
+    onDelete: fn(),
     onLeave: fn(),
   },
   // The real db loader and React Query are unavailable in Storybook; a story opening History
@@ -694,7 +698,10 @@ export const RepeatBlankResetsCreate: Story = {
   },
 }
 
-/** Blocked from the start: no field on any tab can be edited; navigation stays live. */
+/**
+ * Blocked from the start: no field on any tab can be edited, nor the row deleted; navigation
+ * stays live.
+ */
 export const Blocked: Story = {
   args: { blocked: true },
   play: async () => {
@@ -768,6 +775,14 @@ export const Blocked: Story = {
       'true',
     )
     expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument()
+
+    await userEvent.click(pane().getByRole('button', { name: 'More actions' }))
+    const remove = await screen.findByRole(
+      'menuitem',
+      { name: `Delete happening, ${BLOCKED_REASON}` },
+      WAIT,
+    )
+    expect(remove).toHaveAttribute('aria-disabled', 'true')
   },
 }
 
@@ -869,18 +884,19 @@ export const LeaveGuard: Story = {
   },
 }
 
-/** Raw JSON: the row with its committed involvements and an awareness summary inline. */
+/** Raw JSON: committed involvements/awareness inline; the menu's Delete fires onDelete too. */
 export const Menu: Story = {
-  play: async () => {
+  play: async ({ args }) => {
     await userEvent.click(await pane().findByRole('button', { name: 'More actions' }))
     const viewJson = await screen.findByRole('menuitem', { name: 'View raw JSON' })
     await waitFor(() => expect(viewJson).toBeVisible(), WAIT)
     expect(
       screen.getByRole('menuitem', { name: 'Export happening as JSON, Lands in Slice 4.6' }),
     ).toHaveAttribute('aria-disabled', 'true')
-    expect(
-      screen.getByRole('menuitem', { name: 'Delete happening, Lands in Slice 4.2b' }),
-    ).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('menuitem', { name: 'Delete happening' })).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
 
     await userEvent.click(viewJson)
     expect(await screen.findByRole('button', { name: 'Close raw JSON viewer' }, WAIT)).toBeVisible()
@@ -901,6 +917,13 @@ export const Menu: Story = {
         },
       ],
     })
+    await userEvent.click(screen.getByRole('button', { name: 'Close raw JSON viewer' }))
+
+    await userEvent.click(await pane().findByRole('button', { name: 'More actions' }, WAIT))
+    const remove = await screen.findByRole('menuitem', { name: 'Delete happening' }, WAIT)
+    await waitFor(() => expect(remove).toBeVisible(), WAIT)
+    await userEvent.click(remove)
+    await expect(args.onDelete).toHaveBeenCalledWith(expect.objectContaining({ id: AMBUSH.id }))
   },
 }
 

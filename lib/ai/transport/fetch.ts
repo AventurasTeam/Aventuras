@@ -15,9 +15,12 @@ function headersToRecord(headers: HeadersInit | undefined): Record<string, strin
   return Object.fromEntries(new Headers(headers).entries())
 }
 
-async function captureRequestBody(requestClone: Request): Promise<string | undefined> {
-  if (requestClone.body === null) return undefined
-  return requestClone.text()
+async function captureRequestBody(request: Request): Promise<string | undefined> {
+  // A whatwg Request has no `body`, so on native a GET slips past the null check and
+  // reads as ''; that '' becomes the outgoing body, and OkHttp rejects any GET/HEAD body.
+  if (request.method === 'GET' || request.method === 'HEAD') return undefined
+  if (request.body === null) return undefined
+  return request.clone().text()
 }
 
 function isEventStream(response: Response): boolean {
@@ -48,7 +51,7 @@ export function createFetchWithCapture(options: FetchWithCaptureOptions): typeof
 
   return async (input, init) => {
     const request = new Request(input, init)
-    const requestBody = await captureRequestBody(request.clone())
+    const requestBody = await captureRequestBody(request)
     const { actionId } = options
     const id = httpCallSink.beginCall({
       method: request.method,
@@ -61,8 +64,8 @@ export function createFetchWithCapture(options: FetchWithCaptureOptions): typeof
 
     try {
       // The raw init body, not the captured text: a transport that re-sends the
-      // body itself must not round-trip a non-text one through `.text()`. Falls
-      // back to the captured text only when the caller passed a Request.
+      // body itself must not round-trip a non-text one through `.text()`. With no
+      // init body the captured text is sent, so capture must stay undefined for GET/HEAD.
       const outgoingBody = init?.body !== undefined ? init.body : requestBody
       const response =
         fetchImpl !== undefined

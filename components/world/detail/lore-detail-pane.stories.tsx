@@ -17,7 +17,9 @@ import { LoreDetailPane } from './lore-detail-pane'
 
 const WAIT = { timeout: 5000 }
 const NEW_ID = 'lore_new'
-const BLOCKED_REASON = 'Generation is in flight. Cancel to edit.'
+// Deliberately distinct from the pane's real fallback text, so BlockedWithoutReason (which
+// unsets this) can only pass by the fallback actually firing, not by this default leaking through.
+const BLOCKED_REASON = 'Story harness: generation blocked.'
 const CATEGORIES = ['cosmology', 'religion']
 
 const AETHERIUM: Lore = {
@@ -51,19 +53,25 @@ function savedLore(id: string, draft: LoreDraft): Lore {
 
 type HarnessProps = {
   row: Lore | null
+  categories?: readonly string[]
   recentlyClassified?: RecentlyClassified
   blocked?: boolean
+  blockedReason?: string
   onSave: (draft: LoreDraft) => void
   onSaved: (id: string) => void
+  onDelete: (row: Lore) => void
 }
 
 /** Mimics the route: a save's row lands by `onSaved`; `Blank` is a `[+] Blank` (a new `seq`). */
 function Harness({
   row: initialRow,
+  categories = CATEGORIES,
   recentlyClassified,
   blocked = false,
+  blockedReason,
   onSave,
   onSaved,
+  onDelete,
 }: HarnessProps) {
   const [row, setRow] = useState(initialRow)
   const [createSeq, setCreateSeq] = useState(1)
@@ -98,12 +106,13 @@ function Harness({
           branchId="br_1"
           row={row}
           createSeq={row == null ? createSeq : undefined}
-          categories={CATEGORIES}
+          categories={categories}
           recentlyClassified={recentlyClassified}
           blocked={blocked}
-          blockedReason={BLOCKED_REASON}
+          blockedReason={blockedReason}
           onSave={save}
           onSaved={saved}
+          onDelete={onDelete}
           onSession={onSession}
         />
       </View>
@@ -125,7 +134,13 @@ const meta: Meta<typeof Harness> = {
   title: 'Compounds/World/LoreDetailPane',
   component: Harness,
   parameters: { layout: 'padded' },
-  args: { row: AETHERIUM, onSave: fn(), onSaved: fn() },
+  args: {
+    row: AETHERIUM,
+    blockedReason: BLOCKED_REASON,
+    onSave: fn(),
+    onSaved: fn(),
+    onDelete: fn(),
+  },
   // The real db loader and React Query are unavailable in Storybook; a story opening History
   // overrides this with its own provider nested closer to the tree.
   decorators: [
@@ -225,6 +240,23 @@ export const SettingsSave: Story = {
       }),
     )
     await waitFor(() => expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument(), WAIT)
+  },
+}
+
+/** entity.md → Recently-classified: only the row tint decays; the head badge stays at full strength. */
+export const FadingBadgeAtFullStrength: Story = {
+  args: { recentlyClassified: 'fading' },
+  play: async ({ canvasElement }) => {
+    const label = await screen.findByText('Recently classified', {}, WAIT)
+    await expect(label).toBeVisible()
+    await expect(label.closest('.bg-recently-classified-bg')).not.toBeNull()
+    // A dimmed wrapper fades the badge as surely as a class on the badge does.
+    await waitFor(() => {
+      for (let node: Element | null = label; node !== canvasElement; node = node.parentElement) {
+        if (node == null) throw new Error('The badge is outside the story canvas.')
+        expect(getComputedStyle(node).opacity).toBe('1')
+      }
+    }, WAIT)
   },
 }
 
@@ -378,6 +410,20 @@ export const Blocked: Story = {
   },
 }
 
+/** A blocked pane with no explicit reason still disables Delete — it must not fall through enabled. */
+export const BlockedWithoutReason: Story = {
+  args: { blocked: true, blockedReason: undefined },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'More actions' }, WAIT))
+    const remove = await screen.findByRole(
+      'menuitem',
+      { name: 'Delete, Generation is in flight. Cancel to edit.' },
+      WAIT,
+    )
+    await expect(remove).toHaveAttribute('aria-disabled', 'true')
+  },
+}
+
 /** Phone: the three tabs go to the Select, which reaches History. */
 export const Phone: Story = {
   globals: { viewport: { value: 'mobile1' } },
@@ -392,8 +438,8 @@ export const Phone: Story = {
   },
 }
 
-/** A category typed in another casing and never picked from the list saves in the branch's. */
-export const TypedCategorySavesCanonical: Story = {
+/** A category saves as typed, though the branch holds it in another casing. */
+export const TypedCategorySavesAsTyped: Story = {
   play: async ({ args }) => {
     const category = await screen.findByRole('combobox', { name: 'Category' }, WAIT)
     await userEvent.click(category)
@@ -401,11 +447,29 @@ export const TypedCategorySavesCanonical: Story = {
     await userEvent.type(category, 'Religion')
     await userEvent.click(body())
     await waitFor(() => expect(saveButton()).toBeEnabled(), WAIT)
-    await expect(category).toHaveValue('Religion')
     await userEvent.click(saveButton())
     await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1), WAIT)
     await expect(args.onSave).toHaveBeenCalledWith(
-      expect.objectContaining({ category: 'religion' }),
+      expect.objectContaining({ category: 'Religion' }),
+    )
+  },
+}
+
+/** Picking one casing of a category the branch holds in two commits that casing. */
+export const PickedCategoryKeepsItsCasing: Story = {
+  args: { categories: ['cosmology', 'Cosmology', 'religion'] },
+  play: async ({ args }) => {
+    const category = await screen.findByRole('combobox', { name: 'Category' }, WAIT)
+    await userEvent.click(category)
+    await userEvent.clear(category)
+    await userEvent.type(category, 'cosmo')
+    await userEvent.click(await screen.findByRole('option', { name: 'Cosmology' }, WAIT))
+    await waitFor(() => expect(category).toHaveValue('Cosmology'), WAIT)
+    await waitFor(() => expect(saveButton()).toBeEnabled(), WAIT)
+    await userEvent.click(saveButton())
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1), WAIT)
+    await expect(args.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ category: 'Cosmology' }),
     )
   },
 }

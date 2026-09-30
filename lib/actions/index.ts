@@ -9,7 +9,12 @@ export {
   applyDeltaActionGroup,
   type DeltaGroupResult,
 } from './delta/apply-delta-action'
-export { applyUndoPayload, computeUndoPayload } from './delta/delta-encoding'
+export {
+  applyUndoPayload,
+  computeUndoPayload,
+  isPayloadMetaKey,
+  PAYLOAD_META_PREFIX,
+} from './delta/delta-encoding'
 export { __resetRegistrationGuard, registerAllDomains } from './delta/registrations'
 export { __resetRegistry, type StorePatch } from './delta/registry'
 export { type RedoSnapshot } from './delta/redo'

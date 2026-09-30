@@ -70,7 +70,7 @@ import {
   type RollbackCounts,
   type StoryEntryRejection,
 } from '@/lib/actions'
-import { wrapComposerText, type ComposerMode } from '@/lib/composer-wrap'
+import { wrapComposerText, wrapHasSubject, type ComposerMode } from '@/lib/composer-wrap'
 import {
   branches,
   db,
@@ -112,6 +112,7 @@ import {
 import { useTheme } from '@/lib/themes'
 import { toast } from '@/lib/toast'
 import { runAction } from '@/lib/utils'
+import { resolveLead } from '@/lib/world'
 
 const ctx = { db, runInTransaction }
 
@@ -258,13 +259,15 @@ export default function ReaderComposerRoute() {
     hydrationIsCurrent && hydration.status === 'success' && hydration.result.branchId === branchId
   const openForBranch = hydrationSucceeded && open?.branchId === branchId ? open : null
   const leadEntityId = openForBranch?.definition.leadEntityId ?? null
-  const leadName = entitiesStore.useEntities((m) =>
-    leadEntityId ? (m.get(leadEntityId)?.name ?? '') : '',
+  const leadName = entitiesStore.useEntities(
+    (m) => resolveLead(leadEntityId, m, branchId)?.name ?? null,
   )
   const modesEnabled =
     openForBranch?.settings.composerModesEnabled === true &&
     openForBranch.definition.mode === 'adventure'
   const wrapPov = openForBranch?.settings.composerWrapPov ?? 'first'
+  const modesUnavailableReason =
+    modesEnabled && !wrapHasSubject(wrapPov, leadName) ? t('reader:composerLeadMissing') : undefined
 
   const {
     worldTimeFrame,
@@ -1334,6 +1337,7 @@ export default function ReaderComposerRoute() {
                   swapPending,
                   actionsBlocked,
                 })}
+                modesUnavailableReason={modesUnavailableReason}
                 onSend={(rawText, mode) => {
                   const wrapped = wrapComposerText(rawText, { mode, pov: wrapPov, leadName })
                   void runSubmit(wrapped, mode, { text: rawText, mode })

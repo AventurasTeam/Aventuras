@@ -3,13 +3,7 @@ import { useMemo, useState } from 'react'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { useEntryIndex } from '@/hooks/use-entry-index'
 import { formatEntryRef } from '@/lib/entry-refs'
-import {
-  humanizeDelta,
-  pathsMatchingLabel,
-  type HistoryOp,
-  type HistorySort,
-  type HistoryTable,
-} from '@/lib/history'
+import { humanizeDelta, type HistoryOp, type HistorySort, type HistoryTable } from '@/lib/history'
 import { t } from '@/lib/i18n'
 import { generationStore } from '@/lib/stores'
 
@@ -35,9 +29,8 @@ function HistoryTabForTarget({ branchId, targetTable, targetId }: HistoryTabProp
   const settleCount = generationStore.useGeneration((s) => s.settleCount)
   // Fresh identity when the row is patched or a run/reversal settles: the log may have moved.
   const version = useMemo(() => ({ row, settleCount }), [row, settleCount])
-  const labelPaths = useMemo(() => pathsMatchingLabel(targetTable, search), [targetTable, search])
   const chunks = useHistoryChunks(
-    { branchId, targetTable, targetId, op: op ?? undefined, search, labelPaths, sort },
+    { branchId, targetTable, targetId, op: op ?? undefined, search, sort },
     version,
   )
   const entryIndex = useEntryIndex(branchId)

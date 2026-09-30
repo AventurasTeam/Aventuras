@@ -31,6 +31,14 @@ describe('loreDraftSchema', () => {
   })
 })
 
+describe('loreDraftFrom', () => {
+  it('hands each blank draft lists of its own', () => {
+    loreDraftFrom(null).keywords.push('Vael')
+    loreDraftFrom(null).tags.push('myth')
+    expect(loreDraftFrom(null)).toMatchObject({ keywords: [], tags: [] })
+  })
+})
+
 describe('loreActions', () => {
   it('creates with trimmed text, normalized keywords, cleaned tags and a blank category as null', () => {
     const [action] = loreActions({
@@ -93,6 +101,18 @@ describe('loreActions', () => {
         now: 5,
       }),
     ).toEqual([])
+  })
+
+  it('writes a re-cased category as typed', () => {
+    const draft = { ...loreDraftFrom(ROW), category: 'Cosmology' }
+    const [update] = loreActions({ branchId: 'b1', row: ROW, draft, id: ROW.id, now: 5 })
+    expect(update).toMatchObject({ payload: { patch: { category: 'Cosmology' } } })
+  })
+
+  it('writes a re-cased keyword: its stored spelling changes though matching ignores case', () => {
+    const draft = { ...loreDraftFrom(ROW), keywords: ['aetherium'] }
+    const [update] = loreActions({ branchId: 'b1', row: ROW, draft, id: ROW.id, now: 5 })
+    expect(update).toMatchObject({ payload: { patch: { keywords: ['aetherium'] } } })
   })
 
   it('writes only the columns the draft changed', () => {

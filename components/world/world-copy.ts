@@ -1,4 +1,9 @@
-import type { OverflowMenuEntry } from '@/components/compounds/overflow-menu'
+import { gateDisabledReason } from '@/components/compounds/generation-gate-copy'
+import {
+  deleteEntry,
+  type OverflowMenuEntry,
+  type RemoveEntry,
+} from '@/components/compounds/overflow-menu-entry'
 import { ENTITY_REJECTION, LEAD_REJECTION, type LeadRejectionCode } from '@/lib/actions'
 import type { WholeTierSpan } from '@/lib/calendar'
 import type { CharacterState, Entity, EntityKind } from '@/lib/db'
@@ -174,7 +179,7 @@ type LeadEntry = { onSetLead: () => void; disabledReason?: string }
 /** world.md → Detail head structure. */
 export function entityMenuEntries(
   kind: EntityKind,
-  { onViewJson, lead }: { onViewJson: () => void; lead?: LeadEntry },
+  { onViewJson, lead, remove }: { onViewJson: () => void; lead?: LeadEntry; remove?: RemoveEntry },
 ): OverflowMenuEntry[] {
   const leadEntries: OverflowMenuEntry[] =
     kind === 'character' && lead != null
@@ -198,19 +203,18 @@ export function entityMenuEntries(
       onPress: () => {},
     },
     { key: 'json', label: t('world:detail.menu.viewJson'), onPress: onViewJson },
-    {
-      key: 'delete',
-      label: t('world:detail.menu.deleteEntity'),
-      destructive: true,
-      disabled: true,
-      disabledReason: t('world:detail.menu.deleteReason'),
-      onPress: () => {},
-    },
+    ...deleteEntry(t('world:detail.menu.deleteEntity'), remove),
   ]
 }
 
 /** world.md → Detail head — lore: no `Set as lead`. */
-export function loreMenuEntries({ onViewJson }: { onViewJson: () => void }): OverflowMenuEntry[] {
+export function loreMenuEntries({
+  onViewJson,
+  remove,
+}: {
+  onViewJson: () => void
+  remove?: RemoveEntry
+}): OverflowMenuEntry[] {
   return [
     {
       key: 'export',
@@ -220,6 +224,7 @@ export function loreMenuEntries({ onViewJson }: { onViewJson: () => void }): Ove
       onPress: () => {},
     },
     { key: 'json', label: t('world:detail.menu.viewJson'), onPress: onViewJson },
+    ...deleteEntry(t('world:detail.menu.deleteLore'), remove),
   ]
 }
 
@@ -230,7 +235,8 @@ export function leadDisabledReason(
   blocked: boolean,
   blockedReason?: string,
 ): string | undefined {
-  if (blocked) return blockedReason ?? t('common:generationGate.inFlight')
+  const gateReason = gateDisabledReason(blocked, blockedReason)
+  if (gateReason != null) return gateReason
   if (row.id === leadId) return t('world:detail.menu.setLeadAlready')
   if (row.status !== 'active') return t('world:detail.menu.setLeadInactive')
   return undefined

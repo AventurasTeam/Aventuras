@@ -89,4 +89,22 @@ export const plot = {
   // A status-tagged option (e.g. staged entity) adds text after the name, so this keeps
   // Playwright's substring match — RegExp(name) would misread a metacharacter in `name`.
   pickerOption: (page: Page, name: string): Locator => page.getByRole('option', { name }),
+
+  moreActions: (page: Page): Locator =>
+    page.getByRole('button', { name: t('plot:detail.menu.label'), exact: true }),
+  // Exact, so it matches only while enabled: a disabled entry's name appends its reason
+  // (common:disabledWithReason).
+  deleteItem: (page: Page, kind: 'thread' | 'happening'): Locator =>
+    page.getByRole('menuitem', {
+      name: t(
+        kind === 'thread' ? 'plot:detail.menu.deleteThread' : 'plot:detail.menu.deleteHappening',
+      ),
+      exact: true,
+    }),
+  deleteDialog: (page: Page): Locator => page.getByRole('alertdialog'),
+  deleteConfirm: (page: Page, kind: 'thread' | 'happening'): Locator =>
+    plot.deleteDialog(page).getByRole('button', {
+      name: t(kind === 'thread' ? 'plot:delete.confirmThread' : 'plot:delete.confirmHappening'),
+      exact: true,
+    }),
 }

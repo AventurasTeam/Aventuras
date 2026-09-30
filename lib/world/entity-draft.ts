@@ -43,7 +43,6 @@ export type RelationshipBaseLink = Omit<RelationshipLink, 'rowId'>
 const text = (max: number) => z.string().max(max, WORLD_ISSUE.tooLong)
 const list = z.array(z.string()).max(50, WORLD_ISSUE.tooLong)
 
-/** Shared by every draft schema with a priority column (entity, lore). */
 export const prioritySchema = z
   .number({ error: WORLD_ISSUE.priorityRange })
   .int(WORLD_ISSUE.priorityRange)

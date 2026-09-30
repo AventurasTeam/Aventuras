@@ -186,7 +186,18 @@ convention, and the expectation that subsystems route through
   once built, then rethrown), `parent_chain_cap_hit`
   (error: a `parent_location_id` walk hit the depth cap, meaning a loop
   already exists in the stored chain), `story_lead_rejected` (warn: the lead
-  mutator refused, logged with its code)
+  mutator refused, logged with its code), `entity_delete_rejected` /
+  `lore_delete_rejected` / `thread_delete_rejected` /
+  `happening_delete_rejected` (warn: a confirmed delete refused —
+  in-flight, not-found, or (entity only) the lead or a tail race; the
+  tail race (`tail moved`) is logged from
+  `lib/actions/row-delete/delete-entity.ts`, every other refusal from
+  `delete-row.ts`; an entity's store-miss not-found (`delete-entity.ts`,
+  `target == null`) returns before this log fires, so it covers
+  not-found only on the handler path) /
+  `entity_delete_failed` / `lore_delete_failed` / `thread_delete_failed` /
+  `happening_delete_failed` (error: the delete's delta group threw) —
+  `lib/actions/row-delete/delete-row.ts`
 - `classifier.*` — `delta_clamped`, `schema_repair`, `empty_output`,
   `failure_record_retried` (warn: the first attempt to record a failed
   pass threw, and the hook tried once more)
@@ -236,7 +247,12 @@ convention, and the expectation that subsystems route through
   (`components/world/use-lore-row-session.ts` — the lore pane's
   twin), `world_set_lead_failed` (`app/world/[branchId].tsx`
   — a `⋯ → Set as lead` whose `setStoryLead` threw rather than
-  refused), `plot_link_revalidate_failed`
+  refused), `world_delete_failed` (`components/world/use-world-delete.ts`
+  — a confirmed `⋯ → Delete entity` / `Delete` whose `deleteEntityRow` /
+  `deleteRow` threw rather than refused), `plot_delete_failed`
+  (`components/plot/use-plot-delete.ts` — its Plot twin, a confirmed
+  `⋯ → Delete thread` / `Delete happening` whose `deleteRow` threw
+  rather than refused), `plot_link_revalidate_failed`
   (`components/plot/link-card.tsx` — the revalidation after a link row's
   removal rejected, leaving a stale duplicate error blocking Save) and
   its World twins `world_relationships_revalidate_failed`

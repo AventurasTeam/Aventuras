@@ -1,4 +1,8 @@
-import type { OverflowMenuEntry } from '@/components/compounds/overflow-menu'
+import {
+  deleteEntry,
+  type OverflowMenuEntry,
+  type RemoveEntry,
+} from '@/components/compounds/overflow-menu-entry'
 import type { SelectOption } from '@/components/ui/select'
 import { PLOT_REJECTION } from '@/lib/actions'
 import { t } from '@/lib/i18n'
@@ -83,7 +87,11 @@ export function happeningIssueText(message: string): string {
     : t('plot:validation.inTab', { tab: happeningFieldLabel(tab), issue: text })
 }
 
-export function plotMenuEntries(kind: PlotKind, onViewJson: () => void): OverflowMenuEntry[] {
+export function plotMenuEntries(
+  kind: PlotKind,
+  onViewJson: () => void,
+  remove?: RemoveEntry,
+): OverflowMenuEntry[] {
   return [
     {
       key: 'export',
@@ -96,17 +104,12 @@ export function plotMenuEntries(kind: PlotKind, onViewJson: () => void): Overflo
       onPress: () => {},
     },
     { key: 'json', label: t('plot:detail.menu.viewJson'), onPress: onViewJson },
-    {
-      key: 'delete',
-      label:
-        kind === 'thread'
-          ? t('plot:detail.menu.deleteThread')
-          : t('plot:detail.menu.deleteHappening'),
-      destructive: true,
-      disabled: true,
-      disabledReason: t('plot:detail.menu.deleteReason'),
-      onPress: () => {},
-    },
+    ...deleteEntry(
+      kind === 'thread'
+        ? t('plot:detail.menu.deleteThread')
+        : t('plot:detail.menu.deleteHappening'),
+      remove,
+    ),
   ]
 }
 

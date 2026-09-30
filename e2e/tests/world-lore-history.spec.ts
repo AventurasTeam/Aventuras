@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { currentBranchId, queryApp } from '../harness/db'
+import { currentBranchId, queryApp, seedVectors, vecCounts } from '../harness/db'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { suppressNativeUnloadDialogRace } from '../harness/reload'
@@ -63,5 +63,56 @@ test.describe.serial('World lore', () => {
     expect(
       await queryApp(page, `SELECT op, source, target_table FROM deltas WHERE target_id = ?`, [id]),
     ).toEqual([['create', 'user_edit', 'lore']])
+  })
+
+  test('Delete removes the lore row with its translations and vectors', async () => {
+    const page = app.window
+    const branchId = await currentBranchId(page, HERO_STORY)
+    const [[loreId]] = await queryApp(
+      page,
+      `SELECT id FROM lore WHERE branch_id = ? AND title = ?`,
+      [branchId, 'The Drowned Bell'],
+    )
+    const id = loreId as string
+    await seedVectors(page, 'lore', branchId, id)
+    await queryApp(
+      page,
+      `INSERT INTO translations (id, branch_id, target_kind, target_id, field, language, translated_text, created_at, updated_at)
+       VALUES (?, ?, 'lore', ?, 'body', 'es', 'Una campana bajo el puerto.', 1, 1)`,
+      ['e2e_translation_bell', branchId, id],
+    )
+    const footprint = async () => ({
+      lore: (
+        await queryApp(page, `SELECT id FROM lore WHERE branch_id = ? AND id = ?`, [branchId, id])
+      ).length,
+      translations: (
+        await queryApp(
+          page,
+          `SELECT id FROM translations WHERE branch_id = ? AND target_kind = 'lore' AND target_id = ?`,
+          [branchId, id],
+        )
+      ).length,
+      vectors: await vecCounts(page, 'lore', branchId, id),
+    })
+    expect(await footprint()).toEqual({ lore: 1, translations: 1, vectors: { 384: 1, 8: 1 } })
+
+    // The prior test's Save left this row open.
+    await world.moreActions(page).click()
+    await world.menuItem(page, 'deleteLore').click()
+    await world.deleteConfirm(page, 'lore').click()
+
+    await expect
+      .poll(footprint, { timeout: 15_000 })
+      .toEqual({ lore: 0, translations: 0, vectors: { 384: 0, 8: 0 } })
+    expect(
+      await queryApp(
+        page,
+        `SELECT op, source, target_table FROM deltas WHERE target_id = ? ORDER BY log_position`,
+        [id],
+      ),
+    ).toEqual([
+      ['create', 'user_edit', 'lore'],
+      ['delete', 'user_edit', 'lore'],
+    ])
   })
 })

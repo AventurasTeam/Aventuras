@@ -61,13 +61,14 @@ export const world = {
 
   detailName: (page: Page): Locator => page.getByTestId('world-detail-name'),
 
-  // The detail pane's recently-classified badge (world-detail-placeholder.tsx)
+  // The detail pane's recently-classified badge (entity-detail-frame.tsx, lore-detail-pane.tsx)
   // — a plain Tag, no role of its own.
   recentlyClassifiedBadge: (page: Page): Locator =>
     page.getByText(t('world:detail.recentlyClassified'), { exact: true }),
 
   // ImporterMenu options (importer-menu.tsx). A disabled option's accessible name resolves to its
-  // reason, and Blank is enabled only on entity categories — assert the visible label text instead.
+  // reason, and From JSON / From vault are always disabled, Blank while an edit is blocked
+  // (world-add-options.ts) — assert the visible label text instead.
   addMenuOption: (page: Page, key: 'blank' | 'fromJson' | 'fromVault'): Locator =>
     page.getByText(t(`world:addMenu.${key}`), { exact: true }),
 
@@ -95,7 +96,7 @@ export const world = {
 
   moreActions: (page: Page): Locator =>
     page.getByRole('button', { name: t('world:detail.menu.label'), exact: true }),
-  menuItem: (page: Page, key: 'setLead' | 'viewJson'): Locator =>
+  menuItem: (page: Page, key: 'setLead' | 'viewJson' | 'deleteLore'): Locator =>
     page.getByRole('menuitem', { name: t(`world:detail.menu.${key}`), exact: true }),
 
   // The list row's lead Tag (entity-row.tsx meta slot).
@@ -110,4 +111,16 @@ export const world = {
 
   // Rows share one role and similar labels; the testID anchors counting them (testing.md → Selector strategy, Tier 3).
   historyRows: (page: Page): Locator => page.getByTestId('delta-log-row'),
+
+  // The ⋯ entry; a disabled one's accessible name carries its reason (common:disabledWithReason).
+  deleteEntityItem: (page: Page): Locator =>
+    page.getByRole('menuitem', { name: new RegExp(`^${t('world:detail.menu.deleteEntity')}`) }),
+  deleteDialog: (page: Page): Locator => page.getByRole('alertdialog'),
+  deleteConfirm: (
+    page: Page,
+    kind: 'character' | 'location' | 'item' | 'faction' | 'lore',
+  ): Locator =>
+    world
+      .deleteDialog(page)
+      .getByRole('button', { name: t(`world:delete.confirm.${kind}`), exact: true }),
 }

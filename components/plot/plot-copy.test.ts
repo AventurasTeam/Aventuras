@@ -5,6 +5,7 @@ import {
   iconFromOption,
   iconOptionValue,
   plotIconOptions,
+  plotMenuEntries,
   saveRejectionText,
 } from './plot-copy'
 
@@ -54,6 +55,34 @@ describe('saveRejectionText', () => {
     expect(saveRejectionText(undefined)).toBe(
       "Couldn't save your changes. They're still here — try again.",
     )
+  })
+})
+
+describe('plotMenuEntries', () => {
+  it('has no delete entry while there is no row yet', () => {
+    const entries = plotMenuEntries('thread', vi.fn())
+    expect(entries.find((e) => e.key === 'delete')).toBeUndefined()
+  })
+
+  it('disables the delete entry with the given reason', () => {
+    const entries = plotMenuEntries('happening', vi.fn(), {
+      onDelete: vi.fn(),
+      disabledReason: 'Generation is in flight. Cancel to edit.',
+    })
+    const remove = entries.find((e) => e.key === 'delete')
+    expect(remove?.label).toBe('Delete happening')
+    expect(remove?.disabled).toBe(true)
+    expect(remove?.disabledReason).toBe('Generation is in flight. Cancel to edit.')
+  })
+
+  it('enables the delete entry and calls onDelete otherwise', () => {
+    const onDelete = vi.fn()
+    const entries = plotMenuEntries('thread', vi.fn(), { onDelete })
+    const remove = entries.find((e) => e.key === 'delete')
+    expect(remove?.label).toBe('Delete thread')
+    expect(remove?.disabled).toBe(false)
+    remove?.onPress()
+    expect(onDelete).toHaveBeenCalledTimes(1)
   })
 })
 

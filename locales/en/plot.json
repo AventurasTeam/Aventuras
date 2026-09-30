@@ -87,8 +87,7 @@
       "exportReason": "Lands in Slice 4.6",
       "viewJson": "View raw JSON",
       "deleteThread": "Delete thread",
-      "deleteHappening": "Delete happening",
-      "deleteReason": "Lands in Slice 4.2b"
+      "deleteHappening": "Delete happening"
     }
   },
   "fields": {
@@ -169,5 +168,18 @@
     "saved": "Saved.",
     "failed": "Couldn't save your changes. They're still here — try again.",
     "inFlight": "Couldn't save while generation is in flight. Your changes are still here."
+  },
+  "delete": {
+    "threadTitle": "Delete {{name}}?",
+    "happeningTitle": "Delete {{name}}?",
+    "involvements_one": "{{count}} involvement",
+    "involvements_other": "{{count}} involvements",
+    "awareness_one": "{{count}} awareness record",
+    "awareness_other": "{{count}} awareness records",
+    "confirmThread": "Delete thread",
+    "confirmHappening": "Delete happening",
+    "done": "Deleted {{name}}.",
+    "failed": "Couldn't delete that.",
+    "inFlight": "Couldn't delete while generation is in flight."
   }
 }

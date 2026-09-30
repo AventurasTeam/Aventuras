@@ -1,10 +1,11 @@
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View } from 'react-native'
 
 import type { ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { Breadcrumb, type BreadcrumbSegment } from '@/components/compounds/breadcrumb'
+import { DeleteConfirmDialog } from '@/components/compounds/delete-confirm-dialog'
 import { ImporterMenu } from '@/components/compounds/importer-menu'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { HappeningDetailPane } from '@/components/plot/happening-detail-pane'
@@ -21,6 +22,7 @@ import {
   type PlotSelection,
 } from '@/components/plot/plot-selection'
 import { ThreadDetailPane } from '@/components/plot/thread-detail-pane'
+import { usePlotDelete } from '@/components/plot/use-plot-delete'
 import { usePlotSelection } from '@/components/plot/use-plot-selection'
 import { MasterDetailLayout } from '@/components/shells/master-detail-layout'
 import { ScreenShell } from '@/components/shells/screen-shell'
@@ -149,6 +151,12 @@ export default function PlotRoute() {
   const openRegionPct = useOpenRegionTokens(storyId)
 
   const { onSession, guard, navigateGuarded } = useRowSessionGuard()
+  const plotDelete = usePlotDelete(branchId, ctx, guard)
+  const cancelDelete = plotDelete.cancel
+  // A pending confirm's counts go stale off-screen (another surface can delete/rename the row).
+  useEffect(() => {
+    if (!focused) cancelDelete()
+  }, [focused, cancelDelete])
 
   const switchKind = useCallback(
     (next: PlotKind) => {
@@ -329,6 +337,7 @@ export default function PlotRoute() {
         onRejected={onRejected}
         onSession={onSession}
         onOpenEntity={openEntity}
+        onDelete={(row) => plotDelete.request({ kind: 'happening', row })}
         hotkeysEnabled={focused}
       />
     ) : (
@@ -358,6 +367,7 @@ export default function PlotRoute() {
         onSaved={onSaved}
         onRejected={onRejected}
         onSession={onSession}
+        onDelete={(row) => plotDelete.request({ kind: 'thread', row })}
         hotkeysEnabled={focused}
       />
     )
@@ -448,6 +458,16 @@ export default function PlotRoute() {
           />
         </KeyboardInsetColumn>
       )}
+      {plotDelete.copy != null ? (
+        <DeleteConfirmDialog
+          open={focused}
+          onOpenChange={(next) => {
+            if (!next) plotDelete.cancel()
+          }}
+          {...plotDelete.copy}
+          onConfirm={plotDelete.confirm}
+        />
+      ) : null}
     </ScreenShell>
   )
 }

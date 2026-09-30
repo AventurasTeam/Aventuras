@@ -5,6 +5,7 @@ import { View } from 'react-native'
 
 import { DetailTabs } from '@/components/compounds/detail-tabs'
 import { FormRow } from '@/components/compounds/form-row'
+import { gateDisabledReason } from '@/components/compounds/generation-gate-copy'
 import { JSONViewer } from '@/components/compounds/json-viewer'
 import { OverflowMenu } from '@/components/compounds/overflow-menu'
 import { RowLeaveDialog, RowSaveBar } from '@/components/compounds/row-save-session-chrome'
@@ -65,6 +66,8 @@ export type ThreadDetailPaneProps = {
   onRejected?: (reason: string) => void
   /** The surface routes row switches, `←`, segment switches and GO TO through this. */
   onSession: (handle: RowSessionHandle | null) => void
+  /** `⋯ → Delete thread`; the surface raises the confirm. */
+  onDelete: (row: Thread) => void
   /** The host screen's focus state, for the save bar's Cmd/Ctrl-S. */
   hotkeysEnabled?: boolean
 }
@@ -83,6 +86,7 @@ export function ThreadDetailPane({
   onSaved,
   onRejected,
   onSession,
+  onDelete,
   hotkeysEnabled = true,
 }: ThreadDetailPaneProps) {
   const values = useMemo(() => threadDraftFrom(row), [row])
@@ -133,7 +137,16 @@ export function ThreadDetailPane({
           overflowMenu={
             <OverflowMenu
               label={t('plot:detail.menu.label')}
-              entries={plotMenuEntries('thread', () => setJsonOpen(true))}
+              entries={plotMenuEntries(
+                'thread',
+                () => setJsonOpen(true),
+                row == null
+                  ? undefined
+                  : {
+                      onDelete: () => onDelete(row),
+                      disabledReason: gateDisabledReason(blocked, blockedReason),
+                    },
+              )}
               disabled={row == null}
             />
           }

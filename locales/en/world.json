@@ -116,12 +116,38 @@
       "exportReason": "Lands in Slice 4.6",
       "viewJson": "View raw JSON",
       "deleteEntity": "Delete entity",
-      "deleteReason": "Lands in Slice 4.2b"
+      "deleteLore": "Delete"
     },
     "overviewAfterSave": "Save to see the overview",
     "overviewAfterSaveBody": "The glance card reads the saved entity.",
     "assetsPlaceholder": "Assets land with the asset gallery pass",
     "assetsPlaceholderBody": "Portraits and attachments for entities aren't stored yet."
+  },
+  "delete": {
+    "entityTitle": "Delete {{name}}?",
+    "loreTitle": "Delete {{name}}?",
+    "awareness_one": "{{count}} awareness record",
+    "awareness_other": "{{count}} awareness records",
+    "involvements_one": "{{count}} happening involvement",
+    "involvements_other": "{{count}} happening involvements",
+    "relationships_one": "{{count}} relationship",
+    "relationships_other": "{{count}} relationships",
+    "references_one": "{{count}} other entity loses its link to it",
+    "references_other": "{{count}} other entities lose their link to it",
+    "unplacedItems_one": "{{count}} item will have no position",
+    "unplacedItems_other": "{{count}} items will have no position",
+    "tailScene": "Removed from the current scene",
+    "confirm": {
+      "character": "Delete character",
+      "location": "Delete location",
+      "item": "Delete item",
+      "faction": "Delete faction",
+      "lore": "Delete lore"
+    },
+    "done": "Deleted {{name}}.",
+    "failed": "Couldn't delete that.",
+    "inFlight": "Couldn't delete while generation is in flight.",
+    "leadReason": "The story's lead can't be deleted — set another character as lead first."
   },
   "fields": {
     "name": "Name",

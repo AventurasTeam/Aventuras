@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
+import { FIRST_LOGGED_AT } from '@/lib/actions/delta/user-precedence'
 import { branches, deltas, stories, type DbCtx, type NewDelta } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
+import { humanizeDelta } from './humanize'
 import { loadHistoryChunk, type HistoryQuery } from './query'
 
 let db: DbCtx['db']
@@ -100,9 +102,13 @@ describe('loadHistoryChunk', () => {
     expect(await positions({ search: 'state.voice' })).toEqual([5])
   })
 
-  it('matches free text and label paths', async () => {
+  it('matches free text', async () => {
     expect(await positions({ search: 'traits' })).toEqual([4, 2])
-    expect(await positions({ search: 'zzz', labelPaths: ['state.drives'] })).toEqual([3])
+  })
+
+  it('resolves a typed field label to the paths it names, though the payload never spells it', async () => {
+    await db.insert(deltas).values(delta(8, 'update', { state: { stackables: { arrows: 3 } } }))
+    expect(await positions({ search: 'quantities' })).toEqual([8])
   })
 
   it('filters by op, and matches an op typed into search, never a delete row echoing it', async () => {
@@ -113,6 +119,46 @@ describe('loadHistoryChunk', () => {
   it('matches a translated op / filter-chip / summary label typed into search', async () => {
     expect(await positions({ search: 'Created' })).toEqual([1])
     expect(await positions({ search: 'modified' })).toEqual([5, 4, 3, 2])
+  })
+
+  it('matches a whole update summary typed into search, narrowed to updates', async () => {
+    await db
+      .insert(deltas)
+      .values(delta(9, 'update', { state: { traits: ['calm'], drives: ['vengeance'] } }))
+    expect(await positions({ search: 'Modified Traits' })).toEqual([9, 2])
+    expect(await positions({ search: 'modified traits, drives' })).toEqual([9])
+    expect(await positions({ search: 'Traits' })).toEqual([9, 4, 2])
+  })
+
+  it('matches a typed summary on the field paths it names only, never on payload values', async () => {
+    await db
+      .insert(deltas)
+      .values([
+        delta(9, 'update', { state: { traits: ['calm'], drives: ['vengeance'] } }),
+        delta(10, 'update', { description: 'Traits and Drives' }),
+      ])
+    expect(await positions({ search: 'Modified Traits, Drives' })).toEqual([9])
+    expect(await positions({ search: 'Modified Traits, No such field' })).toEqual([])
+  })
+
+  it('finds every row by the summary it renders', async () => {
+    await db
+      .insert(deltas)
+      .values(delta(9, 'update', { state: { traits: ['calm'], drives: ['vengeance'] } }))
+    const { rows } = await loadHistoryChunk(db, base)
+    const context = {
+      targetTable: base.targetTable,
+      targetName: 'Kael',
+      entryLabel: () => null,
+      nowMs: 0,
+    }
+    for (const row of rows) {
+      const { summary } = humanizeDelta(row, context)
+      expect({ summary, found: await positions({ search: summary }) }).toEqual({
+        summary,
+        found: expect.arrayContaining([row.logPosition]),
+      })
+    }
   })
 
   it('pages by log position in either sort, and reports the end', async () => {
@@ -172,5 +218,28 @@ describe('LIKE escaping', () => {
         delta(23, 'update', { description: 'fileXname here' }),
       ])
     expect(await positions({ search: 'file_name' })).toEqual([22])
+  })
+
+  it('matches text the payload stores JSON-escaped, and a bare quote only where a value holds one', async () => {
+    await db
+      .insert(deltas)
+      .values([
+        delta(24, 'update', { description: 'she said "hi"' }),
+        delta(25, 'update', { description: 'C:\\maps\\north' }),
+      ])
+    expect(await positions({ search: '"hi"' })).toEqual([24])
+    expect(await positions({ search: '"' })).toEqual([24])
+    expect(await positions({ search: 'C:\\maps' })).toEqual([25])
+  })
+})
+
+describe('payload meta keys', () => {
+  it('never matches a meta key or its value, only the columns beside it', async () => {
+    await db
+      .insert(deltas)
+      .values(delta(30, 'update', { description: 'moonlit', [FIRST_LOGGED_AT]: 987654 }))
+    expect(await positions({ search: 'logged' })).toEqual([])
+    expect(await positions({ search: '987654' })).toEqual([])
+    expect(await positions({ search: 'moonlit' })).toEqual([30])
   })
 })

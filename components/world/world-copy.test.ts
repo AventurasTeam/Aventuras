@@ -186,33 +186,58 @@ describe('leadRejectionText', () => {
 })
 
 describe('overflow menu', () => {
-  it('offers Set as lead only on characters, with export and delete disabled with reasons', () => {
+  it('offers Set as lead only on characters, with export disabled and delete enabled calling onDelete', () => {
+    const onDelete = vi.fn()
     const character = entityMenuEntries('character', {
       onViewJson: () => {},
       lead: { onSetLead: () => {} },
+      remove: { onDelete },
     })
     expect(character.map((e) => [e.key, e.disabled ?? false, e.disabledReason])).toEqual([
       ['lead', false, undefined],
       ['export', true, 'Lands in Slice 4.6'],
       ['json', false, undefined],
-      ['delete', true, 'Lands in Slice 4.2b'],
+      ['delete', false, undefined],
     ])
+    character.find((e) => e.key === 'delete')?.onPress?.()
+    expect(onDelete).toHaveBeenCalledTimes(1)
     expect(
-      entityMenuEntries('location', { onViewJson: () => {}, lead: { onSetLead: () => {} } }).map(
-        (e) => e.key,
-      ),
+      entityMenuEntries('location', {
+        onViewJson: () => {},
+        lead: { onSetLead: () => {} },
+        remove: { onDelete: () => {} },
+      }).map((e) => e.key),
     ).toEqual(['export', 'json', 'delete'])
+    expect(entityMenuEntries('character', { onViewJson: () => {} }).map((e) => e.key)).toEqual([
+      'export',
+      'json',
+    ])
   })
 
-  it('offers lore no Set as lead: export disabled with its reason, and View raw JSON', () => {
+  it('disables delete with its reason when the row is the lead', () => {
+    const entries = entityMenuEntries('character', {
+      onViewJson: () => {},
+      remove: { onDelete: () => {}, disabledReason: "The story's lead can't be deleted" },
+    })
+    const remove = entries.find((e) => e.key === 'delete')
+    expect(remove?.disabled).toBe(true)
+    expect(remove?.disabledReason).toBe("The story's lead can't be deleted")
+  })
+
+  it('offers lore no Set as lead: export disabled with its reason, View raw JSON, and Delete', () => {
     const onViewJson = vi.fn()
-    const entries = loreMenuEntries({ onViewJson })
+    const onDelete = vi.fn()
+    const entries = loreMenuEntries({ onViewJson, remove: { onDelete } })
     expect(entries.map((e) => [e.key, e.label, e.disabled ?? false, e.disabledReason])).toEqual([
       ['export', 'Export lore as JSON', true, 'Lands in Slice 4.6'],
       ['json', 'View raw JSON', false, undefined],
+      ['delete', 'Delete', false, undefined],
     ])
     entries.find((e) => e.key === 'json')?.onPress?.()
     expect(onViewJson).toHaveBeenCalledTimes(1)
+    entries.find((e) => e.key === 'delete')?.onPress?.()
+    expect(onDelete).toHaveBeenCalledTimes(1)
+    expect(loreMenuEntries({ onViewJson: () => {} }).map((e) => e.key)).toEqual(['export', 'json'])
   })
 
   it('disables the lead entry with its reason, and omits it for non-characters', () => {

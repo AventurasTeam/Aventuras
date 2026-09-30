@@ -16,6 +16,7 @@ import { t } from '@/lib/i18n'
 import type { RecentlyClassified } from '@/lib/row-signals'
 import type { EntityBaseDraft } from '@/lib/world'
 
+import { deleteDisabledReason } from '../delete-copy'
 import { entityMenuEntries } from '../world-copy'
 import { entityTabs, type EntityTab } from './entity-tabs'
 
@@ -64,6 +65,9 @@ type EntityDetailFrameProps<Draft extends EntityBaseDraft> = {
   recentlyClassified?: RecentlyClassified
   /** Characters only; absent in create mode. */
   lead?: { onSetLead: () => void; disabledReason?: string }
+  leadId: string | null
+  /** `⋯ → Delete entity`; the frame computes the entry's disabled reason from `row`/`leadId`. */
+  onDelete: (row: Entity) => void
   blocked: boolean
   blockedReason?: string
   hotkeysEnabled: boolean
@@ -82,6 +86,8 @@ export function EntityDetailFrame<Draft extends EntityBaseDraft>({
   tabCounts,
   recentlyClassified,
   lead,
+  leadId,
+  onDelete,
   blocked,
   blockedReason,
   hotkeysEnabled,
@@ -94,6 +100,13 @@ export function EntityDetailFrame<Draft extends EntityBaseDraft>({
     setJsonRowId(rowId)
     setJsonOpen(false)
   }
+  const remove =
+    row == null
+      ? undefined
+      : {
+          onDelete: () => onDelete(row),
+          disabledReason: deleteDisabledReason(row, leadId, blocked, blockedReason),
+        }
   const baseControl = asBaseControl(session.form.control)
   const changeTab = (value: string) => onTabChange(value as EntityTab)
   return (
@@ -127,7 +140,11 @@ export function EntityDetailFrame<Draft extends EntityBaseDraft>({
           overflowMenu={
             <OverflowMenu
               label={t('world:detail.menu.label')}
-              entries={entityMenuEntries(kind, { onViewJson: () => setJsonOpen(true), lead })}
+              entries={entityMenuEntries(kind, {
+                onViewJson: () => setJsonOpen(true),
+                lead,
+                remove,
+              })}
               disabled={row == null}
             />
           }

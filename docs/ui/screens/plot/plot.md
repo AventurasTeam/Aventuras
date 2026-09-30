@@ -201,10 +201,10 @@ per the
   `source` (free-form text descriptor). Add / remove rows.
 - **History** — delta log filtered to this happening. Involvement
   and awareness edits are their link rows' deltas, not the
-  happening's, so they don't show here — a links-only Save shows
+  happening's, so they don't show here yet — a links-only Save shows
   nothing new in History. See
-  [World — History tab](../world/world.md#history-tab) and the
-  [parked fix](../../../parked.md#history-shows-link-row-edits).
+  [World — History tab](../world/world.md#history-tab) and the fix
+  [scheduled for Slice 4.2c](../../../implementation/milestones/04-world-plot-read-surfaces/slices/02c-collision-review.md#scope-in).
 
 ### Entry-ref picker
 
@@ -327,8 +327,10 @@ minus `Set as lead` (threads and happenings have no lead concept):
 - `View raw JSON` — live; a happening's viewer merges its
   involvements and awareness rows, per
   [Detail pane — raw JSON viewer](#detail-pane--raw-json-viewer) above.
-- `Delete thread` / `Delete happening` — disabled, reason "Lands in
-  Slice 4.2b".
+- `Delete thread` / `Delete happening` — a confirm naming a
+  happening's involvement and awareness counts, then the row and its
+  cascade under one `action_id`
+  ([`world.md → Delete`](../world/world.md#delete)).
 
 ## Save session
 

@@ -7,6 +7,7 @@ import { View } from 'react-native'
 import { DetailTabs } from '@/components/compounds/detail-tabs'
 import { EntryRefPicker } from '@/components/compounds/entry-ref-picker'
 import { FormRow } from '@/components/compounds/form-row'
+import { gateDisabledReason } from '@/components/compounds/generation-gate-copy'
 import { JSONViewer } from '@/components/compounds/json-viewer'
 import { OverflowMenu } from '@/components/compounds/overflow-menu'
 import { RowLeaveDialog, RowSaveBar } from '@/components/compounds/row-save-session-chrome'
@@ -101,6 +102,8 @@ export type HappeningDetailPaneProps = {
   onSession: (handle: RowSessionHandle | null) => void
   /** A link row's `Open in World`; the route navigates through the session's leave guard. */
   onOpenEntity: (entity: Entity) => void
+  /** `⋯ → Delete happening`; the surface raises the confirm. */
+  onDelete: (row: Happening) => void
   /** The host screen's focus state, for the save bar's Cmd/Ctrl-S. */
   hotkeysEnabled?: boolean
 }
@@ -122,6 +125,7 @@ export function HappeningDetailPane({
   onRejected,
   onSession,
   onOpenEntity,
+  onDelete,
   hotkeysEnabled = true,
 }: HappeningDetailPaneProps) {
   const values = useMemo(() => happeningDraftFrom(row, links), [row, links])
@@ -181,7 +185,16 @@ export function HappeningDetailPane({
           overflowMenu={
             <OverflowMenu
               label={t('plot:detail.menu.label')}
-              entries={plotMenuEntries('happening', () => setJsonOpen(true))}
+              entries={plotMenuEntries(
+                'happening',
+                () => setJsonOpen(true),
+                row == null
+                  ? undefined
+                  : {
+                      onDelete: () => onDelete(row),
+                      disabledReason: gateDisabledReason(blocked, blockedReason),
+                    },
+              )}
               disabled={row == null}
             />
           }

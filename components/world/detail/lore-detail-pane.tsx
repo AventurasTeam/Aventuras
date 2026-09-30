@@ -1,11 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useCallback, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Controller, type Control } from 'react-hook-form'
 import { View } from 'react-native'
 
 import { DetailTabs } from '@/components/compounds/detail-tabs'
 import { EmbedWindowTextarea } from '@/components/compounds/embed-window-textarea'
 import { FormRow } from '@/components/compounds/form-row'
+import { gateDisabledReason } from '@/components/compounds/generation-gate-copy'
 import { JSONViewer } from '@/components/compounds/json-viewer'
 import { NumberInput } from '@/components/compounds/number-input'
 import { OverflowMenu } from '@/components/compounds/overflow-menu'
@@ -33,13 +34,6 @@ const resolver = zodResolver(loreDraftSchema)
 
 export const LORE_TABS = ['body', 'settings', 'history'] as const
 export type LoreTab = (typeof LORE_TABS)[number]
-
-// The Autocomplete canonicalizes only a committed pick; a variant typed and left must match too,
-// or the branch lists `Cosmology` beside `cosmology`.
-function canonicalCategory(category: string, categories: readonly string[]): string {
-  const typed = category.trim().toLowerCase()
-  return categories.find((c) => c.toLowerCase() === typed) ?? category
-}
 
 /** A new `[+] Blank` (create `seq`) lands on Body, whichever tab the previous row was on. */
 function useLoreTab(createSeq: number | undefined) {
@@ -71,6 +65,8 @@ export type LoreDetailPaneProps = {
   onSaved: (id: string) => void
   /** A save failed, with its translated reason — the bar's notice has no visible text. */
   onRejected?: (reason: string) => void
+  /** `⋯ → Delete`; the surface raises the confirm. */
+  onDelete: (row: Lore) => void
   /** The surface routes row switches, `←`, category switches and GO TO through this. */
   onSession: (handle: RowSessionHandle | null) => void
   /** The host screen's focus state, for the save bar's Cmd/Ctrl-S. */
@@ -89,21 +85,17 @@ export function LoreDetailPane({
   onSave,
   onSaved,
   onRejected,
+  onDelete,
   onSession,
   hotkeysEnabled = true,
 }: LoreDetailPaneProps) {
   const values = useMemo(() => loreDraftFrom(row), [row])
-  const save = useCallback(
-    (draft: LoreDraft) =>
-      onSave({ ...draft, category: canonicalCategory(draft.category, categories) }),
-    [onSave, categories],
-  )
   const session = useLoreRowSession({
     rowId: row?.id ?? null,
     createSeq,
     values,
     resolver,
-    onSave: save,
+    onSave,
     onSaved,
     onRejected,
     onSession,
@@ -151,7 +143,16 @@ export function LoreDetailPane({
           overflowMenu={
             <OverflowMenu
               label={t('world:detail.menu.label')}
-              entries={loreMenuEntries({ onViewJson: () => setJsonOpen(true) })}
+              entries={loreMenuEntries({
+                onViewJson: () => setJsonOpen(true),
+                remove:
+                  row == null
+                    ? undefined
+                    : {
+                        onDelete: () => onDelete(row),
+                        disabledReason: gateDisabledReason(blocked, blockedReason),
+                      },
+              })}
               disabled={row == null}
             />
           }
@@ -216,7 +217,7 @@ function LoreBody({
               value={field.value}
               onValueChange={field.onChange}
               sourceList={categories}
-              casingNormalization="canonical"
+              casingNormalization="as-typed"
               createTailLabel={(value) => t('world:lore.fields.categoryTail', { value })}
               label={t('world:lore.fields.category')}
               placeholder={t('world:lore.fields.categoryPlaceholder')}

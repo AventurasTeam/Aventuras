@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { wrapComposerText } from './index'
+import { wrapComposerText, wrapHasSubject } from './index'
 
 describe('wrapComposerText', () => {
   it('wraps Do in first person verbatim', () => {
@@ -57,5 +57,37 @@ describe('wrapComposerText', () => {
     expect(
       wrapComposerText('reach for the blade.', { mode: 'do', pov: 'first', leadName: 'Aria' }),
     ).toBe('I reach for the blade.')
+  })
+
+  it('returns the raw text verbatim for a non-first wrap with no resolved lead', () => {
+    expect(wrapComposerText('  draw my blade', { mode: 'do', pov: 'third', leadName: null })).toBe(
+      '  draw my blade',
+    )
+  })
+
+  it('returns the raw text verbatim for Say with no resolved lead', () => {
+    expect(wrapComposerText("who's asking?", { mode: 'say', pov: 'third', leadName: null })).toBe(
+      "who's asking?",
+    )
+  })
+
+  it('wraps in first person with a null lead without throwing', () => {
+    expect(
+      wrapComposerText('reach for the blade', { mode: 'do', pov: 'first', leadName: null }),
+    ).toBe('I reach for the blade.')
+  })
+})
+
+describe('wrapHasSubject', () => {
+  it('is true in first person regardless of the lead', () => {
+    expect(wrapHasSubject('first', null)).toBe(true)
+  })
+
+  it('is true in third person once the lead resolves', () => {
+    expect(wrapHasSubject('third', 'Aria')).toBe(true)
+  })
+
+  it('is false in third person with no resolved lead', () => {
+    expect(wrapHasSubject('third', null)).toBe(false)
   })
 })

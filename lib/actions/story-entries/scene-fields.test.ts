@@ -1,7 +1,12 @@
 import { and, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { undoLastAction, updateEntrySceneFields, writeSystemEntry } from '@/lib/actions'
+import {
+  deleteEntityRow,
+  undoLastAction,
+  updateEntrySceneFields,
+  writeSystemEntry,
+} from '@/lib/actions'
 import {
   branches,
   deltas,
@@ -189,6 +194,23 @@ describe('updateEntrySceneFields', () => {
       entryId: 'e1',
       locationId: LOC_A,
     })
+  })
+
+  // A delete clears the location from the tail only; the previous entry still names it,
+  // and it is the previous entry that anchors a removed character's lastSeenAt.
+  it('does not restore a deleted location to a character the edit removed', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+
+    expect(await deleteEntityRow('b1', LOC_A, ctx)).toEqual({ status: 'ok' })
+    expect((await entityState(db, 'char_b')).current_location_id).toBeNull()
+
+    expect(await updateEntrySceneFields('b1', 'e2', { sceneEntities: [] }, ctx)).toEqual({
+      status: 'ok',
+    })
+    expect((await entityState(db, 'char_a')).current_location_id).toBeNull()
+    expect((await entityState(db, 'char_b')).current_location_id).toBeNull()
   })
 
   it('does not demote a character removed from the scene', async () => {

@@ -146,6 +146,9 @@ Sheet.
   deep link is selected but not revealed in the list (its tier stays
   collapsed, the list sits at the top) — call the list's `revealRow`
   once the story is hydrated.
+- **Read the lead through `resolveLead`** (4.2b): a reversal can leave
+  `leadEntityId` dangling, and the You badge / peek `Set as lead` must
+  treat it as absent.
 
 ## Implementation notes
 

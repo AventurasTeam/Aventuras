@@ -93,7 +93,8 @@ The overflow menu holds rare-but-important actions:
   [wizard.md → Status field](../wizard/wizard.md#status-field--active--staged))
 - **Export entity as JSON** (single-entity export)
 - **View raw JSON** (debug/dev affordance)
-- **Delete entity** (destructive; needs confirmation pass)
+- **Delete entity** (destructive; confirms — see [Delete](#delete);
+  disabled for the lead)
 
 Raw JSON lives here (not as a prominent link) because it's
 power-user/debug territory. One consistent pattern: ⋯ menus are where
@@ -439,6 +440,73 @@ The `⋯ → View raw JSON` action opens the shared
 [Raw JSON viewer](../../patterns/data.md#raw-json-viewer--shared-modal-pattern)
 drawer. No World-specific deviation.
 
+## Delete
+
+Shared spec for World (entity, lore) and Plot (thread, happening —
+[`plot.md → Detail-head overflow menu`](../plot/plot.md#detail-head-overflow-menu)).
+`⋯ → Delete entity` (or `Delete` on lore, `Delete thread` /
+`Delete happening` on Plot) routes through the pane's Save / Discard /
+Cancel guard first when the row is dirty, on both screens, then raises
+a confirm built from the row re-read by id. A resolved Save can rename
+or remove it. Its impact counts are a snapshot at that moment, not a
+live read — the arm re-reads the cascade at apply time regardless. A
+pending confirm is cancelled when the screen loses focus, on both
+screens.
+
+The confirm's description reads "You can undo this from the reader:
+Undo last action in its menu, or Cmd/Ctrl-Z," naming the reader's own
+undo label so the copy can't drift from the reader's menu — one shared
+string (`common:deleteUndoHint`) across every kind. What else it lists
+is per kind: an entity's awareness, involvement and relationship
+counts, other entities losing their link to it, items left unplaced,
+and "Removed from the current scene" when the tail scene names it; a
+happening's involvement and awareness counts; nothing beyond the title
+for lore or a thread. The CTA is per kind too — `Delete character`,
+`Delete location`, `Delete item`, `Delete faction`, `Delete lore`,
+`Delete thread`, `Delete happening`.
+
+Confirming writes one delta group under one `action_id`, so CTRL-Z in
+the reader restores the row (marked `embedding_stale`, so it
+re-embeds at the next sync — vectors aren't delta-logged; see
+[Reversibility](#reversibility)), its link rows whose other end still
+exists (a separate reversal can have removed the far end first), and,
+for an entity, the refs it cleared and the tail scene. What each kind's
+cascade covers:
+
+- **An entity.**
+  - The row, its `happening_involvements`, `happening_awareness` and
+    `character_relationships` rows, its translations and those of the
+    relationships, and its vectors in every dim family.
+  - Every other entity's reference to it — `current_location_id`,
+    `parent_location_id`, `at_location_id`, `faction_id`,
+    `equipped_items[]`, `inventory[]` — cleared in one `state` patch
+    per entity. Items at a deleted location, or held by a deleted
+    character, are left unplaced (no position is invented).
+  - **The tail entry's scene.** The id leaves the tail's
+    `sceneEntities`, and a deleted location stops being its
+    `currentLocationId`, so the next turn doesn't inherit it. Earlier
+    entries keep the id and render it as an Unknown-entity chip
+    ([`entry-card.md → World-state panel`](../../patterns/entry-card.md#world-state-panel)).
+- **Lore.** The row, its translations and its vectors in every dim
+  family.
+- **A thread.** The row, its translations and its vectors in every
+  dim family.
+- **A happening.** The row, its `happening_involvements` and
+  `happening_awareness` rows, its translations, and its vectors in
+  every dim family.
+
+**The lead can't be deleted.** The action refuses it (`lead-entity`)
+and the overflow entry disables with a reason pointing at `Set as
+lead`. The reason isn't the definitional lead requirement — a
+creative third-person story, where a lead is optional, still can't
+delete one once set — it's that the lead is story-level, not
+per-branch or delta-logged
+([`data-model.md → Story settings shape`](../../../data-model.md#story-settings-shape)),
+and `setStoryLead` has no path to clear it back to null.
+
+A regenerate or rollback that reaches a turn before the delete brings
+the row back, like any World edit.
+
 ## Per-row import
 
 The list-pane carries the EntityListPane affordance — minimalist
@@ -478,8 +546,13 @@ prose, then hands pre-formatted strings to the compound.
   (word-start) or the raw enum; the field-path and free-text arms
   apply to `update` deltas only, since a delete's undo payload is the
   full row and would match every path. The free-text arm is a `LIKE`
-  over the raw `undo_payload` JSON, so it matches the value from
-  before the change, not the new one. A field path is tested via
+  over each `undo_payload` member's JSON text, skipping `$`-prefixed
+  meta members, with the term JSON-escaped the same way, so it
+  matches the value from before the change, not the new one. A whole
+  update summary typed as shown (`Modified Traits, Drives`) matches an
+  update when every field it names resolves, through the label
+  vocabulary or as a literal path, to a path in its undo payload —
+  field values never match a summary. A field path is tested via
   `json_type(undo_payload, '$.<path>') IS NOT NULL`, not
   `json_extract` (which misses a `null` pre-change value); a search
   term also resolves against the field-path label vocabulary, so
@@ -501,8 +574,8 @@ prose, then hands pre-formatted strings to the compound.
 - **Resets on row change** — search, op filter and sort return to
   their defaults when the tab is keyed to a new row.
 - **Reads the row's own deltas.** Relationship, awareness and
-  involvement edits are their link rows' deltas and don't show here
-  ([parked](../../../parked.md#history-shows-link-row-edits)).
+  involvement edits are their link rows' deltas and don't show here yet
+  ([Slice 4.2c](../../../implementation/milestones/04-world-plot-read-surfaces/slices/02c-collision-review.md#scope-in)).
 - **Rows aren't pressable.** `entry #n` is meta text; see
   [DeltaLogRow → Click behavior](../../patterns/delta-log-row.md#click-behavior).
 
@@ -558,7 +631,7 @@ Mirrors the [entity detail head pattern](#detail-head-structure):
   [`data-model.md → Chapters / memory system`](../../../data-model.md#chapters--memory-system));
   the same accent rule applies.
 - **Overflow menu (⋯)**: `Export lore as JSON`, `View raw JSON`,
-  `Delete`. **No `Set as lead`** — lead is a character-only concept
+  [`Delete`](#delete). **No `Set as lead`** — lead is a character-only concept
   per [`principles → Mode, lead, and narration`](../../principles.md#mode-lead-and-narration--three-orthogonal-concepts).
 
 ### Body tab — lore
@@ -570,10 +643,8 @@ Two fields, no sub-sections.
   illustrative, not enumerated). On focus, a popover surfaces
   existing categories from this branch's lore as autocomplete
   suggestions, keeping casual taxonomy consistent without forcing
-  an enum. A typed case-variant of an existing category (e.g.
-  `Cosmology` where the branch already has `cosmology`) saves in
-  the branch's existing casing even when it isn't picked from the
-  suggestions. Empty = `— uncategorized —` placeholder.
+  an enum. A category saves exactly as typed or picked, casing
+  included. Empty = `— uncategorized —` placeholder.
 - **Body textarea** — fills the remaining vertical space. Plain
   text per the schema; no markdown rendering or rich-text in v1.
   Standard textarea grow / scroll behavior. **Body is required**
@@ -916,6 +987,8 @@ Merge writes:
 - `entities` op=`update` on every other entity that held an
   inverse ref to non-canonical (state JSON paths rewritten).
 - `translations` op=`update` per affected row.
+- The loser is dropped from the tail scene, as the entity
+  [delete](#delete) arm does — not rewritten to the canonical.
 
 Embeddings are not delta-logged
 ([`data-model.md → embeddings`](../../../data-model.md#diagram)) —

@@ -55,7 +55,7 @@ type DeltaLogRowProps = {
     fieldPath: string | null // op=update: "state.traits[2]"; op=create/delete: null
     summary: string // pre-rendered diff prose, host-formatted
     entryId: string | null // null for non-entry-triggered events
-    createdAtRelative: string // pre-formatted "2h ago" / "12 Apr 14:33"
+    createdAtRelative: string // pre-formatted "2h ago" / "12 Apr, 14:33"
     actionId: string // included for future grouping cue; v1 renders flat
   }
   onPress?: () => void // host wires navigation
@@ -139,7 +139,17 @@ Muted foreground (`text-fg-muted text-xs`), middle-dot separators:
   when null. Plain meta text, not a link — see
   [Click behavior](#click-behavior). Host supplies the
   pre-formatted "entry #47" via the entry's position.
-- **Time** — `createdAtRelative` opaque.
+- **Time** — `createdAtRelative` opaque to the compound. The host
+  renders it relative under a week (`just now`, `5m ago`, `2h ago`,
+  `3d ago`), then as the date and time in the shape its locale string
+  sets — English is day-month on a 24-hour clock, `12 Apr, 14:33` —
+  adding the year outside the current year (`30 Dec 2025, 09:05`). A
+  date-time format setting independent of the UI language is
+  [routed to M7.1](../../implementation/roadmap.md#m7--app-settings--diagnostics--onboarding).
+  It is the wall-clock time the delta was logged; the row's place in
+  the story is its entry ref. The story card's last-opened
+  time follows the same rule
+  ([story-card.md → Compound API](./story-card.md#compound-api)).
 
 ## Click behavior
 

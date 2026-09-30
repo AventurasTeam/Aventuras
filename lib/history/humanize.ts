@@ -1,8 +1,8 @@
+import { isPayloadMetaKey } from '@/lib/actions'
 import type { Delta } from '@/lib/db'
-import { t } from '@/lib/i18n'
+import { relativeTimeLabel, t } from '@/lib/i18n'
 
-import { fieldPathLabel, type HistoryTable } from './field-labels'
-import { relativeTimeLabel } from './relative-time'
+import { fieldPathLabel, SUMMARY_FIELD_SEPARATOR, type HistoryTable } from './field-labels'
 
 /** DeltaLogRow's `delta` prop, pre-formatted (patterns/delta-log-row.md → Compound API). */
 export type HistoryRowView = {
@@ -34,11 +34,11 @@ function nestedPaths(prefix: string, value: Record<string, unknown>): string[] {
   })
 }
 
-/** The field paths an update changed, read off its undo payload's keys; `$` keys are meta. */
+/** The field paths an update changed, read off its undo payload's keys, skipping meta keys. */
 export function changedPaths(delta: Pick<Delta, 'op' | 'undoPayload'>): string[] {
   if (delta.op !== 'update' || delta.undoPayload == null) return []
   return Object.entries(delta.undoPayload).flatMap(([key, value]) => {
-    if (key.startsWith('$')) return []
+    if (isPayloadMetaKey(key)) return []
     if (!NESTED_COLUMNS.has(key) || !isPlainObject(value)) return [key]
     const inner = nestedPaths(key, value)
     return inner.length > 0 ? inner : [key]
@@ -58,7 +58,7 @@ function summary(delta: Delta, table: HistoryTable): string {
   const labels = [...new Set(changedPaths(delta).map((path) => fieldPathLabel(table, path)))]
   return labels.length === 0
     ? t('history:summary.modifiedUnknown')
-    : t('history:summary.modified', { fields: labels.join(', ') })
+    : t('history:summary.modified', { fields: labels.join(SUMMARY_FIELD_SEPARATOR) })
 }
 
 /** Humanizes a delta to a display row, from `undo_payload` keys (C4). */

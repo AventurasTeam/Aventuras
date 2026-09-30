@@ -169,6 +169,18 @@ describe('applyDeltaActionGroup — a delete and a write naming what it removes'
     expect(await snapshot()).toEqual(before)
   })
 
+  // Without cascade children the cascade check never fires, and two logged deletes of one
+  // row make every later undo re-insert it twice.
+  it('rejects two deletes of one childless row', async () => {
+    const before = await snapshot()
+
+    const result = await group([deleteEntity('char_keep'), deleteEntity('char_keep')])
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'group-conflict' })
+    expect(await snapshot()).toEqual(before)
+    expect(before.deltas).toEqual([])
+  })
+
   it('commits the entity delete builder output and undoes it cleanly', async () => {
     await ctx.db.insert(entities).values([
       entity('fac_1', 'faction'),

@@ -186,6 +186,6 @@ git-ignored `.impl-plans/M02-04-story-list.md`).
   definition / settings parse, `hydrate(branchId)`, open-failure write) and
   should give the currently-silent `{status:'no-branch'}` return a surface;
   [Slice 2.10](./10-recovery-ui.md) renders / clears open-failure via the
-  store. Relative-time strings (`lib/stores/stories/relative-time.ts`) are not
-  yet i18n'd — a cross-cutting pass with the sibling helper in
-  `collision-resolve-dialog.tsx`.
+  store. Relative-time strings were not yet i18n'd; 4.2b folded them into
+  `relativeTimeLabel` (`lib/i18n`), shared with History, and the sibling
+  helper in `collision-resolve-dialog.tsx` is 4.2c's.

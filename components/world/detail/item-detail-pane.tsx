@@ -30,6 +30,7 @@ export function ItemDetailPane({
   onSession,
   onOpenEntity,
   onOpenHappening,
+  onDelete,
   hotkeysEnabled = true,
 }: EntityPaneProps) {
   const values = useMemo(() => itemDraftFrom(row), [row])
@@ -59,6 +60,8 @@ export function ItemDetailPane({
       onTabChange={setTab}
       tabCounts={{ involvements: data.involvements.length }}
       recentlyClassified={recentlyClassified}
+      leadId={data.leadId}
+      onDelete={onDelete}
       hotkeysEnabled={hotkeysEnabled}
       {...gate}
     >

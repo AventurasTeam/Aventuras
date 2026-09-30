@@ -16,7 +16,7 @@ const view = (overrides: Partial<HistoryRowView>): HistoryRowView => ({
   fieldPath: 'state.traits',
   summary: 'Modified Traits',
   entryId: null,
-  createdAtRelative: '2 h ago',
+  createdAtRelative: '2h ago',
   actionId: 'act_1',
   ...overrides,
 })
@@ -95,7 +95,7 @@ export const Populated: Story = {
   play: async ({ args }) => {
     const rows = await screen.findAllByTestId('delta-log-row')
     expect(rows).toHaveLength(4)
-    expect(within(rows[1]).getByText('periodic classifier · entry #47 · 2 h ago')).toBeVisible()
+    expect(within(rows[1]).getByText('periodic classifier · entry #47 · 2h ago')).toBeVisible()
     expect(screen.queryAllByRole('button', { name: /^update Kael/ })).toHaveLength(0)
 
     await userEvent.click(screen.getByRole('button', { name: 'Load older' }))

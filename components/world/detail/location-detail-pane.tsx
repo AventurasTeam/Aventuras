@@ -42,6 +42,7 @@ export function LocationDetailPane({
   onSession,
   onOpenEntity,
   onOpenHappening,
+  onDelete,
   hotkeysEnabled = true,
 }: EntityPaneProps) {
   const values = useMemo(() => locationDraftFrom(row), [row])
@@ -72,6 +73,8 @@ export function LocationDetailPane({
       onTabChange={setTab}
       tabCounts={{ involvements: data.involvements.length }}
       recentlyClassified={recentlyClassified}
+      leadId={data.leadId}
+      onDelete={onDelete}
       hotkeysEnabled={hotkeysEnabled}
       {...gate}
     >

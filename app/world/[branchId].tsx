@@ -1,10 +1,11 @@
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View } from 'react-native'
 
 import type { ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { Breadcrumb, type BreadcrumbSegment } from '@/components/compounds/breadcrumb'
+import { DeleteConfirmDialog } from '@/components/compounds/delete-confirm-dialog'
 import { ImporterMenu } from '@/components/compounds/importer-menu'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { distinctCategories } from '@/components/plot/plot-route-data'
@@ -25,6 +26,7 @@ import type { EntityPaneData } from '@/components/world/detail/entity-pane-props
 import { entityTabOf } from '@/components/world/detail/entity-tabs'
 import { LoreDetailPane } from '@/components/world/detail/lore-detail-pane'
 import { firstFlaggedRow } from '@/components/world/first-flagged-row'
+import { useWorldDelete } from '@/components/world/use-world-delete'
 import {
   useWorldSelection,
   type WorldDetailSelection,
@@ -66,7 +68,7 @@ import {
   storiesStore,
 } from '@/lib/stores'
 import { toast } from '@/lib/toast'
-import { branchWorldTime, type EntitySaveInput, type LoreDraft } from '@/lib/world'
+import { branchWorldTime, resolveLead, type EntitySaveInput, type LoreDraft } from '@/lib/world'
 
 const ctx = { db, runInTransaction }
 
@@ -143,7 +145,10 @@ export default function WorldRoute() {
   const calendar = useMemo(() => resolveCalendar(calendarId), [calendarId])
   const signals = useRowSignals(branchId)
   const collisions = useMemo(() => deriveCollisions(entities), [entities])
-  const leadId = open?.definition.leadEntityId ?? null
+  const leadId = useMemo(
+    () => resolveLead(open?.definition.leadEntityId, entityRows, branchId)?.id ?? null,
+    [open, entityRows, branchId],
+  )
   const leadLabel =
     open == null ? null : open.definition.mode === 'adventure' ? 'you' : 'protagonist'
 
@@ -203,6 +208,12 @@ export default function WorldRoute() {
   const openRegionPct = useOpenRegionTokens(storyId)
 
   const { onSession, guard, navigateGuarded } = useRowSessionGuard()
+  const worldDelete = useWorldDelete(branchId, ctx, guard)
+  const cancelDelete = worldDelete.cancel
+  // A pending confirm's counts go stale off-screen (another surface can delete/rename the row).
+  useEffect(() => {
+    if (!focused) cancelDelete()
+  }, [focused, cancelDelete])
 
   const switchCategory = useCallback(
     (next: WorldCategory) => {
@@ -438,6 +449,7 @@ export default function WorldRoute() {
         onSave={saveLoreRow}
         onSaved={onSaved}
         onRejected={onRejected}
+        onDelete={(row) => worldDelete.request({ kind: 'lore', row })}
         onSession={onSession}
         hotkeysEnabled={focused}
       />
@@ -467,6 +479,7 @@ export default function WorldRoute() {
         onOpenEntity={openEntity}
         onOpenHappening={openHappening}
         onSetLead={onSetLead}
+        onDelete={(row) => worldDelete.request({ kind: 'entity', row })}
         hotkeysEnabled={focused}
       />
     )
@@ -550,6 +563,16 @@ export default function WorldRoute() {
           />
         </KeyboardInsetColumn>
       )}
+      {worldDelete.copy != null ? (
+        <DeleteConfirmDialog
+          open={focused}
+          onOpenChange={(next) => {
+            if (!next) worldDelete.cancel()
+          }}
+          {...worldDelete.copy}
+          onConfirm={worldDelete.confirm}
+        />
+      ) : null}
     </ScreenShell>
   )
 }

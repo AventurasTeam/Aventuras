@@ -6,13 +6,20 @@ import type { HistoryQuery } from '@/lib/history'
 import { t } from '@/lib/i18n'
 import { toast } from '@/lib/toast'
 
-import { useHistoryLoader } from './history-loader'
+import { useHistoryLoader, type HistoryLoader } from './history-loader'
 
 export type HistoryStatus = 'loading' | 'ready' | 'loading-more' | 'failed'
 
 type ChunkState = { rows: readonly Delta[]; nextCursor: number | null; status: HistoryStatus }
 
 const LOADING: ChunkState = { rows: [], nextCursor: null, status: 'loading' }
+
+type Request = {
+  load: HistoryLoader
+  query: Omit<HistoryQuery, 'cursor' | 'limit'>
+  version: unknown
+  attempt: number
+}
 
 export type HistoryChunks = {
   rows: readonly Delta[]
@@ -27,35 +34,32 @@ function message(error: unknown): string {
 }
 
 /**
- * patterns/lists.md → Load-older: reloads on any query or `version` change, not on scroll.
- * `labelPaths` must be referentially stable, or every render reloads.
+ * patterns/lists.md → Load-older: reloads from the first chunk whenever the query or `version`'s
+ * identity changes, so `version` must be memoized; a fresh one per render never settles.
  */
 export function useHistoryChunks(
   query: Omit<HistoryQuery, 'cursor' | 'limit'>,
   version: unknown,
 ): HistoryChunks {
   const load = useHistoryLoader()
-  const [state, setState] = useState<ChunkState>(LOADING)
+  const [applied, setApplied] = useState<(ChunkState & { for: Request }) | null>(null)
   const [attempt, setAttempt] = useState(0)
   const generation = useRef(0)
   // Two loadMore calls before a re-render share one closure's state; this stops the second.
   const loadingMore = useRef(false)
-  const { branchId, targetTable, targetId, op, search, labelPaths, sort } = query
-  const request = useMemo(
+  const { branchId, targetTable, targetId, op, search, sort } = query
+  const request = useMemo<Request>(
     () => ({
       load,
-      query: { branchId, targetTable, targetId, op, search, labelPaths, sort },
+      query: { branchId, targetTable, targetId, op, search, sort },
       version,
       attempt,
     }),
-    [load, branchId, targetTable, targetId, op, search, labelPaths, sort, version, attempt],
+    [load, branchId, targetTable, targetId, op, search, sort, version, attempt],
   )
-  const [shownFor, setShownFor] = useState(request)
-  // Reset during render, not in the effect, so the old query's rows never commit under the new one.
-  if (shownFor !== request) {
-    setShownFor(request)
-    setState(LOADING)
-  }
+  // A superseded read can still land between the new request's commit and the effect cleanup
+  // that orphans it, so rows carry the request they were read for and show only under it.
+  const state: ChunkState = applied?.for === request ? applied : LOADING
 
   // Read the query only through `request`: its identity is what resets the rows.
   useEffect(() => {
@@ -64,7 +68,12 @@ export function useHistoryChunks(
     request.load({ ...request.query, cursor: null }).then(
       (chunk) => {
         if (generation.current === mine)
-          setState({ rows: chunk.rows, nextCursor: chunk.nextCursor, status: 'ready' })
+          setApplied({
+            for: request,
+            rows: chunk.rows,
+            nextCursor: chunk.nextCursor,
+            status: 'ready',
+          })
       },
       (error: unknown) => {
         if (generation.current !== mine) return
@@ -73,7 +82,7 @@ export function useHistoryChunks(
           targetId: request.query.targetId,
           error: message(error),
         })
-        setState({ rows: [], nextCursor: null, status: 'failed' })
+        setApplied({ for: request, rows: [], nextCursor: null, status: 'failed' })
       },
     )
     // Unmount and every reload orphan whatever is still in flight.
@@ -87,16 +96,20 @@ export function useHistoryChunks(
     loadingMore.current = true
     const mine = generation.current
     const cursor = state.nextCursor
-    setState((current) => ({ ...current, status: 'loading-more' }))
+    setApplied((current) => current && { ...current, status: 'loading-more' })
     request.load({ ...request.query, cursor }).then(
       (chunk) => {
         if (generation.current !== mine) return
         loadingMore.current = false
-        setState((current) => ({
-          rows: [...current.rows, ...chunk.rows],
-          nextCursor: chunk.nextCursor,
-          status: 'ready',
-        }))
+        setApplied(
+          (current) =>
+            current && {
+              ...current,
+              rows: [...current.rows, ...chunk.rows],
+              nextCursor: chunk.nextCursor,
+              status: 'ready',
+            },
+        )
       },
       (error: unknown) => {
         if (generation.current !== mine) return
@@ -106,7 +119,7 @@ export function useHistoryChunks(
           targetId: request.query.targetId,
           error: message(error),
         })
-        setState((current) => ({ ...current, status: 'ready' }))
+        setApplied((current) => current && { ...current, status: 'ready' })
         toast.error(t('history:tab.failed'))
       },
     )

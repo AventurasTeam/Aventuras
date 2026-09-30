@@ -24,7 +24,7 @@ Used by:
 ```ts
 // StoryCardData = the canonical `stories` row + two derived display strings.
 type StoryCardData = Story & {
-  lastOpenedRelative: string // pre-formatted "2h ago" (derived in the selector)
+  lastOpenedRelative: string // pre-formatted "2h ago" / "12 Apr, 14:33" / "Never" (derived in the selector)
   chapterLabel: string | null // pre-formatted "Chapter 3"; selector returns null for every row until chapters land
 }
 
@@ -63,6 +63,10 @@ strings** — same opaque-render contract EntryCard's
 `worldTimeLabel` and the top-bar time chip use. They're computed by
 the stories selector (`selectStoryCards` → `toStoryCardData`), not in
 the compound, so the card stays date-library agnostic.
+`lastOpenedRelative` follows History's time rule
+([delta-log-row.md → Meta line](./delta-log-row.md#meta-line)):
+relative under a week, then the date and time, with the year outside
+the current year; `Never` for a story never opened.
 
 `chapterLabel` is a deferred slot: `toStoryCardData` returns `null`
 for **every** row in M2 (chapters land in a later milestone), so the
@@ -120,7 +124,8 @@ Chip.
   truncates with `numberOfLines={2}` if it overflows.
 - **Meta row.** Mode (written out: "Adventure" / "Creative"),
   chapter label (`Chapter 3` — deferred, null for every row in
-  M2), last-opened relative (`2h ago`). Middle-dot separators.
+  M2), last-opened time (`2h ago`, or `12 Apr, 14:33` past a
+  week). Middle-dot separators.
 - **Description.** 3-line ellipsis. `(no description yet)`
   italic placeholder when null.
 

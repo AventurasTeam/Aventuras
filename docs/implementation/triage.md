@@ -55,13 +55,18 @@ slice-planning gate forces its resolution before that slice is planned.
   `edce17b8`.
 
 - **Piggyback entity visual text was uncapped; new writes now
-  truncate.** `parseVisualChanges` now truncates a note to
+  truncate.** `buildPiggybackActions` truncates a note to
   `VISUAL_TEXT_MAX`, matching `characterStateSchema`'s 500-char visual
-  caps (4.2b, developer decision 2026-09-28). Still open: an entity
-  that already holds an over-long visual field from before this fix
-  still fails a later `updateEntity` that re-validates its whole
-  state — e.g. a delete clearing a ref to it. No repair of existing
-  rows.
+  caps, so notes from the tagged block and from the fallback
+  classifier are both cut (4.2b, developer decision 2026-09-28). Still
+  open: an entity that already holds an over-long visual field from
+  before this fix still fails a later `updateEntity` that re-validates
+  its whole state — e.g. a delete clearing a ref to it. No repair of
+  existing rows. The fallback classifier path also accepts stackable
+  keys and amounts that the tagged-block parser's `parseTransfers`
+  rejects — a blank or over-long key, a fractional or negative amount —
+  and those fail the same whole-state re-validation; pre-existing, not
+  fixed.
 - **`row-closure.ts`'s `CHILD_TABLES` widens a reversal set only for
   happenings' children.** A reversal deleting a character a create made
   orphans relationship, involvement or awareness rows naming it that
@@ -123,17 +128,120 @@ slice-planning gate forces its resolution before that slice is planned.
   phone keyboard layout) (2026-09-28, raised by 4.2b).
 - **`Autocomplete`'s `casingNormalization` (default `'canonical'`)
   canonicalizes only a committed pick.** A variant typed and left uncommitted
-  keeps its own casing — the lore pane's Body tab patches this at
-  save (`canonicalCategory` in `lore-detail-pane.tsx`), matching an
-  existing category's casing even when it wasn't picked from the
-  suggestions. The next consumer of `Autocomplete` with
-  `casingNormalization="canonical"` won't get this for free and
-  needs the same save-time patch (2026-09-28, raised by 4.2b).
+  keeps its own casing. No shipped consumer uses `canonical` (the lore,
+  thread and happening categories are `as-typed`), so the next one
+  needs a save-time patch. The canonical match also takes the first
+  case-insensitive suggestion even when one matches exactly, so on a
+  list holding both `Cosmology` and `cosmology`, picking `Cosmology`
+  commits `cosmology` (2026-09-28, raised by 4.2b).
+- **AlertDialog impact lists aren't in the dialog's accessible
+  description.** The bulleted impact list (`DeleteConfirmDialog`'s
+  `delete-impacts` View, and the shipped
+  `RollbackConfirm` — `components/reader/rollback-confirm.tsx`) is a
+  plain `Text` sibling of `AlertDialogDescription`, the only body
+  content wired into the dialog's `aria-describedby`; a screen reader
+  can still browse to the sibling rows, it just doesn't announce them
+  with the description, and the leading `•` glyph reads as a
+  character rather than a list marker. `DefinitionalChangeDialog`
+  puts its bullets inside the description instead — a working
+  alternative already shipped. Pattern-wide — every AlertDialog
+  consumer with an impact list, not just World / Plot delete. Read,
+  not verified with a screen reader (2026-09-28, raised by 4.2b).
+- **A creative third-person story whose lead is its only character can
+  never delete that character.** Creative + third-person is the one
+  mode/narration combination where a lead is optional
+  ([`data-model.md → Story settings shape`](../data-model.md#story-settings-shape)),
+  but once one is set, deleting it is refused (`lead-entity`) and
+  `setStoryLead` has no path to clear it back to null. M6's
+  per-branch, delta-logged lead
+  ([roadmap.md](./roadmap.md#m6--branches--diff-cache)) is the likely
+  home (2026-09-28, raised by 4.2b).
 - **The History tab's `Deleted` op chip likely never matches in a
   per-row tab.** A deleted row can't be selected to open its
   History tab, and undoing its delete prunes the delta, so no row's
   History tab is likely to ever see a `Deleted` chip produce a result —
-  until the parked
-  [link-row union](../parked.md#history-shows-link-row-edits) or a
-  global delta surface (Diagnostics Hub delta log) lands. Read, not
-  verified (2026-09-28, raised by 4.2b).
+  until 4.2c's
+  [link-row union](./milestones/04-world-plot-read-surfaces/slices/02c-collision-review.md#scope-in)
+  or a global delta surface (Diagnostics Hub delta log) lands. Read,
+  not verified (2026-09-28, raised by 4.2b).
+- **The composer's Send-blocked reason is invisible to sighted Android
+  users.** While a turn generates or suggestions refresh, the reader
+  passes `sendBlocked` and the "blocked while generating" reason
+  reaches only Send's tooltip and `accessibilityHint`; web shows it on
+  hover or focus, native shows nothing on screen. Canon keeps it off
+  the visible reason line
+  ([`principles.md → What's not gated`](../ui/principles.md#whats-not-gated)
+  and its disabled-controls tooltip rule under
+  [Affordance loci](../ui/principles.md#affordance-loci)); the gap is
+  native-only and pre-existing (2026-09-28, raised by 4.2b review).
+- **A link an entity delete captured can come back with no delta.**
+  An entity delete keeps the link rows it cascades only in its own undo
+  payload. When a later reversal removes the machine write that created
+  one of them, that create-undo finds the row already gone and prunes
+  its delta; undoing the entity delete then restores the row through
+  the live-link filter, since both its ends are live, and nothing left
+  in the log can reverse it. Follow-up (developer decision on the 4.2b
+  stack review, R1 option a): a create-undo of a link row that is
+  already absent also strips that row from the delete payload that
+  captured it — the contract between the reverse-replay closure and
+  the delete cascade payload
+  ([generation-pipeline.md → Reverse-replay](../generation-pipeline.md#reverse-replay)).
+  Both triggers were probed with a scratch test on the 4.2b head:
+  - **A periodic pass reversed mid-burst.** The pass is abort-free
+    once its single model call returns, so the window is its write
+    burst: the user deletes a character between two of its writes,
+    then a later write fails (any rejection but a `noop`, or a throw,
+    aborts the run and reverse-replays it) or boot recovery reverses
+    the pass.
+    Reproduced for a relationship between two characters the pass
+    didn't create. Involvement and awareness rows can't hit it: the
+    classifier writes them only under a happening created in the same
+    pass, which the reversal deletes, so the live-link filter drops
+    them. CTRL-Z never reverses a pass's writes: its bracket cancels
+    an in-flight pass, which either stops before its first write or
+    lands its whole burst first.
+  - **A prose edit's sweep, with no timing window.** The user deletes
+    a character, then edits the head turn's prose, whose sweep reverses
+    the periodic facts anchored to it; CTRL-Z the edit, then CTRL-Z
+    the delete. Reproduced for a relationship anchored to the head turn
+    between characters that survive, and for awareness anchored to the
+    head turn under a happening anchored to an older turn, which the
+    sweep keeps. Not for an involvement: it shares its happening's
+    anchor, so the sweep deletes the happening too.
+
+  Option (a) as worded covers creates only. A swept pass update to a
+  captured row is pruned the same way: a relationship view the pass
+  changed from `ally` to `rival` comes back as `rival` when the
+  delete is undone, though that row keeps its older create delta. A
+  rerun doesn't duplicate a restored row: awareness and relationship
+  writes are upserts behind unique indexes (`haw_natural_uniq`,
+  `char_rel_pair_uniq`) and update it in place. `happening_involvements`
+  has no such index, and `createHappeningInvolvement` doesn't check for
+  an existing link, but the classifier emits involvements only under a
+  happening it creates (2026-09-30, raised by the 4.2b stack review).
+
+- **`blankToNull` has two copies.** `lib/world/draft-text.ts` and
+  `lib/plot/thread-draft.ts` each define it (World's entity and lore
+  drafts use the first, Plot's thread and happening drafts the second).
+  It wants a shared home such as `lib/text`. The 4.2b stack doesn't
+  touch Plot's copy or its callers, so the move is a follow-up on main
+  (2026-09-30, raised by the 4.2b stack review).
+- **Deleting a relationship leaves its translations.** The
+  relationship delete handler (`lib/actions/relationships/register.ts`)
+  doesn't cascade `character_relationship` translation rows, though
+  an entity delete that cascades a relationship does drop them.
+  Harmless until a translation writer exists (none calls
+  `createTranslation` today);
+  [C3](./milestones/04-world-plot-read-surfaces/milestone.md#c3--delete-arm-hardening)
+  scoped the translation cascade to the embedded kinds' delete arms,
+  and the handler predates 4.2b (2026-09-30, raised by the 4.2b stack
+  review).
+
+- **`reader-composer-modes.spec` can fail on its own locator.** After
+  Send it waits for `getByText('E2E-MODES', { exact: false })`, which
+  also matches the mock reply (`E2E-MODES-REPLY …`); when the reply
+  renders before the assertion runs, Playwright's strict mode sees two
+  elements and fails, and the retry passes. Seen once in two runs on
+  the 4.2b head; the spec is unchanged since 3.4b. A locator that can
+  only match the user action (the wrapped text, or `exact: true`) would
+  close it (2026-09-30, raised by the 4.2b stack-review follow-up).
