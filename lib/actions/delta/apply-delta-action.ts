@@ -20,6 +20,12 @@ import { linkRefs } from './live-refs'
 import { createdKey, resolveByActionKind, resolveByTable, type HandlerOutcome } from './registry'
 import { entityCascadeKeys, rowLock, type RowLockKey } from './row-locks'
 
+/** The runner's own refusals; a handler's code passes through beside them. */
+export const DELTA_REJECTION = {
+  reversalInProgress: 'reversal-in-progress',
+  groupConflict: 'group-conflict',
+} as const
+
 type Args = { action: PipelineAction; actionId: string; branchId: string; entryId?: string | null }
 type OkOutcome = Extract<HandlerOutcome, { status: 'ok' }>
 
@@ -152,7 +158,7 @@ async function applyDeltaActionUnlocked(args: Args, ctx: DbCtx): Promise<Mutatio
   if (isUserOriginatedSource(action.source) && generationStore.getTxState().reversalInProgress)
     return {
       status: 'rejected',
-      code: 'reversal-in-progress',
+      code: DELTA_REJECTION.reversalInProgress,
       reason: 'prose reversal in progress',
     }
 
@@ -281,7 +287,7 @@ async function applyDeltaActionGroupUnlocked(
     if (isUserOriginatedSource(action.source) && generationStore.getTxState().reversalInProgress)
       return {
         status: 'rejected',
-        code: 'reversal-in-progress',
+        code: DELTA_REJECTION.reversalInProgress,
         reason: 'prose reversal in progress',
       }
 
@@ -312,7 +318,8 @@ async function applyDeltaActionGroupUnlocked(
 
   if (prepared.length === 0) return { status: 'ok' }
   const conflict = groupConflict(prepared.map(({ outcome }) => outcome))
-  if (conflict !== null) return { status: 'rejected', reason: conflict, code: 'group-conflict' }
+  if (conflict !== null)
+    return { status: 'rejected', reason: conflict, code: DELTA_REJECTION.groupConflict }
 
   const ops: SqlOp[] = prepared.flatMap(({ deltaId, source, outcome }) => [
     deltaRowOp(ctx, { deltaId, branchId, entryId, actionId, source, target: outcome }),

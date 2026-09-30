@@ -6,7 +6,7 @@ import { threadsStore } from '@/lib/stores'
 
 import { nullifyRef } from '../coerce'
 import { payloadFromChildren, rowCascade } from '../delta/delete-cascade'
-import { register, type ActionHandler } from '../delta/registry'
+import { register, TARGET_NOT_FOUND, type ActionHandler } from '../delta/registry'
 import type { DeltaSource } from '../types'
 
 const cascade = rowCascade('thread')
@@ -159,7 +159,11 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     .from(threads)
     .where(and(eq(threads.branchId, bid), eq(threads.id, id)))
   if (!current)
-    return { status: 'rejected', reason: `delete target threads ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `delete target threads ${bid}:${id} not found`,
+      code: TARGET_NOT_FOUND,
+    }
   const { ops: childOps, children } = await cascade.run(bid, id, ctx)
   return {
     status: 'ok',

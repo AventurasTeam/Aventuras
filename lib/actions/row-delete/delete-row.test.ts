@@ -20,9 +20,11 @@ import {
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { entitiesStore, generationStore } from '@/lib/stores'
 
+import { withKeyLock } from '../delta/key-lock'
+import { rowLock } from '../delta/row-locks'
 import type { DbCtx } from '../types'
 import { deleteEntityRow } from './delete-entity'
-import { deleteRow, ROW_DELETE_REJECTION } from './delete-row'
+import { commitRowDelete, deleteRow, ROW_DELETE_REJECTION } from './delete-row'
 
 let ctx: DbCtx
 
@@ -192,5 +194,50 @@ describe('deleteEntityRow — missing target', () => {
       code: ROW_DELETE_REJECTION.notFound,
     })
     expect(await ctx.db.select().from(deltas)).toEqual([])
+  })
+})
+
+describe('row delete — every refusal carries a code from the closed set', () => {
+  it.each(['lore', 'thread', 'happening'] as const)(
+    'refuses a missing %s with not-found and writes nothing',
+    async (kind) => {
+      expect(await deleteRow(kind, 'b1', `${kind}_ghost`, ctx)).toMatchObject({
+        status: 'rejected',
+        code: ROW_DELETE_REJECTION.notFound,
+      })
+      expect(await ctx.db.select().from(deltas)).toEqual([])
+    },
+  )
+
+  it('reports a prose reversal that starts while the delete waits on its lock as in-flight', async () => {
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const held = withKeyLock(rowLock('happenings')({ branchId: 'b1' }), () => gate)
+    const pending = deleteRow('happening', 'b1', 'hap_1', ctx)
+    generationStore.setReversalInProgress(true)
+    release()
+    await held
+
+    expect(await pending).toMatchObject({
+      status: 'rejected',
+      code: ROW_DELETE_REJECTION.inFlight,
+    })
+    expect(await ctx.db.select().from(happenings).where(eq(happenings.id, 'hap_1'))).toHaveLength(1)
+  })
+
+  it('reports a refusal the delete family has no code for as failed', async () => {
+    const twice = {
+      kind: 'deleteLore',
+      source: 'user_edit',
+      payload: { branchId: 'b1', id: 'lore_1' },
+    } as const
+
+    expect(await commitRowDelete('lore', 'b1', 'lore_1', [twice, twice], ctx)).toMatchObject({
+      status: 'rejected',
+      code: ROW_DELETE_REJECTION.failed,
+    })
+    expect(await ctx.db.select().from(lore).where(eq(lore.id, 'lore_1'))).toHaveLength(1)
   })
 })

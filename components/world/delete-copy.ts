@@ -1,6 +1,6 @@
 import { deleteUndoHint, type DeleteConfirmCopy } from '@/components/compounds/delete-confirm-copy'
 import { gateDisabledReason } from '@/components/compounds/generation-gate-copy'
-import { ENTITY_DELETE_CODES } from '@/lib/actions'
+import { ROW_DELETE_REJECTION, type RowDeleteRejectionCode } from '@/lib/actions'
 import type { Entity, Lore } from '@/lib/db'
 import { t } from '@/lib/i18n'
 
@@ -36,11 +36,17 @@ export function loreDeleteCopy(row: Lore): DeleteConfirmCopy {
   }
 }
 
+// Exhaustive: a new RowDeleteRejectionCode fails typecheck until it has text here.
+const DELETE_REJECTION_TEXT: Record<RowDeleteRejectionCode, () => string> = {
+  [ROW_DELETE_REJECTION.inFlight]: () => t('world:delete.inFlight'),
+  [ROW_DELETE_REJECTION.leadEntity]: () => t('world:delete.leadReason'),
+  [ROW_DELETE_REJECTION.notFound]: () => t('world:delete.failed'),
+  [ROW_DELETE_REJECTION.failed]: () => t('world:delete.failed'),
+}
+
 /** A refused delete's user-facing text; the actions' own reasons are developer strings. */
-export function deleteRejectionText(code: string | undefined): string {
-  if (code === ENTITY_DELETE_CODES.inFlight) return t('world:delete.inFlight')
-  if (code === ENTITY_DELETE_CODES.leadEntity) return t('world:delete.leadReason')
-  return t('world:delete.failed')
+export function deleteRejectionText(code: RowDeleteRejectionCode): string {
+  return DELETE_REJECTION_TEXT[code]()
 }
 
 /** Why `Delete entity` is unavailable for this row, or undefined when it is available. */

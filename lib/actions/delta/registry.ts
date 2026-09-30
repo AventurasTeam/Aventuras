@@ -43,6 +43,9 @@ export function createdKey(table: string, id: string): string {
   return `${table}:${id}`
 }
 
+/** A handler's code for a write whose target row is gone, so each family's boundary can name it. */
+export const TARGET_NOT_FOUND = 'not-found'
+
 export type HandlerOutcome =
   // Deliberately a bare string: each action family funnels its OWN rejection vocabulary
   // through here, so a single union would couple taxonomies with no reason to agree.

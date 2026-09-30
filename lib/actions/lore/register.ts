@@ -6,7 +6,7 @@ import { loreStore } from '@/lib/stores'
 
 import { payloadFromChildren, rowCascade } from '../delta/delete-cascade'
 import { deepEqual } from '../delta/delta-encoding'
-import { register, type ActionHandler } from '../delta/registry'
+import { register, TARGET_NOT_FOUND, type ActionHandler } from '../delta/registry'
 import type { DeltaSource } from '../types'
 
 const cascade = rowCascade('lore')
@@ -156,7 +156,12 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     .select()
     .from(lore)
     .where(and(eq(lore.branchId, bid), eq(lore.id, id)))
-  if (!current) return { status: 'rejected', reason: `delete target lore ${bid}:${id} not found` }
+  if (!current)
+    return {
+      status: 'rejected',
+      reason: `delete target lore ${bid}:${id} not found`,
+      code: TARGET_NOT_FOUND,
+    }
   const { ops: childOps, children } = await cascade.run(bid, id, ctx)
   return {
     status: 'ok',

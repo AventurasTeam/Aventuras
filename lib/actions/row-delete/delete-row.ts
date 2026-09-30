@@ -2,18 +2,40 @@ import { logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { generationStore } from '@/lib/stores'
 
-import { applyDeltaActionGroup } from '../delta/apply-delta-action'
+import { applyDeltaActionGroup, DELTA_REJECTION } from '../delta/apply-delta-action'
+import { TARGET_NOT_FOUND } from '../delta/registry'
+import { ENTITY_DELETE_REJECTION } from '../entities/register'
 import { ROW_SAVE_REJECTION } from '../row-save/commit-row-save'
 import type { DbCtx, PipelineAction } from '../types'
 
 export const ROW_DELETE_REJECTION = {
   inFlight: ROW_SAVE_REJECTION.inFlight,
-  notFound: 'not-found',
+  notFound: TARGET_NOT_FOUND,
+  leadEntity: ENTITY_DELETE_REJECTION.leadEntity,
+  failed: 'failed',
 } as const
+
+export type RowDeleteRejectionCode =
+  (typeof ROW_DELETE_REJECTION)[keyof typeof ROW_DELETE_REJECTION]
 
 export type RowDeleteResult =
   | { status: 'ok' }
-  | { status: 'rejected'; reason: string; code?: string }
+  | { status: 'rejected'; reason: string; code: RowDeleteRejectionCode }
+
+// A reversal raised while the delete waited on its lock is the state the gate below reports as
+// in-flight; anything the family has no code for is a failed write.
+function rejectionCode(code: string | undefined): RowDeleteRejectionCode {
+  switch (code) {
+    case DELTA_REJECTION.reversalInProgress:
+      return ROW_DELETE_REJECTION.inFlight
+    case TARGET_NOT_FOUND:
+      return ROW_DELETE_REJECTION.notFound
+    case ENTITY_DELETE_REJECTION.leadEntity:
+      return ROW_DELETE_REJECTION.leadEntity
+    default:
+      return ROW_DELETE_REJECTION.failed
+  }
+}
 
 export type RowDeleteKind = 'entity' | 'lore' | 'thread' | 'happening'
 
@@ -56,7 +78,7 @@ export async function commitRowDelete(
       reason: result.reason,
       code: result.code,
     })
-    return result
+    return { status: 'rejected', reason: result.reason, code: rejectionCode(result.code) }
   }
   return { status: 'ok' }
 }

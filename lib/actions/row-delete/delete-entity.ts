@@ -3,13 +3,10 @@ import { entitiesStore } from '@/lib/stores'
 import { entityDeleteActions, type DeleteTail } from '@/lib/world'
 
 import { withKeyLock } from '../delta/key-lock'
-import { ENTITY_DELETE_REJECTION } from '../entities/register'
 import { loadHeadTurn } from '../story-entries/head-turn'
 import { entryMetadataLockKey } from '../story-entries/world-time'
 import type { DbCtx } from '../types'
 import { commitRowDelete, ROW_DELETE_REJECTION, type RowDeleteResult } from './delete-row'
-
-export const ENTITY_DELETE_CODES = { ...ROW_DELETE_REJECTION, ...ENTITY_DELETE_REJECTION } as const
 
 /**
  * world.md → Delete. Holds the tail's metadata lock like the scene editor, so the drop can't race

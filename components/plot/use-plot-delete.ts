@@ -1,7 +1,12 @@
 import { useCallback, useState } from 'react'
 
 import { deleteUndoHint, type DeleteConfirmCopy } from '@/components/compounds/delete-confirm-copy'
-import { deleteRow, ROW_DELETE_REJECTION, type DbCtx } from '@/lib/actions'
+import {
+  deleteRow,
+  ROW_DELETE_REJECTION,
+  type DbCtx,
+  type RowDeleteRejectionCode,
+} from '@/lib/actions'
 import type { Happening, Thread } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
@@ -68,11 +73,17 @@ export function freshDeleteTarget(
   return row == null ? null : { kind: 'happening', row }
 }
 
+// Exhaustive: a new RowDeleteRejectionCode fails typecheck until it has text here.
+const DELETE_REJECTION_TEXT: Record<RowDeleteRejectionCode, () => string> = {
+  [ROW_DELETE_REJECTION.inFlight]: () => t('plot:delete.inFlight'),
+  [ROW_DELETE_REJECTION.leadEntity]: () => t('plot:delete.failed'),
+  [ROW_DELETE_REJECTION.notFound]: () => t('plot:delete.failed'),
+  [ROW_DELETE_REJECTION.failed]: () => t('plot:delete.failed'),
+}
+
 /** A refused delete's user-facing text; the action's own reason is a developer string. */
-export function plotDeleteRejectionText(code: string | undefined): string {
-  return code === ROW_DELETE_REJECTION.inFlight
-    ? t('plot:delete.inFlight')
-    : t('plot:delete.failed')
+export function plotDeleteRejectionText(code: RowDeleteRejectionCode): string {
+  return DELETE_REJECTION_TEXT[code]()
 }
 
 /**

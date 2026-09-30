@@ -17,7 +17,12 @@ import { checkParentChain, PARENT_CHAIN_BROKEN, PARENT_CYCLE, parentOfLocations 
 
 import { payloadFromChildren } from '../delta/delete-cascade'
 import { computeUndoPayload, deepEqual } from '../delta/delta-encoding'
-import { register, type ActionHandler, type HandlerOutcome } from '../delta/registry'
+import {
+  register,
+  TARGET_NOT_FOUND,
+  type ActionHandler,
+  type HandlerOutcome,
+} from '../delta/registry'
 import type { DbCtx, DeltaSource } from '../types'
 import { entityCascade } from './entity-cascade'
 import {
@@ -263,7 +268,11 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     .from(entities)
     .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
   if (!current)
-    return { status: 'rejected', reason: `delete target entities ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `delete target entities ${bid}:${id} not found`,
+      code: TARGET_NOT_FOUND,
+    }
   // Interim: lead isn't per-branch/delta-logged yet (M6) — deleting it would dangle the pointer.
   if (await isStoryLead(ctx, bid, id))
     return {

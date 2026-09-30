@@ -13,7 +13,7 @@ import { happeningsStore } from '@/lib/stores'
 
 import { nullifyRef } from '../coerce'
 import { defineCascade, payloadFromChildren, rowCascade } from '../delta/delete-cascade'
-import { register, type ActionHandler } from '../delta/registry'
+import { register, TARGET_NOT_FOUND, type ActionHandler } from '../delta/registry'
 import type { DeltaSource } from '../types'
 
 const ownCascade = rowCascade('happening')
@@ -225,7 +225,11 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     .from(happenings)
     .where(and(eq(happenings.branchId, bid), eq(happenings.id, id)))
   if (!current)
-    return { status: 'rejected', reason: `delete target happening ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `delete target happening ${bid}:${id} not found`,
+      code: TARGET_NOT_FOUND,
+    }
 
   const { ops: childOps, children } = await happeningCascade.run(bid, id, ctx)
 
