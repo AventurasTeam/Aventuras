@@ -12,9 +12,7 @@ import {
 } from '@/lib/db'
 
 import type { DbCtx } from '../types'
-import type { Cascade, StorePatch } from './registry'
-
-type Rows = Record<string, unknown>[]
+import type { Cascade, CascadeRun, HandlerOutcome, Rows, StorePatch } from './registry'
 
 export type TranslationTargetKind = Translation['targetKind']
 
@@ -96,12 +94,6 @@ export async function translationCascade(
   return { ops, children: { translations: rows } }
 }
 
-type CascadeRun<C> = (
-  branchId: string,
-  targetId: string,
-  ctx: DbCtx,
-) => Promise<{ ops: SqlOp[]; children: C }>
-
 /**
  * Declares a cascade once: `run`'s children are keyed by exactly the tables named, so the rows a
  * delete captures and the rows its undo restores can't drift apart.
@@ -137,6 +129,29 @@ export function payloadFromChildren(children: Record<string, Rows>): Record<stri
   return Object.fromEntries(
     Object.entries(children).map(([table, rows]) => [payloadKey(table), rows]),
   )
+}
+
+/**
+ * A cascading delete's outcome: the cascade's ops ahead of the row's own. The payload holds the
+ * full row beside the children the cascade removed, which log no delta of their own, so undo
+ * rebuilds both from it.
+ */
+export async function cascadedDelete(
+  ctx: DbCtx,
+  cascade: Cascade,
+  target: { table: string; row: { id: string; branchId: string }; deleteOp: SqlOp },
+): Promise<HandlerOutcome> {
+  const { table, row, deleteOp } = target
+  const { ops, children } = await cascade.run(row.branchId, row.id, ctx)
+  return {
+    status: 'ok',
+    targetTable: table,
+    targetId: row.id,
+    op: 'delete',
+    undoPayload: { ...row, ...payloadFromChildren(children) },
+    ops: [...ops, deleteOp],
+    patch: { op: 'delete', id: row.id },
+  }
 }
 
 export type CapturedChildren = { table: string; rows: Rows }[]

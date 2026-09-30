@@ -6,9 +6,9 @@ import { entitiesStore, generationStore } from '@/lib/stores'
 import { loadHeadTurn } from './head-turn'
 import { applyDeltaActionGroup } from '../delta/apply-delta-action'
 import type { DbCtx, PipelineAction } from '../types'
+import { withEntryMetadataLock } from './entry-metadata-lock'
 import type { StoryEntryRejection } from './operational'
 import { STORY_ENTRY_REJECTION, type StoryEntryRejectionCode } from './register'
-import { withEntryMetadataLock } from './world-time'
 
 export type SceneFieldsEdit = {
   sceneEntities: string[]

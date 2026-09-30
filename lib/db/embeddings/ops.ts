@@ -28,29 +28,27 @@ export function packFloat32(vec: Float32Array): Uint8Array {
 // `source` gates the insert on the row holding that text; a racing delete/edit inserts nothing.
 export function upsertVecOps(w: VecWrite, source: VecSourceGuard): SqlOp[] {
   const table = vecTableName(w.kind, w.dim)
-  const values = [
-    vecRowPk(w.branchId, w.id, w.modelId),
-    w.branchId,
-    w.modelId,
-    w.id,
-    w.sourceHash,
-    w.vector,
-  ]
-  const remove: SqlOp = {
-    sql: `DELETE FROM ${table} WHERE branch_id = ? AND id = ? AND model_id = ?`,
-    params: [w.branchId, w.id, w.modelId],
-  }
-  const columns = '(pk, branch_id, model_id, id, source_hash, embedding)'
   const guard = embeddedSourceGuard(w.kind, {
     id: w.id,
     branchId: w.branchId,
     fields: source.fields,
   })
   return [
-    remove,
     {
-      sql: `INSERT INTO ${table} ${columns} SELECT ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM ${SOURCE_TABLES[w.kind]} WHERE ${guard.sql})`,
-      params: [...values, ...guard.params],
+      sql: `DELETE FROM ${table} WHERE branch_id = ? AND id = ? AND model_id = ?`,
+      params: [w.branchId, w.id, w.modelId],
+    },
+    {
+      sql: `INSERT INTO ${table} (pk, branch_id, model_id, id, source_hash, embedding) SELECT ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM ${SOURCE_TABLES[w.kind]} WHERE ${guard.sql})`,
+      params: [
+        vecRowPk(w.branchId, w.id, w.modelId),
+        w.branchId,
+        w.modelId,
+        w.id,
+        w.sourceHash,
+        w.vector,
+        ...guard.params,
+      ],
     },
   ]
 }

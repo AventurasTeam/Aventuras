@@ -6,8 +6,8 @@ import { generateId } from '@/lib/ids'
 import { generationStore } from '@/lib/stores'
 
 import { applyDeltaAction } from '../delta/apply-delta-action'
-import { withKeyLock } from '../delta/key-lock'
 import type { DbCtx } from '../types'
+import { withEntryMetadataLock } from './entry-metadata-lock'
 import type { StoryEntryRejection } from './operational'
 import { STORY_ENTRY_REJECTION, type StoryEntryRejectionCode } from './register'
 
@@ -19,22 +19,6 @@ function rejected(code: StoryEntryRejectionCode, reason: string): StoryEntryReje
 
 function inFlight(): StoryEntryRejection {
   return rejected(STORY_ENTRY_REJECTION.inFlight, 'generation in flight')
-}
-
-/**
- * Serializes the read-then-decide of every ungated entry-metadata writer. Per ROW, not
- * per action: same-row writers under different action names are the pair that must not
- * interleave. Never call one of them from `run` — the lock is not reentrant, so the inner
- * call would await the outer's own promise and deadlock. It is the outermost lock: `run`
- * may dispatch through the runner, which takes its row locks inside; nothing holding a row
- * lock may take this one.
- */
-export function withEntryMetadataLock<T>(
-  branchId: string,
-  id: string,
-  run: () => Promise<T>,
-): Promise<T> {
-  return withKeyLock(`entryMetadata:${branchId}:${id}`, run)
 }
 
 /**

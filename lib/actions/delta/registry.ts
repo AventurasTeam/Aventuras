@@ -17,7 +17,13 @@ export type StorePatch =
 // A domain patcher closes over its working-set store; the store branch-guards.
 export type StorePatcher = (branchId: string, patch: StorePatch) => void
 
-type Rows = Record<string, unknown>[]
+export type Rows = Record<string, unknown>[]
+
+export type CascadeRun<C> = (
+  branchId: string,
+  targetId: string,
+  ctx: DbCtx,
+) => Promise<{ ops: SqlOp[]; children: C }>
 
 /**
  * A delete's cascade. `tables` names the child tables it removes, by registered table name: the
@@ -27,11 +33,7 @@ type Rows = Record<string, unknown>[]
  */
 export type Cascade<T extends string = string> = {
   tables: readonly T[]
-  run: (
-    branchId: string,
-    targetId: string,
-    ctx: DbCtx,
-  ) => Promise<{ ops: SqlOp[]; children: Record<T, Rows> }>
+  run: CascadeRun<Record<T, Rows>>
 }
 
 /** Rows the same action group creates, as `createdKey`s — handlers read pre-group state. */

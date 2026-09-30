@@ -360,7 +360,8 @@ changed takes the cancel route without writing a delta.
 
 **The edit is the second ungated writer to entry metadata**, so it
 serializes against the world-time footer's write on a per-row lock
-(`withEntryMetadataLock`, `lib/actions/story-entries/world-time.ts`) —
+(`withEntryMetadataLock`,
+`lib/actions/story-entries/entry-metadata-lock.ts`) —
 per row rather than per action, because same-row writers under different
 action names are the pair that must not interleave. Pipeline dispatches
 are not in that pair: `hard-gate` holds them apart from each other, and a

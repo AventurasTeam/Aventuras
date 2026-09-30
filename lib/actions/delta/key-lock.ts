@@ -26,7 +26,7 @@ export function withKeyLock<T>(key: string, run: () => Promise<T>): Promise<T> {
 
 // Deduped because the lock is not reentrant; sorted so two holders of overlapping key sets
 // take them in one order and can't deadlock. One lock sits outside these sets, always taken
-// first: `withEntryMetadataLock` (story-entries/world-time.ts).
+// first: `withEntryMetadataLock` (story-entries/entry-metadata-lock.ts).
 export function withKeyLocks<T>(keys: readonly string[], run: () => Promise<T>): Promise<T> {
   return acquire([...new Set(keys)].sort(), run)
 }

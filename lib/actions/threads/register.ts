@@ -5,7 +5,7 @@ import { KIND_FIELDS, threadWriteSchema, threads } from '@/lib/db'
 import { threadsStore } from '@/lib/stores'
 
 import { nullifyRef } from '../coerce'
-import { payloadFromChildren, rowCascade } from '../delta/delete-cascade'
+import { cascadedDelete, rowCascade } from '../delta/delete-cascade'
 import { register, TARGET_NOT_FOUND, type ActionHandler } from '../delta/registry'
 import type { DeltaSource } from '../types'
 
@@ -164,23 +164,14 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
       reason: `delete target threads ${bid}:${id} not found`,
       code: TARGET_NOT_FOUND,
     }
-  const { ops: childOps, children } = await cascade.run(bid, id, ctx)
-  return {
-    status: 'ok',
-    targetTable: 'threads',
-    targetId: id,
-    op: 'delete',
-    // Full row so reverse-replay rebuilds both the SQLite re-insert and the store create-patch.
-    undoPayload: { ...current, ...payloadFromChildren(children) },
-    ops: [
-      ...childOps,
-      ctx.db
-        .delete(threads)
-        .where(and(eq(threads.branchId, bid), eq(threads.id, id)))
-        .toSQL(),
-    ],
-    patch: { op: 'delete', id },
-  }
+  return cascadedDelete(ctx, cascade, {
+    table: 'threads',
+    row: current,
+    deleteOp: ctx.db
+      .delete(threads)
+      .where(and(eq(threads.branchId, bid), eq(threads.id, id)))
+      .toSQL(),
+  })
 }
 
 export function registerThreads(): void {

@@ -2,8 +2,8 @@ import { logger } from '@/lib/diagnostics'
 import { entitiesStore } from '@/lib/stores'
 import { entityDeleteActions, type DeleteTail } from '@/lib/world'
 
+import { withEntryMetadataLock } from '../story-entries/entry-metadata-lock'
 import { loadHeadTurn } from '../story-entries/head-turn'
-import { withEntryMetadataLock } from '../story-entries/world-time'
 import type { DbCtx } from '../types'
 import { commitRowDelete, ROW_DELETE_REJECTION, type RowDeleteResult } from './delete-row'
 

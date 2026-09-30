@@ -12,7 +12,7 @@ import {
 import { happeningsStore } from '@/lib/stores'
 
 import { nullifyRef } from '../coerce'
-import { defineCascade, payloadFromChildren, rowCascade } from '../delta/delete-cascade'
+import { cascadedDelete, defineCascade, rowCascade } from '../delta/delete-cascade'
 import { register, TARGET_NOT_FOUND, type ActionHandler } from '../delta/registry'
 import type { DeltaSource } from '../types'
 
@@ -230,26 +230,14 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
       reason: `delete target happening ${bid}:${id} not found`,
       code: TARGET_NOT_FOUND,
     }
-
-  const { ops: childOps, children } = await happeningCascade.run(bid, id, ctx)
-
-  return {
-    status: 'ok',
-    targetTable: 'happenings',
-    targetId: id,
-    op: 'delete',
-    // The link rows have no delta of their own here, so the parent's payload is
-    // the only place reverse-replay can rebuild them from.
-    undoPayload: { ...current, ...payloadFromChildren(children) },
-    ops: [
-      ...childOps,
-      ctx.db
-        .delete(happenings)
-        .where(and(eq(happenings.branchId, bid), eq(happenings.id, id)))
-        .toSQL(),
-    ],
-    patch: { op: 'delete', id },
-  }
+  return cascadedDelete(ctx, happeningCascade, {
+    table: 'happenings',
+    row: current,
+    deleteOp: ctx.db
+      .delete(happenings)
+      .where(and(eq(happenings.branchId, bid), eq(happenings.id, id)))
+      .toSQL(),
+  })
 }
 
 export function registerHappenings(): void {

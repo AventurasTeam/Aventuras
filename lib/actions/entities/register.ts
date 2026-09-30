@@ -15,7 +15,7 @@ import { logger } from '@/lib/diagnostics'
 import { entitiesStore } from '@/lib/stores'
 import { checkParentChain, PARENT_CHAIN_BROKEN, PARENT_CYCLE, parentOfLocations } from '@/lib/world'
 
-import { payloadFromChildren } from '../delta/delete-cascade'
+import { cascadedDelete } from '../delta/delete-cascade'
 import { computeUndoPayload, deepEqual } from '../delta/delta-encoding'
 import {
   register,
@@ -280,23 +280,14 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
       reason: 'the story lead cannot be deleted',
       code: ENTITY_DELETE_REJECTION.leadEntity,
     }
-  const { ops: childOps, children } = await entityCascade.run(bid, id, ctx)
-  return {
-    status: 'ok',
-    targetTable: 'entities',
-    targetId: id,
-    op: 'delete',
-    // Full row so reverse-replay rebuilds both the SQLite re-insert and the store create-patch.
-    undoPayload: { ...current, ...payloadFromChildren(children) },
-    ops: [
-      ...childOps,
-      ctx.db
-        .delete(entities)
-        .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
-        .toSQL(),
-    ],
-    patch: { op: 'delete', id },
-  }
+  return cascadedDelete(ctx, entityCascade, {
+    table: 'entities',
+    row: current,
+    deleteOp: ctx.db
+      .delete(entities)
+      .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
+      .toSQL(),
+  })
 }
 
 export function registerEntities(): void {
