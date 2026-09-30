@@ -1,6 +1,14 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { Chapter, TimeTracker } from '$lib/types'
 
+vi.mock('$lib/stores/activity.svelte', () => ({
+  activity: {
+    startStep: vi.fn(() => ''),
+    updateStep: vi.fn(),
+    endStep: vi.fn(),
+    recordStep: vi.fn(() => ''),
+  },
+}))
 vi.mock('$lib/stores/debug.svelte', () => ({
   debug: { addDebugRequest: vi.fn(), addDebugResponse: vi.fn() },
 }))
@@ -13,7 +21,7 @@ vi.mock('$lib/stores/settings.svelte', () => ({
   },
 }))
 
-import { buildChapterSummariesBlock, joinReinforcement } from './NarrativeService'
+import { buildChapterSummariesBlock, joinReinforcement, narrativeChunks } from './NarrativeService'
 
 describe('joinReinforcement', () => {
   it('prefixes the turn message when the pack rendered reinforcement', () => {
@@ -105,5 +113,41 @@ describe('buildChapterSummariesBlock — chapter times', () => {
     const block = buildChapterSummariesBlock([chapter({ startTime: null, endTime: null })])
 
     expect(block).not.toContain('*Time:')
+  })
+})
+
+describe('narrativeChunks', () => {
+  async function collect(parts: { type: string; text?: string; error?: unknown }[]) {
+    const out = []
+    for await (const chunk of narrativeChunks(
+      (async function* () {
+        yield* parts
+      })(),
+    ))
+      out.push(chunk)
+    return out
+  }
+
+  it('marks the start of the response, then passes reasoning and text on', async () => {
+    expect(
+      await collect([
+        { type: 'start' },
+        { type: 'start-step' },
+        { type: 'reasoning-delta', text: 'hm' },
+        { type: 'text-delta', text: 'Hi.' },
+        { type: 'finish' },
+      ]),
+    ).toEqual([
+      { content: '', done: false, started: true },
+      { content: '', reasoning: 'hm', done: false },
+      { content: 'Hi.', done: false },
+    ])
+  })
+
+  it('throws a failed request instead of passing it on as an empty answer', async () => {
+    const failure = new Error('401 · Invalid API key provided.')
+    await expect(collect([{ type: 'start' }, { type: 'error', error: failure }])).rejects.toBe(
+      failure,
+    )
   })
 })

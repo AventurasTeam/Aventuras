@@ -21,7 +21,7 @@ import type {
 import type { Story, StoryEntry } from '$lib/types'
 import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
 import type { StreamChunk } from '$lib/services/ai/core/types'
-import { NO_ACTIVITY, type ActivityReporter } from '$lib/services/activity'
+import { NO_ACTIVITY, failStep, type ActivityReporter } from '$lib/services/activity'
 
 const MAX_EMPTY_RESPONSE_RETRIES = 3
 
@@ -38,6 +38,7 @@ export interface NarrativeDependencies {
     signal: AbortSignal | undefined,
     timelineFillResult: RetrievalResult['timelineFillResult'],
     worldStateBlock: string | null | undefined,
+    activityParentId?: string,
   ) => AsyncIterable<StreamChunk>
 }
 
@@ -79,6 +80,7 @@ export class NarrativePhase {
     let fullResponse = ''
     let fullReasoning = ''
     let chunkCount = 0
+    let contentChunks = 0
     let retryCount = 0
 
     while (retryCount < MAX_EMPTY_RESPONSE_RETRIES) {
@@ -91,6 +93,7 @@ export class NarrativePhase {
       fullResponse = ''
       fullReasoning = ''
       chunkCount = 0
+      contentChunks = 0
 
       // An attempt is its own step: the loop is otherwise silent, so three empty responses
       // read as one long wait with nothing to show for it.
@@ -98,8 +101,8 @@ export class NarrativePhase {
         retryCount > 0 ? `Attempt ${retryCount + 1}` : 'Request',
         { parentId: narrativeStepId },
       )
-      // The wait gives way to streaming at the first chunk carrying anything, so the two are
-      // consecutive children of the attempt.
+      // The wait gives way to the response as soon as it starts arriving, content or not, so the
+      // two are consecutive children of the attempt and an empty answer still shows as one.
       let waitId = activity.startStep('Waiting for model', { parentId: attemptId })
       let streamId = ''
 
@@ -113,6 +116,7 @@ export class NarrativePhase {
           abortSignal,
           retrievalResult.timelineFillResult,
           retrievalResult.worldStateBlock,
+          attemptId,
         )) {
           if (abortSignal?.aborted) {
             activity.endStep(waitId, 'skipped')
@@ -123,13 +127,15 @@ export class NarrativePhase {
             return null
           }
 
-          if (waitId && (chunk.content || chunk.reasoning)) {
+          if (waitId && (chunk.started || chunk.content || chunk.reasoning)) {
             activity.endStep(waitId)
             waitId = ''
             streamId = activity.startStep('Generating', { parentId: attemptId, isLLM: true })
           }
+          if (chunk.started) continue
 
           chunkCount++
+          if (chunk.content || chunk.reasoning) contentChunks++
 
           // Accumulate content and reasoning
           if (chunk.content) {
@@ -153,8 +159,12 @@ export class NarrativePhase {
           }
         }
 
-        activity.endStep(waitId, 'done', 'no tokens')
-        activity.endStep(streamId, 'done', `${chunkCount} chunks`)
+        activity.endStep(waitId, 'done', 'no response')
+        activity.endStep(
+          streamId,
+          'done',
+          contentChunks ? `${contentChunks} chunk${contentChunks === 1 ? '' : 's'}` : 'no content',
+        )
         if (fullResponse.trim()) {
           activity.endStep(attemptId)
           break // Success
@@ -163,10 +173,8 @@ export class NarrativePhase {
         retryCount++
       } catch (error) {
         const aborted = error instanceof Error && error.name === 'AbortError'
-        activity.endStep(waitId, aborted ? 'skipped' : 'failed')
-        activity.endStep(streamId, aborted ? 'skipped' : 'failed')
-        activity.endStep(attemptId, aborted ? 'skipped' : 'failed')
-        activity.endStep(narrativeStepId, aborted ? 'skipped' : 'failed')
+        for (const id of [waitId, streamId, attemptId, narrativeStepId])
+          failStep(activity, id, error)
         if (aborted) {
           yield { type: 'aborted', phase: 'narrative' } satisfies AbortedEvent
           return null

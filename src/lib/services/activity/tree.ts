@@ -103,3 +103,38 @@ export function flattenTree(nodes: ActivityNode[], level = 0): ActivityRow[] {
   }
   return rows
 }
+
+/**
+ * Failed steps whose failure a failed descendant already shows: a parent that failed because its
+ * child did, carrying the child's reason or none of its own. Displaying both repeats one failure.
+ * A parent with a reason of its own -- a request's "after 3 attempts" over its attempts -- is kept.
+ */
+export function failuresShownBelow(nodes: ActivityNode[]): Set<string> {
+  const shown = new Set<string>()
+  // The reasons of the failed steps beneath `node`, and of `node` itself when failed.
+  const visit = (node: ActivityNode): (string | undefined)[] => {
+    const below = node.children.flatMap(visit)
+    const { step } = node
+    if (step.status === 'failed' && below.length > 0) {
+      if (!step.error || below.includes(step.error)) shown.add(step.id)
+    }
+    return step.status === 'failed' ? [...below, step.error] : below
+  }
+  nodes.forEach(visit)
+  return shown
+}
+
+/** Steps with a failed step somewhere beneath them, whatever their own outcome. */
+export function stepsAboveFailures(nodes: ActivityNode[]): Set<string> {
+  const above = new Set<string>()
+  const visit = (node: ActivityNode): boolean => {
+    let failedBelow = false
+    for (const child of node.children) {
+      if (visit(child) || child.step.status === 'failed') failedBelow = true
+    }
+    if (failedBelow) above.add(node.step.id)
+    return failedBelow
+  }
+  nodes.forEach(visit)
+  return above
+}

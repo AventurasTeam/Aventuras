@@ -19,6 +19,7 @@ import {
   type ActivityStep,
   type ActivityTurn,
   type StartStepOptions,
+  type TurnOutcome,
 } from '$lib/services/activity'
 
 class ActivityStore {
@@ -114,8 +115,12 @@ class ActivityStore {
     this.startClock()
   }
 
-  endTurn() {
-    this.guard(() => this.recorder.endTurn(), undefined)
+  rebindTurn(fromEntryId: string, toEntryId: string) {
+    this.guard(() => this.recorder.rebindTurn(fromEntryId, toEntryId), undefined)
+  }
+
+  endTurn(outcome?: TurnOutcome, error?: string | null) {
+    this.guard(() => this.recorder.endTurn(outcome, error), undefined)
     this.now = Date.now()
     this.stopClock()
   }
@@ -128,8 +133,13 @@ class ActivityStore {
     this.guard(() => this.recorder.updateStep(id, detail), undefined)
   }
 
-  endStep(id: string, status?: Exclude<ActivityStatus, 'running'>, detail?: string) {
-    this.guard(() => this.recorder.endStep(id, status, detail), undefined)
+  endStep(
+    id: string,
+    status?: Exclude<ActivityStatus, 'running'>,
+    detail?: string,
+    error?: string | null,
+  ) {
+    this.guard(() => this.recorder.endStep(id, status, detail, error), undefined)
   }
 
   recordStep(
@@ -137,6 +147,7 @@ class ActivityStore {
     options?: StartStepOptions & {
       status?: Exclude<ActivityStatus, 'running'>
       durationMs?: number
+      error?: string | null
     },
   ): string {
     return this.guard(() => this.recorder.recordStep(label, options), '')
@@ -163,6 +174,12 @@ class ActivityStore {
   tree(turn: ActivityTurn): ActivityNode[] {
     void this.version
     return buildTree(turn.steps)
+  }
+
+  /** Why the turn halted, or null when it did not. */
+  haltReason(turn: ActivityTurn): string | null {
+    void this.version
+    return turn.outcome === 'halted' ? (turn.error ?? '') : null
   }
 
   hasEnded(turn: ActivityTurn): boolean {

@@ -493,10 +493,11 @@ describe('runTier3Selection activity reporting', () => {
 
   it('records a failed selection as failed', async () => {
     generateStructured.mockRejectedValue(new Error('boom'))
+    vi.mocked(activity.startStep).mockReturnValueOnce('tier3')
 
     await runTier3Selection(request)
 
-    expect(activity.endStep).toHaveBeenCalledWith('', 'failed')
+    expect(activity.endStep).toHaveBeenCalledWith('tier3', 'failed', undefined, 'boom')
   })
 
   it('records a cache hit as a finished step that cost no model call', async () => {

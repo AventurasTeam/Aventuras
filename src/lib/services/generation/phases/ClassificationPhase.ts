@@ -20,7 +20,7 @@ import type { Story, StoryEntry, TimeTracker } from '$lib/types'
 import type { ClassificationResult } from '$lib/services/ai/sdk/schemas/classifier'
 
 /** Dependencies for classification phase - injected to avoid tight coupling */
-import { NO_ACTIVITY, type ActivityReporter } from '$lib/services/activity'
+import { NO_ACTIVITY, failStep, type ActivityReporter } from '$lib/services/activity'
 
 export interface ClassificationDependencies {
   classifyResponse: (
@@ -30,6 +30,7 @@ export interface ClassificationDependencies {
     story: Story | null | undefined,
     chatHistoryEntries: StoryEntry[],
     timeTracker: TimeTracker | null | undefined,
+    activityParentId?: string,
   ) => Promise<ClassificationResult>
 }
 
@@ -100,14 +101,26 @@ export class ClassificationPhase {
           story,
           chatHistoryEntries,
           story?.timeTracker,
-        )
-        activity.endStep(callId)
-      } catch (error) {
-        activity.endStep(
           callId,
-          error instanceof Error && error.name === 'AbortError' ? 'skipped' : 'failed',
         )
+      } catch (error) {
+        failStep(activity, callId, error)
         throw error
+      }
+
+      // The classifier absorbs its failures into `_error`. A salvaged result is still applied.
+      const failure = classificationResult._error
+      if (!failure) activity.endStep(callId)
+      else if (classificationResult._salvaged)
+        activity.endStep(callId, 'done', 'partly applied', failure)
+      else {
+        activity.endStep(callId, 'failed', undefined, failure)
+        yield {
+          type: 'error',
+          phase: 'classification',
+          error: new Error(failure),
+          fatal: false,
+        } satisfies ErrorEvent
       }
 
       if (abortSignal?.aborted) {
@@ -118,13 +131,18 @@ export class ClassificationPhase {
       // The phase stays suspended at this yield while the consumer applies the result, so the
       // step spans exactly that work.
       const applyId = activity.startStep('Updating world', { parentId: input.activityParentId })
+      let applied = false
       try {
         yield {
           type: 'classification_complete',
           result: classificationResult,
+          applyStepId: applyId,
         } satisfies ClassificationCompleteEvent
+        applied = true
       } finally {
-        activity.endStep(applyId)
+        // Resumed means handled; abandoned here means stopped, or the consumer threw and has
+        // already closed the step as failed.
+        activity.endStep(applyId, applied ? 'done' : 'skipped')
       }
 
       const result: ClassificationPhaseResult = {

@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { buildTree, deepestRunningStep, flattenTree, rootStep } from './tree'
+import {
+  buildTree,
+  deepestRunningStep,
+  failuresShownBelow,
+  stepsAboveFailures,
+  flattenTree,
+  rootStep,
+} from './tree'
 import type { ActivityStep } from './types'
 
 function step(partial: Partial<ActivityStep> & { id: string }): ActivityStep {
@@ -178,5 +185,60 @@ describe('rootStep', () => {
     const cyclic = [step({ id: 'a', parentId: 'b' }), step({ id: 'b', parentId: 'a' })]
 
     expect(rootStep(cyclic, cyclic[0])).toBeDefined()
+  })
+})
+
+describe('failuresShownBelow', () => {
+  const failed = (id: string, parentId: string | null, error?: string) =>
+    step({ id, parentId, status: 'failed', error })
+
+  it('marks a parent that failed with the same reason as its child', () => {
+    const nodes = buildTree([failed('p', null, '401 · bad key'), failed('c', 'p', '401 · bad key')])
+    expect([...failuresShownBelow(nodes)]).toEqual(['p'])
+  })
+
+  it('marks a failed parent with no reason of its own', () => {
+    const nodes = buildTree([failed('p', null), failed('c', 'p', 'boom')])
+    expect([...failuresShownBelow(nodes)]).toEqual(['p'])
+  })
+
+  it('keeps a parent whose reason says more than its children', () => {
+    const nodes = buildTree([
+      failed('req', null, '429 · limited (after 3 attempts)'),
+      failed('a1', 'req', '429 · limited'),
+    ])
+    expect(failuresShownBelow(nodes).size).toBe(0)
+  })
+
+  it('reaches through a finished middle step to a failure deeper down', () => {
+    const nodes = buildTree([
+      failed('p', null, 'boom'),
+      step({ id: 'm', parentId: 'p' }),
+      failed('c', 'm', 'boom'),
+    ])
+    expect([...failuresShownBelow(nodes)]).toEqual(['p'])
+  })
+
+  it('leaves a failed step with no failed descendants alone', () => {
+    const nodes = buildTree([failed('p', null, 'boom'), step({ id: 'c', parentId: 'p' })])
+    expect(failuresShownBelow(nodes).size).toBe(0)
+  })
+})
+
+describe('stepsAboveFailures', () => {
+  it('marks every ancestor of a failed step, finished or not', () => {
+    const nodes = buildTree([
+      step({ id: 'retrieval' }),
+      step({ id: 'world', parentId: 'retrieval' }),
+      step({ id: 'tier3', parentId: 'world', status: 'failed', error: 'boom' }),
+      step({ id: 'lorebook', parentId: 'retrieval' }),
+    ])
+    expect([...stepsAboveFailures(nodes)].sort()).toEqual(['retrieval', 'world'])
+  })
+
+  it('marks nothing when nothing failed', () => {
+    expect(
+      stepsAboveFailures(buildTree([step({ id: 'a' }), step({ id: 'b', parentId: 'a' })])).size,
+    ).toBe(0)
   })
 })

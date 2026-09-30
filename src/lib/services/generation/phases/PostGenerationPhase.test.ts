@@ -3,6 +3,14 @@ import { describe, it, expect, vi } from 'vitest'
 // PostGenerationPhase imports TranslationService for its `shouldTranslate` gate, and that
 // class extends BaseAIService. Stubbing the two rune-based stores it reaches lets the real
 // gate run rather than a reimplementation of it.
+vi.mock('$lib/stores/activity.svelte', () => ({
+  activity: {
+    startStep: vi.fn(() => ''),
+    updateStep: vi.fn(),
+    endStep: vi.fn(),
+    recordStep: vi.fn(() => ''),
+  },
+}))
 vi.mock('$lib/stores/debug.svelte', () => ({
   debug: { addDebugRequest: vi.fn(), addDebugResponse: vi.fn() },
 }))
@@ -189,8 +197,9 @@ describe('PostGenerationPhase', () => {
         expect.objectContaining({ mode: 'adventure' }),
         'second',
         'story-1',
+        '',
       )
-      expect(translateActionChoices).toHaveBeenCalledWith(choices, 'it', 'story-1')
+      expect(translateActionChoices).toHaveBeenCalledWith(choices, 'it', 'story-1', '')
     })
 
     it('hands the story to the suggestions generator and its translation', async () => {
@@ -203,8 +212,15 @@ describe('PostGenerationPhase', () => {
         ),
       )
 
-      expect(generateSuggestions).toHaveBeenCalledWith([], [], [], 'The dragon fell.', 'story-1')
-      expect(translateSuggestions).toHaveBeenCalledWith(suggestions, 'it', 'story-1')
+      expect(generateSuggestions).toHaveBeenCalledWith(
+        [],
+        [],
+        [],
+        'The dragon fell.',
+        'story-1',
+        '',
+      )
+      expect(translateSuggestions).toHaveBeenCalledWith(suggestions, 'it', 'story-1', '')
     })
   })
 

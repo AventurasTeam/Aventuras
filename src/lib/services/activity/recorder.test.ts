@@ -274,3 +274,42 @@ describe('latestTurn', () => {
     expect(recorder.latestTurn?.entryId).toBe('entry-2')
   })
 })
+
+describe('error reasons', () => {
+  it('keeps the reason a failed step was closed with, and a snapshot carries it', () => {
+    const { recorder } = recorderAt()
+    recorder.setReporting('line')
+    recorder.startTurn('entry-1')
+
+    const id = recorder.startStep('Classifying')
+    recorder.endStep(id, 'failed', undefined, '401 · invalid API key')
+    recorder.recordStep('Tier 3 selection', { status: 'failed', error: 'timed out' })
+
+    const steps = recorder.snapshot()[0].steps
+    expect(steps.map((s) => s.error)).toEqual(['401 · invalid API key', 'timed out'])
+  })
+
+  it('records no reason when none is given', () => {
+    const { recorder } = recorderAt()
+    recorder.setReporting('line')
+    recorder.startTurn('entry-1')
+
+    recorder.endStep(recorder.startStep('Classifying'), 'failed')
+
+    expect(recorder.snapshot()[0].steps[0].error).toBeUndefined()
+  })
+})
+
+describe('rebindTurn', () => {
+  it('moves a turn to the entry that took the place of its narration', () => {
+    const { recorder } = recorderAt()
+    recorder.setReporting('line')
+    recorder.startTurn('narration-1')
+    recorder.startStep('Narrative')
+
+    recorder.rebindTurn('narration-1', 'error-1')
+
+    expect(recorder.find('narration-1')).toBeNull()
+    expect(recorder.find('error-1')?.steps.map((s) => s.label)).toEqual(['Narrative'])
+  })
+})

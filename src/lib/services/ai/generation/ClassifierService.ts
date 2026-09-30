@@ -39,6 +39,7 @@ import {
 import type { RuntimeVariable, RuntimeEntityType } from '$lib/services/packs/types'
 import { NoObjectGeneratedError } from 'ai'
 import { jsonrepair } from 'jsonrepair'
+import { describeActivityError } from '$lib/services/activity'
 
 const log = createLogger('Classifier')
 
@@ -76,6 +77,7 @@ export class ClassifierService extends BaseAIService {
     context: ClassificationContext,
     visibleEntries?: StoryEntry[],
     currentStoryTime?: TimeTracker | null,
+    activityParentId?: string,
   ): Promise<ClassificationResult> {
     log('classify', {
       narrativeLength: context.narrativeResponse.length,
@@ -154,6 +156,7 @@ export class ClassifierService extends BaseAIService {
           schema,
           system,
           prompt,
+          activityParentId,
         },
         'classifier',
       )) as ClassificationResult
@@ -218,7 +221,8 @@ export class ClassifierService extends BaseAIService {
         presentCharacterNames: [],
         timeProgression: 'none',
       },
-      _error: error instanceof Error ? error.message : String(error),
+      _error:
+        describeActivityError(error) ?? (error instanceof Error ? error.message : String(error)),
     }
 
     // Only a schema/parse rejection carries the model's text. A transport failure, an
@@ -245,6 +249,7 @@ export class ClassifierService extends BaseAIService {
       salvaged._runtimeVarDefs = runtimeVars
     }
     salvaged._error = empty._error
+    salvaged._salvaged = true
 
     log('classify salvaged a partial result', {
       characterUpdates: salvaged.entryUpdates.characterUpdates.length,

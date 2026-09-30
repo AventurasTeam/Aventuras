@@ -11,6 +11,8 @@ import { BaseAIService } from '../BaseAIService'
 import { createLogger } from '$lib/log'
 import { generatePlainText } from '../sdk/generate'
 import { ContextBuilder } from '$lib/services/context'
+import { activity } from '$lib/stores/activity.svelte'
+import { describeActivityError, failStep } from '$lib/services/activity'
 import {
   translatedUIResultSchema,
   translatedSuggestionsResultSchema,
@@ -70,6 +72,8 @@ const SUPPORTED_LANGUAGE_CODES = [
 export interface TranslationResult {
   translatedContent: string
   detectedLanguage?: string
+  /** Why the translation failed, when `translatedContent` is the untranslated original. */
+  failure?: string
 }
 
 export interface UITranslationItem {
@@ -107,6 +111,7 @@ export class TranslationService extends BaseAIService {
     targetLanguage: string,
     _isVisualProse: boolean,
     storyId: string | undefined,
+    activityParentId?: string,
   ): Promise<TranslationResult> {
     // Skip if target is English or content is empty
     if (targetLanguage === 'en' || !content.trim()) {
@@ -123,6 +128,7 @@ export class TranslationService extends BaseAIService {
           presetId: this.presetId,
           system,
           prompt,
+          activityParentId,
         },
         'translate-narration',
       )
@@ -131,6 +137,7 @@ export class TranslationService extends BaseAIService {
       return { translatedContent: translatedContent.trim() }
     } catch (error) {
       log('Translation failed:', error)
+      failStep(activity, activityParentId, error)
       return { translatedContent: content } // Return original on failure
     }
   }
@@ -166,7 +173,7 @@ export class TranslationService extends BaseAIService {
       return { translatedContent: translatedContent.trim(), detectedLanguage: sourceLanguage }
     } catch (error) {
       log('Input translation failed:', error)
-      return { translatedContent: content }
+      return { translatedContent: content, failure: describeActivityError(error) ?? undefined }
     }
   }
 
@@ -215,6 +222,7 @@ export class TranslationService extends BaseAIService {
     suggestions: T[],
     targetLanguage: string,
     storyId: string | undefined,
+    activityParentId?: string,
   ): Promise<T[]> {
     if (suggestions.length === 0) return []
     if (targetLanguage === 'en') return suggestions
@@ -235,6 +243,7 @@ export class TranslationService extends BaseAIService {
         system,
         prompt,
         'translate-suggestions',
+        activityParentId,
       )
 
       // Merge translated text back into original objects (preserves extra fields)
@@ -245,6 +254,7 @@ export class TranslationService extends BaseAIService {
       }))
     } catch (error) {
       log('Suggestions translation failed:', error)
+      failStep(activity, activityParentId, error)
       return suggestions
     }
   }
@@ -257,6 +267,7 @@ export class TranslationService extends BaseAIService {
     choices: T[],
     targetLanguage: string,
     storyId: string | undefined,
+    activityParentId?: string,
   ): Promise<T[]> {
     if (choices.length === 0) return []
     if (targetLanguage === 'en') return choices
@@ -277,6 +288,7 @@ export class TranslationService extends BaseAIService {
         system,
         prompt,
         'translate-action-choices',
+        activityParentId,
       )
 
       // Merge translated text back into original objects (preserves extra fields)
@@ -287,6 +299,7 @@ export class TranslationService extends BaseAIService {
       }))
     } catch (error) {
       log('Action choices translation failed:', error)
+      failStep(activity, activityParentId, error)
       return choices
     }
   }

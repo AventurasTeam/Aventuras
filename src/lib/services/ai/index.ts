@@ -113,6 +113,8 @@ import type {
 import type { TranslationResult, UITranslationItem } from './utils'
 import { recentContent, AS_HAYSTACK, AS_PROSE } from '$lib/utils/recentContent'
 import { joinPromptBlocks } from '$lib/utils/promptBlocks'
+import { activity } from '$lib/stores/activity.svelte'
+import { describeActivityError, failStep } from '$lib/services/activity'
 
 // Timeline Fill service settings (per design doc section 3.1.4: Static Retrieval)
 export interface TimelineFillSettings {
@@ -162,6 +164,8 @@ export interface ImageGenerationServiceSettings {
 
 // Re-export ImageGenerationContext type for backwards compatibility
 export interface ImageGenerationContext {
+  /** Step the image work nests under in the activity record. */
+  activityParentId?: string
   storyId: string
   /** Branch the turn runs on; `null` is the main branch. */
   branchId: string | null
@@ -263,6 +267,7 @@ class AIService {
     signal?: AbortSignal,
     timelineFillResult?: TimelineFillResult | null,
     worldStateBlock?: string | null,
+    activityParentId?: string,
   ): AsyncIterable<StreamChunk> {
     log('streamNarrative called', {
       entriesCount: entries.length,
@@ -299,6 +304,7 @@ class AIService {
       retrievedChapterContext,
       signal,
       timelineFillResult,
+      activityParentId,
     })
   }
 
@@ -312,6 +318,7 @@ class AIService {
     story?: Story | null,
     visibleEntries?: StoryEntry[],
     currentStoryTime?: TimeTracker | null,
+    activityParentId?: string,
   ): Promise<ClassificationResult> {
     log('classifyResponse called', {
       narrativeLength: narrativeResponse.length,
@@ -353,7 +360,7 @@ class AIService {
       existingStoryBeats: worldState.storyBeats ?? [],
     }
 
-    return classifierService.classify(context, visibleEntries, currentStoryTime)
+    return classifierService.classify(context, visibleEntries, currentStoryTime, activityParentId)
   }
 
   /**
@@ -365,6 +372,7 @@ class AIService {
     lorebookEntries: Entry[] | undefined,
     latestNarrativeResponse: string | undefined,
     storyId: string | undefined,
+    activityParentId?: string,
   ): Promise<SuggestionsResult> {
     log('generateSuggestions called', {
       entriesCount: entries.length,
@@ -380,6 +388,7 @@ class AIService {
       lorebookEntries,
       storyId,
       latestNarrativeResponse,
+      activityParentId,
     )
   }
 
@@ -394,6 +403,7 @@ class AIService {
     promptContext: PromptContext | undefined,
     pov: 'first' | 'second' | 'third' | undefined,
     storyId: string | undefined,
+    activityParentId?: string,
   ): Promise<ActionChoicesResult> {
     log('generateActionChoices called', {
       entriesCount: entries.length,
@@ -420,6 +430,7 @@ class AIService {
 
     // Build context for the service
     const context = {
+      activityParentId,
       storyId,
       narrativeResponse,
       userAction: lastUserAction?.content ?? '',
@@ -868,7 +879,10 @@ class AIService {
    * - Inline mode: Process <pic> tags from AI response
    * - Analyzed mode: Use LLM to identify imageable scenes
    */
-  async generateImagesForNarrative(context: ImageGenerationContext): Promise<void> {
+  /** How many images were handed off to generate, or why none could be. */
+  async generateImagesForNarrative(
+    context: ImageGenerationContext,
+  ): Promise<{ queued: number; failure?: string }> {
     log('generateImagesForNarrative called', {
       storyId: context.storyId,
       entryId: context.entryId,
@@ -879,12 +893,12 @@ class AIService {
 
     if (context.imageGenerationMode === 'none') {
       log('Image generation off for this story')
-      return
+      return { queued: 0 }
     }
 
     if (!this.isImageGenerationEnabled(undefined, 'standard')) {
       log('Image generation not enabled or not configured')
-      return
+      return { queued: 0 }
     }
 
     // Check if inline image mode is enabled for this story
@@ -904,14 +918,15 @@ class AIService {
           referenceMode: context.referenceMode,
         }
         await inlineImageService.processNarrativeForInlineImages(inlineContext)
-      } else {
-        // Analyzed mode: Use LLM to identify imageable scenes
-        log('Using analyzed image mode')
-        await this.runAnalyzedImageGeneration(context)
+        return { queued: 0 }
       }
+      // Analyzed mode: Use LLM to identify imageable scenes
+      log('Using analyzed image mode')
+      return await this.runAnalyzedImageGeneration(context)
     } catch (error) {
       log('Image generation failed (non-fatal)', error)
       // Don't throw - image generation failure shouldn't break the main flow
+      return { queued: 0, failure: describeActivityError(error) ?? undefined }
     }
   }
 
@@ -919,11 +934,13 @@ class AIService {
    * Run analyzed image generation mode.
    * Uses LLM to identify visually striking moments in narrative text.
    */
-  private async runAnalyzedImageGeneration(context: ImageGenerationContext): Promise<void> {
+  private async runAnalyzedImageGeneration(
+    context: ImageGenerationContext,
+  ): Promise<{ queued: number; failure?: string }> {
     const imageSettings = context.imageSettings
     if (!imageSettings) {
       log('No image settings in context, skipping analyzed image generation')
-      return
+      return { queued: 0 }
     }
     const referenceMode = context.referenceMode ?? false
     const scope: BranchScope = { storyId: context.storyId, branchId: context.branchId }
@@ -970,22 +987,33 @@ class AIService {
     // single catch spanning both emitted `Failed` after `Complete` had already fired for
     // a throw while queueing, closing an analysis phase twice. `Failed` stays a
     // notification only (`StoryEntry` toasts on it) — it never ends the phase.
+    const analysisId = context.activityParentId
+      ? activity.startStep('Scene analysis', { parentId: context.activityParentId, isLLM: true })
+      : ''
     let scenes: ResolvedScene[]
     try {
       // Create service and identify scenes
       const analysisService = serviceFactory.createImageAnalysisService()
-      const identified = await analysisService.identifyScenes(analysisContext)
-      scenes = resolveScenes(identified, present)
-      if (scenes.length < identified.length) {
-        log('Dropped scenes', { before: identified.length, after: scenes.length })
+      const analysis = await analysisService.identifyScenes(analysisContext, analysisId)
+      if (analysis.failure) {
+        // Absorbed as before -- no scenes, no toast -- but the analysis did fail.
+        activity.endStep(analysisId, 'failed', undefined, analysis.failure)
+        emitImageAnalysisComplete(context.entryId, 0, 0)
+        return { queued: 0, failure: analysis.failure }
+      }
+      scenes = resolveScenes(analysis.scenes, present)
+      if (scenes.length < analysis.scenes.length) {
+        log('Dropped scenes', { before: analysis.scenes.length, after: scenes.length })
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       log('Scene analysis failed', error)
+      failStep(activity, analysisId, error)
       emitImageAnalysisComplete(context.entryId, 0, 0)
       emitImageAnalysisFailed(context.entryId, errorMessage)
-      return
+      return { queued: 0, failure: describeActivityError(error) ?? undefined }
     }
+    activity.endStep(analysisId, 'done', `${scenes.length} scenes`)
 
     // Count portrait generations
     const portraitCount = scenes.filter((s) => s.generatePortrait).length
@@ -1002,6 +1030,7 @@ class AIService {
     }
     emitImageAnalysisComplete(context.entryId, sceneCount, portraitCount)
 
+    let queued = 0
     try {
       // Queue image generation for each scene
       const getImageProfile = context.getImageProfile ?? (() => undefined)
@@ -1011,7 +1040,7 @@ class AIService {
         ...scenes.filter((s) => !s.generatePortrait),
       ]
       for (const scene of portraitsFirst) {
-        await this.queueAnalyzedImageGeneration(
+        const didQueue = await this.queueAnalyzedImageGeneration(
           scope,
           context.entryId,
           scene,
@@ -1021,12 +1050,15 @@ class AIService {
           getImageProfile,
           context.onPortraitGenerated,
         )
+        if (didQueue) queued++
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       log('Queueing analyzed image generation failed', error)
       emitImageAnalysisFailed(context.entryId, errorMessage)
+      return { queued, failure: describeActivityError(error) ?? undefined }
     }
+    return { queued }
   }
 
   // A portrait still generating counts. The model is told who has one but may still ask, and a
@@ -1047,7 +1079,7 @@ class AIService {
     referenceMode: boolean,
     getImageProfile: (id: string) => ImageProfile | undefined,
     onPortraitGenerated: ImageGenerationContext['onPortraitGenerated'],
-  ): Promise<void> {
+  ): Promise<boolean> {
     const { storyId } = scope
     const imageId = crypto.randomUUID()
     const live = getLiveCharacters()
@@ -1057,11 +1089,11 @@ class AIService {
       portraitCharacter = findLiveCharacter(scene.portraitOf, live)
       if (!portraitCharacter) {
         log('Portrait skipped: character gone', { characterId: scene.portraitOf.id })
-        return
+        return false
       }
       if (this.hasPortrait(scope, portraitCharacter)) {
         log('Portrait skipped: character already has one', { characterId: portraitCharacter.id })
-        return
+        return false
       }
     }
 
@@ -1082,7 +1114,7 @@ class AIService {
       if (sources.length > 0) {
         if (!this.isImageGenerationEnabled(undefined, 'reference')) {
           log('Reference image generation not configured')
-          return
+          return false
         }
         references = {
           sources,
@@ -1100,7 +1132,7 @@ class AIService {
     if (scene.generatePortrait) {
       if (!this.isImageGenerationEnabled(undefined, 'portrait')) {
         log('Portrait image generation not configured')
-        return
+        return false
       }
       profileId = imageSettings.portraitProfileId
       modelToUse = getImageProfile(profileId ?? '')?.model ?? ''
@@ -1110,7 +1142,7 @@ class AIService {
 
     if (!profileId) {
       log('No image profile configured, skipping scene')
-      return
+      return false
     }
 
     // Build full prompt with style
@@ -1162,6 +1194,7 @@ class AIService {
       return null
     })
     if (portraitCharacter) this.pendingPortraits.track(scope, portraitCharacter, run)
+    return true
   }
 
   /**
@@ -1242,7 +1275,8 @@ class AIService {
     storyId: string,
     visibleEntries: StoryEntry[],
     onBackgroundImageUpdate: (image: string) => void,
-  ): Promise<void> {
+    activityParentId?: string,
+  ): Promise<{ failure?: string }> {
     // Two phases, two separate pairs, each closed in a `finally`: the progress counters
     // read `Started`/`Complete` and `Queued`/`Ready`, and a single try/catch around both
     // left them open. A throw while generating reported an analysis failure for a phase
@@ -1251,40 +1285,56 @@ class AIService {
     // `createBackgroundImageService` throws when no background profile is configured, so it
     // stays inside the try: this is called fire-and-forget from `story.svelte.ts`, where a
     // rejected promise is an unhandled rejection rather than a logged failure.
+    // Each request is a step of its own under the caller's, when the caller reports one.
+    const step = (label: string) =>
+      activityParentId ? activity.startStep(label, { parentId: activityParentId, isLLM: true }) : ''
     emitBackgroundImageAnalysisStarted()
+    const detectId = step('Change detection')
     let service: ReturnType<typeof serviceFactory.createBackgroundImageService> | null = null
-    let result: BackgroundImageAnalysisResult | null = null
+    let result: (BackgroundImageAnalysisResult & { failure?: string }) | null = null
+    let failure: string | undefined
     try {
       service = serviceFactory.createBackgroundImageService()
-      result = await service.analyzeResponsesForBackgroundImage(storyId, visibleEntries)
+      result = await service.analyzeResponsesForBackgroundImage(storyId, visibleEntries, detectId)
+      failure = result.failure
     } catch (error) {
       emitBackgroundImageAnalysisFailed()
       log('Background image analysis failed', error)
+      failure = describeActivityError(error) ?? undefined
     } finally {
       emitBackgroundImageAnalysisComplete()
     }
+    if (failure) activity.endStep(detectId, 'failed', undefined, failure)
+    else activity.endStep(detectId, 'done', result?.changeNecessary ? 'scene changed' : 'no change')
 
     // Ai returns empty string or short response if no change, otherwise the image prompt
-    if (!service || !result?.changeNecessary) return
+    if (!service || !result?.changeNecessary) return { failure }
 
     log('Background change detected, prompt:', result.prompt)
     emitBackgroundImageQueued()
+    const imageId = step('Image request')
     try {
-      const image = await service.generateBackgroundImage(result.prompt)
+      const { image, failure: imageFailure } = await service.generateBackgroundImage(result.prompt)
 
       if (image) {
         log('Background image generated successfully', { image })
         onBackgroundImageUpdate(image)
+        activity.endStep(imageId)
       } else {
         log('Background image generation failed')
         emitBackgroundImageAnalysisFailed()
+        failure = imageFailure ?? 'No image was returned'
+        activity.endStep(imageId, 'failed', undefined, failure)
       }
     } catch (error) {
       emitBackgroundImageAnalysisFailed()
       log('Background image generation failed', error)
+      failure = describeActivityError(error) ?? undefined
+      failStep(activity, imageId, error)
     } finally {
       emitBackgroundImageReady()
     }
+    return { failure }
   }
 
   // ===== Translation Methods =====
@@ -1297,9 +1347,16 @@ class AIService {
     targetLanguage: string,
     isVisualProse: boolean,
     storyId: string | undefined,
+    activityParentId?: string,
   ): Promise<TranslationResult> {
     const service = serviceFactory.createTranslationService('narration')
-    return service.translateNarration(content, targetLanguage, isVisualProse, storyId)
+    return service.translateNarration(
+      content,
+      targetLanguage,
+      isVisualProse,
+      storyId,
+      activityParentId,
+    )
   }
 
   /**
@@ -1333,9 +1390,10 @@ class AIService {
     suggestions: T[],
     targetLanguage: string,
     storyId: string | undefined,
+    activityParentId?: string,
   ): Promise<T[]> {
     const service = serviceFactory.createTranslationService('suggestions')
-    return service.translateSuggestions(suggestions, targetLanguage, storyId)
+    return service.translateSuggestions(suggestions, targetLanguage, storyId, activityParentId)
   }
 
   /**
@@ -1345,9 +1403,10 @@ class AIService {
     choices: T[],
     targetLanguage: string,
     storyId: string | undefined,
+    activityParentId?: string,
   ): Promise<T[]> {
     const service = serviceFactory.createTranslationService('actionChoices')
-    return service.translateActionChoices(choices, targetLanguage, storyId)
+    return service.translateActionChoices(choices, targetLanguage, storyId, activityParentId)
   }
 
   /**

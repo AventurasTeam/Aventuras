@@ -11,4 +11,6 @@ export interface StreamChunk {
   content: string
   reasoning?: string
   done: boolean
+  /** The response has begun arriving; carries no content of its own. */
+  started?: boolean
 }

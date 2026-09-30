@@ -66,7 +66,23 @@ function parseRetryAfterMs(error: unknown): number | null {
   return null
 }
 
-async function withRetry<T>(fn: () => PromiseLike<T>, signal?: AbortSignal): Promise<T> {
+/** Told about each wait before it starts, so a caller can report it. */
+export interface RetryHooks {
+  onRetryWait?(wait: {
+    error: unknown
+    delayMs: number
+    source: 'Retry-After' | 'backoff'
+    /** 1-based: the first retry is 1. */
+    retry: number
+    maxRetries: number
+  }): void
+}
+
+async function withRetry<T>(
+  fn: () => PromiseLike<T>,
+  signal: AbortSignal | undefined,
+  hooks: RetryHooks,
+): Promise<T> {
   let lastError: unknown
   for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
     try {
@@ -99,6 +115,13 @@ async function withRetry<T>(fn: () => PromiseLike<T>, signal?: AbortSignal): Pro
       console.warn(
         `[retryMiddleware] 429 received, retrying in ${Math.round(delay / 1000)}s (${src}, attempt ${attempt + 1}/${RETRY_DELAYS_MS.length})`,
       )
+      hooks.onRetryWait?.({
+        error,
+        delayMs: delay,
+        source: src,
+        retry: attempt + 1,
+        maxRetries: RETRY_DELAYS_MS.length,
+      })
       await sleep(delay, signal)
     }
   }
@@ -109,7 +132,11 @@ async function withRetry<T>(fn: () => PromiseLike<T>, signal?: AbortSignal): Pro
 // (i.e. pre-stream, on the initial HTTP response headers). A 429 emitted as an
 // error event *after* the stream has started is not caught here — rare on
 // OpenAI-compatible providers, but not impossible.
-export const retryOn429Middleware: LanguageModelMiddleware = {
-  wrapGenerate: async ({ doGenerate, params }) => withRetry(() => doGenerate(), params.abortSignal),
-  wrapStream: async ({ doStream, params }) => withRetry(() => doStream(), params.abortSignal),
+export function retryOn429Middleware(hooks: RetryHooks = {}): LanguageModelMiddleware {
+  return {
+    wrapGenerate: async ({ doGenerate, params }) =>
+      withRetry(() => doGenerate(), params.abortSignal, hooks),
+    wrapStream: async ({ doStream, params }) =>
+      withRetry(() => doStream(), params.abortSignal, hooks),
+  }
 }

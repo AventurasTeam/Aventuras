@@ -4,6 +4,14 @@ import { describe, it, expect, vi } from 'vitest'
 // That class extends BaseAIService, so loading it reaches the debug and settings stores --
 // rune-based modules the test runner cannot evaluate. Both are stubbed so the *real* gate
 // runs: reimplementing the predicate here would leave the thing under test untested.
+vi.mock('$lib/stores/activity.svelte', () => ({
+  activity: {
+    startStep: vi.fn(() => ''),
+    updateStep: vi.fn(),
+    endStep: vi.fn(),
+    recordStep: vi.fn(() => ''),
+  },
+}))
 vi.mock('$lib/stores/debug.svelte', () => ({
   debug: { addDebugRequest: vi.fn(), addDebugResponse: vi.fn() },
 }))
@@ -71,7 +79,7 @@ describe('TranslationPhase', () => {
       new TranslationPhase({ translateNarration }).execute(makeInput({ isVisualProse: true })),
     )
 
-    expect(translateNarration).toHaveBeenCalledWith('The dragon fell.', 'it', true, 'story-1')
+    expect(translateNarration).toHaveBeenCalledWith('The dragon fell.', 'it', true, 'story-1', '')
   })
 
   it('skips without calling the translator when translation is off', async () => {
@@ -180,5 +188,29 @@ describe('TranslationPhase activity reporting', () => {
 
     await drain(gen)
     expect(steps.find((s) => s.label === 'Saving translation')?.status).toBe('done')
+  })
+})
+
+describe('TranslationPhase abandoned while saving', () => {
+  it('skips the saving step when the consumer never resumes the phase', async () => {
+    const closed: Record<string, string> = {}
+    const activity = {
+      startStep: (label: string) => label,
+      endStep: (id: string, status = 'done') => {
+        closed[id] ??= status
+      },
+      recordStep: () => '',
+    }
+    const translateNarration = vi.fn().mockResolvedValue({ translatedContent: 'Il drago cadde.' })
+    const gen = new TranslationPhase({ translateNarration }).execute(
+      makeInput({ activity, activityParentId: 'phase' }),
+    )
+
+    let next = await gen.next()
+    while (!next.done && next.value.type !== 'phase_complete') next = await gen.next()
+    expect((next.value as any).applyStepId).toBe('Saving translation')
+    await gen.return(undefined as any)
+
+    expect(closed['Saving translation']).toBe('skipped')
   })
 })

@@ -163,3 +163,84 @@ describe('ClassificationPhase activity reporting', () => {
     expect(steps.find((s) => s.label === 'Updating world')?.status).toBe('done')
   })
 })
+
+describe('ClassificationPhase failure reporting', () => {
+  function recorder() {
+    const steps: { id: string; label: string; status?: string; detail?: string; error?: string }[] =
+      []
+    const activity = {
+      startStep: (label: string) => {
+        const id = `s${steps.length + 1}`
+        steps.push({ id, label })
+        return id
+      },
+      endStep: (id: string, status = 'done', detail?: string, error?: string | null) => {
+        const step = steps.find((s) => s.id === id)
+        if (!step || step.status) return
+        Object.assign(step, { status, detail, error: error ?? undefined })
+      },
+      recordStep: () => '',
+    }
+    return { steps, activity }
+  }
+  const empty = {
+    entryUpdates: {
+      characterUpdates: [],
+      locationUpdates: [],
+      itemUpdates: [],
+      storyBeatUpdates: [],
+      newCharacters: [],
+      newLocations: [],
+      newItems: [],
+      newStoryBeats: [],
+    },
+    scene: { currentLocationName: null, presentCharacterNames: [], timeProgression: 'none' },
+  }
+
+  it('fails Classifying with the reason when nothing was recovered, and flags the phase', async () => {
+    const { steps, activity } = recorder()
+    const phase = new ClassificationPhase({
+      classifyResponse: async () => ({ ...empty, _error: '401 · invalid API key' }) as any,
+    })
+
+    const { events } = await drain(phase.execute(makeInput({ activity, activityParentId: 'p' })))
+
+    expect(steps[0]).toMatchObject({
+      label: 'Classifying',
+      status: 'failed',
+      error: '401 · invalid API key',
+    })
+    expect(events.find((e) => e.type === 'error')).toMatchObject({ fatal: false })
+    // Still handed on: the consumer shows its warning and applies the empty update.
+    expect(events.some((e) => e.type === 'classification_complete')).toBe(true)
+  })
+
+  it('finishes Classifying as partly applied when the result was salvaged', async () => {
+    const { steps, activity } = recorder()
+    const phase = new ClassificationPhase({
+      classifyResponse: async () => ({ ...empty, _error: 'bad field', _salvaged: true }) as any,
+    })
+
+    const { events } = await drain(phase.execute(makeInput({ activity, activityParentId: 'p' })))
+
+    expect(steps[0]).toMatchObject({ status: 'done', detail: 'partly applied', error: 'bad field' })
+    expect(events.some((e) => e.type === 'error')).toBe(false)
+  })
+
+  it('carries the world update step on the event, and skips it when abandoned there', async () => {
+    const { steps, activity } = recorder()
+    const gen = new ClassificationPhase({ classifyResponse: async () => classification }).execute(
+      makeInput({ activity, activityParentId: 'p' }),
+    )
+
+    let next = await gen.next()
+    while (!next.done && next.value.type !== 'classification_complete') next = await gen.next()
+    const applyStepId = (next.value as any).applyStepId
+    await gen.return(null)
+
+    expect(steps.find((s) => s.id === applyStepId)).toMatchObject({
+      label: 'Updating world',
+      status: 'skipped',
+    })
+  })
+})

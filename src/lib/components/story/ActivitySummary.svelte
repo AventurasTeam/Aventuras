@@ -6,6 +6,7 @@
   let { turn }: { turn: ActivityTurn } = $props()
 
   let expanded = $derived(activity.isTreeExpanded(turn))
+  let haltReason = $derived(activity.haltReason(turn))
 
   /**
    * Values, not the step: like the timeline's rows, a live step is mutated in place, so the
@@ -41,20 +42,30 @@
     class="h-3 w-3 shrink-0 translate-y-0.5 transition-transform {expanded ? 'rotate-90' : ''}"
   />
 
-  {#if current}
-    {#if current.root}
-      <span class="shrink-0">{current.root}</span>
-      <span class="text-muted-foreground/50 shrink-0">·</span>
+  <!-- Wraps rather than being cut; the time follows the last word. -->
+  <span class="min-w-0 flex-1 break-words">
+    {#if current}
+      {#if current.root}
+        {current.root}
+        <span class="text-muted-foreground/50">·</span>
+      {/if}
+      <span class="text-foreground">{current.label}</span>
+      {#if current.detail}
+        <span class="text-muted-foreground/60">· {current.detail}</span>
+      {/if}
+      <span class="text-primary inline-flex items-baseline gap-0.5 whitespace-nowrap tabular-nums">
+        {current.time}
+        {#if current.isLLM}
+          <Sparkles class="h-3 w-3 shrink-0 translate-y-0.5 text-amber-700 dark:text-amber-500" />
+        {/if}
+      </span>
+    {:else if haltReason !== null}
+      <span class="text-red-700 dark:text-red-500">Failed</span>
+      {#if haltReason}
+        · {haltReason}
+      {/if}
+    {:else}
+      {activity.hasEnded(turn) ? 'Finished' : 'Working'}
     {/if}
-    <span class="text-foreground min-w-0 truncate">{current.label}</span>
-    {#if current.detail}
-      <span class="text-muted-foreground/60 min-w-0 truncate">· {current.detail}</span>
-    {/if}
-    <span class="text-primary shrink-0 tabular-nums">{current.time}</span>
-    {#if current.isLLM}
-      <Sparkles class="-ml-1 h-3 w-3 shrink-0 translate-y-0.5 text-amber-700 dark:text-amber-500" />
-    {/if}
-  {:else}
-    <span class="min-w-0 truncate">{activity.hasEnded(turn) ? 'Finished' : 'Working'}</span>
-  {/if}
+  </span>
 </button>

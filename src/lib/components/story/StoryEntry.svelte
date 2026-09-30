@@ -46,7 +46,7 @@
     resolveTTSSanitizeOptions,
   } from '$lib/services/ai/utils/ttsText'
   import { parseMarkdown, parseStoryMarkdown } from '$lib/utils/markdown'
-  import { findPrecedingUserAction } from '$lib/utils/storyEntries'
+  import { findPrecedingUserAction, isGenerationErrorEntry } from '$lib/utils/storyEntries'
   import { entryNumber } from '$lib/utils/storyNavigation'
   import { sanitizeTextForTTS } from '$lib/utils/htmlSanitize'
   import {
@@ -124,14 +124,9 @@
     }
   }
 
-  // Check if this entry is an error entry (either tracked or detected by content)
-  const isErrorEntry = $derived(
-    entry.type === 'system' &&
-      (ui.lastGenerationError?.errorEntryId === entry.id ||
-        entry.content.toLowerCase().includes('generation failed') ||
-        entry.content.toLowerCase().includes('failed to generate') ||
-        entry.content.toLowerCase().includes('empty response')),
-  )
+  // By its marker alone, not its text: rewording or translating the message cannot take its
+  // Retry away.
+  const isErrorEntry = $derived(isGenerationErrorEntry(entry))
 
   // Check if Visual Prose mode is enabled for this story
   const visualProseMode = $derived(story.currentStory?.settings?.visualProseMode ?? false)
@@ -142,7 +137,9 @@
   // Only while this turn's record is still retained; an evicted one offers nothing rather
   // than an empty panel. See RETAINED_TURNS.
   const activityRecord = $derived(
-    settings.uiSettings.activityReporting !== 'off' && entry.type === 'narration'
+    // A system entry has one only when it took the place of a turn's narration: see rebindTurn.
+    settings.uiSettings.activityReporting !== 'off' &&
+      (entry.type === 'narration' || entry.type === 'system')
       ? activity.recordFor(entry.id)
       : null,
   )
@@ -1836,6 +1833,43 @@
             {/if}
           </DropdownMenu.Content>
         </DropdownMenu.Root>
+      </div>
+    {:else if !isEditing && !isDeleting && entry.type === 'system' && !isErrorEntry}
+      <!-- Any other system entry: regenerate (as the last entry, answering the action before it),
+           edit and delete. -->
+      <div class="-ml-2 flex shrink-0 items-center gap-0.5">
+        {#if isLastEntry && findPrecedingUserAction(story.entries, entry.id)}
+          <Button
+            variant="text"
+            size="icon"
+            onclick={handleRetryFromEntry}
+            disabled={entriesLocked}
+            class="h-7 w-7 text-amber-700 hover:text-amber-800 dark:text-amber-500 dark:hover:text-amber-600"
+            title="Generate a response in its place"
+          >
+            <RotateCcw class="h-4 w-4" />
+          </Button>
+        {/if}
+        <Button
+          variant="text"
+          size="icon"
+          onclick={startEdit}
+          disabled={entriesLocked}
+          class="text-muted-foreground hover:text-foreground h-7 w-7"
+          title={entriesLocked ? 'Cannot edit during generation or retry' : 'Edit'}
+        >
+          <Pencil class="h-4 w-4" />
+        </Button>
+        <Button
+          variant="text"
+          size="icon"
+          onclick={() => (isDeleting = true)}
+          disabled={entriesLocked}
+          class="text-muted-foreground h-7 w-7 hover:text-red-700 dark:hover:text-red-500"
+          title={entriesLocked ? 'Cannot delete during generation or retry' : 'Delete'}
+        >
+          <Trash2 class="h-4 w-4" />
+        </Button>
       </div>
     {/if}
   </div>

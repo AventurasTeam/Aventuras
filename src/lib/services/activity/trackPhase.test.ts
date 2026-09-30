@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { trackPhase } from './trackPhase'
-import type { ActivityReporter } from './reporter'
+import { trackStep, type ActivityReporter } from './reporter'
 
 function reporter() {
   const closed: { id: string; status: string }[] = []
@@ -28,7 +28,7 @@ async function drain<E, R>(gen: AsyncGenerator<E, R>) {
   }
 }
 
-const phaseOf = (events: { type: string }[], result: unknown = 'ok') =>
+const phaseOf = (events: { type: string; error?: unknown }[], result: unknown = 'ok') =>
   (async function* () {
     for (const e of events) yield e
     return result
@@ -123,5 +123,49 @@ describe('trackPhase', () => {
     )
 
     expect(closed).toEqual([{ id: 's1', status: 'failed' }])
+  })
+})
+
+describe('failure reasons', () => {
+  function reasons() {
+    const closed: { status?: string; reason?: string | null }[] = []
+    const activity: ActivityReporter = {
+      startStep: () => 's1',
+      endStep: (_id, status, _detail, reason) => closed.push({ status, reason }),
+      recordStep: () => '',
+    }
+    return { activity, closed }
+  }
+
+  it('closes a phase with the reason carried by its error event', async () => {
+    const { activity, closed } = reasons()
+
+    await drain(
+      trackPhase(activity, 's1', phaseOf([{ type: 'error', error: new Error('provider down') }])),
+    )
+
+    expect(closed).toEqual([{ status: 'failed', reason: 'provider down' }])
+  })
+
+  it('closes a phase that throws with the reason of the throw', async () => {
+    const { activity, closed } = reasons()
+    const phase = (async function* () {
+      yield { type: 'phase_start' }
+      throw new Error('template not found')
+    })()
+
+    await expect(drain(trackPhase(activity, 's1', phase))).rejects.toThrow('template not found')
+    expect(closed).toEqual([{ status: 'failed', reason: 'template not found' }])
+  })
+
+  it('closes a step run by trackStep with the reason of its throw, and rethrows', async () => {
+    const { activity, closed } = reasons()
+
+    await expect(
+      trackStep(activity, 'Generating suggestions', {}, async () => {
+        throw new Error('rate limited')
+      }),
+    ).rejects.toThrow('rate limited')
+    expect(closed).toEqual([{ status: 'failed', reason: 'rate limited' }])
   })
 })

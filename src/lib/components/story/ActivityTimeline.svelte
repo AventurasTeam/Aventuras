@@ -1,12 +1,14 @@
 <script lang="ts">
   import { activity } from '$lib/stores/activity.svelte'
   import {
+    failuresShownBelow,
+    stepsAboveFailures,
     flattenTree,
     formatDuration,
     stepDuration,
     type ActivityTurn,
   } from '$lib/services/activity'
-  import { Sparkles } from '@lucide/svelte'
+  import { Sparkles, TriangleAlert } from '@lucide/svelte'
 
   let { turn, now }: { turn: ActivityTurn; now: number } = $props()
 
@@ -16,8 +18,11 @@
    * however often the tree is rebuilt around it. Recomputing primitives is what puts a
    * revised detail on screen.
    */
-  let rows = $derived(
-    flattenTree(activity.tree(turn)).map(({ step, level }) => ({
+  let rows = $derived.by(() => {
+    const nodes = activity.tree(turn)
+    const shownBelow = failuresShownBelow(nodes)
+    const aboveFailures = stepsAboveFailures(nodes)
+    return flattenTree(nodes).map(({ step, level }) => ({
       id: step.id,
       level,
       label: step.label,
@@ -25,10 +30,15 @@
       isLLM: step.isLLM,
       running: step.status === 'running',
       skipped: step.status === 'skipped',
-      failed: step.status === 'failed',
+      // A failure is told once, on the deepest step that carries it. Every step above one is
+      // marked, unless it is itself shown as failed, so the way down to it can be followed.
+      failed: step.status === 'failed' && !shownBelow.has(step.id),
+      failedBelow:
+        aboveFailures.has(step.id) && !(step.status === 'failed' && !shownBelow.has(step.id)),
       time: formatDuration(stepDuration(step, now)),
-    })),
-  )
+      error: shownBelow.has(step.id) ? '' : (step.error ?? ''),
+    }))
+  })
 </script>
 
 <!-- Uncapped, like the reasoning block: a long turn is read by scrolling the story, not through
@@ -42,10 +52,15 @@
     >
       <!-- Fixed width, so the labels start in one column. -->
       <span
-        class="inline-flex w-12 shrink-0 items-baseline justify-end tabular-nums"
+        class="inline-flex w-14 shrink-0 items-baseline justify-end whitespace-nowrap tabular-nums"
         class:text-muted-foreground={!row.running}
         class:text-primary={row.running}
       >
+        {#if row.failedBelow}
+          <TriangleAlert
+            class="mr-1 h-2.5 w-2.5 shrink-0 translate-y-px text-red-700 dark:text-red-500"
+          />
+        {/if}
         {#if row.isLLM}
           <Sparkles
             class="mr-1 h-2.5 w-2.5 shrink-0 translate-y-px text-amber-700 dark:text-amber-500"
@@ -55,12 +70,14 @@
       </span>
 
       <!-- One colour per outcome, never two: same-property utilities are resolved by the order
-           Tailwind emits them, not the order written, and muted is emitted after destructive. -->
+           Tailwind emits them, not the order written. Literal red: `--destructive` is too dark
+           for text on several themes. -->
       <span
-        class="min-w-0 truncate"
-        class:text-foreground={row.running}
-        class:text-destructive={row.failed}
-        class:text-muted-foreground={!row.running && !row.failed}
+        class="min-w-0 truncate {row.failed
+          ? 'text-red-700 dark:text-red-500'
+          : row.running
+            ? 'text-foreground'
+            : 'text-muted-foreground'}"
         class:line-through={row.skipped}
       >
         {row.label}
@@ -74,6 +91,16 @@
         <span class="text-primary/60 shrink-0">…</span>
       {/if}
     </div>
+    {#if row.error}
+      <!-- Indented to the label (level, plus the time column and its gap), and wrapped: a reason
+           is read in full. -->
+      <p
+        class="pb-0.5 text-[11px] leading-snug break-words text-red-700 dark:text-red-500"
+        style="padding-left: {row.level * 0.75 + 3.875}rem"
+      >
+        {row.error}
+      </p>
+    {/if}
   {:else}
     <p class="text-muted-foreground py-0.5 text-[11px]">Nothing recorded yet.</p>
   {/each}

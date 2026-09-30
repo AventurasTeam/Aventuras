@@ -79,6 +79,8 @@ export interface PhaseCompleteEvent {
   type: 'phase_complete'
   phase: GenerationPhase
   result?: unknown
+  /** The step reporting the consumer's handling of this result, to fail if that handling throws. */
+  applyStepId?: string
 }
 
 export interface NarrativeChunkEvent {
@@ -97,6 +99,8 @@ export interface NarrativeCompleteEvent {
 export interface ClassificationCompleteEvent {
   type: 'classification_complete'
   result: ClassificationResult
+  /** The step reporting the consumer's handling of this result, to fail if that handling throws. */
+  applyStepId?: string
 }
 
 export interface ErrorEvent {

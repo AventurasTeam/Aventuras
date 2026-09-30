@@ -21,7 +21,12 @@ export interface ActivityStep {
   startedAt: number
   /** Absent while the step is running. */
   endedAt?: number
+  /** Why a failed step failed, as the reader is shown it. */
+  error?: string
 }
+
+/** How a turn ended. `halted`: a failure stopped it before its narration was produced. */
+export type TurnOutcome = 'finished' | 'halted' | 'stopped'
 
 export interface ActivityTurn {
   id: string
@@ -29,6 +34,10 @@ export interface ActivityTurn {
   entryId: string
   startedAt: number
   endedAt?: number
+  /** Set when the turn ends. */
+  outcome?: TurnOutcome
+  /** Why a halted turn halted. */
+  error?: string
   steps: ActivityStep[]
 }
 

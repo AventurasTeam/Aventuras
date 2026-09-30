@@ -22,7 +22,7 @@ import type { TranslationResult } from '$lib/services/ai/utils/TranslationServic
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
 
 /** Dependencies for translation phase - injected to avoid tight coupling */
-import { NO_ACTIVITY, type ActivityReporter } from '$lib/services/activity'
+import { NO_ACTIVITY, failStep, type ActivityReporter } from '$lib/services/activity'
 
 export interface TranslationDependencies {
   translateNarration: (
@@ -30,6 +30,7 @@ export interface TranslationDependencies {
     targetLanguage: string,
     isVisualProse: boolean,
     storyId: string | undefined,
+    activityParentId?: string,
   ) => Promise<TranslationResult>
 }
 
@@ -108,6 +109,7 @@ export class TranslationPhase {
         targetLanguage,
         isVisualProse,
         storyId,
+        callId,
       )
       activity.endStep(callId)
 
@@ -129,22 +131,24 @@ export class TranslationPhase {
       // The phase stays suspended at this yield while the consumer stores the translation, so
       // the step spans exactly that work.
       const saveId = activity.startStep('Saving translation', { parentId: input.activityParentId })
+      let saved = false
       try {
         yield {
           type: 'phase_complete',
           phase: 'translation',
           result,
+          applyStepId: saveId,
         } satisfies PhaseCompleteEvent
+        saved = true
       } finally {
-        activity.endStep(saveId)
+        // Resumed means handled; abandoned here means stopped, or the consumer threw and has
+        // already closed the step as failed.
+        activity.endStep(saveId, saved ? 'done' : 'skipped')
       }
 
       return result
     } catch (error) {
-      activity.endStep(
-        callId,
-        error instanceof Error && error.name === 'AbortError' ? 'skipped' : 'failed',
-      )
+      failStep(activity, callId, error)
       if (error instanceof Error && error.name === 'AbortError') {
         yield { type: 'aborted', phase: 'translation' } satisfies AbortedEvent
         return {

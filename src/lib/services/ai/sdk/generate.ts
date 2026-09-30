@@ -24,6 +24,8 @@ import { jsonrepair } from 'jsonrepair'
 import * as z from 'zod'
 import { loggingMiddleware, patchResponseMiddleware, promptSchemaMiddleware } from './middleware'
 import { retryOn429Middleware } from './middleware/retryMiddleware'
+import { activityMiddleware, AttemptTracker } from './middleware/activityMiddleware'
+import { activity } from '$lib/stores/activity.svelte'
 import {
   buildProviderOptions,
   type ResolvedPreset,
@@ -47,6 +49,8 @@ interface BaseGenerateOptions {
   system: string
   prompt: string
   signal?: AbortSignal
+  /** The step this request serves; its attempts and waits are reported beneath it. */
+  activityParentId?: string
 }
 
 interface GenerateObjectOptions<T extends z.ZodType> extends BaseGenerateOptions {
@@ -142,14 +146,29 @@ function createJsonExtractMiddleware(): LanguageModelMiddleware {
  * Takes the resolved config rather than a row of booleans: every flag it needs is already on
  * it, and four positional `boolean`s in a row is a swap no type error would ever catch.
  */
-function buildStructuredMiddleware(config: ResolvedPreset): LanguageModelMiddleware[] {
+/**
+ * The head every chain shares. retryOn429Middleware is intentionally outermost: it re-invokes the
+ * whole inner chain (including patchResponseMiddleware) on each retry. Do not reorder without
+ * understanding this — putting retry after patchResponse would cause patched state to leak across
+ * attempts. The activity middleware sits directly inside it, so it sees every attempt raw.
+ */
+function chainHead(activityParentId?: string): LanguageModelMiddleware[] {
+  if (!activityParentId) return [retryOn429Middleware(), patchResponseMiddleware()]
+  const tracker = new AttemptTracker(activity, activityParentId)
+  return [
+    retryOn429Middleware(tracker.retryHooks),
+    activityMiddleware(tracker),
+    patchResponseMiddleware(),
+  ]
+}
+
+function buildStructuredMiddleware(
+  config: ResolvedPreset,
+  activityParentId?: string,
+): LanguageModelMiddleware[] {
   const { supportsStructuredOutput, useThinkTag, preset, providerType } = config
 
-  // retryOn429Middleware is intentionally outermost: it re-invokes the whole
-  // inner chain (including patchResponseMiddleware) on each retry. Do not
-  // reorder without understanding this — putting retry after patchResponse
-  // would cause patched state to leak across attempts.
-  const base: LanguageModelMiddleware[] = [retryOn429Middleware, patchResponseMiddleware()]
+  const base = chainHead(activityParentId)
 
   // Unconditional on purpose: a provider that claims native structured output and then wraps
   // the object in prose is common enough that `structuredOutputOverride: 'off'` exists for it.
@@ -182,12 +201,11 @@ function buildStructuredMiddleware(config: ResolvedPreset): LanguageModelMiddlew
   return base
 }
 
-function buildPlainTextMiddleware(useThinkTag: boolean): LanguageModelMiddleware[] {
-  // retryOn429Middleware is intentionally outermost: it re-invokes the whole
-  // inner chain (including patchResponseMiddleware) on each retry. Do not
-  // reorder without understanding this — putting retry after patchResponse
-  // would cause patched state to leak across attempts.
-  const base: LanguageModelMiddleware[] = [retryOn429Middleware, patchResponseMiddleware()]
+function buildPlainTextMiddleware(
+  useThinkTag: boolean,
+  activityParentId?: string,
+): LanguageModelMiddleware[] {
+  const base = chainHead(activityParentId)
   if (useThinkTag) {
     base.push(thinkTagMiddleware)
   }
@@ -203,7 +221,7 @@ export async function generateStructured<T extends z.ZodType>(
   options: GenerateObjectOptions<T>,
   serviceId: string,
 ): Promise<z.infer<T>> {
-  const { presetId, schema, system, prompt, signal } = options
+  const { presetId, schema, system, prompt, signal, activityParentId } = options
   const config = resolvePresetModel({ presetId, serviceId, debugId: undefined })
   const { preset, providerType, model, providerOptions, reasoning, supportsStructuredOutput } =
     config
@@ -218,7 +236,7 @@ export async function generateStructured<T extends z.ZodType>(
   const result = await generateText({
     model: wrapLanguageModel({
       model: model as LanguageModelV4,
-      middleware: buildStructuredMiddleware(config),
+      middleware: buildStructuredMiddleware(config, activityParentId),
     }),
     system,
     prompt,
@@ -237,7 +255,7 @@ export async function generatePlainText(
   options: BaseGenerateOptions,
   serviceId: string,
 ): Promise<string> {
-  const { presetId, system, prompt, signal } = options
+  const { presetId, system, prompt, signal, activityParentId } = options
   const { preset, providerType, model, providerOptions, reasoning, useThinkTag } =
     resolvePresetModel({
       presetId,
@@ -250,7 +268,7 @@ export async function generatePlainText(
   const { text } = await generateText({
     model: wrapLanguageModel({
       model,
-      middleware: buildPlainTextMiddleware(useThinkTag),
+      middleware: buildPlainTextMiddleware(useThinkTag, activityParentId),
     }),
     system,
     prompt,
@@ -268,10 +286,12 @@ interface NarrativeGenerateOptions {
   system: string
   prompt: string
   signal?: AbortSignal
+  /** The step this request serves; its attempts and waits are reported beneath it. */
+  activityParentId?: string
 }
 
 export function streamNarrative(options: NarrativeGenerateOptions) {
-  const { system, prompt, signal } = options
+  const { system, prompt, signal, activityParentId } = options
   const debugId = crypto.randomUUID()
   const { providerType, model, temperature, maxTokens, providerOptions, reasoning, useThinkTag } =
     resolveNarrativeConfig(debugId)
@@ -282,7 +302,7 @@ export function streamNarrative(options: NarrativeGenerateOptions) {
   return streamText({
     model: wrapLanguageModel({
       model,
-      middleware: buildPlainTextMiddleware(useThinkTag),
+      middleware: buildPlainTextMiddleware(useThinkTag, activityParentId),
     }),
     system,
     prompt,
@@ -308,7 +328,7 @@ export function streamNarrative(options: NarrativeGenerateOptions) {
 }
 
 export async function generateNarrative(options: NarrativeGenerateOptions): Promise<string> {
-  const { system, prompt, signal } = options
+  const { system, prompt, signal, activityParentId } = options
   const { providerType, model, temperature, maxTokens, providerOptions, reasoning, useThinkTag } =
     resolveNarrativeConfig()
 
@@ -317,7 +337,7 @@ export async function generateNarrative(options: NarrativeGenerateOptions): Prom
   const { text } = await generateText({
     model: wrapLanguageModel({
       model,
-      middleware: buildPlainTextMiddleware(useThinkTag),
+      middleware: buildPlainTextMiddleware(useThinkTag, activityParentId),
     }),
     system,
     prompt,

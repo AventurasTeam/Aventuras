@@ -29,6 +29,7 @@ import {
 import { ContextBuilder } from '$lib/services/context'
 import { debug } from '$lib/stores/debug.svelte'
 import { activity } from '$lib/stores/activity.svelte'
+import { describeActivityError } from '$lib/services/activity'
 import { retrievalStep, retrievalStepStatus } from './retrievalSteps'
 import { recentContent, AS_PROSE } from '$lib/utils/recentContent'
 import {
@@ -381,12 +382,13 @@ export class AgenticRetrievalService extends BaseAIService {
         activity.endStep(agentStepId, 'skipped', stepBudget(stepsTaken))
         throw error
       }
-      failure = error instanceof Error ? error.message : String(error)
+      failure =
+        describeActivityError(error) ?? (error instanceof Error ? error.message : String(error))
       log('Agent run failed -- salvaging what it gathered', { failure, steps: stepsTaken })
     }
 
-    activity.endStep(iterationStepId, failure ? 'failed' : 'done')
-    activity.endStep(agentStepId, failure ? 'failed' : 'done', stepBudget(stepsTaken))
+    activity.endStep(iterationStepId, failure ? 'failed' : 'done', undefined, failure)
+    activity.endStep(agentStepId, failure ? 'failed' : 'done', stepBudget(stepsTaken), failure)
 
     const metrics = retrievalMetrics(events)
     const transcript = formatRetrievalHistory(events)

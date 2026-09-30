@@ -194,8 +194,9 @@ export class GenerationPipeline {
           r.preGeneration?.visualProseMode ?? false,
         ),
         // Independent phases
-        background: this.tracked('Background image', () =>
+        background: this.tracked('Background image', (parentId) =>
           this.backgroundPhase.execute({
+            activityParentId: parentId,
             storyId: ctx.story.id,
             storyEntries: ctx.visibleEntries,
             imageSettings: cfg.imageSettings,
@@ -300,7 +301,13 @@ export class GenerationPipeline {
       imageDeps.classification,
       imageDeps.translation,
     )
-    const image = yield* this.tracked('Images', () => this.imagePhase.execute(imageInput))
+    const image = yield* this.tracked('Images', (parentId) =>
+      this.imagePhase.execute({
+        ...imageInput,
+        activity: this.activity,
+        activityParentId: parentId,
+      }),
+    )
 
     return {
       classification: imageDeps.classification,

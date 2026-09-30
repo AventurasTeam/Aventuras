@@ -44,7 +44,7 @@ describe('BackgroundImagePhase', () => {
       ).execute(makeInput()),
     )
 
-    expect(analyze).toHaveBeenCalledWith('s1', [])
+    expect(analyze).toHaveBeenCalledWith('s1', [], undefined)
     expect(result).toEqual({ started: true })
     expect(events.map((e) => e.type)).toEqual(['phase_start', 'phase_complete'])
   })
@@ -147,5 +147,36 @@ describe('BackgroundImagePhase', () => {
       expect(result.skippedReason).toBe('aborted')
       expect(events.map((e) => e.type)).toEqual(['phase_start', 'aborted'])
     })
+  })
+})
+
+describe('BackgroundImagePhase failure reporting', () => {
+  it('passes its step down, and reports nothing when the requests went through', async () => {
+    const analyze = vi.fn().mockResolvedValue({})
+
+    const { events } = await drain(
+      new BackgroundImagePhase(
+        makeDeps({ analyzeBackgroundChangeAndGenerateImage: analyze }),
+      ).execute(makeInput({ activityParentId: 'bg' })),
+    )
+
+    expect(analyze).toHaveBeenCalledWith('s1', [], 'bg')
+    expect(events.some((e) => e.type === 'error')).toBe(false)
+  })
+
+  it('reports an absorbed failure as a non-fatal error with its reason', async () => {
+    const analyze = vi.fn().mockResolvedValue({ failure: '429 · rate limited' })
+
+    const { events, result } = await drain(
+      new BackgroundImagePhase(
+        makeDeps({ analyzeBackgroundChangeAndGenerateImage: analyze }),
+      ).execute(makeInput({ activityParentId: 'bg' })),
+    )
+
+    const error = events.find((e) => e.type === 'error') as any
+    expect(error).toMatchObject({ fatal: false })
+    expect(error.error.message).toBe('429 · rate limited')
+    // Unchanged for the turn: the phase still completes.
+    expect(result).toEqual({ started: true })
   })
 })

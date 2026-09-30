@@ -9,6 +9,7 @@
  */
 
 import { NoObjectGeneratedError } from 'ai'
+import { describeActivityError } from '$lib/services/activity'
 import type { VisualDescriptors } from '$lib/types'
 import type { ServiceId } from '$lib/stores/settings.svelte'
 import { BaseAIService } from '../BaseAIService'
@@ -76,7 +77,11 @@ export class ImageAnalysisService extends BaseAIService {
    * Analyze narrative text to identify visually striking moments.
    * Returns an array of imageable scenes sorted by priority (highest first).
    */
-  async identifyScenes(context: ImageAnalysisContext): Promise<ImageableScene[]> {
+  /** The scenes, or none and why: a failure is not the same as finding nothing to draw. */
+  async identifyScenes(
+    context: ImageAnalysisContext,
+    activityParentId?: string,
+  ): Promise<{ scenes: ImageableScene[]; failure?: string }> {
     log('identifyScenes called', {
       narrativeLength: context.narrativeResponse.length,
       presentCharactersCount: context.presentCharacters.length,
@@ -127,7 +132,13 @@ ${context.translatedNarrative}`
     const { system, user: prompt } = await ctx.render(templateId)
 
     try {
-      const result = await this.generate(sceneAnalysisResultSchema, system, prompt, templateId)
+      const result = await this.generate(
+        sceneAnalysisResultSchema,
+        system,
+        prompt,
+        templateId,
+        activityParentId,
+      )
 
       // Sort by priority (highest first)
       const sortedScenes = result.scenes.sort((a, b) => b.priority - a.priority)
@@ -137,17 +148,17 @@ ${context.translatedNarrative}`
         priorities: sortedScenes.map((s) => s.priority),
       })
 
-      return sortedScenes as ImageableScene[]
+      return { scenes: sortedScenes as ImageableScene[] }
     } catch (error) {
       const recovered = this.recoverScenesFromMalformedOutput(error)
       if (recovered && recovered.length > 0) {
         log('identifyScenes recovered scenes from malformed output', {
           scenesFound: recovered.length,
         })
-        return recovered.sort((a, b) => b.priority - a.priority)
+        return { scenes: recovered.sort((a, b) => b.priority - a.priority) }
       }
       log('identifyScenes failed', error)
-      return []
+      return { scenes: [], failure: describeActivityError(error) ?? undefined }
     }
   }
 

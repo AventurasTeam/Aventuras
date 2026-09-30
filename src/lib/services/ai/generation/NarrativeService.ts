@@ -264,6 +264,32 @@ export interface NarrativeOptions {
   signal?: AbortSignal
   /** Timeline fill result for Q&A injection */
   timelineFillResult?: TimelineFillResult | null
+  /** The step this request serves; its attempts and waits are reported beneath it. */
+  activityParentId?: string
+}
+
+/**
+ * The narrator's stream parts, as the chunks the narrative phase reads. Reasoning and text are
+ * passed on, the start of the response is marked, and everything else is dropped.
+ */
+export async function* narrativeChunks(
+  parts: AsyncIterable<{ type: string; text?: string; error?: unknown }>,
+): AsyncIterable<StreamChunk> {
+  for await (const part of parts) {
+    if (part.type === 'start-step') {
+      // The first piece of the response is in, text or not: an empty answer is still one.
+      yield { content: '', done: false, started: true }
+    } else if (part.type === 'error') {
+      // `streamText` reports a failed request as a part rather than by throwing. Left in the
+      // stream it reads as an answer with no text, and is retried as an empty response.
+      throw part.error
+    } else if (part.type === 'reasoning-delta') {
+      // Native reasoning providers, or reasoning extracted from <think> tags.
+      yield { content: '', reasoning: part.text, done: false }
+    } else if (part.type === 'text-delta') {
+      yield { content: part.text || '', done: false }
+    }
+  }
 }
 
 /**
@@ -296,8 +322,14 @@ export class NarrativeService {
     story?: Story | null,
     options: NarrativeOptions = {},
   ): AsyncIterable<StreamChunk> {
-    const { tieredContextBlock, styleReview, retrievedChapterContext, signal, timelineFillResult } =
-      options
+    const {
+      tieredContextBlock,
+      styleReview,
+      retrievedChapterContext,
+      signal,
+      timelineFillResult,
+      activityParentId,
+    } = options
 
     log('stream', {
       entriesCount: entries.length,
@@ -328,21 +360,13 @@ export class NarrativeService {
         system: systemPrompt,
         prompt: joinReinforcement(reinforcement, userPrompt),
         signal,
+        activityParentId,
       })
 
       // Use fullStream to capture both text and reasoning
       // - Native reasoning providers (Anthropic, OpenAI) emit reasoning-delta parts
       // - Models using <think> tags have reasoning extracted by extractReasoningMiddleware
-      for await (const part of stream.fullStream) {
-        if (part.type === 'reasoning-delta') {
-          // Reasoning delta from native providers or extracted from <think> tags
-          yield { content: '', reasoning: (part as { text?: string }).text, done: false }
-        } else if (part.type === 'text-delta') {
-          // Regular text content
-          yield { content: (part as { text?: string }).text || '', done: false }
-        }
-        // Ignore other part types (reasoning-start, reasoning-end, tool calls, finish, etc.)
-      }
+      yield* narrativeChunks(stream.fullStream)
 
       yield { content: '', done: true }
     } catch (error) {

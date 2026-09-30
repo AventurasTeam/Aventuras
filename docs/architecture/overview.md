@@ -382,6 +382,19 @@ into steps as `AgenticRetrievalService` records them, and chapter queries carry 
 budget already measured. Phases with several completion paths are wrapped by `trackPhase` rather than
 instrumented one exit at a time.
 
+Each request is its own step, opened by the caller that knows what it is for and passed down as
+`activityParentId`. Below that, `sdk/generate.ts` puts `activityMiddleware` directly inside
+`retryOn429Middleware`: a request that needs a second attempt gets one step per attempt (the first
+backfilled) and one per wait the retry middleware schedules. The SDK's own retries re-enter the
+chain and show as attempts; the waits between them are the library's and are not reported. The
+retrieval agent builds its model elsewhere (`sdk/agents/factory.ts`) and has no attempt rows.
+
+A failed step carries its reason, worded once by `describeActivityError` (status and provider
+message for an API error). Services that absorb a failure into a fallback — translation,
+suggestions, action choices, timeline fill, scene analysis, the background image, the classifier's
+`_error` — still close the step they serve as failed (`failStep`), and return the fallback as before.
+A turn ends with an outcome (`turnOutcome`): only `halted` puts "Failed" on the collapsed line.
+
 Reporting never alters a turn. Every write is guarded, the display sits inside a boundary, and the
 narrative retry loop is reported but unchanged. Records are session-only, bounded by `RETAINED_TURNS`,
 and never persisted or exported.

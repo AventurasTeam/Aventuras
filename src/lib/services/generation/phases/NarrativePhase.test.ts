@@ -252,12 +252,12 @@ describe('NarrativePhase activity reporting', () => {
     expect(steps.some((s) => s.label === 'Generating')).toBe(false)
   })
 
-  it('marks the wait as having produced no tokens when the stream is empty', async () => {
+  it('marks the wait as having had no response when the stream ends without one', async () => {
     const { steps, reporter } = recordingReporter()
 
     await drain(phaseReporting(streamOf(chunk({ done: true })), reporter).execute(makeInput()))
 
-    expect(steps.find((s) => s.label === 'Waiting for model')?.detail).toBe('no tokens')
+    expect(steps.find((s) => s.label === 'Waiting for model')?.detail).toBe('no response')
   })
 
   it('reports the streaming as the LLM step, with the chunk count', async () => {
@@ -270,7 +270,7 @@ describe('NarrativePhase activity reporting', () => {
     expect(steps.find((s) => s.label === 'Request')?.isLLM).toBeFalsy()
     expect(steps.find((s) => s.label === 'Generating')).toMatchObject({
       status: 'done',
-      detail: '2 chunks',
+      detail: '1 chunk',
       isLLM: true,
     })
   })
@@ -315,5 +315,63 @@ describe('NarrativePhase activity reporting', () => {
     const { result } = await drain(phaseWith(stream).execute(makeInput()))
 
     expect(result?.content).toBe('Hi.')
+  })
+})
+
+describe('NarrativePhase response steps', () => {
+  function recordingReporter() {
+    const steps: { id: string; label: string; status?: string; detail?: string }[] = []
+    return {
+      steps,
+      reporter: {
+        startStep: (label: string) => {
+          const id = `s${steps.length + 1}`
+          steps.push({ id, label })
+          return id
+        },
+        endStep: (id: string, status = 'done', detail?: string) => {
+          const step = steps.find((s) => s.id === id)
+          if (!step || step.status) return
+          step.status = status
+          if (detail !== undefined) step.detail = detail
+        },
+        recordStep: () => '',
+      },
+    }
+  }
+
+  it('shows an empty answer as a response with no content, after its wait', async () => {
+    const { steps, reporter } = recordingReporter()
+    const stream = streamOf({ content: '', done: false, started: true }, chunk({ done: true }))
+
+    await drain(
+      new NarrativePhase({ streamNarrative: stream, activity: reporter } as any).execute(
+        makeInput(),
+      ),
+    )
+
+    expect(steps.slice(1, 4).map((s) => [s.label, s.detail])).toEqual([
+      ['Request', 'empty response'],
+      ['Waiting for model', undefined],
+      ['Generating', 'no content'],
+    ])
+  })
+
+  it('does not count the start of the response as a chunk', async () => {
+    const { steps, reporter } = recordingReporter()
+    const stream = streamOf(
+      { content: '', done: false, started: true },
+      chunk({ content: 'Hi.' }),
+      chunk({ done: true }),
+    )
+
+    const { result } = await drain(
+      new NarrativePhase({ streamNarrative: stream, activity: reporter } as any).execute(
+        makeInput(),
+      ),
+    )
+
+    expect(steps.find((s) => s.label === 'Generating')?.detail).toBe('1 chunk')
+    expect(result?.chunkCount).toBe(2)
   })
 })

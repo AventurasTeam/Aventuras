@@ -18,6 +18,7 @@ export abstract class BaseAIService {
     system: string,
     prompt: string,
     templateId: string,
+    activityParentId?: string,
   ): Promise<T> {
     return generateStructured(
       {
@@ -25,6 +26,7 @@ export abstract class BaseAIService {
         schema,
         system,
         prompt,
+        activityParentId,
       },
       templateId,
     )

@@ -2,6 +2,12 @@
   import { tick } from 'svelte'
   import { ui, type RetrievalCacheKey } from '$lib/stores/ui.svelte'
   import { activity } from '$lib/stores/activity.svelte'
+  import {
+    describeActivityError,
+    failStep,
+    turnOutcome,
+    type TurnEnding,
+  } from '$lib/services/activity'
   import { toRetrievalSnapshot } from '$lib/services/ai/retrieval'
   import { buildTimelineFillBlock } from '$lib/services/ai/generation'
   import { joinPromptBlocks } from '$lib/utils/promptBlocks'
@@ -13,17 +19,7 @@
   import { database } from '$lib/services/database'
   import { SimpleActivationTracker } from '$lib/services/ai/retrieval/EntryRetrievalService'
   import { TranslationService } from '$lib/services/ai/utils/TranslationService'
-  import {
-    Send,
-    Wand2,
-    MessageSquare,
-    Brain,
-    Sparkles,
-    RefreshCw,
-    X,
-    PenLine,
-    Square,
-  } from '@lucide/svelte'
+  import { Send, Wand2, MessageSquare, Brain, Sparkles, PenLine, Square } from '@lucide/svelte'
   import Suggestions from './Suggestions.svelte'
   import GrammarCheck from './GrammarCheck.svelte'
   import {
@@ -37,7 +33,7 @@
   } from '$lib/services/events'
   import { isTouchDevice } from '$lib/utils/swipe'
   import { isAndroid } from '$lib/utils/platform'
-  import { findPrecedingUserAction } from '$lib/utils/storyEntries'
+  import { findPrecedingUserAction, GENERATION_ERROR_SOURCE } from '$lib/utils/storyEntries'
   import { errMessage } from '$lib/utils/error'
   import {
     GenerationPipeline,
@@ -72,7 +68,7 @@
   // ============================================================================
 
   /** What the input translation cost, for the turn record. See `InputTranslationTiming`. */
-  type InputTranslationTiming = { startedAt: number; durationMs: number; failed: boolean }
+  type InputTranslationTiming = { startedAt: number; durationMs: number; error?: string }
 
   async function translateUserInput(
     content: string,
@@ -89,10 +85,10 @@
     // Measured here because this runs before the generation path opens the turn record, and
     // it is a model call on the same critical path as everything the record does cover.
     const startedAt = Date.now()
-    const timing = (failed: boolean): InputTranslationTiming => ({
+    const timing = (error?: string): InputTranslationTiming => ({
       startedAt,
       durationMs: Date.now() - startedAt,
-      failed,
+      error,
     })
 
     try {
@@ -111,11 +107,15 @@
       return {
         promptContent: result.translatedContent,
         originalInput: content,
-        timing: timing(false),
+        timing: timing(result.failure),
       }
     } catch (error) {
       log('Input translation failed (non-fatal), using original', error)
-      return { promptContent: content, originalInput: undefined, timing: timing(true) }
+      return {
+        promptContent: content,
+        originalInput: undefined,
+        timing: timing(describeActivityError(error) ?? 'failed'),
+      }
     }
   }
 
@@ -315,11 +315,12 @@
       translateSuggestions: aiService.translateSuggestions.bind(aiService),
       generateActionChoices: aiService.generateActionChoices.bind(aiService),
       translateActionChoices: aiService.translateActionChoices.bind(aiService),
-      analyzeBackgroundChangeAndGenerateImage: (storyId, visibleEntries) =>
+      analyzeBackgroundChangeAndGenerateImage: (storyId, visibleEntries, activityParentId) =>
         aiService.analyzeBackgroundChangeAndGenerateImage(
           storyId,
           visibleEntries,
           story.updateCurrentBackgroundImage.bind(story),
+          activityParentId,
         ),
     }
   }
@@ -572,6 +573,9 @@
     }
     ui.resetBackgroundedFlag()
 
+    // What the turn ran into, for the outcome its record closes with.
+    const ending: Omit<TurnEnding, 'stopRequested'> = {}
+
     try {
       // Inside the try: only its `finally` closes the turn, and a throw before that point
       // would leave a record nothing can close.
@@ -582,7 +586,8 @@
           isLLM: true,
           startedAt: inputTranslation.startedAt,
           durationMs: inputTranslation.durationMs,
-          status: inputTranslation.failed ? 'failed' : 'done',
+          status: inputTranslation.error ? 'failed' : 'done',
+          error: inputTranslation.error,
         })
       }
 
@@ -771,8 +776,13 @@
               'warning',
             )
           }
-          await story.applyClassificationResult(event.result, narrationEntry.id)
-          await story.updateEntryTimeEnd(narrationEntry.id)
+          try {
+            await story.applyClassificationResult(event.result, narrationEntry.id)
+            await story.updateEntryTimeEnd(narrationEntry.id)
+          } catch (error) {
+            failStep(activity, event.applyStepId, error)
+            throw error
+          }
 
           const translationSettings = settings.translationSettings
           if (TranslationService.shouldTranslateWorldState(translationSettings)) {
@@ -818,16 +828,22 @@
               }
             | undefined
           if (translationResult?.translated && translationResult.translatedContent) {
-            await database.updateStoryEntry(narrationEntry.id, {
-              translatedContent: translationResult.translatedContent,
-              translationLanguage: translationResult.targetLanguage,
-            })
-            await story.refreshEntry(narrationEntry.id)
+            try {
+              await database.updateStoryEntry(narrationEntry.id, {
+                translatedContent: translationResult.translatedContent,
+                translationLanguage: translationResult.targetLanguage,
+              })
+              await story.refreshEntry(narrationEntry.id)
+            } catch (error) {
+              failStep(activity, event.applyStepId, error)
+              throw error
+            }
           }
         }
 
         if (event.type === 'error' && event.fatal) {
           console.error('[ActionInput] Fatal pipeline error:', event.error)
+          ending.fatalError = describeActivityError(event.error) ?? event.error.message
           break
         }
       }
@@ -836,8 +852,13 @@
       if (stopRequested) return
 
       if (!fullResponse.trim()) {
-        const errorMessage = 'The AI returned an empty response after 3 attempts. Please try again.'
-        const errorEntry = await story.addEntry('system', errorMessage, lease)
+        const errorMessage =
+          'The AI failed to provide a response after 3 attempts. Please try again.'
+        ending.emptyResponse = errorMessage
+        const errorEntry = await story.addEntry('system', errorMessage, lease, {
+          source: GENERATION_ERROR_SOURCE,
+        })
+        activity.rebindTurn(narrationEntryId, errorEntry.id)
         ui.setGenerationError({
           message: errorMessage,
           errorEntryId: errorEntry.id,
@@ -893,6 +914,7 @@
       const errorMessage = ui.wasBackgroundedDuringGeneration
         ? `Generation may have been interrupted while the app was in the background. ${baseMessage}`
         : baseMessage
+      ending.caughtError = errorMessage
       // The fallback must not be able to trip the same wire that brought us here. If the
       // story or branch moved under the generation, `addEntry` refuses — and throwing again
       // from the handler would lose the error entirely, leaving an unhandled rejection and
@@ -902,7 +924,9 @@
           'system',
           `Generation failed: ${errorMessage}`,
           lease,
+          { source: GENERATION_ERROR_SOURCE },
         )
+        activity.rebindTurn(narrationEntryId, errorEntry.id)
         ui.setGenerationError({
           message: errorMessage,
           errorEntryId: errorEntry.id,
@@ -920,7 +944,8 @@
       ui.setGenerating(false)
       ui.setGenerationStatus('')
       // Closes the turn even when a step was left running, so the record is bounded.
-      activity.endTurn()
+      const { outcome, error } = turnOutcome({ ...ending, stopRequested })
+      activity.endTurn(outcome, error)
       activeAbortController = null
 
       // Android: always stop the foreground service when generation ends
@@ -1235,10 +1260,6 @@
     })
   }
 
-  function dismissError() {
-    ui.clearGenerationError()
-  }
-
   /**
    * Regenerate a narration that has no matching retry backup. That is not the rare case
    * the name suggests: `ui.retryBackup` lives in an in-memory SvelteMap, so it is gone
@@ -1401,28 +1422,6 @@
 </script>
 
 <div class="ml-1 space-y-3">
-  {#if ui.lastGenerationError && !ui.isGenerating}
-    <div
-      class="flex items-center justify-between gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3"
-    >
-      <div class="flex items-center gap-2 text-sm text-red-400">
-        <span>Generation failed. Would you like to try again?</span>
-      </div>
-      <div class="flex items-center gap-2">
-        <button
-          onclick={handleRetry}
-          class="btn flex items-center gap-1.5 bg-red-500/20 text-sm text-red-400 hover:bg-red-500/30"
-          ><RefreshCw class="h-4 w-4" />Retry</button
-        >
-        <button
-          onclick={dismissError}
-          class="text-surface-400 hover:bg-surface-700 hover:text-surface-200 rounded p-1.5"
-          title="Dismiss"><X class="h-4 w-4" /></button
-        >
-      </div>
-    </div>
-  {/if}
-
   <GrammarCheck text={inputValue} onApplySuggestion={(newText) => (inputValue = newText)} />
 
   {#if isCreativeMode}

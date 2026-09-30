@@ -10,7 +10,7 @@
  */
 
 import { findTurnByEntryId, retainTurns, RETAINED_TURNS } from './retention'
-import type { ActivityStatus, ActivityStep, ActivityTurn } from './types'
+import type { ActivityStatus, ActivityStep, ActivityTurn, TurnOutcome } from './types'
 
 /** How much of a turn's activity the story view reports. See docs/architecture/overview.md. */
 export type ActivityReporting = 'off' | 'line' | 'tree'
@@ -69,7 +69,7 @@ export class ActivityRecorder {
     this.onChange()
   }
 
-  endTurn(): void {
+  endTurn(outcome: TurnOutcome = 'finished', error?: string | null): void {
     if (!this.current) return
     const endedAt = this.now()
     // A turn can end with steps still open -- an abort unwinds past the `endStep` that would
@@ -82,6 +82,8 @@ export class ActivityRecorder {
       step.detail ??= 'interrupted'
     }
     this.current.endedAt = endedAt
+    this.current.outcome = outcome
+    if (error) this.current.error = error
     this.current = null
     this.onChange()
   }
@@ -112,13 +114,19 @@ export class ActivityRecorder {
     this.onChange()
   }
 
-  endStep(id: string, status: Exclude<ActivityStatus, 'running'> = 'done', detail?: string): void {
+  endStep(
+    id: string,
+    status: Exclude<ActivityStatus, 'running'> = 'done',
+    detail?: string,
+    error?: string | null,
+  ): void {
     if (!id || !this.current) return
     const step = this.current.steps.find((s) => s.id === id)
     if (!step || step.status !== 'running') return
     step.status = status
     step.endedAt = this.now()
     if (detail !== undefined) step.detail = detail
+    if (error) step.error = error
     this.onChange()
   }
 
@@ -131,6 +139,7 @@ export class ActivityRecorder {
     options: StartStepOptions & {
       status?: Exclude<ActivityStatus, 'running'>
       durationMs?: number
+      error?: string | null
     } = {},
   ): string {
     const id = this.startStep(label, options)
@@ -138,8 +147,17 @@ export class ActivityRecorder {
     const step = this.current.steps.find((s) => s.id === id)!
     step.status = options.status ?? 'done'
     step.endedAt = step.startedAt + (options.durationMs ?? 0)
+    if (options.error) step.error = options.error
     this.onChange()
     return id
+  }
+
+  /** Move a turn's record to another entry, for a turn whose narration became an error entry. */
+  rebindTurn(fromEntryId: string, toEntryId: string): void {
+    const turn = findTurnByEntryId(this.turns, fromEntryId)
+    if (!turn) return
+    turn.entryId = toEntryId
+    this.onChange()
   }
 
   /** The turn in flight, or null between turns. */

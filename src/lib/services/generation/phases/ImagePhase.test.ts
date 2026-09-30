@@ -162,3 +162,60 @@ describe('ImagePhase', () => {
     })
   })
 })
+
+describe('ImagePhase activity reporting', () => {
+  function reporter() {
+    const updates: [string, string][] = []
+    const activity = {
+      startStep: () => '',
+      endStep: () => {},
+      recordStep: () => '',
+      updateStep: (id: string, detail: string) => updates.push([id, detail]),
+    }
+    return { activity, updates }
+  }
+
+  it('notes how many images it handed off', async () => {
+    const { activity, updates } = reporter()
+    const generate = vi.fn().mockResolvedValue({ queued: 3 })
+
+    const { events } = await drain(
+      new ImagePhase(makeDeps({ generateImagesForNarrative: generate })).execute(
+        makeInput({ activity, activityParentId: 'images' }),
+      ),
+    )
+
+    expect(generate.mock.calls[0][0].activityParentId).toBe('images')
+    expect(updates).toEqual([['images', '3 images queued']])
+    expect(events.some((e) => e.type === 'error')).toBe(false)
+  })
+
+  it('notes none queued when the analysis found no scenes', async () => {
+    const { activity, updates } = reporter()
+
+    await drain(
+      new ImagePhase(
+        makeDeps({ generateImagesForNarrative: vi.fn().mockResolvedValue({ queued: 0 }) }),
+      ).execute(makeInput({ activity, activityParentId: 'images' })),
+    )
+
+    expect(updates).toEqual([['images', '0 images queued']])
+  })
+
+  it('reports a failed analysis as a non-fatal error with its reason', async () => {
+    const { activity, updates } = reporter()
+    const generate = vi.fn().mockResolvedValue({ queued: 0, failure: '401 · invalid API key' })
+
+    const { events, result } = await drain(
+      new ImagePhase(makeDeps({ generateImagesForNarrative: generate })).execute(
+        makeInput({ activity, activityParentId: 'images' }),
+      ),
+    )
+
+    const error = events.find((e) => e.type === 'error') as any
+    expect(error).toMatchObject({ fatal: false })
+    expect(error.error.message).toBe('401 · invalid API key')
+    expect(updates).toEqual([])
+    expect(result).toEqual({ started: true })
+  })
+})

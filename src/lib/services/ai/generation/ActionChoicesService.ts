@@ -12,12 +12,16 @@ import type { ServiceId } from '$lib/stores/settings.svelte'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { createLogger } from '$lib/log'
+import { activity } from '$lib/stores/activity.svelte'
+import { failStep } from '$lib/services/activity'
 import { getContextConfig } from '../core/config'
 import { actionChoicesResultSchema, type ActionChoice } from '../sdk/schemas/actionchoices'
 
 const log = createLogger('ActionChoices')
 
 export interface ActionChoicesContext {
+  /** The step this request serves; a failure closes it. */
+  activityParentId?: string
   /** Story whose pack supplies the template; undefined only outside a story. */
   storyId: string | undefined
   narrativeResponse: string
@@ -161,12 +165,14 @@ export class ActionChoicesService extends BaseAIService {
         system,
         prompt,
         'action-choices',
+        context.activityParentId,
       )
 
       log('Action choices generated:', result.choices.length)
       return result.choices.slice(0, 4)
     } catch (error) {
       log('Action choices generation failed:', error)
+      failStep(activity, context.activityParentId, error)
       return []
     }
   }

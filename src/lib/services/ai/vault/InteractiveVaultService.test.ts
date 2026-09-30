@@ -36,6 +36,14 @@ vi.mock('$lib/stores/scenarioVault.svelte', () => ({
 
 // Pulled in transitively via BaseAIService -> sdk/generate, unused by the paths
 // under test here (they never call this.generate()).
+vi.mock('$lib/stores/activity.svelte', () => ({
+  activity: {
+    startStep: vi.fn(() => ''),
+    updateStep: vi.fn(),
+    endStep: vi.fn(),
+    recordStep: vi.fn(() => ''),
+  },
+}))
 vi.mock('$lib/stores/debug.svelte', () => ({
   debug: { log: vi.fn(), isActive: false },
 }))
