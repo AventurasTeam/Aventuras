@@ -155,7 +155,11 @@ You are a **dispatched worker** when your task prompt says so and names an escal
 
 **At start and after any compaction, resume from the ledger,** checked against `git log`. A task without `complete` is not complete. A question with a message ID and no answer is still open: resume it with the channel's resume form. Never ask it again; if the ID is missing, find the question through the channel before asking anything.
 
-**Before asking,** finish any in-flight review loop of an implemented task, and sweep the remaining tasks for the same issue so one question covers it. Give the coordinator what it needs to answer without your context: slice and task, the conflict quoted from the plan and the doc it cites, the options, and which later tasks depend on the answer. Then wait on the channel, resuming after each timeout. Start no new task while a question is open, even an independent one: this worker waits, and other workers keep the machine busy.
+**Before asking,** finish any in-flight review loop of an implemented task, and sweep the remaining tasks for the same issue so one question covers it. Give the coordinator what it needs to answer without your context: slice and task, the conflict quoted from the plan and the doc it cites, the options, and which later tasks depend on the answer.
+
+**While a question is open, keep going with the tasks that don't depend on it,** in plan order. When such tasks remain, send the question with a short timeout, about a minute: the timeout hands back its message ID and the question stays open. Ledger each task you pass over as `held: <question>`. Between tasks, never in the middle of one, check for the answer with the channel's resume form and the same short timeout. Wait on the channel with its full timeout, resuming after each one, only when every remaining task depends on an open question. The final review and the finish wait until no question is open.
+
+**Never stop between tasks.** Nobody is at the terminal to say "continue": a worker that ends its turn to wait for input stalls until someone notices. Stop only after reporting completion, or while waiting on the channel.
 
 **Answers come labelled.** Record the label with the answer. An answer that overrides the plan goes, quoted with its label, into every later implementer and spec-reviewer prompt it touches; otherwise the reviewer flags it as a deviation.
 
