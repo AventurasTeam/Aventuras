@@ -175,6 +175,26 @@ After writing the complete plan, look at the slice doc with fresh eyes and check
 
 If you find issues, fix them inline. No need to re-review — just fix and move on. If you find a slice requirement with no task, add the task.
 
+## Independent review
+
+The self-review shares every blind spot of the session that wrote the plan. After it, offer the developer an independent review by a reviewer with none of this session's context:
+
+1. **Skip.**
+2. **A fresh subagent:** a clean context, the same model family.
+3. **An external agent** through an orchestrator, when the environment has one: a clean context, and it can be a different model family. With Orca, follow [`references/external-plan-review.md`](references/external-plan-review.md).
+
+Recommend one. The external agent suits a plan that changes the schema, touches a contract another slice builds on, or runs to many tasks. The subagent suits a plan with new logic that doesn't. Skipping suits a few mechanical tasks. The developer chooses, and names the agent for the external route.
+
+Both reviewers get [`plan-document-reviewer-prompt.md`](plan-document-reviewer-prompt.md) with its paths filled in, and nothing else from this session. They write their findings to `<plan-stem>.plan-review.md` next to the plan and never edit the plan.
+
+**Handle the findings** the way aventuras-receiving-code-review handles review feedback: check each one against the slice doc, canon and the code before acting on it.
+
+- A finding that holds gets fixed in the plan.
+- One that doesn't gets rejected, with the evidence.
+- One that would change a Decision, or overturn the slice doc, goes to the developer.
+
+Add a line under each finding in the review file saying what happened to it. Then tell the developer the verdict, what you changed, what you rejected, and any question for them, before moving on to the handoff.
+
 ## Execution Handoff
 
 After saving the plan, recommend an executor — then let the developer choose.
