@@ -25,7 +25,7 @@ export interface ImageDependencies {
 
 /** Settings needed for image phase decision making */
 export interface ImageSettings {
-  imageGenerationMode?: ImageGenerationMode
+  imageGenerationMode: ImageGenerationMode
   referenceMode?: boolean
 }
 
@@ -48,7 +48,7 @@ export interface ImageInput {
 /** Result from image phase */
 export interface ImageResult {
   started: boolean
-  skippedReason?: 'disabled' | 'agentic_generate_off' | 'not_configured' | 'aborted' | 'inline_mode'
+  skippedReason?: 'disabled' | 'not_configured' | 'aborted' | 'inline_mode'
 }
 
 /** Coordinates image generation. Errors are non-fatal. */
@@ -88,13 +88,6 @@ export class ImagePhase {
       return result
     }
 
-    // Check if auto-generate is off (manual mode - context stored for later)
-    if (imageSettings.imageGenerationMode !== 'agentic') {
-      const result: ImageResult = { started: false, skippedReason: 'agentic_generate_off' }
-      yield { type: 'phase_complete', phase: 'image', result } satisfies PhaseCompleteEvent
-      return result
-    }
-
     // Check if image generation is actually configured (profile exists)
     if (
       !this.deps.isImageGenerationEnabled(imageSettings, 'standard') ||
@@ -124,6 +117,7 @@ export class ImagePhase {
       translatedNarrative,
       translationLanguage,
       referenceMode: imageSettings.referenceMode || false,
+      imageGenerationMode: imageSettings.imageGenerationMode,
     }
 
     try {

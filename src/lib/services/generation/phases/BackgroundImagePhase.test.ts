@@ -59,7 +59,11 @@ describe('BackgroundImagePhase', () => {
       const { result } = await drain(
         new BackgroundImagePhase(
           makeDeps({ analyzeBackgroundChangeAndGenerateImage: analyze }),
-        ).execute(makeInput({ imageSettings: { backgroundImagesEnabled: false } })),
+        ).execute(
+          makeInput({
+            imageSettings: { backgroundImagesEnabled: false, imageGenerationMode: 'agentic' },
+          }),
+        ),
       )
 
       expect(result).toEqual({ started: false, skippedReason: 'disabled' })

@@ -1,3 +1,5 @@
+import type { ImageGenerationMode, StorySettings } from '$lib/types'
+
 export function normalizeImageDataUrl(imageData: string | null | undefined): string | null {
   if (!imageData) {
     return null
@@ -212,4 +214,9 @@ export function specFromPixels(width: number, height: number): ImageSpec {
 export function describeImageSpec(spec: ImageSpec): string {
   const { width, height } = specToPixels(spec)
   return `${spec.orientation} ${spec.size} (${width}x${height})`
+}
+
+/** The image mode a story generates under: its saved mode, or Text Only when none is chosen. */
+export function storyImageMode(settings: StorySettings | null | undefined): ImageGenerationMode {
+  return settings?.imageGenerationMode ?? 'none'
 }

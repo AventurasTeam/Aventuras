@@ -81,3 +81,12 @@ already labelled "Plot Suggestions". Two properties every migration there must h
   that keeps firing silently reverts whatever the user changed in between.
 - **Silent about untouched values**, because a stored value equal to the old default was never a
   choice, and carrying it across pins everyone who never opened the panel to a stale number.
+
+## Story Settings
+
+A story's settings are a JSON column, read through `mapStory`, which passes them through
+`readStorySettings` in `src/lib/utils/storySettings.ts`. An image mode that is not a current value
+(older versions saved `'auto'`) is dropped there, so the story reads as having no mode chosen: it
+generates as Text Only, and Story Settings selects nothing and says so until a mode is picked.
+Nothing is written back, so an older export or sync payload is handled the same way whenever it
+arrives.

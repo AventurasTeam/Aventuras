@@ -16,6 +16,7 @@ import { createLogger } from '$lib/log'
 import type { RenderResult } from './types'
 import type { Character, Location, Item, StoryBeat } from '$lib/types'
 import type { RuntimeVariable, RuntimeVarsMap } from '$lib/services/packs/types'
+import { storyImageMode } from '$lib/utils/image'
 
 const log = createLogger('ContextBuilder')
 
@@ -95,7 +96,7 @@ export class ContextBuilder {
       themes: story.settings?.themes?.join(', ') || '',
       settingDescription: story.description || '',
       visualProseMode: story.settings?.visualProseMode || false,
-      inlineImageMode: story.settings?.imageGenerationMode === 'inline',
+      inlineImageMode: storyImageMode(story.settings) === 'inline',
       targetResponseLength: story.settings?.targetLength || 'dynamic',
       narratorReinforcement: story.settings?.narratorReinforcement || 'full',
     })

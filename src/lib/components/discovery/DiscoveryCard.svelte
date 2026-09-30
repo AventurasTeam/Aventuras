@@ -90,7 +90,7 @@
       <!-- Hover Actions (Only visible when NOT imported) -->
       {#if !isImported}
         <div
-          class="absolute inset-0 hidden items-center justify-center gap-2 bg-black/60 p-4 opacity-0 transition-opacity group-hover:opacity-100 sm:flex"
+          class="can-hover:flex absolute inset-0 hidden items-center justify-center gap-2 bg-black/60 p-4 opacity-0 transition-opacity group-hover:opacity-100"
         >
           <Button
             size="icon"

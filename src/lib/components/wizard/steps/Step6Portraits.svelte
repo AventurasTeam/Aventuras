@@ -118,7 +118,7 @@
                 <Button
                   size="icon"
                   variant="destructive"
-                  class="absolute -top-2 -right-2 h-6 w-6 rounded-full opacity-0 shadow-md transition-opacity group-hover:opacity-100"
+                  class="can-hover:opacity-0 absolute -top-2 -right-2 h-6 w-6 rounded-full shadow-md transition-opacity group-hover:opacity-100"
                   onclick={onRemoveProtagonistPortrait}
                   title="Remove portrait"
                 >
@@ -250,7 +250,7 @@
                       <Button
                         size="icon"
                         variant="destructive"
-                        class="absolute -top-2 -right-2 h-5 w-5 rounded-full opacity-0 shadow-md transition-opacity group-hover:opacity-100"
+                        class="can-hover:opacity-0 absolute -top-2 -right-2 h-5 w-5 rounded-full shadow-md transition-opacity group-hover:opacity-100"
                         onclick={() => onRemoveSupportingPortrait(char.name)}
                         title="Remove portrait"
                       >
