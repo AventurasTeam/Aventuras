@@ -130,12 +130,13 @@ describe('plotDeleteCopy', () => {
 })
 
 describe('plotDeleteRejectionText', () => {
-  it('names the in-flight refusal and falls back to the generic failure otherwise', () => {
+  it('names the in-flight refusal and gives every other code the generic failure', () => {
     expect(plotDeleteRejectionText(ROW_DELETE_REJECTION.inFlight)).toBe(
       "Couldn't delete while generation is in flight.",
     )
-    expect(plotDeleteRejectionText('not-found')).toBe("Couldn't delete that.")
-    expect(plotDeleteRejectionText(undefined)).toBe("Couldn't delete that.")
+    expect(plotDeleteRejectionText(ROW_DELETE_REJECTION.notFound)).toBe("Couldn't delete that.")
+    expect(plotDeleteRejectionText(ROW_DELETE_REJECTION.leadEntity)).toBe("Couldn't delete that.")
+    expect(plotDeleteRejectionText(ROW_DELETE_REJECTION.failed)).toBe("Couldn't delete that.")
   })
 })
 

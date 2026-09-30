@@ -23,6 +23,7 @@ import { characterRelationshipsStore } from '@/lib/stores'
 
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { applyRedo, snapshotForRedo } from '../delta/redo'
+import { TARGET_NOT_FOUND } from '../delta/registry'
 import { reverseAndPruneDeltaRows } from '../delta/reverse-replay'
 import type { DbCtx } from '../types'
 import { ENTITY_DELETE_REJECTION } from './register'
@@ -121,6 +122,14 @@ describe('deleteEntity', () => {
       code: ENTITY_DELETE_REJECTION.leadEntity,
     })
     expect(await ctx.db.select().from(entities)).toHaveLength(2)
+    expect(await ctx.db.select().from(deltas)).toEqual([])
+  })
+
+  it('refuses a target that is already gone with not-found', async () => {
+    expect(await remove('char_ghost')).toMatchObject({
+      status: 'rejected',
+      code: TARGET_NOT_FOUND,
+    })
     expect(await ctx.db.select().from(deltas)).toEqual([])
   })
 

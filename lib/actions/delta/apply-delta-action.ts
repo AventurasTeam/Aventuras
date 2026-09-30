@@ -13,11 +13,18 @@ import {
   type MutationResult,
   type PipelineAction,
 } from '../types'
+import { capturedPatches } from './delete-cascade'
 import { deltaRowOp } from './delta-row'
 import { withKeyLocks } from './key-lock'
 import { linkRefs } from './live-refs'
 import { createdKey, resolveByActionKind, resolveByTable, type HandlerOutcome } from './registry'
 import { entityCascadeKeys, rowLock, type RowLockKey } from './row-locks'
+
+/** The runner's own refusals; a handler's code passes through beside them. */
+export const DELTA_REJECTION = {
+  reversalInProgress: 'reversal-in-progress',
+  groupConflict: 'group-conflict',
+} as const
 
 type Args = { action: PipelineAction; actionId: string; branchId: string; entryId?: string | null }
 type OkOutcome = Extract<HandlerOutcome, { status: 'ok' }>
@@ -107,9 +114,15 @@ export function lockKeysFor(action: PipelineAction): readonly RowLockKey[] {
   return isProductionAction(action) ? lockKeysOf(action.kind, action.payload) : []
 }
 
+/** The rows a delete's cascade removed, read off its payload so they match what undo restores. */
+function cascadedRows(outcome: OkOutcome) {
+  if (outcome.op !== 'delete') return []
+  return capturedPatches(resolveByTable(outcome.targetTable)?.cascade, outcome.undoPayload)
+}
+
 function emitOutcomePatches(branchId: string, outcome: OkOutcome): void {
   if (outcome.patch) resolveByTable(outcome.targetTable)?.patcher?.(branchId, outcome.patch)
-  for (const child of outcome.cascadePatches ?? [])
+  for (const child of cascadedRows(outcome))
     resolveByTable(child.table)?.patcher?.(branchId, child.patch)
 }
 
@@ -145,7 +158,7 @@ async function applyDeltaActionUnlocked(args: Args, ctx: DbCtx): Promise<Mutatio
   if (isUserOriginatedSource(action.source) && generationStore.getTxState().reversalInProgress)
     return {
       status: 'rejected',
-      code: 'reversal-in-progress',
+      code: DELTA_REJECTION.reversalInProgress,
       reason: 'prose reversal in progress',
     }
 
@@ -215,7 +228,7 @@ function groupConflict(outcomes: readonly OkOutcome[]): string | null {
       if (deleted.has(key)) return `the group deletes ${key} twice`
       deleted.add(key)
     }
-    for (const child of outcome.cascadePatches ?? []) {
+    for (const child of cascadedRows(outcome)) {
       const key = createdKey(child.table, child.patch.id)
       if (cascaded.has(key)) return `two deletes in the group cascade ${key}`
       cascaded.add(key)
@@ -236,16 +249,9 @@ function groupConflict(outcomes: readonly OkOutcome[]): string | null {
 }
 
 /**
- * Commits actions under one actionId in a single transaction — a rejection anywhere leaves nothing
- * behind, unlike sequential `applyDeltaAction` calls, which each commit on their own.
- *
- * Handlers run before the transaction opens and read pre-group state: an action can't read an
- * earlier one's created row (only `GroupScope` names it); a same-column double-write on one row
- * is rejected here rather than left to callers.
- *
- * Rejected as `group-conflict`: a row deleted twice, a write to a row a delete in the group
- * cascades (two deletes' cascades included), and a link write naming an entity or happening the
- * group deletes.
+ * One actionId, one transaction: a rejection anywhere leaves nothing behind. Handlers read
+ * pre-group state, so a group-created row shows only in `GroupScope`, a same-column double-write
+ * on one row is rejected, and so is every `groupConflict` case (code `group-conflict`).
  */
 export async function applyDeltaActionGroup(
   actions: readonly PipelineAction[],
@@ -266,15 +272,17 @@ async function applyDeltaActionGroupUnlocked(
   const entryId = args.entryId ?? null
 
   type Prepared = { deltaId: string; source: PipelineAction['source']; outcome: OkOutcome }
+  type Refusal = Extract<DeltaGroupResult, { status: 'rejected' }>
   const prepared: Prepared[] = []
   const pendingColumns = new Map<string, Set<string>>()
   const created = new Set<string>()
 
-  for (const action of actions) {
+  // A refusal aborts the group; a 'noop' just commits nothing — a group can't half-fail on one.
+  const prepare = async (action: PipelineAction): Promise<Refusal | 'noop' | null> => {
     if (isUserOriginatedSource(action.source) && generationStore.getTxState().reversalInProgress)
       return {
         status: 'rejected',
-        code: 'reversal-in-progress',
+        code: DELTA_REJECTION.reversalInProgress,
         reason: 'prose reversal in progress',
       }
 
@@ -282,11 +290,10 @@ async function applyDeltaActionGroupUnlocked(
     if (!resolved) return { status: 'rejected', reason: `no handler registered for ${action.kind}` }
 
     const outcome = await resolved.handler(action, branchId, ctx, { created })
-    if (outcome.status === 'rejected') {
-      // A no-op contributes nothing to commit, and a group cannot half-fail on one.
-      if (outcome.code === 'noop') continue
-      return { status: 'rejected', reason: outcome.reason, code: outcome.code }
-    }
+    if (outcome.status === 'rejected')
+      return outcome.code === 'noop'
+        ? 'noop'
+        : { status: 'rejected', reason: outcome.reason, code: outcome.code }
 
     const rowKey = createdKey(outcome.targetTable, outcome.targetId)
     const columns = outcome.patch?.op === 'update' ? Object.keys(outcome.patch.columns) : []
@@ -301,11 +308,27 @@ async function applyDeltaActionGroupUnlocked(
 
     prepared.push({ deltaId: generateId('delta'), source: action.source, outcome })
     if (outcome.op === 'create') created.add(rowKey)
+    return null
+  }
+
+  const skipped: { action: PipelineAction; createdThen: number }[] = []
+  for (const action of actions) {
+    const refused = await prepare(action)
+    if (refused === 'noop') skipped.push({ action, createdThen: created.size })
+    else if (refused) return refused
+  }
+  // A link can no-op only because the row it names is created later in the group, so it runs
+  // once more against every create. Links name no other link, so one more pass settles it.
+  for (const { action, createdThen } of skipped) {
+    if (created.size === createdThen) continue
+    const refused = await prepare(action)
+    if (refused && refused !== 'noop') return refused
   }
 
   if (prepared.length === 0) return { status: 'ok' }
   const conflict = groupConflict(prepared.map(({ outcome }) => outcome))
-  if (conflict !== null) return { status: 'rejected', reason: conflict, code: 'group-conflict' }
+  if (conflict !== null)
+    return { status: 'rejected', reason: conflict, code: DELTA_REJECTION.groupConflict }
 
   const ops: SqlOp[] = prepared.flatMap(({ deltaId, source, outcome }) => [
     deltaRowOp(ctx, { deltaId, branchId, entryId, actionId, source, target: outcome }),

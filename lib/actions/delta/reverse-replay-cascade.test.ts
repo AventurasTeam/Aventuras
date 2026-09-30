@@ -30,7 +30,7 @@ const KNIGHT: NewEntity = {
 }
 
 async function setup() {
-  const cascadeDeleteOps = vi.fn(async () => ({ ops: [], children: {} }))
+  const cascadeRun = vi.fn(async () => ({ ops: [], children: { entities: [] } }))
   // vitest.setup.ts registered the real domains process-globally; reset so the
   // fixture domain lands in a registry holding only what this file needs.
   __resetRegistry()
@@ -53,16 +53,10 @@ async function setup() {
     },
     columnSchemas: {},
     handlers: {},
-    restoreCascade: (undoPayload) => ({
-      children: [
-        { table: 'entities', rows: undoPayload.entityChildren as Record<string, unknown>[] },
-      ],
-      cascadeKeys: ['entityChildren'],
-    }),
-    cascadeDeleteOps,
+    cascade: { tables: ['entities'], run: cascadeRun },
   })
 
-  return { db, ctx: { db, runInTransaction }, cascadeDeleteOps }
+  return { db, ctx: { db, runInTransaction }, cascadeRun }
 }
 
 describe('reverse-replay of a cascade whose children are embeddable', () => {
@@ -85,7 +79,7 @@ describe('reverse-replay of a cascade whose children are embeddable', () => {
             id: 'p1',
             branchId: 'b1',
             // Clean at delete time: it had been embedded and nothing touched it since.
-            entityChildren: [{ ...KNIGHT, state: null, embeddingStale: 0 }],
+            entities: [{ ...KNIGHT, state: null, embeddingStale: 0 }],
           },
           encodingVersion: 1,
           createdAt: 1,
@@ -107,7 +101,7 @@ describe('reverse-replay of a cascade whose children are embeddable', () => {
 // create leaves the children to their own deltas.
 describe('reverse-replay of a create on a domain that registers a delete cascade', () => {
   it('deletes the parent without consulting the cascade hook', async () => {
-    const { db, ctx, cascadeDeleteOps } = await setup()
+    const { db, ctx, cascadeRun } = await setup()
 
     await db.insert(cascadeParents).values({ id: 'p1', branchId: 'b1' })
     await db.insert(entities).values(KNIGHT)
@@ -132,7 +126,7 @@ describe('reverse-replay of a create on a domain that registers a delete cascade
       ctx,
     )
 
-    expect(cascadeDeleteOps).not.toHaveBeenCalled()
+    expect(cascadeRun).not.toHaveBeenCalled()
     const parents = await db.select().from(cascadeParents).where(eq(cascadeParents.id, 'p1'))
     expect(parents).toHaveLength(0)
     // Untouched on purpose: a real actionId-scoped set carries this row's own delta.

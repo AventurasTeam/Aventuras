@@ -248,8 +248,8 @@ rows as they stand when the write lands, not only the pass's snapshot:
   `upsertHappeningAwareness` and `upsertCharacterRelationship`. A create
   re-reads the rows it names — the entity and the happening, or both
   ends of a pair — and no-ops when one is gone, so a delete landing
-  after the pass's post-call re-read leaves no orphan row; a row
-  created earlier in the same action group counts as present. A new
+  after the pass's post-call re-read leaves no orphan row; a row the
+  same action group creates counts as present, in either order. A new
   character reconciled to a row deleted in that window is dropped for
   the pass. Lock keys: [Concurrency](#concurrency).
 

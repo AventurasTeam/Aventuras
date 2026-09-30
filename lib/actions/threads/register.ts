@@ -5,16 +5,11 @@ import { KIND_FIELDS, threadWriteSchema, threads } from '@/lib/db'
 import { threadsStore } from '@/lib/stores'
 
 import { nullifyRef } from '../coerce'
-import {
-  cascadePatches,
-  payloadFromChildren,
-  restoreChildren,
-  rowCascade,
-} from '../delta/delete-cascade'
-import { register, type ActionHandler } from '../delta/registry'
+import { cascadedDelete, rowCascade } from '../delta/delete-cascade'
+import { register, TARGET_NOT_FOUND, type ActionHandler } from '../delta/registry'
 import type { DeltaSource } from '../types'
 
-const cascade = rowCascade('threads', 'thread')
+const cascade = rowCascade('thread')
 
 type ThreadUpdatePatch = Partial<{
   title: string
@@ -164,25 +159,19 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     .from(threads)
     .where(and(eq(threads.branchId, bid), eq(threads.id, id)))
   if (!current)
-    return { status: 'rejected', reason: `delete target threads ${bid}:${id} not found` }
-  const { ops: childOps, children } = await cascade(bid, id, ctx)
-  return {
-    status: 'ok',
-    targetTable: 'threads',
-    targetId: id,
-    op: 'delete',
-    // Full row so reverse-replay rebuilds both the SQLite re-insert and the store create-patch.
-    undoPayload: { ...current, ...payloadFromChildren(children) },
-    ops: [
-      ...childOps,
-      ctx.db
-        .delete(threads)
-        .where(and(eq(threads.branchId, bid), eq(threads.id, id)))
-        .toSQL(),
-    ],
-    patch: { op: 'delete', id },
-    cascadePatches: cascadePatches(children),
-  }
+    return {
+      status: 'rejected',
+      reason: `delete target threads ${bid}:${id} not found`,
+      code: TARGET_NOT_FOUND,
+    }
+  return cascadedDelete(ctx, cascade, {
+    table: 'threads',
+    row: current,
+    deleteOp: ctx.db
+      .delete(threads)
+      .where(and(eq(threads.branchId, bid), eq(threads.id, id)))
+      .toSQL(),
+  })
 }
 
 export function registerThreads(): void {
@@ -196,7 +185,6 @@ export function registerThreads(): void {
       deleteThread: deleteHandler,
     },
     patcher: (branchId, p) => threadsStore.patch(branchId, p),
-    restoreCascade: restoreChildren(['translations']),
-    cascadeDeleteOps: cascade,
+    cascade,
   })
 }

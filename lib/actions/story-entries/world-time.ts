@@ -6,8 +6,8 @@ import { generateId } from '@/lib/ids'
 import { generationStore } from '@/lib/stores'
 
 import { applyDeltaAction } from '../delta/apply-delta-action'
-import { withKeyLock } from '../delta/key-lock'
 import type { DbCtx } from '../types'
+import { withEntryMetadataLock } from './entry-metadata-lock'
 import type { StoryEntryRejection } from './operational'
 import { STORY_ENTRY_REJECTION, type StoryEntryRejectionCode } from './register'
 
@@ -22,16 +22,6 @@ function inFlight(): StoryEntryRejection {
 }
 
 /**
- * Serializes the read-then-decide of every ungated entry-metadata writer. Per ROW, not
- * per action: same-row writers under different action names are the pair that must not
- * interleave. Never hold this key around a call into one of them — `withKeyLock` is not
- * reentrant, so the inner call would await the outer's own promise and deadlock.
- */
-export function entryMetadataLockKey(branchId: string, id: string): string {
-  return `entryMetadata:${branchId}:${id}`
-}
-
-/**
  * Ungated writer vs. ungated writer only: pipeline dispatches are held apart by
  * `hard-gate`, and their stale `tail` snapshot is answered by the handler's partial
  * merge (register.ts), not by this lock.
@@ -42,7 +32,7 @@ export async function updateEntryWorldTime(
   worldTime: number,
   ctx: DbCtx,
 ): Promise<UpdateWorldTimeResult> {
-  return withKeyLock(entryMetadataLockKey(branchId, id), () =>
+  return withEntryMetadataLock(branchId, id, () =>
     updateEntryWorldTimeLocked(branchId, id, worldTime, ctx),
   )
 }

@@ -3,8 +3,9 @@ import { DatabaseSync, type SQLInputValue } from 'node:sqlite'
 import { getLoadablePath } from 'sqlite-vec'
 import { beforeEach, describe, expect, it } from 'vitest'
 
+import { plantVec } from '../__tests__/vec-fixtures'
 import type { SqlOp } from '../types'
-import { deleteVecIdsOps, deleteVecOps, upsertVecOps } from './ops'
+import { deleteVecIdsOps, deleteVecOps, upsertVecOps, type VecSourceGuard } from './ops'
 import { sourceHash } from './source-hash'
 import { deleteBranchModelVecOps, ensureVecTables, vecRowPk } from './vec-tables'
 
@@ -33,20 +34,34 @@ function vec(dim: number, seed: number): Uint8Array {
   return new Uint8Array(arr.buffer)
 }
 
+const KAEL: VecSourceGuard = { fields: ['Kael', null] }
+
+// `entities` carries only the columns the guard reads, not the migrated schema.
+async function makeSourcedDb(): Promise<DatabaseSync> {
+  const db = makeDb()
+  await ensureVecTables(384, async (sql) => {
+    db.exec(sql)
+  })
+  db.exec('CREATE TABLE entities (branch_id TEXT, id TEXT, name TEXT, description TEXT)')
+  return db
+}
+
+function addKael(db: DatabaseSync, branchId: string, id: string): void {
+  db.prepare(`INSERT INTO entities VALUES (?, ?, 'Kael', NULL)`).run(branchId, id)
+}
+
 describe('upsertVecOps / deleteVecOps', () => {
   let db: DatabaseSync
 
   beforeEach(async () => {
-    db = makeDb()
-    await ensureVecTables(384, async (sql) => {
-      db.exec(sql)
-    })
+    db = await makeSourcedDb()
   })
 
   it('upserting the same (id, branch_id) twice leaves exactly one row carrying the latest values', () => {
+    addKael(db, 'b1', 'e1')
     const base = { kind: 'entity' as const, id: 'e1', branchId: 'b1', modelId: 'm1', dim: 384 }
-    runOps(db, upsertVecOps({ ...base, sourceHash: sourceHash('h1'), vector: vec(384, 0) }))
-    runOps(db, upsertVecOps({ ...base, sourceHash: sourceHash('h2'), vector: vec(384, 1) }))
+    runOps(db, upsertVecOps({ ...base, sourceHash: sourceHash('h1'), vector: vec(384, 0) }, KAEL))
+    runOps(db, upsertVecOps({ ...base, sourceHash: sourceHash('h2'), vector: vec(384, 1) }, KAEL))
 
     const rows = db
       .prepare('select id, source_hash from entities_vec_384 where branch_id = ?')
@@ -58,29 +73,37 @@ describe('upsertVecOps / deleteVecOps', () => {
   })
 
   it('does not disturb a different id in the same branch', () => {
+    addKael(db, 'b1', 'e1')
+    addKael(db, 'b1', 'e2')
     runOps(
       db,
-      upsertVecOps({
-        kind: 'entity',
-        id: 'e1',
-        branchId: 'b1',
-        modelId: 'm1',
-        dim: 384,
-        sourceHash: sourceHash('h1'),
-        vector: vec(384, 0),
-      }),
+      upsertVecOps(
+        {
+          kind: 'entity',
+          id: 'e1',
+          branchId: 'b1',
+          modelId: 'm1',
+          dim: 384,
+          sourceHash: sourceHash('h1'),
+          vector: vec(384, 0),
+        },
+        KAEL,
+      ),
     )
     runOps(
       db,
-      upsertVecOps({
-        kind: 'entity',
-        id: 'e2',
-        branchId: 'b1',
-        modelId: 'm1',
-        dim: 384,
-        sourceHash: sourceHash('h-other'),
-        vector: vec(384, 1),
-      }),
+      upsertVecOps(
+        {
+          kind: 'entity',
+          id: 'e2',
+          branchId: 'b1',
+          modelId: 'm1',
+          dim: 384,
+          sourceHash: sourceHash('h-other'),
+          vector: vec(384, 1),
+        },
+        KAEL,
+      ),
     )
 
     const rows = db.prepare('select id, source_hash from entities_vec_384 order by id').all() as {
@@ -92,30 +115,38 @@ describe('upsertVecOps / deleteVecOps', () => {
   })
 
   it('inserts cleanly when the same source id exists in a different branch, and branch_id-scoped KNN returns only that branch row', () => {
+    addKael(db, 'b1', 'e1')
+    addKael(db, 'b2', 'e1')
     runOps(
       db,
-      upsertVecOps({
-        kind: 'entity',
-        id: 'e1',
-        branchId: 'b1',
-        modelId: 'm1',
-        dim: 384,
-        sourceHash: sourceHash('h1'),
-        vector: vec(384, 0),
-      }),
+      upsertVecOps(
+        {
+          kind: 'entity',
+          id: 'e1',
+          branchId: 'b1',
+          modelId: 'm1',
+          dim: 384,
+          sourceHash: sourceHash('h1'),
+          vector: vec(384, 0),
+        },
+        KAEL,
+      ),
     )
     expect(() =>
       runOps(
         db,
-        upsertVecOps({
-          kind: 'entity',
-          id: 'e1',
-          branchId: 'b2',
-          modelId: 'm1',
-          dim: 384,
-          sourceHash: sourceHash('h2'),
-          vector: vec(384, 1),
-        }),
+        upsertVecOps(
+          {
+            kind: 'entity',
+            id: 'e1',
+            branchId: 'b2',
+            modelId: 'm1',
+            dim: 384,
+            sourceHash: sourceHash('h2'),
+            vector: vec(384, 1),
+          },
+          KAEL,
+        ),
       ),
     ).not.toThrow()
 
@@ -137,18 +168,15 @@ describe('upsertVecOps / deleteVecOps', () => {
   })
 
   it('deletes the row for (kind, id, branchId)', () => {
-    runOps(
-      db,
-      upsertVecOps({
-        kind: 'entity',
-        id: 'e1',
-        branchId: 'b1',
-        modelId: 'm1',
-        dim: 384,
-        sourceHash: sourceHash('h1'),
-        vector: vec(384, 0),
-      }),
-    )
+    plantVec(db, {
+      kind: 'entity',
+      id: 'e1',
+      branchId: 'b1',
+      modelId: 'm1',
+      dim: 384,
+      sourceHash: sourceHash('h1'),
+      vector: vec(384, 0),
+    })
     runOps(db, deleteVecOps('entity', 'e1', 'b1', ['entities_vec_384']))
 
     const rows = db.prepare('select id from entities_vec_384 where branch_id = ?').all('b1')
@@ -156,21 +184,25 @@ describe('upsertVecOps / deleteVecOps', () => {
   })
 
   it('matches a legacy 2-part-pk row by columns: upsert of the same model replaces it', () => {
+    addKael(db, 'b1', 'e1')
     db.prepare(
       'insert into entities_vec_384 (pk, branch_id, model_id, id, source_hash, embedding) values (?, ?, ?, ?, ?, ?)',
     ).run('b1:e1', 'b1', 'm1', 'e1', sourceHash('legacy'), vec(384, 0))
 
     runOps(
       db,
-      upsertVecOps({
-        kind: 'entity',
-        id: 'e1',
-        branchId: 'b1',
-        modelId: 'm1',
-        dim: 384,
-        sourceHash: sourceHash('h-new'),
-        vector: vec(384, 1),
-      }),
+      upsertVecOps(
+        {
+          kind: 'entity',
+          id: 'e1',
+          branchId: 'b1',
+          modelId: 'm1',
+          dim: 384,
+          sourceHash: sourceHash('h-new'),
+          vector: vec(384, 1),
+        },
+        KAEL,
+      ),
     )
 
     const rows = db
@@ -193,29 +225,36 @@ describe('upsertVecOps / deleteVecOps', () => {
   })
 
   it('upserting a second model for the same (branch, id) leaves both rows, and does not disturb the first model row', () => {
+    addKael(db, 'b1', 'e1')
     runOps(
       db,
-      upsertVecOps({
-        kind: 'entity',
-        id: 'e1',
-        branchId: 'b1',
-        modelId: 'm1',
-        dim: 384,
-        sourceHash: sourceHash('h1'),
-        vector: vec(384, 0),
-      }),
+      upsertVecOps(
+        {
+          kind: 'entity',
+          id: 'e1',
+          branchId: 'b1',
+          modelId: 'm1',
+          dim: 384,
+          sourceHash: sourceHash('h1'),
+          vector: vec(384, 0),
+        },
+        KAEL,
+      ),
     )
     runOps(
       db,
-      upsertVecOps({
-        kind: 'entity',
-        id: 'e1',
-        branchId: 'b1',
-        modelId: 'm2',
-        dim: 384,
-        sourceHash: sourceHash('h2'),
-        vector: vec(384, 1),
-      }),
+      upsertVecOps(
+        {
+          kind: 'entity',
+          id: 'e1',
+          branchId: 'b1',
+          modelId: 'm2',
+          dim: 384,
+          sourceHash: sourceHash('h2'),
+          vector: vec(384, 1),
+        },
+        KAEL,
+      ),
     )
 
     const rows = db
@@ -237,15 +276,18 @@ describe('model-aware vec identity', () => {
   })
 
   it('upsert replaces only the same model row', () => {
-    const [del, ins] = upsertVecOps({
-      kind: 'entity',
-      id: 'e1',
-      branchId: 'b1',
-      modelId: 'm2',
-      dim: 384,
-      sourceHash: 'h' as never,
-      vector: new Uint8Array(4),
-    })
+    const [del, ins] = upsertVecOps(
+      {
+        kind: 'entity',
+        id: 'e1',
+        branchId: 'b1',
+        modelId: 'm2',
+        dim: 384,
+        sourceHash: 'h' as never,
+        vector: new Uint8Array(4),
+      },
+      KAEL,
+    )
     expect(del.sql).toBe(
       'DELETE FROM entities_vec_384 WHERE branch_id = ? AND id = ? AND model_id = ?',
     )
@@ -286,18 +328,15 @@ describe('model-aware vec identity', () => {
     // 40000 ids overrun SQLite's 32766-bind cap in a single statement.
     const ids = Array.from({ length: 40000 }, (_, i) => `e${i}`)
     const put = (branchId: string, id: string) =>
-      runOps(
-        db,
-        upsertVecOps({
-          kind: 'entity',
-          id,
-          branchId,
-          modelId: 'm1',
-          dim: 384,
-          sourceHash: sourceHash(id),
-          vector: vec(384, 0),
-        }),
-      )
+      plantVec(db, {
+        kind: 'entity',
+        id,
+        branchId,
+        modelId: 'm1',
+        dim: 384,
+        sourceHash: sourceHash(id),
+        vector: vec(384, 0),
+      })
     for (const id of ['e0', 'e20000', 'e39999', 'kept']) put('b1', id)
     put('b2', 'e0')
 
@@ -320,16 +359,12 @@ describe('model-aware vec identity', () => {
   })
 })
 
-describe('upsertVecOps with a source guard', () => {
+describe('upsertVecOps source guard', () => {
   let db: DatabaseSync
 
   beforeEach(async () => {
-    db = makeDb()
-    await ensureVecTables(384, async (sql) => {
-      db.exec(sql)
-    })
-    db.exec('CREATE TABLE entities (branch_id TEXT, id TEXT, name TEXT, description TEXT)')
-    db.prepare(`INSERT INTO entities VALUES ('b1', 'e1', 'Kael', NULL)`).run()
+    db = await makeSourcedDb()
+    addKael(db, 'b1', 'e1')
   })
 
   const write = (id: string) => ({
@@ -345,20 +380,33 @@ describe('upsertVecOps with a source guard', () => {
     (db.prepare('select id from entities_vec_384').all() as { id: string }[]).map((r) => r.id)
 
   it('lands while the row still holds the embedded text', () => {
-    runOps(db, upsertVecOps(write('e1'), { fields: ['Kael', null] }))
+    runOps(db, upsertVecOps(write('e1'), KAEL))
     expect(ids()).toEqual(['e1'])
   })
 
   it('writes nothing for a row deleted mid-embed', () => {
     // e1's own live text, not e2's — pins the guard's `id = ?`: a guard that
     // matched on columns alone would find e1's row and land a vector for e2.
-    runOps(db, upsertVecOps(write('e2'), { fields: ['Kael', null] }))
+    runOps(db, upsertVecOps(write('e2'), KAEL))
     expect(ids()).toEqual([])
   })
 
   it('writes nothing for a row edited mid-embed, and drops the stale vector it replaced', () => {
-    runOps(db, upsertVecOps(write('e1')))
+    plantVec(db, write('e1'))
     runOps(db, upsertVecOps(write('e1'), { fields: ['Kale', null] }))
     expect(ids()).toEqual([])
+  })
+
+  // Fixtures plant with plantVec, so a row shaped unlike a real one would make them vacuous.
+  it('plantVec writes the row the guarded upsert writes', () => {
+    const rows = () => db.prepare('select * from entities_vec_384').all()
+    runOps(db, upsertVecOps(write('e1'), KAEL))
+    const upserted = rows()
+    runOps(db, deleteVecOps('entity', 'e1', 'b1', ['entities_vec_384']))
+
+    plantVec(db, write('e1'))
+
+    expect(upserted).toHaveLength(1)
+    expect(rows()).toEqual(upserted)
   })
 })

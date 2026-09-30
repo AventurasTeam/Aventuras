@@ -17,37 +17,32 @@ export type StorePatch =
 // A domain patcher closes over its working-set store; the store branch-guards.
 export type StorePatcher = (branchId: string, patch: StorePatch) => void
 
-// Extracts cascaded child rows from a delete delta's undo payload; the engine
-// strips the declared keys to recover the clean parent row.
-export type CascadeRestore = (undoPayload: Record<string, unknown>) => {
-  /** Child rows to re-insert, keyed by their own registered table name. */
-  children: { table: string; rows: Record<string, unknown>[] }[]
-  /** Keys in the undo payload that belong to cascaded children; engine strips these. */
-  cascadeKeys: string[]
-}
+export type Rows = Record<string, unknown>[]
 
-/**
- * Replays the forward delete's cascade; returns child rows so the caller can emit store patches.
- * **Delete-op-only** — reversing a `create` must not read this; see
- * `docs/generation-pipeline.md` → Reverse-replay.
- */
-export type CascadeDeleteOps = (
+export type CascadeRun<C> = (
   branchId: string,
   targetId: string,
   ctx: DbCtx,
-) => Promise<{
-  ops: SqlOp[]
-  children: Record<string, Record<string, unknown>[]>
-}>
+) => Promise<{ ops: SqlOp[]; children: C }>
 
 /**
- * Rows created earlier in the same action group, as `createdKey`s — handlers read pre-group state.
+ * `tables`: the child tables a delete removes, by registered name. `run` is **delete-op-only** —
+ * reversing a `create` must not read it (`docs/generation-pipeline.md` → Reverse-replay).
  */
+export type Cascade<T extends string = string> = {
+  tables: readonly T[]
+  run: CascadeRun<Record<T, Rows>>
+}
+
+/** Rows the same action group creates, as `createdKey`s — handlers read pre-group state. */
 export type GroupScope = { readonly created: ReadonlySet<string> }
 
 export function createdKey(table: string, id: string): string {
   return `${table}:${id}`
 }
+
+/** A handler's code for a write whose target row is gone, so each family's boundary can name it. */
+export const TARGET_NOT_FOUND = 'not-found'
 
 export type HandlerOutcome =
   // Deliberately a bare string: each action family funnels its OWN rejection vocabulary
@@ -61,8 +56,6 @@ export type HandlerOutcome =
       undoPayload: Record<string, unknown> | null
       ops: SqlOp[]
       patch: StorePatch | null
-      /** Rows a delete's cascade removed; the runner patches their stores after the commit. */
-      cascadePatches?: readonly { table: string; patch: StorePatch }[]
     }
 
 export type ActionHandler = (
@@ -89,8 +82,7 @@ export type DomainRegistration = {
   columnSchemas: Record<string, ZodType>
   handlers: Record<string, ActionHandler>
   patcher?: StorePatcher
-  restoreCascade?: CascadeRestore
-  cascadeDeleteOps?: CascadeDeleteOps
+  cascade?: Cascade
   /**
    * Row exists while any of these is non-null; a reversal nulling them all deletes it instead.
    * No other invariant may span columns. See `docs/generation-pipeline.md` → Reverse-replay.

@@ -359,7 +359,7 @@ describe('reverseReplayDeltas', () => {
     expect(entry.metadata).toEqual({ sceneEntities: [], currentLocationId: null, worldTime: 5 })
   })
 
-  it('delete without restoreCascade passes undo payload through untouched', async () => {
+  it('delete on a table with no cascade passes undo payload through untouched', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seed(db)

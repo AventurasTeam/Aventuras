@@ -45,10 +45,7 @@ async function exists(ctx: DbCtx, branchId: string, ref: LiveRef): Promise<boole
   return row != null
 }
 
-/**
- * The FK-less link tables can't refuse a dead id, and a delete can land between a no-gate pass's
- * snapshot and its writes (cadence.md → Live-row guards). A row created earlier in the group counts.
- */
+/** FK-less link tables take a dead id (cadence.md → Live-row guards); group-created rows count. */
 export async function missingRef(
   ctx: DbCtx,
   branchId: string,
@@ -62,8 +59,8 @@ export async function missingRef(
   return false
 }
 
-export const MISSING_REF: Extract<HandlerOutcome, { status: 'rejected' }> = {
+export const MISSING_REF = {
   status: 'rejected',
   reason: 'the link names a row that no longer exists',
   code: 'noop',
-}
+} as const satisfies Extract<HandlerOutcome, { status: 'rejected' }>

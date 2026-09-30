@@ -24,8 +24,8 @@ export function withKeyLock<T>(key: string, run: () => Promise<T>): Promise<T> {
   return settled
 }
 
-// Deduped because the lock is not reentrant; sorted so two holders of overlapping key sets
-// take them in one order and can't deadlock.
+// Deduped: the lock isn't reentrant. Sorted: overlapping key sets lock in one order, no deadlock.
+// `withEntryMetadataLock` (story-entries/entry-metadata-lock.ts) sits outside, always taken first.
 export function withKeyLocks<T>(keys: readonly string[], run: () => Promise<T>): Promise<T> {
   return acquire([...new Set(keys)].sort(), run)
 }

@@ -13,6 +13,7 @@ import {
   type SqlOp,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { plantVec, seedVec } from '@/lib/db/__tests__/vec-fixtures'
 import type { EmbedderConfig } from '@/lib/embedder'
 
 import {
@@ -209,27 +210,21 @@ function seedVectors(
   modelId: string,
   dim: number,
 ): void {
-  sqlite.exec('BEGIN')
-  try {
-    rows.forEach((row, i) => {
-      const composite = compositeText(row.fields)
-      for (const op of upsertVecOps({
+  rows.forEach((row, i) => {
+    seedVec(
+      sqlite,
+      {
         kind: row.kind,
         id: row.id,
         branchId: row.branchId,
         modelId,
         dim,
-        sourceHash: sourceHash(composite),
+        sourceHash: sourceHash(compositeText(row.fields)),
         vector: fakeVec(dim, i),
-      })) {
-        sqlite.prepare(op.sql).run(...(op.params as SQLInputValue[]))
-      }
-    })
-    sqlite.exec('COMMIT')
-  } catch (err) {
-    sqlite.exec('ROLLBACK')
-    throw err
-  }
+      },
+      { fields: row.fields },
+    )
+  })
 }
 
 function seedOldVectors(sqlite: DatabaseSync, rows: EmbeddedFieldRow[], modelId = OLD): void {
@@ -922,11 +917,15 @@ describe('embedder-swap engine', () => {
     const { sqlite, runInTransaction, embedded } = await setup()
     seedOldVectors(sqlite, embedded)
     // Leftover NEW row for e1 from an abandoned swap toward the same model id.
-    seedOldVectors(
-      sqlite,
-      [{ kind: 'entity', id: 'e1', branchId: 'b1', fields: ['stale', 'leftover'] }],
-      NEW,
-    )
+    plantVec(sqlite, {
+      kind: 'entity',
+      id: 'e1',
+      branchId: 'b1',
+      modelId: NEW,
+      dim: DIM,
+      sourceHash: sourceHash(compositeText(['stale', 'leftover'])),
+      vector: fakeVec(DIM, 0),
+    })
     const embed = makeEmbedRows(sqlite)
     const { deps } = makeDeps(sqlite, runInTransaction, embed.fn)
 

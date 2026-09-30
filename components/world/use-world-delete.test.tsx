@@ -2,7 +2,7 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { ENTITY_DELETE_CODES, type DbCtx } from '@/lib/actions'
+import { ROW_DELETE_REJECTION, type DbCtx } from '@/lib/actions'
 import type { CharacterRelationship, HappeningAwareness, HappeningInvolvement } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { makeEntity, makeLore } from '@/lib/list-modules/__tests__/fixtures'
@@ -220,7 +220,7 @@ describe('useWorldDelete → confirm', () => {
     deleteEntityRow.mockResolvedValue({
       status: 'rejected',
       reason: 'generation in flight',
-      code: ENTITY_DELETE_CODES.inFlight,
+      code: ROW_DELETE_REJECTION.inFlight,
     })
     const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard))
     act(() => result.current.request({ kind: 'entity', row: MIRA }))
@@ -234,7 +234,7 @@ describe('useWorldDelete → confirm', () => {
     deleteEntityRow.mockResolvedValue({
       status: 'rejected',
       reason: 'lead entity',
-      code: ENTITY_DELETE_CODES.leadEntity,
+      code: ROW_DELETE_REJECTION.leadEntity,
     })
     const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard))
     act(() => result.current.request({ kind: 'entity', row: MIRA }))

@@ -3,10 +3,9 @@ import { and, eq, inArray } from 'drizzle-orm'
 import { BIND_CHUNK, entities, happenings, type Delta } from '@/lib/db'
 
 import type { DbCtx } from '../types'
+import { capturedChildren, type CapturedChildren as Children } from './delete-cascade'
 import { linkRefs, type LiveRef } from './live-refs'
-import { resolveByTable, type CascadeRestore } from './registry'
-
-type Children = ReturnType<CascadeRestore>['children']
+import { resolveByTable } from './registry'
 
 export type LiveLinkFilter = (branchId: string, children: Children) => Children
 
@@ -14,10 +13,10 @@ const REF_TABLES = { entities, happenings } as const
 
 const refKey = (table: string, branchId: string, id: string) => `${table}:${branchId}:${id}`
 
-function capturedChildren(delta: Delta): Children {
+function capturedBy(delta: Delta): Children {
   if (delta.op !== 'delete') return []
-  const restore = resolveByTable(delta.targetTable)?.restoreCascade
-  return restore ? restore((delta.undoPayload ?? {}) as Record<string, unknown>).children : []
+  const payload = (delta.undoPayload ?? {}) as Record<string, unknown>
+  return capturedChildren(resolveByTable(delta.targetTable)?.cascade, payload).children
 }
 
 /**
@@ -40,7 +39,7 @@ export async function liveLinkFilter(rows: readonly Delta[], ctx: DbCtx): Promis
     { table: LiveRef['table']; branchId: string; ids: Set<string> }
   >()
   for (const delta of rows) {
-    for (const child of capturedChildren(delta)) {
+    for (const child of capturedBy(delta)) {
       for (const row of child.rows) {
         for (const ref of linkRefs(child.table, row)) {
           if (fate.has(refKey(ref.table, delta.branchId, ref.id))) continue

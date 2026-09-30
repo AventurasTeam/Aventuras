@@ -39,8 +39,8 @@ row and leaves `happening_awareness`, `happening_involvements`,
 dangling (all FK-less by composite-PK necessity), and nothing on any
 delete path reaches the vec0 tables — `deleteVecOps` exists with no
 caller. Reverse-replay already restores rows stale; redo rebuilds a
-delete from the registry's `cascadeDeleteOps` hook, never from the
-handler, which is where the sweep must therefore live.
+delete from the registry's cascade hook (`cascade.run`), never from
+the handler, which is where the sweep must therefore live.
 
 ## Required reading
 
@@ -111,11 +111,11 @@ handler, which is where the sweep must therefore live.
 - **C3 delete arms**, per the milestone's pinned mechanism: the
   grouped entity delete — one merged `updateEntity` per referencing
   entity, one `updateStoryEntryMetadata` for the tail scene drop, then
-  `deleteEntity` with `cascadeDeleteOps` covering the three link tables
-  and translations; the `lead-entity` refusal when the target is the
+  `deleteEntity` with a registered cascade covering the three link
+  tables and translations; the `lead-entity` refusal when the target is the
   story's lead; the happening cascade's child read and delete moved
   into one critical section under the key lock; and `deleteVecOps`
-  emitted from each embedded kind's `cascadeDeleteOps` so forward
+  emitted from each embedded kind's registered cascade so forward
   delete and redo both sweep. The 4.2b PR amends `world.md` to record
   the tail-scene drop, or records the deviation if review rejects it.
 - **Delete surfaces:** `Delete entity` and lore `Delete` in the C11
@@ -221,11 +221,13 @@ handler, which is where the sweep must therefore live.
 
 ## Implementation notes
 
-- **A row created earlier in the same action group counts as present
-  for the three link writers' live-row guards** (relationships
-  included; developer decision, 2026-09-28), on top of the per-branch
-  lock and re-read-and-no-op shape the "Deleting an entity while a
-  classifier pass is in flight" open question above resolved.
+- **A row the same action group creates counts as present for the
+  three link writers' live-row guards** (relationships included;
+  developer decision, 2026-09-28), on top of the per-branch lock and
+  re-read-and-no-op shape the "Deleting an entity while a classifier
+  pass is in flight" open question above resolved. The order inside
+  the group doesn't matter: the runner settles a link against every
+  create in its group.
 - **Reversals are never refused; the lead can dangle (developer
   decision, 2026-09-28).** `resolveLead` (`lib/world`) is the interim:
   World and the composer read the lead through it and treat a
@@ -265,15 +267,17 @@ handler, which is where the sweep must therefore live.
   than merging it in, which would have carried the pre-rebase commits.
 - **Entity cascade rides the delete delta's undo payload**, the same
   shape as `deleteHappening`'s (`involvements` / `awareness` /
-  `relationships` / `translations` keys, `restoreCascade`, and the
-  forward handler registered as `cascadeDeleteOps` so redo replays
-  it) — one delta per deleted row would have bloated History and the
-  undo group.
-- **`HandlerOutcome.cascadePatches` closes a latent bug.** The runner
-  previously emitted only the parent's store patch; a forward cascade
-  would have left dead link rows in the working-set stores, but the
-  bug stayed latent because no production delete caller existed to
-  exercise it.
+  `relationships` / `translations` keys, and one registered `cascade`
+  that names the child tables undo restores and that redo replays) —
+  one delta per deleted row would have bloated History and the undo
+  group.
+- **The runner patches cascaded children out of their stores, which
+  closes a latent bug.** It reads them off the delete's payload, by
+  the registered cascade's tables, so the patch always matches what
+  undo restores. The runner previously emitted only the parent's store
+  patch; a forward cascade would have left dead link rows in the
+  working-set stores, but the bug stayed latent because no production
+  delete caller existed to exercise it.
 - **A group mixing a delete with a write to a row the delete cascades
   is rejected up front as `group-conflict`.** Otherwise it would
   commit and then fail undo forever on a UNIQUE re-insert — the same

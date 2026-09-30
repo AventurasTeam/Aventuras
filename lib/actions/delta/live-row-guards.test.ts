@@ -194,7 +194,65 @@ describe('a row alive on another branch does not satisfy the guard', () => {
   })
 })
 
-describe('a row created earlier in the same group counts as present', () => {
+describe('a row the same group creates counts as present', () => {
+  it('keeps a link written ahead of the create it names', async () => {
+    const result = await applyDeltaActionGroup(
+      [
+        {
+          kind: 'createHappeningInvolvement',
+          source: 'user_edit',
+          payload: {
+            entry: { id: 'hinv_new', branchId: 'b1', happeningId: 'hap_new', entityId: 'char_a' },
+          },
+        },
+        {
+          kind: 'createHappening',
+          source: 'user_edit',
+          payload: {
+            entry: {
+              id: 'hap_new',
+              branchId: 'b1',
+              title: 'A new thing',
+              createdAt: 2,
+              updatedAt: 2,
+            },
+          },
+        },
+      ],
+      { actionId: 'act_2', branchId: 'b1' },
+      ctx,
+    )
+    expect(result).toEqual({ status: 'ok' })
+    expect(await ctx.db.select().from(happenings).where(eq(happenings.id, 'hap_new'))).toHaveLength(
+      1,
+    )
+    expect(await ctx.db.select().from(happeningInvolvements)).toHaveLength(1)
+  })
+
+  it('still drops a link naming a row the group never creates', async () => {
+    const result = await applyDeltaActionGroup(
+      [
+        {
+          kind: 'createHappeningInvolvement',
+          source: 'user_edit',
+          payload: {
+            entry: { id: 'hinv_new', branchId: 'b1', happeningId: 'hap_gone', entityId: 'char_a' },
+          },
+        },
+        {
+          kind: 'createEntity',
+          source: 'user_edit',
+          payload: { entry: character('char_new', 'Cato') },
+        },
+      ],
+      { actionId: 'act_2', branchId: 'b1' },
+      ctx,
+    )
+    expect(result).toEqual({ status: 'ok' })
+    expect(await ctx.db.select().from(entities).where(eq(entities.id, 'char_new'))).toHaveLength(1)
+    expect(await ctx.db.select().from(happeningInvolvements)).toEqual([])
+  })
+
   it("keeps a Plot create's links to its new happening", async () => {
     const result = await applyDeltaActionGroup(
       [

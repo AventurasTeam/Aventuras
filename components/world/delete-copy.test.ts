@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { deleteUndoHint } from '@/components/compounds/delete-confirm-copy'
-import { ENTITY_DELETE_CODES } from '@/lib/actions'
+import { ROW_DELETE_REJECTION } from '@/lib/actions'
 import { emptyEntityState, type Entity, type Lore } from '@/lib/db'
 
 import { deleteDisabledReason, deleteRejectionText, loreDeleteCopy } from './delete-copy'
@@ -37,16 +37,15 @@ describe('deleteDisabledReason', () => {
 })
 
 describe('deleteRejectionText', () => {
-  it('names the in-flight and lead refusals, and falls back to the generic failure otherwise', () => {
-    expect(deleteRejectionText(ENTITY_DELETE_CODES.inFlight)).toBe(
+  it('names the in-flight and lead refusals, and gives every other code the generic failure', () => {
+    expect(deleteRejectionText(ROW_DELETE_REJECTION.inFlight)).toBe(
       "Couldn't delete while generation is in flight.",
     )
-    expect(deleteRejectionText(ENTITY_DELETE_CODES.leadEntity)).toBe(
+    expect(deleteRejectionText(ROW_DELETE_REJECTION.leadEntity)).toBe(
       "The story's lead can't be deleted — set another character as lead first.",
     )
-    expect(deleteRejectionText('not-found')).toBe("Couldn't delete that.")
-    expect(deleteRejectionText('group-conflict')).toBe("Couldn't delete that.")
-    expect(deleteRejectionText(undefined)).toBe("Couldn't delete that.")
+    expect(deleteRejectionText(ROW_DELETE_REJECTION.notFound)).toBe("Couldn't delete that.")
+    expect(deleteRejectionText(ROW_DELETE_REJECTION.failed)).toBe("Couldn't delete that.")
   })
 })
 
