@@ -4,8 +4,9 @@ import { DatabaseSync, type SQLInputValue } from 'node:sqlite'
 import { getLoadablePath } from 'sqlite-vec'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { plantVec, seedVec } from '../__tests__/vec-fixtures'
 import type { SqlOp } from '../types'
-import { upsertVecOps } from './ops'
+import type { VecWrite } from './ops'
 import { compositeText, sourceHash } from './source-hash'
 import {
   clearEmbeddingStaleFlagsOps,
@@ -97,20 +98,27 @@ describe('recomputeStaleOps', () => {
   const recompute = (rows: ReturnType<typeof entity>[], modelId: string) =>
     recomputeStaleOps(rows, modelId, tableNamesOf(db), queryAllFor(db))
 
+  function vecWrite(
+    kind: EmbeddedFieldRow['kind'],
+    branchId: string,
+    id: string,
+    fields: (string | null)[],
+    modelId: string,
+    dim: number,
+  ): VecWrite {
+    return {
+      kind,
+      id,
+      branchId,
+      modelId,
+      dim,
+      sourceHash: sourceHash(compositeText(fields)),
+      vector: vec(dim, 0),
+    }
+  }
+
   function seedVector(id: string, fields: (string | null)[], modelId: string, dim = 384): void {
-    for (const sql of ensureVecTablesSql(dim)) db.exec(sql)
-    runOps(
-      db,
-      upsertVecOps({
-        kind: 'entity',
-        id,
-        branchId: 'b1',
-        modelId,
-        dim,
-        sourceHash: sourceHash(compositeText(fields)),
-        vector: vec(dim, 0),
-      }),
-    )
+    seedVectorFor('entity', 'b1', id, fields, modelId, dim)
   }
 
   function insertEntity(id: string, name: string, description: string | null = null): void {
@@ -143,18 +151,17 @@ describe('recomputeStaleOps', () => {
     dim = 384,
   ): void {
     for (const sql of ensureVecTablesSql(dim)) db.exec(sql)
-    runOps(
-      db,
-      upsertVecOps({
-        kind,
-        id,
-        branchId,
-        modelId,
-        dim,
-        sourceHash: sourceHash(compositeText(fields)),
-        vector: vec(dim, 0),
-      }),
-    )
+    seedVec(db, vecWrite(kind, branchId, id, fields, modelId, dim), { fields })
+  }
+
+  function plantStaleVector(
+    branchId: string,
+    id: string,
+    embedded: (string | null)[],
+    modelId: string,
+  ): void {
+    for (const sql of ensureVecTablesSql(384)) db.exec(sql)
+    plantVec(db, vecWrite('entity', branchId, id, embedded, modelId, 384))
   }
 
   function staleFlagIn(table: string, branchId: string, id: string): number {
@@ -218,7 +225,7 @@ describe('recomputeStaleOps', () => {
     insertEntity('e2', 'Bram', 'a master smith')
     insertEntity('e3', 'Cass', 'a rider')
     seedVector('e1', ['Kara', 'a scout'], 'm1')
-    seedVector('e2', ['Bram', 'a smith'], 'm1')
+    plantStaleVector('b1', 'e2', ['Bram', 'a smith'], 'm1')
     // e3 never embedded. e2's content has since moved on.
     db.prepare('update entities set embedding_stale = 1 where id = ?').run('e1')
 
@@ -269,7 +276,7 @@ describe('recomputeStaleOps', () => {
     insertLore('b1', 'e1', 'Kara')
 
     seedVector('e1', ['Kara', 'a scout'], 'm1') // entity/b1/e1: unchanged
-    seedVectorFor('entity', 'b2', 'e1', ['Vex', 'old text'], 'm1') // entity/b2/e1: moved on
+    plantStaleVector('b2', 'e1', ['Vex', 'old text'], 'm1') // entity/b2/e1: moved on
     seedVectorFor('lore', 'b1', 'e1', ['Kara', null], 'm1') // lore/b1/e1: unchanged
 
     const rows: EmbeddedFieldRow[] = [
