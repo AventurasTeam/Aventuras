@@ -1046,6 +1046,17 @@ class AIService {
     const { storyId } = scope
     const imageId = crypto.randomUUID()
     const presentCharacters = getPresentCharacters()
+    const portraitCharacter =
+      scene.portraitOf && refreshCharacter(scene.portraitOf, presentCharacters)
+
+    // The model is only asked to skip characters listed as having one; a second would overwrite it.
+    if (
+      portraitCharacter &&
+      (portraitCharacter.portrait || this.pendingPortraits.get(scope, portraitCharacter))
+    ) {
+      log('Portrait skipped: character already has one', { characterId: portraitCharacter.id })
+      return
+    }
 
     // Determine profile and model
     let profileId = imageSettings.profileId
@@ -1136,13 +1147,14 @@ class AIService {
       sizeToUse,
       entryId,
       scene,
+      portraitCharacter,
       onPortraitGenerated,
       references,
     ).catch((error) => {
       log('Async analyzed image generation failed', { imageId, error })
       return null
     })
-    if (scene.portraitOf) this.pendingPortraits.track(scope, scene.portraitOf, run)
+    if (portraitCharacter) this.pendingPortraits.track(scope, portraitCharacter, run)
   }
 
   /**
@@ -1157,6 +1169,7 @@ class AIService {
     size: ImageSpec,
     entryId: string,
     scene: ResolvedScene,
+    portraitCharacter: Character | undefined,
     onPortraitGenerated: ImageGenerationContext['onPortraitGenerated'],
     references?: AnalyzedImageReferences,
   ): Promise<string | null> {
@@ -1201,10 +1214,10 @@ class AIService {
 
     if (!base64) return null
 
-    if (scene.portraitOf) {
+    if (portraitCharacter) {
       try {
-        await onPortraitGenerated(scene.portraitOf, base64)
-        log('Handed portrait to store', { characterId: scene.portraitOf.id })
+        await onPortraitGenerated(portraitCharacter, base64)
+        log('Handed portrait to store', { characterId: portraitCharacter.id })
       } catch (error) {
         log('Saving the generated portrait failed', { imageId, error })
       }
