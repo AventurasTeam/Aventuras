@@ -13,6 +13,7 @@ import {
   type MutationResult,
   type PipelineAction,
 } from '../types'
+import { capturedPatches } from './delete-cascade'
 import { deltaRowOp } from './delta-row'
 import { withKeyLocks } from './key-lock'
 import { linkRefs } from './live-refs'
@@ -107,9 +108,15 @@ export function lockKeysFor(action: PipelineAction): readonly RowLockKey[] {
   return isProductionAction(action) ? lockKeysOf(action.kind, action.payload) : []
 }
 
+/** The rows a delete's cascade removed, read off its payload so they match what undo restores. */
+function cascadedRows(outcome: OkOutcome) {
+  if (outcome.op !== 'delete') return []
+  return capturedPatches(resolveByTable(outcome.targetTable)?.cascade, outcome.undoPayload)
+}
+
 function emitOutcomePatches(branchId: string, outcome: OkOutcome): void {
   if (outcome.patch) resolveByTable(outcome.targetTable)?.patcher?.(branchId, outcome.patch)
-  for (const child of outcome.cascadePatches ?? [])
+  for (const child of cascadedRows(outcome))
     resolveByTable(child.table)?.patcher?.(branchId, child.patch)
 }
 
@@ -215,7 +222,7 @@ function groupConflict(outcomes: readonly OkOutcome[]): string | null {
       if (deleted.has(key)) return `the group deletes ${key} twice`
       deleted.add(key)
     }
-    for (const child of outcome.cascadePatches ?? []) {
+    for (const child of cascadedRows(outcome)) {
       const key = createdKey(child.table, child.patch.id)
       if (cascaded.has(key)) return `two deletes in the group cascade ${key}`
       cascaded.add(key)

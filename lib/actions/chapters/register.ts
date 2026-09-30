@@ -4,16 +4,11 @@ import type { Chapter, NewChapter } from '@/lib/db'
 import { chapterWriteSchema, chapters, KIND_FIELDS } from '@/lib/db'
 import { chaptersStore } from '@/lib/stores'
 
-import {
-  cascadePatches,
-  payloadFromChildren,
-  restoreChildren,
-  rowCascade,
-} from '../delta/delete-cascade'
+import { payloadFromChildren, rowCascade } from '../delta/delete-cascade'
 import { register, type ActionHandler } from '../delta/registry'
 import type { DeltaSource } from '../types'
 
-const cascade = rowCascade('chapters', 'chapter')
+const cascade = rowCascade('chapter')
 
 type ChapterUpdatePatch = Partial<{
   sequenceNumber: number
@@ -164,7 +159,7 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     .where(and(eq(chapters.branchId, bid), eq(chapters.id, id)))
   if (!current)
     return { status: 'rejected', reason: `delete target chapters ${bid}:${id} not found` }
-  const { ops: childOps, children } = await cascade(bid, id, ctx)
+  const { ops: childOps, children } = await cascade.run(bid, id, ctx)
   return {
     status: 'ok',
     targetTable: 'chapters',
@@ -180,7 +175,6 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
         .toSQL(),
     ],
     patch: { op: 'delete', id },
-    cascadePatches: cascadePatches(children),
   }
 }
 
@@ -195,7 +189,6 @@ export function registerChapters(): void {
       deleteChapter: deleteHandler,
     },
     patcher: (branchId, p) => chaptersStore.patch(branchId, p),
-    restoreCascade: restoreChildren(['translations']),
-    cascadeDeleteOps: cascade,
+    cascade,
   })
 }

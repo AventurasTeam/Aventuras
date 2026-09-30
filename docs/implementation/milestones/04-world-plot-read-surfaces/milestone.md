@@ -311,7 +311,7 @@ mechanism where the shipped runner forces it:
   `state` patch — the runner rejects two writes to one row's column —
   then one `updateStoryEntryMetadata` dropping the id from the tail
   entry's `sceneEntities` / `currentLocationId`, then the
-  `deleteEntity` whose registered `cascadeDeleteOps` removes its
+  `deleteEntity` whose registered cascade removes its
   `happening_involvements`, `happening_awareness`,
   `character_relationships` and `translations` rows. The link and
   translation set mirrors the merge path canon gives in
@@ -339,10 +339,10 @@ mechanism where the shipped runner forces it:
   (2026-09-28):** no per-happening key existed, and a read inside the
   delete's transaction is impossible over sqlite-proxy.
 - Every delete — forward, and again on **redo** — leaves zero vec0
-  rows for the id across every dim family. The sweep lives in
-  `cascadeDeleteOps` via `deleteVecOps`, because `applyRedo` rebuilds
-  a delete from the descriptor plus that hook and never re-runs the
-  handler. Reverse-replay restores the row `embedding_stale` so the
+  rows for the id across every dim family. The sweep lives in the
+  registered cascade's `run` via `deleteVecOps`, because `applyRedo`
+  rebuilds a delete from the descriptor plus that hook and never
+  re-runs the handler. Reverse-replay restores the row `embedding_stale` so the
   drain re-embeds it (already shipped). Reversing a create sweeps its
   vectors too. Every embedded kind's delete arm (entity, lore, thread,
   happening and chapter), forward and on redo, also removes its row's

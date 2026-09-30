@@ -12,11 +12,9 @@ import {
 } from '@/lib/db'
 
 import type { DbCtx } from '../types'
-import type { CascadeDeleteOps, CascadeRestore, StorePatch } from './registry'
+import type { Cascade, StorePatch } from './registry'
 
 type Rows = Record<string, unknown>[]
-
-export type DeleteCascade = { ops: SqlOp[]; children: Record<string, Rows> }
 
 export type TranslationTargetKind = Translation['targetKind']
 
@@ -33,18 +31,20 @@ export function vecTableLister(ctx: DbCtx): () => Promise<string[]> {
   return () => (tables ??= listVecFamilyTables(ctx.db))
 }
 
-/** A row's vectors in every dim family (retrieval.md → Compute lifecycle); none off embedded tables. */
+/** An embedded row's vectors in every dim family (retrieval.md → Compute lifecycle). */
 export async function vecSweepOps(
-  table: string,
+  kind: VecTargetKind,
   branchId: string,
   id: string,
   listTables: () => Promise<string[]>,
 ): Promise<SqlOp[]> {
-  const kind = VEC_KIND_BY_TABLE.get(table)
-  return kind === undefined ? [] : deleteVecOps(kind, id, branchId, await listTables())
+  return deleteVecOps(kind, id, branchId, await listTables())
 }
 
-/** `vecSweepOps` for many rows of one table and branch: one statement per dim family. */
+/**
+ * `vecSweepOps` for many rows of one table and branch: one statement per dim family. Takes the
+ * table a delta names, so it sweeps nothing off embedded tables.
+ */
 export async function vecSweepIdsOps(
   table: string,
   branchId: string,
@@ -62,7 +62,7 @@ export async function translationCascade(
   ctx: DbCtx,
   branchId: string,
   targets: readonly { kind: TranslationTargetKind; ids: readonly string[] }[],
-): Promise<DeleteCascade> {
+): Promise<{ ops: SqlOp[]; children: { translations: Translation[] } }> {
   const clauses = targets
     .filter((target) => target.ids.length > 0)
     .map((target) =>
@@ -96,13 +96,30 @@ export async function translationCascade(
   return { ops, children: { translations: rows } }
 }
 
+type CascadeRun<C> = (
+  branchId: string,
+  targetId: string,
+  ctx: DbCtx,
+) => Promise<{ ops: SqlOp[]; children: C }>
+
+/**
+ * Declares a cascade once: `run`'s children are keyed by exactly the tables named, so the rows a
+ * delete captures and the rows its undo restores can't drift apart.
+ */
+export function defineCascade<const T extends string, C extends Record<T, Rows>>(
+  tables: readonly T[],
+  run: CascadeRun<C> & (keyof C extends T ? unknown : never),
+): Cascade<T> {
+  return { tables, run }
+}
+
 /** An embedded row's own cascade: its translations and its vectors. */
-export function rowCascade(table: string, kind: TranslationTargetKind): CascadeDeleteOps {
-  return async (branchId, id, ctx) => {
+export function rowCascade(kind: VecTargetKind): Cascade<'translations'> {
+  return defineCascade(['translations'], async (branchId, id, ctx) => {
     const own = await translationCascade(ctx, branchId, [{ kind, ids: [id] }])
-    const vectors = await vecSweepOps(table, branchId, id, vecTableLister(ctx))
+    const vectors = await vecSweepOps(kind, branchId, id, vecTableLister(ctx))
     return { ops: [...own.ops, ...vectors], children: own.children }
-  }
+  })
 }
 
 // Stored undo payloads fix these key names; other tables ride under their table name.
@@ -122,21 +139,44 @@ export function payloadFromChildren(children: Record<string, Rows>): Record<stri
   )
 }
 
-/** Restores `tables`' rows from a delete's payload; a payload written before a table joined reads empty. */
-export function restoreChildren(tables: readonly string[]): CascadeRestore {
-  return (undoPayload) => ({
+export type CapturedChildren = { table: string; rows: Rows }[]
+
+/**
+ * The child rows a delete's payload captured, by registered table, and the payload keys holding
+ * them. A payload written before a table joined the cascade reads empty for it.
+ */
+export function capturedChildren(
+  cascade: Cascade | undefined,
+  undoPayload: Record<string, unknown>,
+): { children: CapturedChildren; cascadeKeys: string[] } {
+  const tables = cascade?.tables ?? []
+  return {
     children: tables.map((table) => ({
       table,
       rows: (undoPayload[payloadKey(table)] as Rows | undefined) ?? [],
     })),
     cascadeKeys: tables.map(payloadKey),
-  })
+  }
 }
 
-export function cascadePatches(
-  children: Record<string, Rows>,
-): { table: string; patch: StorePatch }[] {
-  return Object.entries(children).flatMap(([table, rows]) =>
-    rows.map((row) => ({ table, patch: { op: 'delete' as const, id: row.id as string } })),
+type ChildPatch = { table: string; patch: StorePatch }
+
+function deletePatches(table: string, rows: Rows): ChildPatch[] {
+  return rows.map((row) => ({ table, patch: { op: 'delete' as const, id: row.id as string } }))
+}
+
+/** Store patches for the rows a cascade's `run` just removed. */
+export function cascadePatches(children: Record<string, Rows>): ChildPatch[] {
+  return Object.entries(children).flatMap(([table, rows]) => deletePatches(table, rows))
+}
+
+/** Store patches for the rows a delete's payload captured — what its undo would restore. */
+export function capturedPatches(
+  cascade: Cascade | undefined,
+  undoPayload: Record<string, unknown> | null,
+): ChildPatch[] {
+  if (undoPayload == null) return []
+  return capturedChildren(cascade, undoPayload).children.flatMap(({ table, rows }) =>
+    deletePatches(table, rows),
   )
 }

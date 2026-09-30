@@ -12,16 +12,11 @@ import {
 import { happeningsStore } from '@/lib/stores'
 
 import { nullifyRef } from '../coerce'
-import {
-  cascadePatches,
-  payloadFromChildren,
-  restoreChildren,
-  rowCascade,
-} from '../delta/delete-cascade'
-import { register, type ActionHandler, type CascadeDeleteOps } from '../delta/registry'
+import { defineCascade, payloadFromChildren, rowCascade } from '../delta/delete-cascade'
+import { register, type ActionHandler } from '../delta/registry'
 import type { DeltaSource } from '../types'
 
-const ownCascade = rowCascade('happenings', 'happening')
+const ownCascade = rowCascade('happening')
 
 type HappeningUpdatePatch = Partial<{
   title: string
@@ -166,55 +161,58 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
 
 // Link writers hold happening_links, so no involvement or awareness row lands between read
 // and delete; translations aren't locked.
-const happeningCascade: CascadeDeleteOps = async (branchId, happeningId, ctx) => {
-  const involvements = await ctx.db
-    .select()
-    .from(happeningInvolvements)
-    .where(
-      and(
-        eq(happeningInvolvements.branchId, branchId),
-        eq(happeningInvolvements.happeningId, happeningId),
-      ),
-    )
-  const awareness = await ctx.db
-    .select()
-    .from(happeningAwareness)
-    .where(
-      and(
-        eq(happeningAwareness.branchId, branchId),
-        eq(happeningAwareness.happeningId, happeningId),
-      ),
-    )
-  const own = await ownCascade(branchId, happeningId, ctx)
-  return {
-    ops: [
-      ctx.db
-        .delete(happeningInvolvements)
-        .where(
-          and(
-            eq(happeningInvolvements.branchId, branchId),
-            eq(happeningInvolvements.happeningId, happeningId),
-          ),
-        )
-        .toSQL(),
-      ctx.db
-        .delete(happeningAwareness)
-        .where(
-          and(
-            eq(happeningAwareness.branchId, branchId),
-            eq(happeningAwareness.happeningId, happeningId),
-          ),
-        )
-        .toSQL(),
-      ...own.ops,
-    ],
-    children: {
-      happening_involvements: involvements,
-      happening_awareness: awareness,
-      ...own.children,
-    },
-  }
-}
+const happeningCascade = defineCascade(
+  ['happening_involvements', 'happening_awareness', 'translations'],
+  async (branchId, happeningId, ctx) => {
+    const involvements = await ctx.db
+      .select()
+      .from(happeningInvolvements)
+      .where(
+        and(
+          eq(happeningInvolvements.branchId, branchId),
+          eq(happeningInvolvements.happeningId, happeningId),
+        ),
+      )
+    const awareness = await ctx.db
+      .select()
+      .from(happeningAwareness)
+      .where(
+        and(
+          eq(happeningAwareness.branchId, branchId),
+          eq(happeningAwareness.happeningId, happeningId),
+        ),
+      )
+    const own = await ownCascade.run(branchId, happeningId, ctx)
+    return {
+      ops: [
+        ctx.db
+          .delete(happeningInvolvements)
+          .where(
+            and(
+              eq(happeningInvolvements.branchId, branchId),
+              eq(happeningInvolvements.happeningId, happeningId),
+            ),
+          )
+          .toSQL(),
+        ctx.db
+          .delete(happeningAwareness)
+          .where(
+            and(
+              eq(happeningAwareness.branchId, branchId),
+              eq(happeningAwareness.happeningId, happeningId),
+            ),
+          )
+          .toSQL(),
+        ...own.ops,
+      ],
+      children: {
+        happening_involvements: involvements,
+        happening_awareness: awareness,
+        ...own.children,
+      },
+    }
+  },
+)
 
 const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'deleteHappening')
@@ -229,7 +227,7 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
   if (!current)
     return { status: 'rejected', reason: `delete target happening ${bid}:${id} not found` }
 
-  const { ops: childOps, children } = await happeningCascade(bid, id, ctx)
+  const { ops: childOps, children } = await happeningCascade.run(bid, id, ctx)
 
   return {
     status: 'ok',
@@ -247,7 +245,6 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
         .toSQL(),
     ],
     patch: { op: 'delete', id },
-    cascadePatches: cascadePatches(children),
   }
 }
 
@@ -262,11 +259,6 @@ export function registerHappenings(): void {
       deleteHappening: deleteHandler,
     },
     patcher: (branchId, p) => happeningsStore.patch(branchId, p),
-    restoreCascade: restoreChildren([
-      'happening_involvements',
-      'happening_awareness',
-      'translations',
-    ]),
-    cascadeDeleteOps: happeningCascade,
+    cascade: happeningCascade,
   })
 }

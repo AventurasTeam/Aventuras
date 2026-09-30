@@ -4,17 +4,12 @@ import type { Lore, NewLore } from '@/lib/db'
 import { KIND_FIELDS, lore, loreWriteSchema } from '@/lib/db'
 import { loreStore } from '@/lib/stores'
 
-import {
-  cascadePatches,
-  payloadFromChildren,
-  restoreChildren,
-  rowCascade,
-} from '../delta/delete-cascade'
+import { payloadFromChildren, rowCascade } from '../delta/delete-cascade'
 import { deepEqual } from '../delta/delta-encoding'
 import { register, type ActionHandler } from '../delta/registry'
 import type { DeltaSource } from '../types'
 
-const cascade = rowCascade('lore', 'lore')
+const cascade = rowCascade('lore')
 
 type LoreUpdatePatch = Partial<{
   title: string
@@ -162,7 +157,7 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     .from(lore)
     .where(and(eq(lore.branchId, bid), eq(lore.id, id)))
   if (!current) return { status: 'rejected', reason: `delete target lore ${bid}:${id} not found` }
-  const { ops: childOps, children } = await cascade(bid, id, ctx)
+  const { ops: childOps, children } = await cascade.run(bid, id, ctx)
   return {
     status: 'ok',
     targetTable: 'lore',
@@ -178,7 +173,6 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
         .toSQL(),
     ],
     patch: { op: 'delete', id },
-    cascadePatches: cascadePatches(children),
   }
 }
 
@@ -189,7 +183,6 @@ export function registerLore(): void {
     columnSchemas: {},
     handlers: { createLore: createHandler, updateLore: updateHandler, deleteLore: deleteHandler },
     patcher: (branchId, p) => loreStore.patch(branchId, p),
-    restoreCascade: restoreChildren(['translations']),
-    cascadeDeleteOps: cascade,
+    cascade,
   })
 }

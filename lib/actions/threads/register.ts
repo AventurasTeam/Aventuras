@@ -5,16 +5,11 @@ import { KIND_FIELDS, threadWriteSchema, threads } from '@/lib/db'
 import { threadsStore } from '@/lib/stores'
 
 import { nullifyRef } from '../coerce'
-import {
-  cascadePatches,
-  payloadFromChildren,
-  restoreChildren,
-  rowCascade,
-} from '../delta/delete-cascade'
+import { payloadFromChildren, rowCascade } from '../delta/delete-cascade'
 import { register, type ActionHandler } from '../delta/registry'
 import type { DeltaSource } from '../types'
 
-const cascade = rowCascade('threads', 'thread')
+const cascade = rowCascade('thread')
 
 type ThreadUpdatePatch = Partial<{
   title: string
@@ -165,7 +160,7 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     .where(and(eq(threads.branchId, bid), eq(threads.id, id)))
   if (!current)
     return { status: 'rejected', reason: `delete target threads ${bid}:${id} not found` }
-  const { ops: childOps, children } = await cascade(bid, id, ctx)
+  const { ops: childOps, children } = await cascade.run(bid, id, ctx)
   return {
     status: 'ok',
     targetTable: 'threads',
@@ -181,7 +176,6 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
         .toSQL(),
     ],
     patch: { op: 'delete', id },
-    cascadePatches: cascadePatches(children),
   }
 }
 
@@ -196,7 +190,6 @@ export function registerThreads(): void {
       deleteThread: deleteHandler,
     },
     patcher: (branchId, p) => threadsStore.patch(branchId, p),
-    restoreCascade: restoreChildren(['translations']),
-    cascadeDeleteOps: cascade,
+    cascade,
   })
 }

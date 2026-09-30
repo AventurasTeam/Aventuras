@@ -16,6 +16,7 @@ const scopeRows = sqliteTable('group_scope_rows', {
 declare module '@/lib/actions/action-map' {
   interface TestPipelineActionMap {
     groupScopeCreate: { source: 'user_edit'; payload: { id: string } }
+    groupScopeDelete: { source: 'user_edit'; payload: { id: string } }
     groupScopeProbe: { source: 'user_edit'; payload: { id: string } }
   }
 }
@@ -50,9 +51,23 @@ async function setup() {
             },
           ],
           patch: null,
-          cascadePatches: [
-            { table: 'group_scope_children', patch: { op: 'delete', id: 'child_1' } },
+        }
+      },
+      groupScopeDelete: (action) => {
+        if (action.kind !== 'groupScopeDelete') throw new Error('kind')
+        return {
+          status: 'ok',
+          targetTable: 'group_scope_rows',
+          targetId: action.payload.id,
+          op: 'delete',
+          undoPayload: { id: action.payload.id, group_scope_children: [{ id: 'child_1' }] },
+          ops: [
+            {
+              sql: 'DELETE FROM group_scope_rows WHERE id = ? AND branch_id = ?',
+              params: [action.payload.id, 'b1'],
+            },
           ],
+          patch: null,
         }
       },
       groupScopeProbe: (action, _branchId, _ctx, group) => {
@@ -60,6 +75,10 @@ async function setup() {
         seen.push(group)
         return { status: 'rejected', reason: 'probe only', code: 'noop' }
       },
+    },
+    cascade: {
+      tables: ['group_scope_children'],
+      run: async () => ({ ops: [], children: { group_scope_children: [] } }),
     },
   })
   register({
@@ -73,8 +92,8 @@ async function setup() {
 }
 
 describe('applyDeltaActionGroup — group scope and cascade patches', () => {
-  it('shows each handler the rows created earlier in its group, and patches cascaded children', async () => {
-    const { ctx, seen, store } = await setup()
+  it('shows each handler the rows created earlier in its group', async () => {
+    const { ctx, seen } = await setup()
 
     const result = await applyDeltaActionGroup(
       [
@@ -88,15 +107,27 @@ describe('applyDeltaActionGroup — group scope and cascade patches', () => {
     expect(result).toEqual({ status: 'ok' })
     expect(seen).toHaveLength(1)
     expect(seen[0]?.created.has(createdKey('group_scope_rows', 'row_1'))).toBe(true)
+  })
+
+  it('patches the children a delete captured in its payload out of their store', async () => {
+    const { ctx, store } = await setup()
+
+    const result = await applyDeltaActionGroup(
+      [{ kind: 'groupScopeDelete', source: 'user_edit', payload: { id: 'row_1' } }],
+      { actionId: 'act_1', branchId: 'b1' },
+      ctx,
+    )
+
+    expect(result).toEqual({ status: 'ok' })
     expect(store.getRows().has('child_1')).toBe(false)
   })
 
-  it('patches cascaded children on the single-action path too, which has no group scope', async () => {
+  it('patches captured children on the single-action path too, which has no group scope', async () => {
     const { ctx, seen, store } = await setup()
 
-    const created = await applyDeltaAction(
+    const deleted = await applyDeltaAction(
       {
-        action: { kind: 'groupScopeCreate', source: 'user_edit', payload: { id: 'row_1' } },
+        action: { kind: 'groupScopeDelete', source: 'user_edit', payload: { id: 'row_1' } },
         actionId: 'act_1',
         branchId: 'b1',
       },
@@ -111,7 +142,7 @@ describe('applyDeltaActionGroup — group scope and cascade patches', () => {
       ctx,
     )
 
-    expect(created.status).toBe('ok')
+    expect(deleted.status).toBe('ok')
     expect(store.getRows().has('child_1')).toBe(false)
     expect(seen).toEqual([undefined])
   })

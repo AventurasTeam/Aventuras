@@ -4,7 +4,7 @@ import type { Delta, SqlOp } from '@/lib/db'
 import { deltas, embeddedFieldsForTable, isEmbeddedSourceTable, rowsPerInsert } from '@/lib/db'
 
 import type { DbCtx } from '../types'
-import { vecSweepIdsOps, vecTableLister } from './delete-cascade'
+import { capturedChildren, vecSweepIdsOps, vecTableLister } from './delete-cascade'
 import { applyUndoPayload, isPayloadMetaKey } from './delta-encoding'
 import { withKeyLocks } from './key-lock'
 import { liveLinkFilter } from './live-link-filter'
@@ -198,9 +198,7 @@ async function buildUndoOps(
     }
     if (delta.op === 'delete') {
       const full = (delta.undoPayload ?? {}) as Record<string, unknown>
-      const { children: captured, cascadeKeys } = entry.restoreCascade
-        ? entry.restoreCascade(full)
-        : { children: [], cascadeKeys: [] }
+      const { children: captured, cascadeKeys } = capturedChildren(entry.cascade, full)
       const children = liveLinks(delta.branchId, captured)
 
       const rowData = { ...full }

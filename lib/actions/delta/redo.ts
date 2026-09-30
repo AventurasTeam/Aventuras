@@ -92,8 +92,8 @@ async function applyRedoLocked(
         restored = true
       }
     } else if (delta.op === 'delete') {
-      if (entry.cascadeDeleteOps) {
-        const { ops: childOps, children } = await entry.cascadeDeleteOps(
+      if (entry.cascade) {
+        const { ops: childOps, children } = await entry.cascade.run(
           delta.branchId,
           delta.targetId,
           ctx,

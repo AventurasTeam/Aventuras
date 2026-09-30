@@ -15,7 +15,7 @@ import { logger } from '@/lib/diagnostics'
 import { entitiesStore } from '@/lib/stores'
 import { checkParentChain, PARENT_CHAIN_BROKEN, PARENT_CYCLE, parentOfLocations } from '@/lib/world'
 
-import { cascadePatches, payloadFromChildren, restoreChildren } from '../delta/delete-cascade'
+import { payloadFromChildren } from '../delta/delete-cascade'
 import { computeUndoPayload, deepEqual } from '../delta/delta-encoding'
 import { register, type ActionHandler, type HandlerOutcome } from '../delta/registry'
 import type { DbCtx, DeltaSource } from '../types'
@@ -271,7 +271,7 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
       reason: 'the story lead cannot be deleted',
       code: ENTITY_DELETE_REJECTION.leadEntity,
     }
-  const { ops: childOps, children } = await entityCascade(bid, id, ctx)
+  const { ops: childOps, children } = await entityCascade.run(bid, id, ctx)
   return {
     status: 'ok',
     targetTable: 'entities',
@@ -287,7 +287,6 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
         .toSQL(),
     ],
     patch: { op: 'delete', id },
-    cascadePatches: cascadePatches(children),
   }
 }
 
@@ -310,12 +309,6 @@ export function registerEntities(): void {
       retireEntity: retireEntityHandler,
     },
     patcher: (branchId, p) => entitiesStore.patch(branchId, p),
-    restoreCascade: restoreChildren([
-      'happening_involvements',
-      'happening_awareness',
-      'character_relationships',
-      'translations',
-    ]),
-    cascadeDeleteOps: entityCascade,
+    cascade: entityCascade,
   })
 }
