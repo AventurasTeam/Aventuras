@@ -220,6 +220,17 @@ slice-planning gate forces its resolution before that slice is planned.
   an existing link, but the classifier emits involvements only under a
   happening it creates (2026-09-30, raised by the 4.2b stack review).
 
+  The deleted row itself has the same gap, which option (a) doesn't
+  reach. A happening the pass wrote from the head turn, deleted in
+  Plot: edit that turn's prose, CTRL-Z the edit, CTRL-Z the delete. The
+  happening and its links come back with no delta, the pass's rerun
+  writes the happening a second time, and a later rollback removes only
+  one. In the prose-edit trigger above, the same rollback also leaves
+  the untracked awareness row naming a happening that is gone. Probed
+  through the pipeline and the delete, edit, undo and rollback actions
+  at the 4.2b review head (`1428e5b8`), not re-run on `main`
+  (2026-09-30, from a slice-review skill test).
+
 - **`blankToNull` has two copies.** `lib/world/draft-text.ts` and
   `lib/plot/thread-draft.ts` each define it (World's entity and lore
   drafts use the first, Plot's thread and happening drafts the second).
