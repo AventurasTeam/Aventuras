@@ -171,6 +171,8 @@ export interface ImageGenerationContext {
   imageSettings?: ImageGenerationServiceSettings
   /** Image profile lookup — supplied by caller */
   getImageProfile?: (id: string) => ImageProfile | undefined
+  /** Saves a generated portrait onto its character — supplied by caller to avoid store access */
+  onPortraitGenerated: (character: Character, portrait: string) => Promise<void>
 }
 
 const log = createLogger('AIService')
@@ -988,6 +990,7 @@ class AIService {
           context.presentCharacters,
           referenceMode,
           getImageProfile,
+          context.onPortraitGenerated,
         )
       }
     } catch (error) {
@@ -1008,6 +1011,7 @@ class AIService {
     presentCharacters: Character[],
     referenceMode: boolean,
     getImageProfile: (id: string) => ImageProfile | undefined,
+    onPortraitGenerated: ImageGenerationContext['onPortraitGenerated'],
   ): Promise<void> {
     const imageId = crypto.randomUUID()
 
@@ -1109,6 +1113,7 @@ class AIService {
       entryId,
       scene,
       presentCharacters,
+      onPortraitGenerated,
       referenceImageUrls,
     ).catch((error) => {
       log('Async analyzed image generation failed', { imageId, error })
@@ -1127,6 +1132,7 @@ class AIService {
     entryId: string,
     scene: ImageableScene,
     presentCharacters: Character[],
+    onPortraitGenerated: ImageGenerationContext['onPortraitGenerated'],
     referenceImageUrls?: string[],
   ): Promise<void> {
     try {
@@ -1157,10 +1163,8 @@ class AIService {
           (c) => c.name.toLowerCase() === charName.toLowerCase(),
         )
         if (character) {
-          await database.updateCharacter(character.id, {
-            portrait: base64,
-          })
-          log('Saved portrait to character', { characterId: character.id, name: charName })
+          await onPortraitGenerated(character, base64)
+          log('Handed portrait to store', { characterId: character.id, name: charName })
         }
       }
 

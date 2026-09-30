@@ -12,7 +12,7 @@
 </script>
 
 <script lang="ts">
-  import type { StoryEntry, EmbeddedImage, TimeTracker } from '$lib/types'
+  import type { Character, StoryEntry, EmbeddedImage, TimeTracker } from '$lib/types'
   import { story } from '$lib/stores/story.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { settings } from '$lib/stores/settings.svelte'
@@ -1330,6 +1330,8 @@
 
   async function handleGenerateStoryImages() {
     if (!story.currentStory || isGeneratingStoryImages) return
+    const scope = story.currentScope
+    if (!scope) return
     isGeneratingStoryImages = true
     try {
       const context = {
@@ -1344,6 +1346,8 @@
         allCharacters: story.characters,
         imageSettings: settings.systemServicesSettings.imageGeneration,
         getImageProfile: (id: string) => settings.getImageProfile(id),
+        onPortraitGenerated: (character: Character, portrait: string) =>
+          story.saveGeneratedPortrait(scope, character, portrait),
       }
       await aiService.generateImagesForNarrative(context)
     } catch (error) {

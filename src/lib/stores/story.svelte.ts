@@ -2160,6 +2160,30 @@ class StoryStore {
     this.characters = this.characters.map((c) => (c.id === owned.id ? { ...c, ...updates } : c))
   }
 
+  // A portrait lands after generation, so the story or branch may have changed, and the
+  // character may have been copied onto the branch since it was read.
+  async saveGeneratedPortrait(
+    scope: BranchScope,
+    character: Character,
+    portrait: string,
+  ): Promise<void> {
+    if (!this.isOpen(scope)) {
+      log('Portrait dropped: story or branch changed', {
+        characterId: character.id,
+        storyId: scope.storyId,
+        branchId: scope.branchId,
+      })
+      return
+    }
+    const canonicalId = character.overridesId ?? character.id
+    const live = this.characters.find((c) => (c.overridesId ?? c.id) === canonicalId)
+    if (!live) {
+      log('Portrait dropped: character gone', { characterId: character.id })
+      return
+    }
+    await this.updateCharacter(live.id, { portrait })
+  }
+
   // Delete a character (protagonist cannot be deleted)
   async deleteCharacter(id: string): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
