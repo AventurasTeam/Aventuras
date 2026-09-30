@@ -36,23 +36,23 @@ export type ResolvedScene = ImageableScene & {
  */
 export function resolveScenes(scenes: ImageableScene[], present: Character[]): ResolvedScene[] {
   // Each portrait is its own save; two for one character race to copy it onto the branch.
-  const portraitKeys = new Set<string>()
+  const portraitIds = new Set<string>()
   const resolved: ResolvedScene[] = []
   for (const scene of scenes) {
-    const depicted: Character[] = []
-    for (const name of scene.characters) {
-      const character = characterNamed(name, present)
-      if (character && !depicted.some((c) => canonicalId(c) === canonicalId(character))) {
-        depicted.push(character)
-      }
-    }
+    const matches = scene.characters.map((name) => characterNamed(name, present))
 
     let portraitOf: Character | undefined
     if (scene.generatePortrait) {
-      portraitOf =
-        scene.characters.length > 0 ? characterNamed(scene.characters[0], present) : undefined
-      if (!portraitOf || portraitKeys.has(canonicalId(portraitOf))) continue
-      portraitKeys.add(canonicalId(portraitOf))
+      portraitOf = matches[0]
+      if (!portraitOf || portraitIds.has(canonicalId(portraitOf))) continue
+      portraitIds.add(canonicalId(portraitOf))
+    }
+
+    const depicted: Character[] = []
+    for (const character of matches) {
+      if (character && !depicted.some((c) => canonicalId(c) === canonicalId(character))) {
+        depicted.push(character)
+      }
     }
     resolved.push({ ...scene, depicted, portraitOf })
   }
