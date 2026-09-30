@@ -73,7 +73,7 @@ On "Dispatch slice `<milestone>/<stem>`: plan at `<path>`":
 
 6. Record the IDs. Tell the developer the worktree name.
 
-**While a stack is open,** its lower branches can change under a worker. Before starting any worker on a stack, compare each branch's head on origin with the ledger, and name a head that moved in the new worker's spec. When `main` moves, tell the developer to leave GitHub's stack rebase alone while a worker builds on the stack, or to tell you first: it force-pushes every branch of the stack.
+**While a stack is open,** its lower branches can change under a worker. Before starting any worker on a stack, compare each branch's head on origin (`git ls-remote origin <branch>`, not a possibly stale `origin/*` ref) with the ledger, and name a head that moved in the new worker's spec. When `main` moves, tell the developer to leave GitHub's stack rebase alone while a worker builds on the stack, or to tell you first: it force-pushes every branch of the stack.
 
 ## Questions
 

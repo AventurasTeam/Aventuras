@@ -191,7 +191,7 @@ Both reviewers get [`plan-document-reviewer-prompt.md`](plan-document-reviewer-p
 
 - A finding that holds gets fixed in the plan.
 - One that doesn't gets rejected, with the evidence.
-- One that would change a Decision, or overturn the slice doc, goes to the developer.
+- One that challenges a recorded Decision or the slice doc goes to the developer, whichever way you lean.
 
 Add a line under each finding in the review file saying what happened to it. Then tell the developer the verdict, what you changed, what you rejected, and any question for them, before moving on to the handoff.
 

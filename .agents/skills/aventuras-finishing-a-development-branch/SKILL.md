@@ -248,7 +248,12 @@ When the plan's Execution gate splits the slice into stacked PRs (CodeRabbit rev
 - **Link each upper PR into a GitHub native stack right after `gh pr create`:** for PR 2, `echo '{"pull_requests":[<PR1>,<PR2>]}' | gh api --method POST repos/AventurasTeam/Aventuras/stacks --input -` and record the stack `number`; for each later PR, `echo '{"pull_requests":[<PRk>]}' | gh api --method POST repos/AventurasTeam/Aventuras/stacks/<number>/add --input -`. Don't use the gh-stack extension's rebase or push flow.
 - **Linking starts CI and CodeRabbit on an upper PR,** so every check is required on every PR. If no Actions checks appear within 5 minutes of linking, ask. If CodeRabbit's description says it skipped the review, comment `@coderabbitai review` once.
 - **Never rewrite a published branch:** no rebase, no force-push. A fix to a lower PR goes on its branch and is carried up by merging, lower into upper, in stack order.
-- **If a lower branch was rewritten on origin** (`git fetch` reports a forced update, usually because someone used GitHub's stack rebase): reset your local lower branches to origin, since they hold nothing unpushed; move only your unpushed upper commits with `git rebase --onto origin/<lower> <old lower head> <upper>`; never push the old heads; then run the review loop again at the new heads. Record it in the ledger.
+- **If a lower branch was rewritten on origin** (`git fetch` reports a forced update; GitHub's stack rebase rewrites every branch of the stack): recover bottom up, touching only commits you haven't pushed.
+  - A branch origin has: move it to origin's head, replaying your unpushed commits on top (`git rebase --onto origin/<branch> <its old origin head> <branch>`).
+  - A branch origin doesn't have yet: replay it onto its lower branch's new head (`git rebase --onto <lower> <old lower head> <branch>`).
+  - An upper branch origin didn't rewrite, over a lower one it did: merge the new lower head in.
+
+  Push each recovered branch with a normal push, never the old heads, record it in the ledger, and run the review loop again at the new heads.
 - **Report completion once, after the last PR,** with every PR URL.
 
 ## Quick Reference
