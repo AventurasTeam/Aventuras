@@ -31,7 +31,7 @@ Runs at start and after every compaction, before anything else:
 You are its only writer. Update it before acting and before every acknowledgement:
 
 - the Run ID and the repo ID (`orca repo list --json`)
-- per slice: plan path, task and dispatch IDs, worktree, branch, whether it changes the schema, state (queued / running / waiting on the developer / PR #n ready / merged / failed)
+- per slice: plan path, task and dispatch IDs, worktree, branch, whether it changes the schema, state (queued / running / reviewing / waiting on the developer / PR #n ready / merged / failed)
 - per question: `Q<n>`, slice, message ID, text, class, reply and its label, state, whether the push went out
 - per delivery: its ID, the message IDs it held, and whether each is handled and the delivery acknowledged
 
@@ -92,9 +92,22 @@ That worker waits; the others carry on.
 
 ## Worker messages
 
-- **worker_done, succeeded:** `gh pr view <url> --json baseRefName,state,body` and `gh pr checks <n> --json name,state,description` (the view's `statusCheckRollup` carries no descriptions). Check that it's open, with every check passed and CodeRabbit's description `Review completed`: its check also passes when it skipped the review for its rate limit. A wrong base: `gh pr edit <n> --base main`. Every `PROVISIONAL:` and `DEVELOPER:` reply in your ledger for that slice must appear in the body; add any missing ones with `gh pr edit <n> --body`. Then `worker-release --dispatch <id>`; it closes the worker's terminal and keeps its worktree. If a check failed or is still pending, CodeRabbit didn't review, or the ledger says the slice needs its migration regenerated, start a follow-up worker in that worktree (Review follow-ups) for it, and push nothing yet. Otherwise ledger `PR #n ready` and push `<slice> PR #<n> ready for review`.
+- **worker_done, succeeded:** `gh pr view <url> --json baseRefName,state,body` and `gh pr checks <n> --json name,state,description` (the view's `statusCheckRollup` carries no descriptions). Check that it's open, with every check passed and CodeRabbit's description `Review completed`: its check also passes when it skipped the review for its rate limit. A wrong base: `gh pr edit <n> --base main`. Every `PROVISIONAL:` and `DEVELOPER:` reply in your ledger for that slice must appear in the body; add any missing ones with `gh pr edit <n> --body`. Then `worker-release --dispatch <id>`; it closes the worker's terminal and keeps its worktree. If a check failed or is still pending, CodeRabbit didn't review, or the ledger says the slice needs its migration regenerated, start a follow-up worker in that worktree (Review follow-ups) for it, and push nothing yet. Otherwise the slice's implementation is done: start its slice review (Slice review), and push nothing yet.
 - **worker_done, failed, or an escalation:** ledger it and push `<slice> failed: <reason>`. Keep the worktree.
 - **Silence:** a worker inside a long subagent run can't heartbeat. Act only on Orca's liveness verdicts, as the guide describes.
+
+## Slice review
+
+Once every PR of a slice has validated, `worker-release` the slice worker. Then start a fresh worker in the same worktree, with `--worktree id:<repo-id>::<worktree-path>`, and set the ledger state to `reviewing`. The spec, filled in:
+
+> **Target:** slice `<milestone>/<stem>`, PRs <#a → #b …> from bottom to top, with the top branch `<branch>` checked out in your worktree. **Change:** review the slice with aventuras-slice-review as a dispatched worker. **Constraints:** the plan, slice doc and worker ledger are read-only; your ledger is `<plan-stem>.review.md` next to the plan; your escalation channel is the `ask` command in your preamble, with `--timeout-ms 540000`, for blockers only; never merge, never push to main, never force-push. **Ownership:** your worktree, the top PR's branch (and a new top PR if the budget calls for one), that PR's description and comments, and your ledger. **Acceptance:** the report is posted as a PR comment and in that PR's description, and the pushed PR passes every check with CodeRabbit's description read; your worker_done carries the comment URL, the count per class, and the report.
+
+**When its worker_done arrives,** validate the PR it pushed as for any worker_done. A new top PR must also be in the stack. Then:
+
+1. **Check each decision against the code before relaying it.** Re-derive its failure sequence, and correct the report where it's wrong. Read the not-taken list critically, and name any dismissal you'd reopen: something real dismissed without a citation, or a deferral left unfiled.
+2. **Write the decisions into the session** as `R<n> [<slice>]`, in the report's plain-language form, followed by the not-taken list. Push `<slice> reviewed: <n> decisions`. Each `R<n>` waits on the developer like a load-bearing question, and the ledger records it the same way.
+3. **On the developer's answers,** add a `DEVELOPER:` line under each decision's checkbox in the PR body (`gh pr edit --body-file`, after diffing a fresh copy of the body). Then start a follow-up worker (Review follow-ups) whose spec carries each decision, normalised, with the developer's words. Its questions go through Questions.
+4. **When that follow-up's worker_done validates,** or at once if the review had no decisions, ledger `PR #n ready` and push `<slice> PR #<n> ready for review`.
 
 ## Review follow-ups
 
@@ -106,6 +119,7 @@ On "address review on PR #n", start a fresh worker in that slice's existing work
 - Holding an acknowledgement until the developer answers
 - A foreground wait, or two waits at once
 - Relaying the developer's words without the normalised option
+- Relaying a slice review's decisions without checking them against the code
 - Starting a second schema-changing slice
 - Acting on what you remember instead of the ledger after a compaction
 - Editing tracked repository files (the git-ignored ledger is yours), merging, or telling a worker to merge
