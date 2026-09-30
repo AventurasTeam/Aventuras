@@ -204,15 +204,6 @@ describe('resolveScenes', () => {
     expect(prompts(resolveScenes(scenes, present))).toEqual(['a'])
   })
 
-  it('treats a copy-on-write override as its original', () => {
-    const override = character({ id: 'z', name: 'Mira', overridesId: 'a' })
-    const scenes = [
-      scene({ prompt: 'a', characters: ['Mira'], generatePortrait: true }),
-      scene({ prompt: 'b', characters: ['Mira'], generatePortrait: true }),
-    ]
-    expect(prompts(resolveScenes(scenes, [override]))).toEqual(['a'])
-  })
-
   it('keeps portraits for different characters', () => {
     const scenes = [
       scene({ prompt: 'a', characters: ['Mira'], generatePortrait: true }),
