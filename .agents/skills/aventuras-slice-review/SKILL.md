@@ -71,29 +71,34 @@ If the top branch moves on origin while agents run, for example because the deve
 
 ## Step 3 — Correlate
 
-Deduplicate across sources. For each remaining finding:
+Deduplicate across sources. Split a finding whose parts belong in different classes: each part ends in one place. A finding whose trigger is wrong but whose defect is real by another route stays one finding, restated. Whatever you find yourself while correlating is logged as a finding of your own. For each finding:
 
-- Name the concrete trigger: a UI surface, or a non-UI writer (piggyback, classifier, chapter close, undo/redo, rollback/regenerate). If dismissing it relies on a UI guard, name the guard.
-- Check whether canon requires the guarantee at that layer. Search canon's known-limitation lists, not only the plan.
-- Re-run an agent's probe or mutant only if the file has changed since the agent ran, or the agent ran it in a working tree rather than at the commit. Otherwise, confirming the file is unchanged and reading the code is enough.
+- For a behaviour finding, name the concrete trigger: a UI surface, or a non-UI writer (piggyback, classifier, chapter close, undo/redo, rollback/regenerate). If dismissing it relies on a UI guard, name the guard.
+- Check whether canon requires the guarantee at that layer. Search canon's known-limitation lists, not only the plan. A canon doc the range changed is under review too: judge against its text at the merge base, and against the slice's change to it only where a recorded decision backs the change.
+- Re-run an agent's probe or mutant only if the file has changed since the agent ran, or the agent didn't confirm its worktree was at `<head>`. Otherwise, confirming the file is unchanged and reading the code is enough. Load-bearing items are the exception: see below.
 - When a claim is unclear, message the agent that made it while it's still reachable. Otherwise settle it from the code.
 
 | Class | Test | Outcome |
 | --- | --- | --- |
 | Settled | A clear, evidence-backed fix, including cleanup with one obvious fix (dead exports, a misplaced file) | Fixed in Step 4 |
-| Reversible | A fix with a real alternative, cheap to change later, or a user-visible choice canon allows either way | Fixed provisionally; the alternative is recorded |
-| Load-bearing | Schema; a contract that canon or another slice defines; user-visible behaviour canon is silent or conflicting on, where the options differ in what the user sees; or overturning a recorded decision | Recorded for the developer: not asked, not fixed |
+| Reversible | A fix with a real alternative, cheap to change later: wording, a format, a choice canon allows either way, or an implementer's choice | Fixed provisionally; the alternative is recorded |
+| Load-bearing | Schema; a contract that canon or another slice defines; behaviour canon is silent or conflicting on, where the options differ in what gets stored, sent or kept; or overturning a recorded decision | Recorded for the developer: not asked, not fixed, not filed |
 | Deferred | Real, but the slice's changes didn't cause it, or its fix belongs to another slice's scope | Filed in Step 4; the report says where |
 | Dissolved | Not a defect, already decided, or already tracked | Cite the code fact (`file:line`), the decision, the canon line, or the tracking entry |
 
+- **A recorded decision** is one of the plan's Decisions or a developer's answer. An implementer's choice in the plan or the worker ledger isn't one, and neither is a ledger note that a reviewer skipped something.
 - **Dissolved needs a citation.** "Benign", "later", "a follow-up on main" and "below threshold" aren't reasons. Something real but later is Deferred, and gets filed.
-- **"Already tracked" means searched.** Search triage, `followups.md`, `parked.md`, the roadmap's routed items and the Open questions of later slices before filing anything, so nothing gets filed twice. If an entry covers the root cause but not this case, add the case to that entry: that counts as filing.
-- **A defect the slice caused is in scope,** even when its fix touches files the range didn't change.
+- **"Already tracked" means searched.** Search triage, `followups.md`, `parked.md`, the roadmap's routed items and the Open questions of later slices before filing anything, so nothing gets filed twice. An entry that already states this case dissolves it. If you'd add to the entry, the case or the evidence that it reproduces, the finding is Deferred and the addition is the filing.
+- **A defect the slice caused is in scope,** even when its fix touches files the range didn't change. A new route to an older defect counts as caused.
+- **A test gap is settled** when a unit or component test can pin it. When only an E2E could, `docs/testing.md` decides whether the slice warrants one: cite it either way.
 - **A declined CodeRabbit thread stays declined** unless you have new evidence. If you do, it's load-bearing.
-- **Type-design findings follow `code-conventions.md → Type design`.** If the rule applies, the finding is settled, or reversible when it has a real alternative, even though every caller is correct today and even when the type crosses modules. If it doesn't apply, dismiss it with the rule's reason.
-- **Re-derive every load-bearing item from the code yourself.** Don't copy the failure sequence from an agent's summary.
-  - Probe it with a scratch test, deleted afterwards, wherever a probe is feasible. Check each step of the sequence, and whether the example you'll give can actually happen. Any assumption on the failure path itself gets probed, not reported.
-  - Mark what you verified and what you assumed.
+- **Type-design findings follow `code-conventions.md → Type design`.** If the rule applies, the finding is settled, or reversible when it has a real alternative, even though every caller is correct today and even when the type crosses modules. A tightening that changes a shape canon pins is still settled: update the doc with it. If the rule doesn't apply, dismiss the finding with the rule's reason.
+- **Re-derive every load-bearing item from the code yourself,** whatever the agent's evidence. Don't copy the failure sequence from an agent's summary.
+  - Probe it with a scratch test, deleted afterwards, through the actions the screens call. Check each step of the sequence, and whether the example you'll give can actually happen.
+  - A step that leans on a mechanism (a cancel, an abort, a reversal, which action CTRL-Z picks) is checked against canon's section on that mechanism and the code's own comments where it happens. A step that contradicts them is wrong until a probe shows otherwise.
+  - A route you couldn't probe that way isn't a step. List it under "not verified", apart from the sequence.
+  - The screens themselves needn't be driven: that they offer the actions in that order goes under what you assumed. UI behaviour may be probed in the unit project with stand-in children, also named there.
+  - Mark what you verified, what you assumed, and what you couldn't verify.
 - **Two canon docs that disagree are a finding of their own.** If the history shows the newer, more specific contract replaced the older one, it wins, and fixing the stale doc is settled. Otherwise it's load-bearing.
 - **Duplicate code without a defect** goes to the simplifier in Step 5, not into a class.
 
@@ -142,10 +147,11 @@ Write it for a reader who doesn't have the internals in their head. Give one lin
    - how likely it is and how bad;
    - the options, with their trade-offs;
    - your recommendation and what it gives up;
-   - what you verified and what you assumed.
+   - what you verified, what you assumed, and what you couldn't verify.
 2. **Provisional fixes:** each choice and its alternative.
 3. **Fixed:** one line per fix, with its commit, grouped by the PR where the defect came in.
 4. **Not taken:** every finding that wasn't fixed, deferred (where it's filed) or dissolved (the citation). Collapse this part in the PR comment.
+5. **Counts,** in one line: findings per class, candidates the agents rejected, and what the simplifier took.
 
 ## Dispatched worker
 
@@ -166,6 +172,7 @@ After Step 6, go through the decisions with the developer one at a time: what's 
 - Dismissing with "benign", "later", "a follow-up on main" or "below threshold"
 - Dismissing a type-design finding because every caller is correct today
 - A decision's failure sequence copied from an agent's summary, not re-derived, or an example in it that hasn't been probed
+- A step in a failure sequence that you read but couldn't probe, written as if it happens
 - Filing a deferral without first searching the roadmap and later slices for it
 - Counting docs toward CodeRabbit's cap, or reading "Review completed" on a docs-only push as a review of the docs
 - Pushing per fix, or per fix agent

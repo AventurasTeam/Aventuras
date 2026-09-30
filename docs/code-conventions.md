@@ -190,10 +190,14 @@ reason to skip it. It is defence for its own sake, and skipped, when it
 adds runtime checks for states the types already exclude, re-validates
 data a Zod boundary already checked, guards against a caller that
 doesn't exist and isn't planned, or makes an API harder to use without
-removing a real invalid state.
+removing a real invalid state. A type-only change (`readonly`, a
+narrower type) is never that. A change that makes an invariant
+unnecessary, such as a runner that accepts either order, counts as an
+API change, not a runtime check.
 
 The scope is code the slice adds or changes. Looseness in older code
-is filed as a deferral, not fixed in passing.
+is filed as a deferral, not fixed in passing, and a slice that adds one
+more caller of an older loose API doesn't bring that API into scope.
 
 ## Component folder taxonomy
 
