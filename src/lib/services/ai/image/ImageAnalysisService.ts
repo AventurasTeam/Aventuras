@@ -17,6 +17,7 @@ import { createLogger } from '$lib/log'
 import {
   sceneAnalysisResultSchema,
   imageableSceneSchema,
+  dropDuplicatePortraits,
   type ImageableScene,
 } from '../sdk/schemas/imageanalysis'
 
@@ -130,7 +131,9 @@ ${context.translatedNarrative}`
       const result = await this.generate(sceneAnalysisResultSchema, system, prompt, templateId)
 
       // Sort by priority (highest first)
-      const sortedScenes = result.scenes.sort((a, b) => b.priority - a.priority)
+      const sortedScenes = dropDuplicatePortraits(
+        result.scenes.sort((a, b) => b.priority - a.priority),
+      )
 
       log('identifyScenes complete', {
         scenesFound: sortedScenes.length,
@@ -144,7 +147,7 @@ ${context.translatedNarrative}`
         log('identifyScenes recovered scenes from malformed output', {
           scenesFound: recovered.length,
         })
-        return recovered.sort((a, b) => b.priority - a.priority)
+        return dropDuplicatePortraits(recovered.sort((a, b) => b.priority - a.priority))
       }
       log('identifyScenes failed', error)
       return []

@@ -46,5 +46,17 @@ export const backgroundImageAnalysisResultSchema = z.object({
 })
 
 export type ImageableScene = z.infer<typeof imageableSceneSchema>
+// Each portrait is its own save; two for one character race to copy it onto the branch.
+export function dropDuplicatePortraits(scenes: ImageableScene[]): ImageableScene[] {
+  const seen = new Set<string>()
+  return scenes.filter((s) => {
+    if (!s.generatePortrait || s.characters.length === 0) return true
+    const key = s.characters[0].toLowerCase()
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 export type SceneAnalysisResult = z.infer<typeof sceneAnalysisResultSchema>
 export type BackgroundImageAnalysisResult = z.infer<typeof backgroundImageAnalysisResultSchema>
