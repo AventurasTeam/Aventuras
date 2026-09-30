@@ -58,17 +58,21 @@ import type {
   Tense,
   TimeTracker,
 } from '$lib/types'
-import { normalizeImageDataUrl, expectedPixels, type ImageSpec } from '$lib/utils/image'
+import type { BranchScope } from '$lib/utils/branchScope'
+import { expectedPixels, type ImageSpec } from '$lib/utils/image'
 import type { StreamChunk } from './core/types'
 import { serviceFactory } from './core/factory'
 import {
   inlineImageService,
   isImageGenerationEnabled as isImageGenerationEnabledUtil,
+  PendingPortraits,
+  referencePortraitSources,
   refreshCharacter,
+  resolveReferenceUrls,
   resolveStylePrompt,
   runImageGeneration,
 } from './image'
-import type { InlineImageContext, ImageAnalysisContext } from './image'
+import type { InlineImageContext, ImageAnalysisContext, PortraitSource } from './image'
 import {
   MemoryService,
   NarrativeService,
@@ -154,6 +158,8 @@ export interface ImageGenerationServiceSettings {
 // Re-export ImageGenerationContext type for backwards compatibility
 export interface ImageGenerationContext {
   storyId: string
+  /** Branch the turn runs on; `null` is the main branch. */
+  branchId: string | null
   entryId: string
   narrativeResponse: string
   userAction: string
@@ -213,8 +219,16 @@ export interface AgenticRetrievalOptions {
   activityParentId?: string
 }
 
+/** What a scene that wants reference portraits needs to start, and to fall back on. */
+interface AnalyzedImageReferences {
+  sources: PortraitSource[]
+  withoutReferences: { profileId: string; model: string; size: ImageSpec }
+}
+
 class AIService {
   private narrativeService: NarrativeService
+  // Outlives a turn: a portrait started at the end of one can still be running in the next.
+  private pendingPortraits = new PendingPortraits()
 
   constructor() {
     this.narrativeService = serviceFactory.createNarrativeService()
@@ -911,9 +925,13 @@ class AIService {
     const presentNow = () =>
       context.presentCharacters.map((c) => refreshCharacter(c, liveCharacters()))
 
+    const scope: BranchScope = { storyId: context.storyId, branchId: context.branchId }
+
+    // A portrait still generating counts: asking for a second would overwrite the first.
     const present = presentNow()
-    const charactersWithPortraits = present.filter((c) => c.portrait).map((c) => c.name)
-    const charactersWithoutPortraits = present.filter((c) => !c.portrait).map((c) => c.name)
+    const hasPortrait = (c: Character) => !!c.portrait || !!this.pendingPortraits.get(scope, c)
+    const charactersWithPortraits = present.filter(hasPortrait).map((c) => c.name)
+    const charactersWithoutPortraits = present.filter((c) => !hasPortrait(c)).map((c) => c.name)
 
     // Build style prompt
     const stylePrompt = await resolveStylePrompt(context.storyId, imageSettings.styleId)
@@ -979,15 +997,18 @@ class AIService {
     try {
       // Queue image generation for each scene
       const getImageProfile = context.getImageProfile ?? (() => undefined)
-      // Re-read: analysis takes long enough for a portrait from an earlier turn to land.
-      const presentAtQueue = presentNow()
-      for (const scene of scenes) {
+      // Portraits go first so a scene of the same character finds its portrait pending.
+      const portraitsFirst = [
+        ...scenes.filter((s) => s.generatePortrait),
+        ...scenes.filter((s) => !s.generatePortrait),
+      ]
+      for (const scene of portraitsFirst) {
         await this.queueAnalyzedImageGeneration(
-          context.storyId,
+          scope,
           context.entryId,
           scene,
           imageSettings,
-          presentAtQueue,
+          presentNow,
           referenceMode,
           getImageProfile,
           context.onPortraitGenerated,
@@ -1004,53 +1025,46 @@ class AIService {
    * Queue image generation for an analyzed scene.
    */
   private async queueAnalyzedImageGeneration(
-    storyId: string,
+    scope: BranchScope,
     entryId: string,
     scene: ImageableScene,
     imageSettings: ImageGenerationServiceSettings,
-    presentCharacters: Character[],
+    getPresentCharacters: () => Character[],
     referenceMode: boolean,
     getImageProfile: (id: string) => ImageProfile | undefined,
     onPortraitGenerated: ImageGenerationContext['onPortraitGenerated'],
   ): Promise<void> {
+    const { storyId } = scope
     const imageId = crypto.randomUUID()
+    const presentCharacters = getPresentCharacters()
 
     // Determine profile and model
     let profileId = imageSettings.profileId
     let modelToUse = getImageProfile(profileId ?? '')?.model ?? ''
     let sizeToUse = imageSettings.size
-    let referenceImageUrls: string[] | undefined
+    let references: AnalyzedImageReferences | undefined
     let styleId: string | undefined = imageSettings.styleId
 
     // If reference mode and scene has characters, look for reference images
     if (referenceMode && scene.characters.length > 0 && !scene.generatePortrait) {
-      const portraitUrls: string[] = []
+      const sources = referencePortraitSources(scene.characters, presentCharacters, (c) =>
+        this.pendingPortraits.get(scope, c),
+      )
 
-      for (const charName of scene.characters.slice(0, 3)) {
-        const character = presentCharacters.find(
-          (c) => c.name.toLowerCase() === charName.toLowerCase(),
-        )
-        const portraitUrl = normalizeImageDataUrl(character?.portrait)
-        if (portraitUrl) {
-          portraitUrls.push(portraitUrl)
-        }
-      }
-
-      if (portraitUrls.length > 0) {
+      if (sources.length > 0) {
         if (!this.isImageGenerationEnabled(undefined, 'reference')) {
           log('Reference image generation not configured')
           return
+        }
+        references = {
+          sources,
+          withoutReferences: { profileId: profileId ?? '', model: modelToUse, size: sizeToUse },
         }
         // Use reference profile and model for img2img
         profileId = imageSettings.referenceProfileId
         modelToUse = getImageProfile(profileId ?? '')?.model ?? ''
         sizeToUse = imageSettings.referenceSize
-        referenceImageUrls = portraitUrls
         styleId = imageSettings.styleId
-        log('Using character portraits as reference', {
-          characters: scene.characters,
-          count: portraitUrls.length,
-        })
       }
     }
 
@@ -1103,8 +1117,12 @@ class AIService {
     // Emit queued event
     emitImageQueued(imageId, entryId)
 
+    const portraitCharacter = scene.generatePortrait
+      ? presentCharacters.find((c) => c.name.toLowerCase() === scene.characters[0]?.toLowerCase())
+      : undefined
+
     // Start async generation (fire-and-forget)
-    this.generateAnalyzedImage(
+    const run = this.generateAnalyzedImage(
       imageId,
       fullPrompt,
       profileId!,
@@ -1112,16 +1130,19 @@ class AIService {
       sizeToUse,
       entryId,
       scene,
-      presentCharacters,
+      portraitCharacter,
       onPortraitGenerated,
-      referenceImageUrls,
+      references,
     ).catch((error) => {
       log('Async analyzed image generation failed', { imageId, error })
+      return null
     })
+    if (portraitCharacter) this.pendingPortraits.track(scope, portraitCharacter, run)
   }
 
   /**
    * Generate a single analyzed image using the SDK (runs asynchronously).
+   * Resolves to the image once any portrait has been handed to the store, or null on failure.
    */
   private async generateAnalyzedImage(
     imageId: string,
@@ -1131,49 +1152,62 @@ class AIService {
     size: ImageSpec,
     entryId: string,
     scene: ImageableScene,
-    presentCharacters: Character[],
+    portraitCharacter: Character | undefined,
     onPortraitGenerated: ImageGenerationContext['onPortraitGenerated'],
-    referenceImageUrls?: string[],
-  ): Promise<void> {
-    try {
-      log('Generating analyzed image', {
-        imageId,
-        profileId,
-        model,
-        sceneType: scene.sceneType,
-        hasReference: !!referenceImageUrls?.length,
-      })
-
-      const base64 = await runImageGeneration({
-        imageId,
-        entryId,
-        prompt,
-        profileId,
-        model,
-        size,
-        referenceImages: referenceImageUrls,
-      })
-
-      if (!base64) return
-
-      // If this was a portrait generation, save to character
-      if (scene.generatePortrait && scene.characters.length > 0) {
-        const charName = scene.characters[0]
-        const character = presentCharacters.find(
-          (c) => c.name.toLowerCase() === charName.toLowerCase(),
-        )
-        if (character) {
-          await onPortraitGenerated(character, base64)
-          log('Handed portrait to store', { characterId: character.id, name: charName })
-        }
+    references?: AnalyzedImageReferences,
+  ): Promise<string | null> {
+    let referenceImages: string[] | undefined
+    let recordUpdates: Partial<EmbeddedImage> | undefined
+    if (references) {
+      referenceImages = await resolveReferenceUrls(references.sources)
+      if (referenceImages.length > 0) {
+        log('Using character portraits as reference', {
+          characters: scene.characters,
+          count: referenceImages.length,
+        })
+      } else {
+        // Every portrait it was waiting on failed, so the record falls back to what a
+        // scene without references would have been.
+        ;({ profileId, model, size } = references.withoutReferences)
+        referenceImages = undefined
+        const { width, height } = expectedPixels(size)
+        recordUpdates = { model, width, height }
+        log('Reference portraits unavailable, generating without', { imageId })
       }
-
-      log('Analyzed image generated successfully', { imageId })
-    } catch (error) {
-      // `runImageGeneration` records its own outcome and balances the queued count, so
-      // anything thrown past it comes from saving the portrait onto its character.
-      log('Saving the generated portrait failed', { imageId, error })
     }
+
+    log('Generating analyzed image', {
+      imageId,
+      profileId,
+      model,
+      sceneType: scene.sceneType,
+      hasReference: !!referenceImages?.length,
+    })
+
+    const base64 = await runImageGeneration({
+      imageId,
+      entryId,
+      prompt,
+      profileId,
+      model,
+      size,
+      referenceImages,
+      recordUpdates,
+    })
+
+    if (!base64) return null
+
+    if (portraitCharacter) {
+      try {
+        await onPortraitGenerated(portraitCharacter, base64)
+        log('Handed portrait to store', { characterId: portraitCharacter.id })
+      } catch (error) {
+        log('Saving the generated portrait failed', { imageId, error })
+      }
+    }
+
+    log('Analyzed image generated successfully', { imageId })
+    return base64
   }
 
   /**

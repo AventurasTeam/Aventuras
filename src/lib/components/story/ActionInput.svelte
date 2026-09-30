@@ -302,6 +302,7 @@
       generateImagesForNarrative: (ctx) =>
         aiService.generateImagesForNarrative({
           ...ctx,
+          branchId: scope.branchId,
           getCharacters: () => story.characters,
           imageSettings: settings.systemServicesSettings.imageGeneration,
           getImageProfile: (id) => settings.getImageProfile(id),

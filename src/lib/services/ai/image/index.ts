@@ -38,7 +38,13 @@ export {
 } from './imageUtils'
 
 // Portrait lookups for reference-mode scenes
-export { refreshCharacter } from './portraitReferences'
+export {
+  PendingPortraits,
+  refreshCharacter,
+  referencePortraitSources,
+  resolveReferenceUrls,
+  type PortraitSource,
+} from './portraitReferences'
 
 // Style template resolution
 export { resolveStylePrompt, resolveStylePromptForPack } from './stylePrompt'

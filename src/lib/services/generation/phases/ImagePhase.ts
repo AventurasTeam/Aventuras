@@ -14,7 +14,7 @@ import type {
 import type { ImageGenerationContext } from '$lib/services/ai'
 import type { Character, ImageGenerationMode } from '$lib/types'
 
-type PhaseImageContext = Omit<ImageGenerationContext, 'onPortraitGenerated'>
+type PhaseImageContext = Omit<ImageGenerationContext, 'branchId' | 'onPortraitGenerated'>
 
 /** Dependencies for image phase - injected to avoid tight coupling */
 export interface ImageDependencies {

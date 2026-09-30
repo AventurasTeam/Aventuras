@@ -1343,6 +1343,7 @@
         referenceMode: story.currentStory.settings?.referenceMode ?? false,
         translatedNarrative: entry.translatedContent ?? undefined,
         imageGenerationMode: storyImageMode(story.currentStory.settings),
+        branchId: scope.branchId,
         getCharacters: () => story.characters,
         imageSettings: settings.systemServicesSettings.imageGeneration,
         getImageProfile: (id: string) => settings.getImageProfile(id),
