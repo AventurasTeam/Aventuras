@@ -5,11 +5,10 @@ import { entitiesStore, generationStore } from '@/lib/stores'
 
 import { loadHeadTurn } from './head-turn'
 import { applyDeltaActionGroup } from '../delta/apply-delta-action'
-import { withKeyLock } from '../delta/key-lock'
 import type { DbCtx, PipelineAction } from '../types'
 import type { StoryEntryRejection } from './operational'
 import { STORY_ENTRY_REJECTION, type StoryEntryRejectionCode } from './register'
-import { entryMetadataLockKey } from './world-time'
+import { withEntryMetadataLock } from './world-time'
 
 export type SceneFieldsEdit = {
   sceneEntities: string[]
@@ -42,7 +41,7 @@ export async function updateEntrySceneFields(
   edit: SceneFieldsEdit,
   ctx: DbCtx,
 ): Promise<UpdateSceneFieldsResult> {
-  return withKeyLock(entryMetadataLockKey(branchId, id), () =>
+  return withEntryMetadataLock(branchId, id, () =>
     updateEntrySceneFieldsLocked(branchId, id, edit, ctx),
   )
 }

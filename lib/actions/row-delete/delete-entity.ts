@@ -2,9 +2,8 @@ import { logger } from '@/lib/diagnostics'
 import { entitiesStore } from '@/lib/stores'
 import { entityDeleteActions, type DeleteTail } from '@/lib/world'
 
-import { withKeyLock } from '../delta/key-lock'
 import { loadHeadTurn } from '../story-entries/head-turn'
-import { entryMetadataLockKey } from '../story-entries/world-time'
+import { withEntryMetadataLock } from '../story-entries/world-time'
 import type { DbCtx } from '../types'
 import { commitRowDelete, ROW_DELETE_REJECTION, type RowDeleteResult } from './delete-row'
 
@@ -19,7 +18,7 @@ export async function deleteEntityRow(
 ): Promise<RowDeleteResult> {
   const lockedTail = (await loadHeadTurn(branchId, ctx))?.tail.id ?? null
   const run = () => deleteEntityLocked(branchId, id, lockedTail, ctx)
-  return lockedTail == null ? run() : withKeyLock(entryMetadataLockKey(branchId, lockedTail), run)
+  return lockedTail == null ? run() : withEntryMetadataLock(branchId, lockedTail, run)
 }
 
 async function deleteEntityLocked(

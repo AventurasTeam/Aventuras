@@ -24,11 +24,17 @@ function inFlight(): StoryEntryRejection {
 /**
  * Serializes the read-then-decide of every ungated entry-metadata writer. Per ROW, not
  * per action: same-row writers under different action names are the pair that must not
- * interleave. Never hold this key around a call into one of them — `withKeyLock` is not
- * reentrant, so the inner call would await the outer's own promise and deadlock.
+ * interleave. Never call one of them from `run` — the lock is not reentrant, so the inner
+ * call would await the outer's own promise and deadlock. It is the outermost lock: `run`
+ * may dispatch through the runner, which takes its row locks inside; nothing holding a row
+ * lock may take this one.
  */
-export function entryMetadataLockKey(branchId: string, id: string): string {
-  return `entryMetadata:${branchId}:${id}`
+export function withEntryMetadataLock<T>(
+  branchId: string,
+  id: string,
+  run: () => Promise<T>,
+): Promise<T> {
+  return withKeyLock(`entryMetadata:${branchId}:${id}`, run)
 }
 
 /**
@@ -42,7 +48,7 @@ export async function updateEntryWorldTime(
   worldTime: number,
   ctx: DbCtx,
 ): Promise<UpdateWorldTimeResult> {
-  return withKeyLock(entryMetadataLockKey(branchId, id), () =>
+  return withEntryMetadataLock(branchId, id, () =>
     updateEntryWorldTimeLocked(branchId, id, worldTime, ctx),
   )
 }

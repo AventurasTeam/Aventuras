@@ -109,11 +109,7 @@ export {
   type SceneFieldsEdit,
   type UpdateSceneFieldsResult,
 } from './story-entries/scene-fields'
-export {
-  entryMetadataLockKey,
-  updateEntryWorldTime,
-  type UpdateWorldTimeResult,
-} from './story-entries/world-time'
+export { updateEntryWorldTime, type UpdateWorldTimeResult } from './story-entries/world-time'
 export { refreshSuggestions } from './suggestions/refresh-suggestions'
 export {
   regenerateTurn,
