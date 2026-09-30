@@ -206,6 +206,8 @@ WORKTREE_PATH=$(git rev-parse --show-toplevel)
 
 **If `GIT_DIR == GIT_COMMON`:** Normal repo, no worktree to clean up. Done.
 
+**If an orchestrator manages the worktree** (Orca lists it in `orca worktree list`; its worktrees also live under `.worktrees/`): never `git worktree remove` it, or the orchestrator keeps a record of a worktree that's gone. Remove it through the orchestrator (`orca worktree rm --worktree <id>`, which also deletes its branch) once the merge has landed, or leave it and tell the developer. Done.
+
 **If worktree path is under `.worktrees/`, `worktrees/`, or `~/.config/superpowers/worktrees/`:** Superpowers created this worktree — we own cleanup.
 
 ```bash
@@ -223,7 +225,7 @@ When your task prompt makes you a dispatched worker (aventuras-subagent-driven-d
 
 1. **Step 1.5 draws on your worker ledger too.** Every `DEVELOPER:` answer goes into Implementation notes; every `PROVISIONAL:` answer goes in marked provisional. An answer that changes what a canon doc says (`docs/data-model.md`, a contract) also updates that doc on this branch.
 2. **Comment audit: run it whenever the finder reports candidate blocks.** Don't offer it; commit it as Step 1.6 says.
-3. **The PR is the only option.** Never merge, never keep. Before pushing, merge `origin/main` in with a new commit if the branch conflicts with it, and if `git diff --name-only origin/main...HEAD | wc -l` is over 100 (CodeRabbit's cap), ask through the channel about splitting. Then push and create the PR (Option 2). Its body adds, after Summary, one section per non-empty label from the ledger:
+3. **The PR is the only option.** Never merge, never keep. Before pushing, merge `origin/main` in with a new commit if the branch conflicts with it, and if `git diff --name-only origin/main...HEAD | grep -vc '^docs/'` is over 100 (CodeRabbit's cap, which counts non-docs files only), ask through the channel about splitting. Then push and create the PR (Option 2). Its body adds, after Summary, one section per non-empty label from the ledger:
 
    ```markdown
    ## Decisions pending
@@ -235,8 +237,24 @@ When your task prompt makes you a dispatched worker (aventuras-subagent-driven-d
 
    Record the PR URL in the ledger.
 
-4. **Review loop.** Wait until every check has finished, CodeRabbit's included (`gh pr checks <n> --watch`, in the background: the E2E suite outlasts a foreground command). CodeRabbit's check passes even when it skipped the review, so read its description with `gh pr checks <n> --json name,description`: only `Review completed` means it reviewed this head. Wait on that description, not for a posted review: a review with no findings posts none. On `Review rate limited`, wait the time its PR comment names, comment `@coderabbitai review`, and wait again. Then handle every CodeRabbit comment — inline threads and those in its review body (`gh pr view <n> --json reviews`) — with aventuras-receiving-code-review, which has its own Dispatched worker section. A failed check is a bug: fix it with aventuras-systematic-debugging. Fixes are new commits, never amend or force-push; each push restarts this step. CodeRabbit answers your replies: reply again only where it raises something new.
-5. **Done** when all checks pass, CodeRabbit's reads `Review completed`, and every review comment has your reply: in its thread, or, for comments in the review body, in your PR comment. Then report completion once, with the PR URL, in the form your prompt gives for reporting completion; the question channel blocks for a reply and is not it. Never clean up the worktree: fixes from the developer's review land in it later.
+4. **Review loop.** Wait until every check has finished, CodeRabbit's included (`gh pr checks <n> --watch`, in the background: the E2E suite outlasts a foreground command). CodeRabbit's check passes even when it skipped the review, so read its description with `gh pr checks <n> --json name,description`: only `Review completed` means it reviewed this head. Wait on that description, not for a posted review: a review with no findings posts none. On `Review rate limited`, wait the time its PR comment names, comment `@coderabbitai review`, and wait again. On `Review paused`, comment `@coderabbitai review`. CodeRabbit path-filters `docs/**`: it never reviews docs, and a push that changed only docs reads `No files to review`, which counts as reviewed. Review your own docs changes against `.claude/rules/docs.md`: `pnpm lint:docs` checks links and markdown, not whether the text is right. Then handle every CodeRabbit comment — inline threads and those in its review body (`gh pr view <n> --json reviews`) — with aventuras-receiving-code-review, which has its own Dispatched worker section. A failed check is a bug: fix it with aventuras-systematic-debugging. Fixes are new commits, never amend or force-push; each push restarts this step. CodeRabbit answers your replies: reply again only where it raises something new.
+5. **Done** when all checks pass, CodeRabbit's reads `Review completed` (or `No files to review` after a docs-only push), and every review comment has your reply: in its thread, or, for comments in the review body, in your PR comment. Then report completion once, with the PR URL, in the form your prompt gives for reporting completion; the question channel blocks for a reply and is not it. Never clean up the worktree: fixes from the developer's review land in it later.
+
+### Stacked PRs
+
+When the plan's Execution gate splits the slice into stacked PRs (CodeRabbit reviews at most 100 non-docs files), finish them one at a time, at each PR's last task, before starting the next PR's tasks. Steps 3–5 apply to every PR, with these differences:
+
+- **Branches:** PR 1 is your worktree's branch. PR k is a new branch `<PR 1's branch>-<k>` off PR k−1's branch, opened with `--base <PR k−1's branch>`. Titles `M<slice> (k/n): …`; an upper PR's body opens `Stacked on #<lower>: review that first.`
+- **Link each upper PR into a GitHub native stack right after `gh pr create`:** for PR 2, `echo '{"pull_requests":[<PR1>,<PR2>]}' | gh api --method POST repos/AventurasTeam/Aventuras/stacks --input -` and record the stack `number`; for each later PR, `echo '{"pull_requests":[<PRk>]}' | gh api --method POST repos/AventurasTeam/Aventuras/stacks/<number>/add --input -`. Don't use the gh-stack extension's rebase or push flow.
+- **Linking starts CI and CodeRabbit on an upper PR,** so every check is required on every PR. If no Actions checks appear within 5 minutes of linking, ask. If CodeRabbit's description says it skipped the review, comment `@coderabbitai review` once.
+- **Never rewrite a published branch:** no rebase, no force-push. A fix to a lower PR goes on its branch and is carried up by merging, lower into upper, in stack order.
+- **If a lower branch was rewritten on origin** (`git fetch` reports a forced update; GitHub's stack rebase rewrites every branch of the stack): recover bottom up, touching only commits you haven't pushed.
+  - A branch origin has: move it to origin's head, replaying your unpushed commits on top (`git rebase --onto origin/<branch> <its old origin head> <branch>`).
+  - A branch origin doesn't have yet: replay it onto its lower branch's new head (`git rebase --onto <lower> <old lower head> <branch>`).
+  - An upper branch origin didn't rewrite, over a lower one it did: merge the new lower head in.
+
+  Push each recovered branch with a normal push, never the old heads, record it in the ledger, and run the review loop again at the new heads.
+- **Report completion once, after the last PR,** with every PR URL.
 
 ## Quick Reference
 
@@ -276,7 +294,7 @@ When your task prompt makes you a dispatched worker (aventuras-subagent-driven-d
 **Cleaning up harness-owned worktrees**
 
 - **Problem:** Removing a worktree the harness created causes phantom state
-- **Fix:** Only clean up worktrees under `.worktrees/`, `worktrees/`, or `~/.config/superpowers/worktrees/`
+- **Fix:** Only clean up worktrees under `.worktrees/`, `worktrees/`, or `~/.config/superpowers/worktrees/`, and remove an orchestrator's worktrees through the orchestrator
 
 ## Red Flags
 

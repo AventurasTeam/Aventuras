@@ -10,6 +10,8 @@ reviews:
   auto_review:
     enabled: true
     drafts: false
+    # Every push is one batch of focused commits, so the default pause (5) hits each round.
+    auto_pause_after_reviewed_commits: 0
     # A slice too large for one review ships as stacked PRs whose upper half
     # targets the lower half's branch. Without these, CodeRabbit skips it.
     base_branches:

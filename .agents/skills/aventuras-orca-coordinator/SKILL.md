@@ -21,8 +21,10 @@ Runs at start and after every compaction, before anything else:
 
 1. The developer started you with `claude --remote-control` in the main checkout. If Remote Control isn't active, ask them to run `/remote-control`.
 2. **Read the ledger,** `.impl-plans/coordinator.md` in the main checkout. It is your memory; your context isn't. Create it if missing.
-3. Reuse the ledger's Run. Only with none: `orca orchestration run-create --objective "slice workers" --json`, and record its ID.
+3. Reuse the ledger's Run. Only with none: `orca orchestration run-create --objective "slice workers" --json`, and record its ID. Every restart gives you a new terminal handle: when `$ORCA_TERMINAL_HANDLE` differs from the one in the ledger, run `orca orchestration run-use --id <run>` before anything else (without it `worker-start` is refused `consumer_fenced`), and record the new handle.
 4. Reconcile: `orca orchestration worker-list --run <run> --include-remote --json` against the ledger.
+   - A restart marks a live worker's Dispatch `failed` (`terminal_missing`) and puts its Task back to `ready`. Restart it with `worker-start --task <id> --worktree id:<repo-id>::<worktree-path>` (`--retry-of` is refused); the new worker resumes from its ledger.
+   - Orca also restores old agent sessions, finished workers' included, as idle terminals in their worktrees. Before starting any worker in a worktree, run `orca terminal list --worktree <sel>`. An agent terminal that isn't a live Dispatch's is a restored or retained session: send nothing to it, and tell the developer which ones to close, since typing into one puts a second agent in the worktree.
 5. Re-post every question still waiting on the developer into the session, and push the ones whose push never went out.
 6. Start the wait, with `--ack` if the ledger shows a handled delivery not yet acknowledged. A replayed message whose ID the ledger already marks handled gets no second reply, release or push.
 
@@ -30,8 +32,8 @@ Runs at start and after every compaction, before anything else:
 
 You are its only writer. Update it before acting and before every acknowledgement:
 
-- the Run ID and the repo ID (`orca repo list --json`)
-- per slice: plan path, task and dispatch IDs, worktree, branch, whether it changes the schema, state (queued / running / reviewing / waiting on the developer / PR #n ready / merged / failed)
+- the Run ID, the repo ID (`orca repo list --json`) and your terminal handle (`$ORCA_TERMINAL_HANDLE`)
+- per slice: plan path, task and dispatch IDs, worktree, branch (for a stack, every branch with its head SHA as last seen, updated at each worker_done and before each worker start), whether it changes the schema, state (queued / running / reviewing / waiting on the developer / PR #n ready / merged / failed)
 - per question: `Q<n>`, slice, message ID, text, class, reply and its label, state, whether the push went out
 - per delivery: its ID, the message IDs it held, and whether each is handled and the delivery acknowledged
 
@@ -43,29 +45,35 @@ Keep exactly one consuming wait, always in the background (`run_in_background`),
 orca orchestration check --run <run> [--ack <delivery_id>] --wait --types "worker_done,escalation,question" --timeout-ms 3300000 --json
 ```
 
-Never wait in the foreground; you would miss the developer. Read the output with `grep -v _keepalive`: Orca writes a keepalive line every 15 s. A wait that ends within seconds with an error is a failure to read and fix, not a timeout; don't restart it blindly.
+Never wait in the foreground; you would miss the developer. Read the output with `grep -v _keepalive`: Orca writes a keepalive line every 15 s. Heartbeats arrive despite `--types`, batched up to 50: a delivery of heartbeats alone gets acknowledged with the next wait, and a backlog is paged through with non-waiting `check --ack <id> --json` calls, a ledger line before each. A wait that ends within seconds with an error is a failure to read and fix, not a timeout; don't restart it blindly.
 
-**A timeout is a checkpoint.** Run `orca orchestration worker-list --run <run> --include-remote --json` and act on what needs attention, as the guide says. Check every `PR #n ready` slice with `gh pr view <n> --json state`; a merged one is `merged` in the ledger, and a slice queued behind it, or whose Execution gate now holds, starts now. If another unmerged slice also changes the schema, mark it `needs its migration regenerated` in the ledger: a follow-up worker in its worktree (Review follow-ups) merges `origin/main` in and regenerates the migration with drizzle-kit. Start that follow-up only once the slice's own worker has reported done and been released; two agents in one worktree commit over each other. Then restart the wait.
+**A timeout is a checkpoint.** Run `orca orchestration worker-list --run <run> --include-remote --json` and act on what needs attention, as the guide says. Read each live worker's screen too: a permission dialog or a stopped worker whose escalation failed to send shows only there. Check every `PR #n ready` slice with `gh pr view <n> --json state`; a merged one is `merged` in the ledger, and a slice queued behind it, or whose Execution gate now holds, starts now. If another unmerged slice also changes the schema, mark it `needs its migration regenerated` in the ledger: a follow-up worker in its worktree (Review follow-ups) merges `origin/main` in and regenerates the migration with drizzle-kit. Start that follow-up only once the slice's own worker has reported done and been released; two agents in one worktree commit over each other. Then restart the wait.
 
 ## Dispatching a slice
 
 On "Dispatch slice `<milestone>/<stem>`: plan at `<path>`":
 
-1. Read the plan at that absolute path: its slice doc link, which must match the dispatch line (ask the developer if not), its Execution gate, and whether any task touches `lib/db/schema.ts` or `lib/db/migrations/`.
+1. Read the plan at that absolute path: its slice doc link, which must match the dispatch line (ask the developer if not), its Execution gate, including whether it splits the slice into stacked PRs, and whether any task touches `lib/db/schema.ts` or `lib/db/migrations/`.
 2. If the gate isn't `none` and its condition doesn't hold yet, queue the slice, record the gate, and tell the developer. It starts at the checkpoint where the condition holds.
 3. If it changes the schema while another unmerged slice does too, queue it, record that, and tell the developer; it starts when that slice's PR merges.
 4. `git fetch origin` (worktrees branch from `origin/main`).
 5. Start the worker:
 
    ```bash
-   orca orchestration worker-start --run <run> --worktree new-top-level --repo id:<repo-id> --name <milestone>-<stem> --setup run --agent claude --task-title "<milestone>/<stem>" --spec "<spec>" --json
+   orca orchestration worker-start --run <run> --worktree new-top-level --repo id:<repo-id> --name <milestone>-<stem> --setup run --agent claude --model opus --effort xhigh --task-title "<milestone>/<stem>" --spec "<spec>" --json
    ```
+
+   Every worker you start, whether implementer, slice reviewer, follow-up or restart, gets `--agent claude --model opus --effort xhigh`. Without them it launches with whatever model and effort the Orca UI last had, so a change there would reach the workers.
 
    The spec, filled in:
 
-   > **Target:** the plan at `<path>`, executed in your new worktree. **Change:** execute it with aventuras-subagent-driven-development as a dispatched worker (see its Dispatched worker section) and finish with aventuras-finishing-a-development-branch. **Constraints:** the plan is read-only; your ledger is `<plan-stem>.worker.md` next to it; your escalation channel is the `ask` command in your preamble, with `--timeout-ms 540000` (your shell tool stops a command at 600000, which would lose the message ID a timeout prints); replying in the review threads of your own PR is part of the task, not contacting a human; never merge, never push to main. **Ownership:** your worktree and your ledger file. **Acceptance:** an open PR against main with every check passing and every review comment replied to; your worker_done carries the PR URL.
+   > **Target:** the plan at `<path>`, executed in your new worktree. **Change:** execute it with aventuras-subagent-driven-development as a dispatched worker (see its Dispatched worker section) and finish with aventuras-finishing-a-development-branch. **Constraints:** the plan is read-only; your ledger is `<plan-stem>.worker.md` next to it; your escalation channel is the `ask` command in your preamble, with `--timeout-ms` at most 540000 (your shell tool stops a command at 600000, which would lose the message ID a timeout prints); replying in the review threads of your own PR is part of the task, not contacting a human; never merge, never push to main. **Ownership:** your worktree and your ledger file. **Acceptance:** an open PR against main with every check passing and every review comment replied to; your worker_done carries the PR URL.
+
+   For a plan split into stacked PRs, the Ownership adds "the branches you create for the upper PRs", and the Acceptance reads: "the plan's `<n>` PRs, stacked as aventuras-finishing-a-development-branch → Stacked PRs describes, each with every check passing and every review comment replied to; one worker_done after the last PR, carrying every PR URL."
 
 6. Record the IDs. Tell the developer the worktree name.
+
+**While a stack is open,** its lower branches can change under a worker. Before starting any worker on a stack, compare each branch's head on origin (`git ls-remote origin <branch>`, not a possibly stale `origin/*` ref) with the ledger, and name a head that moved in the new worker's spec. When `main` moves, tell the developer to leave GitHub's stack rebase alone while a worker builds on the stack, or to tell you first: it force-pushes every branch of the stack.
 
 ## Questions
 
@@ -92,8 +100,10 @@ That worker waits; the others carry on.
 
 ## Worker messages
 
-- **worker_done, succeeded:** `gh pr view <url> --json baseRefName,state,body` and `gh pr checks <n> --json name,state,description` (the view's `statusCheckRollup` carries no descriptions). Check that it's open, with every check passed and CodeRabbit's description `Review completed`: its check also passes when it skipped the review for its rate limit. `No files to review` also counts when everything pushed since its last `Review completed` is under `docs/**`, which CodeRabbit path-filters. A wrong base: `gh pr edit <n> --base main`. Every `PROVISIONAL:` and `DEVELOPER:` reply in your ledger for that slice must appear in the body; add any missing ones with `gh pr edit <n> --body`. Then `worker-release --dispatch <id>`; it closes the worker's terminal and keeps its worktree. If a check failed or is still pending, CodeRabbit didn't review, or the ledger says the slice needs its migration regenerated, start a follow-up worker in that worktree (Review follow-ups) for it, and push nothing yet. Otherwise the slice's implementation is done: start its slice review (Slice review), and push nothing yet.
-- **worker_done, failed, or an escalation:** ledger it and push `<slice> failed: <reason>`. Keep the worktree.
+- **worker_done, succeeded:** `gh pr view <url> --json baseRefName,state,body` and `gh pr checks <n> --json name,state,description` (the view's `statusCheckRollup` carries no descriptions). Check that it's open, with every check passed and CodeRabbit's description `Review completed`: its check also passes when it skipped the review for its rate limit. `No files to review` also counts when everything pushed since its last `Review completed` is under `docs/**`, which CodeRabbit path-filters. A single PR with the wrong base: `gh pr edit <n> --base main`. For a stack, check every PR: PR 1's base is `main`, PR k's is PR k−1's branch, and `gh api repos/AventurasTeam/Aventuras/pulls/<n> --jq .stack` gives the same stack number on each, with positions 1 to n. Never retarget an upper PR to `main`: that takes it out of the stack. Every `PROVISIONAL:` and `DEVELOPER:` reply in your ledger for that slice must appear in the body; add any missing ones with `gh pr edit <n> --body`. Then `worker-release --dispatch <id>`; it closes the worker's terminal and keeps its worktree. When it comes back `retained` / `user_takeover`, which has happened on every release so far for reasons on Orca's side, the terminal stays open: tell the developer which one, and don't close it yourself, since a takeover may mean they're in it. If a check failed or is still pending, CodeRabbit didn't review, or the ledger says the slice needs its migration regenerated, start a follow-up worker in that worktree (Review follow-ups) for it, and push nothing yet. Otherwise the slice's implementation is done: start its slice review (Slice review), and push nothing yet.
+- **Escalation `permission-prompt`:** the worker hook (the Desktop's managed settings, from `~/claude-worker-setup/`) sends it when a worker or one of its subagents hits a permission dialog; a subagent's never times out. Read the screen (`orca terminal read --terminal <handle>`). A command that only touches the session scratchpad or the worker's own scratch copies: answer it yourself with `orca terminal send --terminal <handle> --text 1`. Anything else is load-bearing (Questions); type the developer's answer into the dialog the same way.
+- **Escalation `worker-stopped`:** the worker ended its turn without worker_done, again after the hook nudged it once. Read the screen. A question written in prose goes through Questions, and the reply is typed with `orca terminal send`. A usage-limit notice needs nothing: Claude Code resumes after the reset. Otherwise send `Continue with the next task in your ledger; if you're blocked, use ask.`
+- **worker_done, failed, or any other escalation:** ledger it and push `<slice> failed: <reason>`. Keep the worktree.
 - **Silence:** a worker inside a long subagent run can't heartbeat. Act only on Orca's liveness verdicts, as the guide describes.
 
 ## Slice review

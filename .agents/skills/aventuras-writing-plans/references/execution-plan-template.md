@@ -22,6 +22,8 @@ Milestone: [Milestone N](../docs/implementation/milestones/NN-name/milestone.md)
 
 `none` — or a condition that must hold before execution may start, such as "Slice 1.1 merged". A plan can be complete and approved while an execution gate is still open; the executor honors the gate and waits.
 
+[When the slice is too big for one PR (CodeRabbit reviews at most 100 non-docs files), split it here by module layer: "PR 1 = Tasks 1–N, PR 2 = Tasks N+1–M on PR 1's branch, …". Each PR's last task runs the full local gates.]
+
 ## Decisions
 
 Carried from the aventuras-plan-slice session that preceded this plan.

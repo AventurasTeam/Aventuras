@@ -11,5 +11,6 @@ scripts/poc-embedder/.venv/
 .agents/
 .claude/
 .impl-plans/
+.worktrees/
 _tmp/
 AGENTS.md

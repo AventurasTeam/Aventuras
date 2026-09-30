@@ -67,6 +67,8 @@ app-example
 storybook-static
 .impl-plans/
 .worktrees/
+# Claude Code agent-isolation worktrees
+.claude/worktrees/
 
 # Superpowers brainstorming scratch dir (visual companion mockups)
 .superpowers/
