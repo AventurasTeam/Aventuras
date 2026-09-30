@@ -169,7 +169,7 @@ You are a **dispatched worker** when your task prompt says so and names an escal
 | `PROVISIONAL:` | a reversible choice the coordinator made | the PR's Decisions pending                                    |
 | `DEVELOPER:`   | the developer decided                    | the PR's decisions list, the slice doc's Implementation notes |
 
-**Finish** with aventuras-finishing-a-development-branch; its Dispatched worker section replaces the options menu.
+**Finish** with aventuras-finishing-a-development-branch; its Dispatched worker section replaces the options menu. A plan whose Execution gate splits the slice into stacked PRs finishes PR by PR: at each PR's last task, follow its Stacked PRs section for that PR, then carry on with the next PR's tasks on the next branch.
 
 ## Prompt Templates
 
