@@ -225,31 +225,22 @@ describe('resolveScenes', () => {
     expect(resolveScenes(scenes, present)).toHaveLength(3)
   })
 
-  it('does not hand the portrait to the second character when the first is unknown', () => {
-    const [resolved] = resolveScenes(
-      [scene({ prompt: 'a', characters: ['Nobody', 'Mira'], generatePortrait: true })],
-      present,
-    )
-    expect(resolved.portraitOf).toBeUndefined()
-    expect(resolved.depicted).toEqual([mira])
+  it('drops a portrait whose first name is unknown rather than giving it to the second', () => {
+    const scenes = [scene({ prompt: 'a', characters: ['Nobody', 'Mira'], generatePortrait: true })]
+    expect(resolveScenes(scenes, present)).toEqual([])
   })
 
-  it('collapses portraits for the same unknown name', () => {
+  it('drops portrait scenes for a name that matches nobody', () => {
     const scenes = [
       scene({ prompt: 'a', characters: ['Nobody'], generatePortrait: true }),
-      scene({ prompt: 'b', characters: ['nobody '], generatePortrait: true }),
+      scene({ prompt: 'b', characters: ['Mira'] }),
     ]
-    expect(prompts(resolveScenes(scenes, present))).toEqual(['a'])
+    expect(prompts(resolveScenes(scenes, present))).toEqual(['b'])
   })
 
-  it('keeps portrait scenes that name no one', () => {
-    const scenes = [
-      scene({ prompt: 'a', generatePortrait: true }),
-      scene({ prompt: 'b', generatePortrait: true }),
-    ]
-    const resolved = resolveScenes(scenes, present)
-    expect(prompts(resolved)).toEqual(['a', 'b'])
-    expect(resolved.every((s) => s.portraitOf === undefined)).toBe(true)
+  it('drops portrait scenes that name no one', () => {
+    const scenes = [scene({ prompt: 'a', generatePortrait: true }), scene({ prompt: 'b' })]
+    expect(prompts(resolveScenes(scenes, present))).toEqual(['b'])
   })
 
   it('preserves order', () => {

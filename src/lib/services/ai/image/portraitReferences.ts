@@ -27,11 +27,14 @@ function characterNamed(name: string, characters: Character[]): Character | unde
 export type ResolvedScene = ImageableScene & {
   /** Characters the scene depicts, in the model's order; names that match nobody are dropped. */
   depicted: Character[]
-  /** Who the portrait is for; unset when the first name matches nobody. */
+  /** Who the portrait is for; set on every portrait scene. */
   portraitOf?: Character
 }
 
-/** Resolves each scene's character names once, then keeps only the first portrait per character. */
+/**
+ * Resolves each scene's character names once. Keeps only the first portrait per character and
+ * drops portraits whose first name matches nobody.
+ */
 export function resolveScenes(scenes: ImageableScene[], present: Character[]): ResolvedScene[] {
   // Each portrait is its own save; two for one character race to copy it onto the branch.
   const portraitKeys = new Set<string>()
@@ -46,11 +49,11 @@ export function resolveScenes(scenes: ImageableScene[], present: Character[]): R
     }
 
     let portraitOf: Character | undefined
-    if (scene.generatePortrait && scene.characters.length > 0) {
-      portraitOf = characterNamed(scene.characters[0], present)
-      const key = portraitOf ? canonicalId(portraitOf) : normalizeName(scene.characters[0])
-      if (portraitKeys.has(key)) continue
-      portraitKeys.add(key)
+    if (scene.generatePortrait) {
+      portraitOf =
+        scene.characters.length > 0 ? characterNamed(scene.characters[0], present) : undefined
+      if (!portraitOf || portraitKeys.has(canonicalId(portraitOf))) continue
+      portraitKeys.add(canonicalId(portraitOf))
     }
     resolved.push({ ...scene, depicted, portraitOf })
   }

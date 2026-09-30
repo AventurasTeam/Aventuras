@@ -975,7 +975,11 @@ class AIService {
     try {
       // Create service and identify scenes
       const analysisService = serviceFactory.createImageAnalysisService()
-      scenes = resolveScenes(await analysisService.identifyScenes(analysisContext), present)
+      const identified = await analysisService.identifyScenes(analysisContext)
+      scenes = resolveScenes(identified, present)
+      if (scenes.length < identified.length) {
+        log('Dropped scenes', { before: identified.length, after: scenes.length })
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       log('Scene analysis failed', error)
