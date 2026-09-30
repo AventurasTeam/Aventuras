@@ -1,6 +1,7 @@
 import type { Character } from '$lib/types'
 import { branchScopeKey, type BranchScope } from '$lib/utils/branchScope'
 import { normalizeImageDataUrl } from '$lib/utils/image'
+import { foldName } from '$lib/utils/text'
 import type { ImageableScene } from '../sdk/schemas/imageanalysis'
 
 /** A saved portrait, or one still generating (null when it failed). */
@@ -16,11 +17,9 @@ export function refreshCharacter(character: Character, live: Character[]): Chara
   return live.find((c) => canonicalId(c) === id) ?? character
 }
 
-const normalizeName = (name: string) => name.trim().toLowerCase()
-
 function characterNamed(name: string, characters: Character[]): Character | undefined {
-  const wanted = normalizeName(name)
-  return characters.find((c) => normalizeName(c.name) === wanted)
+  const wanted = foldName(name)
+  return characters.find((c) => foldName(c.name) === wanted)
 }
 
 /** A scene whose character names are resolved against the characters present. */

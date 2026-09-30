@@ -182,6 +182,12 @@ describe('resolveScenes', () => {
     expect(resolved.depicted).toEqual([mira])
   })
 
+  it('matches names ignoring accents and punctuation', () => {
+    const elise = character({ id: 'e', name: 'Élise' })
+    const [resolved] = resolveScenes([scene({ prompt: 'a', characters: ['elise.'] })], [elise])
+    expect(resolved.depicted).toEqual([elise])
+  })
+
   it('drops names that match nobody and repeats of one character', () => {
     const [resolved] = resolveScenes(
       [scene({ prompt: 'a', characters: ['Nobody', 'Mira', 'mira ', 'Tomas'] })],
