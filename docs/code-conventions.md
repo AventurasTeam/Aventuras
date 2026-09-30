@@ -1,8 +1,8 @@
 # Code conventions
 
 How the source tree stays consistent — module boundaries, state
-placement, the action layer, component taxonomy, and the smaller
-disciplines (i18n, testing, forms, package manager). Some rules are
+placement, the action layer, type design, component taxonomy, and the
+smaller disciplines (i18n, testing, forms, package manager). Some rules are
 mechanically enforced today; others are convention-only until the
 tooling they depend on lands in a later slice. Each section says
 which.
@@ -162,6 +162,38 @@ destructive-to-lose state (app settings — providers, API keys)
 **blocks at a recovery screen** rather than silently resetting.
 Defaulting app settings on a failed read is an M1 stopgap until that
 screen lands — don't read it as the pattern's norm.
+
+## Type design
+
+Tighten a type when the design already knows more than the type says.
+Tightening is a type or API change: a closed union instead of
+`string`, `readonly`, a required parameter instead of an optional one,
+one argument where two could disagree. It is not a new runtime check.
+Convention-only; the slice review
+([`aventuras-slice-review`](../.agents/skills/aventuras-slice-review/SKILL.md))
+applies it to every type-design finding.
+
+Tighten when any of these holds:
+
+- **Boundary.** Other modules or later slices build on the type:
+  action-layer results, store APIs, substrate helpers.
+- **Known shape.** The design already fixes the values (a known set of
+  result codes, a table-to-kind mapping, a Zod schema) and the type is
+  looser. Encode the designed shape, not a loose placeholder.
+- **Invariant kept by convention.** Correctness depends on every caller
+  remembering something: passing a guard, emitting a create before its
+  links, taking locks in sorted order. The type or the API carries it
+  instead.
+
+It holds even when every caller is correct today, and that isn't a
+reason to skip it. It is defence for its own sake, and skipped, when it
+adds runtime checks for states the types already exclude, re-validates
+data a Zod boundary already checked, guards against a caller that
+doesn't exist and isn't planned, or makes an API harder to use without
+removing a real invalid state.
+
+The scope is code the slice adds or changes. Looseness in older code
+is filed as a deferral, not fixed in passing.
 
 ## Component folder taxonomy
 
