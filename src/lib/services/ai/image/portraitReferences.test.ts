@@ -5,7 +5,9 @@ import {
   referencePortraitSources,
   refreshCharacter,
   resolveReferenceUrls,
+  resolveScenes,
 } from './portraitReferences'
+import type { ImageableScene } from '../sdk/schemas/imageanalysis'
 
 function character(overrides: Partial<Character> & Pick<Character, 'id'>): Character {
   return { name: 'Mira', portrait: null, ...overrides } as Character
@@ -110,50 +112,154 @@ describe('PendingPortraits', () => {
 describe('referencePortraitSources', () => {
   const none = () => undefined
 
-  it('keeps the order of the named characters', () => {
-    const characters = [
-      character({ id: 'a', name: 'Mira', portrait: 'mira' }),
+  it('keeps the order of the depicted characters', () => {
+    const depicted = [
       character({ id: 'b', name: 'Tomas', portrait: 'tomas' }),
+      character({ id: 'a', name: 'Mira', portrait: 'mira' }),
     ]
-    expect(referencePortraitSources(['Tomas', 'Mira'], characters, none)).toEqual(['tomas', 'mira'])
-  })
-
-  it('matches names ignoring case', () => {
-    const characters = [character({ id: 'a', name: 'Mira', portrait: 'mira' })]
-    expect(referencePortraitSources(['mIRA'], characters, none)).toEqual(['mira'])
+    expect(referencePortraitSources(depicted, none)).toEqual(['tomas', 'mira'])
   })
 
   it('prefers a saved portrait over a pending one', () => {
-    const characters = [character({ id: 'a', portrait: 'saved' })]
+    const depicted = [character({ id: 'a', portrait: 'saved' })]
     const pendingFor = () => Promise.resolve('new')
-    expect(referencePortraitSources(['Mira'], characters, pendingFor)).toEqual(['saved'])
+    expect(referencePortraitSources(depicted, pendingFor)).toEqual(['saved'])
   })
 
   it('uses a pending portrait when there is no saved one', () => {
-    const characters = [character({ id: 'a' })]
     const promise = Promise.resolve('new')
-    expect(referencePortraitSources(['Mira'], characters, () => promise)).toEqual([promise])
+    expect(referencePortraitSources([character({ id: 'a' })], () => promise)).toEqual([promise])
   })
 
-  it('skips characters with neither, and names that match no character', () => {
-    const characters = [
+  it('skips characters with neither', () => {
+    const depicted = [
       character({ id: 'a', name: 'Mira' }),
       character({ id: 'b', name: 'Tomas', portrait: 'tomas' }),
     ]
-    expect(referencePortraitSources(['Mira', 'Nobody', 'Tomas'], characters, none)).toEqual([
-      'tomas',
-    ])
+    expect(referencePortraitSources(depicted, none)).toEqual(['tomas'])
   })
 
-  it('looks at the first three names only', () => {
-    const characters = ['A', 'B', 'C', 'D'].map((name) =>
+  it('looks at the first three characters only', () => {
+    const depicted = ['A', 'B', 'C', 'D'].map((name) =>
       character({ id: name, name, portrait: name }),
     )
-    expect(referencePortraitSources(['A', 'B', 'C', 'D'], characters, none)).toEqual([
-      'A',
-      'B',
-      'C',
-    ])
+    expect(referencePortraitSources(depicted, none)).toEqual(['A', 'B', 'C'])
+  })
+
+  it('counts a character without a portrait toward the limit of three', () => {
+    const depicted = [
+      character({ id: 'A', name: 'A', portrait: 'A' }),
+      character({ id: 'B', name: 'B' }),
+      character({ id: 'C', name: 'C', portrait: 'C' }),
+      character({ id: 'D', name: 'D', portrait: 'D' }),
+    ]
+    expect(referencePortraitSources(depicted, none)).toEqual(['A', 'C'])
+  })
+})
+
+describe('resolveScenes', () => {
+  const mira = character({ id: 'a', name: 'Mira' })
+  const tomas = character({ id: 'b', name: 'Tomas' })
+  const present = [mira, tomas]
+
+  function scene(
+    overrides: Partial<ImageableScene> & Pick<ImageableScene, 'prompt'>,
+  ): ImageableScene {
+    return {
+      sourceText: 'quote',
+      sceneType: 'character',
+      priority: 5,
+      characters: [],
+      generatePortrait: false,
+      ...overrides,
+    }
+  }
+
+  const prompts = (scenes: { prompt: string }[]) => scenes.map((s) => s.prompt)
+
+  it('matches names ignoring case and surrounding whitespace', () => {
+    const [resolved] = resolveScenes([scene({ prompt: 'a', characters: [' mIRA '] })], present)
+    expect(resolved.depicted).toEqual([mira])
+  })
+
+  it('drops names that match nobody and repeats of one character', () => {
+    const [resolved] = resolveScenes(
+      [scene({ prompt: 'a', characters: ['Nobody', 'Mira', 'mira ', 'Tomas'] })],
+      present,
+    )
+    expect(resolved.depicted).toEqual([mira, tomas])
+  })
+
+  it('keeps only the first portrait for a character, ignoring case', () => {
+    const scenes = [
+      scene({ prompt: 'a', characters: ['Mira'], generatePortrait: true }),
+      scene({ prompt: 'b', characters: ['mira '], generatePortrait: true }),
+    ]
+    expect(prompts(resolveScenes(scenes, present))).toEqual(['a'])
+  })
+
+  it('treats a copy-on-write override as its original', () => {
+    const override = character({ id: 'z', name: 'Mira', overridesId: 'a' })
+    const scenes = [
+      scene({ prompt: 'a', characters: ['Mira'], generatePortrait: true }),
+      scene({ prompt: 'b', characters: ['Mira'], generatePortrait: true }),
+    ]
+    expect(prompts(resolveScenes(scenes, [override]))).toEqual(['a'])
+  })
+
+  it('keeps portraits for different characters', () => {
+    const scenes = [
+      scene({ prompt: 'a', characters: ['Mira'], generatePortrait: true }),
+      scene({ prompt: 'b', characters: ['Tomas'], generatePortrait: true }),
+    ]
+    const resolved = resolveScenes(scenes, present)
+    expect(resolved.map((s) => s.portraitOf)).toEqual([mira, tomas])
+  })
+
+  it('never drops non-portrait scenes, even for a character that has a portrait', () => {
+    const scenes = [
+      scene({ prompt: 'a', characters: ['Mira'], generatePortrait: true }),
+      scene({ prompt: 'b', characters: ['Mira'] }),
+      scene({ prompt: 'c', characters: ['Mira'] }),
+    ]
+    expect(resolveScenes(scenes, present)).toHaveLength(3)
+  })
+
+  it('does not hand the portrait to the second character when the first is unknown', () => {
+    const [resolved] = resolveScenes(
+      [scene({ prompt: 'a', characters: ['Nobody', 'Mira'], generatePortrait: true })],
+      present,
+    )
+    expect(resolved.portraitOf).toBeUndefined()
+    expect(resolved.depicted).toEqual([mira])
+  })
+
+  it('collapses portraits for the same unknown name', () => {
+    const scenes = [
+      scene({ prompt: 'a', characters: ['Nobody'], generatePortrait: true }),
+      scene({ prompt: 'b', characters: ['nobody '], generatePortrait: true }),
+    ]
+    expect(prompts(resolveScenes(scenes, present))).toEqual(['a'])
+  })
+
+  it('keeps portrait scenes that name no one', () => {
+    const scenes = [
+      scene({ prompt: 'a', generatePortrait: true }),
+      scene({ prompt: 'b', generatePortrait: true }),
+    ]
+    const resolved = resolveScenes(scenes, present)
+    expect(prompts(resolved)).toEqual(['a', 'b'])
+    expect(resolved.every((s) => s.portraitOf === undefined)).toBe(true)
+  })
+
+  it('preserves order', () => {
+    const scenes = [
+      scene({ prompt: 'a', characters: ['Tomas'], generatePortrait: true }),
+      scene({ prompt: 'b' }),
+      scene({ prompt: 'c', characters: ['Mira'], generatePortrait: true }),
+      scene({ prompt: 'd', characters: ['tomas'], generatePortrait: true }),
+    ]
+    expect(prompts(resolveScenes(scenes, present))).toEqual(['a', 'b', 'c'])
   })
 })
 

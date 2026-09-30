@@ -69,10 +69,16 @@ import {
   referencePortraitSources,
   refreshCharacter,
   resolveReferenceUrls,
+  resolveScenes,
   resolveStylePrompt,
   runImageGeneration,
 } from './image'
-import type { InlineImageContext, ImageAnalysisContext, PortraitSource } from './image'
+import type {
+  InlineImageContext,
+  ImageAnalysisContext,
+  PortraitSource,
+  ResolvedScene,
+} from './image'
 import {
   MemoryService,
   NarrativeService,
@@ -101,7 +107,6 @@ import type {
   ChapterSummaryResult,
   ChapterTimelineEstimate,
   ClassificationResult,
-  ImageableScene,
   RetrievalDecision,
   SuggestionsResult,
 } from './sdk'
@@ -966,11 +971,11 @@ class AIService {
     // single catch spanning both emitted `Failed` after `Complete` had already fired for
     // a throw while queueing, closing an analysis phase twice. `Failed` stays a
     // notification only (`StoryEntry` toasts on it) — it never ends the phase.
-    let scenes: ImageableScene[]
+    let scenes: ResolvedScene[]
     try {
       // Create service and identify scenes
       const analysisService = serviceFactory.createImageAnalysisService()
-      scenes = await analysisService.identifyScenes(analysisContext)
+      scenes = resolveScenes(await analysisService.identifyScenes(analysisContext), present)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       log('Scene analysis failed', error)
@@ -1027,7 +1032,7 @@ class AIService {
   private async queueAnalyzedImageGeneration(
     scope: BranchScope,
     entryId: string,
-    scene: ImageableScene,
+    scene: ResolvedScene,
     imageSettings: ImageGenerationServiceSettings,
     getPresentCharacters: () => Character[],
     referenceMode: boolean,
@@ -1046,9 +1051,10 @@ class AIService {
     let styleId: string | undefined = imageSettings.styleId
 
     // If reference mode and scene has characters, look for reference images
-    if (referenceMode && scene.characters.length > 0 && !scene.generatePortrait) {
-      const sources = referencePortraitSources(scene.characters, presentCharacters, (c) =>
-        this.pendingPortraits.get(scope, c),
+    if (referenceMode && scene.depicted.length > 0 && !scene.generatePortrait) {
+      const sources = referencePortraitSources(
+        scene.depicted.map((c) => refreshCharacter(c, presentCharacters)),
+        (c) => this.pendingPortraits.get(scope, c),
       )
 
       if (sources.length > 0) {
@@ -1117,10 +1123,6 @@ class AIService {
     // Emit queued event
     emitImageQueued(imageId, entryId)
 
-    const portraitCharacter = scene.generatePortrait
-      ? presentCharacters.find((c) => c.name.toLowerCase() === scene.characters[0]?.toLowerCase())
-      : undefined
-
     // Start async generation (fire-and-forget)
     const run = this.generateAnalyzedImage(
       imageId,
@@ -1130,14 +1132,13 @@ class AIService {
       sizeToUse,
       entryId,
       scene,
-      portraitCharacter,
       onPortraitGenerated,
       references,
     ).catch((error) => {
       log('Async analyzed image generation failed', { imageId, error })
       return null
     })
-    if (portraitCharacter) this.pendingPortraits.track(scope, portraitCharacter, run)
+    if (scene.portraitOf) this.pendingPortraits.track(scope, scene.portraitOf, run)
   }
 
   /**
@@ -1151,8 +1152,7 @@ class AIService {
     model: string,
     size: ImageSpec,
     entryId: string,
-    scene: ImageableScene,
-    portraitCharacter: Character | undefined,
+    scene: ResolvedScene,
     onPortraitGenerated: ImageGenerationContext['onPortraitGenerated'],
     references?: AnalyzedImageReferences,
   ): Promise<string | null> {
@@ -1197,10 +1197,10 @@ class AIService {
 
     if (!base64) return null
 
-    if (portraitCharacter) {
+    if (scene.portraitOf) {
       try {
-        await onPortraitGenerated(portraitCharacter, base64)
-        log('Handed portrait to store', { characterId: portraitCharacter.id })
+        await onPortraitGenerated(scene.portraitOf, base64)
+        log('Handed portrait to store', { characterId: scene.portraitOf.id })
       } catch (error) {
         log('Saving the generated portrait failed', { imageId, error })
       }

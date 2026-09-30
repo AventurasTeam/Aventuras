@@ -43,7 +43,9 @@ export {
   refreshCharacter,
   referencePortraitSources,
   resolveReferenceUrls,
+  resolveScenes,
   type PortraitSource,
+  type ResolvedScene,
 } from './portraitReferences'
 
 // Style template resolution
