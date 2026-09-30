@@ -226,17 +226,6 @@ slice-planning gate forces its resolution before that slice is planned.
   It wants a shared home such as `lib/text`. The 4.2b stack doesn't
   touch Plot's copy or its callers, so the move is a follow-up on main
   (2026-09-30, raised by the 4.2b stack review).
-- **Deleting a relationship leaves its translations.** The
-  relationship delete handler (`lib/actions/relationships/register.ts`)
-  doesn't cascade `character_relationship` translation rows, though
-  an entity delete that cascades a relationship does drop them.
-  Harmless until a translation writer exists (none calls
-  `createTranslation` today);
-  [C3](./milestones/04-world-plot-read-surfaces/milestone.md#c3--delete-arm-hardening)
-  scoped the translation cascade to the embedded kinds' delete arms,
-  and the handler predates 4.2b (2026-09-30, raised by the 4.2b stack
-  review).
-
 - **`reader-composer-modes.spec` can fail on its own locator.** After
   Send it waits for `getByText('E2E-MODES', { exact: false })`, which
   also matches the mock reply (`E2E-MODES-REPLY …`); when the reply
