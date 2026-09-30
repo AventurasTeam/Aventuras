@@ -245,3 +245,25 @@ slice-planning gate forces its resolution before that slice is planned.
   the 4.2b head; the spec is unchanged since 3.4b. A locator that can
   only match the user action (the wrapped text, or `exact: true`) would
   close it (2026-09-30, raised by the 4.2b stack-review follow-up).
+- **A late vector write can delete a newer vector and leave the row
+  clean with none.** `upsertVecOps` guards its insert on the row still
+  holding the embedded text, but its delete of the prior
+  `(branch, id, model)` vector is unconditional, and the stale-flag
+  clear is guarded like the insert. If two embeds of one row overlap
+  and the older finishes last, it removes the vector the newer one
+  wrote and inserts nothing, while the flag the newer one cleared
+  stays clear, so the drain never revisits the row. Guarding the
+  delete with the same predicate would close it. Whether two embeds of
+  one row can overlap is unchecked: one drain pass is sequential, but
+  the turn-time embed (`lib/embedder-swap/app-deps.ts`) uses the same
+  model and isn't obviously serialized against it. Read, not reproduced
+  (2026-09-30, raised by the 4.2b type-design follow-up).
+- **`RowSaveResult.code` is a bare optional string.** The save side of
+  what the delete side now closes (`RowDeleteRejectionCode`): World's
+  `saveRejectionText` and Plot's save mapper match a few codes and let
+  the rest fall through, and `ENTITY_REJECTION` spreads a family's
+  codes into an open set. Closing it the same way means a code union
+  for the save family, the runner's refusals mapped at `commitRowSave`
+  as `commitRowDelete` does, and exhaustive copy tables. The save paths
+  predate 4.2b, so the follow-up left them (2026-09-30, raised by the
+  4.2b type-design follow-up).
