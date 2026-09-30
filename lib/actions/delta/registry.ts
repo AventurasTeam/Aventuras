@@ -26,10 +26,8 @@ export type CascadeRun<C> = (
 ) => Promise<{ ops: SqlOp[]; children: C }>
 
 /**
- * A delete's cascade. `tables` names the child tables it removes, by registered table name: the
- * delete's payload carries their rows, undo restores exactly those, and the runner patches their
- * stores. `run` is **delete-op-only** — reversing a `create` must not read it; see
- * `docs/generation-pipeline.md` → Reverse-replay.
+ * `tables`: the child tables a delete removes, by registered name. `run` is **delete-op-only** —
+ * reversing a `create` must not read it (`docs/generation-pipeline.md` → Reverse-replay).
  */
 export type Cascade<T extends string = string> = {
   tables: readonly T[]

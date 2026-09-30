@@ -22,8 +22,7 @@ export type RowDeleteResult =
   | { status: 'ok' }
   | { status: 'rejected'; reason: string; code: RowDeleteRejectionCode }
 
-// A reversal raised while the delete waited on its lock is the state the gate below reports as
-// in-flight; anything the family has no code for is a failed write.
+// A reversal raised while the delete awaited its lock is what the gate below reports as in-flight.
 function rejectionCode(code: string | undefined): RowDeleteRejectionCode {
   switch (code) {
     case DELTA_REJECTION.reversalInProgress:

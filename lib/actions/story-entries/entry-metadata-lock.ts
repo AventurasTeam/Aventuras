@@ -1,12 +1,9 @@
 import { withKeyLock } from '../delta/key-lock'
 
 /**
- * Serializes the read-then-decide of every ungated entry-metadata writer. Per ROW, not
- * per action: same-row writers under different action names are the pair that must not
- * interleave. Never call one of them from `run` — the lock is not reentrant, so the inner
- * call would await the outer's own promise and deadlock. It is the outermost lock: `run`
- * may dispatch through the runner, which takes its row locks inside; nothing holding a row
- * lock may take this one.
+ * Serializes ungated entry-metadata writers' read-then-decide per ROW: same-row writers under
+ * different action names must not interleave. Not reentrant — never call one from `run`, it
+ * deadlocks. Outermost lock: `run` may take the runner's row locks; no row-lock holder takes this.
  */
 export function withEntryMetadataLock<T>(
   branchId: string,

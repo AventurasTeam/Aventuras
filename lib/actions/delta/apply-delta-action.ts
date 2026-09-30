@@ -249,16 +249,9 @@ function groupConflict(outcomes: readonly OkOutcome[]): string | null {
 }
 
 /**
- * Commits actions under one actionId in a single transaction — a rejection anywhere leaves nothing
- * behind, unlike sequential `applyDeltaAction` calls, which each commit on their own.
- *
- * Handlers run before the transaction opens and read pre-group state: an action can't read a row
- * the group creates (only `GroupScope` names it, whatever the order); a same-column double-write
- * on one row is rejected here rather than left to callers.
- *
- * Rejected as `group-conflict`: a row deleted twice, a write to a row a delete in the group
- * cascades (two deletes' cascades included), and a link write naming an entity or happening the
- * group deletes.
+ * One actionId, one transaction: a rejection anywhere leaves nothing behind. Handlers read
+ * pre-group state, so a group-created row shows only in `GroupScope`, a same-column double-write
+ * on one row is rejected, and so is every `groupConflict` case (code `group-conflict`).
  */
 export async function applyDeltaActionGroup(
   actions: readonly PipelineAction[],
@@ -284,8 +277,7 @@ async function applyDeltaActionGroupUnlocked(
   const pendingColumns = new Map<string, Set<string>>()
   const created = new Set<string>()
 
-  // A refusal aborts the group; 'noop' contributes nothing to commit, and a group can't half-fail
-  // on one.
+  // A refusal aborts the group; a 'noop' just commits nothing — a group can't half-fail on one.
   const prepare = async (action: PipelineAction): Promise<Refusal | 'noop' | null> => {
     if (isUserOriginatedSource(action.source) && generationStore.getTxState().reversalInProgress)
       return {

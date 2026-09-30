@@ -3,10 +3,7 @@ import type { DatabaseSync, SQLInputValue } from 'node:sqlite'
 import { upsertVecOps, type VecSourceGuard, type VecWrite } from '../embeddings/ops'
 import { vecRowPk, vecTableName } from '../embeddings/vec-tables'
 
-/**
- * Writes `w` through the guarded production upsert, for a vector whose source row holds
- * `source`. Throws on a guard miss, which would otherwise leave the fixture silently empty.
- */
+/** Writes `w` via the guarded production upsert; a guard miss throws rather than seed nothing. */
 export function seedVec(sqlite: DatabaseSync, w: VecWrite, source: VecSourceGuard): void {
   for (const op of upsertVecOps(w, source)) {
     sqlite.prepare(op.sql).run(...(op.params as SQLInputValue[]))
@@ -23,10 +20,7 @@ export function seedVec(sqlite: DatabaseSync, w: VecWrite, source: VecSourceGuar
   }
 }
 
-/**
- * Inserts `w` with no source check, for a vector that on purpose matches no live row: stale,
- * orphaned, or left over from another model.
- */
+/** Unguarded insert for a vector meant to match no live row: stale, orphaned or another model's. */
 export function plantVec(sqlite: DatabaseSync, w: VecWrite): void {
   sqlite
     .prepare(

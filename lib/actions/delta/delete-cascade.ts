@@ -39,10 +39,7 @@ export async function vecSweepOps(
   return deleteVecOps(kind, id, branchId, await listTables())
 }
 
-/**
- * `vecSweepOps` for many rows of one table and branch: one statement per dim family. Takes the
- * table a delta names, so it sweeps nothing off embedded tables.
- */
+/** `vecSweepOps` for many ids, one statement per dim family; non-embedded tables sweep nothing. */
 export async function vecSweepIdsOps(
   table: string,
   branchId: string,
@@ -94,10 +91,7 @@ export async function translationCascade(
   return { ops, children: { translations: rows } }
 }
 
-/**
- * Declares a cascade once: `run`'s children are keyed by exactly the tables named, so the rows a
- * delete captures and the rows its undo restores can't drift apart.
- */
+/** Ties `run`'s child keys to `tables`, so what a delete captures and undo restores can't drift. */
 export function defineCascade<const T extends string, C extends Record<T, Rows>>(
   tables: readonly T[],
   run: CascadeRun<C> & (keyof C extends T ? unknown : never),
@@ -131,11 +125,7 @@ export function payloadFromChildren(children: Record<string, Rows>): Record<stri
   )
 }
 
-/**
- * A cascading delete's outcome: the cascade's ops ahead of the row's own. The payload holds the
- * full row beside the children the cascade removed, which log no delta of their own, so undo
- * rebuilds both from it.
- */
+/** Cascade ops go first. Children log no delta of their own, so the payload holds them for undo. */
 export async function cascadedDelete(
   ctx: DbCtx,
   cascade: Cascade,
@@ -156,10 +146,7 @@ export async function cascadedDelete(
 
 export type CapturedChildren = { table: string; rows: Rows }[]
 
-/**
- * The child rows a delete's payload captured, by registered table, and the payload keys holding
- * them. A payload written before a table joined the cascade reads empty for it.
- */
+/** A payload's captured child rows, by registered table; one the payload predates reads empty. */
 export function capturedChildren(
   cascade: Cascade | undefined,
   undoPayload: Record<string, unknown>,
