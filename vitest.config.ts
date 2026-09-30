@@ -50,7 +50,13 @@ export default defineConfig({
         // Pre-bundled up front: a dep first discovered mid-run reloads the browser and fails
         // whichever story file was importing it.
         optimizeDeps: {
-          include: ['i18next', 'react-i18next', 'react-hook-form', '@hookform/resolvers/zod'],
+          include: [
+            'i18next',
+            'react-i18next',
+            'react-hook-form',
+            '@hookform/resolvers/zod',
+            '@tanstack/react-query',
+          ],
         },
         test: {
           name: 'storybook',

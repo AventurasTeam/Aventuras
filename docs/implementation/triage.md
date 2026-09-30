@@ -75,3 +75,65 @@ slice-planning gate forces its resolution before that slice is planned.
   it for both; alternatively, turn admission could await
   `settleUserWrites()` first, as the prose-reversal barrier already
   does. Reasoned, not reproduced (2026-09-28, raised by 4.2b).
+- **HistoryTab reloads its first chunk on every `settleCount`
+  change.** Any run settling (any kind, any branch), or a reversal
+  ending, collapses the list to a spinner and drops the older
+  chunks the user loaded, so the scroll position jumps. Every delta
+  writer checked patches the target row after commit, so the row
+  identity may already cover it — checked by grep, not proven.
+  Options: drop `settleCount` from the version, or keep rows during
+  a version-only reload and refetch up to the loaded count. Read,
+  not reproduced (2026-09-28, raised by 4.2b).
+- **`Button`'s `loading` state doesn't reach assistive tech on
+  web.** React Native Web drops `accessibilityState.busy`, so no
+  `aria-busy` renders. Seen testing History's Load older: the button
+  disables and shows a progressbar spinner, with nothing announcing
+  "busy" to a screen reader. Canon already commits to `aria-busy`
+  on a busy control — [`import-dialog.md` →
+  Accessibility](../ui/patterns/import-dialog.md#accessibility)
+  requires `aria-busy="true"` (web) on its own spinner/reading
+  state — so this is a deviation across every `loading` consumer of
+  `Button`, not a History-specific gap (2026-09-28, raised by 4.2b).
+- **Plot panes keep their tab when `[+] Blank` starts a create.**
+  Thread and happening panes hold the tab in
+  `useState(initialTab ?? 'overview')`, without the render-time
+  `createSeq` reset the entity panes' `useEntityTab` and the lore
+  pane have, so a Blank started from a row open on History lands on
+  History's "History starts at the first save" instead of Overview.
+  Pre-existing from 4.3 (2026-09-28, raised by 4.2b).
+- **Row save sessions leave Save enabled while an untouched field is
+  invalid.** react-hook-form's `onChange` validation merges only the
+  edited field's error, so `useRowSaveSession`'s `invalidReason`
+  stays null (its TSDoc says "null while the draft is writable") —
+  e.g. an entity or Plot create enables Save with an empty name after
+  editing another field; Save then refuses. The lore session runs a
+  one-shot whole-draft check on the first edit; lifting that into the
+  shared hook broke no test but shows errors on fields the user
+  hasn't touched, a product call (2026-09-28, raised by 4.2b).
+- **`LoreDetailPane` duplicates `EntityDetailFrame`.** The head, tab
+  list, menu and JSON viewer wiring, plus the tab-reset hook, are a
+  near-copy (~100 lines) of `EntityDetailFrame` / `useEntityTab`;
+  generalizing the frame would let menu changes, e.g. Delete, land
+  once instead of twice (2026-09-28, raised by 4.2b).
+- **The lore body textarea doesn't fill the pane.** Canon
+  ([world.md → Body tab — lore](../ui/screens/world/world.md#body-tab--lore))
+  and the slice say the body fills the remaining height; it ships
+  as a 12–40-row `EmbedWindowTextarea`, because filling needs the
+  shared `DetailPane` scroller to let content grow (every pane,
+  phone keyboard layout) (2026-09-28, raised by 4.2b).
+- **`Autocomplete`'s `casingNormalization` (default `'canonical'`)
+  canonicalizes only a committed pick.** A variant typed and left uncommitted
+  keeps its own casing — the lore pane's Body tab patches this at
+  save (`canonicalCategory` in `lore-detail-pane.tsx`), matching an
+  existing category's casing even when it wasn't picked from the
+  suggestions. The next consumer of `Autocomplete` with
+  `casingNormalization="canonical"` won't get this for free and
+  needs the same save-time patch (2026-09-28, raised by 4.2b).
+- **The History tab's `Deleted` op chip likely never matches in a
+  per-row tab.** A deleted row can't be selected to open its
+  History tab, and undoing its delete prunes the delta, so no row's
+  History tab is likely to ever see a `Deleted` chip produce a result —
+  until the parked
+  [link-row union](../parked.md#history-shows-link-row-edits) or a
+  global delta surface (Diagnostics Hub delta log) lands. Read, not
+  verified (2026-09-28, raised by 4.2b).

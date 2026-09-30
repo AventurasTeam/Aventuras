@@ -7,6 +7,7 @@ import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { Breadcrumb, type BreadcrumbSegment } from '@/components/compounds/breadcrumb'
 import { ImporterMenu } from '@/components/compounds/importer-menu'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
+import { distinctCategories } from '@/components/plot/plot-route-data'
 import { plotHref } from '@/components/plot/plot-selection'
 import { MasterDetailLayout } from '@/components/shells/master-detail-layout'
 import { ScreenShell } from '@/components/shells/screen-shell'
@@ -22,6 +23,7 @@ import { deriveCollisions } from '@/components/world/collisions'
 import { EntityDetailPane } from '@/components/world/detail/entity-detail-pane'
 import type { EntityPaneData } from '@/components/world/detail/entity-pane-props'
 import { entityTabOf } from '@/components/world/detail/entity-tabs'
+import { LoreDetailPane } from '@/components/world/detail/lore-detail-pane'
 import { firstFlaggedRow } from '@/components/world/first-flagged-row'
 import {
   useWorldSelection,
@@ -48,7 +50,7 @@ import { useRouteLink } from '@/hooks/use-route-link'
 import { useRowSessionGuard } from '@/hooks/use-row-session-guard'
 import { useRowSignals } from '@/hooks/use-row-signals'
 import { useTier } from '@/hooks/use-tier'
-import { saveEntity, setStoryLead } from '@/lib/actions'
+import { saveEntity, saveLore, setStoryLead } from '@/lib/actions'
 import { DEFAULT_CALENDAR_ID, resolveCalendar } from '@/lib/calendar'
 import { db, runInTransaction } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
@@ -64,7 +66,7 @@ import {
   storiesStore,
 } from '@/lib/stores'
 import { toast } from '@/lib/toast'
-import { branchWorldTime, type EntitySaveInput } from '@/lib/world'
+import { branchWorldTime, type EntitySaveInput, type LoreDraft } from '@/lib/world'
 
 const ctx = { db, runInTransaction }
 
@@ -73,6 +75,8 @@ function selectionName(selection: WorldDetailSelection | null): string | null {
   switch (selection.type) {
     case 'create':
       return t(`world:detail.newEntity.${selection.kind}`)
+    case 'create-lore':
+      return t('world:detail.newLore')
     case 'lore':
       return selection.row.title
     case 'entity':
@@ -152,6 +156,8 @@ export default function WorldRoute() {
   })
   const detailOpen = isPhone && selection != null
   const selectedEntity = selection?.type === 'entity' ? selection.row : null
+  const selectedLore = selection?.type === 'lore' ? selection.row : null
+  const loreCategories = useMemo(() => distinctCategories(lore), [lore])
 
   const relationships = useMemo(
     () =>
@@ -169,6 +175,7 @@ export default function WorldRoute() {
   )
   const paneData = useMemo<EntityPaneData>(
     () => ({
+      branchId,
       entities,
       relationships,
       involvements,
@@ -177,7 +184,16 @@ export default function WorldRoute() {
       calendar,
       leadId,
     }),
-    [entities, relationships, involvements, entryIndex.index, worldTime, calendar, leadId],
+    [
+      branchId,
+      entities,
+      relationships,
+      involvements,
+      entryIndex.index,
+      worldTime,
+      calendar,
+      leadId,
+    ],
   )
 
   const { activeRunKind, editBlocked, gateReason, classifierRunning } = useStoryGenerationGate(
@@ -346,6 +362,10 @@ export default function WorldRoute() {
     (input: EntitySaveInput) => saveEntity({ ...input, branchId, row: selectedEntity }, ctx),
     [branchId, selectedEntity],
   )
+  const saveLoreRow = useCallback(
+    (draft: LoreDraft) => saveLore({ branchId, row: selectedLore, draft }, ctx),
+    [branchId, selectedLore],
+  )
   const onSaved = useCallback(
     (id: string) => {
       select(id)
@@ -399,12 +419,27 @@ export default function WorldRoute() {
   ]
 
   const detailPane =
-    selection == null || selection.type === 'lore' ? (
-      <WorldDetailPlaceholder
-        selection={selection}
+    selection == null ? (
+      <WorldDetailPlaceholder />
+    ) : selection.type === 'lore' || selection.type === 'create-lore' ? (
+      <LoreDetailPane
+        key={linkMount}
+        branchId={branchId}
+        row={selection.type === 'lore' ? selection.row : null}
+        createSeq={selection.type === 'create-lore' ? selection.seq : undefined}
+        categories={loreCategories}
         recentlyClassified={
-          selection != null ? signals.recentlyClassified.rows.get(selection.row.id) : undefined
+          selection.type === 'lore'
+            ? signals.recentlyClassified.rows.get(selection.row.id)
+            : undefined
         }
+        blocked={editBlocked}
+        blockedReason={gateReason}
+        onSave={saveLoreRow}
+        onSaved={onSaved}
+        onRejected={onRejected}
+        onSession={onSession}
+        hotkeysEnabled={focused}
       />
     ) : (
       <EntityDetailPane
@@ -501,7 +536,7 @@ export default function WorldRoute() {
                   <ImporterMenu
                     trigger="icon"
                     label={worldAddLabel(category)}
-                    options={worldAddOptions(category, () => guard(startCreate), {
+                    options={worldAddOptions(() => guard(startCreate), {
                       disabled: editBlocked,
                       disabledReason: gateReason,
                     })}

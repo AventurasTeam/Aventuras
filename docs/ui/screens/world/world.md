@@ -466,10 +466,10 @@ configured for the active kind:
 
 ## History tab
 
-History is the delta log filtered to this entity: every change
-(`op=create / update / delete`) that touched this `entity_id`. Never
-editable — rollback happens in the reader. Row rendering follows
-the [DeltaLogRow pattern](../../patterns/delta-log-row.md); host
+History is the delta log filtered to this row: every delta keyed
+to this row (`op=create / update / delete`). Never editable —
+rollback happens in the reader. Row rendering follows the
+[DeltaLogRow pattern](../../patterns/delta-log-row.md); host
 resolves target display names and renders the diff summary
 prose, then hands pre-formatted strings to the compound.
 
@@ -489,9 +489,22 @@ prose, then hands pre-formatted strings to the compound.
   log doesn't need to be fully in memory.
 - **Op filter** — all / create / update / delete
 - **Sort** — newest-first (default) or oldest-first
-- **Load-older chunking** — log-shaped data; uses the
+- **Load-older chunking** — log-shaped data, 50-row chunks; uses the
   [load-older pattern](../../patterns/lists.md#load-older--log-shaped-unbounded-lists)
-  (explicit button), not virtualization.
+  (`Load older` under newest-first sort, `Load newer` under
+  oldest-first), not virtualization.
+- **Failed load** — a failed first-chunk load shows a failed
+  state with Retry; a failed load-more keeps the rows already
+  shown, toasts, and leaves `Load older` to try again.
+- **Before the first save** — an unsaved row's tab reads "History
+  starts at the first save" instead of an empty log.
+- **Resets on row change** — search, op filter and sort return to
+  their defaults when the tab is keyed to a new row.
+- **Reads the row's own deltas.** Relationship, awareness and
+  involvement edits are their link rows' deltas and don't show here
+  ([parked](../../../parked.md#history-shows-link-row-edits)).
+- **Rows aren't pressable.** `entry #n` is meta text; see
+  [DeltaLogRow → Click behavior](../../patterns/delta-log-row.md#click-behavior).
 
 Involvements table gets the same load-older pattern eventually; list
 pane is fine unpaginated for normal stories (filter chips + search
@@ -536,7 +549,6 @@ subject matter, not identity. `Body` matches the schema field name
 
 Mirrors the [entity detail head pattern](#detail-head-structure):
 
-- Breadcrumb strip: kind-icon + "Lore"
 - **Title** (inline-editable with pencil) — equivalent of the entity
   name slot. Edits dirty the save session.
 - **Recently-classified badge** — per
@@ -558,7 +570,10 @@ Two fields, no sub-sections.
   illustrative, not enumerated). On focus, a popover surfaces
   existing categories from this branch's lore as autocomplete
   suggestions, keeping casual taxonomy consistent without forcing
-  an enum. Empty = `— uncategorized —` placeholder.
+  an enum. A typed case-variant of an existing category (e.g.
+  `Cosmology` where the branch already has `cosmology`) saves in
+  the branch's existing casing even when it isn't picked from the
+  suggestions. Empty = `— uncategorized —` placeholder.
 - **Body textarea** — fills the remaining vertical space. Plain
   text per the schema; no markdown rendering or rich-text in v1.
   Standard textarea grow / scroll behavior. **Body is required**
@@ -586,9 +601,9 @@ Four fields, top-down:
   - `disabled` — never injected; lore is read-only reference
     material for the user.
 - **`priority`** (integer input, narrow; range `0..100`). Default `0`.
-  Tooltip: "Higher priority makes this lore more likely to be picked
-  when it's relevant. It won't surface lore the scene isn't about —
-  use Always for that."
+  Inline `FormRow` hint text: "Higher priority makes this lore more
+  likely to be picked when it's relevant. It won't surface lore the
+  scene isn't about — use Always for that."
   That is the shipped semantic: priority feeds `pin_signal` as
   `priority/100`, which scales the row's score by
   `1 + k_pin × pin_signal` (`k_pin = 0.25` for lore). A no-op at the
@@ -645,14 +660,18 @@ real volume signals demand.
 
 ### Required body — creation + edit invariant
 
-A lore entry cannot exist with an empty `body`. Validation lives
-at two places:
+A lore entry cannot exist with an empty `body` — whitespace-only
+counts as empty. Validation lives at two places:
 
-- **Body tab save** — save bar disables until body is non-empty.
+- **Body tab save** — Save and `Cmd/Ctrl-S` disable while the
+  body is empty; Discard stays live, per
+  [`save-sessions.md → Invalid draft`](../../patterns/save-sessions.md#invalid-draft).
+  The reason shows in the save bar prefixed with its tab
+  (`Body: Lore needs a body.`).
 - **Creation paths** (per [Per-row import](#per-row-import) /
   [`patterns/data.md → import-counterparts`](../../patterns/data.md#import-counterparts--file-based--vault)):
-  - **Blank** — form must enforce body-non-empty before save bar
-    enables.
+  - **Blank** — the same Body-tab rule applies: Save stays
+    disabled until the draft's body is non-empty.
   - **From JSON file** — Zod schema marks `body` required;
     mismatch fails the existing friendly-error path.
   - **From Vault** — vault entries already carry populated bodies
@@ -1013,13 +1032,15 @@ overflows.
   tablet landscape and desktop stay 2-col. Type-hint applies
   `overflow-wrap: anywhere` so long monospace strings break
   cleanly when 2-col is active.
-- **History tab controls reflow on narrow widths.** The
-  `.history-controls` row (search input, op-filter chips, sort
-  picker) is a single horizontal row at desktop tier; on tablet
-  and phone it `flex-wrap`s, with the search input taking its own
-  full-width row first and the filter and sort chips wrapping
-  beneath. Prevents the search field from collapsing to a
-  multi-line vertical block at narrow widths.
+- **History tab controls are container-keyed, not tier-keyed.** The
+  History tab's `Toolbar` follows the
+  [Toolbar container-keyed overflow rule](../../patterns/toolbar.md#cross-tier-overflow-rule):
+  a single horizontal row (search, op-filter chips, sort picker)
+  when the tab's own container is `≥ 1024 px`, and stacked below
+  that — search on its own full-width row first, filter and sort
+  chips wrapping beneath — regardless of device tier. Prevents the
+  search field from collapsing to a multi-line vertical block at
+  narrow widths.
 - **Save bar on phone** stays at the bottom edge of the detail
   route's scroll region per
   [`patterns/save-sessions.md`](../../patterns/save-sessions.md) and

@@ -199,7 +199,12 @@ per the
   chips at 0.2 / 0.5 / 0.8; a chip reads selected only on an exact
   match, so classifier-written values display with none lit) +
   `source` (free-form text descriptor). Add / remove rows.
-- **History** — delta log filtered to this happening.
+- **History** — delta log filtered to this happening. Involvement
+  and awareness edits are their link rows' deltas, not the
+  happening's, so they don't show here — a links-only Save shows
+  nothing new in History. See
+  [World — History tab](../world/world.md#history-tab) and the
+  [parked fix](../../../parked.md#history-shows-link-row-edits).
 
 ### Entry-ref picker
 
@@ -403,12 +408,13 @@ inherit unchanged.
   unchanged on phone.
 - **History tab controls reflow on narrow widths** identically to
   World — search input takes its own full-width row first;
-  filter and sort chips wrap beneath. Same `flex-wrap` rule on
-  `.history-controls` per
+  filter and sort chips wrap beneath. Same container-keyed Toolbar
+  rule per
   [the World mobile expression](../world/world.md#mobile-expression).
   History rows themselves render via the
-  [DeltaLogRow pattern](../../patterns/delta-log-row.md), filtered
-  host-side to thread / happening targets.
+  [DeltaLogRow pattern](../../patterns/delta-log-row.md); the
+  filter to the thread / happening target runs in SQL
+  (`loadHistoryChunk`), not host-side.
 - **Detail-head overflow menu (`⋯`)** binds to Popover on desktop /
   tablet, Sheet (short) on phone per
   [`mobile/layout.md → Surface bindings`](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces).

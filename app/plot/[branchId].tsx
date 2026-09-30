@@ -297,6 +297,7 @@ export default function PlotRoute() {
         key={linkMount}
         row={selection.type === 'happening' ? selection.row : null}
         createSeq={selection.type === 'create' ? selection.seq : undefined}
+        branchId={branchId}
         links={links}
         entities={entities}
         entries={entryIndex.entries}
@@ -335,6 +336,7 @@ export default function PlotRoute() {
         key={linkMount}
         row={selection.type === 'thread' ? selection.row : null}
         createSeq={selection.type === 'create' ? selection.seq : undefined}
+        branchId={branchId}
         entryIndex={entryIndex.index}
         categories={threadCategories}
         recentlyClassified={

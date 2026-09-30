@@ -8,8 +8,10 @@ import { FormRow } from '@/components/compounds/form-row'
 import { JSONViewer } from '@/components/compounds/json-viewer'
 import { OverflowMenu } from '@/components/compounds/overflow-menu'
 import { RowLeaveDialog, RowSaveBar } from '@/components/compounds/row-save-session-chrome'
+import { HistoryTab } from '@/components/history/history-tab'
 import { DetailPane } from '@/components/shells/detail-pane'
 import { Autocomplete } from '@/components/ui/autocomplete'
+import { EmptyState } from '@/components/ui/empty-state'
 import { InlineEditableName } from '@/components/ui/inline-editable-name'
 import { Select } from '@/components/ui/select'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
@@ -34,7 +36,6 @@ import {
   threadFieldLabel,
   validationText,
 } from './plot-copy'
-import { PlotHistoryPlaceholder } from './plot-history-placeholder'
 import { THREAD_TABS, type ThreadTab } from './plot-selection'
 import { usePlotRowSession } from './use-plot-row-session'
 
@@ -45,6 +46,8 @@ export type ThreadDetailPaneProps = {
   row: Thread | null
   /** The create selection's `seq`; a new value resets the create draft. */
   createSeq?: number
+  /** For the History tab's query. */
+  branchId: string
   /** A ready index — the route mounts no pane before it is. */
   entryIndex: EntryIndex
   /** Distinct categories on the branch, for the Autocomplete's suggestions. */
@@ -69,6 +72,7 @@ export type ThreadDetailPaneProps = {
 export function ThreadDetailPane({
   row,
   createSeq,
+  branchId,
   entryIndex,
   categories,
   recentlyClassified,
@@ -161,7 +165,14 @@ export function ThreadDetailPane({
             />
           </TabsContent>
           <TabsContent value="history">
-            <PlotHistoryPlaceholder />
+            {row == null ? (
+              <EmptyState
+                title={t('history:tab.afterSave')}
+                subtext={t('history:tab.afterSaveBody')}
+              />
+            ) : (
+              <HistoryTab branchId={branchId} targetTable="threads" targetId={row.id} />
+            )}
           </TabsContent>
         </DetailPane>
       </Tabs>

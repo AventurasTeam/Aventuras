@@ -11,8 +11,10 @@ import { JSONViewer } from '@/components/compounds/json-viewer'
 import { OverflowMenu } from '@/components/compounds/overflow-menu'
 import { RowLeaveDialog, RowSaveBar } from '@/components/compounds/row-save-session-chrome'
 import { SwitchRow } from '@/components/compounds/switch-row'
+import { HistoryTab } from '@/components/history/history-tab'
 import { DetailPane } from '@/components/shells/detail-pane'
 import { Autocomplete } from '@/components/ui/autocomplete'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Icon } from '@/components/ui/icon'
 import { InlineEditableName } from '@/components/ui/inline-editable-name'
 import { Input } from '@/components/ui/input'
@@ -46,7 +48,6 @@ import {
   plotIconOptions,
   plotMenuEntries,
 } from './plot-copy'
-import { PlotHistoryPlaceholder } from './plot-history-placeholder'
 import { HAPPENING_TABS, type HappeningTab } from './plot-selection'
 import { usePlotRowSession } from './use-plot-row-session'
 
@@ -75,6 +76,8 @@ export type HappeningDetailPaneProps = {
   row: Happening | null
   /** The create selection's `seq`; a new value resets the create draft. */
   createSeq?: number
+  /** For the History tab's query. */
+  branchId: string
   /** The row's committed involvement and awareness rows; memoize by identity. */
   links: HappeningLinks
   /** The branch's entities, for the Involvements and Awareness pickers. */
@@ -105,6 +108,7 @@ export type HappeningDetailPaneProps = {
 export function HappeningDetailPane({
   row,
   createSeq,
+  branchId,
   links,
   entities,
   entries,
@@ -239,7 +243,14 @@ export function HappeningDetailPane({
             )}
           </TabsContent>
           <TabsContent value="history">
-            <PlotHistoryPlaceholder />
+            {row == null ? (
+              <EmptyState
+                title={t('history:tab.afterSave')}
+                subtext={t('history:tab.afterSaveBody')}
+              />
+            ) : (
+              <HistoryTab branchId={branchId} targetTable="happenings" targetId={row.id} />
+            )}
           </TabsContent>
         </DetailPane>
       </Tabs>

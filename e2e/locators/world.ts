@@ -101,4 +101,13 @@ export const world = {
   // The list row's lead Tag (entity-row.tsx meta slot).
   leadTag: (page: Page, name: string): Locator =>
     world.row(page, name).getByText(t('world:lead.you'), { exact: true }),
+
+  // Lore's own tab strip (lore-detail-pane.tsx), not the entity `tab` above.
+  loreTab: (page: Page, tab: 'body' | 'settings' | 'history'): Locator =>
+    page.getByRole('tab', { name: t(`world:lore.tabs.${tab}`), exact: true }),
+  loreBody: (page: Page): Locator =>
+    page.getByRole('textbox', { name: t('world:lore.fields.body'), exact: true }),
+
+  // Rows share one role and similar labels; the testID anchors counting them (testing.md → Selector strategy, Tier 3).
+  historyRows: (page: Page): Locator => page.getByTestId('delta-log-row'),
 }

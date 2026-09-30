@@ -80,8 +80,6 @@
       "history": "History"
     },
     "tabSelect": "Section",
-    "historyPlaceholder": "History lands in Slice 4.2b",
-    "historyPlaceholderBody": "Edits and rollbacks will appear here as they happen.",
     "menu": {
       "label": "More actions",
       "exportThread": "Export thread as JSON",

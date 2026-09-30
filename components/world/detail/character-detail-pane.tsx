@@ -129,7 +129,7 @@ export function CharacterDetailPane({
       <TabsContent value="settings">
         <SettingsTab control={asBaseControl(control)} {...gate} />
       </TabsContent>
-      <TrailingTabs data={data} onOpenHappening={onOpenHappening} />
+      <TrailingTabs row={row} data={data} onOpenHappening={onOpenHappening} />
     </EntityDetailFrame>
   )
 }

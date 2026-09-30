@@ -212,17 +212,29 @@ convention, and the expectation that subsystems route through
   `rejection_tracker_unavailable`. `row_signals_read_failed`
   (`hooks/use-row-signals.ts`, a bounded-read failure),
   `entry_index_read_failed` (`hooks/use-entry-index.ts`, same shape),
-  `world_story_load_failed` / `plot_story_load_failed` (a cold
+  `history_load_failed` / `history_load_more_failed`
+  (`components/history/use-history-chunks.ts` — a chunk load or a
+  load-more rejected; a failed load-more keeps the rows already
+  shown and toasts), `world_story_load_failed` / `plot_story_load_failed` (a cold
   mount's `loadOpenStory` rejection, `hooks/use-cold-open-story.ts`),
   `world_story_not_found` / `plot_story_not_found` (warn: the same
   cold mount on a branch with no story, which leaves for the story
-  list),
+  list), `row_save_failed` (`hooks/use-row-save-session.ts` — a Save
+  whose validation or commit threw; the user sees only the generic
+  failure), `row_save_validate_failed` (the whole-draft `trigger()`
+  promise itself threw: the same hook's re-validation after a store
+  refresh of an invalid draft, or the lore session's first-edit
+  whole-draft check),
+  `row_save_rejected_handler_failed` (an `onRejected` that threw),
+  `row_save_leave_failed` (a queued leave that threw once released),
   `plot_saved_handler_failed` (`components/plot/use-plot-row-session.ts`
   — a `PlotRowSessionOptions.onSaved` that throws after the write
   already landed), `entity_saved_handler_failed`
   (`components/world/use-entity-row-session.ts` — its World twin,
   an `EntityRowSessionOptions.onSaved` that throws after the write
-  already landed), `world_set_lead_failed` (`app/world/[branchId].tsx`
+  already landed), `lore_saved_handler_failed`
+  (`components/world/use-lore-row-session.ts` — the lore pane's
+  twin), `world_set_lead_failed` (`app/world/[branchId].tsx`
   — a `⋯ → Set as lead` whose `setStoryLead` threw rather than
   refused), `plot_link_revalidate_failed`
   (`components/plot/link-card.tsx` — the revalidation after a link row's

@@ -13,11 +13,13 @@ import {
   type FactionDraft,
   type ItemDraft,
   type LocationDraft,
+  type LoreDraft,
   type WorldIssue,
 } from '@/lib/world'
 
 import type { EntityPaneData } from './detail/entity-pane-props'
 import type { EntityTab } from './detail/entity-tabs'
+import type { LoreTab } from './detail/lore-detail-pane'
 
 /** A draft-schema issue message (a key) → its text; unknown messages pass through. */
 export function validationText(message: string): string {
@@ -47,6 +49,21 @@ export function entityIssueText(message: string): string {
   return tab == null
     ? text
     : t('world:validation.inTab', { tab: t(`world:detail.tabs.${tab}`), issue: text })
+}
+
+// The title is the head's name slot, on every tab, so its issue names no tab.
+const LORE_ISSUE_TAB: Partial<Record<WorldIssue, LoreTab>> = {
+  bodyRequired: 'body',
+  priorityRange: 'settings',
+}
+
+/** The lore save bar's notice, naming the tab an issue lives on as entityIssueText does. */
+export function loreIssueText(message: string): string {
+  const text = validationText(message)
+  const tab = isWorldIssue(message) ? LORE_ISSUE_TAB[message] : undefined
+  return tab == null
+    ? text
+    : t('world:validation.inTab', { tab: t(`world:lore.tabs.${tab}`), issue: text })
 }
 
 /** A refused save's user-facing text; the actions' own reasons are developer strings. */
@@ -137,6 +154,21 @@ export function entityFieldLabel(kind: EntityKind, field: string): string {
   return Object.hasOwn(labels, field) ? labels[field]() : field
 }
 
+const LORE_LABEL: Record<keyof LoreDraft, () => string> = {
+  title: () => t('world:lore.fields.title'),
+  body: () => t('world:lore.fields.body'),
+  category: () => t('world:lore.fields.category'),
+  injectionMode: () => t('world:lore.fields.injectionMode'),
+  priority: () => t('world:lore.fields.priority'),
+  keywords: () => t('world:lore.fields.keywords'),
+  tags: () => t('world:lore.fields.tags'),
+}
+
+/** save-sessions.md → Save bar: user-recognizable field names. */
+export function loreFieldLabel(field: string): string {
+  return Object.hasOwn(LORE_LABEL, field) ? LORE_LABEL[field as keyof LoreDraft]() : field
+}
+
 type LeadEntry = { onSetLead: () => void; disabledReason?: string }
 
 /** world.md → Detail head structure. */
@@ -174,6 +206,20 @@ export function entityMenuEntries(
       disabledReason: t('world:detail.menu.deleteReason'),
       onPress: () => {},
     },
+  ]
+}
+
+/** world.md → Detail head — lore: no `Set as lead`. */
+export function loreMenuEntries({ onViewJson }: { onViewJson: () => void }): OverflowMenuEntry[] {
+  return [
+    {
+      key: 'export',
+      label: t('world:detail.menu.exportLore'),
+      disabled: true,
+      disabledReason: t('world:detail.menu.exportReason'),
+      onPress: () => {},
+    },
+    { key: 'json', label: t('world:detail.menu.viewJson'), onPress: onViewJson },
   ]
 }
 
