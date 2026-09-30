@@ -33,7 +33,7 @@ Runs at start and after every compaction, before anything else:
 You are its only writer. Update it before acting and before every acknowledgement:
 
 - the Run ID, the repo ID (`orca repo list --json`) and your terminal handle (`$ORCA_TERMINAL_HANDLE`)
-- per slice: plan path, task and dispatch IDs, worktree, branch, whether it changes the schema, state (queued / running / reviewing / waiting on the developer / PR #n ready / merged / failed)
+- per slice: plan path, task and dispatch IDs, worktree, branch (for a stack, every branch with its head SHA as last seen, updated at each worker_done and before each worker start), whether it changes the schema, state (queued / running / reviewing / waiting on the developer / PR #n ready / merged / failed)
 - per question: `Q<n>`, slice, message ID, text, class, reply and its label, state, whether the push went out
 - per delivery: its ID, the message IDs it held, and whether each is handled and the delivery acknowledged
 
