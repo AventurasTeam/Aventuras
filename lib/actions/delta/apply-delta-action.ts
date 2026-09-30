@@ -252,9 +252,9 @@ function groupConflict(outcomes: readonly OkOutcome[]): string | null {
  * Commits actions under one actionId in a single transaction — a rejection anywhere leaves nothing
  * behind, unlike sequential `applyDeltaAction` calls, which each commit on their own.
  *
- * Handlers run before the transaction opens and read pre-group state: an action can't read an
- * earlier one's created row (only `GroupScope` names it); a same-column double-write on one row
- * is rejected here rather than left to callers.
+ * Handlers run before the transaction opens and read pre-group state: an action can't read a row
+ * the group creates (only `GroupScope` names it, whatever the order); a same-column double-write
+ * on one row is rejected here rather than left to callers.
  *
  * Rejected as `group-conflict`: a row deleted twice, a write to a row a delete in the group
  * cascades (two deletes' cascades included), and a link write naming an entity or happening the
@@ -279,11 +279,14 @@ async function applyDeltaActionGroupUnlocked(
   const entryId = args.entryId ?? null
 
   type Prepared = { deltaId: string; source: PipelineAction['source']; outcome: OkOutcome }
+  type Refusal = Extract<DeltaGroupResult, { status: 'rejected' }>
   const prepared: Prepared[] = []
   const pendingColumns = new Map<string, Set<string>>()
   const created = new Set<string>()
 
-  for (const action of actions) {
+  // A refusal aborts the group; 'noop' contributes nothing to commit, and a group can't half-fail
+  // on one.
+  const prepare = async (action: PipelineAction): Promise<Refusal | 'noop' | null> => {
     if (isUserOriginatedSource(action.source) && generationStore.getTxState().reversalInProgress)
       return {
         status: 'rejected',
@@ -295,11 +298,10 @@ async function applyDeltaActionGroupUnlocked(
     if (!resolved) return { status: 'rejected', reason: `no handler registered for ${action.kind}` }
 
     const outcome = await resolved.handler(action, branchId, ctx, { created })
-    if (outcome.status === 'rejected') {
-      // A no-op contributes nothing to commit, and a group cannot half-fail on one.
-      if (outcome.code === 'noop') continue
-      return { status: 'rejected', reason: outcome.reason, code: outcome.code }
-    }
+    if (outcome.status === 'rejected')
+      return outcome.code === 'noop'
+        ? 'noop'
+        : { status: 'rejected', reason: outcome.reason, code: outcome.code }
 
     const rowKey = createdKey(outcome.targetTable, outcome.targetId)
     const columns = outcome.patch?.op === 'update' ? Object.keys(outcome.patch.columns) : []
@@ -314,6 +316,21 @@ async function applyDeltaActionGroupUnlocked(
 
     prepared.push({ deltaId: generateId('delta'), source: action.source, outcome })
     if (outcome.op === 'create') created.add(rowKey)
+    return null
+  }
+
+  const skipped: { action: PipelineAction; createdThen: number }[] = []
+  for (const action of actions) {
+    const refused = await prepare(action)
+    if (refused === 'noop') skipped.push({ action, createdThen: created.size })
+    else if (refused) return refused
+  }
+  // A link can no-op only because the row it names is created later in the group, so it runs
+  // once more against every create. Links name no other link, so one more pass settles it.
+  for (const { action, createdThen } of skipped) {
+    if (created.size === createdThen) continue
+    const refused = await prepare(action)
+    if (refused && refused !== 'noop') return refused
   }
 
   if (prepared.length === 0) return { status: 'ok' }

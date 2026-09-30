@@ -34,9 +34,7 @@ export type Cascade<T extends string = string> = {
   ) => Promise<{ ops: SqlOp[]; children: Record<T, Rows> }>
 }
 
-/**
- * Rows created earlier in the same action group, as `createdKey`s — handlers read pre-group state.
- */
+/** Rows the same action group creates, as `createdKey`s — handlers read pre-group state. */
 export type GroupScope = { readonly created: ReadonlySet<string> }
 
 export function createdKey(table: string, id: string): string {

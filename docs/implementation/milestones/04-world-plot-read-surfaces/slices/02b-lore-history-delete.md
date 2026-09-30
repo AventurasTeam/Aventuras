@@ -221,11 +221,13 @@ the handler, which is where the sweep must therefore live.
 
 ## Implementation notes
 
-- **A row created earlier in the same action group counts as present
-  for the three link writers' live-row guards** (relationships
-  included; developer decision, 2026-09-28), on top of the per-branch
-  lock and re-read-and-no-op shape the "Deleting an entity while a
-  classifier pass is in flight" open question above resolved.
+- **A row the same action group creates counts as present for the
+  three link writers' live-row guards** (relationships included;
+  developer decision, 2026-09-28), on top of the per-branch lock and
+  re-read-and-no-op shape the "Deleting an entity while a classifier
+  pass is in flight" open question above resolved. The order inside
+  the group doesn't matter: the runner settles a link against every
+  create in its group.
 - **Reversals are never refused; the lead can dangle (developer
   decision, 2026-09-28).** `resolveLead` (`lib/world`) is the interim:
   World and the composer read the lead through it and treat a
