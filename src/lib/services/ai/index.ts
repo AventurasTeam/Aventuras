@@ -178,7 +178,7 @@ export interface ImageGenerationContext {
   /** Story-level image generation mode — supplied by caller to avoid store access */
   imageGenerationMode: ImageGenerationMode
   /** Live story characters, read at the moment of use — supplied by caller for portrait/reference lookups */
-  getCharacters?: () => Character[]
+  getCharacters: () => Character[]
   /** System image generation service settings — supplied by caller */
   imageSettings?: ImageGenerationServiceSettings
   /** Image profile lookup — supplied by caller */
@@ -926,7 +926,7 @@ class AIService {
       return
     }
     const referenceMode = context.referenceMode ?? false
-    const liveCharacters = () => context.getCharacters?.() ?? []
+    const liveCharacters = () => context.getCharacters()
     const presentNow = () =>
       context.presentCharacters.map((c) => refreshCharacter(c, liveCharacters()))
 
