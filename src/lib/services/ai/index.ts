@@ -58,7 +58,7 @@ import type {
   Tense,
   TimeTracker,
 } from '$lib/types'
-import type { BranchScope } from '$lib/utils/branchScope'
+import { findLiveCharacter, type BranchScope } from '$lib/utils/branchScope'
 import { expectedPixels, type ImageSpec } from '$lib/utils/image'
 import type { StreamChunk } from './core/types'
 import { serviceFactory } from './core/factory'
@@ -926,17 +926,16 @@ class AIService {
       return
     }
     const referenceMode = context.referenceMode ?? false
-    const liveCharacters = () => context.getCharacters()
-    const presentNow = () =>
-      context.presentCharacters.map((c) => refreshCharacter(c, liveCharacters()))
-
     const scope: BranchScope = { storyId: context.storyId, branchId: context.branchId }
 
-    // A portrait still generating counts: asking for a second would overwrite the first.
-    const present = presentNow()
-    const hasPortrait = (c: Character) => !!c.portrait || !!this.pendingPortraits.get(scope, c)
-    const charactersWithPortraits = present.filter(hasPortrait).map((c) => c.name)
-    const charactersWithoutPortraits = present.filter((c) => !hasPortrait(c)).map((c) => c.name)
+    const live = context.getCharacters()
+    const present = context.presentCharacters.map((c) => refreshCharacter(c, live))
+    const charactersWithPortraits = present
+      .filter((c) => this.hasPortrait(scope, c))
+      .map((c) => c.name)
+    const charactersWithoutPortraits = present
+      .filter((c) => !this.hasPortrait(scope, c))
+      .map((c) => c.name)
 
     // Build style prompt
     const stylePrompt = await resolveStylePrompt(context.storyId, imageSettings.styleId)
@@ -1017,7 +1016,7 @@ class AIService {
           context.entryId,
           scene,
           imageSettings,
-          presentNow,
+          context.getCharacters,
           referenceMode,
           getImageProfile,
           context.onPortraitGenerated,
@@ -1030,6 +1029,12 @@ class AIService {
     }
   }
 
+  // A portrait still generating counts. The model is told who has one but may still ask, and a
+  // second would be wasted.
+  private hasPortrait(scope: BranchScope, c: Character): boolean {
+    return !!c.portrait || !!this.pendingPortraits.get(scope, c)
+  }
+
   /**
    * Queue image generation for an analyzed scene.
    */
@@ -1038,24 +1043,26 @@ class AIService {
     entryId: string,
     scene: ResolvedScene,
     imageSettings: ImageGenerationServiceSettings,
-    getPresentCharacters: () => Character[],
+    getLiveCharacters: () => Character[],
     referenceMode: boolean,
     getImageProfile: (id: string) => ImageProfile | undefined,
     onPortraitGenerated: ImageGenerationContext['onPortraitGenerated'],
   ): Promise<void> {
     const { storyId } = scope
     const imageId = crypto.randomUUID()
-    const presentCharacters = getPresentCharacters()
-    const portraitCharacter =
-      scene.portraitOf && refreshCharacter(scene.portraitOf, presentCharacters)
+    const live = getLiveCharacters()
 
-    // The model is only asked to skip characters listed as having one; a second would overwrite it.
-    if (
-      portraitCharacter &&
-      (portraitCharacter.portrait || this.pendingPortraits.get(scope, portraitCharacter))
-    ) {
-      log('Portrait skipped: character already has one', { characterId: portraitCharacter.id })
-      return
+    let portraitCharacter: Character | undefined
+    if (scene.portraitOf) {
+      portraitCharacter = findLiveCharacter(scene.portraitOf, live)
+      if (!portraitCharacter) {
+        log('Portrait skipped: character gone', { characterId: scene.portraitOf.id })
+        return
+      }
+      if (this.hasPortrait(scope, portraitCharacter)) {
+        log('Portrait skipped: character already has one', { characterId: portraitCharacter.id })
+        return
+      }
     }
 
     // Determine profile and model
@@ -1068,7 +1075,7 @@ class AIService {
     // If reference mode and scene has characters, look for reference images
     if (referenceMode && scene.depicted.length > 0 && !scene.generatePortrait) {
       const sources = referencePortraitSources(
-        scene.depicted.map((c) => refreshCharacter(c, presentCharacters)),
+        scene.depicted.map((c) => refreshCharacter(c, live)),
         (c) => this.pendingPortraits.get(scope, c),
       )
 
