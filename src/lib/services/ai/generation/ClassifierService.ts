@@ -25,8 +25,7 @@ import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { database } from '$lib/services/database'
 import { createLogger } from '$lib/log'
-import { stripPicTags } from '$lib/utils/inlineImageParser'
-import { stripNarratorMarkup } from '$lib/utils/text'
+import { CLEAN_FOR_CLASSIFICATION, narrationCleaner } from '$lib/utils/narrationClean'
 import { recentContent, AS_PROSE } from '$lib/utils/recentContent'
 import {
   classificationResultSchema,
@@ -537,7 +536,6 @@ export class ClassifierService extends BaseAIService {
   }
 }
 
-/** Neither the image markup nor the narrator's layout is part of the passage to classify. */
-function cleanForClassification(content: string): string {
-  return stripNarratorMarkup(stripPicTags(content))
-}
+// Image tags, HTML and rules are dropped; header text is kept for the time and place fields.
+// See docs/architecture/narration-cleaning.md.
+const cleanForClassification = narrationCleaner(CLEAN_FOR_CLASSIFICATION)
