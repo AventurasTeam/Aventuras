@@ -638,7 +638,7 @@
         cachedRetrievalResult: options?.cachedRetrievalResult ?? null,
       }
 
-      const deps = buildPipelineDependencies({ storyId: lease.storyId, branchId: lease.branchId })
+      const deps = buildPipelineDependencies(lease)
       const pipeline = new GenerationPipeline(deps)
 
       let fullResponse = ''
