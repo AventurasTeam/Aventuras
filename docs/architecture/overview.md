@@ -334,7 +334,9 @@ has moved (`loreCallbacks.assertScope`); chapter creation does not, so a chapter
 a switch takes its number from the branch now loaded. The row still carries the right branch,
 so this is a numbering fault rather than a misplaced chapter. Analyzed images outlive it too; a
 generated portrait is saved only if its story and branch are still open and the character has no
-portrait yet (`story.saveGeneratedPortrait`). Stop registers
+portrait yet (`story.saveGeneratedPortrait`), and the write — including any copy-on-write
+override — lands on the captured branch and reaches the in-memory list only while that branch is
+still the open one. Stop registers
 its rewind on the lease and waits for it rather than releasing — aborting the request to the model
 is not the completion of the generation's writes, and an `applyClassificationResult` already entered
 keeps going regardless. One release owner throughout, so the rewind cannot race the writes it

@@ -1957,8 +1957,11 @@ class StoryStore {
    * If the character is inherited from a parent branch, creates an override.
    * Returns the owned character (either the original or the new override).
    */
-  private async cowCharacter(entity: Character): Promise<{ entity: Character; wasCowed: boolean }> {
-    const branchId = this.currentStory?.currentBranchId
+  private async cowCharacter(
+    entity: Character,
+    expected?: BranchScope,
+  ): Promise<{ entity: Character; wasCowed: boolean }> {
+    const branchId = expected ? expected.branchId : this.currentStory?.currentBranchId
     if (
       !branchId ||
       entity.branchId === branchId ||
@@ -1974,7 +1977,9 @@ class StoryStore {
       overridesId: entity.overridesId ?? entity.id,
     }
     await database.addCharacter(override)
-    this.characters = this.characters.map((c) => (c.id === entity.id ? override : c))
+    if (!expected || this.isOpen(expected)) {
+      this.characters = this.characters.map((c) => (c.id === entity.id ? override : c))
+    }
     log(
       'COW: Created character override',
       override.name,
@@ -2138,8 +2143,13 @@ class StoryStore {
     return character
   }
 
-  // Update an existing character (except protagonist swap)
-  async updateCharacter(id: string, updates: Partial<Character>): Promise<void> {
+  // Update an existing character (except protagonist swap). With `expected`, the write targets
+  // that branch and the in-memory list is only touched while it is still the open one.
+  async updateCharacter(
+    id: string,
+    updates: Partial<Character>,
+    expected?: BranchScope,
+  ): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     const existing = this.characters.find((c) => c.id === id)
@@ -2155,9 +2165,11 @@ class StoryStore {
     }
 
     // COW: ensure entity is owned by current branch before updating
-    const { entity: owned } = await this.cowCharacter(existing)
+    const { entity: owned } = await this.cowCharacter(existing, expected)
     await database.updateCharacter(owned.id, updates)
-    this.characters = this.characters.map((c) => (c.id === owned.id ? { ...c, ...updates } : c))
+    if (!expected || this.isOpen(expected)) {
+      this.characters = this.characters.map((c) => (c.id === owned.id ? { ...c, ...updates } : c))
+    }
   }
 
   // A portrait lands after generation, so the story or branch may have changed, and the
@@ -2185,7 +2197,7 @@ class StoryStore {
       log('Portrait dropped: character already has one', { characterId: live.id })
       return
     }
-    await this.updateCharacter(live.id, { portrait })
+    await this.updateCharacter(live.id, { portrait }, scope)
   }
 
   // Delete a character (protagonist cannot be deleted)
