@@ -2162,6 +2162,7 @@ class StoryStore {
 
   // A portrait lands after generation, so the story or branch may have changed, and the
   // character may have been copied onto the branch since it was read.
+  // It never overwrites: the character may have been given a portrait since.
   async saveGeneratedPortrait(
     scope: BranchScope,
     character: Character,
@@ -2178,6 +2179,10 @@ class StoryStore {
     const live = findLiveCharacter(character, this.characters)
     if (!live) {
       log('Portrait dropped: character gone', { characterId: character.id })
+      return
+    }
+    if (live.portrait) {
+      log('Portrait dropped: character already has one', { characterId: live.id })
       return
     }
     await this.updateCharacter(live.id, { portrait })
