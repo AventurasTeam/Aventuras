@@ -14,9 +14,14 @@ import type {
 import type { ImageGenerationContext } from '$lib/services/ai'
 import type { Character, ImageGenerationMode } from '$lib/types'
 
+type PhaseImageContext = Omit<
+  ImageGenerationContext,
+  'branchId' | 'getCharacters' | 'onPortraitGenerated'
+>
+
 /** Dependencies for image phase - injected to avoid tight coupling */
 export interface ImageDependencies {
-  generateImagesForNarrative: (context: ImageGenerationContext) => Promise<void>
+  generateImagesForNarrative: (context: PhaseImageContext) => Promise<void>
   isImageGenerationEnabled: (
     storySettings?: any,
     type?: 'standard' | 'background' | 'portrait' | 'reference',
@@ -105,7 +110,7 @@ export class ImagePhase {
     }
 
     // Build the image generation context
-    const imageGenContext: ImageGenerationContext = {
+    const imageGenContext: PhaseImageContext = {
       storyId,
       entryId,
       narrativeResponse: narrativeContent,
