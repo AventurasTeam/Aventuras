@@ -36,7 +36,7 @@ export type ResolvedScene = ImageableScene & {
  * drops portraits whose first name matches nobody.
  */
 export function resolveScenes(scenes: ImageableScene[], present: Character[]): ResolvedScene[] {
-  // Each portrait is its own save; two for one character race to copy it onto the branch.
+  // One portrait per character; the store keeps only the first.
   const portraitIds = new Set<string>()
   const resolved: ResolvedScene[] = []
   for (const scene of scenes) {
