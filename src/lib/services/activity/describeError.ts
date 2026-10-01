@@ -38,7 +38,20 @@ function describe(error: unknown): string {
   return reasonOf(error)
 }
 
+/**
+ * How the HTTP plugin reports any failure reading a response body, its cause dropped. Almost always
+ * a connection lost mid-stream; rarely a body that would not decompress.
+ */
+const BODY_READ_FAILURE = 'error decoding response body'
+
 function reasonOf(error: unknown): string {
+  const reason = messageOf(error)
+  return reason.includes(BODY_READ_FAILURE)
+    ? `Connection lost while the response was streaming (${reason})`
+    : reason
+}
+
+function messageOf(error: unknown): string {
   if (APICallError.isInstance(error)) {
     const message = providerMessage(error.responseBody) ?? error.message
     return error.statusCode ? `${error.statusCode} · ${message}` : message

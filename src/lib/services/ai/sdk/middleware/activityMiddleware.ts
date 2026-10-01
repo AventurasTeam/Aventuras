@@ -54,8 +54,11 @@ export class AttemptTracker {
       return
     }
     this.backfillFirst()
+    // Each attempt is the actual call; the request above it becomes their container.
     this.attemptId = this.activity.startStep(`Attempt ${this.attempts}`, {
       parentId: this.parentId,
+      isLLM: true,
+      attempt: true,
     })
   }
 
@@ -83,6 +86,8 @@ export class AttemptTracker {
     const { startedAt, endedAt, error } = this.first
     this.activity.recordStep('Attempt 1', {
       parentId: this.parentId,
+      isLLM: true,
+      attempt: true,
       startedAt,
       durationMs: (endedAt ?? this.now()) - startedAt,
       status: error === null ? 'skipped' : 'failed',

@@ -20,7 +20,9 @@ export {
   deepestRunningStep,
   rootStep,
   failuresShownBelow,
-  stepsAboveFailures,
+  failureMarks,
+  stepsAboveLLMSteps,
+  type FailureMark,
 } from './tree'
 
 export { stepDuration, turnDuration, formatDuration } from './duration'

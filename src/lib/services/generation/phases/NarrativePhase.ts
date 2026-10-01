@@ -179,13 +179,16 @@ export class NarrativePhase {
           yield { type: 'aborted', phase: 'narrative' } satisfies AbortedEvent
           return null
         }
+        // Text streamed before the error is kept as the narration: it was paid for.
+        const partial = !!fullResponse.trim()
         yield {
           type: 'error',
           phase: 'narrative',
           error: error instanceof Error ? error : new Error(String(error)),
-          fatal: true,
+          fatal: !partial,
         } satisfies ErrorEvent
-        return null
+        if (!partial) return null
+        break
       }
     }
 

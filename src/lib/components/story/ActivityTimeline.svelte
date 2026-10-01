@@ -2,7 +2,8 @@
   import { activity } from '$lib/stores/activity.svelte'
   import {
     failuresShownBelow,
-    stepsAboveFailures,
+    failureMarks,
+    stepsAboveLLMSteps,
     flattenTree,
     formatDuration,
     stepDuration,
@@ -21,20 +22,24 @@
   let rows = $derived.by(() => {
     const nodes = activity.tree(turn)
     const shownBelow = failuresShownBelow(nodes)
-    const aboveFailures = stepsAboveFailures(nodes)
+    const marks = failureMarks(nodes)
+    const aboveLLM = stepsAboveLLMSteps(nodes)
     return flattenTree(nodes).map(({ step, level }) => ({
       id: step.id,
       level,
       label: step.label,
       detail: step.detail ?? '',
-      isLLM: step.isLLM,
+      // On the calls themselves: not on a request that turned out to hold several attempts.
+      isLLM: step.isLLM && !aboveLLM.has(step.id),
       running: step.status === 'running',
       skipped: step.status === 'skipped',
       // A failure is told once, on the deepest step that carries it. Every step above one is
       // marked, unless it is itself shown as failed, so the way down to it can be followed.
       failed: step.status === 'failed' && !shownBelow.has(step.id),
-      failedBelow:
-        aboveFailures.has(step.id) && !(step.status === 'failed' && !shownBelow.has(step.id)),
+      // Above a failure, unless shown failed itself: ⚠ for a failure, ↻ when every failure
+      // beneath is an attempt its request got past.
+      mark:
+        step.status === 'failed' && !shownBelow.has(step.id) ? null : (marks.get(step.id) ?? null),
       time: formatDuration(stepDuration(step, now)),
       error: shownBelow.has(step.id) ? '' : (step.error ?? ''),
     }))
@@ -56,10 +61,12 @@
         class:text-muted-foreground={!row.running}
         class:text-primary={row.running}
       >
-        {#if row.failedBelow}
+        {#if row.mark === 'failed'}
           <TriangleAlert
             class="mr-1 h-2.5 w-2.5 shrink-0 translate-y-px text-red-700 dark:text-red-500"
           />
+        {:else if row.mark === 'recovered'}
+          <TriangleAlert class="text-foreground mr-1 h-2.5 w-2.5 shrink-0 translate-y-px" />
         {/if}
         {#if row.isLLM}
           <Sparkles

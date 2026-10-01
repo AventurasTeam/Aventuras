@@ -65,6 +65,12 @@ describe('describeActivityError', () => {
     expect(describeActivityError('boom')).toBe('boom')
   })
 
+  it('names the lost connection behind the HTTP plugin’s body read failure', () => {
+    expect(describeActivityError('error decoding response body')).toBe(
+      'Connection lost while the response was streaming (error decoding response body)',
+    )
+  })
+
   it('returns null for an abort', () => {
     const abort = new Error('aborted')
     abort.name = 'AbortError'

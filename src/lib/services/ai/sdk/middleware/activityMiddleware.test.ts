@@ -133,3 +133,29 @@ describe('attempt numbering', () => {
     expect(errors.map((e) => (e as any)[ATTEMPT_NUMBER])).toEqual([1, 2, 3, 4])
   })
 })
+
+describe('attempts as calls', () => {
+  it('records every attempt as an LLM step', async () => {
+    const { recorder, parentId, steps } = record()
+    const doGenerate = vi
+      .fn()
+      .mockRejectedValueOnce(rateLimited())
+      .mockResolvedValueOnce({ text: 'ok' })
+
+    const result = call(doGenerate, new AttemptTracker(recorder, parentId))
+    await vi.advanceTimersByTimeAsync(20_000)
+    await result
+
+    expect(
+      steps()
+        .filter((s) => s.label.startsWith('Attempt'))
+        .map((s) => s.isLLM),
+    ).toEqual([true, true])
+    expect(steps().find((s) => s.label === 'Waiting to retry')?.isLLM).toBe(false)
+    expect(
+      steps()
+        .filter((s) => s.label.startsWith('Attempt'))
+        .every((s) => s.attempt),
+    ).toBe(true)
+  })
+})

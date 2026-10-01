@@ -282,7 +282,7 @@ export async function* narrativeChunks(
     } else if (part.type === 'error') {
       // `streamText` reports a failed request as a part rather than by throwing. Left in the
       // stream it reads as an answer with no text, and is retried as an empty response.
-      throw part.error
+      throw streamError(part.error)
     } else if (part.type === 'reasoning-delta') {
       // Native reasoning providers, or reasoning extracted from <think> tags.
       yield { content: '', reasoning: part.text, done: false }
@@ -290,6 +290,14 @@ export async function* narrativeChunks(
       yield { content: part.text || '', done: false }
     }
   }
+}
+
+/** A provider's in-stream error arrives as its JSON `error` object, not as an `Error`. */
+function streamError(error: unknown): Error {
+  if (error instanceof Error) return error
+  const { message, code } = (error ?? {}) as { message?: unknown; code?: unknown }
+  if (typeof message !== 'string') return new Error(String(error))
+  return new Error(code ? `${code} · ${message}` : message, { cause: error })
 }
 
 /**

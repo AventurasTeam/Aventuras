@@ -124,16 +124,50 @@ export function failuresShownBelow(nodes: ActivityNode[]): Set<string> {
   return shown
 }
 
-/** Steps with a failed step somewhere beneath them, whatever their own outcome. */
-export function stepsAboveFailures(nodes: ActivityNode[]): Set<string> {
+/** What lies beneath a step: a failure, or only failed attempts its request got past. */
+export type FailureMark = 'failed' | 'recovered'
+
+/**
+ * Steps with a failed step somewhere beneath them, and which kind. A failed attempt whose request
+ * has not failed -- it is retrying, or got there on a later attempt -- is recovered; any other
+ * failure is a failure. A step with both beneath it is marked failed.
+ */
+export function failureMarks(nodes: ActivityNode[]): Map<string, FailureMark> {
+  const marks = new Map<string, FailureMark>()
+  const worse = (a: FailureMark | null, b: FailureMark | null): FailureMark | null =>
+    a === 'failed' || b === 'failed' ? 'failed' : (a ?? b)
+  const visit = (node: ActivityNode): FailureMark | null => {
+    let below: FailureMark | null = null
+    for (const child of node.children) {
+      const own: FailureMark | null =
+        child.step.status !== 'failed'
+          ? null
+          : child.step.attempt && node.step.status !== 'failed'
+            ? 'recovered'
+            : 'failed'
+      below = worse(below, worse(own, visit(child)))
+    }
+    if (below) marks.set(node.step.id, below)
+    return below
+  }
+  nodes.forEach(visit)
+  return marks
+}
+
+/**
+ * Steps with an LLM step beneath them. The marker belongs on the calls themselves, so a step
+ * marked as one that turns out to contain them -- a request that needed several attempts -- is
+ * a container and shows no marker of its own.
+ */
+export function stepsAboveLLMSteps(nodes: ActivityNode[]): Set<string> {
   const above = new Set<string>()
   const visit = (node: ActivityNode): boolean => {
-    let failedBelow = false
+    let llmBelow = false
     for (const child of node.children) {
-      if (visit(child) || child.step.status === 'failed') failedBelow = true
+      if (visit(child) || child.step.isLLM) llmBelow = true
     }
-    if (failedBelow) above.add(node.step.id)
-    return failedBelow
+    if (llmBelow) above.add(node.step.id)
+    return llmBelow
   }
   nodes.forEach(visit)
   return above

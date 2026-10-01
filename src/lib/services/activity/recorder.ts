@@ -20,6 +20,8 @@ export interface StartStepOptions {
   parentId?: string | null
   detail?: string
   isLLM?: boolean
+  /** See `ActivityStep.attempt`. */
+  attempt?: boolean
   /** Overrides the clock, for a step whose duration was measured elsewhere. */
   startedAt?: number
 }
@@ -97,6 +99,7 @@ export class ActivityRecorder {
       label,
       detail: options.detail,
       isLLM: options.isLLM ?? false,
+      ...(options.attempt ? { attempt: true } : {}),
       status: 'running',
       startedAt: options.startedAt ?? this.now(),
     }

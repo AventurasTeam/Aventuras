@@ -150,4 +150,11 @@ describe('narrativeChunks', () => {
       failure,
     )
   })
+
+  it("throws a provider's in-stream error object as an error with its message", async () => {
+    const error = { message: 'Upstream provider stopped responding', code: 502 }
+    await expect(collect([{ type: 'error', error }])).rejects.toThrow(
+      '502 · Upstream provider stopped responding',
+    )
+  })
 })

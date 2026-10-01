@@ -17,6 +17,8 @@ export interface ActivityStep {
   detail?: string
   /** True when the step's work is an LLM request. */
   isLLM: boolean
+  /** One of several tries at the same request. A failed one the request got past is recovered. */
+  attempt?: boolean
   status: ActivityStatus
   startedAt: number
   /** Absent while the step is running. */

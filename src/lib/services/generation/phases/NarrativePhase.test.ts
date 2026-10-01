@@ -142,6 +142,20 @@ describe('NarrativePhase', () => {
     expect(events.find((e) => e.type === 'error')).toMatchObject({ fatal: true })
   })
 
+  it('keeps the text streamed before a failure, reporting the failure non-fatally', async () => {
+    const streamNarrative = vi.fn(async function* (): AsyncGenerator<StreamChunk> {
+      yield chunk({ content: 'The dragon ' })
+      throw new Error('connection reset')
+    })
+
+    const { events, result } = await drain(phaseWith(streamNarrative).execute(makeInput()))
+
+    expect(streamNarrative).toHaveBeenCalledTimes(1)
+    expect(result?.content).toBe('The dragon ')
+    expect(events.find((e) => e.type === 'error')).toMatchObject({ fatal: false })
+    expect(events.at(-1)?.type).toBe('phase_complete')
+  })
+
   describe('abort', () => {
     it('does not start the stream when already aborted', async () => {
       const controller = new AbortController()
@@ -307,6 +321,24 @@ describe('NarrativePhase activity reporting', () => {
 
     expect(steps.every((s) => s.status !== undefined)).toBe(true)
     expect(steps.find((s) => s.label === 'Narrative')?.status).toBe('failed')
+  })
+
+  it('marks a narration kept after a failure as failed', async () => {
+    const { steps, reporter } = recordingReporter()
+    const streamNarrative = async function* (): AsyncGenerator<StreamChunk> {
+      yield chunk({ content: 'The dragon ' })
+      throw new Error('connection reset')
+    }
+
+    await drain(phaseReporting(streamNarrative, reporter).execute(makeInput()))
+
+    expect(
+      steps.filter((s) => s.label !== 'Waiting for model').map((s) => [s.label, s.status]),
+    ).toEqual([
+      ['Narrative', 'failed'],
+      ['Request', 'failed'],
+      ['Generating', 'failed'],
+    ])
   })
 
   it('records nothing when no reporter is injected', async () => {
