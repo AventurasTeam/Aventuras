@@ -97,7 +97,7 @@ import { grammarService } from '$lib/services/grammar'
 import { clearTier3SelectionCache } from '$lib/services/ai'
 import { clearImageMarkerCache } from '$lib/services/image'
 import { GenerationLease } from '$lib/utils/generationLease'
-import { sameBranchScope, type BranchScope } from '$lib/utils/branchScope'
+import { findLiveCharacter, sameBranchScope, type BranchScope } from '$lib/utils/branchScope'
 import { checkpointDeletionBlocker } from '$lib/utils/storyNavigation'
 
 const log = createLogger('StoryStore')
@@ -2175,8 +2175,7 @@ class StoryStore {
       })
       return
     }
-    const canonicalId = character.overridesId ?? character.id
-    const live = this.characters.find((c) => (c.overridesId ?? c.id) === canonicalId)
+    const live = findLiveCharacter(character, this.characters)
     if (!live) {
       log('Portrait dropped: character gone', { characterId: character.id })
       return

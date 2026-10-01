@@ -1,3 +1,5 @@
+import type { Character } from '$lib/types'
+
 /**
  * How a story branch is named when it is used as a map or set key.
  *
@@ -25,4 +27,13 @@ export interface BranchScope {
  */
 export function sameBranchScope(a: BranchScope, b: BranchScope): boolean {
   return a.storyId === b.storyId && (a.branchId ?? null) === (b.branchId ?? null)
+}
+
+/** The id a copy-on-write override shares with the row it overrides. */
+export const canonicalId = (entity: { id: string; overridesId?: string | null }) =>
+  entity.overridesId ?? entity.id
+
+export function findLiveCharacter(character: Character, live: Character[]): Character | undefined {
+  const id = canonicalId(character)
+  return live.find((c) => canonicalId(c) === id)
 }

@@ -1,5 +1,10 @@
 import type { Character } from '$lib/types'
-import { branchScopeKey, type BranchScope } from '$lib/utils/branchScope'
+import {
+  branchScopeKey,
+  canonicalId,
+  findLiveCharacter,
+  type BranchScope,
+} from '$lib/utils/branchScope'
 import { normalizeImageDataUrl } from '$lib/utils/image'
 import { foldName } from '$lib/utils/text'
 import type { ImageableScene } from '../sdk/schemas/imageanalysis'
@@ -9,12 +14,9 @@ export type PortraitSource = string | Promise<string | null>
 
 const MAX_REFERENCES = 3
 
-const canonicalId = (c: Character) => c.overridesId ?? c.id
-
 /** The live entry for the same character, matched on canonical id so a copy-on-write swap can't miss. */
 export function refreshCharacter(character: Character, live: Character[]): Character {
-  const id = canonicalId(character)
-  return live.find((c) => canonicalId(c) === id) ?? character
+  return findLiveCharacter(character, live) ?? character
 }
 
 function characterNamed(name: string, characters: Character[]): Character | undefined {
