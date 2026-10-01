@@ -6,7 +6,7 @@ import {
   type BranchScope,
 } from '$lib/utils/branchScope'
 import { normalizeImageDataUrl } from '$lib/utils/image'
-import { foldName } from '$lib/utils/text'
+import { sameEntityName } from '$lib/utils/text'
 import type { ImageableScene } from '../sdk/schemas/imageanalysis'
 
 /** A saved portrait, or one still generating (null when it failed). */
@@ -20,8 +20,7 @@ export function refreshCharacter(character: Character, live: Character[]): Chara
 }
 
 function characterNamed(name: string, characters: Character[]): Character | undefined {
-  const wanted = foldName(name)
-  return characters.find((c) => foldName(c.name) === wanted)
+  return characters.find((c) => sameEntityName(name, c.name))
 }
 
 /** A scene whose character names are resolved against the characters present. */

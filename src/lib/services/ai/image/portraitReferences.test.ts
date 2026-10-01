@@ -196,6 +196,12 @@ describe('resolveScenes', () => {
     expect(resolved.depicted).toEqual([mira, tomas])
   })
 
+  it('matches no one for a name that is only punctuation', () => {
+    const unnamed = character({ id: 'u', name: '???' })
+    const [resolved] = resolveScenes([scene({ prompt: 'a', characters: ['...'] })], [unnamed])
+    expect(resolved.depicted).toEqual([])
+  })
+
   it('keeps only the first portrait for a character, ignoring case', () => {
     const scenes = [
       scene({ prompt: 'a', characters: ['Mira'], generatePortrait: true }),
