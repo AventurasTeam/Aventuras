@@ -46,6 +46,5 @@ export const backgroundImageAnalysisResultSchema = z.object({
 })
 
 export type ImageableScene = z.infer<typeof imageableSceneSchema>
-
 export type SceneAnalysisResult = z.infer<typeof sceneAnalysisResultSchema>
 export type BackgroundImageAnalysisResult = z.infer<typeof backgroundImageAnalysisResultSchema>
