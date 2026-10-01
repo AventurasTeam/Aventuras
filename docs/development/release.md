@@ -136,6 +136,20 @@ already ignores the app's own version, so that push can only rebuild for nothing
   fresh entry nothing else could restore. The action keys on `scripts/ci/lockfile-hash.js`, which
   hashes the lockfile with the version fields removed, and falls back to the newest same-OS/arch
   entry on a miss; it also only saves on `master`.
+- **Android's Rust cache also persists the generated Kotlin.** The build scripts of `tauri` and `wry`
+  write Kotlin into the gitignored
+  `src-tauri/gen/android/app/src/main/java/com/karelian/aventura/generated/` and declare
+  `rerun-if-changed` on it, so on a fresh checkout cargo marks both crates dirty ("the file ... is
+  missing") and rebuilds every plugin and `tauri-runtime-wry` behind them, in each of the four cargo
+  builds. `cache-directories` stores that directory in the same entry as `target/`, so the files
+  come back with the mtimes the cached fingerprints expect and only the app crate compiles. The
+  option is not part of rust-cache's key, so an exact hit never re-saves: add a path, or change what
+  is persisted, by bumping the key suffix (`android-v2`), which makes the next `master` run cold.
+  The saving is small beside the app crate's release compile (about 70-95s per build) and
+  disappears in run-to-run noise. The second `aarch64` build still recompiles the app crate,
+  because the CLI rewrites `gen/android/tauri.settings.gradle` between the two builds. Cargo prints
+  dirty reasons only under `-v`: set `CARGO_TERM_VERBOSE: true` on the build step to see them. iOS
+  cargo output stays hidden under `xcodebuild` even then, but neither crate generates files on iOS.
 
 The **Windows** desktop leg builds on a ReFS [Dev Drive](https://learn.microsoft.com/en-us/windows/dev-drive/)
 created by `samypr100/setup-dev-drive` (a dynamic VHDX, recreated every run — the drive itself is
