@@ -332,7 +332,9 @@ The lease does **not** cover the post-turn background tasks — chapter creation
 management are started un-awaited and outlive it. Lore management refuses a write whose branch
 has moved (`loreCallbacks.assertScope`); chapter creation does not, so a chapter finished after
 a switch takes its number from the branch now loaded. The row still carries the right branch,
-so this is a numbering fault rather than a misplaced chapter. Stop registers
+so this is a numbering fault rather than a misplaced chapter. Analyzed images outlive it too; a
+generated portrait is saved only if its story and branch are still open and the character has no
+portrait yet (`story.saveGeneratedPortrait`). Stop registers
 its rewind on the lease and waits for it rather than releasing — aborting the request to the model
 is not the completion of the generation's writes, and an `applyClassificationResult` already entered
 keeps going regardless. One release owner throughout, so the rewind cannot race the writes it
