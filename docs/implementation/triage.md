@@ -71,8 +71,9 @@ slice-planning gate forces its resolution before that slice is planned.
   suggestion-refresh row and cite it, or reuse the per-turn copy
   (2026-10-04, raised by the post-4.2b triage pass).
 - **`createTranslation`'s live-target check holds no key lock between
-  its read and its commit.** The link writers take a key per end, so a
-  concurrent delete of an end serialises with the write (canon:
+  its read and its commit.** The link writers take their family's per-branch
+  key, which an entity or happening delete also holds, so a concurrent
+  delete of an end serialises with the write (canon:
   [`generation-pipeline.md`](../generation-pipeline.md#atomicity-per-action),
   [`cadence.md`](../memory/cadence.md#concurrency));
   `missingRef` in `lib/actions/translations/register.ts` reads the
