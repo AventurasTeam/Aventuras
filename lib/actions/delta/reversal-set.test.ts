@@ -372,7 +372,7 @@ describe('selectReversalSet — the closure', () => {
         targetTable: 'character_relationships',
         targetId: 'rel_b2',
       }),
-      // A fork copies rows and deltas under the same ids.
+      // A fork copies rows and deltas under the same target ids.
       delta('d_p_b2', 2, { branchId: 'b2', targetTable: 'entities', targetId: 'char_p' }),
     )
 
