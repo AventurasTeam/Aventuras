@@ -7,6 +7,7 @@ import {
   buildPiggybackActions,
   buildStateReport,
   MAX_RETRIEVAL_QUERIES,
+  normalizeStackableTransfer,
   resolveSuggestionEmission,
   resolveSuggestionItems,
   substitutePiggybackIds,
@@ -270,7 +271,21 @@ export async function* piggybackFallbackClassifierPhase(
     return { status: 'completed' }
   }
 
-  const { block: resolvedBlock, failures } = substitutePiggybackIds(result.value, idMap)
+  const { block: substituted, failures } = substitutePiggybackIds(result.value, idMap)
+  // The schema can't reject one bad stackable without failing the whole call, so the
+  // transfers parseTransfers would drop are dropped here, before the actions and report.
+  const resolvedBlock: ParsedStateBlock =
+    substituted.transfers === undefined
+      ? substituted
+      : {
+          ...substituted,
+          transfers: {
+            ...substituted.transfers,
+            stackables: substituted.transfers.stackables.flatMap(
+              (transfer) => normalizeStackableTransfer(transfer) ?? [],
+            ),
+          },
+        }
   if (failures.length > 0) {
     ctx.log.warn('classifier.piggyback_fallback_parse_failed', {
       fields: failures.map((f) => f.field),

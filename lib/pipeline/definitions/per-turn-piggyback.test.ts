@@ -906,6 +906,91 @@ describe('per-turn-piggyback', () => {
       expect(visualDeltaEvents).toEqual([])
     })
 
+    it('drops the stackable transfers the tagged-block parser would reject, keeping the valid one', async () => {
+      const heroId = 'char_00000000-0000-4000-8000-000000000001'
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition,
+        settings: baseSettings({ models: {} }),
+      })
+      hydrateEntries(phaseDb, 'b1', [
+        {
+          id: 'entry-1',
+          branchId: 'b1',
+          position: 1,
+          content: 'Starting point',
+          metadata: { sceneEntities: [], currentLocationId: null, worldTime: 100 },
+        } as never,
+        {
+          id: 'entry-2',
+          branchId: 'b1',
+          position: 2,
+          content: 'Hero haggles at the stall',
+          metadata: { sceneEntities: [], currentLocationId: null, worldTime: 100 },
+        } as never,
+      ])
+      entitiesStore.hydrate('b1', [
+        {
+          id: heroId,
+          branchId: 'b1',
+          kind: 'character',
+          status: 'active',
+          name: 'Hero',
+          state: { stackables: { gold: 10 } },
+        } as never,
+      ])
+
+      generateStructuredMock.mockResolvedValueOnce({
+        status: 'ok',
+        value: {
+          sceneEntities: ['c1'],
+          currentLocation: undefined,
+          worldTimeDelta: 0,
+          visualChanges: [],
+          transfers: {
+            items: [],
+            stackables: [
+              { key: 'Silver', amount: 3, to: 'c1' },
+              { key: 'gold', amount: -5, from: 'c1' },
+              { key: 'copper', amount: 1.5, to: 'c1' },
+              { key: '  ', amount: 2, to: 'c1' },
+              { key: 'x'.repeat(41), amount: 2, to: 'c1' },
+            ],
+          },
+        },
+      })
+
+      const ctx = {
+        actionId: 'act_1',
+        abortSignal: new AbortController().signal,
+        intermediates: { idMap: new IdBiMap() },
+        log: makeLogger('act_1'),
+        db: phaseDb.db,
+        runInTransaction: async () => undefined,
+        storyId: 's1',
+        branchId: 'b1',
+      }
+
+      const gen = piggybackFallbackClassifierPhase(ctx)
+      const events = []
+      let result = await gen.next()
+      while (!result.done) {
+        events.push(result.value)
+        result = await gen.next()
+      }
+
+      expect(result.value).toEqual({ status: 'completed' })
+      const stackableWrites = events.flatMap((e) =>
+        e.type === 'delta_emitted' && e.action.kind === 'updateEntityStackables'
+          ? [e.action.payload]
+          : [],
+      )
+      expect(stackableWrites).toEqual([
+        { branchId: 'b1', id: heroId, stackables: { gold: 10, silver: 3 } },
+      ])
+    })
+
     it('rerolls generateClassifierState when initial result has negative worldTimeDelta and returns second successful result', async () => {
       currentStoryStore.set({
         storyId: 's1',

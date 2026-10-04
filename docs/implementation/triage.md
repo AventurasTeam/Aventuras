@@ -54,19 +54,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **Piggyback entity visual text was uncapped; new writes now
-  truncate.** `buildPiggybackActions` truncates a note to
-  `VISUAL_TEXT_MAX`, matching `characterStateSchema`'s 500-char visual
-  caps, so notes from the tagged block and from the fallback
-  classifier are both cut (4.2b, developer decision 2026-09-28). Still
-  open: an entity that already holds an over-long visual field from
-  before this fix still fails a later `updateEntity` that re-validates
-  its whole state — e.g. a delete clearing a ref to it. No repair of
-  existing rows. The fallback classifier path also accepts stackable
-  keys and amounts that the tagged-block parser's `parseTransfers`
-  rejects — a blank or over-long key, a fractional or negative amount —
-  and those fail the same whole-state re-validation; pre-existing, not
-  fixed.
 - **`row-closure.ts`'s `CHILD_TABLES` widens a reversal set only for
   happenings' children.** A reversal deleting a character a create made
   orphans relationship, involvement or awareness rows naming it that
@@ -263,3 +250,11 @@ slice-planning gate forces its resolution before that slice is planned.
   reading starts `S` with the seats, since they are already selected.
   Which one is intended is unsettled. Read, not reproduced
   (2026-10-02, raised by an E1 eval review of PR #487 Task 2).
+- **The fallback classifier can re-apply stackable transfers the
+  narrative fold already wrote.** The fold applies whatever the tagged
+  block parsed even when another field failed
+  (`lib/pipeline/definitions/per-turn.ts`), and any parse failure fires
+  the fallback, whose schema asks for transfers again. Item moves and
+  visual changes overwrite, so a repeat is harmless; stackable amounts
+  add, so a transfer both layers report lands twice. Read, not
+  reproduced (2026-10-04, raised by the post-4.2b triage pass).
