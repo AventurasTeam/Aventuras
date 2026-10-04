@@ -89,3 +89,12 @@ slice-planning gate forces its resolution before that slice is planned.
   cascading its `character_relationship` translations; only the entity
   cascade cleans them up. Latent: nothing writes translations. Raised
   by the Task 1 review of the reversal-integrity PR (2026-10-05).
+  Reversing a relationship's create can strand them too: the
+  closure's `userKeptCreates` in `lib/actions/delta/row-closure.ts`
+  drops the planner's "still non-null" half (a plan decision), so a
+  create whose user-written view was later cleared counts as kept and
+  the closure leaves the row and its referrers unremoved, while the
+  planner deletes the row (`lib/actions/delta/reverse-replay.ts`, the
+  create arm's `rowKeepingColumns` branch). Revisit both when
+  translations get a writer. Raised by the Task 3 review of the same
+  PR (2026-10-05).
