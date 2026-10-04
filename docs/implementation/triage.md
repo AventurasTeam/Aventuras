@@ -93,15 +93,6 @@ slice-planning gate forces its resolution before that slice is planned.
   pane have, so a Blank started from a row open on History lands on
   History's "History starts at the first save" instead of Overview.
   Pre-existing from 4.3 (2026-09-28, raised by 4.2b).
-- **Row save sessions leave Save enabled while an untouched field is
-  invalid.** react-hook-form's `onChange` validation merges only the
-  edited field's error, so `useRowSaveSession`'s `invalidReason`
-  stays null (its TSDoc says "null while the draft is writable") —
-  e.g. an entity or Plot create enables Save with an empty name after
-  editing another field; Save then refuses. The lore session runs a
-  one-shot whole-draft check on the first edit; lifting that into the
-  shared hook broke no test but shows errors on fields the user
-  hasn't touched, a product call (2026-09-28, raised by 4.2b).
 - **`LoreDetailPane` duplicates `EntityDetailFrame`.** The head, tab
   list, menu and JSON viewer wiring, plus the tab-reset hook, are a
   near-copy (~100 lines) of `EntityDetailFrame` / `useEntityTab`;

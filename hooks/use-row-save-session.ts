@@ -171,6 +171,9 @@ export function useRowSaveSession<Draft extends FieldValues>({
   const appliedRef = useRef({ rowKey, values })
   // The render snapshot trails a trigger() by a render; the subscription sees every emission.
   const errorsRef = useRef<object>(errors)
+  // react-hook-form stores errors only for the fields an edit validated, so the whole draft is
+  // checked apart from them: Save disables for an untouched invalid field without flagging it.
+  const [draftIssue, setDraftIssue] = useState<string | null>(null)
 
   // Passive, after react-hook-form's own mount effect: subscribing flags the form mounted.
   useEffect(
@@ -183,6 +186,29 @@ export function useRowSaveSession<Draft extends FieldValues>({
       }),
     [form],
   )
+
+  useEffect(() => {
+    let latest = 0
+    const unsubscribe = form.subscribe({
+      formState: { values: true },
+      callback: ({ values: draft }) => {
+        const run = ++latest
+        Promise.resolve(
+          resolver(draft, undefined, { fields: {}, shouldUseNativeValidation: false }),
+        )
+          .then((result) => {
+            if (run === latest) setDraftIssue(firstIssue(result.errors))
+          })
+          .catch((error: unknown) => {
+            logger.error('app.row_save_validate_failed', { error: errorMessage(error) })
+          })
+      },
+    })
+    return () => {
+      latest = Number.NaN
+      unsubscribe()
+    }
+  }, [form, resolver])
 
   // Layout, not passive: the new row must never paint with the previous row's draft.
   useLayoutEffect(() => {
@@ -370,11 +396,12 @@ export function useRowSaveSession<Draft extends FieldValues>({
   const dirtyFields = [...new Set([...Object.keys(values), ...Object.keys(dirtyByField)])]
     .filter((field) => hasDirty(dirtyByField[field]))
     .map((field) => fieldLabel(field))
-  const issue = firstIssue(errors)
+  const dirty = dirtyFields.length > 0
+  const issue = firstIssue(errors) ?? (dirty ? draftIssue : null)
 
   return {
     form,
-    dirty: dirtyFields.length > 0,
+    dirty,
     dirtyFields,
     invalidReason: issue == null ? null : issueText(issue),
     saving,

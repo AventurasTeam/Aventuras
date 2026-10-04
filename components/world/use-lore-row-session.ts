@@ -71,19 +71,9 @@ export function useLoreRowSession({
     onRejected,
   })
   const { form, dirty, requestLeave } = session
-  // world.md → Required body: an edit validates only its own field, so a create holding just a
-  // title would otherwise offer Save; the first edit checks the whole draft. Undoing the edits
-  // drops those issues too, or fields the user never touched stay flagged on a clean draft.
+  // Undoing every edit leaves the edited fields' issues behind; a clean draft shows none.
   useEffect(() => {
-    if (!dirty) {
-      form.clearErrors()
-      return
-    }
-    form.trigger().catch((error: unknown) => {
-      logger.error('app.row_save_validate_failed', {
-        error: error instanceof Error ? error.message : String(error),
-      })
-    })
+    if (!dirty) form.clearErrors()
   }, [dirty, form])
   useEffect(() => {
     onSession({ dirty, requestLeave })
