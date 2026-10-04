@@ -7,7 +7,7 @@ Use this template when dispatching a code quality reviewer subagent.
 **Only dispatch after spec compliance review passes.**
 
 ```
-Dispatch a subagent with:
+Dispatch the aventuras-code-reviewer agent with:
   Use template at aventuras-requesting-code-review/code-reviewer.md
 
   DESCRIPTION: [task summary, from implementer's report]
@@ -23,4 +23,6 @@ Dispatch a subagent with:
 - Is the implementation following the file structure from the plan?
 - Did this implementation create new files that are already large, or significantly grow existing files? (Don't flag pre-existing file sizes — focus on what this change contributed.)
 
-**Code reviewer returns:** Strengths, Issues (Critical/Important/Minor), Assessment
+**Code reviewer returns:** Strengths, Issues (Critical/Important/Minor), Outside this change, Assessment
+
+Outside this change lists pre-existing problems the reviewer noticed. They aren't this task's to fix: route them to `docs/implementation/triage.md` and don't hold the task for them.

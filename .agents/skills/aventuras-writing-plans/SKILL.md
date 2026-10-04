@@ -40,7 +40,7 @@ Write the plan into a file created from `references/execution-plan-template.md`.
 - **Header** — title, the agentic-workers sub-skill line, `Slice:` / `Milestone:` links, Goal, Architecture, Tech Stack.
 - **Execution gate** — a condition that must hold before execution may start, or `none`.
 - **Decisions** — developer decisions, implementer choices, and monitor-during-work items carried from `aventuras-plan-slice`. These are the upstream source for the slice doc's **Implementation notes**: any decision that deviates from the slice brief, constrains a future slice, or picks a non-obvious route is promoted there when the branch is finished. This plan lives in git-ignored `.impl-plans/` and is ephemeral — the slice doc is the durable record, so nothing notable should die with the plan.
-- **Tasks** — one `### Task N` per task; see Task Structure below.
+- **Tasks** — one `### Task N` per task; see Task Structure below. A plan of more than five tasks holds skeleton entries here first, then a Writer batches line; see Batched writing.
 - **Evidence Matrix** — one row per slice acceptance criterion.
 - **Skill Plan** — domain skills the executor should reach for.
 - **Recommended Executor** — filled at the Execution Handoff step.
@@ -85,6 +85,10 @@ Every task carries two tiers the executor honors. Assign them now — you see al
 
 When unsure, pick `review` and `standard` — over-verifying is cheaper than a silent miss. The developer sees both tiers in the plan and can push any task up before execution starts.
 
+## Canon references
+
+Every task names the canon it implements on a **Canon:** line: one or more doc sections, as links with anchors, each with a few words on what it governs for this task. The executor pastes the task into the implementer's prompt, so this line is how the implementer knows where to look. Name the section, not the whole doc. Where the task departs from canon on purpose, say so on the line and point to the Decision that records why.
+
 ## Task Structure
 
 Each entry in the plan's Tasks section follows this format:
@@ -94,6 +98,7 @@ Each entry in the plan's Tasks section follows this format:
 
 **Model:** cheap | standard | capable — <one-line why>
 **Verification:** automated | review — <one-line why>
+**Canon:** [`docs/<area>/<doc>.md → <Section>`](../docs/<area>/<doc>.md#<section>) — <what this task implements from it>
 
 **Files:**
 
@@ -159,9 +164,61 @@ Every step must contain the actual content an engineer needs. These are **plan f
 - Exact commands with expected output
 - DRY, YAGNI, TDD, frequent commits
 
+## Batched writing
+
+A plan of more than five tasks is written in stages, so each task gets a writer's whole attention. Written in one pass, a long plan's tasks come out thin: in an evaluation on the M4.2b plan, tasks written whole prevented none of 19 defects found later, and tasks written four at a time from a skeleton prevented 10. Up to five tasks, write the plan whole as the sections above describe.
+
+**1. Skeleton.** Write the plan file with every section, but each task as a skeleton entry, then the Writer batches line. A writer later turns each entry into the full task, seeing only the skeleton, the repository and canon, so the entry must decide everything that crosses tasks.
+
+````markdown
+### Task N: [Component Name]
+
+**Model:** cheap | standard | capable — <one-line why>
+**Verification:** automated | review — <one-line why>
+**Canon:** [`docs/<area>/<doc>.md → <Section>`](../docs/<area>/<doc>.md#<section>) — <what this task implements from it>
+**Depends on:** Task a (<what it uses from it>), … — or `none`
+
+**Scope:** <what the task delivers and how its acceptance is shown: behaviour, edge cases and refusals that other tasks or the slice's acceptance criteria rely on. A paragraph, not steps.>
+
+**Files:**
+
+- Create: `exact/path/to/file.ts`
+- Modify: `exact/path/to/existing.ts`
+- Test: `exact/path/to/file.test.ts`
+
+**Interface:**
+
+```ts
+// The exported declarations this task adds or changes: exact names, signatures, types
+// with their fields, constants with their values, component props.
+```
+
+**Shared resources:** <migration number, i18n namespace and keys, shared fixtures, barrel lines> — or `none`
+````
+
+The interfaces are the contract between writers working at the same time:
+
+- Write them from the code at this commit. Every existing function, type or table an interface names or calls must exist with that shape: read it, don't recall it.
+- Put cross-task behaviour in the owning task's Scope, not only in a type: who validates an input, who takes which lock, what a function returns when it refuses, what runs inside a transaction. A writer of a dependent task sees only the interface and the Scope.
+- Name every shared resource once, in the task that owns it, so two writers never pick the same migration number or i18n key.
+
+After the task list, add a **Writer batches** line: about four consecutive tasks per batch, tasks that edit the same file in one batch where you can, and for each batch the files it shares with other batches.
+
+**2. Review and approval.** Run the Self-Review on the skeleton, then offer the Independent review on it: the reviewer checks the contract the writers build on, which is where a batched plan's cross-task errors live. Then show the developer the skeleton (the task list with tiers, and the batches) and wait for their approval. Fixing an interface now costs an edit; after the writers it costs a batch.
+
+**3. Writers.** Dispatch the `aventuras-plan-writer` agent (`.claude/agents/aventuras-plan-writer.md`: Opus, effort `xhigh`) once per batch, with [`plan-writer-prompt.md`](plan-writer-prompt.md). Writers run three at a time by default: before dispatching, tell the developer the number of batches and the concurrency, and let them change it. Each writer writes its tasks to `<plan-stem>.batch-<K>.md` next to the plan and replies with a report. Without Claude Code agent definitions (another harness), dispatch a general subagent whose prompt is that definition file's body followed by the filled template.
+
+**4. Assembly.** Handle each report the way aventuras-receiving-code-review handles review feedback: check it against the code and canon before acting. In the M4.2b evaluation about four reports in ten were not real problems.
+
+- A real interface problem: fix the skeleton entry, and rerun every batch whose tasks use that interface.
+- A writer's correction of its own task's scope: keep it if it holds, and tell the developer.
+- An open cross-task question: settle it, and fix the tasks it touches, by a small edit or by rerunning the batch.
+
+Then replace each skeleton entry in the plan with its written task, delete the batch files, and run the Self-Review's placeholder scan and type consistency check across the whole plan: tasks use each other's interfaces as declared, and a task that edits a file an earlier task changed starts from what that task leaves there.
+
 ## Self-Review
 
-After writing the complete plan, look at the slice doc with fresh eyes and check the plan against it. This is a checklist you run yourself — not a subagent dispatch.
+After writing the complete plan, look at the slice doc with fresh eyes and check the plan against it. In a batched plan this runs on the skeleton, and the placeholder scan and type consistency check run again after assembly (see Batched writing). This is a checklist you run yourself — not a subagent dispatch.
 
 **1. Slice coverage:** Skim each requirement in the slice doc — Goal, Scope: in, Acceptance criteria. Can you point to a task that implements it? List any gaps.
 
@@ -177,7 +234,7 @@ If you find issues, fix them inline. No need to re-review — just fix and move 
 
 ## Independent review
 
-The self-review shares every blind spot of the session that wrote the plan. After it, offer the developer an independent review by a reviewer with none of this session's context:
+The self-review shares every blind spot of the session that wrote the plan. After it, offer the developer an independent review by a reviewer with none of this session's context. In a batched plan the review runs on the skeleton, before any writer (see Batched writing).
 
 1. **Skip.**
 2. **A fresh subagent:** a clean context, the same model family.

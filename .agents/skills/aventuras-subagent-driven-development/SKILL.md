@@ -67,12 +67,12 @@ digraph process {
         "Mark task complete in the task list" [shape=box];
     }
 
-    "Read plan, extract all tasks with full text, note context, create the task list" [shape=box];
+    "Read the plan's sections and task list, create the task list" [shape=box];
     "More tasks remain?" [shape=diamond];
     "Dispatch final code reviewer subagent for entire implementation" [shape=box];
     "Use aventuras-finishing-a-development-branch" [shape=box style=filled fillcolor=lightgreen];
 
-    "Read plan, extract all tasks with full text, note context, create the task list" -> "Dispatch implementer subagent (./implementer-prompt.md)";
+    "Read the plan's sections and task list, create the task list" -> "Dispatch implementer subagent (./implementer-prompt.md)";
     "Dispatch implementer subagent (./implementer-prompt.md)" -> "Implementer subagent asks questions?";
     "Implementer subagent asks questions?" -> "Answer questions, provide context" [label="yes"];
     "Answer questions, provide context" -> "Dispatch implementer subagent (./implementer-prompt.md)";
@@ -93,6 +93,8 @@ digraph process {
 }
 ```
 
+**Read one task at a time.** At the start, read the plan's header, Execution gate and Decisions, and its task list (each task's heading, tiers and Files block): that is the context you curate each dispatch from. Read a task's full text when you reach it and paste it into the dispatch. Plans written in batches run to twice the old length, and holding every task's text from the start fills your context before the first task.
+
 ## Per-task verification tier
 
 The per-task loop above is the **`review`-tier** flow. Each task's tier comes from the plan (writing-plans assigns a `Verification:` tier); honor it:
@@ -104,7 +106,9 @@ The **final whole-implementation code reviewer runs regardless of tier** — it 
 
 ## Model Selection
 
-**The model tier is set per task in the plan** (writing-plans assigns each task a `Model:` tier). Dispatch every task at its assigned tier — pass it as the `model` field of the implementer dispatch. If the plan predates this field or omits it, assign a tier using the signals below and state it in the dispatch; do not silently inherit the controller's model. (Mechanical work running on the most capable model — the costly default this prevents — is the common failure.)
+**The model tier is set per task in the plan** (writing-plans assigns each task a `Model:` tier). Dispatch every task at its assigned tier — pass it as the `model` of the `aventuras-implementer` dispatch: `cheap` → haiku, `standard` → sonnet, `capable` → opus. If the plan predates this field or omits it, assign a tier using the signals below and state it in the dispatch; do not silently inherit the controller's model. (Mechanical work running on the most capable model — the costly default this prevents — is the common failure.)
+
+**Effort is set by the agent definitions, not per dispatch:** the implementer runs at `high` (Haiku has no effort setting), the spec reviewer on Opus at `high`, the code reviewer on Opus at `xhigh`. A subagent dispatched without a definition inherits your session's effort.
 
 Use the least powerful model that can handle each role to conserve cost and increase speed.
 
@@ -126,9 +130,9 @@ Implementer subagents report one of four statuses. Handle each appropriately:
 
 **DONE:** Proceed to spec compliance review.
 
-**DONE_WITH_CONCERNS:** The implementer completed the work but flagged doubts. Read the concerns before proceeding. If the concerns are about correctness or scope, address them before review. If they're observations (e.g., "this file is getting large"), note them and proceed to review.
+**DONE_WITH_CONCERNS:** The implementer completed the work but flagged doubts. Read the concerns before proceeding. If the concerns are about correctness or scope, address them before review. If they're observations (e.g., "this file is getting large"), note them and proceed to review. A concern that cites a conflict with canon or the code (the report's Conflicts and departures field) is about correctness: settle it as for NEEDS_CONTEXT below, and have the implementer apply the answer before review.
 
-**NEEDS_CONTEXT:** The implementer needs information that wasn't provided. Provide the missing context and re-dispatch.
+**NEEDS_CONTEXT:** The implementer needs information that wasn't provided, or found before writing code that the task conflicts with canon or the code. Answer it. Where the task and canon conflict, canon wins, unless the plan changes that canon on purpose (it says so, and a task updates the doc). Where it conflicts with the existing code, the code wins where the task's intent is still clear. A question the plan, slice doc and canon don't settle goes to your human partner (a dispatched worker asks through its channel). Then continue the same subagent with the answer (SendMessage to its agent ID), so its reading isn't lost; re-dispatch with the answer only if it can't be continued. An answer that changes the task goes, quoted, into the spec reviewer's prompt.
 
 **BLOCKED:** The implementer cannot complete the task. Assess the blocker:
 
@@ -161,6 +165,8 @@ You are a **dispatched worker** when your task prompt says so and names an escal
 
 **Never stop between tasks.** Nobody is at the terminal to say "continue": a worker that ends its turn to wait for input stalls until someone notices. Stop only after reporting completion, or while waiting on the channel.
 
+**At a usage limit, wrap up as the note asks.** When Claude Code says your usage limit is reached, finish the step in hand, ledger it, and end your turn. Send no worker_done and no escalation for it: the worker setup resumes you after the limit resets, and you continue from your ledger.
+
 **Answers come labelled.** Record the label with the answer. An answer that overrides the plan goes, quoted with its label, into every later implementer and spec-reviewer prompt it touches; otherwise the reviewer flags it as a deviation.
 
 | Label          | Meaning                                  | Ends up in                                                    |
@@ -171,24 +177,27 @@ You are a **dispatched worker** when your task prompt says so and names an escal
 
 **Finish** with aventuras-finishing-a-development-branch; its Dispatched worker section replaces the options menu. A plan whose Execution gate splits the slice into stacked PRs finishes PR by PR: at each PR's last task, follow its Stacked PRs section for that PR, then carry on with the next PR's tasks on the next branch.
 
-## Prompt Templates
+## Agents and Prompt Templates
 
-- `./implementer-prompt.md` - Dispatch implementer subagent
-- `./spec-reviewer-prompt.md` - Dispatch spec compliance reviewer subagent
-- `./code-quality-reviewer-prompt.md` - Dispatch code quality reviewer subagent
+Each subagent role is a Claude Code agent definition in `.claude/agents/`, which sets its model and effort. The templates here are the per-dispatch part:
+
+- `aventuras-implementer` with `./implementer-prompt.md` - implementer
+- `aventuras-spec-reviewer` with `./spec-reviewer-prompt.md` - spec compliance reviewer
+- `aventuras-code-reviewer` with `./code-quality-reviewer-prompt.md` - code quality reviewer; the final whole-implementation review uses the same agent with aventuras-requesting-code-review's template
+
+Without Claude Code agent definitions (another harness), dispatch a general subagent whose prompt is the definition file's body followed by the per-dispatch prompt; its model and effort then follow that harness's controls.
 
 ## Example Workflow
 
 ```
 You: I'm using Subagent-Driven Development to execute this plan.
 
-[Read plan file once: docs/superpowers/plans/feature-plan.md]
-[Extract all 5 tasks with full text and context]
+[Read the plan's sections and task list: docs/superpowers/plans/feature-plan.md]
 [Create the task list with all tasks]
 
 Task 1: Hook installation script
 
-[Get Task 1 text and context (already extracted)]
+[Read Task 1's full text from the plan]
 [Dispatch implementation subagent with full task text + context]
 
 Implementer: "Before I begin - should the hook be installed at user or system level?"
@@ -212,7 +221,7 @@ Code reviewer: Strengths: Good test coverage, clean. Issues: None. Approved.
 
 Task 2: Recovery modes
 
-[Get Task 2 text and context (already extracted)]
+[Read Task 2's full text from the plan]
 [Dispatch implementation subagent with full task text + context]
 
 Implementer: [No questions, proceeds]
@@ -257,7 +266,7 @@ Done!
 
 **vs. Manual execution:**
 
-- Subagents follow TDD naturally
+- Subagents follow TDD (the implementer definition requires a red run for every new test)
 - Fresh context per task (no confusion)
 - Parallel-safe (subagents don't interfere)
 - Subagent can ask questions (before AND during work)
@@ -286,7 +295,7 @@ Done!
 **Cost:**
 
 - More subagent invocations (implementer + 2 reviewers per task)
-- Controller does more prep work (extracting all tasks upfront)
+- Controller does more prep work (reading each task and curating its context)
 - Review loops add iterations
 - But catches issues early (cheaper than debugging later)
 
@@ -331,7 +340,7 @@ Done!
 
 - **aventuras-using-git-worktrees** - Ensures isolated workspace (creates one or verifies existing)
 - **aventuras-writing-plans** - Creates the plan this skill executes
-- **aventuras-requesting-code-review** - Code review template for reviewer subagents
+- **aventuras-requesting-code-review** - The code reviewer's dispatch template
 - **aventuras-finishing-a-development-branch** - Complete development after all tasks
 
 **Subagents should use:**
