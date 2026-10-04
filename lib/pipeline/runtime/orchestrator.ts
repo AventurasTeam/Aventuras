@@ -123,23 +123,14 @@ function endWritePhase(run: RunState): void {
   if (run.gateBehavior === 'no-gate') releaseWritePhase(run.branchId, run.actionId)
 }
 
-// Set as the abort reason once abortRun is certain for the run (abortRun itself, or a failed parallel
-// branch). A user cancel aborts with the default reason: the classifier's burst must still land.
-// An abort that came first keeps its reason, so a branch that throws after a cancel is not covered.
-const RUN_ENDING = 'run-ending'
-
-function isRunEnding(run: RunState): boolean {
-  return run.abortController.signal.aborted && run.abortController.signal.reason === RUN_ENDING
-}
-
 async function handleEvent(event: PhaseEmittedEvent, run: RunState, ctx: RunCtx): Promise<void> {
   if (event.type === 'delta_emitted') {
-    // Promise.all rejects without waiting for sibling branches, so one can emit after abortRun
-    // released the hold: a fresh hold would have no one to release it. The write is dropped, not
-    // thrown, so it can't replace the failure the run is already ending with.
-    if (run.gateBehavior === 'no-gate' && isRunEnding(run)) {
+    // Promise.all rejects without waiting for sibling branches, so one can emit after the run
+    // left txState. The release sits right behind that removal, so a hold taken while registered
+    // is freed and a write after it is dropped; thrown, it could replace the failure.
+    if (run.gateBehavior === 'no-gate' && !generationStore.getTxState().runs.has(run.runId)) {
       logger.debug(
-        'pipeline.write_after_run_ending',
+        'pipeline.write_after_run_left',
         { kind: event.action.kind },
         { actionId: run.actionId },
       )
@@ -230,7 +221,7 @@ async function runParallelGroup(
       pipelineEventBus.emit({ type: 'phase_start', runId: run.runId, name: b.name })
       const result = await consumePhase(b.run(phaseContextOf(run, ctx)), run, ctx)
       pipelineEventBus.emit({ type: 'phase_complete', runId: run.runId, name: b.name, result })
-      if (result.status === 'failed') run.abortController.abort(RUN_ENDING) // wind down siblings that poll
+      if (result.status === 'failed') run.abortController.abort() // wind down siblings that poll
       return result
     }),
   )
@@ -358,7 +349,7 @@ type AbortCause =
   | { reason: 'phase-failure'; error: PipelineError; threw: boolean }
 
 async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<TxResult> {
-  run.abortController.abort(RUN_ENDING)
+  run.abortController.abort()
   let outcome: 'aborted' | 'failed' = cause.reason === 'user-cancel' ? 'aborted' : 'failed'
   let error = cause.reason === 'user-cancel' ? undefined : cause.error
   const markerOp = (settled: 'aborted' | 'failed') =>
@@ -388,6 +379,8 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
   if (cause.reason === 'phase-failure' && cause.threw && !reversalFailed)
     await runPhaseExceptionHook(run, ctx, cause.error)
   generationStore.abortRun(run.runId)
+  // A straggler registered during the hook may have taken a fresh hold since the release above.
+  endWritePhase(run)
   // Uncommitted: the marker rolled back with the reversal, so boot recovery still owns the run.
   if (reversalFailed)
     logger.warn(

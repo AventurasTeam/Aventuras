@@ -14,7 +14,6 @@ import {
   type PipelineAction,
 } from '@/lib/actions'
 import {
-  __resetBranchWriteLocks,
   holdBranchWriteExclusive,
   releaseBranchWriteExclusive,
 } from '@/lib/actions/delta/branch-write-lock'
@@ -28,7 +27,7 @@ import {
   type PhaseFn,
   type PhaseResult,
 } from '@/lib/pipeline'
-import { generationStore } from '@/lib/stores'
+import { awaitRunTerminal } from '@/lib/stores'
 
 import { expectRan, makeHarness, resetSingletons } from './harness'
 
@@ -134,6 +133,18 @@ function spyOnLock(): { holds: string[]; releases: string[] } {
   return { holds, releases }
 }
 
+// Records the happenings that reach the action layer on the run's behalf.
+function spyOnDispatches(): string[] {
+  const dispatched: string[] = []
+  configurePort({
+    applyDeltaAction: (args, applyCtx) => {
+      if (args.action.kind === 'createHappening') dispatched.push(args.action.payload.entry.id)
+      return applyDeltaAction(args, applyCtx)
+    },
+  })
+  return dispatched
+}
+
 // Parks before its first write (the model call) and again between its two writes.
 function defineBurst(
   gateBehavior: 'no-gate' | 'hard-gate',
@@ -165,17 +176,12 @@ function defineBurst(
 // The happening handler refuses an entry on another branch, so this write fails the run.
 const REFUSED = happening('hap_run_2', 'periodic_classifier', 'b_other')
 
-function resetAll(): void {
-  resetSingletons()
-  __resetBranchWriteLocks()
-}
-
 describe('a no-gate run holds the branch write lock through its write phase', () => {
   beforeEach(() => {
-    resetAll()
+    resetSingletons()
     registerAllDomains()
   })
-  afterEach(() => resetAll())
+  afterEach(() => resetSingletons())
 
   it('holds a write from outside the run until the run commits', async () => {
     const { ctx } = await makeHarness()
@@ -271,6 +277,22 @@ describe('a no-gate run holds the branch write lock through its write phase', ()
     expect(await happeningIds(ctx)).toEqual(['hap_run_1', 'hap_user'])
   })
 
+  it('ends the hold when the reversal throws something the orchestrator does not recognise', async () => {
+    const { ctx } = await makeHarness()
+    configurePort({ reverseReplayDeltas: () => Promise.reject(new Error('not a replay error')) })
+    const burst = defineBurst('no-gate', REFUSED)
+    const inflight = runPipeline('burst', ctx)
+    burst.modelCall.open()
+    await burst.firstLanded.opened
+    const user = userWrite(ctx, 'hap_user')
+    await pause(50)
+    expect(user.settled()).toBe(false)
+
+    burst.midBurst.open()
+    await expect(within(inflight, 2000)).rejects.toThrow('not a replay error')
+    await committedAt(user.write)
+  })
+
   // A second exclusive request under the run's own actionId would wait on the first, which
   // commitRun releases only after every branch finishes: the run would never complete.
   it('takes one hold for two parallel branches writing, and completes', async () => {
@@ -304,19 +326,17 @@ describe('a no-gate run holds the branch write lock through its write phase', ()
   })
 
   // Promise.all rejects on the first throwing branch without waiting for siblings, so a sibling can
-  // emit after the abort's reversal released the hold; a fresh hold then has no one to release it.
-  it('drops a late write from a parallel branch after the abort released, leaving the branch free', async () => {
+  // emit once abortRun has reversed and left: its write is dropped, not committed beside nothing.
+  it("drops a sibling's late write once the run has left, even after a cancel aborted first", async () => {
     const { ctx } = await makeHarness()
-    const dispatched: string[] = []
-    configurePort({
-      applyDeltaAction: (args, applyCtx) => {
-        if (args.action.kind === 'createHappening') dispatched.push(args.action.payload.entry.id)
-        return applyDeltaAction(args, applyCtx)
-      },
-    })
+    const dispatched = spyOnDispatches()
+    const wrote = gate()
+    const throwGo = gate()
     const lateGo = gate()
     async function* thrower(): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
       yield { type: 'delta_emitted', action: happening('hap_early', 'periodic_classifier') }
+      wrote.open()
+      await throwGo.opened
       throw new Error('branch exploded')
     }
     async function* straggler(): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
@@ -339,8 +359,14 @@ describe('a no-gate run holds the branch write lock through its write phase', ()
       gateBehavior: 'no-gate',
       concurrencyPolicy: {},
     })
+    const inflight = runPipeline('straggling-burst', ctx)
+    await wrote.opened
+    // The barrier's cancel aborts the controller first, so the abort that follows adds nothing.
+    const cancelled = awaitRunTerminal('straggling-burst', 'b1', 'cancel')
+    throwGo.open()
 
-    const tx = expectRan(await within(runPipeline('straggling-burst', ctx), 2000))
+    const tx = expectRan(await within(inflight, 2000))
+    await cancelled
     expect(tx.outcome).toBe('failed')
     expect(await happeningIds(ctx)).toEqual([])
 
@@ -348,19 +374,66 @@ describe('a no-gate run holds the branch write lock through its write phase', ()
     await pause(50)
     expect(dispatched).toEqual(['hap_early'])
     expect(await happeningIds(ctx)).toEqual([])
+    expect(await positionsOf(ctx, tx.actionId)).toEqual([])
     await committedAt(userWrite(ctx, 'hap_user').write)
   })
 
-  // The failed branch's own result, not a refused sibling write, is what the run reports.
-  it("drops a sibling's write after a branch failed, and reports the branch's failure", async () => {
+  // The hook runs after the reversal and before the run leaves; a straggler writing then takes a
+  // fresh hold, which leaving the run must free.
+  it('frees the branch when the run leaves after its exception hook', async () => {
     const { ctx } = await makeHarness()
-    const dispatched: string[] = []
-    configurePort({
-      applyDeltaAction: (args, applyCtx) => {
-        if (args.action.kind === 'createHappening') dispatched.push(args.action.payload.entry.id)
-        return applyDeltaAction(args, applyCtx)
+    const wrote = gate()
+    const throwGo = gate()
+    const lateGo = gate()
+    const hookEntered = gate()
+    const hookGo = gate()
+    async function* thrower(): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
+      yield { type: 'delta_emitted', action: happening('hap_early', 'periodic_classifier') }
+      wrote.open()
+      await throwGo.opened
+      throw new Error('branch exploded')
+    }
+    async function* straggler(): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
+      await lateGo.opened
+      yield { type: 'delta_emitted', action: happening('hap_late', 'periodic_classifier') }
+      return { status: 'completed' }
+    }
+    definePipeline({
+      kind: 'hooked-burst',
+      phases: [
+        {
+          name: 'group',
+          parallel: [
+            { name: 'a', run: thrower },
+            { name: 'b', run: straggler },
+          ],
+        },
+      ],
+      affordance: 'invisible',
+      gateBehavior: 'no-gate',
+      concurrencyPolicy: {},
+      onPhaseException: async () => {
+        hookEntered.open()
+        await hookGo.opened
       },
     })
+    const inflight = runPipeline('hooked-burst', ctx)
+    await wrote.opened
+    throwGo.open()
+    await hookEntered.opened
+    lateGo.open()
+    await pause(50)
+
+    hookGo.open()
+    expect(expectRan(await within(inflight, 2000)).outcome).toBe('failed')
+    await committedAt(userWrite(ctx, 'hap_user').write)
+  })
+
+  // generation-pipeline.md → Parallel-group event coordination: after a branch fails, the other
+  // branches' in-flight deltas absorb normally and the reversal takes them.
+  it("absorbs a sibling's write after a branch failed, reverses it, and reports the failure", async () => {
+    const { ctx } = await makeHarness()
+    const dispatched = spyOnDispatches()
     const failedAt = gate()
     async function* failing(): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
       yield { type: 'delta_emitted', action: happening('hap_early', 'periodic_classifier') }
@@ -392,8 +465,9 @@ describe('a no-gate run holds the branch write lock through its write phase', ()
     const tx = expectRan(await within(runPipeline('failing-group', ctx), 2000))
     expect(tx.outcome).toBe('failed')
     expect(tx.error).toEqual({ kind: 'phase-logic', detail: 'branch a gave up' })
-    expect(dispatched).toEqual(['hap_early'])
+    expect(dispatched).toEqual(['hap_early', 'hap_late'])
     expect(await happeningIds(ctx)).toEqual([])
+    expect(await positionsOf(ctx, tx.actionId)).toEqual([])
     await committedAt(userWrite(ctx, 'hap_user').write)
   })
 
@@ -404,10 +478,11 @@ describe('a no-gate run holds the branch write lock through its write phase', ()
     const inflight = runPipeline('burst', ctx)
     burst.modelCall.open()
     await burst.firstLanded.opened
-    generationStore.getTxState().runs.forEach((run) => run.abortController.abort())
+    const cancelled = awaitRunTerminal('burst', 'b1', 'cancel')
 
     burst.midBurst.open()
     const tx = expectRan(await inflight)
+    await cancelled
     expect(tx.outcome).toBe('completed')
     expect(await happeningIds(ctx)).toEqual(['hap_run_1', 'hap_run_2'])
   })
@@ -415,10 +490,10 @@ describe('a no-gate run holds the branch write lock through its write phase', ()
 
 describe('a hard-gate run takes no write hold', () => {
   beforeEach(() => {
-    resetAll()
+    resetSingletons()
     registerAllDomains()
   })
-  afterEach(() => resetAll())
+  afterEach(() => resetSingletons())
 
   it("lets another run's write through mid-burst", async () => {
     const { ctx } = await makeHarness()
