@@ -250,7 +250,10 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   canonical entity and let the cascade remove the loser's originals, or
   some other shape? Whatever 4.2c settles on,
   [`world.md → Reversibility`](../../../../ui/screens/world/world.md#reversibility)'s
-  merge write list must be amended to match.
+  merge write list must be amended to match. New rows plus the cascade
+  means more rows a delete captures, so settle
+  [the reversal and delete-payload gap](../../../../followups.md#data-model)
+  before planning this slice.
 - **Reuse the delete confirm's link counts** (4.2b):
   `components/world/delete-impact.ts` repeats the entity cascade's
   awareness / involvement / relationship predicates against the
