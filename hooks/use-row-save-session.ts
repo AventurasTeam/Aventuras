@@ -193,9 +193,9 @@ export function useRowSaveSession<Draft extends FieldValues>({
       formState: { values: true },
       callback: ({ values: draft }) => {
         const run = ++latest
-        Promise.resolve(
-          resolver(draft, undefined, { fields: {}, shouldUseNativeValidation: false }),
-        )
+        // Inside the chain: Resolver may be synchronous, and a sync throw would skip the catch.
+        Promise.resolve()
+          .then(() => resolver(draft, undefined, { fields: {}, shouldUseNativeValidation: false }))
           .then((result) => {
             if (run === latest) setDraftIssue(firstIssue(result.errors))
           })

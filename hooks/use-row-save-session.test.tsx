@@ -646,6 +646,19 @@ describe('useRowSaveSession', () => {
     ])
   })
 
+  it('logs a resolver that throws synchronously instead of throwing out of the edit', async () => {
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const resolver: Resolver<Draft> = () => {
+      throw new Error('refine bug')
+    }
+    const hook = setup(okCommit(), undefined, { resolver })
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    await vi.waitFor(() =>
+      expect(error).toHaveBeenCalledWith('app.row_save_validate_failed', expect.anything()),
+    )
+    expect(hook.result.current.form.getValues('note')).toBe('x')
+  })
+
   it('reads as saving from the start of validation, matching the ignored discard', async () => {
     let release: () => void = () => {}
     const gate = new Promise<void>((resolve) => {
