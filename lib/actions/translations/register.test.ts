@@ -227,6 +227,7 @@ describe('translations CRUD arms', () => {
       translationsStore.getTranslation('entity', 'char_1', 'description', 'es'),
     ).toBeUndefined()
   })
+
   it('create no-ops when its target row is gone (no row, no delta)', async () => {
     const { db, ctx } = await setup()
 

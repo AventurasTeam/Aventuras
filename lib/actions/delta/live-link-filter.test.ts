@@ -15,7 +15,9 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 
 import { capturedChildren } from './delete-cascade'
 import { liveLinkFilter } from './live-link-filter'
-import { resolveByTable } from './registry'
+import { __resetRegistrationGuard, registerAllDomains } from './registrations'
+import { __resetRegistry, resolveByTable } from './registry'
+import { registerEntities } from '../entities/register'
 import type { DbCtx } from '../types'
 
 let ctx: DbCtx
@@ -192,5 +194,20 @@ describe('liveLinkFilter', () => {
     // entry_new is live now but the plan's create removes it; entry_old is gone but its delete
     // in the plan restores it.
     expect(ids(filter('b1', capturedBy(del)))).toMatchObject({ translations: ['tr_old'] })
+  })
+
+  it('throws for a captured row naming a table nothing registered', async () => {
+    const del = entityDelete({ translations: [translation('tr_lore', 'lore', 'lore_1')] })
+    __resetRegistry()
+    // Only the deleted row's table stays registered, so its cascade still captures the translation.
+    registerEntities()
+    try {
+      await expect(liveLinkFilter([del], ctx)).rejects.toThrow(
+        'liveLinkFilter: lore is not a registered table',
+      )
+    } finally {
+      __resetRegistrationGuard()
+      registerAllDomains()
+    }
   })
 })

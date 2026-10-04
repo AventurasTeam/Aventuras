@@ -185,6 +185,44 @@ describe('applyDeltaActionGroup — a delete and a write naming what it removes'
     expect(await ctx.db.select().from(translations)).toEqual([])
   })
 
+  it('rejects a translation create naming a relationship the group cascades', async () => {
+    await ctx.db.insert(characterRelationships).values({
+      id: 'rel_1',
+      branchId: 'b1',
+      aId: 'char_keep',
+      bId: 'char_lose',
+      kind: 'ally',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    const before = await snapshot()
+
+    const result = await group([
+      deleteEntity('char_lose'),
+      {
+        kind: 'createTranslation',
+        source: 'user_edit',
+        payload: {
+          entry: {
+            id: 'tr_new',
+            branchId: 'b1',
+            targetKind: 'character_relationship',
+            targetId: 'rel_1',
+            field: 'kind',
+            language: 'es',
+            translatedText: 'aliado',
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        },
+      },
+    ])
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'group-conflict' })
+    expect(await snapshot()).toEqual(before)
+    expect(await ctx.db.select().from(translations)).toEqual([])
+  })
+
   it('rejects two deletes whose cascades both take one link row', async () => {
     await ctx.db.insert(characterRelationships).values({
       id: 'rel_1',
