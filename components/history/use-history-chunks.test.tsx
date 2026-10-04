@@ -110,12 +110,22 @@ describe('useHistoryChunks', () => {
     const { load, calls } = manualLoader()
     const { hook } = setup(load)
     await waitFor(() => expect(calls).toHaveLength(1))
-    const sixty = Array.from({ length: 60 }, (_, i) => row(100 - i))
-    await act(async () => calls[0].resolve({ rows: sixty, nextCursor: 41 }))
+    const firstPage = Array.from({ length: 50 }, (_, i) => row(100 - i))
+    await act(async () => calls[0].resolve({ rows: firstPage, nextCursor: 51 }))
+    act(() => hook.result.current.loadMore())
+    await waitFor(() => expect(calls).toHaveLength(2))
+    expect(calls[1].query).toEqual(expect.objectContaining({ cursor: 51 }))
+    await act(async () =>
+      calls[1].resolve({
+        rows: Array.from({ length: 10 }, (_, i) => row(50 - i)),
+        nextCursor: null,
+      }),
+    )
+    expect(hook.result.current.rows).toHaveLength(60)
 
     hook.rerender({ search: '', version: {} })
-    await waitFor(() => expect(calls).toHaveLength(2))
-    expect(calls[1].query).toEqual(expect.objectContaining({ cursor: null, limit: 60 }))
+    await waitFor(() => expect(calls).toHaveLength(3))
+    expect(calls[2].query).toEqual(expect.objectContaining({ cursor: null, limit: 60 }))
   })
 
   it('keeps the shown rows when a version refresh fails, and logs it', async () => {
