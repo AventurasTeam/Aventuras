@@ -365,6 +365,10 @@ export const Blocked: Story = {
   args: { blocked: true },
   play: async () => {
     expect(await screen.findByText('What the amulet wants')).toBeVisible()
+    expect(screen.getByText('What the amulet wants').closest('[title]')).toHaveAttribute(
+      'title',
+      BLOCKED_REASON,
+    )
     expect(screen.queryByRole('button', { name: /^Edit / })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Status' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Status' }).closest('[title]')).toHaveAttribute(

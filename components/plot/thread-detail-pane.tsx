@@ -125,6 +125,7 @@ export function ThreadDetailPane({
                   placeholder={t('plot:detail.namePlaceholder')}
                   size="lg"
                   disabled={blocked}
+                  disabledReason={blockedReason}
                 />
               )}
             />

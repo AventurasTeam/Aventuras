@@ -720,6 +720,10 @@ export const Blocked: Story = {
   args: { blocked: true },
   play: async () => {
     expect(await pane().findByText('The alley ambush')).toBeVisible()
+    expect(pane().getByText('The alley ambush').closest('[title]')).toHaveAttribute(
+      'title',
+      BLOCKED_REASON,
+    )
     expect(pane().queryByRole('button', { name: /^Edit / })).not.toBeInTheDocument()
     expect(description()).toHaveAttribute('readonly')
     const category = pane().getByRole('combobox', { name: 'Category' })
