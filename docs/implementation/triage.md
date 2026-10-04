@@ -191,7 +191,7 @@ slice-planning gate forces its resolution before that slice is planned.
   reproduced (2026-10-04, raised by the post-4.2b triage pass).
 - **The composer's Send-blocked tooltip copy isn't principle-owned.**
   While suggestions refresh, Send's reason reads
-  `reader:composer.blockedWhileGenerating` ("Unavailable while
+  `reader:actions.blockedWhileGenerating` ("Unavailable while
   generating."), but disabled-control tooltip copy is principle-owned
   ([`principles.md → Affordance loci`](../ui/principles.md#affordance-loci))
   and its table has rows for per-turn and chapter-close only. Add a
