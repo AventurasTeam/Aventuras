@@ -115,16 +115,6 @@ slice-planning gate forces its resolution before that slice is planned.
   alternative already shipped. Pattern-wide — every AlertDialog
   consumer with an impact list, not just World / Plot delete. Read,
   not verified with a screen reader (2026-09-28, raised by 4.2b).
-- **The composer's Send-blocked reason is invisible to sighted Android
-  users.** While a turn generates or suggestions refresh, the reader
-  passes `sendBlocked` and the "blocked while generating" reason
-  reaches only Send's tooltip and `accessibilityHint`; web shows it on
-  hover or focus, native shows nothing on screen. Canon keeps it off
-  the visible reason line
-  ([`principles.md → What's not gated`](../ui/principles.md#whats-not-gated)
-  and its disabled-controls tooltip rule under
-  [Affordance loci](../ui/principles.md#affordance-loci)); the gap is
-  native-only and pre-existing (2026-09-28, raised by 4.2b review).
 - **A link an entity delete captured can come back with no delta.**
   An entity delete keeps the link rows it cascades only in its own undo
   payload. When a later reversal removes the machine write that created
@@ -199,3 +189,11 @@ slice-planning gate forces its resolution before that slice is planned.
   visual changes overwrite, so a repeat is harmless; stackable amounts
   add, so a transfer both layers report lands twice. Read, not
   reproduced (2026-10-04, raised by the post-4.2b triage pass).
+- **The composer's Send-blocked tooltip copy isn't principle-owned.**
+  While suggestions refresh, Send's reason reads
+  `reader:composer.blockedWhileGenerating` ("Unavailable while
+  generating."), but disabled-control tooltip copy is principle-owned
+  ([`principles.md → Affordance loci`](../ui/principles.md#affordance-loci))
+  and its table has rows for per-turn and chapter-close only. Add a
+  suggestion-refresh row and cite it, or reuse the per-turn copy
+  (2026-10-04, raised by the post-4.2b triage pass).

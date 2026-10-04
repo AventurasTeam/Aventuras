@@ -228,7 +228,7 @@ export const Composer = forwardRef(function Composer(
             <Button
               variant="primary"
               disabled={sendDisabled}
-              accessibilityHint={disabled || sendBlocked ? disabledReason : undefined}
+              disabledReason={disabled || sendBlocked ? disabledReason : undefined}
               onPress={handleSubmit}
             >
               <Text>{t('reader:send')}</Text>

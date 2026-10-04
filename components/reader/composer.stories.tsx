@@ -47,6 +47,25 @@ export const SendBlocked: Story = {
     sendBlocked: true,
     disabledReason: 'Unavailable while generating.',
   },
+  play: async ({ canvas }) => {
+    const send = canvas.getByRole('button', { name: 'Send' })
+    await expect(send).toBeDisabled()
+    await expect(send.parentElement?.getAttribute('title')).toBe('Unavailable while generating.')
+  },
+}
+
+/** An empty draft disables Send with nothing to explain, so the gate's reason stays off it. */
+export const EmptyDraftShowsNoReason: Story = {
+  args: {
+    modesEnabled: false,
+    isGenerating: false,
+    disabledReason: 'Unavailable while generating.',
+  },
+  play: async ({ canvas }) => {
+    const send = canvas.getByRole('button', { name: 'Send' })
+    await expect(send).toBeDisabled()
+    await expect(send.parentElement?.getAttribute('title')).toBeNull()
+  },
 }
 
 /**
