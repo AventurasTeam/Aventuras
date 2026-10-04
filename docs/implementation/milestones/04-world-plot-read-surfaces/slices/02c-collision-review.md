@@ -164,6 +164,10 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   the row's own deltas; a link row removed on its own still lists its
   edits on those tabs, found through its delete delta's payload
   (vitest on the History query over fixtures).
+- The `Deleted` op chip on a character's History tab returns a
+  relationship row removed on its own, its first per-row match: a row's
+  own delete can't be opened, and undoing it prunes the delta (vitest
+  on the History query over fixtures).
 
 ## Tests
 
@@ -278,8 +282,8 @@ to clear before wiring: `collision-resolve-diff.ts` declares
     term against the labels of the table a delta belongs to. The op
     chips then count link rows too: `Created` on a character's tab
     would also list the relationships made, and `Deleted` gets its
-    first per-row matches (closing its [`triage.md`](../../../triage.md)
-    entry). The search bullet's "`target_table` is never matched,
+    first per-row matches (pinned in
+    [Acceptance criteria](#acceptance-criteria)). The search bullet's "`target_table` is never matched,
     since it's constant within a per-row tab" in
     [`world.md → History tab`](../../../../ui/screens/world/world.md#history-tab)
     and C4's single-target query stop holding; amend both with the

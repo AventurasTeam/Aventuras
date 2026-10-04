@@ -125,14 +125,6 @@ slice-planning gate forces its resolution before that slice is planned.
   alternative already shipped. Pattern-wide — every AlertDialog
   consumer with an impact list, not just World / Plot delete. Read,
   not verified with a screen reader (2026-09-28, raised by 4.2b).
-- **The History tab's `Deleted` op chip likely never matches in a
-  per-row tab.** A deleted row can't be selected to open its
-  History tab, and undoing its delete prunes the delta, so no row's
-  History tab is likely to ever see a `Deleted` chip produce a result —
-  until 4.2c's
-  [link-row union](./milestones/04-world-plot-read-surfaces/slices/02c-collision-review.md#scope-in)
-  or a global delta surface (Diagnostics Hub delta log) lands. Read,
-  not verified (2026-09-28, raised by 4.2b).
 - **The composer's Send-blocked reason is invisible to sighted Android
   users.** While a turn generates or suggestions refresh, the reader
   passes `sendBlocked` and the "blocked while generating" reason
