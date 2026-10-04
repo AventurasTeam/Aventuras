@@ -62,8 +62,9 @@ to review (`git diff --stat <base>..<head>`, then `git diff <base>..<head>`).
   gap. An expectation derived from the constant under test is one too. On a range of many tasks,
   check the assertions that guard the riskiest behaviour. Never mutate files in a working tree
   another agent is mutating, and leave the working tree as you found it: `git status` shows no change of yours when you finish.
-- **Keep to the change.** A problem the change didn't introduce goes under Outside this change,
-  not under Issues: the controller routes those to triage.
+- **Keep to the change.** A pre-existing problem in code or docs the change didn't write goes under
+  Outside this change, not under Issues: the controller routes those to triage. A case the change's
+  own code leaves unhandled is an Issue, even when its cause sits in code the change calls.
 
 ## Calibration
 
