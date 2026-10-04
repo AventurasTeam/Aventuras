@@ -125,15 +125,6 @@ slice-planning gate forces its resolution before that slice is planned.
   alternative already shipped. Pattern-wide — every AlertDialog
   consumer with an impact list, not just World / Plot delete. Read,
   not verified with a screen reader (2026-09-28, raised by 4.2b).
-- **A creative third-person story whose lead is its only character can
-  never delete that character.** Creative + third-person is the one
-  mode/narration combination where a lead is optional
-  ([`data-model.md → Story settings shape`](../data-model.md#story-settings-shape)),
-  but once one is set, deleting it is refused (`lead-entity`) and
-  `setStoryLead` has no path to clear it back to null. M6's
-  per-branch, delta-logged lead
-  ([roadmap.md](./roadmap.md#m6--branches--diff-cache)) is the likely
-  home (2026-09-28, raised by 4.2b).
 - **The History tab's `Deleted` op chip likely never matches in a
   per-row tab.** A deleted row can't be selected to open its
   History tab, and undoing its delete prunes the delta, so no row's
