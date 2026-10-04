@@ -100,7 +100,9 @@ export function Button({
       <TextClassContext.Provider value={buttonTextVariants({ variant, size })}>
         <Pressable
           accessibilityRole="button"
-          accessibilityState={{ disabled: !!isDisabled, busy: !!loading }}
+          // RN Web drops accessibilityState; native maps aria-busy onto it.
+          accessibilityState={{ disabled: !!isDisabled }}
+          aria-busy={loading ? true : undefined}
           accessibilityHint={isDisabled ? disabledReason : undefined}
           disabled={isDisabled ?? undefined}
           className={cn(isDisabled && 'opacity-50', buttonVariants({ variant, size }), className)}

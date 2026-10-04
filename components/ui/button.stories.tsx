@@ -83,6 +83,12 @@ export const States: Story = {
       </Button>
     </View>
   ),
+  play: async ({ canvas }) => {
+    const [idle, disabled, loading] = canvas.getAllByRole('button')
+    await expect(idle).not.toHaveAttribute('aria-busy')
+    await expect(disabled).not.toHaveAttribute('aria-busy')
+    await expect(loading).toHaveAttribute('aria-busy', 'true')
+  },
 }
 
 const BLOCKED_REASON = 'Generation in progress'

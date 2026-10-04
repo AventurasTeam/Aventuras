@@ -76,16 +76,6 @@ slice-planning gate forces its resolution before that slice is planned.
   Options: drop `settleCount` from the version, or keep rows during
   a version-only reload and refetch up to the loaded count. Read,
   not reproduced (2026-09-28, raised by 4.2b).
-- **`Button`'s `loading` state doesn't reach assistive tech on
-  web.** React Native Web drops `accessibilityState.busy`, so no
-  `aria-busy` renders. Seen testing History's Load older: the button
-  disables and shows a progressbar spinner, with nothing announcing
-  "busy" to a screen reader. Canon already commits to `aria-busy`
-  on a busy control — [`import-dialog.md` →
-  Accessibility](../ui/patterns/import-dialog.md#accessibility)
-  requires `aria-busy="true"` (web) on its own spinner/reading
-  state — so this is a deviation across every `loading` consumer of
-  `Button`, not a History-specific gap (2026-09-28, raised by 4.2b).
 - **Plot panes keep their tab when `[+] Blank` starts a create.**
   Thread and happening panes hold the tab in
   `useState(initialTab ?? 'overview')`, without the render-time
