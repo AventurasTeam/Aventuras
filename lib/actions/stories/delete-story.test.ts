@@ -17,6 +17,7 @@ import {
   lore,
   pipelineRuns,
   probeCaptures,
+  sourceHash,
   stories,
   storyEntries,
   threads,
@@ -27,6 +28,7 @@ import {
   vaultCalendars,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { plantVec } from '@/lib/db/__tests__/vec-fixtures'
 import { embedderSwapStore, rehydrateStories, storiesStore } from '@/lib/stores'
 
 import { BRANCH_SCOPED, deleteStory } from './delete-story'
@@ -194,11 +196,15 @@ describe('deleteStory — vec0 cleanup', () => {
     for (const stmt of ensureVecTablesSql(768)) sqlite.exec(stmt)
     for (const dim of [384, 768]) {
       for (const story of ['victim', 'survivor']) {
-        sqlite.exec(
-          `INSERT INTO entities_vec_${dim} (pk, branch_id, model_id, id, source_hash, embedding)
-           VALUES ('br_${story}:c_${story}', 'br_${story}', 'm', 'c_${story}', 'h',
-           vec_f32('[${Array(dim).fill('0.1').join(',')}]'))`,
-        )
+        plantVec(sqlite, {
+          kind: 'entity',
+          id: `c_${story}`,
+          branchId: `br_${story}`,
+          modelId: 'm',
+          dim,
+          sourceHash: sourceHash('h'),
+          vector: new Uint8Array(new Float32Array(dim).fill(0.1).buffer),
+        })
       }
     }
   }

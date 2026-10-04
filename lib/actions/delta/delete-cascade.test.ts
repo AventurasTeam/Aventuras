@@ -3,8 +3,9 @@ import type { DatabaseSync } from 'node:sqlite'
 import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
-import { branches, ensureVecTablesSql, stories, translations } from '@/lib/db'
+import { branches, ensureVecTablesSql, sourceHash, stories, translations } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { plantVec } from '@/lib/db/__tests__/vec-fixtures'
 
 import {
   capturedChildren,
@@ -26,12 +27,16 @@ async function setup() {
   return { db, sqlite, ctx: { db, runInTransaction } }
 }
 
-function insertVector(sqlite: DatabaseSync, table: string, dim: number, id: string): void {
-  sqlite
-    .prepare(
-      `INSERT INTO ${table} (pk, branch_id, model_id, id, source_hash, embedding) VALUES (?, ?, ?, ?, ?, ?)`,
-    )
-    .run(`b1:${id}:m${dim}`, 'b1', `m${dim}`, id, 'h', new Uint8Array(new Float32Array(dim).buffer))
+function insertVector(sqlite: DatabaseSync, dim: number, id: string): void {
+  plantVec(sqlite, {
+    kind: 'entity',
+    id,
+    branchId: 'b1',
+    modelId: `m${dim}`,
+    dim,
+    sourceHash: sourceHash('h'),
+    vector: new Uint8Array(new Float32Array(dim).buffer),
+  })
 }
 
 function vectorIds(sqlite: DatabaseSync): string[] {
@@ -44,9 +49,9 @@ function vectorIds(sqlite: DatabaseSync): string[] {
 describe('vecSweepOps', () => {
   it('removes one embedded row from every dim family and leaves its neighbours', async () => {
     const { sqlite, ctx } = await setup()
-    insertVector(sqlite, 'entities_vec_384', 384, 'char_1')
-    insertVector(sqlite, 'entities_vec_8', 8, 'char_1')
-    insertVector(sqlite, 'entities_vec_8', 8, 'char_2')
+    insertVector(sqlite, 384, 'char_1')
+    insertVector(sqlite, 8, 'char_1')
+    insertVector(sqlite, 8, 'char_2')
 
     await ctx.runInTransaction(await vecSweepOps('entity', 'b1', 'char_1', vecTableLister(ctx)))
 
@@ -66,7 +71,7 @@ describe('vecSweepOps', () => {
     await lister1()
 
     for (const ddl of ensureVecTablesSql(16)) sqlite.exec(ddl)
-    insertVector(sqlite, 'entities_vec_16', 16, 'char_3')
+    insertVector(sqlite, 16, 'char_3')
 
     const lister2 = vecTableLister(ctx)
     await ctx.runInTransaction(await vecSweepOps('entity', 'b1', 'char_3', lister2))
@@ -137,18 +142,15 @@ describe('translationCascade', () => {
     await db.insert(translations).values([row('b1'), row('b2')])
 
     const insertLoreVector = (branchId: string) =>
-      sqlite
-        .prepare(
-          `INSERT INTO lore_vec_8 (pk, branch_id, model_id, id, source_hash, embedding) VALUES (?, ?, ?, ?, ?, ?)`,
-        )
-        .run(
-          `${branchId}:lore_1:m8`,
-          branchId,
-          'm8',
-          'lore_1',
-          'h',
-          new Uint8Array(new Float32Array(8).buffer),
-        )
+      plantVec(sqlite, {
+        kind: 'lore',
+        id: 'lore_1',
+        branchId,
+        modelId: 'm8',
+        dim: 8,
+        sourceHash: sourceHash('h'),
+        vector: new Uint8Array(new Float32Array(8).buffer),
+      })
     insertLoreVector('b1')
     insertLoreVector('b2')
 

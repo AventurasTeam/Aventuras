@@ -5,7 +5,9 @@ import { beforeEach, describe, expect, it } from 'vitest'
 
 import { knnQuery, unpackFloat32 } from './knn'
 import { packFloat32 } from './ops'
+import { sourceHash } from './source-hash'
 import { ensureVecTables } from './vec-tables'
+import { plantVec } from '../__tests__/vec-fixtures'
 
 const unit = (...xs: number[]): Float32Array => {
   const v = Float32Array.from(xs)
@@ -78,9 +80,15 @@ describe('knnQuery against a real DB', () => {
   const vec = (...xs: number[]): Uint8Array => packFloat32(Float32Array.from(xs))
 
   const seed = (branchId: string, modelId: string, id: string, ...xs: number[]): void => {
-    db.prepare(
-      'insert into lore_vec_4 (pk, branch_id, model_id, id, source_hash, embedding) values (?, ?, ?, ?, ?, ?)',
-    ).run(`${branchId}:${id}:${modelId}`, branchId, modelId, id, 'h', vec(...xs))
+    plantVec(db, {
+      kind: 'lore',
+      id,
+      branchId,
+      modelId,
+      dim: DIM,
+      sourceHash: sourceHash('h'),
+      vector: vec(...xs),
+    })
   }
 
   const run = (k: number) => {

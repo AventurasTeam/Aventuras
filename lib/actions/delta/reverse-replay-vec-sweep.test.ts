@@ -2,8 +2,18 @@ import type { DatabaseSync } from 'node:sqlite'
 
 import { describe, expect, it } from 'vitest'
 
-import { branches, ensureVecTablesSql, entities, lore, stories, type Delta } from '@/lib/db'
+import {
+  branches,
+  ensureVecTablesSql,
+  entities,
+  lore,
+  sourceHash,
+  stories,
+  type Delta,
+  type VecTargetKind,
+} from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { plantVec } from '@/lib/db/__tests__/vec-fixtures'
 
 import { buildReverseAndPrunePlan, reverseAndPruneDeltaRows } from './reverse-replay'
 
@@ -25,20 +35,17 @@ function insertVector(
   branchId: string,
   dim: number,
   id: string,
-  family = 'entities_vec',
+  kind: VecTargetKind = 'entity',
 ): void {
-  sqlite
-    .prepare(
-      `INSERT INTO ${family}_${dim} (pk, branch_id, model_id, id, source_hash, embedding) VALUES (?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      `${branchId}:${id}:m${dim}`,
-      branchId,
-      `m${dim}`,
-      id,
-      'h',
-      new Uint8Array(new Float32Array(dim).buffer),
-    )
+  plantVec(sqlite, {
+    kind,
+    id,
+    branchId,
+    modelId: `m${dim}`,
+    dim,
+    sourceHash: sourceHash('h'),
+    vector: new Uint8Array(new Float32Array(dim).buffer),
+  })
 }
 
 describe('reverse-replay of a create', () => {
@@ -51,6 +58,15 @@ describe('reverse-replay of a create', () => {
     for (const dim of [384, 8]) {
       insertVector(sqlite, 'b1', dim, 'char_1')
     }
+    const vectorCount = (): number =>
+      (
+        sqlite
+          .prepare(
+            `SELECT (SELECT count(*) FROM entities_vec_384) + (SELECT count(*) FROM entities_vec_8) AS n`,
+          )
+          .all() as { n: number }[]
+      )[0].n
+    expect(vectorCount()).toBe(2)
 
     await reverseAndPruneDeltaRows(
       [
@@ -72,12 +88,7 @@ describe('reverse-replay of a create', () => {
       { db, runInTransaction },
     )
 
-    const left = sqlite
-      .prepare(
-        `SELECT (SELECT count(*) FROM entities_vec_384) + (SELECT count(*) FROM entities_vec_8) AS n`,
-      )
-      .all() as { n: number }[]
-    expect(left[0].n).toBe(0)
+    expect(vectorCount()).toBe(0)
   })
 
   it('sweeps several created rows with one statement per family table', async () => {
@@ -99,7 +110,7 @@ describe('reverse-replay of a create', () => {
     })
     for (const dim of [384, 8]) {
       for (const id of ids) insertVector(sqlite, 'b1', dim, id)
-      insertVector(sqlite, 'b1', dim, 'lore_1', 'lore_vec')
+      insertVector(sqlite, 'b1', dim, 'lore_1', 'lore')
     }
     insertVector(sqlite, 'b2', 8, 'char_1')
     const creates: Delta[] = [...ids, 'lore_1'].map((id, i) => ({

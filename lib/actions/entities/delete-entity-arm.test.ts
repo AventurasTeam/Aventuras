@@ -12,6 +12,7 @@ import {
   happeningAwareness,
   happeningInvolvements,
   happenings,
+  sourceHash,
   stories,
   translations,
   type Delta,
@@ -19,6 +20,7 @@ import {
   type StoryDefinition,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { plantVec } from '@/lib/db/__tests__/vec-fixtures'
 import { characterRelationshipsStore } from '@/lib/stores'
 
 import { applyDeltaAction } from '../delta/apply-delta-action'
@@ -255,20 +257,20 @@ describe('deleteEntity', () => {
 
   it('sweeps the entity own vectors forward, restores it stale on undo, and sweeps again on redo', async () => {
     for (const ddl of ensureVecTablesSql(8)) sqlite.exec(ddl)
-    for (const dim of [384, 8]) {
-      sqlite
-        .prepare(
-          `INSERT INTO entities_vec_${dim} (pk, branch_id, model_id, id, source_hash, embedding) VALUES (?, ?, ?, ?, ?, ?)`,
-        )
-        .run(
-          `b1:char_x:m${dim}`,
-          'b1',
-          `m${dim}`,
-          'char_x',
-          'h',
-          new Uint8Array(new Float32Array(dim).buffer),
-        )
+    const plantVectors = (): void => {
+      for (const dim of [384, 8]) {
+        plantVec(sqlite, {
+          kind: 'entity',
+          id: 'char_x',
+          branchId: 'b1',
+          modelId: `m${dim}`,
+          dim,
+          sourceHash: sourceHash('h'),
+          vector: new Uint8Array(new Float32Array(dim).buffer),
+        })
+      }
     }
+    plantVectors()
     const vectorCount = (): number => {
       const rows = sqlite
         .prepare(
@@ -292,20 +294,7 @@ describe('deleteEntity', () => {
     const [restored] = await ctx.db.select().from(entities).where(eq(entities.id, 'char_x'))
     expect(restored.embeddingStale).toBe(1)
 
-    for (const dim of [384, 8]) {
-      sqlite
-        .prepare(
-          `INSERT INTO entities_vec_${dim} (pk, branch_id, model_id, id, source_hash, embedding) VALUES (?, ?, ?, ?, ?, ?)`,
-        )
-        .run(
-          `b1:char_x:m${dim}`,
-          'b1',
-          `m${dim}`,
-          'char_x',
-          'h',
-          new Uint8Array(new Float32Array(dim).buffer),
-        )
-    }
+    plantVectors()
     await applyRedo(snapshot, ctx)
     expect(vectorCount()).toBe(0)
   })

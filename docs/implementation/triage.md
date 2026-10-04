@@ -261,13 +261,6 @@ slice-planning gate forces its resolution before that slice is planned.
   as `commitRowDelete` does, and exhaustive copy tables. The save paths
   predate 4.2b, so the follow-up left them (2026-09-30, raised by the
   4.2b type-design follow-up).
-- **About eight tests hand-write the vec0 insert that `plantVec` now
-  provides.** `lib/db/__tests__/vec-fixtures.ts` plants a vector with
-  no source check; the delete-cascade, entity-delete, story-delete, KNN
-  and vec0-migration tests and `e2e/harness/db.ts` each spell the same
-  `INSERT` out. The `lib/` ones could adopt it; none was in the
-  follow-up's range (2026-09-30, raised by the 4.2b type-design
-  follow-up).
 - **Keyword-seated rows leave the pool before MMR, so they never
   enter its selected set.** `rankPerType` (`lib/retrieval/ranker.ts`)
   filters seated rows out before `mmrRank`, so a near-duplicate of a
