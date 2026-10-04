@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { Delta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
-import type { HistoryQuery } from '@/lib/history'
+import { HISTORY_CHUNK_SIZE, type HistoryQuery } from '@/lib/history'
 import { t } from '@/lib/i18n'
 import { toast } from '@/lib/toast'
 
@@ -17,7 +17,6 @@ const LOADING: ChunkState = { rows: [], nextCursor: null, status: 'loading' }
 type Request = {
   load: HistoryLoader
   query: Omit<HistoryQuery, 'cursor' | 'limit'>
-  version: unknown
   attempt: number
 }
 
@@ -34,8 +33,9 @@ function message(error: unknown): string {
 }
 
 /**
- * patterns/lists.md → Load-older: reloads from the first chunk whenever the query or `version`'s
- * identity changes, so `version` must be memoized; a fresh one per render never settles.
+ * patterns/lists.md → Load-older: a query change reloads from the first chunk. A `version` identity
+ * change refetches as many rows as are loaded and swaps them in, keeping the shown rows meanwhile,
+ * so `version` must be memoized; a fresh one per render never settles.
  */
 export function useHistoryChunks(
   query: Omit<HistoryQuery, 'cursor' | 'limit'>,
@@ -52,44 +52,58 @@ export function useHistoryChunks(
     () => ({
       load,
       query: { branchId, targetTable, targetId, op, search, sort },
-      version,
       attempt,
     }),
-    [load, branchId, targetTable, targetId, op, search, sort, version, attempt],
+    [load, branchId, targetTable, targetId, op, search, sort, attempt],
   )
   // A superseded read can still land between the new request's commit and the effect cleanup
   // that orphans it, so rows carry the request they were read for and show only under it.
   const state: ChunkState = applied?.for === request ? applied : LOADING
+  const appliedRef = useRef(applied)
+  useEffect(() => {
+    appliedRef.current = applied
+  }, [applied])
 
   // Read the query only through `request`: its identity is what resets the rows.
   useEffect(() => {
     const mine = ++generation.current
-    loadingMore.current = false
-    request.load({ ...request.query, cursor: null }).then(
+    // Same request, so only `version` moved: the rows stay up until the refetch replaces them.
+    const kept = appliedRef.current?.for === request ? appliedRef.current : null
+    const refreshing = kept != null && kept.status !== 'failed'
+    // A refresh replaces the rows, so a loadMore landing meanwhile would append to stale ones.
+    loadingMore.current = refreshing
+    const limit = refreshing ? Math.max(HISTORY_CHUNK_SIZE, kept.rows.length) : undefined
+    request.load({ ...request.query, cursor: null, ...(limit != null ? { limit } : {}) }).then(
       (chunk) => {
-        if (generation.current === mine)
-          setApplied({
-            for: request,
-            rows: chunk.rows,
-            nextCursor: chunk.nextCursor,
-            status: 'ready',
-          })
+        if (generation.current !== mine) return
+        loadingMore.current = false
+        setApplied({
+          for: request,
+          rows: chunk.rows,
+          nextCursor: chunk.nextCursor,
+          status: 'ready',
+        })
       },
       (error: unknown) => {
         if (generation.current !== mine) return
+        loadingMore.current = false
         logger.error('app.history_load_failed', {
           targetTable: request.query.targetTable,
           targetId: request.query.targetId,
           error: message(error),
         })
-        setApplied({ for: request, rows: [], nextCursor: null, status: 'failed' })
+        setApplied(
+          refreshing
+            ? { ...kept, status: 'ready' }
+            : { for: request, rows: [], nextCursor: null, status: 'failed' },
+        )
       },
     )
     // Unmount and every reload orphan whatever is still in flight.
     return () => {
       generation.current += 1
     }
-  }, [request])
+  }, [request, version])
 
   const loadMore = useCallback(() => {
     if (loadingMore.current || state.status !== 'ready' || state.nextCursor == null) return

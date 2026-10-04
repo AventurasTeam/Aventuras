@@ -298,6 +298,10 @@ to clear before wiring: `collision-resolve-diff.ts` declares
     naming Aria, so the relationship's edits drop out of her tab
     unless the union also reads cascade payloads. Decide whether it
     does, and how the cascade reads on the surviving end.
+  - **The tab's refresh version.** `HistoryTab` refetches when its
+    target row or `settleCount` changes; a user edit to a link row
+    changes neither, so the union folds the link stores it reads into
+    that version (2026-10-04 triage pass).
   - **Overlap with the merge.** The merge reattaches the loser's link
     rows to the canonical, in a shape the re-key question above leaves
     open. Moved in place, a row names the canonical and brings its

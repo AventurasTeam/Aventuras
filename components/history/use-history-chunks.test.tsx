@@ -4,6 +4,7 @@ import { useLayoutEffect, useState, type ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Delta } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import type { HistoryChunk, HistoryQuery } from '@/lib/history'
 import { toast } from '@/lib/toast'
 
@@ -86,21 +87,71 @@ describe('useHistoryChunks', () => {
     await waitFor(() => expect(hook.result.current.rows.map((r) => r.logPosition)).toEqual([4, 3]))
   })
 
-  it('drops loaded chunks and reloads the first when the version changes', async () => {
-    const { load, hook } = setup()
-    await waitFor(() => expect(hook.result.current.status).toBe('ready'))
+  it('refreshes in place when the version changes, keeping the loaded rows until the refetch lands', async () => {
+    const { load, calls } = manualLoader()
+    const { hook } = setup(load)
+    await waitFor(() => expect(calls).toHaveLength(1))
+    await act(async () => calls[0].resolve({ rows: [row(4), row(3)], nextCursor: 3 }))
     act(() => hook.result.current.loadMore())
-    await waitFor(() =>
-      expect(hook.result.current.rows.map((r) => r.logPosition)).toEqual([4, 3, 2]),
-    )
+    await act(async () => calls[1].resolve({ rows: [row(2)], nextCursor: null }))
 
     hook.rerender({ search: '', version: {} })
-    await waitFor(() => expect(hook.result.current.rows.map((r) => r.logPosition)).toEqual([4, 3]))
-    expect(load).toHaveBeenCalledTimes(3)
-    expect(load).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: null }))
+    expect(hook.result.current.status).toBe('ready')
+    expect(positions(hook.result.current.rows)).toEqual([4, 3, 2])
+    await waitFor(() => expect(calls).toHaveLength(3))
+    expect(calls[2].query).toEqual(expect.objectContaining({ cursor: null, limit: 50 }))
+
+    await act(async () => calls[2].resolve({ rows: [row(5), row(4), row(3)], nextCursor: 3 }))
+    expect(positions(hook.result.current.rows)).toEqual([5, 4, 3])
+    expect(hook.result.current.hasMore).toBe(true)
   })
 
-  it('shows loading with no rows while a changed query or version reloads (same-commit reset: ClearingASearch story)', async () => {
+  it('refetches every loaded row on a version change once more than a chunk is loaded', async () => {
+    const { load, calls } = manualLoader()
+    const { hook } = setup(load)
+    await waitFor(() => expect(calls).toHaveLength(1))
+    const sixty = Array.from({ length: 60 }, (_, i) => row(100 - i))
+    await act(async () => calls[0].resolve({ rows: sixty, nextCursor: 41 }))
+
+    hook.rerender({ search: '', version: {} })
+    await waitFor(() => expect(calls).toHaveLength(2))
+    expect(calls[1].query).toEqual(expect.objectContaining({ cursor: null, limit: 60 }))
+  })
+
+  it('keeps the shown rows when a version refresh fails, and logs it', async () => {
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const { load, calls } = manualLoader()
+    const { hook } = setup(load)
+    await waitFor(() => expect(calls).toHaveLength(1))
+    await act(async () => calls[0].resolve({ rows: [row(4), row(3)], nextCursor: 3 }))
+
+    hook.rerender({ search: '', version: {} })
+    await waitFor(() => expect(calls).toHaveLength(2))
+    await act(async () => calls[1].reject(new Error('busy')))
+    expect(hook.result.current.status).toBe('ready')
+    expect(positions(hook.result.current.rows)).toEqual([4, 3])
+    expect(hook.result.current.hasMore).toBe(true)
+    expect(error).toHaveBeenCalledWith('app.history_load_failed', expect.anything())
+  })
+
+  it('ignores loadMore while a version refresh is in flight', async () => {
+    const { load, calls } = manualLoader()
+    const { hook } = setup(load)
+    await waitFor(() => expect(calls).toHaveLength(1))
+    await act(async () => calls[0].resolve({ rows: [row(4), row(3)], nextCursor: 3 }))
+
+    hook.rerender({ search: '', version: {} })
+    await waitFor(() => expect(calls).toHaveLength(2))
+    act(() => hook.result.current.loadMore())
+    expect(calls).toHaveLength(2)
+
+    await act(async () => calls[1].resolve({ rows: [row(5), row(4)], nextCursor: 4 }))
+    act(() => hook.result.current.loadMore())
+    expect(calls).toHaveLength(3)
+    expect(calls[2].query).toEqual(expect.objectContaining({ cursor: 4 }))
+  })
+
+  it('shows loading with no rows while a changed query reloads (same-commit reset: ClearingASearch story)', async () => {
     const { load, calls } = manualLoader()
     const { hook, version } = setup(load)
     await waitFor(() => expect(calls).toHaveLength(1))
@@ -114,9 +165,6 @@ describe('useHistoryChunks', () => {
 
     await act(async () => calls[1].resolve({ rows: [row(4)], nextCursor: null }))
     expect(hook.result.current.status).toBe('ready')
-    hook.rerender({ search: 'traits', version: {} })
-    expect(hook.result.current.status).toBe('loading')
-    expect(hook.result.current.rows).toEqual([])
   })
 
   it('fails the first chunk, then retries it from the top', async () => {

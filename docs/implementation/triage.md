@@ -67,15 +67,6 @@ slice-planning gate forces its resolution before that slice is planned.
   it for both; alternatively, turn admission could await
   `settleUserWrites()` first, as the prose-reversal barrier already
   does. Reasoned, not reproduced (2026-09-28, raised by 4.2b).
-- **HistoryTab reloads its first chunk on every `settleCount`
-  change.** Any run settling (any kind, any branch), or a reversal
-  ending, collapses the list to a spinner and drops the older
-  chunks the user loaded, so the scroll position jumps. Every delta
-  writer checked patches the target row after commit, so the row
-  identity may already cover it — checked by grep, not proven.
-  Options: drop `settleCount` from the version, or keep rows during
-  a version-only reload and refetch up to the loaded count. Read,
-  not reproduced (2026-09-28, raised by 4.2b).
 - **Plot panes keep their tab when `[+] Blank` starts a create.**
   Thread and happening panes hold the tab in
   `useState(initialTab ?? 'overview')`, without the render-time
