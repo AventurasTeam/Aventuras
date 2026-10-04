@@ -140,7 +140,10 @@ function Harness({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'F2') setBlocked((prev) => !prev)
       if (e.key === 'F3') session.current?.requestLeave(onLeave)
-      if (e.key === 'F4') setCreateSeq((n) => n + 1)
+      if (e.key === 'F4') {
+        setRow(null)
+        setCreateSeq((n) => n + 1)
+      }
     }
     document.addEventListener('keydown', onKeyDown, true)
     return () => document.removeEventListener('keydown', onKeyDown, true)
@@ -336,6 +339,24 @@ export const RepeatBlankResetsCreate: Story = {
     await userEvent.keyboard('{F4}')
     await waitFor(() => expect(description()).toHaveValue(''), WAIT)
     expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument()
+  },
+}
+
+/** `[+] Blank` from a thread open on History lands the new draft on Overview. */
+export const BlankFromHistoryLandsOnOverview: Story = {
+  play: async () => {
+    await userEvent.click(await screen.findByRole('tab', { name: /^History/ }, WAIT))
+    await expect(await screen.findByText('No history yet', {}, WAIT)).toBeVisible()
+    await userEvent.keyboard('{F4}')
+    await waitFor(
+      () =>
+        expect(screen.getByRole('tab', { name: /^Overview/ })).toHaveAttribute(
+          'aria-selected',
+          'true',
+        ),
+      WAIT,
+    )
+    expect(screen.queryByText('History starts at the first save')).not.toBeInTheDocument()
   },
 }
 

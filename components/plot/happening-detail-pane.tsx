@@ -23,6 +23,7 @@ import { Select } from '@/components/ui/select'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
 import { Tag } from '@/components/ui/tag'
 import { Textarea } from '@/components/ui/textarea'
+import { useCreateResetTab } from '@/hooks/use-create-reset-tab'
 import type { RowSessionHandle } from '@/hooks/use-row-save-session'
 import type { PlotSaveResult } from '@/lib/actions'
 import type { Entity, Happening } from '@/lib/db'
@@ -144,7 +145,7 @@ export function HappeningDetailPane({
   })
   const { control, trigger } = session.form
 
-  const [tab, setTab] = useState<string>(initialTab ?? 'overview')
+  const [tab, setTab] = useCreateResetTab<string>(createSeq, 'overview', initialTab ?? 'overview')
   const [jsonOpen, setJsonOpen] = useState(false)
   const commonKnowledge = useWatch({ control, name: 'commonKnowledge' })
   // Lengths only, so typing in a link row doesn't re-render the whole pane.

@@ -67,13 +67,6 @@ slice-planning gate forces its resolution before that slice is planned.
   it for both; alternatively, turn admission could await
   `settleUserWrites()` first, as the prose-reversal barrier already
   does. Reasoned, not reproduced (2026-09-28, raised by 4.2b).
-- **Plot panes keep their tab when `[+] Blank` starts a create.**
-  Thread and happening panes hold the tab in
-  `useState(initialTab ?? 'overview')`, without the render-time
-  `createSeq` reset the entity panes' `useEntityTab` and the lore
-  pane have, so a Blank started from a row open on History lands on
-  History's "History starts at the first save" instead of Overview.
-  Pre-existing from 4.3 (2026-09-28, raised by 4.2b).
 - **`LoreDetailPane` duplicates `EntityDetailFrame`.** The head, tab
   list, menu and JSON viewer wiring, plus the tab-reset hook, are a
   near-copy (~100 lines) of `EntityDetailFrame` / `useEntityTab`;

@@ -18,6 +18,7 @@ import { InlineEditableName } from '@/components/ui/inline-editable-name'
 import { Select } from '@/components/ui/select'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
 import { Tag } from '@/components/ui/tag'
+import { useCreateResetTab } from '@/hooks/use-create-reset-tab'
 import type { RowSessionHandle } from '@/hooks/use-row-save-session'
 import type { LoreSaveResult } from '@/lib/actions'
 import { INJECTION_MODES, type Lore } from '@/lib/db'
@@ -34,18 +35,6 @@ const resolver = zodResolver(loreDraftSchema)
 
 export const LORE_TABS = ['body', 'settings', 'history'] as const
 export type LoreTab = (typeof LORE_TABS)[number]
-
-/** A new `[+] Blank` (create `seq`) lands on Body, whichever tab the previous row was on. */
-function useLoreTab(createSeq: number | undefined) {
-  const [tab, setTab] = useState<LoreTab>('body')
-  // Synced during render so a new create draft never paints a frame on the previous tab.
-  const [seenSeq, setSeenSeq] = useState(createSeq)
-  if (createSeq !== seenSeq) {
-    setSeenSeq(createSeq)
-    if (createSeq != null) setTab('body')
-  }
-  return [tab, setTab] as const
-}
 
 export type LoreDetailPaneProps = {
   /** For the History tab's query. */
@@ -101,7 +90,7 @@ export function LoreDetailPane({
     onSession,
   })
   const { control } = session.form
-  const [tab, setTab] = useLoreTab(createSeq)
+  const [tab, setTab] = useCreateResetTab<LoreTab>(createSeq, 'body', 'body')
   const changeTab = (value: string) => setTab(value as LoreTab)
   const rowId = row?.id ?? null
   const [jsonOpen, setJsonOpen] = useState(false)
