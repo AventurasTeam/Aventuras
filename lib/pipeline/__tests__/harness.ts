@@ -1,4 +1,9 @@
 import { applyDeltaAction, settleUserWrites } from '@/lib/actions/delta/apply-delta-action'
+import {
+  __resetBranchWriteLocks,
+  holdBranchWriteExclusive,
+  releaseBranchWriteExclusive,
+} from '@/lib/actions/delta/branch-write-lock'
 import { describeDeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
 import { __resetBranchQueues } from '@/lib/actions/turns/branch-queue'
 import { branches, stories } from '@/lib/db'
@@ -35,6 +40,7 @@ export function resetSingletons(): void {
   __resetRegistry()
   __resetBus()
   __resetBranchQueues()
+  __resetBranchWriteLocks()
   resetAllStores()
   clearBuffers()
   configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
@@ -43,5 +49,7 @@ export function resetSingletons(): void {
     reverseReplayDeltas,
     describeReplayError: describeDeltaReplayError,
     settleUserWrites,
+    holdWritePhase: holdBranchWriteExclusive,
+    releaseWritePhase: releaseBranchWriteExclusive,
   })
 }

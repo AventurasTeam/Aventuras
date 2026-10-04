@@ -6,6 +6,10 @@ import {
   applyDeltaAction as realApplyDeltaAction,
   settleUserWrites,
 } from '@/lib/actions/delta/apply-delta-action'
+import {
+  holdBranchWriteExclusive,
+  releaseBranchWriteExclusive,
+} from '@/lib/actions/delta/branch-write-lock'
 import { describeDeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
 import { generateStructured } from '@/lib/ai'
 import { shouldCadenceFire, type EmbedDescriptions } from '@/lib/classifier'
@@ -903,6 +907,8 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
       reverseReplayDeltas,
       describeReplayError: describeDeltaReplayError,
       settleUserWrites,
+      holdWritePhase: holdBranchWriteExclusive,
+      releaseWritePhase: releaseBranchWriteExclusive,
     })
   })
 
@@ -951,6 +957,8 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
       reverseReplayDeltas,
       describeReplayError: describeDeltaReplayError,
       settleUserWrites,
+      holdWritePhase: holdBranchWriteExclusive,
+      releaseWritePhase: releaseBranchWriteExclusive,
     })
   }
 

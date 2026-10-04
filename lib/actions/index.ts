@@ -10,6 +10,7 @@ export {
   settleUserWrites,
   type DeltaGroupResult,
 } from './delta/apply-delta-action'
+export { holdBranchWriteExclusive, releaseBranchWriteExclusive } from './delta/branch-write-lock'
 export {
   applyUndoPayload,
   computeUndoPayload,

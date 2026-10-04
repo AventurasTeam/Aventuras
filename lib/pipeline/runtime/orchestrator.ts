@@ -21,6 +21,8 @@ import type {
 import {
   applyDeltaAction,
   describeReplayError,
+  holdWritePhase,
+  releaseWritePhase,
   reverseReplayDeltas,
   settleUserWrites,
 } from './action-port'
@@ -115,8 +117,35 @@ async function beginRun(run: RunState, ctx: RunCtx): Promise<void> {
   })
 }
 
+// generation-pipeline.md → No-gate write phase: the hold ends when the run settles. A run
+// that never wrote holds nothing, so the release does nothing.
+function endWritePhase(run: RunState): void {
+  if (run.gateBehavior === 'no-gate') releaseWritePhase(run.branchId, run.actionId)
+}
+
+// Set as the abort reason once abortRun is certain for the run (abortRun itself, or a failed parallel
+// branch). A user cancel aborts with the default reason: the classifier's burst must still land.
+const RUN_ENDING = 'run-ending'
+
+function isRunEnding(run: RunState): boolean {
+  return run.abortController.signal.aborted && run.abortController.signal.reason === RUN_ENDING
+}
+
 async function handleEvent(event: PhaseEmittedEvent, run: RunState, ctx: RunCtx): Promise<void> {
   if (event.type === 'delta_emitted') {
+    // Promise.all rejects without waiting for sibling branches, so one can emit after abortRun
+    // released the hold: a fresh hold would have no one to release it. The write is dropped, not
+    // thrown, so it can't replace the failure the run is already ending with.
+    if (run.gateBehavior === 'no-gate' && isRunEnding(run)) {
+      logger.debug(
+        'pipeline.write_after_run_ending',
+        { kind: event.action.kind },
+        { actionId: run.actionId },
+      )
+      return
+    }
+    // The first write takes the lock; later writes, and a parallel branch's, share it.
+    if (run.gateBehavior === 'no-gate') await holdWritePhase(run.branchId, run.actionId)
     let result: MutationResult
     try {
       result = await applyDeltaAction(
@@ -200,7 +229,7 @@ async function runParallelGroup(
       pipelineEventBus.emit({ type: 'phase_start', runId: run.runId, name: b.name })
       const result = await consumePhase(b.run(phaseContextOf(run, ctx)), run, ctx)
       pipelineEventBus.emit({ type: 'phase_complete', runId: run.runId, name: b.name, result })
-      if (result.status === 'failed') run.abortController.abort() // wind down siblings that poll
+      if (result.status === 'failed') run.abortController.abort(RUN_ENDING) // wind down siblings that poll
       return result
     }),
   )
@@ -249,6 +278,8 @@ async function commitRun(
   run: RunState,
   ctx: RunCtx,
 ): Promise<{ tx: TxResult; successor?: RunState }> {
+  // The phases wrote the watermark last, so the write phase is over.
+  endWritePhase(run)
   const pipeline = getPipeline(run.kind)
   const nextKind = pipeline.chainsTo?.(run) ?? null
   // chainsTo may name an unregistered kind (authoring bug); resolve it without
@@ -326,7 +357,7 @@ type AbortCause =
   | { reason: 'phase-failure'; error: PipelineError; threw: boolean }
 
 async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<TxResult> {
-  run.abortController.abort()
+  run.abortController.abort(RUN_ENDING)
   let outcome: 'aborted' | 'failed' = cause.reason === 'user-cancel' ? 'aborted' : 'failed'
   let error = cause.reason === 'user-cancel' ? undefined : cause.error
   const markerOp = (settled: 'aborted' | 'failed') =>
@@ -345,6 +376,10 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
     error = { kind: 'orchestrator', detail: `${stage} failed: ${failure.detail}` }
     outcome = 'failed'
     reversalFailed = !failure.committed
+  } finally {
+    // An uncommitted reversal ends it too: recovery owns those writes, and a held lock
+    // would stall every write to the branch until boot.
+    endWritePhase(run)
   }
   // Must run once the rollback has committed: arming a retry over writes still on disk would
   // race it into re-reading them; an uncommitted reversal leaves recovery to own the branch.

@@ -1,9 +1,11 @@
 import {
   applyDeltaAction,
   describeDeltaReplayError,
+  holdBranchWriteExclusive,
   normalizeAppSettingsRow,
   readClassifierStatus,
   registerAllDomains,
+  releaseBranchWriteExclusive,
   resetStuckClassifierRunState,
   reverseReplayDeltas,
   runClassifierNow,
@@ -54,6 +56,8 @@ export function ensureDeltaActionPort(): void {
     reverseReplayDeltas,
     describeReplayError: describeDeltaReplayError,
     settleUserWrites,
+    holdWritePhase: holdBranchWriteExclusive,
+    releaseWritePhase: releaseBranchWriteExclusive,
   })
 }
 
