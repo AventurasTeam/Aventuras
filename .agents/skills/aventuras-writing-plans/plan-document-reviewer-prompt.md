@@ -13,6 +13,8 @@ You are reviewing an implementation plan before anyone executes it. You have non
 - Milestone doc: [MILESTONE_DOC_PATH]
 - Repository root: [REPO_ROOT]. Start with `CLAUDE.md` (also `AGENTS.md`), then `docs/code-conventions.md`, `docs/testing.md` and the canon docs the plan and the slice doc cite. The code is at [HEAD_SHA]; check the plan against it, not against memory.
 
+**If the plan is a skeleton** (its tasks are entries with Scope, Files and Interface instead of steps; writers turn them into full tasks after this review, each seeing only the skeleton), review it as the contract those writers build on. In check 2, read every interface against the code. Check that each task's Scope states the cross-task behaviour its dependents rely on (who validates, who locks, what a refusal returns), that each Depends on line matches the interface it names, and that shared resources (migration numbers, i18n keys, files several batches edit) are named once. Checks 5 and 7 then apply to each entry's Scope and acceptance, not to test code and steps.
+
 **Check, in this order:**
 
 1. **Slice coverage.** Every item in the slice doc's Goal, Scope: in and Acceptance criteria has a task that delivers it and an Evidence Matrix row that proves it. Nothing in Scope: out is built. Every Open question the slice doc lists is answered in the plan's Decisions.

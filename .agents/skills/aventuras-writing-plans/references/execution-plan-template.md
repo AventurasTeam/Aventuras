@@ -49,8 +49,9 @@ notes when the branch is finished (this plan is git-ignored).
 
 **Model:** cheap | standard | capable — <why>
 **Verification:** automated | review — <why>
+**Canon:** [`docs/<area>/<doc>.md → <Section>`](../docs/<area>/<doc>.md#<section>) — <what this task implements from it>
 
-[One `### Task N` per task — the Model and Verification tier lines, a Files block, then bite-sized steps, exactly as the Task Structure section of SKILL.md specifies. Repeat for every task.]
+[One `### Task N` per task — the Model, Verification and Canon lines, a Files block, then bite-sized steps, exactly as the Task Structure section of SKILL.md specifies. Repeat for every task. A plan of more than five tasks holds skeleton entries here first, then the Writer batches line (SKILL.md → Batched writing).]
 
 ---
 
