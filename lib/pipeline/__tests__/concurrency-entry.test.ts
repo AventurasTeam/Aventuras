@@ -1,6 +1,11 @@
+import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
+import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
+import { withKeyLock } from '@/lib/actions/delta/key-lock'
+import { rowLock } from '@/lib/actions/delta/row-locks'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
+import { entities } from '@/lib/db'
 import {
   definePipeline,
   ensurePerTurnPipelineRegistered,
@@ -20,6 +25,65 @@ const base = { affordance: 'invisible', gateBehavior: 'no-gate' } as const
 describe('runPipeline concurrency entry + coordination', () => {
   beforeEach(() => resetSingletons())
   afterEach(() => resetSingletons())
+
+  it("runs a hard-gate run's phases only after a user write parked on a row lock commits", async () => {
+    const { db, ctx } = await makeHarness()
+    const id = 'char_00000000-0000-4000-8000-0000000000c1'
+    await db.insert(entities).values({
+      id,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Cora',
+      status: 'active',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const held = withKeyLock(rowLock('entities')({ branchId: 'b1', id }), () => gate)
+    // Past the gate check already, as a Save that dispatched just before the turn started.
+    const userWrite = applyDeltaAction(
+      {
+        action: {
+          kind: 'updateEntity',
+          source: 'user_edit',
+          payload: { branchId: 'b1', id, patch: { description: 'from the user' } },
+        },
+        actionId: 'act_user',
+        branchId: 'b1',
+      },
+      ctx,
+    )
+    let seen: string | null | undefined
+    async function* reads(): AsyncGenerator<never, PhaseResult> {
+      const [row] = await db
+        .select({ description: entities.description })
+        .from(entities)
+        .where(eq(entities.id, id))
+      seen = row?.description
+      return { status: 'completed' }
+    }
+    definePipeline({
+      kind: 'gated-reader',
+      phases: [{ name: 'p', run: reads }],
+      affordance: 'invisible',
+      gateBehavior: 'hard-gate',
+      concurrencyPolicy: {},
+    })
+
+    const run = runPipeline('gated-reader', ctx)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(seen).toBeUndefined()
+
+    release()
+    await held
+    expect(await userWrite).toMatchObject({ status: 'ok' })
+    expect(expectRan(await run).outcome).toBe('completed')
+    expect(seen).toBe('from the user')
+  })
 
   it('lets a per-turn run start while the classifier is in flight, and blocks a second classifier', () => {
     // Asserted against the policies the two definitions actually register, not

@@ -7,6 +7,7 @@ import {
   resetStuckClassifierRunState,
   reverseReplayDeltas,
   runClassifierNow,
+  settleUserWrites,
   unprocessedEntryCount,
 } from '@/lib/actions'
 import { createClassifierScheduler } from '@/lib/classifier'
@@ -52,6 +53,7 @@ export function ensureDeltaActionPort(): void {
     applyDeltaAction,
     reverseReplayDeltas,
     describeReplayError: describeDeltaReplayError,
+    settleUserWrites,
   })
 }
 

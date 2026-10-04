@@ -14,6 +14,8 @@ export type DeltaActionPort = {
   // Undefined for anything but a DeltaReplayError. `committed` means the reversal
   // landed and only the store sync after it failed.
   describeReplayError: (e: unknown) => { detail: string; committed: boolean } | undefined
+  /** Resolves once every user write dispatched so far has committed or been refused. */
+  settleUserWrites: () => Promise<void>
 }
 
 let port: DeltaActionPort | undefined
@@ -45,6 +47,10 @@ export function reverseReplayDeltas(
   ...args: Parameters<DeltaActionPort['reverseReplayDeltas']>
 ): ReturnType<DeltaActionPort['reverseReplayDeltas']> {
   return requirePort().reverseReplayDeltas(...args)
+}
+
+export function settleUserWrites(): ReturnType<DeltaActionPort['settleUserWrites']> {
+  return requirePort().settleUserWrites()
 }
 
 export function describeReplayError(

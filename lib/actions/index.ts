@@ -7,6 +7,7 @@ export { runClassifierNow } from './classifier/run-now'
 export {
   applyDeltaAction,
   applyDeltaActionGroup,
+  settleUserWrites,
   type DeltaGroupResult,
 } from './delta/apply-delta-action'
 export {
