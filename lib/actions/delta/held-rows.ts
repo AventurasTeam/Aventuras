@@ -65,13 +65,13 @@ export async function loadHeldRows(ctx: DbCtx, branchId: string): Promise<HeldRo
       const key = heldKey(held.table, held.id)
       const seen = byRow.get(key)
       if (seen) {
-        // Deleting a held row again needs its delete undone first, so a second holder is a broken log.
+        // Deleting a held row again needs its delete undone first, so a second holder is a broken log;
+        // the ascending scan lets the newer holder win.
         logger.error('action_layer.row_held_twice', {
           table: held.table,
           id: held.id,
           holders: [seen.holder.id, held.holder.id],
         })
-        if (seen.holder.logPosition > held.holder.logPosition) continue
       }
       byRow.set(key, held)
     }
