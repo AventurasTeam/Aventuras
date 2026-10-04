@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { NarrativePhase, type NarrativeInput } from './NarrativePhase'
 import type { GenerationEvent, RetrievalResult } from '../types'
 import type { StreamChunk } from '$lib/services/ai/core/types'
+import { ActivityRecorder } from '$lib/services/activity'
 
 async function drain<R>(gen: AsyncGenerator<GenerationEvent, R>) {
   const events: GenerationEvent[] = []
@@ -246,12 +247,7 @@ describe('NarrativePhase activity reporting', () => {
     await drain(phaseReporting(stream, reporter).execute(makeInput()))
 
     // In the order they happen: the wait, then the streaming it gives way to.
-    expect(steps.map((s) => s.label)).toEqual([
-      'Narrative',
-      'Request',
-      'Waiting for model',
-      'Generating',
-    ])
+    expect(steps.map((s) => s.label)).toEqual(['Narrative', 'Waiting for model', 'Generating'])
     const wait = steps.find((s) => s.label === 'Waiting for model')!
     expect(wait.status).toBe('done')
     // Ended by the reasoning chunk, so it is not still open when content arrives.
@@ -280,8 +276,8 @@ describe('NarrativePhase activity reporting', () => {
 
     await drain(phaseReporting(stream, reporter).execute(makeInput()))
 
-    expect(steps.find((s) => s.label === 'Request')).toMatchObject({ status: 'done' })
-    expect(steps.find((s) => s.label === 'Request')?.isLLM).toBeFalsy()
+    // A single pass gets no container of its own.
+    expect(steps.some((s) => s.label.startsWith('Pass'))).toBe(false)
     expect(steps.find((s) => s.label === 'Generating')).toMatchObject({
       status: 'done',
       detail: '1 chunk',
@@ -289,26 +285,39 @@ describe('NarrativePhase activity reporting', () => {
     })
   })
 
-  it('reports each empty attempt separately without changing the retry loop', async () => {
-    const { steps, reporter } = recordingReporter()
+  it('reports each empty pass as failed, grouping the first once a second follows', async () => {
+    const recorder = new ActivityRecorder()
+    recorder.setReporting('tree')
+    recorder.startTurn('entry')
     const streamNarrative = vi.fn(streamOf(chunk({ content: '' }), chunk({ done: true })))
 
     const { events, result } = await drain(
-      phaseReporting(streamNarrative, reporter).execute(makeInput()),
+      phaseReporting(streamNarrative, recorder).execute(makeInput()),
     )
 
-    // Unchanged behaviour: still three attempts, still a fatal error, still no result.
+    // Unchanged behaviour: still three passes, still a fatal error, still no result.
     expect(streamNarrative).toHaveBeenCalledTimes(3)
     expect(result).toBeNull()
-    expect(events.at(-1)).toMatchObject({ type: 'error', phase: 'narrative', fatal: true })
-
-    const attempts = steps.filter((s) => s.label === 'Request' || s.label.startsWith('Attempt'))
-    expect(attempts.map((s) => s.label)).toEqual(['Request', 'Attempt 2', 'Attempt 3'])
-    expect(attempts.every((s) => s.detail === 'empty response')).toBe(true)
-    expect(steps.find((s) => s.label === 'Narrative')).toMatchObject({
-      status: 'failed',
-      detail: 'empty after 3 attempts',
+    expect(events.at(-1)).toMatchObject({
+      type: 'error',
+      phase: 'narrative',
+      fatal: true,
+      error: new Error('Empty response after 3 passes'),
     })
+
+    const steps = recorder.snapshot()[0].steps
+    const narrative = steps.find((s) => s.label === 'Narrative')!
+    expect(narrative).toMatchObject({ status: 'failed', error: 'Empty response after 3 passes' })
+    const passes = steps.filter((s) => s.parentId === narrative.id)
+    expect(passes.map((s) => [s.label, s.status, s.error, s.attempt])).toEqual([
+      ['Pass 1', 'failed', 'Empty response', true],
+      ['Pass 2', 'failed', 'Empty response', true],
+      ['Pass 3', 'failed', 'Empty response', true],
+    ])
+    const pass1 = passes.find((s) => s.label === 'Pass 1')!
+    expect(steps.filter((s) => s.parentId === pass1.id).map((s) => s.label)).toEqual([
+      'Waiting for model',
+    ])
   })
 
   it('leaves no step running when the stream throws', async () => {
@@ -336,7 +345,6 @@ describe('NarrativePhase activity reporting', () => {
       steps.filter((s) => s.label !== 'Waiting for model').map((s) => [s.label, s.status]),
     ).toEqual([
       ['Narrative', 'failed'],
-      ['Request', 'failed'],
       ['Generating', 'failed'],
     ])
   })
@@ -382,8 +390,7 @@ describe('NarrativePhase response steps', () => {
       ),
     )
 
-    expect(steps.slice(1, 4).map((s) => [s.label, s.detail])).toEqual([
-      ['Request', 'empty response'],
+    expect(steps.slice(1, 3).map((s) => [s.label, s.detail])).toEqual([
       ['Waiting for model', undefined],
       ['Generating', 'no content'],
     ])

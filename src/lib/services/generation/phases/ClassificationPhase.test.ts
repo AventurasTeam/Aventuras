@@ -169,15 +169,16 @@ describe('ClassificationPhase failure reporting', () => {
     const steps: { id: string; label: string; status?: string; detail?: string; error?: string }[] =
       []
     const activity = {
-      startStep: (label: string) => {
+      startStep: (label: string, options: { detail?: string } = {}) => {
         const id = `s${steps.length + 1}`
-        steps.push({ id, label })
+        steps.push({ id, label, detail: options.detail })
         return id
       },
       endStep: (id: string, status = 'done', detail?: string, error?: string | null) => {
         const step = steps.find((s) => s.id === id)
         if (!step || step.status) return
-        Object.assign(step, { status, detail, error: error ?? undefined })
+        Object.assign(step, { status, error: error ?? undefined })
+        if (detail !== undefined) step.detail = detail
       },
       recordStep: () => '',
     }
@@ -213,9 +214,14 @@ describe('ClassificationPhase failure reporting', () => {
     expect(events.find((e) => e.type === 'error')).toMatchObject({ fatal: false })
     // Still handed on: the consumer shows its warning and applies the empty update.
     expect(events.some((e) => e.type === 'classification_complete')).toBe(true)
+    expect(steps[1]).toMatchObject({
+      label: 'Updating world',
+      status: 'done',
+      detail: 'fallback bookkeeping only',
+    })
   })
 
-  it('finishes Classifying as partly applied when the result was salvaged', async () => {
+  it('finishes Classifying with the reason, and the update as partly applied, when salvaged', async () => {
     const { steps, activity } = recorder()
     const phase = new ClassificationPhase({
       classifyResponse: async () => ({ ...empty, _error: 'bad field', _salvaged: true }) as any,
@@ -223,7 +229,8 @@ describe('ClassificationPhase failure reporting', () => {
 
     const { events } = await drain(phase.execute(makeInput({ activity, activityParentId: 'p' })))
 
-    expect(steps[0]).toMatchObject({ status: 'done', detail: 'partly applied', error: 'bad field' })
+    expect(steps[0]).toMatchObject({ status: 'done', detail: undefined, error: 'bad field' })
+    expect(steps[1]).toMatchObject({ label: 'Updating world', detail: 'partly applied' })
     expect(events.some((e) => e.type === 'error')).toBe(false)
   })
 

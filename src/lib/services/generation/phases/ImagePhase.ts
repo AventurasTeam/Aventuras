@@ -62,6 +62,9 @@ export interface ImageResult {
   skippedReason?: 'disabled' | 'not_configured' | 'aborted' | 'inline_mode'
 }
 
+const queuedImages = (count: number) =>
+  count === 0 ? 'no images queued' : `${count} image${count === 1 ? '' : 's'} queued`
+
 /** Coordinates image generation. Errors are non-fatal. */
 export class ImagePhase {
   constructor(private deps: ImageDependencies) {}
@@ -147,7 +150,10 @@ export class ImagePhase {
         } satisfies ErrorEvent
       } else if (outcome && input.activityParentId) {
         // The images finish after the turn; the record notes the hand-off, not their progress.
-        input.activity?.updateStep?.(input.activityParentId, `${outcome.queued} images queued`)
+        input.activity?.recordStep('Handed off', {
+          parentId: input.activityParentId,
+          detail: queuedImages(outcome.queued),
+        })
       }
 
       const result: ImageResult = { started: true }

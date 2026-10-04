@@ -7,7 +7,7 @@
  */
 
 import type { ActivityStatus } from './types'
-import type { StartStepOptions } from './recorder'
+import type { GroupOptions, StartStepOptions } from './recorder'
 import { describeActivityError } from './describeError'
 
 export interface ActivityReporter {
@@ -29,6 +29,8 @@ export interface ActivityReporter {
       error?: string | null
     },
   ): string
+  /** See `ActivityRecorder.groupChildren`. Optional, like `updateStep`. */
+  groupChildren?(parentId: string, label: string, options?: GroupOptions): string
 }
 
 /** Stands in wherever no reporter was injected, so reporting is never a required dependency. */

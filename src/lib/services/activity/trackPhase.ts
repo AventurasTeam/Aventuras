@@ -18,16 +18,19 @@ interface PhaseEvent {
 
 /**
  * `stepId` is opened by the caller rather than here, so the same id can be handed to the
- * phase as the parent for whatever it reports itself.
+ * phase as the parent for whatever it reports itself. `offBy` reads a finished phase's result for
+ * the setting that kept it from running, if one did; the step is then skipped with that note.
  */
 export async function* trackPhase<E extends PhaseEvent, R>(
   activity: ActivityReporter,
   stepId: string,
   phase: AsyncGenerator<E, R>,
+  offBy?: (result: R) => string | null,
 ): AsyncGenerator<E, R> {
   const id = stepId
   let status: 'done' | 'failed' | 'skipped' = 'done'
   let reason: string | null = null
+  let detail: string | undefined
   try {
     let next = await phase.next()
     while (!next.done) {
@@ -39,6 +42,11 @@ export async function* trackPhase<E extends PhaseEvent, R>(
       yield event
       next = await phase.next()
     }
+    const off = status === 'done' ? offBy?.(next.value) : null
+    if (off) {
+      status = 'skipped'
+      detail = off
+    }
     return next.value
   } catch (error) {
     status = 'failed'
@@ -48,6 +56,6 @@ export async function* trackPhase<E extends PhaseEvent, R>(
     // The loop steps the phase by hand rather than delegating, so abandoning this generator
     // would otherwise leave the phase's own cleanup unrun.
     await phase.return(undefined as R)
-    activity.endStep(id, status, undefined, reason)
+    activity.endStep(id, status, detail, reason)
   }
 }

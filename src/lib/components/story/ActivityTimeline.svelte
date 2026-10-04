@@ -36,11 +36,11 @@
       // A failure is told once, on the deepest step that carries it. Every step above one is
       // marked, unless it is itself shown as failed, so the way down to it can be followed.
       failed: step.status === 'failed' && !shownBelow.has(step.id),
-      // Above a failure, unless shown failed itself: ⚠ for a failure, ↻ when every failure
+      // Above a failure, unless shown failed itself: red for a failure, plain when every failure
       // beneath is an attempt its request got past.
       mark:
         step.status === 'failed' && !shownBelow.has(step.id) ? null : (marks.get(step.id) ?? null),
-      time: formatDuration(stepDuration(step, now)),
+      time: step.untimed ? '' : formatDuration(stepDuration(step, now)),
       error: shownBelow.has(step.id) ? '' : (step.error ?? ''),
     }))
   })
@@ -55,7 +55,8 @@
       class="flex items-baseline gap-1.5 py-0.5 text-[11px] leading-tight"
       style="padding-left: {row.level * 0.75}rem"
     >
-      <!-- Fixed width, so the labels start in one column. -->
+      <!-- Fixed width even when empty: the column is part of the indent, so the labels of one
+           level start together. -->
       <span
         class="inline-flex w-14 shrink-0 items-baseline justify-end whitespace-nowrap tabular-nums"
         class:text-muted-foreground={!row.running}

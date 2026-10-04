@@ -78,6 +78,27 @@ describe('trackPhase', () => {
     expect(closed).toEqual([{ id: 's1', status: 'skipped' }])
   })
 
+  it('records a phase kept off by a setting as skipped, noting the setting', async () => {
+    const details: (string | undefined)[] = []
+    const { activity, closed } = reporter()
+    const endStep = activity.endStep
+    activity.endStep = (id, status, detail) => {
+      details.push(detail)
+      endStep(id, status)
+    }
+    const offBy = (result: unknown) => (result === 'off' ? 'off in story settings' : null)
+
+    await drain(
+      trackPhase(activity, activity.startStep('Background image'), phaseOf([], 'off'), offBy),
+    )
+    await drain(
+      trackPhase(activity, activity.startStep('Background image'), phaseOf([], 'ran'), offBy),
+    )
+
+    expect(closed.map((c) => c.status)).toEqual(['skipped', 'done'])
+    expect(details).toEqual(['off in story settings', undefined])
+  })
+
   it('closes the step as failed and re-raises when the phase throws', async () => {
     const { activity, closed } = reporter()
     const phase = (async function* () {

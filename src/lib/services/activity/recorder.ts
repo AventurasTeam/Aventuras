@@ -26,6 +26,12 @@ export interface StartStepOptions {
   startedAt?: number
 }
 
+/** How `groupChildren` records the step it adds. */
+export type GroupOptions = Pick<StartStepOptions, 'detail' | 'attempt'> & {
+  status?: Exclude<ActivityStatus, 'running'>
+  error?: string | null
+}
+
 export class ActivityRecorder {
   private turns: ActivityTurn[] = []
   private current: ActivityTurn | null = null
@@ -150,7 +156,29 @@ export class ActivityRecorder {
     const step = this.current.steps.find((s) => s.id === id)!
     step.status = options.status ?? 'done'
     step.endedAt = step.startedAt + (options.durationMs ?? 0)
+    if (options.durationMs === undefined) step.untimed = true
     if (options.error) step.error = options.error
+    this.onChange()
+    return id
+  }
+
+  /**
+   * Move every child of `parentId` under a new finished step spanning them, for work that turns
+   * out only afterwards to be the first of several. Returns its id, or `''` with nothing to move.
+   */
+  groupChildren(parentId: string, label: string, options: GroupOptions = {}): string {
+    if (!parentId || !this.current) return ''
+    const children = this.current.steps.filter((s) => s.parentId === parentId)
+    if (children.length === 0) return ''
+    const startedAt = Math.min(...children.map((s) => s.startedAt))
+    const endedAt = Math.max(...children.map((s) => s.endedAt ?? this.now()))
+    const id = this.recordStep(label, {
+      ...options,
+      parentId,
+      startedAt,
+      durationMs: endedAt - startedAt,
+    })
+    for (const child of children) child.parentId = id
     this.onChange()
     return id
   }

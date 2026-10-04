@@ -18,6 +18,7 @@ import {
   type ActivityStatus,
   type ActivityStep,
   type ActivityTurn,
+  type GroupOptions,
   type StartStepOptions,
   type TurnOutcome,
 } from '$lib/services/activity'
@@ -151,6 +152,10 @@ class ActivityStore {
     },
   ): string {
     return this.guard(() => this.recorder.recordStep(label, options), '')
+  }
+
+  groupChildren(parentId: string, label: string, options?: GroupOptions): string {
+    return this.guard(() => this.recorder.groupChildren(parentId, label, options), '')
   }
 
   /** The turn in flight. Touches `version` so callers re-read as it grows. */

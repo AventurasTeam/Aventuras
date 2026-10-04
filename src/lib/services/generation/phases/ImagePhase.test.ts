@@ -165,12 +165,14 @@ describe('ImagePhase', () => {
 
 describe('ImagePhase activity reporting', () => {
   function reporter() {
-    const updates: [string, string][] = []
+    const updates: [string, string, string | undefined][] = []
     const activity = {
       startStep: () => '',
       endStep: () => {},
-      recordStep: () => '',
-      updateStep: (id: string, detail: string) => updates.push([id, detail]),
+      recordStep: (label: string, options: { parentId?: string; detail?: string } = {}) => {
+        updates.push([options.parentId ?? '', label, options.detail])
+        return ''
+      },
     }
     return { activity, updates }
   }
@@ -186,7 +188,7 @@ describe('ImagePhase activity reporting', () => {
     )
 
     expect(generate.mock.calls[0][0].activityParentId).toBe('images')
-    expect(updates).toEqual([['images', '3 images queued']])
+    expect(updates).toEqual([['images', 'Handed off', '3 images queued']])
     expect(events.some((e) => e.type === 'error')).toBe(false)
   })
 
@@ -199,7 +201,7 @@ describe('ImagePhase activity reporting', () => {
       ).execute(makeInput({ activity, activityParentId: 'images' })),
     )
 
-    expect(updates).toEqual([['images', '0 images queued']])
+    expect(updates).toEqual([['images', 'Handed off', 'no images queued']])
   })
 
   it('reports a failed analysis as a non-fatal error with its reason', async () => {

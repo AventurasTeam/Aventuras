@@ -111,8 +111,7 @@ export class ClassificationPhase {
       // The classifier absorbs its failures into `_error`. A salvaged result is still applied.
       const failure = classificationResult._error
       if (!failure) activity.endStep(callId)
-      else if (classificationResult._salvaged)
-        activity.endStep(callId, 'done', 'partly applied', failure)
+      else if (classificationResult._salvaged) activity.endStep(callId, 'done', undefined, failure)
       else {
         activity.endStep(callId, 'failed', undefined, failure)
         yield {
@@ -130,7 +129,16 @@ export class ClassificationPhase {
 
       // The phase stays suspended at this yield while the consumer applies the result, so the
       // step spans exactly that work.
-      const applyId = activity.startStep('Updating world', { parentId: input.activityParentId })
+      // A failed result still runs the entry's bookkeeping: its end time, and with state tracking
+      // an empty delta and maybe a snapshot.
+      const applyId = activity.startStep('Updating world', {
+        parentId: input.activityParentId,
+        detail: !failure
+          ? undefined
+          : classificationResult._salvaged
+            ? 'partly applied'
+            : 'fallback bookkeeping only',
+      })
       let applied = false
       try {
         yield {

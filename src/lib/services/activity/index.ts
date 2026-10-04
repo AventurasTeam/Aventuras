@@ -29,7 +29,12 @@ export { stepDuration, turnDuration, formatDuration } from './duration'
 
 export { retainTurns, findTurnByEntryId, RETAINED_TURNS } from './retention'
 
-export { ActivityRecorder, type ActivityReporting, type StartStepOptions } from './recorder'
+export {
+  ActivityRecorder,
+  type ActivityReporting,
+  type GroupOptions,
+  type StartStepOptions,
+} from './recorder'
 
 export { NO_ACTIVITY, trackStep, failStep, type ActivityReporter } from './reporter'
 export { describeActivityError, ATTEMPT_NUMBER } from './describeError'

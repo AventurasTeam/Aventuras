@@ -19,7 +19,7 @@ export type {
   ClassificationPhaseResult,
 } from './ClassificationPhase'
 
-export { TranslationPhase } from './TranslationPhase'
+export { TranslationPhase, translatesNarration } from './TranslationPhase'
 export type {
   TranslationDependencies,
   TranslationInput,

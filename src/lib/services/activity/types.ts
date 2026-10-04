@@ -19,6 +19,8 @@ export interface ActivityStep {
   isLLM: boolean
   /** One of several tries at the same request. A failed one the request got past is recovered. */
   attempt?: boolean
+  /** Recorded after the fact without a duration: its span is not a measurement. */
+  untimed?: boolean
   status: ActivityStatus
   startedAt: number
   /** Absent while the step is running. */

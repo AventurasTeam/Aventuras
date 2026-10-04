@@ -41,7 +41,7 @@ export function retrievalStep(event: RetrievalEvent): RetrievalStep {
           detail: event.failed ? 'failed' : event.cached ? 'cached' : event.question,
           // A cached replay is the same answer handed back, not a second model call.
           isLLM: !event.cached && !event.failed,
-          durationMs: event.durationMs ?? 0,
+          durationMs: event.durationMs,
         },
       }
     case 'search':

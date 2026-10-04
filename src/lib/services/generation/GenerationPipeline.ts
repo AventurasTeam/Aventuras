@@ -18,6 +18,7 @@ import {
   NarrativePhase,
   ClassificationPhase,
   TranslationPhase,
+  translatesNarration,
   ImagePhase,
   PostGenerationPhase,
   type RetrievalDependencies,
@@ -85,6 +86,20 @@ export interface PipelineResult {
   fatalError: Error | null
 }
 
+/**
+ * How a phase that is switched on but cannot run is noted. A phase switched off in settings is not
+ * reported at all (`TrackOptions.hidden`).
+ */
+const notConfigured = (profile: string) => (result: { skippedReason?: string }) =>
+  result.skippedReason === 'not_configured' ? `no ${profile} profile` : null
+
+interface TrackOptions<R> {
+  /** Switched off in settings: the phase still runs, to return its empty result, but unreported. */
+  hidden?: boolean
+  /** See `trackPhase`. */
+  offBy?: (result: R) => string | null
+}
+
 export class GenerationPipeline {
   private prePhase = new PreGenerationPhase()
   private retrievalPhase = new RetrievalPhase()
@@ -108,9 +123,11 @@ export class GenerationPipeline {
   private tracked<R>(
     label: string,
     build: (parentId: string) => AsyncGenerator<GenerationEvent, R>,
+    { hidden, offBy }: TrackOptions<R> = {},
   ): AsyncGenerator<GenerationEvent, R> {
+    if (hidden) return build('')
     const id = this.activity.startStep(label)
-    return trackPhase(this.activity, id, build(id))
+    return trackPhase(this.activity, id, build(id), offBy)
   }
 
   constructor(private deps: PipelineDependencies) {
@@ -194,14 +211,22 @@ export class GenerationPipeline {
           r.preGeneration?.visualProseMode ?? false,
         ),
         // Independent phases
-        background: this.tracked('Background image', (parentId) =>
-          this.backgroundPhase.execute({
-            activityParentId: parentId,
-            storyId: ctx.story.id,
-            storyEntries: ctx.visibleEntries,
-            imageSettings: cfg.imageSettings,
-            abortSignal: ctx.abortSignal,
-          }),
+        background: this.tracked(
+          'Background image',
+          (parentId) =>
+            this.backgroundPhase.execute({
+              activityParentId: parentId,
+              storyId: ctx.story.id,
+              storyEntries: ctx.visibleEntries,
+              imageSettings: cfg.imageSettings,
+              abortSignal: ctx.abortSignal,
+            }),
+          {
+            hidden:
+              !cfg.imageSettings.backgroundImagesEnabled ||
+              cfg.imageSettings.imageGenerationMode === 'inline',
+            offBy: notConfigured('background image'),
+          },
         ),
         postGeneration: this.tracked(
           cfg.storyMode === 'creative-writing' ? 'Suggestions' : 'Action choices',
@@ -222,6 +247,7 @@ export class GenerationPipeline {
               translationSettings: cfg.translationSettings,
               abortSignal: ctx.abortSignal,
             }),
+          { hidden: cfg.disableSuggestions },
         ),
       })
 
@@ -272,17 +298,20 @@ export class GenerationPipeline {
           abortSignal: ctx.abortSignal,
         }),
       ),
-      translation: this.tracked('Translation', (parentId) =>
-        this.translationPhase.execute({
-          activity: this.activity,
-          activityParentId: parentId,
-          storyId: ctx.story.id,
-          narrativeContent,
-          narrativeEntryId: ctx.userAction.entryId,
-          isVisualProse,
-          translationSettings: cfg.translationSettings,
-          abortSignal: ctx.abortSignal,
-        }),
+      translation: this.tracked(
+        'Translation',
+        (parentId) =>
+          this.translationPhase.execute({
+            activity: this.activity,
+            activityParentId: parentId,
+            storyId: ctx.story.id,
+            narrativeContent,
+            narrativeEntryId: ctx.userAction.entryId,
+            isVisualProse,
+            translationSettings: cfg.translationSettings,
+            abortSignal: ctx.abortSignal,
+          }),
+        { hidden: !translatesNarration(cfg.translationSettings) },
       ),
     })
 
@@ -301,12 +330,19 @@ export class GenerationPipeline {
       imageDeps.classification,
       imageDeps.translation,
     )
-    const image = yield* this.tracked('Images', (parentId) =>
-      this.imagePhase.execute({
-        ...imageInput,
-        activity: this.activity,
-        activityParentId: parentId,
-      }),
+    const image = yield* this.tracked(
+      'Images',
+      (parentId) =>
+        this.imagePhase.execute({
+          ...imageInput,
+          activity: this.activity,
+          activityParentId: parentId,
+        }),
+      {
+        // Inline images are made as the narration streams, not by this phase.
+        hidden: cfg.imageSettings.imageGenerationMode !== 'agentic',
+        offBy: notConfigured('image'),
+      },
     )
 
     return {

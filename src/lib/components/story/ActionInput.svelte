@@ -128,6 +128,8 @@
   let isRawActionChoice = $state(false)
   let stopRequested = false
   let activeAbortController: AbortController | null = null
+  // Set once the narration is saved: what follows does not honour the abort, so Stop cannot end it.
+  let stopUnavailable = $state(false)
   let textareaRef: HTMLTextAreaElement | null = $state(null)
 
   // ============================================================================
@@ -519,6 +521,7 @@
     if (!story.currentStory) return
 
     stopRequested = false
+    stopUnavailable = false
     activeAbortController = new AbortController()
 
     const visualProseMode = story.currentStory.settings?.visualProseMode ?? false
@@ -755,6 +758,7 @@
             narrationEntryId,
           )
           ui.endStreaming()
+          stopUnavailable = true
           emitNarrativeResponse(narrationEntry.id, fullResponse)
           if (inlineImageTracker?.hasPendingImages) await inlineImageTracker.flushToDatabase()
         }
@@ -852,8 +856,7 @@
       if (stopRequested) return
 
       if (!fullResponse.trim()) {
-        const errorMessage =
-          'The AI failed to provide a response after 3 attempts. Please try again.'
+        const errorMessage = 'The narration could not be generated. Please try again.'
         ending.emptyResponse = errorMessage
         const errorEntry = await story.addEntry('system', errorMessage, lease, {
           source: GENERATION_ERROR_SOURCE,
@@ -947,6 +950,7 @@
       const { outcome, error } = turnOutcome({ ...ending, stopRequested })
       activity.endTurn(outcome, error)
       activeAbortController = null
+      stopUnavailable = false
 
       // Android: always stop the foreground service when generation ends
       if (useBackgroundService) {
@@ -1147,8 +1151,17 @@
     })
   }
 
+  // A retry runs its own rewind, which a Stop part way through would contend with.
+  const stopBlockedBy = $derived(
+    ui.isRetryingLastMessage
+      ? 'Stop is not available during a retry.'
+      : stopUnavailable
+        ? 'Stop is not available at the moment: the turn is finishing steps that cannot be interrupted.'
+        : null,
+  )
+
   async function handleStopGeneration() {
-    if (stopRequested || ui.isRetryingLastMessage) return
+    if (stopRequested || stopBlockedBy) return
 
     stopRequested = true
     activeAbortController?.abort()
@@ -1459,15 +1472,16 @@
             rows="1"></textarea>
         </div>
         {#if ui.isGenerating}
-          {#if !ui.isRetryingLastMessage}<button
+          {#if !stopBlockedBy}<button
               onclick={handleStopGeneration}
               class="flex h-11 w-11 flex-shrink-0 -translate-y-0.5 animate-pulse items-center justify-center rounded-lg p-0 text-red-400 transition-all hover:text-red-300 active:scale-95 sm:translate-y-0"
               title="Stop generation"><Square class="h-6 w-6" /></button
             >
           {:else}<button
-              disabled
+              aria-disabled="true"
+              onclick={() => ui.showToast(stopBlockedBy!, 'info')}
               class="flex h-11 w-11 flex-shrink-0 cursor-not-allowed items-center justify-center rounded-lg p-0 text-red-400 opacity-50"
-              title="Stop disabled during retry"><Square class="h-6 w-6" /></button
+              title={stopBlockedBy}><Square class="h-6 w-6" /></button
             >{/if}
         {:else}<button
             onclick={handleSubmit}
@@ -1528,15 +1542,16 @@
             rows="1"></textarea>
         </div>
         {#if ui.isGenerating}
-          {#if !ui.isRetryingLastMessage}<button
+          {#if !stopBlockedBy}<button
               onclick={handleStopGeneration}
               class="flex h-11 w-11 shrink-0 -translate-y-0.5 animate-pulse items-center justify-center rounded-lg p-0 text-red-400 transition-all hover:text-red-300 active:scale-95 sm:translate-y-0"
               title="Stop generation"><Square class="h-6 w-6" /></button
             >
           {:else}<button
-              disabled
+              aria-disabled="true"
+              onclick={() => ui.showToast(stopBlockedBy!, 'info')}
               class="flex h-11 w-11 shrink-0 cursor-not-allowed items-center justify-center rounded-lg p-0 text-red-400 opacity-50"
-              title="Stop disabled during retry"><Square class="h-6 w-6" /></button
+              title={stopBlockedBy}><Square class="h-6 w-6" /></button
             >{/if}
         {:else}<button
             onclick={handleSubmit}

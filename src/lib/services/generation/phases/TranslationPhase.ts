@@ -55,6 +55,10 @@ export interface TranslationResult2 {
   targetLanguage: string | null
 }
 
+/** Whether the settings have narration translated: the gate this phase applies. */
+export const translatesNarration = (settings: TranslationSettings) =>
+  TranslationService.shouldTranslateNarration(settings)
+
 /**
  * TranslationPhase service
  * Translates narrative content to target language.

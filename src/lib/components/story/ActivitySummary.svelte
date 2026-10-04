@@ -1,7 +1,7 @@
 <script lang="ts">
   import { activity } from '$lib/stores/activity.svelte'
   import { formatDuration, rootStep, stepDuration, type ActivityTurn } from '$lib/services/activity'
-  import { ChevronRight, Sparkles } from '@lucide/svelte'
+  import { ChevronRight } from '@lucide/svelte'
 
   let { turn }: { turn: ActivityTurn } = $props()
 
@@ -23,8 +23,7 @@
       label: step.label,
       root: root.id === step.id ? '' : root.label,
       detail: step.detail ?? '',
-      isLLM: step.isLLM,
-      time: formatDuration(stepDuration(step, activity.now)),
+      time: step.untimed ? '' : formatDuration(stepDuration(step, activity.now)),
     }
   })
 </script>
@@ -53,12 +52,7 @@
       {#if current.detail}
         <span class="text-muted-foreground/60">· {current.detail}</span>
       {/if}
-      <span class="text-primary inline-flex items-baseline gap-0.5 whitespace-nowrap tabular-nums">
-        {current.time}
-        {#if current.isLLM}
-          <Sparkles class="h-3 w-3 shrink-0 translate-y-0.5 text-amber-700 dark:text-amber-500" />
-        {/if}
-      </span>
+      <span class="text-primary whitespace-nowrap tabular-nums">{current.time}</span>
     {:else if haltReason !== null}
       <span class="text-red-700 dark:text-red-500">Failed</span>
       {#if haltReason}

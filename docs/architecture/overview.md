@@ -340,7 +340,9 @@ still the open one. Stop registers
 its rewind on the lease and waits for it rather than releasing — aborting the request to the model
 is not the completion of the generation's writes, and an `applyClassificationResult` already entered
 keeps going regardless. One release owner throughout, so the rewind cannot race the writes it
-exists to reverse.
+exists to reverse. Once the narration is saved, Stop is refused outright — the button dims and a tap
+explains — since nothing after the narration observes the abort; a retry from an error card refuses it
+throughout, as its own rewind is already running.
 
 **Why the switch is refused rather than the writes redirected.** `applyClassificationResult` reads
 the active branch and mutates the in-memory `characters`/`locations`/`items`/`storyBeats` arrays,
@@ -394,6 +396,14 @@ message for an API error). Services that absorb a failure into a fallback — tr
 suggestions, action choices, timeline fill, scene analysis, the background image, the classifier's
 `_error` — still close the step they serve as failed (`failStep`), and return the fallback as before.
 A turn ends with an outcome (`turnOutcome`): only `halted` puts "Failed" on the collapsed line.
+A narrator stream that fails after text has arrived keeps that text as the narration and reports the
+failure without halting.
+
+The narrator's empty-answer loop reports _passes_, kept apart from the transport _attempts_ inside
+them: a single pass has no container, and is grouped into `Pass 1` (`groupChildren`) only once a
+second follows. An empty pass is a failure. A phase switched off in settings is not reported at all;
+one switched on but missing its profile is struck through with that reason. A step recorded after
+the fact without a duration (`untimed`) shows no time rather than `0s`.
 
 Reporting never alters a turn. Every write is guarded, the display sits inside a boundary, and the
 narrative retry loop is reported but unchanged. Records are session-only, bounded by `RETAINED_TURNS`,

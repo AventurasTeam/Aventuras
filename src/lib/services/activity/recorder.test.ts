@@ -313,3 +313,51 @@ describe('rebindTurn', () => {
     expect(recorder.find('error-1')?.steps.map((s) => s.label)).toEqual(['Narrative'])
   })
 })
+
+describe('groupChildren', () => {
+  it('moves the children of a step under a new step spanning them', () => {
+    const { recorder } = recorderAt([10, 10, 20, 30, 40])
+    recorder.setReporting('tree')
+    recorder.startTurn('entry')
+    const parent = recorder.startStep('Narrative')
+    const wait = recorder.startStep('Waiting for model', { parentId: parent })
+    recorder.endStep(wait)
+
+    const group = recorder.groupChildren(parent, 'Pass 1', { status: 'failed', error: 'Empty' })
+
+    const steps = recorder.snapshot()[0].steps
+    expect(steps.find((s) => s.id === wait)?.parentId).toBe(group)
+    expect(steps.find((s) => s.id === group)).toMatchObject({
+      parentId: parent,
+      status: 'failed',
+      error: 'Empty',
+      startedAt: 20,
+      endedAt: 30,
+    })
+  })
+
+  it('adds nothing when the step has no children', () => {
+    const { recorder } = recorderAt()
+    recorder.setReporting('tree')
+    recorder.startTurn('entry')
+    const parent = recorder.startStep('Narrative')
+
+    expect(recorder.groupChildren(parent, 'Pass 1')).toBe('')
+    expect(recorder.snapshot()[0].steps).toHaveLength(1)
+  })
+})
+
+describe('untimed steps', () => {
+  it('marks a step recorded without a duration as untimed, and one with a duration as timed', () => {
+    const { recorder } = recorderAt()
+    recorder.setReporting('tree')
+    recorder.startTurn('entry')
+
+    recorder.recordStep('grep')
+    recorder.recordStep('query ch.1', { durationMs: 1200 })
+
+    const [grep, query] = recorder.snapshot()[0].steps
+    expect(grep.untimed).toBe(true)
+    expect(query.untimed).toBeUndefined()
+  })
+})

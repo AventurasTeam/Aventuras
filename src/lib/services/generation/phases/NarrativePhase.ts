@@ -5,7 +5,7 @@
  * - Coordinate streaming narrative generation via AIService
  * - Yield narrative chunks as they arrive
  * - Handle abort signals properly
- * - Retry on empty responses (up to 3 attempts)
+ * - Retry on empty responses (up to 3 passes)
  */
 
 import type {
@@ -24,6 +24,7 @@ import type { StreamChunk } from '$lib/services/ai/core/types'
 import { NO_ACTIVITY, failStep, type ActivityReporter } from '$lib/services/activity'
 
 const MAX_EMPTY_RESPONSE_RETRIES = 3
+const EMPTY_RESPONSE = 'Empty response'
 
 /** Dependencies for narrative phase - injected to avoid tight coupling */
 export interface NarrativeDependencies {
@@ -64,7 +65,7 @@ export interface NarrativeResult {
 /**
  * NarrativePhase service
  * Streams narrative generation, yielding chunks as they arrive.
- * Handles automatic retry on empty responses (up to 3 attempts).
+ * Handles automatic retry on empty responses (up to 3 passes).
  */
 export class NarrativePhase {
   constructor(private deps: NarrativeDependencies) {}
@@ -95,15 +96,20 @@ export class NarrativePhase {
       chunkCount = 0
       contentChunks = 0
 
-      // An attempt is its own step: the loop is otherwise silent, so three empty responses
-      // read as one long wait with nothing to show for it.
-      const attemptId = activity.startStep(
-        retryCount > 0 ? `Attempt ${retryCount + 1}` : 'Request',
-        { parentId: narrativeStepId },
-      )
+      // A pass after the first is its own step, so three empty responses do not read as one long
+      // wait. The first gets one only once a second follows it. "Pass", not "Attempt": attempts are
+      // the transport retries, reported inside a pass.
+      const passId =
+        retryCount > 0
+          ? activity.startStep(`Pass ${retryCount + 1}`, {
+              parentId: narrativeStepId,
+              attempt: true,
+            })
+          : ''
+      const parentId = passId || narrativeStepId
       // The wait gives way to the response as soon as it starts arriving, content or not, so the
-      // two are consecutive children of the attempt and an empty answer still shows as one.
-      let waitId = activity.startStep('Waiting for model', { parentId: attemptId })
+      // two are consecutive children of the pass and an empty answer still shows as one.
+      let waitId = activity.startStep('Waiting for model', { parentId })
       let streamId = ''
 
       try {
@@ -116,12 +122,12 @@ export class NarrativePhase {
           abortSignal,
           retrievalResult.timelineFillResult,
           retrievalResult.worldStateBlock,
-          attemptId,
+          parentId,
         )) {
           if (abortSignal?.aborted) {
             activity.endStep(waitId, 'skipped')
             activity.endStep(streamId, 'skipped')
-            activity.endStep(attemptId, 'skipped')
+            activity.endStep(passId, 'skipped')
             activity.endStep(narrativeStepId, 'skipped')
             yield { type: 'aborted', phase: 'narrative' } satisfies AbortedEvent
             return null
@@ -130,7 +136,7 @@ export class NarrativePhase {
           if (waitId && (chunk.started || chunk.content || chunk.reasoning)) {
             activity.endStep(waitId)
             waitId = ''
-            streamId = activity.startStep('Generating', { parentId: attemptId, isLLM: true })
+            streamId = activity.startStep('Generating', { parentId, isLLM: true })
           }
           if (chunk.started) continue
 
@@ -166,15 +172,20 @@ export class NarrativePhase {
           contentChunks ? `${contentChunks} chunk${contentChunks === 1 ? '' : 's'}` : 'no content',
         )
         if (fullResponse.trim()) {
-          activity.endStep(attemptId)
+          activity.endStep(passId)
           break // Success
         }
-        activity.endStep(attemptId, 'done', 'empty response')
+        if (passId) activity.endStep(passId, 'failed', undefined, EMPTY_RESPONSE)
+        else
+          activity.groupChildren?.(narrativeStepId, 'Pass 1', {
+            status: 'failed',
+            error: EMPTY_RESPONSE,
+            attempt: true,
+          })
         retryCount++
       } catch (error) {
         const aborted = error instanceof Error && error.name === 'AbortError'
-        for (const id of [waitId, streamId, attemptId, narrativeStepId])
-          failStep(activity, id, error)
+        for (const id of [waitId, streamId, passId, narrativeStepId]) failStep(activity, id, error)
         if (aborted) {
           yield { type: 'aborted', phase: 'narrative' } satisfies AbortedEvent
           return null
@@ -199,15 +210,12 @@ export class NarrativePhase {
     }
 
     if (!fullResponse.trim()) {
-      activity.endStep(
-        narrativeStepId,
-        'failed',
-        `empty after ${MAX_EMPTY_RESPONSE_RETRIES} attempts`,
-      )
+      const reason = `${EMPTY_RESPONSE} after ${MAX_EMPTY_RESPONSE_RETRIES} passes`
+      activity.endStep(narrativeStepId, 'failed', undefined, reason)
       yield {
         type: 'error',
         phase: 'narrative',
-        error: new Error(`Empty response after ${MAX_EMPTY_RESPONSE_RETRIES} attempts`),
+        error: new Error(reason),
         fatal: true,
       } satisfies ErrorEvent
       return null
