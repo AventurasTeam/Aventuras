@@ -347,7 +347,8 @@ churn.
   incl. `classifier_status`, landed in M1.5; this slice is the fork
   orchestration), including the survival-anchor partition of post-fork
   deltas (copy lagging `periodic_classifier` facts about kept entries
-  instead of rewinding them) per
+  instead of rewinding them, unless they name a row the rewind
+  removes) per
   [`data-model.md → Branch model`](../data-model.md#branch-model).
 - M6.2 — Delta-log branch filtering (reads scope to current
   branch's lineage).

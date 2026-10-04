@@ -1240,9 +1240,11 @@ async function reverseReplayDeltas(
   actionId: string,
   settleOps: (deltaCount: number) => SqlOp[] = () => [],
 ): Promise<number> {
-  const deltas = await db.query(
-    'SELECT * FROM deltas WHERE action_id = ? ORDER BY log_position DESC',
-    [actionId],
+  // Closed over the rows its creates delete and the rows naming them (below).
+  const deltas = closeOverRemovedRows(
+    await db.query('SELECT * FROM deltas WHERE action_id = ? ORDER BY log_position DESC', [
+      actionId,
+    ]),
   )
   // Called even at zero deltas: the caller may still have a marker to settle.
   const settle = settleOps(deltas.length)
@@ -1251,9 +1253,10 @@ async function reverseReplayDeltas(
   await db.exec('BEGIN')
   try {
     for (const delta of deltas) {
+      // A row a delete holds takes the undo in that delete's payload (below).
       applyUndo(delta.target_table, delta.target_id, delta.undo_payload)
     }
-    await db.exec('DELETE FROM deltas WHERE action_id = ?', [actionId])
+    await db.exec('DELETE FROM deltas WHERE id IN (?)', [deltas.map((d) => d.id)])
     for (const op of settle) await db.exec(op.sql, op.params)
     await db.exec('COMMIT')
   } catch (e) {
@@ -1335,34 +1338,96 @@ are pruned from the log with the parent's. A cascade that deleted the rows
 would leave their deltas behind, pointing at nothing, and a later redo
 would re-insert children under a parent that is gone. The reversal still
 sweeps the row's vectors, which carry no deltas and would be orphaned
-otherwise. The closure gathers child rows only for a happening, and only
-its involvement and awareness rows; any other child the set doesn't
-already hold — an entity's relationship, involvement or awareness rows,
-any row's translations — outlives the reversal.
+otherwise. Child rows reach the set through the closure below, by
+reference, never through the cascade hook.
 
-**Abort, boot recovery and a prose edit close over the rows their
-creates delete.** Neither selection scope guarantees the set holds every write to such a row. An
-`actionId` scope holds a run's own writes, but not a user edit made to
-a row the run created while a no-gate pass was running — a rename, or
-an involvement added under its happening. An `entryId` scope misses
-child rows even from the same pass, because a child does not have to
-share its parent's anchor: awareness anchors to the turn that narrated
-the learning, which can sit either side of the happening's own
-provenance entry
+**Every reversal closes over the rows its creates delete, and the rows
+naming them.** Every path selects its set through one step that
+applies the closure, so no path can skip it: CTRL-Z of a group or a
+turn and the sweeps it runs, redo's sweep, regenerate, rollback, a
+branch fork's reverse-apply, abort, boot recovery, a turn refused at
+admission, and a prose edit's sweep. No selection scope guarantees the
+set holds every write to a removed row, or every row naming one. An
+`actionId` scope holds a run's own writes, but not a user edit to a
+row the run created. An `entryId` scope misses child rows even from
+the same pass, because a child does not have to share its parent's
+anchor: awareness anchors to the turn that narrated the learning,
+which can sit either side of the happening's own provenance entry
 ([`classifier.md → Provenance attribution`](./memory/classifier.md#provenance-attribution)).
-So both scopes widen their set before replaying it: for each `create`
-it holds, every later delta on that row, and for a happening every
-delta on its involvement and awareness rows, whatever their source —
-a child the user already deleted included, found through its delete's
-`undo_payload`.
-Left out, a user edit would stay in the log pointing at a row that is
-gone, and CTRL-Z of it would report an undo that changed nothing. Two
-exclusions: a later `delete` of the row, whose undo would restore
-children under a parent the create's undo then deletes; and a table
-registering `rowKeepingColumns`, whose create-undo already keeps a row
-the user wrote to. `closeOverRemovedRows`
-(`lib/actions/delta/row-closure.ts`) is the closure; `reverseReplayDeltas`
-and `resolveClassifierFactDeltas` both apply it.
+CTRL-Z of a group steps over periodic-classifier groups, so a pass's
+links to a row the user created sit above the group it undoes. A
+window spares a fact anchored to a surviving turn even when the fact
+names a row the window removes.
+
+The closure is a fixed point. The removed set starts as the rows whose
+`create` the set holds, and any row naming a removed row joins it —
+live in its table, held in a delete's `undo_payload`, or deleted on its
+own — until nothing new joins. One registry of references serves the
+closure; the forward guard `missingRef`, which turns a link write
+naming a dead row into a no-op
+([`cadence.md → User edits and classifier writes`](./memory/cadence.md#user-edits-and-classifier-writes));
+and the live-link filter, which drops a restored link whose far end is
+gone, now a backstop for payloads written before this rule: an
+involvement names its happening and its entity, awareness its
+happening and its character, a relationship both its characters, and a
+translation its target by `target_kind`. Every `create` and `update`
+of a removed row joins the set, whatever its source; a `delete` of it
+never does, as the next paragraph covers. A table registering
+`rowKeepingColumns` keeps its exemption only when the row's own create
+is reversed: a relationship the closure takes because a character it
+names is removed goes whatever views the user set, since it would
+otherwise name a row that exists nowhere. A fact taken by reference
+goes whatever its survival anchor
+([`data-model.md → Survival anchor`](./data-model.md#survival-anchor)).
+Left out, a link would name a row that exists nowhere, and a user edit
+would stay in the log pointing at a row that is gone, its CTRL-Z
+reporting an undo that changed nothing. `closeOverRemovedRows`
+(`lib/actions/delta/row-closure.ts`) is the closure.
+
+**A reversal applies to a row a delete holds.** A deleted row lives on
+in its delete's `undo_payload`, as the delete's target or a captured
+child, until that delete is undone. When the set reverses a write to a
+row absent from its table, the planner finds the delete still in the
+log that holds it — at most one, since deleting the row again needs
+this delete undone first, which prunes it — and applies the undo
+there. A holding delete inside the set is reversed first, newest-first,
+so the row is back in its table by then. Otherwise a `create`'s undo
+strips a captured child from the payload, and prunes the delete when
+the row is the delete's own target: its captured children name the
+target, so the closure takes them and their deltas. An `update`'s undo
+patches the payload copy under the rules a live row follows — user
+precedence, schema-backed sub-fields, and a relationship left with no
+view is stripped. Each changed payload is one write to that delta's
+`undo_payload` in the reversal's transaction; stores hold no deleted
+rows, so no patch follows. A captured fact so follows a live one: a
+prose edit's sweep removes it, and undoing the edit leaves the next
+pass to re-derive it. CTRL-Z is newest-first, so the delete can be
+undone only after the edit is, once the prose the fact came from is
+back. The cost is narrow: a pass that runs between the two undos
+cannot re-derive a link naming the still-deleted row, and that link
+stays lost.
+
+**Two states are refused as integrity errors, writing nothing.** A
+delete the planner would prune that shares its action group with a
+delta still in the log whose undo would write the removed id back: an
+entity delete's `state` and tail-scene updates do, so a later CTRL-Z of
+the group would restore a dead id. A chapter-close consolidation's
+upserts name the surviving happening, so its deletes prune. And a
+captured row among the rows a CTRL-Z's redo would restore (below): it
+would need a newer non-classifier delete still in the log, which
+CTRL-Z picks first. Neither is reachable today — an entity's create is
+never reversed while a delete holds it, given the
+[no-gate write phase](#no-gate-write-phase), newest-first undo, every
+window holding a delete with the create it follows, and sweeps sparing
+entity creates — and refusing keeps a broken assumption loud.
+
+**The set labels each delta for redo:** part of the action being undone,
+reached by the closure from it, or a sweep's row and what the closure
+reaches only from one. CTRL-Z's redo snapshot covers the first two, so
+redo restores the links the closure removed with the group; a sweep's
+rows stay out, since the clamped watermark re-derives them. A delta
+reached both ways counts as the closure's. Every delta-logged write
+clears the redo stack, so redo always meets the state its undo left.
 
 Abort is conceptually identical to user CTRL-Z — same
 `undo_payload` primitive, same reverse-replay path, and the replayed
@@ -1564,7 +1629,9 @@ to `detail` alone otherwise.
 `gateBehavior` controls user-edit gating:
 
 - `'hard-gate'` — all user-source writes blocked while I'm running.
-- `'no-gate'` — user-source writes proceed; my deltas land alongside.
+- `'no-gate'` — user-source writes proceed; my deltas land alongside,
+  except that every other write waits out my write phase
+  ([No-gate write phase](#no-gate-write-phase)).
 - `'scoped-gate'` — deferred (would gate only user writes
   overlapping my `writeSet`; ships when `writeSet` does).
 
@@ -1794,6 +1861,31 @@ survival-anchor predicate in
 [`data-model.md → Entry mutability & rollback → Survival anchor`](./data-model.md#survival-anchor),
 not here. The two are orthogonal — barrier for racing runs, anchor for
 committed positions.
+
+### No-gate write phase
+
+A `no-gate` run's writes must not interleave with any other write to
+its branch. The periodic classifier commits each planned action as its
+own transaction, so a user's delete of a row that predates the pass
+could otherwise commit between two of them by timing alone, and a later
+failure in the same run would reverse the pass around it, pruning a
+link the delete's `undo_payload` still holds.
+
+Every `applyDeltaAction` and `applyDeltaActionGroup` takes a per-branch
+write lock in shared mode, inside the entry metadata lock and before
+its row keys. A `no-gate` run takes it exclusive at its first emitted
+write — after its model call, embedding and reconciliation, so World
+stays editable through those — and waits for every shared holder, so a
+write already in flight lands first. The run's own writes go through
+inside the hold, which ends when the run settles: after the watermark
+write on success, after the abort's reversal commits on failure. A
+write arriving meanwhile waits a few milliseconds; nothing is disabled
+or refused. Prose reversals need nothing more, since the barrier above
+already waits a burst out, and boot recovery runs before any branch
+loads. The lock order holds because a burst never asks for the
+metadata lock: only the scene-field, world-time and entity-delete
+actions take it, and the orchestrator commits a pass's writes through
+`applyDeltaAction` directly.
 
 ### Chained start bypasses concurrencyPolicy
 

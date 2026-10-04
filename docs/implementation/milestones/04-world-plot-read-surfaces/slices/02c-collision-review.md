@@ -251,9 +251,10 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   some other shape? Whatever 4.2c settles on,
   [`world.md → Reversibility`](../../../../ui/screens/world/world.md#reversibility)'s
   merge write list must be amended to match. New rows plus the cascade
-  means more rows a delete captures, so settle
-  [the reversal and delete-payload gap](../../../../followups.md#data-model)
-  before planning this slice.
+  means more rows a delete captures. Captured rows follow
+  [`generation-pipeline.md → Reverse-replay`](../../../../generation-pipeline.md#reverse-replay),
+  and [the reversal-integrity implementation](../../../../followups.md#data-model)
+  lands before this slice's merge.
 - **Reuse the delete confirm's link counts** (4.2b):
   `components/world/delete-impact.ts` repeats the entity cascade's
   awareness / involvement / relationship predicates against the
@@ -304,7 +305,10 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   - **The tab's refresh version.** `HistoryTab` refetches when its
     target row or `settleCount` changes; a user edit to a link row
     changes neither, so the union folds the link stores it reads into
-    that version (2026-10-04 triage pass).
+    that version (2026-10-04 triage pass). A reversal that edits a
+    delete's payload emits no store patch, so link rows the union reads
+    from payloads need a refresh signal of their own
+    ([`generation-pipeline.md → Reverse-replay`](../../../../generation-pipeline.md#reverse-replay)).
   - **Overlap with the merge.** The merge reattaches the loser's link
     rows to the canonical, in a shape the re-key question above leaves
     open. Moved in place, a row names the canonical and brings its
