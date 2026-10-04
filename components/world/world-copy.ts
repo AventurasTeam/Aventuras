@@ -4,7 +4,12 @@ import {
   type OverflowMenuEntry,
   type RemoveEntry,
 } from '@/components/compounds/overflow-menu-entry'
-import { ENTITY_REJECTION, LEAD_REJECTION, type LeadRejectionCode } from '@/lib/actions'
+import {
+  ENTITY_REJECTION,
+  LEAD_REJECTION,
+  type LeadRejectionCode,
+  type RowSaveRejectionCode,
+} from '@/lib/actions'
 import type { WholeTierSpan } from '@/lib/calendar'
 import type { CharacterState, Entity, EntityKind } from '@/lib/db'
 import { t } from '@/lib/i18n'
@@ -71,12 +76,17 @@ export function loreIssueText(message: string): string {
     : t('world:validation.inTab', { tab: t(`world:lore.tabs.${tab}`), issue: text })
 }
 
+// Exhaustive: a new RowSaveRejectionCode fails typecheck until it has text here.
+const SAVE_REJECTION_TEXT: Record<RowSaveRejectionCode, () => string> = {
+  [ENTITY_REJECTION.inFlight]: () => t('world:save.inFlight'),
+  [ENTITY_REJECTION.parentCycle]: () => t('world:save.parentCycle'),
+  [ENTITY_REJECTION.parentChainBroken]: () => t('world:save.parentChainBroken'),
+  [ENTITY_REJECTION.failed]: () => t('world:save.failed'),
+}
+
 /** A refused save's user-facing text; the actions' own reasons are developer strings. */
-export function saveRejectionText(code: string | undefined): string {
-  if (code === ENTITY_REJECTION.inFlight) return t('world:save.inFlight')
-  if (code === ENTITY_REJECTION.parentCycle) return t('world:save.parentCycle')
-  if (code === ENTITY_REJECTION.parentChainBroken) return t('world:save.parentChainBroken')
-  return t('world:save.failed')
+export function saveRejectionText(code: RowSaveRejectionCode): string {
+  return SAVE_REJECTION_TEXT[code]()
 }
 
 export function saveFailureText(): string {

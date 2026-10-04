@@ -52,9 +52,11 @@ describe('saveRejectionText', () => {
     expect(saveRejectionText('in-flight')).toBe(
       "Couldn't save while generation is in flight. Your changes are still here.",
     )
-    expect(saveRejectionText(undefined)).toBe(
-      "Couldn't save your changes. They're still here — try again.",
-    )
+    for (const code of ['failed', 'parent-cycle', 'parent-chain-broken'] as const) {
+      expect(saveRejectionText(code)).toBe(
+        "Couldn't save your changes. They're still here — try again.",
+      )
+    }
   })
 })
 

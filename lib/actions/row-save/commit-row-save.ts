@@ -1,15 +1,37 @@
 import { logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { generationStore } from '@/lib/stores'
+import { PARENT_CHAIN_BROKEN, PARENT_CYCLE } from '@/lib/world'
 
-import { applyDeltaActionGroup } from '../delta/apply-delta-action'
+import { applyDeltaActionGroup, DELTA_REJECTION } from '../delta/apply-delta-action'
 import type { DbCtx, PipelineAction } from '../types'
+
+export const ROW_SAVE_REJECTION = {
+  inFlight: 'in-flight',
+  parentCycle: PARENT_CYCLE,
+  parentChainBroken: PARENT_CHAIN_BROKEN,
+  failed: 'failed',
+} as const
+
+export type RowSaveRejectionCode = (typeof ROW_SAVE_REJECTION)[keyof typeof ROW_SAVE_REJECTION]
 
 export type RowSaveResult =
   | { status: 'ok'; id: string }
-  | { status: 'rejected'; reason: string; code?: string }
+  | { status: 'rejected'; reason: string; code: RowSaveRejectionCode }
 
-export const ROW_SAVE_REJECTION = { inFlight: 'in-flight' } as const
+// A reversal raised while the save awaited its locks is what the gate below reports as in-flight.
+function rejectionCode(code: string | undefined): RowSaveRejectionCode {
+  switch (code) {
+    case DELTA_REJECTION.reversalInProgress:
+      return ROW_SAVE_REJECTION.inFlight
+    case PARENT_CYCLE:
+      return ROW_SAVE_REJECTION.parentCycle
+    case PARENT_CHAIN_BROKEN:
+      return ROW_SAVE_REJECTION.parentChainBroken
+    default:
+      return ROW_SAVE_REJECTION.failed
+  }
+}
 
 export type RowSaveKind = 'thread' | 'happening' | 'entity' | 'lore'
 
@@ -61,7 +83,7 @@ export async function commitRowSave(
       reason: result.reason,
       code: result.code,
     })
-    return result
+    return { status: 'rejected', reason: result.reason, code: rejectionCode(result.code) }
   }
   return { status: 'ok', id }
 }

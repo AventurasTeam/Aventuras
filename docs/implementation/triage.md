@@ -150,15 +150,6 @@ slice-planning gate forces its resolution before that slice is planned.
   at the 4.2b review head (`1428e5b8`), not re-run on `main`
   (2026-09-30, from a slice-review skill test).
 
-- **`RowSaveResult.code` is a bare optional string.** The save side of
-  what the delete side now closes (`RowDeleteRejectionCode`): World's
-  `saveRejectionText` and Plot's save mapper match a few codes and let
-  the rest fall through, and `ENTITY_REJECTION` spreads a family's
-  codes into an open set. Closing it the same way means a code union
-  for the save family, the runner's refusals mapped at `commitRowSave`
-  as `commitRowDelete` does, and exhaustive copy tables. The save paths
-  predate 4.2b, so the follow-up left them (2026-09-30, raised by the
-  4.2b type-design follow-up).
 - **The fallback classifier can re-apply stackable transfers the
   narrative fold already wrote.** The fold applies whatever the tagged
   block parsed even when another field failed

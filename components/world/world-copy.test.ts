@@ -150,7 +150,7 @@ describe('labels and issues', () => {
     expect(saveRejectionText('in-flight')).toBe(
       "Couldn't save while generation is in flight. Your changes are still here.",
     )
-    expect(saveRejectionText(undefined)).toBe(
+    expect(saveRejectionText('failed')).toBe(
       "Couldn't save your changes. They're still here — try again.",
     )
   })

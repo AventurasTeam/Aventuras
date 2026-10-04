@@ -4,7 +4,7 @@ import {
   type RemoveEntry,
 } from '@/components/compounds/overflow-menu-entry'
 import type { SelectOption } from '@/components/ui/select'
-import { PLOT_REJECTION } from '@/lib/actions'
+import { PLOT_REJECTION, type RowSaveRejectionCode } from '@/lib/actions'
 import { t } from '@/lib/i18n'
 import type { PlotKind } from '@/lib/list-modules'
 import { isPlotIssue, type HappeningDraft, type PlotIssue, type ThreadDraft } from '@/lib/plot'
@@ -20,9 +20,18 @@ export function issueLabel(message: string | undefined): string | undefined {
   return message == null ? undefined : validationText(message)
 }
 
+// Exhaustive: a new RowSaveRejectionCode fails typecheck until it has text here. Plot rows have
+// no parent chain, so those codes can't reach this table except as a bug.
+const SAVE_REJECTION_TEXT: Record<RowSaveRejectionCode, () => string> = {
+  [PLOT_REJECTION.inFlight]: () => t('plot:save.inFlight'),
+  [PLOT_REJECTION.parentCycle]: () => t('plot:save.failed'),
+  [PLOT_REJECTION.parentChainBroken]: () => t('plot:save.failed'),
+  [PLOT_REJECTION.failed]: () => t('plot:save.failed'),
+}
+
 /** A refused save's user-facing text; the actions' own reasons are developer strings. */
-export function saveRejectionText(code: string | undefined): string {
-  return code === PLOT_REJECTION.inFlight ? t('plot:save.inFlight') : t('plot:save.failed')
+export function saveRejectionText(code: RowSaveRejectionCode): string {
+  return SAVE_REJECTION_TEXT[code]()
 }
 
 export function saveFailureText(): string {

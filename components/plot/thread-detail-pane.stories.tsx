@@ -494,7 +494,7 @@ export const SaveRejected: Story = {
 }
 
 export const SaveFailed: Story = {
-  args: { saveResult: { status: 'rejected', reason: 'UNIQUE constraint failed' } },
+  args: { saveResult: { status: 'rejected', reason: 'UNIQUE constraint failed', code: 'failed' } },
   play: async ({ args }) => {
     const bar = await editDescription(' Soon.')
     await userEvent.click(within(bar).getByRole('button', { name: /^Save/ }))
