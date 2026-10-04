@@ -1397,8 +1397,10 @@ suppression.** See
 exemption is justified by per-row user intent and a story-wide mode is
 not that. Keyword-injected rows otherwise respect the same status and
 [pool-exclusion](#pool-exclusions) rules as ranked candidates, and a
-row seated by keyword is skipped when it later appears as a ranked
-candidate rather than seated or charged twice.
+row seated by keyword is dropped from the ranked pool before scoring,
+so it is never seated or charged twice and, like a
+[structural-floor](#structural-floor--always-inject) seat, never
+enters MMR's selected set.
 
 **Cascade** is off by default. Enabled, an injected row's own text is
 rescanned for further hits to `keywordRetrieval.cascadeMaxDepth`
