@@ -40,7 +40,7 @@ HEAD_SHA=$(git rev-parse HEAD)
 
 **2. Dispatch code reviewer subagent:**
 
-Dispatch a code reviewer subagent, filling the template at `code-reviewer.md`
+Dispatch the `aventuras-code-reviewer` agent (`.claude/agents/aventuras-code-reviewer.md`: Opus, effort `xhigh`), filling the template at `code-reviewer.md`. Without Claude Code agent definitions (another harness), dispatch a general subagent whose prompt is that file's body followed by the filled template.
 
 **Placeholders:**
 

@@ -63,7 +63,7 @@ On "Dispatch slice `<milestone>/<stem>`: plan at `<path>`":
    orca orchestration worker-start --run <run> --worktree new-top-level --repo id:<repo-id> --name <milestone>-<stem> --setup run --agent claude --model opus --effort xhigh --task-title "<milestone>/<stem>" --spec "<spec>" --json
    ```
 
-   Every worker you start, whether implementer, slice reviewer, follow-up or restart, gets `--agent claude --model opus --effort xhigh`. Without them it launches with whatever model and effort the Orca UI last had, so a change there would reach the workers.
+   Every worker you start, whether implementer, slice reviewer, follow-up or restart, gets `--agent claude --model opus --effort xhigh`. Without them it launches with whatever model and effort the Orca UI last had, so a change there would reach the workers. The subagents a worker dispatches run at the models and efforts their definitions in `.claude/agents/` set, not at the worker's.
 
    The spec, filled in:
 

@@ -57,6 +57,8 @@ vars, no BaaS.
 ├── docs/                  Project documentation
 ├── scripts/               Repo scripts
 ├── .claude/
+│   ├── agents/            Agent definitions the skills dispatch
+│   │                      (model + effort pinned per role)
 │   └── rules/             Topic-scoped Claude rules
 │                          (auto-load on matching file reads)
 ├── .github/               CI / actions
