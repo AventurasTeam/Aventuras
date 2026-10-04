@@ -54,16 +54,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **`Autocomplete`'s casing modes barely differ, and `as-typed`
-  can't re-case.** The tail row hides on any case-insensitive match in
-  both modes, so every commit goes through a suggestion row whose value
-  is already a source entry: typing `reiwa` against `['Reiwa']` and
-  pressing Enter commits `Reiwa` under `as-typed` too, which the
-  `AsTypedCasing` story text says it won't. `canonical` changes a
-  commit only when the list holds two casings of one entry. What
-  `as-typed` should mean is open: show the tail row for a case-only
-  variant, drop the prop and make canonical universal, or leave it
-  (2026-09-28, raised by 4.2b; reframed by the post-4.2b triage pass).
 - **AlertDialog impact lists aren't in the dialog's accessible
   description.** The bulleted impact list (`DeleteConfirmDialog`'s
   `delete-impacts` View, and the shipped

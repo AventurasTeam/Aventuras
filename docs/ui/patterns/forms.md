@@ -715,7 +715,9 @@ acceptable, entry-ref pickers.
     visible; scroll within the dropdown beyond that.
   - **`+ Add new: "<typed>"` row** (bottom) — appears only when
     the typed value doesn't exactly match any source entry
-    (case-insensitive comparison). Visually distinct from
+    (case-insensitive comparison; under `as-typed`, case-sensitive,
+    so a case-only variant gets the row after the entry it varies
+    and re-casing is a deliberate pick). Visually distinct from
     suggestions (e.g., separator above + muted "+ Add new" label
     prefix).
 
@@ -755,7 +757,8 @@ implementation):
 - `casingNormalization: 'canonical' | 'as-typed'` — default
   `canonical`. Use `as-typed` when the source list is hint-only
   rather than canonical (e.g., tag lists where users may
-  intentionally re-case).
+  intentionally re-case). Enter still picks the existing entry
+  under `as-typed`; the typed casing commits from its tail row.
 - `createTailLabel: string` — copy for the tail row; `+ Add new:
 "{value}"` is the default template.
 - `placeholder: string`, `required: boolean` — standard form
