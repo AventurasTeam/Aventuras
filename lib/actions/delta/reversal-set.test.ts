@@ -360,7 +360,7 @@ describe('selectReversalSet — the closure', () => {
     expect(ids(set.rows)).toEqual(['d_view', 'd_rel', 'd_p'])
   })
 
-  it('reads only the seed branch for live rows naming a removed row', async () => {
+  it('reads only the seed branch for writes to and live rows naming a removed row', async () => {
     await ctx.db.insert(entities).values([character('char_p'), character('char_p', 'b2')])
     await ctx.db
       .insert(characterRelationships)
@@ -372,6 +372,8 @@ describe('selectReversalSet — the closure', () => {
         targetTable: 'character_relationships',
         targetId: 'rel_b2',
       }),
+      // A fork copies rows and deltas under the same ids.
+      delta('d_p_b2', 2, { branchId: 'b2', targetTable: 'entities', targetId: 'char_p' }),
     )
 
     const set = await selectReversalSet(ctx, {
@@ -538,6 +540,57 @@ describe('selectReversalSet — refusals and edges', () => {
     })
   })
 
+  it('refuses a held row reached by reference whose create is not in the log', async () => {
+    const created = delta('d_p', 1, { targetTable: 'entities', targetId: 'char_p' })
+    await insertDeltas(
+      created,
+      delta('d_del', 2, {
+        actionId: 'act_del',
+        source: 'user_edit',
+        op: 'delete',
+        targetTable: 'entities',
+        targetId: 'char_x',
+        undoPayload: {
+          ...character('char_x'),
+          relationships: [relationship('rel_h', 'char_p', 'char_x')],
+        },
+      }),
+    )
+
+    const refused = await selectReversalSet(ctx, { branchId: 'b1', target: [created] }).catch(
+      (e: unknown) => e,
+    )
+
+    expect(refused).toBeInstanceOf(ReversalIntegrityError)
+    expect(refused).toMatchObject({
+      refusal: 'no-create',
+      message: 'Reversal refused (no-create): character_relationships:rel_h',
+    })
+  })
+
+  it("carries the first seed delta's actionId on a refusal", async () => {
+    await ctx.db.insert(entities).values([character('char_p'), character('char_q')])
+    await ctx.db.insert(characterRelationships).values(relationship('rel_x', 'char_k', 'char_p'))
+    const first = delta('d_p', 1, {
+      actionId: 'act_first',
+      targetTable: 'entities',
+      targetId: 'char_p',
+    })
+    const second = delta('d_q', 2, {
+      actionId: 'act_second',
+      targetTable: 'entities',
+      targetId: 'char_q',
+    })
+    await insertDeltas(first, second)
+
+    const refused = await selectReversalSet(ctx, {
+      branchId: 'b1',
+      target: [first, second],
+    }).catch((e: unknown) => e)
+
+    expect(refused).toMatchObject({ refusal: 'no-create', actionId: 'act_first' })
+  })
+
   it('refuses a seed delta from another branch', async () => {
     const stray = delta('d_b2', 1, { branchId: 'b2', targetTable: 'entities', targetId: 'char_k' })
 
@@ -550,6 +603,40 @@ describe('selectReversalSet — refusals and edges', () => {
     expect((refused as Error).message).toBe(
       'selectReversalSet: delta d_b2 is on b2, not the seed branch b1',
     )
+  })
+
+  it('refuses a sweep delta from another branch', async () => {
+    const created = delta('d_p', 1, { targetTable: 'entities', targetId: 'char_p' })
+    const stray = delta('d_b2', 1, { branchId: 'b2', targetTable: 'entities', targetId: 'char_k' })
+
+    const refused = await selectReversalSet(ctx, {
+      branchId: 'b1',
+      target: [created],
+      sweep: [stray],
+    }).catch((e: unknown) => e)
+
+    expect((refused as Error).message).toBe(
+      'selectReversalSet: delta d_b2 is on b2, not the seed branch b1',
+    )
+  })
+
+  it('closes over a sweep when the target is empty, labelling nothing for redo', async () => {
+    await ctx.db.insert(entities).values(character('char_p'))
+    await ctx.db.insert(characterRelationships).values(relationship('rel_1', 'char_k', 'char_p'))
+    const swept = delta('d_p', 1, { targetTable: 'entities', targetId: 'char_p' })
+    await insertDeltas(
+      swept,
+      delta('d_rel', 2, {
+        actionId: 'act_other',
+        targetTable: 'character_relationships',
+        targetId: 'rel_1',
+      }),
+    )
+
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target: [], sweep: [swept] })
+
+    expect(ids(set.rows)).toEqual(['d_rel', 'd_p'])
+    expect(set.redoRows).toEqual([])
   })
 
   it('returns an empty set for an empty seed without a query', async () => {
@@ -599,6 +686,49 @@ describe('reversalLockKeys', () => {
         'entities:b1:char_p',
         'happening_links:b1',
         // d_del holds rel_1, which the set's d_rel writes.
+        'entities:b1:char_x',
+      ]),
+    )
+  })
+
+  it('locks the delete holding a row only the sweep reaches', async () => {
+    const created = delta('d_p', 1, { targetTable: 'entities', targetId: 'char_p' })
+    const swept = delta('d_q', 2, {
+      actionId: 'act_s',
+      targetTable: 'entities',
+      targetId: 'char_q',
+    })
+    await insertDeltas(
+      created,
+      swept,
+      delta('d_rel', 3, {
+        actionId: 'act_user',
+        source: 'user_edit',
+        targetTable: 'character_relationships',
+        targetId: 'rel_q',
+      }),
+      delta('d_del', 4, {
+        actionId: 'act_del',
+        source: 'user_edit',
+        op: 'delete',
+        targetTable: 'entities',
+        targetId: 'char_x',
+        undoPayload: {
+          ...character('char_x'),
+          relationships: [relationship('rel_q', 'char_q', 'char_x')],
+        },
+      }),
+    )
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target: [created], sweep: [swept] })
+
+    expect(ids(set.redoRows)).toEqual(['d_p'])
+    expect(new Set(reversalLockKeys(set))).toEqual(
+      new Set([
+        'character_relationships:b1',
+        'entities:b1:char_p',
+        'entities:b1:char_q',
+        'happening_links:b1',
+        // d_del holds rel_q, which only the sweep's char_q reaches.
         'entities:b1:char_x',
       ]),
     )
