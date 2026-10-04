@@ -40,9 +40,9 @@ export function ReindexConfirmDialog({
             {rowCount == null
               ? t('storySettings:reindexConfirm.bodyUnknownCount', { model: modelLabel })
               : t('storySettings:reindexConfirm.body', { count: rowCount, model: modelLabel })}
+            <Text size="sm">{`\n\n${t('storySettings:reindexConfirm.cancelSemantics')}`}</Text>
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <Text size="sm">{t('storySettings:reindexConfirm.cancelSemantics')}</Text>
         <AlertDialogFooter>
           <AlertDialogCancel asChild>
             <Button variant="secondary">

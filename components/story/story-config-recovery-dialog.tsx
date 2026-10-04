@@ -120,14 +120,15 @@ export function StoryConfigRecoveryDialog({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{body}</AlertDialogDescription>
+          <AlertDialogDescription>
+            {body}
+            {confirmingReset ? (
+              <Text variant="muted" size="sm">
+                {`\n\n${confirmationWarning}`}
+              </Text>
+            ) : null}
+          </AlertDialogDescription>
         </AlertDialogHeader>
-
-        {confirmingReset ? (
-          <Text variant="muted" size="sm">
-            {confirmationWarning}
-          </Text>
-        ) : null}
 
         <AlertDialogFooter>
           {confirmingReset ? (

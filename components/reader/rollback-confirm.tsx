@@ -1,5 +1,3 @@
-import { View } from 'react-native'
-
 import {
   AlertDialog,
   AlertDialogAction,
@@ -51,24 +49,24 @@ export function RollbackConfirmModal({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{copy.title}</AlertDialogTitle>
-          <AlertDialogDescription>{copy.body}</AlertDialogDescription>
-        </AlertDialogHeader>
-        <View className="gap-1">
-          <Text size="sm">
-            {`• ${t('reader:rollbackConfirm.entries', { count: counts.entries })}`}
-          </Text>
-          {counts.chapters > 0 && (
-            <Text size="sm" className="font-semibold">
-              {`• ${t('reader:rollbackConfirm.chapters', { count: counts.chapters })}`}
+          <AlertDialogDescription>
+            {copy.body}
+            <Text size="sm">
+              {`\n\n• ${t('reader:rollbackConfirm.entries', { count: counts.entries })}`}
             </Text>
-          )}
-          <Text size="sm">
-            {`• ${t('reader:rollbackConfirm.worldState', { count: counts.worldStateChanges })}`}
-          </Text>
-        </View>
-        <Text size="sm" className="font-bold">
-          {copy.irreversible}
-        </Text>
+            {counts.chapters > 0 && (
+              <Text size="sm" className="font-semibold">
+                {`\n• ${t('reader:rollbackConfirm.chapters', { count: counts.chapters })}`}
+              </Text>
+            )}
+            <Text size="sm">
+              {`\n• ${t('reader:rollbackConfirm.worldState', { count: counts.worldStateChanges })}`}
+            </Text>
+            <Text size="sm" className="font-bold">
+              {`\n\n${copy.irreversible}`}
+            </Text>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel asChild>
             <Button variant="secondary">

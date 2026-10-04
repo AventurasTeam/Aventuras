@@ -1,5 +1,3 @@
-import { View } from 'react-native'
-
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,17 +39,15 @@ export function DeleteConfirmDialog({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{description}</AlertDialogDescription>
-        </AlertDialogHeader>
-        {impacts.length > 0 ? (
-          <View className="gap-1" testID="delete-impacts">
+          <AlertDialogDescription>
+            {description}
             {impacts.map((line, index) => (
               <Text key={index} size="sm">
-                {`• ${line}`}
+                {`${index === 0 ? '\n\n' : '\n'}• ${line}`}
               </Text>
             ))}
-          </View>
-        ) : null}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel asChild>
             <Button variant="secondary">

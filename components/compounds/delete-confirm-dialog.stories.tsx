@@ -35,6 +35,11 @@ export const Character: Story = {
       expect(within(dialog).getByText('• Removed from the current scene')).toBeVisible()
       expect(within(dialog).getByText(deleteUndoHint())).toBeVisible()
     }, WAIT)
+    // alert-dialog.md → Body text: the impacts are announced with the dialog, not browsed to.
+    expect(dialog).toHaveAccessibleDescription(expect.stringContaining('2 awareness records'))
+    expect(dialog).toHaveAccessibleDescription(
+      expect.stringContaining('Removed from the current scene'),
+    )
     await userEvent.click(within(dialog).getByRole('button', { name: 'Delete character' }))
     expect(args.onConfirm).toHaveBeenCalledTimes(1)
     expect(args.onOpenChange).toHaveBeenCalledWith(false)
@@ -45,7 +50,7 @@ export const Lore: Story = {
   args: { title: 'Delete The Aetherium?', impacts: [], confirmLabel: 'Delete lore' },
   play: async ({ args }) => {
     const dialog = await screen.findByRole('alertdialog', { name: 'Delete The Aetherium?' })
-    expect(screen.queryByTestId('delete-impacts')).toBeNull()
+    expect(dialog).toHaveAccessibleDescription(deleteUndoHint())
     await waitFor(() => {
       expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()
     }, WAIT)

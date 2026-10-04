@@ -2,6 +2,8 @@ import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useEffect, useState } from 'react'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
+import { t } from '@/lib/i18n'
+
 import {
   StoryConfigRecoveryDialog,
   type StoryConfigRecoveryDialogProps,
@@ -56,6 +58,9 @@ export const DesktopSettings: Story = {
 
     expect(args.onReset).not.toHaveBeenCalled()
     expect(screen.getByText('Reset settings for Mornstone?')).toBeInTheDocument()
+    expect(screen.getByRole('alertdialog')).toHaveAccessibleDescription(
+      expect.stringContaining(t('landing:storyRecovery.confirmWarning')),
+    )
     const cancel = screen.getByRole('button', { name: 'Cancel' })
     await waitFor(() => expect(cancel).toHaveFocus())
 

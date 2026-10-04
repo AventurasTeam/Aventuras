@@ -54,19 +54,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **AlertDialog impact lists aren't in the dialog's accessible
-  description.** The bulleted impact list (`DeleteConfirmDialog`'s
-  `delete-impacts` View, and the shipped
-  `RollbackConfirm` — `components/reader/rollback-confirm.tsx`) is a
-  plain `Text` sibling of `AlertDialogDescription`, the only body
-  content wired into the dialog's `aria-describedby`; a screen reader
-  can still browse to the sibling rows, it just doesn't announce them
-  with the description, and the leading `•` glyph reads as a
-  character rather than a list marker. `DefinitionalChangeDialog`
-  puts its bullets inside the description instead — a working
-  alternative already shipped. Pattern-wide — every AlertDialog
-  consumer with an impact list, not just World / Plot delete. Read,
-  not verified with a screen reader (2026-09-28, raised by 4.2b).
 - **The fallback classifier can re-apply stackable transfers the
   narrative fold already wrote.** The fold applies whatever the tagged
   block parsed even when another field failed

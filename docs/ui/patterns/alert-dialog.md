@@ -41,15 +41,14 @@ Reasoning: AlertDialog's semantics (blocking, ceremonial, Esc cancels, bounded c
   <AlertDialogContent>
     <AlertDialogHeader>
       <AlertDialogTitle>Delete from entry 47?</AlertDialogTitle>
-      <AlertDialogDescription>Permanent — rolls back to entry 46.</AlertDialogDescription>
+      <AlertDialogDescription>
+        Permanent — rolls back to entry 46.
+        {/* Rollback's bulleted impact list, inside the description */}
+        <Text size="sm">{'\n\n• 12 entries'}</Text>
+        <Text size="sm">{'\n• 4 classifications'}</Text>
+        <Text size="sm">{'\n• 23 world-state changes'}</Text>
+      </AlertDialogDescription>
     </AlertDialogHeader>
-
-    {/* Rollback's bulleted impact list */}
-    <View className="gap-1">
-      <Text size="sm">• 12 entries</Text>
-      <Text size="sm">• 4 classifications</Text>
-      <Text size="sm">• 23 world-state changes</Text>
-    </View>
 
     <AlertDialogFooter>
       <AlertDialogCancel asChild>
@@ -63,7 +62,13 @@ Reasoning: AlertDialog's semantics (blocking, ceremonial, Esc cancels, bounded c
 </AlertDialog>
 ```
 
-Calendar swap-warning's W1 / W2 / W3 sub-warning blocks compose the same way — three child blocks between header and footer, each rendered with surface-specific layout. The primitive imposes no shape on content beyond the gap.
+Calendar swap-warning's W1 / W2 / W3 sub-warning blocks compose between header and footer instead — three child blocks, each rendered with surface-specific layout. The primitive imposes no shape on content beyond the gap.
+
+## Body text
+
+Everything the user must read before choosing goes inside `AlertDialogDescription`, as nested `Text` with `\n` breaks: impact lists, consequence lines ("This can't be undone."), a second step's warning. The description is the only body content wired into the dialog's `aria-describedby` on web, so anything outside it is browsed to rather than announced with the dialog. Nested `Text` keeps per-line styling (a bold chapters line), but a description is announced as flat text, so a bulleted list inside it reads as text with bullet characters, not as a list — being announced wins over list semantics.
+
+Content that needs block layout, like the swap-warning's sub-warning blocks, can't live inside a `Text`. It stays a sibling, and the description carries a one-line summary of it, so the announcement still names the consequence.
 
 **Width.** `max-w-lg` (512px) accommodates both v1 consumers (rollback ~440px, calendar ~480px). Single max-width.
 
