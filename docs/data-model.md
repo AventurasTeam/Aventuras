@@ -456,7 +456,11 @@ the latest entry):
    silently dropping facts about kept turns (see
    [Entry mutability & rollback → Survival anchor](#survival-anchor)).
    The new branch thus carries the complete history up to the fork point
-   and rollback on the new branch can reach any entry 1..N.
+   and rollback on the new branch can reach any entry 1..N. A lagging
+   fact that names a row step 3 removes is the exception: the reversal's
+   closure moves it to step 3, so the fork never holds a link to a row
+   that exists nowhere
+   ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
 3. Reverse-apply parent's deltas with `log_position >= L` **except those
    copied in step 2** (i.e. `entry_id IS NULL OR position(entry_id) >=
 position(N+1)`) onto the new branch's copied rows. These rewind the
@@ -2286,7 +2290,13 @@ and every run the pipeline reverses itself — an aborted or failed run,
 a crash-recovered orphan, a turn refused at admission. Deltas are never
 kept and marked reversed: a kept row would read as the next undo head
 and be re-reversed by a later rollback. A reversed run's only trace is
-its `pipeline_runs.outcome`; a refused admission leaves none.
+its `pipeline_runs.outcome`; a refused admission leaves none. A
+reversal can also change a delta it does not replay: reversing a write
+to a row that a delete still in the log holds applies the undo to that
+delete's `undo_payload` copy, and prunes the delete when the row was
+its target
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
+Forward writes only ever append; only a reversal prunes or edits.
 
 User editing an entry's text does **not** auto-trigger re-classification.
 Text edits are separate from state edits; state stays put unless the user
@@ -2393,15 +2403,17 @@ arbitrary editing.
   keys are identifiers. `$invalidationScope` is the first such key.
   `$firstLoggedAt` is the second: the position a redone `user_edit`
   delta held before its first undo (see `log_position` assignment).
-- **The reversal set closes over the happening → link-row relation**, not
-  over the anchor alone. Undoing a `create` is a plain row delete with no
-  cascade — only the explicit `deleteHappening` action carries one — and a
-  link row does not share its happening's anchor: awareness anchors to the
-  turn that narrated the learning, which can sit either side of the
-  happening's own provenance entry. Reversing by anchor alone would delete a
-  happening and leave its awareness rows pointing at nothing. A suffix
-  rollback never meets this, because it reverses a whole tail; an
-  entry-scoped reversal has to close the set by hand.
+- **The reversal set closes over the rows its creates delete, and the
+  rows naming them**, not over the anchor alone. Undoing a `create` is a
+  plain row delete with no cascade — only an explicit delete action
+  carries one — and a link row does not share its happening's anchor:
+  awareness anchors to the turn that narrated the learning, which can sit
+  either side of the happening's own provenance entry. Reversing by
+  anchor alone would delete a happening and leave its awareness rows
+  pointing at nothing. A suffix rollback closes its set the same way,
+  since a fact anchored to a surviving turn can name a row the suffix
+  removes
+  ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
 - **A first-introduction entity survives the edit that removed its prose.**
   It is not a fact about that turn but a row the rest of the branch now
   references — `sceneEntities` arrays, later happenings' involvements,
@@ -2646,15 +2658,18 @@ Algorithm:
    - **Otherwise** (no `story_entries` create — a field edit, a
      chapter-close batch) — reverse just that `action_id` group.
      Periodic-classifier deltas above it describe unrelated turns and
-     stay put.
+     stay put, except any that name a row the group created, which the
+     reversal's closure takes with it.
 3. Reverse the selected deltas newest-to-oldest via their `undo_payload`,
    move them onto an in-memory redo stack (not persisted), and remove
    them from the `deltas` table.
 
-Redo re-applies from the in-memory stack. The stack clears on any new
-action. Redo is runtime-only; no schema support needed. If the app
-restarts, redo history is lost (acceptable — this matches editor
-conventions).
+Redo re-applies from the in-memory stack, including the rows the
+closure took with the group, so undo and redo stay exact inverses; a
+sweep's rows stay out, since the clamped watermark re-derives them. The
+stack clears on any new action. Redo is runtime-only; no schema
+support needed. If the app restarts, redo history is lost (acceptable
+— this matches editor conventions).
 
 This co-exists cleanly with entry-level rollback: CTRL-Z is
 action-granular ("undo my last thing"), rollback is entry-granular
@@ -2683,7 +2698,11 @@ anchor to their own turn (≥ B), and `null`-anchor deltas always reverse,
 exactly as before; only a lagging background
 delta whose anchor is below `B` is spared. A background delta therefore
 survives only if its anchor entry survives — no orphans or dangling
-anchors by construction. The same predicate drives the
+anchors by construction. The one exception runs the other way: a
+background delta naming a row the reversal removes goes with it
+whatever its anchor, so a fact about a surviving turn cannot name a
+row that exists nowhere
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)). The same predicate drives the
 [fork reverse-apply partition](#branch-model), and is orthogonal to the
 in-flight
 [classifier barrier](./generation-pipeline.md#prose-reversals-and-the-classifier-barrier),
@@ -2886,12 +2905,13 @@ that didn't land never existed; nothing to reverse.
 
 Retry-created rows from the `translation-retry` pipeline carry the
 retry pipeline's own `action_id`, not the originator's. CTRL-Z of
-the originating turn does not reverse retry-created translations —
-they become orphan rows, harmless under keyed lookup (a lookup
-against a reversed target finds nothing). Forward / redo of the
-originator restores the target; the orphan becomes a live translation
-again. Hard-delete of a source row cleans up via existing branch-
-cascade rules and per-row action-layer cleanup writes.
+the originating turn does not select them by `action_id`, but one
+whose target the turn created goes with that target: the reversal's
+closure takes every row naming a removed row, a translation by its
+`target_kind` included
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)),
+and redo restores both. Hard-delete of a source row cleans up via
+existing branch-cascade rules and per-row action-layer cleanup writes.
 
 **Runtime:** Zustand loads translations into an index
 `Map<(kind, id, field, lang), string>` for O(1) render-time lookup. UI

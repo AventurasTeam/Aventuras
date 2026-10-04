@@ -222,7 +222,10 @@ The periodic classifier is `no-gate`, so World stays editable while a
 pass runs. A user edit can meet a classifier write in two ways. It can
 land during the pass: the pass reads its entity snapshot before the
 model call and writes only after the model call and reconciliation
-return, which can be minutes later. Or it can predate the pass but
+return, which can be minutes later. It cannot land inside those writes,
+which hold the branch's write lock for their few milliseconds
+([`generation-pipeline.md → No-gate write phase`](../generation-pipeline.md#no-gate-write-phase)).
+Or it can predate the pass but
 postdate the prose the pass processes, since a pass works through the
 backlog of turns written since the last one. The classifier's writes
 to an existing entity's status and keywords, and to a relationship
