@@ -231,12 +231,6 @@ slice-planning gate forces its resolution before that slice is planned.
   at the 4.2b review head (`1428e5b8`), not re-run on `main`
   (2026-09-30, from a slice-review skill test).
 
-- **`blankToNull` has two copies.** `lib/world/draft-text.ts` and
-  `lib/plot/thread-draft.ts` each define it (World's entity and lore
-  drafts use the first, Plot's thread and happening drafts the second).
-  It wants a shared home such as `lib/text`. The 4.2b stack doesn't
-  touch Plot's copy or its callers, so the move is a follow-up on main
-  (2026-09-30, raised by the 4.2b stack review).
 - **`reader-composer-modes.spec` can fail on its own locator.** After
   Send it waits for `getByText('E2E-MODES', { exact: false })`, which
   also matches the mock reply (`E2E-MODES-REPLY …`); when the reply

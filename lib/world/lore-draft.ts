@@ -3,8 +3,9 @@ import { z } from 'zod'
 import type { PipelineAction } from '@/lib/actions'
 import { INJECTION_MODES, type Lore, type NewLore } from '@/lib/db'
 import { dedupeTerms } from '@/lib/keyword-terms'
+import { blankToNull } from '@/lib/text'
 
-import { blankToNull, cleanList, sameList } from './draft-text'
+import { cleanList, sameList } from './draft-text'
 import { prioritySchema } from './entity-draft'
 import { WORLD_ISSUE } from './issues'
 

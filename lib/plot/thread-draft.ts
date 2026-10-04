@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import type { PipelineAction } from '@/lib/actions'
 import { INJECTION_MODES, THREAD_STATUSES, type NewThread, type Thread } from '@/lib/db'
+import { blankToNull } from '@/lib/text'
 
 import { PLOT_ISSUE } from './issues'
 
@@ -34,12 +35,6 @@ export function threadDraftFrom(row: Thread | null): ThreadDraft {
     status: row.status,
     injectionMode: row.injectionMode,
   }
-}
-
-/** Free text is stored as `NULL` when blank, never `''`. */
-export function blankToNull(value: string): string | null {
-  const trimmed = value.trim()
-  return trimmed === '' ? null : trimmed
 }
 
 type ThreadPatch = Partial<
