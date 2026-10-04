@@ -495,7 +495,9 @@ multiline-specific props off the single-line surface.
 - **`aria-invalid`** — same error contract as Input.
 
 There is no `size` prop; Textarea height is content-driven via
-`rows` and `maxRows`. There are no adornment slots; multiline
+`rows` and `maxRows`, on every surface: a textarea never stretches
+to fill its container, and a screen that wants a taller field raises
+`rows` / `maxRows`. There are no adornment slots; multiline
 content doesn't compose visually with leading / trailing icons,
 and no v1 wireframe needs it.
 

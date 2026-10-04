@@ -54,12 +54,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **The lore body textarea doesn't fill the pane.** Canon
-  ([world.md → Body tab — lore](../ui/screens/world/world.md#body-tab--lore))
-  and the slice say the body fills the remaining height; it ships
-  as a 12–40-row `EmbedWindowTextarea`, because filling needs the
-  shared `DetailPane` scroller to let content grow (every pane,
-  phone keyboard layout) (2026-09-28, raised by 4.2b).
 - **`Autocomplete`'s casing modes barely differ, and `as-typed`
   can't re-case.** The tail row hides on any case-insensitive match in
   both modes, so every commit goes through a suggestion row whose value

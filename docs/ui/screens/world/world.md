@@ -645,9 +645,11 @@ Two fields, no sub-sections.
   suggestions, keeping casual taxonomy consistent without forcing
   an enum. A category saves exactly as typed or picked, casing
   included. Empty = `— uncategorized —` placeholder.
-- **Body textarea** — fills the remaining vertical space. Plain
-  text per the schema; no markdown rendering or rich-text in v1.
-  Standard textarea grow / scroll behavior. **Body is required**
+- **Body textarea** — grows with its content from 12 rows and
+  scrolls internally past 40, per the
+  [Textarea primitive](../../patterns/forms.md#textarea-primitive)'s
+  content-driven height. Plain text per the schema; no markdown
+  rendering or rich-text in v1. **Body is required**
   (see [Required body](#required-body--creation--edit-invariant) below).
 
 Category lives on Body, not Settings, because category is
