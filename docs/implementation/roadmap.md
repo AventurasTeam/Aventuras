@@ -966,6 +966,15 @@ code before it moved; resolve with the slice it names.
   concurrent `definition` writer; the wizard is the only other writer
   and touches drafts only, which the mutator refuses. Raised by Slice
   4.2a; routed from triage 2026-09-27.
+- **M7.2 — The era-name input must snap a typed variant at Flip.**
+  Its canonical casing
+  ([`reader-composer.md`](../ui/screens/reader-composer/reader-composer.md))
+  applies only to a committed pick: `Autocomplete` re-cases a suggestion
+  the user picks, and Flip submits whatever is typed, so `reiwa` typed
+  and flipped stays `reiwa`. Export the canonical match from
+  `components/ui/autocomplete.tsx` and call it at submit rather than
+  on blur, which would race the Flip click. Raised by 4.2b; routed from
+  triage 2026-10-04.
 - **M7.2 — `setStoryLead` can't clear the lead.** The lead picker is
   optional unless the story is adventure or first / second person
   ([`story-settings.md → Orthogonal axes`](../ui/screens/story-settings/story-settings.md#orthogonal-axes)),

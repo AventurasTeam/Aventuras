@@ -88,9 +88,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `as-typed` should mean is open: show the tail row for a case-only
   variant, drop the prop and make canonical universal, or leave it
   (2026-09-28, raised by 4.2b; reframed by the post-4.2b triage pass).
-  A typed variant left uncommitted keeps its casing in both modes;
-  M7.2's era-name input is the first canonical consumer that needs it
-  snapped at submit.
 - **AlertDialog impact lists aren't in the dialog's accessible
   description.** The bulleted impact list (`DeleteConfirmDialog`'s
   `delete-impacts` View, and the shipped
