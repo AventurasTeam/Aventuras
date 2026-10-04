@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "release": "node scripts/release.js",
+    "fake-provider": "node scripts/fake-provider.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"**/*.{ts,js,svelte,json,css,html}\""
