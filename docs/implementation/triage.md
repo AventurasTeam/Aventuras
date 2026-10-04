@@ -231,14 +231,6 @@ slice-planning gate forces its resolution before that slice is planned.
   at the 4.2b review head (`1428e5b8`), not re-run on `main`
   (2026-09-30, from a slice-review skill test).
 
-- **`reader-composer-modes.spec` can fail on its own locator.** After
-  Send it waits for `getByText('E2E-MODES', { exact: false })`, which
-  also matches the mock reply (`E2E-MODES-REPLY …`); when the reply
-  renders before the assertion runs, Playwright's strict mode sees two
-  elements and fails, and the retry passes. Seen once in two runs on
-  the 4.2b head; the spec is unchanged since 3.4b. A locator that can
-  only match the user action (the wrapped text, or `exact: true`) would
-  close it (2026-09-30, raised by the 4.2b stack-review follow-up).
 - **A late vector write can delete a newer vector and leave the row
   clean with none.** `upsertVecOps` guards its insert on the row still
   holding the embedded text, but its delete of the prior

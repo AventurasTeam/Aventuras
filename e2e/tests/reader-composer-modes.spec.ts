@@ -50,7 +50,7 @@ test.describe('reader — composer modes', () => {
 
     await reader.composer(app.window).fill(MARKER)
     await reader.send(app.window).click()
-    await expect(app.window.getByText('E2E-MODES', { exact: false })).toBeVisible({
+    await expect(app.window.getByText(MARKER, { exact: false })).toBeVisible({
       timeout: 30_000,
     })
 
