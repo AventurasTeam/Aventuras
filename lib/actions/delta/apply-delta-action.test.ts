@@ -5,8 +5,13 @@ import { branches, deltas, entities, stories, storyEntries, type NewEntity } fro
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { generationStore, resetAllStores, undoRedoStore } from '@/lib/stores'
 
-import type { PipelineAction } from '../types'
-import { applyDeltaAction, applyDeltaActionGroup } from './apply-delta-action'
+import type { DbCtx, DeltaSource, PipelineAction } from '../types'
+import { applyDeltaAction, applyDeltaActionGroup, settleUserWrites } from './apply-delta-action'
+import {
+  __resetBranchWriteLocks,
+  holdBranchWriteExclusive,
+  releaseBranchWriteExclusive,
+} from './branch-write-lock'
 
 async function seed(db: Awaited<ReturnType<typeof createTestDb>>['db']) {
   await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
@@ -378,5 +383,149 @@ describe('applyDeltaActionGroup', () => {
 
     expect(res.status).toBe('rejected')
     expect((await db.select().from(storyEntries)).length).toBe(0)
+  })
+})
+
+describe('the branch write lock (generation-pipeline.md → No-gate write phase)', () => {
+  let ctx: DbCtx
+
+  beforeEach(async () => {
+    resetAllStores()
+    const { db, runInTransaction } = await createTestDb()
+    ctx = { db, runInTransaction }
+    await seed(db)
+  })
+  afterEach(() => {
+    resetAllStores()
+    __resetBranchWriteLocks()
+  })
+
+  // The lock advances over microtasks; a macrotask hop runs every queued continuation.
+  const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+  const createEntry = (id: string, position: number, source: DeltaSource): PipelineAction => ({
+    kind: 'createStoryEntry',
+    source,
+    payload: {
+      entry: { id, branchId: 'b1', position, kind: 'ai_reply', content: id, createdAt: 1 },
+    },
+  })
+
+  const describeEntity = (description: string, source: DeltaSource): PipelineAction => ({
+    kind: 'updateEntity',
+    source,
+    payload: { branchId: 'b1', id: 'char_a', patch: { description } },
+  })
+
+  const actionDeltas = (actionId: string) =>
+    ctx.db.select().from(deltas).where(eq(deltas.actionId, actionId))
+
+  it("holds another action's write until the run releases, and lets the run's own write through", async () => {
+    await holdBranchWriteExclusive('b1', 'act_pass')
+
+    const user = applyDeltaAction(
+      { action: createEntry('entry_user', 1, 'user_edit'), actionId: 'act_user', branchId: 'b1' },
+      ctx,
+    )
+    await flush()
+    expect(await actionDeltas('act_user')).toEqual([])
+
+    const own = await applyDeltaAction(
+      {
+        action: createEntry('entry_pass', 2, 'periodic_classifier'),
+        actionId: 'act_pass',
+        branchId: 'b1',
+      },
+      ctx,
+    )
+    expect(own).toEqual({ status: 'ok', logPosition: 1 })
+
+    releaseBranchWriteExclusive('b1', 'act_pass')
+    expect(await user).toEqual({ status: 'ok', logPosition: 2 })
+  })
+
+  it('holds a group under another actionId and lets one under the run through', async () => {
+    await holdBranchWriteExclusive('b1', 'act_pass')
+
+    const user = applyDeltaActionGroup(
+      [createEntry('entry_user', 1, 'user_edit')],
+      { actionId: 'act_user', branchId: 'b1' },
+      ctx,
+    )
+    await flush()
+    expect(await actionDeltas('act_user')).toEqual([])
+
+    expect(
+      await applyDeltaActionGroup(
+        [createEntry('entry_pass', 2, 'periodic_classifier')],
+        { actionId: 'act_pass', branchId: 'b1' },
+        ctx,
+      ),
+    ).toEqual({ status: 'ok' })
+
+    releaseBranchWriteExclusive('b1', 'act_pass')
+    expect(await user).toEqual({ status: 'ok' })
+    expect(await actionDeltas('act_user')).toHaveLength(1)
+  })
+
+  it("waits on the branch lock before its row keys, so the run's own write to that row lands", async () => {
+    await ctx.db.insert(entities).values({
+      id: 'char_a',
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Aria',
+      status: 'active',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await holdBranchWriteExclusive('b1', 'act_pass')
+    const user = applyDeltaAction(
+      {
+        action: describeEntity('from the user', 'user_edit'),
+        actionId: 'act_user',
+        branchId: 'b1',
+      },
+      ctx,
+    )
+    await flush()
+
+    // Had the queued user write taken entities:b1:char_a first, this would wait on it forever.
+    expect(
+      await applyDeltaAction(
+        {
+          action: describeEntity('from the pass', 'periodic_classifier'),
+          actionId: 'act_pass',
+          branchId: 'b1',
+        },
+        ctx,
+      ),
+    ).toMatchObject({ status: 'ok' })
+
+    releaseBranchWriteExclusive('b1', 'act_pass')
+    expect(await user).toMatchObject({ status: 'ok' })
+    const [row] = await ctx.db
+      .select({ description: entities.description })
+      .from(entities)
+      .where(eq(entities.id, 'char_a'))
+    expect(row.description).toBe('from the user')
+  })
+
+  it('keeps a user write queued on the lock in settleUserWrites', async () => {
+    await holdBranchWriteExclusive('b1', 'act_pass')
+    const user = applyDeltaAction(
+      { action: createEntry('entry_user', 1, 'user_edit'), actionId: 'act_user', branchId: 'b1' },
+      ctx,
+    )
+    let settled = false
+    const settling = settleUserWrites().then(() => {
+      settled = true
+    })
+    await flush()
+
+    expect(settled).toBe(false)
+    releaseBranchWriteExclusive('b1', 'act_pass')
+    await settling
+    expect(await user).toEqual({ status: 'ok', logPosition: 1 })
   })
 })

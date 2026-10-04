@@ -13,6 +13,7 @@ import {
   type MutationResult,
   type PipelineAction,
 } from '../types'
+import { withBranchWriteShared } from './branch-write-lock'
 import { capturedPatches } from './delete-cascade'
 import { deltaRowOp } from './delta-row'
 import { withKeyLocks } from './key-lock'
@@ -146,7 +147,11 @@ export async function settleUserWrites(): Promise<void> {
 
 export async function applyDeltaAction(args: Args, ctx: DbCtx): Promise<MutationResult> {
   const run = () => applyDeltaActionUnlocked(args, ctx)
-  const write = withKeyLocks(lockKeysFor(args.action), run)
+  // The branch lock sits outside the row keys: a write queued behind a no-gate run holds no key
+  // the run's own writes need (generation-pipeline.md → No-gate write phase).
+  const write = withBranchWriteShared(args.branchId, args.actionId, () =>
+    withKeyLocks(lockKeysFor(args.action), run),
+  )
   return isUserOriginatedSource(args.action.source) ? trackUserWrite(write) : write
 }
 
@@ -261,7 +266,9 @@ export async function applyDeltaActionGroup(
   ctx: DbCtx,
 ): Promise<DeltaGroupResult> {
   const keys = actions.flatMap(lockKeysFor)
-  const write = withKeyLocks(keys, () => applyDeltaActionGroupUnlocked(actions, args, ctx))
+  const write = withBranchWriteShared(args.branchId, args.actionId, () =>
+    withKeyLocks(keys, () => applyDeltaActionGroupUnlocked(actions, args, ctx)),
+  )
   return actions.some((a) => isUserOriginatedSource(a.source)) ? trackUserWrite(write) : write
 }
 
