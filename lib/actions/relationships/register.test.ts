@@ -10,11 +10,14 @@ import { applyDeltaAction, applyDeltaActionGroup } from '../delta/apply-delta-ac
 import { __resetRegistry } from '../delta/registry'
 import { reverseReplayDeltas } from '../delta/reverse-replay'
 import { USER_EDITED_SINCE_PROSE } from '../delta/user-precedence'
+import { registerEntities } from '../entities/register'
 import { registerStoryEntries } from '../story-entries/register'
 import { redoLastAction, undoLastAction } from '../story-entries/undo'
 
 async function setup() {
   __resetRegistry()
+  // missingRef resolves both ends of a new pair through the registry.
+  registerEntities()
   registerCharacterRelationships()
   registerStoryEntries()
   const { db, runInTransaction } = await createTestDb()

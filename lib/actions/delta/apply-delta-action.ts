@@ -16,7 +16,7 @@ import {
 import { capturedPatches } from './delete-cascade'
 import { deltaRowOp } from './delta-row'
 import { withKeyLocks } from './key-lock'
-import { linkRefs } from './live-refs'
+import { rowRefs } from './live-refs'
 import { createdKey, resolveByActionKind, resolveByTable, type HandlerOutcome } from './registry'
 import { entityCascadeKeys, rowLock, type RowLockKey } from './row-locks'
 
@@ -240,7 +240,7 @@ function groupConflict(outcomes: readonly OkOutcome[]): string | null {
     const { patch } = outcome
     const written =
       patch?.op === 'create' ? patch.row : patch?.op === 'update' ? patch.columns : undefined
-    for (const ref of written ? linkRefs(outcome.targetTable, written) : []) {
+    for (const ref of written ? rowRefs(outcome.targetTable, written) : []) {
       const named = createdKey(ref.table, ref.id)
       if (deleted.has(named)) return `the group links ${target} to ${named}, which it deletes`
     }

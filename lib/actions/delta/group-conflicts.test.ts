@@ -12,6 +12,7 @@ import {
   happenings,
   stories,
   storyEntries,
+  translations,
   type Delta,
   type EntryMetadata,
   type NewEntity,
@@ -149,6 +150,39 @@ describe('applyDeltaActionGroup — a delete and a write naming what it removes'
 
     expect(result).toMatchObject({ status: 'rejected', code: 'group-conflict' })
     expect(await snapshot()).toEqual(before)
+  })
+
+  it('rejects a translation create naming a happening the group deletes', async () => {
+    const before = await snapshot()
+
+    const result = await group([
+      {
+        kind: 'deleteHappening',
+        source: 'user_edit',
+        payload: { branchId: 'b1', id: 'hap_1' },
+      },
+      {
+        kind: 'createTranslation',
+        source: 'user_edit',
+        payload: {
+          entry: {
+            id: 'tr_new',
+            branchId: 'b1',
+            targetKind: 'happening',
+            targetId: 'hap_1',
+            field: 'title',
+            language: 'es',
+            translatedText: 'Fuego',
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        },
+      },
+    ])
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'group-conflict' })
+    expect(await snapshot()).toEqual(before)
+    expect(await ctx.db.select().from(translations)).toEqual([])
   })
 
   it('rejects two deletes whose cascades both take one link row', async () => {

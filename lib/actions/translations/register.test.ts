@@ -1,21 +1,45 @@
 import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
-import { branches, deltas, stories, translations, type NewTranslation } from '@/lib/db'
+import {
+  branches,
+  deltas,
+  entities,
+  stories,
+  translations,
+  type NewEntity,
+  type NewTranslation,
+} from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { translationsStore } from '@/lib/stores'
 
 import { registerTranslations } from './register'
-import { applyDeltaAction } from '../delta/apply-delta-action'
+import { applyDeltaAction, applyDeltaActionGroup } from '../delta/apply-delta-action'
+import { MISSING_REF } from '../delta/live-refs'
 import { __resetRegistry } from '../delta/registry'
 import { reverseReplayDeltas } from '../delta/reverse-replay'
+import { registerEntities } from '../entities/register'
+
+const character = (id: string): NewEntity => ({
+  id,
+  branchId: 'br_1',
+  kind: 'character',
+  name: id,
+  status: 'active',
+  injectionMode: 'auto',
+  createdAt: 1,
+  updatedAt: 1,
+})
 
 async function setup() {
   __resetRegistry()
+  // missingRef resolves a translation's target through the registry.
+  registerEntities()
   registerTranslations()
   const { db, runInTransaction } = await createTestDb()
   await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
   await db.insert(branches).values({ id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 })
+  await db.insert(entities).values(character('char_1'))
   translationsStore.__reset()
   translationsStore.hydrate('br_1', [])
   return { db, ctx: { db, runInTransaction } }
@@ -202,5 +226,69 @@ describe('translations CRUD arms', () => {
     expect(
       translationsStore.getTranslation('entity', 'char_1', 'description', 'es'),
     ).toBeUndefined()
+  })
+  it('create no-ops when its target row is gone (no row, no delta)', async () => {
+    const { db, ctx } = await setup()
+
+    const result = await applyDeltaAction(
+      {
+        action: {
+          kind: 'createTranslation',
+          source: 'ai_classifier',
+          payload: { entry: { ...TRANSLATION, targetId: 'char_gone' } },
+        },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+
+    expect(result).toEqual(MISSING_REF)
+    expect(await rowFor(db, 'tr_1')).toBeUndefined()
+    expect(await db.select().from(deltas)).toEqual([])
+  })
+
+  it('create in a group counts a target the same group creates', async () => {
+    const { db, ctx } = await setup()
+
+    const result = await applyDeltaActionGroup(
+      [
+        {
+          kind: 'createEntity',
+          source: 'ai_classifier',
+          payload: { entry: character('char_new') },
+        },
+        {
+          kind: 'createTranslation',
+          source: 'ai_classifier',
+          payload: { entry: { ...TRANSLATION, targetId: 'char_new' } },
+        },
+      ],
+      { actionId: 'act_g', branchId: 'br_1' },
+      ctx,
+    )
+
+    expect(result).toEqual({ status: 'ok' })
+    expect((await rowFor(db, 'tr_1')).targetId).toBe('char_new')
+  })
+
+  it('create in a group writes nothing for a dead target', async () => {
+    const { db, ctx } = await setup()
+
+    const result = await applyDeltaActionGroup(
+      [
+        {
+          kind: 'createTranslation',
+          source: 'ai_classifier',
+          payload: { entry: { ...TRANSLATION, targetId: 'char_gone' } },
+        },
+      ],
+      { actionId: 'act_g', branchId: 'br_1' },
+      ctx,
+    )
+
+    expect(result).toEqual({ status: 'ok' })
+    expect(await rowFor(db, 'tr_1')).toBeUndefined()
+    expect(await db.select().from(deltas)).toEqual([])
   })
 })

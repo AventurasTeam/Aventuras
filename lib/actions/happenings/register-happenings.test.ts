@@ -23,9 +23,12 @@ import { applyDeltaAction } from '../delta/apply-delta-action'
 import { applyRedo, snapshotForRedo } from '../delta/redo'
 import { __resetRegistry } from '../delta/registry'
 import { reverseReplayDeltas, reverseAndPruneDeltaRows } from '../delta/reverse-replay'
+import { registerEntities } from '../entities/register'
 
 async function setup() {
   __resetRegistry()
+  // The live-link filter resolves a restored link's entity through the registry.
+  registerEntities()
   registerHappenings()
   registerHappeningInvolvements()
   registerHappeningAwareness()

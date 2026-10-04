@@ -21,6 +21,7 @@ import { generationStore, resetAllStores } from '@/lib/stores'
 import { saveHappening } from './save-happening'
 import { saveThread } from './save-thread'
 import { __resetRegistry } from '../delta/registry'
+import { registerEntities } from '../entities/register'
 import { registerHappeningAwareness } from '../happenings/register-awareness'
 import { registerHappenings } from '../happenings/register-happenings'
 import { registerHappeningInvolvements } from '../happenings/register-involvements'
@@ -28,6 +29,8 @@ import { registerThreads } from '../threads/register'
 
 async function setup() {
   __resetRegistry()
+  // missingRef resolves a link's entity through the registry.
+  registerEntities()
   registerThreads()
   registerHappenings()
   registerHappeningInvolvements()
