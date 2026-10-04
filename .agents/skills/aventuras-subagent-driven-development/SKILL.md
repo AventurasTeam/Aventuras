@@ -165,6 +165,8 @@ You are a **dispatched worker** when your task prompt says so and names an escal
 
 **Never stop between tasks.** Nobody is at the terminal to say "continue": a worker that ends its turn to wait for input stalls until someone notices. Stop only after reporting completion, or while waiting on the channel.
 
+**At a usage limit, wrap up as the note asks.** When Claude Code says your usage limit is reached, finish the step in hand, ledger it, and end your turn. Send no worker_done and no escalation for it: the worker setup resumes you after the limit resets, and you continue from your ledger.
+
 **Answers come labelled.** Record the label with the answer. An answer that overrides the plan goes, quoted with its label, into every later implementer and spec-reviewer prompt it touches; otherwise the reviewer flags it as a deviation.
 
 | Label          | Meaning                                  | Ends up in                                                    |
