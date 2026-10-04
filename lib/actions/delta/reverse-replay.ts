@@ -9,34 +9,17 @@ import { applyUndoPayload, isPayloadMetaKey } from './delta-encoding'
 import { withKeyLocks } from './key-lock'
 import { liveLinkFilter } from './live-link-filter'
 import { resolveByTable, whereForDelta, type StorePatch } from './registry'
+import { DeltaReplayError } from './replay-errors'
 import { closeOverRemovedRows } from './row-closure'
 import { deltaLockKeys } from './row-locks'
 import { userEditsOutliving, wroteColumn } from './user-precedence'
 
-/**
- * `transaction`: nothing landed. `store-sync`: the DB write landed and the in-memory sync after it
- * threw.
- */
-export type ReplayFailureStage = 'transaction' | 'store-sync'
-
-export class DeltaReplayError extends Error {
-  readonly actionId: string
-  readonly stage: ReplayFailureStage
-  constructor(
-    message: string,
-    opts: { cause: unknown; actionId: string; stage: ReplayFailureStage },
-  ) {
-    super(message, { cause: opts.cause })
-    this.name = 'DeltaReplayError'
-    this.actionId = opts.actionId
-    this.stage = opts.stage
-  }
-
-  /** The DB write landed: callers must not retry it as a failed reversal. */
-  get committed(): boolean {
-    return this.stage === 'store-sync'
-  }
-}
+export {
+  DeltaReplayError,
+  ReversalIntegrityError,
+  type IntegrityRefusal,
+  type ReplayFailureStage,
+} from './replay-errors'
 
 /** What the pipeline port needs from a replay failure; `undefined` hands any other error back. */
 export function describeDeltaReplayError(
