@@ -193,6 +193,16 @@ exported file to the user.
   `ImporterMenu` anyway, which makes it the cheapest place to extract
   one shared `MenuItem`. The rows' role stays with
   [Nested dialog roles in Popover](../../../../parked.md#nested-dialog-roles-in-popover).
+- **Four hand-copied detail-pane heads.** (2026-09-28, routed from
+  triage 2026-10-04) `LoreDetailPane` duplicates `EntityDetailFrame`:
+  the head, tab list, menu and JSON viewer wiring are a near-copy of
+  the frame, and so are the thread and happening panes' heads, so it is
+  four copies, not two. The Plot copies have already drifted — a
+  missing tab reset and a blocked name with no reason, both fixed on
+  2026-10-04 — and still don't close the JSON viewer on a row switch.
+  This slice's export wiring is the next change that lands in all four
+  heads, which makes it the cheapest place to generalize the frame; the
+  tab reset already lives in `hooks/use-create-reset-tab.ts`.
 
 ## Implementation notes
 

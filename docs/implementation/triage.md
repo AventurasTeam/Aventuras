@@ -59,11 +59,6 @@ slice-planning gate forces its resolution before that slice is planned.
   orphans relationship, involvement or awareness rows naming it that
   were written in a different action group. Read, not reproduced;
   pre-existing (2026-09-28, raised by 4.2b).
-- **`LoreDetailPane` duplicates `EntityDetailFrame`.** The head, tab
-  list, menu and JSON viewer wiring, plus the tab-reset hook, are a
-  near-copy (~100 lines) of `EntityDetailFrame` / `useEntityTab`;
-  generalizing the frame would let menu changes, e.g. Delete, land
-  once instead of twice (2026-09-28, raised by 4.2b).
 - **The lore body textarea doesn't fill the pane.** Canon
   ([world.md → Body tab — lore](../ui/screens/world/world.md#body-tab--lore))
   and the slice say the body fills the remaining height; it ships
