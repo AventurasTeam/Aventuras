@@ -70,3 +70,21 @@ slice-planning gate forces its resolution before that slice is planned.
   and its table has rows for per-turn and chapter-close only. Add a
   suggestion-refresh row and cite it, or reuse the per-turn copy
   (2026-10-04, raised by the post-4.2b triage pass).
+- **`createTranslation`'s live-target check holds no key lock between
+  its read and its commit.** The link writers take a key per end, so a
+  concurrent delete of an end serialises with the write (canon:
+  [`generation-pipeline.md`](../generation-pipeline.md#atomicity-per-action),
+  [`cadence.md`](../memory/cadence.md#concurrency));
+  `missingRef` in `lib/actions/translations/register.ts` reads the
+  target and the write commits later, so a concurrent `deleteEntity`
+  could land between them. Latent: nothing writes translations. A fix
+  needs a key per target table, and lore, thread and chapter deletes
+  take no key today (`lib/actions/happenings/register-happenings.ts`
+  already notes translations aren't locked). Raised by the Task 1
+  review of the reversal-integrity PR (2026-10-05).
+- **Deleting a relationship pair directly leaves its translations
+  dangling.** `deleteHandler` and the upsert-to-null delete branch in
+  `lib/actions/relationships/register.ts` delete the pair without
+  cascading its `character_relationship` translations; only the entity
+  cascade cleans them up. Latent: nothing writes translations. Raised
+  by the Task 1 review of the reversal-integrity PR (2026-10-05).
