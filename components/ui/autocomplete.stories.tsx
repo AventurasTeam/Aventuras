@@ -183,6 +183,45 @@ export const SuggestionPickCommitsCanonical: Story = {
   },
 }
 
+/** Enter on a whole entry commits it, not an earlier entry that contains it. */
+export const EnterOnWholeEntryCommitsIt: Story = {
+  args: { onCommit: fn() },
+  render: ({ onCommit }) => (
+    <ControlledAutocomplete
+      sourceList={['Folklore', 'Lore']}
+      placeholder="Category…"
+      onCommit={onCommit}
+    />
+  ),
+  play: async ({ canvas, args }) => {
+    const input = await canvas.findByPlaceholderText('Category…')
+    await userEvent.click(input)
+    await userEvent.type(input, 'Lore')
+    await screen.findByRole('option', { name: 'Lore' })
+    await userEvent.keyboard('{Enter}')
+    await waitFor(() => expect(args.onCommit).toHaveBeenCalledWith('Lore'))
+  },
+}
+
+/** A list holding two casings of one entry commits the one picked. */
+export const PickingACaseVariantCommitsThePick: Story = {
+  args: { onCommit: fn() },
+  render: ({ onCommit }) => (
+    <ControlledAutocomplete
+      sourceList={['cosmology', 'Cosmology']}
+      placeholder="Category…"
+      onCommit={onCommit}
+    />
+  ),
+  play: async ({ canvas, args }) => {
+    const input = await canvas.findByPlaceholderText('Category…')
+    await userEvent.click(input)
+    await userEvent.type(input, 'cosmo')
+    await userEvent.click(await screen.findByRole('option', { name: 'Cosmology' }))
+    await waitFor(() => expect(args.onCommit).toHaveBeenCalledWith('Cosmology'))
+  },
+}
+
 export const TailCreateCommitsTyped: Story = {
   args: { onCommit: fn() },
   render: ({ onCommit }) => (

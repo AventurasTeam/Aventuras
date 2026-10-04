@@ -69,7 +69,7 @@ function normalizeCommit(
 ): string | null {
   const t = raw.trim()
   if (!t) return null
-  if (mode === 'canonical') {
+  if (mode === 'canonical' && !sourceList.includes(t)) {
     return sourceList.find((s) => s.toLowerCase() === t.toLowerCase()) ?? t
   }
   return t
@@ -106,7 +106,12 @@ export function Autocomplete({
     } else if (!trimmed) {
       suggestions = Array.from(sourceList)
     } else {
-      suggestions = sourceList.filter((s) => s.toLowerCase().includes(lc))
+      // An exact match ranks first, same case before any case, so Enter on a whole entry commits
+      // it rather than a longer one containing it. The sort is stable: source order within a rank.
+      const rank = (s: string) => (s === trimmed ? 0 : s.toLowerCase() === lc ? 1 : 2)
+      suggestions = sourceList
+        .filter((s) => s.toLowerCase().includes(lc))
+        .sort((a, b) => rank(a) - rank(b))
     }
     const exactMatch = sourceList.find((s) => s.toLowerCase() === lc)
     const showTail = trimmed.length > 0 && !exactMatch

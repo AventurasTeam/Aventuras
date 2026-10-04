@@ -734,7 +734,9 @@ acceptable, entry-ref pickers.
 ### Default Enter behavior
 
 - **Has matching suggestions** → pick the first match (commit in
-  canonical casing).
+  canonical casing). An exact match ranks first, same case before
+  any case, so Enter on a whole entry commits it rather than a longer
+  entry that contains it.
 - **No matching suggestions** → treat as `+ Add new` and commit
   the trimmed typed text.
 
