@@ -98,17 +98,28 @@ slice-planning gate forces its resolution before that slice is planned.
   create arm's `rowKeepingColumns` branch). Revisit both when
   translations get a writer. Raised by the Task 3 review of the same
   PR (2026-10-05).
-- **A parallel group's stragglers can write around a no-gate run's
+- **A parallel group's straggler can commit around a no-gate run's
   abort.** `runParallelGroup` in `lib/pipeline/runtime/orchestrator.ts`
   uses `Promise.all`, which rejects on the first throwing branch
-  without waiting for siblings. (a) After a cancel or yield abort
-  followed by a branch throw, `abortRun`'s `abort('run-ending')` is a
-  no-op on the already-aborted signal, so a no-gate sibling's late
-  write takes a fresh exclusive hold nobody releases: every later
-  write to the branch queues and `settleUserWrites` hangs. (b) A
-  straggler that passed the run-ending guard before `abortRun` started
-  can still commit under the run's actionId during or after the
-  reversal. Latent: no definition under `lib/pipeline/definitions/`
-  uses a parallel group. Fix when one does: have `runParallelGroup`
-  wait for every sibling to settle before the run aborts. Raised by
-  the Task 9 review of the reversal-integrity PR (2026-10-05).
+  without waiting for siblings. A straggler already past the
+  registered-run check in `handleEvent` when the abort began can still
+  commit under the run's actionId during the reversal, or after it
+  while the exception hook runs, and boot recovery never reverses it.
+  Latent: no definition under `lib/pipeline/definitions/` uses a
+  parallel group. The obvious fix, having `runParallelGroup` wait for
+  every sibling to settle before the run aborts, changes canon's run
+  state, "no drain: a parallel sibling still running is not awaited"
+  (`generation-pipeline.md`, run state transitions), so it needs a
+  canon edit first. Raised by the Task 9 review of the
+  reversal-integrity PR (2026-10-05).
+
+- **`abortCauseOf` may misread an embed timeout as a cancel on
+  Android.** `lib/abort.ts` (`abortCauseOf`, `BOUNDED_SIGNAL_EXPIRED`)
+  tells an expiry from a stop by `signal.reason`, but React Native's
+  `setUpXHR.js` replaces the global `AbortController` with
+  `abort-controller@3.0.0`, whose `abort()` drops its argument. On
+  Android `lib/embedder/local/runtime.native.ts` (the abort checks near
+  lines 201 and 214) would then report a timeout as a cancel, the
+  misreading `lib/embedder/local/cancel.ts` warns about. Not verified
+  on a device. Raised by the Task 9 review of the reversal-integrity
+  PR (2026-10-05).
