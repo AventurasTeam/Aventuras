@@ -98,3 +98,17 @@ slice-planning gate forces its resolution before that slice is planned.
   create arm's `rowKeepingColumns` branch). Revisit both when
   translations get a writer. Raised by the Task 3 review of the same
   PR (2026-10-05).
+- **A parallel group's stragglers can write around a no-gate run's
+  abort.** `runParallelGroup` in `lib/pipeline/runtime/orchestrator.ts`
+  uses `Promise.all`, which rejects on the first throwing branch
+  without waiting for siblings. (a) After a cancel or yield abort
+  followed by a branch throw, `abortRun`'s `abort('run-ending')` is a
+  no-op on the already-aborted signal, so a no-gate sibling's late
+  write takes a fresh exclusive hold nobody releases: every later
+  write to the branch queues and `settleUserWrites` hangs. (b) A
+  straggler that passed the run-ending guard before `abortRun` started
+  can still commit under the run's actionId during or after the
+  reversal. Latent: no definition under `lib/pipeline/definitions/`
+  uses a parallel group. Fix when one does: have `runParallelGroup`
+  wait for every sibling to settle before the run aborts. Raised by
+  the Task 9 review of the reversal-integrity PR (2026-10-05).

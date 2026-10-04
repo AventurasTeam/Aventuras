@@ -125,6 +125,7 @@ function endWritePhase(run: RunState): void {
 
 // Set as the abort reason once abortRun is certain for the run (abortRun itself, or a failed parallel
 // branch). A user cancel aborts with the default reason: the classifier's burst must still land.
+// An abort that came first keeps its reason, so a branch that throws after a cancel is not covered.
 const RUN_ENDING = 'run-ending'
 
 function isRunEnding(run: RunState): boolean {

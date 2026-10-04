@@ -305,7 +305,7 @@ describe('a no-gate run holds the branch write lock through its write phase', ()
 
   // Promise.all rejects on the first throwing branch without waiting for siblings, so a sibling can
   // emit after the abort's reversal released the hold; a fresh hold then has no one to release it.
-  it('refuses a late write from a parallel branch after the abort released, leaving the branch free', async () => {
+  it('drops a late write from a parallel branch after the abort released, leaving the branch free', async () => {
     const { ctx } = await makeHarness()
     const dispatched: string[] = []
     configurePort({
