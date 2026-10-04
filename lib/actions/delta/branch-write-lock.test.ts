@@ -190,6 +190,23 @@ describe('holdBranchWriteExclusive', () => {
     releaseBranchWriteExclusive('b1', 'act_b')
   })
 
+  it('keeps the branch locked while one of two shared holders is still writing', async () => {
+    const first = deferred()
+    const second = deferred()
+    const a = withBranchWriteShared('b1', 'act_a', () => first.promise)
+    const b = withBranchWriteShared('b1', 'act_b', () => second.promise)
+    first.resolve()
+    await a
+
+    // The settled holder left the branch idle-looking only if its entry was dropped early.
+    const hold = holdBranchWriteExclusive('b1', 'act_pass')
+    expect(await isSettled(hold)).toBe(false)
+    second.resolve()
+    await b
+    expect(await isSettled(hold)).toBe(true)
+    releaseBranchWriteExclusive('b1', 'act_pass')
+  })
+
   it('returns the pending acquisition to a repeat hold, which one release ends', async () => {
     const gate = deferred()
     const shared = withBranchWriteShared('b1', 'act_user', () => gate.promise)

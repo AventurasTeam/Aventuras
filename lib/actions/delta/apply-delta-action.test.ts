@@ -511,6 +511,46 @@ describe('the branch write lock (generation-pipeline.md → No-gate write phase)
     expect(row.description).toBe('from the user')
   })
 
+  it("waits on the branch lock before a group's row keys, so the run's own write to that row lands", async () => {
+    await ctx.db.insert(entities).values({
+      id: 'char_a',
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Aria',
+      status: 'active',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await holdBranchWriteExclusive('b1', 'act_pass')
+    const user = applyDeltaActionGroup(
+      [describeEntity('from the user', 'user_edit')],
+      { actionId: 'act_user', branchId: 'b1' },
+      ctx,
+    )
+    await flush()
+
+    // Had the queued group taken entities:b1:char_a first, this would wait on it forever.
+    expect(
+      await applyDeltaAction(
+        {
+          action: describeEntity('from the pass', 'periodic_classifier'),
+          actionId: 'act_pass',
+          branchId: 'b1',
+        },
+        ctx,
+      ),
+    ).toMatchObject({ status: 'ok' })
+
+    releaseBranchWriteExclusive('b1', 'act_pass')
+    expect(await user).toEqual({ status: 'ok' })
+    const [row] = await ctx.db
+      .select({ description: entities.description })
+      .from(entities)
+      .where(eq(entities.id, 'char_a'))
+    expect(row.description).toBe('from the user')
+  })
+
   it('keeps a user write queued on the lock in settleUserWrites', async () => {
     await holdBranchWriteExclusive('b1', 'act_pass')
     const user = applyDeltaAction(

@@ -39,7 +39,9 @@ function drain(branchId: string, lock: BranchLock): void {
     lock.queue.shift()
     head.grant()
   }
+  // Identity-checked: a holder that outlives a test reset must not delete the next entry.
   if (
+    locks.get(branchId) === lock &&
     lock.shared === 0 &&
     lock.exclusive === null &&
     lock.queue.length === 0 &&
