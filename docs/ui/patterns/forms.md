@@ -495,7 +495,9 @@ multiline-specific props off the single-line surface.
 - **`aria-invalid`** — same error contract as Input.
 
 There is no `size` prop; Textarea height is content-driven via
-`rows` and `maxRows`. There are no adornment slots; multiline
+`rows` and `maxRows`, on every surface: a textarea never stretches
+to fill its container, and a screen that wants a taller field raises
+`rows` / `maxRows`. There are no adornment slots; multiline
 content doesn't compose visually with leading / trailing icons,
 and no v1 wireframe needs it.
 
@@ -713,7 +715,9 @@ acceptable, entry-ref pickers.
     visible; scroll within the dropdown beyond that.
   - **`+ Add new: "<typed>"` row** (bottom) — appears only when
     the typed value doesn't exactly match any source entry
-    (case-insensitive comparison). Visually distinct from
+    (case-insensitive comparison; under `as-typed`, case-sensitive,
+    so a case-only variant gets the row after the entry it varies
+    and re-casing is a deliberate pick). Visually distinct from
     suggestions (e.g., separator above + muted "+ Add new" label
     prefix).
 
@@ -734,7 +738,9 @@ acceptable, entry-ref pickers.
 ### Default Enter behavior
 
 - **Has matching suggestions** → pick the first match (commit in
-  canonical casing).
+  canonical casing). An exact match ranks first, same case before
+  any case, so Enter on a whole entry commits it rather than a longer
+  entry that contains it.
 - **No matching suggestions** → treat as `+ Add new` and commit
   the trimmed typed text.
 
@@ -751,7 +757,8 @@ implementation):
 - `casingNormalization: 'canonical' | 'as-typed'` — default
   `canonical`. Use `as-typed` when the source list is hint-only
   rather than canonical (e.g., tag lists where users may
-  intentionally re-case).
+  intentionally re-case). Enter still picks the existing entry
+  under `as-typed`; the typed casing commits from its tail row.
 - `createTailLabel: string` — copy for the tail row; `+ Add new:
 "{value}"` is the default template.
 - `placeholder: string`, `required: boolean` — standard form

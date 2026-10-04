@@ -1076,7 +1076,7 @@ toggle expand / collapse without strip-internal keyboard
 traversal.
 
 On tablet (inheriting desktop), the same hit zones become tap
-targets. Tooltip disclosure surfaces via long-press per the
+targets. Tooltip disclosure surfaces via tap per the
 [touch.md → Tap-to-tooltip on inert chrome text](../../foundations/mobile/touch.md#tap-to-tooltip-on-inert-chrome-text)
 pattern. Cells fall under the 44-px iOS recommended hit-target;
 a tap-miss lands on the chevron or empty region (both also

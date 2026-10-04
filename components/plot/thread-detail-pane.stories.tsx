@@ -140,7 +140,10 @@ function Harness({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'F2') setBlocked((prev) => !prev)
       if (e.key === 'F3') session.current?.requestLeave(onLeave)
-      if (e.key === 'F4') setCreateSeq((n) => n + 1)
+      if (e.key === 'F4') {
+        setRow(null)
+        setCreateSeq((n) => n + 1)
+      }
     }
     document.addEventListener('keydown', onKeyDown, true)
     return () => document.removeEventListener('keydown', onKeyDown, true)
@@ -339,11 +342,33 @@ export const RepeatBlankResetsCreate: Story = {
   },
 }
 
+/** `[+] Blank` from a thread open on History lands the new draft on Overview. */
+export const BlankFromHistoryLandsOnOverview: Story = {
+  play: async () => {
+    await userEvent.click(await screen.findByRole('tab', { name: /^History/ }, WAIT))
+    await expect(await screen.findByText('No history yet', {}, WAIT)).toBeVisible()
+    await userEvent.keyboard('{F4}')
+    await waitFor(
+      () =>
+        expect(screen.getByRole('tab', { name: /^Overview/ })).toHaveAttribute(
+          'aria-selected',
+          'true',
+        ),
+      WAIT,
+    )
+    expect(screen.queryByText('History starts at the first save')).not.toBeInTheDocument()
+  },
+}
+
 /** Blocked from the start: nothing in the pane can be edited or deleted. */
 export const Blocked: Story = {
   args: { blocked: true },
   play: async () => {
     expect(await screen.findByText('What the amulet wants')).toBeVisible()
+    expect(screen.getByText('What the amulet wants').closest('[title]')).toHaveAttribute(
+      'title',
+      BLOCKED_REASON,
+    )
     expect(screen.queryByRole('button', { name: /^Edit / })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Status' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Status' }).closest('[title]')).toHaveAttribute(
@@ -473,7 +498,7 @@ export const SaveRejected: Story = {
 }
 
 export const SaveFailed: Story = {
-  args: { saveResult: { status: 'rejected', reason: 'UNIQUE constraint failed' } },
+  args: { saveResult: { status: 'rejected', reason: 'UNIQUE constraint failed', code: 'failed' } },
   play: async ({ args }) => {
     const bar = await editDescription(' Soon.')
     await userEvent.click(within(bar).getByRole('button', { name: /^Save/ }))

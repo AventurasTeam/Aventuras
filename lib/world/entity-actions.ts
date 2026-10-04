@@ -10,8 +10,9 @@ import {
   type NewEntity,
 } from '@/lib/db'
 import { dedupeTerms, newTerms, normalizeTerm } from '@/lib/keyword-terms'
+import { blankToNull } from '@/lib/text'
 
-import { blankToNull, cleanList, sameList } from './draft-text'
+import { cleanList, sameList } from './draft-text'
 import {
   heldItems,
   stackableKey,

@@ -13,6 +13,7 @@ import {
   happeningAwareness,
   happeningInvolvements,
   happenings,
+  sourceHash,
   stories,
   storyEntries,
   translations,
@@ -23,6 +24,7 @@ import {
   type StoryDefinition,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { plantVec } from '@/lib/db/__tests__/vec-fixtures'
 import { entitiesStore, generationStore } from '@/lib/stores'
 
 import { deleteEntityRow } from './delete-entity'
@@ -70,18 +72,15 @@ const character = (id: string, name: string, state: Partial<CharacterState> = {}
 
 function insertVectors(): void {
   for (const dim of [384, 8]) {
-    sqlite
-      .prepare(
-        `INSERT INTO entities_vec_${dim} (pk, branch_id, model_id, id, source_hash, embedding) VALUES (?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        `b1:char_x:m${dim}`,
-        'b1',
-        `m${dim}`,
-        'char_x',
-        'h',
-        new Uint8Array(new Float32Array(dim).buffer),
-      )
+    plantVec(sqlite, {
+      kind: 'entity',
+      id: 'char_x',
+      branchId: 'b1',
+      modelId: `m${dim}`,
+      dim,
+      sourceHash: sourceHash('h'),
+      vector: new Uint8Array(new Float32Array(dim).buffer),
+    })
   }
 }
 
@@ -201,6 +200,7 @@ async function linkCounts() {
 
 describe('deleteEntityRow — C3 acceptance', () => {
   it('deletes the cascade, rewrites refs in one update, drops the tail mention, sweeps vectors, under one action_id', async () => {
+    expect(vectorCount()).toBe(2)
     expect(await deleteEntityRow('b1', 'char_x', ctx)).toEqual({ status: 'ok' })
 
     expect(await ctx.db.select().from(entities).where(eq(entities.id, 'char_x'))).toEqual([])
@@ -242,6 +242,7 @@ describe('deleteEntityRow — C3 acceptance', () => {
     expect(await tailScene()).toEqual(['char_x', 'char_o'])
 
     insertVectors()
+    expect(vectorCount()).toBe(2)
     await applyRedo(snapshot, ctx)
     expect(await ctx.db.select().from(entities).where(eq(entities.id, 'char_x'))).toEqual([])
     expect(await linkCounts()).toEqual({

@@ -10,6 +10,7 @@ import { DetailPane } from '@/components/shells/detail-pane'
 import { InlineEditableName } from '@/components/ui/inline-editable-name'
 import { Tabs } from '@/components/ui/tabs'
 import { Tag } from '@/components/ui/tag'
+import { useCreateResetTab } from '@/hooks/use-create-reset-tab'
 import type { RowSaveSession } from '@/hooks/use-row-save-session'
 import type { Entity, EntityKind } from '@/lib/db'
 import { t } from '@/lib/i18n'
@@ -43,14 +44,11 @@ export function useEntityTab(
   createSeq: number | undefined,
   initialTab: EntityTab | undefined,
 ) {
-  const [tab, setTab] = useState(openingTab(isCreate, createSeq, initialTab))
-  // Synced during render so a new create draft never paints a frame on the previous tab.
-  const [seenSeq, setSeenSeq] = useState(createSeq)
-  if (createSeq !== seenSeq) {
-    setSeenSeq(createSeq)
-    if (createSeq != null) setTab('identity')
-  }
-  return [tab, setTab] as const
+  return useCreateResetTab<EntityTab>(
+    createSeq,
+    'identity',
+    openingTab(isCreate, createSeq, initialTab),
+  )
 }
 
 type EntityDetailFrameProps<Draft extends EntityBaseDraft> = {

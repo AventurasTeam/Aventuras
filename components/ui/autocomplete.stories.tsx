@@ -58,37 +58,77 @@ export const EmptySource: Story = {
 
 /**
  * `casingNormalization: 'canonical'` (default) — typing "reiwa"
- * commits as "Reiwa" against the canonical source list.
+ * commits as "Reiwa" against the canonical source list, with no tail row.
  */
 export const CanonicalCasing: Story = {
-  render: () => (
+  args: { onCommit: fn() },
+  render: ({ onCommit }) => (
     <View className="gap-3">
       <Text size="sm" variant="muted">
         Type &quot;reiwa&quot; (lowercase) and press Enter — commits as &quot;Reiwa&quot;.
       </Text>
-      <ControlledAutocomplete sourceList={ERA_NAMES} placeholder="Era name…" />
+      <ControlledAutocomplete sourceList={ERA_NAMES} placeholder="Era name…" onCommit={onCommit} />
     </View>
   ),
+  play: async ({ canvas, args }) => {
+    const input = await canvas.findByPlaceholderText('Era name…')
+    await userEvent.click(input)
+    await userEvent.type(input, 'reiwa')
+    await screen.findByRole('option', { name: 'Reiwa' })
+    expect(screen.queryByRole('option', { name: '+ Add new: "reiwa"' })).toBeNull()
+    await userEvent.keyboard('{Enter}')
+    await waitFor(() => expect(args.onCommit).toHaveBeenCalledWith('Reiwa'))
+  },
 }
 
 /**
- * `casingNormalization: 'as-typed'` — preserves the user's casing.
- * Use for hint-only source lists (e.g., tags).
+ * `casingNormalization: 'as-typed'` — a case-only variant gets its own tail
+ * row, so re-casing is a deliberate pick; Enter still picks the entry.
  */
 export const AsTypedCasing: Story = {
-  render: () => (
+  args: { onCommit: fn() },
+  render: ({ onCommit }) => (
     <View className="gap-3">
       <Text size="sm" variant="muted">
-        Type &quot;reiwa&quot; (lowercase) and press Enter — commits as &quot;reiwa&quot;, source
-        casing not enforced.
+        Type &quot;reiwa&quot; (lowercase): Enter keeps &quot;Reiwa&quot;, the + Add new row commits
+        &quot;reiwa&quot;.
       </Text>
       <ControlledAutocomplete
         sourceList={ERA_NAMES}
         casingNormalization="as-typed"
         placeholder="Tag…"
+        onCommit={onCommit}
       />
     </View>
   ),
+  play: async ({ canvas, args }) => {
+    const input = await canvas.findByPlaceholderText('Tag…')
+    await userEvent.click(input)
+    await userEvent.type(input, 'reiwa')
+    await userEvent.click(await screen.findByRole('option', { name: '+ Add new: "reiwa"' }))
+    await waitFor(() => expect(args.onCommit).toHaveBeenCalledWith('reiwa'))
+  },
+}
+
+/** as-typed's tail row ranks after the existing entry, so Enter keeps the entry's casing. */
+export const AsTypedEnterKeepsTheEntry: Story = {
+  args: { onCommit: fn() },
+  render: ({ onCommit }) => (
+    <ControlledAutocomplete
+      sourceList={ERA_NAMES}
+      casingNormalization="as-typed"
+      placeholder="Tag…"
+      onCommit={onCommit}
+    />
+  ),
+  play: async ({ canvas, args }) => {
+    const input = await canvas.findByPlaceholderText('Tag…')
+    await userEvent.click(input)
+    await userEvent.type(input, 'reiwa')
+    await screen.findByRole('option', { name: '+ Add new: "reiwa"' })
+    await userEvent.keyboard('{Enter}')
+    await waitFor(() => expect(args.onCommit).toHaveBeenCalledWith('Reiwa'))
+  },
 }
 
 /**
@@ -180,6 +220,45 @@ export const SuggestionPickCommitsCanonical: Story = {
     const suggestion = await screen.findByRole('option', { name: 'Reiwa' })
     await userEvent.click(suggestion)
     await waitFor(() => expect(args.onCommit).toHaveBeenCalledWith('Reiwa'))
+  },
+}
+
+/** Enter on a whole entry commits it, not an earlier entry that contains it. */
+export const EnterOnWholeEntryCommitsIt: Story = {
+  args: { onCommit: fn() },
+  render: ({ onCommit }) => (
+    <ControlledAutocomplete
+      sourceList={['Folklore', 'Lore']}
+      placeholder="Category…"
+      onCommit={onCommit}
+    />
+  ),
+  play: async ({ canvas, args }) => {
+    const input = await canvas.findByPlaceholderText('Category…')
+    await userEvent.click(input)
+    await userEvent.type(input, 'Lore')
+    await screen.findByRole('option', { name: 'Lore' })
+    await userEvent.keyboard('{Enter}')
+    await waitFor(() => expect(args.onCommit).toHaveBeenCalledWith('Lore'))
+  },
+}
+
+/** A list holding two casings of one entry commits the one picked. */
+export const PickingACaseVariantCommitsThePick: Story = {
+  args: { onCommit: fn() },
+  render: ({ onCommit }) => (
+    <ControlledAutocomplete
+      sourceList={['cosmology', 'Cosmology']}
+      placeholder="Category…"
+      onCommit={onCommit}
+    />
+  ),
+  play: async ({ canvas, args }) => {
+    const input = await canvas.findByPlaceholderText('Category…')
+    await userEvent.click(input)
+    await userEvent.type(input, 'cosmo')
+    await userEvent.click(await screen.findByRole('option', { name: 'Cosmology' }))
+    await waitFor(() => expect(args.onCommit).toHaveBeenCalledWith('Cosmology'))
   },
 }
 

@@ -220,7 +220,10 @@ function Harness({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'F2') setBlocked((prev) => !prev)
       if (e.key === 'F3') session.current?.requestLeave(onLeave)
-      if (e.key === 'F4') setCreateSeq((n) => n + 1)
+      if (e.key === 'F4') {
+        setRow(null)
+        setCreateSeq((n) => n + 1)
+      }
     }
     document.addEventListener('keydown', onKeyDown, true)
     return () => document.removeEventListener('keydown', onKeyDown, true)
@@ -340,6 +343,17 @@ async function editDescription(value: string) {
 async function setCommonKnowledge(on: boolean) {
   await userEvent.click(await waitFor(() => ckSwitch(), WAIT))
   await waitFor(() => expect(ckSwitch()).toHaveAttribute('aria-checked', String(on)), WAIT)
+}
+
+/** `[+] Blank` from a happening open on History lands the new draft on Overview. */
+export const BlankFromHistoryLandsOnOverview: Story = {
+  play: async () => {
+    await userEvent.click(await waitFor(() => tab('History'), WAIT))
+    await expect(await pane().findByText('No history yet', {}, WAIT)).toBeVisible()
+    await userEvent.keyboard('{F4}')
+    await waitFor(() => expect(tab('Overview')).toHaveAttribute('aria-selected', 'true'), WAIT)
+    expect(pane().queryByText('History starts at the first save')).not.toBeInTheDocument()
+  },
 }
 
 /** The committed anchor and link counts; the head carries only the recently-classified badge. */
@@ -706,6 +720,10 @@ export const Blocked: Story = {
   args: { blocked: true },
   play: async () => {
     expect(await pane().findByText('The alley ambush')).toBeVisible()
+    expect(pane().getByText('The alley ambush').closest('[title]')).toHaveAttribute(
+      'title',
+      BLOCKED_REASON,
+    )
     expect(pane().queryByRole('button', { name: /^Edit / })).not.toBeInTheDocument()
     expect(description()).toHaveAttribute('readonly')
     const category = pane().getByRole('combobox', { name: 'Category' })

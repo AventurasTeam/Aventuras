@@ -217,9 +217,15 @@ function Harness({
   const [blocked, setBlocked] = useState(initialBlocked)
   const [links, setLinks] = useState(initialLinks)
   const [finishSave, setFinishSave] = useState<(() => void) | null>(null)
+  const [createSeq, setCreateSeq] = useState(0)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'F2') setBlocked((prev) => !prev)
+      // A `[+] Blank` of the same kind: the route clears the row and bumps the create seq.
+      if (e.key === 'F4') {
+        setRow(null)
+        setCreateSeq((n) => n + 1)
+      }
     }
     document.addEventListener('keydown', onKeyDown, true)
     return () => document.removeEventListener('keydown', onKeyDown, true)
@@ -269,6 +275,7 @@ function Harness({
         <EntityDetailPane
           kind={kind}
           row={row}
+          createSeq={row == null ? createSeq : undefined}
           data={data}
           blocked={blocked}
           blockedReason={BLOCKED_REASON}
@@ -689,6 +696,24 @@ export const CreateLocation: Story = {
 }
 
 const entityHistoryLoader = fn(async (): Promise<HistoryChunk> => ({ rows: [], nextCursor: null }))
+
+/** `[+] Blank` from a character open on History lands the new draft on Identity. */
+export const BlankFromHistoryLandsOnIdentity: Story = {
+  args: { kind: 'character' },
+  decorators: [
+    (Story) => (
+      <HistoryLoaderProvider value={entityHistoryLoader}>
+        <Story />
+      </HistoryLoaderProvider>
+    ),
+  ],
+  play: async () => {
+    await userEvent.click(await waitFor(() => tab(/^History/), WAIT))
+    await expect(await screen.findByText('No history yet', {}, WAIT)).toBeVisible()
+    await userEvent.keyboard('{F4}')
+    await waitFor(() => expect(tab(/^Identity/)).toHaveAttribute('aria-selected', 'true'), WAIT)
+  },
+}
 
 /** A create's History tab targets the saved row's id, not stale create-mode state. */
 export const CreateThenHistoryTargetsTheSavedRow: Story = {

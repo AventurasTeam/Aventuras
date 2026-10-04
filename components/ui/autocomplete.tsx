@@ -35,7 +35,8 @@ type AutocompleteProps = {
    *
    * `'as-typed'` — preserve the user's casing on commit. Use when the source
    * list is hint-only rather than canonical (e.g., tag lists where users may
-   * intentionally re-case).
+   * intentionally re-case). A case-only variant of a source entry gets its own
+   * tail row after that entry; Enter still picks the entry.
    */
   casingNormalization?: 'canonical' | 'as-typed'
   /** Customize the tail-create row label. Default: `+ Add new: "<typed>"`. */
@@ -69,7 +70,7 @@ function normalizeCommit(
 ): string | null {
   const t = raw.trim()
   if (!t) return null
-  if (mode === 'canonical') {
+  if (mode === 'canonical' && !sourceList.includes(t)) {
     return sourceList.find((s) => s.toLowerCase() === t.toLowerCase()) ?? t
   }
   return t
@@ -106,10 +107,19 @@ export function Autocomplete({
     } else if (!trimmed) {
       suggestions = Array.from(sourceList)
     } else {
-      suggestions = sourceList.filter((s) => s.toLowerCase().includes(lc))
+      // An exact match ranks first, same case before any case, so Enter on a whole entry commits
+      // it rather than a longer one containing it. The sort is stable: source order within a rank.
+      const rank = (s: string) => (s === trimmed ? 0 : s.toLowerCase() === lc ? 1 : 2)
+      suggestions = sourceList
+        .filter((s) => s.toLowerCase().includes(lc))
+        .sort((a, b) => rank(a) - rank(b))
     }
-    const exactMatch = sourceList.find((s) => s.toLowerCase() === lc)
-    const showTail = trimmed.length > 0 && !exactMatch
+    // as-typed counts only a same-case entry as a match, so re-casing one is a deliberate pick.
+    const matched =
+      casingNormalization === 'as-typed'
+        ? sourceList.includes(trimmed)
+        : sourceList.some((s) => s.toLowerCase() === lc)
+    const showTail = trimmed.length > 0 && !matched
     const rows: Row<AutocompleteRowData>[] = suggestions.map((s) => ({
       id: s,
       data: { label: s, commitValue: s, isTail: false },
@@ -121,7 +131,7 @@ export function Autocomplete({
       })
     }
     return [{ id: 'main', rows }]
-  }, [value, sourceList, createTailLabel])
+  }, [value, sourceList, casingNormalization, createTailLabel])
 
   const handleActivate = useCallback(
     (row: Row<AutocompleteRowData>) => {

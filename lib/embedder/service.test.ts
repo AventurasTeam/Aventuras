@@ -714,9 +714,15 @@ describe('embedRowsToVecOps — per-kind guard against a source row that moved o
     }
   })
 
-  it('a row edited between assembly and commit lands no vector and stays stale; the next drain lands it', async () => {
+  it('a row edited between assembly and commit keeps its old vector and stays stale; the next drain replaces it', async () => {
     const { sqlite, runInTransaction } = await createTestDb()
     seedKindRows(sqlite, 'b1', true)
+    const hashes = (kind: VecTargetKind) =>
+      (
+        sqlite
+          .prepare(`select source_hash h from ${vecTableName(kind, 384)} where branch_id = 'b1'`)
+          .all() as { h: string }[]
+      ).map((r) => r.h)
 
     const first = await embedRowsToVecOps(
       cfg,
@@ -724,6 +730,7 @@ describe('embedRowsToVecOps — per-kind guard against a source row that moved o
       async (sql) => void sqlite.exec(sql),
     )
     await runInTransaction(first.ops)
+    const firstHashes = new Map(KINDS.map((kind) => [kind, hashes(kind)]))
     for (const kind of KINDS)
       sqlite
         .prepare(`update ${SOURCE_TABLES[kind]} set embedding_stale = 1 where branch_id = 'b1'`)
@@ -743,7 +750,7 @@ describe('embedRowsToVecOps — per-kind guard against a source row that moved o
     await runInTransaction(ops)
 
     for (const kind of KINDS) {
-      expect(vecIds(sqlite, kind, 'b1'), kind).toEqual([])
+      expect(hashes(kind), kind).toEqual(firstHashes.get(kind))
       expect(staleOf(sqlite, kind, 'b1'), kind).toBe(1)
     }
 
@@ -756,6 +763,7 @@ describe('embedRowsToVecOps — per-kind guard against a source row that moved o
 
     for (const kind of KINDS) {
       expect(vecIds(sqlite, kind, 'b1'), kind).toEqual(['x1'])
+      expect(hashes(kind), kind).not.toEqual(firstHashes.get(kind))
       expect(staleOf(sqlite, kind, 'b1'), kind).toBe(0)
     }
   })

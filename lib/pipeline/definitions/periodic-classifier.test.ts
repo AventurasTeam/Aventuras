@@ -2,7 +2,10 @@ import { eq, sql } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { PipelineAction } from '@/lib/actions'
-import { applyDeltaAction as realApplyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
+import {
+  applyDeltaAction as realApplyDeltaAction,
+  settleUserWrites,
+} from '@/lib/actions/delta/apply-delta-action'
 import { describeDeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
 import { generateStructured } from '@/lib/ai'
 import { shouldCadenceFire, type EmbedDescriptions } from '@/lib/classifier'
@@ -899,6 +902,7 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
       applyDeltaAction: realApplyDeltaAction,
       reverseReplayDeltas,
       describeReplayError: describeDeltaReplayError,
+      settleUserWrites,
     })
   })
 
@@ -946,6 +950,7 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
       },
       reverseReplayDeltas,
       describeReplayError: describeDeltaReplayError,
+      settleUserWrites,
     })
   }
 

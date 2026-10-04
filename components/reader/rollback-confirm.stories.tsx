@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { fn } from 'storybook/test'
+import { expect, fn, screen } from 'storybook/test'
+
+import { t } from '@/lib/i18n'
 
 import { RollbackConfirmModal } from './rollback-confirm'
 
@@ -35,6 +37,17 @@ export const CrossChapter: Story = {
     open: true,
     targetEntryNumber: 47,
     counts: { entries: 12, chapters: 1, worldStateChanges: 23 },
+  },
+  play: async () => {
+    const dialog = await screen.findByRole('alertdialog')
+    for (const line of [
+      t('reader:rollbackConfirm.entries', { count: 12 }),
+      t('reader:rollbackConfirm.chapters', { count: 1 }),
+      t('reader:rollbackConfirm.worldState', { count: 23 }),
+      t('reader:rollbackConfirm.irreversible'),
+    ]) {
+      await expect(dialog).toHaveAccessibleDescription(expect.stringContaining(line))
+    }
   },
 }
 

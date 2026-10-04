@@ -8,9 +8,9 @@ import type {
   NewHappening,
   NewHappeningInvolvement,
 } from '@/lib/db'
+import { blankToNull } from '@/lib/text'
 
 import { PLOT_ISSUE } from './issues'
-import { blankToNull } from './thread-draft'
 
 export const involvementDraftSchema = z.object({
   /** Null for a row added this session. */

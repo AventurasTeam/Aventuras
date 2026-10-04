@@ -25,6 +25,15 @@ import type {
   VisualChangeType,
 } from './types'
 
+// data-model.md → Stackable items: lowercase keys of at most 40 characters, and a
+// transfer moves a positive whole count (a negative `to` would store a debt).
+export function normalizeStackableTransfer(transfer: StackableTransfer): StackableTransfer | null {
+  const key = normalizeTerm(transfer.key)
+  if (key === '' || key.length > 40) return null
+  if (!Number.isSafeInteger(transfer.amount) || transfer.amount <= 0) return null
+  return { ...transfer, key }
+}
+
 function isVisualChangeType(value: string): value is VisualChangeType {
   return (VISUAL_CHANGE_TYPES as readonly string[]).includes(value)
 }
@@ -140,17 +149,13 @@ function parseTransfers(segment: string): ParsedTransfers {
     if (attrText === undefined) continue
     const attrs = parseAttributes(attrText)
     if (attrs.key === undefined || attrs.amount === undefined) continue
-    // data-model.md → Stackable items: lowercase keys of at most 40 characters, and a
-    // transfer moves a positive whole count (a negative `to` would store a debt).
-    const key = normalizeTerm(attrs.key)
-    const amount = Number(attrs.amount)
-    if (key === '' || key.length > 40 || !Number.isSafeInteger(amount) || amount <= 0) continue
-    stackables.push({
-      key,
-      amount,
+    const transfer = normalizeStackableTransfer({
+      key: attrs.key,
+      amount: Number(attrs.amount),
       ...(attrs.to !== undefined ? { to: attrs.to } : {}),
       ...(attrs.from !== undefined ? { from: attrs.from } : {}),
     })
+    if (transfer !== null) stackables.push(transfer)
   }
 
   assertNotTruncated(segment, items.length + stackables.length, 'transfers')

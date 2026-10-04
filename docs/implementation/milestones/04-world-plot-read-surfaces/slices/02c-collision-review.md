@@ -164,6 +164,10 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   the row's own deltas; a link row removed on its own still lists its
   edits on those tabs, found through its delete delta's payload
   (vitest on the History query over fixtures).
+- The `Deleted` op chip on a character's History tab returns a
+  relationship row removed on its own, its first per-row match: a row's
+  own delete can't be opened, and undoing it prunes the delta (vitest
+  on the History query over fixtures).
 
 ## Tests
 
@@ -246,7 +250,10 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   canonical entity and let the cascade remove the loser's originals, or
   some other shape? Whatever 4.2c settles on,
   [`world.md → Reversibility`](../../../../ui/screens/world/world.md#reversibility)'s
-  merge write list must be amended to match.
+  merge write list must be amended to match. New rows plus the cascade
+  means more rows a delete captures, so settle
+  [the reversal and delete-payload gap](../../../../followups.md#data-model)
+  before planning this slice.
 - **Reuse the delete confirm's link counts** (4.2b):
   `components/world/delete-impact.ts` repeats the entity cascade's
   awareness / involvement / relationship predicates against the
@@ -278,8 +285,8 @@ to clear before wiring: `collision-resolve-diff.ts` declares
     term against the labels of the table a delta belongs to. The op
     chips then count link rows too: `Created` on a character's tab
     would also list the relationships made, and `Deleted` gets its
-    first per-row matches (closing its [`triage.md`](../../../triage.md)
-    entry). The search bullet's "`target_table` is never matched,
+    first per-row matches (pinned in
+    [Acceptance criteria](#acceptance-criteria)). The search bullet's "`target_table` is never matched,
     since it's constant within a per-row tab" in
     [`world.md → History tab`](../../../../ui/screens/world/world.md#history-tab)
     and C4's single-target query stop holding; amend both with the
@@ -294,6 +301,10 @@ to clear before wiring: `collision-resolve-diff.ts` declares
     naming Aria, so the relationship's edits drop out of her tab
     unless the union also reads cascade payloads. Decide whether it
     does, and how the cascade reads on the surviving end.
+  - **The tab's refresh version.** `HistoryTab` refetches when its
+    target row or `settleCount` changes; a user edit to a link row
+    changes neither, so the union folds the link stores it reads into
+    that version (2026-10-04 triage pass).
   - **Overlap with the merge.** The merge reattaches the loser's link
     rows to the canonical, in a shape the re-key question above leaves
     open. Moved in place, a row names the canonical and brings its

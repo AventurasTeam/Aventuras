@@ -1,4 +1,4 @@
-import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
+import { applyDeltaAction, settleUserWrites } from '@/lib/actions/delta/apply-delta-action'
 import { describeDeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
 import { __resetBranchQueues } from '@/lib/actions/turns/branch-queue'
 import { branches, stories } from '@/lib/db'
@@ -42,5 +42,6 @@ export function resetSingletons(): void {
     applyDeltaAction,
     reverseReplayDeltas,
     describeReplayError: describeDeltaReplayError,
+    settleUserWrites,
   })
 }

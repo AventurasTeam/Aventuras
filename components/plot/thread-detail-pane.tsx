@@ -18,6 +18,7 @@ import { Select } from '@/components/ui/select'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
 import { Tag } from '@/components/ui/tag'
 import { Textarea } from '@/components/ui/textarea'
+import { useCreateResetTab } from '@/hooks/use-create-reset-tab'
 import type { RowSessionHandle } from '@/hooks/use-row-save-session'
 import type { PlotSaveResult } from '@/lib/actions'
 import { INJECTION_MODES, type Thread } from '@/lib/db'
@@ -105,7 +106,7 @@ export function ThreadDetailPane({
   })
   const { control } = session.form
 
-  const [tab, setTab] = useState<string>(initialTab ?? 'overview')
+  const [tab, setTab] = useCreateResetTab<string>(createSeq, 'overview', initialTab ?? 'overview')
   const [jsonOpen, setJsonOpen] = useState(false)
 
   return (
@@ -124,6 +125,7 @@ export function ThreadDetailPane({
                   placeholder={t('plot:detail.namePlaceholder')}
                   size="lg"
                   disabled={blocked}
+                  disabledReason={blockedReason}
                 />
               )}
             />

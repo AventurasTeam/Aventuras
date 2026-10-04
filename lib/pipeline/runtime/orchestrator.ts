@@ -18,7 +18,12 @@ import type {
   RejectedStart,
   TxResult,
 } from '../types'
-import { applyDeltaAction, describeReplayError, reverseReplayDeltas } from './action-port'
+import {
+  applyDeltaAction,
+  describeReplayError,
+  reverseReplayDeltas,
+  settleUserWrites,
+} from './action-port'
 import { checkConcurrencyContract } from './concurrency'
 import { pipelineEventBus } from './event-bus'
 import { runPreflight } from './preflight'
@@ -443,6 +448,10 @@ export async function runPipeline<K extends string>(
   // the common path); beginRun then persists the marker and emits run_start.
   let run = reserveRun(kind, ctx)
   await beginRun(run, ctx)
+  // A user write checks the gate before queueing on its row locks, so one that passed just before
+  // reserveRun raised it could still commit under this run's reads. A chain's successor needs no
+  // settle: the gate stayed up across the handoff.
+  if (run.gateBehavior === 'hard-gate') await settleUserWrites()
   // Drive the run; on a chained commit, drive the successor too. The whole chain is
   // awaited, but the caller gets the ORIGIN run's result — downstream chain outcomes
   // are observed on the event bus, not the return value.

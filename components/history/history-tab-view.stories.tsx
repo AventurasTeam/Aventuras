@@ -111,6 +111,7 @@ export const LoadingOlder: Story = {
   play: async () => {
     const button = await screen.findByRole('button', { name: /Load older/ })
     await expect(button).toBeDisabled()
+    await expect(button).toHaveAttribute('aria-busy', 'true')
     await expect(within(button).getByRole('progressbar')).toBeVisible()
   },
 }

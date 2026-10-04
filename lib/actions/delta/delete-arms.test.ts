@@ -13,12 +13,16 @@ import {
   happeningInvolvements,
   happenings,
   lore,
+  sourceHash,
   stories,
   threads,
   translations,
+  vecTableName,
   type Delta,
+  type VecTargetKind,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { plantVec } from '@/lib/db/__tests__/vec-fixtures'
 import { happeningAwarenessStore, happeningInvolvementsStore } from '@/lib/stores'
 
 import { applyDeltaAction } from './apply-delta-action'
@@ -41,7 +45,6 @@ beforeEach(async () => {
 const CASES = [
   {
     kind: 'lore',
-    family: 'lore_vec',
     translationKind: 'lore',
     insert: () =>
       ctx.db.insert(lore).values({
@@ -59,7 +62,6 @@ const CASES = [
   },
   {
     kind: 'thread',
-    family: 'threads_vec',
     translationKind: 'thread',
     insert: () =>
       ctx.db.insert(threads).values({
@@ -77,7 +79,6 @@ const CASES = [
   },
   {
     kind: 'chapter',
-    family: 'chapter_summaries_vec',
     translationKind: 'chapter',
     insert: () =>
       ctx.db.insert(chapters).values({
@@ -104,7 +105,6 @@ const CASES = [
   },
   {
     kind: 'happening',
-    family: 'happenings_vec',
     translationKind: 'happening',
     insert: () =>
       ctx.db.insert(happenings).values({
@@ -124,27 +124,24 @@ const CASES = [
   },
 ] as const
 
-function insertVectors(family: string): void {
+function insertVectors(kind: VecTargetKind): void {
   for (const dim of [384, 8]) {
-    sqlite
-      .prepare(
-        `INSERT INTO ${family}_${dim} (pk, branch_id, model_id, id, source_hash, embedding) VALUES (?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        `b1:row_1:m${dim}`,
-        'b1',
-        `m${dim}`,
-        'row_1',
-        'h',
-        new Uint8Array(new Float32Array(dim).buffer),
-      )
+    plantVec(sqlite, {
+      kind,
+      id: 'row_1',
+      branchId: 'b1',
+      modelId: `m${dim}`,
+      dim,
+      sourceHash: sourceHash('h'),
+      vector: new Uint8Array(new Float32Array(dim).buffer),
+    })
   }
 }
 
-function vectorCount(family: string): number {
+function vectorCount(kind: VecTargetKind): number {
   const rows = sqlite
     .prepare(
-      `SELECT (SELECT count(*) FROM ${family}_384 WHERE id = 'row_1') + (SELECT count(*) FROM ${family}_8 WHERE id = 'row_1') AS n`,
+      `SELECT (SELECT count(*) FROM ${vecTableName(kind, 384)} WHERE id = 'row_1') + (SELECT count(*) FROM ${vecTableName(kind, 8)} WHERE id = 'row_1') AS n`,
     )
     .all() as { n: number }[]
   return rows[0].n
@@ -158,10 +155,11 @@ async function groupRows(actionId: string): Promise<Delta[]> {
     .orderBy(desc(deltas.logPosition))) as Delta[]
 }
 
-describe.each(CASES)('delete $kind', ({ family, translationKind, insert, remove, select }) => {
+describe.each(CASES)('delete $kind', ({ kind, translationKind, insert, remove, select }) => {
   it('sweeps its vectors and translations forward, restores the row stale on undo, sweeps again on redo', async () => {
     await insert()
-    insertVectors(family)
+    insertVectors(kind)
+    expect(vectorCount(kind)).toBe(2)
     await ctx.db.insert(translations).values({
       id: 'tr_1',
       branchId: 'b1',
@@ -178,7 +176,7 @@ describe.each(CASES)('delete $kind', ({ family, translationKind, insert, remove,
       await applyDeltaAction({ action: remove, actionId: 'act_del', branchId: 'b1' }, ctx),
     ).toMatchObject({ status: 'ok' })
     expect(await select()).toEqual([])
-    expect(vectorCount(family)).toBe(0)
+    expect(vectorCount(kind)).toBe(0)
     expect(await ctx.db.select().from(translations)).toEqual([])
 
     const rows = await groupRows('act_del')
@@ -188,10 +186,11 @@ describe.each(CASES)('delete $kind', ({ family, translationKind, insert, remove,
     expect(restored?.embeddingStale).toBe(1)
     expect(await ctx.db.select().from(translations)).toHaveLength(1)
 
-    insertVectors(family)
+    insertVectors(kind)
+    expect(vectorCount(kind)).toBe(2)
     await applyRedo(snapshot, ctx)
     expect(await select()).toEqual([])
-    expect(vectorCount(family)).toBe(0)
+    expect(vectorCount(kind)).toBe(0)
     expect(await ctx.db.select().from(translations)).toEqual([])
   })
 })

@@ -118,11 +118,13 @@ describe('useRowSaveSession', () => {
     expect(commit).not.toHaveBeenCalled()
   })
 
-  it('names the issue of a field that was never validated before the save', async () => {
+  it('names the issue of an untouched field without flagging the field itself', async () => {
     const commit = okCommit()
     const hook = setup(commit, { rowKey: 'create:thread', values: { title: '', note: '' } })
-    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
     expect(hook.result.current.invalidReason).toBeNull()
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    await vi.waitFor(() => expect(hook.result.current.invalidReason).toBe('text:titleRequired'))
+    expect(hook.result.current.form.formState.errors.title).toBeUndefined()
     let outcome: RowSaveOutcome | undefined
     await act(async () => {
       outcome = await hook.result.current.save()
@@ -638,7 +640,23 @@ describe('useRowSaveSession', () => {
     expect(hook.result.current.saveError).toBe('text:failed')
     expect(onRejected).toHaveBeenCalledWith('text:failed')
     expect(hook.result.current.saving).toBe(false)
-    expect(error).toHaveBeenCalledTimes(1)
+    expect(error.mock.calls.map(([event]) => event).sort()).toEqual([
+      'app.row_save_failed',
+      'app.row_save_validate_failed',
+    ])
+  })
+
+  it('logs a resolver that throws synchronously instead of throwing out of the edit', async () => {
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const resolver: Resolver<Draft> = () => {
+      throw new Error('refine bug')
+    }
+    const hook = setup(okCommit(), undefined, { resolver })
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    await vi.waitFor(() =>
+      expect(error).toHaveBeenCalledWith('app.row_save_validate_failed', expect.anything()),
+    )
+    expect(hook.result.current.form.getValues('note')).toBe('x')
   })
 
   it('reads as saving from the start of validation, matching the ignored discard', async () => {

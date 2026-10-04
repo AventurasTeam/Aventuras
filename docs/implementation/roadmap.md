@@ -467,7 +467,10 @@ verified against the code first. Resolve with the slice each names.
   lead change also makes CTRL-Z undo it before the create it depends on
   and makes rollback / regenerate sweep it. Needs a design session
   before M6.1 / M6.3 are authored; 4.2b's `resolveLead` interim is what
-  it replaces. Surfaced by 4.2b planning (2026-09-28).
+  it replaces. Surfaced by 4.2b planning (2026-09-28). Deleting the lead
+  itself waits on the same logging: the delete would clear the lead in
+  its own undoable group, where today it refuses (`lead-entity`) in
+  every story. Routed from triage 2026-10-04.
 
 **Gates.** M5 (chapter-close writes that branches must respect
 need to exist first).
@@ -963,6 +966,26 @@ code before it moved; resolve with the slice it names.
   concurrent `definition` writer; the wizard is the only other writer
   and touches drafts only, which the mutator refuses. Raised by Slice
   4.2a; routed from triage 2026-09-27.
+- **M7.2 — The era-name input must snap a typed variant at Flip.**
+  Its canonical casing
+  ([`reader-composer.md`](../ui/screens/reader-composer/reader-composer.md))
+  applies only to a committed pick: `Autocomplete` re-cases a suggestion
+  the user picks, and Flip submits whatever is typed, so `reiwa` typed
+  and flipped stays `reiwa`. Export the canonical match from
+  `components/ui/autocomplete.tsx` and call it at submit rather than
+  on blur, which would race the Flip click. Raised by 4.2b; routed from
+  triage 2026-10-04.
+- **M7.2 — `setStoryLead` can't clear the lead.** The lead picker is
+  optional unless the story is adventure or first / second person
+  ([`story-settings.md → Orthogonal axes`](../ui/screens/story-settings/story-settings.md#orthogonal-axes)),
+  so it needs a none choice, and the mutator takes only an entity id.
+  Accepting `null` and skipping the target lookup is enough:
+  `storyDefinitionSchema` already refuses a null lead where one is
+  required. It is also a creative third-person story's only way out of
+  a lead it no longer wants — today the lead can't be deleted in any
+  story, and the workaround makes another active character lead — so
+  [`world.md → Delete`](../ui/screens/world/world.md#delete) changes
+  with it. Raised by 4.2b; routed from triage 2026-10-04.
 - **M7.2 — The classifier prompt has no token budget beyond
   `classifierWindowMaxEntries`.** That knob bounds only the turns
   block; the entity, happening and relationship lists grow unbounded

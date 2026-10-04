@@ -916,6 +916,14 @@ is true. The action-layer's gate-check is defense-in-depth — never
 expected to fire in working UI flow, catches programmatic edits
 (IPC, future MCP, internal bugs). Returns a result, never throws.
 
+The check runs before a user write queues for its row locks, so a
+write can pass it just before a hard-gate run registers and commit
+after. The run therefore settles every dispatched user write
+(`settleUserWrites`) once it registers and before its phases read,
+as the prose-reversal bracket does: the write lands before the run
+reads, never under it, and a chain's successor skips the settle
+because the gate stays up across the handoff.
+
 ---
 
 ## Transaction lifecycle
