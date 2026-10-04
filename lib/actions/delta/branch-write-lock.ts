@@ -3,8 +3,8 @@
 // writer-preferring, so edits can't starve a pass. Shared isn't reentrant: no applyDeltaAction
 // nests, and a no-gate phase writes only through delta_emitted (its status writes take no lock).
 // A queued request that release drops never settles, and the orchestrator drops a write that
-// arrives once its run is ending, so a branch of an aborted run writes on or re-takes the hold
-// only in the parallel-group gap named in triage.md (a cancel aborted first, then a branch threw).
+// arrives once its run is ending, so no branch of an aborted run writes on or re-takes the hold,
+// except in the parallel-group gaps triage.md names.
 
 type Waiter =
   | { readonly mode: 'shared'; readonly grant: () => void }
