@@ -288,10 +288,10 @@ describe('model-aware vec identity', () => {
       },
       KAEL,
     )
-    expect(del.sql).toBe(
-      'DELETE FROM entities_vec_384 WHERE branch_id = ? AND id = ? AND model_id = ?',
+    expect(del.sql).toMatch(
+      /^DELETE FROM entities_vec_384 WHERE branch_id = \? AND id = \? AND model_id = \? AND EXISTS \(/,
     )
-    expect(del.params).toEqual(['b1', 'e1', 'm2'])
+    expect(del.params.slice(0, 3)).toEqual(['b1', 'e1', 'm2'])
     expect(ins.params[0]).toBe('b1:e1:m2')
   })
 
@@ -391,10 +391,20 @@ describe('upsertVecOps source guard', () => {
     expect(ids()).toEqual([])
   })
 
-  it('writes nothing for a row edited mid-embed, and drops the stale vector it replaced', () => {
+  it('writes nothing for a row edited mid-embed, and keeps the vector it would have replaced', () => {
     plantVec(db, write('e1'))
     runOps(db, upsertVecOps(write('e1'), { fields: ['Kale', null] }))
-    expect(ids()).toEqual([])
+    expect(ids()).toEqual(['e1'])
+  })
+
+  it('lets a late write for older text leave the newer embed in place', () => {
+    runOps(db, upsertVecOps({ ...write('e1'), vector: vec(384, 1) }, KAEL))
+    runOps(db, upsertVecOps({ ...write('e1'), vector: vec(384, 0) }, { fields: ['Kale', null] }))
+
+    const rows = db.prepare('select embedding from entities_vec_384').all() as {
+      embedding: Uint8Array
+    }[]
+    expect(rows.map((r) => Buffer.from(r.embedding))).toEqual([Buffer.from(vec(384, 1))])
   })
 
   // Fixtures plant with plantVec, so a row shaped unlike a real one would make them vacuous.

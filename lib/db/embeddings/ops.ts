@@ -25,7 +25,8 @@ export function packFloat32(vec: Float32Array): Uint8Array {
 }
 
 // Scoped to (branch, id, model) so a swap's staged vector never deletes the old model's row.
-// `source` gates the insert on the row holding that text; a racing delete/edit inserts nothing.
+// `source` gates both ops on the row holding that text: a late write for text since edited
+// must not delete the vector a newer embed wrote, since that embed already cleared the flag.
 export function upsertVecOps(w: VecWrite, source: VecSourceGuard): SqlOp[] {
   const table = vecTableName(w.kind, w.dim)
   const guard = embeddedSourceGuard(w.kind, {
@@ -33,13 +34,14 @@ export function upsertVecOps(w: VecWrite, source: VecSourceGuard): SqlOp[] {
     branchId: w.branchId,
     fields: source.fields,
   })
+  const holdsText = `EXISTS (SELECT 1 FROM ${SOURCE_TABLES[w.kind]} WHERE ${guard.sql})`
   return [
     {
-      sql: `DELETE FROM ${table} WHERE branch_id = ? AND id = ? AND model_id = ?`,
-      params: [w.branchId, w.id, w.modelId],
+      sql: `DELETE FROM ${table} WHERE branch_id = ? AND id = ? AND model_id = ? AND ${holdsText}`,
+      params: [w.branchId, w.id, w.modelId, ...guard.params],
     },
     {
-      sql: `INSERT INTO ${table} (pk, branch_id, model_id, id, source_hash, embedding) SELECT ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM ${SOURCE_TABLES[w.kind]} WHERE ${guard.sql})`,
+      sql: `INSERT INTO ${table} (pk, branch_id, model_id, id, source_hash, embedding) SELECT ?, ?, ?, ?, ?, ? WHERE ${holdsText}`,
       params: [
         vecRowPk(w.branchId, w.id, w.modelId),
         w.branchId,

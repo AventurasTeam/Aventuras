@@ -218,19 +218,6 @@ slice-planning gate forces its resolution before that slice is planned.
   at the 4.2b review head (`1428e5b8`), not re-run on `main`
   (2026-09-30, from a slice-review skill test).
 
-- **A late vector write can delete a newer vector and leave the row
-  clean with none.** `upsertVecOps` guards its insert on the row still
-  holding the embedded text, but its delete of the prior
-  `(branch, id, model)` vector is unconditional, and the stale-flag
-  clear is guarded like the insert. If two embeds of one row overlap
-  and the older finishes last, it removes the vector the newer one
-  wrote and inserts nothing, while the flag the newer one cleared
-  stays clear, so the drain never revisits the row. Guarding the
-  delete with the same predicate would close it. Whether two embeds of
-  one row can overlap is unchecked: one drain pass is sequential, but
-  the turn-time embed (`lib/embedder-swap/app-deps.ts`) uses the same
-  model and isn't obviously serialized against it. Read, not reproduced
-  (2026-09-30, raised by the 4.2b type-design follow-up).
 - **`RowSaveResult.code` is a bare optional string.** The save side of
   what the delete side now closes (`RowDeleteRejectionCode`): World's
   `saveRejectionText` and Plot's save mapper match a few codes and let

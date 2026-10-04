@@ -275,7 +275,11 @@ embed path for every restored row.)
 stage's insert is conditional on the source row still holding the
 embedded fields it read, so an embed that races a delete writes no
 orphan vector and one that races an edit writes none either — the row
-stays flagged and the next sync embeds the new text. Every delete
+stays flagged and the next sync embeds the new text. Its delete of the
+vector it replaces carries the same condition, so a late embed of
+older text can't remove a newer embed's vector after that embed
+cleared the flag; the old vector a flagged row keeps never reaches the
+KNN pools. Every delete
 sweeps the row's vectors from every dim family, on the forward delete,
 on redo, and when a reversal deletes a row a create made.
 
