@@ -702,6 +702,8 @@ describe('regenerateTurn', () => {
     await seedTwoTurnsWithCatchUp(ctx)
     await openStory(db, 's1', 'b1')
     await hydrateAppSettings(async () => WORKING_CONFIG)
+    undoRedoStore.pushRedoGroup([])
+    const before = await ctx.db.select().from(deltas)
     const error = vi.spyOn(logger, 'error')
 
     const regen = await withSweepHook(
@@ -721,6 +723,8 @@ describe('regenerateTurn', () => {
       reason: expect.stringContaining('write-back'),
     })
     expect(entriesStore.getById('e_r2')).toBeDefined()
+    expect(await ctx.db.select().from(deltas)).toEqual(before)
+    expect(undoRedoStore.hasRedo()).toBe(true)
     expect(error).toHaveBeenCalledWith(
       'action_layer.reversal_refused',
       expect.objectContaining({ branchId: 'b1', refusal: 'write-back' }),
