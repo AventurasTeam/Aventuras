@@ -163,9 +163,7 @@ export async function resolveInvalidationForDeltas(
     rows.push(...one.rows)
     clampOps.push(...one.clampOps)
   }
-  // Each per-delta result is sorted and unique; concatenating them is neither, and two
-  // recorded scopes can name the same entry.
-  return { status: 'ok', rows: sortForReplay(dedupeById(rows)), clampOps }
+  return { status: 'ok', rows, clampOps }
 }
 
 /**
@@ -205,13 +203,4 @@ export async function resolveClassifierFactDeltas(
         ),
       )) as Delta[]
   ).filter(isReversible)
-}
-
-// reverse-replay unwinds newest-first, and per-scope results concatenate out of log order.
-export function sortForReplay(rows: Delta[]): Delta[] {
-  return [...rows].sort((a, b) => b.logPosition - a.logPosition)
-}
-
-export function dedupeById(rows: readonly Delta[]): Delta[] {
-  return [...new Map(rows.map((r) => [r.id, r])).values()]
 }
