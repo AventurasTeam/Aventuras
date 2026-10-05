@@ -4,9 +4,15 @@ import { deltas, isEmbeddedSourceTable } from '@/lib/db'
 import { isUserOriginatedSource, type DbCtx } from '../types'
 import { cascadePatches } from './delete-cascade'
 import { nextLogPosition } from './delta-row'
+import { heldKey } from './held-rows'
 import { withKeyLocks } from './key-lock'
 import { resolveByTable, whereForDelta } from './registry'
-import { buildReverseAndPrunePlan, DeltaReplayError, emitPatches } from './reverse-replay'
+import {
+  buildReverseAndPrunePlan,
+  DeltaReplayError,
+  emitPatches,
+  ReversalIntegrityError,
+} from './reverse-replay'
 import { reversalLockKeys, type ReversalSet } from './row-closure'
 import { deltaLockKeys } from './row-locks'
 import { FIRST_LOGGED_AT, firstLoggedAt } from './user-precedence'
@@ -19,10 +25,21 @@ export type RedoSnapshot = {
   rowBeforeUndo: Record<string, unknown> | null
 }
 
-// Call this BEFORE reverseAndPruneDeltaRows/reverseReplayDeltas executes on `rows`.
-export async function snapshotForRedo(rows: readonly Delta[], ctx: DbCtx): Promise<RedoSnapshot[]> {
+// Call this BEFORE the reversal of `set` executes.
+export async function snapshotForRedo(set: ReversalSet, ctx: DbCtx): Promise<RedoSnapshot[]> {
+  // Redo restores rows to their tables; it cannot put one back into a delete's payload
+  // (generation-pipeline.md → Reverse-replay).
+  const held = set.redoRows.find(
+    (d) => d.op !== 'delete' && set.held.byRow.has(heldKey(d.targetTable, d.targetId)),
+  )
+  if (held)
+    throw new ReversalIntegrityError(
+      'held-in-redo',
+      `${held.targetTable}:${held.targetId}`,
+      held.actionId,
+    )
   const snapshots: RedoSnapshot[] = []
-  for (const delta of rows) {
+  for (const delta of set.redoRows) {
     const entry = resolveByTable(delta.targetTable)
     if (!entry) throw new Error(`redo snapshot: unknown target_table ${delta.targetTable}`)
     const found = (await ctx.db

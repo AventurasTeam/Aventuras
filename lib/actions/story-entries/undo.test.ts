@@ -3,18 +3,27 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   branches,
+  characterRelationships,
   deltas,
+  entities,
+  happeningAwareness,
   happeningInvolvements,
   happenings,
   pipelineRuns,
   stories,
   storyEntries,
+  type Delta,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { logger } from '@/lib/diagnostics'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
+import { isContentEditDelta } from './classifier-facts'
+import { updateStoryEntryContent } from './operational'
 import { redoLastAction, undoLastAction } from './undo'
+import { applyDeltaAction } from '../delta/apply-delta-action'
 import { DeltaReplayError, reverseReplayDeltas } from '../delta/reverse-replay'
+import type { PipelineAction } from '../types'
 
 afterEach(() => {
   entriesStore.__reset()
@@ -515,6 +524,7 @@ describe('undoLastAction over a refused closure', () => {
       .insert(happeningInvolvements)
       .values({ id: 'hinv_raw', branchId: 'b1', happeningId: 'hap_t', entityId: 'char_k' })
     const before = await db.select().from(deltas)
+    const error = vi.spyOn(logger, 'error')
 
     const result = await undoLastAction('b1', ctx)
 
@@ -523,8 +533,323 @@ describe('undoLastAction over a refused closure', () => {
       code: 'integrity',
       reason: expect.stringContaining('no-create'),
     })
+    // resolveSweep logs the refusal; the undo's own bracket must not log it again.
+    expect(error.mock.calls.filter(([m]) => m === 'action_layer.reversal_refused')).toHaveLength(1)
+    error.mockRestore()
     expect(await db.select().from(deltas)).toEqual(before)
     expect(entriesStore.getById('e_turn')).toBeDefined()
     expect(undoRedoStore.hasRedo()).toBe(false)
+  })
+})
+
+describe('undo and redo carry the reversal closure', () => {
+  type Db = Awaited<ReturnType<typeof createTestDb>>['db']
+  type Ctx = {
+    db: Db
+    runInTransaction: Awaited<ReturnType<typeof createTestDb>>['runInTransaction']
+  }
+
+  async function seedWorld(db: Db) {
+    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
+    await db.insert(entities).values({
+      id: 'char_x',
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Mira',
+      status: 'active',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await db
+      .insert(happenings)
+      .values({ id: 'hap_1', branchId: 'b1', title: 'Fire', createdAt: 1, updatedAt: 1 })
+    entriesStore.hydrate('b1', [])
+  }
+
+  // A head turn of two replies, as operational.test.ts seeds it: e2 is the tail a content
+  // edit invalidates.
+  async function seedTail(db: Db) {
+    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values({
+      id: 'b1',
+      storyId: 's1',
+      name: 'm',
+      createdAt: 1,
+      classifierStatus: {
+        state: 'idle',
+        lastSuccessAt: null,
+        lastError: null,
+        retryCount: 0,
+        processedThrough: 2,
+      },
+    })
+    const entries = [
+      {
+        id: 'e1',
+        branchId: 'b1',
+        position: 1,
+        kind: 'ai_reply' as const,
+        content: 'a',
+        createdAt: 1,
+      },
+      {
+        id: 'e2',
+        branchId: 'b1',
+        position: 2,
+        kind: 'ai_reply' as const,
+        content: 'old',
+        createdAt: 2,
+      },
+    ]
+    await db.insert(storyEntries).values(entries)
+    entriesStore.hydrate(
+      'b1',
+      entries.map((e) => ({ ...e, chapterId: null, metadata: null })),
+    )
+  }
+
+  const factDelta = (
+    id: string,
+    logPosition: number,
+    targetTable: string,
+    targetId: string,
+    entryId: string,
+  ): Delta => ({
+    id,
+    branchId: 'b1',
+    actionId: 'act_pass',
+    op: 'create',
+    targetTable,
+    targetId,
+    entryId,
+    source: 'periodic_classifier',
+    undoPayload: null,
+    logPosition,
+    encodingVersion: 1,
+    createdAt: logPosition,
+  })
+
+  async function act(ctx: Ctx, actionId: string, action: PipelineAction) {
+    const result = await applyDeltaAction({ action, actionId, branchId: 'b1' }, ctx)
+    if (result.status !== 'ok')
+      throw new Error(`${action.kind} did not land: ${JSON.stringify(result)}`)
+  }
+
+  async function contentOf(db: Db, id: string) {
+    const [row] = await db
+      .select({ content: storyEntries.content })
+      .from(storyEntries)
+      .where(eq(storyEntries.id, id))
+    return row.content
+  }
+
+  async function esk(db: Db) {
+    return {
+      character: await db
+        .select({ id: entities.id })
+        .from(entities)
+        .where(eq(entities.id, 'char_e')),
+      involvements: await db.select({ id: happeningInvolvements.id }).from(happeningInvolvements),
+      awareness: await db.select({ id: happeningAwareness.id }).from(happeningAwareness),
+      relationships: await db
+        .select({ id: characterRelationships.id })
+        .from(characterRelationships),
+    }
+  }
+
+  const none = { character: [], involvements: [], awareness: [], relationships: [] }
+
+  it("P1: CTRL-Z of a user-created character takes the pass's links, and redo brings all four back", async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedWorld(db)
+    await act(ctx, 'act_user', {
+      kind: 'createEntity',
+      source: 'user_edit',
+      payload: {
+        entry: {
+          id: 'char_e',
+          branchId: 'b1',
+          kind: 'character',
+          name: 'Esk',
+          status: 'active',
+          injectionMode: 'auto',
+          createdAt: 2,
+          updatedAt: 2,
+        },
+      },
+    })
+    await act(ctx, 'act_pass', {
+      kind: 'createHappeningInvolvement',
+      source: 'periodic_classifier',
+      payload: {
+        entry: { id: 'hinv_e', branchId: 'b1', happeningId: 'hap_1', entityId: 'char_e' },
+      },
+    })
+    await act(ctx, 'act_pass', {
+      kind: 'upsertHappeningAwareness',
+      source: 'periodic_classifier',
+      payload: { branchId: 'b1', happeningId: 'hap_1', characterId: 'char_e' },
+    })
+    await act(ctx, 'act_pass', {
+      kind: 'upsertCharacterRelationship',
+      source: 'periodic_classifier',
+      payload: {
+        branchId: 'b1',
+        subjectId: 'char_e',
+        objectId: 'char_x',
+        kind: 'ally',
+        proseEntryId: null,
+      },
+    })
+    const created = await esk(db)
+    expect(Object.values(created).map((rows) => rows.length)).toEqual([1, 1, 1, 1])
+
+    expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+    expect(await esk(db)).toEqual(none)
+    expect(await db.select().from(deltas)).toEqual([])
+
+    expect(await redoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+    expect(await esk(db)).toEqual(created)
+    const logged = (await db.select().from(deltas)) as Delta[]
+    expect(logged.map((d) => d.targetTable).sort()).toEqual([
+      'character_relationships',
+      'entities',
+      'happening_awareness',
+      'happening_involvements',
+    ])
+
+    expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+    expect(await esk(db)).toEqual(none)
+    expect(await db.select().from(deltas)).toEqual([])
+  })
+
+  it("leaves a content edit's swept facts, and what the closure reaches from them, out of redo", async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedTail(db)
+    expect((await updateStoryEntryContent('b1', 'e2', 'new prose', ctx)).status).toBe('ok')
+    // A pass re-derives from the new prose: a happening anchored to e2, and awareness of it
+    // anchored to e1, which only the closure reaches.
+    await db.insert(happenings).values({
+      id: 'hap_new',
+      branchId: 'b1',
+      title: 'from the new prose',
+      occurredAtEntryId: 'e2',
+      createdAt: 3,
+      updatedAt: 3,
+    })
+    await db.insert(happeningAwareness).values({
+      id: 'haw_early',
+      branchId: 'b1',
+      happeningId: 'hap_new',
+      characterId: 'char_k',
+      learnedAtEntryId: 'e1',
+      decayResistance: null,
+      retrievalCount: 0,
+      source: 'told',
+    })
+    await db
+      .insert(deltas)
+      .values([
+        factDelta('d_hap_new', 2, 'happenings', 'hap_new', 'e2'),
+        factDelta('d_haw_early', 3, 'happening_awareness', 'haw_early', 'e1'),
+      ])
+
+    expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+    expect(await contentOf(db, 'e2')).toBe('old')
+    expect(await db.select().from(happenings)).toEqual([])
+    expect(await db.select().from(happeningAwareness)).toEqual([])
+    expect(await db.select().from(deltas)).toEqual([])
+
+    expect(await redoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+    expect(await contentOf(db, 'e2')).toBe('new prose')
+    expect(await db.select().from(happenings)).toEqual([])
+    expect(await db.select().from(happeningAwareness)).toEqual([])
+    const logged = (await db.select().from(deltas)) as Delta[]
+    expect(logged).toHaveLength(1)
+    expect(isContentEditDelta(logged[0])).toBe(true)
+  })
+
+  it('refuses a CTRL-Z whose redo would restore a row a delete holds, writing nothing', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedWorld(db)
+    await act(ctx, 'act_user', {
+      kind: 'createHappening',
+      source: 'user_edit',
+      payload: {
+        entry: { id: 'hap_u', branchId: 'b1', title: 'Duel', createdAt: 2, updatedAt: 2 },
+      },
+    })
+    // Unreachable through the actions: a classifier delete of the user's happening, which
+    // CTRL-Z steps over to reach the create.
+    const [row] = await db.select().from(happenings).where(eq(happenings.id, 'hap_u'))
+    await db.delete(happenings).where(eq(happenings.id, 'hap_u'))
+    await db.insert(deltas).values({
+      id: 'd_cdel',
+      branchId: 'b1',
+      actionId: 'act_c',
+      op: 'delete',
+      targetTable: 'happenings',
+      targetId: 'hap_u',
+      entryId: null,
+      source: 'periodic_classifier',
+      undoPayload: { ...row, involvements: [], awareness: [] },
+      logPosition: 2,
+      encodingVersion: 1,
+      createdAt: 2,
+    })
+    const before = await db.select().from(deltas)
+    const error = vi.spyOn(logger, 'error')
+
+    const result = await undoLastAction('b1', ctx)
+
+    expect(result).toEqual({
+      status: 'rejected',
+      code: 'integrity',
+      reason: expect.stringContaining('held-in-redo'),
+    })
+    expect(await db.select().from(deltas)).toEqual(before)
+    expect(undoRedoStore.hasRedo()).toBe(false)
+    expect(error).toHaveBeenCalledWith(
+      'action_layer.reversal_refused',
+      expect.objectContaining({ branchId: 'b1', refusal: 'held-in-redo' }),
+    )
+    error.mockRestore()
+  })
+
+  it('refuses a redo whose invalidation reaches a row with no create, leaving the redo pending', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedTail(db)
+    expect((await updateStoryEntryContent('b1', 'e2', 'new prose', ctx)).status).toBe('ok')
+    expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+    // Lands between the undo and the redo; the link is written outside the log.
+    await db.insert(happenings).values({
+      id: 'hap_r',
+      branchId: 'b1',
+      title: 'retry pass',
+      occurredAtEntryId: 'e2',
+      createdAt: 4,
+      updatedAt: 4,
+    })
+    await db.insert(deltas).values(factDelta('d_hap_r', 5, 'happenings', 'hap_r', 'e2'))
+    await db
+      .insert(happeningInvolvements)
+      .values({ id: 'hinv_raw', branchId: 'b1', happeningId: 'hap_r', entityId: 'char_k' })
+
+    const result = await redoLastAction('b1', ctx)
+
+    expect(result).toEqual({
+      status: 'rejected',
+      code: 'integrity',
+      reason: expect.stringContaining('no-create'),
+    })
+    expect(await contentOf(db, 'e2')).toBe('old')
+    expect(undoRedoStore.hasRedo()).toBe(true)
+    expect(await db.select({ id: happenings.id }).from(happenings)).toEqual([{ id: 'hap_r' }])
   })
 })

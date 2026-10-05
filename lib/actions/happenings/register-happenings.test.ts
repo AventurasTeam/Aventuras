@@ -508,7 +508,7 @@ describe('happenings CRUD arms', () => {
     // Undo the delete: capture snapshot first, then prune (remove) the delta
     const deleteDeltaRows = await db.select().from(deltas).where(eq(deltas.actionId, 'act_d'))
     const set = await selectReversalSet(ctx, { branchId: 'br_1', target: deleteDeltaRows })
-    const snapshots = await snapshotForRedo(deleteDeltaRows, ctx)
+    const snapshots = await snapshotForRedo(set, ctx)
     await reverseAndPruneDeltaRows(set, ctx)
 
     // After undo: everything should be restored

@@ -226,7 +226,7 @@ describe('deleteEntityRow — C3 acceptance', () => {
     await deleteEntityRow('b1', 'char_x', ctx)
     const rows = (await ctx.db.select().from(deltas).orderBy(desc(deltas.logPosition))) as Delta[]
     const set = await selectReversalSet(ctx, { branchId: 'b1', target: rows })
-    const snapshot = await snapshotForRedo(rows, ctx)
+    const snapshot = await snapshotForRedo(set, ctx)
     await reverseAndPruneDeltaRows(set, ctx)
 
     const [restored] = await ctx.db.select().from(entities).where(eq(entities.id, 'char_x'))

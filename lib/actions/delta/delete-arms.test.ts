@@ -182,7 +182,7 @@ describe.each(CASES)('delete $kind', ({ kind, translationKind, insert, remove, s
 
     const rows = await groupRows('act_del')
     const set = await selectReversalSet(ctx, { branchId: 'b1', target: rows })
-    const snapshot = await snapshotForRedo(rows, ctx)
+    const snapshot = await snapshotForRedo(set, ctx)
     await reverseAndPruneDeltaRows(set, ctx)
     const [restored] = await select()
     expect(restored?.embeddingStale).toBe(1)
