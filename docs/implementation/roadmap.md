@@ -1129,17 +1129,35 @@ each names.
   finishing for a cancel to land in. Becomes real once the M8.1
   translation call replaces that no-op. Surfaced by M3.7a Task 7
   (2026-07-25).
-- **M8.1 — Translation writers take no row lock, and several delete
-  arms don't cascade translations at all.** No `translations` key
-  exists in `row-locks.ts`, so once a writer exists, a translation
-  written between a cascade's read of a row's translations and the
-  cascade's commit would orphan, and could collide with
-  `translations_natural_uniq` on undo. Latent until this slice ships
-  the first writer. Cascade coverage is also incomplete today:
-  `deleteCharacterRelationship`, the single-POV upsert that deletes a
-  relationship once nulling its last remaining view would leave both
-  views null, `deleteStoryEntry`, and reversing a create all leave the
-  rows' translations behind. Surfaced by 4.2b planning (2026-09-28).
+- **M8.1 — Translation writers take no key lock, and several delete
+  paths leave translations behind.** No `translations` key exists in
+  `row-locks.ts`, and `LOCK_KEY` is null for all three translation
+  actions (`lib/actions/delta/apply-delta-action.ts`), so once a writer
+  exists, a translation written between a cascade's read of a row's
+  translations and the cascade's commit would orphan, and could collide
+  with `translations_natural_uniq` on undo. `createTranslation`'s
+  live-target check (`missingRef` in
+  `lib/actions/translations/register.ts`) has the mirror race: it reads
+  the target, the write commits later, and a concurrent delete of the
+  target could land between them. One per-branch `translations` key
+  closes both, taken by the translation writers, by every delete of a
+  translatable target (lore, thread, chapter and story-entry deletes
+  take no key today; `register-happenings.ts` already notes translations
+  aren't locked), and by `deltaLockKeys` for those tables. Cascade
+  coverage is also incomplete: `deleteCharacterRelationship`, the
+  single-POV upsert that deletes a pair once nulling its last view
+  would leave both null, and `deleteStoryEntry` leave the rows'
+  translations behind. A reversal's closure takes a removed row's
+  translations, but a pair the planner deletes that the closure did not
+  remove keeps them: a kept create whose user view was later cleared
+  (`userKeptRows` in `lib/actions/delta/row-closure.ts` leaves the
+  planner's still-non-null check to the planner), or an update's undo
+  that leaves the pair no view. Latent until this slice ships the first
+  writer, and maybe after: canon's translation writers run hard-gate,
+  which blocks user deletes and reversals while they run, so check
+  whether M8.1 adds a writer outside one. Surfaced by 4.2b planning
+  (2026-09-28); the live-target race and the reversal half were raised
+  in the reversal-integrity PR's review (2026-10-05) and merged here.
 - **M8.3 — `getCalendar` consults only code builtins, never the
   `vault_calendars` table.** The registry holds only
   `earth-gregorian`, so a story configured with a `vault_calendars`
