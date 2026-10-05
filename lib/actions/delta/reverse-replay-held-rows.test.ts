@@ -550,6 +550,69 @@ describe('a reversal applies to rows a delete outside the set holds', () => {
     expect(await ctx.db.select().from(happeningInvolvements)).toEqual([])
     expect(await ctx.db.select().from(deltas)).toEqual([])
   })
+
+  // Out of order only after a redo re-inserts the create above deltas its snapshot absorbed.
+  describe('an update older than the create whose undo removed the held copy', () => {
+    it('leaves the entity out and prunes the delete holding it', async () => {
+      await ctx.db.insert(entities).values(character('char_p'))
+      const [row] = await ctx.db.select().from(entities).where(eq(entities.id, 'char_p'))
+      await ctx.db.delete(entities).where(eq(entities.id, 'char_p'))
+      const onEntity = { targetTable: 'entities', targetId: 'char_p' }
+      await ctx.db.insert(deltas).values([
+        raw('d_upd', 20, { ...onEntity, op: 'update', undoPayload: { status: 'staged' } }),
+        raw('d_create', 30, onEntity),
+        raw('d_del', 40, {
+          ...onEntity,
+          actionId: 'act_del',
+          source: 'user_edit',
+          op: 'delete',
+          undoPayload: {
+            ...row,
+            involvements: [],
+            awareness: [],
+            relationships: [],
+            translations: [],
+          },
+        }),
+      ])
+
+      expect(await reverseReplayDeltas('act_run', ctx)).toBe(2)
+
+      expect(await ctx.db.select().from(deltas)).toEqual([])
+      expect(await ctx.db.select().from(entities).where(eq(entities.id, 'char_p'))).toEqual([])
+    })
+
+    it('leaves the pair out and prunes its delete and the writes left on it', async () => {
+      await seedMentorPair(null, 'wary')
+      const [rel] = await ctx.db.select().from(characterRelationships)
+      await ctx.db.delete(characterRelationships)
+      const onPair = { targetTable: 'character_relationships', targetId: 'rel_1' }
+      await ctx.db.insert(deltas).values([
+        raw('d_upd', 20, { ...onPair, op: 'update', undoPayload: { inverseKind: 'friend' } }),
+        raw('d_create', 30, onPair),
+        // The user cleared the one view that would have kept the pair.
+        raw('d_user', 35, {
+          ...onPair,
+          source: 'user_edit',
+          actionId: 'act_user',
+          op: 'update',
+          undoPayload: { kind: 'rival' },
+        }),
+        raw('d_del', 40, {
+          ...onPair,
+          source: 'user_edit',
+          actionId: 'act_del',
+          op: 'delete',
+          undoPayload: rel,
+        }),
+      ])
+
+      expect(await reverseReplayDeltas('act_run', ctx)).toBe(2)
+
+      expect(await ctx.db.select().from(deltas)).toEqual([])
+      expect(await ctx.db.select().from(characterRelationships)).toEqual([])
+    })
+  })
 })
 
 describe('the write-back refusal', () => {

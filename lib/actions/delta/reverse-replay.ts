@@ -120,6 +120,8 @@ type HeldCopy = {
   readonly row: Record<string, unknown>
   /** Stripped from the payload (captured), or pruning the holder (target). */
   removed: boolean
+  /** Removed by its create's undo, so an older undo in the set cannot bring it back. */
+  removedByCreate: boolean
 }
 
 type BuiltUndo = {
@@ -323,7 +325,7 @@ async function buildUndoOps(
       if (!held || inSet.has(held.holder.id)) return undefined
       await workingRow()
       if (!absent.has(key)) return undefined
-      const copy: HeldCopy = { held, row: { ...held.row }, removed: false }
+      const copy: HeldCopy = { held, row: { ...held.row }, removed: false, removedByCreate: false }
       heldCopies.set(heldId, copy)
       return copy
     }
@@ -370,6 +372,7 @@ async function buildUndoOps(
       if (copy) {
         // The live arm's row-keeping exemption, on the payload copy.
         copy.removed = !userKept.some((col) => copy.row[col] != null)
+        copy.removedByCreate = copy.removed
         if (!copy.removed) {
           for (const col of keeping) if (!userKept.includes(col)) copy.row[col] = null
           reowned.set(delta.id, oldestKeepingWrite(userEdits, userKept).actionId)
@@ -482,6 +485,7 @@ async function buildUndoOps(
     if (columns.length === 0) continue
     const copy = await heldCopy()
     if (copy) {
+      if (copy.removedByCreate) continue
       for (const col of columns)
         copy.row[col] = undoneValue(entry.columnSchemas[col], payload[col], copy.row[col])
       const keeping = entry.rowKeepingColumns
