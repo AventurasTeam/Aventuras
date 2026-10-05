@@ -1,9 +1,10 @@
 import { asc, eq, isNull } from 'drizzle-orm'
 
+import type { IntegrityRefusal } from '@/lib/actions/types'
 import { pipelineRuns, type DbCtx } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 
-import { reverseReplayDeltas } from './action-port'
+import { describeReplayError, reverseReplayDeltas } from './action-port'
 
 export type RecoveredRun = {
   runId: string
@@ -18,6 +19,8 @@ export type RecoveryFailure = {
   actionId: string
   storyId: string | null
   error: unknown
+  /** Set when the reversal was refused as an integrity error, which every boot meets again. */
+  refusal: IntegrityRefusal | null
 }
 export type RecoveryReport = { reversed: RecoveredRun[]; failures: RecoveryFailure[] }
 
@@ -61,6 +64,7 @@ export async function recoverInFlightRuns(ctx: DbCtx): Promise<RecoveryReport> {
         actionId: orphan.actionId,
         storyId: orphan.storyId,
         error: e,
+        refusal: describeReplayError(e)?.refusal ?? null,
       })
       logger.error('pipeline.recovery_failed', {
         runId: orphan.runId,

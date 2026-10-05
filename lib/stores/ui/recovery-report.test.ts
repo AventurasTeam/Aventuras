@@ -32,6 +32,7 @@ describe('recoveryReportStore', () => {
           actionId: 'act_failed',
           storyId: 's1',
           error: new Error('failed'),
+          refusal: null,
         },
       ],
     }

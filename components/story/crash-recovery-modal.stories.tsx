@@ -47,6 +47,7 @@ const degradedReport: RecoveryReport = {
       actionId: 'action-classifier',
       storyId: 's1',
       error: new Error('could not reverse'),
+      refusal: null,
     },
   ],
 }

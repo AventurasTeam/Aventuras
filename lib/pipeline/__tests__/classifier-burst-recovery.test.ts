@@ -1,9 +1,24 @@
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { registerAllDomains, resetStuckClassifierRunState } from '@/lib/actions'
-import { branches, deltas, happenings, pipelineRuns, type ClassifierStatus } from '@/lib/db'
+import {
+  applyDeltaAction,
+  deleteEntityRow,
+  registerAllDomains,
+  resetStuckClassifierRunState,
+} from '@/lib/actions'
+import {
+  branches,
+  deltas,
+  entities,
+  happenings,
+  pipelineRuns,
+  storyEntries,
+  type ClassifierStatus,
+  type EntryMetadata,
+} from '@/lib/db'
 import { recoverInFlightRuns } from '@/lib/pipeline'
+import { entitiesStore } from '@/lib/stores'
 
 import { makeHarness, resetSingletons } from './harness'
 
@@ -117,7 +132,11 @@ describe('a crashed classifier burst', () => {
 
     expect(report.reversed).toHaveLength(0)
     expect(report.failures).toHaveLength(1)
-    expect(report.failures[0]).toMatchObject({ kind: 'periodic-classifier', actionId: 'act_burst' })
+    expect(report.failures[0]).toMatchObject({
+      kind: 'periodic-classifier',
+      actionId: 'act_burst',
+      refusal: null,
+    })
     // Left for the next boot to retry rather than settled.
     const [marker] = await db.select().from(pipelineRuns)
     expect(marker.finishedAt).toBeNull()
@@ -134,5 +153,71 @@ describe('a crashed classifier burst', () => {
       .from(branches)
       .where(eq(branches.id, 'b1'))
     expect(branch.classifierStatus).toEqual(running)
+  })
+
+  // An abort whose reversal failed ends the pass's hold (generation-pipeline.md → No-gate write
+  // phase), so the user can delete a character the pass created while the tail scene names it.
+  it('reports an integrity refusal by kind, and every boot meets it again', async () => {
+    const { db, ctx } = await makeHarness()
+    registerAllDomains()
+    await db.insert(pipelineRuns).values({
+      runId: 'run_classifier',
+      kind: 'periodic-classifier',
+      actionId: 'act_burst',
+      storyId: 's1',
+      startedAt: 1,
+    })
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'createEntity',
+          source: 'periodic_classifier',
+          payload: {
+            entry: {
+              id: 'char_new',
+              branchId: 'b1',
+              kind: 'character',
+              name: 'Vorne',
+              status: 'active',
+              injectionMode: 'auto',
+              createdAt: 1,
+              updatedAt: 1,
+            },
+          },
+        },
+        actionId: 'act_burst',
+        branchId: 'b1',
+      },
+      ctx,
+    )
+    const scene = {
+      sceneEntities: ['char_new'],
+      currentLocationId: null,
+      worldTime: 0,
+    } as EntryMetadata
+    await db.insert(storyEntries).values([
+      { id: 'e1', branchId: 'b1', position: 1, kind: 'opening', content: 'Once.', createdAt: 1 },
+      {
+        id: 'e2',
+        branchId: 'b1',
+        position: 2,
+        kind: 'ai_reply',
+        content: 'Then.',
+        metadata: scene,
+        createdAt: 2,
+      },
+    ])
+    entitiesStore.hydrate('b1', (await db.select().from(entities)) as never)
+    expect(await deleteEntityRow('b1', 'char_new', ctx)).toEqual({ status: 'ok' })
+
+    for (let boot = 0; boot < 2; boot++) {
+      const report = await recoverInFlightRuns(ctx)
+      expect(report.reversed).toHaveLength(0)
+      expect(report.failures).toEqual([
+        expect.objectContaining({ runId: 'run_classifier', refusal: 'write-back' }),
+      ])
+    }
+    const [marker] = await db.select().from(pipelineRuns)
+    expect(marker.finishedAt).toBeNull()
   })
 })

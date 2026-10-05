@@ -440,6 +440,7 @@ describe('describeDeltaReplayError', () => {
     expect(describeDeltaReplayError(error)).toEqual({
       detail: 'Error: store sync boom',
       committed: true,
+      refusal: null,
     })
   })
 
@@ -459,6 +460,7 @@ describe('describeDeltaReplayError', () => {
     expect(describeDeltaReplayError(error)).toEqual({
       detail: 'Error: database is locked',
       committed: false,
+      refusal: null,
     })
   })
 

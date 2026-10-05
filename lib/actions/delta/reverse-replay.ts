@@ -17,7 +17,7 @@ import { deletedRow, heldKey, type HeldRow } from './held-rows'
 import { withKeyLocks } from './key-lock'
 import { liveLinkFilter } from './live-link-filter'
 import { resolveByTable, whereForDelta, type StorePatch } from './registry'
-import { DeltaReplayError, ReversalIntegrityError } from './replay-errors'
+import { DeltaReplayError, ReversalIntegrityError, type IntegrityRefusal } from './replay-errors'
 import {
   reversalLockKeys,
   selectReversalSet,
@@ -37,10 +37,10 @@ export {
 /** What the pipeline port needs from a replay failure; `undefined` hands any other error back. */
 export function describeDeltaReplayError(
   e: unknown,
-): { detail: string; committed: boolean } | undefined {
-  return e instanceof DeltaReplayError
-    ? { detail: String(e.cause), committed: e.committed }
-    : undefined
+): { detail: string; committed: boolean; refusal: IntegrityRefusal | null } | undefined {
+  if (!(e instanceof DeltaReplayError)) return undefined
+  const refusal = e instanceof ReversalIntegrityError ? e.refusal : null
+  return { detail: String(e.cause), committed: e.committed, refusal }
 }
 
 export type PatchEmission = { table: string; branchId: string; patch: StorePatch }

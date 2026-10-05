@@ -25,6 +25,7 @@ function failed(kind: string, storyId: string | null): RecoveryFailure {
     actionId: `action_${kind}`,
     storyId,
     error: new Error('could not reverse'),
+    refusal: null,
   }
 }
 

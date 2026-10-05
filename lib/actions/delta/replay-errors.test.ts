@@ -37,12 +37,13 @@ describe('ReversalIntegrityError', () => {
     expect(e.cause).toBe('Reversal refused (no-create): character_relationships:rel_x')
   })
 
-  it('is described for the pipeline port like any uncommitted replay failure', () => {
+  it('is described for the pipeline port as an uncommitted failure naming its refusal', () => {
     const e = new ReversalIntegrityError('write-back', 'entities:char_x', 'act_g')
 
     expect(describeDeltaReplayError(e)).toEqual({
       detail: 'Reversal refused (write-back): entities:char_x',
       committed: false,
+      refusal: 'write-back',
     })
   })
 })
