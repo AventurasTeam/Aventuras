@@ -145,3 +145,40 @@ slice-planning gate forces its resolution before that slice is planned.
   as a `state` reference, but the schema has no such field: doc/schema
   drift to resolve. Raised by the Task 5 review of the
   reversal-integrity PR (2026-10-05).
+
+- **The rollback preview selects its set outside the bracket and any
+  lock.** `getRollbackCounts` runs `selectReversalSet` unguarded;
+  `closeOver` (`lib/actions/delta/row-closure.ts`) reads live
+  referrers in one round and their creates in the next, so a
+  periodic-classifier abort between the two reads could make the
+  preview throw `no-create`. The user would see a transient "Couldn't
+  roll back" plus an error-level `action_layer.reversal_refused`
+  that misreports a race as an integrity fault; a second tap clears
+  it. Possible fix: take the branch write lock shared around the
+  preview's selection. Reasoned, not reproduced. Raised by the Task 6
+  review of the reversal-integrity PR (2026-10-05).
+
+- **The reader's rollback and edit handlers have no try/catch.**
+  `confirmRollback` and `handleCommitEdit` in
+  `app/reader-composer/[branchId].tsx` await `rollbackToEntry` and
+  `updateStoryEntryContent` bare, so a non-integrity `DeltaReplayError`
+  (a store-sync failure after the commit, say) escapes as an unhandled
+  rejection. The preview handler above them already catches and logs.
+  Raised by the Task 6 review of the reversal-integrity PR
+  (2026-10-05).
+
+- **Rollback and edit rejection copy always says "Please try again."**
+  `reader:rollbackFailed` and `reader:editFailed`
+  (`locales/en/reader.json`) cover every rejection code, including the
+  persistent ones (`delta-failed` from an integrity refusal, `notFound`,
+  `rollbackFloor`), which a retry cannot clear. Regenerate avoids the
+  loop with its own copy map (`REGENERATE_REJECTION_COPY` in
+  `app/reader-composer/[branchId].tsx`). Raised by the Task 6 review of
+  the reversal-integrity PR (2026-10-05).
+
+- **Every seeded hero rollback reverses chapter 1's create.**
+  `delta_hero_3` in `lib/db/devtools/seed-dataset.ts` (the
+  `chap_hero_1` create) has a null `entryId` and is logged after every
+  entry create, so it falls inside every hero rollback window; a probe
+  showed `chapters: 1` even for a rollback to position 70. Raised by the
+  Task 6 review of the reversal-integrity PR (2026-10-05).
