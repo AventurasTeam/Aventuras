@@ -102,17 +102,6 @@ slice-planning gate forces its resolution before that slice is planned.
   Revisit both when translations get a writer. Raised in the
   reversal-integrity PR's review (2026-10-05).
 
-- **`abortCauseOf` may misread an embed timeout as a cancel on
-  Android.** `lib/abort.ts` (`abortCauseOf`, `BOUNDED_SIGNAL_EXPIRED`)
-  tells an expiry from a stop by `signal.reason`, but React Native's
-  `setUpXHR.js` replaces the global `AbortController` with
-  `abort-controller@3.0.0`, whose `abort()` drops its argument. On
-  Android `lib/embedder/local/runtime.native.ts` (the two
-  `abortedEmbedError(signal)` checks in its per-text loop and after
-  it) would then report a timeout as a cancel, the misreading
-  `lib/embedder/local/cancel.ts` warns about. Not verified on a
-  device. Raised in the reversal-integrity PR's review (2026-10-05).
-
 - **The reversal closure doesn't follow id references inside
   `entities.state`.** `REF_COLUMNS` in
   `lib/actions/delta/live-refs.ts` registers only link-table columns,
