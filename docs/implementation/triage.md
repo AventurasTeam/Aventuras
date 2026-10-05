@@ -322,3 +322,15 @@ slice-planning gate forces its resolution before that slice is planned.
   harness seeds from this dataset (`e2e/harness/seed.ts`), so changing
   its source needs a check of what those specs CTRL-Z. Raised in the
   reversal-integrity PR's slice review (2026-10-05).
+
+- **IN-list chunking against the bind cap is hand-rolled in nine
+  places.** `lib/actions/delta/row-closure.ts` (`chunked`) and
+  `lib/db/embeddings/stale.ts` (`chunk`) each keep a private helper,
+  and `user-precedence.ts`, `reverse-replay.ts` and
+  `live-link-filter.ts` under `lib/actions/delta/`, plus
+  `lib/retrieval/run.ts`, `lib/retrieval/source-rows.ts`,
+  `lib/entry-refs/read.ts` and `lib/db/embeddings/ops.ts`, inline the
+  `i += BIND_CHUNK` loop. One exported helper beside `BIND_CHUNK` in
+  `lib/db/bind-limit.ts` would replace them; the reversal-integrity
+  PR's simplifier pass skipped it because that home sits outside the
+  PR. Raised in the reversal-integrity PR's slice review (2026-10-05).
