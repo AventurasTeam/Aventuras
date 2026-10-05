@@ -11,7 +11,6 @@ import { generateStructured } from '../sdk/generate'
  * Prompt generation flows through ContextBuilder + Liquid templates.
  */
 
-import { errMessage } from '$lib/utils/error'
 import type {
   Story,
   StoryEntry,
@@ -40,7 +39,7 @@ import {
 import type { RuntimeVariable, RuntimeEntityType } from '$lib/services/packs/types'
 import { NoObjectGeneratedError } from 'ai'
 import { jsonrepair } from 'jsonrepair'
-import { describeActivityError } from '$lib/services/activity'
+import { describeActivityError, isAbortError } from '$lib/services/activity'
 
 const log = createLogger('Classifier')
 
@@ -188,6 +187,7 @@ export class ClassifierService extends BaseAIService {
       return result
     } catch (error) {
       log('classify failed', error)
+      if (isAbortError(error)) throw error
       return this.recover(error, runtimeVars, runtimeVarsByType)
     }
   }
@@ -222,7 +222,7 @@ export class ClassifierService extends BaseAIService {
         presentCharacterNames: [],
         timeProgression: 'none',
       },
-      _error: describeActivityError(error) ?? errMessage(error),
+      _error: describeActivityError(error),
     }
 
     // Only a schema/parse rejection carries the model's text. A transport failure, an

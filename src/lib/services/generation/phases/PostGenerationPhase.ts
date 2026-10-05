@@ -50,7 +50,7 @@ export interface PostWorldState {
 }
 
 /** Dependencies for post-generation phase */
-import { NO_ACTIVITY, trackStep, type ActivityReporter } from '$lib/services/activity'
+import { NO_ACTIVITY, isAbortError, trackStep, type ActivityReporter } from '$lib/services/activity'
 
 export interface PostGenerationDependencies {
   generateSuggestions: (
@@ -60,13 +60,13 @@ export interface PostGenerationDependencies {
     latestNarrativeResponse: string | undefined,
     storyId: string | undefined,
     activityParentId?: string,
-  ) => Promise<{ suggestions: Suggestion[]; failure?: string | null }>
+  ) => Promise<{ suggestions: Suggestion[]; failure?: string }>
   translateSuggestions: (
     suggestions: Suggestion[],
     targetLanguage: string,
     storyId: string | undefined,
     activityParentId?: string,
-  ) => Promise<{ items: Suggestion[]; failure?: string | null }>
+  ) => Promise<{ items: Suggestion[]; failure?: string }>
   generateActionChoices: (
     entries: StoryEntry[],
     worldState: PostWorldState,
@@ -76,13 +76,13 @@ export interface PostGenerationDependencies {
     pov: 'first' | 'second' | 'third',
     storyId: string | undefined,
     activityParentId?: string,
-  ) => Promise<{ choices: ActionChoice[]; failure?: string | null }>
+  ) => Promise<{ choices: ActionChoice[]; failure?: string }>
   translateActionChoices: (
     choices: ActionChoice[],
     targetLanguage: string,
     storyId: string | undefined,
     activityParentId?: string,
-  ) => Promise<{ items: ActionChoice[]; failure?: string | null }>
+  ) => Promise<{ items: ActionChoice[]; failure?: string }>
 }
 
 /** Input for the post-generation phase */
@@ -142,12 +142,20 @@ export class PostGenerationPhase {
         try {
           result.suggestions = await this.generateSuggestions(input)
         } catch (error) {
+          if (isAbortError(error)) {
+            yield { type: 'aborted', phase: 'post' } satisfies AbortedEvent
+            return { suggestions: null, actionChoices: null }
+          }
           yield this.errorEvent(error)
         }
       } else {
         try {
           result.actionChoices = await this.generateActionChoices(input)
         } catch (error) {
+          if (isAbortError(error)) {
+            yield { type: 'aborted', phase: 'post' } satisfies AbortedEvent
+            return { suggestions: null, actionChoices: null }
+          }
           yield this.errorEvent(error)
         }
       }
@@ -191,7 +199,8 @@ export class PostGenerationPhase {
           ),
         )
         return translated.items
-      } catch {
+      } catch (error) {
+        if (isAbortError(error)) throw error
         return suggestions
       }
     }
@@ -236,7 +245,8 @@ export class PostGenerationPhase {
           ),
         )
         return translated.items
-      } catch {
+      } catch (error) {
+        if (isAbortError(error)) throw error
         return choices
       }
     }

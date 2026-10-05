@@ -226,19 +226,21 @@ describe('trackStep, a failure the work reports', () => {
   })
 })
 
-describe('trackStep, an abort the work reports', () => {
-  it('closes the step as skipped when the reported failure is null', async () => {
+describe('trackStep, a cancellation', () => {
+  it('closes the step as skipped when the work throws an abort, and rethrows it', async () => {
     const closed: [string, string | undefined][] = []
     const activity: ActivityReporter = {
       startStep: () => 's1',
       endStep: (id, status) => closed.push([id, status]),
       recordStep: () => '',
     }
+    const abort = Object.assign(new Error('aborted'), { name: 'AbortError' })
 
-    await trackStep(activity, 'Translating suggestions', {}, async () => ({
-      items: [],
-      failure: null,
-    }))
+    await expect(
+      trackStep(activity, 'Translating suggestions', {}, async () => {
+        throw abort
+      }),
+    ).rejects.toBe(abort)
 
     expect(closed).toEqual([['s1', 'skipped']])
   })

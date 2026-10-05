@@ -8,7 +8,7 @@
 
 import type { ActivityStatus } from './types'
 import type { GroupOptions, StartStepOptions } from './recorder'
-import { describeActivityError } from './describeError'
+import { describeActivityError, isAbortError } from './describeError'
 
 export interface ActivityReporter {
   /** Returns the id to close later, or `''` when nothing was recorded. */
@@ -46,22 +46,21 @@ export const NO_ACTIVITY: ActivityReporter = {
  */
 export function failStep(activity: ActivityReporter, id: string | undefined, error: unknown): void {
   if (!id) return
-  const reason = describeActivityError(error)
-  activity.endStep(id, reason === null ? 'skipped' : 'failed', undefined, reason)
+  if (isAbortError(error)) activity.endStep(id, 'skipped')
+  else activity.endStep(id, 'failed', undefined, describeActivityError(error))
 }
 
 /**
- * Close `id` on the outcome a service reported: `failure` absent means it finished, a reason
- * means it failed, and `null` -- `describeActivityError`'s word for an abort -- means it stopped.
+ * Close `id` on the outcome a service reported: finished, or failed for the reason it gave. A
+ * cancellation is never reported this way; it is thrown.
  */
 export function closeStep(
   activity: ActivityReporter,
   id: string,
-  failure: string | null | undefined,
+  failure: string | undefined,
   detail?: string,
 ): void {
   if (failure === undefined) activity.endStep(id, 'done', detail)
-  else if (failure === null) activity.endStep(id, 'skipped')
   else activity.endStep(id, 'failed', undefined, failure)
 }
 
@@ -82,7 +81,7 @@ export async function trackStep<T>(
   const id = activity.startStep(label, options)
   try {
     const result = await work(id)
-    closeStep(activity, id, (result as { failure?: string | null } | null)?.failure)
+    closeStep(activity, id, (result as { failure?: string } | null)?.failure)
     return result
   } catch (error) {
     failStep(activity, id, error)

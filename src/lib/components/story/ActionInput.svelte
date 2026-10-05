@@ -114,7 +114,7 @@
       return {
         promptContent: content,
         originalInput: undefined,
-        timing: timing(describeActivityError(error) ?? 'failed'),
+        timing: timing(describeActivityError(error)),
       }
     }
   }
@@ -865,7 +865,7 @@
 
         if (event.type === 'error' && event.fatal) {
           console.error('[ActionInput] Fatal pipeline error:', event.error)
-          ending.fatalError = describeActivityError(event.error) ?? event.error.message
+          ending.fatalError = describeActivityError(event.error)
           break
         }
       }

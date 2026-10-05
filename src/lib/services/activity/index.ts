@@ -37,7 +37,7 @@ export {
 } from './recorder'
 
 export { NO_ACTIVITY, closeStep, trackStep, failStep, type ActivityReporter } from './reporter'
-export { describeActivityError, ATTEMPT_NUMBER } from './describeError'
+export { describeActivityError, isAbortError, ATTEMPT_NUMBER } from './describeError'
 
 export { trackPhase, type TrackPhaseOptions } from './trackPhase'
 

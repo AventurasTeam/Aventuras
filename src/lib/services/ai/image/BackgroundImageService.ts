@@ -6,7 +6,7 @@ import { createLogger } from '$lib/log'
 import { backgroundImageAnalysisResultSchema, type BackgroundImageAnalysisResult } from '../sdk'
 import { BaseAIService } from '../BaseAIService'
 import { generateImage } from './providers/registry'
-import { describeActivityError } from '$lib/services/activity'
+import { describeActivityError, isAbortError } from '$lib/services/activity'
 
 const log = createLogger('BackgroundImageService')
 
@@ -60,10 +60,11 @@ export class BackgroundImageService extends BaseAIService {
     } catch (error) {
       emitBackgroundImageAnalysisFailed()
       log('Query generation failed:', error)
+      if (isAbortError(error)) throw error
       return {
         changeNecessary: false,
         prompt: '',
-        failure: describeActivityError(error) ?? undefined,
+        failure: describeActivityError(error),
       }
     }
   }
@@ -95,7 +96,8 @@ export class BackgroundImageService extends BaseAIService {
       return { image: result.base64 }
     } catch (error) {
       log('Background image generation failed:', error)
-      return { image: '', failure: describeActivityError(error) ?? undefined }
+      if (isAbortError(error)) throw error
+      return { image: '', failure: describeActivityError(error) }
     }
   }
 }

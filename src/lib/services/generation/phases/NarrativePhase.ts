@@ -200,7 +200,7 @@ export class NarrativePhase {
         const partial = !!fullResponse.trim()
         if (!aborted && !partial && passesAgain(error)) {
           for (const id of [waitId, streamId]) failStep(activity, id, error)
-          closePass(describeActivityError(error) ?? EMPTY_RESPONSE)
+          closePass(describeActivityError(error))
           lastError = error
           retryCount++
           continue

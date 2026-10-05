@@ -8,7 +8,7 @@
  */
 
 import type { ActivityReporter } from './reporter'
-import { describeActivityError } from './describeError'
+import { describeActivityError, isAbortError } from './describeError'
 
 /** The only thing this needs of a phase event. */
 interface PhaseEvent {
@@ -56,8 +56,11 @@ export async function* trackPhase<E extends PhaseEvent, R>(
     }
     return next.value
   } catch (error) {
-    status = 'failed'
-    reason = describeActivityError(error)
+    if (isAbortError(error)) status = 'skipped'
+    else {
+      status = 'failed'
+      reason = describeActivityError(error)
+    }
     throw error
   } finally {
     // The loop steps the phase by hand rather than delegating, so abandoning this generator

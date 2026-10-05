@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { APICallError, RetryError } from 'ai'
-import { ATTEMPT_NUMBER, describeActivityError } from './describeError'
+import { ATTEMPT_NUMBER, describeActivityError, isAbortError } from './describeError'
 
 const apiError = (statusCode: number | undefined, responseBody?: string) =>
   new APICallError({
@@ -89,10 +89,11 @@ describe('describeActivityError', () => {
     )
   })
 
-  it('returns null for an abort', () => {
+  it('recognises a cancellation apart from a failure', () => {
     const abort = new Error('aborted')
     abort.name = 'AbortError'
-    expect(describeActivityError(abort)).toBeNull()
+    expect(isAbortError(abort)).toBe(true)
+    expect(isAbortError(new Error('provider down'))).toBe(false)
   })
 
   it('caps a long reason', () => {

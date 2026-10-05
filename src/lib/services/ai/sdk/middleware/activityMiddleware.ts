@@ -14,13 +14,15 @@ import {
   ATTEMPT_NUMBER,
   describeActivityError,
   failStep,
+  isAbortError,
   type ActivityReporter,
 } from '$lib/services/activity'
 import type { RetryHooks } from './retryMiddleware'
 
 export class AttemptTracker {
   private attempts = 0
-  private first: { startedAt: number; endedAt?: number; error?: string | null } | null = null
+  private first: { startedAt: number; endedAt?: number; error?: string; aborted?: boolean } | null =
+    null
   private attemptId = ''
   private waitId = ''
 
@@ -70,7 +72,8 @@ export class AttemptTracker {
     // Closed or remembered before tagging, so the attempt's own row reads plainly.
     if (this.attempts === 1 && this.first) {
       this.first.endedAt = this.now()
-      this.first.error = describeActivityError(error)
+      if (isAbortError(error)) this.first.aborted = true
+      else this.first.error = describeActivityError(error)
     } else failStep(this.activity, this.attemptId, error)
     if (error !== null && typeof error === 'object') {
       ;(error as Record<symbol, unknown>)[ATTEMPT_NUMBER] = this.attempts
@@ -79,7 +82,7 @@ export class AttemptTracker {
 
   private backfillFirst(): void {
     if (!this.first) return
-    const { startedAt, endedAt, error } = this.first
+    const { startedAt, endedAt, error, aborted } = this.first
     this.first = null
     this.activity.recordStep('Attempt 1', {
       parentId: this.parentId,
@@ -87,7 +90,7 @@ export class AttemptTracker {
       attempt: true,
       startedAt,
       durationMs: (endedAt ?? this.now()) - startedAt,
-      status: error === null ? 'skipped' : 'failed',
+      status: aborted ? 'skipped' : 'failed',
       error,
     })
   }

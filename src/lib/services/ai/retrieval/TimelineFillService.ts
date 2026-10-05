@@ -24,7 +24,7 @@ import { countTokens } from '$lib/services/tokenizer'
 import { chapterReadBudget } from '../core/defaults'
 
 import { activity } from '$lib/stores/activity.svelte'
-import { closeStep, describeActivityError, failStep } from '$lib/services/activity'
+import { closeStep, describeActivityError, isAbortError, failStep } from '$lib/services/activity'
 
 /** Close a step by how many of its questions were actually answered. */
 function closeAnswerStep(id: string, answers: TimelineAnswer[]): void {
@@ -57,7 +57,7 @@ const UNANSWERED = 'Unable to answer the question.'
 export interface TimelineAnswer {
   answer: string
   /** Why the call failed, when `answer` is the give-up string because it did. */
-  failure?: string | null
+  failure?: string
   /**
    * 0 when the answer is a give-up string rather than retrieved information -- a failed
    * call, or no chapters resolved. `runTimelineFill` drops those instead of forwarding them
@@ -97,7 +97,7 @@ export class TimelineFillService extends BaseAIService {
     chapters: Chapter[],
     alreadyInContext?: string,
     activityParentId?: string,
-  ): Promise<{ queries: TimelineQuery[]; failure?: string | null }> {
+  ): Promise<{ queries: TimelineQuery[]; failure?: string }> {
     log('generateQueries called', {
       visibleEntriesCount: visibleEntries.length,
       chaptersCount: chapters.length,
@@ -138,6 +138,7 @@ export class TimelineFillService extends BaseAIService {
       return { queries: result.queries.slice(0, this.maxQueries) }
     } catch (error) {
       log('Query generation failed:', error)
+      if (isAbortError(error)) throw error
       return { queries: [], failure: describeActivityError(error) }
     }
   }
@@ -299,6 +300,7 @@ export class TimelineFillService extends BaseAIService {
       return { answer: answer.trim(), confidence: 0.8 }
     } catch (error) {
       log('Answer generation failed:', error)
+      if (isAbortError(error)) throw error
       // The caller closes the step it opened: several of these can share one.
       return { answer: UNANSWERED, confidence: 0, failure: describeActivityError(error) }
     }

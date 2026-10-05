@@ -345,3 +345,18 @@ describe('PostGenerationPhase activity reporting', () => {
     expect(steps).toEqual([])
   })
 })
+
+describe('PostGenerationPhase, a cancellation', () => {
+  it('reports a thrown abort as aborted, not as a failure', async () => {
+    const abort = Object.assign(new Error('aborted'), { name: 'AbortError' })
+    const deps = makeDeps({
+      generateActionChoices: async () => {
+        throw abort
+      },
+    })
+
+    const { events } = await drain(new PostGenerationPhase(deps).execute(makeInput()))
+
+    expect(events.map((e) => e.type)).toEqual(['phase_start', 'aborted'])
+  })
+})

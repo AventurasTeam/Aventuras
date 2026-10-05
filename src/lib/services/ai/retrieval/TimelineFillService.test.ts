@@ -352,6 +352,6 @@ describe('runTimelineFill activity reporting', () => {
       ),
     ).rejects.toThrow('aborted')
 
-    expect(activity.endStep).toHaveBeenCalledWith('step-1', 'skipped', undefined, null)
+    expect(activity.endStep).toHaveBeenCalledWith('step-1', 'skipped')
   })
 })

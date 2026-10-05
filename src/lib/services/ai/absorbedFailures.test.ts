@@ -152,3 +152,12 @@ describe('absorbed failures', () => {
     expect(activity.endStep).not.toHaveBeenCalled()
   })
 })
+
+describe('cancellation', () => {
+  it('is rethrown rather than absorbed into a fallback', async () => {
+    const abort = Object.assign(new Error('aborted'), { name: 'AbortError' })
+    generateStructured.mockRejectedValue(abort)
+    const service = new SuggestionsService('suggestions' as any)
+    await expect(service.generateSuggestions([], [], [], 's', 'Hi.', 'step')).rejects.toBe(abort)
+  })
+})

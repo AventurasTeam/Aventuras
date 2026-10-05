@@ -114,7 +114,7 @@ import type { Translated, TranslationResult, UITranslationItem } from './utils'
 import { recentContent, AS_HAYSTACK, AS_PROSE } from '$lib/utils/recentContent'
 import { joinPromptBlocks } from '$lib/utils/promptBlocks'
 import { activity } from '$lib/stores/activity.svelte'
-import { describeActivityError, failStep } from '$lib/services/activity'
+import { describeActivityError, failStep, isAbortError } from '$lib/services/activity'
 
 // Timeline Fill service settings (per design doc section 3.1.4: Static Retrieval)
 export interface TimelineFillSettings {
@@ -373,7 +373,7 @@ class AIService {
     latestNarrativeResponse: string | undefined,
     storyId: string | undefined,
     activityParentId?: string,
-  ): Promise<SuggestionsResult & { failure?: string | null }> {
+  ): Promise<SuggestionsResult & { failure?: string }> {
     log('generateSuggestions called', {
       entriesCount: entries.length,
       threadsCount: activeThreads.length,
@@ -404,7 +404,7 @@ class AIService {
     pov: 'first' | 'second' | 'third' | undefined,
     storyId: string | undefined,
     activityParentId?: string,
-  ): Promise<ActionChoicesResult & { failure?: string | null }> {
+  ): Promise<ActionChoicesResult & { failure?: string }> {
     log('generateActionChoices called', {
       entriesCount: entries.length,
       narrativeLength: narrativeResponse.length,
@@ -923,6 +923,7 @@ class AIService {
       log('Using analyzed image mode')
       return await this.runAnalyzedImageGeneration(context)
     } catch (error) {
+      if (isAbortError(error)) throw error
       log('Image generation failed (non-fatal)', error)
       // Don't throw - image generation failure shouldn't break the main flow. No step met this
       // failure yet, so it gets one of its own.
@@ -930,10 +931,10 @@ class AIService {
       if (context.activityParentId)
         activity.recordStep('Preparing images', {
           parentId: context.activityParentId,
-          status: failure === null ? 'skipped' : 'failed',
+          status: 'failed',
           error: failure,
         })
-      return { queued: 0, failure: failure ?? undefined }
+      return { queued: 0, failure }
     }
   }
 
@@ -1013,12 +1014,13 @@ class AIService {
         log('Dropped scenes', { before: analysis.scenes.length, after: scenes.length })
       }
     } catch (error) {
+      failStep(activity, analysisId, error)
+      if (isAbortError(error)) throw error
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       log('Scene analysis failed', error)
-      failStep(activity, analysisId, error)
       emitImageAnalysisComplete(context.entryId, 0, 0)
       emitImageAnalysisFailed(context.entryId, errorMessage)
-      return { queued: 0, failure: describeActivityError(error) ?? undefined }
+      return { queued: 0, failure: describeActivityError(error) }
     }
     activity.endStep(analysisId, 'done', `${scenes.length} scenes`)
 
@@ -1060,10 +1062,11 @@ class AIService {
         if (didQueue) queued++
       }
     } catch (error) {
+      if (isAbortError(error)) throw error
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       log('Queueing analyzed image generation failed', error)
       emitImageAnalysisFailed(context.entryId, errorMessage)
-      return { queued, failure: describeActivityError(error) ?? undefined }
+      return { queued, failure: describeActivityError(error) }
     }
     return { queued }
   }
@@ -1305,9 +1308,13 @@ class AIService {
       result = await service.analyzeResponsesForBackgroundImage(storyId, visibleEntries, detectId)
       failure = result.failure
     } catch (error) {
+      if (isAbortError(error)) {
+        failStep(activity, detectId, error)
+        throw error
+      }
       emitBackgroundImageAnalysisFailed()
       log('Background image analysis failed', error)
-      failure = describeActivityError(error) ?? undefined
+      failure = describeActivityError(error)
     } finally {
       emitBackgroundImageAnalysisComplete()
     }
@@ -1334,10 +1341,11 @@ class AIService {
         activity.endStep(imageId, 'failed', undefined, failure)
       }
     } catch (error) {
+      failStep(activity, imageId, error)
+      if (isAbortError(error)) throw error
       emitBackgroundImageAnalysisFailed()
       log('Background image generation failed', error)
-      failure = describeActivityError(error) ?? undefined
-      failStep(activity, imageId, error)
+      failure = describeActivityError(error)
     } finally {
       emitBackgroundImageReady()
     }

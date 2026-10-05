@@ -11,7 +11,7 @@ import { BaseAIService } from '../BaseAIService'
 import { createLogger } from '$lib/log'
 import { generatePlainText } from '../sdk/generate'
 import { ContextBuilder } from '$lib/services/context'
-import { describeActivityError } from '$lib/services/activity'
+import { describeActivityError, isAbortError } from '$lib/services/activity'
 import {
   translatedUIResultSchema,
   translatedSuggestionsResultSchema,
@@ -71,7 +71,7 @@ const SUPPORTED_LANGUAGE_CODES = [
 /** Translated items, or the originals with the reason the translation failed. */
 export interface Translated<T> {
   items: T[]
-  failure?: string | null
+  failure?: string
 }
 
 export interface TranslationResult {
@@ -142,8 +142,9 @@ export class TranslationService extends BaseAIService {
       return { translatedContent: translatedContent.trim() }
     } catch (error) {
       log('Translation failed:', error)
+      if (isAbortError(error)) throw error
       // The original back, as before; the caller closes the step it opened with the reason.
-      return { translatedContent: content, failure: describeActivityError(error) ?? undefined }
+      return { translatedContent: content, failure: describeActivityError(error) }
     }
   }
 
@@ -178,7 +179,8 @@ export class TranslationService extends BaseAIService {
       return { translatedContent: translatedContent.trim(), detectedLanguage: sourceLanguage }
     } catch (error) {
       log('Input translation failed:', error)
-      return { translatedContent: content, failure: describeActivityError(error) ?? undefined }
+      if (isAbortError(error)) throw error
+      return { translatedContent: content, failure: describeActivityError(error) }
     }
   }
 
@@ -261,6 +263,7 @@ export class TranslationService extends BaseAIService {
       }
     } catch (error) {
       log('Suggestions translation failed:', error)
+      if (isAbortError(error)) throw error
       return { items: suggestions, failure: describeActivityError(error) }
     }
   }
@@ -307,6 +310,7 @@ export class TranslationService extends BaseAIService {
       }
     } catch (error) {
       log('Action choices translation failed:', error)
+      if (isAbortError(error)) throw error
       return { items: choices, failure: describeActivityError(error) }
     }
   }

@@ -13,7 +13,7 @@ import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { getContextConfig, getLorebookConfig } from '../core/config'
 import { createLogger } from '$lib/log'
-import { describeActivityError } from '$lib/services/activity'
+import { describeActivityError, isAbortError } from '$lib/services/activity'
 import { suggestionsResultSchema, type SuggestionsResult } from '../sdk/schemas/suggestions'
 
 const log = createLogger('Suggestions')
@@ -50,7 +50,7 @@ export class SuggestionsService extends BaseAIService {
     storyId: string | undefined,
     latestNarrativeResponse?: string,
     activityParentId?: string,
-  ): Promise<SuggestionsResult & { failure?: string | null }> {
+  ): Promise<SuggestionsResult & { failure?: string }> {
     log('generateSuggestions called', {
       recentEntriesCount: recentEntries.length,
       activeThreadsCount: activeThreads.length,
@@ -151,6 +151,7 @@ export class SuggestionsService extends BaseAIService {
       return result
     } catch (error) {
       log('Suggestions generation failed:', error)
+      if (isAbortError(error)) throw error
       return { suggestions: [], failure: describeActivityError(error) }
     }
   }

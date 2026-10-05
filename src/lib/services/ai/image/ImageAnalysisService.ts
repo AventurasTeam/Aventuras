@@ -9,7 +9,7 @@
  */
 
 import { NoObjectGeneratedError } from 'ai'
-import { describeActivityError } from '$lib/services/activity'
+import { describeActivityError, isAbortError } from '$lib/services/activity'
 import type { VisualDescriptors } from '$lib/types'
 import type { ServiceId } from '$lib/stores/settings.svelte'
 import { BaseAIService } from '../BaseAIService'
@@ -151,6 +151,7 @@ ${context.translatedNarrative}`
       return { scenes: sortedScenes as ImageableScene[] }
     } catch (error) {
       const recovered = this.recoverScenesFromMalformedOutput(error)
+      if (isAbortError(error)) throw error
       if (recovered && recovered.length > 0) {
         log('identifyScenes recovered scenes from malformed output', {
           scenesFound: recovered.length,
@@ -158,7 +159,7 @@ ${context.translatedNarrative}`
         return { scenes: recovered.sort((a, b) => b.priority - a.priority) }
       }
       log('identifyScenes failed', error)
-      return { scenes: [], failure: describeActivityError(error) ?? undefined }
+      return { scenes: [], failure: describeActivityError(error) }
     }
   }
 

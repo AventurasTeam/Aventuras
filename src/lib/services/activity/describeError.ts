@@ -22,9 +22,13 @@ const attemptNumberOf = (error: unknown): number | undefined =>
     ? ((error as Record<symbol, unknown>)[ATTEMPT_NUMBER] as number | undefined)
     : undefined
 
-/** The reason to show for `error`, or null for an abort, which closes a step as skipped. */
-export function describeActivityError(error: unknown): string | null {
-  if (error instanceof Error && error.name === 'AbortError') return null
+/** A cancellation -- Stop, or a timeout -- rather than a failure of the work. */
+export function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError'
+}
+
+/** The reason to show for a failed step. A cancellation is not a failure: check `isAbortError`. */
+export function describeActivityError(error: unknown): string {
   return cap(describe(error))
 }
 

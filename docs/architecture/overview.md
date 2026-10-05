@@ -396,7 +396,8 @@ message for an API error). Services that absorb a failure into a fallback — tr
 suggestions, action choices, timeline fill, scene analysis, the background image, the classifier's
 `_error` — return the fallback as before, with the reason as `failure`. Whoever opened the step
 closes it: `trackStep` fails a step on a returned `failure` as on a throw. A service closes only
-the steps it opened itself.
+the steps it opened itself. A cancellation is never absorbed: the `AbortError` is rethrown
+(`isAbortError`), and whoever catches it closes the step as skipped.
 A turn ends with an outcome (`turnOutcome`): only `halted` puts "Failed" on the collapsed line, and
 a turn halts only when it produced no narration. A narrator stream that fails after text has arrived
 keeps that text as the narration and reports the failure; one that fails before any text is passed

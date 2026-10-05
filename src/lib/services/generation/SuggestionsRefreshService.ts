@@ -32,7 +32,7 @@ export interface SuggestionsRefreshDependencies {
     suggestions: Suggestion[],
     targetLanguage: string,
     storyId: string | undefined,
-  ) => Promise<{ items: Suggestion[]; failure?: string | null }>
+  ) => Promise<{ items: Suggestion[]; failure?: string }>
 }
 
 export interface SuggestionsRefreshResult {
