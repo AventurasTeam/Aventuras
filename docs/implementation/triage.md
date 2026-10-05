@@ -91,11 +91,3 @@ slice-planning gate forces its resolution before that slice is planned.
   or refusal before any non-periodic machine source creates
   relationships. Raised in the reversal-integrity PR's review
   (2026-10-05).
-
-- **`buildUndoOps` is one ~265-line loop carrying every reversal rule.**
-  `lib/actions/delta/reverse-replay.ts` holds the live and held arms,
-  re-own, tombstones, stranded writes and two refusals in a single
-  loop, with four hand-synced per-row presence structures. Extract the
-  create and update arms (and their held variants) into named helpers,
-  and consider one per-row state, before the next rule lands. Raised in
-  the reversal-integrity PR's review (2026-10-05).

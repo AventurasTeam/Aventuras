@@ -1092,6 +1092,28 @@ A fix is a JSON-path reference registry the closure queries through
 `json_each`. Parked 2026-10-05; the signal to revisit is a machine
 writer that creates entities other than characters.
 
+#### A kept create in a redo group fails redo with a raw SQLite error
+
+When a user write keeps a machine create, the reversal re-owns the
+create and leaves its row and delta in place
+(`lib/actions/delta/reverse-replay.ts`). If that create is also in the
+redo snapshot, `applyRedoLocked` (`lib/actions/delta/redo.ts`) INSERTs
+the row `snapshotForRedo` captured, which never left, and hits a
+primary-key error rather than a refusal; `refusingIntegrity` rethrows
+it, the group stays on the stack, and every retry fails the same way.
+Three shields keep it unreachable, verified by reading in the
+2026-10-05 triage pass: CTRL-Z steps over periodic-classifier groups;
+no non-periodic machine source creates relationships, the only table
+with row-keeping columns; and a user's relationship writes carry no
+entry, so a turn's CTRL-Z takes them with the turn rather than
+counting them as keeping writes. A fix is a `kept-in-redo` refusal in
+`buildUndoOps` when a re-owned create is also a redo row, plus a fifth
+refused state in
+[`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay).
+Parked 2026-10-05; the signal to revisit is a non-periodic machine
+source writing a table with row-keeping columns, or a user write to
+one gaining an entry anchor.
+
 ### Memory pipeline (parked)
 
 Subsystem-scoped deferrals for the memory pipeline (retrieval,
@@ -2886,6 +2908,31 @@ rule when this lands. Only `locales/en` ships.
 
 Parked 2026-09-27 from triage; the signal is the first non-English
 locale.
+
+#### Reader rejection copy always offers a retry
+
+`reader:rollbackFailed`, `reader:editFailed` and
+`reader:regenerateFailed` (`locales/en/reader.json`) end "Please try
+again." for every rejection code, and CTRL-Z's
+`reader:actions.undoFailed` / `redoFailed` do the same for an
+`integrity` refusal, which canon notes refuses again on each retry.
+Only regenerate's dispatch result maps codes to copy
+(`REGENERATE_REJECTION_COPY` in `app/reader-composer/[branchId].tsx`).
+Every rejection a retry can't clear is latent, verified in the
+2026-10-05 triage pass: `not-found` and `not-tail-entry` sit behind
+affordance gating, and `delta-failed` from an integrity refusal needs a
+broken log once the rollback preview's race with a user reversal was
+closed. The reachable rejections (`in-flight-gated`, the regenerate
+gates) are transient, and "try again" is right for them. Two traps for
+whoever maps the codes: `delta-failed` means a transient apply failure
+on scene and world-time saves but an integrity refusal on edit and
+rollback, and `reversalRefused` in
+`lib/actions/story-entries/operational.ts` flattens the refusal kind,
+so the code carries no persistent/transient split yet. Canon's copy
+rule for an integrity refusal at boot recovery is to promise no retry
+([`generation-pipeline.md → Recovery-failure policy`](./generation-pipeline.md#recovery-failure-policy)).
+Parked 2026-10-05; the signal to revisit is a persistent reader
+rejection becoming reachable.
 
 ### Code structure (parked)
 
