@@ -172,9 +172,11 @@ slice-planning gate forces its resolution before that slice is planned.
   (`locales/en/reader.json`) cover every rejection code, including the
   persistent ones (`delta-failed` from an integrity refusal, `notFound`,
   `rollbackFloor`), which a retry cannot clear. Regenerate avoids the
-  loop with its own copy map (`REGENERATE_REJECTION_COPY` in
-  `app/reader-composer/[branchId].tsx`). Raised by the Task 6 review of
-  the reversal-integrity PR (2026-10-05).
+  loop only for its dispatch result, through `REGENERATE_REJECTION_COPY`
+  in `app/reader-composer/[branchId].tsx`; its preview rejection in
+  `handleRequestRegenerate` still toasts `reader:regenerateFailed`
+  ("…Please try again."). Raised by the Task 6 review of the
+  reversal-integrity PR (2026-10-05).
 
 - **Every seeded hero rollback reverses chapter 1's create.**
   `delta_hero_3` in `lib/db/devtools/seed-dataset.ts` (the
