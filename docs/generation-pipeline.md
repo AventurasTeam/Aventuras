@@ -893,8 +893,8 @@ runner rejects a group up front: writing the same row's column twice
 (the same-column check), or, as `group-conflict`
 (`apply-delta-action.ts`'s `groupConflict`): two deletes whose
 cascades overlap, a write to a row that a delete in the group
-cascades, or a link write naming a row the group deletes. A
-write to an existing `entities` row, any
+cascades, or a link or translation write naming a row the group
+deletes or cascades. A write to an existing `entities` row, any
 `character_relationships` write, and any `happening_involvements` /
 `happening_awareness` write or happening delete, holds a key lock
 across that read and its commit, since the classifier and a World or
@@ -1256,12 +1256,17 @@ async function reverseReplayDeltas(
       // A row a delete holds takes the undo in that delete's payload (below).
       applyUndo(delta.target_table, delta.target_id, delta.undo_payload)
     }
+    // A kept create is re-owned rather than pruned (below).
     await db.exec('DELETE FROM deltas WHERE id IN (?)', [deltas.map((d) => d.id)])
     for (const op of settle) await db.exec(op.sql, op.params)
     await db.exec('COMMIT')
   } catch (e) {
     await db.exec('ROLLBACK')
-    throw new DeltaReplayError('Reverse-replay failed', { cause: e, actionId })
+    throw new DeltaReplayError('Reverse-replay failed', {
+      cause: e,
+      actionId,
+      stage: 'transaction',
+    })
   }
 
   // The action layer patches the held branch's store rows after the commit.
@@ -1274,7 +1279,7 @@ async function reverseReplayDeltas(
     throw new DeltaReplayError('Post-commit patch sync failed', {
       cause: e,
       actionId,
-      committed: true,
+      stage: 'store-sync',
     })
   }
   return deltas.length
@@ -1293,10 +1298,11 @@ back with the reversal. The return value is the delta count so
 callers can distinguish a pre-first-delta zero-delta case from a real
 recovery.
 
-`committed: true` on a `DeltaReplayError` means the reversal and its
-prune landed and only the store sync after them failed. `abortRun`
-still reports the run failed, but does not leave it to boot recovery,
-since its marker settled with the reversal. `submitTurn` logs either
+A `DeltaReplayError` at stage `store-sync`, which reads as
+`committed`, means the reversal and its prune landed and only the
+store sync after them failed. `abortRun` still reports the run failed,
+but does not leave it to boot recovery, since its marker settled with
+the reversal. `submitTurn` logs either
 kind and still returns the rejection.
 
 **A reversed machine write keeps a later user write.** Undoing a delta
@@ -1311,7 +1317,8 @@ A `user_edit` inside the set restores as usual: a rollback or
 regenerate sweeps every null-anchored World edit after its target, so
 the row still returns to its prior value, and CTRL-Z of the user's own
 action is never filtered. CTRL-Z of a user edit the rule kept restores
-the value that edit overwrote, which may be the reversed fact's. The
+the value that edit overwrote, which may be the reversed fact's; of the
+oldest user write that kept a create (below), it removes the row. The
 rule has two exceptions. A schema-backed JSON column such as an
 entity's `state` restores the sub-fields its delta changed as before,
 even over a later user write to the same sub-field. A machine `create`
@@ -1321,11 +1328,23 @@ with it, whatever its source (see the closure below), except in a
 table that registers
 `rowKeepingColumns`: a character relationship whose view a later user
 write set keeps its row, with the views the user did not write nulled,
-and is deleted only once both are null. An update's reversal that
-would leave both views null deletes the row too, since the pair's
-one-view `CHECK` forbids it, and an older undo in the same reversal
-that gives it a view back re-inserts it. Restoring column by column
-assumes no other constraint spans a row's columns:
+and is deleted only once both are null. Its `create` is then re-owned
+rather than pruned: it becomes the user's, with source `user_edit`, no
+entry, and the action of the oldest user write that kept the row. A
+later closure that reaches the row so finds its `create`, and CTRL-Z of
+that write, the last of them newest-first undo reaches, removes the
+row the write alone keeps. An update's reversal that would leave both
+views null deletes the row too, since the pair's one-view `CHECK`
+forbids it, and an older undo in the same reversal that gives it a view
+back re-inserts it. A pair a reversal leaves absent that the closure
+did not remove — deleted by an update's undo so, a kept create whose
+user view has since been cleared, or a copy a delete holds that the
+undo strips or whose delete it prunes (below) — takes its other logged
+creates and updates with it, pruned in the same transaction, so no
+write left in the log targets a row that is gone. The prune passes
+over deletes: the pair's own delete is already pruned as its holder,
+and a delete that captured it still holds other rows. Restoring column
+by column assumes no other constraint spans a row's columns:
 `happenings_mutual_excl` would break if a machine write ever updated a
 happening.
 
@@ -1389,41 +1408,45 @@ in its delete's `undo_payload`, as the delete's target or a captured
 child, until that delete is undone. When the set reverses a write to a
 row absent from its table, the planner finds the delete still in the
 log that holds it — at most one, since deleting the row again needs
-this delete undone first, which prunes it — and applies the undo
-there. A holding delete inside the set is reversed first, newest-first,
-so the row is back in its table by then. Otherwise a `create`'s undo
-strips a captured child from the payload, and prunes the delete when
-the row is the delete's own target: its captured children name the
-target, so the closure takes them and their deltas. An `update`'s undo
-patches the payload copy under the rules a live row follows — user
-precedence, schema-backed sub-fields, and a relationship left with no
-view is stripped. Each changed payload is one write to that delta's
-`undo_payload` in the reversal's transaction; stores hold no deleted
-rows, so no patch follows. A captured fact so follows a live one: a
-prose edit's sweep removes it, and undoing the edit leaves the next
-pass to re-derive it. CTRL-Z is newest-first, so the delete can be
-undone only after the edit is, once the prose the fact came from is
-back. The cost is narrow: a pass that runs between the two undos
+this delete undone first, which prunes it — and applies the undo there.
+A holding delete inside the set is reversed first, newest-first, so the
+row is back in its table by then. Otherwise a `create`'s undo strips a
+captured child from the payload, and prunes the delete when the row is
+the delete's own target: its captured children name the target, so the
+closure takes them and their deltas. An `update`'s undo patches the
+payload copy under the rules a live row follows — user precedence,
+schema-backed sub-fields, and a relationship left with no view is
+stripped. A relationship's `create` follows the live arm too: a view a
+later user write set keeps the copy, with the views the user did not
+write nulled and the create re-owned. Each changed payload is one write
+to that delta's `undo_payload` in the reversal's transaction; stores
+hold no deleted rows, so no patch follows. A captured fact so follows a
+live one: a prose edit's sweep removes it, and undoing the edit leaves
+the next pass to re-derive it. CTRL-Z is newest-first, so the delete
+can be undone only after the edit is, once the prose the fact came from
+is back. The cost is narrow: a pass that runs between the two undos
 cannot re-derive a link naming the still-deleted row, and that link
 stays lost.
 
 **Three states are refused as integrity errors, writing nothing.** A
 delete the planner would prune that shares its action group with a
-delta still in the log whose undo would write the removed id back: an
-entity delete's `state` and tail-scene updates do, so a later CTRL-Z of
-the group would restore a dead id. A chapter-close consolidation's
-upserts name the surviving happening, so its deletes prune. A row a
-delete holds among the rows a CTRL-Z's redo would restore (below): it
-would need a newer non-classifier delete still in the log, which
-CTRL-Z picks first. And a row the closure reaches by reference with no
-`create` in the log, which only a writer outside the log could make:
-the wizard, a seed or an import. None is reachable today. An entity's
-create is never reversed while a delete holds it, given the
-[no-gate write phase](#no-gate-write-phase), newest-first undo, every
-window holding a delete with the create it follows, and sweeps sparing
-entity creates. A writer outside the log names only rows it made
-itself, which lack a `create` too, and the closure starts from rows
-whose `create` the set holds. Refusing keeps a broken assumption loud.
+delta still in the log whose undo, as this reversal leaves it, would
+write the removed id back: an entity delete's `state` and tail-scene
+updates do, so a later CTRL-Z of the group would restore a dead id. A
+chapter-close consolidation's upserts name the surviving happening, so
+its deletes prune. A row a delete holds among the rows a CTRL-Z's redo
+would restore (below): it would need a newer non-classifier delete
+still in the log, which CTRL-Z picks first. And a row the closure
+reaches by reference with no `create` in the log, which only a writer
+outside the log could make: the wizard, a seed or an import. None is
+reachable today. An entity's create is never reversed while a delete
+holds it, given the [no-gate write phase](#no-gate-write-phase),
+newest-first undo, every window holding a delete with the create it
+follows, and sweeps sparing entity creates. A writer outside the log
+names only rows it made itself, which lack a `create` too; the closure
+starts from rows whose `create` the set holds; and a `create` a user
+write keeps stays in the log, re-owned. Refusing keeps a broken
+assumption loud.
 
 **The set labels each delta for redo:** part of the action being undone,
 reached by the closure from it, or a sweep's row and what the closure
@@ -1435,7 +1458,8 @@ clears the redo stack, so redo always meets the state its undo left.
 
 Abort is conceptually identical to user CTRL-Z — same
 `undo_payload` primitive, same reverse-replay path, and the replayed
-delta rows are deleted in the same transaction, as CTRL-Z deletes them
+delta rows are pruned in the same transaction, a kept create re-owned
+instead, as CTRL-Z prunes them
 ([`data-model.md → Entry mutability & rollback`](./data-model.md#entry-mutability--rollback)).
 
 ### Streaming partial-entry on abort
