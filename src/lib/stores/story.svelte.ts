@@ -98,6 +98,7 @@ import { clearImageMarkerCache } from '$lib/services/image'
 import { GenerationLease } from '$lib/utils/generationLease'
 import { findLiveCharacter, sameBranchScope, type BranchScope } from '$lib/utils/branchScope'
 import { checkpointDeletionBlocker } from '$lib/utils/storyNavigation'
+import { buildChapterBanners, type ChapterBanner } from '$lib/utils/chapterBanners'
 
 const log = createLogger('StoryStore')
 
@@ -1562,6 +1563,10 @@ class StoryStore {
   )
 
   timeRanges = $derived<SelectableRange[]>(selectableRanges(this.entries, this.timeBoundaries))
+
+  chapterBanners = $derived<Map<string, ChapterBanner>>(
+    buildChapterBanners(this.entries, this.currentBranchChapters),
+  )
 
   /** Everything the review needs, and the fingerprint apply revalidates against. */
   previewReconciliation(

@@ -9,7 +9,6 @@
     resolveEntryByNumber,
     type Landmark,
   } from '$lib/utils/storyNavigation'
-  import { buildChapterBanners } from '$lib/utils/chapterBanners'
   import { supportsHover } from '$lib/utils/platform'
   import { ask } from '@tauri-apps/plugin-dialog'
   import { Button } from '$lib/components/ui/button'
@@ -82,7 +81,7 @@
       story.checkpoints,
       story.branches,
       activeBranch,
-      buildChapterBanners(story.entries, story.currentBranchChapters),
+      story.chapterBanners,
     ),
   )
   const landmarks = $derived(landmarkList.landmarks)

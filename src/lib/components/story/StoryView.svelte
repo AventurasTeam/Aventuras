@@ -7,7 +7,6 @@
   import { fade } from 'svelte/transition'
   import StoryEntry from './StoryEntry.svelte'
   import ChapterBanner from './ChapterBanner.svelte'
-  import { buildChapterBanners } from '$lib/utils/chapterBanners'
   import TimeAnchorModal from '$lib/components/world/TimeAnchorModal.svelte'
   import EntryTimeModal from '$lib/components/world/EntryTimeModal.svelte'
   import StreamingEntry from './StreamingEntry.svelte'
@@ -121,9 +120,7 @@
   })
 
   const chapterBanners = $derived(
-    settings.uiSettings.showChapterBanners
-      ? buildChapterBanners(story.entries, story.currentBranchChapters)
-      : null,
+    settings.uiSettings.showChapterBanners ? story.chapterBanners : null,
   )
   // A string, so the re-pin effect below runs when banners appear or move and not each time
   // `chapterBanners` is rebuilt for a new entry.
