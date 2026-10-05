@@ -1343,15 +1343,11 @@ undo strips or whose delete it prunes (below) — takes its other logged
 creates and updates with it, pruned in the same transaction, so no
 write left in the log targets a row that is gone. The prune passes
 over deletes: the pair's own delete is already pruned as its holder,
-and a delete that captured it still holds other rows. The prune never
-fires under CTRL-Z, so redo, which restores only the set's writes,
-never needs one it took: only periodic-classifier groups sit above the
-group CTRL-Z undoes, every delta-logged write clears the redo stack,
-and no machine writer nulls a relationship view or deletes a pair or a
-character. A writer that starts nulling a view must revisit redo's
-exactness. Restoring column by column assumes no other constraint spans
-a row's columns: `happenings_mutual_excl` would break if a machine
-write ever updated a happening.
+and a delete that captured it still holds other rows. CTRL-Z and redo
+refuse such a reversal instead (below). Restoring column by column
+assumes no other constraint spans a row's columns:
+`happenings_mutual_excl` would break if a machine write ever updated a
+happening.
 
 **Undoing a `create` consults no cascade.**
 A domain may register a cascade hook for its child rows, but that hook
@@ -1433,7 +1429,7 @@ is back. The cost is narrow: a pass that runs between the two undos
 cannot re-derive a link naming the still-deleted row, and that link
 stays lost.
 
-**Three states are refused as integrity errors, writing nothing.** A
+**Four states are refused as integrity errors, writing nothing.** A
 delete the planner would prune that shares its action group with a
 delta still in the log whose undo, as this reversal leaves it, would
 write the removed id back: an entity delete's `state` and tail-scene
@@ -1441,16 +1437,25 @@ updates do, so a later CTRL-Z of the group would restore a dead id. A
 chapter-close consolidation's upserts name the surviving happening, so
 its deletes prune. A row a delete holds among the rows a CTRL-Z's redo
 would restore (below): it would need a newer non-classifier delete
-still in the log, which CTRL-Z picks first. And a row the closure
-reaches by reference with no `create` in the log, which only a writer
-outside the log could make: the wizard, a seed or an import. None is
-reachable today. An entity's create is never reversed while a delete
-holds it, given the [no-gate write phase](#no-gate-write-phase),
-newest-first undo, every window holding a delete with the create it
-follows, and sweeps sparing entity creates. A writer outside the log
-names only rows it made itself, which lack a `create` too; the closure
+still in the log, which CTRL-Z picks first. A row the closure reaches
+by reference with no `create` in the log, which only a writer outside
+the log could make: the wizard, a seed or an import. And a pair a
+CTRL-Z or a redo's sweep leaves absent whose other writes the prune
+above would take: redo restores only its snapshot, so after a CTRL-Z
+the pair would come back without its `create`, its next reversal
+refusing far from the cause, and a redo would take writes no undo of
+it gives back. None is reachable today. An entity's create is never
+reversed while a delete holds it, given the
+[no-gate write phase](#no-gate-write-phase), newest-first undo, every
+window holding a delete with the create it follows, and sweeps sparing
+entity creates. A writer outside the log names only rows it made
+itself, which lack a `create` too; the closure
 starts from rows whose `create` the set holds; and a `create` a user
-write keeps stays in the log, re-owned. Refusing keeps a broken
+write keeps stays in the log, re-owned. Only periodic-classifier
+groups sit above the group CTRL-Z undoes, every delta-logged write
+clears the redo stack, and no machine writer nulls a relationship view
+or deletes a pair or a character, so neither reversal leaves a pair
+absent that the closure did not take. Refusing keeps a broken
 assumption loud.
 
 **The set labels each delta for redo:** part of the action being undone,
