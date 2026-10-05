@@ -22,6 +22,8 @@ vi.mock('$lib/stores/settings.svelte', () => ({
 }))
 
 import { buildChapterSummariesBlock, joinReinforcement, narrativeChunks } from './NarrativeService'
+import { APICallError } from 'ai'
+import { STREAM_FAILURE } from '../core/types'
 
 describe('joinReinforcement', () => {
   it('prefixes the turn message when the pack rendered reinforcement', () => {
@@ -144,11 +146,38 @@ describe('narrativeChunks', () => {
     ])
   })
 
-  it('throws a failed request instead of passing it on as an empty answer', async () => {
-    const failure = new Error('401 · Invalid API key provided.')
+  it('throws a refused request as it is, instead of passing it on as an empty answer', async () => {
+    const failure = new APICallError({
+      message: 'Invalid API key provided.',
+      url: 'https://example.test',
+      requestBodyValues: {},
+      statusCode: 401,
+    })
     await expect(collect([{ type: 'start' }, { type: 'error', error: failure }])).rejects.toBe(
       failure,
     )
+  })
+
+  it('names any other error the stream ends on a stream failure', async () => {
+    await expect(
+      collect([
+        { type: 'text-delta', text: 'The dragon ' },
+        { type: 'error', error: new Error('cut') },
+      ]),
+    ).rejects.toMatchObject({ name: STREAM_FAILURE, message: 'cut' })
+  })
+
+  it('ignores an error the stream goes on past', async () => {
+    expect(
+      await collect([
+        { type: 'text-delta', text: 'The dragon ' },
+        { type: 'error', error: new Error('bad chunk') },
+        { type: 'text-delta', text: 'fell.' },
+      ]),
+    ).toEqual([
+      { content: 'The dragon ', done: false },
+      { content: 'fell.', done: false },
+    ])
   })
 
   it("throws a provider's in-stream error object as an error with its message", async () => {

@@ -140,8 +140,8 @@ export class ImagePhase {
       // Note: This is intentionally fire-and-forget within the pipeline
       // The AIService handles its own error logging
       const outcome = await this.deps.generateImagesForNarrative(imageGenContext)
-      // An absorbed failure is already on the step that met it; nothing was handed off.
-      if (!outcome.failure && input.activityParentId) {
+      // An absorbed failure is already on the step that met it; what did queue is still noted.
+      if ((outcome.queued > 0 || !outcome.failure) && input.activityParentId) {
         // The images finish after the turn; the record notes the hand-off, not their progress.
         input.activity?.recordStep('Handed off', {
           parentId: input.activityParentId,

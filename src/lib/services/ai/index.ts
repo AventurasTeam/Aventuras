@@ -1015,10 +1015,10 @@ class AIService {
       }
     } catch (error) {
       failStep(activity, analysisId, error)
+      emitImageAnalysisComplete(context.entryId, 0, 0)
       if (isAbortError(error)) throw error
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       log('Scene analysis failed', error)
-      emitImageAnalysisComplete(context.entryId, 0, 0)
       emitImageAnalysisFailed(context.entryId, errorMessage)
       return { queued: 0, failure: describeActivityError(error) }
     }
@@ -1066,7 +1066,15 @@ class AIService {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       log('Queueing analyzed image generation failed', error)
       emitImageAnalysisFailed(context.entryId, errorMessage)
-      return { queued, failure: describeActivityError(error) }
+      const failure = describeActivityError(error)
+      // Scene analysis closed already; the queueing is the step that met this failure.
+      if (context.activityParentId)
+        activity.recordStep('Queueing images', {
+          parentId: context.activityParentId,
+          status: 'failed',
+          error: failure,
+        })
+      return { queued, failure }
     }
     return { queued }
   }

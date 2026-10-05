@@ -7,6 +7,12 @@
  * it had a caller left.
  */
 
+/**
+ * The name the narrator's stream failures are thrown under: an error the stream itself reported,
+ * as opposed to a request refused outright or a fault before any request was sent.
+ */
+export const STREAM_FAILURE = 'NarrativeStreamError'
+
 export interface StreamChunk {
   content: string
   reasoning?: string

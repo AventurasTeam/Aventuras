@@ -54,7 +54,7 @@ const CONNECTION_LOST = 'Connection lost while the response was streaming'
 
 function reasonOf(error: unknown): string {
   const reason = messageOf(error)
-  return reason.includes(BODY_READ_FAILURE) && !reason.startsWith(CONNECTION_LOST)
+  return reason.includes(BODY_READ_FAILURE) && !reason.includes(CONNECTION_LOST)
     ? `${CONNECTION_LOST} (${reason})`
     : reason
 }

@@ -20,8 +20,8 @@ import type {
 } from '../types'
 import type { Story, StoryEntry } from '$lib/types'
 import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
-import type { StreamChunk } from '$lib/services/ai/core/types'
-import { APICallError, RetryError } from 'ai'
+import { STREAM_FAILURE, type StreamChunk } from '$lib/services/ai/core/types'
+import { NoOutputGeneratedError } from 'ai'
 import {
   NO_ACTIVITY,
   describeActivityError,
@@ -33,11 +33,13 @@ const MAX_EMPTY_RESPONSE_RETRIES = 3
 const EMPTY_RESPONSE = 'Empty response'
 
 /**
- * A failure before any text that is worth another pass: a stream cut or an error reported inside
- * it. A request that failed outright has had its transport retries already.
+ * A failure before any text that is worth another pass: one the stream itself reported, or a
+ * stream that produced nothing. Not a refused request, whose transport retries are spent, nor a
+ * fault before any request was sent, which another pass would only repeat.
  */
 const passesAgain = (error: unknown) =>
-  !APICallError.isInstance(error) && !RetryError.isInstance(error)
+  (error instanceof Error && error.name === STREAM_FAILURE) ||
+  NoOutputGeneratedError.isInstance(error)
 
 /** Dependencies for narrative phase - injected to avoid tight coupling */
 export interface NarrativeDependencies {

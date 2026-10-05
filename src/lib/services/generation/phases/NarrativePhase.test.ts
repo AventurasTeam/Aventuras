@@ -2,7 +2,10 @@ import { describe, it, expect, vi } from 'vitest'
 import { APICallError } from 'ai'
 import { NarrativePhase, type NarrativeInput } from './NarrativePhase'
 import type { GenerationEvent, RetrievalResult } from '../types'
-import type { StreamChunk } from '$lib/services/ai/core/types'
+import { STREAM_FAILURE, type StreamChunk } from '$lib/services/ai/core/types'
+
+const streamFailure = (message: string) =>
+  Object.assign(new Error(message), { name: STREAM_FAILURE })
 import { ActivityRecorder } from '$lib/services/activity'
 
 async function drain<R>(gen: AsyncGenerator<GenerationEvent, R>) {
@@ -134,7 +137,7 @@ describe('NarrativePhase', () => {
   it('re-sends a stream that fails before any text, as it does an empty one', async () => {
     let call = 0
     const streamNarrative = vi.fn(async function* (): AsyncGenerator<StreamChunk> {
-      if (++call === 1) throw new Error('stream cut')
+      if (++call === 1) throw streamFailure('stream cut')
       yield chunk({ content: 'The dragon fell.' })
     })
 
@@ -148,7 +151,7 @@ describe('NarrativePhase', () => {
   it('gives up fatally when every pass fails, naming the last reason', async () => {
     // There is no turn without a narration, so this one cannot degrade gracefully.
     const streamNarrative = vi.fn(async function* (): AsyncGenerator<StreamChunk> {
-      throw new Error('provider down')
+      throw streamFailure('provider down')
     })
 
     const { events, result } = await drain(phaseWith(streamNarrative).execute(makeInput()))
@@ -158,6 +161,20 @@ describe('NarrativePhase', () => {
     expect(events.find((e) => e.type === 'error')).toMatchObject({
       fatal: true,
       error: new Error('Failed after 3 passes: provider down'),
+    })
+  })
+
+  it('does not re-send a fault from before any request was sent', async () => {
+    const streamNarrative = vi.fn(async function* (): AsyncGenerator<StreamChunk> {
+      throw new Error('Main narrative profile not configured')
+    })
+
+    const { events } = await drain(phaseWith(streamNarrative).execute(makeInput()))
+
+    expect(streamNarrative).toHaveBeenCalledTimes(1)
+    expect(events.find((e) => e.type === 'error')).toMatchObject({
+      fatal: true,
+      error: new Error('Main narrative profile not configured'),
     })
   })
 

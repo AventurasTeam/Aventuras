@@ -11,6 +11,8 @@
  * Uses ContextBuilder for prompt generation through the unified Liquid template pipeline.
  */
 
+import { describeActivityError } from '$lib/services/activity'
+import { APICallError, RetryError } from 'ai'
 import { streamNarrative, generateNarrative } from '../sdk/generate'
 import { ContextBuilder } from '$lib/services/context'
 import { StyleReviewerService } from './StyleReviewerService'
@@ -19,7 +21,7 @@ import { createLogger } from '$lib/log'
 import { stripPicTags } from '$lib/utils/inlineImageParser'
 import { formatTimeSpan } from '$lib/utils/storyTime'
 import { storyImageMode } from '$lib/utils/image'
-import type { StreamChunk } from '../core/types'
+import { STREAM_FAILURE, type StreamChunk } from '../core/types'
 import type {
   Story,
   StoryEntry,
@@ -275,29 +277,43 @@ export interface NarrativeOptions {
 export async function* narrativeChunks(
   parts: AsyncIterable<{ type: string; text?: string; error?: unknown }>,
 ): AsyncIterable<StreamChunk> {
+  // `streamText` reports a failure as a part rather than by throwing, and some providers report
+  // one bad chunk and stream on. Only an error the stream ends on is thrown.
+  let pending: Error | null = null
   for await (const part of parts) {
     if (part.type === 'start-step') {
       // The first piece of the response is in, text or not: an empty answer is still one.
       yield { content: '', done: false, started: true }
     } else if (part.type === 'error') {
-      // `streamText` reports a failed request as a part rather than by throwing. Left in the
-      // stream it reads as an answer with no text, and is retried as an empty response.
-      throw streamError(part.error)
+      pending = streamError(part.error)
     } else if (part.type === 'reasoning-delta') {
+      pending = null
       // Native reasoning providers, or reasoning extracted from <think> tags.
       yield { content: '', reasoning: part.text, done: false }
     } else if (part.type === 'text-delta') {
+      pending = null
       yield { content: part.text || '', done: false }
     }
   }
+  if (pending) throw pending
 }
 
-/** A provider's in-stream error arrives as its JSON `error` object, not as an `Error`. */
+/**
+ * A refused request is passed on as it is. Anything else the stream reported -- a cut, or a
+ * provider's JSON `error` object -- becomes an error named `STREAM_FAILURE`.
+ */
 function streamError(error: unknown): Error {
-  if (error instanceof Error) return error
-  const { message, code } = (error ?? {}) as { message?: unknown; code?: unknown }
-  if (typeof message !== 'string') return new Error(String(error))
-  return new Error(code ? `${code} · ${message}` : message, { cause: error })
+  if (APICallError.isInstance(error) || RetryError.isInstance(error)) return error
+  const failure = new Error(describeActivityError(streamErrorReason(error)), { cause: error })
+  failure.name = STREAM_FAILURE
+  return failure
+}
+
+function streamErrorReason(error: unknown): unknown {
+  if (error instanceof Error || error === null || typeof error !== 'object') return error
+  const { message, code } = error as { message?: unknown; code?: unknown }
+  if (typeof message !== 'string') return error
+  return code ? `${code} · ${message}` : message
 }
 
 /**
