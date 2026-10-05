@@ -19,6 +19,7 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
 import { applyDeltaAction } from './apply-delta-action'
+import { withKeyLock } from './key-lock'
 import {
   buildReverseAndPrunePlan,
   ReversalIntegrityError,
@@ -26,6 +27,7 @@ import {
   reverseReplayDeltas,
 } from './reverse-replay'
 import { selectReversalSet } from './row-closure'
+import { rowLock } from './row-locks'
 import { undoLastAction } from '../story-entries/undo'
 import type { DbCtx, PipelineAction } from '../types'
 
@@ -625,6 +627,43 @@ describe('a reversal applies to rows a delete outside the set holds', () => {
       expect(await ctx.db.select().from(deltas)).toEqual([])
       expect(await ctx.db.select().from(characterRelationships)).toEqual([])
     })
+  })
+})
+
+describe("a reversal rewriting a delete's payload waits on that delete's row", () => {
+  beforeEach(async () => {
+    await act('act_pass', passView('char_x', 'char_y', 'rival'))
+    await act('act_del', deleteEntity('char_x'))
+  })
+
+  // The delete's own CTRL-Z takes this key; rewriting its payload under it would race that undo.
+  async function expectWaitsOnHolder(reverse: () => Promise<number>): Promise<void> {
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const held = withKeyLock(rowLock('entities')({ branchId: 'b1', id: 'char_x' }), () => gate)
+    const pending = reverse()
+    try {
+      // node:sqlite settles every query in microtasks, so an unlocked reversal has committed by now.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect((await payloadOf('act_del')).relationships).toHaveLength(1)
+    } finally {
+      // The lock map outlives the test; a key left held would hang every later test taking it.
+      release()
+      await held
+    }
+    expect(await pending).toBe(1)
+    expect((await payloadOf('act_del')).relationships).toEqual([])
+  }
+
+  it('when reversing an action', async () => {
+    await expectWaitsOnHolder(() => reverseReplayDeltas('act_pass', ctx))
+  })
+
+  it('when reversing a closed set', async () => {
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target: await deltasOf('act_pass') })
+    await expectWaitsOnHolder(() => reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: false }))
   })
 })
 
