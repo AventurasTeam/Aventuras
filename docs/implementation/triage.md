@@ -93,11 +93,12 @@ slice-planning gate forces its resolution before that slice is planned.
   them too. The closure's `userKeptRows` in
   `lib/actions/delta/row-closure.ts` drops the planner's "still
   non-null" half (a plan decision), so a create whose user-written view
-  was later cleared counts as kept; and an update's undo that leaves no
-  view deletes a pair the closure never reached. The planner
+  was later cleared counts as kept; an update's undo that leaves no
+  view deletes a pair the closure never reached; and the same undo on a
+  pair a delete holds strips it from that delete's payload. The planner
   (`lib/actions/delta/reverse-replay.ts`) prunes the pair's own logged
-  writes in both cases, but translations naming it are not closed over
-  and stay. Revisit both when translations get a writer. Raised by the
+  writes in all three cases, but translations naming it are not closed
+  over and stay. Revisit both when translations get a writer. Raised by the
   Task 3 review of the same PR (2026-10-05).
 - **A parallel group's straggler can commit around a no-gate run's
   abort.** `runParallelGroup` in `lib/pipeline/runtime/orchestrator.ts`
