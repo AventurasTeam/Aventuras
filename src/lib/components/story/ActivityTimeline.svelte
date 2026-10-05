@@ -79,27 +79,22 @@
         {row.time}
       </span>
 
-      <!-- One colour per outcome, never two: same-property utilities are resolved by the order
-           Tailwind emits them, not the order written. Literal red: `--destructive` is too dark
-           for text on several themes. -->
-      <span
-        class="min-w-0 truncate {row.failed
-          ? 'text-red-700 dark:text-red-500'
-          : row.running
-            ? 'text-foreground'
-            : 'text-muted-foreground'}"
-        class:line-through={row.skipped}
-      >
-        {row.label}
+      <!-- Wrapped, not cut: label, detail and the running ellipsis flow as one text. One colour
+           per outcome, never two: same-property utilities are resolved by the order Tailwind
+           emits them, not the order written. Literal red: `--destructive` is too dark for text
+           on several themes. -->
+      <span class="min-w-0 flex-1 break-words">
+        <span
+          class={row.failed
+            ? 'text-red-700 dark:text-red-500'
+            : row.running
+              ? 'text-foreground'
+              : 'text-muted-foreground'}
+          class:line-through={row.skipped}>{row.label}</span
+        >{#if row.detail}<span class="text-muted-foreground/60">
+            · {row.detail}</span
+          >{/if}{#if row.running}<span class="text-primary/60"> …</span>{/if}
       </span>
-
-      {#if row.detail}
-        <span class="text-muted-foreground/60 min-w-0 truncate">· {row.detail}</span>
-      {/if}
-
-      {#if row.running}
-        <span class="text-primary/60 shrink-0">…</span>
-      {/if}
     </div>
     {#if row.error}
       <!-- Indented to the label (level, plus the time column and its gap), and wrapped: a reason
