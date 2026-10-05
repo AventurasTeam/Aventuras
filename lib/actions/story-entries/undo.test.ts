@@ -663,7 +663,7 @@ describe('undo and redo carry the reversal closure', () => {
 
   const none = { character: [], involvements: [], awareness: [], relationships: [] }
 
-  it("P1: CTRL-Z of a user-created character takes the pass's links, and redo brings all four back", async () => {
+  it("CTRL-Z of a user-created character takes the pass's links, and redo brings all four back", async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seedWorld(db)
