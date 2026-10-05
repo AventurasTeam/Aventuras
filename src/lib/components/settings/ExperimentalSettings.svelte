@@ -35,7 +35,7 @@
   import { Separator } from '$lib/components/ui/separator'
   import * as Dialog from '$lib/components/ui/dialog'
   import { database } from '$lib/services/database'
-  import { isAndroid } from '$lib/utils/platform'
+  import { isAndroid, isIos } from '$lib/utils/platform'
   import { autosize } from '$lib/utils/autosize'
   import { ask, open } from '@tauri-apps/plugin-dialog'
   import { openFilters } from '$lib/utils/dialogFilters'
@@ -52,6 +52,7 @@
   let showBackupConfirm = $state(false)
   let showRestoreConfirm = $state(false)
   let restoreDone = $state(false)
+  let restoreCloseHint = $state<string | null>(null)
   const RESTORE_EXIT_DELAY_MS = 3000
 
   // SQL Query Box state — initialized from module-level persisted values
@@ -185,9 +186,20 @@
     restoreDone = true
     // Give the modal time to paint before the process ends, so the exit doesn't read as a crash.
     await new Promise((resolve) => setTimeout(resolve, RESTORE_EXIT_DELAY_MS))
-    // exit() rather than relaunch() avoids a Windows webview2 crash on teardown.
-    const { exit } = await import('@tauri-apps/plugin-process')
-    await exit(0)
+    // iOS ignores exit(), so the user has to close the app themselves.
+    if (isIos()) {
+      restoreCloseHint =
+        'Restore succeeded. Close Aventuras from the app switcher, then reopen it to continue with the restored database.'
+      return
+    }
+    try {
+      // exit() rather than relaunch() avoids a Windows webview2 crash on teardown.
+      const { exit } = await import('@tauri-apps/plugin-process')
+      await exit(0)
+    } catch (error) {
+      console.error('[ExperimentalSettings] Exit after restore failed:', error)
+      restoreCloseHint = 'Restore succeeded. Please close and relaunch Aventuras.'
+    }
   }
 
   async function handleStateTrackingToggle(checked: boolean) {
@@ -758,7 +770,7 @@
   </Dialog.Content>
 </Dialog.Root>
 
-<!-- Restore Complete: not dismissable; the app exits shortly -->
+<!-- Restore Complete: not dismissable; the app exits shortly or the user closes it -->
 <Dialog.Root open={restoreDone}>
   <Dialog.Content
     class="p-6 sm:max-w-md"
@@ -768,7 +780,8 @@
     <Dialog.Header>
       <Dialog.Title>Restore complete</Dialog.Title>
       <Dialog.Description class="pt-2">
-        Aventuras is closing. Reopen it to continue with the restored database.
+        {restoreCloseHint ??
+          'Aventuras is closing. Reopen it to continue with the restored database.'}
       </Dialog.Description>
     </Dialog.Header>
   </Dialog.Content>

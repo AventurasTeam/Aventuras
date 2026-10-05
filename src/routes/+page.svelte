@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { database } from '$lib/services/database'
+  import { initPlatform } from '$lib/utils/platform'
   import { settings } from '$lib/stores/settings.svelte'
   import { grammarService } from '$lib/services/grammar'
   import { updaterService } from '$lib/services/updater'
@@ -16,6 +17,8 @@
 
   onMount(async () => {
     try {
+      await initPlatform()
+
       // Initialize database connection
       await database.init()
 

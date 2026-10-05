@@ -17,9 +17,8 @@ happened_.
   with **no Apple certificates, provisioning profiles, or signing secrets** anywhere.
 - **Zero regressions** to the existing platforms: Windows (`nsis`), Linux (`.deb`,
   `.AppImage`, `.rpm`), Android (signed `.apk`), macOS desktop (`.dmg`, Intel + ARM64).
-- Keep changes minimal and iOS-specific. In the end, **no existing file under `src-tauri/` was
-  modified** — no `Cargo.toml`, no `Cargo.lock`, no `tauri.conf.json`, no capabilities, no Rust
-  sources. Everything added under `src-tauri/` is iOS-only and read only for an iOS build
+- Keep changes minimal and iOS-specific. Existing files under `src-tauri/` changed only where
+  iOS needed it (see §5); everything else added there is iOS-only and read only for an iOS build
   (see §4).
 
 ## 2. The compatibility audit (what was already iOS-ready)
@@ -27,17 +26,17 @@ happened_.
 Before writing anything, the repository was audited end to end. The conclusion was that
 the app was unusually close to iOS-ready:
 
-| Area               | Finding                                                                                                                                                                                                                                     |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Mobile entry point | [`src-tauri/src/lib.rs`](../src-tauri/src/lib.rs) already had `#[cfg_attr(mobile, tauri::mobile_entry_point)]` — the same hook Android builds use.                                                                                          |
-| Crate types        | [`src-tauri/Cargo.toml`](../src-tauri/Cargo.toml) already built `staticlib` (required by the iOS Xcode project to link the Rust library).                                                                                                   |
-| Rust dependencies  | `ring` (via rustls), `sqlx`/libsqlite3-sys, `axum`, `tokio`, `reqwest` (rustls-no-provider), `zip`, `image`, `local-ip-address`, `qrcode`, `uuid` — all support `aarch64-apple-ios`. Nothing to change.                                     |
-| iOS icons          | `src-tauri/icons/ios/AppIcon-*.png` — the full set was already generated; `scripts/sync-ios-icons.sh` copies it into the Xcode asset catalog, which `tauri ios init` fills with Tauri's logo.                                               |
-| Frontend           | `viewport-fit=cover` in `src/app.html`; the `AndroidBridge` insets script no-ops when the bridge is absent; `swipe.ts` matches iPhone user agents and defers to `isIos()` for iPads; layout hooks are capability-based, not platform-based. |
-| Updater            | `tauri-plugin-updater` has no iOS support, but `src/lib/services/updater.ts` already mapped `UnsupportedOs` to a graceful "not supported here" error, and the mobile path (GitHub Releases API + manual install) is platform-agnostic.      |
-| Capabilities       | The permission list in `src-tauri/capabilities/default.json` resolves on mobile — proven daily by Android building with the identical list.                                                                                                 |
-| Desktop-only code  | Already gated: `is_nvidia_wayland` under `#[cfg(target_os = "linux")]`, the devtools plugin under `debug_assertions` + feature flag.                                                                                                        |
-| Database           | `db_path` uses `app_config_dir()` → iOS `Library/Application Support`. Works.                                                                                                                                                               |
+| Area               | Finding                                                                                                                                                                                                                                         |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mobile entry point | [`src-tauri/src/lib.rs`](../src-tauri/src/lib.rs) already had `#[cfg_attr(mobile, tauri::mobile_entry_point)]` — the same hook Android builds use.                                                                                              |
+| Crate types        | [`src-tauri/Cargo.toml`](../src-tauri/Cargo.toml) already built `staticlib` (required by the iOS Xcode project to link the Rust library).                                                                                                       |
+| Rust dependencies  | `ring` (via rustls), `sqlx`/libsqlite3-sys, `axum`, `tokio`, `reqwest` (rustls-no-provider), `zip`, `image`, `local-ip-address`, `qrcode`, `uuid` — all support `aarch64-apple-ios`. Nothing to change.                                         |
+| iOS icons          | `src-tauri/icons/ios/AppIcon-*.png` — the full set was already generated; `scripts/sync-ios-icons.sh` copies it into the Xcode asset catalog, which `tauri ios init` fills with Tauri's logo.                                                   |
+| Frontend           | `viewport-fit=cover` in `src/app.html`; the `AndroidBridge` insets script no-ops when the bridge is absent; `swipe.ts` matches `isIos()` (which covers iPads) or the mobile user agents; layout hooks are capability-based, not platform-based. |
+| Updater            | `tauri-plugin-updater` has no iOS support, but `src/lib/services/updater.ts` already mapped `UnsupportedOs` to a graceful "not supported here" error, and the mobile path (GitHub Releases API + manual install) is platform-agnostic.          |
+| Capabilities       | The permission list in `src-tauri/capabilities/default.json` resolves on mobile — proven daily by Android building with the identical list.                                                                                                     |
+| Desktop-only code  | Already gated: `is_nvidia_wayland` under `#[cfg(target_os = "linux")]`, the devtools plugin under `debug_assertions` + feature flag.                                                                                                            |
+| Database           | `db_path` uses `app_config_dir()` → iOS `Library/Application Support`. Works.                                                                                                                                                                   |
 
 Two genuine gaps existed:
 
@@ -184,11 +183,18 @@ or Android build.
 
 ## 5. What deliberately did NOT change
 
-`src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json`,
-`src-tauri/capabilities/`, and every existing Rust source. The regression surface for the
-five existing platforms is limited to three additive YAML job blocks, two additive TS
-branches guarded by user-agent checks, and the iOS-only files under `src-tauri/` (§4) that no
-other platform's build reads.
+`src-tauri/tauri.conf.json`. Existing `src-tauri/` files that did change:
+
+- **`src-tauri/src/backup.rs`** — `restore_database` now runs in `spawn_blocking`, opens the dialog's
+  result itself (`open_src`) and takes a lock. A `file://` URL (iOS) is opened with
+  security-scoped access that is released afterwards; a `content://` URI (Android) is copied to a
+  temp file first. This path is shared with desktop and Android restore.
+- **`src-tauri/src/lib.rs`, `Cargo.toml`, `Cargo.lock`, `capabilities/default.json`** — the
+  `tauri-plugin-websocket` plugin, which the ComfyUI client uses on every platform.
+
+The rest of the regression surface for the five existing platforms is three additive YAML job
+blocks, two additive TS branches guarded by user-agent checks, and the iOS-only files under
+`src-tauri/` (§4) that no other platform's build reads.
 
 ## 6. Every CI failure, in order — and what each taught
 
@@ -258,7 +264,7 @@ On the Linux dev machine (as far as Linux allows):
 
 - `npm run check` (0 errors), `npm test` (1890 passed), `npm run lint` (0 errors),
   `npm run build` — all green after the frontend changes.
-- `cargo check` on the host target — green (no Rust changed, but verified).
+- `cargo check` on the host target — green.
 - `bash -n` on the build script; YAML parse of every touched workflow with a job-graph
   assertion; the `project.yml` patcher unit-tested against a template mock.
 - Flag-level verification of `tauri ios build/init` behavior against the real 2.11.4

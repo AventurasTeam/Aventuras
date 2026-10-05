@@ -9,6 +9,7 @@
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use base64::{engine::general_purpose, Engine as _};
 use futures_util::TryStreamExt;
@@ -88,6 +89,8 @@ pub async fn backup_database(
     Ok(dest_path)
 }
 
+static RESTORE_LOCK: Mutex<()> = Mutex::new(());
+
 /// Restore the database from a backup ZIP.
 ///
 /// Extracts only the `aventura.db` entry (older backups may also contain `stories/*.avt`,
@@ -103,10 +106,15 @@ pub async fn backup_database(
 pub async fn restore_database(app: AppHandle, zip_path: String) -> Result<(), String> {
     let target = db_path(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
-        let (file, staged) = open_src(&app, &zip_path)?;
+        // Overlapping restores would sweep and truncate each other's staged archives.
+        let _guard = RESTORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (file, staged, scoped) = open_src(&app, &zip_path)?;
         let result = restore_db_from_file(file, &target);
         if let Some(staged) = staged {
             let _ = std::fs::remove_file(staged);
+        }
+        if let Some(url) = scoped {
+            stop_scoped_access(&app, url);
         }
         result
     })
@@ -407,12 +415,26 @@ pub async fn export_story_avt(
     Ok(dest_path)
 }
 
-/// Open the backup to restore, returning a seekable `File` plus the temp copy to delete afterwards.
+/// Release the iOS security-scoped access the fs plugin starts when it opens a `file://` URL;
+/// dropping the `File` does not.
+#[cfg(target_os = "ios")]
+fn stop_scoped_access(app: &AppHandle, url: tauri_plugin_fs::FilePath) {
+    use tauri_plugin_fs::FsExt;
+    let _ = app.fs().stop_accessing_security_scoped_resource(url);
+}
+
+#[cfg(not(target_os = "ios"))]
+fn stop_scoped_access(_app: &AppHandle, _url: tauri_plugin_fs::FilePath) {}
+
+/// Open the backup to restore, returning a seekable `File`, the temp copy to delete afterwards and
+/// the `file://` URL whose scoped access the caller must release.
 ///
 /// `src` is whatever the open dialog returned: a real path (desktop), a `file://` URL (iOS, opened
 /// directly with security-scoped access by the fs plugin) or a `content://` SAF URI (Android),
 /// whose descriptor is not reliably seekable, so only that shape is staged into a temp file.
-fn open_src(app: &AppHandle, src: &str) -> Result<(File, Option<PathBuf>), String> {
+type OpenedSrc = (File, Option<PathBuf>, Option<tauri_plugin_fs::FilePath>);
+
+fn open_src(app: &AppHandle, src: &str) -> Result<OpenedSrc, String> {
     use std::str::FromStr;
     use tauri_plugin_fs::{FilePath, FsExt, OpenOptions};
 
@@ -422,13 +444,18 @@ fn open_src(app: &AppHandle, src: &str) -> Result<(File, Option<PathBuf>), Strin
     // Infallible: yields Url for `scheme://…`, Path otherwise.
     match FilePath::from_str(src).unwrap() {
         FilePath::Path(p) => File::open(&p)
-            .map(|f| (f, None))
+            .map(|f| (f, None, None))
             .map_err(|e| format!("failed to open backup {}: {e}", p.display())),
-        FilePath::Url(url) if url.scheme() == "file" => app
-            .fs()
-            .open(FilePath::Url(url), opts)
-            .map(|f| (f, None))
-            .map_err(|e| format!("failed to open backup: {e}")),
+        FilePath::Url(url) if url.scheme() == "file" => {
+            let scoped = FilePath::Url(url.clone());
+            match app.fs().open(FilePath::Url(url), opts) {
+                Ok(f) => Ok((f, None, Some(scoped))),
+                Err(e) => {
+                    stop_scoped_access(app, scoped);
+                    Err(format!("failed to open backup: {e}"))
+                }
+            }
+        }
         FilePath::Url(url) => {
             let mut from = app
                 .fs()
@@ -446,7 +473,7 @@ fn open_src(app: &AppHandle, src: &str) -> Result<(File, Option<PathBuf>), Strin
                     File::open(&staged).map_err(|e| format!("failed to reopen temp copy: {e}"))
                 });
             match copied {
-                Ok(file) => Ok((file, Some(staged))),
+                Ok(file) => Ok((file, Some(staged), None)),
                 Err(e) => {
                     let _ = std::fs::remove_file(&staged);
                     Err(e)

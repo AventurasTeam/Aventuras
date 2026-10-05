@@ -64,7 +64,7 @@
     'mobile-platform':
       'The download has opened in your browser. Once it finishes, open the file to install the update — Android will ask you to confirm.',
     'ios-sideload':
-      'The .ipa has downloaded to your device. It is unsigned, so opening it in Files will not install it — use a sideloading tool such as AltStore, Sideloadly or TrollStore.',
+      'The .ipa download has opened in your browser — wait for it to finish. The file is unsigned, so opening it in Files will not install it — use a sideloading tool such as AltStore, Sideloadly or TrollStore.',
   }
 
   const manualInstallNote = $derived(
