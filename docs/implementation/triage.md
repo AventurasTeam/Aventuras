@@ -127,3 +127,19 @@ slice-planning gate forces its resolution before that slice is planned.
   misreading `lib/embedder/local/cancel.ts` warns about. Not verified
   on a device. Raised by the Task 9 review of the reversal-integrity
   PR (2026-10-05).
+
+- **The reversal closure doesn't follow id references inside
+  `entities.state`.** `REF_COLUMNS` in `lib/actions/delta/live-refs.ts`
+  registers only link-table columns, so `selectReversalSet` in
+  `lib/actions/delta/row-closure.ts` never reaches the ids
+  [`data-model.md`](../data-model.md#branch-model) says `state` holds
+  (`current_location_id`, `faction_id`, `parent_location_id` and
+  `at_location_id` in `lib/db/entities/entity-state-schema.ts`). A
+  reversal removing an entity could leave another entity's `state`
+  naming it if a user write outside the set put the reference there.
+  Unverified whether reachable: the argument canon gives for its
+  write-back refusal, that an entity's create is never reversed while
+  a delete holds it
+  ([`generation-pipeline.md`](../generation-pipeline.md#reverse-replay)),
+  may extend to this. Raised by the Task 5 review of the
+  reversal-integrity PR (2026-10-05).
