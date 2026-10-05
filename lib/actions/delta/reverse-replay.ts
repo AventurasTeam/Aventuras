@@ -188,6 +188,25 @@ function settleHeldCopies(
   return { payloadOps, pruned, rewritten }
 }
 
+// A write left naming a gone row would CTRL-Z to nothing. Redo never restores one: logged writes
+// clear redo, CTRL-Z skips periodic groups, no machine nulls a view, held rows refuse held-in-redo.
+async function strandedWritesOf(
+  ctx: DbCtx,
+  set: ReversalSet,
+  endsAbsent: ReadonlyMap<string, RowRef>,
+  heldCopies: ReadonlyMap<string, HeldCopy>,
+): Promise<Delta[]> {
+  const removedRows = [
+    ...endsAbsent.values(),
+    ...[...heldCopies.values()]
+      .filter((c) => c.removed && resolveByTable(c.held.table)?.rowKeepingColumns)
+      .map((c) => ({ table: c.held.table, id: c.held.id })),
+  ]
+  if (removedRows.length === 0) return []
+  const inSet = new Set(set.rows.map((d) => d.id))
+  return (await writesTo(ctx, set.branchId, removedRows)).filter((d) => !inSet.has(d.id))
+}
+
 function namesId(value: unknown, id: string): boolean {
   if (value === id) return true
   if (Array.isArray(value)) return value.some((item) => namesId(item, id))
@@ -483,20 +502,7 @@ async function buildUndoOps(set: ReversalSet, ctx: DbCtx): Promise<BuiltUndo> {
 
   // Stores hold no deleted rows, so a payload edit emits no patch.
   const { payloadOps, pruned, rewritten } = settleHeldCopies(heldCopies, ctx)
-  // generation-pipeline.md → Reverse-replay: a write left naming a gone row would CTRL-Z to
-  // nothing. Deletes stay: a held row's own delete is pruned as its holder, a capturing one holds
-  // other rows. Unreachable from CTRL-Z, so redo never restores such a row without these: only a
-  // user write clears a view (the classifier drops a blank kind), and CTRL-Z undoes it first.
-  const removedRows = [
-    ...endsAbsent.values(),
-    ...[...heldCopies.values()]
-      .filter((c) => c.removed && resolveByTable(c.held.table)?.rowKeepingColumns)
-      .map((c) => ({ table: c.held.table, id: c.held.id })),
-  ]
-  const strandedWrites =
-    removedRows.length > 0
-      ? (await writesTo(ctx, set.branchId, removedRows)).filter((d) => !inSet.has(d.id))
-      : []
+  const strandedWrites = await strandedWritesOf(ctx, set, endsAbsent, heldCopies)
   await refuseWriteBack(ctx, set, pruned, rewritten, strandedWrites)
   ops.push(...payloadOps)
 
