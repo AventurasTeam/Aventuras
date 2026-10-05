@@ -23,7 +23,6 @@ import type {
   LocationBeforeState,
   ItemBeforeState,
   StoryBeatBeforeState,
-  ImageGenerationMode,
 } from '$lib/types'
 import { database } from '$lib/services/database'
 import { rollbackService } from '$lib/services/rollbackService'
@@ -5246,16 +5245,7 @@ class StoryStore {
     genre: string
     description?: string
     mode: StoryMode
-    settings: {
-      pov: 'first' | 'second' | 'third'
-      tense: 'past' | 'present'
-      tone?: string
-      themes?: string[]
-      visualProseMode?: boolean
-      imageGenerationMode?: ImageGenerationMode
-      backgroundImagesEnabled?: boolean
-      referenceMode?: boolean
-    }
+    settings: StorySettings
     protagonist: Partial<Character>
     startingLocation: Partial<Location>
     initialItems: Partial<Item>[]
@@ -5305,16 +5295,7 @@ class StoryStore {
       genre: data.genre,
       templateId: 'wizard-generated',
       mode: data.mode,
-      settings: {
-        pov: data.settings.pov,
-        tense: data.settings.tense,
-        tone: data.settings.tone,
-        themes: data.settings.themes,
-        visualProseMode: data.settings.visualProseMode,
-        imageGenerationMode: data.settings.imageGenerationMode,
-        backgroundImagesEnabled: data.settings.backgroundImagesEnabled,
-        referenceMode: data.settings.referenceMode,
-      },
+      settings: data.settings,
       memoryConfig: DEFAULT_MEMORY_CONFIG,
       retryState: null,
       styleReviewState: null,
