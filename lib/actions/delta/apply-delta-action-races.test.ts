@@ -444,7 +444,16 @@ describe('a classifier write racing a user Save on one row', () => {
               ),
             )
           expect(await deltaOf(ctx.db, `k_${round}`), label).toBeUndefined()
-          expect(await deltaOf(ctx.db, `u_${round}`), label).toBeDefined()
+          const user = (await ctx.db
+            .select()
+            .from(deltas)
+            .where(eq(deltas.actionId, `u_${round}`))) as Delta[]
+          // A Save the reversal met keeps the row and takes over the pass's create; one after it
+          // creates the row anew. Its update alone would leave the row with no create in the log.
+          expect([['create'], ['create', 'update']], label).toContainEqual(
+            user.map((d) => d.op).sort(),
+          )
+          expect(new Set(user.map((d) => d.source)), label).toEqual(new Set(['user_edit']))
           expect(row?.inverseKind, label).toBe('wary')
         },
       )

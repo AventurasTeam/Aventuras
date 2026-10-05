@@ -31,7 +31,12 @@ export function describeDeltaReplayError(
 
 export type PatchEmission = { table: string; branchId: string; patch: StorePatch }
 
-export type ReversePlan = { ops: SqlOp[]; pruneOps: SqlOp[]; patches: PatchEmission[] }
+export type ReversePlan = {
+  ops: SqlOp[]
+  /** One log write per delta in the set: its prune, or the re-own of a create whose row stays. */
+  pruneOps: SqlOp[]
+  patches: PatchEmission[]
+}
 
 /**
  * The reversal of a closed set, unexecuted — so a caller that owns a transaction of its
@@ -43,7 +48,16 @@ export async function buildReverseAndPrunePlan(set: ReversalSet, ctx: DbCtx): Pr
   const built = await buildUndoOps(set.rows, ctx)
   return {
     ops: built.ops,
-    pruneOps: set.rows.map((r) => ctx.db.delete(deltas).where(eq(deltas.id, r.id)).toSQL()),
+    pruneOps: set.rows.map((r) => {
+      const keptBy = built.reowned.get(r.id)
+      return keptBy === undefined
+        ? ctx.db.delete(deltas).where(eq(deltas.id, r.id)).toSQL()
+        : ctx.db
+            .update(deltas)
+            .set({ source: 'user_edit', entryId: null, actionId: keptBy })
+            .where(eq(deltas.id, r.id))
+            .toSQL()
+    }),
     patches: built.patches,
   }
 }
@@ -76,7 +90,7 @@ function undoDirtiesVector(targetTable: string, payloadKeys: readonly string[]):
 async function buildUndoOps(
   rows: readonly Delta[],
   ctx: DbCtx,
-): Promise<{ ops: SqlOp[]; patches: PatchEmission[] }> {
+): Promise<{ ops: SqlOp[]; patches: PatchEmission[]; reowned: Map<string, string> }> {
   const working = new Map<string, Record<string, unknown>>()
   // A tombstone keeps the deleted row so an older undo giving back a row-keeping column
   // re-inserts it; a row already missing, or deleted by a create's undo here, stays out.
@@ -84,6 +98,10 @@ async function buildUndoOps(
   const absent = new Set<string>()
   const ops: SqlOp[] = []
   const patches: PatchEmission[] = []
+  // A kept create's row exists only through the user writes that kept it, so the create goes to
+  // the oldest of them, the last a newest-first CTRL-Z reaches; pruned, the row's next reversal
+  // by reference would find no create and refuse.
+  const reowned = new Map<string, string>()
   const listVecTables = vecTableLister(ctx)
   const laterUserEdits = await userEditsOutliving(ctx, rows, readsUserEdits)
   const liveLinks = await liveLinkFilter(rows, ctx)
@@ -159,6 +177,7 @@ async function buildUndoOps(
         if (userKept.some((col) => row[col] != null)) {
           Object.assign(row, restored)
           if (Object.keys(restored).length > 0) emitUpdate(restored, row)
+          reowned.set(delta.id, oldestKeepingWrite(userEdits, userKept).actionId)
           continue
         }
       }
@@ -279,7 +298,12 @@ async function buildUndoOps(
   for (const { table, branchId, ids } of swept.values())
     ops.push(...(await vecSweepIdsOps(table, branchId, ids, listVecTables)))
 
-  return { ops, patches }
+  return { ops, patches, reowned }
+}
+
+function oldestKeepingWrite(edits: readonly Delta[], columns: readonly string[]): Delta {
+  const keeping = edits.filter((e) => columns.some((col) => wroteColumn([e], col)))
+  return keeping.reduce((oldest, e) => (e.logPosition < oldest.logPosition ? e : oldest))
 }
 
 // A delete's undo re-inserts the whole row whatever came after, so it reads no user edits.

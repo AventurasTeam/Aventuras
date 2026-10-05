@@ -494,7 +494,8 @@ describe('reversing a machine create of a relationship', () => {
     const [row] = await pair(db)
     expect(row).toMatchObject({ kind: null, inverseKind: 'wary' })
     expect(characterRelationshipsStore.getById(row.id)).toEqual(row)
-    expect(await actionIds(db)).toEqual(['act_u'])
+    // The kept create goes to the user write that kept the row, not out of the log.
+    expect(await actionIds(db)).toEqual(['act_u', 'act_u'])
   })
 
   it('leaves the pair as the user left it when the user wrote both views', async () => {
@@ -524,6 +525,7 @@ describe('reversing a machine create of a relationship', () => {
     await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     expect(await pair(db)).toHaveLength(0)
+    expect(await actionIds(db)).toEqual(['act_u1', 'act_u2'])
   })
 
   it('deletes the pair when no user edit followed', async () => {
@@ -581,6 +583,97 @@ describe('a prose edit under a later user write', () => {
     )
     expect(rederived).toEqual({ status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' })
     expect((await pair(db))[0].kind).toBe('rival')
+  })
+})
+
+const entryAction = (id: string, position: number, kind: 'user_action' | 'ai_reply') => ({
+  kind: 'createStoryEntry' as const,
+  source: 'user_edit' as const,
+  payload: {
+    entry: { id, branchId: 'b1', position, kind, content: `${id} prose`, createdAt: position },
+  },
+})
+
+const fromReply: PipelineAction = {
+  kind: 'upsertCharacterRelationship',
+  source: 'periodic_classifier',
+  payload: {
+    branchId: 'b1',
+    subjectId: 'char_kael',
+    objectId: 'char_mira',
+    kind: 'ally',
+    proseEntryId: 'e_reply',
+  },
+}
+
+async function relationshipCreates(db: Db): Promise<Delta[]> {
+  return (await db
+    .select()
+    .from(deltas)
+    .where(
+      and(eq(deltas.targetTable, 'character_relationships'), eq(deltas.op, 'create')),
+    )) as Delta[]
+}
+
+async function relationshipDeltas(db: Db): Promise<Delta[]> {
+  return (await db
+    .select()
+    .from(deltas)
+    .where(eq(deltas.targetTable, 'character_relationships'))) as Delta[]
+}
+
+describe('a kept create goes to the user write that kept its row', () => {
+  // Kael by the user, a pass's pair anchored to the reply, the user's view on it, then the
+  // prose edit that sweeps the pass's create but keeps the row for the user's view.
+  async function sweptUnderUserView(ctx: Ctx, db: Db, view: PipelineAction) {
+    await createKael(ctx)
+    await db.insert(entities).values({ ...KAEL, id: 'char_mira', name: 'Mira' })
+    await apply(ctx, entryAction('e_action', 1, 'user_action'), 'act_e1')
+    await apply(ctx, entryAction('e_reply', 2, 'ai_reply'), 'act_e2')
+    await apply(ctx, fromReply, 'act_c', 'e_reply')
+    await apply(ctx, view, 'act_u')
+    expect(await updateStoryEntryContent('b1', 'e_action', 'rewritten', ctx)).toEqual({
+      status: 'ok',
+    })
+  }
+
+  it('re-owns the create a prose edit keeps, so removing a character it names closes', async () => {
+    const { db, ctx } = await setup()
+    await sweptUnderUserView(ctx, db, userViews('ally', 'wary'))
+
+    const [created] = await relationshipCreates(db)
+    expect(created).toMatchObject({ source: 'user_edit', entryId: null, actionId: 'act_u' })
+
+    expect(await reverseReplayDeltas('act_0', ctx)).toBe(3)
+    expect(await pair(db)).toEqual([])
+    expect(await relationshipDeltas(db)).toEqual([])
+  })
+
+  it("removes the row on CTRL-Z of the user's view edit, which it exists only through", async () => {
+    const { db, ctx } = await setup()
+    // Overwrites the pass's view too, so the edit's undo alone would put the pass's fact back.
+    await sweptUnderUserView(ctx, db, userViews('rival', 'wary'))
+    entriesStore.hydrate('b1', [])
+    undoRedoStore.clear()
+
+    expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+    expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+
+    expect(await pair(db)).toEqual([])
+    expect(await relationshipDeltas(db)).toEqual([])
+  })
+
+  it('gives the create to the older of two user writes that kept the row', async () => {
+    const { db, ctx } = await setup()
+    await seedChars(db)
+    await apply(ctx, classifyView('ally'), 'act_c')
+    await apply(ctx, userViews('ally', 'wary'), 'act_u1')
+    await apply(ctx, userViews('rival', 'wary'), 'act_u2')
+
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
+
+    const [created] = await relationshipCreates(db)
+    expect(created).toMatchObject({ source: 'user_edit', entryId: null, actionId: 'act_u1' })
   })
 })
 
