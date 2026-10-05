@@ -18,8 +18,6 @@
       ? banner.prev && `Since ${banner.prev.label}`
       : `Chapter ${banner.number}`,
   )
-
-  const storyFont = 'font-family: var(--font-story-custom, var(--font-story))'
 </script>
 
 <header
@@ -36,16 +34,13 @@
   {/if}
 
   {#if banner.title}
-    <h2 class="text-foreground mt-2 text-center text-xl font-semibold" style={storyFont}>
+    <h2 class="text-foreground font-story mt-2 text-center text-xl font-semibold">
       {banner.title}
     </h2>
   {/if}
 
   {#if banner.summary}
-    <p
-      class="text-muted-foreground mt-2 text-sm leading-relaxed whitespace-pre-line"
-      style={storyFont}
-    >
+    <p class="text-muted-foreground font-story mt-2 text-sm leading-relaxed whitespace-pre-line">
       {banner.summary}
     </p>
   {/if}
