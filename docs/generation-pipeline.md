@@ -1150,8 +1150,11 @@ observability-only state:
   the pause, because it writes `state: 'running'` before any delta
   and so definitionally causes one. Other kinds describe the fault
   without promising a pause.
-- Both variants say the story's content is intact and that
-  restarting the app retries automatically.
+- Every variant says the story's content is intact. Each also says
+  that restarting the app retries automatically, unless the reversal
+  was refused as an integrity error (`ReversalIntegrityError`): every
+  boot refuses that one again, so its copy says the update could not
+  be undone without breaking later changes and promises no retry.
 
 No max-retry counter and no admin "drop orphan" affordance for v1;
 stuck orphans remain visible in Logs across boots. Nearly every

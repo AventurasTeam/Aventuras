@@ -18,14 +18,18 @@ function report(...reversed: RecoveredRun[]): RecoveryReport {
   return { reversed, failures: [] }
 }
 
-function failed(kind: string, storyId: string | null): RecoveryFailure {
+function failed(
+  kind: string,
+  storyId: string | null,
+  refusal: RecoveryFailure['refusal'] = null,
+): RecoveryFailure {
   return {
     runId: `run_${kind}`,
     kind,
     actionId: `action_${kind}`,
     storyId,
     error: new Error('could not reverse'),
-    refusal: null,
+    refusal,
   }
 }
 
@@ -115,6 +119,44 @@ describe('failure copy', () => {
   it('falls back to unnamed copy when the story id resolves to no title', () => {
     expect(formatRecoveryReport(failureReport(failed('periodic-classifier', null)), {})).toContain(
       'that story',
+    )
+  })
+
+  it('promises a retry for a failure a restart can heal', () => {
+    for (const kind of ['periodic-classifier', 'per-turn'])
+      for (const storyId of ['story_1', null])
+        expect(
+          formatRecoveryReport(failureReport(failed(kind, storyId)), { story_1: 'Mornstone' }),
+        ).toContain('restarting the app retries automatically')
+  })
+
+  // Every boot refuses it again, so promising a retry would be false.
+  it('promises no retry for an integrity refusal, and still says the content is intact', () => {
+    for (const kind of ['periodic-classifier', 'per-turn'])
+      for (const storyId of ['story_1', null]) {
+        const text = formatRecoveryReport(failureReport(failed(kind, storyId, 'write-back')), {
+          story_1: 'Mornstone',
+        })
+        expect(text).toContain('could not be undone without breaking later changes')
+        expect(text).toMatch(/your story content is intact/i)
+        expect(text).not.toContain('restart')
+      }
+  })
+
+  it('keeps the pause for a classifier refusal, and its story name', () => {
+    expect(
+      formatRecoveryReport(failureReport(failed('periodic-classifier', 'story_1', 'write-back')), {
+        story_1: 'Mornstone',
+      }),
+    ).toBe(
+      'An interrupted background memory update in Mornstone could not be undone without breaking later changes. Memory updates for this story stay paused so nothing is duplicated — your story content is intact.',
+    )
+    expect(
+      formatRecoveryReport(failureReport(failed('per-turn', 'story_1', 'write-back')), {
+        story_1: 'Mornstone',
+      }),
+    ).toBe(
+      'An interrupted background update in Mornstone could not be undone without breaking later changes. Your story content is intact.',
     )
   })
 
