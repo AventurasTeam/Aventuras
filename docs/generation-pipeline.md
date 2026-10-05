@@ -1924,10 +1924,12 @@ commits or leaves the run to boot recovery. A
 write arriving meanwhile waits a few milliseconds; nothing is disabled
 or refused. Prose reversals need nothing more, since the barrier above
 already waits a burst out, and boot recovery runs before any branch
-loads. The lock order holds because a burst never asks for the
-metadata lock: only the scene-field, world-time and entity-delete
-actions take it, and the orchestrator commits a pass's writes through
-`applyDeltaAction` directly.
+loads. The rollback preview writes nothing but takes the lock shared
+around its set selection, so a pass's abort reversal cannot land
+between the closure's reads. The lock order holds because a burst
+never asks for the metadata lock: only the scene-field, world-time and
+entity-delete actions take it, and the orchestrator commits a pass's
+writes through `applyDeltaAction` directly.
 
 ### Chained start bypasses concurrencyPolicy
 
