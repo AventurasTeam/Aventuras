@@ -141,5 +141,7 @@ slice-planning gate forces its resolution before that slice is planned.
   write-back refusal, that an entity's create is never reversed while
   a delete holds it
   ([`generation-pipeline.md`](../generation-pipeline.md#reverse-replay)),
-  may extend to this. Raised by the Task 5 review of the
+  may extend to this. Separately, `data-model.md` lists `equipped_by`
+  as a `state` reference, but the schema has no such field: doc/schema
+  drift to resolve. Raised by the Task 5 review of the
   reversal-integrity PR (2026-10-05).

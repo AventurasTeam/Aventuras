@@ -329,6 +329,28 @@ describe('a reversal applies to rows a delete outside the set holds', () => {
     expect((await payloadOf('act_del')).relationships).toEqual([])
   })
 
+  it('keeps a held relationship an older undo gives a view back after a newer one left none', async () => {
+    await seedMentorPair('ally', null)
+    const userViews = (kind: string | null, inverseKind: string | null): PipelineAction => ({
+      kind: 'upsertCharacterRelationship',
+      source: 'user_edit',
+      payload: { branchId: 'b1', subjectId: 'char_x', objectId: 'char_y', kind, inverseKind },
+    })
+    await act('act_user1', userViews(null, 'mentor'))
+    await act('act_pass', passView('char_x', 'char_y', 'rival'))
+    await act('act_user2', userViews('rival', null))
+    await act('act_del', deleteEntity('char_x'))
+    const target = [...(await deltasOf('act_pass')), ...(await deltasOf('act_user1'))]
+
+    // The pass's undo nulls `kind` beside act_user2's null view; act_user1's undo then
+    // restores `kind`, so the copy stays in the payload.
+    await reverseAndPruneDeltaRows(await selectReversalSet(ctx, { branchId: 'b1', target }), ctx)
+
+    expect((await payloadOf('act_del')).relationships).toEqual([
+      expect.objectContaining({ id: 'rel_1', kind: 'ally', inverseKind: null }),
+    ])
+  })
+
   it('re-owns a held create a later user view keeps, so removing a character it names closes', async () => {
     await act('act_user0', {
       kind: 'createEntity',
