@@ -1,7 +1,11 @@
 import { eq } from 'drizzle-orm'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { __resetRegistrationGuard, __resetRegistry } from '@/lib/actions'
+import {
+  __resetBranchWriteLocks,
+  withBranchWriteShared,
+} from '@/lib/actions/delta/branch-write-lock'
 import {
   APP_SETTINGS_DEFAULTS,
   APP_SETTINGS_SINGLETON_ID,
@@ -14,9 +18,14 @@ import {
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { __resetDiagnosticsGate } from '@/lib/diagnostics'
+import {
+  __resetDeltaActionPort,
+  holdWritePhase,
+  releaseWritePhase,
+} from '@/lib/pipeline/runtime/action-port'
 import { appSettingsStore, recoveryReportStore, resetAllStores } from '@/lib/stores'
 
-import { runBootstrap } from './bootstrap'
+import { ensureDeltaActionPort, runBootstrap } from './bootstrap'
 
 let ctx: {
   db: Awaited<ReturnType<typeof createTestDb>>['db']
@@ -181,5 +190,35 @@ describe('runBootstrap', () => {
     expect(recoveryReportStore.getSnapshot().pendingRecoveryReport?.reversed).toMatchObject([
       { runId: 'r1', storyId: 's1', deltas: 1 },
     ])
+  })
+})
+
+// Every pipeline test configures its own port, so only this pins the production write phase.
+describe('ensureDeltaActionPort', () => {
+  // The lock advances over microtasks; a macrotask hop runs every queued continuation.
+  const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+  beforeEach(() => {
+    __resetDeltaActionPort()
+    __resetBranchWriteLocks()
+  })
+  afterEach(() => {
+    __resetDeltaActionPort()
+    __resetBranchWriteLocks()
+  })
+
+  it("holds the branch's writes from the run's write phase until it is released", async () => {
+    ensureDeltaActionPort()
+    await holdWritePhase('b1', 'act_run')
+    const run = vi.fn(async () => {})
+    const write = withBranchWriteShared('b1', 'act_user', run)
+    await flush()
+    expect(run).not.toHaveBeenCalled()
+
+    releaseWritePhase('b1', 'act_run')
+    await flush()
+    // Checked before awaiting, so a release that frees nothing fails here, not by timeout.
+    expect(run).toHaveBeenCalledOnce()
+    await write
   })
 })
