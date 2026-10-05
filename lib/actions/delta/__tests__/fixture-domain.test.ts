@@ -271,7 +271,11 @@ describe('fixture domain self-registration + roundtrip (AC5)', () => {
 
     const rows = (await db.select().from(deltas).where(eq(deltas.actionId, 'act_prune'))) as Delta[]
     await expect(
-      reverseAndPruneDeltaRows(await selectReversalSet(ctx, { branchId: 'b1', target: rows }), ctx),
+      reverseAndPruneDeltaRows(
+        await selectReversalSet(ctx, { branchId: 'b1', target: rows }),
+        ctx,
+        { keepRedoExact: false },
+      ),
     ).rejects.toMatchObject({
       name: 'DeltaReplayError',
       message: 'Post-commit patch sync failed',

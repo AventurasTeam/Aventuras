@@ -183,7 +183,7 @@ describe.each(CASES)('delete $kind', ({ kind, translationKind, insert, remove, s
     const rows = await groupRows('act_del')
     const set = await selectReversalSet(ctx, { branchId: 'b1', target: rows })
     const snapshot = await snapshotForRedo(set, ctx)
-    await reverseAndPruneDeltaRows(set, ctx)
+    await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: false })
     const [restored] = await select()
     expect(restored?.embeddingStale).toBe(1)
     expect(await ctx.db.select().from(translations)).toHaveLength(1)
@@ -276,6 +276,7 @@ describe('delete happening — link rows', () => {
     await reverseAndPruneDeltaRows(
       await selectReversalSet(ctx, { branchId: 'b1', target: rows }),
       ctx,
+      { keepRedoExact: false },
     )
     expect(await ctx.db.select().from(happeningInvolvements)).toHaveLength(2)
     expect(await ctx.db.select().from(happeningAwareness)).toHaveLength(2)

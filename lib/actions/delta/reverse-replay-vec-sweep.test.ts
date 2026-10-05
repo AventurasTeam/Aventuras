@@ -23,6 +23,7 @@ async function reverseRows(rows: readonly Delta[], ctx: DbCtx): Promise<number> 
   return reverseAndPruneDeltaRows(
     await selectReversalSet(ctx, { branchId: 'b1', target: rows }),
     ctx,
+    { keepRedoExact: false },
   )
 }
 
@@ -141,6 +142,7 @@ describe('reverse-replay of a create', () => {
     const plan = await buildReverseAndPrunePlan(
       await selectReversalSet(ctx, { branchId: 'b1', target: creates }),
       ctx,
+      { keepRedoExact: false },
     )
     const sweeps = plan.ops.map((op) => op.sql).filter((sql) => /_vec_\d+ WHERE/.test(sql))
     expect(sweeps.map((sql) => sql.split(' WHERE')[0]).sort()).toEqual([

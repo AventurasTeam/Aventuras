@@ -105,7 +105,7 @@ async function undoBracketed(branchId: string, ctx: DbCtx): Promise<UndoResult> 
   // mutability & rollback).
   const snapshot = await snapshotForRedo(set, ctx)
   try {
-    await reverseAndPruneDeltaRows(set, ctx, clampOps, { keepRedoExact: true })
+    await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: true }, clampOps)
   } catch (e) {
     // A committed DeltaReplayError means the reversal + prune already landed in
     // SQLite; only the post-commit store sync failed. The data change is real,

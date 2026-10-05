@@ -43,7 +43,7 @@ async function commitNewAction(
   extraOps: readonly SqlOp[],
 ): Promise<void> {
   try {
-    await reverseAndPruneDeltaRows(set, ctx, extraOps)
+    await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: false }, extraOps)
   } catch (e) {
     if (e instanceof DeltaReplayError && e.committed) undoRedoStore.clear()
     throw e

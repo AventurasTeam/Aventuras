@@ -93,7 +93,9 @@ async function payloadOf(actionId: string): Promise<Record<string, unknown>> {
 }
 
 async function planFor(target: readonly Delta[]) {
-  return buildReverseAndPrunePlan(await selectReversalSet(ctx, { branchId: 'b1', target }), ctx)
+  return buildReverseAndPrunePlan(await selectReversalSet(ctx, { branchId: 'b1', target }), ctx, {
+    keepRedoExact: false,
+  })
 }
 
 const isPayloadWrite = (op: { sql: string }) => /^update "deltas"/.test(op.sql)
@@ -391,8 +393,10 @@ describe('a reversal applies to rows a delete outside the set holds', () => {
     // The pass's undo nulls `kind` beside act_user2's null view; act_user1's undo then
     // restores `kind`, so the copy stays in the payload and act_user2 stays in the log.
     const set = await selectReversalSet(ctx, { branchId: 'b1', target })
-    expect((await buildReverseAndPrunePlan(set, ctx)).pruneOps).toHaveLength(set.rows.length)
-    await reverseAndPruneDeltaRows(set, ctx)
+    expect(
+      (await buildReverseAndPrunePlan(set, ctx, { keepRedoExact: false })).pruneOps,
+    ).toHaveLength(set.rows.length)
+    await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: false })
 
     expect((await payloadOf('act_del')).relationships).toEqual([
       expect.objectContaining({ id: 'rel_1', kind: 'ally', inverseKind: null }),
@@ -446,7 +450,7 @@ describe('a reversal applies to rows a delete outside the set holds', () => {
     const set = await selectReversalSet(ctx, { branchId: 'b1', target: await deltasOf('act_pass') })
     await reverseReplayDeltas('act_del', ctx)
 
-    await reverseAndPruneDeltaRows(set, ctx)
+    await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: false })
 
     const [rel] = await ctx.db.select().from(characterRelationships)
     expect(rel).toMatchObject({ id: 'rel_1', kind: 'ally' })
@@ -459,11 +463,11 @@ describe('a reversal applies to rows a delete outside the set holds', () => {
     const all = (await ctx.db.select().from(deltas)) as Delta[]
     const set = await selectReversalSet(ctx, { branchId: 'b1', target: all })
 
-    const plan = await buildReverseAndPrunePlan(set, ctx)
+    const plan = await buildReverseAndPrunePlan(set, ctx, { keepRedoExact: false })
     expect(plan.ops.filter(isPayloadWrite)).toEqual([])
     expect(plan.pruneOps).toHaveLength(3)
 
-    await reverseAndPruneDeltaRows(set, ctx)
+    await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: false })
     expect(await ctx.db.select().from(happenings)).toEqual([])
     expect(await ctx.db.select().from(happeningInvolvements)).toEqual([])
     expect(await ctx.db.select().from(deltas)).toEqual([])
@@ -501,7 +505,9 @@ describe('a reversal applies to rows a delete outside the set holds', () => {
 
     // The delete restores rel_1 as rival/null; the older pass undo then nulls `kind` on that
     // restored row, leaving no view, so the row is deleted rather than updated into the CHECK.
-    await reverseAndPruneDeltaRows(await selectReversalSet(ctx, { branchId: 'b1', target }), ctx)
+    await reverseAndPruneDeltaRows(await selectReversalSet(ctx, { branchId: 'b1', target }), ctx, {
+      keepRedoExact: false,
+    })
 
     expect(
       await ctx.db.select({ id: entities.id }).from(entities).where(eq(entities.id, 'char_x')),
@@ -677,6 +683,6 @@ describe('the write-back refusal', () => {
   it('reaches a caller of the closed-set reversal unwrapped too', async () => {
     await seedWriteBack()
     const set = await selectReversalSet(ctx, { branchId: 'b1', target: await deltasOf('act_pass') })
-    await expectRefusedUnwritten(() => reverseAndPruneDeltaRows(set, ctx))
+    await expectRefusedUnwritten(() => reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: false }))
   })
 })

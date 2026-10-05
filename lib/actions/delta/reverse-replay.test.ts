@@ -475,6 +475,7 @@ describe('reverseAndPruneDeltaRows', () => {
     const count = await reverseAndPruneDeltaRows(
       await selectReversalSet(ctx, { branchId: 'b1', target: [] }),
       ctx,
+      { keepRedoExact: false },
       [{ sql: `UPDATE branches SET name = ? WHERE id = ?`, params: ['renamed', 'b1'] }],
     )
     expect(count).toBe(0)
@@ -854,6 +855,7 @@ describe('reversals take a closed set', () => {
     const count = await reverseAndPruneDeltaRows(
       await selectReversalSet(ctx, { branchId: 'b1', target: passRows }),
       ctx,
+      { keepRedoExact: false },
     )
 
     expect(count).toBe(2)

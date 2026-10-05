@@ -45,9 +45,10 @@ export function describeDeltaReplayError(
 
 export type PatchEmission = { table: string; branchId: string; patch: StorePatch }
 
+/** Required, so a reversal that must keep redo exact cannot get the prune by omission. */
 export type ReversalOptions = {
   /** CTRL-Z and redo: refuse a prune of writes outside the set, which redo cannot restore. */
-  keepRedoExact?: boolean
+  keepRedoExact: boolean
 }
 
 export type ReversePlan = {
@@ -72,7 +73,7 @@ export type ReversePlan = {
 export async function buildReverseAndPrunePlan(
   set: ReversalSet,
   ctx: DbCtx,
-  options: ReversalOptions = {},
+  options: ReversalOptions,
 ): Promise<ReversePlan> {
   const built = await buildUndoOps(set, ctx, options)
   const reownOrPrune = (r: Delta): SqlOp => {
@@ -547,8 +548,8 @@ function readsUserEdits(delta: Delta): boolean {
 export async function reverseAndPruneDeltaRows(
   set: ReversalSet,
   ctx: DbCtx,
+  options: ReversalOptions,
   extraOps: readonly SqlOp[] = [],
-  options: ReversalOptions = {},
 ): Promise<number> {
   if (set.rows.length === 0 && extraOps.length === 0) return 0
   const actionId = set.rows[0]?.actionId ?? 'rollback'
@@ -605,7 +606,7 @@ export async function reverseReplayDeltas(
       const settle = settleOps(set.rows.length)
       if (set.rows.length === 0 && settle.length === 0) return 0
 
-      const plan = await buildReverseAndPrunePlan(set, ctx)
+      const plan = await buildReverseAndPrunePlan(set, ctx, { keepRedoExact: false })
       patches = plan.patches
       await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...settle])
     } catch (e) {

@@ -71,7 +71,7 @@ async function sweepFrom(
   const swept = await resolveSweep(branchId, targetId, ctx)
   if ('status' in swept) return swept
   try {
-    await reverseAndPruneDeltaRows(swept.set, ctx, swept.clampOps)
+    await reverseAndPruneDeltaRows(swept.set, ctx, { keepRedoExact: false }, swept.clampOps)
   } catch (e) {
     if (!(e instanceof ReversalIntegrityError)) throw e
     return reversalRefused(branchId, e)

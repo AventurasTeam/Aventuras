@@ -258,7 +258,7 @@ async function undoOf(ctx: Ctx, actionId: string) {
     .orderBy(desc(deltas.logPosition))) as Delta[]
   const set = await selectReversalSet(ctx, { branchId: 'b1', target: rows })
   const snapshot = await snapshotForRedo(set, ctx)
-  await reverseAndPruneDeltaRows(set, ctx)
+  await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: false })
   return snapshot
 }
 

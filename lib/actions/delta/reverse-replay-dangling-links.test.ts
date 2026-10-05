@@ -89,7 +89,9 @@ async function undoHead(): Promise<void> {
   const all = (await ctx.db.select().from(deltas).orderBy(desc(deltas.logPosition))) as Delta[]
   const head = all[0].actionId
   const target = all.filter((d) => d.actionId === head)
-  await reverseAndPruneDeltaRows(await selectReversalSet(ctx, { branchId: 'b1', target }), ctx)
+  await reverseAndPruneDeltaRows(await selectReversalSet(ctx, { branchId: 'b1', target }), ctx, {
+    keepRedoExact: false,
+  })
 }
 
 async function danglingInvolvements(): Promise<unknown[]> {
@@ -223,6 +225,7 @@ describe('undoing a delete whose link names a row a later reversal removed', () 
     await reverseAndPruneDeltaRows(
       await selectReversalSet(ctx, { branchId: 'b1', target: [], sweep }),
       ctx,
+      { keepRedoExact: false },
     )
     await undoHead()
 
@@ -281,6 +284,7 @@ describe('undoing a delete whose link names a row a later reversal removed', () 
     await reverseAndPruneDeltaRows(
       await selectReversalSet(ctx, { branchId: 'b1', target: both }),
       ctx,
+      { keepRedoExact: false },
     )
 
     const inv = await ctx.db.select({ id: happeningInvolvements.id }).from(happeningInvolvements)
@@ -302,6 +306,7 @@ describe('undoing a delete whose link names a row a later reversal removed', () 
     await reverseAndPruneDeltaRows(
       await selectReversalSet(ctx, { branchId: 'b1', target: all }),
       ctx,
+      { keepRedoExact: false },
     )
 
     expect(await ctx.db.select().from(happenings)).toEqual([])
@@ -322,6 +327,7 @@ describe('undoing a delete whose link names a row a later reversal removed', () 
     await reverseAndPruneDeltaRows(
       await selectReversalSet(ctx, { branchId: 'b1', target: all }),
       ctx,
+      { keepRedoExact: false },
     )
 
     expect(await ctx.db.select().from(happenings)).toEqual([])
@@ -389,7 +395,7 @@ describe('undoing a delete whose link names a row a later reversal removed', () 
     expect(facts.map((d) => d.targetId)).toEqual(['hap_f'])
 
     const set = await selectReversalSet(ctx, { branchId: 'b1', target: [], sweep: facts })
-    await reverseAndPruneDeltaRows(set, ctx)
+    await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: false })
 
     expect(await ctx.db.select().from(happenings)).toEqual([])
     expect(await ctx.db.select().from(happeningInvolvements)).toEqual([])

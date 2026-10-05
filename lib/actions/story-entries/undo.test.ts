@@ -953,7 +953,9 @@ describe('a CTRL-Z or redo whose reversal would prune writes outside its redo', 
     await seedStrandingGroup(db)
     const target = (await db.select().from(deltas).where(eq(deltas.actionId, 'act_u1'))) as Delta[]
 
-    await reverseAndPruneDeltaRows(await selectReversalSet(ctx, { branchId: 'b1', target }), ctx)
+    await reverseAndPruneDeltaRows(await selectReversalSet(ctx, { branchId: 'b1', target }), ctx, {
+      keepRedoExact: false,
+    })
 
     expect(await db.select().from(characterRelationships)).toEqual([])
     expect(await db.select().from(deltas)).toEqual([])

@@ -66,6 +66,7 @@ async function reverseRows(rows: readonly Delta[], ctx: Ctx): Promise<number> {
   return reverseAndPruneDeltaRows(
     await selectReversalSet(ctx, { branchId: 'b1', target: rows }),
     ctx,
+    { keepRedoExact: false },
   )
 }
 
@@ -408,8 +409,10 @@ describe('reversing a machine view update', () => {
       target: await deltasOf(db, 'act_c'),
     })
     // The pair ends present, so act_0's create and act_x's update stay in the log.
-    expect((await buildReverseAndPrunePlan(set, ctx)).pruneOps).toHaveLength(set.rows.length)
-    await reverseAndPruneDeltaRows(set, ctx)
+    expect(
+      (await buildReverseAndPrunePlan(set, ctx, { keepRedoExact: false })).pruneOps,
+    ).toHaveLength(set.rows.length)
+    await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: false })
 
     const [row] = await pair(db)
     expect(row).toEqual({ ...created, kind: null, inverseKind: 'friend' })
@@ -520,8 +523,10 @@ describe('reversing a machine view update', () => {
       await db.insert(deltas).values([...target, userView])
       const set = await selectReversalSet(ctx, { branchId: 'b1', target })
       expect(set.rows.map((d) => d.id)).not.toContain('d_user')
-      expect((await buildReverseAndPrunePlan(set, ctx)).pruneOps).toHaveLength(set.rows.length)
-      await reverseAndPruneDeltaRows(set, ctx)
+      expect(
+        (await buildReverseAndPrunePlan(set, ctx, { keepRedoExact: false })).pruneOps,
+      ).toHaveLength(set.rows.length)
+      await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: false })
       expect(await pair(db)).toEqual([expect.objectContaining({ id: 'rel_1' })])
       expect(await actionIds(db)).toEqual(['act_u'])
     }
@@ -598,6 +603,7 @@ describe('reversing a machine create of a relationship', () => {
     const plan = await buildReverseAndPrunePlan(
       await selectReversalSet(ctx, { branchId: 'b1', target: await deltasOf(db, 'act_c') }),
       ctx,
+      { keepRedoExact: false },
     )
     expect(plan.ops).toEqual([])
     expect(plan.pruneOps).toHaveLength(1)
@@ -783,7 +789,9 @@ describe('a kept create goes to the user write that kept its row', () => {
       branchId: 'b1',
       target: await deltasOf(db, 'act_pass'),
     })
-    expect((await buildReverseAndPrunePlan(set, ctx)).pruneOps).toHaveLength(set.rows.length)
+    expect(
+      (await buildReverseAndPrunePlan(set, ctx, { keepRedoExact: false })).pruneOps,
+    ).toHaveLength(set.rows.length)
 
     expect(await reverseReplayDeltas('act_pass', ctx)).toBe(3)
 

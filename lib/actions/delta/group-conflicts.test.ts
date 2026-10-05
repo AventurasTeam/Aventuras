@@ -93,6 +93,7 @@ async function undoGroup(): Promise<void> {
   await reverseAndPruneDeltaRows(
     await selectReversalSet(ctx, { branchId: 'b1', target: rows }),
     ctx,
+    { keepRedoExact: false },
   )
 }
 

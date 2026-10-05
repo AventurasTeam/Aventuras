@@ -509,7 +509,7 @@ describe('happenings CRUD arms', () => {
     const deleteDeltaRows = await db.select().from(deltas).where(eq(deltas.actionId, 'act_d'))
     const set = await selectReversalSet(ctx, { branchId: 'br_1', target: deleteDeltaRows })
     const snapshots = await snapshotForRedo(set, ctx)
-    await reverseAndPruneDeltaRows(set, ctx)
+    await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: false })
 
     // After undo: everything should be restored
     expect(await rowFor(db, 'hap_1')).toBeDefined()

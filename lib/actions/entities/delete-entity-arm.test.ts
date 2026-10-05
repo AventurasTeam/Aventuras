@@ -35,6 +35,7 @@ async function reverseRows(rows: readonly Delta[], ctx: DbCtx): Promise<number> 
   return reverseAndPruneDeltaRows(
     await selectReversalSet(ctx, { branchId: 'b1', target: rows }),
     ctx,
+    { keepRedoExact: false },
   )
 }
 
@@ -299,7 +300,7 @@ describe('deleteEntity', () => {
       .orderBy(desc(deltas.logPosition))) as Delta[]
     const set = await selectReversalSet(ctx, { branchId: 'b1', target: rows })
     const snapshot = await snapshotForRedo(set, ctx)
-    await reverseAndPruneDeltaRows(set, ctx)
+    await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: false })
     const [restored] = await ctx.db.select().from(entities).where(eq(entities.id, 'char_x'))
     expect(restored.embeddingStale).toBe(1)
 
