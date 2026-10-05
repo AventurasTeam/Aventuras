@@ -7,6 +7,7 @@ import {
   settleUserWrites,
 } from '@/lib/actions/delta/apply-delta-action'
 import {
+  __resetBranchWriteLocks,
   holdBranchWriteExclusive,
   releaseBranchWriteExclusive,
 } from '@/lib/actions/delta/branch-write-lock'
@@ -899,6 +900,7 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
     vi.resetAllMocks()
     __resetRegistry()
     __resetClassifierEmbedder()
+    __resetBranchWriteLocks()
   })
 
   afterEach(() => {
