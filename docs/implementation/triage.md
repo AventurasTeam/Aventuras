@@ -217,3 +217,12 @@ slice-planning gate forces its resolution before that slice is planned.
   refusal and the redo stays pending. Add a guard or refusal before any
   non-periodic machine source creates relationships. Raised by the Task
   7 review of the reversal-integrity PR (2026-10-05).
+
+- **Redo of an `update` re-logs it even when its row is gone.**
+  `applyRedoLocked` in `lib/actions/delta/redo.ts` sets `restored` for
+  an update when the snapshot carries a row, not when the live row
+  exists, so an UPDATE that matches nothing still re-logs its delta and
+  a later CTRL-Z reports an undo that changed nothing. That contradicts
+  the comment beside it. Shielded today because every delta-logged
+  write clears the redo stack. Raised by the Task 12 review of the
+  reversal-integrity PR (2026-10-05).
