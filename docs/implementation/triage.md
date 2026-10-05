@@ -100,18 +100,6 @@ slice-planning gate forces its resolution before that slice is planned.
   relationships. Raised in the reversal-integrity PR's review
   (2026-10-05).
 
-- **`loadHeldRows` scans the branch's whole delta log on every
-  reversal-set selection.** `lib/actions/delta/held-rows.ts` filters
-  on `op = 'delete'` and JSON-decodes every delete payload each time a
-  reversal set is selected: every CTRL-Z, prose edit, abort and
-  rollback-preview tap. The only `deltas` indexes are
-  `(branch_id, log_position)` and
-  `(branch_id, target_id, log_position)`, so the filter scans the log,
-  which grows every turn (awareness bumps add update deltas). Latent:
-  fine today. Revisit with a partial index on deletes (or an
-  op-leading index) when long stories show selection latency. Raised
-  in the reversal-integrity PR's review (2026-10-05).
-
 - **`buildUndoOps` is one ~265-line loop carrying every reversal rule.**
   `lib/actions/delta/reverse-replay.ts` holds the live and held arms,
   re-own, tombstones, stranded writes and two refusals in a single

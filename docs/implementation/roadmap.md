@@ -1488,6 +1488,28 @@ own.
   desktop is v1 prod alongside it. Re-derived from the M3.4 MMR entry
   (2026-08-08), whose desktop half is now canon.
 
+- **M9.5 — Reversal selection reads the whole branch log, and an
+  abort's lookup scans every branch.** `loadHeldRows` in
+  `lib/actions/delta/held-rows.ts` filters on `op = 'delete'` and
+  JSON-decodes every delete payload each time a reversal set is
+  selected: every CTRL-Z, redo, prose edit, rollback and its preview,
+  abort and boot recovery. CTRL-Z also loads the branch's whole log,
+  payloads included, to pick its target (`recentDeltaRows` in
+  `lib/actions/story-entries/undo.ts`), and `reverseReplayDeltas`'s
+  `WHERE action_id = ?` in `lib/actions/delta/reverse-replay.ts`
+  matches no index, so abort and boot recovery scan `deltas` across
+  every story. The only `deltas` indexes are `(branch_id, log_position)`
+  and `(branch_id, target_id, log_position)` (`lib/db/system/system.table.ts`,
+  migration `0001_striped_prism.sql`), and the log grows every turn
+  (awareness bumps add update deltas). Fine at today's lengths and not
+  measured. A fix is one migration (an `action_id` or
+  `(branch_id, action_id)` index, and a partial
+  `(branch_id, log_position) WHERE op = 'delete'`) plus a bounded head
+  read for CTRL-Z's target, measured on a bench beside
+  `bench/retrieval-cost.test.ts`. Raised in the reversal-integrity PR's
+  review (2026-10-05); the two wider scans were found when it was
+  routed.
+
 **Gates.** M8 (every user-facing surface must exist before the
 visual audit, and translation must round-trip cleanly through
 backup / export).
