@@ -18,7 +18,13 @@ import { withKeyLocks } from './key-lock'
 import { liveLinkFilter } from './live-link-filter'
 import { resolveByTable, whereForDelta, type StorePatch } from './registry'
 import { DeltaReplayError, ReversalIntegrityError } from './replay-errors'
-import { reversalLockKeys, selectReversalSet, type ReversalSet } from './row-closure'
+import {
+  reversalLockKeys,
+  selectReversalSet,
+  writesTo,
+  type ReversalSet,
+  type RowRef,
+} from './row-closure'
 import { userEditsOutliving, wroteColumn } from './user-precedence'
 
 export {
@@ -44,7 +50,8 @@ export type ReversePlan = {
   ops: SqlOp[]
   /**
    * One log write per delta in the set (its prune, or the re-own of a create whose row stays),
-   * and the prune of each delete outside it whose own row the reversal removes.
+   * the prune of each delete outside it whose own row the reversal removes, and the prune of
+   * every other write to a row-keeping row the reversal leaves absent.
    */
   pruneOps: SqlOp[]
   patches: PatchEmission[]
@@ -71,7 +78,7 @@ export async function buildReverseAndPrunePlan(set: ReversalSet, ctx: DbCtx): Pr
   }
   return {
     ops: built.ops,
-    pruneOps: [...set.rows, ...built.prunedHolders].map(reownOrPrune),
+    pruneOps: [...set.rows, ...built.prunedHolders, ...built.strandedWrites].map(reownOrPrune),
     patches: built.patches,
   }
 }
@@ -113,6 +120,8 @@ type BuiltUndo = {
   /** Kept create's delta id → the action of the oldest user write that kept its row. */
   reowned: Map<string, string>
   prunedHolders: Delta[]
+  /** Writes outside the set to a row-keeping row the reversal leaves absent. */
+  strandedWrites: Delta[]
 }
 
 // A null partial on a schema-backed column means the column itself was null pre-change — no
@@ -196,9 +205,10 @@ async function refuseWriteBack(
   set: ReversalSet,
   pruned: readonly Delta[],
   rewritten: ReadonlyMap<string, Record<string, unknown>>,
+  stranded: readonly Delta[],
 ): Promise<void> {
   if (pruned.length === 0) return
-  const settled = new Set([...set.rows, ...pruned].map((d) => d.id))
+  const settled = new Set([...set.rows, ...pruned, ...stranded].map((d) => d.id))
   const actionIds = [...new Set(pruned.map((d) => d.actionId))]
   for (let i = 0; i < actionIds.length; i += BIND_CHUNK) {
     const group = (await ctx.db
@@ -251,6 +261,8 @@ async function buildUndoOps(set: ReversalSet, ctx: DbCtx): Promise<BuiltUndo> {
   // A row a delete outside the set holds takes its undo on that delete's payload copy; a
   // holder inside the set is newer, so its undo has already put the row back.
   const heldCopies = new Map<string, HeldCopy>()
+  // Row-keeping rows this plan deletes, keyed like `working`; a later re-insert takes one back out.
+  const endsAbsent = new Map<string, RowRef>()
 
   for (const delta of rows) {
     const entry = resolveByTable(delta.targetTable)
@@ -351,6 +363,8 @@ async function buildUndoOps(set: ReversalSet, ctx: DbCtx): Promise<BuiltUndo> {
       working.set(key, {})
       absent.add(key)
       tombstones.delete(key)
+      if (entry.rowKeepingColumns)
+        endsAbsent.set(key, { table: delta.targetTable, id: delta.targetId })
       emitDelete()
       if (isEmbeddedSourceTable(delta.targetTable)) {
         const sweepKey = `${delta.targetTable}:${delta.branchId}`
@@ -381,6 +395,7 @@ async function buildUndoOps(set: ReversalSet, ctx: DbCtx): Promise<BuiltUndo> {
       working.set(key, { ...rowData })
       absent.delete(key)
       tombstones.delete(key)
+      endsAbsent.delete(key)
       ops.push(ctx.db.insert(table).values(rowData).toSQL())
       patches.push({
         table: delta.targetTable,
@@ -416,6 +431,7 @@ async function buildUndoOps(set: ReversalSet, ctx: DbCtx): Promise<BuiltUndo> {
           working.set(childKey, { ...childRow })
           absent.delete(childKey)
           tombstones.delete(childKey)
+          endsAbsent.delete(childKey)
           patches.push({
             table: childTableName,
             branchId: delta.branchId,
@@ -455,24 +471,40 @@ async function buildUndoOps(set: ReversalSet, ctx: DbCtx): Promise<BuiltUndo> {
     if (tombstones.has(key)) {
       if (!keepsNone) {
         tombstones.delete(key)
+        endsAbsent.delete(key)
         emitInsert(row)
       }
     } else if (keepsNone && !absent.has(key)) {
       tombstones.add(key)
+      endsAbsent.set(key, { table: delta.targetTable, id: delta.targetId })
       emitDelete()
     } else emitUpdate(restored, row)
   }
 
   // Stores hold no deleted rows, so a payload edit emits no patch.
   const { payloadOps, pruned, rewritten } = settleHeldCopies(heldCopies, ctx)
-  await refuseWriteBack(ctx, set, pruned, rewritten)
+  // generation-pipeline.md → Reverse-replay: a write left naming a gone row would CTRL-Z to
+  // nothing. Deletes stay: a held row's own delete is pruned as its holder, a capturing one holds
+  // other rows. Unreachable from CTRL-Z, so redo never restores such a row without these: only a
+  // user write clears a view (the classifier drops a blank kind), and CTRL-Z undoes it first.
+  const removedRows = [
+    ...endsAbsent.values(),
+    ...[...heldCopies.values()]
+      .filter((c) => c.removed && resolveByTable(c.held.table)?.rowKeepingColumns)
+      .map((c) => ({ table: c.held.table, id: c.held.id })),
+  ]
+  const strandedWrites =
+    removedRows.length > 0
+      ? (await writesTo(ctx, set.branchId, removedRows)).filter((d) => !inSet.has(d.id))
+      : []
+  await refuseWriteBack(ctx, set, pruned, rewritten, strandedWrites)
   ops.push(...payloadOps)
 
   // One vec0 scan per family table, not per row: each statement scans the whole table.
   for (const { table, branchId, ids } of swept.values())
     ops.push(...(await vecSweepIdsOps(table, branchId, ids, listVecTables)))
 
-  return { ops, patches, reowned, prunedHolders: pruned }
+  return { ops, patches, reowned, prunedHolders: pruned, strandedWrites }
 }
 
 function oldestKeepingWrite(edits: readonly Delta[], columns: readonly string[]): Delta {

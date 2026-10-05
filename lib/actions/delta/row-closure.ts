@@ -32,7 +32,7 @@ export type ReversalSeed = {
   readonly sweep?: readonly Delta[]
 }
 
-type RowRef = { readonly table: string; readonly id: string }
+export type RowRef = { readonly table: string; readonly id: string }
 
 const mint = (set: Omit<ReversalSet, typeof reversalSetBrand>) => set as ReversalSet
 
@@ -53,7 +53,11 @@ function chunked<T>(items: readonly T[]): T[][] {
 }
 
 /** Every create and update of the rows, whatever its source; a delete of one never joins. */
-async function writesTo(ctx: DbCtx, branchId: string, rows: readonly RowRef[]): Promise<Delta[]> {
+export async function writesTo(
+  ctx: DbCtx,
+  branchId: string,
+  rows: readonly RowRef[],
+): Promise<Delta[]> {
   const found: Delta[] = []
   for (const [targetTable, ids] of idsByTable(rows)) {
     for (const chunk of chunked(ids)) {

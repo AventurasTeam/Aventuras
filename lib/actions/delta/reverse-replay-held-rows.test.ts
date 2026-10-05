@@ -129,6 +129,16 @@ const passInvolvement = (id: string, happeningId: string, entityId: string): Pip
 })
 
 // char_x < char_y: `kind` is char_x's view, `inverseKind` char_y's.
+const userPair = (kind: string | null, inverseKind: string | null): PipelineAction => ({
+  kind: 'upsertCharacterRelationship',
+  source: 'user_edit',
+  payload: { branchId: 'b1', subjectId: 'char_x', objectId: 'char_y', kind, inverseKind },
+})
+
+async function deltasTargeting(id: string): Promise<Delta[]> {
+  return (await ctx.db.select().from(deltas).where(eq(deltas.targetId, id))) as Delta[]
+}
+
 async function seedMentorPair(kind: string | null, inverseKind: string | null): Promise<void> {
   await ctx.db.insert(characterRelationships).values({
     id: 'rel_1',
@@ -329,22 +339,57 @@ describe('a reversal applies to rows a delete outside the set holds', () => {
     expect((await payloadOf('act_del')).relationships).toEqual([])
   })
 
+  it("prunes the user's writes to a captured relationship the reversal strips", async () => {
+    await act('act_user0', userPair(null, 'mentor'))
+    await act('act_pass', passView('char_x', 'char_y', 'rival'))
+    await act('act_user1', userPair('rival', null))
+    const [rel] = await ctx.db.select().from(characterRelationships)
+    await act('act_del', deleteEntity('char_x'))
+
+    await reverseReplayDeltas('act_pass', ctx)
+
+    expect((await payloadOf('act_del')).relationships).toEqual([])
+    expect(await deltasTargeting(rel.id)).toEqual([])
+    // CTRL-Z lands on the delete, then finds nothing: no group is left naming the stripped row.
+    entriesStore.hydrate('b1', [])
+    expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+    expect(
+      await ctx.db.select({ id: entities.id }).from(entities).where(eq(entities.id, 'char_x')),
+    ).toEqual([{ id: 'char_x' }])
+    expect(await undoLastAction('b1', ctx)).toMatchObject({ code: 'nothing-to-apply' })
+  })
+
+  it("prunes a relationship's own delete and its writes when the reversal leaves it no view", async () => {
+    await act('act_user0', userPair(null, 'mentor'))
+    await act('act_pass', passView('char_x', 'char_y', 'rival'))
+    await act('act_user1', userPair('rival', null))
+    const [rel] = await ctx.db.select().from(characterRelationships)
+    await act('act_del', {
+      kind: 'deleteCharacterRelationship',
+      source: 'user_edit',
+      payload: { branchId: 'b1', id: rel.id },
+    })
+
+    await reverseReplayDeltas('act_pass', ctx)
+
+    expect(await ctx.db.select().from(deltas)).toEqual([])
+    entriesStore.hydrate('b1', [])
+    expect(await undoLastAction('b1', ctx)).toMatchObject({ code: 'nothing-to-apply' })
+  })
+
   it('keeps a held relationship an older undo gives a view back after a newer one left none', async () => {
     await seedMentorPair('ally', null)
-    const userViews = (kind: string | null, inverseKind: string | null): PipelineAction => ({
-      kind: 'upsertCharacterRelationship',
-      source: 'user_edit',
-      payload: { branchId: 'b1', subjectId: 'char_x', objectId: 'char_y', kind, inverseKind },
-    })
-    await act('act_user1', userViews(null, 'mentor'))
+    await act('act_user1', userPair(null, 'mentor'))
     await act('act_pass', passView('char_x', 'char_y', 'rival'))
-    await act('act_user2', userViews('rival', null))
+    await act('act_user2', userPair('rival', null))
     await act('act_del', deleteEntity('char_x'))
     const target = [...(await deltasOf('act_pass')), ...(await deltasOf('act_user1'))]
 
     // The pass's undo nulls `kind` beside act_user2's null view; act_user1's undo then
-    // restores `kind`, so the copy stays in the payload.
-    await reverseAndPruneDeltaRows(await selectReversalSet(ctx, { branchId: 'b1', target }), ctx)
+    // restores `kind`, so the copy stays in the payload and act_user2 stays in the log.
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target })
+    expect((await buildReverseAndPrunePlan(set, ctx)).pruneOps).toHaveLength(set.rows.length)
+    await reverseAndPruneDeltaRows(set, ctx)
 
     expect((await payloadOf('act_del')).relationships).toEqual([
       expect.objectContaining({ id: 'rel_1', kind: 'ally', inverseKind: null }),
@@ -595,6 +640,35 @@ describe('the write-back refusal', () => {
 
     expect((await payloadOf('act_del')).relationships).toEqual([])
     expect(await ctx.db.select({ id: deltas.id }).from(deltas)).toEqual([{ id: 'd_del_y' }])
+  })
+
+  it('does not count a group-mate the reversal prunes with the row it targets', async () => {
+    // Unreachable through the actions: no relationship write carries an id in its payload.
+    await seedMentorPair('rival', null)
+    const [rel] = await ctx.db.select().from(characterRelationships)
+    await ctx.db.delete(characterRelationships)
+    const onPair = { targetTable: 'character_relationships', targetId: 'rel_1' }
+    const byUser = { source: 'user_edit', actionId: 'act_del' } as const
+    await ctx.db.insert(deltas).values([
+      raw('d_create', 1, { ...onPair, actionId: 'act_user0', source: 'user_edit' }),
+      raw('d_pass', 2, {
+        ...onPair,
+        actionId: 'act_pass',
+        op: 'update',
+        undoPayload: { kind: null },
+      }),
+      raw('d_named', 3, {
+        ...onPair,
+        ...byUser,
+        op: 'update',
+        undoPayload: { inverseKind: 'rel_1' },
+      }),
+      raw('d_del', 4, { ...onPair, ...byUser, op: 'delete', undoPayload: rel }),
+    ])
+
+    expect(await reverseReplayDeltas('act_pass', ctx)).toBe(1)
+
+    expect(await ctx.db.select().from(deltas)).toEqual([])
   })
 
   it('reaches a caller of the closed-set reversal unwrapped too', async () => {

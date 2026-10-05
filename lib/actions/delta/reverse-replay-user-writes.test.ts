@@ -27,7 +27,7 @@ import {
 } from './reverse-replay'
 import { selectReversalSet } from './row-closure'
 import { USER_EDITED_SINCE_PROSE } from './user-precedence'
-import { updateStoryEntryContent } from '../story-entries/operational'
+import { rollbackToEntry, updateStoryEntryContent } from '../story-entries/operational'
 import { redoLastAction, undoLastAction } from '../story-entries/undo'
 import type { PipelineAction } from '../types'
 
@@ -372,7 +372,9 @@ describe('reversing a machine view update', () => {
 
     expect(await pair(db)).toHaveLength(0)
     expect(characterRelationshipsStore.getById(created.id)).toBeUndefined()
-    expect(await actionIds(db)).toEqual(['act_0', 'act_u'])
+    // The user's writes to the pair go with it, so no CTRL-Z lands on a group naming it.
+    expect(await actionIds(db)).toEqual([])
+    expect(await undoAfterReversal(ctx)).toMatchObject({ code: 'nothing-to-apply' })
   })
 
   // The classifier never clears a view today, but the upsert handler accepts a null one.
@@ -401,10 +403,17 @@ describe('reversing a machine view update', () => {
       'act_x',
     )
 
-    await reverseRows(await deltasOf(db, 'act_c'), ctx)
+    const set = await selectReversalSet(ctx, {
+      branchId: 'b1',
+      target: await deltasOf(db, 'act_c'),
+    })
+    // The pair ends present, so act_0's create and act_x's update stay in the log.
+    expect((await buildReverseAndPrunePlan(set, ctx)).pruneOps).toHaveLength(set.rows.length)
+    await reverseAndPruneDeltaRows(set, ctx)
 
     const [row] = await pair(db)
     expect(row).toEqual({ ...created, kind: null, inverseKind: 'friend' })
+    expect(await actionIds(db)).toEqual(['act_0', 'act_x'])
     expect(characterRelationshipsStore.getById(row.id)).toEqual(row)
   })
 
@@ -525,7 +534,8 @@ describe('reversing a machine create of a relationship', () => {
     await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     expect(await pair(db)).toHaveLength(0)
-    expect(await relationshipCreates(db)).toEqual([])
+    expect(await relationshipDeltas(db)).toEqual([])
+    expect(await undoAfterReversal(ctx)).toMatchObject({ code: 'nothing-to-apply' })
   })
 
   it('deletes the pair when no user edit followed', async () => {
@@ -622,6 +632,12 @@ async function relationshipDeltas(db: Db): Promise<Delta[]> {
     .where(eq(deltas.targetTable, 'character_relationships'))) as Delta[]
 }
 
+function undoAfterReversal(ctx: Ctx) {
+  entriesStore.hydrate('b1', [])
+  undoRedoStore.clear()
+  return undoLastAction('b1', ctx)
+}
+
 describe('a kept create goes to the user write that kept its row', () => {
   // Kael by the user, a pass's pair anchored to the reply, the user's view on it, then the
   // prose edit that sweeps the pass's create but keeps the row for the user's view.
@@ -680,6 +696,13 @@ describe('a kept create goes to the user write that kept its row', () => {
     await apply(ctx, classifyView('ally'), 'act_pass')
     await apply(ctx, userViews('ally', 'wary'), 'act_u')
 
+    // The closure took the pair's writes, so pruning the absent pair's log adds none twice.
+    const set = await selectReversalSet(ctx, {
+      branchId: 'b1',
+      target: await deltasOf(db, 'act_pass'),
+    })
+    expect((await buildReverseAndPrunePlan(set, ctx)).pruneOps).toHaveLength(set.rows.length)
+
     expect(await reverseReplayDeltas('act_pass', ctx)).toBe(3)
 
     expect(await db.select().from(entities).where(eq(entities.id, 'char_mira'))).toEqual([])
@@ -698,6 +721,41 @@ describe('a kept create goes to the user write that kept its row', () => {
 
     const [created] = await relationshipCreates(db)
     expect(created).toMatchObject({ source: 'user_edit', entryId: null, actionId: 'act_u1' })
+  })
+
+  it('prunes the re-owned create once a rollback sweeps the view that kept its row', async () => {
+    const { db, ctx } = await setup()
+    await createKael(ctx)
+    await db.insert(entities).values({ ...KAEL, id: 'char_mira', name: 'Mira' })
+    await apply(ctx, entryAction('e_action', 1, 'user_action'), 'act_e1')
+    const fromAction: PipelineAction = {
+      kind: 'upsertCharacterRelationship',
+      source: 'periodic_classifier',
+      payload: {
+        branchId: 'b1',
+        subjectId: 'char_kael',
+        objectId: 'char_mira',
+        kind: 'ally',
+        proseEntryId: 'e_action',
+      },
+    }
+    await apply(ctx, fromAction, 'act_c', 'e_action')
+    await apply(ctx, entryAction('e_reply', 2, 'ai_reply'), 'act_e2')
+    await apply(ctx, userViews('ally', 'wary'), 'act_u')
+    expect(await updateStoryEntryContent('b1', 'e_action', 'rewritten', ctx)).toEqual({
+      status: 'ok',
+    })
+    // Re-owned below the reply's create, so the rollback's window misses it.
+    expect(await relationshipCreates(db)).toEqual([expect.objectContaining({ actionId: 'act_u' })])
+
+    expect((await rollbackToEntry('b1', 'e_reply', ctx)).status).toBe('ok')
+
+    expect(await pair(db)).toEqual([])
+    expect(await relationshipDeltas(db)).toEqual([])
+    // CTRL-Z reaches the prose edit, then the turn, never a group naming only the gone pair.
+    expect(await undoAfterReversal(ctx)).toEqual({ status: 'ok' })
+    expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+    expect(await actionIds(db)).toEqual(['act_0'])
   })
 })
 
