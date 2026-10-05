@@ -125,18 +125,6 @@ slice-planning gate forces its resolution before that slice is planned.
   none either. Drift to resolve in the doc. Raised in the
   reversal-integrity PR's review (2026-10-05).
 
-- **The reader's edit commit has no try/catch.** `handleCommitEdit` in
-  `app/reader-composer/[branchId].tsx` awaits `updateStoryEntryContent`
-  bare, and both commit buttons reach it through `commitDraft` in
-  `components/reader/reader-surface.tsx`, whose `ReaderRow` fires them
-  as `() => void onCommitEdit()` and the Save-and-regen twin. A throw
-  that isn't an integrity refusal, which returns as a rejection (a
-  store-sync `DeltaReplayError` after the commit, say), escapes as an
-  unhandled rejection with no toast, and the draft stays open. Rollback
-  is covered: its confirm dispatches through `runAction` (`lib/utils.ts`),
-  which logs `reader.rollback_failed` and toasts. Raised in the
-  reversal-integrity PR's review (2026-10-05).
-
 - **Rollback and edit rejection copy always says "Please try again."**
   `reader:rollbackFailed` and `reader:editFailed`
   (`locales/en/reader.json`) cover every rejection code, including the

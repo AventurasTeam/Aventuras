@@ -10,12 +10,10 @@ import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { TruncatedText } from '@/components/compounds/truncated-text'
 import { Composer, type ComposerHandle } from '@/components/reader/composer'
 import { isDraftEmpty, planSubmissionHandback } from '@/components/reader/composer-draft'
+import { useContentEditing } from '@/components/reader/content-editing'
 import { readerPillPhase } from '@/components/reader/generation-phase'
 import ReaderDocument, { type ReaderDocumentRef } from '@/components/reader/reader-document'
-import {
-  type EditResult,
-  type ReaderSurfaceHandle,
-} from '@/components/reader/reader-document-types'
+import { type ReaderSurfaceHandle } from '@/components/reader/reader-document-types'
 import { ReaderSurface } from '@/components/reader/reader-surface'
 import {
   classifyRegenerateGate,
@@ -62,7 +60,6 @@ import {
   submitTurn,
   undoLastAction,
   type UndoRejectionCode,
-  updateStoryEntryContent,
   writeSystemEntry,
   type LoadOpenStoryResult,
   type RegenerateRejectionCode,
@@ -922,18 +919,7 @@ export default function ReaderComposerRoute() {
     setRollback(null)
   }, [branchId, rollback, runRegenerate])
 
-  const handleCommitEdit = useCallback(
-    async (entryId: string, content: string): Promise<EditResult> => {
-      const result = await updateStoryEntryContent(branchId, entryId, content, ctx)
-      if (result.status === 'rejected') {
-        // The draft stays open in the document; the host owns the toast.
-        toast.error(t('reader:editFailed'))
-        return { ok: false }
-      }
-      return { ok: true }
-    },
-    [branchId],
-  )
+  const handleCommitEdit = useContentEditing(branchId, ctx, reload)
 
   const handleRequestRegenerate = useCallback(
     async (entryId: string) => {
