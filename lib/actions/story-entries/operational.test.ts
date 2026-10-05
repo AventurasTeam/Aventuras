@@ -213,6 +213,24 @@ describe('updateStoryEntryContent', () => {
     expect(result.status).toBe('rejected')
     if (result.status === 'rejected') expect(result.code).toBe('in-flight-gated')
   })
+
+  // A double Save: both calls pass the gate before either's read resolves, and the first
+  // raises the barrier before the second reaches the bracket.
+  it('rejects a second save that reaches the bracket while the first holds it', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+
+    const [first, second] = await Promise.all([
+      updateStoryEntryContent('b1', 'e1', 'first', ctx),
+      updateStoryEntryContent('b1', 'e1', 'second', ctx),
+    ])
+
+    expect(first).toEqual({ status: 'ok' })
+    expect(second).toMatchObject({ status: 'rejected', code: 'in-flight-gated' })
+    const [row] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'e1'))
+    expect(row.content).toBe('first')
+  })
 })
 
 // Fixture: opening (delta-exempt direct insert) + 3 turns, with one entity
