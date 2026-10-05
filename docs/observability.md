@@ -176,6 +176,10 @@ convention, and the expectation that subsystems route through
   after its rollback committed; for the periodic classifier both record
   attempts failed, and the branch stays `running` until boot recovery)
 - `action_layer.*` — `user_write_rejected`, `constraint_violation`,
+  `reversal_refused` (error: an undo, redo, rollback, prose edit or
+  regenerate refused as an integrity error, logged with its refusal
+  kind), `row_held_twice` (error: two deletes in the log hold one row,
+  which a sound log never produces),
   `story_settings_repaired` (the corrupt-blob repair: carries the failing
   key paths, since the blob it describes is overwritten in the same call),
   `thread_save_rejected` / `happening_save_rejected` / `entity_save_rejected`

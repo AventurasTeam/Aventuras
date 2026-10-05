@@ -162,6 +162,11 @@ mechanism rather than the hover-preview.
   smallest case isn't worth the inconsistency.
 - **Entire-branch rollback** — deleting the first entry on a
   branch. Modal copy is identical; counts cover the entire branch.
+- **Refused reversal** — the preview selects the closed set the commit
+  reverses, so a set the log cannot close
+  ([`generation-pipeline.md → Reverse-replay`](../../../../generation-pipeline.md#reverse-replay))
+  opens no modal and shows the rollback-failed toast instead. A refusal
+  only the commit raises shows the same toast with the modal still open.
 - **During generation** — per
   [branch-navigator → during generation](../branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked),
   the per-entry `×` is disabled while any pipeline phase is active.
