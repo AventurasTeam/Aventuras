@@ -127,13 +127,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `reader:regenerateFailed` ("…Please try again."). Raised in the
   reversal-integrity PR's review (2026-10-05).
 
-- **Every seeded hero rollback reverses chapter 1's create.**
-  `delta_hero_3` in `lib/db/devtools/seed-dataset.ts` (the
-  `chap_hero_1` create) has a null `entryId` and is logged after every
-  entry create, so it falls inside every hero rollback window; a probe
-  showed `chapters: 1` even for a rollback to position 70. Raised in
-  the reversal-integrity PR's review (2026-10-05).
-
 - **Redo re-inserts newest-first, so a link lands before its parent.**
   `applyRedoLocked` in `lib/actions/delta/redo.ts` walks the snapshots
   newest-first and a link's create precedes its parent entity's. It is
@@ -172,26 +165,6 @@ slice-planning gate forces its resolution before that slice is planned.
   create and update arms (and their held variants) into named helpers,
   and consider one per-row state, before the next rule lands. Raised in
   the reversal-integrity PR's review (2026-10-05).
-
-- **The seed logs a classifier happening as its own CTRL-Z group.**
-  The hero branch's `act_class_1` group in
-  `lib/db/devtools/seed-dataset.ts` (`delta_hero_2`, the `hap_fire`
-  create, with `delta_hero_5`, `delta_hero_6` and `delta_hero_7`, its
-  link creates) is logged as `ai_classifier` in an action of its own
-  with no story-entry create, a group no production writer leaves. The
-  periodic classifier logs happenings and links as
-  `periodic_classifier` (`lib/classifier/plan.ts`), which CTRL-Z steps
-  over (`lib/undo/index.ts`), and the Plot draft
-  (`lib/plot/happening-draft.ts`) logs them as `user_edit`. A CTRL-Z
-  that reaches the group on the seeded hero branch so undoes it as a
-  standalone group. Pre-existing for `delta_hero_2` (the merge base
-  logs it the same way); this PR added the link creates to the group,
-  and its sibling `delta_hero_8` already logs as a periodic pass. The
-  test "logs the hero happening fire as one contiguous action" in
-  `seed-dataset.test.ts` treats it as a CTRL-Z-able group, and the E2E
-  harness seeds from this dataset (`e2e/harness/seed.ts`), so changing
-  its source needs a check of what those specs CTRL-Z. Raised in the
-  reversal-integrity PR's slice review (2026-10-05).
 
 - **IN-list chunking against the bind cap is hand-rolled in nine
   places.** `lib/actions/delta/row-closure.ts` (`chunked`) and

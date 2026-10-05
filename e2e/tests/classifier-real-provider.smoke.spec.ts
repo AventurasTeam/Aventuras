@@ -27,6 +27,8 @@ test.describe('periodic classifier — real provider smoke', () => {
   // advanced value — then the poll waits out its timeout for a second advance
   // that no further turn triggers.
   let parkedWatermark = 0
+  // The fixture logs its own periodic_classifier happening; this run's writes sit above its log.
+  let seededLogHead = 0
 
   test.beforeAll(async () => {
     test.setTimeout(300_000)
@@ -95,6 +97,10 @@ test.describe('periodic classifier — real provider smoke', () => {
         )
         .run(m)
       parkedWatermark = m
+      const { lp } = head
+        .prepare(`SELECT COALESCE(MAX(log_position), 0) AS lp FROM deltas WHERE branch_id = ?`)
+        .get('br_hero_main') as { lp: number }
+      seededLogHead = lp
     } finally {
       head.close()
     }
@@ -273,7 +279,7 @@ test.describe('periodic classifier — real provider smoke', () => {
     // embedding_stale = 0 and 7+7 child rows, which are not the pass's business.
     const CLASSIFIER_HAPPENINGS = `SELECT target_id FROM deltas
        WHERE branch_id = ? AND source = 'periodic_classifier'
-         AND target_table = 'happenings' AND op = 'create'`
+         AND target_table = 'happenings' AND op = 'create' AND log_position > ${seededLogHead}`
 
     const written = await queryApp(app.window, `SELECT COUNT(*) FROM (${CLASSIFIER_HAPPENINGS})`, [
       branchId,
