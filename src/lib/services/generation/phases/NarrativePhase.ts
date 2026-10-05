@@ -108,9 +108,8 @@ export class NarrativePhase {
       fullReasoning = ''
       contentChunks = 0
 
-      // A pass after the first is its own step, so three empty responses do not read as one long
-      // wait. The first gets one only once a second follows it. "Pass", not "Attempt": attempts are
-      // the transport retries, reported inside a pass.
+      // Passes are empty-answer retries; transport attempts nest inside each pass. The first pass
+      // gets a step of its own only once a second follows it.
       const passId =
         retryCount > 0
           ? activity.startStep(`Pass ${retryCount + 1}`, {
