@@ -234,3 +234,61 @@ slice-planning gate forces its resolution before that slice is planned.
   create and update arms (and their held variants) into named helpers,
   and consider one per-row state, before the next rule lands. Raised in
   the reversal-integrity PR's review (2026-10-05).
+
+- **Redo re-logs a machine delta without its first position.**
+  `relogPayload` in `lib/actions/delta/redo.ts` stamps `$firstLoggedAt`
+  only on user-originated deltas, so a machine create redone above a
+  user write it preceded reads as later than that write. A reviewer
+  probed this sequence: a periodic pass creates a relationship; the
+  user sets its other view in Entity detail; a later periodic group (a
+  pass on an earlier turn) logs above both; CTRL-Z the view edit;
+  CTRL-Z the turn, whose window holds the pass's create and spares the
+  lagging group; redo; redo. The create re-logs at the head unstamped
+  and the view write re-logs stamped with its original, older position,
+  so the user write no longer outlives the create. A later prose edit
+  of that turn sweeps the pass, and the closure (`userKeptRows` in
+  `lib/actions/delta/row-closure.ts`) and the planner
+  (`userEditsOutliving` in `lib/actions/delta/user-precedence.ts`)
+  both judge the pair unkept: they delete it and prune the user's view
+  write, so the view is lost. Pre-existing: before this PR the planner
+  lost the view the same way and left the write stranded rather than
+  pruned. Possible fix: stamp the first position on every re-logged
+  delta, since both readers of `firstLoggedAt` are source-agnostic,
+  then revisit the `reversal-set.test.ts` test "judges the keeping
+  write by where it first logged: a view redone above the create keeps
+  nothing", which pins the current reading. Raised in the
+  reversal-integrity PR's slice review (2026-10-05).
+
+- **A kept pair's later machine update can restore a value a sweep
+  nulled.** When a sweep reverses a relationship's create that a user
+  write kept, the live create arm of `buildUndoOps` in
+  `lib/actions/delta/reverse-replay.ts` nulls the views the user did
+  not write and re-owns the create, but a later machine update of the
+  pair stays in the log, its `undo_payload` still holding the swept
+  value. Reversing that update writes the value back. A reviewer probed
+  this sequence: a pass on entry e1 creates the pair with `kind`; a
+  pass on e2 updates `kind`; the user sets `inverseKind`; editing e1's
+  prose keeps the pair and nulls `kind`; a later sweep of e2's pass
+  restores e1's swept `kind`. User precedence does not stop it, since
+  the user never wrote `kind` (`userEditsOutliving` in
+  `lib/actions/delta/user-precedence.ts`). The held-copy arm beside it
+  nulls the same way, so a pair a delete holds likely shares the gap
+  (not probed). Each step is ordinary use. Pre-existing: the merge
+  base's live create arm nulls the same way. Raised in the
+  reversal-integrity PR's slice review (2026-10-05).
+
+- **`RedoSnapshot` can be built by hand.** `RedoSnapshot` in
+  `lib/actions/delta/redo.ts` is a plain exported object type,
+  re-exported from `lib/actions` and held by
+  `lib/stores/ui/undo-redo.ts`, and `applyRedo` trusts whatever
+  snapshots it is given. The `held-in-redo` refusal and the snapshot's
+  "taken before the reversal" timing hold only because
+  `snapshotForRedo` is its one producer; a hand-built snapshot skips
+  both. Latent: no production code builds one, though
+  `redo.test.ts` and `undo-redo.test.ts` do, so a brand needs a
+  test-side constructor. The type predates this PR, and
+  [Type design](../code-conventions.md#type-design) files looseness in
+  older code as a deferral. Brand it, or make it opaque, when redo is
+  next touched, as `ReversalSet` already is (`reversalSetBrand` in
+  `lib/actions/delta/row-closure.ts`). Raised in the
+  reversal-integrity PR's slice review (2026-10-05).
