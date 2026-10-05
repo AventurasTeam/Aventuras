@@ -874,7 +874,10 @@
       if (stopRequested) return
 
       if (!fullResponse.trim()) {
-        const errorMessage = 'The narration could not be generated. Please try again.'
+        // The reason when the pipeline gave one: with reporting off, nothing else shows it.
+        const errorMessage = ending.fatalError
+          ? `The narration could not be generated: ${ending.fatalError}`
+          : 'The narration could not be generated. Please try again.'
         ending.emptyResponse = errorMessage
         const errorEntry = await story.addEntry('system', errorMessage, lease, {
           source: GENERATION_ERROR_SOURCE,
