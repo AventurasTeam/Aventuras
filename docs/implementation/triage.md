@@ -134,15 +134,6 @@ slice-planning gate forces its resolution before that slice is planned.
   showed `chapters: 1` even for a rollback to position 70. Raised in
   the reversal-integrity PR's review (2026-10-05).
 
-- **`resolveRedoInvalidation`'s sweep looks always empty.** The
-  docblock in `lib/actions/story-entries/undo.ts` calls the case
-  reachable "through a retry timer firing between the undo and the
-  redo", but `applyDeltaAction` clears the redo stack after every
-  delta-logged write whatever its source, so a pass that wrote anything
-  leaves nothing to redo. Fix the comment, or drop the sweep from redo
-  if nothing else reaches it. Confirmed by reading, not reproduced.
-  Raised in the reversal-integrity PR's review (2026-10-05).
-
 - **Redo re-inserts newest-first, so a link lands before its parent.**
   `applyRedoLocked` in `lib/actions/delta/redo.ts` walks the snapshots
   newest-first and a link's create precedes its parent entity's. It is
@@ -161,15 +152,6 @@ slice-planning gate forces its resolution before that slice is planned.
   or refusal before any non-periodic machine source creates
   relationships. Raised in the reversal-integrity PR's review
   (2026-10-05).
-
-- **Redo of an `update` re-logs it even when its row is gone.**
-  `applyRedoLocked` in `lib/actions/delta/redo.ts` sets `restored` for
-  an update when the snapshot carries a row, not when the live row
-  exists, so an UPDATE that matches nothing still re-logs its delta
-  and a later CTRL-Z reports an undo that changed nothing. That
-  contradicts the comment beside it. Shielded today because every
-  delta-logged write clears the redo stack. Raised in the
-  reversal-integrity PR's review (2026-10-05).
 
 - **`loadHeldRows` scans the branch's whole delta log on every
   reversal-set selection.** `lib/actions/delta/held-rows.ts` filters
@@ -190,30 +172,6 @@ slice-planning gate forces its resolution before that slice is planned.
   create and update arms (and their held variants) into named helpers,
   and consider one per-row state, before the next rule lands. Raised in
   the reversal-integrity PR's review (2026-10-05).
-
-- **Redo re-logs a machine delta without its first position.**
-  `relogPayload` in `lib/actions/delta/redo.ts` stamps `$firstLoggedAt`
-  only on user-originated deltas, so a machine create redone above a
-  user write it preceded reads as later than that write. A reviewer
-  probed this sequence: a periodic pass creates a relationship; the
-  user sets its other view in Entity detail; a later periodic group (a
-  pass on an earlier turn) logs above both; CTRL-Z the view edit;
-  CTRL-Z the turn, whose window holds the pass's create and spares the
-  lagging group; redo; redo. The create re-logs at the head unstamped
-  and the view write re-logs stamped with its original, older position,
-  so the user write no longer outlives the create. A later prose edit
-  of that turn sweeps the pass, and the closure (`userKeptRows` in
-  `lib/actions/delta/row-closure.ts`) and the planner
-  (`userEditsOutliving` in `lib/actions/delta/user-precedence.ts`)
-  both judge the pair unkept: they delete it and prune the user's view
-  write, so the view is lost. Pre-existing: before this PR the planner
-  lost the view the same way and left the write stranded rather than
-  pruned. Possible fix: stamp the first position on every re-logged
-  delta, since both readers of `firstLoggedAt` are source-agnostic,
-  then revisit the `reversal-set.test.ts` test "judges the keeping
-  write by where it first logged: a view redone above the create keeps
-  nothing", which pins the current reading. Raised in the
-  reversal-integrity PR's slice review (2026-10-05).
 
 - **A kept pair's later machine update can restore a value a sweep
   nulled.** When a sweep reverses a relationship's create that a user

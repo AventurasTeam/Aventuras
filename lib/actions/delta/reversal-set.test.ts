@@ -23,7 +23,6 @@ import { applyDeltaAction } from './apply-delta-action'
 import { EMPTY_HELD_ROWS, heldKey } from './held-rows'
 import { ReversalIntegrityError } from './replay-errors'
 import { reversalLockKeys, selectReversalSet } from './row-closure'
-import { FIRST_LOGGED_AT } from './user-precedence'
 import type { DbCtx, PipelineAction } from '../types'
 
 let ctx: DbCtx
@@ -428,27 +427,6 @@ describe('selectReversalSet — row-keeping creates', () => {
 
     expect(ids(set.redoRows)).toEqual(['d_rel'])
     expect(ids(set.rows)).toEqual(['d_tr', 'd_view', 'd_rel'])
-  })
-
-  it('judges the keeping write by where it first logged: a view redone above the create keeps nothing', async () => {
-    await ctx.db.insert(entities).values(character('char_x'))
-    await ctx.db.insert(characterRelationships).values(relationship('rel_1', 'char_k', 'char_x'))
-    const created = delta('d_rel', 2, { targetTable: 'character_relationships', targetId: 'rel_1' })
-    await insertDeltas(
-      created,
-      delta('d_view', 3, {
-        actionId: 'act_user',
-        source: 'user_edit',
-        op: 'update',
-        targetTable: 'character_relationships',
-        targetId: 'rel_1',
-        undoPayload: { kind: 'ally', [FIRST_LOGGED_AT]: 1 },
-      }),
-    )
-
-    const set = await selectReversalSet(ctx, { branchId: 'b1', target: [created] })
-
-    expect(ids(set.rows)).toEqual(['d_view', 'd_rel'])
   })
 
   it('removes a kept create a removed row in the seed reaches, with the view that kept it', async () => {

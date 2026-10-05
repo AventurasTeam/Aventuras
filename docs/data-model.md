@@ -2322,7 +2322,9 @@ arbitrary editing.
 - CTRL-Z reverses the edit itself. Its group carries no `story_entries`
   create, so it is a `group`-kind undo unit and never sweeps the turn
   beneath it — the pre-edit prose is the payload. Reversing it re-runs the
-  same invalidation the forward edit ran (below), and so does redoing it.
+  same invalidation the forward edit ran (below). Redoing it re-clamps the
+  watermark only: the undo already swept the facts, and a pass that logged
+  one since would have cleared the redo stack.
 - Keystroke-level undo inside the open editor is still the editor's job,
   not the log's: a delta is written per save, not per character.
 - When branching from entry N, the new branch copies entry N's _current_
@@ -2405,8 +2407,6 @@ arbitrary editing.
   be namespaced out of that walk or it reaches a `SET` clause and the store
   patch beside it. The prefix cannot collide with a column, because column
   keys are identifiers. `$invalidationScope` is the first such key.
-  `$firstLoggedAt` is the second: the position a redone `user_edit`
-  delta held before its first undo (see `log_position` assignment).
 - **The reversal set closes over the rows its creates delete, and the
   rows naming them**, not over the anchor alone. Undoing a `create` is a
   plain row delete with no cascade — only an explicit delete action
@@ -2484,21 +2484,24 @@ autoincrement primitive (`AUTOINCREMENT` is table-global, not
 partitioned), so the assignment lives in the delta-creating
 mutator, not as a column default.
 
-This holds for a **redo's** re-insert too: the restored delta takes a
-fresh `MAX+1` rather than the slot it held before the undo. The undo
-freed that slot, and a classifier pass firing between the undo and the
-redo can have taken it — replaying the old value would collide on the
-uniqueness backstop below and wedge the redo stack, since the snapshot
-is only popped on a post-commit failure. Re-assigning also keeps the
-restored delta at the log head, so a following CTRL-Z reaches it rather
-than whatever ran in the gap. A group re-inserts in ascending original
-order, which preserves its internal ordering. The head slot would also
-rank a restored user write above the machine writes it preceded, so a
-redo stamps a `user_edit` delta with `$firstLoggedAt`, and reversal
-precedence orders by that
-([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
+A **redo's** re-insert is the exception: the restored delta takes back
+the slot it held before the undo. Every delta-logged write clears the
+redo stack, and the redo's bracket keeps writers out while it runs, so
+nothing can have logged into that slot since the undo freed it. Log
+order so stays the order the writes were first made: a pass on an
+earlier turn that logged above a turn before the undo still sits above
+it after the redo, and reversal precedence, which reads a user write as
+later than a machine write by position
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)),
+judges a restored write exactly as it did before the undo. A following
+CTRL-Z still reaches the restored group first, since only
+periodic-classifier groups, which CTRL-Z steps over, can sit above it.
+A writer that bypassed the stack clear would collide on the uniqueness
+backstop below, failing the redo whole rather than misordering the log.
 
-Invariant: monotonically increasing within branch. Gaps are fine
+Invariant: increasing within branch in the order the writes were
+first made; a redo restores a position rather than taking a new one.
+Gaps are fine
 (rollback, fork copy, delete deltas — so gaps occur naturally; the
 `>=`, `<`, `MAX` operations all tolerate them), but duplicates
 within branch break chain-walk ordering. The

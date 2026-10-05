@@ -3,20 +3,10 @@ import { and, asc, desc, eq, gt, inArray, or, sql } from 'drizzle-orm'
 import { BIND_CHUNK, deltas, type Delta } from '@/lib/db'
 
 import { isUserOriginatedSource, type DbCtx } from '../types'
-import { PAYLOAD_META_PREFIX } from './delta-encoding'
 import type { LockedTable } from './row-locks'
 
 /** Noop reason for a classifier write a newer user edit of the same field outranks. */
 export const USER_EDITED_SINCE_PROSE = 'user-edited-since-prose'
-
-/** Payload meta key a redo stamps on the user delta it re-logs at the head. */
-export const FIRST_LOGGED_AT = `${PAYLOAD_META_PREFIX}firstLoggedAt`
-
-/** The position a delta first logged at: a redone user write still follows what it preceded. */
-export function firstLoggedAt(delta: Pick<Delta, 'logPosition' | 'undoPayload'>): number {
-  const first = delta.undoPayload?.[FIRST_LOGGED_AT]
-  return typeof first === 'number' ? first : delta.logPosition
-}
 
 /** The source entry's latest create/content-edit delta position, 0 when it has none. */
 export async function proseLogPosition(
@@ -120,7 +110,7 @@ export async function userEditsOutliving(
   for (const group of groupBy(machine, (d) => `${d.branchId}:${d.targetTable}`).values()) {
     const { branchId, targetTable } = group[0]
     // One bound per table; each machine write below keeps only its own row's later edits.
-    const since = group.reduce((min, d) => Math.min(min, firstLoggedAt(d)), Infinity)
+    const since = group.reduce((min, d) => Math.min(min, d.logPosition), Infinity)
     const ids = [...new Set(group.map((d) => d.targetId))]
     for (let i = 0; i < ids.length; i += BIND_CHUNK) {
       const chunk = ids.slice(i, i + BIND_CHUNK)
@@ -132,7 +122,7 @@ export async function userEditsOutliving(
   return new Map(
     machine.map((d) => [
       d.id,
-      (editsByRow.get(rowKey(d)) ?? []).filter((e) => firstLoggedAt(e) > firstLoggedAt(d)),
+      (editsByRow.get(rowKey(d)) ?? []).filter((e) => e.logPosition > d.logPosition),
     ]),
   )
 }

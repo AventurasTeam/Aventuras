@@ -14,7 +14,7 @@ import { isRefTable, referrersOf } from './live-refs'
 import { resolveByTable } from './registry'
 import { ReversalIntegrityError } from './replay-errors'
 import { deltaLockKeys, type RowLockKey } from './row-locks'
-import { firstLoggedAt, wroteColumn } from './user-precedence'
+import { wroteColumn } from './user-precedence'
 
 type ReversalSetFields = Pick<ReversalSet, 'branchId' | 'rows' | 'redoRows' | 'held'>
 
@@ -149,7 +149,7 @@ function userKeptRows(
     const keptAll = creates.every((create) => {
       if (isUserOriginatedSource(create.source)) return false
       const keeping = resolveByTable(create.targetTable)?.rowKeepingColumns
-      const later = edits.filter((e) => firstLoggedAt(e) > firstLoggedAt(create))
+      const later = edits.filter((e) => e.logPosition > create.logPosition)
       return keeping?.some((col) => wroteColumn(later, col)) ?? false
     })
     if (keptAll) kept.add(key)

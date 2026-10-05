@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { FIRST_LOGGED_AT } from '@/lib/actions/delta/user-precedence'
 import { branches, deltas, stories, type DbCtx, type NewDelta } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
@@ -237,7 +236,7 @@ describe('payload meta keys', () => {
   it('never matches a meta key or its value, only the columns beside it', async () => {
     await db
       .insert(deltas)
-      .values(delta(30, 'update', { description: 'moonlit', [FIRST_LOGGED_AT]: 987654 }))
+      .values(delta(30, 'update', { description: 'moonlit', $firstLoggedAt: 987654 }))
     expect(await positions({ search: 'logged' })).toEqual([])
     expect(await positions({ search: '987654' })).toEqual([])
     expect(await positions({ search: 'moonlit' })).toEqual([30])

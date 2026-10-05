@@ -1323,10 +1323,10 @@ kind and still returns the rejection.
 from a pipeline source skips each top-level column that a later
 `user_edit` delta on the same row wrote, by creating the row or
 changing that column, unless that delta is in the set being reversed
-too. Later means by the position the user delta first logged at: a
-redo re-logs it at the head, above machine writes it preceded, and
-records the first position in `$firstLoggedAt`. A delta left with no
-column writes nothing and is still pruned.
+too. Later means by log position, which a redo restores rather than
+reassigns
+([`data-model.md → Entry mutability & rollback`](./data-model.md#entry-mutability--rollback)).
+A delta left with no column writes nothing and is still pruned.
 A `user_edit` inside the set restores as usual: a rollback or
 regenerate sweeps every null-anchored World edit after its target, so
 the row still returns to its prior value, and CTRL-Z of the user's own
@@ -1378,7 +1378,7 @@ reference, never through the cascade hook.
 **Every reversal closes over the rows its creates delete, and the rows
 naming them.** Every path selects its set through one step that
 applies the closure, so no path can skip it: CTRL-Z of a group or a
-turn and the sweeps it runs, redo's sweep, regenerate, rollback, a
+turn and the sweeps it runs, regenerate, rollback, a
 branch fork's reverse-apply, abort, boot recovery, a turn refused at
 admission, and a prose edit's sweep. No selection scope guarantees the
 set holds every write to a removed row, or every row naming one. An
@@ -1454,12 +1454,10 @@ would restore (below): it would need a newer non-classifier delete
 still in the log, which CTRL-Z picks first. A row the closure reaches
 by reference with no `create` in the log, which only a writer outside
 the log could make: the wizard, a seed or an import. And a pair a
-CTRL-Z or a redo's sweep leaves absent whose other writes the prune
+CTRL-Z leaves absent whose other writes the prune
 above would take: redo restores only its snapshot, so an update whose
 undo deleted the pair redoes onto no row yet re-logs, its next CTRL-Z
-reporting an undo that changed nothing, and a redo would take writes
-no undo of it gives back. A refused redo stays on the stack, so each
-retry refuses again until a new action clears it. Only `write-back`
+reporting an undo that changed nothing. Only `write-back`
 is reachable today, and only at boot recovery of a `no-gate` run
 whose abort's own reversal failed: the
 [no-gate write phase](#no-gate-write-phase) ends the hold then, so

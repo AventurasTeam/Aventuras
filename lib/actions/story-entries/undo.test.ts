@@ -821,44 +821,11 @@ describe('undo and redo carry the reversal closure', () => {
       expect.objectContaining({ branchId: 'b1', refusal: 'held-in-redo' }),
     )
   })
-
-  it('refuses a redo whose invalidation reaches a row with no create, leaving the redo pending', async () => {
-    const { db, runInTransaction } = await createTestDb()
-    const ctx = { db, runInTransaction }
-    await seedTail(db)
-    expect((await updateStoryEntryContent('b1', 'e2', 'new prose', ctx)).status).toBe('ok')
-    expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
-    // Built by hand: a real write between the undo and the redo would clear the redo stack. The
-    // link is written outside the log.
-    await db.insert(happenings).values({
-      id: 'hap_r',
-      branchId: 'b1',
-      title: 'retry pass',
-      occurredAtEntryId: 'e2',
-      createdAt: 4,
-      updatedAt: 4,
-    })
-    await db.insert(deltas).values(factDelta('d_hap_r', 5, 'happenings', 'hap_r', 'e2'))
-    await db
-      .insert(happeningInvolvements)
-      .values({ id: 'hinv_raw', branchId: 'b1', happeningId: 'hap_r', entityId: 'char_k' })
-
-    const result = await redoLastAction('b1', ctx)
-
-    expect(result).toEqual({
-      status: 'rejected',
-      code: 'integrity',
-      reason: expect.stringContaining('no-create'),
-    })
-    expect(await contentOf(db, 'e2')).toBe('old')
-    expect(undoRedoStore.hasRedo()).toBe(true)
-    expect(await db.select({ id: happenings.id }).from(happenings)).toEqual([{ id: 'hap_r' }])
-  })
 })
 
 // Unreachable through the actions: a machine write nulls a relationship view, so an undo would
 // prune the pair's writes outside its redo (generation-pipeline.md → Reverse-replay).
-describe('a CTRL-Z or redo whose reversal would prune writes outside its redo', () => {
+describe('a CTRL-Z whose reversal would prune writes outside its redo', () => {
   type Db = Awaited<ReturnType<typeof createTestDb>>['db']
 
   const onPair = (
@@ -994,81 +961,92 @@ describe('a CTRL-Z or redo whose reversal would prune writes outside its redo', 
     expect(entriesStore.getById('e_turn')).toBeDefined()
     expect(undoRedoStore.hasRedo()).toBe(false)
   })
+})
 
-  it('refuses a redo whose invalidation would prune them, leaving the redo pending', async () => {
+// A pass on an earlier turn can log above a turn's writes and stay when CTRL-Z skips it, so
+// a redo that moved the turn's writes to the head would reorder them against a user write.
+describe('redo restores the order the writes first logged in', () => {
+  it("keeps a user's view on a pair the turn's pass created, through undo, redo and a prose edit", async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
-    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
-    await db.insert(branches).values({
-      id: 'b1',
-      storyId: 's1',
-      name: 'm',
-      createdAt: 1,
-      classifierStatus: {
-        state: 'idle',
-        lastSuccessAt: null,
-        lastError: null,
-        retryCount: 0,
-        processedThrough: 2,
-      },
+    await seed(db)
+    hydrateOpeningAndTurn()
+    // char_x < char_y: `kind` is the pass's view, `inverseKind` the user's.
+    await db.insert(characterRelationships).values({
+      id: 'rel_1',
+      branchId: 'b1',
+      aId: 'char_x',
+      bId: 'char_y',
+      kind: 'rival',
+      inverseKind: 'mentor',
+      createdAt: 2,
+      updatedAt: 3,
     })
-    const entries = [
+    await db
+      .insert(happenings)
+      .values({ id: 'hap_lag', branchId: 'b1', title: 'Lagging', createdAt: 4, updatedAt: 4 })
+    const row = {
+      branchId: 'b1',
+      targetTable: 'character_relationships',
+      targetId: 'rel_1',
+      undoPayload: null,
+      encodingVersion: 1,
+    } as const
+    await db.insert(deltas).values([
       {
-        id: 'e1',
-        branchId: 'b1',
-        position: 1,
-        kind: 'ai_reply' as const,
-        content: 'a',
-        createdAt: 1,
-      },
-      {
-        id: 'e2',
-        branchId: 'b1',
-        position: 2,
-        kind: 'ai_reply' as const,
-        content: 'old',
+        ...row,
+        id: 'd_rel',
+        actionId: 'act_pass',
+        op: 'create',
+        entryId: 'e_turn',
+        source: 'periodic_classifier',
+        logPosition: 2,
         createdAt: 2,
       },
-    ]
-    await db.insert(storyEntries).values(entries)
-    entriesStore.hydrate(
-      'b1',
-      entries.map((e) => ({ ...e, chapterId: null, metadata: null })),
-    )
-    expect((await updateStoryEntryContent('b1', 'e2', 'new prose', ctx)).status).toBe('ok')
-    expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
-    // Built by hand: a real write between the undo and the redo would clear the redo stack. The
-    // retry pass sets `kind` from the restored e2, and another pass nulls `inverseKind`.
-    await seedPair(db)
-    await db.insert(deltas).values([
-      onPair('d_pair', 4, { actionId: 'act_u0', op: 'create' }),
-      onPair('d_kind', 5, {
-        actionId: 'act_retry',
+      {
+        ...row,
+        id: 'd_view',
+        actionId: 'act_view',
+        op: 'update',
+        entryId: null,
+        source: 'user_edit',
+        undoPayload: { inverseKind: null },
+        logPosition: 3,
+        createdAt: 3,
+      },
+      {
+        ...row,
+        id: 'd_lag',
+        actionId: 'act_lag',
+        op: 'create',
+        targetTable: 'happenings',
+        targetId: 'hap_lag',
+        entryId: 'e_opening',
         source: 'periodic_classifier',
-        entryId: 'e2',
-        undoPayload: { kind: null },
-      }),
-      onPair('d_null', 6, {
-        actionId: 'act_pass',
-        source: 'periodic_classifier',
-        entryId: 'e1',
-        undoPayload: { inverseKind: 'mentor' },
-      }),
+        logPosition: 4,
+        createdAt: 4,
+      },
     ])
-    const before = await db.select().from(deltas)
-    const error = vi.spyOn(logger, 'error')
+    const positions = async () =>
+      Object.fromEntries(
+        (await db.select().from(deltas)).map((d) => [d.id, d.logPosition] as const),
+      )
+    const before = await positions()
 
-    const result = await redoLastAction('b1', ctx)
+    expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+    expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+    expect(await db.select().from(characterRelationships)).toEqual([])
+    expect(await redoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+    expect(await redoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+    expect(await positions()).toEqual(before)
 
-    expect(result).toEqual({
-      status: 'rejected',
-      code: 'integrity',
-      reason: expect.stringContaining('pruned-outside-redo'),
-    })
-    expect(refusalsLogged(error)).toHaveLength(1)
-    await expectNothingWritten(db, before)
-    const [e2] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'e2'))
-    expect(e2.content).toBe('old')
-    expect(undoRedoStore.hasRedo()).toBe(true)
+    expect((await updateStoryEntryContent('b1', 'e_turn', 'a rewritten reply', ctx)).status).toBe(
+      'ok',
+    )
+
+    expect(await db.select().from(characterRelationships)).toEqual([
+      expect.objectContaining({ id: 'rel_1', kind: null, inverseKind: 'mentor' }),
+    ])
+    expect(await db.select().from(deltas).where(eq(deltas.id, 'd_view'))).toHaveLength(1)
   })
 })

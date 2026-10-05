@@ -461,8 +461,12 @@ describe('a classifier write racing a user Save on one row', () => {
     },
   )
 
-  it('keeps a redo and a classifier append consistent with the order they logged', async () => {
+  // Production keeps the two apart: every delta-logged write clears the redo stack, and the
+  // redo's bracket holds writers off. Raced anyway, a write that took the slot the undo freed
+  // fails the redo on the position backstop, atomically, rather than restoring over it.
+  it('fails a redo whole when a classifier append took its slot, else keeps their log order', async () => {
     const ctx = await setup()
+    const redoFailed = new Set<number>()
     await sweep(
       async (round) => {
         const id = `char_${round}`
@@ -495,7 +499,11 @@ describe('a classifier write racing a user Save on one row', () => {
               `k_${round}`,
               ctx,
             ),
-          user: () => applyRedo(snapshot, ctx),
+          user: () =>
+            applyRedo(snapshot, ctx).catch((e: unknown) => {
+              expect(String(e)).toMatch(/UNIQUE/)
+              redoFailed.add(round)
+            }),
         }
       },
       async (round, label) => {
@@ -505,12 +513,18 @@ describe('a classifier write racing a user Save on one row', () => {
           .select()
           .from(entities)
           .where(eq(entities.id, `char_${round}`))
+        expect(machine, label).toBeDefined()
+        if (redoFailed.has(round)) {
+          expect(redone, label).toBeUndefined()
+          expect(row.keywords, label).toEqual(['a', 'b'])
+          return
+        }
         expect(redone, label).toBeDefined()
-        expect(row.keywords, label).toContain('u')
-        if (machine && machine.logPosition > redone!.logPosition)
-          expect(row.keywords, label).toEqual(['a', 'u', 'b'])
+        expect(machine!.logPosition, label).toBeGreaterThan(redone!.logPosition)
+        expect(row.keywords, label).toEqual(['a', 'u', 'b'])
       },
     )
+    expect(redoFailed.size).toBeGreaterThan(0)
   })
 
   it('never logs a classifier view update onto a pair the user deleted first', async () => {
