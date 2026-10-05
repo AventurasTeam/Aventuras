@@ -1212,6 +1212,7 @@ export function getDefaultUISettings(): UISettings {
     showScrollToBottom: true,
     storyMaxWidth: '3xl',
     showEntryNumberAndTime: false,
+    showChapterBanners: false,
     highlightDialogue: false,
     dialogueColor: '',
     incognitoKeyboard: false,
@@ -1594,6 +1595,9 @@ class SettingsStore {
       const showEntryNumberAndTime = await database.getSetting('show_entry_number_and_time')
       if (showEntryNumberAndTime !== null)
         this.uiSettings.showEntryNumberAndTime = showEntryNumberAndTime === 'true'
+      const showChapterBanners = await database.getSetting('show_chapter_banners')
+      if (showChapterBanners !== null)
+        this.uiSettings.showChapterBanners = showChapterBanners === 'true'
       const highlightDialogue = await database.getSetting('highlight_dialogue')
       if (highlightDialogue !== null)
         this.uiSettings.highlightDialogue = highlightDialogue === 'true'
@@ -2734,6 +2738,11 @@ class SettingsStore {
     await database.setSetting('show_entry_number_and_time', enabled.toString())
   }
 
+  async setShowChapterBanners(enabled: boolean) {
+    this.uiSettings.showChapterBanners = enabled
+    await database.setSetting('show_chapter_banners', enabled.toString())
+  }
+
   async setHighlightDialogue(enabled: boolean) {
     this.uiSettings.highlightDialogue = enabled
     await database.setSetting('highlight_dialogue', enabled.toString())
@@ -3199,6 +3208,7 @@ class SettingsStore {
       'show_entry_number_and_time',
       this.uiSettings.showEntryNumberAndTime.toString(),
     )
+    await database.setSetting('show_chapter_banners', this.uiSettings.showChapterBanners.toString())
     await database.setSetting('highlight_dialogue', this.uiSettings.highlightDialogue.toString())
     await database.setSetting('dialogue_color', this.uiSettings.dialogueColor)
     this.applyDialogueHighlight()

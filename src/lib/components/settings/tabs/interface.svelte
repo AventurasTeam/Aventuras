@@ -294,6 +294,20 @@
     />
   </div>
 
+  <!-- Chapter Banners -->
+  <div class="flex items-center justify-between">
+    <div>
+      <Label>Show Chapter Banners</Label>
+      <p class="text-muted-foreground text-xs">
+        Mark where each chapter begins in the story, with its title and summary
+      </p>
+    </div>
+    <Switch
+      checked={settings.uiSettings.showChapterBanners}
+      onCheckedChange={(v) => settings.setShowChapterBanners(v)}
+    />
+  </div>
+
   <!-- Dialogue Highlighting -->
   <div class="space-y-3">
     <div class="flex items-center justify-between">

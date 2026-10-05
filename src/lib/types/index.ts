@@ -804,6 +804,8 @@ export interface UISettings {
   storyMaxWidth: '2xl' | '3xl' | '4xl' | '5xl' | '7xl' | '9xl'
   /** Show each entry's number and in-story time in the story view. */
   showEntryNumberAndTime: boolean
+  /** Mark where each chapter begins in the story view, with its title and summary. */
+  showChapterBanners: boolean
   /** Colour quoted speech in story text. Has no effect on Visual Prose stories. */
   highlightDialogue: boolean
   /**

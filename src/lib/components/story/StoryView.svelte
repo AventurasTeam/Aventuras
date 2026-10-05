@@ -6,6 +6,8 @@
   import { tick, untrack } from 'svelte'
   import { fade } from 'svelte/transition'
   import StoryEntry from './StoryEntry.svelte'
+  import ChapterBanner from './ChapterBanner.svelte'
+  import { buildChapterBanners } from '$lib/utils/chapterBanners'
   import TimeAnchorModal from '$lib/components/world/TimeAnchorModal.svelte'
   import EntryTimeModal from '$lib/components/world/EntryTimeModal.svelte'
   import StreamingEntry from './StreamingEntry.svelte'
@@ -117,6 +119,17 @@
       startIndex: start,
     }
   })
+
+  const chapterBanners = $derived(
+    settings.uiSettings.showChapterBanners
+      ? buildChapterBanners(story.entries, story.currentBranchChapters)
+      : null,
+  )
+  // A string, so the re-pin effect below runs when banners appear or move and not each time
+  // `chapterBanners` is rebuilt for a new entry.
+  const bannerSignature = $derived(
+    chapterBanners ? [...chapterBanners.values()].map((b) => b.key).join('|') : '',
+  )
 
   // Load earlier entries above, compensate scroll, then trim the bottom if it's
   // safely off-screen (two-phase so each compensation is isolated and correct).
@@ -414,6 +427,23 @@
     performScroll()
   })
 
+  // A banner that appears or goes while the reader is at the bottom (a chapter finishing in
+  // the background, the setting being flipped) moves the bottom; nothing else re-pins it.
+  let lastBannerSignature: string | null = null
+  $effect(() => {
+    const signature = bannerSignature
+    if (lastBannerSignature === null) {
+      lastBannerSignature = signature
+      return
+    }
+    if (signature === lastBannerSignature) return
+    lastBannerSignature = signature
+    untrack(() => {
+      if (ui.userScrolledUp) return
+      void tick().then(() => performScroll())
+    })
+  })
+
   // Scroll to bottom when opening/returning to story panel — always, regardless of autoScroll
   // (autoScroll only controls scrolling during generation, not initial panel positioning)
   // untrack prevents story.entries.length (accessed inside scrollToBottom) from being
@@ -528,8 +558,15 @@
         {/if}
 
         {#each displayedEntries.entries as entry (entry.id)}
-          <!-- data-entry-id lets branch-switch landing locate a specific entry element -->
+          {@const banner = chapterBanners?.get(entry.id)}
+          <!-- data-entry-id lets branch-switch landing locate a specific entry element. The
+               banner sits inside it so a jump to the entry lands on the banner above it. -->
           <div data-entry-id={entry.id}>
+            {#if banner}
+              <div class="mb-2.5 sm:mb-3">
+                <ChapterBanner {banner} onNavigate={(id) => void landOnEntry(id)} />
+              </div>
+            {/if}
             <StoryEntry {entry} />
           </div>
         {/each}
