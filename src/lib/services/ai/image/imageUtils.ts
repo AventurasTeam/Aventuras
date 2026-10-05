@@ -10,7 +10,7 @@ import { settings } from '$lib/stores/settings.svelte'
 import type { EmbeddedImage, StorySettings } from '$lib/types'
 import { emitImageQueued, emitImageReady, emitImageAnalysisFailed } from '$lib/services/events'
 import { createLogger } from '$lib/log'
-import { expectedPixels, defaultImageSpec, type ImageSpec } from '$lib/utils/image'
+import { expectedPixels, defaultImageSpec, storyImageMode, type ImageSpec } from '$lib/utils/image'
 
 const log = createLogger('ImageUtils')
 
@@ -43,7 +43,7 @@ export function isImageGenerationEnabled(
   const imageSettings = settings.systemServicesSettings.imageGeneration
 
   if (storySettings) {
-    if (type !== 'background' && storySettings.imageGenerationMode === 'none') return false
+    if (type !== 'background' && storyImageMode(storySettings) === 'none') return false
   } else {
     if (!imageSettings?.profileId) return false
   }

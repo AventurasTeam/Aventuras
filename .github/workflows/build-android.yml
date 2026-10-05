@@ -44,11 +44,14 @@ jobs:
       # Cargo.toml and drops workspace crates from the Cargo.lock hash, so a release bump
       # reuses this key. Re-check on upgrade — a TOML parse failure or an unsupported
       # Cargo.lock format falls back to hashing the raw files, warning in the job log.
+      # cache-directories keeps the generated Kotlin's mtimes consistent with the cached
+      # fingerprints. It is not part of the key, so adding a path means bumping the suffix.
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
-          key: android
+          key: android-v2
+          cache-directories: src-tauri/gen/android/app/src/main/java/com/karelian/aventura/generated
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Setup Java

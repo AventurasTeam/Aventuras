@@ -289,7 +289,7 @@
           <div class="space-y-1">
             {#each landmarks as landmark (landmark.checkpointId ?? `origin:${landmark.entryId}`)}
               <div
-                class="group hover:bg-surface-700/50 relative min-h-[40px] rounded-lg transition-colors sm:min-h-0"
+                class="group hover:bg-surface-700/50 can-hover:min-h-0 relative min-h-[40px] rounded-lg transition-colors"
               >
                 {#if landmark.checkpointId && renamingCheckpointId === landmark.checkpointId}
                   <div class="flex items-start gap-2 p-2 text-left">
@@ -312,26 +312,26 @@
                       }}
                     />
                     <button
-                      class="flex min-h-[32px] min-w-[32px] items-center justify-center p-1 text-green-400 hover:text-green-300 sm:min-h-0 sm:min-w-0 sm:p-0.5"
+                      class="tap-target text-green-400 hover:text-green-300"
                       onclick={confirmRename}
                       title="Save checkpoint name"
                       aria-label="Save checkpoint name"
                     >
-                      <Check class="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+                      <Check class="can-hover:size-3.5 size-4" />
                     </button>
                     <button
-                      class="text-surface-400 hover:text-surface-200 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 sm:min-h-0 sm:min-w-0 sm:p-0.5"
+                      class="text-surface-400 hover:text-surface-200 tap-target"
                       onclick={cancelRename}
                       title="Cancel rename"
                       aria-label="Cancel checkpoint rename"
                     >
-                      <X class="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+                      <X class="can-hover:size-3.5 size-4" />
                     </button>
                   </div>
                 {:else}
                   <button
                     type="button"
-                    class="flex min-h-[40px] w-full items-start gap-2 rounded-lg p-2 pr-20 text-left sm:min-h-0 sm:pr-14"
+                    class="can-hover:min-h-0 can-hover:pr-14 flex min-h-[40px] w-full items-start gap-2 rounded-lg p-2 pr-20 text-left"
                     onclick={() => void goToLandmark(landmark)}
                     title="Go to entry {landmark.number}:&#10;{landmark.label}"
                   >
@@ -362,18 +362,18 @@
                     )}
                     {@const deleteUnavailable = deleteBlockedReason !== null}
                     <div
-                      class="absolute top-1 right-1 flex transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100"
+                      class="can-hover:opacity-0 absolute top-1 right-1 flex transition-opacity group-hover:opacity-100 focus-within:opacity-100"
                     >
                       <button
-                        class="text-surface-500 hover:text-surface-200 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 sm:min-h-0 sm:min-w-0 sm:p-0.5"
+                        class="text-surface-500 hover:text-surface-200 tap-target"
                         onclick={() => startRename(landmark.checkpointId!, landmark.label)}
                         title="Rename"
                         aria-label="Rename checkpoint"
                       >
-                        <Edit2 class="h-4 w-4 sm:h-3 sm:w-3" />
+                        <Edit2 class="can-hover:size-3 size-4" />
                       </button>
                       <button
-                        class="flex min-h-[32px] min-w-[32px] items-center justify-center p-1 sm:min-h-0 sm:min-w-0 sm:p-0.5 {deleteUnavailable
+                        class="tap-target {deleteUnavailable
                           ? 'text-surface-600 cursor-not-allowed'
                           : 'text-surface-500 hover:text-destructive'}"
                         onclick={() =>
@@ -390,7 +390,7 @@
                           : 'Delete checkpoint'}
                         aria-disabled={deleteUnavailable}
                       >
-                        <Trash2 class="h-4 w-4 sm:h-3 sm:w-3" />
+                        <Trash2 class="can-hover:size-3 size-4" />
                       </button>
                     </div>
                   {/if}
@@ -421,7 +421,7 @@
               <div id="orphaned-checkpoints" class="mt-2 space-y-1">
                 {#each orphaned as orphan (orphan.checkpointId)}
                   <div
-                    class="group hover:bg-surface-700/50 relative min-h-[40px] rounded-lg transition-colors sm:min-h-0"
+                    class="group hover:bg-surface-700/50 can-hover:min-h-0 relative min-h-[40px] rounded-lg transition-colors"
                   >
                     {#if renamingCheckpointId === orphan.checkpointId}
                       <div class="flex items-start gap-2 p-2 text-left">
@@ -436,26 +436,26 @@
                           }}
                         />
                         <button
-                          class="text-surface-500 hover:text-surface-200 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 sm:min-h-0 sm:min-w-0 sm:p-0.5"
+                          class="text-surface-500 hover:text-surface-200 tap-target"
                           onclick={() => void confirmRename()}
                           title="Save checkpoint name"
                           aria-label="Save checkpoint name"
                         >
-                          <Check class="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+                          <Check class="can-hover:size-3.5 size-4" />
                         </button>
                         <button
-                          class="text-surface-500 hover:text-surface-200 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 sm:min-h-0 sm:min-w-0 sm:p-0.5"
+                          class="text-surface-500 hover:text-surface-200 tap-target"
                           onclick={cancelRename}
                           title="Cancel rename"
                           aria-label="Cancel checkpoint rename"
                         >
-                          <X class="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+                          <X class="can-hover:size-3.5 size-4" />
                         </button>
                       </div>
                     {:else}
                       <button
                         type="button"
-                        class="flex min-h-[40px] w-full items-start gap-2 rounded-lg p-2 pr-20 text-left sm:min-h-0 sm:pr-14"
+                        class="can-hover:min-h-0 can-hover:pr-14 flex min-h-[40px] w-full items-start gap-2 rounded-lg p-2 pr-20 text-left"
                         onclick={reportOrphan}
                         title="This checkpoint's entry no longer exists, so there is nowhere to go"
                       >
@@ -473,18 +473,18 @@
                       )}
                       {@const orphanDeleteUnavailable = orphanBlockedReason !== null}
                       <div
-                        class="absolute top-1 right-1 flex transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100"
+                        class="can-hover:opacity-0 absolute top-1 right-1 flex transition-opacity group-hover:opacity-100 focus-within:opacity-100"
                       >
                         <button
-                          class="text-surface-500 hover:text-surface-200 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 sm:min-h-0 sm:min-w-0 sm:p-0.5"
+                          class="text-surface-500 hover:text-surface-200 tap-target"
                           onclick={() => startRename(orphan.checkpointId, orphan.label)}
                           title="Rename"
                           aria-label="Rename checkpoint"
                         >
-                          <Edit2 class="h-4 w-4 sm:h-3 sm:w-3" />
+                          <Edit2 class="can-hover:size-3 size-4" />
                         </button>
                         <button
-                          class="flex min-h-[32px] min-w-[32px] items-center justify-center p-1 sm:min-h-0 sm:min-w-0 sm:p-0.5 {orphanDeleteUnavailable
+                          class="tap-target {orphanDeleteUnavailable
                             ? 'text-surface-600 cursor-not-allowed'
                             : 'text-surface-500 hover:text-destructive'}"
                           onclick={() =>
@@ -501,7 +501,7 @@
                             : 'Delete checkpoint'}
                           aria-disabled={orphanDeleteUnavailable}
                         >
-                          <Trash2 class="h-4 w-4 sm:h-3 sm:w-3" />
+                          <Trash2 class="can-hover:size-3 size-4" />
                         </button>
                       </div>
                     {/if}

@@ -59,7 +59,9 @@
     type RestoreResult,
   } from '$lib/services/generation'
   import { InlineImageTracker } from '$lib/services/ai/image'
+  import type { BranchScope } from '$lib/utils/branchScope'
   import type { GenerationLease } from '$lib/utils/generationLease'
+  import { storyImageMode } from '$lib/utils/image'
 
   function log(...args: any[]) {
     console.log('[ActionInput]', ...args)
@@ -253,11 +255,11 @@
   // ============================================================================
 
   /**
-   * `storyId` is the turn's, captured by the caller, not `story.currentStory` read live:
+   * `scope` is the turn's, captured by the caller, not `story.currentStory` read live:
    * these run across the whole generation, and a story switch mid-turn would otherwise
    * point the rest of it at another story's pack.
    */
-  function buildPipelineDependencies(storyId: string): PipelineDependencies {
+  function buildPipelineDependencies(scope: BranchScope): PipelineDependencies {
     return {
       activity,
       shouldUseAgenticRetrieval: () =>
@@ -265,7 +267,7 @@
       runAgenticRetrieval: (options) =>
         aiService.runAgenticRetrieval({
           ...options,
-          storyId,
+          storyId: scope.storyId,
           getChapterEntries: story.getChapterEntries.bind(story),
           getUnchapterizedEntries: story.getUnchapterizedEntries.bind(story),
         }),
@@ -274,7 +276,7 @@
       // is about `tokenThreshold` tokens by construction. See `story.chapterReadBudget`.
       runTimelineFill: (visibleEntries, chapters, alreadyInContext, activityParentId) =>
         aiService.runTimelineFill(
-          storyId,
+          scope.storyId,
           visibleEntries,
           chapters,
           story.getChapterEntries.bind(story),
@@ -284,7 +286,7 @@
         ),
       answerChapterQuestion: (chapterNumber, question, chapters) =>
         aiService.answerChapterQuestion(
-          storyId,
+          scope.storyId,
           chapterNumber,
           question,
           chapters,
@@ -300,10 +302,12 @@
       generateImagesForNarrative: (ctx) =>
         aiService.generateImagesForNarrative({
           ...ctx,
-          imageGenerationMode: story.currentStory?.settings?.imageGenerationMode,
-          allCharacters: story.characters,
+          branchId: scope.branchId,
+          getCharacters: () => story.characters,
           imageSettings: settings.systemServicesSettings.imageGeneration,
           getImageProfile: (id) => settings.getImageProfile(id),
+          onPortraitGenerated: (character, portrait) =>
+            story.saveGeneratedPortrait(scope, character, portrait),
         }),
       isImageGenerationEnabled: (storySettings, type) =>
         aiService.isImageGenerationEnabled(storySettings, type),
@@ -517,7 +521,8 @@
     activeAbortController = new AbortController()
 
     const visualProseMode = story.currentStory.settings?.visualProseMode ?? false
-    const inlineImageMode = story.currentStory.settings?.imageGenerationMode === 'inline'
+    const imageMode = storyImageMode(story.currentStory.settings)
+    const inlineImageMode = imageMode === 'inline'
     const streamingEntryId = crypto.randomUUID()
     const narrationEntryId = crypto.randomUUID()
 
@@ -614,7 +619,7 @@
         activationTracker,
         translationSettings: settings.translationSettings,
         imageSettings: {
-          imageGenerationMode: currentStoryRef.settings?.imageGenerationMode ?? 'agentic',
+          imageGenerationMode: imageMode,
           backgroundImagesEnabled: currentStoryRef.settings?.backgroundImagesEnabled ?? false,
           referenceMode: currentStoryRef.settings?.referenceMode ?? false,
         },
@@ -633,7 +638,7 @@
         cachedRetrievalResult: options?.cachedRetrievalResult ?? null,
       }
 
-      const deps = buildPipelineDependencies(currentStoryRef.id)
+      const deps = buildPipelineDependencies(lease)
       const pipeline = new GenerationPipeline(deps)
 
       let fullResponse = ''

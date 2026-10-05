@@ -12,7 +12,7 @@
 </script>
 
 <script lang="ts">
-  import type { StoryEntry, EmbeddedImage, TimeTracker } from '$lib/types'
+  import type { Character, StoryEntry, EmbeddedImage, TimeTracker } from '$lib/types'
   import { story } from '$lib/stores/story.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { settings } from '$lib/stores/settings.svelte'
@@ -84,6 +84,7 @@
   import { SvelteMap, SvelteSet } from 'svelte/reactivity'
   import { escapeHtml } from '$lib/utils/inlineImageParser'
   import { extractSentenceAt, expandRangeBidirectional } from '$lib/utils/text'
+  import { storyImageMode } from '$lib/utils/image'
 
   let { entry }: { entry: StoryEntry } = $props()
 
@@ -328,7 +329,7 @@
 
   const hasEmbeddedImages = $derived(embeddedImages.length > 0)
   const canGenerateStoryImages = $derived(
-    entry.type === 'narration' && story.currentStory?.settings?.imageGenerationMode === 'agentic',
+    entry.type === 'narration' && storyImageMode(story.currentStory?.settings) === 'agentic',
   )
   const storyImagesLabel = $derived(
     hasEmbeddedImages ? 'Images already generated' : 'Generate story images',
@@ -1329,6 +1330,8 @@
 
   async function handleGenerateStoryImages() {
     if (!story.currentStory || isGeneratingStoryImages) return
+    const scope = story.currentScope
+    if (!scope) return
     isGeneratingStoryImages = true
     try {
       const context = {
@@ -1339,10 +1342,13 @@
         presentCharacters: story.characters,
         referenceMode: story.currentStory.settings?.referenceMode ?? false,
         translatedNarrative: entry.translatedContent ?? undefined,
-        imageGenerationMode: story.currentStory.settings?.imageGenerationMode,
-        allCharacters: story.characters,
+        imageGenerationMode: storyImageMode(story.currentStory.settings),
+        branchId: scope.branchId,
+        getCharacters: () => story.characters,
         imageSettings: settings.systemServicesSettings.imageGeneration,
         getImageProfile: (id: string) => settings.getImageProfile(id),
+        onPortraitGenerated: (character: Character, portrait: string) =>
+          story.saveGeneratedPortrait(scope, character, portrait),
       }
       await aiService.generateImagesForNarrative(context)
     } catch (error) {

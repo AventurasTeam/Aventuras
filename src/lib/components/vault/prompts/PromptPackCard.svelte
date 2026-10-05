@@ -34,12 +34,9 @@
 
   const canUseDirectories = supportsDirectoryTransfer()
 
-  let exportMenuOpen = $state(false)
-  let replaceMenuOpen = $state(false)
-
   // The card reveals its actions on hover, so an open menu has to hold its trigger visible.
-  const triggerClass = (open: boolean) =>
-    `h-8 w-8 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 ${open ? 'sm:opacity-100' : ''}`
+  const triggerClass =
+    'h-8 w-8 transition-opacity group-hover:opacity-100 aria-expanded:opacity-100 can-hover:opacity-0'
 
   // The built-in pack is rewritten from the app's own templates on every launch, so it is
   // never a replacement target.
@@ -84,14 +81,14 @@
             toggle on click opens then immediately closes the menu on touch.
           -->
           {#if canUseDirectories}
-            <DropdownMenu.Root bind:open={exportMenuOpen}>
+            <DropdownMenu.Root>
               <DropdownMenu.Trigger>
                 {#snippet child({ props })}
                   <Button
                     {...props}
                     variant="ghost"
                     size="icon"
-                    class={triggerClass(exportMenuOpen)}
+                    class={triggerClass}
                     title="Export pack"
                   >
                     <Upload class="h-4 w-4" />
@@ -114,7 +111,7 @@
             <Button
               variant="ghost"
               size="icon"
-              class={triggerClass(false)}
+              class={triggerClass}
               onclick={() => onExport?.()}
               title="Export pack"
             >
@@ -123,14 +120,14 @@
           {/if}
 
           {#if canReplace && canUseDirectories}
-            <DropdownMenu.Root bind:open={replaceMenuOpen}>
+            <DropdownMenu.Root>
               <DropdownMenu.Trigger>
                 {#snippet child({ props })}
                   <Button
                     {...props}
                     variant="ghost"
                     size="icon"
-                    class={triggerClass(replaceMenuOpen)}
+                    class={triggerClass}
                     title="Replace this pack"
                   >
                     <RefreshCw class="h-4 w-4" />
@@ -155,7 +152,7 @@
             <Button
               variant="ghost"
               size="icon"
-              class={triggerClass(false)}
+              class={triggerClass}
               onclick={() => onUpdateFromFile?.()}
               title="Update from file"
             >
@@ -167,7 +164,7 @@
             <Button
               variant="ghost"
               size="icon"
-              class="text-destructive h-8 w-8 transition-opacity sm:opacity-0 sm:group-hover:opacity-100"
+              class="text-destructive can-hover:opacity-0 h-8 w-8 transition-opacity group-hover:opacity-100"
               onclick={(e: MouseEvent) => {
                 e.stopPropagation()
                 onDelete?.()

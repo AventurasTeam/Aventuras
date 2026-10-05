@@ -113,6 +113,13 @@ describe('isImageGenerationEnabled', () => {
     // background is exempt from the story-level mode.
     expect(isImageGenerationEnabled({ imageGenerationMode: 'none' }, 'background')).toBe(true)
   })
+
+  it('treats a story with no mode as none', () => {
+    setSlotIds('p-std', 'p-bg', null, null)
+
+    expect(isImageGenerationEnabled({}, 'standard')).toBe(false)
+    expect(isImageGenerationEnabled({}, 'background')).toBe(true)
+  })
 })
 
 describe('agreement between isImageGenerationEnabled and hasRequiredCredentials', () => {
@@ -150,7 +157,9 @@ describe('agreement between isImageGenerationEnabled and hasRequiredCredentials'
       it(`agree for ${slot} — ${scenario.name}`, () => {
         scenario.apply()
 
-        expect(isImageGenerationEnabled({}, slot)).toBe(hasRequiredCredentials(slot))
+        expect(isImageGenerationEnabled({ imageGenerationMode: 'agentic' }, slot)).toBe(
+          hasRequiredCredentials(slot),
+        )
       })
     }
   }

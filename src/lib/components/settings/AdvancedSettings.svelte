@@ -721,6 +721,17 @@
                   saveSystem()
                 },
               })}
+
+              {@render switchRow({
+                label: 'Clean Input',
+                description:
+                  'Strip image tags, HTML and headings from the narration before review, so the reviewer judges the prose and not the formatting. Turn it off if reviews look worse.',
+                checked: system.styleReviewer.cleanInput,
+                onChange: (v) => {
+                  system.styleReviewer.cleanInput = v
+                  saveSystem()
+                },
+              })}
             {/if}
           </div>
         </Collapsible.Content>

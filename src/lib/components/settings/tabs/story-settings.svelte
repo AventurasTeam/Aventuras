@@ -250,7 +250,7 @@
     imageGenerationEnabled={imageGenEnabled}
     {backgroundImagesAvailable}
     {portraitReferenceAvailable}
-    imageGenerationMode={storySettings.imageGenerationMode ?? 'none'}
+    imageGenerationMode={storySettings.imageGenerationMode ?? null}
     backgroundImagesEnabled={storySettings.backgroundImagesEnabled ?? false}
     referenceMode={storySettings.referenceMode ?? false}
     targetLength={storySettings.targetLength ?? 'dynamic'}

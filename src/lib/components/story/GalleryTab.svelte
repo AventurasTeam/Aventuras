@@ -527,9 +527,9 @@
                   ></div>
                 </div>
               {/if}
-              <!-- Hover overlay - desktop only -->
+              <!-- Hover overlay: hover-capable devices only; clicks pass through to the image and Retry -->
               <div
-                class="absolute inset-0 hidden items-center justify-center bg-black/40 opacity-0 transition-opacity duration-200 group-hover:opacity-100 sm:flex"
+                class="can-hover:flex pointer-events-none absolute inset-0 hidden items-center justify-center bg-black/40 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
               >
                 <Button variant="default" size="sm">View</Button>
               </div>
