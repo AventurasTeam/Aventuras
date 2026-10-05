@@ -483,7 +483,7 @@ describe('a classifier write racing a user Save on one row', () => {
           .where(eq(deltas.actionId, `u_${round}`))) as Delta[]
         const set = await selectReversalSet(ctx, { branchId: BRANCH, target: rows })
         const snapshot = await snapshotForRedo(set, ctx)
-        await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: false })
+        await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: true })
         return {
           classifier: () =>
             classify(
