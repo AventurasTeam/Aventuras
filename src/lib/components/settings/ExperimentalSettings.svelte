@@ -54,6 +54,7 @@
   let restoreDone = $state(false)
   let restoreCloseHint = $state<string | null>(null)
   const RESTORE_EXIT_DELAY_MS = 3000
+  const onIos = isIos()
 
   // SQL Query Box state — initialized from module-level persisted values
   let sqlQuery = $state(_sqlQuery)
@@ -752,7 +753,12 @@
           <span class="font-mono text-xs">aventura-pre-restore.db</span> in the app data folder.
         </p>
         <p class="font-medium text-amber-500">
-          The application will close after restoring. You will need to reopen it manually.
+          {#if onIos}
+            iOS cannot close the app for you. After restoring, close Aventuras from the app
+            switcher, then reopen it.
+          {:else}
+            The application will close after restoring. You will need to reopen it manually.
+          {/if}
         </p>
       </Dialog.Description>
     </Dialog.Header>
@@ -764,7 +770,7 @@
         class="border-destructive text-destructive hover:bg-destructive/10 gap-2"
       >
         <Upload class="h-4 w-4" />
-        Restore & Close App
+        {onIos ? 'Restore' : 'Restore & Close App'}
       </Button>
     </Dialog.Footer>
   </Dialog.Content>
