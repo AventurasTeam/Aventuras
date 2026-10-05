@@ -48,11 +48,8 @@ vi.mock('../embedder-swap/engine', async (importOriginal) => {
   return { ...actual, startSwap: vi.fn(async () => 'completed' as const) }
 })
 
-// A seam into an individual sweep from inside the real regenerateTurn control
-// flow — the only way to observe sweep ordering, or to fail one sweep and not
-// the other, without reimplementing the action. `set.rows` identifies which sweep
-// is running; abortRun's unwind goes through reverseReplayDeltas, a different
-// export, so it never reaches this one.
+// Seam into one sweep inside the real regenerateTurn flow, to observe sweep order or fail one sweep
+// only. `set.rows` identifies the sweep; abortRun's unwind (reverseReplayDeltas) bypasses it.
 const sweepHook = vi.hoisted(() => ({
   onSweep: null as ((rows: readonly { id: string }[]) => void) | null,
 }))

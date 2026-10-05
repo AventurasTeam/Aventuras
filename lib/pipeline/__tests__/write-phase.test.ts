@@ -116,7 +116,6 @@ function configurePort(overrides: Partial<DeltaActionPort>): void {
   })
 }
 
-// Records which actions the orchestrator asks to hold or release, then forwards to the real lock.
 function spyOnLock(): { holds: string[]; releases: string[] } {
   const holds: string[] = []
   const releases: string[] = []
@@ -133,7 +132,6 @@ function spyOnLock(): { holds: string[]; releases: string[] } {
   return { holds, releases }
 }
 
-// Records the happenings that reach the action layer on the run's behalf.
 function spyOnDispatches(): string[] {
   const dispatched: string[] = []
   configurePort({
@@ -429,8 +427,7 @@ describe('a no-gate run holds the branch write lock through its write phase', ()
     await committedAt(userWrite(ctx, 'hap_user').write)
   })
 
-  // generation-pipeline.md → Parallel-group event coordination: after a branch fails, the other
-  // branches' in-flight deltas absorb normally and the reversal takes them.
+  // generation-pipeline.md → Parallel-group event coordination.
   it("absorbs a sibling's write after a branch failed, reverses it, and reports the failure", async () => {
     const { ctx } = await makeHarness()
     const dispatched = spyOnDispatches()
@@ -471,7 +468,7 @@ describe('a no-gate run holds the branch write lock through its write phase', ()
     await committedAt(userWrite(ctx, 'hap_user').write)
   })
 
-  // generation-pipeline.md → Prose reversals and the classifier barrier: a 'cancel' abort never reaches the commit burst.
+  // generation-pipeline.md → Prose reversals and the classifier barrier.
   it("lets a burst land after a 'cancel' abort, as the sweep that follows expects", async () => {
     const { ctx } = await makeHarness()
     const burst = defineBurst('no-gate')

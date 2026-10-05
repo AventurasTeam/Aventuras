@@ -1,8 +1,7 @@
 // Per-branch write lock (generation-pipeline.md → No-gate write phase): delta writes hold it
-// shared; a no-gate run holds it exclusive from its first emitted write until it settles. FIFO and
-// writer-preferring, so edits can't starve a pass. Shared isn't reentrant: no applyDeltaAction
-// nests, and a no-gate phase writes only through delta_emitted (its status writes take no lock).
-// A queued request that release drops never settles.
+// shared, a no-gate run exclusive until it settles; FIFO, writer-preferring so edits can't starve.
+// Shared isn't reentrant: no applyDeltaAction nests; no-gate phases write only via delta_emitted
+// (their status writes take no lock).
 
 type Waiter =
   | { readonly mode: 'shared'; readonly grant: () => void }
@@ -63,7 +62,7 @@ async function holdingShared<T>(
   }
 }
 
-/** Runs `run` holding `branchId`'s write lock shared; passes straight through when `actionId` holds it exclusive. */
+/** Runs `run` under `branchId`'s shared lock; passes through if `actionId` holds it exclusive. */
 export function withBranchWriteShared<T>(
   branchId: string,
   actionId: string,
@@ -103,7 +102,7 @@ export function holdBranchWriteExclusive(branchId: string, actionId: string): Pr
   return acquisition
 }
 
-/** Ends `actionId`'s exclusive hold on `branchId`, or drops its queued request; otherwise does nothing. */
+/** Ends `actionId`'s exclusive hold on `branchId`, or drops its queued request; else a no-op. */
 export function releaseBranchWriteExclusive(branchId: string, actionId: string): void {
   const lock = locks.get(branchId)
   if (!lock?.acquisitions.delete(actionId)) return

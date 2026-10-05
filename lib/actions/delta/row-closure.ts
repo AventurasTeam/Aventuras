@@ -28,7 +28,7 @@ export type ReversalSeed = {
   readonly branchId: string
   /** The action being undone, or a path's whole selection. */
   readonly target: readonly Delta[]
-  /** Rows reversed because prose moved; redo leaves them, and what only they reach, to re-derivation. */
+  /** Rows reversed because prose moved; redo leaves them and what only they reach to re-derive. */
   readonly sweep?: readonly Delta[]
 }
 
@@ -112,10 +112,8 @@ async function liveReferrers(
 }
 
 /**
- * Keys of the seeded rows whose every seed create is a machine create on a row-keeping table that
- * a `user_edit` outside the seed, first logged after it, kept by writing a keeping column. Judged
- * from `writes`, the read that gathers the row's deltas: a separate read lets a user Save landing
- * between the two join the set as the closure's and be reversed.
+ * Seeded rows a later outside `user_edit` kept by writing a keeping column. Judged from `writes`:
+ * a separate read lets a user Save landing between the two join the set and be reversed.
  */
 function userKeptRows(
   seedCreates: ReadonlyMap<string, readonly Delta[]>,
@@ -144,8 +142,7 @@ function userKeptRows(
   return kept
 }
 
-// The fixed point of generation-pipeline.md → Reverse-replay: rows the seed's creates remove,
-// then every row naming a removed row — live, held, or deleted on its own — until none joins.
+// Fixed point of generation-pipeline.md → Reverse-replay: removed rows, then every row naming one.
 async function closeOver(
   ctx: DbCtx,
   branchId: string,

@@ -16,7 +16,7 @@ export type DeltaActionPort = {
   describeReplayError: (e: unknown) => { detail: string; committed: boolean } | undefined
   /** Resolves once every user write dispatched so far has committed or been refused. */
   settleUserWrites: () => Promise<void>
-  /** Takes the branch's write lock exclusive for the run; idempotent per actionId, never rejects. */
+  /** Takes the branch write lock exclusive for the run; idempotent per actionId, never rejects. */
   holdWritePhase: (branchId: string, actionId: string) => Promise<void>
   /** Ends the run's hold (or queued request); does nothing when it has none. */
   releaseWritePhase: (branchId: string, actionId: string) => void

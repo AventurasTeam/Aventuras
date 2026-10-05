@@ -880,7 +880,7 @@ describe('reversals take a closed set', () => {
       },
       'act_pass',
     )
-    // Only a writer outside the log makes a row like this (generation-pipeline.md → Reverse-replay).
+    // Raw insert: a writer outside the log (generation-pipeline.md → Reverse-replay).
     await db
       .insert(happeningInvolvements)
       .values({ id: 'hinv_raw', branchId: 'b1', happeningId: 'hap_p', entityId: 'char_1' })

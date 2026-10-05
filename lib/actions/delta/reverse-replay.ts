@@ -64,11 +64,9 @@ export type ReversePlan = {
 }
 
 /**
- * The reversal of a closed set, unexecuted — so a caller that owns a transaction of its
- * own can commit it alongside its own work rather than in a second one. Ops and prunes
- * stay separate because their order relative to the caller's ops is the caller's call.
- * A delete whose own row the reversal removes is pruned with the set
- * (generation-pipeline.md → Reverse-replay). The prunes leave gaps in log_position.
+ * The reversal of a closed set, unexecuted, for a caller committing it inside its own transaction.
+ * Ops and prunes stay separate: their order against the caller's ops is the caller's call. The
+ * prunes leave gaps in log_position (generation-pipeline.md → Reverse-replay).
  */
 export async function buildReverseAndPrunePlan(
   set: ReversalSet,
@@ -168,8 +166,7 @@ function rebuiltPayload(holder: Delta, copies: readonly HeldCopy[]): Record<stri
   return payload
 }
 
-// One payload write per changed delete; a delete whose own row is removed is pruned instead,
-// taking any strip or patch on it along.
+// A delete whose own row is removed is pruned, not rewritten; any strip or patch on it goes too.
 function settleHeldCopies(
   copies: ReadonlyMap<string, HeldCopy>,
   ctx: DbCtx,
@@ -281,9 +278,8 @@ async function buildUndoOps(
   const absent = new Set<string>()
   const ops: SqlOp[] = []
   const patches: PatchEmission[] = []
-  // A kept create's row exists only through the user writes that kept it, so the create goes to
-  // the oldest of them, the last a newest-first CTRL-Z reaches; pruned, the row's next reversal
-  // by reference would find no create and refuse.
+  // The create goes to the oldest user write that kept its row (the last a newest-first CTRL-Z
+  // reaches); pruned, the row's next reversal by reference would find no create and refuse.
   const reowned = new Map<string, string>()
   const listVecTables = vecTableLister(ctx)
   const laterUserEdits = await userEditsOutliving(ctx, rows, readsUserEdits)
@@ -573,10 +569,8 @@ export async function reverseAndPruneDeltaRows(
 }
 
 /**
- * Reverses and prunes in one transaction, as CTRL-Z does: rows left in the log would read as
- * the undo head and a later rollback's to-do (data-model.md → Entry mutability & rollback).
- * The action's deltas are closed through `selectReversalSet` first. Ops from
- * `settleOps(deltaCount)` join that transaction, even when `deltaCount` is 0.
+ * Reverses and prunes in one transaction, as CTRL-Z does: unpruned rows would read as the undo head
+ * (data-model.md → Entry mutability & rollback). `settleOps(deltaCount)` ops join it, even at 0.
  */
 export async function reverseReplayDeltas(
   actionId: string,

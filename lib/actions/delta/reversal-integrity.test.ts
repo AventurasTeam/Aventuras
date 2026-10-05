@@ -98,8 +98,7 @@ beforeEach(async () => {
     updatedAt: 1,
   })
   await ctx.db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
-  // No create deltas, like rows the wizard writes: the closure never reaches them, since
-  // they name nothing.
+  // No create deltas, like wizard-written rows: the closure never reaches them (they name nothing).
   await ctx.db
     .insert(entities)
     .values([character('char_lead', 'Kael'), character('char_x', 'Mira')])
@@ -159,9 +158,8 @@ async function redo(): Promise<void> {
   expect(await redoLastAction('b1', ctx)).toEqual({ status: 'ok' })
 }
 
-// The orchestrator's abortRun reverses a failed run this way. In production the no-gate write
-// lock keeps a user write out of a pass's burst, so these interleavings are not a reachable
-// abort: driving the reversal directly pins the planner.
+// Mirrors the orchestrator's abortRun. The no-gate write lock keeps user writes out of a pass's
+// burst in production, so these interleavings are unreachable there; driving it pins the planner.
 async function abort(actionId: string): Promise<void> {
   await reverseReplayDeltas(actionId, ctx)
 }
@@ -249,7 +247,7 @@ async function expectNoDanglingRefs(label: string): Promise<void> {
       if (!live.has(key) && !held.byRow.has(key))
         dangling.push(`held ${row.table}:${row.id} (delta ${row.holder.id}) names ${key}`)
     }
-  // Thrown, not asserted: toEqual's message truncates the array, and the self-tests match the rows in it.
+  // Thrown, not asserted: toEqual truncates the array; the self-tests match rows in the message.
   if (dangling.length > 0) throw new Error(`${label}: ${dangling.join('; ')}`)
 }
 

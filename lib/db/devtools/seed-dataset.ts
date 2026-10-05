@@ -1119,9 +1119,8 @@ const heroDeltas: NewDelta[] = [
     encodingVersion: 1,
     createdAt: BASE + 22 * MIN,
   },
-  // hap_fire's link rows, logged with the happening so one undo takes the action whole; a
-  // reversal that removes the happening refuses without their creates (generation-pipeline.md →
-  // Reverse-replay). haw_fire_kael learns at entry 25, so it is a later pass's action.
+  // Link rows log with hap_fire: a reversal removing it refuses without their creates
+  // (generation-pipeline.md → Reverse-replay). haw_fire_kael learns at entry 25: a later pass.
   {
     id: 'delta_hero_5',
     branchId: MAIN,
@@ -1210,11 +1209,8 @@ const heroDeltas: NewDelta[] = [
   },
 ]
 
-// Every persisted entry but the opening carries a create delta (the rollback window resolves
-// from it — operational.ts rejects without one); seeding rows bare makes
-// delete/rollback silently dead on every seeded story. Sources mirror the
-// real writers: user_edit for user turns, ai_classifier for model output, and
-// none for the opening, which the wizard commits with no delta (create-story.ts).
+// Rollback/delete resolve from an entry's create delta (operational.ts rejects without one) and
+// go silently dead on a bare seed. The opening has none, as in create-story.ts.
 function entryCreateDeltas(allEntries: NewStoryEntry[]): NewDelta[] {
   const nextLogPosition = new Map<string, number>()
   return allEntries

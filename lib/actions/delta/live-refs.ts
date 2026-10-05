@@ -17,7 +17,7 @@ export type RefTable =
 
 export type LiveRef = { table: RefTable; id: string }
 
-/** A column of the referring table naming a `refTable` row; `when` limits it to rows whose discriminator matches. */
+/** A column naming a `refTable` row; `when` limits it to rows whose discriminator matches. */
 export type RefColumn = {
   readonly column: string
   readonly refTable: RefTable
@@ -35,9 +35,8 @@ export const TRANSLATION_TARGET_TABLE = {
 } as const satisfies Record<Translation['targetKind'], RefTable>
 
 /**
- * The one reference registry, keyed by the referring table's registered name: the reversal
- * closure, `missingRef` and the live-link filter all read it (generation-pipeline.md →
- * Reverse-replay).
+ * The one reference registry, keyed by the referring table's registered name
+ * (generation-pipeline.md → Reverse-replay).
  */
 export const REF_COLUMNS: Readonly<Record<string, readonly RefColumn[]>> = {
   happening_involvements: [
@@ -68,7 +67,7 @@ export function isRefTable(table: string): table is RefTable {
   return REF_TABLES.has(table)
 }
 
-/** The rows `row` of `table` names; none for a table that names nothing, or a row lacking the columns. */
+/** The rows `row` of `table` names; none if the table names nothing or the row lacks columns. */
 export function rowRefs(table: string, row: Record<string, unknown>): LiveRef[] {
   const refs = Object.hasOwn(REF_COLUMNS, table) ? REF_COLUMNS[table] : []
   return refs.flatMap(({ column, refTable, when }) => {

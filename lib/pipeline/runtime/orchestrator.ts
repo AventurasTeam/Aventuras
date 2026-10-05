@@ -126,9 +126,8 @@ function endWritePhase(run: RunState): void {
 async function handleEvent(event: PhaseEmittedEvent, run: RunState, ctx: RunCtx): Promise<void> {
   if (event.type === 'delta_emitted') {
     // Promise.all rejects without waiting for sibling branches, so one can emit after the run
-    // left txState. The release sits right behind that removal, so a hold taken while registered
-    // is freed and a write after it is dropped; the run's outcome is already settled, so there is
-    // nothing to fail.
+    // left txState. The release sits right behind that removal (freeing any hold taken while
+    // registered); the outcome is already settled, so a late write is dropped, not failed.
     if (run.gateBehavior === 'no-gate' && !generationStore.getTxState().runs.has(run.runId)) {
       logger.debug(
         'pipeline.write_after_run_left',

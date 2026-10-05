@@ -17,7 +17,7 @@ export type HeldRow = {
   readonly holder: Delta
   /** `target`: the holder's own row. `captured`: a child under one of its cascade keys. */
   readonly place: 'target' | 'captured'
-  /** The held copy: the payload minus cascade and meta keys for a target, the child row otherwise. */
+  /** The held copy: a target's payload minus cascade and meta keys, else the child row. */
   readonly row: Readonly<Record<string, unknown>>
 }
 
@@ -65,8 +65,8 @@ export async function loadHeldRows(ctx: DbCtx, branchId: string): Promise<HeldRo
       const key = heldKey(held.table, held.id)
       const seen = byRow.get(key)
       if (seen) {
-        // Deleting a held row again needs its delete undone first, so a second holder is a broken log;
-        // the ascending scan lets the newer holder win.
+        // A second holder means a broken log (re-deleting a held row needs its delete undone
+        // first); the ascending scan lets the newer holder win.
         logger.error('action_layer.row_held_twice', {
           table: held.table,
           id: held.id,

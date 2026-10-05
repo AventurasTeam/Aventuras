@@ -78,7 +78,6 @@ const translation = (
   updatedAt: 1,
 })
 
-// An entity delete of char_k whose payload captured these rows.
 function entityDelete(captured: {
   relationships?: CharacterRelationship[]
   translations?: Translation[]

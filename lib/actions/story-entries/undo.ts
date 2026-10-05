@@ -85,9 +85,8 @@ async function undoBracketed(branchId: string, ctx: DbCtx): Promise<UndoResult> 
   let clampOps: SqlOp[]
   if (target.kind === 'turn') {
     const swept = await resolveSweep(branchId, target.entryId, ctx)
-    // resolveSweep refuses on a missing entry, an absent create delta, or a closure the log
-    // cannot satisfy: the log cannot describe what it is being asked to reverse. A refusal is
-    // already logged there.
+    // resolveSweep refuses (missing entry, absent create delta, unsatisfiable closure) and logs
+    // it: the log cannot describe what it is asked to reverse.
     if ('status' in swept) return { status: 'rejected', code: 'integrity', reason: swept.reason }
     set = swept.set
     clampOps = swept.clampOps
@@ -101,15 +100,13 @@ async function undoBracketed(branchId: string, ctx: DbCtx): Promise<UndoResult> 
     set = await selectReversalSet(ctx, { branchId, target: group, sweep: invalidation.rows })
   }
 
-  // Redo restores the target and the rows its closure took (data-model.md → Entry
-  // mutability & rollback).
+  // Redo restores the target and its closure (data-model.md → Entry mutability & rollback).
   const snapshot = await snapshotForRedo(set, ctx)
   try {
     await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: true }, clampOps)
   } catch (e) {
-    // A committed DeltaReplayError means the reversal + prune already landed in
-    // SQLite; only the post-commit store sync failed. The data change is real,
-    // so preserve redo capability before surfacing the sync failure.
+    // Committed: the reversal + prune landed in SQLite, only the store sync failed. The change
+    // is real, so keep redo available before surfacing the failure.
     if (e instanceof DeltaReplayError && e.committed) undoRedoStore.pushRedoGroup(snapshot)
     throw e
   }
@@ -148,9 +145,8 @@ export async function redoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
       try {
         await applyRedo(snapshot, ctx, { set, extraOps: invalidation.clampOps })
       } catch (e) {
-        // Committed means the redo's DB write landed; only the post-commit store
-        // sync failed. Pop the snapshot regardless — retrying it would re-insert
-        // an already-inserted delta row and collide on its primary key.
+        // Committed: the redo's DB write landed, only the store sync failed. Pop regardless —
+        // a retry would re-insert an already-inserted delta row and collide on its primary key.
         if (e instanceof DeltaReplayError && e.committed) undoRedoStore.popRedoGroup()
         throw e
       }

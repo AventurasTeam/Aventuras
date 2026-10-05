@@ -571,8 +571,7 @@ describe('undo and redo carry the reversal closure', () => {
     entriesStore.hydrate('b1', [])
   }
 
-  // A head turn of two replies, as operational.test.ts seeds it: e2 is the tail a content
-  // edit invalidates.
+  // Two replies, as operational.test.ts seeds them: e2 is the tail a content edit invalidates.
   async function seedTail(db: Db) {
     await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
     await db.insert(branches).values({
@@ -857,9 +856,8 @@ describe('undo and redo carry the reversal closure', () => {
   })
 })
 
-// Unreachable through the actions: a machine write that nulls a relationship view. The undo then
-// leaves the pair with no view, and the pair's other writes, outside the set, would be pruned
-// where redo cannot restore them (generation-pipeline.md → Reverse-replay).
+// Unreachable through the actions: a machine write nulls a relationship view, so an undo would
+// prune the pair's writes outside its redo (generation-pipeline.md → Reverse-replay).
 describe('a CTRL-Z or redo whose reversal would prune writes outside its redo', () => {
   type Db = Awaited<ReturnType<typeof createTestDb>>['db']
 

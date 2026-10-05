@@ -727,8 +727,7 @@ function undoAfterReversal(ctx: Ctx) {
 }
 
 describe('a kept create goes to the user write that kept its row', () => {
-  // Kael by the user, a pass's pair anchored to the reply, the user's view on it, then the
-  // prose edit that sweeps the pass's create but keeps the row for the user's view.
+  // The prose edit sweeps the pass's create but keeps the row for the user's view.
   async function sweptUnderUserView(ctx: Ctx, db: Db, view: PipelineAction) {
     await createKael(ctx)
     await db.insert(entities).values({ ...KAEL, id: 'char_mira', name: 'Mira' })

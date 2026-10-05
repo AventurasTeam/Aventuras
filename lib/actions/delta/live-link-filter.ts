@@ -27,11 +27,9 @@ function capturedKeys(children: Children): Set<string> {
 const size = (children: Children) => children.reduce((n, child) => n + child.rows.length, 0)
 
 /**
- * C3: a delete's undo restores the rows it captured, but a separate reversal may since have
- * removed a row one of them names. A named row counts as live by its state once the whole plan
- * has run — its oldest create in the plan removes it, a delete restores it — else if the same
- * undo restores it, else by the DB. A captured row naming a dead row drops, and so does every
- * captured row naming a dropped one.
+ * Drops captured rows naming a row a separate reversal removed since, cascading to rows naming
+ * those. Liveness: the plan's end state (the row's oldest delta: a create removes it, a delete
+ * restores it), else this undo's own restores, else the DB.
  */
 export async function liveLinkFilter(rows: readonly Delta[], ctx: DbCtx): Promise<LiveLinkFilter> {
   const fate = new Map<string, Delta>()

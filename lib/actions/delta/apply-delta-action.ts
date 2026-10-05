@@ -220,9 +220,8 @@ type GroupArgs = { actionId: string; branchId: string; entryId?: string | null }
 
 /**
  * Handlers read pre-group state, so a delete's cascade can't see the group's other writes: a
- * second delete of a row, or a second write to a cascaded one, logs it twice (undo restores it
- * twice and hits a unique constraint forever), and a link or translation written to a deleted or
- * cascaded row passes the live-row guard and dangles.
+ * second delete of a row, or a second write to a cascaded one, logs it twice (undo then hits a
+ * unique constraint forever); a link or translation to a deleted or cascaded row dangles.
  */
 function groupConflict(outcomes: readonly OkOutcome[]): string | null {
   const cascaded = new Set<string>()
@@ -326,9 +325,8 @@ async function applyDeltaActionGroupUnlocked(
     if (refused === 'noop') skipped.push({ action, createdThen: created.size })
     else if (refused) return refused
   }
-  // A link can no-op only because the row it names is created later in the group, so it runs
-  // once more against every create. One more pass settles it: createOutcome mints relationship
-  // ids itself, so a group can't name a relationship it creates.
+  // A link no-ops only if its row is created later in the group, so rerun it after all creates.
+  // One rerun settles it: createOutcome mints relationship ids, so a group can't name its own.
   for (const { action, createdThen } of skipped) {
     if (created.size === createdThen) continue
     const refused = await prepare(action)

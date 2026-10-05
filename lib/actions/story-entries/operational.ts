@@ -126,14 +126,13 @@ async function updateStoryEntryContentBracketed(
         .set({ content })
         .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, id)))
         .toSQL(),
-      // Spliced rather than dispatched: applyDeltaAction commits its own transaction, so
-      // it could not be atomic with the reversal, and its barrier rejects a user_edit
-      // action while `reversalInProgress` is set -- which the bracket above sets.
+      // Spliced, not dispatched: applyDeltaAction's own transaction isn't atomic with the reversal,
+      // and its barrier rejects user_edit while the bracket's `reversalInProgress` is set.
       deltaRowOp(ctx, {
         deltaId: generateId('delta'),
         branchId,
-        // Survival anchor: without it a rollback above this entry would sweep the delta
-        // and restore stale prose onto a row that survives (data-model.md).
+        // Survival anchor (data-model.md): else a rollback above sweeps this delta and restores
+        // stale prose onto a surviving row.
         entryId: id,
         actionId: generateId('act'),
         source: 'user_edit',
@@ -157,8 +156,6 @@ async function updateStoryEntryContentBracketed(
 
 export type RollbackCounts = { entries: number; chapters: number; worldStateChanges: number }
 
-// The rollback-window predicate behind resolveSweep, which the preview and every sweep
-// path share.
 async function resolveRollbackWindow(
   branchId: string,
   targetId: string,
@@ -218,11 +215,9 @@ async function resolveRollbackWindow(
 }
 
 /**
- * The rollback window materialized and closed: the set the sweep reverses, plus the
- * watermark clamp that must ride in its transaction. Writes nothing (a refusal only logs) — each
- * caller owns its own tail (`countBuckets`, a redo snapshot, nothing) and decides its own
- * redo-stack policy, which is not uniform across callers. A closure the log cannot satisfy
- * comes back as the `delta-failed` rejection.
+ * The rollback window materialized and closed: the set the sweep reverses, plus the watermark
+ * clamp that must ride in its transaction. Writes nothing (a refusal only logs); each caller owns
+ * its tail and redo-stack policy, which differ. A closure the log cannot satisfy is `delta-failed`.
  */
 export async function resolveSweep(
   branchId: string,

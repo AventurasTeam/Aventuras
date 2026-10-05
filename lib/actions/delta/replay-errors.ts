@@ -1,7 +1,4 @@
-/**
- * `transaction`: nothing landed. `store-sync`: the DB write landed and the in-memory sync after it
- * threw.
- */
+/** `transaction`: nothing landed. `store-sync`: the DB write landed, the in-memory sync threw. */
 export type ReplayFailureStage = 'transaction' | 'store-sync'
 
 export class DeltaReplayError extends Error {

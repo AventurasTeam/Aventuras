@@ -184,10 +184,8 @@ function isReversible(delta: Delta): boolean {
 }
 
 /**
- * The classifier facts anchored to the entries in a content edit's invalidation scope, minus
- * entity creates — unclosed. Every caller reverses them through `selectReversalSet`, whose
- * closure takes the rows naming what their creates delete: a link does not share its
- * happening's anchor (classifier.md -> Provenance attribution).
+ * Classifier facts anchored to the scope's entries, minus entity creates; unclosed. Callers add
+ * the link rows through `selectReversalSet` (classifier.md -> Provenance attribution).
  */
 export async function resolveClassifierFactDeltas(
   branchId: string,
