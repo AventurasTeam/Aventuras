@@ -315,6 +315,7 @@ export function buildClassifierActions(
     const objectId = resolveRef(relationship.object, 'character')
     if (subjectId == null || objectId == null || subjectId === objectId) continue
     // A blank kind would be rejected or stored as whitespace; drop the fact instead of failing.
+    // Never emit a null view: reversal redo relies on it (generation-pipeline.md → Reverse-replay).
     const kind = nonBlank(relationship.kind)
     if (kind == null) continue
     planned.push({

@@ -189,7 +189,7 @@ function settleHeldCopies(
 }
 
 // A write left naming a gone row would CTRL-Z to nothing. Redo never restores one: logged writes
-// clear redo, CTRL-Z skips periodic groups, no machine nulls a view, held rows refuse held-in-redo.
+// clear redo, only periodic groups sit above a CTRL-Z target, no machine nulls a view or deletes.
 async function strandedWritesOf(
   ctx: DbCtx,
   set: ReversalSet,
