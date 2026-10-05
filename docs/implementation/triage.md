@@ -136,17 +136,27 @@ slice-planning gate forces its resolution before that slice is planned.
   none either. Drift to resolve in the doc. Raised in the
   reversal-integrity PR's review (2026-10-05).
 
-- **The rollback preview selects its set outside the bracket and any
-  lock.** `getRollbackCounts` runs `selectReversalSet` unguarded;
-  `closeOver` (`lib/actions/delta/row-closure.ts`) reads live
-  referrers in one round and their creates in the next, so a
-  periodic-classifier abort between the two reads could make the
-  preview throw `no-create`. The user would see a transient "Couldn't
-  roll back" plus an error-level `action_layer.reversal_refused` that
-  misreports a race as an integrity fault; a second tap clears it.
-  Possible fix: take the branch write lock shared around the preview's
-  selection. Reasoned, not reproduced. Raised in the
-  reversal-integrity PR's review (2026-10-05).
+- **A user's own reversal can land between the rollback preview's
+  closure reads.** `closeOver` (`lib/actions/delta/row-closure.ts`)
+  reads live referrers in one round and their creates in the next.
+  `getRollbackCounts` in `lib/actions/story-entries/operational.ts`
+  holds the branch write lock shared around its selection, but a
+  CTRL-Z (`undoLastAction`), a redo or a content edit's reversal takes
+  no branch lock: `bracketProseReversal` waits out the classifier and
+  settles user writes, nothing more. Opening the preview (× through
+  `openRollback`, ↻ through `handleRequestRegenerate`, both in
+  `app/reader-composer/[branchId].tsx`) sets no flag that blocks undo,
+  so a hotkey CTRL-Z can commit between those reads and the preview
+  refuses `no-create`. The user would see "Couldn't roll back", or the
+  regenerate-failed toast, plus an error-level
+  `action_layer.reversal_refused` that misreports a race as an
+  integrity fault; a second tap clears it. The window is the preview's
+  own few DB round trips. Possible fixes: have bracketed reversals take
+  the branch lock exclusive, or retry the preview's selection once on
+  a `no-create` refusal. Read-verified, not reproduced. The
+  periodic-classifier abort half was closed in the same PR's slice
+  review by that shared hold. Raised in the reversal-integrity PR's
+  review (2026-10-05).
 
 - **The reader's edit commit has no try/catch.** `handleCommitEdit` in
   `app/reader-composer/[branchId].tsx` awaits `updateStoryEntryContent`
@@ -289,6 +299,26 @@ slice-planning gate forces its resolution before that slice is planned.
   test-side constructor. The type predates this PR, and
   [Type design](../code-conventions.md#type-design) files looseness in
   older code as a deferral. Brand it, or make it opaque, when redo is
-  next touched, as `ReversalSet` already is (`reversalSetBrand` in
-  `lib/actions/delta/row-closure.ts`). Raised in the
+  next touched, so it is minted only by its producer, as `ReversalSet`
+  is by `selectReversalSet`. Raised in the reversal-integrity PR's
+  slice review (2026-10-05).
+
+- **The seed logs a classifier happening as its own CTRL-Z group.**
+  The hero branch's `act_class_1` group in
+  `lib/db/devtools/seed-dataset.ts` (`delta_hero_2`, the `hap_fire`
+  create, with `delta_hero_5`, `delta_hero_6` and `delta_hero_7`, its
+  link creates) is logged as `ai_classifier` in an action of its own
+  with no story-entry create, a group no production writer leaves. The
+  periodic classifier logs happenings and links as
+  `periodic_classifier` (`lib/classifier/plan.ts`), which CTRL-Z steps
+  over (`lib/undo/index.ts`), and the Plot draft
+  (`lib/plot/happening-draft.ts`) logs them as `user_edit`. A CTRL-Z
+  that reaches the group on the seeded hero branch so undoes it as a
+  standalone group. Pre-existing for `delta_hero_2` (the merge base
+  logs it the same way); this PR added the link creates to the group,
+  and its sibling `delta_hero_8` already logs as a periodic pass. The
+  test "logs the hero happening fire as one contiguous action" in
+  `seed-dataset.test.ts` treats it as a CTRL-Z-able group, and the E2E
+  harness seeds from this dataset (`e2e/harness/seed.ts`), so changing
+  its source needs a check of what those specs CTRL-Z. Raised in the
   reversal-integrity PR's slice review (2026-10-05).
