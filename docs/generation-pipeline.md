@@ -1240,12 +1240,12 @@ async function reverseReplayDeltas(
   actionId: string,
   settleOps: (deltaCount: number) => SqlOp[] = () => [],
 ): Promise<number> {
+  const rows = await db.query(
+    'SELECT * FROM deltas WHERE action_id = ? ORDER BY log_position DESC',
+    [actionId],
+  )
   // Closed over the rows its creates delete and the rows naming them (below).
-  const deltas = selectReversalSet(
-    await db.query('SELECT * FROM deltas WHERE action_id = ? ORDER BY log_position DESC', [
-      actionId,
-    ]),
-  ).rows
+  const deltas = (await selectReversalSet({ branchId: rows[0]?.branch_id, target: rows })).rows
   // Called even at zero deltas: the caller may still have a marker to settle.
   const settle = settleOps(deltas.length)
   if (deltas.length === 0 && settle.length === 0) return 0
@@ -1262,6 +1262,8 @@ async function reverseReplayDeltas(
     await db.exec('COMMIT')
   } catch (e) {
     await db.exec('ROLLBACK')
+    // An integrity refusal (below) already names what it refused.
+    if (e instanceof ReversalIntegrityError) throw e
     throw new DeltaReplayError('Reverse-replay failed', {
       cause: e,
       actionId,
