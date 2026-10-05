@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import { getRollbackCounts } from '@/lib/actions'
+import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { ID_PATTERN, IdBiMap, SUBSTITUTABLE_PREFIXES } from '@/lib/ids'
 import { detectRichEntryHtml, parseMarkdownToHtml } from '@/lib/markdown'
 
@@ -192,6 +194,39 @@ describe('seed id substitution contract', () => {
       if (state?.faction_id) expect(entityIds, `${e.id}.faction_id`).toContain(state.faction_id)
       if (state?.current_location_id)
         expect(entityIds, `${e.id}.current_location_id`).toContain(state.current_location_id)
+    }
+  })
+})
+
+// A link row with no create delta of its own makes any rollback that removes its parent refuse
+// `no-create` (generation-pipeline.md → Reverse-replay), so the seeded stories could not roll back.
+describe('seeded rollback', () => {
+  const BATCH = 100
+
+  async function seededDb() {
+    const handle = await createTestDb()
+    for (const { table, rows } of buildSeedSteps())
+      for (let i = 0; i < rows.length; i += BATCH)
+        await handle.db.insert(table).values(rows.slice(i, i + BATCH) as never)
+    return handle
+  }
+
+  // hap_fire anchors at entry 22 and its links at 22 and 25, so rolling back to any earlier entry
+  // sweeps them; checking every entry also covers rollbacks that spare them.
+  it('previews a rollback to every hero entry above the opening', async () => {
+    const { db, runInTransaction } = await seededDb()
+    const entries = (
+      rowsOf('story_entries') as { id: string; branchId: string; position: number }[]
+    ).filter((r) => r.branchId === 'br_hero_main' && r.position > 1)
+    expect(entries.length).toBeGreaterThan(22)
+
+    for (const entry of entries) {
+      const counts = await getRollbackCounts('br_hero_main', entry.id, { db, runInTransaction })
+      expect(counts, `entry ${entry.position}`).toEqual({
+        entries: expect.any(Number),
+        chapters: expect.any(Number),
+        worldStateChanges: expect.any(Number),
+      })
     }
   })
 })
