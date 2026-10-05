@@ -2,7 +2,7 @@
 
 Resolves the `4.2c planning gate — Reversals leave link rows and delete
 payloads out of step with the log` entry in
-[`followups.md → Data-model`](../followups.md#data-model). The commit
+`followups.md → Data-model`, since drained. The commit
 that lands this record replaces that entry with a one-line
 implementation entry: the design is settled, the code is not.
 

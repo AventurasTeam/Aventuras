@@ -1241,11 +1241,11 @@ async function reverseReplayDeltas(
   settleOps: (deltaCount: number) => SqlOp[] = () => [],
 ): Promise<number> {
   // Closed over the rows its creates delete and the rows naming them (below).
-  const deltas = closeOverRemovedRows(
+  const deltas = selectReversalSet(
     await db.query('SELECT * FROM deltas WHERE action_id = ? ORDER BY log_position DESC', [
       actionId,
     ]),
-  )
+  ).rows
   // Called even at zero deltas: the caller may still have a marker to settle.
   const settle = settleOps(deltas.length)
   if (deltas.length === 0 && settle.length === 0) return 0
@@ -1381,7 +1381,7 @@ goes whatever its survival anchor
 ([`data-model.md → Survival anchor`](./data-model.md#survival-anchor)).
 Left out, a link would name a row that exists nowhere, and a user edit
 would stay in the log pointing at a row that is gone, its CTRL-Z
-reporting an undo that changed nothing. `closeOverRemovedRows`
+reporting an undo that changed nothing. `selectReversalSet`
 (`lib/actions/delta/row-closure.ts`) is the closure.
 
 **A reversal applies to a row a delete holds.** A deleted row lives on
@@ -1407,19 +1407,23 @@ back. The cost is narrow: a pass that runs between the two undos
 cannot re-derive a link naming the still-deleted row, and that link
 stays lost.
 
-**Two states are refused as integrity errors, writing nothing.** A
+**Three states are refused as integrity errors, writing nothing.** A
 delete the planner would prune that shares its action group with a
 delta still in the log whose undo would write the removed id back: an
 entity delete's `state` and tail-scene updates do, so a later CTRL-Z of
 the group would restore a dead id. A chapter-close consolidation's
-upserts name the surviving happening, so its deletes prune. And a
-captured row among the rows a CTRL-Z's redo would restore (below): it
+upserts name the surviving happening, so its deletes prune. A row a
+delete holds among the rows a CTRL-Z's redo would restore (below): it
 would need a newer non-classifier delete still in the log, which
-CTRL-Z picks first. Neither is reachable today — an entity's create is
-never reversed while a delete holds it, given the
+CTRL-Z picks first. And a row the closure reaches by reference with no
+`create` in the log, which only a writer outside the log could make:
+the wizard, a seed or an import. None is reachable today. An entity's
+create is never reversed while a delete holds it, given the
 [no-gate write phase](#no-gate-write-phase), newest-first undo, every
 window holding a delete with the create it follows, and sweeps sparing
-entity creates — and refusing keeps a broken assumption loud.
+entity creates. A writer outside the log names only rows it made
+itself, which lack a `create` too, and the closure starts from rows
+whose `create` the set holds. Refusing keeps a broken assumption loud.
 
 **The set labels each delta for redo:** part of the action being undone,
 reached by the closure from it, or a sweep's row and what the closure
@@ -1878,7 +1882,8 @@ write — after its model call, embedding and reconciliation, so World
 stays editable through those — and waits for every shared holder, so a
 write already in flight lands first. The run's own writes go through
 inside the hold, which ends when the run settles: after the watermark
-write on success, after the abort's reversal commits on failure. A
+write on success, after the abort's reversal on failure, whether it
+commits or leaves the run to boot recovery. A
 write arriving meanwhile waits a few milliseconds; nothing is disabled
 or refused. Prose reversals need nothing more, since the barrier above
 already waits a burst out, and boot recovery runs before any branch
