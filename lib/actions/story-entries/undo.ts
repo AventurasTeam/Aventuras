@@ -81,8 +81,7 @@ async function undoBracketed(branchId: string, ctx: DbCtx): Promise<UndoResult> 
   let clampOps: SqlOp[]
   if (target.kind === 'turn') {
     const swept = await resolveSweep(branchId, target.entryId, ctx)
-    // resolveSweep refuses a missing entry or an absent create delta, and refuses and logs an
-    // unsatisfiable closure: the log cannot describe what it is asked to reverse.
+    // A missing entry or create delta, or a refused closure (the only one logged): unreversible.
     if ('status' in swept) return { status: 'rejected', code: 'integrity', reason: swept.reason }
     set = swept.set
     clampOps = swept.clampOps

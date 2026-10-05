@@ -249,8 +249,7 @@ describe('seeded rollback', () => {
     expect(fire[fire.length - 1]! - fire[0]!).toBe(fire.length - 1)
   })
 
-  // CTRL-Z skips only periodic passes, so a machine link create logged apart from its happening
-  // would be undone on its own, a step no real writer leaves.
+  // CTRL-Z skips only periodic passes; a link create logged apart from its happening undoes alone.
   it('logs each machine link create with its happening unless a periodic pass wrote it', () => {
     type DeltaRow = {
       branchId: string

@@ -325,9 +325,8 @@ async function applyDeltaActionGroupUnlocked(
     if (refused === 'noop') skipped.push({ action, createdThen: created.size })
     else if (refused) return refused
   }
-  // A link naming a row created later in the group no-ops on the first pass, so rerun skipped
-  // actions once all creates are in. One rerun settles it: createOutcome mints relationship ids,
-  // so a group can't name its own.
+  // A link naming a row created later in the group no-ops on pass one: rerun it after all creates.
+  // One rerun settles it: createOutcome mints relationship ids, so a group can't name its own.
   for (const { action, createdThen } of skipped) {
     if (created.size === createdThen) continue
     const refused = await prepare(action)

@@ -18,12 +18,12 @@ import { firstLoggedAt, wroteColumn } from './user-precedence'
 
 type ReversalSetFields = Pick<ReversalSet, 'branchId' | 'rows' | 'redoRows' | 'held'>
 
-/** A closed reversal set; constructed only by selectReversalSet, so no path reverses an unclosed one. */
+/** A closed reversal set, built only by selectReversalSet so no path reverses an unclosed one. */
 class ReversalSet {
   // A private field makes the type nominal: no literal or spread of a set satisfies it.
   readonly #closed = true
   readonly branchId: string
-  /** Every delta the reversal replays, then prunes (or re-owns, for a kept create), newest-first. */
+  /** Every delta the reversal replays then prunes (or re-owns for a kept create), newest-first. */
   readonly rows: readonly Delta[]
   /** The target and what the closure reaches from it, newest-first: what CTRL-Z's redo restores. */
   readonly redoRows: readonly Delta[]

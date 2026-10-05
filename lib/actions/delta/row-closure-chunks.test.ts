@@ -14,7 +14,7 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { registerAllDomains } from './registrations'
 import { selectReversalSet } from './row-closure'
 
-// The setup file already loaded row-closure against the real chunk size; a fresh graph sees the mock.
+// The setup file already loaded row-closure at the real chunk size; a fresh graph sees the mock.
 vi.hoisted(() => {
   vi.resetModules()
 })
