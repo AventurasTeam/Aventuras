@@ -22,14 +22,24 @@ export interface ChapterBanner {
 }
 
 /**
- * Where chapter banners go: one before each chapter's first entry, and one before the
- * un-chapterized tail when there is one. Keyed by the entry the banner sits before.
- *
- * A chapter is placed only when both its ends are in `entries`, as `getChapterEntries` requires,
- * so a chapter finished on another branch cannot claim an entry the tail owns. The tail starts
- * after the highest resolved chapter end, the same boundary as `getUnchapterizedEntries`, and
- * takes the number `getNextChapterNumber` would give the next chapter. Banners are ordered by
- * where they sit rather than by `number`, which can disagree after a branch switch.
+ * Index of the last entry any chapter ends on, or -1 when no chapter end is in `indexById`.
+ * The tail starts after it.
+ */
+export function lastResolvedChapterEnd(
+  indexById: Map<string, number>,
+  chapters: Chapter[],
+): number {
+  let lastEnd = -1
+  for (const chapter of chapters) {
+    const end = indexById.get(chapter.endEntryId)
+    if (end !== undefined && end > lastEnd) lastEnd = end
+  }
+  return lastEnd
+}
+
+/**
+ * Where chapter banners go, keyed by the entry each sits before, in story order rather than by
+ * `number`. See docs/architecture/overview.md.
  */
 export function buildChapterBanners(
   entries: StoryEntry[],
@@ -41,7 +51,6 @@ export function buildChapterBanners(
   const indexById = new Map(entries.map((entry, index) => [entry.id, index]))
 
   const placed: { index: number; banner: ChapterBanner }[] = []
-  let lastEnd = -1
   let maxNumber = 0
 
   for (const chapter of chapters) {
@@ -49,7 +58,6 @@ export function buildChapterBanners(
 
     const start = indexById.get(chapter.startEntryId)
     const end = indexById.get(chapter.endEntryId)
-    if (end !== undefined && end > lastEnd) lastEnd = end
     if (start === undefined || end === undefined) continue
 
     placed.push({
@@ -69,6 +77,7 @@ export function buildChapterBanners(
   }
 
   // No end resolved: calling the whole story a "tail" would be wrong, so there is none.
+  const lastEnd = lastResolvedChapterEnd(indexById, chapters)
   const tailIndex = lastEnd + 1
   if (lastEnd !== -1 && tailIndex < entries.length) {
     const tailStart = entries[tailIndex]

@@ -98,7 +98,11 @@ import { clearImageMarkerCache } from '$lib/services/image'
 import { GenerationLease } from '$lib/utils/generationLease'
 import { findLiveCharacter, sameBranchScope, type BranchScope } from '$lib/utils/branchScope'
 import { checkpointDeletionBlocker } from '$lib/utils/storyNavigation'
-import { buildChapterBanners, type ChapterBanner } from '$lib/utils/chapterBanners'
+import {
+  buildChapterBanners,
+  lastResolvedChapterEnd,
+  type ChapterBanner,
+} from '$lib/utils/chapterBanners'
 
 const log = createLogger('StoryStore')
 
@@ -3627,19 +3631,12 @@ class StoryStore {
     }
 
     const chapters = this.currentBranchChapters
-    let lastChapterEnd = -1
-    let resolved = 0
-    for (const chapter of chapters) {
-      const endIdx = this._entryIdToIndex.get(chapter.endEntryId)
-      if (endIdx === undefined) continue
-      resolved++
-      if (endIdx > lastChapterEnd) lastChapterEnd = endIdx
-    }
+    const lastChapterEnd = lastResolvedChapterEnd(this._entryIdToIndex, chapters)
 
     // Chapters exist but none could be placed (broken endEntryId refs): returning
     // everything would label the whole story "not yet chapterized" and make grep count
     // it twice. Better to return nothing than to lie about what it is.
-    if (chapters.length > 0 && resolved === 0) return []
+    if (chapters.length > 0 && lastChapterEnd === -1) return []
 
     return this.entries.slice(lastChapterEnd + 1)
   }

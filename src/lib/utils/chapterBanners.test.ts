@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import type { Chapter, StoryEntry } from '$lib/types'
-import { buildChapterBanners, chapterBannerLabel, TAIL_BANNER_TITLE } from './chapterBanners'
+import {
+  buildChapterBanners,
+  chapterBannerLabel,
+  lastResolvedChapterEnd,
+  TAIL_BANNER_TITLE,
+} from './chapterBanners'
 
 function entry(id: string, position: number): StoryEntry {
   return {
@@ -140,5 +145,24 @@ describe('chapterBannerLabel', () => {
 
   it('falls back to the number alone', () => {
     expect(chapterBannerLabel({ number: 3, title: null })).toBe('Chapter 3')
+  })
+})
+
+describe('lastResolvedChapterEnd', () => {
+  const indexById = new Map(entries.map((e, i) => [e.id, i]))
+
+  it('is -1 when no chapter end resolves', () => {
+    expect(lastResolvedChapterEnd(indexById, [chapter('c1', 1, 'gone', 'gone')])).toBe(-1)
+    expect(lastResolvedChapterEnd(indexById, [])).toBe(-1)
+  })
+
+  it('is the highest resolved end, whatever the chapter order', () => {
+    expect(
+      lastResolvedChapterEnd(indexById, [
+        chapter('c2', 2, 'e2', 'e3'),
+        chapter('c9', 9, 'e0', 'gone'),
+        chapter('c1', 1, 'e0', 'e1'),
+      ]),
+    ).toBe(3)
   })
 })
