@@ -361,6 +361,19 @@ describe('a reversal applies to rows a delete outside the set holds', () => {
     expect(await undoLastAction('b1', ctx)).toMatchObject({ code: 'nothing-to-apply' })
   })
 
+  it('strips a held relationship once the user cleared the view they had added', async () => {
+    await act('act_pass', passView('char_x', 'char_y', 'rival'))
+    await act('act_user1', userPair('rival', 'mentor'))
+    await act('act_user2', userPair('rival', null))
+    await act('act_del', deleteEntity('char_x'))
+
+    await reverseReplayDeltas('act_pass', ctx)
+
+    expect((await payloadOf('act_del')).relationships).toEqual([])
+    await reverseReplayDeltas('act_del', ctx)
+    expect(await ctx.db.select().from(characterRelationships)).toEqual([])
+  })
+
   it("prunes a relationship's own delete and its writes when the reversal leaves it no view", async () => {
     await act('act_user0', userPair(null, 'mentor'))
     await act('act_pass', passView('char_x', 'char_y', 'rival'))
@@ -618,7 +631,9 @@ describe('a reversal applies to rows a delete outside the set holds', () => {
 describe('the write-back refusal', () => {
   // Unreachable through the actions: the pass's create is reversed while a delete holds its
   // row, and that delete's group carries a state write naming it.
-  async function seedWriteBack(): Promise<void> {
+  async function seedWriteBack(
+    naming: Record<string, unknown> = { state: { faction_id: 'char_p' } },
+  ): Promise<void> {
     await act('act_pass', {
       kind: 'createEntity',
       source: 'periodic_classifier',
@@ -633,7 +648,7 @@ describe('the write-back refusal', () => {
         op: 'update',
         targetTable: 'entities',
         targetId: 'char_x',
-        undoPayload: { state: { faction_id: 'char_p' } },
+        undoPayload: naming,
       }),
       raw('d_del', 3, {
         actionId: 'act_del',
@@ -670,6 +685,11 @@ describe('the write-back refusal', () => {
 
   it('refuses to prune a delete whose group would write the removed id back, writing nothing', async () => {
     await seedWriteBack()
+    await expectRefusedUnwritten(() => reverseReplayDeltas('act_pass', ctx))
+  })
+
+  it('finds the removed id inside an id array', async () => {
+    await seedWriteBack({ state: { inventory: ['char_q', 'char_p'] } })
     await expectRefusedUnwritten(() => reverseReplayDeltas('act_pass', ctx))
   })
 
@@ -712,6 +732,41 @@ describe('the write-back refusal', () => {
 
     expect((await payloadOf('act_del')).relationships).toEqual([])
     expect(await ctx.db.select({ id: deltas.id }).from(deltas)).toEqual([{ id: 'd_del_y' }])
+  })
+
+  it('does not count a group-mate the closure takes with the row it targets', async () => {
+    // As seedWriteBack, but the state write targets char_q, which the pass created too.
+    const passEntity = (id: string): PipelineAction => ({
+      kind: 'createEntity',
+      source: 'periodic_classifier',
+      payload: { entry: character(id, { state: emptyEntityState('character') }) },
+    })
+    await act('act_pass', passEntity('char_p'))
+    await act('act_pass', passEntity('char_q'))
+    const [p] = await ctx.db.select().from(entities).where(eq(entities.id, 'char_p'))
+    await ctx.db.delete(entities).where(eq(entities.id, 'char_p'))
+    const byUser = { source: 'user_edit', actionId: 'act_del' } as const
+    await ctx.db.insert(deltas).values([
+      raw('d_state', 10, {
+        ...byUser,
+        op: 'update',
+        targetTable: 'entities',
+        targetId: 'char_q',
+        undoPayload: { state: { faction_id: 'char_p' } },
+      }),
+      raw('d_del', 11, {
+        ...byUser,
+        op: 'delete',
+        targetTable: 'entities',
+        targetId: 'char_p',
+        undoPayload: { ...p, involvements: [], awareness: [], relationships: [], translations: [] },
+      }),
+    ])
+
+    expect(await reverseReplayDeltas('act_pass', ctx)).toBe(3)
+
+    expect(await ctx.db.select().from(deltas)).toEqual([])
+    expect(await ctx.db.select().from(entities).where(eq(entities.id, 'char_q'))).toEqual([])
   })
 
   it('does not count a group-mate the reversal prunes with the row it targets', async () => {
