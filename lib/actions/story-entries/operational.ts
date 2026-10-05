@@ -24,10 +24,14 @@ export type StoryEntryRejection = {
   code: StoryEntryRejectionCode
 }
 
+export function logReversalRefused(branchId: string, e: ReversalIntegrityError): void {
+  logger.error('action_layer.reversal_refused', { branchId, refusal: e.refusal, reason: e.message })
+}
+
 // A refused reversal wrote nothing; it travels on the action's existing rejection
 // (generation-pipeline.md → Reverse-replay).
 export function reversalRefused(branchId: string, e: ReversalIntegrityError): StoryEntryRejection {
-  logger.error('action_layer.reversal_refused', { branchId, refusal: e.refusal, reason: e.message })
+  logReversalRefused(branchId, e)
   return { status: 'rejected', reason: e.message, code: STORY_ENTRY_REJECTION.deltaFailed }
 }
 

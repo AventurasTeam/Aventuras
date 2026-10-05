@@ -6,6 +6,7 @@ import {
   branches,
   deltas,
   entities,
+  happeningInvolvements,
   happenings,
   stories,
   storyEntries,
@@ -585,7 +586,7 @@ describe('snapshotForRedo over a reversal set', () => {
     ...over,
   })
 
-  it('snapshots the target and its closure, not a sweep-only row', async () => {
+  it('leaves a sweep-only row out of the redo snapshot', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seed(db)
@@ -613,6 +614,48 @@ describe('snapshotForRedo over a reversal set', () => {
     expect(set.rows.map((d) => d.id)).toEqual(['d_s', 'd_u'])
     expect(snapshot.map((s) => s.delta.id)).toEqual(['d_u'])
     expect(snapshot[0].rowBeforeUndo).toMatchObject({ id: 'ent_1', name: 'Aria' })
+  })
+
+  it('snapshots a set whose sweep row a delete holds, since redo leaves the sweep out', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    await db.insert(entities).values({ ...KNIGHT, id: 'ent_1', name: 'Aria' })
+    const update = row('d_u', 1, {
+      op: 'update',
+      targetTable: 'entities',
+      targetId: 'ent_1',
+      undoPayload: { name: 'Old' },
+    })
+    const swept = row('d_s', 2, {
+      actionId: 'act_pass',
+      source: 'periodic_classifier',
+      targetTable: 'happenings',
+      targetId: 'hap_h',
+    })
+    const hold = row('d_del', 3, {
+      actionId: 'act_del',
+      op: 'delete',
+      targetTable: 'happenings',
+      targetId: 'hap_h',
+      undoPayload: {
+        id: 'hap_h',
+        branchId: 'b1',
+        title: 'Gone',
+        createdAt: 1,
+        updatedAt: 1,
+        involvements: [],
+        awareness: [],
+      },
+    })
+    await db.insert(deltas).values([update, swept, hold])
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target: [update], sweep: [swept] })
+
+    const snapshot = await snapshotForRedo(set, ctx)
+
+    expect(set.rows.map((d) => d.id)).toContain('d_s')
+    expect(set.redoRows.map((d) => d.id)).toEqual(['d_u'])
+    expect(snapshot.map((s) => s.delta.id)).toEqual(['d_u'])
   })
 
   it('refuses a create of a row a delete holds, before reading any row', async () => {
@@ -643,9 +686,48 @@ describe('snapshotForRedo over a reversal set', () => {
 
     expect(error).toBeInstanceOf(ReversalIntegrityError)
     expect(error).toMatchObject({ refusal: 'held-in-redo' })
-    expect((error as Error).message).toContain('happenings:hap_h')
+    expect((error as Error).message).toContain('happenings:hap_h held by d_del')
     expect(select).not.toHaveBeenCalled()
     select.mockRestore()
+  })
+
+  it("refuses under the reversal's id, not the id of the held write the closure sits behind", async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    await db
+      .insert(happeningInvolvements)
+      .values({ id: 'hinv_1', branchId: 'b1', happeningId: 'hap_h', entityId: 'char_k' })
+    const create = row('d_c', 1, { targetTable: 'happenings', targetId: 'hap_h' })
+    // Newest in redoRows, so the reversal's own id differs from the held create's.
+    const link = row('d_link', 2, {
+      actionId: 'act_pass',
+      source: 'periodic_classifier',
+      targetTable: 'happening_involvements',
+      targetId: 'hinv_1',
+    })
+    const hold = row('d_del', 3, {
+      actionId: 'act_del',
+      op: 'delete',
+      targetTable: 'happenings',
+      targetId: 'hap_h',
+      undoPayload: {
+        id: 'hap_h',
+        branchId: 'b1',
+        title: 'Gone',
+        createdAt: 1,
+        updatedAt: 1,
+        involvements: [],
+        awareness: [],
+      },
+    })
+    await db.insert(deltas).values([create, link, hold])
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target: [create] })
+
+    const error: unknown = await snapshotForRedo(set, ctx).catch((e: unknown) => e)
+
+    expect(set.redoRows.map((d) => d.id)).toEqual(['d_link', 'd_c'])
+    expect(error).toMatchObject({ refusal: 'held-in-redo', actionId: 'act_pass' })
   })
 
   it('refuses an update of a row a delete captured', async () => {
@@ -690,6 +772,6 @@ describe('snapshotForRedo over a reversal set', () => {
 
     expect(error).toBeInstanceOf(ReversalIntegrityError)
     expect(error).toMatchObject({ refusal: 'held-in-redo' })
-    expect((error as Error).message).toContain('character_relationships:rel_c')
+    expect((error as Error).message).toContain('character_relationships:rel_c held by d_edel')
   })
 })

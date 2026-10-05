@@ -184,3 +184,34 @@ slice-planning gate forces its resolution before that slice is planned.
   entry create, so it falls inside every hero rollback window; a probe
   showed `chapters: 1` even for a rollback to position 70. Raised by the
   Task 6 review of the reversal-integrity PR (2026-10-05).
+
+- **`resolveRedoInvalidation`'s sweep looks always empty.** The
+  docblock in `lib/actions/story-entries/undo.ts` calls the case
+  reachable "through a retry timer firing between the undo and the
+  redo", but `applyDeltaAction` clears the redo stack after every
+  delta-logged write whatever its source, so a pass that wrote anything
+  leaves nothing to redo. Fix the comment, or drop the sweep from redo
+  if nothing else reaches it. Confirmed by reading, not reproduced.
+  Raised by the Task 7 review of the reversal-integrity PR (2026-10-05).
+
+- **No test sends an uncommitted `DeltaReplayError` through
+  `undoLastAction`.** The `e.committed` check before the redo push in
+  `undoBracketed` is pinned only for the committed case; an uncommitted
+  one must leave the redo stack alone. Raised by the Task 7 review of
+  the reversal-integrity PR (2026-10-05).
+
+- **Redo re-inserts newest-first, so a link lands before its parent.**
+  `applyRedoLocked` in `lib/actions/delta/redo.ts` walks the snapshots
+  newest-first and a link's create precedes its parent entity's. It is
+  safe only because link ends (`entity_id`, `character_id`, and the like)
+  carry no foreign key; adding one breaks redo of a closed group. Record
+  the constraint where link tables are declared. Raised by the Task 7
+  review of the reversal-integrity PR (2026-10-05).
+
+- **A kept (re-owned) create in `redoRows` fails redo with a raw SQLite
+  error.** It is unreachable today only because no non-periodic machine
+  source creates relationships and CTRL-Z skips periodic groups. If one
+  is reached, redo's plain INSERT hits a primary-key error rather than a
+  refusal and the redo stays pending. Add a guard or refusal before any
+  non-periodic machine source creates relationships. Raised by the Task
+  7 review of the reversal-integrity PR (2026-10-05).

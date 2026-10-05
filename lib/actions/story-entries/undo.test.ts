@@ -26,6 +26,7 @@ import { DeltaReplayError, reverseReplayDeltas } from '../delta/reverse-replay'
 import type { PipelineAction } from '../types'
 
 afterEach(() => {
+  vi.restoreAllMocks()
   entriesStore.__reset()
   generationStore.__reset()
   undoRedoStore.clear()
@@ -357,11 +358,10 @@ describe('undoLastAction / redoLastAction', () => {
     hydrateOpeningAndTurn()
 
     // The reversal + prune tx commits, then the patcher throws → committed:true.
-    const patchSpy = vi.spyOn(entriesStore, 'patch').mockImplementation(() => {
+    vi.spyOn(entriesStore, 'patch').mockImplementation(() => {
       throw new Error('store sync boom')
     })
     await expect(undoLastAction('b1', ctx)).rejects.toBeInstanceOf(DeltaReplayError)
-    patchSpy.mockRestore()
 
     // The DB change is real and committed: the delta row was pruned.
     expect((await db.select().from(deltas).where(eq(deltas.id, 'd_turn'))).length).toBe(0)
@@ -399,7 +399,6 @@ describe('undoLastAction / redoLastAction', () => {
     await redoLastAction('b1', ctx)
     expect(spy.mock.calls.map((c) => c[0])).toEqual([true, false])
     expect(generationStore.getTxState().reversalInProgress).toBe(false)
-    spy.mockRestore()
   })
 
   it('rejects undo/redo when the branch is not the one loaded in entriesStore', async () => {
@@ -535,7 +534,6 @@ describe('undoLastAction over a refused closure', () => {
     })
     // resolveSweep logs the refusal; the undo's own bracket must not log it again.
     expect(error.mock.calls.filter(([m]) => m === 'action_layer.reversal_refused')).toHaveLength(1)
-    error.mockRestore()
     expect(await db.select().from(deltas)).toEqual(before)
     expect(entriesStore.getById('e_turn')).toBeDefined()
     expect(undoRedoStore.hasRedo()).toBe(false)
@@ -818,7 +816,6 @@ describe('undo and redo carry the reversal closure', () => {
       'action_layer.reversal_refused',
       expect.objectContaining({ branchId: 'b1', refusal: 'held-in-redo' }),
     )
-    error.mockRestore()
   })
 
   it('refuses a redo whose invalidation reaches a row with no create, leaving the redo pending', async () => {
@@ -827,7 +824,8 @@ describe('undo and redo carry the reversal closure', () => {
     await seedTail(db)
     expect((await updateStoryEntryContent('b1', 'e2', 'new prose', ctx)).status).toBe('ok')
     expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
-    // Lands between the undo and the redo; the link is written outside the log.
+    // Built by hand: a real write between the undo and the redo would clear the redo stack. The
+    // link is written outside the log.
     await db.insert(happenings).values({
       id: 'hap_r',
       branchId: 'b1',

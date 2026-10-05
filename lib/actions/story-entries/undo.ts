@@ -6,7 +6,7 @@ import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 import { selectUndoTarget } from '@/lib/undo'
 
 import { resolveInvalidationForDeltas, type InvalidationOutcome } from './classifier-facts'
-import { resolveSweep, reversalRefused } from './operational'
+import { logReversalRefused, resolveSweep } from './operational'
 import { bracketProseReversal } from './prose-reversal'
 import { applyRedo, snapshotForRedo, type RedoSnapshot } from '../delta/redo'
 import {
@@ -37,7 +37,7 @@ function unreadableScopeRejection(deltaId: string): UndoResult {
 }
 
 // A refused reversal wrote nothing, and the log cannot produce the reversal it should
-// (generation-pipeline.md → Reverse-replay). reversalRefused logs it.
+// (generation-pipeline.md → Reverse-replay).
 async function refusingIntegrity(
   branchId: string,
   body: () => Promise<UndoResult>,
@@ -46,7 +46,8 @@ async function refusingIntegrity(
     return await body()
   } catch (e) {
     if (!(e instanceof ReversalIntegrityError)) throw e
-    return { status: 'rejected', code: 'integrity', reason: reversalRefused(branchId, e).reason }
+    logReversalRefused(branchId, e)
+    return { status: 'rejected', code: 'integrity', reason: e.message }
   }
 }
 

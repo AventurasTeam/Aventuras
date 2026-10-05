@@ -29,15 +29,18 @@ export type RedoSnapshot = {
 export async function snapshotForRedo(set: ReversalSet, ctx: DbCtx): Promise<RedoSnapshot[]> {
   // Redo restores rows to their tables; it cannot put one back into a delete's payload
   // (generation-pipeline.md → Reverse-replay).
-  const held = set.redoRows.find(
+  const heldWrite = set.redoRows.find(
     (d) => d.op !== 'delete' && set.held.byRow.has(heldKey(d.targetTable, d.targetId)),
   )
-  if (held)
+  if (heldWrite) {
+    const key = heldKey(heldWrite.targetTable, heldWrite.targetId)
+    // The reversal's own id, as the other refusals carry; the held write may be a pass the closure reached.
     throw new ReversalIntegrityError(
       'held-in-redo',
-      `${held.targetTable}:${held.targetId}`,
-      held.actionId,
+      `${key} held by ${set.held.byRow.get(key)?.holder.id}`,
+      set.redoRows[0].actionId,
     )
+  }
   const snapshots: RedoSnapshot[] = []
   for (const delta of set.redoRows) {
     const entry = resolveByTable(delta.targetTable)
