@@ -970,6 +970,24 @@ prune. And phases also write directly through `ctx.db` (classifier
 status, for one), which dropping events does not stop, so each phase's
 direct writes need auditing first.
 
+Seen again 2026-10-05 in the reversal-integrity PR's review, with part
+of that fix in place: `handleEvent` (`lib/pipeline/runtime/orchestrator.ts`)
+drops a `no-gate` run's write once the run has left txState, keyed on
+its removal rather than its abort. Two windows stay open. A straggler
+that first emits before the run leaves txState, during the reversal or
+the exception hook, passes that check and commits under the run's
+`actionId` unreversed, and boot recovery never reverses it, since the
+run's marker settled with the reversal. And if the reversal throws
+something other than a `DeltaReplayError`, `abortRun` rethrows before
+`generationStore.abortRun`, so the run stays registered and a later
+straggler passes the check and takes a write-phase hold nobody
+releases; that needs both latent conditions at once. Dropping from the
+abort on, as above, covers both. Waiting for every sibling to settle
+before the run aborts would close them too, but contradicts the abort's
+"no drain" step in
+[Run state transitions](./generation-pipeline.md#run-state-transitions),
+so it needs a canon edit first.
+
 Parked 2026-09-13 from the PR #513 review; the first pipeline that
 declares a `parallel:` group, or a cancel that visibly lags, is the
 signal to revisit.
@@ -1004,29 +1022,6 @@ Parked 2026-09-13 from the PR #513 review; a delta-patched store
 gaining a synchronous subscriber or patch logic that can throw
 (validation, a must-exist invariant), or anything starting to read
 `pipeline_runs.outcome`, is the signal to revisit.
-
-#### A pair deleted for having no view strands its user deltas
-
-Reversing a machine view update that would leave a character
-relationship with neither view deletes the pair, since its one-view
-`CHECK` forbids an empty row
-([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
-User deltas on that pair stay in the log pointing at a row that is gone,
-a user `create` of the pair included, and CTRL-Z of one reports an undo
-that changes nothing. `reverse-replay-user-writes.test.ts` ("deletes a
-pair the reversal would leave with no view") pins the current behaviour.
-The closure that sweeps a removed row's later writes skips the table on
-purpose: its create-undo keeps a pair the user wrote a view to. Two
-fixes are open: sweep the pair's user deltas when the no-view delete
-fires, or have CTRL-Z refuse an edit whose row is gone. The second
-changes the undo contract — a refusal at the head of the stack blocks
-every older undo behind it — so it wants a decision, not a patch.
-Reachable through a prose edit, reasoned from the code rather than
-reproduced: clear your view of a pair whose other view a pass wrote,
-then edit that pass's prose.
-
-Parked 2026-09-27 from triage; the signal is a user-visible undo that
-does nothing on a relationship.
 
 ### Memory pipeline (parked)
 
