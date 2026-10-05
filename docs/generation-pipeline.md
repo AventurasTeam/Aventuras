@@ -1343,10 +1343,15 @@ undo strips or whose delete it prunes (below) — takes its other logged
 creates and updates with it, pruned in the same transaction, so no
 write left in the log targets a row that is gone. The prune passes
 over deletes: the pair's own delete is already pruned as its holder,
-and a delete that captured it still holds other rows. Restoring column
-by column assumes no other constraint spans a row's columns:
-`happenings_mutual_excl` would break if a machine write ever updated a
-happening.
+and a delete that captured it still holds other rows. The prune never
+fires under CTRL-Z, so redo, which restores only the set's writes,
+never needs one it took: only periodic-classifier groups sit above the
+group CTRL-Z undoes, every delta-logged write clears the redo stack,
+and no machine writer nulls a relationship view or deletes a pair or a
+character. A writer that starts nulling a view must revisit redo's
+exactness. Restoring column by column assumes no other constraint spans
+a row's columns: `happenings_mutual_excl` would break if a machine
+write ever updated a happening.
 
 **Undoing a `create` consults no cascade.**
 A domain may register a cascade hook for its child rows, but that hook
