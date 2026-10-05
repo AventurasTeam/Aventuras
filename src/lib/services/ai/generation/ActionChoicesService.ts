@@ -12,8 +12,7 @@ import type { ServiceId } from '$lib/stores/settings.svelte'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { createLogger } from '$lib/log'
-import { activity } from '$lib/stores/activity.svelte'
-import { failStep } from '$lib/services/activity'
+import { describeActivityError } from '$lib/services/activity'
 import { getContextConfig } from '../core/config'
 import { actionChoicesResultSchema, type ActionChoice } from '../sdk/schemas/actionchoices'
 
@@ -50,7 +49,9 @@ export class ActionChoicesService extends BaseAIService {
   /**
    * Generate action choices based on current narrative context.
    */
-  async generateChoices(context: ActionChoicesContext): Promise<ActionChoice[]> {
+  async generateChoices(
+    context: ActionChoicesContext,
+  ): Promise<{ choices: ActionChoice[]; failure?: string | null }> {
     log('generateChoices called', {
       narrativeLength: context.narrativeResponse.length,
       recentEntriesCount: context.recentEntries.length,
@@ -169,11 +170,10 @@ export class ActionChoicesService extends BaseAIService {
       )
 
       log('Action choices generated:', result.choices.length)
-      return result.choices.slice(0, 4)
+      return { choices: result.choices.slice(0, 4) }
     } catch (error) {
       log('Action choices generation failed:', error)
-      failStep(activity, context.activityParentId, error)
-      return []
+      return { choices: [], failure: describeActivityError(error) }
     }
   }
 }

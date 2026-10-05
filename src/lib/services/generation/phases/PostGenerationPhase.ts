@@ -60,13 +60,13 @@ export interface PostGenerationDependencies {
     latestNarrativeResponse: string | undefined,
     storyId: string | undefined,
     activityParentId?: string,
-  ) => Promise<{ suggestions: Suggestion[] }>
+  ) => Promise<{ suggestions: Suggestion[]; failure?: string | null }>
   translateSuggestions: (
     suggestions: Suggestion[],
     targetLanguage: string,
     storyId: string | undefined,
     activityParentId?: string,
-  ) => Promise<Suggestion[]>
+  ) => Promise<{ items: Suggestion[]; failure?: string | null }>
   generateActionChoices: (
     entries: StoryEntry[],
     worldState: PostWorldState,
@@ -76,13 +76,13 @@ export interface PostGenerationDependencies {
     pov: 'first' | 'second' | 'third',
     storyId: string | undefined,
     activityParentId?: string,
-  ) => Promise<{ choices: ActionChoice[] }>
+  ) => Promise<{ choices: ActionChoice[]; failure?: string | null }>
   translateActionChoices: (
     choices: ActionChoice[],
     targetLanguage: string,
     storyId: string | undefined,
     activityParentId?: string,
-  ) => Promise<ActionChoice[]>
+  ) => Promise<{ items: ActionChoice[]; failure?: string | null }>
 }
 
 /** Input for the post-generation phase */
@@ -182,7 +182,7 @@ export class PostGenerationPhase {
 
     if (TranslationService.shouldTranslate(translationSettings)) {
       try {
-        return await trackStep(activity, 'Translating suggestions', llm, (stepId) =>
+        const translated = await trackStep(activity, 'Translating suggestions', llm, (stepId) =>
           this.deps.translateSuggestions(
             suggestions,
             translationSettings.targetLanguage,
@@ -190,6 +190,7 @@ export class PostGenerationPhase {
             stepId,
           ),
         )
+        return translated.items
       } catch {
         return suggestions
       }
@@ -226,7 +227,7 @@ export class PostGenerationPhase {
 
     if (TranslationService.shouldTranslate(translationSettings)) {
       try {
-        return await trackStep(activity, 'Translating action choices', llm, (stepId) =>
+        const translated = await trackStep(activity, 'Translating action choices', llm, (stepId) =>
           this.deps.translateActionChoices(
             choices,
             translationSettings.targetLanguage,
@@ -234,6 +235,7 @@ export class PostGenerationPhase {
             stepId,
           ),
         )
+        return translated.items
       } catch {
         return choices
       }

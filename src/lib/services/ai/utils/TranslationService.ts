@@ -11,8 +11,7 @@ import { BaseAIService } from '../BaseAIService'
 import { createLogger } from '$lib/log'
 import { generatePlainText } from '../sdk/generate'
 import { ContextBuilder } from '$lib/services/context'
-import { activity } from '$lib/stores/activity.svelte'
-import { describeActivityError, failStep } from '$lib/services/activity'
+import { describeActivityError } from '$lib/services/activity'
 import {
   translatedUIResultSchema,
   translatedSuggestionsResultSchema,
@@ -68,6 +67,12 @@ const SUPPORTED_LANGUAGE_CODES = [
   'ta',
   'te',
 ]
+
+/** Translated items, or the originals with the reason the translation failed. */
+export interface Translated<T> {
+  items: T[]
+  failure?: string | null
+}
 
 export interface TranslationResult {
   translatedContent: string
@@ -223,9 +228,9 @@ export class TranslationService extends BaseAIService {
     targetLanguage: string,
     storyId: string | undefined,
     activityParentId?: string,
-  ): Promise<T[]> {
-    if (suggestions.length === 0) return []
-    if (targetLanguage === 'en') return suggestions
+  ): Promise<Translated<T>> {
+    if (suggestions.length === 0) return { items: [] }
+    if (targetLanguage === 'en') return { items: suggestions }
 
     try {
       const suggestionsJson = JSON.stringify(
@@ -248,14 +253,15 @@ export class TranslationService extends BaseAIService {
 
       // Merge translated text back into original objects (preserves extra fields)
       log('Translated', result.suggestions.length, 'suggestions to', targetLanguage)
-      return suggestions.map((original, index) => ({
-        ...original,
-        text: result.suggestions[index]?.text ?? original.text,
-      }))
+      return {
+        items: suggestions.map((original, index) => ({
+          ...original,
+          text: result.suggestions[index]?.text ?? original.text,
+        })),
+      }
     } catch (error) {
       log('Suggestions translation failed:', error)
-      failStep(activity, activityParentId, error)
-      return suggestions
+      return { items: suggestions, failure: describeActivityError(error) }
     }
   }
 
@@ -268,9 +274,9 @@ export class TranslationService extends BaseAIService {
     targetLanguage: string,
     storyId: string | undefined,
     activityParentId?: string,
-  ): Promise<T[]> {
-    if (choices.length === 0) return []
-    if (targetLanguage === 'en') return choices
+  ): Promise<Translated<T>> {
+    if (choices.length === 0) return { items: [] }
+    if (targetLanguage === 'en') return { items: choices }
 
     try {
       const choicesJson = JSON.stringify(
@@ -293,14 +299,15 @@ export class TranslationService extends BaseAIService {
 
       // Merge translated text back into original objects (preserves extra fields)
       log('Translated', result.choices.length, 'action choices to', targetLanguage)
-      return choices.map((original, index) => ({
-        ...original,
-        text: result.choices[index]?.text ?? original.text,
-      }))
+      return {
+        items: choices.map((original, index) => ({
+          ...original,
+          text: result.choices[index]?.text ?? original.text,
+        })),
+      }
     } catch (error) {
       log('Action choices translation failed:', error)
-      failStep(activity, activityParentId, error)
-      return choices
+      return { items: choices, failure: describeActivityError(error) }
     }
   }
 

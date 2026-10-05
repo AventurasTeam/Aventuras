@@ -206,3 +206,22 @@ describe('trackPhase, a phase switched off', () => {
     expect(closed).toEqual([])
   })
 })
+
+describe('trackStep, a failure the work reports', () => {
+  it('closes the step as failed with the reason the work returned', async () => {
+    const closed: [string, string | undefined, string | null | undefined][] = []
+    const activity: ActivityReporter = {
+      startStep: () => 's1',
+      endStep: (id, status, _detail, error) => closed.push([id, status, error]),
+      recordStep: () => '',
+    }
+
+    const result = await trackStep(activity, 'Generating suggestions', {}, async () => ({
+      suggestions: [],
+      failure: '429 · rate limited',
+    }))
+
+    expect(result.suggestions).toEqual([])
+    expect(closed).toEqual([['s1', 'failed', '429 · rate limited']])
+  })
+})

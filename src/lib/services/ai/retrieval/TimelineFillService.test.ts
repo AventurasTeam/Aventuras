@@ -101,7 +101,7 @@ describe('TimelineFillService', () => {
       mockEntries,
       [],
     )
-    expect(queries).toEqual([])
+    expect(queries).toEqual({ queries: [] })
   })
 })
 

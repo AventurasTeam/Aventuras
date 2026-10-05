@@ -97,7 +97,7 @@ export class TimelineFillService extends BaseAIService {
     chapters: Chapter[],
     alreadyInContext?: string,
     activityParentId?: string,
-  ): Promise<TimelineQuery[]> {
+  ): Promise<{ queries: TimelineQuery[]; failure?: string | null }> {
     log('generateQueries called', {
       visibleEntriesCount: visibleEntries.length,
       chaptersCount: chapters.length,
@@ -105,7 +105,7 @@ export class TimelineFillService extends BaseAIService {
 
     if (chapters.length === 0) {
       log('No chapters available, skipping query generation')
-      return []
+      return { queries: [] }
     }
 
     // Build chapter history from visible entries
@@ -135,11 +135,10 @@ export class TimelineFillService extends BaseAIService {
       )
 
       log('Generated queries:', result.queries.length)
-      return result.queries.slice(0, this.maxQueries)
+      return { queries: result.queries.slice(0, this.maxQueries) }
     } catch (error) {
       log('Query generation failed:', error)
-      failStep(activity, activityParentId, error)
-      return []
+      return { queries: [], failure: describeActivityError(error) }
     }
   }
 
@@ -416,9 +415,9 @@ export class TimelineFillService extends BaseAIService {
       parentId: activityParentId,
       isLLM: true,
     })
-    let queries: TimelineQuery[]
+    let planned: Awaited<ReturnType<typeof this.generateQueries>>
     try {
-      queries = await this.generateQueries(
+      planned = await this.generateQueries(
         storyId,
         visibleEntries,
         chapters,
@@ -431,7 +430,9 @@ export class TimelineFillService extends BaseAIService {
       failStep(activity, planStepId, error)
       throw error
     }
-    activity.endStep(planStepId, 'done', `${queries.length} questions`)
+    const { queries, failure } = planned
+    if (failure) activity.endStep(planStepId, 'failed', undefined, failure)
+    else activity.endStep(planStepId, 'done', `${queries.length} questions`)
     if (queries.length === 0) {
       return { queries: [], responses: [] }
     }

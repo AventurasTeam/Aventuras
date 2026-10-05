@@ -51,7 +51,8 @@ export function failStep(activity: ActivityReporter, id: string | undefined, err
 }
 
 /**
- * Run `work` as one step, closing it as failed if it throws.
+ * Run `work` as one step, closing it as failed if it throws, or if it returns a `failure`: a
+ * service that absorbs its failure reports it on its result, and the step's opener closes it.
  *
  * The throw is re-raised: whether a failure is fatal is the caller's decision, and reporting
  * must not change it.
@@ -66,7 +67,9 @@ export async function trackStep<T>(
   const id = activity.startStep(label, options)
   try {
     const result = await work(id)
-    activity.endStep(id)
+    const failure = (result as { failure?: string | null } | null)?.failure
+    if (failure) activity.endStep(id, 'failed', undefined, failure)
+    else activity.endStep(id)
     return result
   } catch (error) {
     failStep(activity, id, error)

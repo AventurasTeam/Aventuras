@@ -49,9 +49,9 @@ const italian = { enabled: true, targetLanguage: 'it' } as unknown as Translatio
 function makeDeps(overrides: Partial<PostGenerationDependencies> = {}): PostGenerationDependencies {
   return {
     generateSuggestions: async () => ({ suggestions }),
-    translateSuggestions: async () => [{ text: 'Scappa' }] as any[],
+    translateSuggestions: async () => ({ items: [{ text: 'Scappa' }] as any[] }),
     generateActionChoices: async () => ({ choices }),
-    translateActionChoices: async () => [{ text: 'Combatti' }] as any[],
+    translateActionChoices: async () => ({ items: [{ text: 'Combatti' }] as any[] }),
     ...overrides,
   }
 }
@@ -181,7 +181,7 @@ describe('PostGenerationPhase', () => {
     // dropped or reordered one is otherwise invisible until a user opens the output.
     it('hands the story to the action-choice generator and its translation', async () => {
       const generateActionChoices = vi.fn(async () => ({ choices }))
-      const translateActionChoices = vi.fn(async () => choices)
+      const translateActionChoices = vi.fn(async () => ({ items: choices }))
 
       await drain(
         new PostGenerationPhase(
@@ -204,7 +204,7 @@ describe('PostGenerationPhase', () => {
 
     it('hands the story to the suggestions generator and its translation', async () => {
       const generateSuggestions = vi.fn(async () => ({ suggestions }))
-      const translateSuggestions = vi.fn(async () => suggestions)
+      const translateSuggestions = vi.fn(async () => ({ items: suggestions }))
 
       await drain(
         new PostGenerationPhase(makeDeps({ generateSuggestions, translateSuggestions })).execute(

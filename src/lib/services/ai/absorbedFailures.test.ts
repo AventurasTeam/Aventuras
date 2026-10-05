@@ -61,9 +61,6 @@ beforeEach(() => {
   generatePlainText.mockRejectedValue(failure)
 })
 
-const failedWith = (id: string) =>
-  expect(activity.endStep).toHaveBeenCalledWith(id, 'failed', undefined, 'provider down')
-
 describe('absorbed failures', () => {
   it('narration translation returns the original with the reason', async () => {
     const service = new TranslationService('translation' as any)
@@ -77,23 +74,21 @@ describe('absorbed failures', () => {
     expect(result).toEqual({ translatedContent: 'Ciao.', failure: 'provider down' })
   })
 
-  it('suggestion and action-choice translation return the originals and fail their steps', async () => {
+  it('suggestion and action-choice translation return the originals with the reason', async () => {
     const service = new TranslationService('translation' as any)
     const items = [{ text: 'Go north' }]
-    expect(await service.translateSuggestions(items, 'it', 's', 'sugg')).toBe(items)
-    expect(await service.translateActionChoices(items, 'it', 's', 'choice')).toBe(items)
-    failedWith('sugg')
-    failedWith('choice')
+    const failed = { items, failure: 'provider down' }
+    expect(await service.translateSuggestions(items, 'it', 's', 'sugg')).toEqual(failed)
+    expect(await service.translateActionChoices(items, 'it', 's', 'choice')).toEqual(failed)
   })
 
-  it('suggestions return an empty list and fail their step', async () => {
+  it('suggestions return an empty list with the reason', async () => {
     const service = new SuggestionsService('suggestions' as any)
     const result = await service.generateSuggestions([], [], [], 's', 'Hi.', 'step')
-    expect(result).toEqual({ suggestions: [] })
-    failedWith('step')
+    expect(result).toEqual({ suggestions: [], failure: 'provider down' })
   })
 
-  it('action choices return an empty list and fail their step', async () => {
+  it('action choices return an empty list with the reason', async () => {
     const service = new ActionChoicesService('actionChoices' as any)
     const result = await service.generateChoices({
       activityParentId: 'step',
@@ -106,15 +101,16 @@ describe('absorbed failures', () => {
       pov: 'second',
       tense: 'present',
     } as any)
-    expect(result).toEqual([])
-    failedWith('step')
+    expect(result).toEqual({ choices: [], failure: 'provider down' })
   })
 
-  it('timeline fill planning returns no questions and fails its step', async () => {
+  it('timeline fill planning returns no questions, with the reason', async () => {
     const service = new TimelineFillService('timelineFill' as any, 3)
     const chapter = { number: 1, summary: 'The start.' } as any
-    expect(await service.generateQueries('s', [], [chapter], undefined, 'plan')).toEqual([])
-    failedWith('plan')
+    expect(await service.generateQueries('s', [], [chapter], undefined, 'plan')).toEqual({
+      queries: [],
+      failure: 'provider down',
+    })
   })
 
   it('a timeline fill chapter read marks its answer unanswered, with the reason', async () => {

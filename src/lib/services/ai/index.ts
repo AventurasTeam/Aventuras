@@ -110,7 +110,7 @@ import type {
   RetrievalDecision,
   SuggestionsResult,
 } from './sdk'
-import type { TranslationResult, UITranslationItem } from './utils'
+import type { Translated, TranslationResult, UITranslationItem } from './utils'
 import { recentContent, AS_HAYSTACK, AS_PROSE } from '$lib/utils/recentContent'
 import { joinPromptBlocks } from '$lib/utils/promptBlocks'
 import { activity } from '$lib/stores/activity.svelte'
@@ -373,7 +373,7 @@ class AIService {
     latestNarrativeResponse: string | undefined,
     storyId: string | undefined,
     activityParentId?: string,
-  ): Promise<SuggestionsResult> {
+  ): Promise<SuggestionsResult & { failure?: string | null }> {
     log('generateSuggestions called', {
       entriesCount: entries.length,
       threadsCount: activeThreads.length,
@@ -404,7 +404,7 @@ class AIService {
     pov: 'first' | 'second' | 'third' | undefined,
     storyId: string | undefined,
     activityParentId?: string,
-  ): Promise<ActionChoicesResult> {
+  ): Promise<ActionChoicesResult & { failure?: string | null }> {
     log('generateActionChoices called', {
       entriesCount: entries.length,
       narrativeLength: narrativeResponse.length,
@@ -449,8 +449,7 @@ class AIService {
       lorebookEntries,
     }
 
-    const choices = await actionChoicesService.generateChoices(context)
-    return { choices }
+    return actionChoicesService.generateChoices(context)
   }
 
   /**
@@ -1393,7 +1392,7 @@ class AIService {
     targetLanguage: string,
     storyId: string | undefined,
     activityParentId?: string,
-  ): Promise<T[]> {
+  ): Promise<Translated<T>> {
     const service = serviceFactory.createTranslationService('suggestions')
     return service.translateSuggestions(suggestions, targetLanguage, storyId, activityParentId)
   }
@@ -1406,7 +1405,7 @@ class AIService {
     targetLanguage: string,
     storyId: string | undefined,
     activityParentId?: string,
-  ): Promise<T[]> {
+  ): Promise<Translated<T>> {
     const service = serviceFactory.createTranslationService('actionChoices')
     return service.translateActionChoices(choices, targetLanguage, storyId, activityParentId)
   }
