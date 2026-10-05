@@ -127,14 +127,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `reader:regenerateFailed` ("…Please try again."). Raised in the
   reversal-integrity PR's review (2026-10-05).
 
-- **Redo re-inserts newest-first, so a link lands before its parent.**
-  `applyRedoLocked` in `lib/actions/delta/redo.ts` walks the snapshots
-  newest-first and a link's create precedes its parent entity's. It is
-  safe only because link ends (`entity_id`, `character_id`, and the
-  like) carry no foreign key; adding one breaks redo of a closed
-  group. Record the constraint where link tables are declared. Raised
-  in the reversal-integrity PR's review (2026-10-05).
-
 - **A kept (re-owned) create in `redoRows` fails redo with a raw
   SQLite error.** It is unreachable today only because no non-periodic
   machine source creates relationships and CTRL-Z skips periodic

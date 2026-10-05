@@ -140,16 +140,16 @@ erDiagram
     happening_involvements {
         text id PK "hinv_${uuid}; surrogate single ID — needed as delta target (same reason as character_relationships)"
         text branch_id FK "composite PK with id; forks with branches"
-        text happening_id FK
-        text entity_id FK "character | location | item | faction"
+        text happening_id "FK-less ref into happenings (see Branch model)"
+        text entity_id "FK-less ref; character | location | item | faction"
         text role "optional free-form — actor / target / site / etc."
     }
 
     happening_awareness {
         text id PK "haw_${uuid}; surrogate single ID — needed as delta target (same reason as character_relationships)"
         text branch_id FK "composite PK with id; forks with branches"
-        text happening_id FK
-        text character_id FK "entity where kind=character"
+        text happening_id "FK-less ref into happenings (see Branch model)"
+        text character_id "FK-less ref; entity where kind=character"
         text learned_at_entry_id "entry where this character learned it; FK-less ref into story_entries"
         real decay_resistance "0..1; scales recency decay (1=no decay, 0=normal). Set by classifier severity at extraction; tunable by user toggle and lore-mgmt at chapter close. See docs/memory/retrieval.md → Pinning"
         integer retrieval_count "incremented by ranker on injection (post budget-fill); per-chapter counter, reset at chapter close after lore-mgmt phase 3d. Delta-logged so rollback reverses retrieval-driven counts. See docs/memory/chapter-close.md → 3d awareness pin tuning"
@@ -160,8 +160,8 @@ erDiagram
     character_relationships {
         text id PK "rel_${uuid}; needed as delta + translation target"
         text branch_id FK "composite PK with id; relationships fork with branches"
-        text a_id FK "entity where kind=character; canonical-ordered (a_id < b_id)"
-        text b_id FK "entity where kind=character"
+        text a_id "FK-less ref; entity where kind=character; canonical-ordered (a_id < b_id)"
+        text b_id "FK-less ref; entity where kind=character"
         text kind "a's view of b — free-form LLM/user-authored; nullable until that POV is observed"
         text inverse_kind "b's view of a — free-form; nullable until that POV is observed"
         integer created_at
@@ -519,6 +519,15 @@ require walking every reference site including state JSON to rewrite IDs
 during copy; that's where bugs would hide forever. Composite PK sidesteps
 the whole category. Tables at the global scope (`stories`, `assets`) keep
 single-column PKs since they aren't branched.
+
+**Link ends carry no foreign key.** `happening_involvements`,
+`happening_awareness` and `character_relationships` name their ends by
+id alone. A composite `(branch_id, …)` key is possible, but redo
+re-inserts a closed group newest-first, so a link's row lands before
+its parent's in one transaction, and the schema declares no deferred
+keys; an enforced end would fail that redo. The reversal closure keeps
+ends from dangling instead
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
 
 Text duplication across branches is acceptable (one data point: a 350k-word
 story exported as JSON is ~2.5MB — branches at 10x are still tiny). The
