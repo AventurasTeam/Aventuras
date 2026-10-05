@@ -6,6 +6,7 @@ import { logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
+import { withBranchWriteShared } from '../delta/branch-write-lock'
 import { deltaRowOp } from '../delta/delta-row'
 import {
   DeltaReplayError,
@@ -258,6 +259,8 @@ function countBuckets(rows: readonly Pick<Delta, 'op' | 'targetTable'>[]): Rollb
   return { entries, chapters, worldStateChanges }
 }
 
+const ROLLBACK_PREVIEW_LOCK_ID = 'rollback-preview'
+
 export async function getRollbackCounts(
   branchId: string,
   targetId: string,
@@ -265,7 +268,10 @@ export async function getRollbackCounts(
 ): Promise<RollbackCounts | StoryEntryRejection> {
   // The closed set, not the window: a fact on a surviving turn naming a row the sweep
   // removes goes too (rollback-confirm.md → Counts).
-  const swept = await resolveSweep(branchId, targetId, ctx)
+  // Held shared: a no-gate run's abort reversal landing between the closure's reads refuses it.
+  const swept = await withBranchWriteShared(branchId, ROLLBACK_PREVIEW_LOCK_ID, () =>
+    resolveSweep(branchId, targetId, ctx),
+  )
   if ('status' in swept) return swept
   return countBuckets(swept.set.rows)
 }

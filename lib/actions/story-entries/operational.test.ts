@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { applyDeltaAction, DeltaReplayError, type DbCtx } from '@/lib/actions'
+import { applyDeltaAction, DeltaReplayError, reverseReplayDeltas, type DbCtx } from '@/lib/actions'
 import {
   branches,
   deltas,
@@ -27,8 +27,14 @@ import {
 
 import { isContentEditDelta } from './classifier-facts'
 import { getRollbackCounts, rollbackToEntry, updateStoryEntryContent } from './operational'
+import {
+  __resetBranchWriteLocks,
+  holdBranchWriteExclusive,
+  releaseBranchWriteExclusive,
+} from '../delta/branch-write-lock'
 
 afterEach(() => {
+  __resetBranchWriteLocks()
   entriesStore.__reset()
   generationStore.__reset()
   happeningAwarenessStore.__reset()
@@ -1119,6 +1125,29 @@ describe('rollback over the closed set', () => {
       'action_layer.reversal_refused',
       expect.objectContaining({ branchId: 'b1', refusal: 'no-create' }),
     )
+    error.mockRestore()
+  })
+
+  it("selects the preview's set only once a no-gate run's abort reversal has committed", async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedLateLink(db, ctx, true)
+    const error = vi.spyOn(logger, 'error')
+    await holdBranchWriteExclusive('b1', 'act_late')
+
+    let settled = false
+    const preview = getRollbackCounts('b1', 't2', ctx).finally(() => {
+      settled = true
+    })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(settled).toBe(false)
+
+    // The run's abort reverses its link inside the hold; the preview must not count it.
+    expect(await reverseReplayDeltas('act_late', ctx)).toBe(1)
+    releaseBranchWriteExclusive('b1', 'act_late')
+
+    expect(await preview).toEqual({ entries: 2, chapters: 0, worldStateChanges: 3 })
+    expect(error).not.toHaveBeenCalledWith('action_layer.reversal_refused', expect.anything())
     error.mockRestore()
   })
 
