@@ -51,6 +51,21 @@ export function failStep(activity: ActivityReporter, id: string | undefined, err
 }
 
 /**
+ * Close `id` on the outcome a service reported: `failure` absent means it finished, a reason
+ * means it failed, and `null` -- `describeActivityError`'s word for an abort -- means it stopped.
+ */
+export function closeStep(
+  activity: ActivityReporter,
+  id: string,
+  failure: string | null | undefined,
+  detail?: string,
+): void {
+  if (failure === undefined) activity.endStep(id, 'done', detail)
+  else if (failure === null) activity.endStep(id, 'skipped')
+  else activity.endStep(id, 'failed', undefined, failure)
+}
+
+/**
  * Run `work` as one step, closing it as failed if it throws, or if it returns a `failure`: a
  * service that absorbs its failure reports it on its result, and the step's opener closes it.
  *
@@ -67,9 +82,7 @@ export async function trackStep<T>(
   const id = activity.startStep(label, options)
   try {
     const result = await work(id)
-    const failure = (result as { failure?: string | null } | null)?.failure
-    if (failure) activity.endStep(id, 'failed', undefined, failure)
-    else activity.endStep(id)
+    closeStep(activity, id, (result as { failure?: string | null } | null)?.failure)
     return result
   } catch (error) {
     failStep(activity, id, error)

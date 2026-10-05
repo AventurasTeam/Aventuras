@@ -225,3 +225,21 @@ describe('trackStep, a failure the work reports', () => {
     expect(closed).toEqual([['s1', 'failed', '429 · rate limited']])
   })
 })
+
+describe('trackStep, an abort the work reports', () => {
+  it('closes the step as skipped when the reported failure is null', async () => {
+    const closed: [string, string | undefined][] = []
+    const activity: ActivityReporter = {
+      startStep: () => 's1',
+      endStep: (id, status) => closed.push([id, status]),
+      recordStep: () => '',
+    }
+
+    await trackStep(activity, 'Translating suggestions', {}, async () => ({
+      items: [],
+      failure: null,
+    }))
+
+    expect(closed).toEqual([['s1', 'skipped']])
+  })
+})

@@ -24,21 +24,21 @@ import { countTokens } from '$lib/services/tokenizer'
 import { chapterReadBudget } from '../core/defaults'
 
 import { activity } from '$lib/stores/activity.svelte'
-import { describeActivityError, failStep } from '$lib/services/activity'
+import { closeStep, describeActivityError, failStep } from '$lib/services/activity'
 
 /** Close a step by how many of its questions were actually answered. */
 function closeAnswerStep(id: string, answers: TimelineAnswer[]): void {
   const answered = answers.filter((a) => a.confidence > 0).length
-  const failure = answers.find((a) => a.failure)?.failure
-  if (answered === 0 && failure) activity.endStep(id, 'failed', undefined, failure)
-  else
-    activity.endStep(
-      id,
-      'done',
-      answered === answers.length
-        ? `${answered} answered`
-        : `${answered} of ${answers.length} answered`,
-    )
+  // The step failed only when no question got an answer; one failure among answers is a partial read.
+  const failure = answered === 0 ? answers.find((a) => a.failure !== undefined)?.failure : undefined
+  closeStep(
+    activity,
+    id,
+    failure,
+    answered === answers.length
+      ? `${answered} answered`
+      : `${answered} of ${answers.length} answered`,
+  )
 }
 
 const log = createLogger('TimelineFill')
@@ -431,8 +431,7 @@ export class TimelineFillService extends BaseAIService {
       throw error
     }
     const { queries, failure } = planned
-    if (failure) activity.endStep(planStepId, 'failed', undefined, failure)
-    else activity.endStep(planStepId, 'done', `${queries.length} questions`)
+    closeStep(activity, planStepId, failure, `${queries.length} questions`)
     if (queries.length === 0) {
       return { queries: [], responses: [] }
     }
