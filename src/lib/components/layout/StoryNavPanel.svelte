@@ -31,6 +31,7 @@
     GitBranch,
     Milestone,
     Navigation,
+    PenLine,
     Trash2,
     X,
   } from '@lucide/svelte'
@@ -350,6 +351,8 @@
                       <GitBranch class="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
                     {:else if landmark.kind === 'chapter'}
                       <BookOpen class="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+                    {:else if landmark.kind === 'tail'}
+                      <PenLine class="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
                     {:else}
                       <Bookmark class="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
                     {/if}

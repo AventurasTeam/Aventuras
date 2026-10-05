@@ -5,14 +5,14 @@ export const TAIL_BANNER_TITLE = 'The Story Continues'
 export interface ChapterBannerLink {
   /** The entry the banner sits before. */
   entryId: string
-  number: number
+  label: string
 }
 
 export interface ChapterBanner {
-  number: number
+  /** Null for the un-chapterized tail, which is not a chapter yet. */
+  number: number | null
   title: string | null
   summary: string | null
-  isTail: boolean
   prev: ChapterBannerLink | null
   next: ChapterBannerLink | null
 }
@@ -48,11 +48,8 @@ export function buildChapterBanners(
 
   type Placed = { index: number; entryId: string; banner: Omit<ChapterBanner, 'prev' | 'next'> }
   const placed: Placed[] = []
-  let maxNumber = 0
 
   for (const chapter of chapters) {
-    maxNumber = Math.max(maxNumber, chapter.number)
-
     const start = indexById.get(chapter.startEntryId)
     const end = indexById.get(chapter.endEntryId)
     if (start === undefined || end === undefined) continue
@@ -64,7 +61,6 @@ export function buildChapterBanners(
         number: chapter.number,
         title: chapter.title,
         summary: chapter.summary,
-        isTail: false,
       },
     })
   }
@@ -76,7 +72,7 @@ export function buildChapterBanners(
     placed.push({
       index: tailIndex,
       entryId: entries[tailIndex].id,
-      banner: { number: maxNumber + 1, title: TAIL_BANNER_TITLE, summary: null, isTail: true },
+      banner: { number: null, title: TAIL_BANNER_TITLE, summary: null },
     })
   }
 
@@ -93,15 +89,23 @@ export function buildChapterBanners(
     const after = ordered[i + 1]
     banners.set(entryId, {
       ...banner,
-      prev: before ? { entryId: before.entryId, number: before.banner.number } : null,
-      next: after ? { entryId: after.entryId, number: after.banner.number } : null,
+      prev: before
+        ? { entryId: before.entryId, label: chapterBannerLinkLabel(before.banner) }
+        : null,
+      next: after ? { entryId: after.entryId, label: chapterBannerLinkLabel(after.banner) } : null,
     })
   })
 
   return banners
 }
 
-/** `Chapter 3: The Heist`, or `Chapter 3` when the chapter has no title. */
+/** `Chapter 3: The Heist`, `Chapter 3` when the chapter has no title, or the tail's title. */
 export function chapterBannerLabel(banner: Pick<ChapterBanner, 'number' | 'title'>): string {
+  if (banner.number === null) return TAIL_BANNER_TITLE
   return banner.title ? `Chapter ${banner.number}: ${banner.title}` : `Chapter ${banner.number}`
+}
+
+/** `Chapter 3`, or the tail's title. */
+export function chapterBannerLinkLabel(banner: Pick<ChapterBanner, 'number'>): string {
+  return banner.number === null ? TAIL_BANNER_TITLE : `Chapter ${banner.number}`
 }

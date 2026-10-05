@@ -353,7 +353,7 @@ describe('buildLandmarks', () => {
       const { landmarks } = buildLandmarks(branchView, [], [br1], null, banners)
       expect(landmarks.map((l) => [l.kind, l.number, l.label, l.checkpointId])).toEqual([
         ['chapter', 1, 'Chapter 1: Opening', null],
-        ['chapter', 3, 'Chapter 2: The Story Continues', null],
+        ['tail', 3, 'The Story Continues', null],
       ])
     })
 
@@ -368,7 +368,7 @@ describe('buildLandmarks', () => {
       expect(landmarks.map((l) => [l.kind, l.number])).toEqual([
         ['chapter', 1],
         ['origin', 2],
-        ['chapter', 3],
+        ['tail', 3],
         ['checkpoint', 3],
       ])
     })
@@ -384,7 +384,7 @@ describe('buildLandmarks', () => {
       expect(landmarks.map((l) => [l.kind, l.switchesBranch])).toEqual([
         ['chapter', false],
         ['origin', true],
-        ['chapter', false],
+        ['tail', false],
         ['checkpoint', true],
       ])
     })

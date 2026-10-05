@@ -118,7 +118,7 @@ export function jumpToEntry(request: EntryJumpRequest): boolean {
   return willLand
 }
 
-export type LandmarkKind = 'origin' | 'checkpoint' | 'chapter'
+export type LandmarkKind = 'origin' | 'checkpoint' | 'chapter' | 'tail'
 
 export interface Landmark {
   entryId: string
@@ -173,7 +173,7 @@ export interface Landmarks {
  * The places in the branch being read that are worth returning to: where it began, every
  * checkpoint along the lineage that produced its current state, and where each chapter starts.
  *
- * A chapter row sorts ahead of any other row on the same entry, matching the story view, where
+ * A chapter or tail row sorts ahead of any other row on the same entry, matching the story view, where
  * its banner sits above that entry.
  *
  * A checkpoint missing from `entries` is two different things, and they are not shown alike: one
@@ -260,13 +260,14 @@ export function buildLandmarks(
       branchId: entry.branchId,
       switchesBranch: false,
       number: entryNumber(entry),
-      kind: 'chapter',
+      kind: banner.number === null ? 'tail' : 'chapter',
       label: chapterBannerLabel(banner),
       branchName: getBranchName(entry.branchId),
     })
   }
 
-  const rank = (landmark: Landmark) => (landmark.kind === 'chapter' ? 0 : 1)
+  const rank = (landmark: Landmark) =>
+    landmark.kind === 'chapter' || landmark.kind === 'tail' ? 0 : 1
 
   return {
     landmarks: landmarks.sort((a, b) => a.number - b.number || rank(a) - rank(b)),

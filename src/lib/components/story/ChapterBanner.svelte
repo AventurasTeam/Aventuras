@@ -12,6 +12,13 @@
     onNavigate: (entryId: string) => void
   } = $props()
 
+  // The tail is not a chapter, so it is introduced by what it follows.
+  const eyebrow = $derived(
+    banner.number === null
+      ? banner.prev && `Since ${banner.prev.label}`
+      : `Chapter ${banner.number}`,
+  )
+
   const storyFont = 'font-family: var(--font-story-custom, var(--font-story))'
 </script>
 
@@ -20,13 +27,13 @@
     ? 'bg-card/60 backdrop-blur-md'
     : 'bg-card'}"
 >
-  <div class="flex items-center gap-3">
-    <span class="border-border flex-1 border-t"></span>
-    <span class="text-primary text-xs font-semibold tracking-[0.2em] uppercase">
-      Chapter {banner.number}
-    </span>
-    <span class="border-border flex-1 border-t"></span>
-  </div>
+  {#if eyebrow}
+    <div class="flex items-center gap-3">
+      <span class="border-border flex-1 border-t"></span>
+      <span class="text-primary text-xs font-semibold tracking-[0.2em] uppercase">{eyebrow}</span>
+      <span class="border-border flex-1 border-t"></span>
+    </div>
+  {/if}
 
   {#if banner.title}
     <h2 class="text-foreground mt-2 text-center text-xl font-semibold" style={storyFont}>
@@ -51,10 +58,10 @@
         size="sm"
         class="h-7 gap-1 px-2 text-xs"
         onclick={() => onNavigate(prev.entryId)}
-        aria-label="Go to the start of chapter {prev.number}"
+        aria-label="Go to {prev.label}"
       >
         <ChevronLeft />
-        Chapter {prev.number}
+        {prev.label}
       </Button>
     {:else}
       <span></span>
@@ -66,9 +73,9 @@
         size="sm"
         class="h-7 gap-1 px-2 text-xs"
         onclick={() => onNavigate(next.entryId)}
-        aria-label="Go to the start of chapter {next.number}"
+        aria-label="Go to {next.label}"
       >
-        Chapter {next.number}
+        {next.label}
         <ChevronRight />
       </Button>
     {/if}
