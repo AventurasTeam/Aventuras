@@ -47,12 +47,18 @@ export type PatchEmission = { table: string; branchId: string; patch: StorePatch
 
 /** Required, so a reversal that must keep redo exact cannot get the prune by omission. */
 export type ReversalOptions = {
-  /** CTRL-Z and redo: refuse a prune of writes outside the set, which redo cannot restore. */
+  /**
+   * CTRL-Z and redo: refuse a reversal that would prune a row-keeping row's writes left outside
+   * the set, which redo cannot restore.
+   */
   keepRedoExact: boolean
 }
 
 export type ReversePlan = {
-  /** The undos' row writes, and one `undo_payload` write per held delete they change. */
+  /**
+   * The undos' row writes, one `undo_payload` write per held delete they change, and the vector
+   * sweeps of the rows they delete.
+   */
   ops: SqlOp[]
   /**
    * One log write per delta in the set (its prune, or the re-own of a create whose row stays),
@@ -66,7 +72,7 @@ export type ReversePlan = {
 /**
  * The reversal of a closed set, unexecuted, for a caller committing it inside its own transaction.
  * Ops and prunes stay separate: their order against the caller's ops is the caller's call. The
- * prunes leave gaps in log_position (generation-pipeline.md → Reverse-replay).
+ * prunes leave gaps in log_position (data-model.md → Entry mutability & rollback).
  */
 export async function buildReverseAndPrunePlan(
   set: ReversalSet,
@@ -197,8 +203,8 @@ function settleHeldCopies(
   return { payloadOps, pruned, rewritten }
 }
 
-// A write left naming a gone row would CTRL-Z to nothing. Redo restores none of them, so CTRL-Z and
-// redo refuse rather than prune (generation-pipeline.md → Reverse-replay).
+// A write left targeting a gone row would CTRL-Z to nothing. Redo restores none of them, so CTRL-Z
+// and redo refuse rather than prune (generation-pipeline.md → Reverse-replay).
 async function strandedWritesOf(
   ctx: DbCtx,
   set: ReversalSet,

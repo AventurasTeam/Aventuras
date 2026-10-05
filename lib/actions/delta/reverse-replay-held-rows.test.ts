@@ -809,7 +809,7 @@ describe('the write-back refusal', () => {
   })
 
   it('does not count a group-mate the reversal prunes with the row it targets', async () => {
-    // Unreachable through the actions: no relationship write carries an id in its payload.
+    // Unreachable through the actions: no relationship update carries an id in its payload.
     await seedMentorPair('rival', null)
     const [rel] = await ctx.db.select().from(characterRelationships)
     await ctx.db.delete(characterRelationships)
