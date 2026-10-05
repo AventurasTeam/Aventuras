@@ -512,7 +512,7 @@ The `id` is a UUID generated once at row creation and never regenerated.
 On branch copy, `INSERT ... SELECT` flips branch_id and leaves everything
 else (including id and all internal references) verbatim. Cross-references
 — FK columns AND id-references buried inside `entities.state` JSON
-(`parent_location_id`, `current_location_id`, `equipped_by`, etc.) — stay
+(`parent_location_id`, `current_location_id`, `equipped_items`, etc.) — stay
 valid because they all resolve within the new branch's scope automatically.
 The alternative (single-column UUID PK + generate-fresh-on-copy) would
 require walking every reference site including state JSON to rewrite IDs

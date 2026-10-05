@@ -93,28 +93,21 @@ slice-planning gate forces its resolution before that slice is planned.
   Revisit both when translations get a writer. Raised in the
   reversal-integrity PR's review (2026-10-05).
 
-- **The reversal closure doesn't follow id references inside
-  `entities.state`.** `REF_COLUMNS` in
-  `lib/actions/delta/live-refs.ts` registers only link-table columns,
-  so `selectReversalSet` in `lib/actions/delta/row-closure.ts` never
-  reaches the ids [`data-model.md`](../data-model.md#branch-model)
-  says `state` holds: `current_location_id`, `faction_id`,
-  `parent_location_id` and `at_location_id`, and the id arrays
-  `equipped_items` and `inventory` (all in
-  `lib/db/entities/entity-state-schema.ts`). A reversal removing an
-  entity could leave another entity's `state` naming it if a user
-  write outside the set put the reference there; an item the user
-  equips or stows is likely the commonest such write. Unverified
-  whether reachable: the argument canon gives for its write-back
-  refusal, that an entity's create is never reversed while a delete
-  holds it
-  ([`generation-pipeline.md`](../generation-pipeline.md#reverse-replay)),
-  may extend to this. Separately, `data-model.md` contradicts itself:
-  its branch model lists `equipped_by` as a `state` reference, but its
-  own [`ItemState` shape](../data-model.md#itemstate-shape) has no such
-  field and rules out a back-pointer on the item, and the schema has
-  none either. Drift to resolve in the doc. Raised in the
-  reversal-integrity PR's review (2026-10-05).
+- **Canon disagrees on whether the periodic classifier introduces
+  locations.** The `currentLocationId` row of
+  [`piggyback.md → What piggyback writes`](../memory/piggyback.md#what-piggyback-writes)
+  says a location new to the prose stays stale "until the periodic
+  classifier creates it" and calls the cost a few turns of degraded
+  retrieval, but the classifier's write set in
+  [`classifier.md`](../memory/classifier.md#background-task-framing)
+  and `lib/classifier/plan.ts` introduce characters only. Nothing
+  machine-creates a location, so the stale id, and the wrong
+  `state.current_location_id` the piggyback bookkeeping copies onto
+  in-scene characters, last until the user creates the entity. Decide
+  whether the classifier should introduce locations, or correct
+  piggyback.md. Introducing them would revive the parked
+  [closure gap for ids inside JSON](../parked.md#the-reversal-closure-doesnt-follow-ids-inside-json-columns).
+  Raised by the 2026-10-05 triage pass.
 
 - **Rollback and edit rejection copy always says "Please try again."**
   `reader:rollbackFailed` and `reader:editFailed`

@@ -1061,6 +1061,37 @@ gaining a synchronous subscriber or patch logic that can throw
 (validation, a must-exist invariant), or anything starting to read
 `pipeline_runs.outcome`, is the signal to revisit.
 
+#### The reversal closure doesn't follow ids inside JSON columns
+
+`REF_COLUMNS` in `lib/actions/delta/live-refs.ts` registers only
+link-table columns, so `selectReversalSet` in
+`lib/actions/delta/row-closure.ts` never reaches ids held inside JSON:
+`entities.state`'s `current_location_id`, `faction_id`,
+`parent_location_id`, `at_location_id`, `lastSeenAt.locationId` and
+`lastSeenAt.entryId`, its `equipped_items` and `inventory` arrays (all
+in `lib/db/entities/entity-state-schema.ts`), and
+`story_entries.metadata`'s `sceneEntities` and `currentLocationId`. A
+reversal that removes an entity could leave one of them naming it.
+
+Not reachable for `state`, verified by reading in the 2026-10-05
+triage pass: only characters are ever machine-created
+(`lib/classifier/plan.ts`), and no `state` field names a character;
+CTRL-Z is newest-first, and rollback and regenerate windows take every
+later write; prose-edit sweeps spare entity creates; and a no-gate
+run's abort holds the branch lock exclusive. Inferred, not verified:
+in the boot-recovery window after an abort's own reversal failed
+([no-gate write phase](./generation-pipeline.md#no-gate-write-phase)),
+a later turn's piggyback or a tail scene edit can name the pass's new
+character in `sceneEntities`, and recovery then reverses the create
+with no refusal. A dangling id renders as "Entity no longer exists"
+(`components/world/overview/overview-parts.tsx`), never a crash, and
+`namesId` in `lib/actions/delta/reverse-replay.ts` already walks
+nested payloads, so the write-back refusal covers ids in `state`.
+
+A fix is a JSON-path reference registry the closure queries through
+`json_each`. Parked 2026-10-05; the signal to revisit is a machine
+writer that creates entities other than characters.
+
 ### Memory pipeline (parked)
 
 Subsystem-scoped deferrals for the memory pipeline (retrieval,
