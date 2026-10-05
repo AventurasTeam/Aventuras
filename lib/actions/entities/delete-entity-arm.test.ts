@@ -24,7 +24,7 @@ import { plantVec } from '@/lib/db/__tests__/vec-fixtures'
 import { characterRelationshipsStore } from '@/lib/stores'
 
 import { applyDeltaAction } from '../delta/apply-delta-action'
-import { applyRedo, snapshotForRedo } from '../delta/redo'
+import { applyRedo, prepareUndo } from '../delta/redo'
 import { TARGET_NOT_FOUND } from '../delta/registry'
 import { reverseAndPruneDeltaRows } from '../delta/reverse-replay'
 import { selectReversalSet } from '../delta/row-closure'
@@ -299,8 +299,8 @@ describe('deleteEntity', () => {
       .where(eq(deltas.actionId, 'act_del'))
       .orderBy(desc(deltas.logPosition))) as Delta[]
     const set = await selectReversalSet(ctx, { branchId: 'b1', target: rows })
-    const snapshot = await snapshotForRedo(set, ctx)
-    await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: true })
+    const { snapshot, reverse } = await prepareUndo(set, ctx)
+    await reverse()
     const [restored] = await ctx.db.select().from(entities).where(eq(entities.id, 'char_x'))
     expect(restored.embeddingStale).toBe(1)
 

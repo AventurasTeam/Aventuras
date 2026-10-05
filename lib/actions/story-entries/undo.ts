@@ -8,12 +8,8 @@ import { selectUndoTarget } from '@/lib/undo'
 import { resolveInvalidationForDeltas, type InvalidationOutcome } from './classifier-facts'
 import { logReversalRefused, resolveSweep } from './operational'
 import { bracketProseReversal } from './prose-reversal'
-import { applyRedo, snapshotForRedo, type RedoSnapshot } from '../delta/redo'
-import {
-  DeltaReplayError,
-  ReversalIntegrityError,
-  reverseAndPruneDeltaRows,
-} from '../delta/reverse-replay'
+import { applyRedo, prepareUndo, type RedoSnapshot } from '../delta/redo'
+import { DeltaReplayError, ReversalIntegrityError } from '../delta/reverse-replay'
 import { selectReversalSet, type ReversalSet } from '../delta/row-closure'
 import type { DbCtx } from '../types'
 
@@ -101,16 +97,16 @@ async function undoBracketed(branchId: string, ctx: DbCtx): Promise<UndoResult> 
   }
 
   // Redo restores the target and its closure (data-model.md → Entry mutability & rollback).
-  const snapshot = await snapshotForRedo(set, ctx)
+  const undo = await prepareUndo(set, ctx)
   try {
-    await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: true }, clampOps)
+    await undo.reverse(clampOps)
   } catch (e) {
     // Committed: the reversal + prune landed in SQLite, only the store sync failed. The change
     // is real, so keep redo available before surfacing the failure.
-    if (e instanceof DeltaReplayError && e.committed) undoRedoStore.pushRedoGroup(snapshot)
+    if (e instanceof DeltaReplayError && e.committed) undoRedoStore.pushRedoGroup(undo.snapshot)
     throw e
   }
-  undoRedoStore.pushRedoGroup(snapshot)
+  undoRedoStore.pushRedoGroup(undo.snapshot)
   return { status: 'ok' }
 }
 

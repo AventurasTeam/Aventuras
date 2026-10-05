@@ -26,7 +26,7 @@ import { plantVec } from '@/lib/db/__tests__/vec-fixtures'
 import { happeningAwarenessStore, happeningInvolvementsStore } from '@/lib/stores'
 
 import { applyDeltaAction } from './apply-delta-action'
-import { applyRedo, snapshotForRedo } from './redo'
+import { applyRedo, prepareUndo } from './redo'
 import { reverseAndPruneDeltaRows } from './reverse-replay'
 import { selectReversalSet } from './row-closure'
 import type { DbCtx } from '../types'
@@ -182,8 +182,8 @@ describe.each(CASES)('delete $kind', ({ kind, translationKind, insert, remove, s
 
     const rows = await groupRows('act_del')
     const set = await selectReversalSet(ctx, { branchId: 'b1', target: rows })
-    const snapshot = await snapshotForRedo(set, ctx)
-    await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: true })
+    const { snapshot, reverse } = await prepareUndo(set, ctx)
+    await reverse()
     const [restored] = await select()
     expect(restored?.embeddingStale).toBe(1)
     expect(await ctx.db.select().from(translations)).toHaveLength(1)

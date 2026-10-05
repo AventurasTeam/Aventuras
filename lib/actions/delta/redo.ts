@@ -12,6 +12,7 @@ import {
   DeltaReplayError,
   emitPatches,
   ReversalIntegrityError,
+  reverseAndPruneDeltaRows,
 } from './reverse-replay'
 import { reversalLockKeys, type ReversalSet } from './row-closure'
 import { deltaLockKeys } from './row-locks'
@@ -25,8 +26,24 @@ export type RedoSnapshot = {
   rowBeforeUndo: Record<string, unknown> | null
 }
 
-// Call this BEFORE the reversal of `set` executes.
-export async function snapshotForRedo(set: ReversalSet, ctx: DbCtx): Promise<RedoSnapshot[]> {
+/** A redoable CTRL-Z of a set: the redo snapshot, taken before `reverse` runs the reversal. */
+export type PreparedUndo = {
+  readonly snapshot: readonly RedoSnapshot[]
+  /** Reverses and prunes the set, refusing a prune the snapshot could not restore. */
+  readonly reverse: (extraOps?: readonly SqlOp[]) => Promise<number>
+}
+
+// One call takes the snapshot and fixes keepRedoExact, so the two cannot disagree.
+export async function prepareUndo(set: ReversalSet, ctx: DbCtx): Promise<PreparedUndo> {
+  const snapshot = await snapshotForRedo(set, ctx)
+  return {
+    snapshot,
+    reverse: (extraOps = []) =>
+      reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: true }, extraOps),
+  }
+}
+
+async function snapshotForRedo(set: ReversalSet, ctx: DbCtx): Promise<RedoSnapshot[]> {
   // Redo restores rows to their tables; it cannot put one back into a delete's payload
   // (generation-pipeline.md → Reverse-replay).
   const heldWrite = set.redoRows.find(

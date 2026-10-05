@@ -17,9 +17,9 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { entitiesStore, entriesStore } from '@/lib/stores'
 
 import { applyDeltaAction } from './apply-delta-action'
-import { applyRedo, snapshotForRedo } from './redo'
+import { applyRedo, prepareUndo } from './redo'
 import { register } from './registry'
-import { ReversalIntegrityError, reverseAndPruneDeltaRows } from './reverse-replay'
+import { ReversalIntegrityError } from './reverse-replay'
 import { selectReversalSet } from './row-closure'
 import type { PipelineAction } from '../types'
 
@@ -31,7 +31,7 @@ const phantoms = sqliteTable('redo_phantoms', {
   label: text('label'),
 })
 
-describe('snapshotForRedo / applyRedo', () => {
+describe('prepareUndo / applyRedo', () => {
   it('round-trips an update delta: captures pre-undo state, then restores it on redo', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
@@ -64,8 +64,8 @@ describe('snapshotForRedo / applyRedo', () => {
       createdAt: Date.now(),
     }
 
-    // snapshotForRedo must run BEFORE the undo reversal, capturing current ('Aria').
-    const snapshot = await snapshotForRedo(
+    // The snapshot is taken BEFORE the undo reversal, capturing current ('Aria').
+    const { snapshot } = await prepareUndo(
       await selectReversalSet(ctx, { branchId: 'b1', target: [deltaRow] }),
       ctx,
     )
@@ -150,8 +150,8 @@ describe('snapshotForRedo / applyRedo', () => {
       createdAt: Date.now(),
     }
 
-    // snapshotForRedo runs before the undo's re-insertion — the row is still absent.
-    const snapshot = await snapshotForRedo(
+    // The snapshot is taken before the undo's re-insertion — the row is still absent.
+    const { snapshot } = await prepareUndo(
       await selectReversalSet(ctx, { branchId: 'b1', target: [deleteDelta] }),
       ctx,
     )
@@ -213,7 +213,7 @@ describe('snapshotForRedo / applyRedo', () => {
       logPosition: 11,
     }
 
-    // A null rowBeforeUndo means snapshotForRedo found no matching row: applyRedo
+    // A null rowBeforeUndo means the snapshot found no matching row: applyRedo
     // must write nothing to the DB for create/update, and must NOT patch the store.
     await applyRedo(
       [
@@ -257,8 +257,8 @@ async function undoOf(ctx: Ctx, actionId: string) {
     .where(eq(deltas.actionId, actionId))
     .orderBy(desc(deltas.logPosition))) as Delta[]
   const set = await selectReversalSet(ctx, { branchId: 'b1', target: rows })
-  const snapshot = await snapshotForRedo(set, ctx)
-  await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: true })
+  const { snapshot, reverse } = await prepareUndo(set, ctx)
+  await reverse()
   return snapshot
 }
 
@@ -566,7 +566,7 @@ describe('applyRedo and embedding_stale', () => {
   })
 })
 
-describe('snapshotForRedo over a reversal set', () => {
+describe('prepareUndo over a reversal set', () => {
   const row = (
     id: string,
     logPosition: number,
@@ -608,7 +608,7 @@ describe('snapshotForRedo over a reversal set', () => {
     await db.insert(deltas).values([update, swept])
     const set = await selectReversalSet(ctx, { branchId: 'b1', target: [update], sweep: [swept] })
 
-    const snapshot = await snapshotForRedo(set, ctx)
+    const { snapshot } = await prepareUndo(set, ctx)
 
     expect(set.rows.map((d) => d.id)).toEqual(['d_s', 'd_u'])
     expect(snapshot.map((s) => s.delta.id)).toEqual(['d_u'])
@@ -650,7 +650,7 @@ describe('snapshotForRedo over a reversal set', () => {
     await db.insert(deltas).values([update, swept, hold])
     const set = await selectReversalSet(ctx, { branchId: 'b1', target: [update], sweep: [swept] })
 
-    const snapshot = await snapshotForRedo(set, ctx)
+    const { snapshot } = await prepareUndo(set, ctx)
 
     expect(set.rows.map((d) => d.id)).toContain('d_s')
     expect(set.redoRows.map((d) => d.id)).toEqual(['d_u'])
@@ -681,7 +681,7 @@ describe('snapshotForRedo over a reversal set', () => {
     const set = await selectReversalSet(ctx, { branchId: 'b1', target: [create] })
     const select = vi.spyOn(ctx.db, 'select')
 
-    const error: unknown = await snapshotForRedo(set, ctx).catch((e: unknown) => e)
+    const error: unknown = await prepareUndo(set, ctx).catch((e: unknown) => e)
 
     expect(error).toBeInstanceOf(ReversalIntegrityError)
     expect(error).toMatchObject({ refusal: 'held-in-redo' })
@@ -728,7 +728,7 @@ describe('snapshotForRedo over a reversal set', () => {
     await db.insert(deltas).values([update, hold])
     const set = await selectReversalSet(ctx, { branchId: 'b1', target: [update] })
 
-    const error: unknown = await snapshotForRedo(set, ctx).catch((e: unknown) => e)
+    const error: unknown = await prepareUndo(set, ctx).catch((e: unknown) => e)
 
     expect(error).toBeInstanceOf(ReversalIntegrityError)
     expect(error).toMatchObject({ refusal: 'held-in-redo' })

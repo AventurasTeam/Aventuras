@@ -16,7 +16,7 @@ import { entriesStore, resetAllStores, undoRedoStore } from '@/lib/stores'
 import { redoLastAction, undoLastAction } from '../story-entries/undo'
 import type { PipelineAction } from '../types'
 import { applyDeltaAction, applyDeltaActionGroup } from './apply-delta-action'
-import { applyRedo, snapshotForRedo } from './redo'
+import { applyRedo, prepareUndo } from './redo'
 import { reverseAndPruneDeltaRows, reverseReplayDeltas } from './reverse-replay'
 import { selectReversalSet } from './row-closure'
 
@@ -482,8 +482,8 @@ describe('a classifier write racing a user Save on one row', () => {
           .from(deltas)
           .where(eq(deltas.actionId, `u_${round}`))) as Delta[]
         const set = await selectReversalSet(ctx, { branchId: BRANCH, target: rows })
-        const snapshot = await snapshotForRedo(set, ctx)
-        await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: true })
+        const { snapshot, reverse } = await prepareUndo(set, ctx)
+        await reverse()
         return {
           classifier: () =>
             classify(

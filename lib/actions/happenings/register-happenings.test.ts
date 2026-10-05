@@ -20,9 +20,9 @@ import { registerHappeningAwareness } from './register-awareness'
 import { registerHappenings } from './register-happenings'
 import { registerHappeningInvolvements } from './register-involvements'
 import { applyDeltaAction } from '../delta/apply-delta-action'
-import { applyRedo, snapshotForRedo } from '../delta/redo'
+import { applyRedo, prepareUndo } from '../delta/redo'
 import { __resetRegistry } from '../delta/registry'
-import { reverseReplayDeltas, reverseAndPruneDeltaRows } from '../delta/reverse-replay'
+import { reverseReplayDeltas } from '../delta/reverse-replay'
 import { selectReversalSet } from '../delta/row-closure'
 import { registerEntities } from '../entities/register'
 
@@ -508,8 +508,8 @@ describe('happenings CRUD arms', () => {
     // Undo the delete: capture snapshot first, then prune (remove) the delta
     const deleteDeltaRows = await db.select().from(deltas).where(eq(deltas.actionId, 'act_d'))
     const set = await selectReversalSet(ctx, { branchId: 'br_1', target: deleteDeltaRows })
-    const snapshots = await snapshotForRedo(set, ctx)
-    await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: true })
+    const { snapshot: snapshots, reverse } = await prepareUndo(set, ctx)
+    await reverse()
 
     // After undo: everything should be restored
     expect(await rowFor(db, 'hap_1')).toBeDefined()
