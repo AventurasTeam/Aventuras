@@ -7,6 +7,7 @@ import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
 import { deltaRowOp } from '../delta/delta-row'
 import { DeltaReplayError, reverseAndPruneDeltaRows } from '../delta/reverse-replay'
+import { selectReversalSet, type ReversalSet } from '../delta/row-closure'
 import type { DbCtx } from '../types'
 import { contentEditUndoPayload, resolveContentEditInvalidation } from './classifier-facts'
 import { bracketProseReversal, classifierWatermarkClampOps } from './prose-reversal'
@@ -21,12 +22,12 @@ export type StoryEntryRejection = {
 // A second unrelated action clears the redo stack (data-model.md). That holds when only the store
 // sync after the commit throws too: the action landed all the same.
 async function commitNewAction(
-  rows: Delta[],
+  set: ReversalSet,
   ctx: DbCtx,
   extraOps: readonly SqlOp[],
 ): Promise<void> {
   try {
-    await reverseAndPruneDeltaRows(rows, ctx, extraOps)
+    await reverseAndPruneDeltaRows(set, ctx, extraOps)
   } catch (e) {
     if (e instanceof DeltaReplayError && e.committed) undoRedoStore.clear()
     throw e
@@ -101,7 +102,8 @@ async function updateStoryEntryContentBracketed(
   // is already behind. One transaction, because a clamp without the reversal re-derives
   // beside the stale facts and a reversal without the clamp deletes them with nothing
   // to replace them.
-  await commitNewAction(invalidation.rows, ctx, [
+  const set = await selectReversalSet(ctx, { branchId, target: [], sweep: invalidation.rows })
+  await commitNewAction(set, ctx, [
     ctx.db
       .update(storyEntries)
       .set({ content })
@@ -265,7 +267,8 @@ export async function rollbackToEntry(
     const swept = await resolveSweep(branchId, targetId, ctx)
     if ('status' in swept) return swept
     const counts = countBuckets(swept.rows)
-    await commitNewAction(swept.rows, ctx, swept.clampOps)
+    const set = await selectReversalSet(ctx, { branchId, target: swept.rows })
+    await commitNewAction(set, ctx, swept.clampOps)
     return { status: 'ok', counts }
   })
 }

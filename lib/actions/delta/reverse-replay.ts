@@ -9,9 +9,8 @@ import { applyUndoPayload, isPayloadMetaKey } from './delta-encoding'
 import { withKeyLocks } from './key-lock'
 import { liveLinkFilter } from './live-link-filter'
 import { resolveByTable, whereForDelta, type StorePatch } from './registry'
-import { DeltaReplayError } from './replay-errors'
-import { closeOverRemovedRows } from './row-closure'
-import { deltaLockKeys } from './row-locks'
+import { DeltaReplayError, ReversalIntegrityError } from './replay-errors'
+import { reversalLockKeys, selectReversalSet, type ReversalSet } from './row-closure'
 import { userEditsOutliving, wroteColumn } from './user-precedence'
 
 export {
@@ -35,16 +34,16 @@ export type PatchEmission = { table: string; branchId: string; patch: StorePatch
 export type ReversePlan = { ops: SqlOp[]; pruneOps: SqlOp[]; patches: PatchEmission[] }
 
 /**
- * The reversal of a delta set, unexecuted — so a caller that owns a transaction of its
+ * The reversal of a closed set, unexecuted — so a caller that owns a transaction of its
  * own can commit it alongside its own work rather than in a second one. Ops and prunes
  * stay separate because their order relative to the caller's ops is the caller's call.
  * The prunes leave gaps in log_position; that's expected.
  */
-export async function buildReverseAndPrunePlan(rows: Delta[], ctx: DbCtx): Promise<ReversePlan> {
-  const built = await buildUndoOps(rows, ctx)
+export async function buildReverseAndPrunePlan(set: ReversalSet, ctx: DbCtx): Promise<ReversePlan> {
+  const built = await buildUndoOps(set.rows, ctx)
   return {
     ops: built.ops,
-    pruneOps: rows.map((r) => ctx.db.delete(deltas).where(eq(deltas.id, r.id)).toSQL()),
+    pruneOps: set.rows.map((r) => ctx.db.delete(deltas).where(eq(deltas.id, r.id)).toSQL()),
     patches: built.patches,
   }
 }
@@ -75,7 +74,7 @@ function undoDirtiesVector(targetTable: string, payloadKeys: readonly string[]):
 // Per-row working copy: same-row undos (even disjoint JSON sub-keys) compose, not clobber via a
 // stale base. Machine undos yield to later user edits: generation-pipeline.md → Reverse-replay.
 async function buildUndoOps(
-  rows: Delta[],
+  rows: readonly Delta[],
   ctx: DbCtx,
 ): Promise<{ ops: SqlOp[]; patches: PatchEmission[] }> {
   const working = new Map<string, Record<string, unknown>>()
@@ -146,8 +145,8 @@ async function buildUndoOps(
       })
     }
 
-    // No child-row cascade: a child goes only if its own create is in the set, and row-closure.ts
-    // adds children only for a happening's involvements and awareness; any other outlives the row.
+    // No child-row cascade: a child goes only through its own create, which the closure
+    // (row-closure.ts) puts in the set.
     if (delta.op === 'create') {
       const keeping = entry.rowKeepingColumns ?? []
       const userKept = keeping.filter((col) => wroteColumn(userEdits, col))
@@ -290,19 +289,20 @@ function readsUserEdits(delta: Delta): boolean {
 }
 
 export async function reverseAndPruneDeltaRows(
-  rows: Delta[],
+  set: ReversalSet,
   ctx: DbCtx,
   extraOps: readonly SqlOp[] = [],
 ): Promise<number> {
-  if (rows.length === 0 && extraOps.length === 0) return 0
-  const actionId = rows[0]?.actionId ?? 'rollback'
-  return withKeyLocks(deltaLockKeys(rows), async () => {
+  if (set.rows.length === 0 && extraOps.length === 0) return 0
+  const actionId = set.rows[0]?.actionId ?? 'rollback'
+  return withKeyLocks(reversalLockKeys(set), async () => {
     let patches: PatchEmission[]
     try {
-      const plan = await buildReverseAndPrunePlan(rows, ctx)
+      const plan = await buildReverseAndPrunePlan(set, ctx)
       patches = plan.patches
       await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...extraOps])
     } catch (e) {
+      if (e instanceof ReversalIntegrityError) throw e
       throw new DeltaReplayError('Reverse-and-prune failed', {
         cause: e,
         actionId,
@@ -310,42 +310,45 @@ export async function reverseAndPruneDeltaRows(
       })
     }
     emitCommittedPatches(patches, actionId)
-    return rows.length
+    return set.rows.length
   })
 }
 
 /**
  * Reverses and prunes in one transaction, as CTRL-Z does: rows left in the log would read as
  * the undo head and a later rollback's to-do (data-model.md → Entry mutability & rollback).
- * Ops from `settleOps(deltaCount)` join that transaction, even when `deltaCount` is 0.
+ * The action's deltas are closed through `selectReversalSet` first. Ops from
+ * `settleOps(deltaCount)` join that transaction, even when `deltaCount` is 0.
  */
 export async function reverseReplayDeltas(
   actionId: string,
   ctx: DbCtx,
   settleOps: (deltaCount: number) => readonly SqlOp[] = () => [],
 ): Promise<number> {
-  const fail = (e: unknown) =>
-    new DeltaReplayError('Reverse-replay failed', { cause: e, actionId, stage: 'transaction' })
-  let rows: Delta[]
+  // A refusal already names what it refused and committed nothing; wrapping would hide it.
+  const fail = (e: unknown): DeltaReplayError =>
+    e instanceof ReversalIntegrityError
+      ? e
+      : new DeltaReplayError('Reverse-replay failed', { cause: e, actionId, stage: 'transaction' })
+  let set: ReversalSet
   try {
-    rows = await closeOverRemovedRows(
-      (await ctx.db
-        .select()
-        .from(deltas)
-        .where(eq(deltas.actionId, actionId))
-        .orderBy(desc(deltas.logPosition))) as Delta[],
-      ctx,
-    )
+    const rows = (await ctx.db
+      .select()
+      .from(deltas)
+      .where(eq(deltas.actionId, actionId))
+      .orderBy(desc(deltas.logPosition))) as Delta[]
+    // An empty seed runs no query, so its branch is never read.
+    set = await selectReversalSet(ctx, { branchId: rows[0]?.branchId ?? '', target: rows })
   } catch (e) {
     throw fail(e)
   }
-  return withKeyLocks(deltaLockKeys(rows), async () => {
+  return withKeyLocks(reversalLockKeys(set), async () => {
     let patches: PatchEmission[]
     try {
-      const settle = settleOps(rows.length)
-      if (rows.length === 0 && settle.length === 0) return 0
+      const settle = settleOps(set.rows.length)
+      if (set.rows.length === 0 && settle.length === 0) return 0
 
-      const plan = await buildReverseAndPrunePlan(rows, ctx)
+      const plan = await buildReverseAndPrunePlan(set, ctx)
       patches = plan.patches
       await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...settle])
     } catch (e) {
@@ -353,6 +356,6 @@ export async function reverseReplayDeltas(
     }
     // Action layer owns the patch: invert in the held-branch store after the tx.
     emitCommittedPatches(patches, actionId)
-    return rows.length
+    return set.rows.length
   })
 }

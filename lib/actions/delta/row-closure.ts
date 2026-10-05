@@ -1,99 +1,14 @@
-import { and, eq, getTableColumns, inArray, ne, sql } from 'drizzle-orm'
+import { and, eq, getTableColumns, inArray, ne } from 'drizzle-orm'
 
-import { BIND_CHUNK, deltas, happeningAwareness, happeningInvolvements, type Delta } from '@/lib/db'
+import { BIND_CHUNK, deltas, type Delta } from '@/lib/db'
 
-import type { DbCtx } from '../types'
+import { isUserOriginatedSource, type DbCtx } from '../types'
 import { EMPTY_HELD_ROWS, heldKey, loadHeldRows, type HeldRowIndex } from './held-rows'
 import { isRefTable, referrersOf } from './live-refs'
 import { resolveByTable } from './registry'
 import { ReversalIntegrityError } from './replay-errors'
 import { deltaLockKeys, type RowLockKey } from './row-locks'
-import { userEditsOutliving, wroteColumn } from './user-precedence'
-
-// A child row points at its parent by id alone (FK-less), so nothing deletes it with the parent.
-const CHILD_TABLES = {
-  happenings: [
-    { name: 'happening_involvements', table: happeningInvolvements },
-    { name: 'happening_awareness', table: happeningAwareness },
-  ],
-} as const
-
-/**
- * `rows` widened by every delta on a row one of its `create`s will delete, whatever that delta's
- * source: the row's own later writes, and its child rows' writes, a deleted child's included.
- * Left out, a later user edit is stranded in the log pointing at nothing (generation-pipeline.md
- * → Reverse-replay). A later `delete` of the row stays out, since undoing it would restore
- * children under a parent the create's undo then deletes; so does a table whose create-undo keeps
- * rows a user wrote to. Sorted newest-first for replay.
- */
-export async function closeOverRemovedRows(rows: readonly Delta[], ctx: DbCtx): Promise<Delta[]> {
-  const removed = rows.filter(
-    (d) => d.op === 'create' && resolveByTable(d.targetTable)?.rowKeepingColumns == null,
-  )
-  const byId = new Map(rows.map((d) => [d.id, d]))
-  const add = (found: readonly Delta[]) => {
-    for (const d of found) if (!byId.has(d.id)) byId.set(d.id, d)
-  }
-
-  const groups = new Map<string, { branchId: string; targetTable: string; ids: string[] }>()
-  for (const d of removed) {
-    const key = `${d.branchId}:${d.targetTable}`
-    const group = groups.get(key) ?? { branchId: d.branchId, targetTable: d.targetTable, ids: [] }
-    group.ids.push(d.targetId)
-    groups.set(key, group)
-  }
-
-  for (const { branchId, targetTable, ids } of groups.values()) {
-    add(
-      (await ctx.db
-        .select()
-        .from(deltas)
-        .where(
-          and(
-            eq(deltas.branchId, branchId),
-            eq(deltas.targetTable, targetTable),
-            inArray(deltas.targetId, ids),
-            ne(deltas.op, 'delete'),
-          ),
-        )) as Delta[],
-    )
-    for (const child of CHILD_TABLES[targetTable as keyof typeof CHILD_TABLES] ?? []) {
-      const live = await ctx.db
-        .select({ id: child.table.id })
-        .from(child.table)
-        .where(and(eq(child.table.branchId, branchId), inArray(child.table.happeningId, ids)))
-      // A child the user already deleted is gone from its table; its delete's undo payload
-      // still names the parent, and leaving its history out strands that delete.
-      const deleted = await ctx.db
-        .select({ id: deltas.targetId })
-        .from(deltas)
-        .where(
-          and(
-            eq(deltas.branchId, branchId),
-            eq(deltas.targetTable, child.name),
-            eq(deltas.op, 'delete'),
-            inArray(sql`json_extract(${deltas.undoPayload}, '$.happeningId')`, ids),
-          ),
-        )
-      const childIds = [...new Set([...live, ...deleted].map((r) => r.id))]
-      if (childIds.length === 0) continue
-      add(
-        (await ctx.db
-          .select()
-          .from(deltas)
-          .where(
-            and(
-              eq(deltas.branchId, branchId),
-              eq(deltas.targetTable, child.name),
-              inArray(deltas.targetId, childIds),
-            ),
-          )) as Delta[],
-      )
-    }
-  }
-
-  return [...byId.values()].sort((a, b) => b.logPosition - a.logPosition)
-}
+import { firstLoggedAt, wroteColumn } from './user-precedence'
 
 declare const reversalSetBrand: unique symbol
 
@@ -192,17 +107,37 @@ async function liveReferrers(
   return found
 }
 
-/** Ids of the row-keeping creates in `seed` that a later user write outside it kept. */
-async function userKeptCreates(ctx: DbCtx, seed: readonly Delta[]): Promise<ReadonlySet<string>> {
-  const keepingColumns = (d: Delta) =>
-    d.op === 'create' ? resolveByTable(d.targetTable)?.rowKeepingColumns : undefined
-  if (!seed.some((d) => keepingColumns(d) !== undefined)) return new Set()
-  const outliving = await userEditsOutliving(ctx, seed, (d) => keepingColumns(d) !== undefined)
-  return new Set(
-    seed
-      .filter((d) => keepingColumns(d)?.some((col) => wroteColumn(outliving.get(d.id) ?? [], col)))
-      .map((d) => d.id),
-  )
+/**
+ * Keys of the seeded rows whose every seed create is a machine create on a row-keeping table that
+ * a `user_edit` outside the seed, first logged after it, kept by writing a keeping column. Judged
+ * from `writes`, the read that gathers the row's deltas: a separate read lets a user Save landing
+ * between the two join the set as the closure's and be reversed.
+ */
+function userKeptRows(
+  seedCreates: ReadonlyMap<string, readonly Delta[]>,
+  writes: readonly Delta[],
+  seedIds: ReadonlySet<string>,
+): Set<string> {
+  const userWrites = new Map<string, Delta[]>()
+  for (const d of writes) {
+    if (d.source !== 'user_edit' || seedIds.has(d.id)) continue
+    const key = heldKey(d.targetTable, d.targetId)
+    const found = userWrites.get(key)
+    if (found) found.push(d)
+    else userWrites.set(key, [d])
+  }
+  const kept = new Set<string>()
+  for (const [key, creates] of seedCreates) {
+    const edits = userWrites.get(key) ?? []
+    const keptAll = creates.every((create) => {
+      if (isUserOriginatedSource(create.source)) return false
+      const keeping = resolveByTable(create.targetTable)?.rowKeepingColumns
+      const later = edits.filter((e) => firstLoggedAt(e) > firstLoggedAt(create))
+      return keeping?.some((col) => wroteColumn(later, col)) ?? false
+    })
+    if (keptAll) kept.add(key)
+  }
+  return kept
 }
 
 // The fixed point of generation-pipeline.md → Reverse-replay: rows the seed's creates remove,
@@ -226,16 +161,29 @@ async function closeOver(
     frontier.push({ table: row.table, id: row.id })
   }
 
-  const kept = await userKeptCreates(ctx, seed)
+  const seedIds = new Set(seed.map((d) => d.id))
+  let seedCreates = new Map<string, Delta[]>()
   for (const d of seed) {
-    if (d.op === 'create' && !kept.has(d.id))
-      remove({ table: d.targetTable, id: d.targetId }, false)
+    if (d.op !== 'create') continue
+    const key = heldKey(d.targetTable, d.targetId)
+    const creates = seedCreates.get(key)
+    if (creates) creates.push(d)
+    else seedCreates.set(key, [d])
+    remove({ table: d.targetTable, id: d.targetId }, false)
   }
 
   while (frontier.length > 0) {
-    const round = frontier
+    let round = frontier
     frontier = []
-    const writes = await writesTo(ctx, branchId, round)
+    let writes = await writesTo(ctx, branchId, round)
+    // Only the seed's own creates can be kept; a row reached by reference later goes regardless.
+    const kept = userKeptRows(seedCreates, writes, seedIds)
+    seedCreates = new Map()
+    if (kept.size > 0) {
+      for (const key of kept) removed.delete(key)
+      round = round.filter(({ table, id }) => !kept.has(heldKey(table, id)))
+      writes = writes.filter((d) => !kept.has(heldKey(d.targetTable, d.targetId)))
+    }
     for (const d of writes) if (!set.has(d.id)) set.set(d.id, d)
     const created = new Set(
       writes.filter((d) => d.op === 'create').map((d) => heldKey(d.targetTable, d.targetId)),

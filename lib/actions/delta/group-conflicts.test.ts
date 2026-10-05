@@ -24,6 +24,7 @@ import { entityDeleteActions } from '@/lib/world'
 
 import { applyDeltaActionGroup } from './apply-delta-action'
 import { reverseAndPruneDeltaRows } from './reverse-replay'
+import { selectReversalSet } from './row-closure'
 import type { DbCtx, PipelineAction } from '../types'
 
 let ctx: DbCtx
@@ -89,7 +90,10 @@ async function undoGroup(): Promise<void> {
     .from(deltas)
     .where(eq(deltas.actionId, 'act_g'))
     .orderBy(desc(deltas.logPosition))) as Delta[]
-  await reverseAndPruneDeltaRows(rows, ctx)
+  await reverseAndPruneDeltaRows(
+    await selectReversalSet(ctx, { branchId: 'b1', target: rows }),
+    ctx,
+  )
 }
 
 describe('applyDeltaActionGroup — a delete and a write naming what it removes', () => {

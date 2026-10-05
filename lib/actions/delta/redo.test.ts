@@ -19,6 +19,7 @@ import { applyDeltaAction } from './apply-delta-action'
 import { applyRedo, snapshotForRedo } from './redo'
 import { register } from './registry'
 import { reverseAndPruneDeltaRows } from './reverse-replay'
+import { selectReversalSet } from './row-closure'
 import type { PipelineAction } from '../types'
 
 // Throwaway domain (raw SQL only) with a unique table name so registering it
@@ -248,8 +249,9 @@ async function undoOf(ctx: Ctx, actionId: string) {
     .from(deltas)
     .where(eq(deltas.actionId, actionId))
     .orderBy(desc(deltas.logPosition))) as Delta[]
+  const set = await selectReversalSet(ctx, { branchId: 'b1', target: rows })
   const snapshot = await snapshotForRedo(rows, ctx)
-  await reverseAndPruneDeltaRows(rows, ctx)
+  await reverseAndPruneDeltaRows(set, ctx)
   return snapshot
 }
 

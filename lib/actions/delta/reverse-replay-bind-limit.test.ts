@@ -7,7 +7,15 @@ import { branches, happeningAwareness, stories, type Delta } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
 import { reverseAndPruneDeltaRows } from './reverse-replay'
+import { selectReversalSet } from './row-closure'
 import type { DbCtx } from '../types'
+
+async function reverseRows(rows: readonly Delta[], ctx: DbCtx): Promise<number> {
+  return reverseAndPruneDeltaRows(
+    await selectReversalSet(ctx, { branchId: 'b1', target: rows }),
+    ctx,
+  )
+}
 
 // 8 cols → floor(32766/8)=4095 max rows/INSERT; 4200 rows forces a multi-statement restore.
 const AWARENESS_ROW_COUNT = 4200
@@ -68,7 +76,7 @@ describe('reverse-replay of a delete cascade wider than the bind cap', () => {
       createdAt: 1,
     }
 
-    await reverseAndPruneDeltaRows([delta], ctx)
+    await reverseRows([delta], ctx)
 
     const restored = await db
       .select()
@@ -126,7 +134,7 @@ describe('reverse-replay of a delete cascade wider than the bind cap', () => {
       createdAt: 1,
     }
 
-    await reverseAndPruneDeltaRows([delta], ctx)
+    await reverseRows([delta], ctx)
 
     const restored = await db
       .select()

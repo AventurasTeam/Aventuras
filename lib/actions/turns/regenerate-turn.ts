@@ -15,6 +15,7 @@ import {
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
 import { DeltaReplayError, reverseAndPruneDeltaRows } from '../delta/reverse-replay'
+import { selectReversalSet } from '../delta/row-closure'
 import { resolveSweep, type StoryEntryRejection } from '../story-entries/operational'
 import { bracketProseReversal } from '../story-entries/prose-reversal'
 import type { DbCtx } from '../types'
@@ -62,7 +63,8 @@ async function sweepFrom(
 ): Promise<{ status: 'ok' } | StoryEntryRejection> {
   const swept = await resolveSweep(branchId, targetId, ctx)
   if ('status' in swept) return swept
-  await reverseAndPruneDeltaRows(swept.rows, ctx, swept.clampOps)
+  const set = await selectReversalSet(ctx, { branchId, target: swept.rows })
+  await reverseAndPruneDeltaRows(set, ctx, swept.clampOps)
   return { status: 'ok' }
 }
 

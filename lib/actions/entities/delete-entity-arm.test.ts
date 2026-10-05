@@ -27,8 +27,16 @@ import { applyDeltaAction } from '../delta/apply-delta-action'
 import { applyRedo, snapshotForRedo } from '../delta/redo'
 import { TARGET_NOT_FOUND } from '../delta/registry'
 import { reverseAndPruneDeltaRows } from '../delta/reverse-replay'
+import { selectReversalSet } from '../delta/row-closure'
 import type { DbCtx } from '../types'
 import { ENTITY_DELETE_REJECTION } from './register'
+
+async function reverseRows(rows: readonly Delta[], ctx: DbCtx): Promise<number> {
+  return reverseAndPruneDeltaRows(
+    await selectReversalSet(ctx, { branchId: 'b1', target: rows }),
+    ctx,
+  )
+}
 
 const character = (id: string, branchId: string, name: string): NewEntity => ({
   id,
@@ -149,7 +157,7 @@ describe('deleteEntity', () => {
       .where(eq(deltas.actionId, 'act_del'))
       .orderBy(desc(deltas.logPosition))) as Delta[]
     expect(rows).toHaveLength(1)
-    await reverseAndPruneDeltaRows(rows, ctx)
+    await reverseRows(rows, ctx)
 
     const [restored] = await ctx.db.select().from(entities).where(eq(entities.id, 'char_x'))
     expect(restored.embeddingStale).toBe(1)
@@ -240,7 +248,7 @@ describe('deleteEntity', () => {
     expect(payload.relationships).toHaveLength(1)
     expect(payload.translations).toHaveLength(2)
 
-    await reverseAndPruneDeltaRows(rows, ctx)
+    await reverseRows(rows, ctx)
     expect(
       await ctx.db
         .select()
@@ -290,7 +298,7 @@ describe('deleteEntity', () => {
       .where(eq(deltas.actionId, 'act_del'))
       .orderBy(desc(deltas.logPosition))) as Delta[]
     const snapshot = await snapshotForRedo(rows, ctx)
-    await reverseAndPruneDeltaRows(rows, ctx)
+    await reverseRows(rows, ctx)
     const [restored] = await ctx.db.select().from(entities).where(eq(entities.id, 'char_x'))
     expect(restored.embeddingStale).toBe(1)
 
@@ -339,7 +347,7 @@ describe('deleteEntity', () => {
       .from(deltas)
       .where(eq(deltas.actionId, 'act_del'))
       .orderBy(desc(deltas.logPosition))) as Delta[]
-    await reverseAndPruneDeltaRows(rows, ctx)
+    await reverseRows(rows, ctx)
 
     expect(
       await ctx.db

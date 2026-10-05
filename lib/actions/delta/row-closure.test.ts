@@ -5,7 +5,7 @@ import { branches, deltas, happeningInvolvements, happenings, stories, type Delt
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
 import { reverseReplayDeltas } from './reverse-replay'
-import { closeOverRemovedRows } from './row-closure'
+import { selectReversalSet } from './row-closure'
 
 const delta = (
   id: string,
@@ -60,7 +60,7 @@ async function seed() {
   return { db, ctx: { db, runInTransaction } }
 }
 
-describe('closeOverRemovedRows', () => {
+describe('the reversal closure', () => {
   it("reverses a user's later writes to a row the aborted run created, and prunes them", async () => {
     const { db, ctx } = await seed()
 
@@ -71,72 +71,23 @@ describe('closeOverRemovedRows', () => {
     expect(await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))).toEqual([])
   })
 
-  it('sweeps a child the user added and then deleted, finding it through its delete', async () => {
-    const { db, ctx } = await seed()
-    await db
-      .insert(happeningInvolvements)
-      .values({ id: 'hinv_gone', branchId: 'b1', happeningId: 'hap_run', entityId: 'char_m' })
-    const [gone] = await db
-      .select()
-      .from(happeningInvolvements)
-      .where(eq(happeningInvolvements.id, 'hinv_gone'))
-    await db.delete(happeningInvolvements).where(eq(happeningInvolvements.id, 'hinv_gone'))
-    await db.insert(deltas).values([
-      delta('d_gone_create', 4, {
-        actionId: 'act_user3',
-        source: 'user_edit',
-        targetTable: 'happening_involvements',
-        targetId: 'hinv_gone',
-      }),
-      delta('d_gone_delete', 5, {
-        actionId: 'act_user4',
-        source: 'user_edit',
-        op: 'delete',
-        targetTable: 'happening_involvements',
-        targetId: 'hinv_gone',
-        undoPayload: { ...gone },
-      }),
-    ])
-
-    expect(await reverseReplayDeltas('act_run', ctx)).toBe(5)
-
-    expect(await db.select().from(happeningInvolvements)).toEqual([])
-    expect(await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))).toEqual([])
-  })
-
   it("leaves out a later delete of the row, whose undo would restore the row's children", async () => {
     const { db, ctx } = await seed()
-    const userDelete = delta('d_delete', 4, {
-      actionId: 'act_user3',
-      source: 'user_edit',
-      op: 'delete',
-      targetTable: 'happenings',
-      targetId: 'hap_run',
-    })
-    await db.insert(deltas).values(userDelete)
-
-    const closed = await closeOverRemovedRows(
-      [delta('d_create', 1, { targetTable: 'happenings', targetId: 'hap_run' })],
-      ctx,
-    )
-
-    expect(closed.map((d) => d.id)).toEqual(['d_inv', 'd_rename', 'd_create'])
-  })
-
-  it('does not widen a table whose create-undo keeps rows a user wrote to', async () => {
-    const { db, ctx } = await seed()
-    const pair = delta('d_pair', 5, { targetTable: 'character_relationships', targetId: 'rel_1' })
     await db.insert(deltas).values(
-      delta('d_view', 6, {
-        actionId: 'act_user4',
+      delta('d_delete', 4, {
+        actionId: 'act_user3',
         source: 'user_edit',
-        op: 'update',
-        targetTable: 'character_relationships',
-        targetId: 'rel_1',
-        undoPayload: { aToB: null },
+        op: 'delete',
+        targetTable: 'happenings',
+        targetId: 'hap_run',
       }),
     )
 
-    expect(await closeOverRemovedRows([pair], ctx)).toEqual([pair])
+    const set = await selectReversalSet(ctx, {
+      branchId: 'b1',
+      target: [delta('d_create', 1, { targetTable: 'happenings', targetId: 'hap_run' })],
+    })
+
+    expect(set.rows.map((d) => d.id)).toEqual(['d_inv', 'd_rename', 'd_create'])
   })
 })

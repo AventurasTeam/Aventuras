@@ -21,6 +21,7 @@ import { entitiesStore, generationStore } from '@/lib/stores'
 
 import { applyDeltaAction } from './apply-delta-action'
 import { reverseAndPruneDeltaRows, reverseReplayDeltas } from './reverse-replay'
+import { selectReversalSet } from './row-closure'
 import { deleteEntityRow } from '../row-delete/delete-entity'
 import { deleteRow } from '../row-delete/delete-row'
 import { resolveClassifierFactDeltas } from '../story-entries/classifier-facts'
@@ -55,6 +56,12 @@ const translation = (
   updatedAt: 1,
 })
 
+const linkToNew: PipelineAction = {
+  kind: 'createHappeningInvolvement',
+  source: 'user_edit',
+  payload: { entry: { id: 'hinv_n', branchId: 'b1', happeningId: 'hap_n', entityId: 'char_x' } },
+}
+
 beforeEach(async () => {
   generationStore.__reset()
   const t = await createTestDb()
@@ -81,10 +88,8 @@ function passAction(actionId: string, entryId: string | null = null) {
 async function undoHead(): Promise<void> {
   const all = (await ctx.db.select().from(deltas).orderBy(desc(deltas.logPosition))) as Delta[]
   const head = all[0].actionId
-  await reverseAndPruneDeltaRows(
-    all.filter((d) => d.actionId === head),
-    ctx,
-  )
+  const target = all.filter((d) => d.actionId === head)
+  await reverseAndPruneDeltaRows(await selectReversalSet(ctx, { branchId: 'b1', target }), ctx)
 }
 
 async function danglingInvolvements(): Promise<unknown[]> {
@@ -214,7 +219,11 @@ describe('undoing a delete whose link names a row a later reversal removed', () 
     })
     expect(await deleteEntityRow('b1', 'char_x', ctx)).toEqual({ status: 'ok' })
 
-    await reverseAndPruneDeltaRows(await resolveClassifierFactDeltas('b1', ['e5'], ctx), ctx)
+    const sweep = await resolveClassifierFactDeltas('b1', ['e5'], ctx)
+    await reverseAndPruneDeltaRows(
+      await selectReversalSet(ctx, { branchId: 'b1', target: [], sweep }),
+      ctx,
+    )
     await undoHead()
 
     expect(await ctx.db.select().from(happenings)).toEqual([])
@@ -240,12 +249,14 @@ describe('undoing a delete whose link names a row a later reversal removed', () 
       },
     })
     const [rel] = await ctx.db.select().from(characterRelationships)
-    await ctx.db
-      .insert(translations)
-      .values([
-        translation('tr_rel', 'character_relationship', rel.id),
-        translation('tr_own', 'entity', 'char_x'),
-      ])
+    // Logged, not inserted raw: the closure reaches it through the relationship and refuses
+    // a row with no create in the log (generation-pipeline.md → Reverse-replay).
+    await passAction('act_tr')({
+      kind: 'createTranslation',
+      source: 'periodic_classifier',
+      payload: { entry: translation('tr_rel', 'character_relationship', rel.id) },
+    })
+    await ctx.db.insert(translations).values(translation('tr_own', 'entity', 'char_x'))
     expect(await deleteEntityRow('b1', 'char_x', ctx)).toEqual({ status: 'ok' })
 
     await reverseReplayDeltas('act_pass', ctx)
@@ -267,7 +278,10 @@ describe('undoing a delete whose link names a row a later reversal removed', () 
     expect(await deleteRow('happening', 'b1', 'hap_old', ctx)).toEqual({ status: 'ok' })
 
     const both = (await ctx.db.select().from(deltas).orderBy(desc(deltas.logPosition))) as Delta[]
-    await reverseAndPruneDeltaRows(both, ctx)
+    await reverseAndPruneDeltaRows(
+      await selectReversalSet(ctx, { branchId: 'b1', target: both }),
+      ctx,
+    )
 
     const inv = await ctx.db.select({ id: happeningInvolvements.id }).from(happeningInvolvements)
     expect(inv).toEqual([{ id: 'hinv_1' }])
@@ -279,13 +293,16 @@ describe('undoing a delete whose link names a row a later reversal removed', () 
       source: 'periodic_classifier',
       payload: { entry: { id: 'hap_n', branchId: 'b1', title: 'New', createdAt: 2, updatedAt: 2 } },
     })
-    await ctx.db
-      .insert(happeningInvolvements)
-      .values({ id: 'hinv_n', branchId: 'b1', happeningId: 'hap_n', entityId: 'char_x' })
+    // Logged, not inserted raw: the closure takes it with hap_n and refuses a row with no
+    // create in the log (generation-pipeline.md → Reverse-replay).
+    await passAction('act_link')(linkToNew)
     expect(await deleteEntityRow('b1', 'char_x', ctx)).toEqual({ status: 'ok' })
 
-    const both = (await ctx.db.select().from(deltas).orderBy(desc(deltas.logPosition))) as Delta[]
-    await reverseAndPruneDeltaRows(both, ctx)
+    const all = (await ctx.db.select().from(deltas).orderBy(desc(deltas.logPosition))) as Delta[]
+    await reverseAndPruneDeltaRows(
+      await selectReversalSet(ctx, { branchId: 'b1', target: all }),
+      ctx,
+    )
 
     expect(await ctx.db.select().from(happenings)).toEqual([])
     expect(await danglingInvolvements()).toEqual([])
@@ -297,14 +314,15 @@ describe('undoing a delete whose link names a row a later reversal removed', () 
       source: 'periodic_classifier',
       payload: { entry: { id: 'hap_n', branchId: 'b1', title: 'New', createdAt: 2, updatedAt: 2 } },
     })
-    await ctx.db
-      .insert(happeningInvolvements)
-      .values({ id: 'hinv_n', branchId: 'b1', happeningId: 'hap_n', entityId: 'char_x' })
+    await passAction('act_link')(linkToNew)
     expect(await deleteEntityRow('b1', 'char_x', ctx)).toEqual({ status: 'ok' })
     expect(await deleteRow('happening', 'b1', 'hap_n', ctx)).toEqual({ status: 'ok' })
 
     const all = (await ctx.db.select().from(deltas).orderBy(desc(deltas.logPosition))) as Delta[]
-    await reverseAndPruneDeltaRows(all, ctx)
+    await reverseAndPruneDeltaRows(
+      await selectReversalSet(ctx, { branchId: 'b1', target: all }),
+      ctx,
+    )
 
     expect(await ctx.db.select().from(happenings)).toEqual([])
     expect(await danglingInvolvements()).toEqual([])
@@ -342,5 +360,38 @@ describe('undoing a delete whose link names a row a later reversal removed', () 
 
     expect(await selectsToUndo('hap_many')).toBe(await selectsToUndo('hap_one'))
     expect(await ctx.db.select().from(happeningInvolvements)).toHaveLength(5)
+  })
+
+  it('leaves the closure to the set: the anchored facts come back unclosed', async () => {
+    await passAction(
+      'act_pass',
+      'e5',
+    )({
+      kind: 'createHappening',
+      source: 'periodic_classifier',
+      payload: {
+        entry: { id: 'hap_f', branchId: 'b1', title: 'Fact', createdAt: 2, updatedAt: 2 },
+      },
+    })
+    // Awareness-style: the link anchors to another turn than its happening.
+    await passAction(
+      'act_pass2',
+      'e4',
+    )({
+      kind: 'createHappeningInvolvement',
+      source: 'periodic_classifier',
+      payload: {
+        entry: { id: 'hinv_e4', branchId: 'b1', happeningId: 'hap_f', entityId: 'char_x' },
+      },
+    })
+
+    const facts = await resolveClassifierFactDeltas('b1', ['e5'], ctx)
+    expect(facts.map((d) => d.targetId)).toEqual(['hap_f'])
+
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target: [], sweep: facts })
+    await reverseAndPruneDeltaRows(set, ctx)
+
+    expect(await ctx.db.select().from(happenings)).toEqual([])
+    expect(await ctx.db.select().from(happeningInvolvements)).toEqual([])
   })
 })

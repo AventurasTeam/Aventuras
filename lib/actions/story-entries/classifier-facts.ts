@@ -6,7 +6,6 @@ import { logger } from '@/lib/diagnostics'
 
 import { loadHeadTurn } from './head-turn'
 import { PAYLOAD_META_PREFIX } from '../delta/delta-encoding'
-import { closeOverRemovedRows } from '../delta/row-closure'
 import type { DbCtx } from '../types'
 import { classifierWatermarkClampOps } from './prose-reversal'
 
@@ -185,14 +184,10 @@ function isReversible(delta: Delta): boolean {
 }
 
 /**
- * Every delta a content edit must reverse: the classifier facts anchored to the
- * entries in its invalidation scope, closed over the rows their creates delete.
- *
- * The closure is load-bearing. A link row does NOT share its happening's anchor:
- * awareness anchors to the turn that narrated the learning, which can sit either
- * side of the happening's own provenance entry (classifier.md -> Provenance
- * attribution), so reversing by anchor alone deletes a happening while its
- * awareness rows survive pointing at nothing.
+ * The classifier facts anchored to the entries in a content edit's invalidation scope, minus
+ * entity creates — unclosed. Every caller reverses them through `selectReversalSet`, whose
+ * closure takes the rows naming what their creates delete: a link does not share its
+ * happening's anchor (classifier.md -> Provenance attribution).
  */
 export async function resolveClassifierFactDeltas(
   branchId: string,
@@ -200,7 +195,7 @@ export async function resolveClassifierFactDeltas(
   ctx: DbCtx,
 ): Promise<Delta[]> {
   if (entryIds.length === 0) return []
-  const anchored = (
+  return (
     (await ctx.db
       .select()
       .from(deltas)
@@ -212,12 +207,9 @@ export async function resolveClassifierFactDeltas(
         ),
       )) as Delta[]
   ).filter(isReversible)
-
-  return closeOverRemovedRows(anchored, ctx)
 }
 
-// reverse-replay unwinds newest-first, and the two queries above are unioned out
-// of log order.
+// reverse-replay unwinds newest-first, and per-scope results concatenate out of log order.
 export function sortForReplay(rows: Delta[]): Delta[] {
   return [...rows].sort((a, b) => b.logPosition - a.logPosition)
 }

@@ -25,6 +25,7 @@ import {
   reverseAndPruneDeltaRows,
   reverseReplayDeltas,
 } from './reverse-replay'
+import { selectReversalSet } from './row-closure'
 import { USER_EDITED_SINCE_PROSE } from './user-precedence'
 import { updateStoryEntryContent } from '../story-entries/operational'
 import { redoLastAction, undoLastAction } from '../story-entries/undo'
@@ -59,6 +60,13 @@ async function deltasOf(db: Db, actionId: string): Promise<Delta[]> {
     .from(deltas)
     .where(eq(deltas.actionId, actionId))
     .orderBy(desc(deltas.logPosition))) as Delta[]
+}
+
+async function reverseRows(rows: readonly Delta[], ctx: Ctx): Promise<number> {
+  return reverseAndPruneDeltaRows(
+    await selectReversalSet(ctx, { branchId: 'b1', target: rows }),
+    ctx,
+  )
 }
 
 async function actionIds(db: Db): Promise<string[]> {
@@ -183,7 +191,7 @@ describe('reversing a machine write under a later user write', () => {
     await apply(ctx, promote, 'act_c')
     await apply(ctx, userPatch({ status: 'retired', retiredReason: 'exiled' }), 'act_u')
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     expect(await kael(db)).toMatchObject({ status: 'retired', retiredReason: 'exiled' })
     expect(entitiesStore.getById('char_kael')).toMatchObject({ status: 'retired' })
@@ -196,7 +204,7 @@ describe('reversing a machine write under a later user write', () => {
     await apply(ctx, append(['the wanderer']), 'act_c')
     await apply(ctx, userPatch({ keywords: ['the knight', 'the wanderer', 'ser kael'] }), 'act_u')
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     expect((await kael(db)).keywords).toEqual(['the knight', 'the wanderer', 'ser kael'])
     expect(await actionIds(db)).toEqual(['act_0', 'act_u'])
@@ -209,7 +217,7 @@ describe('reversing a machine write under a later user write', () => {
     await apply(ctx, classifyView('ally'), 'act_c')
     await apply(ctx, userViews('rival', 'friend'), 'act_u')
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     const [row] = await pair(db)
     expect(row).toMatchObject({ kind: 'rival', inverseKind: 'friend' })
@@ -222,7 +230,7 @@ describe('reversing a machine write under a later user write', () => {
     await apply(ctx, retire, 'act_c')
     await apply(ctx, userPatch({ status: 'active' }), 'act_u')
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     expect(await kael(db)).toMatchObject({ status: 'active', retiredReason: null })
   })
@@ -233,7 +241,7 @@ describe('reversing a machine write under a later user write', () => {
     await apply(ctx, retire, 'act_c')
     await apply(ctx, userPatch({ description: 'a knight errant' }), 'act_u')
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     expect(await kael(db)).toMatchObject({
       status: 'active',
@@ -250,7 +258,7 @@ describe('reversing a machine write under a later user write', () => {
     await apply(ctx, userViews('rival', 'friend'), 'act_u')
 
     const rows = [...(await deltasOf(db, 'act_u')), ...(await deltasOf(db, 'act_c'))]
-    await reverseAndPruneDeltaRows(rows, ctx)
+    await reverseRows(rows, ctx)
 
     expect((await pair(db))[0].kind).toBe('friend')
   })
@@ -264,7 +272,7 @@ describe('reversing a machine write under a later user write', () => {
     await apply(ctx, classifyView('enemy'), 'act_c2')
 
     const rows = [...(await deltasOf(db, 'act_c2')), ...(await deltasOf(db, 'act_c1'))]
-    await reverseAndPruneDeltaRows(rows, ctx)
+    await reverseRows(rows, ctx)
 
     expect((await pair(db))[0].kind).toBe('rival')
   })
@@ -289,7 +297,7 @@ describe('reversing a machine write under a later user write', () => {
     )
     await apply(ctx, userPatch({ status: 'retired' }), 'act_u')
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     expect((await kael(db)).status).toBe('retired')
     const [mira] = await db.select().from(entities).where(eq(entities.id, 'char_mira'))
@@ -303,7 +311,7 @@ describe('reversing a machine write under a later user write', () => {
     await apply(ctx, classifyView('ally'), 'act_c1')
     await apply(ctx, classifyView('enemy'), 'act_c2')
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c1'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c1'), ctx)
 
     expect((await pair(db))[0].kind).toBe('friend')
   })
@@ -331,7 +339,7 @@ describe('reversing a machine write under a later user write', () => {
     const edited = { ...state, visual: { attire: 'plate armor' }, traits: ['brave', 'stubborn'] }
     await apply(ctx, userPatch({ state: edited }), 'act_u')
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     expect((await kael(db)).state).toMatchObject({
       visual: { attire: 'travel cloak' },
@@ -360,7 +368,7 @@ describe('reversing a machine view update', () => {
     await apply(ctx, classifyMiraView('wary'), 'act_c')
     await apply(ctx, userViews(null, 'wary'), 'act_u')
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     expect(await pair(db)).toHaveLength(0)
     expect(characterRelationshipsStore.getById(created.id)).toBeUndefined()
@@ -393,7 +401,7 @@ describe('reversing a machine view update', () => {
       'act_x',
     )
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     const [row] = await pair(db)
     expect(row).toEqual({ ...created, kind: null, inverseKind: 'friend' })
@@ -417,7 +425,7 @@ describe('reversing a machine view update', () => {
       'act_u',
     )
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     expect(await pair(db)).toHaveLength(0)
   })
@@ -448,7 +456,7 @@ describe('reversing a machine view update', () => {
       createdAt: logPosition,
     })
 
-    await reverseAndPruneDeltaRows(
+    await reverseRows(
       [
         delta('d_create', 30, 'create', null),
         delta('d_kael', 20, 'update', { kind: null }),
@@ -466,7 +474,7 @@ describe('reversing a machine view update', () => {
     await apply(ctx, userViews('ally', null), 'act_0')
     await apply(ctx, classifyMiraView('wary'), 'act_c')
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     const [row] = await pair(db)
     expect(row).toMatchObject({ kind: 'ally', inverseKind: null })
@@ -481,7 +489,7 @@ describe('reversing a machine create of a relationship', () => {
     await apply(ctx, classifyView('ally'), 'act_c')
     await apply(ctx, userViews('ally', 'wary'), 'act_u')
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     const [row] = await pair(db)
     expect(row).toMatchObject({ kind: null, inverseKind: 'wary' })
@@ -495,11 +503,14 @@ describe('reversing a machine create of a relationship', () => {
     await apply(ctx, classifyView('ally'), 'act_c')
     await apply(ctx, userViews('rival', 'wary'), 'act_u')
 
-    const plan = await buildReverseAndPrunePlan(await deltasOf(db, 'act_c'), ctx)
+    const plan = await buildReverseAndPrunePlan(
+      await selectReversalSet(ctx, { branchId: 'b1', target: await deltasOf(db, 'act_c') }),
+      ctx,
+    )
     expect(plan.ops).toEqual([])
     expect(plan.pruneOps).toHaveLength(1)
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
     expect((await pair(db))[0]).toMatchObject({ kind: 'rival', inverseKind: 'wary' })
   })
 
@@ -510,7 +521,7 @@ describe('reversing a machine create of a relationship', () => {
     await apply(ctx, userViews('ally', 'wary'), 'act_u1')
     await apply(ctx, userViews('ally', null), 'act_u2')
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     expect(await pair(db)).toHaveLength(0)
   })
@@ -521,7 +532,7 @@ describe('reversing a machine create of a relationship', () => {
     await apply(ctx, classifyView('ally'), 'act_c')
     const [created] = await pair(db)
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     expect(await pair(db)).toHaveLength(0)
     expect(characterRelationshipsStore.getById(created.id)).toBeUndefined()

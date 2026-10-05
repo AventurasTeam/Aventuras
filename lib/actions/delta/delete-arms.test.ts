@@ -28,6 +28,7 @@ import { happeningAwarenessStore, happeningInvolvementsStore } from '@/lib/store
 import { applyDeltaAction } from './apply-delta-action'
 import { applyRedo, snapshotForRedo } from './redo'
 import { reverseAndPruneDeltaRows } from './reverse-replay'
+import { selectReversalSet } from './row-closure'
 import type { DbCtx } from '../types'
 
 let ctx: DbCtx
@@ -180,8 +181,9 @@ describe.each(CASES)('delete $kind', ({ kind, translationKind, insert, remove, s
     expect(await ctx.db.select().from(translations)).toEqual([])
 
     const rows = await groupRows('act_del')
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target: rows })
     const snapshot = await snapshotForRedo(rows, ctx)
-    await reverseAndPruneDeltaRows(rows, ctx)
+    await reverseAndPruneDeltaRows(set, ctx)
     const [restored] = await select()
     expect(restored?.embeddingStale).toBe(1)
     expect(await ctx.db.select().from(translations)).toHaveLength(1)
@@ -271,7 +273,10 @@ describe('delete happening — link rows', () => {
       awareness: [awarenessB1],
     })
 
-    await reverseAndPruneDeltaRows(rows, ctx)
+    await reverseAndPruneDeltaRows(
+      await selectReversalSet(ctx, { branchId: 'b1', target: rows }),
+      ctx,
+    )
     expect(await ctx.db.select().from(happeningInvolvements)).toHaveLength(2)
     expect(await ctx.db.select().from(happeningAwareness)).toHaveLength(2)
     expect(

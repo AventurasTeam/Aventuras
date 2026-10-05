@@ -18,6 +18,7 @@ import type { PipelineAction } from '../types'
 import { applyDeltaAction, applyDeltaActionGroup } from './apply-delta-action'
 import { applyRedo, snapshotForRedo } from './redo'
 import { reverseAndPruneDeltaRows, reverseReplayDeltas } from './reverse-replay'
+import { selectReversalSet } from './row-closure'
 
 type Db = Awaited<ReturnType<typeof createTestDb>>['db']
 type Ctx = {
@@ -330,7 +331,10 @@ describe('a classifier write racing a user Save on one row', () => {
         .select()
         .from(deltas)
         .where(eq(deltas.actionId, actionId))) as Delta[]
-      return reverseAndPruneDeltaRows(rows, ctx)
+      return reverseAndPruneDeltaRows(
+        await selectReversalSet(ctx, { branchId: BRANCH, target: rows }),
+        ctx,
+      )
     },
   }
 
@@ -467,8 +471,9 @@ describe('a classifier write racing a user Save on one row', () => {
           .select()
           .from(deltas)
           .where(eq(deltas.actionId, `u_${round}`))) as Delta[]
+        const set = await selectReversalSet(ctx, { branchId: BRANCH, target: rows })
         const snapshot = await snapshotForRedo(rows, ctx)
-        await reverseAndPruneDeltaRows(rows, ctx)
+        await reverseAndPruneDeltaRows(set, ctx)
         return {
           classifier: () =>
             classify(
