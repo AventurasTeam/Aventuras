@@ -350,9 +350,7 @@
     isAtPhysicalBottom = nearBottom
   }
 
-  // Gone in the same render its narration entry arrives in. Rendered side by side for a
-  // moment, the entry pushes the stream down, scroll anchoring follows it, and removing the
-  // stream then leaves the view at the end of the new entry.
+  // Hidden once its entry exists, so scroll anchoring can't strand the view below it.
   const showStreamingEntry = $derived.by(() => {
     if (!ui.isStreaming) return false
     const id = ui.streamingNarrationEntryId
@@ -469,7 +467,7 @@
     })
   })
 
-  // The same request, arriving while the story panel is already up — the effect above
+  // The same request, arriving while the story panel is already up — the panel-landing effect
   // won't re-run, since neither activePanel nor storyContainer changed. Declared after
   // it so that on a remount the panel effect takes the request first and this one finds
   // nothing; consumeEntryScroll is atomic, so exactly one of the two ever lands it.

@@ -19,7 +19,7 @@ function makeDeps(
   overrides: Partial<BackgroundImageDependencies> = {},
 ): BackgroundImageDependencies {
   return {
-    analyzeBackgroundChangeAndGenerateImage: async () => {},
+    analyzeBackgroundChangeAndGenerateImage: async () => ({}),
     isImageGenerationEnabled: () => true,
     ...overrides,
   }
@@ -36,7 +36,7 @@ function makeInput(overrides: Partial<BackgroundImageInput> = {}): BackgroundIma
 
 describe('BackgroundImagePhase', () => {
   it('runs the background analyser when everything is configured', async () => {
-    const analyze = vi.fn().mockResolvedValue(undefined)
+    const analyze = vi.fn().mockResolvedValue({})
 
     const { events, result } = await drain(
       new BackgroundImagePhase(

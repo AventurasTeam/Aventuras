@@ -25,8 +25,6 @@
     const marks = failureMarks(nodes)
     const holding = stepsHoldingAttempts(nodes)
     return flattenTree(nodes).map(({ step, level }) => {
-      // A failure is told once, on the deepest step that carries it. Every step above one is
-      // marked, unless it is itself shown as failed, so the way down to it can be followed.
       const failed = step.status === 'failed' && !shownBelow.has(step.id)
       return {
         id: step.id,
@@ -38,7 +36,6 @@
         running: step.status === 'running',
         skipped: step.status === 'skipped',
         failed,
-        // Red for a failure beneath, plain when every one is an attempt its request got past.
         mark: failed ? null : (marks.get(step.id) ?? null),
         error: shownBelow.has(step.id) ? '' : (step.error ?? ''),
         timing: { startedAt: step.startedAt, endedAt: step.endedAt, untimed: step.untimed },
@@ -54,9 +51,6 @@
   )
 </script>
 
-<!-- Uncapped, like the reasoning block: a long turn is read by scrolling the story, not through
-     a window of its own. While the narration streams few steps run beside it, so the report
-     rarely grows under the reader. -->
 <div class="border-border/50 bg-muted/30 mt-1 rounded-md border px-2 py-1.5">
   {#each rows as row (row.id)}
     <div

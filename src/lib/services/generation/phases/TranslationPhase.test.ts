@@ -25,6 +25,7 @@ vi.mock('$lib/stores/settings.svelte', () => ({
 }))
 
 import { TranslationPhase, type TranslationInput } from './TranslationPhase'
+import { ActivityRecorder } from '$lib/services/activity'
 import type { GenerationEvent } from '../types'
 import type { TranslationSettings } from '$lib/types'
 
@@ -175,14 +176,9 @@ describe('TranslationPhase activity reporting', () => {
   })
 
   it('fails its step and saves nothing when the service hands the original back', async () => {
-    const closed: Record<string, [string, string | null | undefined]> = {}
-    const activity = {
-      startStep: (label: string) => label,
-      endStep: (id: string, status = 'done', _detail?: string, error?: string | null) => {
-        closed[id] ??= [status, error]
-      },
-      recordStep: () => '',
-    }
+    const activity = new ActivityRecorder()
+    activity.setReporting('tree')
+    activity.startTurn('entry')
     const translateNarration = vi
       .fn()
       .mockResolvedValue({ translatedContent: 'The dragon fell.', failure: '429 · rate limited' })
@@ -191,7 +187,11 @@ describe('TranslationPhase activity reporting', () => {
       new TranslationPhase({ translateNarration }).execute(makeInput({ activity })),
     )
 
-    expect(closed['Translating to it']).toEqual(['failed', '429 · rate limited'])
+    expect(activity.activeTurn!.steps[0]).toMatchObject({
+      label: 'Translating to it',
+      status: 'failed',
+      error: '429 · rate limited',
+    })
     expect(result).toMatchObject({ translated: false, translatedContent: null })
   })
 })

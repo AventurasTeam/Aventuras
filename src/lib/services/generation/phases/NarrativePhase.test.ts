@@ -66,7 +66,6 @@ describe('NarrativePhase', () => {
     expect(result).toEqual({
       content: 'The dragon fell.',
       reasoning: 'setting up the fall',
-      chunkCount: 3,
     })
     expect(events.filter((e) => e.type === 'narrative_chunk')).toHaveLength(2)
     expect(events.at(-1)?.type).toBe('phase_complete')
@@ -240,33 +239,12 @@ describe('NarrativePhase', () => {
 })
 
 describe('NarrativePhase activity reporting', () => {
-  /** Records what the phase reported, in order, as `label` + final status. */
+  /** The real recorder, with a turn open for the phase to report into. */
   function recordingReporter() {
-    const steps: {
-      id: string
-      label: string
-      status?: string
-      detail?: string
-      isLLM?: boolean
-    }[] = []
-    let n = 0
-    return {
-      steps,
-      reporter: {
-        startStep: (label: string, options: any = {}) => {
-          const id = `s${++n}`
-          steps.push({ id, label, detail: options.detail, isLLM: options.isLLM })
-          return id
-        },
-        endStep: (id: string, status = 'done', detail?: string) => {
-          const step = steps.find((s) => s.id === id)
-          if (!step || step.status) return
-          step.status = status
-          if (detail !== undefined) step.detail = detail
-        },
-        recordStep: () => '',
-      },
-    }
+    const reporter = new ActivityRecorder()
+    reporter.setReporting('tree')
+    reporter.startTurn('entry')
+    return { steps: reporter.activeTurn!.steps, reporter }
   }
 
   const phaseReporting = (streamNarrative: any, activity: any) =>
@@ -364,7 +342,7 @@ describe('NarrativePhase activity reporting', () => {
 
     await drain(phaseReporting(streamNarrative, reporter).execute(makeInput()))
 
-    expect(steps.every((s) => s.status !== undefined)).toBe(true)
+    expect(steps.every((s) => s.status !== 'running')).toBe(true)
     expect(steps.find((s) => s.label === 'Narrative')?.status).toBe('failed')
   })
 
@@ -396,24 +374,10 @@ describe('NarrativePhase activity reporting', () => {
 
 describe('NarrativePhase response steps', () => {
   function recordingReporter() {
-    const steps: { id: string; label: string; status?: string; detail?: string }[] = []
-    return {
-      steps,
-      reporter: {
-        startStep: (label: string) => {
-          const id = `s${steps.length + 1}`
-          steps.push({ id, label })
-          return id
-        },
-        endStep: (id: string, status = 'done', detail?: string) => {
-          const step = steps.find((s) => s.id === id)
-          if (!step || step.status) return
-          step.status = status
-          if (detail !== undefined) step.detail = detail
-        },
-        recordStep: () => '',
-      },
-    }
+    const reporter = new ActivityRecorder()
+    reporter.setReporting('tree')
+    reporter.startTurn('entry')
+    return { steps: reporter.activeTurn!.steps, reporter }
   }
 
   it('shows an empty answer as a response with no content, after its wait', async () => {
@@ -447,6 +411,6 @@ describe('NarrativePhase response steps', () => {
     )
 
     expect(steps.find((s) => s.label === 'Generating')?.detail).toBe('1 chunk')
-    expect(result?.chunkCount).toBe(2)
+    expect(result?.content).toBe('Hi.')
   })
 })

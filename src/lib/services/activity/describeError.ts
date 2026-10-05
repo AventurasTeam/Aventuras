@@ -6,6 +6,7 @@
  */
 
 import { APICallError, RetryError } from 'ai'
+import { errMessage } from '$lib/utils/error'
 
 /** A reason is shown in full, but a provider can echo a whole prompt back in its error body. */
 const MAX_REASON_LENGTH = 300
@@ -59,8 +60,7 @@ function messageOf(error: unknown): string {
     const message = providerMessage(error.responseBody) ?? error.message
     return error.statusCode ? `${error.statusCode} · ${message}` : message
   }
-  if (error instanceof Error) return error.message
-  return String(error)
+  return errMessage(error)
 }
 
 /** The message field of a provider's JSON error body, in the shapes providers actually use. */

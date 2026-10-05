@@ -24,7 +24,7 @@ type PhaseImageContext = Omit<
 export interface ImageDependencies {
   generateImagesForNarrative: (
     context: PhaseImageContext,
-  ) => Promise<{ queued: number; failure?: string } | void>
+  ) => Promise<{ queued: number; failure?: string }>
   isImageGenerationEnabled: (
     storySettings?: any,
     type?: 'standard' | 'background' | 'portrait' | 'reference',
@@ -141,7 +141,7 @@ export class ImagePhase {
       // The AIService handles its own error logging
       const outcome = await this.deps.generateImagesForNarrative(imageGenContext)
       // An absorbed failure is already on the step that met it; nothing was handed off.
-      if (outcome && !outcome.failure && input.activityParentId) {
+      if (!outcome.failure && input.activityParentId) {
         // The images finish after the turn; the record notes the hand-off, not their progress.
         input.activity?.recordStep('Handed off', {
           parentId: input.activityParentId,

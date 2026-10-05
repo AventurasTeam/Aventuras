@@ -14,7 +14,7 @@ async function drain<R>(gen: AsyncGenerator<GenerationEvent, R>) {
 
 function makeDeps(overrides: Partial<ImageDependencies> = {}): ImageDependencies {
   return {
-    generateImagesForNarrative: async () => {},
+    generateImagesForNarrative: async () => ({ queued: 0 }),
     isImageGenerationEnabled: () => true,
     ...overrides,
   }
@@ -35,7 +35,7 @@ function makeInput(overrides: Partial<ImageInput> = {}): ImageInput {
 
 describe('ImagePhase', () => {
   it('builds the generation context from the turn', async () => {
-    const generateImagesForNarrative = vi.fn().mockResolvedValue(undefined)
+    const generateImagesForNarrative = vi.fn().mockResolvedValue({ queued: 0 })
 
     const { result } = await drain(
       new ImagePhase(makeDeps({ generateImagesForNarrative })).execute(
@@ -58,7 +58,7 @@ describe('ImagePhase', () => {
   })
 
   it('defaults referenceMode to false rather than leaving it undefined', async () => {
-    const generateImagesForNarrative = vi.fn().mockResolvedValue(undefined)
+    const generateImagesForNarrative = vi.fn().mockResolvedValue({ queued: 0 })
 
     await drain(new ImagePhase(makeDeps({ generateImagesForNarrative })).execute(makeInput()))
 

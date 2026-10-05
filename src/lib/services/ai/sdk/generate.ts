@@ -143,10 +143,6 @@ function createJsonExtractMiddleware(): LanguageModelMiddleware {
 }
 
 /**
- * Takes the resolved config rather than a row of booleans: every flag it needs is already on
- * it, and four positional `boolean`s in a row is a swap no type error would ever catch.
- */
-/**
  * The head every chain shares. retryOn429Middleware is intentionally outermost: it re-invokes the
  * whole inner chain (including patchResponseMiddleware) on each retry. Do not reorder without
  * understanding this — putting retry after patchResponse would cause patched state to leak across
@@ -162,6 +158,10 @@ function chainHead(activityParentId?: string): LanguageModelMiddleware[] {
   ]
 }
 
+/**
+ * Takes the resolved config rather than a row of booleans: every flag it needs is already on
+ * it, and four positional `boolean`s in a row is a swap no type error would ever catch.
+ */
 function buildStructuredMiddleware(
   config: ResolvedPreset,
   activityParentId?: string,

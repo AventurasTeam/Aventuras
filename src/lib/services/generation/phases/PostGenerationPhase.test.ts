@@ -117,7 +117,7 @@ describe('PostGenerationPhase', () => {
 
     expect(generateSuggestions).not.toHaveBeenCalled()
     expect(generateActionChoices).not.toHaveBeenCalled()
-    expect(result).toEqual({ suggestions: null, actionChoices: null })
+    expect(result).toEqual({ suggestions: null, actionChoices: null, skippedReason: 'disabled' })
     expect(events.map((e) => e.type)).toEqual(['phase_start', 'phase_complete'])
   })
 

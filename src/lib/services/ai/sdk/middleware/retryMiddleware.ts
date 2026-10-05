@@ -69,7 +69,6 @@ function parseRetryAfterMs(error: unknown): number | null {
 /** Told about each wait before it starts, so a caller can report it. */
 export interface RetryHooks {
   onRetryWait?(wait: {
-    error: unknown
     delayMs: number
     source: 'Retry-After' | 'backoff'
     /** 1-based: the first retry is 1. */
@@ -116,7 +115,6 @@ async function withRetry<T>(
         `[retryMiddleware] 429 received, retrying in ${Math.round(delay / 1000)}s (${src}, attempt ${attempt + 1}/${RETRY_DELAYS_MS.length})`,
       )
       hooks.onRetryWait?.({
-        error,
         delayMs: delay,
         source: src,
         retry: attempt + 1,

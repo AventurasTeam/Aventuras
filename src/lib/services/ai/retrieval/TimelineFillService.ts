@@ -43,8 +43,6 @@ function closeAnswerStep(id: string, answers: TimelineAnswer[]): void {
 
 const log = createLogger('TimelineFill')
 
-/** How a step that threw is closed: an abort was not a failure of the work itself. */
-
 /**
  * Text `answerQuestion` returns when the call failed, so `runTimelineFill` can drop it.
  *

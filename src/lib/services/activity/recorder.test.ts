@@ -361,3 +361,30 @@ describe('untimed steps', () => {
     expect(query.untimed).toBeUndefined()
   })
 })
+
+describe('steps outside the turn in flight', () => {
+  it('records nothing under a parent that belongs to an ended turn', () => {
+    const { recorder } = recorderAt()
+    recorder.setReporting('tree')
+    recorder.startTurn('entry-1')
+    const parentId = recorder.startStep('Background image')
+    recorder.endTurn()
+    recorder.startTurn('entry-2')
+
+    expect(recorder.startStep('Waiting to retry', { parentId })).toBe('')
+    expect(recorder.activeTurn?.steps).toEqual([])
+  })
+
+  it('discards a step and everything beneath it', () => {
+    const { recorder } = recorderAt()
+    recorder.setReporting('tree')
+    recorder.startTurn('entry')
+    const keep = recorder.startStep('Narrative')
+    const drop = recorder.startStep('Translation')
+    recorder.startStep('Translating', { parentId: drop })
+
+    recorder.discardStep(drop)
+
+    expect(recorder.activeTurn?.steps.map((s) => s.id)).toEqual([keep])
+  })
+})

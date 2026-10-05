@@ -21,7 +21,7 @@ export interface BackgroundImageDependencies {
     storyId: string,
     visibleEntries: StoryEntry[],
     activityParentId?: string,
-  ) => Promise<{ failure?: string } | void>
+  ) => Promise<{ failure?: string }>
   isImageGenerationEnabled: (
     storySettings?: any,
     type?: 'standard' | 'background' | 'portrait' | 'reference',

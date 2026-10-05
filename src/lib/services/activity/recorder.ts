@@ -99,6 +99,8 @@ export class ActivityRecorder {
   /** Returns the step id to close later, or `''` when nothing was recorded. */
   startStep(label: string, options: StartStepOptions = {}): string {
     if (!this.enabled || !this.current) return ''
+    // Work still unwinding from an ended turn must not land in the next one.
+    if (options.parentId && !this.current.steps.some((s) => s.id === options.parentId)) return ''
     const step: ActivityStep = {
       id: `step-${++this.counter}`,
       parentId: options.parentId ?? null,
@@ -181,6 +183,17 @@ export class ActivityRecorder {
     for (const child of children) child.parentId = id
     this.onChange()
     return id
+  }
+
+  /** Remove a step of the turn in flight, and anything beneath it, as if never recorded. */
+  discardStep(id: string): void {
+    if (!id || !this.current) return
+    const doomed = new Set([id])
+    for (const step of this.current.steps) {
+      if (step.parentId && doomed.has(step.parentId)) doomed.add(step.id)
+    }
+    this.current.steps = this.current.steps.filter((s) => !doomed.has(s.id))
+    this.onChange()
   }
 
   /** Move a turn's record to another entry, for a turn whose narration became an error entry. */

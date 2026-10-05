@@ -13,8 +13,6 @@ import { describeActivityError } from './describeError'
 export interface ActivityReporter {
   /** Returns the id to close later, or `''` when nothing was recorded. */
   startStep(label: string, options?: StartStepOptions): string
-  /** Revise a running step's detail. Optional: reporters that never need it may omit it. */
-  updateStep?(id: string, detail: string): void
   endStep(
     id: string,
     status?: Exclude<ActivityStatus, 'running'>,
@@ -29,8 +27,10 @@ export interface ActivityReporter {
       error?: string | null
     },
   ): string
-  /** See `ActivityRecorder.groupChildren`. Optional, like `updateStep`. */
+  /** See `ActivityRecorder.groupChildren`. Optional: reporters that never group may omit it. */
   groupChildren?(parentId: string, label: string, options?: GroupOptions): string
+  /** See `ActivityRecorder.discardStep`. Optional, like `groupChildren`. */
+  discardStep?(id: string): void
 }
 
 /** Stands in wherever no reporter was injected, so reporting is never a required dependency. */

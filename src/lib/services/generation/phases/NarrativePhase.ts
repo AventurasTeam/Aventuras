@@ -72,7 +72,6 @@ export interface NarrativeInput {
 export interface NarrativeResult {
   content: string
   reasoning: string
-  chunkCount: number
 }
 
 /**
@@ -93,7 +92,6 @@ export class NarrativePhase {
 
     let fullResponse = ''
     let fullReasoning = ''
-    let chunkCount = 0
     let contentChunks = 0
     let retryCount = 0
     // Why the last pass failed, when it failed with an error rather than an empty answer.
@@ -108,7 +106,6 @@ export class NarrativePhase {
 
       fullResponse = ''
       fullReasoning = ''
-      chunkCount = 0
       contentChunks = 0
 
       // A pass after the first is its own step, so three empty responses do not read as one long
@@ -149,10 +146,8 @@ export class NarrativePhase {
           parentId,
         )) {
           if (abortSignal?.aborted) {
-            activity.endStep(waitId, 'skipped')
-            activity.endStep(streamId, 'skipped')
-            activity.endStep(passId, 'skipped')
-            activity.endStep(narrativeStepId, 'skipped')
+            for (const id of [waitId, streamId, passId, narrativeStepId])
+              activity.endStep(id, 'skipped')
             yield { type: 'aborted', phase: 'narrative' } satisfies AbortedEvent
             return null
           }
@@ -164,9 +159,6 @@ export class NarrativePhase {
           }
           if (chunk.started) continue
 
-          chunkCount++
-          if (chunk.content || chunk.reasoning) contentChunks++
-
           // Accumulate content and reasoning
           if (chunk.content) {
             fullResponse += chunk.content
@@ -177,6 +169,7 @@ export class NarrativePhase {
 
           // Yield chunk if there's any content or reasoning to display
           if (chunk.content || chunk.reasoning) {
+            contentChunks++
             yield {
               type: 'narrative_chunk',
               content: chunk.content || '',
@@ -252,7 +245,6 @@ export class NarrativePhase {
     const result: NarrativeResult = {
       content: fullResponse,
       reasoning: fullReasoning,
-      chunkCount,
     }
 
     activity.endStep(narrativeStepId)

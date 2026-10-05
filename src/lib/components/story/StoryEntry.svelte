@@ -73,6 +73,7 @@
   import ActivityTimeline from './ActivityTimeline.svelte'
   import { activity } from '$lib/stores/activity.svelte'
   import { formatDuration, turnDuration } from '$lib/services/activity'
+  import { reportRenderError } from '$lib/utils/activityDisplay'
   import { countTokens } from '$lib/services/tokenizer'
   import { errMessage } from '$lib/utils/error'
   import { sameBranchScope } from '$lib/utils/branchScope'
@@ -1714,26 +1715,7 @@
         >
           {@render copyIcon()}
         </Button>
-        <Button
-          variant="text"
-          size="icon"
-          onclick={startEdit}
-          disabled={entriesLocked}
-          class="text-muted-foreground hover:text-foreground h-7 w-7"
-          title={entriesLocked ? 'Cannot edit during generation or retry' : 'Edit'}
-        >
-          <Pencil class="h-4 w-4" />
-        </Button>
-        <Button
-          variant="text"
-          size="icon"
-          onclick={() => (isDeleting = true)}
-          disabled={entriesLocked}
-          class="text-muted-foreground h-7 w-7 hover:text-red-700 dark:hover:text-red-500"
-          title={entriesLocked ? 'Cannot delete during generation or retry' : 'Delete'}
-        >
-          <Trash2 class="h-4 w-4" />
-        </Button>
+        {@render editDeleteButtons()}
         <DropdownMenu.Root
           onOpenChange={(isOpen) => {
             if (!isOpen) adjustmentsOpen = menuLocked = false
@@ -1857,29 +1839,33 @@
             <RotateCcw class="h-4 w-4" />
           </Button>
         {/if}
-        <Button
-          variant="text"
-          size="icon"
-          onclick={startEdit}
-          disabled={entriesLocked}
-          class="text-muted-foreground hover:text-foreground h-7 w-7"
-          title={entriesLocked ? 'Cannot edit during generation or retry' : 'Edit'}
-        >
-          <Pencil class="h-4 w-4" />
-        </Button>
-        <Button
-          variant="text"
-          size="icon"
-          onclick={() => (isDeleting = true)}
-          disabled={entriesLocked}
-          class="text-muted-foreground h-7 w-7 hover:text-red-700 dark:hover:text-red-500"
-          title={entriesLocked ? 'Cannot delete during generation or retry' : 'Delete'}
-        >
-          <Trash2 class="h-4 w-4" />
-        </Button>
+        {@render editDeleteButtons()}
       </div>
     {/if}
   </div>
+
+  {#snippet editDeleteButtons()}
+    <Button
+      variant="text"
+      size="icon"
+      onclick={startEdit}
+      disabled={entriesLocked}
+      class="text-muted-foreground hover:text-foreground h-7 w-7"
+      title={entriesLocked ? 'Cannot edit during generation or retry' : 'Edit'}
+    >
+      <Pencil class="h-4 w-4" />
+    </Button>
+    <Button
+      variant="text"
+      size="icon"
+      onclick={() => (isDeleting = true)}
+      disabled={entriesLocked}
+      class="text-muted-foreground h-7 w-7 hover:text-red-700 dark:hover:text-red-500"
+      title={entriesLocked ? 'Cannot delete during generation or retry' : 'Delete'}
+    >
+      <Trash2 class="h-4 w-4" />
+    </Button>
+  {/snippet}
 
   {#snippet storyTimeChip()}
     <div class="flex items-center gap-1 text-right text-[12px] leading-4 tabular-nums">
@@ -1888,18 +1874,12 @@
     </div>
   {/snippet}
 
-  <!-- Below 41rem the story time has this row to itself, and the report's line shares it
-       rather than taking a second one; from 41rem the time is in the header and the line has
-       the row alone. The report sits above the reasoning, where the streaming entry has it, so
-       it does not jump when this entry replaces that one. Each part is a bystander to the
-       entry: a fault rendering it must not take the narration with it. -->
+  <!-- A fault rendering the report must not take the narration with it. -->
   {#if showReport || showEntryMeta}
     <div class="mb-2 flex items-center gap-2 {showReport ? '' : '@min-[41rem]:hidden'}">
       {#if showReport && activityRecord}
         <div class="min-w-0 flex-1">
-          <svelte:boundary
-            onerror={(error) => console.warn('[activity] Report failed to render:', error)}
-          >
+          <svelte:boundary onerror={reportRenderError}>
             <ActivitySummary turn={activityRecord} />
           </svelte:boundary>
         </div>
@@ -1914,9 +1894,7 @@
 
   {#if showReport && activityRecord && activity.isTreeExpanded(activityRecord)}
     <div class="mb-2">
-      <svelte:boundary
-        onerror={(error) => console.warn('[activity] Report failed to render:', error)}
-      >
+      <svelte:boundary onerror={reportRenderError}>
         <ActivityTimeline turn={activityRecord} now={activity.now} />
       </svelte:boundary>
     </div>

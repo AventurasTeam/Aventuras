@@ -109,6 +109,8 @@ export interface PostGenerationInput {
 export interface PostGenerationResult {
   suggestions: Suggestion[] | null
   actionChoices: ActionChoice[] | null
+  /** Suggestions are off in settings. */
+  skippedReason?: 'disabled'
 }
 
 /**
@@ -131,7 +133,9 @@ export class PostGenerationPhase {
       return { suggestions: null, actionChoices: null }
     }
 
-    const result: PostGenerationResult = { suggestions: null, actionChoices: null }
+    const result: PostGenerationResult = disableSuggestions
+      ? { suggestions: null, actionChoices: null, skippedReason: 'disabled' }
+      : { suggestions: null, actionChoices: null }
 
     if (!disableSuggestions) {
       if (isCreativeMode) {

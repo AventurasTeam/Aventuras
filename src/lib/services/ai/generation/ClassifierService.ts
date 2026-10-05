@@ -11,6 +11,7 @@ import { generateStructured } from '../sdk/generate'
  * Prompt generation flows through ContextBuilder + Liquid templates.
  */
 
+import { errMessage } from '$lib/utils/error'
 import type {
   Story,
   StoryEntry,
@@ -221,8 +222,7 @@ export class ClassifierService extends BaseAIService {
         presentCharacterNames: [],
         timeProgression: 'none',
       },
-      _error:
-        describeActivityError(error) ?? (error instanceof Error ? error.message : String(error)),
+      _error: describeActivityError(error) ?? errMessage(error),
     }
 
     // Only a schema/parse rejection carries the model's text. A transport failure, an

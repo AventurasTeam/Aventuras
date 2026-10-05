@@ -13,13 +13,13 @@ import type { LanguageModelMiddleware } from 'ai'
 import {
   ATTEMPT_NUMBER,
   describeActivityError,
+  failStep,
   type ActivityReporter,
 } from '$lib/services/activity'
 import type { RetryHooks } from './retryMiddleware'
 
 export class AttemptTracker {
   private attempts = 0
-  private backfilled = false
   private first: { startedAt: number; endedAt?: number; error?: string | null } | null = null
   private attemptId = ''
   private waitId = ''
@@ -67,23 +67,20 @@ export class AttemptTracker {
   }
 
   attemptFailed(error: unknown): void {
-    const reason = describeActivityError(error)
-    // Tagged after describing, so the attempt's own row reads plainly.
+    // Closed or remembered before tagging, so the attempt's own row reads plainly.
+    if (this.attempts === 1 && this.first) {
+      this.first.endedAt = this.now()
+      this.first.error = describeActivityError(error)
+    } else failStep(this.activity, this.attemptId, error)
     if (error !== null && typeof error === 'object') {
       ;(error as Record<symbol, unknown>)[ATTEMPT_NUMBER] = this.attempts
     }
-    if (this.attempts === 1 && this.first) {
-      this.first.endedAt = this.now()
-      this.first.error = reason
-      return
-    }
-    this.activity.endStep(this.attemptId, reason === null ? 'skipped' : 'failed', undefined, reason)
   }
 
   private backfillFirst(): void {
-    if (this.backfilled || !this.first) return
-    this.backfilled = true
+    if (!this.first) return
     const { startedAt, endedAt, error } = this.first
+    this.first = null
     this.activity.recordStep('Attempt 1', {
       parentId: this.parentId,
       isLLM: true,

@@ -998,7 +998,7 @@ class AIService {
       const analysisService = serviceFactory.createImageAnalysisService()
       const analysis = await analysisService.identifyScenes(analysisContext, analysisId)
       if (analysis.failure) {
-        // Absorbed as before -- no scenes, no toast -- but the analysis did fail.
+        // Absorbed: no scenes and no toast, but the step records the failure.
         activity.endStep(analysisId, 'failed', undefined, analysis.failure)
         emitImageAnalysisComplete(context.entryId, 0, 0)
         return { queued: 0, failure: analysis.failure }

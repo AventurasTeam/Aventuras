@@ -1,3 +1,4 @@
+import { ActivityRecorder } from '$lib/services/activity'
 import { describe, it, expect, vi } from 'vitest'
 import { ClassificationPhase, type ClassificationInput } from './ClassificationPhase'
 import type { GenerationEvent } from '../types'
@@ -146,23 +147,10 @@ describe('ClassificationPhase activity reporting', () => {
 
 describe('ClassificationPhase failure reporting', () => {
   function recorder() {
-    const steps: { id: string; label: string; status?: string; detail?: string; error?: string }[] =
-      []
-    const activity = {
-      startStep: (label: string, options: { detail?: string } = {}) => {
-        const id = `s${steps.length + 1}`
-        steps.push({ id, label, detail: options.detail })
-        return id
-      },
-      endStep: (id: string, status = 'done', detail?: string, error?: string | null) => {
-        const step = steps.find((s) => s.id === id)
-        if (!step || step.status) return
-        Object.assign(step, { status, error: error ?? undefined })
-        if (detail !== undefined) step.detail = detail
-      },
-      recordStep: () => '',
-    }
-    return { steps, activity }
+    const activity = new ActivityRecorder()
+    activity.setReporting('tree')
+    activity.startTurn('entry')
+    return { steps: activity.activeTurn!.steps, activity }
   }
   const empty = {
     entryUpdates: {
@@ -184,7 +172,7 @@ describe('ClassificationPhase failure reporting', () => {
       classifyResponse: async () => ({ ...empty, _error: '401 · invalid API key' }) as any,
     })
 
-    const { events } = await drain(phase.execute(makeInput({ activity, activityParentId: 'p' })))
+    const { events } = await drain(phase.execute(makeInput({ activity })))
 
     expect(steps[0]).toMatchObject({
       label: 'Classifying',
@@ -203,7 +191,7 @@ describe('ClassificationPhase failure reporting', () => {
       classifyResponse: async () => ({ ...empty, _error: 'bad field', _salvaged: true }) as any,
     })
 
-    const { events } = await drain(phase.execute(makeInput({ activity, activityParentId: 'p' })))
+    const { events } = await drain(phase.execute(makeInput({ activity })))
 
     expect(steps[0]).toMatchObject({ status: 'done', detail: undefined, error: 'bad field' })
     expect(events.some((e) => e.type === 'error')).toBe(false)

@@ -5,6 +5,7 @@
  * and chapter context using the Vercel AI SDK ToolLoopAgent.
  */
 
+import { errMessage } from '$lib/utils/error'
 import type { Entry, Chapter, StoryEntry, TimeTracker } from '$lib/types'
 import type { ServiceId } from '$lib/stores/settings.svelte'
 import { BaseAIService } from '../BaseAIService'
@@ -382,8 +383,7 @@ export class AgenticRetrievalService extends BaseAIService {
         activity.endStep(agentStepId, 'skipped', stepBudget(stepsTaken))
         throw error
       }
-      failure =
-        describeActivityError(error) ?? (error instanceof Error ? error.message : String(error))
+      failure = describeActivityError(error) ?? errMessage(error)
       log('Agent run failed -- salvaging what it gathered', { failure, steps: stepsTaken })
     }
 

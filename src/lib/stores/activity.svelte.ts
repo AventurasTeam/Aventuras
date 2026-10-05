@@ -161,6 +161,10 @@ class ActivityStore {
     return this.guard(() => this.recorder.recordStep(label, options), '')
   }
 
+  discardStep(id: string) {
+    this.guard(() => this.recorder.discardStep(id), undefined)
+  }
+
   groupChildren(parentId: string, label: string, options?: GroupOptions): string {
     return this.guard(() => this.recorder.groupChildren(parentId, label, options), '')
   }

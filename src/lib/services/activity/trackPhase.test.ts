@@ -89,10 +89,10 @@ describe('trackPhase', () => {
     const offBy = (result: unknown) => (result === 'off' ? 'off in story settings' : null)
 
     await drain(
-      trackPhase(activity, activity.startStep('Background image'), phaseOf([], 'off'), offBy),
+      trackPhase(activity, activity.startStep('Background image'), phaseOf([], 'off'), { offBy }),
     )
     await drain(
-      trackPhase(activity, activity.startStep('Background image'), phaseOf([], 'ran'), offBy),
+      trackPhase(activity, activity.startStep('Background image'), phaseOf([], 'ran'), { offBy }),
     )
 
     expect(closed.map((c) => c.status)).toEqual(['skipped', 'done'])
@@ -188,5 +188,21 @@ describe('failure reasons', () => {
       }),
     ).rejects.toThrow('rate limited')
     expect(closed).toEqual([{ status: 'failed', reason: 'rate limited' }])
+  })
+})
+
+describe('trackPhase, a phase switched off', () => {
+  it('drops the step of a phase whose result says it was switched off', async () => {
+    const discarded: string[] = []
+    const { activity, closed } = reporter()
+    activity.discardStep = (id) => discarded.push(id)
+    const hiddenBy = (result: unknown) => result === 'off'
+
+    await drain(
+      trackPhase(activity, activity.startStep('Translation'), phaseOf([], 'off'), { hiddenBy }),
+    )
+
+    expect(discarded).toEqual(['s1'])
+    expect(closed).toEqual([])
   })
 })

@@ -39,6 +39,6 @@ export {
 export { NO_ACTIVITY, trackStep, failStep, type ActivityReporter } from './reporter'
 export { describeActivityError, ATTEMPT_NUMBER } from './describeError'
 
-export { trackPhase } from './trackPhase'
+export { trackPhase, type TrackPhaseOptions } from './trackPhase'
 
 export { turnOutcome, type TurnEnding } from './outcome'

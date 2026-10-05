@@ -53,11 +53,9 @@ export interface TranslationResult2 {
   translated: boolean
   translatedContent: string | null
   targetLanguage: string | null
+  /** Narration translation is off in settings. */
+  skippedReason?: 'disabled'
 }
-
-/** Whether the settings have narration translated: the gate this phase applies. */
-export const translatesNarration = (settings: TranslationSettings) =>
-  TranslationService.shouldTranslateNarration(settings)
 
 /**
  * TranslationPhase service
@@ -79,6 +77,7 @@ export class TranslationPhase {
         translated: false,
         translatedContent: null,
         targetLanguage: null,
+        skippedReason: 'disabled',
       }
 
       yield {
