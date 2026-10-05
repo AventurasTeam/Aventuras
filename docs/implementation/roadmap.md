@@ -316,6 +316,26 @@ DB-backed `openRegionTokens` resolves all of them.
   [lessons-learned → No "harmless" id leaks](./lessons-learned/no-harmless-id-leaks.md)
   records. Surfaced by the M3.4 whole-slice review (2026-08-03).
 
+- **M5.1 / M5.2 — A close reverses by its commit position, and leaves
+  its entries' `chapter_id` behind.** A chapter close logs with a null
+  anchor, and null-anchored deltas reverse whenever they sit at or above
+  the sweep's first position
+  ([`data-model.md → Survival anchor`](../data-model.md#survival-anchor)).
+  A close commits at the head, which can sit past the chapter's end
+  entry, since auto-close picks its boundary inside the open region; a
+  rollback or regenerate into that gap then takes the close back, with
+  its lore and metadata work, although every entry of the chapter
+  survives. Anchoring a close on its end entry is the obvious candidate
+  (M5.2 owns the close writer, M5.5 the deep-rollback surface). And
+  `story_entries.chapter_id` has no foreign key and no place in
+  `REF_COLUMNS` (`lib/actions/delta/live-refs.ts`), so a reversed close
+  leaves its entries naming a chapter that no longer exists unless M5.1
+  logs the assignments in the close's own action. The dev seed
+  (`lib/db/devtools/seed-dataset.ts`) sets `chapterId` directly and
+  shows exactly that once a close is taken back. Found while the
+  2026-10-05 triage pass re-placed the seed's chapter closes; verified
+  against canon and the schema, not reproduced in a real close.
+
 **Gates.** M4 (chapter-close compacts entities + lore the world
 panel renders; surfaces would be invisible without M4).
 
