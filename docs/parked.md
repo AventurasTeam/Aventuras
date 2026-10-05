@@ -895,8 +895,12 @@ back from the classifier cadence indefinitely
 (`resetStuckClassifierRunState`), which is the safe direction but a
 permanent one. Reaching it requires running a build older than its own
 data — a downgrade, or a domain renamed without a migration. Not
-corruption, and not otherwise reachable: every other reversal failure
-is transient DB IO and self-heals on the next boot.
+corruption, and not otherwise reachable. Of the other reversal
+failures, only the
+[migration case](#multi-version-undo_payload-apply-dispatcher) and
+[an integrity refusal](#a-boot-recovery-refused-as-an-integrity-error-never-settles)
+outlive a boot; the rest are transient DB IO and self-heal on the next
+boot.
 
 The obvious remedy is wrong and is recorded here so it is not
 re-proposed: deleting the orphaned rows would erase undo history,
@@ -923,7 +927,10 @@ fixed:
 
 - **On the boot path it needs the version skew above.** Every other
   reversal failure is transient and the next boot's retry clears it,
-  so the branch is either reconciled or already held back.
+  or is
+  [an integrity refusal](#a-boot-recovery-refused-as-an-integrity-error-never-settles),
+  which boot meets only for a `no-gate` orphan, whose branch it holds
+  back. Either way the branch is reconciled or already held back.
 - **In-session it needs a later successful turn.** The scheduler ticks
   only on `kind === PER_TURN_KIND && outcome === 'completed'`, so the
   failed run does not fire it.
@@ -945,6 +952,37 @@ concurrency contract to learn about orphans.
 Parked 2026-08-25 after the boot-recovery work closed the reachable
 half; duplicated happenings observed after a failed reversal are the
 signal to revisit.
+
+#### A boot recovery refused as an integrity error never settles
+
+A `no-gate` run whose abort's own reversal fails leaves its writes to
+boot recovery, and its hold ends anyway
+([`generation-pipeline.md → No-gate write phase`](./generation-pipeline.md#no-gate-write-phase)),
+so the user can write to the branch before recovery runs. If the
+latest scene names a character the pass created and the user deletes
+it in World, the delete's tail-scene update still names it. Recovery
+would prune that delete with the create it holds, so it refuses as
+`write-back`
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)),
+writes nothing, and leaves the marker open. Every boot refuses again
+while that delete stays in the log: the "Recovery incomplete" modal
+shows at each startup, without promising a retry, and boot keeps the
+branch off the classifier cadence (`resetStuckClassifierRunState`).
+Nothing else is lost, but v1 has no "drop orphan" affordance to clear
+it. It takes two faults in one session: a database error during the
+abort's reversal, then that delete.
+
+The remedy is to settle such an orphan at recovery: on an integrity
+refusal, close its `pipeline_runs` row as `failed` and keep its writes
+as ordinary history, which CTRL-Z steps over as a background pass.
+Memory updates resume, at a cost: the pass's partial facts stay, and
+the next pass may derive some of them again, so duplicates are
+possible.
+
+Parked 2026-10-05 as too rare to trade for those duplicates; a user
+report of a story whose memory stopped updating, or a "Recovery
+incomplete" modal that persists across restarts, is the signal to
+revisit.
 
 #### An abort waits on its phases, except a thrown parallel branch
 

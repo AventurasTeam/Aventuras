@@ -1158,13 +1158,22 @@ observability-only state:
 
 No max-retry counter and no admin "drop orphan" affordance for v1;
 stuck orphans remain visible in Logs across boots. Nearly every
-failure is transient DB IO that self-heals on the next boot. Two
-cannot, and both are parked: an orphan whose `undo_payload`
+failure is transient DB IO that self-heals on the next boot. Three
+cannot, and all three are parked: an orphan whose `undo_payload`
 references a column shape that no longer exists post-migration (the
 [multi-version apply-dispatcher](./parked.md#multi-version-undo_payload-apply-dispatcher)
-case, which that work resolves), and
-[a delta whose target table left the registry](./parked.md#a-delta-whose-target-table-left-the-registry-cannot-be-reversed).
-Reaching either means running a build older than its own data.
+case, which that work resolves),
+[a delta whose target table left the registry](./parked.md#a-delta-whose-target-table-left-the-registry-cannot-be-reversed),
+and
+[a reversal refused as an integrity error](./parked.md#a-boot-recovery-refused-as-an-integrity-error-never-settles).
+Reaching either of the first two takes a build and data from
+different versions. The third needs a `no-gate` run whose abort's own
+reversal failed: the
+[no-gate write phase](#no-gate-write-phase) ends the run's hold even
+then, so a user write can land that the reversal would break, and
+[Reverse-replay](#reverse-replay) refuses the reversal as `write-back`
+on each boot. The orphan's writes stay, and so does its branch's
+pause.
 
 ### `chainsTo` on predecessor
 
