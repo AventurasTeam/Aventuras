@@ -154,6 +154,24 @@ describe('liveLinkFilter', () => {
     })
   })
 
+  it('drops a captured row whose named row survives only on another branch', async () => {
+    // A fork copies rows with their ids.
+    await ctx.db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'fork', createdAt: 1 })
+    await ctx.db.insert(entities).values({ ...character('char_fork'), branchId: 'b2' })
+    const del = entityDelete({
+      relationships: [
+        relationship('rel_fork', 'char_fork', 'char_k'),
+        relationship('rel_live', 'char_k', 'char_x'),
+      ],
+    })
+
+    const filter = await liveLinkFilter([del], ctx)
+
+    expect(ids(filter('b1', capturedBy(del)))).toMatchObject({
+      character_relationships: ['rel_live'],
+    })
+  })
+
   it('judges a story entry by its fate in the plan before the database', async () => {
     await ctx.db.insert(storyEntries).values({
       id: 'entry_new',

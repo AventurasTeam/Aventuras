@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -136,30 +136,27 @@ describe('undoing a delete whose link names a row a later reversal removed', () 
     expect(await ctx.db.select().from(happeningAwareness)).toEqual([])
   })
 
-  it('skips a link whose far end survives only on a sibling branch under the same id', async () => {
+  it('skips a held link whose far end is gone here but survives on a sibling branch', async () => {
     // A fork copies rows with their ids, so the far-end read must be branch-scoped.
     await ctx.db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'fork', createdAt: 1 })
+    await ctx.db.insert(happenings).values(
+      ['b1', 'b2'].map((branchId) => ({
+        id: 'hap_p',
+        branchId,
+        title: 'Fire',
+        createdAt: 1,
+        updatedAt: 1,
+      })),
+    )
     await ctx.db
-      .insert(happenings)
-      .values({ id: 'hap_p', branchId: 'b2', title: 'Fire', createdAt: 1, updatedAt: 1 })
-    const pass = passAction('act_pass')
-    await pass({
-      kind: 'createHappening',
-      source: 'periodic_classifier',
-      payload: {
-        entry: { id: 'hap_p', branchId: 'b1', title: 'Fire', createdAt: 2, updatedAt: 2 },
-      },
-    })
-    await pass({
-      kind: 'createHappeningInvolvement',
-      source: 'periodic_classifier',
-      payload: {
-        entry: { id: 'hinv_p', branchId: 'b1', happeningId: 'hap_p', entityId: 'char_x' },
-      },
-    })
+      .insert(happeningInvolvements)
+      .values({ id: 'hinv_p', branchId: 'b1', happeningId: 'hap_p', entityId: 'char_x' })
     expect(await deleteEntityRow('b1', 'char_x', ctx)).toEqual({ status: 'ok' })
+    // No delta records the removal, so no closure strips the held link: only the filter sees it.
+    await ctx.db
+      .delete(happenings)
+      .where(and(eq(happenings.branchId, 'b1'), eq(happenings.id, 'hap_p')))
 
-    await reverseReplayDeltas('act_pass', ctx)
     await undoHead()
 
     expect(await ctx.db.select().from(entities).where(eq(entities.id, 'char_x'))).toHaveLength(1)
