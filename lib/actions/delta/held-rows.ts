@@ -21,15 +21,17 @@ export type HeldRow = {
   readonly row: Readonly<Record<string, unknown>>
 }
 
+/** A row's `table:id` key, minted only by heldKey so a key built another way cannot look one up. */
+export type HeldKey = string & { readonly __brand: 'HeldKey' }
+
 export type HeldRowIndex = {
-  /** Keyed by `heldKey(table, id)`. */
-  readonly byRow: ReadonlyMap<string, HeldRow>
+  readonly byRow: ReadonlyMap<HeldKey, HeldRow>
   /** Held rows naming `table:id` through REF_COLUMNS. */
   naming(table: RefTable, id: string): readonly HeldRow[]
 }
 
-export function heldKey(table: string, id: string): string {
-  return `${table}:${id}`
+export function heldKey(table: string, id: string): HeldKey {
+  return `${table}:${id}` as HeldKey
 }
 
 export const EMPTY_HELD_ROWS: HeldRowIndex = { byRow: new Map(), naming: () => [] }
@@ -59,7 +61,7 @@ export async function loadHeldRows(ctx: DbCtx, branchId: string): Promise<HeldRo
     .where(and(eq(deltas.branchId, branchId), eq(deltas.op, 'delete')))
     .orderBy(asc(deltas.logPosition))) as Delta[]
 
-  const byRow = new Map<string, HeldRow>()
+  const byRow = new Map<HeldKey, HeldRow>()
   for (const holder of deletes) {
     for (const held of heldBy(holder)) {
       const key = heldKey(held.table, held.id)
@@ -77,7 +79,7 @@ export async function loadHeldRows(ctx: DbCtx, branchId: string): Promise<HeldRo
     }
   }
 
-  const naming = new Map<string, HeldRow[]>()
+  const naming = new Map<HeldKey, HeldRow[]>()
   for (const held of byRow.values()) {
     for (const ref of rowRefs(held.table, held.row)) {
       const key = heldKey(ref.table, ref.id)

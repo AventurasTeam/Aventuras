@@ -3,7 +3,13 @@ import { and, eq, getTableColumns, inArray, ne } from 'drizzle-orm'
 import { BIND_CHUNK, deltas, type Delta } from '@/lib/db'
 
 import { isUserOriginatedSource, type DbCtx } from '../types'
-import { EMPTY_HELD_ROWS, heldKey, loadHeldRows, type HeldRowIndex } from './held-rows'
+import {
+  EMPTY_HELD_ROWS,
+  heldKey,
+  loadHeldRows,
+  type HeldKey,
+  type HeldRowIndex,
+} from './held-rows'
 import { isRefTable, referrersOf } from './live-refs'
 import { resolveByTable } from './registry'
 import { ReversalIntegrityError } from './replay-errors'
@@ -125,11 +131,11 @@ async function liveReferrers(
  * a separate read lets a user Save landing between the two join the set and be reversed.
  */
 function userKeptRows(
-  seedCreates: ReadonlyMap<string, readonly Delta[]>,
+  seedCreates: ReadonlyMap<HeldKey, readonly Delta[]>,
   writes: readonly Delta[],
   seedIds: ReadonlySet<string>,
-): Set<string> {
-  const userWrites = new Map<string, Delta[]>()
+): Set<HeldKey> {
+  const userWrites = new Map<HeldKey, Delta[]>()
   for (const d of writes) {
     if (d.source !== 'user_edit' || seedIds.has(d.id)) continue
     const key = heldKey(d.targetTable, d.targetId)
@@ -137,7 +143,7 @@ function userKeptRows(
     if (found) found.push(d)
     else userWrites.set(key, [d])
   }
-  const kept = new Set<string>()
+  const kept = new Set<HeldKey>()
   for (const [key, creates] of seedCreates) {
     const edits = userWrites.get(key) ?? []
     const keptAll = creates.every((create) => {
@@ -160,8 +166,8 @@ async function closeOver(
   actionId: string,
 ): Promise<Delta[]> {
   const set = new Map(seed.map((d) => [d.id, d]))
-  const removed = new Set<string>()
-  const byReference = new Set<string>()
+  const removed = new Set<HeldKey>()
+  const byReference = new Set<HeldKey>()
   let frontier: RowRef[] = []
   const remove = (row: RowRef, viaReference: boolean) => {
     const key = heldKey(row.table, row.id)
@@ -172,7 +178,7 @@ async function closeOver(
   }
 
   const seedIds = new Set(seed.map((d) => d.id))
-  let seedCreates = new Map<string, Delta[]>()
+  let seedCreates = new Map<HeldKey, Delta[]>()
   for (const d of seed) {
     if (d.op !== 'create') continue
     const key = heldKey(d.targetTable, d.targetId)
