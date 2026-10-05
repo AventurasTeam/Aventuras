@@ -164,9 +164,12 @@ describe('generationGateReason', () => {
     expect(generationGateReason(false, 'chapter-close')).toBeUndefined()
   })
 
-  it('names a chapter close, and any other blocking run as generation in flight', () => {
+  it('names a chapter close and a suggestion refresh, and any other run as generation in flight', () => {
     expect(generationGateReason(true, 'chapter-close')).toBe(
       'Chapter close in progress. Cancel to edit.',
+    )
+    expect(generationGateReason(true, 'suggestion-refresh')).toBe(
+      'Refreshing suggestions. Cancel to edit.',
     )
     expect(generationGateReason(true, 'per-turn')).toBe('Generation is in flight. Cancel to edit.')
     expect(generationGateReason(true, null)).toBe('Generation is in flight. Cancel to edit.')

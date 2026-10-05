@@ -370,10 +370,14 @@ editable control disables when a transaction is in flight,
 including form save buttons (so the user doesn't draft an edit
 they can't submit). Hover/focus reveals a uniform tooltip:
 
-| Pipeline      | Tooltip copy                                 |
-| ------------- | -------------------------------------------- |
-| Per-turn      | `Generation is in flight. Cancel to edit.`   |
-| Chapter-close | `Chapter close in progress. Cancel to edit.` |
+| Pipeline           | Tooltip copy                                 |
+| ------------------ | -------------------------------------------- |
+| Per-turn           | `Generation is in flight. Cancel to edit.`   |
+| Chapter-close      | `Chapter close in progress. Cancel to edit.` |
+| Suggestion refresh | `Refreshing suggestions. Cancel to edit.`    |
+
+Suggestion refresh is a third hard-gate run. It leaves Send in place
+rather than swapping it for Cancel, so its cancel is the status pill's.
 
 Tooltip copy is principle-owned. Per-screen docs cite, don't
 reinvent.

@@ -38,6 +38,10 @@ import {
 import { useWorldTimeEditing } from '@/components/reader/world-time-editing'
 import { WorldTimeEditSheet } from '@/components/reader/worldtime-edit-sheet'
 import { ScreenShell } from '@/components/shells/screen-shell'
+import {
+  generationGateReason,
+  selectStorySettingsGenerationRunKind,
+} from '@/components/story-settings/generation-run'
 import { EmptyState } from '@/components/ui/empty-state'
 import { KeyboardInsetColumn } from '@/components/ui/keyboard-inset-column'
 import { Text } from '@/components/ui/text'
@@ -152,7 +156,8 @@ function matchesJumpToBottomShortcut(ev: KeyboardEvent): boolean {
 type ReaderGateState = {
   hydrationSucceeded: boolean
   swapPending: boolean
-  actionsBlocked: boolean
+  /** The principle-owned gate tooltip, undefined while nothing blocks actions. */
+  gateReason: string | undefined
 }
 
 // Precedence, not independent conditions: hydration outranks the swap, which
@@ -160,8 +165,7 @@ type ReaderGateState = {
 function composerDisabledReason(state: ReaderGateState): string | undefined {
   if (!state.hydrationSucceeded) return t('reader:hydrationLoading')
   if (state.swapPending) return t('reader:actions.blockedWhileSwapping')
-  if (state.actionsBlocked) return t('reader:actions.blockedWhileGenerating')
-  return undefined
+  return state.gateReason
 }
 
 // Same precedence order as above; null means the reader itself renders. A failed
@@ -637,6 +641,10 @@ export default function ReaderComposerRoute() {
   // What every user-edit affordance gates on: the generation gate alone leaves
   // the pre-registration window open.
   const actionsBlocked = editBlocked || dispatchInFlight
+  const gateRunKind = generationStore.useGeneration((s) =>
+    selectStorySettingsGenerationRunKind(s.txState, storyId ?? undefined),
+  )
+  const gateReason = generationGateReason(actionsBlocked, gateRunKind)
 
   const runSubmit = useCallback(
     async (content: string, composerMode: string, raw?: { text: string; mode: ComposerMode }) => {
@@ -1141,10 +1149,7 @@ export default function ReaderComposerRoute() {
     // suggestion refresh now holds too. Keyed off the turn alone, the item
     // would stay enabled and its rejection would toast "nothing to undo" over
     // an intact history.
-    const blocked = {
-      disabled: actionsBlocked,
-      disabledReason: t('reader:actions.blockedWhileGenerating'),
-    }
+    const blocked = { disabled: actionsBlocked, disabledReason: gateReason }
     return {
       id: 'reader',
       header: t('chrome.onThisScreen'),
@@ -1173,7 +1178,7 @@ export default function ReaderComposerRoute() {
           : []),
       ],
     }
-  }, [hasRedo, actionsBlocked, runUndoRedo, entries.length, jumpToBottom])
+  }, [hasRedo, actionsBlocked, gateReason, runUndoRedo, entries.length, jumpToBottom])
 
   const streamingPayload = useMemo(
     () =>
@@ -1321,7 +1326,7 @@ export default function ReaderComposerRoute() {
                 disabledReason={composerDisabledReason({
                   hydrationSucceeded,
                   swapPending,
-                  actionsBlocked,
+                  gateReason,
                 })}
                 modesUnavailableReason={modesUnavailableReason}
                 onSend={(rawText, mode) => {

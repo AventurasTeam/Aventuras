@@ -62,15 +62,6 @@ slice-planning gate forces its resolution before that slice is planned.
   visual changes overwrite, so a repeat is harmless; stackable amounts
   add, so a transfer both layers report lands twice. Read, not
   reproduced (2026-10-04, raised by the post-4.2b triage pass).
-- **The composer's Send-blocked tooltip copy isn't principle-owned.**
-  While suggestions refresh, Send's reason reads
-  `reader:actions.blockedWhileGenerating` ("Unavailable while
-  generating."), but disabled-control tooltip copy is principle-owned
-  ([`principles.md → Affordance loci`](../ui/principles.md#affordance-loci))
-  and its table has rows for per-turn and chapter-close only. Add a
-  suggestion-refresh row and cite it, or reuse the per-turn copy
-  (2026-10-04, raised by the post-4.2b triage pass).
-
 - **`createTranslation`'s live-target check holds no key lock between
   its read and its commit.** The link writers take their family's
   per-branch key, which an entity or happening delete also holds, so a
