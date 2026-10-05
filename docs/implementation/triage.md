@@ -69,25 +69,3 @@ slice-planning gate forces its resolution before that slice is planned.
   piggyback.md. Introducing them would revive the parked
   [closure gap for ids inside JSON](../parked.md#the-reversal-closure-doesnt-follow-ids-inside-json-columns).
   Raised by the 2026-10-05 triage pass.
-
-- **Rollback and edit rejection copy always says "Please try again."**
-  `reader:rollbackFailed` and `reader:editFailed`
-  (`locales/en/reader.json`) cover every rejection code, including the
-  persistent ones (`delta-failed` from an integrity refusal,
-  `not-found`, `rollback-floor`), which a retry cannot clear. Regenerate
-  avoids the loop only for its dispatch result, through
-  `REGENERATE_REJECTION_COPY` in `app/reader-composer/[branchId].tsx`;
-  its preview rejection in `handleRequestRegenerate` still toasts
-  `reader:regenerateFailed` ("…Please try again."). Raised in the
-  reversal-integrity PR's review (2026-10-05).
-
-- **A kept (re-owned) create in `redoRows` fails redo with a raw
-  SQLite error.** It is unreachable today only because no non-periodic
-  machine source creates relationships and CTRL-Z skips periodic
-  groups. If one is reached, the plain INSERT `applyRedoLocked`
-  (`lib/actions/delta/redo.ts`) runs from the row `snapshotForRedo`
-  captured hits a primary-key error rather than a refusal, since the
-  kept row never left, and the redo stays pending. Add a guard
-  or refusal before any non-periodic machine source creates
-  relationships. Raised in the reversal-integrity PR's review
-  (2026-10-05).
