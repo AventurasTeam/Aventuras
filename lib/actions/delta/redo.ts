@@ -34,11 +34,10 @@ export async function snapshotForRedo(set: ReversalSet, ctx: DbCtx): Promise<Red
   )
   if (heldWrite) {
     const key = heldKey(heldWrite.targetTable, heldWrite.targetId)
-    // The reversal's own id, as the other refusals carry; the held write may be a pass the closure reached.
     throw new ReversalIntegrityError(
       'held-in-redo',
       `${key} held by ${set.held.byRow.get(key)?.holder.id}`,
-      set.redoRows[0].actionId,
+      heldWrite.actionId,
     )
   }
   const snapshots: RedoSnapshot[] = []
