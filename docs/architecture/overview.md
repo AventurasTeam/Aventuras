@@ -394,7 +394,9 @@ retrieval agent builds its model elsewhere (`sdk/agents/factory.ts`) and has no 
 A failed step carries its reason, worded once by `describeActivityError` (status and provider
 message for an API error). Services that absorb a failure into a fallback — translation,
 suggestions, action choices, timeline fill, scene analysis, the background image, the classifier's
-`_error` — still close the step they serve as failed (`failStep`), and return the fallback as before.
+`_error` — return the fallback as before, with the reason as `failure`. Whoever opened the step
+closes it: `trackStep` fails a step on a returned `failure` as on a throw. A service closes only
+the steps it opened itself.
 A turn ends with an outcome (`turnOutcome`): only `halted` puts "Failed" on the collapsed line, and
 a turn halts only when it produced no narration. A narrator stream that fails after text has arrived
 keeps that text as the narration and reports the failure; one that fails before any text is passed
