@@ -668,8 +668,8 @@ describe("a reversal rewriting a delete's payload waits on that delete's row", (
 })
 
 describe('the write-back refusal', () => {
-  // Unreachable through the actions: the pass's create is reversed while a delete holds its
-  // row, and that delete's group carries a state write naming it.
+  // The actions reach this only at boot recovery after a failed abort, through the tail scene
+  // (generation-pipeline.md → Reverse-replay); seeded here with a state write naming the row.
   async function seedWriteBack(
     naming: Record<string, unknown> = { state: { faction_id: 'char_p' } },
   ): Promise<void> {

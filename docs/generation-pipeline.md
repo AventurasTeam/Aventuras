@@ -1459,9 +1459,16 @@ above would take: redo restores only its snapshot, so an update whose
 undo deleted the pair redoes onto no row yet re-logs, its next CTRL-Z
 reporting an undo that changed nothing, and a redo would take writes
 no undo of it gives back. A refused redo stays on the stack, so each
-retry refuses again until a new action clears it. None is reachable
-today. An entity's create is never reversed while a delete holds it,
-given the [no-gate write phase](#no-gate-write-phase), newest-first
+retry refuses again until a new action clears it. Only `write-back`
+is reachable today, and only at boot recovery of a `no-gate` run
+whose abort's own reversal failed: the
+[no-gate write phase](#no-gate-write-phase) ends the hold then, so
+the user can delete a row the pass created, in an entity delete whose
+tail-scene update names it, before recovery reverses the create. Each
+boot refuses it again, a failure a restart can't heal
+([Recovery-failure policy](#recovery-failure-policy)). Otherwise an
+entity's create is never reversed while a delete holds it, given the
+no-gate write phase, newest-first
 undo, every window holding a delete with the create it follows, and
 sweeps sparing entity creates. A writer outside the log names only
 rows it made itself, which lack a `create` too; the closure starts
@@ -1932,8 +1939,14 @@ stays editable through those — and waits for every shared holder, so a
 write already in flight lands first. The run's own writes go through
 inside the hold, which ends when the run settles: after the watermark
 write on success, after the abort's reversal on failure, whether it
-commits or leaves the run to boot recovery. A
-write arriving meanwhile waits a few milliseconds; nothing is disabled
+commits or leaves the run to boot recovery. Ending it on an
+uncommitted reversal keeps a held lock from stalling every write to
+the branch until the next boot, at a cost: a user's delete of a row
+the run created can then land first, and recovery refuses to reverse
+the create as `write-back` on each boot
+([Reverse-replay](#reverse-replay),
+[Recovery-failure policy](#recovery-failure-policy)). A write
+arriving meanwhile waits a few milliseconds; nothing is disabled
 or refused. Prose reversals need nothing more, since the barrier above
 already waits a burst out, and boot recovery runs before any branch
 loads. The rollback preview writes nothing but takes the lock shared
