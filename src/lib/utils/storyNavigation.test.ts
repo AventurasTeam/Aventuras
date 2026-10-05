@@ -375,6 +375,22 @@ describe('buildLandmarks', () => {
       ])
     })
 
+    it('marks only origin and checkpoint rows as switching branch', () => {
+      const { landmarks } = buildLandmarks(
+        branchView,
+        [checkpoint('cp', 'b2')],
+        [br1],
+        br1,
+        banners,
+      )
+      expect(landmarks.map((l) => [l.kind, l.switchesBranch])).toEqual([
+        ['chapter', false],
+        ['origin', true],
+        ['chapter', false],
+        ['checkpoint', true],
+      ])
+    })
+
     it('lists no chapter rows when none are passed', () => {
       const { landmarks } = buildLandmarks(branchView, [checkpoint('cp', 'b2')], [br1], null)
       expect(landmarks.map((l) => l.kind)).toEqual(['checkpoint'])

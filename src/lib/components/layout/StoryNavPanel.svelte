@@ -133,11 +133,9 @@
 
   async function goToLandmark(landmark: Landmark) {
     const currentBranchId = story.currentStory?.currentBranchId ?? null
-    // A chapter start can lie in an ancestor branch's history, and the chapter is in this
-    // branch's view either way, so a chapter row never carries the reader to another branch.
     if (
       landmarkNavigationMode === 'checkpoint-branch' &&
-      landmark.kind !== 'chapter' &&
+      landmark.switchesBranch &&
       currentBranchId !== landmark.branchId
     ) {
       // Refused before the landing is claimed, so a blocked switch leaves no claim to clean up.
