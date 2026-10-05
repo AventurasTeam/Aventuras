@@ -17,6 +17,11 @@ use sync::commands::{
     sync_connect, sync_pull_story, sync_push_story,
 };
 
+#[tauri::command]
+fn is_ios() -> bool {
+    cfg!(target_os = "ios")
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let _ = rustls::crypto::ring::default_provider().install_default();
@@ -293,6 +298,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_websocket::init())
         .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             start_sync_server,
@@ -302,6 +308,7 @@ pub fn run() {
             sync_connect,
             sync_pull_story,
             sync_push_story,
+            is_ios,
             backup_database,
             restore_database,
             export_images_zip,

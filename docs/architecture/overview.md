@@ -414,6 +414,10 @@ through Tauri's HTTP plugin (`imageGetFetch`, or the patched `fetchApi` for Comf
 has no injection point), on every platform. `comfy.test.ts` fails if an SDK upgrade renames the
 members that patch replaces.
 
+The ComfyUI SDK also holds a WebSocket, and `CallWrapper` only finishes on events from it, so the
+socket goes through `tauri-plugin-websocket` too (`tauriWebSocket.ts`, passed as
+`customWebSocketImpl`); the WebView's own `ws://` is subject to the same ATS block.
+
 ## Environment
 
 There are no required `.env` files for local development or the built app:

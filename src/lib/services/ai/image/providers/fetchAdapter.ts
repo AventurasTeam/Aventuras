@@ -38,7 +38,11 @@ export async function imageFetch(options: {
   } = options
 
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  let timedOut = false
+  const timeoutId = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, timeoutMs)
   signal?.addEventListener('abort', () => controller.abort())
 
   const startTime = Date.now()
@@ -135,7 +139,8 @@ export async function imageFetch(options: {
 
     return response
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
+    // Tauri HTTP rejects an aborted request with a plain Error, not an AbortError.
+    if (timedOut || (error instanceof DOMException && error.name === 'AbortError')) {
       throw new Error(`Image generation timed out after ${timeoutMs / 1000}s`)
     }
     throw error
@@ -155,7 +160,11 @@ export async function imageGetFetch(
   const { signal, timeoutMs = DEFAULT_IMAGE_TIMEOUT, serviceId = 'image-gen' } = options ?? {}
 
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  let timedOut = false
+  const timeoutId = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, timeoutMs)
   signal?.addEventListener('abort', () => controller.abort())
 
   const startTime = Date.now()
@@ -183,7 +192,8 @@ export async function imageGetFetch(
     debug.addDebugResponse(debugId, serviceId, { status: response.status }, startTime)
     return response
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
+    // Tauri HTTP rejects an aborted request with a plain Error, not an AbortError.
+    if (timedOut || (error instanceof DOMException && error.name === 'AbortError')) {
       throw new Error(`Image fetch timed out after ${timeoutMs / 1000}s`)
     }
     throw error

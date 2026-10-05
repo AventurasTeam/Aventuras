@@ -14,13 +14,20 @@ import type {
   ComfySamplerInfo,
   ComfyCustomWorkflow,
 } from './types'
-import { ComfyApi, PromptBuilder, CallWrapper, type ImageInfo } from '@saintno/comfyui-sdk'
+import {
+  ComfyApi,
+  PromptBuilder,
+  CallWrapper,
+  type ImageInfo,
+  type WebSocketInterface,
+} from '@saintno/comfyui-sdk'
 import BasicTxt2ImgWorkflow from './comfyWorkflows/basic-txt2img-workflow.json'
 import LoraTxt2ImgWorkflow from './comfyWorkflows/lora-txt2img-workflow.json'
 import UnetTxt2ImgWorkflow from './comfyWorkflows/unet-txt2img-workflow.json'
 import { specToPixels } from '$lib/utils/image'
 import { imageGetFetch } from './fetchAdapter'
 import type { ComfyApiFetchInternals } from './comfyFetchMembers'
+import { TauriWebSocket } from './tauriWebSocket'
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 
 const DEFAULT_BASE_URL = 'http://localhost:8188'
@@ -330,10 +337,16 @@ function buildOnFailedHandler(
   }
 }
 
-export function createComfyProvider(config: ImageProviderConfig): ImageProvider {
-  const baseUrl = (config.baseUrl || DEFAULT_BASE_URL).trim()
+// One client per server: each holds a socket and timers that nothing tears down.
+const apis = new Map<string, ComfyApi>()
 
-  const api = new ComfyApi(baseUrl)
+function getApi(baseUrl: string): ComfyApi {
+  const cached = apis.get(baseUrl)
+  if (cached) return cached
+
+  const api = new ComfyApi(baseUrl, undefined, {
+    customWebSocketImpl: TauriWebSocket as unknown as WebSocketInterface,
+  })
 
   // Routes every SDK request through Tauri HTTP (docs/architecture/overview.md, "Local image
   // servers"); headers are replaced, not merged, as in the SDK.
@@ -346,6 +359,14 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
 
   // init() issues its first request synchronously, so the patch above must already be in place.
   api.init()
+  apis.set(baseUrl, api)
+  return api
+}
+
+export function createComfyProvider(config: ImageProviderConfig): ImageProvider {
+  const baseUrl = (config.baseUrl || DEFAULT_BASE_URL).trim()
+
+  const api = getApi(baseUrl)
 
   // Binds baseUrl + optional timeout so internal callers don't repeat them.
   const fetchModels = (type: string) => fetchModelList(baseUrl, type, config.timeoutMs)

@@ -6,6 +6,19 @@
  * background-generation foreground service.
  */
 
+import { invoke } from '@tauri-apps/api/core'
+
+let nativeIos: boolean | null = null
+
+/** Asks the native side which OS it was built for, so `isIos()` is exact once this resolves. */
+export async function initPlatform(): Promise<void> {
+  try {
+    nativeIos = await invoke<boolean>('is_ios')
+  } catch {
+    nativeIos = null
+  }
+}
+
 /** Returns `true` when running inside an Android WebView (user-agent based). */
 export function isAndroid(): boolean {
   if (typeof navigator === 'undefined') return false
@@ -13,10 +26,12 @@ export function isAndroid(): boolean {
 }
 
 /**
- * Returns `true` when running inside an iOS or iPadOS WebView (user-agent based). An iPad's
- * WKWebView reports a Mac UA by default, so a Mac UA with touch points counts as iPadOS.
+ * Returns `true` when running inside an iOS or iPadOS WebView. Exact once `initPlatform()` has
+ * resolved; until then, and outside Tauri, it falls back to the user agent. An iPad's WKWebView
+ * reports a Mac UA by default, so a Mac UA with touch points counts as iPadOS.
  */
 export function isIos(): boolean {
+  if (nativeIos !== null) return nativeIos
   if (typeof navigator === 'undefined') return false
   if (/iPad|iPhone|iPod/i.test(navigator.userAgent)) return true
   return /Macintosh/i.test(navigator.userAgent) && (navigator.maxTouchPoints ?? 0) > 1
