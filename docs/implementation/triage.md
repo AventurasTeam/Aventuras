@@ -70,83 +70,86 @@ slice-planning gate forces its resolution before that slice is planned.
   and its table has rows for per-turn and chapter-close only. Add a
   suggestion-refresh row and cite it, or reuse the per-turn copy
   (2026-10-04, raised by the post-4.2b triage pass).
+
 - **`createTranslation`'s live-target check holds no key lock between
-  its read and its commit.** The link writers take their family's per-branch
-  key, which an entity or happening delete also holds, so a concurrent
-  delete of an end serialises with the write (canon:
+  its read and its commit.** The link writers take their family's
+  per-branch key, which an entity or happening delete also holds, so a
+  concurrent delete of an end serialises with the write (canon:
   [`generation-pipeline.md`](../generation-pipeline.md#atomicity-per-action),
-  [`cadence.md`](../memory/cadence.md#concurrency));
-  `missingRef` in `lib/actions/translations/register.ts` reads the
-  target and the write commits later, so a concurrent `deleteEntity`
-  could land between them. Latent: nothing writes translations. A fix
-  needs a key per target table, and lore, thread and chapter deletes
-  take no key today (`lib/actions/happenings/register-happenings.ts`
-  already notes translations aren't locked). Raised by the Task 1
-  review of the reversal-integrity PR (2026-10-05).
+  [`cadence.md`](../memory/cadence.md#concurrency)); `missingRef` in
+  `lib/actions/translations/register.ts` reads the target and the
+  write commits later, so a concurrent `deleteEntity` could land
+  between them. Latent: nothing writes translations. A fix needs a key
+  per target table, and lore, thread and chapter deletes take no key
+  today (`lib/actions/happenings/register-happenings.ts` already notes
+  translations aren't locked). Raised in the reversal-integrity PR's
+  review (2026-10-05).
+
 - **Deleting a relationship pair directly leaves its translations
   dangling.** `deleteHandler` and the upsert-to-null delete branch in
   `lib/actions/relationships/register.ts` delete the pair without
   cascading its `character_relationship` translations; only the entity
-  cascade cleans them up. Latent: nothing writes translations. Raised
-  by the Task 1 review of the reversal-integrity PR (2026-10-05).
-  A reversal that deletes a pair the closure did not remove strands
-  them too. The closure's `userKeptRows` in
+  cascade cleans them up. A reversal that deletes a pair the closure
+  did not remove strands them too. The closure's `userKeptRows` in
   `lib/actions/delta/row-closure.ts` drops the planner's "still
-  non-null" half (a plan decision), so a create whose user-written view
-  was later cleared counts as kept; an update's undo that leaves no
-  view deletes a pair the closure never reached; and the same undo on a
-  pair a delete holds strips it from that delete's payload. The planner
-  (`lib/actions/delta/reverse-replay.ts`) prunes the pair's own logged
-  writes in all three cases, but translations naming it are not closed
-  over and stay. Revisit both when translations get a writer. Raised by the
-  Task 3 review of the same PR (2026-10-05).
+  non-null" half (a plan decision), so a create whose user-written
+  view was later cleared counts as kept; an update's undo that leaves
+  no view deletes a pair the closure never reached; and the same undo
+  on a pair a delete holds strips it from that delete's payload. The
+  planner (`lib/actions/delta/reverse-replay.ts`) prunes the pair's
+  own logged writes in all three cases, but translations naming it are
+  not closed over and stay. Latent: nothing writes translations.
+  Revisit both when translations get a writer. Raised in the
+  reversal-integrity PR's review (2026-10-05).
+
 - **A parallel group's straggler can commit around a no-gate run's
-  abort.** `runParallelGroup` in `lib/pipeline/runtime/orchestrator.ts`
-  uses `Promise.all`, which rejects on the first throwing branch
-  without waiting for siblings. A straggler that first emits before
-  the run leaves txState (during the reversal or the exception hook)
-  passes the registered-run check in `handleEvent` and commits under
-  the run's actionId unreversed, and boot recovery never reverses it.
-  If the reversal throws something that isn't a `DeltaReplayError`,
-  `abortRun` rethrows before `generationStore.abortRun`, the run stays
-  registered forever, and a later straggler passes the check and takes
-  a hold nobody releases (this needs both latent conditions at once).
-  Latent: no definition under `lib/pipeline/definitions/` uses a
-  parallel group. The obvious fix, having `runParallelGroup` wait for
-  every sibling to settle before the run aborts, changes canon's run
-  state, "no drain: a parallel sibling still running is not awaited"
+  abort.** `runParallelGroup` in
+  `lib/pipeline/runtime/orchestrator.ts` uses `Promise.all`, which
+  rejects on the first throwing branch without waiting for siblings. A
+  straggler that first emits before the run leaves txState (during the
+  reversal or the exception hook) passes the registered-run check in
+  `handleEvent` and commits under the run's actionId unreversed, and
+  boot recovery never reverses it. If the reversal throws something
+  that isn't a `DeltaReplayError`, `abortRun` rethrows before
+  `generationStore.abortRun`, the run stays registered forever, and a
+  later straggler passes the check and takes a hold nobody releases
+  (this needs both latent conditions at once). Latent: no definition
+  under `lib/pipeline/definitions/` uses a parallel group. The obvious
+  fix, having `runParallelGroup` wait for every sibling to settle
+  before the run aborts, changes canon's run state, "no drain: a
+  parallel sibling still running is not awaited"
   (`generation-pipeline.md`, run state transitions), so it needs a
-  canon edit first. Raised by the Task 9 review of the
-  reversal-integrity PR (2026-10-05).
+  canon edit first. Raised in the reversal-integrity PR's review
+  (2026-10-05).
 
 - **`abortCauseOf` may misread an embed timeout as a cancel on
   Android.** `lib/abort.ts` (`abortCauseOf`, `BOUNDED_SIGNAL_EXPIRED`)
   tells an expiry from a stop by `signal.reason`, but React Native's
   `setUpXHR.js` replaces the global `AbortController` with
   `abort-controller@3.0.0`, whose `abort()` drops its argument. On
-  Android `lib/embedder/local/runtime.native.ts` (the abort checks near
-  lines 201 and 214) would then report a timeout as a cancel, the
-  misreading `lib/embedder/local/cancel.ts` warns about. Not verified
-  on a device. Raised by the Task 9 review of the reversal-integrity
-  PR (2026-10-05).
+  Android `lib/embedder/local/runtime.native.ts` (the two
+  `abortedEmbedError(signal)` checks in its per-text loop and after
+  it) would then report a timeout as a cancel, the misreading
+  `lib/embedder/local/cancel.ts` warns about. Not verified on a
+  device. Raised in the reversal-integrity PR's review (2026-10-05).
 
 - **The reversal closure doesn't follow id references inside
-  `entities.state`.** `REF_COLUMNS` in `lib/actions/delta/live-refs.ts`
-  registers only link-table columns, so `selectReversalSet` in
-  `lib/actions/delta/row-closure.ts` never reaches the ids
-  [`data-model.md`](../data-model.md#branch-model) says `state` holds
-  (`current_location_id`, `faction_id`, `parent_location_id` and
-  `at_location_id` in `lib/db/entities/entity-state-schema.ts`). A
-  reversal removing an entity could leave another entity's `state`
-  naming it if a user write outside the set put the reference there.
-  Unverified whether reachable: the argument canon gives for its
-  write-back refusal, that an entity's create is never reversed while
-  a delete holds it
+  `entities.state`.** `REF_COLUMNS` in
+  `lib/actions/delta/live-refs.ts` registers only link-table columns,
+  so `selectReversalSet` in `lib/actions/delta/row-closure.ts` never
+  reaches the ids [`data-model.md`](../data-model.md#branch-model)
+  says `state` holds (`current_location_id`, `faction_id`,
+  `parent_location_id` and `at_location_id` in
+  `lib/db/entities/entity-state-schema.ts`). A reversal removing an
+  entity could leave another entity's `state` naming it if a user
+  write outside the set put the reference there. Unverified whether
+  reachable: the argument canon gives for its write-back refusal, that
+  an entity's create is never reversed while a delete holds it
   ([`generation-pipeline.md`](../generation-pipeline.md#reverse-replay)),
   may extend to this. Separately, `data-model.md` lists `equipped_by`
   as a `state` reference, but the schema has no such field: doc/schema
-  drift to resolve. Raised by the Task 5 review of the
-  reversal-integrity PR (2026-10-05).
+  drift to resolve. Raised in the reversal-integrity PR's review
+  (2026-10-05).
 
 - **The rollback preview selects its set outside the bracket and any
   lock.** `getRollbackCounts` runs `selectReversalSet` unguarded;
@@ -154,11 +157,11 @@ slice-planning gate forces its resolution before that slice is planned.
   referrers in one round and their creates in the next, so a
   periodic-classifier abort between the two reads could make the
   preview throw `no-create`. The user would see a transient "Couldn't
-  roll back" plus an error-level `action_layer.reversal_refused`
-  that misreports a race as an integrity fault; a second tap clears
-  it. Possible fix: take the branch write lock shared around the
-  preview's selection. Reasoned, not reproduced. Raised by the Task 6
-  review of the reversal-integrity PR (2026-10-05).
+  roll back" plus an error-level `action_layer.reversal_refused` that
+  misreports a race as an integrity fault; a second tap clears it.
+  Possible fix: take the branch write lock shared around the preview's
+  selection. Reasoned, not reproduced. Raised in the
+  reversal-integrity PR's review (2026-10-05).
 
 - **The reader's rollback and edit handlers have no try/catch.**
   `confirmRollback` and `handleCommitEdit` in
@@ -166,26 +169,25 @@ slice-planning gate forces its resolution before that slice is planned.
   `updateStoryEntryContent` bare, so a non-integrity `DeltaReplayError`
   (a store-sync failure after the commit, say) escapes as an unhandled
   rejection. The preview handler above them already catches and logs.
-  Raised by the Task 6 review of the reversal-integrity PR
-  (2026-10-05).
+  Raised in the reversal-integrity PR's review (2026-10-05).
 
 - **Rollback and edit rejection copy always says "Please try again."**
   `reader:rollbackFailed` and `reader:editFailed`
   (`locales/en/reader.json`) cover every rejection code, including the
-  persistent ones (`delta-failed` from an integrity refusal, `notFound`,
-  `rollbackFloor`), which a retry cannot clear. Regenerate avoids the
-  loop only for its dispatch result, through `REGENERATE_REJECTION_COPY`
-  in `app/reader-composer/[branchId].tsx`; its preview rejection in
-  `handleRequestRegenerate` still toasts `reader:regenerateFailed`
-  ("…Please try again."). Raised by the Task 6 review of the
-  reversal-integrity PR (2026-10-05).
+  persistent ones (`delta-failed` from an integrity refusal,
+  `notFound`, `rollbackFloor`), which a retry cannot clear. Regenerate
+  avoids the loop only for its dispatch result, through
+  `REGENERATE_REJECTION_COPY` in `app/reader-composer/[branchId].tsx`;
+  its preview rejection in `handleRequestRegenerate` still toasts
+  `reader:regenerateFailed` ("…Please try again."). Raised in the
+  reversal-integrity PR's review (2026-10-05).
 
 - **Every seeded hero rollback reverses chapter 1's create.**
   `delta_hero_3` in `lib/db/devtools/seed-dataset.ts` (the
   `chap_hero_1` create) has a null `entryId` and is logged after every
   entry create, so it falls inside every hero rollback window; a probe
-  showed `chapters: 1` even for a rollback to position 70. Raised by the
-  Task 6 review of the reversal-integrity PR (2026-10-05).
+  showed `chapters: 1` even for a rollback to position 70. Raised in
+  the reversal-integrity PR's review (2026-10-05).
 
 - **`resolveRedoInvalidation`'s sweep looks always empty.** The
   docblock in `lib/actions/story-entries/undo.ts` calls the case
@@ -194,35 +196,56 @@ slice-planning gate forces its resolution before that slice is planned.
   delta-logged write whatever its source, so a pass that wrote anything
   leaves nothing to redo. Fix the comment, or drop the sweep from redo
   if nothing else reaches it. Confirmed by reading, not reproduced.
-  Raised by the Task 7 review of the reversal-integrity PR (2026-10-05).
+  Raised in the reversal-integrity PR's review (2026-10-05).
 
 - **No test sends an uncommitted `DeltaReplayError` through
   `undoLastAction`.** The `e.committed` check before the redo push in
-  `undoBracketed` is pinned only for the committed case; an uncommitted
-  one must leave the redo stack alone. Raised by the Task 7 review of
-  the reversal-integrity PR (2026-10-05).
+  `undoBracketed` is pinned only for the committed case; an
+  uncommitted one must leave the redo stack alone. Raised in the
+  reversal-integrity PR's review (2026-10-05).
 
 - **Redo re-inserts newest-first, so a link lands before its parent.**
   `applyRedoLocked` in `lib/actions/delta/redo.ts` walks the snapshots
   newest-first and a link's create precedes its parent entity's. It is
-  safe only because link ends (`entity_id`, `character_id`, and the like)
-  carry no foreign key; adding one breaks redo of a closed group. Record
-  the constraint where link tables are declared. Raised by the Task 7
-  review of the reversal-integrity PR (2026-10-05).
+  safe only because link ends (`entity_id`, `character_id`, and the
+  like) carry no foreign key; adding one breaks redo of a closed
+  group. Record the constraint where link tables are declared. Raised
+  in the reversal-integrity PR's review (2026-10-05).
 
-- **A kept (re-owned) create in `redoRows` fails redo with a raw SQLite
-  error.** It is unreachable today only because no non-periodic machine
-  source creates relationships and CTRL-Z skips periodic groups. If one
-  is reached, redo's plain INSERT hits a primary-key error rather than a
-  refusal and the redo stays pending. Add a guard or refusal before any
-  non-periodic machine source creates relationships. Raised by the Task
-  7 review of the reversal-integrity PR (2026-10-05).
+- **A kept (re-owned) create in `redoRows` fails redo with a raw
+  SQLite error.** It is unreachable today only because no non-periodic
+  machine source creates relationships and CTRL-Z skips periodic
+  groups. If one is reached, redo's plain INSERT hits a primary-key
+  error rather than a refusal and the redo stays pending. Add a guard
+  or refusal before any non-periodic machine source creates
+  relationships. Raised in the reversal-integrity PR's review
+  (2026-10-05).
 
 - **Redo of an `update` re-logs it even when its row is gone.**
   `applyRedoLocked` in `lib/actions/delta/redo.ts` sets `restored` for
   an update when the snapshot carries a row, not when the live row
-  exists, so an UPDATE that matches nothing still re-logs its delta and
-  a later CTRL-Z reports an undo that changed nothing. That contradicts
-  the comment beside it. Shielded today because every delta-logged
-  write clears the redo stack. Raised by the Task 12 review of the
-  reversal-integrity PR (2026-10-05).
+  exists, so an UPDATE that matches nothing still re-logs its delta
+  and a later CTRL-Z reports an undo that changed nothing. That
+  contradicts the comment beside it. Shielded today because every
+  delta-logged write clears the redo stack. Raised in the
+  reversal-integrity PR's review (2026-10-05).
+
+- **`loadHeldRows` scans the branch's whole delta log on every
+  reversal-set selection.** `lib/actions/delta/held-rows.ts` filters
+  on `op = 'delete'` and JSON-decodes every delete payload each time a
+  reversal set is selected: every CTRL-Z, prose edit, abort and
+  rollback-preview tap. The only `deltas` indexes are
+  `(branch_id, log_position)` and
+  `(branch_id, target_id, log_position)`, so the filter scans the log,
+  which grows every turn (awareness bumps add update deltas). Latent:
+  fine today. Revisit with a partial index on deletes (or an
+  op-leading index) when long stories show selection latency. Raised
+  in the reversal-integrity PR's review (2026-10-05).
+
+- **`buildUndoOps` is one ~265-line loop carrying every reversal rule.**
+  `lib/actions/delta/reverse-replay.ts` holds the live and held arms,
+  re-own, tombstones, stranded writes and two refusals in a single
+  loop, with four hand-synced per-row presence structures. Extract the
+  create and update arms (and their held variants) into named helpers,
+  and consider one per-row state, before the next rule lands. Raised in
+  the reversal-integrity PR's review (2026-10-05).
