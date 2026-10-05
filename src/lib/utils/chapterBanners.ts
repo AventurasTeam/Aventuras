@@ -9,14 +9,10 @@ export interface ChapterBannerLink {
 }
 
 export interface ChapterBanner {
-  key: string
-  chapterId: string | null
   number: number
   title: string | null
   summary: string | null
   isTail: boolean
-  /** The entry this banner sits before. */
-  startEntryId: string
   prev: ChapterBannerLink | null
   next: ChapterBannerLink | null
 }
@@ -50,7 +46,8 @@ export function buildChapterBanners(
 
   const indexById = new Map(entries.map((entry, index) => [entry.id, index]))
 
-  const placed: { index: number; banner: ChapterBanner }[] = []
+  type Placed = { index: number; entryId: string; banner: Omit<ChapterBanner, 'prev' | 'next'> }
+  const placed: Placed[] = []
   let maxNumber = 0
 
   for (const chapter of chapters) {
@@ -62,16 +59,12 @@ export function buildChapterBanners(
 
     placed.push({
       index: start,
+      entryId: chapter.startEntryId,
       banner: {
-        key: `chapter:${chapter.id}`,
-        chapterId: chapter.id,
         number: chapter.number,
         title: chapter.title,
         summary: chapter.summary,
         isTail: false,
-        startEntryId: chapter.startEntryId,
-        prev: null,
-        next: null,
       },
     })
   }
@@ -80,38 +73,29 @@ export function buildChapterBanners(
   const lastEnd = lastResolvedChapterEnd(indexById, chapters)
   const tailIndex = lastEnd + 1
   if (lastEnd !== -1 && tailIndex < entries.length) {
-    const tailStart = entries[tailIndex]
     placed.push({
       index: tailIndex,
-      banner: {
-        key: 'tail',
-        chapterId: null,
-        number: maxNumber + 1,
-        title: TAIL_BANNER_TITLE,
-        summary: null,
-        isTail: true,
-        startEntryId: tailStart.id,
-        prev: null,
-        next: null,
-      },
+      entryId: entries[tailIndex].id,
+      banner: { number: maxNumber + 1, title: TAIL_BANNER_TITLE, summary: null, isTail: true },
     })
   }
 
+  // Stable, so of two banners on one entry the earlier-placed one (a chapter over the tail,
+  // the first of two chapters) keeps it.
   placed.sort((a, b) => a.index - b.index)
+  const ordered: Placed[] = []
+  for (const item of placed) {
+    if (ordered[ordered.length - 1]?.entryId !== item.entryId) ordered.push(item)
+  }
 
-  const seen = new Set<string>()
-  const ordered = placed.filter(({ banner }) => {
-    if (seen.has(banner.startEntryId)) return false
-    seen.add(banner.startEntryId)
-    return true
-  })
-
-  ordered.forEach(({ banner }, i) => {
-    const before = ordered[i - 1]?.banner
-    const after = ordered[i + 1]?.banner
-    banner.prev = before ? { entryId: before.startEntryId, number: before.number } : null
-    banner.next = after ? { entryId: after.startEntryId, number: after.number } : null
-    banners.set(banner.startEntryId, banner)
+  ordered.forEach(({ entryId, banner }, i) => {
+    const before = ordered[i - 1]
+    const after = ordered[i + 1]
+    banners.set(entryId, {
+      ...banner,
+      prev: before ? { entryId: before.entryId, number: before.banner.number } : null,
+      next: after ? { entryId: after.entryId, number: after.banner.number } : null,
+    })
   })
 
   return banners

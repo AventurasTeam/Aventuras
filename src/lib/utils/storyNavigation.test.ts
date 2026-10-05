@@ -351,11 +351,9 @@ describe('buildLandmarks', () => {
 
     it('adds a row for each chapter start and for the tail, without a checkpoint id', () => {
       const { landmarks } = buildLandmarks(branchView, [], [br1], null, banners)
-      expect(
-        landmarks.map((l) => [l.kind, l.number, l.label, l.chapterId, l.checkpointId]),
-      ).toEqual([
-        ['chapter', 1, 'Chapter 1: Opening', 'c1', null],
-        ['chapter', 3, 'Chapter 2: The Story Continues', null, null],
+      expect(landmarks.map((l) => [l.kind, l.number, l.label, l.checkpointId])).toEqual([
+        ['chapter', 1, 'Chapter 1: Opening', null],
+        ['chapter', 3, 'Chapter 2: The Story Continues', null],
       ])
     })
 

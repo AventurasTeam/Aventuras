@@ -66,7 +66,6 @@ describe('buildChapterBanners', () => {
     const tail = banners.get('e4')!
     expect(tail).toMatchObject({
       isTail: true,
-      chapterId: null,
       number: 3,
       title: TAIL_BANNER_TITLE,
       summary: null,
@@ -130,6 +129,26 @@ describe('buildChapterBanners', () => {
     ])
 
     expect(banners.get('e2')).toMatchObject({ isTail: true, number: 10 })
+  })
+
+  it('gives two chapters that share a start entry to the first, linking past the other', () => {
+    const banners = buildChapterBanners(entries, [
+      chapter('c1', 1, 'e0', 'e1'),
+      chapter('c2', 2, 'e0', 'e3'),
+    ])
+
+    expect([...banners.keys()]).toEqual(['e0', 'e4'])
+    expect(banners.get('e0')).toMatchObject({ number: 1, next: { entryId: 'e4', number: 3 } })
+    expect(banners.get('e4')).toMatchObject({ prev: { entryId: 'e0', number: 1 } })
+  })
+
+  it('gives a chapter that starts on the tail entry the banner, not the tail', () => {
+    const banners = buildChapterBanners(entries, [
+      chapter('c1', 1, 'e0', 'e1'),
+      chapter('c2', 2, 'e2', 'e1'),
+    ])
+
+    expect(banners.get('e2')).toMatchObject({ isTail: false, number: 2 })
   })
 
   it('has no tail when no chapter end resolves', () => {

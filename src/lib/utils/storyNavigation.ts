@@ -123,8 +123,6 @@ export type LandmarkKind = 'origin' | 'checkpoint' | 'chapter'
 export interface Landmark {
   entryId: string
   checkpointId: string | null
-  /** Set on chapter rows only. The tail has no chapter, so it has none either. */
-  chapterId: string | null
   branchId: string | null
   /** Whether "Switch to checkpoint branch" applies. A chapter's start may lie in an ancestor's history. */
   switchesBranch: boolean
@@ -213,7 +211,6 @@ export function buildLandmarks(
       landmarks.push({
         entryId: forkEntry.id,
         checkpointId: origin?.id ?? null,
-        chapterId: null,
         branchId: forkEntry.branchId,
         switchesBranch: true,
         number: entryNumber(forkEntry),
@@ -245,7 +242,6 @@ export function buildLandmarks(
     landmarks.push({
       entryId: entry.id,
       checkpointId: checkpoint.id,
-      chapterId: null,
       branchId: entry.branchId,
       switchesBranch: true,
       number: entryNumber(entry),
@@ -255,13 +251,12 @@ export function buildLandmarks(
     })
   }
 
-  for (const banner of chapterBanners?.values() ?? []) {
-    const entry = byId.get(banner.startEntryId)
+  for (const [entryId, banner] of chapterBanners ?? []) {
+    const entry = byId.get(entryId)
     if (!entry) continue
     landmarks.push({
       entryId: entry.id,
       checkpointId: null,
-      chapterId: banner.chapterId,
       branchId: entry.branchId,
       switchesBranch: false,
       number: entryNumber(entry),

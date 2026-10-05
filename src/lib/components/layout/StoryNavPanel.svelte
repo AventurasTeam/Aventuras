@@ -298,7 +298,7 @@
           />
         {:else}
           <div class="space-y-1">
-            {#each landmarks as landmark (`${landmark.kind}:${landmark.chapterId ?? landmark.checkpointId ?? landmark.entryId}`)}
+            {#each landmarks as landmark (`${landmark.kind}:${landmark.checkpointId ?? landmark.entryId}`)}
               <div
                 class="group hover:bg-surface-700/50 can-hover:min-h-0 relative min-h-[40px] rounded-lg transition-colors"
               >
