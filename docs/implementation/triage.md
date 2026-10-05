@@ -173,24 +173,6 @@ slice-planning gate forces its resolution before that slice is planned.
   and consider one per-row state, before the next rule lands. Raised in
   the reversal-integrity PR's review (2026-10-05).
 
-- **A kept pair's later machine update can restore a value a sweep
-  nulled.** When a sweep reverses a relationship's create that a user
-  write kept, the live create arm of `buildUndoOps` in
-  `lib/actions/delta/reverse-replay.ts` nulls the views the user did
-  not write and re-owns the create, but a later machine update of the
-  pair stays in the log, its `undo_payload` still holding the swept
-  value. Reversing that update writes the value back. A reviewer probed
-  this sequence: a pass on entry e1 creates the pair with `kind`; a
-  pass on e2 updates `kind`; the user sets `inverseKind`; editing e1's
-  prose keeps the pair and nulls `kind`; a later sweep of e2's pass
-  restores e1's swept `kind`. User precedence does not stop it, since
-  the user never wrote `kind` (`userEditsOutliving` in
-  `lib/actions/delta/user-precedence.ts`). The held-copy arm beside it
-  nulls the same way, so a pair a delete holds likely shares the gap
-  (not probed). Each step is ordinary use. Pre-existing: the merge
-  base's live create arm nulls the same way. Raised in the
-  reversal-integrity PR's slice review (2026-10-05).
-
 - **`RedoSnapshot` can be built by hand.** `RedoSnapshot` in
   `lib/actions/delta/redo.ts` is a plain exported object type,
   re-exported from `lib/actions` and held by

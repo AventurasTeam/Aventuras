@@ -632,6 +632,64 @@ describe('reversing a machine create of a relationship', () => {
   })
 })
 
+// A kept pair's create has the views the user did not write nulled; a later machine update of
+// only such a view goes with it, or a sweep of that update would write the swept value back.
+describe('a kept pair takes the machine updates of the views it nulls', () => {
+  it('prunes a later update of a nulled view, so no later reversal restores the swept value', async () => {
+    const { db, ctx } = await setup()
+    await seedChars(db)
+    await apply(ctx, classifyView('rival'), 'act_c1')
+    await apply(ctx, classifyView('friend'), 'act_c2')
+    await apply(ctx, userViews('friend', 'mentor'), 'act_u')
+
+    await reverseRows(await deltasOf(db, 'act_c1'), ctx)
+
+    const [row] = await pair(db)
+    expect(row).toMatchObject({ kind: null, inverseKind: 'mentor' })
+    expect(characterRelationshipsStore.getById(row.id)).toEqual(row)
+    expect(await deltasOf(db, 'act_c2')).toEqual([])
+    expect(await actionIds(db)).toEqual(['act_u', 'act_u'])
+  })
+
+  it('does the same on the copy a delete holds', async () => {
+    const { db, ctx } = await setup()
+    await seedChars(db)
+    await apply(ctx, classifyView('rival'), 'act_c1')
+    await apply(ctx, classifyView('friend'), 'act_c2')
+    await apply(ctx, userViews('friend', 'mentor'), 'act_u')
+    const [live] = await pair(db)
+    await apply(
+      ctx,
+      {
+        kind: 'deleteCharacterRelationship',
+        source: 'user_edit',
+        payload: { branchId: 'b1', id: live.id },
+      },
+      'act_del',
+    )
+
+    await reverseRows(await deltasOf(db, 'act_c1'), ctx)
+
+    expect(await pair(db)).toEqual([])
+    const [held] = await deltasOf(db, 'act_del')
+    expect(held.undoPayload).toMatchObject({ kind: null, inverseKind: 'mentor' })
+    expect(await deltasOf(db, 'act_c2')).toEqual([])
+  })
+
+  it('leaves a machine update of the view the user kept in the log', async () => {
+    const { db, ctx } = await setup()
+    await seedChars(db)
+    await apply(ctx, classifyView('rival'), 'act_c1')
+    await apply(ctx, userViews('rival', 'mentor'), 'act_u')
+    await apply(ctx, classifyMiraView('wary'), 'act_c2')
+
+    await reverseRows(await deltasOf(db, 'act_c1'), ctx)
+
+    expect((await pair(db))[0]).toMatchObject({ kind: null, inverseKind: 'wary' })
+    expect(await deltasOf(db, 'act_c2')).toHaveLength(1)
+  })
+})
+
 describe('a prose edit under a later user write', () => {
   it("keeps the view the user set after the reply's fact, and blocks its re-derivation", async () => {
     const { db, ctx } = await setup()

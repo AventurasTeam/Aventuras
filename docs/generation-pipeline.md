@@ -1342,7 +1342,10 @@ with it, whatever its source (see the closure below), except in a
 table that registers
 `rowKeepingColumns`: a character relationship whose view a later user
 write set keeps its row, with the views the user did not write nulled,
-and is deleted only once both are null. Its `create` is then re-owned
+and is deleted only once both are null. A machine update that wrote
+only views the reversal nulls goes with the create, reversed and
+pruned, as a removed row's later writes do: left in the log, its undo
+would write the swept value back. Its `create` is then re-owned
 rather than pruned: it becomes the user's, with source `user_edit`, no
 entry, and the action of the oldest user write that kept the row. A
 later closure that reaches the row so finds its `create`, and CTRL-Z of
