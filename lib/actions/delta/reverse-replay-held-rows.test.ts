@@ -143,7 +143,7 @@ async function seedMentorPair(kind: string | null, inverseKind: string | null): 
 }
 
 describe('a reversal applies to rows a delete outside the set holds', () => {
-  it("P3: strips the pass's relationships from an entity delete in one payload write", async () => {
+  it("strips the pass's relationships from an entity delete in one payload write", async () => {
     await act('act_pass', passView('char_x', 'char_y', 'rival'))
     await act('act_pass', passView('char_x', 'char_z', 'ally'))
     await act('act_del', deleteEntity('char_x'))
@@ -164,7 +164,7 @@ describe('a reversal applies to rows a delete outside the set holds', () => {
     expect(await ctx.db.select().from(characterRelationships)).toEqual([])
   })
 
-  it("P4: strips the pass's awareness from a happening delete", async () => {
+  it("strips the pass's awareness from a happening delete", async () => {
     await ctx.db
       .insert(happenings)
       .values({ id: 'hap_1', branchId: 'b1', title: 'Fire', createdAt: 1, updatedAt: 1 })
@@ -184,7 +184,7 @@ describe('a reversal applies to rows a delete outside the set holds', () => {
     expect(await ctx.db.select().from(happeningAwareness)).toEqual([])
   })
 
-  it('P5: prunes the deletes of rows the pass created, so CTRL-Z reaches the group before them', async () => {
+  it('prunes the deletes of rows the pass created, so CTRL-Z reaches the group before them', async () => {
     entriesStore.hydrate('b1', [])
     await act('act_user0', {
       kind: 'createLore',
@@ -221,7 +221,7 @@ describe('a reversal applies to rows a delete outside the set holds', () => {
     expect(await ctx.db.select().from(deltas)).toEqual([])
   })
 
-  it('P6: patches a captured relationship back to the view the pass overwrote', async () => {
+  it('patches a captured relationship back to the view the pass overwrote', async () => {
     await seedMentorPair('ally', null)
     await act('act_pass', passView('char_x', 'char_y', 'rival'))
     await act('act_del', deleteEntity('char_x'))
@@ -234,6 +234,25 @@ describe('a reversal applies to rows a delete outside the set holds', () => {
     await reverseReplayDeltas('act_del', ctx)
     const [rel] = await ctx.db.select().from(characterRelationships)
     expect(rel).toMatchObject({ id: 'rel_1', kind: 'ally', inverseKind: null })
+  })
+
+  it('composes two undos onto one held copy', async () => {
+    await ctx.db.insert(entities).values(character('char_s', { status: 'staged', keywords: ['a'] }))
+    await act('act_pass', {
+      kind: 'promoteStagedEntity',
+      source: 'periodic_classifier',
+      payload: { branchId: 'b1', id: 'char_s', proseEntryId: null },
+    })
+    await act('act_pass', {
+      kind: 'appendEntityKeywords',
+      source: 'periodic_classifier',
+      payload: { branchId: 'b1', id: 'char_s', keywords: ['b'], proseEntryId: null },
+    })
+    await act('act_del', deleteEntity('char_s'))
+
+    await reverseReplayDeltas('act_pass', ctx)
+
+    expect(await payloadOf('act_del')).toMatchObject({ status: 'staged', keywords: ['a'] })
   })
 
   it('keeps a later user write on the held copy and restores only what the user left', async () => {
@@ -348,6 +367,19 @@ describe('a reversal applies to rows a delete outside the set holds', () => {
     await reverseReplayDeltas('act_user0', ctx)
     expect(await ctx.db.select().from(characterRelationships)).toEqual([])
     expect(await ctx.db.select().from(deltas)).toEqual([])
+  })
+
+  it('reverses the live row when its holder was undone after the set was selected', async () => {
+    await seedMentorPair('ally', null)
+    await act('act_pass', passView('char_x', 'char_y', 'rival'))
+    await act('act_del', deleteEntity('char_x'))
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target: await deltasOf('act_pass') })
+    await reverseReplayDeltas('act_del', ctx)
+
+    await reverseAndPruneDeltaRows(set, ctx)
+
+    const [rel] = await ctx.db.select().from(characterRelationships)
+    expect(rel).toMatchObject({ id: 'rel_1', kind: 'ally' })
   })
 
   it('edits no payload when the holder is in the set: its undo puts the rows back first', async () => {
@@ -500,6 +532,47 @@ describe('the write-back refusal', () => {
   it('refuses to prune a delete whose group would write the removed id back, writing nothing', async () => {
     await seedWriteBack()
     await expectRefusedUnwritten(() => reverseReplayDeltas('act_pass', ctx))
+  })
+
+  it("reads a group-mate's payload as this reversal leaves it, not as stored", async () => {
+    // One action deletes char_y, capturing a relationship naming char_p, then char_p; the
+    // reversal strips that relationship from char_y's delete, so nothing left names char_p.
+    await act('act_pass', {
+      kind: 'createEntity',
+      source: 'periodic_classifier',
+      payload: { entry: character('char_p') },
+    })
+    await act('act_pass', passView('char_p', 'char_y', 'rival'))
+    const [p] = await ctx.db.select().from(entities).where(eq(entities.id, 'char_p'))
+    const [y] = await ctx.db.select().from(entities).where(eq(entities.id, 'char_y'))
+    const [rel] = await ctx.db.select().from(characterRelationships)
+    await ctx.db.delete(characterRelationships)
+    await ctx.db.delete(entities).where(eq(entities.id, 'char_p'))
+    await ctx.db.delete(entities).where(eq(entities.id, 'char_y'))
+    const captured = { involvements: [], awareness: [], translations: [] }
+    await ctx.db.insert(deltas).values([
+      raw('d_del_y', 10, {
+        actionId: 'act_del',
+        source: 'user_edit',
+        op: 'delete',
+        targetTable: 'entities',
+        targetId: 'char_y',
+        undoPayload: { ...y, ...captured, relationships: [rel] },
+      }),
+      raw('d_del_p', 11, {
+        actionId: 'act_del',
+        source: 'user_edit',
+        op: 'delete',
+        targetTable: 'entities',
+        targetId: 'char_p',
+        undoPayload: { ...p, ...captured, relationships: [] },
+      }),
+    ])
+
+    expect(await reverseReplayDeltas('act_pass', ctx)).toBe(2)
+
+    expect((await payloadOf('act_del')).relationships).toEqual([])
+    expect(await ctx.db.select({ id: deltas.id }).from(deltas)).toEqual([{ id: 'd_del_y' }])
   })
 
   it('reaches a caller of the closed-set reversal unwrapped too', async () => {

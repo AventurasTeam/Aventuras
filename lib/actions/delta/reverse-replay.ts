@@ -40,6 +40,7 @@ export function describeDeltaReplayError(
 export type PatchEmission = { table: string; branchId: string; patch: StorePatch }
 
 export type ReversePlan = {
+  /** The undos' row writes, and one `undo_payload` write per held delete they change. */
   ops: SqlOp[]
   /**
    * One log write per delta in the set (its prune, or the re-own of a create whose row stays),
@@ -153,7 +154,7 @@ function rebuiltPayload(holder: Delta, copies: readonly HeldCopy[]): Record<stri
 function settleHeldCopies(
   copies: ReadonlyMap<string, HeldCopy>,
   ctx: DbCtx,
-): { payloadOps: SqlOp[]; pruned: Delta[] } {
+): { payloadOps: SqlOp[]; pruned: Delta[]; rewritten: Map<string, Record<string, unknown>> } {
   const byHolder = new Map<string, HeldCopy[]>()
   for (const copy of copies.values()) {
     const group = byHolder.get(copy.held.holder.id)
@@ -162,19 +163,20 @@ function settleHeldCopies(
   }
   const payloadOps: SqlOp[] = []
   const pruned: Delta[] = []
+  const rewritten = new Map<string, Record<string, unknown>>()
   for (const group of byHolder.values()) {
     const { holder } = group[0].held
-    if (group.some((c) => c.held.place === 'target' && c.removed)) pruned.push(holder)
-    else
-      payloadOps.push(
-        ctx.db
-          .update(deltas)
-          .set({ undoPayload: rebuiltPayload(holder, group) })
-          .where(eq(deltas.id, holder.id))
-          .toSQL(),
-      )
+    if (group.some((c) => c.held.place === 'target' && c.removed)) {
+      pruned.push(holder)
+      continue
+    }
+    const payload = rebuiltPayload(holder, group)
+    rewritten.set(holder.id, payload)
+    payloadOps.push(
+      ctx.db.update(deltas).set({ undoPayload: payload }).where(eq(deltas.id, holder.id)).toSQL(),
+    )
   }
-  return { payloadOps, pruned }
+  return { payloadOps, pruned, rewritten }
 }
 
 function namesId(value: unknown, id: string): boolean {
@@ -188,11 +190,12 @@ function namesId(value: unknown, id: string): boolean {
 }
 
 // generation-pipeline.md → Reverse-replay: a later CTRL-Z of the pruned delete's group would
-// restore a dead id.
+// restore a dead id. A group-mate this plan rewrites is read as rewritten.
 async function refuseWriteBack(
   ctx: DbCtx,
   set: ReversalSet,
   pruned: readonly Delta[],
+  rewritten: ReadonlyMap<string, Record<string, unknown>>,
 ): Promise<void> {
   if (pruned.length === 0) return
   const settled = new Set([...set.rows, ...pruned].map((d) => d.id))
@@ -212,7 +215,7 @@ async function refuseWriteBack(
         (d) =>
           d.actionId === holder.actionId &&
           !settled.has(d.id) &&
-          namesId(d.undoPayload, holder.targetId),
+          namesId(rewritten.get(d.id) ?? d.undoPayload, holder.targetId),
       )
       if (hit)
         throw new ReversalIntegrityError(
@@ -461,8 +464,8 @@ async function buildUndoOps(set: ReversalSet, ctx: DbCtx): Promise<BuiltUndo> {
   }
 
   // Stores hold no deleted rows, so a payload edit emits no patch.
-  const { payloadOps, pruned } = settleHeldCopies(heldCopies, ctx)
-  await refuseWriteBack(ctx, set, pruned)
+  const { payloadOps, pruned, rewritten } = settleHeldCopies(heldCopies, ctx)
+  await refuseWriteBack(ctx, set, pruned, rewritten)
   ops.push(...payloadOps)
 
   // One vec0 scan per family table, not per row: each statement scans the whole table.
