@@ -13,7 +13,7 @@ import {
 import type { DbCtx } from '../types'
 import { capturedChildren, vecSweepIdsOps, vecTableLister } from './delete-cascade'
 import { applyUndoPayload, isPayloadMetaKey } from './delta-encoding'
-import { heldKey, type HeldRow } from './held-rows'
+import { deletedRow, heldKey, type HeldRow } from './held-rows'
 import { withKeyLocks } from './key-lock'
 import { liveLinkFilter } from './live-link-filter'
 import { resolveByTable, whereForDelta, type StorePatch } from './registry'
@@ -421,11 +421,7 @@ async function buildUndoOps(
       const { children: captured, cascadeKeys } = capturedChildren(entry.cascade, full)
       const children = liveLinks(delta.branchId, captured)
 
-      const rowData = { ...full }
-      for (const payloadKey of Object.keys(rowData)) {
-        if (cascadeKeys.includes(payloadKey) || isPayloadMetaKey(payloadKey))
-          delete rowData[payloadKey]
-      }
+      const rowData = deletedRow(full, cascadeKeys)
       // The payload's flag was accurate at delete time, but an embedder swap since
       // then re-embeds only LIVE rows, so the vector can be gone while it reads clean.
       if (isEmbeddedSourceTable(delta.targetTable)) rowData.embeddingStale = 1

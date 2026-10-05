@@ -4,13 +4,13 @@ import { BIND_CHUNK, type Delta } from '@/lib/db'
 
 import type { DbCtx } from '../types'
 import { capturedChildren, type CapturedChildren as Children } from './delete-cascade'
+import { heldKey, type HeldKey } from './held-rows'
 import { isRefTable, rowRefs, type LiveRef, type RefTable } from './live-refs'
 import { resolveByTable } from './registry'
 
 export type LiveLinkFilter = (branchId: string, children: Children) => Children
 
 const refKey = (table: string, branchId: string, id: string) => `${table}:${branchId}:${id}`
-const rowKey = (table: string, id: string) => `${table}:${id}`
 
 function capturedBy(delta: Delta): Children {
   if (delta.op !== 'delete') return []
@@ -18,9 +18,9 @@ function capturedBy(delta: Delta): Children {
   return capturedChildren(resolveByTable(delta.targetTable)?.cascade, payload).children
 }
 
-function capturedKeys(children: Children): Set<string> {
+function capturedKeys(children: Children): Set<HeldKey> {
   return new Set(
-    children.flatMap(({ table, rows }) => rows.map((row) => rowKey(table, row.id as string))),
+    children.flatMap(({ table, rows }) => rows.map((row) => heldKey(table, row.id as string))),
   )
 }
 
@@ -50,7 +50,7 @@ export async function liveLinkFilter(rows: readonly Delta[], ctx: DbCtx): Promis
       for (const row of child.rows) {
         for (const ref of rowRefs(child.table, row)) {
           if (fate.has(refKey(ref.table, delta.branchId, ref.id))) continue
-          if (restoredHere.has(rowKey(ref.table, ref.id))) continue
+          if (restoredHere.has(heldKey(ref.table, ref.id))) continue
           const groupKey = `${ref.table}:${delta.branchId}`
           const group = unresolved.get(groupKey) ?? {
             table: ref.table,
@@ -90,7 +90,7 @@ export async function liveLinkFilter(rows: readonly Delta[], ctx: DbCtx): Promis
         const key = refKey(ref.table, branchId, ref.id)
         const last = fate.get(key)
         if (last) return last.op === 'delete'
-        return restoredHere.has(rowKey(ref.table, ref.id)) || live.has(key)
+        return restoredHere.has(heldKey(ref.table, ref.id)) || live.has(key)
       }
       const next = kept.map(({ table, rows: childRows }) => ({
         table,

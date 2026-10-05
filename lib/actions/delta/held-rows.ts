@@ -36,15 +36,23 @@ export function heldKey(table: string, id: string): HeldKey {
 
 export const EMPTY_HELD_ROWS: HeldRowIndex = { byRow: new Map(), naming: () => [] }
 
+/** The delete's own row in its payload: every key but the cascade and meta keys. */
+export function deletedRow(
+  payload: Readonly<Record<string, unknown>>,
+  cascadeKeys: readonly string[],
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(payload).filter(([key]) => !cascadeKeys.includes(key) && !isPayloadMetaKey(key)),
+  )
+}
+
 function heldBy(holder: Delta): HeldRow[] {
   const payload = holder.undoPayload ?? {}
   const { children, cascadeKeys } = capturedChildren(
     resolveByTable(holder.targetTable)?.cascade,
     payload,
   )
-  const target = Object.fromEntries(
-    Object.entries(payload).filter(([key]) => !cascadeKeys.includes(key) && !isPayloadMetaKey(key)),
-  )
+  const target = deletedRow(payload, cascadeKeys)
   return [
     { table: holder.targetTable, id: holder.targetId, holder, place: 'target', row: target },
     ...children.flatMap(({ table, rows }) =>
