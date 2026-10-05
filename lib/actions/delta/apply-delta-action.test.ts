@@ -12,6 +12,7 @@ import {
   holdBranchWriteExclusive,
   releaseBranchWriteExclusive,
 } from './branch-write-lock'
+import { __redoGroupForTest } from './redo'
 
 async function seed(db: Awaited<ReturnType<typeof createTestDb>>['db']) {
   await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
@@ -80,7 +81,7 @@ describe('applyDeltaAction', () => {
       entryId: null,
     })
 
-    undoRedoStore.pushRedoGroup([])
+    undoRedoStore.pushRedoGroup(__redoGroupForTest())
     // Branch mismatch rejects before any write — a rejection is not a new action.
     await applyDeltaAction(args('entry_r1', 'b-other'), { db, runInTransaction })
     expect(undoRedoStore.hasRedo()).toBe(true)

@@ -225,7 +225,7 @@ describe('deleteEntityRow — C3 acceptance', () => {
     await deleteEntityRow('b1', 'char_x', ctx)
     const rows = (await ctx.db.select().from(deltas).orderBy(desc(deltas.logPosition))) as Delta[]
     const set = await selectReversalSet(ctx, { branchId: 'b1', target: rows })
-    const { snapshot, reverse } = await prepareUndo(set, ctx)
+    const { group, reverse } = await prepareUndo(set, ctx)
     await reverse()
 
     const [restored] = await ctx.db.select().from(entities).where(eq(entities.id, 'char_x'))
@@ -244,7 +244,7 @@ describe('deleteEntityRow — C3 acceptance', () => {
 
     insertVectors()
     expect(vectorCount()).toBe(2)
-    await applyRedo(snapshot, ctx)
+    await applyRedo(group, ctx)
     expect(await ctx.db.select().from(entities).where(eq(entities.id, 'char_x'))).toEqual([])
     expect(await linkCounts()).toEqual({
       awareness: 0,

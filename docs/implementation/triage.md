@@ -173,22 +173,6 @@ slice-planning gate forces its resolution before that slice is planned.
   and consider one per-row state, before the next rule lands. Raised in
   the reversal-integrity PR's review (2026-10-05).
 
-- **`RedoSnapshot` can be built by hand.** `RedoSnapshot` in
-  `lib/actions/delta/redo.ts` is a plain exported object type,
-  re-exported from `lib/actions` and held by
-  `lib/stores/ui/undo-redo.ts`, and `applyRedo` trusts whatever
-  snapshots it is given. The `held-in-redo` refusal and the snapshot's
-  "taken before the reversal" timing hold only because
-  `snapshotForRedo` is its one producer; a hand-built snapshot skips
-  both. Latent: no production code builds one, though
-  `redo.test.ts` and `undo-redo.test.ts` do, so a brand needs a
-  test-side constructor. The type predates this PR, and
-  [Type design](../code-conventions.md#type-design) files looseness in
-  older code as a deferral. Brand it, or make it opaque, when redo is
-  next touched, so it is minted only by its producer, as `ReversalSet`
-  is by `selectReversalSet`. Raised in the reversal-integrity PR's
-  slice review (2026-10-05).
-
 - **The seed logs a classifier happening as its own CTRL-Z group.**
   The hero branch's `act_class_1` group in
   `lib/db/devtools/seed-dataset.ts` (`delta_hero_2`, the `hap_fire`

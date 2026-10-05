@@ -22,18 +22,39 @@ export type RedoSnapshot = {
   rowBeforeUndo: Record<string, unknown> | null
 }
 
-/** A redoable CTRL-Z of a set: the redo snapshot, taken before `reverse` runs the reversal. */
+/**
+ * A CTRL-Z's redo snapshot, minted only by prepareUndo, as ReversalSet is by selectReversalSet:
+ * its held-row refusal and its taken-before-the-reversal timing hold for no other producer.
+ */
+class RedoGroup {
+  // A private field makes the type nominal: no literal or spread of a group satisfies it.
+  readonly #minted = true
+  readonly snapshots: readonly RedoSnapshot[]
+
+  constructor(snapshots: readonly RedoSnapshot[]) {
+    this.snapshots = snapshots
+  }
+}
+
+export type { RedoGroup }
+
+// Test-only: a group no undo took, for a test that needs one on the redo stack.
+export function __redoGroupForTest(snapshots: readonly RedoSnapshot[] = []): RedoGroup {
+  return new RedoGroup(snapshots)
+}
+
+/** A redoable CTRL-Z of a set: the redo group, taken before `reverse` runs the reversal. */
 export type PreparedUndo = {
-  readonly snapshot: readonly RedoSnapshot[]
+  readonly group: RedoGroup
   /** Reverses and prunes the set, refusing a prune the snapshot could not restore. */
   readonly reverse: (extraOps?: readonly SqlOp[]) => Promise<number>
 }
 
 // One call takes the snapshot and fixes keepRedoExact, so the two cannot disagree.
 export async function prepareUndo(set: ReversalSet, ctx: DbCtx): Promise<PreparedUndo> {
-  const snapshot = await snapshotForRedo(set, ctx)
+  const group = new RedoGroup(await snapshotForRedo(set, ctx))
   return {
-    snapshot,
+    group,
     reverse: (extraOps = []) =>
       reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: true }, extraOps),
   }
@@ -82,10 +103,11 @@ function redoRow(
  * invalidates.
  */
 export function applyRedo(
-  snapshots: readonly RedoSnapshot[],
+  group: RedoGroup,
   ctx: DbCtx,
   extraOps: readonly SqlOp[] = [],
 ): Promise<void> {
+  const { snapshots } = group
   const keys = deltaLockKeys(snapshots.map((s) => s.delta))
   return withKeyLocks(keys, () => applyRedoLocked(snapshots, ctx, extraOps))
 }

@@ -18,6 +18,7 @@ import { isContentEditDelta } from './classifier-facts'
 import { rollbackToEntry, updateStoryEntryContent } from './operational'
 import { writeSystemEntry } from './system-entry'
 import { redoLastAction, undoLastAction } from './undo'
+import { __redoGroupForTest } from '../delta/redo'
 
 afterEach(() => {
   entriesStore.__reset()
@@ -290,9 +291,9 @@ describe('undo of a content edit', () => {
 
     // Replaying the fact would re-insert a row the next pass re-derives anyway, and
     // fight the redo arm's own invalidation.
-    const snapshot = undoRedoStore.peekRedoGroup()
-    expect(snapshot).toHaveLength(1)
-    expect(isContentEditDelta(snapshot![0].delta)).toBe(true)
+    const snapshots = undoRedoStore.peekRedoGroup()?.snapshots
+    expect(snapshots).toHaveLength(1)
+    expect(isContentEditDelta(snapshots![0].delta)).toBe(true)
   })
 
   it('redo restores the edited prose and re-inserts the delta', async () => {
@@ -382,30 +383,32 @@ describe('undo of a content edit', () => {
 
     // applyRedo writes nothing for a snapshot carrying no row, so clamping for it would
     // spend a pass re-reading prose that never changed.
-    undoRedoStore.pushRedoGroup([
-      {
-        delta: {
-          id: 'd_phantom',
-          branchId: 'b1',
-          actionId: 'act_phantom',
-          op: 'update',
-          targetTable: 'story_entries',
-          targetId: 'e_reply',
-          entryId: 'e_reply',
-          source: 'user_edit',
-          // Carries a scope, so an untouched watermark can only come from the rowBeforeUndo
-          // guard — without it the guard is unreachable and the assertion below is free.
-          undoPayload: {
-            content: 'gone',
-            $invalidationScope: { entryIds: ['e_reply'], editedPosition: 2 },
+    undoRedoStore.pushRedoGroup(
+      __redoGroupForTest([
+        {
+          delta: {
+            id: 'd_phantom',
+            branchId: 'b1',
+            actionId: 'act_phantom',
+            op: 'update',
+            targetTable: 'story_entries',
+            targetId: 'e_reply',
+            entryId: 'e_reply',
+            source: 'user_edit',
+            // Carries a scope, so an untouched watermark can only come from the rowBeforeUndo
+            // guard — without it the guard is unreachable and the assertion below is free.
+            undoPayload: {
+              content: 'gone',
+              $invalidationScope: { entryIds: ['e_reply'], editedPosition: 2 },
+            },
+            logPosition: 9,
+            encodingVersion: 1,
+            createdAt: 9,
           },
-          logPosition: 9,
-          encodingVersion: 1,
-          createdAt: 9,
+          rowBeforeUndo: null,
         },
-        rowBeforeUndo: null,
-      },
-    ])
+      ]),
+    )
 
     expect((await redoLastAction('b1', ctx)).status).toBe('ok')
     expect(await processedThrough(db)).toBe(2)

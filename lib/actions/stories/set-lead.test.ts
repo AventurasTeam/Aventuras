@@ -20,6 +20,7 @@ import {
 } from '@/lib/stores'
 
 import { setStoryLead } from './set-lead'
+import { __redoGroupForTest } from '../delta/redo'
 
 const DEFINITION = storyDefinitionSchema.parse({
   mode: 'adventure',
@@ -221,7 +222,7 @@ describe('setStoryLead', () => {
 
   it('clears redo on a successful lead change', async () => {
     const { ctx } = await setup()
-    undoRedoStore.pushRedoGroup([])
+    undoRedoStore.pushRedoGroup(__redoGroupForTest())
     expect(undoRedoStore.hasRedo()).toBe(true)
     expect(await setStoryLead('story_1', 'char_mira', ctx)).toEqual({ status: 'ok' })
     expect(undoRedoStore.hasRedo()).toBe(false)
@@ -229,7 +230,7 @@ describe('setStoryLead', () => {
 
   it('leaves redo intact when the lead change is refused', async () => {
     const { ctx } = await setup()
-    undoRedoStore.pushRedoGroup([])
+    undoRedoStore.pushRedoGroup(__redoGroupForTest())
     expect(await setStoryLead('story_1', 'loc_hollow', ctx)).toEqual({
       status: 'rejected',
       code: 'not-character',

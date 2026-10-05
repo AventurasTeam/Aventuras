@@ -7,6 +7,8 @@ import { branches, deltas, stories, storyEntries, type EntryMetadata } from '@/l
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
+import { __redoGroupForTest } from '../delta/redo'
+
 afterEach(() => {
   entriesStore.__reset()
   generationStore.__reset()
@@ -86,7 +88,7 @@ describe('updateEntryWorldTime', () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seed(db)
-    undoRedoStore.pushRedoGroup([])
+    undoRedoStore.pushRedoGroup(__redoGroupForTest())
 
     const result = await updateEntryWorldTime('b1', 'e2', 45, ctx)
     expect(result.status).toBe('ok')
@@ -193,7 +195,7 @@ describe('updateEntryWorldTime', () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seed(db)
-    undoRedoStore.pushRedoGroup([])
+    undoRedoStore.pushRedoGroup(__redoGroupForTest())
 
     const result = await updateEntryWorldTime('b1', 'e2', 120, ctx)
     expect(result.status).toBe('ok')

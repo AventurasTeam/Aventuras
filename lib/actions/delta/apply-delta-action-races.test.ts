@@ -486,7 +486,7 @@ describe('a classifier write racing a user Save on one row', () => {
           .from(deltas)
           .where(eq(deltas.actionId, `u_${round}`))) as Delta[]
         const set = await selectReversalSet(ctx, { branchId: BRANCH, target: rows })
-        const { snapshot, reverse } = await prepareUndo(set, ctx)
+        const { group, reverse } = await prepareUndo(set, ctx)
         await reverse()
         return {
           classifier: () =>
@@ -500,7 +500,7 @@ describe('a classifier write racing a user Save on one row', () => {
               ctx,
             ),
           user: () =>
-            applyRedo(snapshot, ctx).catch((e: unknown) => {
+            applyRedo(group, ctx).catch((e: unknown) => {
               expect(String(e)).toMatch(/UNIQUE/)
               redoFailed.add(round)
             }),

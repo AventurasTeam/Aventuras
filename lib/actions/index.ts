@@ -19,7 +19,7 @@ export {
 } from './delta/delta-encoding'
 export { __resetRegistrationGuard, registerAllDomains } from './delta/registrations'
 export { __resetRegistry, type StorePatch } from './delta/registry'
-export { type RedoSnapshot } from './delta/redo'
+export { __redoGroupForTest, type RedoGroup, type RedoSnapshot } from './delta/redo'
 export {
   DeltaReplayError,
   describeDeltaReplayError,

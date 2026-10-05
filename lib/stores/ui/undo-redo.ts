@@ -1,11 +1,7 @@
 import { useStore } from 'zustand'
 import { createStore } from 'zustand/vanilla'
 
-import type { RedoSnapshot } from '@/lib/actions'
-
-// peek returns (and the selector sees) the live stack arrays — readonly so a
-// caller can't splice store state in place.
-type RedoGroup = readonly RedoSnapshot[]
+import type { RedoGroup } from '@/lib/actions'
 
 type UndoRedoState = {
   redoStack: readonly RedoGroup[]

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
-import type { RedoSnapshot } from '@/lib/actions'
+import { __redoGroupForTest, type RedoGroup, type RedoSnapshot } from '@/lib/actions'
 
 import { undoRedoStore } from './undo-redo'
 
@@ -8,8 +8,8 @@ afterEach(() => {
   undoRedoStore.clear()
 })
 
-function group(branchId: string): RedoSnapshot[] {
-  return [{ delta: { branchId } as RedoSnapshot['delta'], rowBeforeUndo: null }]
+function group(branchId: string): RedoGroup {
+  return __redoGroupForTest([{ delta: { branchId } as RedoSnapshot['delta'], rowBeforeUndo: null }])
 }
 
 describe('undoRedoStore.peekRedoGroup', () => {
