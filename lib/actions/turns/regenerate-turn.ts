@@ -19,9 +19,12 @@ import {
   ReversalIntegrityError,
   reverseAndPruneDeltaRows,
 } from '../delta/reverse-replay'
-import { resolveSweep, type StoryEntryRejection } from '../story-entries/operational'
+import {
+  resolveSweep,
+  reversalRefused,
+  type StoryEntryRejection,
+} from '../story-entries/operational'
 import { bracketProseReversal } from '../story-entries/prose-reversal'
-import { STORY_ENTRY_REJECTION } from '../story-entries/register'
 import type { DbCtx } from '../types'
 import { withBranchQueue } from './branch-queue'
 
@@ -71,14 +74,7 @@ async function sweepFrom(
     await reverseAndPruneDeltaRows(swept.set, ctx, swept.clampOps)
   } catch (e) {
     if (!(e instanceof ReversalIntegrityError)) throw e
-    // Nothing was written; the refusal travels as the sweep's rejection
-    // (generation-pipeline.md → Reverse-replay).
-    logger.error('action_layer.reversal_refused', {
-      branchId,
-      refusal: e.refusal,
-      reason: e.message,
-    })
-    return { status: 'rejected', reason: e.message, code: STORY_ENTRY_REJECTION.deltaFailed }
+    return reversalRefused(branchId, e)
   }
   return { status: 'ok' }
 }

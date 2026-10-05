@@ -26,7 +26,7 @@ export type StoryEntryRejection = {
 
 // A refused reversal wrote nothing; it travels on the action's existing rejection
 // (generation-pipeline.md → Reverse-replay).
-function reversalRefused(branchId: string, e: ReversalIntegrityError): StoryEntryRejection {
+export function reversalRefused(branchId: string, e: ReversalIntegrityError): StoryEntryRejection {
   logger.error('action_layer.reversal_refused', { branchId, refusal: e.refusal, reason: e.message })
   return { status: 'rejected', reason: e.message, code: STORY_ENTRY_REJECTION.deltaFailed }
 }
@@ -215,7 +215,7 @@ async function resolveRollbackWindow(
 
 /**
  * The rollback window materialized and closed: the set the sweep reverses, plus the
- * watermark clamp that must ride in its transaction. Deliberately side-effect-free — each
+ * watermark clamp that must ride in its transaction. Writes nothing (a refusal only logs) — each
  * caller owns its own tail (`countBuckets`, a redo snapshot, nothing) and decides its own
  * redo-stack policy, which is not uniform across callers. A closure the log cannot satisfy
  * comes back as the `delta-failed` rejection.

@@ -11,6 +11,7 @@ import {
   type Delta,
   type StoryEntry,
 } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { PER_TURN_KIND } from '@/lib/pipeline'
 import {
   awaitRunTerminal,
@@ -699,6 +700,7 @@ describe('regenerateTurn', () => {
     await seedTwoTurnsWithCatchUp(ctx)
     await openStory(db, 's1', 'b1')
     await hydrateAppSettings(async () => WORKING_CONFIG)
+    const error = vi.spyOn(logger, 'error')
 
     const regen = await withSweepHook(
       () => {
@@ -717,5 +719,10 @@ describe('regenerateTurn', () => {
       reason: expect.stringContaining('write-back'),
     })
     expect(entriesStore.getById('e_r2')).toBeDefined()
+    expect(error).toHaveBeenCalledWith(
+      'action_layer.reversal_refused',
+      expect.objectContaining({ branchId: 'b1', refusal: 'write-back' }),
+    )
+    error.mockRestore()
   })
 })
