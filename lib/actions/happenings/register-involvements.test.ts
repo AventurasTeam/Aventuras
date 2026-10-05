@@ -12,13 +12,18 @@ import {
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { happeningInvolvementsStore } from '@/lib/stores'
 
+import { registerHappenings } from './register-happenings'
 import { registerHappeningInvolvements } from './register-involvements'
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { __resetRegistry } from '../delta/registry'
 import { reverseReplayDeltas } from '../delta/reverse-replay'
+import { registerEntities } from '../entities/register'
 
 async function setup() {
   __resetRegistry()
+  // missingRef resolves the involvement's happening and entity through the registry.
+  registerEntities()
+  registerHappenings()
   registerHappeningInvolvements()
   const { db, runInTransaction } = await createTestDb()
   await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })

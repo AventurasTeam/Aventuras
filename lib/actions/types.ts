@@ -1,6 +1,7 @@
 import type { PipelineActionMap, TestPipelineActionMap } from './action-map'
 
 export type { DbCtx } from '@/lib/db'
+export type { IntegrityRefusal } from './delta/replay-errors'
 
 /**
  * The entry a classifier write derives from: a field the user wrote after its prose keeps its

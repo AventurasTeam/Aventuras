@@ -1119,12 +1119,70 @@ const heroDeltas: NewDelta[] = [
     encodingVersion: 1,
     createdAt: BASE + 22 * MIN,
   },
+  // Link rows log with hap_fire: a reversal removing it refuses without their creates
+  // (generation-pipeline.md → Reverse-replay). haw_fire_kael learns at entry 25: a later pass.
+  {
+    id: 'delta_hero_5',
+    branchId: MAIN,
+    entryId: entryId('hero', 22),
+    actionId: 'act_class_1',
+    logPosition: 3,
+    source: 'ai_classifier',
+    targetTable: 'happening_involvements',
+    targetId: 'hinv_fire_mira',
+    op: 'create',
+    undoPayload: null,
+    encodingVersion: 1,
+    createdAt: BASE + 22 * MIN,
+  },
+  {
+    id: 'delta_hero_6',
+    branchId: MAIN,
+    entryId: entryId('hero', 22),
+    actionId: 'act_class_1',
+    logPosition: 4,
+    source: 'ai_classifier',
+    targetTable: 'happening_involvements',
+    targetId: 'hinv_fire_watch',
+    op: 'create',
+    undoPayload: null,
+    encodingVersion: 1,
+    createdAt: BASE + 22 * MIN,
+  },
+  {
+    id: 'delta_hero_7',
+    branchId: MAIN,
+    entryId: entryId('hero', 22),
+    actionId: 'act_class_1',
+    logPosition: 5,
+    source: 'ai_classifier',
+    targetTable: 'happening_awareness',
+    targetId: 'haw_fire_mira',
+    op: 'create',
+    undoPayload: null,
+    encodingVersion: 1,
+    createdAt: BASE + 22 * MIN,
+  },
+  {
+    id: 'delta_hero_8',
+    branchId: MAIN,
+    entryId: entryId('hero', 25),
+    actionId: 'act_class_3',
+    logPosition: 6,
+    source: 'periodic_classifier',
+    targetTable: 'happening_awareness',
+    targetId: 'haw_fire_kael',
+    op: 'create',
+    undoPayload: null,
+    encodingVersion: 1,
+    createdAt: BASE + 25 * MIN,
+  },
   {
     id: 'delta_hero_3',
     branchId: MAIN,
     entryId: null,
     actionId: 'act_chapter_1',
-    logPosition: 3,
+    logPosition: 7,
     source: 'chapter_close',
     targetTable: 'chapters',
     targetId: 'chap_hero_1',
@@ -1140,7 +1198,7 @@ const heroDeltas: NewDelta[] = [
     branchId: MAIN,
     entryId: entryId('hero', 71),
     actionId: 'act_class_2',
-    logPosition: 4,
+    logPosition: 8,
     source: 'periodic_classifier',
     targetTable: 'entities',
     targetId: ID.brannocFlagged,
@@ -1151,30 +1209,30 @@ const heroDeltas: NewDelta[] = [
   },
 ]
 
-// Every persisted entry carries a create delta (the rollback window resolves
-// from it — operational.ts rejects without one); seeding rows bare makes
-// delete/rollback silently dead on every seeded story. Sources mirror the
-// real writers: user_edit for user turns, ai_classifier for model output.
+// Rollback/delete resolve from an entry's create delta (operational.ts rejects without one) and
+// go silently dead on a bare seed. The opening has none, as in create-story.ts.
 function entryCreateDeltas(allEntries: NewStoryEntry[]): NewDelta[] {
   const nextLogPosition = new Map<string, number>()
-  return allEntries.map((e) => {
-    const lp = nextLogPosition.get(e.branchId) ?? 1
-    nextLogPosition.set(e.branchId, lp + 1)
-    return {
-      id: `delta_create_${e.branchId}_${e.id}`,
-      branchId: e.branchId,
-      entryId: null,
-      actionId: `act_create_${e.branchId}_${e.id}`,
-      logPosition: lp,
-      source: e.kind === 'user_action' ? ('user_edit' as const) : ('ai_classifier' as const),
-      targetTable: 'story_entries',
-      targetId: e.id,
-      op: 'create' as const,
-      undoPayload: null,
-      encodingVersion: 1,
-      createdAt: e.createdAt,
-    }
-  })
+  return allEntries
+    .filter((e) => e.kind !== 'opening')
+    .map((e) => {
+      const lp = nextLogPosition.get(e.branchId) ?? 1
+      nextLogPosition.set(e.branchId, lp + 1)
+      return {
+        id: `delta_create_${e.branchId}_${e.id}`,
+        branchId: e.branchId,
+        entryId: null,
+        actionId: `act_create_${e.branchId}_${e.id}`,
+        logPosition: lp,
+        source: e.kind === 'user_action' ? ('user_edit' as const) : ('ai_classifier' as const),
+        targetTable: 'story_entries',
+        targetId: e.id,
+        op: 'create' as const,
+        undoPayload: null,
+        encodingVersion: 1,
+        createdAt: e.createdAt,
+      }
+    })
 }
 
 // ---------------------------------------------------------------------------

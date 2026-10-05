@@ -23,10 +23,11 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { plantVec } from '@/lib/db/__tests__/vec-fixtures'
 import { characterRelationshipsStore } from '@/lib/stores'
 
+import { reverseRows } from '../delta/__tests__/reverse-rows'
 import { applyDeltaAction } from '../delta/apply-delta-action'
-import { applyRedo, snapshotForRedo } from '../delta/redo'
+import { applyRedo, prepareUndo } from '../delta/redo'
 import { TARGET_NOT_FOUND } from '../delta/registry'
-import { reverseAndPruneDeltaRows } from '../delta/reverse-replay'
+import { selectReversalSet } from '../delta/row-closure'
 import type { DbCtx } from '../types'
 import { ENTITY_DELETE_REJECTION } from './register'
 
@@ -149,7 +150,7 @@ describe('deleteEntity', () => {
       .where(eq(deltas.actionId, 'act_del'))
       .orderBy(desc(deltas.logPosition))) as Delta[]
     expect(rows).toHaveLength(1)
-    await reverseAndPruneDeltaRows(rows, ctx)
+    await reverseRows(rows, ctx)
 
     const [restored] = await ctx.db.select().from(entities).where(eq(entities.id, 'char_x'))
     expect(restored.embeddingStale).toBe(1)
@@ -240,7 +241,7 @@ describe('deleteEntity', () => {
     expect(payload.relationships).toHaveLength(1)
     expect(payload.translations).toHaveLength(2)
 
-    await reverseAndPruneDeltaRows(rows, ctx)
+    await reverseRows(rows, ctx)
     expect(
       await ctx.db
         .select()
@@ -289,8 +290,9 @@ describe('deleteEntity', () => {
       .from(deltas)
       .where(eq(deltas.actionId, 'act_del'))
       .orderBy(desc(deltas.logPosition))) as Delta[]
-    const snapshot = await snapshotForRedo(rows, ctx)
-    await reverseAndPruneDeltaRows(rows, ctx)
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target: rows })
+    const { snapshot, reverse } = await prepareUndo(set, ctx)
+    await reverse()
     const [restored] = await ctx.db.select().from(entities).where(eq(entities.id, 'char_x'))
     expect(restored.embeddingStale).toBe(1)
 
@@ -339,7 +341,7 @@ describe('deleteEntity', () => {
       .from(deltas)
       .where(eq(deltas.actionId, 'act_del'))
       .orderBy(desc(deltas.logPosition))) as Delta[]
-    await reverseAndPruneDeltaRows(rows, ctx)
+    await reverseRows(rows, ctx)
 
     expect(
       await ctx.db

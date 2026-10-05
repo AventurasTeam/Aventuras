@@ -47,8 +47,15 @@ const degradedReport: RecoveryReport = {
       actionId: 'action-classifier',
       storyId: 's1',
       error: new Error('could not reverse'),
+      refusal: null,
     },
   ],
+}
+
+// Every boot refuses it again, so the copy must not promise that restarting retries.
+const refusedReport: RecoveryReport = {
+  reversed: [],
+  failures: [{ ...degradedReport.failures[0], refusal: 'write-back' }],
 }
 
 const meta: Meta<typeof CrashRecoveryModal> = {
@@ -105,6 +112,20 @@ export const MemoryPaused: Story = {
     const description = screen.getByText(/Memory updates for this story are paused/)
     expect(description.textContent).toContain('Mornstone')
     expect(description.textContent).toContain('restarting the app retries automatically')
+  },
+}
+
+export const MemoryPausedRefused: Story = {
+  args: {
+    report: refusedReport,
+    storyNames: { s1: 'Mornstone' },
+  },
+  play: async () => {
+    expect(screen.getByText('Recovery incomplete')).toBeInTheDocument()
+    const description = screen.getByText(/Memory updates for this story stay paused/)
+    expect(description.textContent).toContain('Mornstone')
+    expect(description.textContent).toContain('your story content is intact')
+    expect(description.textContent).not.toContain('restart')
   },
 }
 

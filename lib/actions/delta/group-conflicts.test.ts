@@ -12,6 +12,7 @@ import {
   happenings,
   stories,
   storyEntries,
+  translations,
   type Delta,
   type EntryMetadata,
   type NewEntity,
@@ -23,6 +24,7 @@ import { entityDeleteActions } from '@/lib/world'
 
 import { applyDeltaActionGroup } from './apply-delta-action'
 import { reverseAndPruneDeltaRows } from './reverse-replay'
+import { selectReversalSet } from './row-closure'
 import type { DbCtx, PipelineAction } from '../types'
 
 let ctx: DbCtx
@@ -88,7 +90,11 @@ async function undoGroup(): Promise<void> {
     .from(deltas)
     .where(eq(deltas.actionId, 'act_g'))
     .orderBy(desc(deltas.logPosition))) as Delta[]
-  await reverseAndPruneDeltaRows(rows, ctx)
+  await reverseAndPruneDeltaRows(
+    await selectReversalSet(ctx, { branchId: 'b1', target: rows }),
+    ctx,
+    { keepRedoExact: false },
+  )
 }
 
 describe('applyDeltaActionGroup — a delete and a write naming what it removes', () => {
@@ -149,6 +155,77 @@ describe('applyDeltaActionGroup — a delete and a write naming what it removes'
 
     expect(result).toMatchObject({ status: 'rejected', code: 'group-conflict' })
     expect(await snapshot()).toEqual(before)
+  })
+
+  it('rejects a translation create naming a happening the group deletes', async () => {
+    const before = await snapshot()
+
+    const result = await group([
+      {
+        kind: 'deleteHappening',
+        source: 'user_edit',
+        payload: { branchId: 'b1', id: 'hap_1' },
+      },
+      {
+        kind: 'createTranslation',
+        source: 'user_edit',
+        payload: {
+          entry: {
+            id: 'tr_new',
+            branchId: 'b1',
+            targetKind: 'happening',
+            targetId: 'hap_1',
+            field: 'title',
+            language: 'es',
+            translatedText: 'Fuego',
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        },
+      },
+    ])
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'group-conflict' })
+    expect(await snapshot()).toEqual(before)
+    expect(await ctx.db.select().from(translations)).toEqual([])
+  })
+
+  it('rejects a translation create naming a relationship the group cascades', async () => {
+    await ctx.db.insert(characterRelationships).values({
+      id: 'rel_1',
+      branchId: 'b1',
+      aId: 'char_keep',
+      bId: 'char_lose',
+      kind: 'ally',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    const before = await snapshot()
+
+    const result = await group([
+      deleteEntity('char_lose'),
+      {
+        kind: 'createTranslation',
+        source: 'user_edit',
+        payload: {
+          entry: {
+            id: 'tr_new',
+            branchId: 'b1',
+            targetKind: 'character_relationship',
+            targetId: 'rel_1',
+            field: 'kind',
+            language: 'es',
+            translatedText: 'aliado',
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        },
+      },
+    ])
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'group-conflict' })
+    expect(await snapshot()).toEqual(before)
+    expect(await ctx.db.select().from(translations)).toEqual([])
   })
 
   it('rejects two deletes whose cascades both take one link row', async () => {

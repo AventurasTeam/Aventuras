@@ -323,8 +323,8 @@ What stays open:
   later, an error in the user's favor.
 - A reversal that deletes a row the machine created, an entity or
   happening on abort or recovery or a happening on a prose edit,
-  deletes the user's edits to it too, and leaves their deltas pointing
-  at nothing.
+  deletes the user's edits to it too, and prunes their deltas with it
+  ([`generation-pipeline.md → Reverse-replay`](../generation-pipeline.md#reverse-replay)).
 - A World Save merges keywords and relationships three-way against
   the stored row, so a classifier write made while the pane was open
   survives unless the user changed the same term or view. What it

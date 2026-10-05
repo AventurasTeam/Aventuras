@@ -1,15 +1,14 @@
 import { and, eq, inArray } from 'drizzle-orm'
 
-import { BIND_CHUNK, entities, happenings, type Delta } from '@/lib/db'
+import { BIND_CHUNK, type Delta } from '@/lib/db'
 
 import type { DbCtx } from '../types'
 import { capturedChildren, type CapturedChildren as Children } from './delete-cascade'
-import { linkRefs, type LiveRef } from './live-refs'
+import { heldKey, type HeldKey } from './held-rows'
+import { isRefTable, rowRefs, type LiveRef, type RefTable } from './live-refs'
 import { resolveByTable } from './registry'
 
 export type LiveLinkFilter = (branchId: string, children: Children) => Children
-
-const REF_TABLES = { entities, happenings } as const
 
 const refKey = (table: string, branchId: string, id: string) => `${table}:${branchId}:${id}`
 
@@ -19,30 +18,39 @@ function capturedBy(delta: Delta): Children {
   return capturedChildren(resolveByTable(delta.targetTable)?.cascade, payload).children
 }
 
+function capturedKeys(children: Children): Set<HeldKey> {
+  return new Set(
+    children.flatMap(({ table, rows }) => rows.map((row) => heldKey(table, row.id as string))),
+  )
+}
+
+const size = (children: Children) => children.reduce((n, child) => n + child.rows.length, 0)
+
 /**
- * C3: a delete's undo restores the links it captured, but a separate reversal may since have
- * removed the row at a link's far end. A named row counts as live by its state once the whole
- * plan has run — its oldest create in the plan removes it, a delete restores it — else by the DB.
- * A dropped relationship takes its translations with it.
+ * Drops captured rows naming a row that is dead once the plan has run, cascading to rows naming
+ * those. Liveness: the row's oldest delta in the plan (a create removes it, a delete restores it),
+ * else this undo's own restores, else the DB.
  */
 export async function liveLinkFilter(rows: readonly Delta[], ctx: DbCtx): Promise<LiveLinkFilter> {
   const fate = new Map<string, Delta>()
   for (const delta of rows) {
-    if (delta.op === 'update' || !Object.hasOwn(REF_TABLES, delta.targetTable)) continue
+    if (delta.op === 'update' || !isRefTable(delta.targetTable)) continue
+    // The planner may keep a row-keeping row; if not, the closure already took every row naming it.
+    if (delta.op === 'create' && resolveByTable(delta.targetTable)?.rowKeepingColumns) continue
     const key = refKey(delta.targetTable, delta.branchId, delta.targetId)
     const seen = fate.get(key)
     if (!seen || delta.logPosition < seen.logPosition) fate.set(key, delta)
   }
 
-  const unresolved = new Map<
-    string,
-    { table: LiveRef['table']; branchId: string; ids: Set<string> }
-  >()
+  const unresolved = new Map<string, { table: RefTable; branchId: string; ids: Set<string> }>()
   for (const delta of rows) {
-    for (const child of capturedBy(delta)) {
+    const children = capturedBy(delta)
+    const restoredHere = capturedKeys(children)
+    for (const child of children) {
       for (const row of child.rows) {
-        for (const ref of linkRefs(child.table, row)) {
+        for (const ref of rowRefs(child.table, row)) {
           if (fate.has(refKey(ref.table, delta.branchId, ref.id))) continue
+          if (restoredHere.has(heldKey(ref.table, ref.id))) continue
           const groupKey = `${ref.table}:${delta.branchId}`
           const group = unresolved.get(groupKey) ?? {
             table: ref.table,
@@ -58,42 +66,39 @@ export async function liveLinkFilter(rows: readonly Delta[], ctx: DbCtx): Promis
 
   const live = new Set<string>()
   for (const { table: name, branchId, ids } of unresolved.values()) {
-    const table = REF_TABLES[name]
+    const entry = resolveByTable(name)
+    if (!entry) throw new Error(`liveLinkFilter: ${name} is not a registered table`)
+    const { table, idCol, branchCol } = entry.descriptor
     const all = [...ids]
     for (let i = 0; i < all.length; i += BIND_CHUNK) {
+      const chunk = all.slice(i, i + BIND_CHUNK)
       const found = await ctx.db
-        .select({ id: table.id })
+        .select({ id: idCol })
         .from(table)
-        .where(and(eq(table.branchId, branchId), inArray(table.id, all.slice(i, i + BIND_CHUNK))))
-      for (const { id } of found) live.add(refKey(name, branchId, id))
+        .where(
+          branchCol ? and(eq(branchCol, branchId), inArray(idCol, chunk)) : inArray(idCol, chunk),
+        )
+      for (const { id } of found) if (typeof id === 'string') live.add(refKey(name, branchId, id))
     }
   }
 
   return (branchId, children) => {
-    const isLive = (ref: LiveRef) => {
-      const key = refKey(ref.table, branchId, ref.id)
-      const last = fate.get(key)
-      return last ? last.op === 'delete' : live.has(key)
+    let kept = children
+    for (;;) {
+      const restoredHere = capturedKeys(kept)
+      const isLive = (ref: LiveRef) => {
+        const key = refKey(ref.table, branchId, ref.id)
+        const last = fate.get(key)
+        if (last) return last.op === 'delete'
+        return restoredHere.has(heldKey(ref.table, ref.id)) || live.has(key)
+      }
+      const next = kept.map(({ table, rows: childRows }) => ({
+        table,
+        rows: childRows.filter((row) => rowRefs(table, row).every(isLive)),
+      }))
+      // Rows only drop, so an unchanged count means nothing did.
+      if (size(next) === size(kept)) return next
+      kept = next
     }
-    const droppedRelationships = new Set<string>()
-    const kept = children.map(({ table, rows: childRows }) => ({
-      table,
-      rows: childRows.filter((row) => {
-        if (linkRefs(table, row).every(isLive)) return true
-        if (table === 'character_relationships') droppedRelationships.add(row.id as string)
-        return false
-      }),
-    }))
-    return kept.map(({ table, rows: childRows }) => ({
-      table,
-      rows:
-        table === 'translations'
-          ? childRows.filter(
-              (row) =>
-                row.targetKind !== 'character_relationship' ||
-                !droppedRelationships.has(row.targetId as string),
-            )
-          : childRows,
-    }))
   }
 }

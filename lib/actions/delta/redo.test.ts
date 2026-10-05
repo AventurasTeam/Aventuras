@@ -6,6 +6,7 @@ import {
   branches,
   deltas,
   entities,
+  happenings,
   stories,
   storyEntries,
   type Delta,
@@ -16,9 +17,12 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { entitiesStore, entriesStore } from '@/lib/stores'
 
 import { applyDeltaAction } from './apply-delta-action'
-import { applyRedo, snapshotForRedo } from './redo'
+import { withKeyLock } from './key-lock'
+import { applyRedo, prepareUndo } from './redo'
 import { register } from './registry'
-import { reverseAndPruneDeltaRows } from './reverse-replay'
+import { ReversalIntegrityError } from './reverse-replay'
+import { selectReversalSet } from './row-closure'
+import { rowLock } from './row-locks'
 import type { PipelineAction } from '../types'
 
 // Throwaway domain (raw SQL only) with a unique table name so registering it
@@ -29,7 +33,7 @@ const phantoms = sqliteTable('redo_phantoms', {
   label: text('label'),
 })
 
-describe('snapshotForRedo / applyRedo', () => {
+describe('prepareUndo / applyRedo', () => {
   it('round-trips an update delta: captures pre-undo state, then restores it on redo', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
@@ -62,8 +66,11 @@ describe('snapshotForRedo / applyRedo', () => {
       createdAt: Date.now(),
     }
 
-    // snapshotForRedo must run BEFORE the undo reversal, capturing current ('Aria').
-    const snapshot = await snapshotForRedo([deltaRow], ctx)
+    // The snapshot is taken BEFORE the undo reversal, capturing current ('Aria').
+    const { snapshot } = await prepareUndo(
+      await selectReversalSet(ctx, { branchId: 'b1', target: [deltaRow] }),
+      ctx,
+    )
 
     // Simulate the undo having applied the delta's undo_payload (name -> 'Old Name').
     await db.update(entities).set({ name: 'Old Name' }).where(eq(entities.id, 'ent_1'))
@@ -145,8 +152,11 @@ describe('snapshotForRedo / applyRedo', () => {
       createdAt: Date.now(),
     }
 
-    // snapshotForRedo runs before the undo's re-insertion — the row is still absent.
-    const snapshot = await snapshotForRedo([deleteDelta], ctx)
+    // The snapshot is taken before the undo's re-insertion — the row is still absent.
+    const { snapshot } = await prepareUndo(
+      await selectReversalSet(ctx, { branchId: 'b1', target: [deleteDelta] }),
+      ctx,
+    )
 
     // Simulate the undo's delete-branch reversal (buildUndoOps): re-insert from undo_payload.
     await db.insert(entities).values(deleteDelta.undoPayload)
@@ -205,7 +215,7 @@ describe('snapshotForRedo / applyRedo', () => {
       logPosition: 11,
     }
 
-    // A null rowBeforeUndo means snapshotForRedo found no matching row: applyRedo
+    // A null rowBeforeUndo means the snapshot found no matching row: applyRedo
     // must write nothing to the DB for create/update, and must NOT patch the store.
     await applyRedo(
       [
@@ -248,8 +258,9 @@ async function undoOf(ctx: Ctx, actionId: string) {
     .from(deltas)
     .where(eq(deltas.actionId, actionId))
     .orderBy(desc(deltas.logPosition))) as Delta[]
-  const snapshot = await snapshotForRedo(rows, ctx)
-  await reverseAndPruneDeltaRows(rows, ctx)
+  const set = await selectReversalSet(ctx, { branchId: 'b1', target: rows })
+  const { snapshot, reverse } = await prepareUndo(set, ctx)
+  await reverse()
   return snapshot
 }
 
@@ -554,5 +565,245 @@ describe('applyRedo and embedding_stale', () => {
 
     await applyRedo(snapshot, ctx)
     expect(() => readRow(sqlite, 'entities', 'char_1')).toThrow()
+  })
+})
+
+describe('prepareUndo over a reversal set', () => {
+  const row = (
+    id: string,
+    logPosition: number,
+    over: Partial<Delta> & Pick<Delta, 'targetTable' | 'targetId'>,
+  ): Delta => ({
+    id,
+    branchId: 'b1',
+    actionId: 'act_u',
+    op: 'create',
+    entryId: null,
+    source: 'user_edit',
+    undoPayload: null,
+    logPosition,
+    encodingVersion: 1,
+    createdAt: logPosition,
+    ...over,
+  })
+
+  it('leaves a sweep-only row out of the redo snapshot', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    await db.insert(entities).values({ ...KNIGHT, id: 'ent_1', name: 'Aria' })
+    await db
+      .insert(happenings)
+      .values({ id: 'hap_s', branchId: 'b1', title: 'Swept', createdAt: 1, updatedAt: 1 })
+    const update = row('d_u', 1, {
+      op: 'update',
+      targetTable: 'entities',
+      targetId: 'ent_1',
+      undoPayload: { name: 'Old' },
+    })
+    const swept = row('d_s', 2, {
+      actionId: 'act_pass',
+      source: 'periodic_classifier',
+      targetTable: 'happenings',
+      targetId: 'hap_s',
+    })
+    await db.insert(deltas).values([update, swept])
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target: [update], sweep: [swept] })
+
+    const { snapshot } = await prepareUndo(set, ctx)
+
+    expect(set.rows.map((d) => d.id)).toEqual(['d_s', 'd_u'])
+    expect(snapshot.map((s) => s.delta.id)).toEqual(['d_u'])
+    expect(snapshot[0].rowBeforeUndo).toMatchObject({ id: 'ent_1', name: 'Aria' })
+  })
+
+  it('snapshots a set whose sweep row a delete holds, since redo leaves the sweep out', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    await db.insert(entities).values({ ...KNIGHT, id: 'ent_1', name: 'Aria' })
+    const update = row('d_u', 1, {
+      op: 'update',
+      targetTable: 'entities',
+      targetId: 'ent_1',
+      undoPayload: { name: 'Old' },
+    })
+    const swept = row('d_s', 2, {
+      actionId: 'act_pass',
+      source: 'periodic_classifier',
+      targetTable: 'happenings',
+      targetId: 'hap_h',
+    })
+    const hold = row('d_del', 3, {
+      actionId: 'act_del',
+      op: 'delete',
+      targetTable: 'happenings',
+      targetId: 'hap_h',
+      undoPayload: {
+        id: 'hap_h',
+        branchId: 'b1',
+        title: 'Gone',
+        createdAt: 1,
+        updatedAt: 1,
+        involvements: [],
+        awareness: [],
+      },
+    })
+    await db.insert(deltas).values([update, swept, hold])
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target: [update], sweep: [swept] })
+
+    const { snapshot } = await prepareUndo(set, ctx)
+
+    expect(set.rows.map((d) => d.id)).toContain('d_s')
+    expect(set.redoRows.map((d) => d.id)).toEqual(['d_u'])
+    expect(snapshot.map((s) => s.delta.id)).toEqual(['d_u'])
+  })
+
+  it('refuses a create of a row a delete holds, before reading any row', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    const create = row('d_c', 1, { targetTable: 'happenings', targetId: 'hap_h' })
+    const hold = row('d_del', 2, {
+      actionId: 'act_del',
+      op: 'delete',
+      targetTable: 'happenings',
+      targetId: 'hap_h',
+      undoPayload: {
+        id: 'hap_h',
+        branchId: 'b1',
+        title: 'Gone',
+        createdAt: 1,
+        updatedAt: 1,
+        involvements: [],
+        awareness: [],
+      },
+    })
+    await db.insert(deltas).values([create, hold])
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target: [create] })
+    const select = vi.spyOn(ctx.db, 'select')
+
+    const error: unknown = await prepareUndo(set, ctx).catch((e: unknown) => e)
+
+    expect(error).toBeInstanceOf(ReversalIntegrityError)
+    expect(error).toMatchObject({ refusal: 'held-in-redo' })
+    expect((error as Error).message).toContain('happenings:hap_h held by d_del')
+    expect(select).not.toHaveBeenCalled()
+    select.mockRestore()
+  })
+
+  it('refuses an update of a row a delete captured', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    const update = row('d_up', 1, {
+      op: 'update',
+      targetTable: 'character_relationships',
+      targetId: 'rel_c',
+      undoPayload: { kind: 'ally' },
+    })
+    const hold = row('d_edel', 2, {
+      actionId: 'act_del',
+      op: 'delete',
+      targetTable: 'entities',
+      targetId: 'char_g',
+      undoPayload: {
+        ...KNIGHT,
+        id: 'char_g',
+        involvements: [],
+        awareness: [],
+        relationships: [
+          {
+            id: 'rel_c',
+            branchId: 'b1',
+            aId: 'char_g',
+            bId: 'char_h',
+            kind: 'rival',
+            inverseKind: null,
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ],
+        translations: [],
+      },
+    })
+    await db.insert(deltas).values([update, hold])
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target: [update] })
+
+    const error: unknown = await prepareUndo(set, ctx).catch((e: unknown) => e)
+
+    expect(error).toBeInstanceOf(ReversalIntegrityError)
+    expect(error).toMatchObject({ refusal: 'held-in-redo' })
+    expect((error as Error).message).toContain('character_relationships:rel_c held by d_edel')
+  })
+})
+
+describe('applyRedo with an invalidation set', () => {
+  it("waits on the invalidation set's row locks, which the snapshot's own keys leave out", async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    const entry = {
+      id: 'e1',
+      branchId: 'b1',
+      position: 1,
+      kind: 'opening' as const,
+      content: 'before',
+      chapterId: null,
+      metadata: { sceneEntities: [], currentLocationId: null, worldTime: 5 },
+      createdAt: 1,
+    }
+    await db.insert(storyEntries).values(entry)
+    await db
+      .insert(happenings)
+      .values({ id: 'hap_s', branchId: 'b1', title: 'Swept', createdAt: 1, updatedAt: 1 })
+    const swept: Delta = {
+      id: 'd_s',
+      branchId: 'b1',
+      actionId: 'act_pass',
+      op: 'create',
+      targetTable: 'happenings',
+      targetId: 'hap_s',
+      entryId: null,
+      source: 'periodic_classifier',
+      undoPayload: null,
+      logPosition: 1,
+      encodingVersion: 1,
+      createdAt: 1,
+    }
+    await db.insert(deltas).values(swept)
+    const edit: Delta = {
+      ...swept,
+      id: 'd_e',
+      actionId: 'act_edit',
+      op: 'update',
+      targetTable: 'story_entries',
+      targetId: 'e1',
+      source: 'user_edit',
+      undoPayload: { content: 'before' },
+      logPosition: 2,
+    }
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target: [], sweep: [swept] })
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const held = withKeyLock(rowLock('happenings')({ branchId: 'b1' }), () => gate)
+
+    const redo = applyRedo([{ delta: edit, rowBeforeUndo: { ...entry, content: 'after' } }], ctx, {
+      set,
+      extraOps: [],
+    })
+    // The test db settles in microtasks, so an unlocked redo has committed by the next task.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(await db.select().from(happenings)).toHaveLength(1)
+    const [waiting] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'e1'))
+    expect(waiting.content).toBe('before')
+
+    release()
+    await Promise.all([held, redo])
+    expect(await db.select().from(happenings)).toEqual([])
+    const [redone] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'e1'))
+    expect(redone.content).toBe('after')
   })
 })

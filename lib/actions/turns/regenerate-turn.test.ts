@@ -2,7 +2,18 @@ import { and, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { branches, deltas, happenings, storyEntries, type Delta, type StoryEntry } from '@/lib/db'
+import {
+  branches,
+  characterRelationships,
+  deltas,
+  entities,
+  happeningInvolvements,
+  happenings,
+  storyEntries,
+  type Delta,
+  type StoryEntry,
+} from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { PER_TURN_KIND } from '@/lib/pipeline'
 import {
   awaitRunTerminal,
@@ -17,8 +28,15 @@ import { branchEntries, openStory, sseFetch, WORKING_CONFIG } from './__tests__/
 import { regenerateTurn } from './regenerate-turn'
 import { submitTurn } from './submit-turn'
 import { expectRan, makeHarness, resetSingletons } from '../../pipeline/__tests__/harness'
-import { DeltaReplayError, type reverseAndPruneDeltaRows } from '../delta/reverse-replay'
+import { applyDeltaAction } from '../delta/apply-delta-action'
+import {
+  DeltaReplayError,
+  ReversalIntegrityError,
+  type reverseAndPruneDeltaRows,
+} from '../delta/reverse-replay'
+import { updateStoryEntryContent } from '../story-entries/operational'
 import { undoLastAction } from '../story-entries/undo'
+import type { PipelineAction } from '../types'
 
 vi.mock('@/lib/retrieval', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
@@ -30,11 +48,8 @@ vi.mock('../embedder-swap/engine', async (importOriginal) => {
   return { ...actual, startSwap: vi.fn(async () => 'completed' as const) }
 })
 
-// A seam into an individual sweep from inside the real regenerateTurn control
-// flow — the only way to observe sweep ordering, or to fail one sweep and not
-// the other, without reimplementing the action. `rows` identifies which sweep
-// is running; abortRun's unwind goes through reverseReplayDeltas, a different
-// export, so it never reaches this one.
+// Seam into one sweep inside the real regenerateTurn flow, to observe sweep order or fail one sweep
+// only. `set.rows` identifies the sweep; abortRun's unwind (reverseReplayDeltas) bypasses it.
 const sweepHook = vi.hoisted(() => ({
   onSweep: null as ((rows: readonly { id: string }[]) => void) | null,
 }))
@@ -55,9 +70,9 @@ vi.mock('../delta/reverse-replay', async (importOriginal) => {
   const actual = await importOriginal<
     Record<string, unknown> & { reverseAndPruneDeltaRows: typeof reverseAndPruneDeltaRows }
   >()
-  const hooked: typeof reverseAndPruneDeltaRows = (rows, ctx, extraOps) => {
-    sweepHook.onSweep?.(rows)
-    return actual.reverseAndPruneDeltaRows(rows, ctx, extraOps)
+  const hooked: typeof reverseAndPruneDeltaRows = (set, ctx, options, extraOps) => {
+    sweepHook.onSweep?.(set.rows)
+    return actual.reverseAndPruneDeltaRows(set, ctx, options, extraOps)
   }
   return { ...actual, reverseAndPruneDeltaRows: hooked }
 })
@@ -657,5 +672,137 @@ describe('regenerateTurn', () => {
 
     await expect(regen).rejects.toThrow('unknown target_table lore')
     expect(attempted).toEqual([false, true])
+  })
+  it('reports sweep-refused when the closure refuses the sweep, destroying nothing', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    // Only a writer outside the log makes this row (generation-pipeline.md → Reverse-replay).
+    await ctx.db
+      .insert(happeningInvolvements)
+      .values({ id: 'hinv_raw', branchId: 'b1', happeningId: 'h_b', entityId: 'char_k' })
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    undoRedoStore.pushRedoGroup([])
+    const before = await ctx.db.select().from(deltas)
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+
+    expect(regen).toEqual({
+      status: 'rejected',
+      code: 'sweep-refused',
+      reason: expect.stringContaining('no-create'),
+    })
+    expect(entriesStore.getById('e_r2')).toBeDefined()
+    expect(await ctx.db.select().from(deltas)).toEqual(before)
+    expect(undoRedoStore.hasRedo()).toBe(true)
+  })
+
+  it('reports sweep-refused when the reversal refuses at commit', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    undoRedoStore.pushRedoGroup([])
+    const before = await ctx.db.select().from(deltas)
+    const error = vi.spyOn(logger, 'error')
+
+    const regen = await withSweepHook(
+      () => {
+        throw new ReversalIntegrityError(
+          'write-back',
+          'happenings:h_b is named by delta d_x',
+          'act_t2',
+        )
+      },
+      () => regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx),
+    )
+
+    expect(regen).toEqual({
+      status: 'rejected',
+      code: 'sweep-refused',
+      reason: expect.stringContaining('write-back'),
+    })
+    expect(entriesStore.getById('e_r2')).toBeDefined()
+    expect(await ctx.db.select().from(deltas)).toEqual(before)
+    expect(undoRedoStore.hasRedo()).toBe(true)
+    expect(error).toHaveBeenCalledWith(
+      'action_layer.reversal_refused',
+      expect.objectContaining({ branchId: 'b1', refusal: 'write-back' }),
+    )
+    error.mockRestore()
+  })
+
+  // Built like reverse-replay-user-writes.test.ts's rollback of a re-owned create: the sweep
+  // leaves the pair absent and prunes its create below the window, as CTRL-Z would refuse to.
+  it("prunes a swept pair's re-owned create below the window", async () => {
+    const { ctx, db } = await makeHarness()
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    const apply = async (action: PipelineAction, actionId: string, entryId?: string) => {
+      const result = await applyDeltaAction({ action, actionId, branchId: 'b1', entryId }, ctx)
+      if (result.status !== 'ok') throw new Error(`${actionId}: ${JSON.stringify(result)}`)
+    }
+    const character = (id: string, name: string) => ({
+      id,
+      branchId: 'b1',
+      kind: 'character' as const,
+      name,
+      status: 'active' as const,
+      injectionMode: 'auto' as const,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    const pair = { branchId: 'b1', subjectId: 'char_kael', objectId: 'char_mira' }
+    const turnEntry = (id: string, position: number, kind: 'user_action' | 'ai_reply') =>
+      ({
+        kind: 'createStoryEntry',
+        source: 'user_edit',
+        payload: { entry: ENTRY(id, position, kind, `${id} prose`) },
+      }) as PipelineAction
+    await db.insert(storyEntries).values(ENTRY('e_opening', 1, 'opening', 'once upon a time'))
+    await db.insert(entities).values(character('char_mira', 'Mira'))
+    await apply(
+      {
+        kind: 'createEntity',
+        source: 'user_edit',
+        payload: { entry: character('char_kael', 'Kael') },
+      },
+      'act_0',
+    )
+    await apply(turnEntry('e_u1', 2, 'user_action'), 'act_e1')
+    await apply(
+      {
+        kind: 'upsertCharacterRelationship',
+        source: 'periodic_classifier',
+        payload: { ...pair, kind: 'ally', proseEntryId: 'e_u1' },
+      },
+      'act_c',
+      'e_u1',
+    )
+    await apply(turnEntry('e_r1', 3, 'ai_reply'), 'act_e2')
+    await apply(
+      {
+        kind: 'upsertCharacterRelationship',
+        source: 'user_edit',
+        payload: { ...pair, kind: 'ally', inverseKind: 'wary' },
+      },
+      'act_u',
+    )
+    entriesStore.hydrate('b1', await db.select().from(storyEntries))
+    expect(await updateStoryEntryContent('b1', 'e_u1', 'rewritten', ctx)).toEqual({
+      status: 'ok',
+    })
+    const pairDeltas = () =>
+      db.select().from(deltas).where(eq(deltas.targetTable, 'character_relationships'))
+    expect(await pairDeltas()).toEqual([
+      expect.objectContaining({ op: 'create', actionId: 'act_u' }),
+      expect.objectContaining({ op: 'update', actionId: 'act_u' }),
+    ])
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r1', ctx)
+
+    expect(regen.status).toBe('ran')
+    expect(await db.select().from(characterRelationships)).toEqual([])
+    expect(await pairDeltas()).toEqual([])
   })
 })

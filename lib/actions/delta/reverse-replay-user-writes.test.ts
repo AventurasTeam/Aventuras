@@ -19,14 +19,16 @@ import {
   undoRedoStore,
 } from '@/lib/stores'
 
+import { reverseRows } from './__tests__/reverse-rows'
 import { applyDeltaAction } from './apply-delta-action'
 import {
   buildReverseAndPrunePlan,
   reverseAndPruneDeltaRows,
   reverseReplayDeltas,
 } from './reverse-replay'
+import { selectReversalSet } from './row-closure'
 import { USER_EDITED_SINCE_PROSE } from './user-precedence'
-import { updateStoryEntryContent } from '../story-entries/operational'
+import { rollbackToEntry, updateStoryEntryContent } from '../story-entries/operational'
 import { redoLastAction, undoLastAction } from '../story-entries/undo'
 import type { PipelineAction } from '../types'
 
@@ -183,7 +185,7 @@ describe('reversing a machine write under a later user write', () => {
     await apply(ctx, promote, 'act_c')
     await apply(ctx, userPatch({ status: 'retired', retiredReason: 'exiled' }), 'act_u')
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     expect(await kael(db)).toMatchObject({ status: 'retired', retiredReason: 'exiled' })
     expect(entitiesStore.getById('char_kael')).toMatchObject({ status: 'retired' })
@@ -196,7 +198,7 @@ describe('reversing a machine write under a later user write', () => {
     await apply(ctx, append(['the wanderer']), 'act_c')
     await apply(ctx, userPatch({ keywords: ['the knight', 'the wanderer', 'ser kael'] }), 'act_u')
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     expect((await kael(db)).keywords).toEqual(['the knight', 'the wanderer', 'ser kael'])
     expect(await actionIds(db)).toEqual(['act_0', 'act_u'])
@@ -209,7 +211,7 @@ describe('reversing a machine write under a later user write', () => {
     await apply(ctx, classifyView('ally'), 'act_c')
     await apply(ctx, userViews('rival', 'friend'), 'act_u')
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     const [row] = await pair(db)
     expect(row).toMatchObject({ kind: 'rival', inverseKind: 'friend' })
@@ -222,7 +224,7 @@ describe('reversing a machine write under a later user write', () => {
     await apply(ctx, retire, 'act_c')
     await apply(ctx, userPatch({ status: 'active' }), 'act_u')
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     expect(await kael(db)).toMatchObject({ status: 'active', retiredReason: null })
   })
@@ -233,7 +235,7 @@ describe('reversing a machine write under a later user write', () => {
     await apply(ctx, retire, 'act_c')
     await apply(ctx, userPatch({ description: 'a knight errant' }), 'act_u')
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     expect(await kael(db)).toMatchObject({
       status: 'active',
@@ -250,7 +252,7 @@ describe('reversing a machine write under a later user write', () => {
     await apply(ctx, userViews('rival', 'friend'), 'act_u')
 
     const rows = [...(await deltasOf(db, 'act_u')), ...(await deltasOf(db, 'act_c'))]
-    await reverseAndPruneDeltaRows(rows, ctx)
+    await reverseRows(rows, ctx)
 
     expect((await pair(db))[0].kind).toBe('friend')
   })
@@ -264,7 +266,7 @@ describe('reversing a machine write under a later user write', () => {
     await apply(ctx, classifyView('enemy'), 'act_c2')
 
     const rows = [...(await deltasOf(db, 'act_c2')), ...(await deltasOf(db, 'act_c1'))]
-    await reverseAndPruneDeltaRows(rows, ctx)
+    await reverseRows(rows, ctx)
 
     expect((await pair(db))[0].kind).toBe('rival')
   })
@@ -289,7 +291,7 @@ describe('reversing a machine write under a later user write', () => {
     )
     await apply(ctx, userPatch({ status: 'retired' }), 'act_u')
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     expect((await kael(db)).status).toBe('retired')
     const [mira] = await db.select().from(entities).where(eq(entities.id, 'char_mira'))
@@ -303,7 +305,7 @@ describe('reversing a machine write under a later user write', () => {
     await apply(ctx, classifyView('ally'), 'act_c1')
     await apply(ctx, classifyView('enemy'), 'act_c2')
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c1'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c1'), ctx)
 
     expect((await pair(db))[0].kind).toBe('friend')
   })
@@ -331,7 +333,7 @@ describe('reversing a machine write under a later user write', () => {
     const edited = { ...state, visual: { attire: 'plate armor' }, traits: ['brave', 'stubborn'] }
     await apply(ctx, userPatch({ state: edited }), 'act_u')
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     expect((await kael(db)).state).toMatchObject({
       visual: { attire: 'travel cloak' },
@@ -360,11 +362,13 @@ describe('reversing a machine view update', () => {
     await apply(ctx, classifyMiraView('wary'), 'act_c')
     await apply(ctx, userViews(null, 'wary'), 'act_u')
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     expect(await pair(db)).toHaveLength(0)
     expect(characterRelationshipsStore.getById(created.id)).toBeUndefined()
-    expect(await actionIds(db)).toEqual(['act_0', 'act_u'])
+    // The user's writes to the pair go with it, so no CTRL-Z lands on a group naming it.
+    expect(await actionIds(db)).toEqual([])
+    expect(await undoAfterReversal(ctx)).toMatchObject({ code: 'nothing-to-apply' })
   })
 
   // The classifier never clears a view today, but the upsert handler accepts a null one.
@@ -393,10 +397,19 @@ describe('reversing a machine view update', () => {
       'act_x',
     )
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    const set = await selectReversalSet(ctx, {
+      branchId: 'b1',
+      target: await deltasOf(db, 'act_c'),
+    })
+    // The pair ends present, so act_0's create and act_x's update stay in the log.
+    expect(
+      (await buildReverseAndPrunePlan(set, ctx, { keepRedoExact: false })).pruneOps,
+    ).toHaveLength(set.rows.length)
+    await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: false })
 
     const [row] = await pair(db)
     expect(row).toEqual({ ...created, kind: null, inverseKind: 'friend' })
+    expect(await actionIds(db)).toEqual(['act_0', 'act_x'])
     expect(characterRelationshipsStore.getById(row.id)).toEqual(row)
   })
 
@@ -417,7 +430,7 @@ describe('reversing a machine view update', () => {
       'act_u',
     )
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     expect(await pair(db)).toHaveLength(0)
   })
@@ -448,7 +461,7 @@ describe('reversing a machine view update', () => {
       createdAt: logPosition,
     })
 
-    await reverseAndPruneDeltaRows(
+    await reverseRows(
       [
         delta('d_create', 30, 'create', null),
         delta('d_kael', 20, 'update', { kind: null }),
@@ -460,13 +473,97 @@ describe('reversing a machine view update', () => {
     expect(await pair(db)).toHaveLength(0)
   })
 
+  // Out of order only after a redo; the user's view edit outside the set keeps the closure off
+  // the pair, so the create arm deletes it and the older delete's undo puts it back.
+  describe('a pair the plan deletes and an older undo restores', () => {
+    const raw = (
+      id: string,
+      logPosition: number,
+      over: Partial<Delta> & Pick<Delta, 'op' | 'targetTable' | 'targetId'>,
+    ): Delta => ({
+      id,
+      branchId: 'b1',
+      entryId: null,
+      actionId: 'act_synthetic',
+      logPosition,
+      source: 'periodic_classifier',
+      undoPayload: null,
+      encodingVersion: 1,
+      createdAt: logPosition,
+      ...over,
+    })
+    const relRow = {
+      id: 'rel_1',
+      branchId: 'b1',
+      aId: 'char_kael',
+      bId: 'char_mira',
+      kind: null,
+      inverseKind: 'friend',
+      createdAt: 1,
+      updatedAt: 1,
+    }
+    const onPair = { targetTable: 'character_relationships', targetId: 'rel_1' } as const
+    // Logged above the create, outside the set: it wrote `kind`, which is null again now.
+    const userView = raw('d_user', 40, {
+      ...onPair,
+      op: 'update',
+      source: 'user_edit',
+      actionId: 'act_u',
+      undoPayload: { kind: null },
+    })
+
+    async function expectNoStrandedPrunes(ctx: Ctx, db: Db, target: Delta[]) {
+      await db.insert(deltas).values([...target, userView])
+      const set = await selectReversalSet(ctx, { branchId: 'b1', target })
+      expect(set.rows.map((d) => d.id)).not.toContain('d_user')
+      expect(
+        (await buildReverseAndPrunePlan(set, ctx, { keepRedoExact: false })).pruneOps,
+      ).toHaveLength(set.rows.length)
+      await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: false })
+      expect(await pair(db)).toEqual([expect.objectContaining({ id: 'rel_1' })])
+      expect(await actionIds(db)).toEqual(['act_u'])
+    }
+
+    it("keeps the writes of a pair its own delete's undo restores", async () => {
+      const { db, ctx } = await setup()
+      await seedChars(db)
+      await expectNoStrandedPrunes(ctx, db, [
+        raw('d_create', 30, { ...onPair, op: 'create' }),
+        raw('d_delete', 20, { ...onPair, op: 'delete', undoPayload: relRow }),
+      ])
+    })
+
+    it('keeps the writes of a pair an entity delete restores as a captured child', async () => {
+      const { db, ctx } = await setup()
+      await db.insert(entities).values({ ...KAEL, id: 'char_mira', name: 'Mira' })
+      const [kaelRow] = await db.insert(entities).values(KAEL).returning()
+      await db.delete(entities).where(eq(entities.id, 'char_kael'))
+      await expectNoStrandedPrunes(ctx, db, [
+        raw('d_create', 30, { ...onPair, op: 'create' }),
+        raw('d_delete', 20, {
+          op: 'delete',
+          targetTable: 'entities',
+          targetId: 'char_kael',
+          source: 'user_edit',
+          undoPayload: {
+            ...kaelRow,
+            relationships: [relRow],
+            involvements: [],
+            awareness: [],
+            translations: [],
+          },
+        }),
+      ])
+    })
+  })
+
   it('updates a pair the reversal leaves with a view', async () => {
     const { db, ctx } = await setup()
     await seedChars(db)
     await apply(ctx, userViews('ally', null), 'act_0')
     await apply(ctx, classifyMiraView('wary'), 'act_c')
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     const [row] = await pair(db)
     expect(row).toMatchObject({ kind: 'ally', inverseKind: null })
@@ -481,12 +578,13 @@ describe('reversing a machine create of a relationship', () => {
     await apply(ctx, classifyView('ally'), 'act_c')
     await apply(ctx, userViews('ally', 'wary'), 'act_u')
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     const [row] = await pair(db)
     expect(row).toMatchObject({ kind: null, inverseKind: 'wary' })
     expect(characterRelationshipsStore.getById(row.id)).toEqual(row)
-    expect(await actionIds(db)).toEqual(['act_u'])
+    // The kept create goes to the user write that kept the row, not out of the log.
+    expect(await actionIds(db)).toEqual(['act_u', 'act_u'])
   })
 
   it('leaves the pair as the user left it when the user wrote both views', async () => {
@@ -495,11 +593,15 @@ describe('reversing a machine create of a relationship', () => {
     await apply(ctx, classifyView('ally'), 'act_c')
     await apply(ctx, userViews('rival', 'wary'), 'act_u')
 
-    const plan = await buildReverseAndPrunePlan(await deltasOf(db, 'act_c'), ctx)
+    const plan = await buildReverseAndPrunePlan(
+      await selectReversalSet(ctx, { branchId: 'b1', target: await deltasOf(db, 'act_c') }),
+      ctx,
+      { keepRedoExact: false },
+    )
     expect(plan.ops).toEqual([])
     expect(plan.pruneOps).toHaveLength(1)
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
     expect((await pair(db))[0]).toMatchObject({ kind: 'rival', inverseKind: 'wary' })
   })
 
@@ -510,9 +612,11 @@ describe('reversing a machine create of a relationship', () => {
     await apply(ctx, userViews('ally', 'wary'), 'act_u1')
     await apply(ctx, userViews('ally', null), 'act_u2')
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     expect(await pair(db)).toHaveLength(0)
+    expect(await relationshipDeltas(db)).toEqual([])
+    expect(await undoAfterReversal(ctx)).toMatchObject({ code: 'nothing-to-apply' })
   })
 
   it('deletes the pair when no user edit followed', async () => {
@@ -521,7 +625,7 @@ describe('reversing a machine create of a relationship', () => {
     await apply(ctx, classifyView('ally'), 'act_c')
     const [created] = await pair(db)
 
-    await reverseAndPruneDeltaRows(await deltasOf(db, 'act_c'), ctx)
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     expect(await pair(db)).toHaveLength(0)
     expect(characterRelationshipsStore.getById(created.id)).toBeUndefined()
@@ -570,6 +674,170 @@ describe('a prose edit under a later user write', () => {
     )
     expect(rederived).toEqual({ status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' })
     expect((await pair(db))[0].kind).toBe('rival')
+  })
+})
+
+const entryAction = (id: string, position: number, kind: 'user_action' | 'ai_reply') => ({
+  kind: 'createStoryEntry' as const,
+  source: 'user_edit' as const,
+  payload: {
+    entry: { id, branchId: 'b1', position, kind, content: `${id} prose`, createdAt: position },
+  },
+})
+
+const fromReply: PipelineAction = {
+  kind: 'upsertCharacterRelationship',
+  source: 'periodic_classifier',
+  payload: {
+    branchId: 'b1',
+    subjectId: 'char_kael',
+    objectId: 'char_mira',
+    kind: 'ally',
+    proseEntryId: 'e_reply',
+  },
+}
+
+async function relationshipCreates(db: Db): Promise<Delta[]> {
+  return (await db
+    .select()
+    .from(deltas)
+    .where(
+      and(eq(deltas.targetTable, 'character_relationships'), eq(deltas.op, 'create')),
+    )) as Delta[]
+}
+
+async function relationshipDeltas(db: Db): Promise<Delta[]> {
+  return (await db
+    .select()
+    .from(deltas)
+    .where(eq(deltas.targetTable, 'character_relationships'))) as Delta[]
+}
+
+function undoAfterReversal(ctx: Ctx) {
+  entriesStore.hydrate('b1', [])
+  undoRedoStore.clear()
+  return undoLastAction('b1', ctx)
+}
+
+describe('a kept create goes to the user write that kept its row', () => {
+  // The prose edit sweeps the pass's create but keeps the row for the user's view.
+  async function sweptUnderUserView(ctx: Ctx, db: Db, view: PipelineAction) {
+    await createKael(ctx)
+    await db.insert(entities).values({ ...KAEL, id: 'char_mira', name: 'Mira' })
+    await apply(ctx, entryAction('e_action', 1, 'user_action'), 'act_e1')
+    await apply(ctx, entryAction('e_reply', 2, 'ai_reply'), 'act_e2')
+    await apply(ctx, fromReply, 'act_c', 'e_reply')
+    await apply(ctx, view, 'act_u')
+    expect(await updateStoryEntryContent('b1', 'e_action', 'rewritten', ctx)).toEqual({
+      status: 'ok',
+    })
+  }
+
+  it('re-owns the create a prose edit keeps, so removing a character it names closes', async () => {
+    const { db, ctx } = await setup()
+    await sweptUnderUserView(ctx, db, userViews('ally', 'wary'))
+
+    const [created] = await relationshipCreates(db)
+    expect(created).toMatchObject({ source: 'user_edit', entryId: null, actionId: 'act_u' })
+
+    expect(await reverseReplayDeltas('act_0', ctx)).toBe(3)
+    expect(await pair(db)).toEqual([])
+    expect(await relationshipDeltas(db)).toEqual([])
+  })
+
+  it("removes the row on CTRL-Z of the user's view edit, which it exists only through", async () => {
+    const { db, ctx } = await setup()
+    // Overwrites the pass's view too, so the edit's undo alone would put the pass's fact back.
+    await sweptUnderUserView(ctx, db, userViews('rival', 'wary'))
+    entriesStore.hydrate('b1', [])
+    undoRedoStore.clear()
+
+    expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+    expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+
+    expect(await pair(db)).toEqual([])
+    expect(await relationshipDeltas(db)).toEqual([])
+  })
+
+  // generation-pipeline.md → Reverse-replay: a relationship reached by reference goes whatever
+  // views the user set, even when its own create, in the same set, would have kept it.
+  it('removes a kept pair with the character the same pass created', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values(KAEL)
+    await apply(
+      ctx,
+      {
+        kind: 'createEntity',
+        source: 'periodic_classifier',
+        payload: { entry: { ...KAEL, id: 'char_mira', name: 'Mira' } },
+      },
+      'act_pass',
+    )
+    await apply(ctx, classifyView('ally'), 'act_pass')
+    await apply(ctx, userViews('ally', 'wary'), 'act_u')
+
+    // The closure took the pair's writes, so pruning the absent pair's log adds none twice.
+    const set = await selectReversalSet(ctx, {
+      branchId: 'b1',
+      target: await deltasOf(db, 'act_pass'),
+    })
+    expect(
+      (await buildReverseAndPrunePlan(set, ctx, { keepRedoExact: false })).pruneOps,
+    ).toHaveLength(set.rows.length)
+
+    expect(await reverseReplayDeltas('act_pass', ctx)).toBe(3)
+
+    expect(await db.select().from(entities).where(eq(entities.id, 'char_mira'))).toEqual([])
+    expect(await pair(db)).toEqual([])
+    expect(await relationshipDeltas(db)).toEqual([])
+  })
+
+  it('gives the create to the older of two user writes that kept the row', async () => {
+    const { db, ctx } = await setup()
+    await seedChars(db)
+    await apply(ctx, classifyView('ally'), 'act_c')
+    await apply(ctx, userViews('ally', 'wary'), 'act_u1')
+    await apply(ctx, userViews('rival', 'wary'), 'act_u2')
+
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
+
+    const [created] = await relationshipCreates(db)
+    expect(created).toMatchObject({ source: 'user_edit', entryId: null, actionId: 'act_u1' })
+  })
+
+  it('prunes the re-owned create once a rollback sweeps the view that kept its row', async () => {
+    const { db, ctx } = await setup()
+    await createKael(ctx)
+    await db.insert(entities).values({ ...KAEL, id: 'char_mira', name: 'Mira' })
+    await apply(ctx, entryAction('e_action', 1, 'user_action'), 'act_e1')
+    const fromAction: PipelineAction = {
+      kind: 'upsertCharacterRelationship',
+      source: 'periodic_classifier',
+      payload: {
+        branchId: 'b1',
+        subjectId: 'char_kael',
+        objectId: 'char_mira',
+        kind: 'ally',
+        proseEntryId: 'e_action',
+      },
+    }
+    await apply(ctx, fromAction, 'act_c', 'e_action')
+    await apply(ctx, entryAction('e_reply', 2, 'ai_reply'), 'act_e2')
+    await apply(ctx, userViews('ally', 'wary'), 'act_u')
+    expect(await updateStoryEntryContent('b1', 'e_action', 'rewritten', ctx)).toEqual({
+      status: 'ok',
+    })
+    // Re-owned below the reply's create, so the rollback's window misses it.
+    expect(await relationshipCreates(db)).toEqual([expect.objectContaining({ actionId: 'act_u' })])
+
+    expect((await rollbackToEntry('b1', 'e_reply', ctx)).status).toBe('ok')
+
+    expect(await pair(db)).toEqual([])
+    expect(await relationshipDeltas(db)).toEqual([])
+    // CTRL-Z reaches the prose edit, then the turn, never a group naming only the gone pair.
+    expect(await undoAfterReversal(ctx)).toEqual({ status: 'ok' })
+    expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+    expect(await actionIds(db)).toEqual(['act_0'])
   })
 })
 

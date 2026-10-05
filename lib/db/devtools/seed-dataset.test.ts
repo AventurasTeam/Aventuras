@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
+import { getRollbackCounts } from '@/lib/actions'
+import { REF_COLUMNS, rowRefs } from '@/lib/actions/delta/live-refs'
+import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { ID_PATTERN, IdBiMap, SUBSTITUTABLE_PREFIXES } from '@/lib/ids'
 import { detectRichEntryHtml, parseMarkdownToHtml } from '@/lib/markdown'
 
@@ -192,6 +195,115 @@ describe('seed id substitution contract', () => {
       if (state?.faction_id) expect(entityIds, `${e.id}.faction_id`).toContain(state.faction_id)
       if (state?.current_location_id)
         expect(entityIds, `${e.id}.current_location_id`).toContain(state.current_location_id)
+    }
+  })
+})
+
+// A link row with no create delta of its own makes any rollback that removes its parent refuse
+// `no-create` (generation-pipeline.md → Reverse-replay), so the seeded stories could not roll back.
+describe('seeded rollback', () => {
+  const BATCH = 100
+
+  async function seededDb() {
+    const handle = await createTestDb()
+    for (const { table, rows } of buildSeedSteps())
+      for (let i = 0; i < rows.length; i += BATCH)
+        await handle.db.insert(table).values(rows.slice(i, i + BATCH) as never)
+    return handle
+  }
+
+  // A writer outside the log names only rows it made itself, so a reversal removing a logged row
+  // never meets a referrer it cannot reverse (generation-pipeline.md → Reverse-replay).
+  it('names a logged row only from rows whose create is logged too', () => {
+    const logged = new Set(
+      (
+        rowsOf('deltas') as {
+          branchId: string
+          targetTable: string
+          targetId: string
+          op: string
+        }[]
+      )
+        .filter((d) => d.op === 'create')
+        .map((d) => `${d.branchId}:${d.targetTable}:${d.targetId}`),
+    )
+    for (const table of Object.keys(REF_COLUMNS)) {
+      for (const row of rowsOf(table)) {
+        if (logged.has(`${row.branchId as string}:${table}:${row.id as string}`)) continue
+        for (const ref of rowRefs(table, row))
+          expect(logged, `${table} ${row.id as string}`).not.toContain(
+            `${row.branchId as string}:${ref.table}:${ref.id}`,
+          )
+      }
+    }
+  })
+
+  // CTRL-Z undoes the newest action, so a split action would be undone in two halves.
+  it('logs the hero happening fire as one contiguous action', () => {
+    const fire = (rowsOf('deltas') as { branchId: string; actionId: string; logPosition: number }[])
+      .filter((r) => r.branchId === 'br_hero_main' && r.actionId === 'act_class_1')
+      .map((r) => r.logPosition)
+      .sort((a, b) => a - b)
+
+    expect(fire).toHaveLength(4)
+    expect(fire[fire.length - 1]! - fire[0]!).toBe(fire.length - 1)
+  })
+
+  // CTRL-Z skips only periodic passes; a link create logged apart from its happening undoes alone.
+  it('logs each machine link create with its happening unless a periodic pass wrote it', () => {
+    type DeltaRow = {
+      branchId: string
+      actionId: string
+      source: string
+      targetTable: string
+      targetId: string
+      op: string
+    }
+    const rows = rowsOf('deltas') as DeltaRow[]
+    const key = (branchId: unknown, id: unknown) => `${branchId as string}:${id as string}`
+    const happeningAction = new Map(
+      rows
+        .filter((d) => d.targetTable === 'happenings' && d.op === 'create')
+        .map((d) => [key(d.branchId, d.targetId), d.actionId]),
+    )
+    const linkHappening = new Map(
+      ['happening_awareness', 'happening_involvements'].flatMap((table) =>
+        rowsOf(table).map((r) => [`${table}:${key(r.branchId, r.id)}`, r.happeningId]),
+      ),
+    )
+
+    const machineLinks = rows.filter(
+      (d) =>
+        d.op === 'create' &&
+        linkHappening.has(`${d.targetTable}:${key(d.branchId, d.targetId)}`) &&
+        d.source !== 'user_edit' &&
+        d.source !== 'periodic_classifier',
+    )
+    expect(machineLinks.length).toBeGreaterThan(0)
+    for (const d of machineLinks) {
+      const happeningId = linkHappening.get(`${d.targetTable}:${key(d.branchId, d.targetId)}`)
+      expect(d.actionId, `${d.targetTable} ${d.targetId}`).toBe(
+        happeningAction.get(key(d.branchId, happeningId)),
+      )
+    }
+  })
+
+  // Every seeded branch, not just the hero's: hap_fire anchors at entry 22 and its links at 22 and
+  // 25, so the hero's earlier rollbacks sweep them and the later ones spare them.
+  it('previews a rollback to every seeded entry above the opening', async () => {
+    const { db, runInTransaction } = await seededDb()
+    const entries = (
+      rowsOf('story_entries') as { id: string; branchId: string; kind: string; position: number }[]
+    ).filter((r) => r.kind !== 'opening')
+    expect(entries.length).toBeGreaterThan(100)
+
+    for (const entry of entries) {
+      const counts = await getRollbackCounts(entry.branchId, entry.id, { db, runInTransaction })
+      expect(counts, `${entry.branchId} entry ${entry.position}`).toEqual({
+        entries: expect.any(Number),
+        chapters: expect.any(Number),
+        worldStateChanges: expect.any(Number),
+      })
     }
   })
 })

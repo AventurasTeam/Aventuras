@@ -7,15 +7,20 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { happeningAwarenessStore } from '@/lib/stores'
 
 import { registerHappeningAwareness } from './register-awareness'
+import { registerHappenings } from './register-happenings'
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { __resetRegistry } from '../delta/registry'
 import { reverseReplayDeltas } from '../delta/reverse-replay'
+import { registerEntities } from '../entities/register'
 
 const BRANCH = 'br_1'
 const OTHER_BRANCH = 'br_2'
 
 async function setup(rows: HappeningAwareness[] = []) {
   __resetRegistry()
+  // missingRef resolves the awareness row's happening and character through the registry.
+  registerEntities()
+  registerHappenings()
   registerHappeningAwareness()
   const { db, runInTransaction } = await createTestDb()
   await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })

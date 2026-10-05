@@ -21,6 +21,8 @@ import type {
 import {
   applyDeltaAction,
   describeReplayError,
+  holdWritePhase,
+  releaseWritePhase,
   reverseReplayDeltas,
   settleUserWrites,
 } from './action-port'
@@ -115,8 +117,27 @@ async function beginRun(run: RunState, ctx: RunCtx): Promise<void> {
   })
 }
 
+// generation-pipeline.md → No-gate write phase: the hold ends when the run settles. A run
+// that never wrote holds nothing, so the release does nothing.
+function endWritePhase(run: RunState): void {
+  if (run.gateBehavior === 'no-gate') releaseWritePhase(run.branchId, run.actionId)
+}
+
 async function handleEvent(event: PhaseEmittedEvent, run: RunState, ctx: RunCtx): Promise<void> {
   if (event.type === 'delta_emitted') {
+    // Promise.all rejects without waiting for sibling branches, so one can emit after the run
+    // left txState. The release sits right behind that removal (freeing any hold taken while
+    // registered); the outcome is already settled, so a late write is dropped, not failed.
+    if (run.gateBehavior === 'no-gate' && !generationStore.getTxState().runs.has(run.runId)) {
+      logger.debug(
+        'pipeline.write_after_run_left',
+        { kind: event.action.kind },
+        { actionId: run.actionId },
+      )
+      return
+    }
+    // The first write takes the lock exclusive; later ones, a parallel branch's too, reuse it.
+    if (run.gateBehavior === 'no-gate') await holdWritePhase(run.branchId, run.actionId)
     let result: MutationResult
     try {
       result = await applyDeltaAction(
@@ -249,6 +270,8 @@ async function commitRun(
   run: RunState,
   ctx: RunCtx,
 ): Promise<{ tx: TxResult; successor?: RunState }> {
+  // Every phase, parallel branches included, has returned: no write of this run is still to come.
+  endWritePhase(run)
   const pipeline = getPipeline(run.kind)
   const nextKind = pipeline.chainsTo?.(run) ?? null
   // chainsTo may name an unregistered kind (authoring bug); resolve it without
@@ -345,6 +368,10 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
     error = { kind: 'orchestrator', detail: `${stage} failed: ${failure.detail}` }
     outcome = 'failed'
     reversalFailed = !failure.committed
+  } finally {
+    // An uncommitted reversal ends it too: recovery owns those writes, and a held lock
+    // would stall every write to the branch until boot.
+    endWritePhase(run)
   }
   // Must run once the rollback has committed: arming a retry over writes still on disk would
   // race it into re-reading them; an uncommitted reversal leaves recovery to own the branch.
@@ -352,6 +379,9 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
   if (cause.reason === 'phase-failure' && cause.threw && !reversalFailed)
     await runPhaseExceptionHook(run, ctx, cause.error)
   generationStore.abortRun(run.runId)
+  // A straggler that wrote while the run was still registered (during the hook) may have taken a
+  // fresh hold since the release above.
+  endWritePhase(run)
   // Uncommitted: the marker rolled back with the reversal, so boot recovery still owns the run.
   if (reversalFailed)
     logger.warn(

@@ -7,8 +7,10 @@ import {
   entities,
   happeningAwareness,
   happeningInvolvements,
+  happenings,
   stories,
   storyEntries,
+  type Delta,
   type NewEntity,
   type VecTargetKind,
 } from '@/lib/db'
@@ -19,9 +21,11 @@ import { applyDeltaAction } from './apply-delta-action'
 import {
   DeltaReplayError,
   describeDeltaReplayError,
+  ReversalIntegrityError,
   reverseAndPruneDeltaRows,
   reverseReplayDeltas,
 } from './reverse-replay'
+import { selectReversalSet } from './row-closure'
 import type { PipelineAction } from '../types'
 
 afterEach(() => {
@@ -436,6 +440,7 @@ describe('describeDeltaReplayError', () => {
     expect(describeDeltaReplayError(error)).toEqual({
       detail: 'Error: store sync boom',
       committed: true,
+      refusal: null,
     })
   })
 
@@ -455,6 +460,7 @@ describe('describeDeltaReplayError', () => {
     expect(describeDeltaReplayError(error)).toEqual({
       detail: 'Error: database is locked',
       committed: false,
+      refusal: null,
     })
   })
 
@@ -468,9 +474,12 @@ describe('reverseAndPruneDeltaRows', () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seed(db)
-    const count = await reverseAndPruneDeltaRows([], ctx, [
-      { sql: `UPDATE branches SET name = ? WHERE id = ?`, params: ['renamed', 'b1'] },
-    ])
+    const count = await reverseAndPruneDeltaRows(
+      await selectReversalSet(ctx, { branchId: 'b1', target: [] }),
+      ctx,
+      { keepRedoExact: false },
+      [{ sql: `UPDATE branches SET name = ? WHERE id = ?`, params: ['renamed', 'b1'] }],
+    )
     expect(count).toBe(0)
     const [branch] = await db.select().from(branches).where(eq(branches.id, 'b1'))
     expect(branch.name).toBe('renamed')
@@ -809,5 +818,82 @@ describe('reverse-replay and embedding_stale', () => {
     // so an ungated flag surfaces only as store/DB drift.
     expect(happeningInvolvementsStore.getById('inv_1')).toEqual(involvements[0])
     expect(happeningAwarenessStore.getById('haw_1')).toEqual(awareness[0])
+  })
+})
+
+describe('reversals take a closed set', () => {
+  it('reverses a later link to a row the set creates, and prunes its delta', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    await db.insert(entities).values(KNIGHT)
+    await apply(
+      ctx,
+      {
+        kind: 'createHappening',
+        source: 'periodic_classifier',
+        payload: {
+          entry: { id: 'hap_p', branchId: 'b1', title: 'Fire', createdAt: 1, updatedAt: 1 },
+        },
+      },
+      'act_pass',
+    )
+    await apply(
+      ctx,
+      {
+        kind: 'createHappeningInvolvement',
+        source: 'user_edit',
+        payload: {
+          entry: { id: 'hinv_u', branchId: 'b1', happeningId: 'hap_p', entityId: 'char_1' },
+        },
+      },
+      'act_user',
+    )
+    const passRows = (await db
+      .select()
+      .from(deltas)
+      .where(eq(deltas.actionId, 'act_pass'))) as Delta[]
+
+    const count = await reverseAndPruneDeltaRows(
+      await selectReversalSet(ctx, { branchId: 'b1', target: passRows }),
+      ctx,
+      { keepRedoExact: false },
+    )
+
+    expect(count).toBe(2)
+    expect(await db.select().from(happenings)).toEqual([])
+    expect(await db.select().from(happeningInvolvements)).toEqual([])
+    expect(await db.select().from(deltas)).toEqual([])
+  })
+
+  it('rethrows an integrity refusal unwrapped and writes nothing', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    await db.insert(entities).values(KNIGHT)
+    await apply(
+      ctx,
+      {
+        kind: 'createHappening',
+        source: 'periodic_classifier',
+        payload: {
+          entry: { id: 'hap_p', branchId: 'b1', title: 'Fire', createdAt: 1, updatedAt: 1 },
+        },
+      },
+      'act_pass',
+    )
+    // Raw insert: a writer outside the log (generation-pipeline.md → Reverse-replay).
+    await db
+      .insert(happeningInvolvements)
+      .values({ id: 'hinv_raw', branchId: 'b1', happeningId: 'hap_p', entityId: 'char_1' })
+
+    const error: unknown = await reverseReplayDeltas('act_pass', ctx).catch((e: unknown) => e)
+
+    expect(error).toBeInstanceOf(ReversalIntegrityError)
+    expect(error).toMatchObject({ refusal: 'no-create', committed: false })
+    expect((error as Error).message).toContain('happening_involvements:hinv_raw')
+    expect(describeDeltaReplayError(error)?.committed).toBe(false)
+    expect(await db.select().from(happenings)).toHaveLength(1)
+    expect(await db.select().from(deltas)).toHaveLength(1)
   })
 })

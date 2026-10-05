@@ -5,8 +5,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { branches, entities, stories, type NewEntity } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
+import { reverseRows } from './__tests__/reverse-rows'
 import { __resetRegistry, register } from './registry'
-import { reverseAndPruneDeltaRows } from './reverse-replay'
 import { registerEntities } from '../entities/register'
 
 // No shipped domain cascades an embeddable table today, so the engine's child arm
@@ -63,7 +63,7 @@ describe('reverse-replay of a cascade whose children are embeddable', () => {
   it('re-dirties embedding_stale on restored child rows', async () => {
     const { db, ctx } = await setup()
 
-    await reverseAndPruneDeltaRows(
+    await reverseRows(
       [
         {
           id: 'delta_1',
@@ -106,7 +106,7 @@ describe('reverse-replay of a create on a domain that registers a delete cascade
     await db.insert(cascadeParents).values({ id: 'p1', branchId: 'b1' })
     await db.insert(entities).values(KNIGHT)
 
-    await reverseAndPruneDeltaRows(
+    await reverseRows(
       [
         {
           id: 'delta_1',

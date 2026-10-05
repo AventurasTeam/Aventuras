@@ -2290,13 +2290,17 @@ and every run the pipeline reverses itself — an aborted or failed run,
 a crash-recovered orphan, a turn refused at admission. Deltas are never
 kept and marked reversed: a kept row would read as the next undo head
 and be re-reversed by a later rollback. A reversed run's only trace is
-its `pipeline_runs.outcome`; a refused admission leaves none. A
-reversal can also change a delta it does not replay: reversing a write
-to a row that a delete still in the log holds applies the undo to that
-delete's `undo_payload` copy, and prunes the delete when the row was
-its target
+its `pipeline_runs.outcome`; a refused admission leaves none. One
+replayed delta stays: a machine `create` whose row a later user write
+keeps is re-owned to the oldest such write, as a `user_edit` with no
+entry. A reversal can also change a delta it does not replay: reversing
+a write to a row that a delete still in the log holds applies the undo
+to that delete's `undo_payload` copy, and prunes the delete when the
+row was its target; and a relationship the reversal leaves absent takes
+its other logged writes with it
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
-Forward writes only ever append; only a reversal prunes or edits.
+Forward writes only ever append; only a reversal prunes or edits, and
+what it edits is a delete's payload or a kept create's owner.
 
 User editing an entry's text does **not** auto-trigger re-classification.
 Text edits are separate from state edits; state stays put unless the user

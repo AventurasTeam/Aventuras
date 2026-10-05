@@ -10,6 +10,7 @@ import { createWorkingSetStore } from '@/lib/stores'
 import { applyDeltaAction } from '../apply-delta-action'
 import { __resetRegistry, register, type ActionHandler, type StorePatcher } from '../registry'
 import { reverseAndPruneDeltaRows, reverseReplayDeltas } from '../reverse-replay'
+import { selectReversalSet } from '../row-closure'
 
 // Throwaway domain — raw SQL only; never in the real schema/migrations.
 const fixtures = sqliteTable('fixtures', {
@@ -269,7 +270,13 @@ describe('fixture domain self-registration + roundtrip (AC5)', () => {
     )
 
     const rows = (await db.select().from(deltas).where(eq(deltas.actionId, 'act_prune'))) as Delta[]
-    await expect(reverseAndPruneDeltaRows(rows, ctx)).rejects.toMatchObject({
+    await expect(
+      reverseAndPruneDeltaRows(
+        await selectReversalSet(ctx, { branchId: 'b1', target: rows }),
+        ctx,
+        { keepRedoExact: false },
+      ),
+    ).rejects.toMatchObject({
       name: 'DeltaReplayError',
       message: 'Post-commit patch sync failed',
       committed: true,

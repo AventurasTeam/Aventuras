@@ -16,8 +16,9 @@ import { entriesStore, resetAllStores, undoRedoStore } from '@/lib/stores'
 import { redoLastAction, undoLastAction } from '../story-entries/undo'
 import type { PipelineAction } from '../types'
 import { applyDeltaAction, applyDeltaActionGroup } from './apply-delta-action'
-import { applyRedo, snapshotForRedo } from './redo'
+import { applyRedo, prepareUndo } from './redo'
 import { reverseAndPruneDeltaRows, reverseReplayDeltas } from './reverse-replay'
+import { selectReversalSet } from './row-closure'
 
 type Db = Awaited<ReturnType<typeof createTestDb>>['db']
 type Ctx = {
@@ -330,7 +331,11 @@ describe('a classifier write racing a user Save on one row', () => {
         .select()
         .from(deltas)
         .where(eq(deltas.actionId, actionId))) as Delta[]
-      return reverseAndPruneDeltaRows(rows, ctx)
+      return reverseAndPruneDeltaRows(
+        await selectReversalSet(ctx, { branchId: BRANCH, target: rows }),
+        ctx,
+        { keepRedoExact: false },
+      )
     },
   }
 
@@ -440,7 +445,16 @@ describe('a classifier write racing a user Save on one row', () => {
               ),
             )
           expect(await deltaOf(ctx.db, `k_${round}`), label).toBeUndefined()
-          expect(await deltaOf(ctx.db, `u_${round}`), label).toBeDefined()
+          const user = (await ctx.db
+            .select()
+            .from(deltas)
+            .where(eq(deltas.actionId, `u_${round}`))) as Delta[]
+          // A Save the reversal met keeps the row and takes over the pass's create; one after it
+          // creates the row anew. Its update alone would leave the row with no create in the log.
+          expect([['create'], ['create', 'update']], label).toContainEqual(
+            user.map((d) => d.op).sort(),
+          )
+          expect(new Set(user.map((d) => d.source)), label).toEqual(new Set(['user_edit']))
           expect(row?.inverseKind, label).toBe('wary')
         },
       )
@@ -467,8 +481,9 @@ describe('a classifier write racing a user Save on one row', () => {
           .select()
           .from(deltas)
           .where(eq(deltas.actionId, `u_${round}`))) as Delta[]
-        const snapshot = await snapshotForRedo(rows, ctx)
-        await reverseAndPruneDeltaRows(rows, ctx)
+        const set = await selectReversalSet(ctx, { branchId: BRANCH, target: rows })
+        const { snapshot, reverse } = await prepareUndo(set, ctx)
+        await reverse()
         return {
           classifier: () =>
             classify(

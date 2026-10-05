@@ -1,4 +1,4 @@
-import type { MutationResult, PipelineAction } from '@/lib/actions/types'
+import type { IntegrityRefusal, MutationResult, PipelineAction } from '@/lib/actions/types'
 import type { DbCtx, SqlOp } from '@/lib/db'
 
 export type DeltaActionPort = {
@@ -12,10 +12,16 @@ export type DeltaActionPort = {
     settleOps?: (deltaCount: number) => readonly SqlOp[],
   ) => Promise<number>
   // Undefined for anything but a DeltaReplayError. `committed` means the reversal
-  // landed and only the store sync after it failed.
-  describeReplayError: (e: unknown) => { detail: string; committed: boolean } | undefined
+  // landed and only the store sync after it failed; `refusal` names an integrity refusal.
+  describeReplayError: (
+    e: unknown,
+  ) => { detail: string; committed: boolean; refusal: IntegrityRefusal | null } | undefined
   /** Resolves once every user write dispatched so far has committed or been refused. */
   settleUserWrites: () => Promise<void>
+  /** Takes the branch write lock exclusive for the run; idempotent per actionId, never rejects. */
+  holdWritePhase: (branchId: string, actionId: string) => Promise<void>
+  /** Ends the run's hold (or queued request); does nothing when it has none. */
+  releaseWritePhase: (branchId: string, actionId: string) => void
 }
 
 let port: DeltaActionPort | undefined
@@ -57,4 +63,16 @@ export function describeReplayError(
   e: unknown,
 ): ReturnType<DeltaActionPort['describeReplayError']> {
   return requirePort().describeReplayError(e)
+}
+
+export function holdWritePhase(
+  ...args: Parameters<DeltaActionPort['holdWritePhase']>
+): ReturnType<DeltaActionPort['holdWritePhase']> {
+  return requirePort().holdWritePhase(...args)
+}
+
+export function releaseWritePhase(
+  ...args: Parameters<DeltaActionPort['releaseWritePhase']>
+): ReturnType<DeltaActionPort['releaseWritePhase']> {
+  return requirePort().releaseWritePhase(...args)
 }

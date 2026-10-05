@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { applyDeltaAction, DeltaReplayError, type DbCtx } from '@/lib/actions'
+import { applyDeltaAction, DeltaReplayError, reverseReplayDeltas, type DbCtx } from '@/lib/actions'
 import {
   branches,
   deltas,
@@ -15,6 +15,7 @@ import {
   type Delta,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { logger } from '@/lib/diagnostics'
 import {
   entriesStore,
   generationStore,
@@ -26,8 +27,14 @@ import {
 
 import { isContentEditDelta } from './classifier-facts'
 import { getRollbackCounts, rollbackToEntry, updateStoryEntryContent } from './operational'
+import {
+  __resetBranchWriteLocks,
+  holdBranchWriteExclusive,
+  releaseBranchWriteExclusive,
+} from '../delta/branch-write-lock'
 
 afterEach(() => {
+  __resetBranchWriteLocks()
   entriesStore.__reset()
   generationStore.__reset()
   happeningAwarenessStore.__reset()
@@ -1019,5 +1026,268 @@ describe('updateStoryEntryContent invalidation scope', () => {
       .from(branches)
       .where(eq(branches.id, 'b1'))
     expect(branch.status?.processedThrough).toBe(0)
+  })
+})
+
+// seedBranchWithTurns, plus a happening the swept turn t3 created and a link to it anchored to
+// the surviving t1: the window spares the link, the closure takes it.
+async function seedLateLink(
+  db: Awaited<ReturnType<typeof createTestDb>>['db'],
+  ctx: DbCtx,
+  logged: boolean,
+) {
+  await seedBranchWithTurns(db, ctx)
+  await db.insert(entities).values({
+    id: 'char_w',
+    branchId: 'b1',
+    kind: 'character',
+    name: 'Wren',
+    status: 'active',
+    injectionMode: 'auto',
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  await applyDeltaAction(
+    {
+      action: {
+        kind: 'createHappening',
+        source: 'ai_classifier',
+        payload: {
+          entry: { id: 'hap_t3', branchId: 'b1', title: 'Duel', createdAt: 1, updatedAt: 1 },
+        },
+      },
+      actionId: 'turn3',
+      branchId: 'b1',
+      entryId: null,
+    },
+    ctx,
+  )
+  const late = { id: 'hinv_late', branchId: 'b1', happeningId: 'hap_t3', entityId: 'char_w' }
+  if (logged)
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'createHappeningInvolvement',
+          source: 'periodic_classifier',
+          payload: { entry: late },
+        },
+        actionId: 'act_late',
+        branchId: 'b1',
+        entryId: 't1',
+      },
+      ctx,
+    )
+  // Only a writer outside the log makes this row (generation-pipeline.md → Reverse-replay).
+  else await db.insert(happeningInvolvements).values(late)
+}
+
+async function entryIds(db: Awaited<ReturnType<typeof createTestDb>>['db']) {
+  return (await db.select({ id: storyEntries.id }).from(storyEntries)).map((r) => r.id).sort()
+}
+
+describe('rollback over the closed set', () => {
+  it('counts and removes a fact on a surviving turn that names a row the sweep removes', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedLateLink(db, ctx, true)
+    entriesStore.hydrate('b1', [])
+
+    // The window alone holds ent_a's create and update and hap_t3's create; the link is a fourth.
+    expect(await getRollbackCounts('b1', 't2', ctx)).toEqual({
+      entries: 2,
+      chapters: 0,
+      worldStateChanges: 4,
+    })
+
+    expect((await rollbackToEntry('b1', 't2', ctx)).status).toBe('ok')
+    expect(await db.select().from(happeningInvolvements)).toEqual([])
+    expect(await db.select().from(happenings)).toEqual([])
+    const lps = (await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))).map(
+      (r) => r.logPosition,
+    )
+    expect(lps).toEqual([1])
+  })
+
+  it('returns the delta-failed rejection from the preview when the closure refuses', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedLateLink(db, ctx, false)
+    const error = vi.spyOn(logger, 'error')
+
+    const counts = await getRollbackCounts('b1', 't2', ctx)
+
+    expect(counts).toEqual({
+      status: 'rejected',
+      code: 'delta-failed',
+      reason: expect.stringContaining('no-create'),
+    })
+    expect(error).toHaveBeenCalledWith(
+      'action_layer.reversal_refused',
+      expect.objectContaining({ branchId: 'b1', refusal: 'no-create' }),
+    )
+    error.mockRestore()
+  })
+
+  it("selects the preview's set only once a no-gate run's abort reversal has committed", async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedLateLink(db, ctx, true)
+    const error = vi.spyOn(logger, 'error')
+    await holdBranchWriteExclusive('b1', 'act_late')
+
+    let settled = false
+    const preview = getRollbackCounts('b1', 't2', ctx).finally(() => {
+      settled = true
+    })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(settled).toBe(false)
+
+    // The run's abort reverses its link inside the hold; the preview must not count it.
+    expect(await reverseReplayDeltas('act_late', ctx)).toBe(1)
+    releaseBranchWriteExclusive('b1', 'act_late')
+
+    expect(await preview).toEqual({ entries: 2, chapters: 0, worldStateChanges: 3 })
+    expect(error).not.toHaveBeenCalledWith('action_layer.reversal_refused', expect.anything())
+    error.mockRestore()
+  })
+
+  it('refuses a rollback the closure refuses, writing nothing and keeping redo', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedLateLink(db, ctx, false)
+    entriesStore.hydrate('b1', [])
+    undoRedoStore.pushRedoGroup([])
+    const before = await db.select().from(deltas)
+
+    const result = await rollbackToEntry('b1', 't2', ctx)
+
+    expect(result).toEqual({
+      status: 'rejected',
+      code: 'delta-failed',
+      reason: expect.stringContaining('no-create'),
+    })
+    expect(await db.select().from(deltas)).toEqual(before)
+    expect(await entryIds(db)).toEqual(['op', 't1', 't2', 't3'])
+    expect(undoRedoStore.hasRedo()).toBe(true)
+    expect(generationStore.getTxState().reversalInProgress).toBe(false)
+  })
+
+  it('refuses a rollback whose commit would prune a delete its group writes back', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    entriesStore.hydrate('b1', [])
+    // Unreachable through the actions: a delete of ent_a anchored to the surviving t1, grouped
+    // with a write naming it, so the window spares both and the planner meets the delete.
+    const [ent] = await db.select().from(entities).where(eq(entities.id, 'ent_a'))
+    await db.delete(entities).where(eq(entities.id, 'ent_a'))
+    await db.insert(deltas).values([
+      {
+        ...classifierDelta('d_del', 6, 'entities', 'ent_a', 't1'),
+        actionId: 'act_del',
+        source: 'user_edit',
+        op: 'delete',
+        undoPayload: {
+          ...ent,
+          involvements: [],
+          awareness: [],
+          relationships: [],
+          translations: [],
+        },
+      },
+      {
+        ...classifierDelta('d_ref', 7, 'entities', 'char_k', 't1'),
+        actionId: 'act_del',
+        source: 'user_edit',
+        op: 'update',
+        undoPayload: { state: { faction_id: 'ent_a' } },
+      },
+    ])
+    undoRedoStore.pushRedoGroup([])
+    const before = await db.select().from(deltas)
+
+    const result = await rollbackToEntry('b1', 't2', ctx)
+
+    expect(result).toEqual({
+      status: 'rejected',
+      code: 'delta-failed',
+      reason: expect.stringContaining('write-back'),
+    })
+    expect(await db.select().from(deltas)).toEqual(before)
+    expect(await entryIds(db)).toEqual(['op', 't1', 't2', 't3'])
+    expect(undoRedoStore.hasRedo()).toBe(true)
+  })
+})
+
+describe('content edit refusals', () => {
+  it('refuses an edit whose sweep the closure refuses, writing nothing', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedClassifiedTail(db)
+    await db.insert(happeningInvolvements).values({
+      id: 'hinv_raw',
+      branchId: 'b1',
+      happeningId: 'hap_2',
+      entityId: 'char_m',
+      role: null,
+    })
+    const before = await db.select().from(deltas)
+
+    const result = await updateStoryEntryContent('b1', 'e2', 'new', ctx)
+
+    expect(result).toEqual({
+      status: 'rejected',
+      code: 'delta-failed',
+      reason: expect.stringContaining('no-create'),
+    })
+    const [row] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'e2'))
+    expect(row.content).toBe('old')
+    expect(await db.select().from(deltas)).toEqual(before)
+  })
+
+  it('refuses an edit whose commit would prune a delete its group writes back', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedClassifiedTail(db)
+    // Unreachable through the actions: the user deleted hap_2 with its links, in a group whose
+    // other write names it.
+    const [hap] = await db.select().from(happenings).where(eq(happenings.id, 'hap_2'))
+    const involvements = await db.select().from(happeningInvolvements)
+    const awareness = await db.select().from(happeningAwareness)
+    await db.delete(happeningInvolvements)
+    await db.delete(happeningAwareness)
+    await db.delete(happenings).where(eq(happenings.id, 'hap_2'))
+    await db.insert(deltas).values([
+      {
+        ...classifierDelta('d_del', 6, 'happenings', 'hap_2', 'e2'),
+        entryId: null,
+        actionId: 'act_del',
+        source: 'user_edit',
+        op: 'delete',
+        undoPayload: { ...hap, involvements, awareness },
+      },
+      {
+        ...classifierDelta('d_ref', 7, 'entities', 'char_k', 'e2'),
+        entryId: null,
+        actionId: 'act_del',
+        source: 'user_edit',
+        op: 'update',
+        undoPayload: { state: { current_location_id: 'hap_2' } },
+      },
+    ])
+    undoRedoStore.pushRedoGroup([])
+    const before = await db.select().from(deltas)
+
+    const result = await updateStoryEntryContent('b1', 'e2', 'new', ctx)
+
+    expect(result).toEqual({
+      status: 'rejected',
+      code: 'delta-failed',
+      reason: expect.stringContaining('write-back'),
+    })
+    const [row] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'e2'))
+    expect(row.content).toBe('old')
+    expect(await db.select().from(deltas)).toEqual(before)
+    expect(undoRedoStore.hasRedo()).toBe(true)
   })
 })

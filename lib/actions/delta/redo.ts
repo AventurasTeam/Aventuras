@@ -4,9 +4,17 @@ import { deltas, isEmbeddedSourceTable } from '@/lib/db'
 import { isUserOriginatedSource, type DbCtx } from '../types'
 import { cascadePatches } from './delete-cascade'
 import { nextLogPosition } from './delta-row'
+import { heldKey } from './held-rows'
 import { withKeyLocks } from './key-lock'
 import { resolveByTable, whereForDelta } from './registry'
-import { buildReverseAndPrunePlan, DeltaReplayError, emitPatches } from './reverse-replay'
+import {
+  buildReverseAndPrunePlan,
+  DeltaReplayError,
+  emitPatches,
+  ReversalIntegrityError,
+  reverseAndPruneDeltaRows,
+} from './reverse-replay'
+import { reversalLockKeys, type ReversalSet } from './row-closure'
 import { deltaLockKeys } from './row-locks'
 import { FIRST_LOGGED_AT, firstLoggedAt } from './user-precedence'
 
@@ -18,10 +26,39 @@ export type RedoSnapshot = {
   rowBeforeUndo: Record<string, unknown> | null
 }
 
-// Call this BEFORE reverseAndPruneDeltaRows/reverseReplayDeltas executes on `rows`.
-export async function snapshotForRedo(rows: Delta[], ctx: DbCtx): Promise<RedoSnapshot[]> {
+/** A redoable CTRL-Z of a set: the redo snapshot, taken before `reverse` runs the reversal. */
+export type PreparedUndo = {
+  readonly snapshot: readonly RedoSnapshot[]
+  /** Reverses and prunes the set, refusing a prune the snapshot could not restore. */
+  readonly reverse: (extraOps?: readonly SqlOp[]) => Promise<number>
+}
+
+// One call takes the snapshot and fixes keepRedoExact, so the two cannot disagree.
+export async function prepareUndo(set: ReversalSet, ctx: DbCtx): Promise<PreparedUndo> {
+  const snapshot = await snapshotForRedo(set, ctx)
+  return {
+    snapshot,
+    reverse: (extraOps = []) =>
+      reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: true }, extraOps),
+  }
+}
+
+async function snapshotForRedo(set: ReversalSet, ctx: DbCtx): Promise<RedoSnapshot[]> {
+  // Redo restores rows to their tables; it cannot put one back into a delete's payload
+  // (generation-pipeline.md → Reverse-replay).
+  const heldWrite = set.redoRows.find(
+    (d) => d.op !== 'delete' && set.held.byRow.has(heldKey(d.targetTable, d.targetId)),
+  )
+  if (heldWrite) {
+    const key = heldKey(heldWrite.targetTable, heldWrite.targetId)
+    throw new ReversalIntegrityError(
+      'held-in-redo',
+      `${key} held by ${set.held.byRow.get(key)?.holder.id}`,
+      heldWrite.actionId,
+    )
+  }
   const snapshots: RedoSnapshot[] = []
-  for (const delta of rows) {
+  for (const delta of set.redoRows) {
     const entry = resolveByTable(delta.targetTable)
     if (!entry) throw new Error(`redo snapshot: unknown target_table ${delta.targetTable}`)
     const found = (await ctx.db
@@ -44,12 +81,10 @@ function redoRow(
 }
 
 /**
- * Deltas to reverse in the redo's own transaction, plus ops to settle with it. Stays
+ * A closed set to reverse in the redo's own transaction, plus ops to settle with it. Stays
  * table-agnostic here: the caller decides what a restored row invalidates.
  */
-export type RedoInvalidation = { rows: Delta[]; extraOps: readonly SqlOp[] }
-
-const NO_INVALIDATION: RedoInvalidation = { rows: [], extraOps: [] }
+export type RedoInvalidation = { set: ReversalSet; extraOps: readonly SqlOp[] }
 
 // Reversal precedence weighs a user write by where it first logged, not the head slot it
 // re-logs at, which sits above the machine writes it preceded.
@@ -62,16 +97,19 @@ function relogPayload(delta: Delta): Delta['undoPayload'] {
 export function applyRedo(
   snapshots: readonly RedoSnapshot[],
   ctx: DbCtx,
-  invalidation: RedoInvalidation = NO_INVALIDATION,
+  invalidation?: RedoInvalidation,
 ): Promise<void> {
-  const keys = deltaLockKeys([...snapshots.map((s) => s.delta), ...invalidation.rows])
+  const keys = [
+    ...deltaLockKeys(snapshots.map((s) => s.delta)),
+    ...(invalidation ? reversalLockKeys(invalidation.set) : []),
+  ]
   return withKeyLocks(keys, () => applyRedoLocked(snapshots, ctx, invalidation))
 }
 
 async function applyRedoLocked(
   snapshots: readonly RedoSnapshot[],
   ctx: DbCtx,
-  invalidation: RedoInvalidation,
+  invalidation: RedoInvalidation | undefined,
 ): Promise<void> {
   const ops = []
   const restoredDeltas: Delta[] = []
@@ -131,8 +169,8 @@ async function applyRedoLocked(
   // reversal of the same row would be clobbered the other way round. Ordered explicitly
   // rather than left to chance -- the classifier targets no story_entries row today.
   const plan =
-    invalidation.rows.length > 0
-      ? await buildReverseAndPrunePlan(invalidation.rows, ctx)
+    invalidation && invalidation.set.rows.length > 0
+      ? await buildReverseAndPrunePlan(invalidation.set, ctx, { keepRedoExact: true })
       : { ops: [], pruneOps: [], patches: [] }
   // Prunes ahead of the re-inserts so the restored deltas take positions above what
   // survives the reversal rather than above rows this transaction is deleting.
@@ -141,7 +179,7 @@ async function applyRedoLocked(
     ...ops,
     ...deltaOps,
     ...plan.ops,
-    ...invalidation.extraOps,
+    ...(invalidation?.extraOps ?? []),
   ])
   // Past this point the redo is committed, so a patcher throw is a store-sync failure:
   // redoLastAction still pops the (now-applied) snapshot instead of leaving it for a doomed retry.

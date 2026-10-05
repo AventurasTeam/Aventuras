@@ -30,8 +30,8 @@ import { entitiesStore, generationStore } from '@/lib/stores'
 import { deleteEntityRow } from './delete-entity'
 import { ROW_DELETE_REJECTION } from './delete-row'
 import { applyDeltaAction } from '../delta/apply-delta-action'
-import { applyRedo, snapshotForRedo } from '../delta/redo'
-import { reverseAndPruneDeltaRows } from '../delta/reverse-replay'
+import { applyRedo, prepareUndo } from '../delta/redo'
+import { selectReversalSet } from '../delta/row-closure'
 import type { loadHeadTurn as LoadHeadTurn } from '../story-entries/head-turn'
 import { updateEntrySceneFields } from '../story-entries/scene-fields'
 import type { DbCtx } from '../types'
@@ -224,8 +224,9 @@ describe('deleteEntityRow — C3 acceptance', () => {
   it('undo restores everything stale; redo re-deletes and re-sweeps', async () => {
     await deleteEntityRow('b1', 'char_x', ctx)
     const rows = (await ctx.db.select().from(deltas).orderBy(desc(deltas.logPosition))) as Delta[]
-    const snapshot = await snapshotForRedo(rows, ctx)
-    await reverseAndPruneDeltaRows(rows, ctx)
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target: rows })
+    const { snapshot, reverse } = await prepareUndo(set, ctx)
+    await reverse()
 
     const [restored] = await ctx.db.select().from(entities).where(eq(entities.id, 'char_x'))
     expect(restored.embeddingStale).toBe(1)

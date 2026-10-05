@@ -6,7 +6,6 @@ import { logger } from '@/lib/diagnostics'
 
 import { loadHeadTurn } from './head-turn'
 import { PAYLOAD_META_PREFIX } from '../delta/delta-encoding'
-import { closeOverRemovedRows } from '../delta/row-closure'
 import type { DbCtx } from '../types'
 import { classifierWatermarkClampOps } from './prose-reversal'
 
@@ -164,9 +163,7 @@ export async function resolveInvalidationForDeltas(
     rows.push(...one.rows)
     clampOps.push(...one.clampOps)
   }
-  // Each per-delta result is sorted and unique; concatenating them is neither, and two
-  // recorded scopes can name the same entry.
-  return { status: 'ok', rows: sortForReplay(dedupeById(rows)), clampOps }
+  return { status: 'ok', rows, clampOps }
 }
 
 /**
@@ -185,14 +182,8 @@ function isReversible(delta: Delta): boolean {
 }
 
 /**
- * Every delta a content edit must reverse: the classifier facts anchored to the
- * entries in its invalidation scope, closed over the rows their creates delete.
- *
- * The closure is load-bearing. A link row does NOT share its happening's anchor:
- * awareness anchors to the turn that narrated the learning, which can sit either
- * side of the happening's own provenance entry (classifier.md -> Provenance
- * attribution), so reversing by anchor alone deletes a happening while its
- * awareness rows survive pointing at nothing.
+ * Classifier facts anchored to the scope's entries, minus entity creates; unclosed. Callers add
+ * the link rows through `selectReversalSet` (classifier.md -> Provenance attribution).
  */
 export async function resolveClassifierFactDeltas(
   branchId: string,
@@ -200,7 +191,7 @@ export async function resolveClassifierFactDeltas(
   ctx: DbCtx,
 ): Promise<Delta[]> {
   if (entryIds.length === 0) return []
-  const anchored = (
+  return (
     (await ctx.db
       .select()
       .from(deltas)
@@ -212,16 +203,4 @@ export async function resolveClassifierFactDeltas(
         ),
       )) as Delta[]
   ).filter(isReversible)
-
-  return closeOverRemovedRows(anchored, ctx)
-}
-
-// reverse-replay unwinds newest-first, and the two queries above are unioned out
-// of log order.
-export function sortForReplay(rows: Delta[]): Delta[] {
-  return [...rows].sort((a, b) => b.logPosition - a.logPosition)
-}
-
-export function dedupeById(rows: readonly Delta[]): Delta[] {
-  return [...new Map(rows.map((r) => [r.id, r])).values()]
 }

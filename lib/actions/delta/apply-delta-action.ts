@@ -13,10 +13,11 @@ import {
   type MutationResult,
   type PipelineAction,
 } from '../types'
+import { withBranchWriteShared } from './branch-write-lock'
 import { capturedPatches } from './delete-cascade'
 import { deltaRowOp } from './delta-row'
 import { withKeyLocks } from './key-lock'
-import { linkRefs } from './live-refs'
+import { rowRefs } from './live-refs'
 import { createdKey, resolveByActionKind, resolveByTable, type HandlerOutcome } from './registry'
 import { entityCascadeKeys, rowLock, type RowLockKey } from './row-locks'
 
@@ -146,7 +147,11 @@ export async function settleUserWrites(): Promise<void> {
 
 export async function applyDeltaAction(args: Args, ctx: DbCtx): Promise<MutationResult> {
   const run = () => applyDeltaActionUnlocked(args, ctx)
-  const write = withKeyLocks(lockKeysFor(args.action), run)
+  // The branch lock sits outside the row keys: a write queued behind a no-gate run holds no key
+  // the run's own writes need (generation-pipeline.md → No-gate write phase).
+  const write = withBranchWriteShared(args.branchId, args.actionId, () =>
+    withKeyLocks(lockKeysFor(args.action), run),
+  )
   return isUserOriginatedSource(args.action.source) ? trackUserWrite(write) : write
 }
 
@@ -215,9 +220,8 @@ type GroupArgs = { actionId: string; branchId: string; entryId?: string | null }
 
 /**
  * Handlers read pre-group state, so a delete's cascade can't see the group's other writes: a
- * second delete of a row, or a second write to a cascaded one, logs it twice (undo restores it
- * twice and hits a unique constraint forever), and a link written to a deleted row passes the
- * live-row guard and dangles.
+ * second delete of a row, or a second write to a cascaded one, logs it twice (undo then hits a
+ * unique constraint forever); a link or translation to a deleted or cascaded row dangles.
  */
 function groupConflict(outcomes: readonly OkOutcome[]): string | null {
   const cascaded = new Set<string>()
@@ -240,9 +244,11 @@ function groupConflict(outcomes: readonly OkOutcome[]): string | null {
     const { patch } = outcome
     const written =
       patch?.op === 'create' ? patch.row : patch?.op === 'update' ? patch.columns : undefined
-    for (const ref of written ? linkRefs(outcome.targetTable, written) : []) {
+    for (const ref of written ? rowRefs(outcome.targetTable, written) : []) {
       const named = createdKey(ref.table, ref.id)
-      if (deleted.has(named)) return `the group links ${target} to ${named}, which it deletes`
+      // A link's ends are never cascaded, but a translation's target (a relationship) can be.
+      if (deleted.has(named) || cascaded.has(named))
+        return `the group links ${target} to ${named}, which it deletes or cascades`
     }
   }
   return null
@@ -259,7 +265,9 @@ export async function applyDeltaActionGroup(
   ctx: DbCtx,
 ): Promise<DeltaGroupResult> {
   const keys = actions.flatMap(lockKeysFor)
-  const write = withKeyLocks(keys, () => applyDeltaActionGroupUnlocked(actions, args, ctx))
+  const write = withBranchWriteShared(args.branchId, args.actionId, () =>
+    withKeyLocks(keys, () => applyDeltaActionGroupUnlocked(actions, args, ctx)),
+  )
   return actions.some((a) => isUserOriginatedSource(a.source)) ? trackUserWrite(write) : write
 }
 
@@ -317,8 +325,8 @@ async function applyDeltaActionGroupUnlocked(
     if (refused === 'noop') skipped.push({ action, createdThen: created.size })
     else if (refused) return refused
   }
-  // A link can no-op only because the row it names is created later in the group, so it runs
-  // once more against every create. Links name no other link, so one more pass settles it.
+  // A link naming a row created later in the group no-ops on pass one: rerun it after all creates.
+  // One rerun settles it: createOutcome mints relationship ids, so a group can't name its own.
   for (const { action, createdThen } of skipped) {
     if (created.size === createdThen) continue
     const refused = await prepare(action)

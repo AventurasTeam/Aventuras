@@ -26,7 +26,8 @@ const REPLY = 'E2E-RETRIEVAL-REPLY — the amulet answers, warm against the rib.
 const ACTION = 'Ask Mira what really happened during the alley ambush.'
 
 const AWARENESS_SUM_SQL = `SELECT COALESCE(SUM(retrieval_count), 0) FROM happening_awareness WHERE branch_id = ?`
-const AWARENESS_DELTA_SQL = `SELECT count(*) FROM deltas WHERE branch_id = ? AND target_table = 'happening_awareness'`
+// Updates only: the seed logs creates for hap_fire's awareness rows, and a bump is an update.
+const AWARENESS_DELTA_SQL = `SELECT count(*) FROM deltas WHERE branch_id = ? AND target_table = 'happening_awareness' AND op = 'update'`
 
 // The whole retrieval seam on one turn: the blocking sync stage embeds the
 // branch's dirty rows, KNN + the ranker build a bundle, the bundle reaches the
@@ -84,7 +85,7 @@ test.describe('retrieval — a turn injects a retrieved bundle', () => {
     const awarenessBefore = await scalar(AWARENESS_SUM_SQL, [HERO_BRANCH])
     // Nothing has retrieved on this branch yet, so a bump is the only writer
     // that can move either number.
-    expect(await scalar(AWARENESS_DELTA_SQL, [HERO_BRANCH]), 'no seeded awareness deltas').toBe(0)
+    expect(await scalar(AWARENESS_DELTA_SQL, [HERO_BRANCH]), 'no seeded awareness updates').toBe(0)
 
     // Submitted without waiting for the background drain on purpose: the sync
     // stage is blocking, so the bundle below is complete whatever the drain has

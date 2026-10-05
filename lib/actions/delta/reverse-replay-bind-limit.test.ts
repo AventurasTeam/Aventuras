@@ -6,8 +6,8 @@ import { describe, expect, it } from 'vitest'
 import { branches, happeningAwareness, stories, type Delta } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
-import { reverseAndPruneDeltaRows } from './reverse-replay'
 import type { DbCtx } from '../types'
+import { reverseRows } from './__tests__/reverse-rows'
 
 // 8 cols → floor(32766/8)=4095 max rows/INSERT; 4200 rows forces a multi-statement restore.
 const AWARENESS_ROW_COUNT = 4200
@@ -68,7 +68,7 @@ describe('reverse-replay of a delete cascade wider than the bind cap', () => {
       createdAt: 1,
     }
 
-    await reverseAndPruneDeltaRows([delta], ctx)
+    await reverseRows([delta], ctx)
 
     const restored = await db
       .select()
@@ -126,7 +126,7 @@ describe('reverse-replay of a delete cascade wider than the bind cap', () => {
       createdAt: 1,
     }
 
-    await reverseAndPruneDeltaRows([delta], ctx)
+    await reverseRows([delta], ctx)
 
     const restored = await db
       .select()

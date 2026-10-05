@@ -15,7 +15,9 @@ import {
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { plantVec } from '@/lib/db/__tests__/vec-fixtures'
 
-import { buildReverseAndPrunePlan, reverseAndPruneDeltaRows } from './reverse-replay'
+import { reverseRows } from './__tests__/reverse-rows'
+import { buildReverseAndPrunePlan } from './reverse-replay'
+import { selectReversalSet } from './row-closure'
 
 function insertEntity(db: any, branchId: string, id: string): Promise<void> {
   return db.insert(entities).values({
@@ -68,7 +70,7 @@ describe('reverse-replay of a create', () => {
       )[0].n
     expect(vectorCount()).toBe(2)
 
-    await reverseAndPruneDeltaRows(
+    await reverseRows(
       [
         {
           id: 'delta_1',
@@ -129,7 +131,11 @@ describe('reverse-replay of a create', () => {
     }))
     const ctx = { db, runInTransaction }
 
-    const plan = await buildReverseAndPrunePlan(creates, ctx)
+    const plan = await buildReverseAndPrunePlan(
+      await selectReversalSet(ctx, { branchId: 'b1', target: creates }),
+      ctx,
+      { keepRedoExact: false },
+    )
     const sweeps = plan.ops.map((op) => op.sql).filter((sql) => /_vec_\d+ WHERE/.test(sql))
     expect(sweeps.map((sql) => sql.split(' WHERE')[0]).sort()).toEqual([
       'DELETE FROM entities_vec_384',
@@ -138,7 +144,7 @@ describe('reverse-replay of a create', () => {
       'DELETE FROM lore_vec_8',
     ])
 
-    await reverseAndPruneDeltaRows(creates, ctx)
+    await reverseRows(creates, ctx)
     const left = sqlite
       .prepare(
         `SELECT branch_id, id FROM entities_vec_384 UNION ALL SELECT branch_id, id FROM entities_vec_8
@@ -159,7 +165,7 @@ describe('reverse-replay of a create', () => {
     insertVector(sqlite, 'b1', 8, 'char_1')
     insertVector(sqlite, 'b2', 8, 'char_1')
 
-    await reverseAndPruneDeltaRows(
+    await reverseRows(
       [
         {
           id: 'delta_1',

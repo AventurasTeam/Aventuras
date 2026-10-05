@@ -14,8 +14,16 @@ import {
 } from '@/lib/pipeline'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
-import { DeltaReplayError, reverseAndPruneDeltaRows } from '../delta/reverse-replay'
-import { resolveSweep, type StoryEntryRejection } from '../story-entries/operational'
+import {
+  DeltaReplayError,
+  ReversalIntegrityError,
+  reverseAndPruneDeltaRows,
+} from '../delta/reverse-replay'
+import {
+  resolveSweep,
+  reversalRefused,
+  type StoryEntryRejection,
+} from '../story-entries/operational'
 import { bracketProseReversal } from '../story-entries/prose-reversal'
 import type { DbCtx } from '../types'
 import { withBranchQueue } from './branch-queue'
@@ -62,7 +70,12 @@ async function sweepFrom(
 ): Promise<{ status: 'ok' } | StoryEntryRejection> {
   const swept = await resolveSweep(branchId, targetId, ctx)
   if ('status' in swept) return swept
-  await reverseAndPruneDeltaRows(swept.rows, ctx, swept.clampOps)
+  try {
+    await reverseAndPruneDeltaRows(swept.set, ctx, { keepRedoExact: false }, swept.clampOps)
+  } catch (e) {
+    if (!(e instanceof ReversalIntegrityError)) throw e
+    return reversalRefused(branchId, e)
+  }
   return { status: 'ok' }
 }
 

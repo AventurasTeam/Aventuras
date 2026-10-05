@@ -252,9 +252,7 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   [`world.md → Reversibility`](../../../../ui/screens/world/world.md#reversibility)'s
   merge write list must be amended to match. New rows plus the cascade
   means more rows a delete captures. Captured rows follow
-  [`generation-pipeline.md → Reverse-replay`](../../../../generation-pipeline.md#reverse-replay),
-  and [the reversal-integrity implementation](../../../../followups.md#data-model)
-  lands before this slice's merge.
+  [`generation-pipeline.md → Reverse-replay`](../../../../generation-pipeline.md#reverse-replay).
 - **Reuse the delete confirm's link counts** (4.2b):
   `components/world/delete-impact.ts` repeats the entity cascade's
   awareness / involvement / relationship predicates against the

@@ -1,0 +1,101 @@
+import { and, asc, eq } from 'drizzle-orm'
+
+import { deltas, type Delta } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
+
+import type { DbCtx } from '../types'
+import { capturedChildren } from './delete-cascade'
+import { isPayloadMetaKey } from './delta-encoding'
+import { rowRefs, type RefTable } from './live-refs'
+import { resolveByTable } from './registry'
+
+/** A row living on only in a delete's undo_payload (generation-pipeline.md → Reverse-replay). */
+export type HeldRow = {
+  readonly table: string
+  readonly id: string
+  /** The delete still in the log whose payload holds the row. */
+  readonly holder: Delta
+  /** `target`: the holder's own row. `captured`: a child under one of its cascade keys. */
+  readonly place: 'target' | 'captured'
+  /** The held copy: a target's payload minus cascade and meta keys, else the child row. */
+  readonly row: Readonly<Record<string, unknown>>
+}
+
+/** A row's `table:id` key, minted only by heldKey so a key built another way cannot look one up. */
+export type HeldKey = string & { readonly __brand: 'HeldKey' }
+
+export type HeldRowIndex = {
+  readonly byRow: ReadonlyMap<HeldKey, HeldRow>
+  /** Held rows naming `table:id` through REF_COLUMNS. */
+  naming(table: RefTable, id: string): readonly HeldRow[]
+}
+
+export function heldKey(table: string, id: string): HeldKey {
+  return `${table}:${id}` as HeldKey
+}
+
+export const EMPTY_HELD_ROWS: HeldRowIndex = { byRow: new Map(), naming: () => [] }
+
+/** The delete's own row in its payload: every key but the cascade and meta keys. */
+export function deletedRow(
+  payload: Readonly<Record<string, unknown>>,
+  cascadeKeys: readonly string[],
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(payload).filter(([key]) => !cascadeKeys.includes(key) && !isPayloadMetaKey(key)),
+  )
+}
+
+function heldBy(holder: Delta): HeldRow[] {
+  const payload = holder.undoPayload ?? {}
+  const { children, cascadeKeys } = capturedChildren(
+    resolveByTable(holder.targetTable)?.cascade,
+    payload,
+  )
+  const target = deletedRow(payload, cascadeKeys)
+  return [
+    { table: holder.targetTable, id: holder.targetId, holder, place: 'target', row: target },
+    ...children.flatMap(({ table, rows }) =>
+      rows.map((row) => ({ table, id: row.id as string, holder, place: 'captured' as const, row })),
+    ),
+  ]
+}
+
+/** Every row the branch's deletes hold, read in one query. */
+export async function loadHeldRows(ctx: DbCtx, branchId: string): Promise<HeldRowIndex> {
+  const deletes = (await ctx.db
+    .select()
+    .from(deltas)
+    .where(and(eq(deltas.branchId, branchId), eq(deltas.op, 'delete')))
+    .orderBy(asc(deltas.logPosition))) as Delta[]
+
+  const byRow = new Map<HeldKey, HeldRow>()
+  for (const holder of deletes) {
+    for (const held of heldBy(holder)) {
+      const key = heldKey(held.table, held.id)
+      const seen = byRow.get(key)
+      if (seen) {
+        // A second holder means a broken log (re-deleting a held row needs its delete undone
+        // first); the ascending scan lets the newer holder win.
+        logger.error('action_layer.row_held_twice', {
+          table: held.table,
+          id: held.id,
+          holders: [seen.holder.id, held.holder.id],
+        })
+      }
+      byRow.set(key, held)
+    }
+  }
+
+  const naming = new Map<HeldKey, HeldRow[]>()
+  for (const held of byRow.values()) {
+    for (const ref of rowRefs(held.table, held.row)) {
+      const key = heldKey(ref.table, ref.id)
+      const list = naming.get(key)
+      if (list) list.push(held)
+      else naming.set(key, [held])
+    }
+  }
+
+  return { byRow, naming: (table, id) => naming.get(heldKey(table, id)) ?? [] }
+}
