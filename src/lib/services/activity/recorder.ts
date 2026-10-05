@@ -188,11 +188,14 @@ export class ActivityRecorder {
   /** Remove a step of the turn in flight, and anything beneath it, as if never recorded. */
   discardStep(id: string): void {
     if (!id || !this.current) return
+    const steps = this.current.steps
+    // Until nothing new is found: a group from `groupChildren` comes after its children.
     const doomed = new Set([id])
-    for (const step of this.current.steps) {
-      if (step.parentId && doomed.has(step.parentId)) doomed.add(step.id)
+    for (let size = 0; size !== doomed.size;) {
+      size = doomed.size
+      for (const step of steps) if (step.parentId && doomed.has(step.parentId)) doomed.add(step.id)
     }
-    this.current.steps = this.current.steps.filter((s) => !doomed.has(s.id))
+    for (let i = steps.length - 1; i >= 0; i--) if (doomed.has(steps[i].id)) steps.splice(i, 1)
     this.onChange()
   }
 

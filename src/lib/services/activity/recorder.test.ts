@@ -387,4 +387,18 @@ describe('steps outside the turn in flight', () => {
 
     expect(recorder.activeTurn?.steps.map((s) => s.id)).toEqual([keep])
   })
+
+  it('discards a group together with the children it was created after', () => {
+    const { recorder } = recorderAt()
+    recorder.setReporting('tree')
+    recorder.startTurn('entry')
+    const keep = recorder.startStep('Retrieval')
+    const narrative = recorder.startStep('Narrative')
+    recorder.recordStep('Waiting for model', { parentId: narrative })
+    const group = recorder.groupChildren(narrative, 'Pass 1')
+
+    recorder.discardStep(group)
+
+    expect(recorder.activeTurn?.steps.map((s) => s.id)).toEqual([keep, narrative])
+  })
 })
