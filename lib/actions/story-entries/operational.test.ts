@@ -1174,6 +1174,7 @@ describe('rollback over the closed set', () => {
         undoPayload: { state: { faction_id: 'ent_a' } },
       },
     ])
+    undoRedoStore.pushRedoGroup([])
     const before = await db.select().from(deltas)
 
     const result = await rollbackToEntry('b1', 't2', ctx)
@@ -1185,6 +1186,7 @@ describe('rollback over the closed set', () => {
     })
     expect(await db.select().from(deltas)).toEqual(before)
     expect(await entryIds(db)).toEqual(['op', 't1', 't2', 't3'])
+    expect(undoRedoStore.hasRedo()).toBe(true)
   })
 })
 
@@ -1244,6 +1246,7 @@ describe('content edit refusals', () => {
         undoPayload: { state: { current_location_id: 'hap_2' } },
       },
     ])
+    undoRedoStore.pushRedoGroup([])
     const before = await db.select().from(deltas)
 
     const result = await updateStoryEntryContent('b1', 'e2', 'new', ctx)
@@ -1256,5 +1259,6 @@ describe('content edit refusals', () => {
     const [row] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'e2'))
     expect(row.content).toBe('old')
     expect(await db.select().from(deltas)).toEqual(before)
+    expect(undoRedoStore.hasRedo()).toBe(true)
   })
 })
