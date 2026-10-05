@@ -10,19 +10,30 @@ import { ReversalIntegrityError } from './replay-errors'
 import { deltaLockKeys, type RowLockKey } from './row-locks'
 import { firstLoggedAt, wroteColumn } from './user-precedence'
 
-declare const reversalSetBrand: unique symbol
+type ReversalSetFields = Pick<ReversalSet, 'branchId' | 'rows' | 'redoRows' | 'held'>
 
-/** A closed reversal set; minted only by selectReversalSet, so no path reverses an unclosed one. */
-export type ReversalSet = {
-  readonly [reversalSetBrand]: true
+/** A closed reversal set; constructed only by selectReversalSet, so no path reverses an unclosed one. */
+class ReversalSet {
+  // A private field makes the type nominal: no literal or spread of a set satisfies it.
+  readonly #closed = true
   readonly branchId: string
-  /** Every delta the reversal replays and prunes, newest-first. */
+  /** Every delta the reversal replays, then prunes (or re-owns, for a kept create), newest-first. */
   readonly rows: readonly Delta[]
   /** The target and what the closure reaches from it, newest-first: what CTRL-Z's redo restores. */
   readonly redoRows: readonly Delta[]
   /** The rows the branch's deletes held when the set was selected. */
   readonly held: HeldRowIndex
+
+  constructor(fields: ReversalSetFields) {
+    this.branchId = fields.branchId
+    this.rows = fields.rows
+    this.redoRows = fields.redoRows
+    this.held = fields.held
+  }
 }
+
+// Type-only: a value export would let another module construct an unclosed set.
+export type { ReversalSet }
 
 export type ReversalSeed = {
   readonly branchId: string
@@ -33,8 +44,6 @@ export type ReversalSeed = {
 }
 
 export type RowRef = { readonly table: string; readonly id: string }
-
-const mint = (set: Omit<ReversalSet, typeof reversalSetBrand>) => set as ReversalSet
 
 function idsByTable(rows: readonly RowRef[]): Map<string, string[]> {
   const byTable = new Map<string, string[]>()
@@ -212,7 +221,8 @@ export async function selectReversalSet(ctx: DbCtx, seed: ReversalSeed): Promise
     throw new Error(
       `selectReversalSet: delta ${stray.id} is on ${stray.branchId}, not the seed branch ${branchId}`,
     )
-  if (all.length === 0) return mint({ branchId, rows: [], redoRows: [], held: EMPTY_HELD_ROWS })
+  if (all.length === 0)
+    return new ReversalSet({ branchId, rows: [], redoRows: [], held: EMPTY_HELD_ROWS })
 
   const held = await loadHeldRows(ctx, branchId)
   const { actionId } = all[0]
@@ -221,7 +231,7 @@ export async function selectReversalSet(ctx: DbCtx, seed: ReversalSeed): Promise
     sweep.length > 0
       ? await closeOver(ctx, branchId, [...redoRows, ...sweep], held, actionId)
       : redoRows
-  return mint({ branchId, rows, redoRows, held })
+  return new ReversalSet({ branchId, rows, redoRows, held })
 }
 
 /** Row keys for the set's rows and for every delete holding a row it writes. */
