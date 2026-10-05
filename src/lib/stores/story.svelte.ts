@@ -4482,6 +4482,11 @@ class StoryStore {
 
   private generationLease = $state<GenerationLease | null>(null)
 
+  /** True from a branch switch or creation being requested until it has fully settled. */
+  get isSwitchingBranch(): boolean {
+    return this.pendingBranchSwitches > 0
+  }
+
   /** True while a generation holds the branch. Drives the switch affordances. */
   get isGenerationLeaseHeld(): boolean {
     return this.generationLease !== null
