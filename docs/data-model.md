@@ -1073,20 +1073,20 @@ via dotted paths. The split:
 
 Per-field "who writes / when":
 
-| Field group                                 | First write                                  | Subsequent writes                                         |
-| ------------------------------------------- | -------------------------------------------- | --------------------------------------------------------- |
-| `description` (top-level)                   | Whoever spawns the entity                    | User-only in v1                                           |
-| `visual.*`                                  | Classifier from prose, or user via form      | Both — classifier evolves on observed prose change        |
-| `traits`, `drives`                          | Classifier from prose, or user via form      | Classifier (chapter-close lore-mgmt only) + user via form |
-| `voice`                                     | Classifier from prose, or user via form      | Both                                                      |
-| `current_location_id`                       | Classifier per-turn                          | Classifier per-turn primary; user can edit                |
-| `equipped_items`, `inventory`, `stackables` | Classifier per-turn                          | Classifier per-turn primary; user can edit                |
-| `faction_id`                                | Classifier or user                           | Both                                                      |
-| `lastSeenAt`                                | Classifier-only                              | Classifier-only                                           |
-| `parent_location_id`                        | User at creation, or classifier on discovery | Both — rare changes                                       |
-| `condition` (Location/Item)                 | Classifier or user                           | Both                                                      |
-| `standing`, `agenda` (Faction)              | Classifier or user                           | Classifier (chapter-close) + user                         |
-| `at_location_id` (Item)                     | Classifier per-turn                          | Classifier per-turn primary; user can edit                |
+| Field group                                 | First write                             | Subsequent writes                                         |
+| ------------------------------------------- | --------------------------------------- | --------------------------------------------------------- |
+| `description` (top-level)                   | Whoever spawns the entity               | User-only in v1                                           |
+| `visual.*`                                  | Classifier from prose, or user via form | Both — classifier evolves on observed prose change        |
+| `traits`, `drives`                          | Classifier from prose, or user via form | Classifier (chapter-close lore-mgmt only) + user via form |
+| `voice`                                     | Classifier from prose, or user via form | Both                                                      |
+| `current_location_id`                       | Classifier per-turn                     | Classifier per-turn primary; user can edit                |
+| `equipped_items`, `inventory`, `stackables` | Classifier per-turn                     | Classifier per-turn primary; user can edit                |
+| `faction_id`                                | Classifier or user                      | Both                                                      |
+| `lastSeenAt`                                | Classifier-only                         | Classifier-only                                           |
+| `parent_location_id`                        | User at creation                        | User-only in v1                                           |
+| `condition` (Location/Item)                 | Classifier or user                      | Both                                                      |
+| `standing`, `agenda` (Faction)              | Classifier or user                      | Classifier (chapter-close) + user                         |
+| `at_location_id` (Item)                     | Classifier per-turn                     | Classifier per-turn primary; user can edit                |
 
 Manual user edit vs classifier overwrite policy is parked as an
 architecture concern. v1 lean: classifier writes from prose-evidenced

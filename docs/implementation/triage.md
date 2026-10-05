@@ -53,19 +53,3 @@ slice-planning gate forces its resolution before that slice is planned.
   to get. Held rather than routed in the 2026-09-09 triage pass, which
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
-
-- **Canon disagrees on whether the periodic classifier introduces
-  locations.** The `currentLocationId` row of
-  [`piggyback.md → What piggyback writes`](../memory/piggyback.md#what-piggyback-writes)
-  says a location new to the prose stays stale "until the periodic
-  classifier creates it" and calls the cost a few turns of degraded
-  retrieval, but the classifier's write set in
-  [`classifier.md`](../memory/classifier.md#background-task-framing)
-  and `lib/classifier/plan.ts` introduce characters only. Nothing
-  machine-creates a location, so the stale id, and the wrong
-  `state.current_location_id` the piggyback bookkeeping copies onto
-  in-scene characters, last until the user creates the entity. Decide
-  whether the classifier should introduce locations, or correct
-  piggyback.md. Introducing them would revive the parked
-  [closure gap for ids inside JSON](../parked.md#the-reversal-closure-doesnt-follow-ids-inside-json-columns).
-  Raised by the 2026-10-05 triage pass.

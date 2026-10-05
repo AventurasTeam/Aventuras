@@ -193,9 +193,11 @@ proposed signal to early-trigger the periodic classifier when prose
 introduces a relevant new character or location was considered and
 parked — see
 [`parked.md → Early classifier trigger on new-entity introduction`](../../../../parked.md#early-classifier-trigger-on-new-entity-introduction-introducednewrelevantentity).
-The same tolerance (stale/missing data for a few turns, acceptable)
-extends to `currentLocationId` when prose moves to a location that
-doesn't exist as an entity yet.
+The same tolerance was extended to `currentLocationId` when prose
+moves to a location that doesn't exist as an entity yet, on the
+premise that the classifier would create it. It introduces characters
+only, so that staleness has no few-turn bound; see
+[`piggyback.md → What piggyback writes`](../../../../memory/piggyback.md#what-piggyback-writes).
 
 **Non-existent entity ID filtering.** `buildPiggybackActions` (`lib/piggyback/apply.ts`)
 filters `visualChanges` and `transfers` against `byId.has(id)` before creating
