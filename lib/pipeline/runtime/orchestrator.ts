@@ -127,7 +127,8 @@ async function handleEvent(event: PhaseEmittedEvent, run: RunState, ctx: RunCtx)
   if (event.type === 'delta_emitted') {
     // Promise.all rejects without waiting for sibling branches, so one can emit after the run
     // left txState. The release sits right behind that removal, so a hold taken while registered
-    // is freed and a write after it is dropped; thrown, it could replace the failure.
+    // is freed and a write after it is dropped; the run's outcome is already settled, so there is
+    // nothing to fail.
     if (run.gateBehavior === 'no-gate' && !generationStore.getTxState().runs.has(run.runId)) {
       logger.debug(
         'pipeline.write_after_run_left',
@@ -379,7 +380,8 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
   if (cause.reason === 'phase-failure' && cause.threw && !reversalFailed)
     await runPhaseExceptionHook(run, ctx, cause.error)
   generationStore.abortRun(run.runId)
-  // A straggler registered during the hook may have taken a fresh hold since the release above.
+  // A straggler that wrote while the run was still registered (during the hook) may have taken a
+  // fresh hold since the release above.
   endWritePhase(run)
   // Uncommitted: the marker rolled back with the reversal, so boot recovery still owns the run.
   if (reversalFailed)

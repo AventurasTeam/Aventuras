@@ -101,10 +101,14 @@ slice-planning gate forces its resolution before that slice is planned.
 - **A parallel group's straggler can commit around a no-gate run's
   abort.** `runParallelGroup` in `lib/pipeline/runtime/orchestrator.ts`
   uses `Promise.all`, which rejects on the first throwing branch
-  without waiting for siblings. A straggler already past the
-  registered-run check in `handleEvent` when the abort began can still
-  commit under the run's actionId during the reversal, or after it
-  while the exception hook runs, and boot recovery never reverses it.
+  without waiting for siblings. A straggler that first emits before
+  the run leaves txState (during the reversal or the exception hook)
+  passes the registered-run check in `handleEvent` and commits under
+  the run's actionId unreversed, and boot recovery never reverses it.
+  If the reversal throws something that isn't a `DeltaReplayError`,
+  `abortRun` rethrows before `generationStore.abortRun`, the run stays
+  registered forever, and a later straggler passes the check and takes
+  a hold nobody releases (this needs both latent conditions at once).
   Latent: no definition under `lib/pipeline/definitions/` uses a
   parallel group. The obvious fix, having `runParallelGroup` wait for
   every sibling to settle before the run aborts, changes canon's run
