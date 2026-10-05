@@ -1441,17 +1441,18 @@ still in the log, which CTRL-Z picks first. A row the closure reaches
 by reference with no `create` in the log, which only a writer outside
 the log could make: the wizard, a seed or an import. And a pair a
 CTRL-Z or a redo's sweep leaves absent whose other writes the prune
-above would take: redo restores only its snapshot, so after a CTRL-Z
-the pair would come back without its `create`, its next reversal
-refusing far from the cause, and a redo would take writes no undo of
-it gives back. None is reachable today. An entity's create is never
-reversed while a delete holds it, given the
-[no-gate write phase](#no-gate-write-phase), newest-first undo, every
-window holding a delete with the create it follows, and sweeps sparing
-entity creates. A writer outside the log names only rows it made
-itself, which lack a `create` too; the closure
-starts from rows whose `create` the set holds; and a `create` a user
-write keeps stays in the log, re-owned. Only periodic-classifier
+above would take: redo restores only its snapshot, so an update whose
+undo deleted the pair redoes onto no row yet re-logs, its next CTRL-Z
+reporting an undo that changed nothing, and a redo would take writes
+no undo of it gives back. A refused redo stays on the stack, so each
+retry refuses again until a new action clears it. None is reachable
+today. An entity's create is never reversed while a delete holds it,
+given the [no-gate write phase](#no-gate-write-phase), newest-first
+undo, every window holding a delete with the create it follows, and
+sweeps sparing entity creates. A writer outside the log names only
+rows it made itself, which lack a `create` too; the closure starts
+from rows whose `create` the set holds; and a `create` a user write
+keeps stays in the log, re-owned. Only periodic-classifier
 groups sit above the group CTRL-Z undoes, every delta-logged write
 clears the redo stack, and no machine writer nulls a relationship view
 or deletes a pair or a character, so neither reversal leaves a pair
