@@ -1210,30 +1210,33 @@ const heroDeltas: NewDelta[] = [
   },
 ]
 
-// Every persisted entry carries a create delta (the rollback window resolves
+// Every persisted entry but the opening carries a create delta (the rollback window resolves
 // from it — operational.ts rejects without one); seeding rows bare makes
 // delete/rollback silently dead on every seeded story. Sources mirror the
-// real writers: user_edit for user turns, ai_classifier for model output.
+// real writers: user_edit for user turns, ai_classifier for model output, and
+// none for the opening, which the wizard commits with no delta (create-story.ts).
 function entryCreateDeltas(allEntries: NewStoryEntry[]): NewDelta[] {
   const nextLogPosition = new Map<string, number>()
-  return allEntries.map((e) => {
-    const lp = nextLogPosition.get(e.branchId) ?? 1
-    nextLogPosition.set(e.branchId, lp + 1)
-    return {
-      id: `delta_create_${e.branchId}_${e.id}`,
-      branchId: e.branchId,
-      entryId: null,
-      actionId: `act_create_${e.branchId}_${e.id}`,
-      logPosition: lp,
-      source: e.kind === 'user_action' ? ('user_edit' as const) : ('ai_classifier' as const),
-      targetTable: 'story_entries',
-      targetId: e.id,
-      op: 'create' as const,
-      undoPayload: null,
-      encodingVersion: 1,
-      createdAt: e.createdAt,
-    }
-  })
+  return allEntries
+    .filter((e) => e.kind !== 'opening')
+    .map((e) => {
+      const lp = nextLogPosition.get(e.branchId) ?? 1
+      nextLogPosition.set(e.branchId, lp + 1)
+      return {
+        id: `delta_create_${e.branchId}_${e.id}`,
+        branchId: e.branchId,
+        entryId: null,
+        actionId: `act_create_${e.branchId}_${e.id}`,
+        logPosition: lp,
+        source: e.kind === 'user_action' ? ('user_edit' as const) : ('ai_classifier' as const),
+        targetTable: 'story_entries',
+        targetId: e.id,
+        op: 'create' as const,
+        undoPayload: null,
+        encodingVersion: 1,
+        createdAt: e.createdAt,
+      }
+    })
 }
 
 // ---------------------------------------------------------------------------

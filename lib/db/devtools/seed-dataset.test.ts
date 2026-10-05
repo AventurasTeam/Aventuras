@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { getRollbackCounts } from '@/lib/actions'
+import { REF_COLUMNS, rowRefs } from '@/lib/actions/delta/live-refs'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { ID_PATTERN, IdBiMap, SUBSTITUTABLE_PREFIXES } from '@/lib/ids'
 import { detectRichEntryHtml, parseMarkdownToHtml } from '@/lib/markdown'
@@ -210,6 +211,32 @@ describe('seeded rollback', () => {
         await handle.db.insert(table).values(rows.slice(i, i + BATCH) as never)
     return handle
   }
+
+  // A writer outside the log names only rows it made itself, so a reversal removing a logged row
+  // never meets a referrer it cannot reverse (generation-pipeline.md → Reverse-replay).
+  it('names a logged row only from rows whose create is logged too', () => {
+    const logged = new Set(
+      (
+        rowsOf('deltas') as {
+          branchId: string
+          targetTable: string
+          targetId: string
+          op: string
+        }[]
+      )
+        .filter((d) => d.op === 'create')
+        .map((d) => `${d.branchId}:${d.targetTable}:${d.targetId}`),
+    )
+    for (const table of Object.keys(REF_COLUMNS)) {
+      for (const row of rowsOf(table)) {
+        if (logged.has(`${row.branchId as string}:${table}:${row.id as string}`)) continue
+        for (const ref of rowRefs(table, row))
+          expect(logged, `${table} ${row.id as string}`).not.toContain(
+            `${row.branchId as string}:${ref.table}:${ref.id}`,
+          )
+      }
+    }
+  })
 
   // CTRL-Z undoes the newest action, so a split action would be undone in two halves.
   it('logs the hero happening fire as one contiguous action', () => {
