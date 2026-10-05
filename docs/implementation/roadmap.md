@@ -624,6 +624,29 @@ code before it moved; resolve with the slice it names.
   blocks at turn 5 and malformed ones at turn 80 would silently move a
   story onto the expensive path exactly as it gets long. Surfaced
   2026-09-06 designing the query stack.
+- **M7.1 — The fallback classifier can re-apply stackable transfers the
+  narrative fold already wrote.** The fold applies whatever the tagged
+  block parsed even when another field failed
+  (`lib/pipeline/definitions/per-turn.ts`), and any parse failure fires
+  the fallback, whose schema asks for transfers again. Item moves and
+  visual changes overwrite, so a repeat is harmless; stackable amounts
+  add, so a transfer both layers report lands twice. Verified by
+  reading in the 2026-10-05 triage pass, not reproduced: the fallback
+  reads the post-fold store (`per-turn-piggyback.ts`) and
+  `lib/piggyback/apply.ts` adds the amount to the current count, with
+  no dedupe; one made-up id in `<scene_entities>` beside a valid
+  `<transfers>` is enough, since `substitute.ts` fails a whole field on
+  an unknown placeholder. Unreachable until this slice: `piggybackMode`
+  defaults to `'off'` and only the dev seed turns it on. Canon decides
+  the fold half
+  ([`piggyback.md → Parse strategy and failure recovery`](../memory/piggyback.md#parse-strategy-and-failure-recovery))
+  and frames the fallback as a from-scratch, last-writer-wins
+  re-extraction, but never addresses fields that are deltas rather
+  than values. Options: the fallback drops transfers when the fold
+  applied them; it bases stackables on the pre-fold state, so last
+  writer wins does hold; or the fold applies nothing on a partial
+  parse, which contradicts canon. Raised by the post-4.2b triage pass
+  (2026-10-04), routed 2026-10-05.
 - **M7.1 — Every future model-removal path must evict the native session cache.**
   `lib/embedder/local/runtime.native.ts` holds a lazy `bundles`
   `Map<modelId, SessionBundle>`; a removed then re-downloaded model reuses

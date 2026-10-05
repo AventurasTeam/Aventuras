@@ -54,14 +54,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **The fallback classifier can re-apply stackable transfers the
-  narrative fold already wrote.** The fold applies whatever the tagged
-  block parsed even when another field failed
-  (`lib/pipeline/definitions/per-turn.ts`), and any parse failure fires
-  the fallback, whose schema asks for transfers again. Item moves and
-  visual changes overwrite, so a repeat is harmless; stackable amounts
-  add, so a transfer both layers report lands twice. Read, not
-  reproduced (2026-10-04, raised by the post-4.2b triage pass).
 - **Canon disagrees on whether the periodic classifier introduces
   locations.** The `currentLocationId` row of
   [`piggyback.md → What piggyback writes`](../memory/piggyback.md#what-piggyback-writes)
