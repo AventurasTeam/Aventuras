@@ -1,6 +1,6 @@
 import { and, eq, getTableColumns, inArray, ne } from 'drizzle-orm'
 
-import { BIND_CHUNK, deltas, type Delta } from '@/lib/db'
+import { chunked, deltas, type Delta } from '@/lib/db'
 
 import { isUserOriginatedSource, type DbCtx } from '../types'
 import { isPayloadMetaKey } from './delta-encoding'
@@ -60,12 +60,6 @@ function idsByTable(rows: readonly RowRef[]): Map<string, string[]> {
     else byTable.set(table, [id])
   }
   return byTable
-}
-
-function chunked<T>(items: readonly T[]): T[][] {
-  const chunks: T[][] = []
-  for (let i = 0; i < items.length; i += BIND_CHUNK) chunks.push(items.slice(i, i + BIND_CHUNK))
-  return chunks
 }
 
 /** Every create and update of the rows, whatever its source; a delete of one never joins. */

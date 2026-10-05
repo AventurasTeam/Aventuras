@@ -1,6 +1,6 @@
 import { getTableColumns } from 'drizzle-orm'
 
-import { BIND_CHUNK } from '../bind-limit'
+import { chunked } from '../bind-limit'
 import { entities } from '../entities/entities.table'
 import { happenings } from '../happenings/happenings.table'
 import { lore } from '../lore/lore.table'
@@ -138,10 +138,7 @@ export type StaleTargetRow = Pick<EmbeddedFieldRow, 'kind' | 'id' | 'branchId'>
 export function flagEmbeddingStaleOps(rows: readonly StaleTargetRow[]): SqlOp[] {
   const ops: SqlOp[] = []
   for (const { kind, branchId, rows: groupRows } of groupRowsByKindBranch(rows).values()) {
-    for (const ids of chunk(
-      groupRows.map((row) => row.id),
-      BIND_CHUNK,
-    )) {
+    for (const ids of chunked(groupRows.map((row) => row.id))) {
       const placeholders = ids.map(() => '?').join(', ')
       ops.push({
         sql: `UPDATE ${SOURCE_TABLES[kind]} SET embedding_stale = 1 WHERE branch_id = ? AND id IN (${placeholders})`,
@@ -169,7 +166,7 @@ export function clearEmbeddingStaleFlagsOps(rows: readonly EmbeddedFieldRow[]): 
 export function flagBranchesEmbeddingStaleOps(branchIds: readonly string[]): SqlOp[] {
   if (branchIds.length === 0) return []
   const kinds = Object.keys(SOURCE_TABLES) as VecTargetKind[]
-  return chunk(branchIds, BIND_CHUNK).flatMap((ids) => {
+  return chunked(branchIds).flatMap((ids) => {
     const placeholders = ids.map(() => '?').join(', ')
     return kinds.map((kind) => ({
       sql: `UPDATE ${SOURCE_TABLES[kind]} SET embedding_stale = 1 WHERE branch_id IN (${placeholders})`,
@@ -178,19 +175,13 @@ export function flagBranchesEmbeddingStaleOps(branchIds: readonly string[]): Sql
   })
 }
 
-function chunk<T>(items: readonly T[], size: number): T[][] {
-  const out: T[][] = []
-  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
-  return out
-}
-
 function setStaleOps(
   kind: VecTargetKind,
   branchId: string,
   ids: readonly string[],
   stale: 0 | 1,
 ): SqlOp[] {
-  return chunk(ids, BIND_CHUNK).map((idChunk) => {
+  return chunked(ids).map((idChunk) => {
     const placeholders = idChunk.map(() => '?').join(', ')
     return {
       sql: `UPDATE ${SOURCE_TABLES[kind]} SET embedding_stale = ? WHERE branch_id = ? AND id IN (${placeholders})`,
@@ -231,10 +222,7 @@ export async function partitionByStoredVector(
   const freshRows: EmbeddedFieldRow[] = []
 
   for (const { kind, branchId, rows: groupRows } of groupRowsByKindBranch(rows).values()) {
-    const idChunks = chunk(
-      groupRows.map((row) => row.id),
-      BIND_CHUNK,
-    )
+    const idChunks = chunked(groupRows.map((row) => row.id))
     const stored = new Map<string, string>()
     for (const table of familyTablesFor(kind, tableNames)) {
       for (const ids of idChunks) {

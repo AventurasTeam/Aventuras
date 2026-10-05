@@ -1,5 +1,5 @@
 import {
-  BIND_CHUNK,
+  chunked,
   knnQuery,
   unpackFloat32,
   vecTableName,
@@ -573,12 +573,8 @@ async function loadAdmittedVectors(
 ): Promise<void> {
   // Chunked only for the bind limit, never narrower: vectorsByIdQuery scans the whole
   // branch partition either way (see its docblock), so a second chunk is another full scan.
-  const chunks: string[][] = []
-  for (let i = 0; i < ids.length; i += BIND_CHUNK) {
-    chunks.push(ids.slice(i, i + BIND_CHUNK))
-  }
   const results = await Promise.all(
-    chunks.map((chunk) => {
+    chunked(ids).map((chunk) => {
       const query = vectorsByIdQuery(kind, params.dim, {
         branchId: params.branchId,
         modelId: params.modelId,

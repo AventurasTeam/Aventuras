@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm'
 
 import type { DbCtx } from '@/lib/db'
-import { BIND_CHUNK, storyEntries } from '@/lib/db'
+import { chunked, storyEntries } from '@/lib/db'
 import { excerpt, stripMarkup } from '@/lib/text'
 
 import type { EntryIndex, EntryRef } from './types'
@@ -90,11 +90,11 @@ async function readWideExcerpts(
 ): Promise<Map<string, string>> {
   const excerpts = new Map<string, string>()
   // Chunked: a story of rich entries can flag every row.
-  for (let i = 0; i < ids.length; i += BIND_CHUNK) {
+  for (const chunk of chunked(ids)) {
     const rows = await database
       .select({ id: storyEntries.id, ...sourceHead(WIDE_SOURCE_CHARS) })
       .from(storyEntries)
-      .where(inArray(storyEntries.id, ids.slice(i, i + BIND_CHUNK)))
+      .where(inArray(storyEntries.id, chunk))
     for (const r of rows) excerpts.set(r.id, widePreview(r))
   }
   return excerpts

@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gt, inArray, or, sql } from 'drizzle-orm'
 
-import { BIND_CHUNK, deltas, type Delta } from '@/lib/db'
+import { chunked, deltas, type Delta } from '@/lib/db'
 
 import { isUserOriginatedSource, type DbCtx } from '../types'
 import type { LockedTable } from './row-locks'
@@ -112,10 +112,8 @@ export async function userEditsOutliving(
     // One bound per table; each machine write below keeps only its own row's later edits.
     const since = group.reduce((min, d) => Math.min(min, d.logPosition), Infinity)
     const ids = [...new Set(group.map((d) => d.targetId))]
-    for (let i = 0; i < ids.length; i += BIND_CHUNK) {
-      const chunk = ids.slice(i, i + BIND_CHUNK)
+    for (const chunk of chunked(ids))
       edits.push(...(await rowDeltasAfter(ctx, branchId, targetTable, chunk, since, true)))
-    }
   }
   const outliving = edits.filter((e) => !reversed.has(e.id))
   const editsByRow = groupBy(outliving, rowKey)
