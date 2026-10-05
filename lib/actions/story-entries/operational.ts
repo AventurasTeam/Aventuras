@@ -2,11 +2,16 @@ import { and, desc, eq, sql, type SQL } from 'drizzle-orm'
 
 import type { Delta, SqlOp } from '@/lib/db'
 import { deltas, storyEntries } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
 import { deltaRowOp } from '../delta/delta-row'
-import { DeltaReplayError, reverseAndPruneDeltaRows } from '../delta/reverse-replay'
+import {
+  DeltaReplayError,
+  ReversalIntegrityError,
+  reverseAndPruneDeltaRows,
+} from '../delta/reverse-replay'
 import { selectReversalSet, type ReversalSet } from '../delta/row-closure'
 import type { DbCtx } from '../types'
 import { contentEditUndoPayload, resolveContentEditInvalidation } from './classifier-facts'
@@ -19,8 +24,15 @@ export type StoryEntryRejection = {
   code: StoryEntryRejectionCode
 }
 
+// A refused reversal wrote nothing; it travels on the action's existing rejection
+// (generation-pipeline.md → Reverse-replay).
+function reversalRefused(branchId: string, e: ReversalIntegrityError): StoryEntryRejection {
+  logger.error('action_layer.reversal_refused', { branchId, refusal: e.refusal, reason: e.message })
+  return { status: 'rejected', reason: e.message, code: STORY_ENTRY_REJECTION.deltaFailed }
+}
+
 // A second unrelated action clears the redo stack (data-model.md). That holds when only the store
-// sync after the commit throws too: the action landed all the same.
+// sync after the commit throws too: the action landed all the same. A refusal is not committed.
 async function commitNewAction(
   set: ReversalSet,
   ctx: DbCtx,
@@ -102,33 +114,38 @@ async function updateStoryEntryContentBracketed(
   // is already behind. One transaction, because a clamp without the reversal re-derives
   // beside the stale facts and a reversal without the clamp deletes them with nothing
   // to replace them.
-  const set = await selectReversalSet(ctx, { branchId, target: [], sweep: invalidation.rows })
-  await commitNewAction(set, ctx, [
-    ctx.db
-      .update(storyEntries)
-      .set({ content })
-      .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, id)))
-      .toSQL(),
-    // Spliced rather than dispatched: applyDeltaAction commits its own transaction, so
-    // it could not be atomic with the reversal, and its barrier rejects a user_edit
-    // action while `reversalInProgress` is set -- which the bracket above sets.
-    deltaRowOp(ctx, {
-      deltaId: generateId('delta'),
-      branchId,
-      // Survival anchor: without it a rollback above this entry would sweep the delta
-      // and restore stale prose onto a row that survives (data-model.md).
-      entryId: id,
-      actionId: generateId('act'),
-      source: 'user_edit',
-      target: {
-        targetTable: 'story_entries',
-        targetId: id,
-        op: 'update',
-        undoPayload: contentEditUndoPayload(current.content, invalidation.scope),
-      },
-    }),
-    ...invalidation.clampOps,
-  ])
+  try {
+    const set = await selectReversalSet(ctx, { branchId, target: [], sweep: invalidation.rows })
+    await commitNewAction(set, ctx, [
+      ctx.db
+        .update(storyEntries)
+        .set({ content })
+        .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, id)))
+        .toSQL(),
+      // Spliced rather than dispatched: applyDeltaAction commits its own transaction, so
+      // it could not be atomic with the reversal, and its barrier rejects a user_edit
+      // action while `reversalInProgress` is set -- which the bracket above sets.
+      deltaRowOp(ctx, {
+        deltaId: generateId('delta'),
+        branchId,
+        // Survival anchor: without it a rollback above this entry would sweep the delta
+        // and restore stale prose onto a row that survives (data-model.md).
+        entryId: id,
+        actionId: generateId('act'),
+        source: 'user_edit',
+        target: {
+          targetTable: 'story_entries',
+          targetId: id,
+          op: 'update',
+          undoPayload: contentEditUndoPayload(current.content, invalidation.scope),
+        },
+      }),
+      ...invalidation.clampOps,
+    ])
+  } catch (e) {
+    if (e instanceof ReversalIntegrityError) return reversalRefused(branchId, e)
+    throw e
+  }
 
   entriesStore.patch(branchId, { op: 'update', id, columns: { content } })
   return { status: 'ok' }
@@ -136,9 +153,8 @@ async function updateStoryEntryContentBracketed(
 
 export type RollbackCounts = { entries: number; chapters: number; worldStateChanges: number }
 
-// Resolves the rollback-window predicate shared by the preview (counts) and
-// execute paths, so each builds its own select — the count path skips the
-// undo_payload blob it never reads.
+// The rollback-window predicate behind resolveSweep, which the preview and every sweep
+// path share.
 async function resolveRollbackWindow(
   branchId: string,
   targetId: string,
@@ -198,17 +214,17 @@ async function resolveRollbackWindow(
 }
 
 /**
- * The rollback window materialized: the delta rows to reverse (log_position DESC,
- * the order reverse-replay requires) plus the watermark clamp that must ride in
- * their transaction. Deliberately side-effect-free — each caller owns its own tail
- * (`countBuckets`, a redo snapshot, nothing) and decides its own redo-stack policy,
- * which is not uniform across callers.
+ * The rollback window materialized and closed: the set the sweep reverses, plus the
+ * watermark clamp that must ride in its transaction. Deliberately side-effect-free — each
+ * caller owns its own tail (`countBuckets`, a redo snapshot, nothing) and decides its own
+ * redo-stack policy, which is not uniform across callers. A closure the log cannot satisfy
+ * comes back as the `delta-failed` rejection.
  */
 export async function resolveSweep(
   branchId: string,
   targetId: string,
   ctx: DbCtx,
-): Promise<{ rows: Delta[]; clampOps: SqlOp[] } | StoryEntryRejection> {
+): Promise<{ set: ReversalSet; clampOps: SqlOp[] } | StoryEntryRejection> {
   const win = await resolveRollbackWindow(branchId, targetId, ctx)
   if ('status' in win) return win
   const rows = (await ctx.db
@@ -216,14 +232,21 @@ export async function resolveSweep(
     .from(deltas)
     .where(win.where)
     .orderBy(desc(deltas.logPosition))) as Delta[]
-  return { rows, clampOps: classifierWatermarkClampOps(branchId, win.earliestRemovedPosition) }
+  let set: ReversalSet
+  try {
+    set = await selectReversalSet(ctx, { branchId, target: rows })
+  } catch (e) {
+    if (e instanceof ReversalIntegrityError) return reversalRefused(branchId, e)
+    throw e
+  }
+  return { set, clampOps: classifierWatermarkClampOps(branchId, win.earliestRemovedPosition) }
 }
 
 // Buckets per rollback-confirm.md, whose world-state row is scoped to the other
 // narrative tables. An entry-scoped delta is spared by the survival anchor unless its
 // entry is being deleted, so counting one here would charge the user twice for a loss
 // the entries line already reports.
-function countBuckets(rows: Pick<Delta, 'op' | 'targetTable'>[]): RollbackCounts {
+function countBuckets(rows: readonly Pick<Delta, 'op' | 'targetTable'>[]): RollbackCounts {
   let entries = 0
   let chapters = 0
   let worldStateChanges = 0
@@ -241,14 +264,11 @@ export async function getRollbackCounts(
   targetId: string,
   ctx: DbCtx,
 ): Promise<RollbackCounts | StoryEntryRejection> {
-  const win = await resolveRollbackWindow(branchId, targetId, ctx)
-  if ('status' in win) return win
-  // Counts are order-independent and never read undo_payload — project neither.
-  const rows = await ctx.db
-    .select({ op: deltas.op, targetTable: deltas.targetTable })
-    .from(deltas)
-    .where(win.where)
-  return countBuckets(rows)
+  // The closed set, not the window: a fact on a surviving turn naming a row the sweep
+  // removes goes too (rollback-confirm.md → Counts).
+  const swept = await resolveSweep(branchId, targetId, ctx)
+  if ('status' in swept) return swept
+  return countBuckets(swept.set.rows)
 }
 
 export async function rollbackToEntry(
@@ -266,9 +286,13 @@ export async function rollbackToEntry(
   return bracketProseReversal(branchId, async () => {
     const swept = await resolveSweep(branchId, targetId, ctx)
     if ('status' in swept) return swept
-    const counts = countBuckets(swept.rows)
-    const set = await selectReversalSet(ctx, { branchId, target: swept.rows })
-    await commitNewAction(set, ctx, swept.clampOps)
+    const counts = countBuckets(swept.set.rows)
+    try {
+      await commitNewAction(swept.set, ctx, swept.clampOps)
+    } catch (e) {
+      if (e instanceof ReversalIntegrityError) return reversalRefused(branchId, e)
+      throw e
+    }
     return { status: 'ok', counts }
   })
 }

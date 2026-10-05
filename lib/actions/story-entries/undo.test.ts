@@ -1,7 +1,15 @@
 import { eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { branches, deltas, pipelineRuns, stories, storyEntries } from '@/lib/db'
+import {
+  branches,
+  deltas,
+  happeningInvolvements,
+  happenings,
+  pipelineRuns,
+  stories,
+  storyEntries,
+} from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
@@ -476,5 +484,47 @@ describe('undoLastAction after a reversed turn', () => {
     expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
     expect(entriesStore.getById('e_turn')).toBeUndefined()
     expect(await db.select().from(storyEntries).where(eq(storyEntries.id, 'e_turn'))).toEqual([])
+  })
+})
+
+describe('undoLastAction over a refused closure', () => {
+  it('returns integrity for a turn whose window the closure refuses, writing nothing', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    hydrateOpeningAndTurn()
+    await db
+      .insert(happenings)
+      .values({ id: 'hap_t', branchId: 'b1', title: 'Duel', createdAt: 2, updatedAt: 2 })
+    await db.insert(deltas).values({
+      id: 'd_hap',
+      branchId: 'b1',
+      actionId: 'act_turn',
+      op: 'create',
+      targetTable: 'happenings',
+      targetId: 'hap_t',
+      entryId: null,
+      source: 'ai_classifier',
+      undoPayload: null,
+      logPosition: 2,
+      encodingVersion: 1,
+      createdAt: 2,
+    })
+    // Only a writer outside the log makes this row (generation-pipeline.md → Reverse-replay).
+    await db
+      .insert(happeningInvolvements)
+      .values({ id: 'hinv_raw', branchId: 'b1', happeningId: 'hap_t', entityId: 'char_k' })
+    const before = await db.select().from(deltas)
+
+    const result = await undoLastAction('b1', ctx)
+
+    expect(result).toEqual({
+      status: 'rejected',
+      code: 'integrity',
+      reason: expect.stringContaining('no-create'),
+    })
+    expect(await db.select().from(deltas)).toEqual(before)
+    expect(entriesStore.getById('e_turn')).toBeDefined()
+    expect(undoRedoStore.hasRedo()).toBe(false)
   })
 })

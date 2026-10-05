@@ -2,7 +2,15 @@ import { and, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { branches, deltas, happenings, storyEntries, type Delta, type StoryEntry } from '@/lib/db'
+import {
+  branches,
+  deltas,
+  happeningInvolvements,
+  happenings,
+  storyEntries,
+  type Delta,
+  type StoryEntry,
+} from '@/lib/db'
 import { PER_TURN_KIND } from '@/lib/pipeline'
 import {
   awaitRunTerminal,
@@ -17,7 +25,11 @@ import { branchEntries, openStory, sseFetch, WORKING_CONFIG } from './__tests__/
 import { regenerateTurn } from './regenerate-turn'
 import { submitTurn } from './submit-turn'
 import { expectRan, makeHarness, resetSingletons } from '../../pipeline/__tests__/harness'
-import { DeltaReplayError, type reverseAndPruneDeltaRows } from '../delta/reverse-replay'
+import {
+  DeltaReplayError,
+  ReversalIntegrityError,
+  type reverseAndPruneDeltaRows,
+} from '../delta/reverse-replay'
 import { undoLastAction } from '../story-entries/undo'
 
 vi.mock('@/lib/retrieval', async (importOriginal) => {
@@ -657,5 +669,53 @@ describe('regenerateTurn', () => {
 
     await expect(regen).rejects.toThrow('unknown target_table lore')
     expect(attempted).toEqual([false, true])
+  })
+  it('reports sweep-refused when the closure refuses the sweep, destroying nothing', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    // Only a writer outside the log makes this row (generation-pipeline.md → Reverse-replay).
+    await ctx.db
+      .insert(happeningInvolvements)
+      .values({ id: 'hinv_raw', branchId: 'b1', happeningId: 'h_b', entityId: 'char_k' })
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    undoRedoStore.pushRedoGroup([])
+    const before = await ctx.db.select().from(deltas)
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+
+    expect(regen).toEqual({
+      status: 'rejected',
+      code: 'sweep-refused',
+      reason: expect.stringContaining('no-create'),
+    })
+    expect(entriesStore.getById('e_r2')).toBeDefined()
+    expect(await ctx.db.select().from(deltas)).toEqual(before)
+    expect(undoRedoStore.hasRedo()).toBe(true)
+  })
+
+  it('reports sweep-refused when the reversal refuses at commit', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+
+    const regen = await withSweepHook(
+      () => {
+        throw new ReversalIntegrityError(
+          'write-back',
+          'happenings:h_b is named by delta d_x',
+          'act_t2',
+        )
+      },
+      () => regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx),
+    )
+
+    expect(regen).toEqual({
+      status: 'rejected',
+      code: 'sweep-refused',
+      reason: expect.stringContaining('write-back'),
+    })
+    expect(entriesStore.getById('e_r2')).toBeDefined()
   })
 })

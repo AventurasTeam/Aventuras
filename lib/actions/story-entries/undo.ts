@@ -61,10 +61,10 @@ export async function undoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
     let clampOps: SqlOp[]
     if (target.kind === 'turn') {
       const swept = await resolveSweep(branchId, target.entryId, ctx)
-      // resolveSweep refuses on a missing entry or an absent create delta: the
-      // log cannot describe what it is being asked to reverse.
+      // resolveSweep refuses on a missing entry, an absent create delta, or a closure the log
+      // cannot satisfy: the log cannot describe what it is being asked to reverse.
       if ('status' in swept) return { status: 'rejected', code: 'integrity', reason: swept.reason }
-      set = await selectReversalSet(ctx, { branchId, target: swept.rows })
+      set = swept.set
       clampOps = swept.clampOps
     } else {
       const group = recent.filter((r) => r.actionId === target.actionId)
