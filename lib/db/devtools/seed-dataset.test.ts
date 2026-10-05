@@ -211,18 +211,29 @@ describe('seeded rollback', () => {
     return handle
   }
 
-  // hap_fire anchors at entry 22 and its links at 22 and 25, so rolling back to any earlier entry
-  // sweeps them; checking every entry also covers rollbacks that spare them.
-  it('previews a rollback to every hero entry above the opening', async () => {
+  // CTRL-Z undoes the newest action, so a split action would be undone in two halves.
+  it('logs the hero happening fire as one contiguous action', () => {
+    const fire = (rowsOf('deltas') as { branchId: string; actionId: string; logPosition: number }[])
+      .filter((r) => r.branchId === 'br_hero_main' && r.actionId === 'act_class_1')
+      .map((r) => r.logPosition)
+      .sort((a, b) => a - b)
+
+    expect(fire).toHaveLength(4)
+    expect(fire[fire.length - 1]! - fire[0]!).toBe(fire.length - 1)
+  })
+
+  // Every seeded branch, not just the hero's: hap_fire anchors at entry 22 and its links at 22 and
+  // 25, so the hero's earlier rollbacks sweep them and the later ones spare them.
+  it('previews a rollback to every seeded entry above the opening', async () => {
     const { db, runInTransaction } = await seededDb()
     const entries = (
-      rowsOf('story_entries') as { id: string; branchId: string; position: number }[]
-    ).filter((r) => r.branchId === 'br_hero_main' && r.position > 1)
-    expect(entries.length).toBeGreaterThan(22)
+      rowsOf('story_entries') as { id: string; branchId: string; kind: string; position: number }[]
+    ).filter((r) => r.kind !== 'opening')
+    expect(entries.length).toBeGreaterThan(100)
 
     for (const entry of entries) {
-      const counts = await getRollbackCounts('br_hero_main', entry.id, { db, runInTransaction })
-      expect(counts, `entry ${entry.position}`).toEqual({
+      const counts = await getRollbackCounts(entry.branchId, entry.id, { db, runInTransaction })
+      expect(counts, `${entry.branchId} entry ${entry.position}`).toEqual({
         entries: expect.any(Number),
         chapters: expect.any(Number),
         worldStateChanges: expect.any(Number),
