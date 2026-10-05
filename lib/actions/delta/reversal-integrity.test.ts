@@ -159,7 +159,9 @@ async function redo(): Promise<void> {
   expect(await redoLastAction('b1', ctx)).toEqual({ status: 'ok' })
 }
 
-// The orchestrator's abortRun reverses a failed run this way.
+// The orchestrator's abortRun reverses a failed run this way. In production the no-gate write
+// lock keeps a user write out of a pass's burst, so these interleavings are not a reachable
+// abort: driving the reversal directly pins the planner.
 async function abort(actionId: string): Promise<void> {
   await reverseReplayDeltas(actionId, ctx)
 }
@@ -183,9 +185,9 @@ async function step(label: string, run: () => Promise<void>): Promise<void> {
 }
 
 function registered(table: string) {
-  const entry = resolveByTable(table)
-  if (!entry) throw new Error(`${table} is not registered`)
-  return entry
+  const registration = resolveByTable(table)
+  if (!registration) throw new Error(`${table} is not registered`)
+  return registration
 }
 
 async function liveIds(table: string): Promise<string[]> {
@@ -210,12 +212,20 @@ async function deltasOn(id: string): Promise<Delta[]> {
   return (await ctx.db.select().from(deltas).where(eq(deltas.targetId, id))) as Delta[]
 }
 
+async function proseOf(id: string): Promise<string> {
+  const [row] = await ctx.db
+    .select({ content: storyEntries.content })
+    .from(storyEntries)
+    .where(eq(storyEntries.id, id))
+  return row.content
+}
+
 async function heldRow(table: string, id: string) {
   return (await loadHeldRows(ctx, 'b1')).byRow.get(heldKey(table, id))
 }
 
 /** Invariant 1: a live row names only live rows; a held row names only live or held ones. */
-async function expectNoDanglingRefs(step: string): Promise<void> {
+async function expectNoDanglingRefs(label: string): Promise<void> {
   const refTables = new Set(
     Object.values(REF_COLUMNS).flatMap((columns) => columns.map((column) => column.refTable)),
   )
@@ -239,8 +249,8 @@ async function expectNoDanglingRefs(step: string): Promise<void> {
       if (!live.has(key) && !held.byRow.has(key))
         dangling.push(`held ${row.table}:${row.id} (delta ${row.holder.id}) names ${key}`)
     }
-  // Thrown, not asserted: a diff elides the rows, and a failure must name them.
-  if (dangling.length > 0) throw new Error(`${step}: ${dangling.join('; ')}`)
+  // Thrown, not asserted: toEqual's message truncates the array, and the self-tests match the rows in it.
+  if (dangling.length > 0) throw new Error(`${label}: ${dangling.join('; ')}`)
 }
 
 /** Invariant 2: absent from its table, and neither the log nor a delete's payload restores it. */
@@ -333,6 +343,25 @@ describe('reversal integrity scenarios', () => {
     await expectGoneForGood('entities', 'char_p')
     await expectGoneForGood('character_relationships', relationshipId)
     expect(await isLive('entities', 'char_x')).toBe(true)
+  })
+
+  it("aborting a pass takes a user relationship a delete holds that names the pass's character", async () => {
+    await step('pass create', () =>
+      act('act_pass')(createCharacter('char_p', 'Pell', 'periodic_classifier')),
+    )
+    await step('user link', () => act('act_user')(relate('char_p', 'char_x', 'ally', 'user_edit')))
+    const relationshipId = await onlyId('character_relationships')
+    await step('delete', () => deleteEntity('char_x'))
+    expect((await heldRow('character_relationships', relationshipId))?.place).toBe('captured')
+
+    await step('abort', () => abort('act_pass'))
+    await expectGoneForGood('entities', 'char_p')
+    await expectGoneForGood('character_relationships', relationshipId)
+    expect((await heldRow('entities', 'char_x'))?.place).toBe('target')
+
+    await step('CTRL-Z', undo)
+    expect(await isLive('entities', 'char_x')).toBe(true)
+    await expectGoneForGood('character_relationships', relationshipId)
   })
 
   it('an abort strips a captured relationship from an entity delete; undoing the delete leaves it gone', async () => {
@@ -464,12 +493,15 @@ describe('reversal integrity scenarios', () => {
     expect((await heldRow('entities', 'char_x'))?.place).toBe('target')
 
     await step('CTRL-Z of the edit', undo)
-    const [prose] = await ctx.db
-      .select({ content: storyEntries.content })
-      .from(storyEntries)
-      .where(eq(storyEntries.id, 'e_a'))
-    expect(prose.content).toBe('e_a content')
+    expect(await proseOf('e_a')).toBe('e_a content')
     for (const [table, id] of swept) await expectGoneForGood(table, id)
+
+    await step('redo of the edit', redo)
+    expect(await proseOf('e_a')).toBe('rewritten')
+    for (const [table, id] of swept) await expectGoneForGood(table, id)
+
+    await step('second CTRL-Z of the edit', undo)
+    expect(await proseOf('e_a')).toBe('e_a content')
 
     // The entity delete: the happening delete went with the edit's sweep.
     await step('CTRL-Z of the entity delete', undo)
