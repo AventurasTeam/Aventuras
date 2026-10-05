@@ -140,13 +140,17 @@ test.describe('periodic classifier — graph population', () => {
     )
     expect(involvements[0][0]).toBe(1)
 
-    // Provenance landed on the delta, and the watermark advanced.
+    // Provenance landed on the pass's own delta (the seed already logs anchored periodic rows),
+    // and the watermark advanced.
     const anchored = await queryApp(
       app.window,
-      `SELECT COUNT(*) FROM deltas WHERE branch_id = ? AND source = 'periodic_classifier' AND entry_id IS NOT NULL`,
-      [branchId],
+      `SELECT COUNT(*) FROM deltas
+       WHERE branch_id = ? AND source = 'periodic_classifier' AND entry_id IS NOT NULL
+         AND target_table = 'happenings' AND target_id IN
+           (SELECT id FROM happenings WHERE branch_id = ? AND title LIKE '%ford%')`,
+      [branchId, branchId],
     )
-    expect(anchored[0][0]).toBeGreaterThan(0)
+    expect(anchored[0][0]).toBe(1)
 
     const status = await queryApp(
       app.window,
