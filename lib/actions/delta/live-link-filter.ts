@@ -27,14 +27,16 @@ function capturedKeys(children: Children): Set<string> {
 const size = (children: Children) => children.reduce((n, child) => n + child.rows.length, 0)
 
 /**
- * Drops captured rows naming a row a separate reversal removed since, cascading to rows naming
- * those. Liveness: the plan's end state (the row's oldest delta: a create removes it, a delete
- * restores it), else this undo's own restores, else the DB.
+ * Drops captured rows naming a row that is dead once the plan has run, cascading to rows naming
+ * those. Liveness: the row's oldest delta in the plan (a create removes it, a delete restores it),
+ * else this undo's own restores, else the DB.
  */
 export async function liveLinkFilter(rows: readonly Delta[], ctx: DbCtx): Promise<LiveLinkFilter> {
   const fate = new Map<string, Delta>()
   for (const delta of rows) {
     if (delta.op === 'update' || !isRefTable(delta.targetTable)) continue
+    // The planner may keep a row-keeping row; if not, the closure already took every row naming it.
+    if (delta.op === 'create' && resolveByTable(delta.targetTable)?.rowKeepingColumns) continue
     const key = refKey(delta.targetTable, delta.branchId, delta.targetId)
     const seen = fate.get(key)
     if (!seen || delta.logPosition < seen.logPosition) fate.set(key, delta)

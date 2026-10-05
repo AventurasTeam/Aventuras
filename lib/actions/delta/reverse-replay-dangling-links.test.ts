@@ -270,6 +270,56 @@ describe('undoing a delete whose link names a row a later reversal removed', () 
     expect(left).toEqual([{ id: 'tr_own' }])
   })
 
+  it('restores the translations of a relationship the user kept, with the delete holding both', async () => {
+    await passAction('act_c')({
+      kind: 'upsertCharacterRelationship',
+      source: 'periodic_classifier',
+      payload: {
+        branchId: 'b1',
+        subjectId: 'char_lead',
+        objectId: 'char_x',
+        kind: 'rival',
+        proseEntryId: null,
+      },
+    })
+    const [rel] = await ctx.db.select().from(characterRelationships)
+    await passAction('act_t')({
+      kind: 'createTranslation',
+      source: 'periodic_classifier',
+      payload: { entry: translation('tr_1', 'character_relationship', rel.id) },
+    })
+    await passAction('act_u')({
+      kind: 'upsertCharacterRelationship',
+      source: 'user_edit',
+      payload: {
+        branchId: 'b1',
+        subjectId: 'char_lead',
+        objectId: 'char_x',
+        kind: 'ally',
+        inverseKind: null,
+      },
+    })
+    await passAction('act_d')({
+      kind: 'deleteEntity',
+      source: 'user_edit',
+      payload: { branchId: 'b1', id: 'char_x' },
+    })
+
+    const target = (
+      (await ctx.db.select().from(deltas).orderBy(desc(deltas.logPosition))) as Delta[]
+    ).filter((d) => d.actionId === 'act_d' || d.actionId === 'act_c')
+    await reverseAndPruneDeltaRows(await selectReversalSet(ctx, { branchId: 'b1', target }), ctx, {
+      keepRedoExact: false,
+    })
+
+    expect(await ctx.db.select().from(characterRelationships)).toEqual([
+      expect.objectContaining({ id: rel.id, kind: 'ally' }),
+    ])
+    expect(await ctx.db.select({ id: translations.id }).from(translations)).toEqual([
+      { id: 'tr_1' },
+    ])
+  })
+
   it('restores a link naming a row an earlier-reversed delete in the same plan restores', async () => {
     await ctx.db
       .insert(happenings)
