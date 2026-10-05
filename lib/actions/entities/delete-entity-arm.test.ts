@@ -23,21 +23,13 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { plantVec } from '@/lib/db/__tests__/vec-fixtures'
 import { characterRelationshipsStore } from '@/lib/stores'
 
+import { reverseRows } from '../delta/__tests__/reverse-rows'
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { applyRedo, prepareUndo } from '../delta/redo'
 import { TARGET_NOT_FOUND } from '../delta/registry'
-import { reverseAndPruneDeltaRows } from '../delta/reverse-replay'
 import { selectReversalSet } from '../delta/row-closure'
 import type { DbCtx } from '../types'
 import { ENTITY_DELETE_REJECTION } from './register'
-
-async function reverseRows(rows: readonly Delta[], ctx: DbCtx): Promise<number> {
-  return reverseAndPruneDeltaRows(
-    await selectReversalSet(ctx, { branchId: 'b1', target: rows }),
-    ctx,
-    { keepRedoExact: false },
-  )
-}
 
 const character = (id: string, branchId: string, name: string): NewEntity => ({
   id,

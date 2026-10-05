@@ -15,17 +15,9 @@ import {
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { plantVec } from '@/lib/db/__tests__/vec-fixtures'
 
-import { buildReverseAndPrunePlan, reverseAndPruneDeltaRows } from './reverse-replay'
+import { reverseRows } from './__tests__/reverse-rows'
+import { buildReverseAndPrunePlan } from './reverse-replay'
 import { selectReversalSet } from './row-closure'
-import type { DbCtx } from '../types'
-
-async function reverseRows(rows: readonly Delta[], ctx: DbCtx): Promise<number> {
-  return reverseAndPruneDeltaRows(
-    await selectReversalSet(ctx, { branchId: 'b1', target: rows }),
-    ctx,
-    { keepRedoExact: false },
-  )
-}
 
 function insertEntity(db: any, branchId: string, id: string): Promise<void> {
   return db.insert(entities).values({

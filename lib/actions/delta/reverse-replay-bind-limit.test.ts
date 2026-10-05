@@ -6,17 +6,8 @@ import { describe, expect, it } from 'vitest'
 import { branches, happeningAwareness, stories, type Delta } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
-import { reverseAndPruneDeltaRows } from './reverse-replay'
-import { selectReversalSet } from './row-closure'
 import type { DbCtx } from '../types'
-
-async function reverseRows(rows: readonly Delta[], ctx: DbCtx): Promise<number> {
-  return reverseAndPruneDeltaRows(
-    await selectReversalSet(ctx, { branchId: 'b1', target: rows }),
-    ctx,
-    { keepRedoExact: false },
-  )
-}
+import { reverseRows } from './__tests__/reverse-rows'
 
 // 8 cols → floor(32766/8)=4095 max rows/INSERT; 4200 rows forces a multi-statement restore.
 const AWARENESS_ROW_COUNT = 4200

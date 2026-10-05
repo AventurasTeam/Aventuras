@@ -19,6 +19,7 @@ import {
   undoRedoStore,
 } from '@/lib/stores'
 
+import { reverseRows } from './__tests__/reverse-rows'
 import { applyDeltaAction } from './apply-delta-action'
 import {
   buildReverseAndPrunePlan,
@@ -60,14 +61,6 @@ async function deltasOf(db: Db, actionId: string): Promise<Delta[]> {
     .from(deltas)
     .where(eq(deltas.actionId, actionId))
     .orderBy(desc(deltas.logPosition))) as Delta[]
-}
-
-async function reverseRows(rows: readonly Delta[], ctx: Ctx): Promise<number> {
-  return reverseAndPruneDeltaRows(
-    await selectReversalSet(ctx, { branchId: 'b1', target: rows }),
-    ctx,
-    { keepRedoExact: false },
-  )
 }
 
 async function actionIds(db: Db): Promise<string[]> {

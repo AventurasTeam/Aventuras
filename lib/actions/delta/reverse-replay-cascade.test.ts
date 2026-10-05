@@ -2,22 +2,12 @@ import { and, eq } from 'drizzle-orm'
 import { sqliteTable, text } from 'drizzle-orm/sqlite-core'
 import { describe, expect, it, vi } from 'vitest'
 
-import { branches, entities, stories, type Delta, type NewEntity } from '@/lib/db'
+import { branches, entities, stories, type NewEntity } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
+import { reverseRows } from './__tests__/reverse-rows'
 import { __resetRegistry, register } from './registry'
-import { reverseAndPruneDeltaRows } from './reverse-replay'
-import { selectReversalSet } from './row-closure'
 import { registerEntities } from '../entities/register'
-import type { DbCtx } from '../types'
-
-async function reverseRows(rows: readonly Delta[], ctx: DbCtx): Promise<number> {
-  return reverseAndPruneDeltaRows(
-    await selectReversalSet(ctx, { branchId: 'b1', target: rows }),
-    ctx,
-    { keepRedoExact: false },
-  )
-}
 
 // No shipped domain cascades an embeddable table today, so the engine's child arm
 // needs a throwaway parent to be reachable at all.
