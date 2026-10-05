@@ -24,7 +24,7 @@ export class DeltaReplayError extends Error {
 }
 
 /** Which integrity state a reversal refused (generation-pipeline.md → Reverse-replay). */
-export type IntegrityRefusal = 'write-back' | 'held-in-redo' | 'no-create'
+export type IntegrityRefusal = 'write-back' | 'held-in-redo' | 'no-create' | 'pruned-outside-redo'
 
 /** A reversal refused before writing anything, so it never reads as committed. */
 export class ReversalIntegrityError extends DeltaReplayError {

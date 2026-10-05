@@ -153,7 +153,7 @@ async function applyRedoLocked(
   // rather than left to chance -- the classifier targets no story_entries row today.
   const plan =
     invalidation && invalidation.set.rows.length > 0
-      ? await buildReverseAndPrunePlan(invalidation.set, ctx)
+      ? await buildReverseAndPrunePlan(invalidation.set, ctx, { keepRedoExact: true })
       : { ops: [], pruneOps: [], patches: [] }
   // Prunes ahead of the re-inserts so the restored deltas take positions above what
   // survives the reversal rather than above rows this transaction is deleting.

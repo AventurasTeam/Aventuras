@@ -45,6 +45,11 @@ export function describeDeltaReplayError(
 
 export type PatchEmission = { table: string; branchId: string; patch: StorePatch }
 
+export type ReversalOptions = {
+  /** CTRL-Z and redo: refuse a prune of writes outside the set, which redo cannot restore. */
+  keepRedoExact?: boolean
+}
+
 export type ReversePlan = {
   /** The undos' row writes, and one `undo_payload` write per held delete they change. */
   ops: SqlOp[]
@@ -64,8 +69,12 @@ export type ReversePlan = {
  * A delete whose own row the reversal removes is pruned with the set
  * (generation-pipeline.md → Reverse-replay). The prunes leave gaps in log_position.
  */
-export async function buildReverseAndPrunePlan(set: ReversalSet, ctx: DbCtx): Promise<ReversePlan> {
-  const built = await buildUndoOps(set, ctx)
+export async function buildReverseAndPrunePlan(
+  set: ReversalSet,
+  ctx: DbCtx,
+  options: ReversalOptions = {},
+): Promise<ReversePlan> {
+  const built = await buildUndoOps(set, ctx, options)
   const reownOrPrune = (r: Delta): SqlOp => {
     const keptBy = built.reowned.get(r.id)
     return keptBy === undefined
@@ -188,8 +197,8 @@ function settleHeldCopies(
   return { payloadOps, pruned, rewritten }
 }
 
-// A write left naming a gone row would CTRL-Z to nothing. Redo never restores one: logged writes
-// clear redo, only periodic groups sit above a CTRL-Z target, no machine nulls a view or deletes.
+// A write left naming a gone row would CTRL-Z to nothing. Redo restores none of them, so CTRL-Z and
+// redo refuse rather than prune (generation-pipeline.md → Reverse-replay).
 async function strandedWritesOf(
   ctx: DbCtx,
   set: ReversalSet,
@@ -258,7 +267,11 @@ async function refuseWriteBack(
 
 // Per-row working copy: same-row undos (even disjoint JSON sub-keys) compose, not clobber via a
 // stale base. Machine undos yield to later user edits: generation-pipeline.md → Reverse-replay.
-async function buildUndoOps(set: ReversalSet, ctx: DbCtx): Promise<BuiltUndo> {
+async function buildUndoOps(
+  set: ReversalSet,
+  ctx: DbCtx,
+  options: ReversalOptions,
+): Promise<BuiltUndo> {
   const rows = set.rows
   const working = new Map<string, Record<string, unknown>>()
   // A tombstone keeps the deleted row so an older undo giving back a row-keeping column
@@ -503,6 +516,13 @@ async function buildUndoOps(set: ReversalSet, ctx: DbCtx): Promise<BuiltUndo> {
   // Stores hold no deleted rows, so a payload edit emits no patch.
   const { payloadOps, pruned, rewritten } = settleHeldCopies(heldCopies, ctx)
   const strandedWrites = await strandedWritesOf(ctx, set, endsAbsent, heldCopies)
+  const [stranded] = strandedWrites
+  if (options.keepRedoExact && stranded)
+    throw new ReversalIntegrityError(
+      'pruned-outside-redo',
+      `${stranded.targetTable}:${stranded.targetId} ends absent; redo cannot restore ${stranded.id}`,
+      set.rows[0]?.actionId ?? 'reversal',
+    )
   await refuseWriteBack(ctx, set, pruned, rewritten, strandedWrites)
   ops.push(...payloadOps)
 
@@ -528,13 +548,14 @@ export async function reverseAndPruneDeltaRows(
   set: ReversalSet,
   ctx: DbCtx,
   extraOps: readonly SqlOp[] = [],
+  options: ReversalOptions = {},
 ): Promise<number> {
   if (set.rows.length === 0 && extraOps.length === 0) return 0
   const actionId = set.rows[0]?.actionId ?? 'rollback'
   return withKeyLocks(reversalLockKeys(set), async () => {
     let patches: PatchEmission[]
     try {
-      const plan = await buildReverseAndPrunePlan(set, ctx)
+      const plan = await buildReverseAndPrunePlan(set, ctx, options)
       patches = plan.patches
       await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...extraOps])
     } catch (e) {
