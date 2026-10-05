@@ -521,7 +521,7 @@ async function buildUndoOps(
   if (options.keepRedoExact && stranded)
     throw new ReversalIntegrityError(
       'pruned-outside-redo',
-      `${stranded.targetTable}:${stranded.targetId} ends absent; redo cannot restore ${stranded.id}`,
+      `${stranded.targetTable}:${stranded.targetId} ends absent; pruning ${stranded.id} would leave redo inexact`,
       set.rows[0]?.actionId ?? 'reversal',
     )
   await refuseWriteBack(ctx, set, pruned, rewritten, strandedWrites)
