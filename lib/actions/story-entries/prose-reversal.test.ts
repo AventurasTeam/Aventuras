@@ -6,10 +6,12 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { generationStore } from '@/lib/stores'
 
 import { bracketProseReversal, classifierWatermarkClampOps } from './prose-reversal'
+import { __resetBranchWriteLocks, withBranchWriteShared } from '../delta/branch-write-lock'
 
 describe('bracketProseReversal', () => {
   beforeEach(() => {
     generationStore.__reset()
+    __resetBranchWriteLocks()
   })
 
   it('sets reversalInProgress across the body and clears it after', async () => {
@@ -58,6 +60,61 @@ describe('bracketProseReversal', () => {
     resolveTerminal()
     await done
     expect(order).toEqual(['aborted', 'swept'])
+  })
+
+  // A rollback preview selects its set under a shared hold across several reads; a reversal
+  // committing between them refuses the preview as an integrity fault.
+  it("runs the body only once a rollback preview's shared hold settles", async () => {
+    const order: string[] = []
+    let endPreview!: () => void
+    const preview = withBranchWriteShared(
+      'branch_1',
+      'rollback-preview',
+      () =>
+        new Promise<void>((resolve) => {
+          endPreview = () => {
+            order.push('preview done')
+            resolve()
+          }
+        }),
+    )
+    const done = bracketProseReversal('branch_1', async () => {
+      order.push('swept')
+    })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(order).toEqual([])
+
+    endPreview()
+    await Promise.all([preview, done])
+    expect(order).toEqual(['preview done', 'swept'])
+  })
+
+  it('keeps a preview starting mid-reversal out until the body settles', async () => {
+    const order: string[] = []
+    let preview: Promise<void> | undefined
+    await bracketProseReversal('branch_1', async () => {
+      preview = withBranchWriteShared('branch_1', 'rollback-preview', async () => {
+        order.push('preview')
+      })
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      order.push('swept')
+    })
+    await preview
+    expect(order).toEqual(['swept', 'preview'])
+  })
+
+  it('releases the hold when the body throws', async () => {
+    await expect(
+      bracketProseReversal('branch_1', async () => {
+        throw new Error('sweep failed')
+      }),
+    ).rejects.toThrow('sweep failed')
+
+    let ran = false
+    await withBranchWriteShared('branch_1', 'rollback-preview', async () => {
+      ran = true
+    })
+    expect(ran).toBe(true)
   })
 
   it('rejects a nested bracket rather than silently dropping the barrier', async () => {

@@ -125,28 +125,6 @@ slice-planning gate forces its resolution before that slice is planned.
   none either. Drift to resolve in the doc. Raised in the
   reversal-integrity PR's review (2026-10-05).
 
-- **A user's own reversal can land between the rollback preview's
-  closure reads.** `closeOver` (`lib/actions/delta/row-closure.ts`)
-  reads live referrers in one round and their creates in the next.
-  `getRollbackCounts` in `lib/actions/story-entries/operational.ts`
-  holds the branch write lock shared around its selection, but a
-  CTRL-Z (`undoLastAction`), a redo or a content edit's reversal takes
-  no branch lock: `bracketProseReversal` waits out the classifier and
-  settles user writes, nothing more. Opening the preview (× through
-  `openRollback`, ↻ through `handleRequestRegenerate`, both in
-  `app/reader-composer/[branchId].tsx`) sets no flag that blocks undo,
-  so a hotkey CTRL-Z can commit between those reads and the preview
-  refuses `no-create`. The user would see "Couldn't roll back", or the
-  regenerate-failed toast, plus an error-level
-  `action_layer.reversal_refused` that misreports a race as an
-  integrity fault; a second tap clears it. The window is the preview's
-  own few DB round trips. Possible fixes: have bracketed reversals take
-  the branch lock exclusive, or retry the preview's selection once on
-  a `no-create` refusal. Read-verified, not reproduced. The
-  periodic-classifier abort half was closed in the same PR's slice
-  review by that shared hold. Raised in the reversal-integrity PR's
-  review (2026-10-05).
-
 - **The reader's edit commit has no try/catch.** `handleCommitEdit` in
   `app/reader-composer/[branchId].tsx` awaits `updateStoryEntryContent`
   bare, and both commit buttons reach it through `commitDraft` in

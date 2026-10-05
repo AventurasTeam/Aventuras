@@ -1905,6 +1905,13 @@ undoes it, or is refused. Without the settle, the undo would choose its
 target from a log the Save is still writing to, and restore over it
 once the Save frees its lock.
 
+The bracket then takes the branch write lock
+([No-gate write phase](#no-gate-write-phase)) exclusive around the
+sweep, so the sweep cannot commit between a rollback preview's closure
+reads, which hold it shared. The drain and the settle have already
+emptied the branch of other writers, so the hold waits on a preview at
+most.
+
 **`yieldsTo` stays unused in v1.** Modelling reversal as a `'reversal'`
 pipeline kind with `periodic-classifier` declaring
 `yieldsTo: ['reversal']` was considered and rejected: a reversal writes
@@ -1947,11 +1954,12 @@ the create as `write-back` on each boot
 ([Reverse-replay](#reverse-replay),
 [Recovery-failure policy](#recovery-failure-policy)). A write
 arriving meanwhile waits a few milliseconds; nothing is disabled
-or refused. Prose reversals need nothing more, since the barrier above
-already waits a burst out, and boot recovery runs before any branch
-loads. The rollback preview writes nothing but takes the lock shared
-around its set selection, so a pass's abort reversal cannot land
-between the closure's reads. The lock order holds because a burst
+or refused. A prose reversal takes the lock exclusive around its
+sweep, once the barrier above has waited a burst out, and boot recovery
+runs before any branch loads. The rollback preview writes nothing but
+takes the lock shared around its set selection, so neither a pass's
+abort reversal nor a prose reversal can land between the closure's
+reads. The lock order holds because a burst
 never asks for the metadata lock: only the scene-field, world-time and
 entity-delete actions take it, and the orchestrator commits a pass's
 writes through `applyDeltaAction` directly.

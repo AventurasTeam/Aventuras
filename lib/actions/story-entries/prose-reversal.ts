@@ -3,6 +3,10 @@ import type { SqlOp } from '@/lib/db'
 import { awaitRunTerminal, generationStore } from '@/lib/stores'
 
 import { settleUserWrites } from '../delta/apply-delta-action'
+import { holdBranchWriteExclusive, releaseBranchWriteExclusive } from '../delta/branch-write-lock'
+
+// One id serves every bracket: the barrier flag already admits one at a time.
+const PROSE_REVERSAL_LOCK_ID = 'prose-reversal'
 
 /**
  * generation-pipeline.md -> Prose reversals and the classifier barrier. Not re-entrant: a
@@ -18,7 +22,13 @@ export async function bracketProseReversal<T>(
   try {
     await awaitRunTerminal(PERIODIC_CLASSIFIER_KIND, branchId, 'cancel')
     await settleUserWrites()
-    return await body()
+    // Exclusive, so the reversal can't commit between a rollback preview's closure reads.
+    await holdBranchWriteExclusive(branchId, PROSE_REVERSAL_LOCK_ID)
+    try {
+      return await body()
+    } finally {
+      releaseBranchWriteExclusive(branchId, PROSE_REVERSAL_LOCK_ID)
+    }
   } finally {
     generationStore.setReversalInProgress(false)
   }
