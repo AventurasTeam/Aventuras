@@ -751,21 +751,7 @@ describe('regenerateTurn', () => {
       createdAt: 1,
       updatedAt: 1,
     })
-    const views = (
-      source: 'user_edit' | 'periodic_classifier',
-      kind: string | null,
-      inverseKind?: string | null,
-    ): PipelineAction => ({
-      kind: 'upsertCharacterRelationship',
-      source,
-      payload: {
-        branchId: 'b1',
-        subjectId: 'char_kael',
-        objectId: 'char_mira',
-        kind,
-        ...(source === 'user_edit' ? { inverseKind } : { proseEntryId: 'e_u1' }),
-      },
-    })
+    const pair = { branchId: 'b1', subjectId: 'char_kael', objectId: 'char_mira' }
     const turnEntry = (id: string, position: number, kind: 'user_action' | 'ai_reply') =>
       ({
         kind: 'createStoryEntry',
@@ -783,9 +769,24 @@ describe('regenerateTurn', () => {
       'act_0',
     )
     await apply(turnEntry('e_u1', 2, 'user_action'), 'act_e1')
-    await apply(views('periodic_classifier', 'ally'), 'act_c', 'e_u1')
+    await apply(
+      {
+        kind: 'upsertCharacterRelationship',
+        source: 'periodic_classifier',
+        payload: { ...pair, kind: 'ally', proseEntryId: 'e_u1' },
+      },
+      'act_c',
+      'e_u1',
+    )
     await apply(turnEntry('e_r1', 3, 'ai_reply'), 'act_e2')
-    await apply(views('user_edit', 'ally', 'wary'), 'act_u')
+    await apply(
+      {
+        kind: 'upsertCharacterRelationship',
+        source: 'user_edit',
+        payload: { ...pair, kind: 'ally', inverseKind: 'wary' },
+      },
+      'act_u',
+    )
     entriesStore.hydrate('b1', await db.select().from(storyEntries))
     expect(await updateStoryEntryContent('b1', 'e_u1', 'rewritten', ctx)).toEqual({
       status: 'ok',
