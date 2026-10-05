@@ -369,7 +369,10 @@ describe('a reversal applies to rows a delete outside the set holds', () => {
       source: 'user_edit',
       payload: { branchId: 'b1', id: rel.id },
     })
+    const pass = await deltasOf('act_pass')
 
+    // The pass's update, the holder, and act_user0's create and act_user1's update, once each.
+    expect((await planFor(pass)).pruneOps).toHaveLength(pass.length + 1 + 2)
     await reverseReplayDeltas('act_pass', ctx)
 
     expect(await ctx.db.select().from(deltas)).toEqual([])

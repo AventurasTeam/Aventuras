@@ -477,6 +477,88 @@ describe('reversing a machine view update', () => {
     expect(await pair(db)).toHaveLength(0)
   })
 
+  // Out of order only after a redo; the user's view edit outside the set keeps the closure off
+  // the pair, so the create arm deletes it and the older delete's undo puts it back.
+  describe('a pair the plan deletes and an older undo restores', () => {
+    const raw = (
+      id: string,
+      logPosition: number,
+      over: Partial<Delta> & Pick<Delta, 'op' | 'targetTable' | 'targetId'>,
+    ): Delta => ({
+      id,
+      branchId: 'b1',
+      entryId: null,
+      actionId: 'act_synthetic',
+      logPosition,
+      source: 'periodic_classifier',
+      undoPayload: null,
+      encodingVersion: 1,
+      createdAt: logPosition,
+      ...over,
+    })
+    const relRow = {
+      id: 'rel_1',
+      branchId: 'b1',
+      aId: 'char_kael',
+      bId: 'char_mira',
+      kind: null,
+      inverseKind: 'friend',
+      createdAt: 1,
+      updatedAt: 1,
+    }
+    const onPair = { targetTable: 'character_relationships', targetId: 'rel_1' } as const
+    // Logged above the create, outside the set: it wrote `kind`, which is null again now.
+    const userView = raw('d_user', 40, {
+      ...onPair,
+      op: 'update',
+      source: 'user_edit',
+      actionId: 'act_u',
+      undoPayload: { kind: null },
+    })
+
+    async function expectNoStrandedPrunes(ctx: Ctx, db: Db, target: Delta[]) {
+      await db.insert(deltas).values([...target, userView])
+      const set = await selectReversalSet(ctx, { branchId: 'b1', target })
+      expect(set.rows.map((d) => d.id)).not.toContain('d_user')
+      expect((await buildReverseAndPrunePlan(set, ctx)).pruneOps).toHaveLength(set.rows.length)
+      await reverseAndPruneDeltaRows(set, ctx)
+      expect(await pair(db)).toEqual([expect.objectContaining({ id: 'rel_1' })])
+      expect(await actionIds(db)).toEqual(['act_u'])
+    }
+
+    it("keeps the writes of a pair its own delete's undo restores", async () => {
+      const { db, ctx } = await setup()
+      await seedChars(db)
+      await expectNoStrandedPrunes(ctx, db, [
+        raw('d_create', 30, { ...onPair, op: 'create' }),
+        raw('d_delete', 20, { ...onPair, op: 'delete', undoPayload: relRow }),
+      ])
+    })
+
+    it('keeps the writes of a pair an entity delete restores as a captured child', async () => {
+      const { db, ctx } = await setup()
+      await db.insert(entities).values({ ...KAEL, id: 'char_mira', name: 'Mira' })
+      const [kaelRow] = await db.insert(entities).values(KAEL).returning()
+      await db.delete(entities).where(eq(entities.id, 'char_kael'))
+      await expectNoStrandedPrunes(ctx, db, [
+        raw('d_create', 30, { ...onPair, op: 'create' }),
+        raw('d_delete', 20, {
+          op: 'delete',
+          targetTable: 'entities',
+          targetId: 'char_kael',
+          source: 'user_edit',
+          undoPayload: {
+            ...kaelRow,
+            relationships: [relRow],
+            involvements: [],
+            awareness: [],
+            translations: [],
+          },
+        }),
+      ])
+    })
+  })
+
   it('updates a pair the reversal leaves with a view', async () => {
     const { db, ctx } = await setup()
     await seedChars(db)
