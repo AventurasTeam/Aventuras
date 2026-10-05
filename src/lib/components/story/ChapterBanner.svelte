@@ -1,6 +1,6 @@
 <script lang="ts">
   import { story } from '$lib/stores/story.svelte'
-  import type { ChapterBanner } from '$lib/utils/chapterBanners'
+  import type { ChapterBanner, ChapterBannerLink } from '$lib/utils/chapterBanners'
   import { Button } from '$lib/components/ui/button'
   import { ChevronLeft, ChevronRight } from '@lucide/svelte'
 
@@ -50,34 +50,26 @@
     </p>
   {/if}
 
-  <div class="mt-2 flex items-center justify-between">
+  <div class="mt-2 flex items-center">
     {#if banner.prev}
-      {@const prev = banner.prev}
-      <Button
-        variant="text"
-        size="sm"
-        class="h-7 gap-1 px-2 text-xs"
-        onclick={() => onNavigate(prev.entryId)}
-        aria-label="Go to {prev.label}"
-      >
-        <ChevronLeft />
-        {prev.label}
-      </Button>
-    {:else}
-      <span></span>
+      {@render navLink(banner.prev, 'prev')}
     {/if}
     {#if banner.next}
-      {@const next = banner.next}
-      <Button
-        variant="text"
-        size="sm"
-        class="h-7 gap-1 px-2 text-xs"
-        onclick={() => onNavigate(next.entryId)}
-        aria-label="Go to {next.label}"
-      >
-        {next.label}
-        <ChevronRight />
-      </Button>
+      {@render navLink(banner.next, 'next')}
     {/if}
   </div>
 </header>
+
+{#snippet navLink(link: ChapterBannerLink, dir: 'prev' | 'next')}
+  <Button
+    variant="text"
+    size="sm"
+    class="h-7 gap-1 px-2 text-xs {dir === 'next' ? 'ml-auto' : ''}"
+    onclick={() => onNavigate(link.entryId)}
+    aria-label="Go to {link.label}"
+  >
+    {#if dir === 'prev'}<ChevronLeft />{/if}
+    {link.label}
+    {#if dir === 'next'}<ChevronRight />{/if}
+  </Button>
+{/snippet}
