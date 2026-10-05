@@ -420,6 +420,9 @@ running step rather than the ellipsis. `activity_reporting` is written only by `
 and the interface reset, so a stored `off` is a choice and is read back as one — the default reaches
 absent keys only.
 
+A turn's timeline opens by default while it is the latest turn in `tree` mode, and in either
+mode for any turn in which a step failed, a recovered attempt included. A reader's own choice wins.
+
 ## Images
 
 Nine backends live under `src/lib/services/ai/image/providers/` — NanoGPT, OpenAI, OpenRouter,

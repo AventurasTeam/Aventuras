@@ -39,6 +39,11 @@ export function buildTree(steps: ActivityStep[]): ActivityNode[] {
  *
  * A step whose parent is missing counts as a root, matching `buildTree`.
  */
+/** Whether any step failed, a recovered attempt included. */
+export function hasFailedStep(steps: ActivityStep[]): boolean {
+  return steps.some((step) => step.status === 'failed')
+}
+
 export function deepestRunningStep(steps: ActivityStep[]): ActivityStep | null {
   const byId = new Map(steps.map((s) => [s.id, s]))
 

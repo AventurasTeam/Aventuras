@@ -5,6 +5,7 @@ import {
   failuresShownBelow,
   failureMarks,
   stepsHoldingAttempts,
+  hasFailedStep,
   flattenTree,
   rootStep,
 } from './tree'
@@ -312,5 +313,14 @@ describe('failureMarks, attempts inside a failed attempt', () => {
       step({ id: 'pass2', parentId: 'narrative', status: 'done', attempt: true }),
     ])
     expect(failureMarks(nodes).get('narrative')).toBe('recovered')
+  })
+})
+
+describe('hasFailedStep', () => {
+  it('finds a failed step anywhere, a recovered attempt included', () => {
+    expect(
+      hasFailedStep([step({ id: 'a' }), step({ id: 'b', status: 'failed', attempt: true })]),
+    ).toBe(true)
+    expect(hasFailedStep([step({ id: 'a' }), step({ id: 'b', status: 'skipped' })])).toBe(false)
   })
 })

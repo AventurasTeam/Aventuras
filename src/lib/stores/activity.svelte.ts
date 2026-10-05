@@ -13,6 +13,7 @@ import {
   ActivityRecorder,
   buildTree,
   deepestRunningStep,
+  hasFailedStep,
   type ActivityNode,
   type ActivityReporting,
   type ActivityStatus,
@@ -42,7 +43,8 @@ class ActivityStore {
    *
    * Each map holds only what the reader has actually chosen. Absent means "whatever the
    * default is here": the report shows itself, and the tree follows the reporting setting while
-   * it is the latest turn, and is the line once a newer turn has started.
+   * it is the latest turn, and is the line once a newer turn has started -- unless a step in the
+   * turn failed, which keeps its tree open.
    */
   private reportVisible = new SvelteMap<string, boolean>()
   private treeExpanded = new SvelteMap<string, boolean>()
@@ -71,8 +73,17 @@ class ActivityStore {
   }
 
   /** Whether the report is showing the full timeline rather than the line. */
+  /** Open by default for the latest turn in tree mode, and for any turn in which a step failed. */
   isTreeExpanded(turn: ActivityTurn): boolean {
-    return this.treeExpanded.get(turn.entryId) ?? (this.isLatest(turn) && this.reporting === 'tree')
+    return (
+      this.treeExpanded.get(turn.entryId) ??
+      ((this.isLatest(turn) && this.reporting === 'tree') || this.hasFailure(turn))
+    )
+  }
+
+  private hasFailure(turn: ActivityTurn): boolean {
+    if (turn.endedAt === undefined) void this.version
+    return hasFailedStep(turn.steps)
   }
 
   private isLatest(turn: ActivityTurn): boolean {
