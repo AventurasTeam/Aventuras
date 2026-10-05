@@ -140,15 +140,8 @@ export class ImagePhase {
       // Note: This is intentionally fire-and-forget within the pipeline
       // The AIService handles its own error logging
       const outcome = await this.deps.generateImagesForNarrative(imageGenContext)
-      // Absorbed below, but the step it served failed: say so, non-fatally.
-      if (outcome?.failure) {
-        yield {
-          type: 'error',
-          phase: 'image',
-          error: new Error(outcome.failure),
-          fatal: false,
-        } satisfies ErrorEvent
-      } else if (outcome && input.activityParentId) {
+      // An absorbed failure is already on the step that met it; nothing was handed off.
+      if (outcome && !outcome.failure && input.activityParentId) {
         // The images finish after the turn; the record notes the hand-off, not their progress.
         input.activity?.recordStep('Handed off', {
           parentId: input.activityParentId,

@@ -28,10 +28,11 @@ export function describeActivityError(error: unknown): string | null {
 }
 
 function describe(error: unknown): string {
-  // Each attempt carries its own reason on its own row; the request says only that it ran out.
+  // The cause is repeated here: a request reported without attempt rows has nowhere else to show it.
   if (RetryError.isInstance(error)) {
     const attempts = attemptNumberOf(error.lastError) ?? error.errors.length
-    return `Failed after ${attempts} attempts, with no retries left`
+    const ran = error.reason === 'maxRetriesExceeded' ? ', with no retries left' : ''
+    return `Failed after ${attempts} attempts${ran}: ${reasonOf(error.lastError)}`
   }
   const attempt = attemptNumberOf(error)
   if (attempt && attempt > 1) return `${reasonOf(error)} (on attempt ${attempt})`
@@ -44,10 +45,12 @@ function describe(error: unknown): string {
  */
 const BODY_READ_FAILURE = 'error decoding response body'
 
+const CONNECTION_LOST = 'Connection lost while the response was streaming'
+
 function reasonOf(error: unknown): string {
   const reason = messageOf(error)
-  return reason.includes(BODY_READ_FAILURE)
-    ? `Connection lost while the response was streaming (${reason})`
+  return reason.includes(BODY_READ_FAILURE) && !reason.startsWith(CONNECTION_LOST)
+    ? `${CONNECTION_LOST} (${reason})`
     : reason
 }
 

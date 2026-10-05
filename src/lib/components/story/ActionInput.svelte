@@ -4,7 +4,7 @@
   import { activity } from '$lib/stores/activity.svelte'
   import {
     describeActivityError,
-    failStep,
+    trackStep,
     turnOutcome,
     type TurnEnding,
   } from '$lib/services/activity'
@@ -759,6 +759,7 @@
           )
           ui.endStreaming()
           stopUnavailable = true
+          ending.narrationSaved = true
           emitNarrativeResponse(narrationEntry.id, fullResponse)
           if (inlineImageTracker?.hasPendingImages) await inlineImageTracker.flushToDatabase()
         }
@@ -780,13 +781,26 @@
               'warning',
             )
           }
-          try {
-            await story.applyClassificationResult(event.result, narrationEntry.id)
-            await story.updateEntryTimeEnd(narrationEntry.id)
-          } catch (error) {
-            failStep(activity, event.applyStepId, error)
-            throw error
-          }
+          const entryId = narrationEntry.id
+          const { _error, _salvaged } = event.result
+          // A failed result still runs the entry's bookkeeping: its end time, and with state
+          // tracking an empty delta and maybe a snapshot.
+          await trackStep(
+            activity,
+            'Updating world',
+            {
+              parentId: event.activityParentId,
+              detail: !_error
+                ? undefined
+                : _salvaged
+                  ? 'partly applied'
+                  : 'fallback bookkeeping only',
+            },
+            async () => {
+              await story.applyClassificationResult(event.result, entryId)
+              await story.updateEntryTimeEnd(entryId)
+            },
+          )
 
           const translationSettings = settings.translationSettings
           if (TranslationService.shouldTranslateWorldState(translationSettings)) {
@@ -832,16 +846,20 @@
               }
             | undefined
           if (translationResult?.translated && translationResult.translatedContent) {
-            try {
-              await database.updateStoryEntry(narrationEntry.id, {
-                translatedContent: translationResult.translatedContent,
-                translationLanguage: translationResult.targetLanguage,
-              })
-              await story.refreshEntry(narrationEntry.id)
-            } catch (error) {
-              failStep(activity, event.applyStepId, error)
-              throw error
-            }
+            const entryId = narrationEntry.id
+            const { translatedContent, targetLanguage } = translationResult
+            await trackStep(
+              activity,
+              'Saving translation',
+              { parentId: event.activityParentId },
+              async () => {
+                await database.updateStoryEntry(entryId, {
+                  translatedContent,
+                  translationLanguage: targetLanguage,
+                })
+                await story.refreshEntry(entryId)
+              },
+            )
           }
         }
 
@@ -929,7 +947,8 @@
           lease,
           { source: GENERATION_ERROR_SOURCE },
         )
-        activity.rebindTurn(narrationEntryId, errorEntry.id)
+        // A narration already saved keeps its record; the failed step tells what went wrong.
+        if (!ending.narrationSaved) activity.rebindTurn(narrationEntryId, errorEntry.id)
         ui.setGenerationError({
           message: errorMessage,
           errorEntryId: errorEntry.id,

@@ -3,10 +3,9 @@
   import {
     failuresShownBelow,
     failureMarks,
-    stepsAboveLLMSteps,
+    stepsHoldingAttempts,
     flattenTree,
-    formatDuration,
-    stepDuration,
+    formatStepDuration,
     type ActivityTurn,
   } from '$lib/services/activity'
   import { Sparkles, TriangleAlert } from '@lucide/svelte'
@@ -17,33 +16,42 @@
    * Rows carry values, not steps. A step is a plain object mutated in place -- its `detail`
    * moves while it runs -- so a row holding the reference renders whatever it read first,
    * however often the tree is rebuilt around it. Recomputing primitives is what puts a
-   * revised detail on screen.
+   * revised detail on screen. The tree is read once per recorded change; only the times follow
+   * the clock.
    */
-  let rows = $derived.by(() => {
+  let analysed = $derived.by(() => {
     const nodes = activity.tree(turn)
     const shownBelow = failuresShownBelow(nodes)
     const marks = failureMarks(nodes)
-    const aboveLLM = stepsAboveLLMSteps(nodes)
-    return flattenTree(nodes).map(({ step, level }) => ({
-      id: step.id,
-      level,
-      label: step.label,
-      detail: step.detail ?? '',
-      // On the calls themselves: not on a request that turned out to hold several attempts.
-      isLLM: step.isLLM && !aboveLLM.has(step.id),
-      running: step.status === 'running',
-      skipped: step.status === 'skipped',
+    const holding = stepsHoldingAttempts(nodes)
+    return flattenTree(nodes).map(({ step, level }) => {
       // A failure is told once, on the deepest step that carries it. Every step above one is
       // marked, unless it is itself shown as failed, so the way down to it can be followed.
-      failed: step.status === 'failed' && !shownBelow.has(step.id),
-      // Above a failure, unless shown failed itself: red for a failure, plain when every failure
-      // beneath is an attempt its request got past.
-      mark:
-        step.status === 'failed' && !shownBelow.has(step.id) ? null : (marks.get(step.id) ?? null),
-      time: step.untimed ? '' : formatDuration(stepDuration(step, now)),
-      error: shownBelow.has(step.id) ? '' : (step.error ?? ''),
-    }))
+      const failed = step.status === 'failed' && !shownBelow.has(step.id)
+      return {
+        id: step.id,
+        level,
+        label: step.label,
+        detail: step.detail ?? '',
+        // On the calls themselves: not on a request that turned out to hold several attempts.
+        isLLM: step.isLLM && !holding.has(step.id),
+        running: step.status === 'running',
+        skipped: step.status === 'skipped',
+        failed,
+        // Red for a failure beneath, plain when every one is an attempt its request got past.
+        mark: failed ? null : (marks.get(step.id) ?? null),
+        error: shownBelow.has(step.id) ? '' : (step.error ?? ''),
+        timing: { startedAt: step.startedAt, endedAt: step.endedAt, untimed: step.untimed },
+      }
+    })
   })
+
+  let rows = $derived(
+    analysed.map((row) => ({
+      ...row,
+      time: formatStepDuration(row.timing, now),
+    })),
+  )
 </script>
 
 <!-- Uncapped, like the reasoning block: a long turn is read by scrolling the story, not through

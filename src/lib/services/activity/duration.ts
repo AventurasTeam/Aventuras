@@ -7,14 +7,22 @@
 
 import type { ActivityStep, ActivityTurn } from './types'
 
+/** What a step's time is read from. */
+export type StepTiming = Pick<ActivityStep, 'startedAt' | 'endedAt' | 'untimed'>
+
 /** Elapsed milliseconds, measured against `now` while the step is still running. */
-export function stepDuration(step: ActivityStep, now: number): number {
+export function stepDuration(step: StepTiming, now: number): number {
   return Math.max(0, (step.endedAt ?? now) - step.startedAt)
 }
 
 /** Elapsed milliseconds for the whole turn, measured against `now` while it runs. */
 export function turnDuration(turn: ActivityTurn, now: number): number {
   return Math.max(0, (turn.endedAt ?? now) - turn.startedAt)
+}
+
+/** A step's displayed time: blank for one recorded without a duration, whose span is not measured. */
+export function formatStepDuration(step: StepTiming, now: number): string {
+  return step.untimed ? '' : formatDuration(stepDuration(step, now))
 }
 
 /**

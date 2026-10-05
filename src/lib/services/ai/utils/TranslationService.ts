@@ -137,8 +137,8 @@ export class TranslationService extends BaseAIService {
       return { translatedContent: translatedContent.trim() }
     } catch (error) {
       log('Translation failed:', error)
-      failStep(activity, activityParentId, error)
-      return { translatedContent: content } // Return original on failure
+      // The original back, as before; the caller closes the step it opened with the reason.
+      return { translatedContent: content, failure: describeActivityError(error) ?? undefined }
     }
   }
 

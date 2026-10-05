@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+import { APICallError } from 'ai'
 import { NarrativePhase, type NarrativeInput } from './NarrativePhase'
 import type { GenerationEvent, RetrievalResult } from '../types'
 import type { StreamChunk } from '$lib/services/ai/core/types'
@@ -131,16 +132,51 @@ describe('NarrativePhase', () => {
     })
   })
 
-  it('treats a stream failure as fatal, unlike the other phases', async () => {
-    // There is no turn without a narration, so this one cannot degrade gracefully.
-    const streamNarrative = async function* (): AsyncGenerator<StreamChunk> {
-      throw new Error('provider down')
-    }
+  it('re-sends a stream that fails before any text, as it does an empty one', async () => {
+    let call = 0
+    const streamNarrative = vi.fn(async function* (): AsyncGenerator<StreamChunk> {
+      if (++call === 1) throw new Error('stream cut')
+      yield chunk({ content: 'The dragon fell.' })
+    })
 
     const { events, result } = await drain(phaseWith(streamNarrative).execute(makeInput()))
 
+    expect(streamNarrative).toHaveBeenCalledTimes(2)
+    expect(result?.content).toBe('The dragon fell.')
+    expect(events.some((e) => e.type === 'error')).toBe(false)
+  })
+
+  it('gives up fatally when every pass fails, naming the last reason', async () => {
+    // There is no turn without a narration, so this one cannot degrade gracefully.
+    const streamNarrative = vi.fn(async function* (): AsyncGenerator<StreamChunk> {
+      throw new Error('provider down')
+    })
+
+    const { events, result } = await drain(phaseWith(streamNarrative).execute(makeInput()))
+
+    expect(streamNarrative).toHaveBeenCalledTimes(3)
     expect(result).toBeNull()
-    expect(events.find((e) => e.type === 'error')).toMatchObject({ fatal: true })
+    expect(events.find((e) => e.type === 'error')).toMatchObject({
+      fatal: true,
+      error: new Error('Failed after 3 passes: provider down'),
+    })
+  })
+
+  it('does not re-send a request that failed outright: its retries are already spent', async () => {
+    const refused = new APICallError({
+      message: 'Unauthorized',
+      url: 'https://example.test',
+      requestBodyValues: {},
+      statusCode: 401,
+    })
+    const streamNarrative = vi.fn(async function* (): AsyncGenerator<StreamChunk> {
+      throw refused
+    })
+
+    const { events } = await drain(phaseWith(streamNarrative).execute(makeInput()))
+
+    expect(streamNarrative).toHaveBeenCalledTimes(1)
+    expect(events.find((e) => e.type === 'error')).toMatchObject({ fatal: true, error: refused })
   })
 
   it('keeps the text streamed before a failure, reporting the failure non-fatally', async () => {

@@ -212,6 +212,13 @@
     ui.isGenerating || story.isRetryInProgress || story.isGenerationLeaseHeld,
   )
 
+  // The tracked failure counts only while its error entry ends this story and branch: it is held in
+  // memory and outlives a switch to another one.
+  const errorPending = $derived(
+    !!ui.lastGenerationError &&
+      story.entries[story.entries.length - 1]?.id === ui.lastGenerationError.errorEntryId,
+  )
+
   // Branch as well as story: a snapshot taken elsewhere would be refused on restore, and
   // offering it here hides the regenerate that does work on this branch.
   const canRetry = $derived(
@@ -220,7 +227,7 @@
       story.currentScope &&
       sameBranchScope(ui.retryBackup, story.currentScope) &&
       !entriesLocked &&
-      !ui.lastGenerationError,
+      !errorPending,
   )
 
   // Fallback regenerate: no matching retry backup exists, so there is no pre-generation
@@ -241,7 +248,7 @@
       isLastEntry &&
       !canRetry &&
       !entriesLocked &&
-      !ui.lastGenerationError &&
+      !errorPending &&
       !!findPrecedingUserAction(story.entries, entry.id),
   )
 
@@ -1446,7 +1453,7 @@
         title={showActivityRecord ? 'Hide generation activity' : 'Show generation activity'}
         onclick={() => activity.setReportVisible(entry.id, !showActivityRecord)}
       >
-        {formatDuration(turnDuration(activityRecord, activity.now))}
+        {formatDuration(turnDuration(activityRecord, activityRecord.endedAt ?? activity.now))}
       </button>
     {/if}
 

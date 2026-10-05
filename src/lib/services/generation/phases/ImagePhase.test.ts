@@ -204,7 +204,7 @@ describe('ImagePhase activity reporting', () => {
     expect(updates).toEqual([['images', 'Handed off', 'no images queued']])
   })
 
-  it('reports a failed analysis as a non-fatal error with its reason', async () => {
+  it('leaves a failed analysis to its own step, and notes no hand-off', async () => {
     const { activity, updates } = reporter()
     const generate = vi.fn().mockResolvedValue({ queued: 0, failure: '401 · invalid API key' })
 
@@ -214,9 +214,7 @@ describe('ImagePhase activity reporting', () => {
       ),
     )
 
-    const error = events.find((e) => e.type === 'error') as any
-    expect(error).toMatchObject({ fatal: false })
-    expect(error.error.message).toBe('401 · invalid API key')
+    expect(events.some((e) => e.type === 'error')).toBe(false)
     expect(updates).toEqual([])
     expect(result).toEqual({ started: true })
   })

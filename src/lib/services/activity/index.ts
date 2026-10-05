@@ -21,11 +21,11 @@ export {
   rootStep,
   failuresShownBelow,
   failureMarks,
-  stepsAboveLLMSteps,
+  stepsHoldingAttempts,
   type FailureMark,
 } from './tree'
 
-export { stepDuration, turnDuration, formatDuration } from './duration'
+export { stepDuration, turnDuration, formatDuration, formatStepDuration } from './duration'
 
 export { retainTurns, findTurnByEntryId, RETAINED_TURNS } from './retention'
 

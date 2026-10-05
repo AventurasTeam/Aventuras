@@ -24,7 +24,22 @@ import { countTokens } from '$lib/services/tokenizer'
 import { chapterReadBudget } from '../core/defaults'
 
 import { activity } from '$lib/stores/activity.svelte'
-import { failStep } from '$lib/services/activity'
+import { describeActivityError, failStep } from '$lib/services/activity'
+
+/** Close a step by how many of its questions were actually answered. */
+function closeAnswerStep(id: string, answers: TimelineAnswer[]): void {
+  const answered = answers.filter((a) => a.confidence > 0).length
+  const failure = answers.find((a) => a.failure)?.failure
+  if (answered === 0 && failure) activity.endStep(id, 'failed', undefined, failure)
+  else
+    activity.endStep(
+      id,
+      'done',
+      answered === answers.length
+        ? `${answered} answered`
+        : `${answered} of ${answers.length} answered`,
+    )
+}
 
 const log = createLogger('TimelineFill')
 
@@ -43,6 +58,8 @@ const UNANSWERED = 'Unable to answer the question.'
 // Type definitions
 export interface TimelineAnswer {
   answer: string
+  /** Why the call failed, when `answer` is the give-up string because it did. */
+  failure?: string | null
   /**
    * 0 when the answer is a give-up string rather than retrieved information -- a failed
    * call, or no chapters resolved. `runTimelineFill` drops those instead of forwarding them
@@ -285,8 +302,8 @@ export class TimelineFillService extends BaseAIService {
       return { answer: answer.trim(), confidence: 0.8 }
     } catch (error) {
       log('Answer generation failed:', error)
-      failStep(activity, activityParentId, error)
-      return { answer: UNANSWERED, confidence: 0 }
+      // The caller closes the step it opened: several of these can share one.
+      return { answer: UNANSWERED, confidence: 0, failure: describeActivityError(error) }
     }
   }
 
@@ -345,10 +362,22 @@ export class TimelineFillService extends BaseAIService {
         missing: missing.length,
         of: queries.length,
       })
+      // Each re-ask is its own request, so its attempts and outcome are not mixed with its siblings'.
       const retried = await Promise.all(
-        missing.map((index) =>
-          this.answerQuestionWithContent(storyId, queries[index], chapterContent, activityParentId),
-        ),
+        missing.map(async (index) => {
+          const askId = activity.startStep(`Re-asking question ${index + 1}`, {
+            parentId: activityParentId,
+            isLLM: true,
+          })
+          const answer = await this.answerQuestionWithContent(
+            storyId,
+            queries[index],
+            chapterContent,
+            askId,
+          )
+          closeAnswerStep(askId, [answer])
+          return answer
+        }),
       )
       missing.forEach((index, i) => {
         answers[index] = retried[i]
@@ -484,7 +513,7 @@ export class TimelineFillService extends BaseAIService {
           throw error
         }
 
-        activity.endStep(readStepId, 'done', `${group.items.length} answered`)
+        closeAnswerStep(readStepId, answers)
 
         group.items.forEach((item, i) => {
           // `confidence: 0` is what every give-up path sets. None of it is retrieved

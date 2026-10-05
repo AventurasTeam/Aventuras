@@ -159,58 +159,39 @@ describe('TranslationPhase', () => {
 })
 
 describe('TranslationPhase activity reporting', () => {
-  it('reports saving the translation as a step that spans the consumer storing it', async () => {
-    const steps: { id: string; label: string; status?: string }[] = []
-    const activity = {
-      startStep: (label: string) => {
-        const id = `s${steps.length + 1}`
-        steps.push({ id, label })
-        return id
-      },
-      endStep: (id: string, status = 'done') => {
-        const step = steps.find((s) => s.id === id)
-        if (step && !step.status) step.status = status
-      },
-      recordStep: () => '',
-    }
+  it('hands the consumer the parent to report saving the translation under', async () => {
     const translateNarration = vi.fn().mockResolvedValue({ translatedContent: 'Il drago cadde.' })
     const gen = new TranslationPhase({ translateNarration }).execute(
-      makeInput({ activity, activityParentId: 'phase' }),
+      makeInput({ activityParentId: 'phase' }),
     )
 
     let next = await gen.next()
     while (!next.done && next.value.type !== 'phase_complete') next = await gen.next()
 
-    expect(steps.map((s) => [s.label, s.status])).toEqual([
-      ['Translating to it', 'done'],
-      ['Saving translation', undefined],
-    ])
-
-    await drain(gen)
-    expect(steps.find((s) => s.label === 'Saving translation')?.status).toBe('done')
+    expect(next.value).toMatchObject({
+      activityParentId: 'phase',
+      result: { translated: true, translatedContent: 'Il drago cadde.' },
+    })
   })
-})
 
-describe('TranslationPhase abandoned while saving', () => {
-  it('skips the saving step when the consumer never resumes the phase', async () => {
-    const closed: Record<string, string> = {}
+  it('fails its step and saves nothing when the service hands the original back', async () => {
+    const closed: Record<string, [string, string | null | undefined]> = {}
     const activity = {
       startStep: (label: string) => label,
-      endStep: (id: string, status = 'done') => {
-        closed[id] ??= status
+      endStep: (id: string, status = 'done', _detail?: string, error?: string | null) => {
+        closed[id] ??= [status, error]
       },
       recordStep: () => '',
     }
-    const translateNarration = vi.fn().mockResolvedValue({ translatedContent: 'Il drago cadde.' })
-    const gen = new TranslationPhase({ translateNarration }).execute(
-      makeInput({ activity, activityParentId: 'phase' }),
+    const translateNarration = vi
+      .fn()
+      .mockResolvedValue({ translatedContent: 'The dragon fell.', failure: '429 · rate limited' })
+
+    const { result } = await drain(
+      new TranslationPhase({ translateNarration }).execute(makeInput({ activity })),
     )
 
-    let next = await gen.next()
-    while (!next.done && next.value.type !== 'phase_complete') next = await gen.next()
-    expect((next.value as any).applyStepId).toBe('Saving translation')
-    await gen.return(undefined as any)
-
-    expect(closed['Saving translation']).toBe('skipped')
+    expect(closed['Translating to it']).toEqual(['failed', '429 · rate limited'])
+    expect(result).toMatchObject({ translated: false, translatedContent: null })
   })
 })

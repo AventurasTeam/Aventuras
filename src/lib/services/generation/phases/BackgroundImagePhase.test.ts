@@ -164,7 +164,7 @@ describe('BackgroundImagePhase failure reporting', () => {
     expect(events.some((e) => e.type === 'error')).toBe(false)
   })
 
-  it('reports an absorbed failure as a non-fatal error with its reason', async () => {
+  it('leaves an absorbed failure to the step that met it, and completes', async () => {
     const analyze = vi.fn().mockResolvedValue({ failure: '429 · rate limited' })
 
     const { events, result } = await drain(
@@ -173,9 +173,7 @@ describe('BackgroundImagePhase failure reporting', () => {
       ).execute(makeInput({ activityParentId: 'bg' })),
     )
 
-    const error = events.find((e) => e.type === 'error') as any
-    expect(error).toMatchObject({ fatal: false })
-    expect(error.error.message).toBe('429 · rate limited')
+    expect(events.some((e) => e.type === 'error')).toBe(false)
     // Unchanged for the turn: the phase still completes.
     expect(result).toEqual({ started: true })
   })

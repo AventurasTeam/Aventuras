@@ -925,7 +925,9 @@ class AIService {
       return await this.runAnalyzedImageGeneration(context)
     } catch (error) {
       log('Image generation failed (non-fatal)', error)
-      // Don't throw - image generation failure shouldn't break the main flow
+      // Don't throw - image generation failure shouldn't break the main flow. No step of its own
+      // met this failure, so it closes the phase's.
+      failStep(activity, context.activityParentId, error)
       return { queued: 0, failure: describeActivityError(error) ?? undefined }
     }
   }

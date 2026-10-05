@@ -118,6 +118,13 @@ class ActivityStore {
 
   rebindTurn(fromEntryId: string, toEntryId: string) {
     this.guard(() => this.recorder.rebindTurn(fromEntryId, toEntryId), undefined)
+    // The reader's choices go with the record.
+    for (const choices of [this.reportVisible, this.treeExpanded]) {
+      const choice = choices.get(fromEntryId)
+      if (choice === undefined) continue
+      choices.set(toEntryId, choice)
+      choices.delete(fromEntryId)
+    }
   }
 
   endTurn(outcome?: TurnOutcome, error?: string | null) {
@@ -175,24 +182,29 @@ class ActivityStore {
    * object whose `steps` array is mutated in place, so nothing about it changes identity as
    * the turn runs. Without the rune read, a `$derived` over these computes once -- against an
    * empty step list -- and never again.
+   *
+   * An ended turn no longer changes, so its reads skip `version`: with many records on screen,
+   * every change to the running turn would otherwise recompute all of them.
    */
   tree(turn: ActivityTurn): ActivityNode[] {
-    void this.version
+    if (turn.endedAt === undefined) void this.version
     return buildTree(turn.steps)
   }
 
   /** Why the turn halted, or null when it did not. */
   haltReason(turn: ActivityTurn): string | null {
-    void this.version
+    if (turn.endedAt === undefined) void this.version
     return turn.outcome === 'halted' ? (turn.error ?? '') : null
   }
 
   hasEnded(turn: ActivityTurn): boolean {
+    if (turn.endedAt !== undefined) return true
     void this.version
     return turn.endedAt !== undefined
   }
 
   deepestRunning(turn: ActivityTurn): ActivityStep | null {
+    if (turn.endedAt !== undefined) return null
     void this.version
     return deepestRunningStep(turn.steps)
   }

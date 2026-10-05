@@ -16,11 +16,16 @@ export interface TurnEnding {
   caughtError?: string | null
   /** The turn produced no narration without an error saying why. */
   emptyResponse?: string | null
+  /** The narration was saved: a later failure is told by its step, and the turn did not halt. */
+  narrationSaved?: boolean
 }
 
 export function turnOutcome(ending: TurnEnding): { outcome: TurnOutcome; error: string | null } {
   if (ending.stopRequested) return { outcome: 'stopped', error: null }
-  const reason = ending.caughtError ?? ending.fatalError ?? ending.emptyResponse ?? null
-  if (reason) return { outcome: 'halted', error: reason }
+  if (ending.narrationSaved) return { outcome: 'finished', error: null }
+  const reason = [ending.caughtError, ending.fatalError, ending.emptyResponse].find(
+    (r) => r != null,
+  )
+  if (reason !== undefined) return { outcome: 'halted', error: reason }
   return { outcome: 'finished', error: null }
 }

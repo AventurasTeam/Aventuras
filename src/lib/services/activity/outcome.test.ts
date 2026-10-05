@@ -56,3 +56,18 @@ describe('endTurn outcome', () => {
     expect(b).toMatchObject({ outcome: 'halted', error: '401 · invalid API key' })
   })
 })
+
+describe('turnOutcome, edge cases', () => {
+  it('halts on an error even when its message is empty', () => {
+    expect(turnOutcome({ stopRequested: false, caughtError: '' })).toEqual({
+      outcome: 'halted',
+      error: '',
+    })
+  })
+
+  it('finishes a turn whose narration was saved before a later error', () => {
+    expect(
+      turnOutcome({ stopRequested: false, narrationSaved: true, caughtError: 'write failed' }),
+    ).toEqual({ outcome: 'finished', error: null })
+  })
+})

@@ -65,11 +65,10 @@ const failedWith = (id: string) =>
   expect(activity.endStep).toHaveBeenCalledWith(id, 'failed', undefined, 'provider down')
 
 describe('absorbed failures', () => {
-  it('narration translation returns the original and fails its step', async () => {
+  it('narration translation returns the original with the reason', async () => {
     const service = new TranslationService('translation' as any)
     const result = await service.translateNarration('Hi.', 'it', false, 's', 'step')
-    expect(result.translatedContent).toBe('Hi.')
-    failedWith('step')
+    expect(result).toEqual({ translatedContent: 'Hi.', failure: 'provider down' })
   })
 
   it('input translation returns the original with the reason', async () => {
@@ -118,7 +117,7 @@ describe('absorbed failures', () => {
     failedWith('plan')
   })
 
-  it('a timeline fill chapter read marks its answer unanswered and fails its step', async () => {
+  it('a timeline fill chapter read marks its answer unanswered, with the reason', async () => {
     const service = new TimelineFillService('timelineFill' as any, 3) as any
     const answer = await service.answerQuestionWithContent(
       's',
@@ -126,8 +125,7 @@ describe('absorbed failures', () => {
       'Chapter text.',
       'read',
     )
-    expect(answer.confidence).toBe(0)
-    failedWith('read')
+    expect(answer).toMatchObject({ confidence: 0, failure: 'provider down' })
   })
 
   it('scene analysis reports its failure apart from finding no scenes', async () => {

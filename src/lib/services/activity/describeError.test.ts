@@ -40,7 +40,9 @@ describe('describeActivityError', () => {
       reason: 'maxRetriesExceeded',
       errors: [apiError(429), apiError(429), apiError(429)],
     })
-    expect(describeActivityError(error)).toBe('Failed after 3 attempts, with no retries left')
+    expect(describeActivityError(error)).toBe(
+      'Failed after 3 attempts, with no retries left: 429 · Bad Request',
+    )
   })
 
   it('counts every attempt the app made when its last attempt was numbered', () => {
@@ -50,7 +52,23 @@ describe('describeActivityError', () => {
       reason: 'maxRetriesExceeded',
       errors: [apiError(429), apiError(429), last],
     })
-    expect(describeActivityError(error)).toBe('Failed after 12 attempts, with no retries left')
+    expect(describeActivityError(error)).toBe(
+      'Failed after 12 attempts, with no retries left: 429 · Bad Request',
+    )
+  })
+
+  it('does not claim no retries were left when the last error was not retryable', () => {
+    const error = new RetryError({
+      message: 'Failed after 2 attempts',
+      reason: 'errorNotRetryable',
+      errors: [apiError(500), apiError(401)],
+    })
+    expect(describeActivityError(error)).toBe('Failed after 2 attempts: 401 · Bad Request')
+  })
+
+  it('wraps a lost connection once, however often it is described', () => {
+    const once = describeActivityError('error decoding response body')!
+    expect(describeActivityError(new Error(once))).toBe(once)
   })
 
   it('names the attempt a request finally failed on when it was not retried further', () => {

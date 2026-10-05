@@ -112,46 +112,18 @@ export class ClassificationPhase {
       const failure = classificationResult._error
       if (!failure) activity.endStep(callId)
       else if (classificationResult._salvaged) activity.endStep(callId, 'done', undefined, failure)
-      else {
-        activity.endStep(callId, 'failed', undefined, failure)
-        yield {
-          type: 'error',
-          phase: 'classification',
-          error: new Error(failure),
-          fatal: false,
-        } satisfies ErrorEvent
-      }
+      else activity.endStep(callId, 'failed', undefined, failure)
 
       if (abortSignal?.aborted) {
         yield { type: 'aborted', phase: 'classification' } satisfies AbortedEvent
         return null
       }
 
-      // The phase stays suspended at this yield while the consumer applies the result, so the
-      // step spans exactly that work.
-      // A failed result still runs the entry's bookkeeping: its end time, and with state tracking
-      // an empty delta and maybe a snapshot.
-      const applyId = activity.startStep('Updating world', {
-        parentId: input.activityParentId,
-        detail: !failure
-          ? undefined
-          : classificationResult._salvaged
-            ? 'partly applied'
-            : 'fallback bookkeeping only',
-      })
-      let applied = false
-      try {
-        yield {
-          type: 'classification_complete',
-          result: classificationResult,
-          applyStepId: applyId,
-        } satisfies ClassificationCompleteEvent
-        applied = true
-      } finally {
-        // Resumed means handled; abandoned here means stopped, or the consumer threw and has
-        // already closed the step as failed.
-        activity.endStep(applyId, applied ? 'done' : 'skipped')
-      }
+      yield {
+        type: 'classification_complete',
+        result: classificationResult,
+        activityParentId: input.activityParentId ?? undefined,
+      } satisfies ClassificationCompleteEvent
 
       const result: ClassificationPhaseResult = {
         classificationResult,

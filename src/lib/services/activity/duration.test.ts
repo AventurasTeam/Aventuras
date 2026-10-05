@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatDuration, stepDuration, turnDuration } from './duration'
+import { formatDuration, formatStepDuration, stepDuration, turnDuration } from './duration'
 import type { ActivityStep, ActivityTurn } from './types'
 
 const base: ActivityStep = {
@@ -17,11 +17,11 @@ describe('stepDuration', () => {
   })
 
   it('measures a running step against now', () => {
-    expect(stepDuration({ ...base, status: 'running' }, 4_000)).toBe(3_000)
+    expect(stepDuration(base, 4_000)).toBe(3_000)
   })
 
   it('never reports a negative duration', () => {
-    expect(stepDuration({ ...base, status: 'running' }, 0)).toBe(0)
+    expect(stepDuration(base, 0)).toBe(0)
   })
 })
 
@@ -52,5 +52,15 @@ describe('formatDuration', () => {
     expect(formatDuration(95_000)).toBe('1m 35s')
     expect(formatDuration(119_800)).toBe('2m 0s')
     expect(formatDuration(600_000)).toBe('10m 0s')
+  })
+})
+
+describe('formatStepDuration', () => {
+  it('shows a measured step, however short', () => {
+    expect(formatStepDuration({ ...base, endedAt: 1_200 }, 9_999)).toBe('0s')
+  })
+
+  it('leaves a step recorded without a duration blank', () => {
+    expect(formatStepDuration({ ...base, endedAt: 1_000, untimed: true }, 9_999)).toBe('')
   })
 })

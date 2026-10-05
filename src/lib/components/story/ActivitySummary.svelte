@@ -1,6 +1,6 @@
 <script lang="ts">
   import { activity } from '$lib/stores/activity.svelte'
-  import { formatDuration, rootStep, stepDuration, type ActivityTurn } from '$lib/services/activity'
+  import { formatStepDuration, rootStep, type ActivityTurn } from '$lib/services/activity'
   import { ChevronRight } from '@lucide/svelte'
 
   let { turn }: { turn: ActivityTurn } = $props()
@@ -23,7 +23,7 @@
       label: step.label,
       root: root.id === step.id ? '' : root.label,
       detail: step.detail ?? '',
-      time: step.untimed ? '' : formatDuration(stepDuration(step, activity.now)),
+      time: formatStepDuration(step, activity.now),
     }
   })
 </script>

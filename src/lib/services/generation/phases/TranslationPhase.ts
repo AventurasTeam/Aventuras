@@ -115,6 +115,17 @@ export class TranslationPhase {
         storyId,
         callId,
       )
+      // Absorbed by the service, which hands the original back: there is nothing to save.
+      if (translationResult.failure) {
+        activity.endStep(callId, 'failed', undefined, translationResult.failure)
+        const result: TranslationResult2 = {
+          translated: false,
+          translatedContent: null,
+          targetLanguage: null,
+        }
+        yield { type: 'phase_complete', phase: 'translation', result } satisfies PhaseCompleteEvent
+        return result
+      }
       activity.endStep(callId)
 
       if (abortSignal?.aborted) {
@@ -132,23 +143,12 @@ export class TranslationPhase {
         targetLanguage,
       }
 
-      // The phase stays suspended at this yield while the consumer stores the translation, so
-      // the step spans exactly that work.
-      const saveId = activity.startStep('Saving translation', { parentId: input.activityParentId })
-      let saved = false
-      try {
-        yield {
-          type: 'phase_complete',
-          phase: 'translation',
-          result,
-          applyStepId: saveId,
-        } satisfies PhaseCompleteEvent
-        saved = true
-      } finally {
-        // Resumed means handled; abandoned here means stopped, or the consumer threw and has
-        // already closed the step as failed.
-        activity.endStep(saveId, saved ? 'done' : 'skipped')
-      }
+      yield {
+        type: 'phase_complete',
+        phase: 'translation',
+        result,
+        activityParentId: input.activityParentId ?? undefined,
+      } satisfies PhaseCompleteEvent
 
       return result
     } catch (error) {

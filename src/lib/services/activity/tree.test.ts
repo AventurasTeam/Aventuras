@@ -4,7 +4,7 @@ import {
   deepestRunningStep,
   failuresShownBelow,
   failureMarks,
-  stepsAboveLLMSteps,
+  stepsHoldingAttempts,
   flattenTree,
   rootStep,
 } from './tree'
@@ -283,17 +283,34 @@ describe('failureMarks', () => {
   })
 })
 
-describe('stepsAboveLLMSteps', () => {
-  it('marks a request that holds LLM attempts, so the marker moves down to them', () => {
+describe('stepsHoldingAttempts', () => {
+  it('marks a request that holds attempts, so the marker moves down to them', () => {
     const nodes = buildTree([
       step({ id: 'req', isLLM: true }),
-      step({ id: 'a1', parentId: 'req', isLLM: true }),
+      step({ id: 'a1', parentId: 'req', isLLM: true, attempt: true }),
       step({ id: 'wait', parentId: 'req' }),
     ])
-    expect([...stepsAboveLLMSteps(nodes)]).toEqual(['req'])
+    expect([...stepsHoldingAttempts(nodes)]).toEqual(['req'])
   })
 
-  it('leaves a single LLM call alone', () => {
-    expect(stepsAboveLLMSteps(buildTree([step({ id: 'call', isLLM: true })])).size).toBe(0)
+  it('leaves a model call alone when the calls beneath it are its own, not attempts', () => {
+    const nodes = buildTree([
+      step({ id: 'call', isLLM: true }),
+      step({ id: 'query', parentId: 'call', isLLM: true }),
+    ])
+    expect(stepsHoldingAttempts(nodes).size).toBe(0)
+  })
+})
+
+describe('failureMarks, attempts inside a failed attempt', () => {
+  it('counts a failed attempt as recovered when a later attempt beside it finished', () => {
+    const nodes = buildTree([
+      step({ id: 'narrative' }),
+      step({ id: 'pass1', parentId: 'narrative', status: 'failed', attempt: true }),
+      step({ id: 'a1', parentId: 'pass1', status: 'failed', attempt: true }),
+      step({ id: 'a2', parentId: 'pass1', status: 'done', attempt: true }),
+      step({ id: 'pass2', parentId: 'narrative', status: 'done', attempt: true }),
+    ])
+    expect(failureMarks(nodes).get('narrative')).toBe('recovered')
   })
 })

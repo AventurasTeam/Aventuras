@@ -89,20 +89,12 @@ export class BackgroundImagePhase {
     }
 
     try {
-      const outcome = await this.deps.analyzeBackgroundChangeAndGenerateImage(
+      // An absorbed failure is already on the step that met it, beneath this phase's.
+      await this.deps.analyzeBackgroundChangeAndGenerateImage(
         storyId,
         storyEntries,
         input.activityParentId,
       )
-      // Absorbed below, but the step it served failed: say so, non-fatally.
-      if (outcome?.failure) {
-        yield {
-          type: 'error',
-          phase: 'image',
-          error: new Error(outcome.failure),
-          fatal: false,
-        } satisfies ErrorEvent
-      }
 
       const result: BackgroundImageResult = { started: true }
       yield { type: 'phase_complete', phase: 'image', result } satisfies PhaseCompleteEvent

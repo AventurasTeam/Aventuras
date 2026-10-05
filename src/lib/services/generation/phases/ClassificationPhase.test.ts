@@ -132,35 +132,15 @@ describe('ClassificationPhase', () => {
 })
 
 describe('ClassificationPhase activity reporting', () => {
-  it('reports the world update as a step that spans the consumer applying the result', async () => {
-    const steps: { id: string; label: string; status?: string }[] = []
-    const activity = {
-      startStep: (label: string) => {
-        const id = `s${steps.length + 1}`
-        steps.push({ id, label })
-        return id
-      },
-      endStep: (id: string, status = 'done') => {
-        const step = steps.find((s) => s.id === id)
-        if (step && !step.status) step.status = status
-      },
-      recordStep: () => '',
-    }
+  it('hands the consumer the parent to report its world update under', async () => {
     const gen = new ClassificationPhase({ classifyResponse: async () => classification }).execute(
-      makeInput({ activity, activityParentId: 'phase' }),
+      makeInput({ activityParentId: 'phase' }),
     )
 
     let next = await gen.next()
     while (!next.done && next.value.type !== 'classification_complete') next = await gen.next()
 
-    // Held by the consumer: the call is over, the world update is still running.
-    expect(steps.map((s) => [s.label, s.status])).toEqual([
-      ['Classifying', 'done'],
-      ['Updating world', undefined],
-    ])
-
-    await drain(gen)
-    expect(steps.find((s) => s.label === 'Updating world')?.status).toBe('done')
+    expect((next.value as any).activityParentId).toBe('phase')
   })
 })
 
@@ -198,7 +178,7 @@ describe('ClassificationPhase failure reporting', () => {
     scene: { currentLocationName: null, presentCharacterNames: [], timeProgression: 'none' },
   }
 
-  it('fails Classifying with the reason when nothing was recovered, and flags the phase', async () => {
+  it('fails Classifying with the reason when nothing was recovered', async () => {
     const { steps, activity } = recorder()
     const phase = new ClassificationPhase({
       classifyResponse: async () => ({ ...empty, _error: '401 · invalid API key' }) as any,
@@ -211,17 +191,13 @@ describe('ClassificationPhase failure reporting', () => {
       status: 'failed',
       error: '401 · invalid API key',
     })
-    expect(events.find((e) => e.type === 'error')).toMatchObject({ fatal: false })
+    // Told once, on Classifying: the phase raises no error of its own.
+    expect(events.some((e) => e.type === 'error')).toBe(false)
     // Still handed on: the consumer shows its warning and applies the empty update.
     expect(events.some((e) => e.type === 'classification_complete')).toBe(true)
-    expect(steps[1]).toMatchObject({
-      label: 'Updating world',
-      status: 'done',
-      detail: 'fallback bookkeeping only',
-    })
   })
 
-  it('finishes Classifying with the reason, and the update as partly applied, when salvaged', async () => {
+  it('finishes Classifying with the reason when the result was salvaged', async () => {
     const { steps, activity } = recorder()
     const phase = new ClassificationPhase({
       classifyResponse: async () => ({ ...empty, _error: 'bad field', _salvaged: true }) as any,
@@ -230,24 +206,6 @@ describe('ClassificationPhase failure reporting', () => {
     const { events } = await drain(phase.execute(makeInput({ activity, activityParentId: 'p' })))
 
     expect(steps[0]).toMatchObject({ status: 'done', detail: undefined, error: 'bad field' })
-    expect(steps[1]).toMatchObject({ label: 'Updating world', detail: 'partly applied' })
     expect(events.some((e) => e.type === 'error')).toBe(false)
-  })
-
-  it('carries the world update step on the event, and skips it when abandoned there', async () => {
-    const { steps, activity } = recorder()
-    const gen = new ClassificationPhase({ classifyResponse: async () => classification }).execute(
-      makeInput({ activity, activityParentId: 'p' }),
-    )
-
-    let next = await gen.next()
-    while (!next.done && next.value.type !== 'classification_complete') next = await gen.next()
-    const applyStepId = (next.value as any).applyStepId
-    await gen.return(null)
-
-    expect(steps.find((s) => s.id === applyStepId)).toMatchObject({
-      label: 'Updating world',
-      status: 'skipped',
-    })
   })
 })
