@@ -1169,7 +1169,7 @@ const heroDeltas: NewDelta[] = [
     entryId: entryId('hero', 25),
     actionId: 'act_class_3',
     logPosition: 6,
-    source: 'ai_classifier',
+    source: 'periodic_classifier',
     targetTable: 'happening_awareness',
     targetId: 'haw_fire_kael',
     op: 'create',
