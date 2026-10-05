@@ -451,6 +451,62 @@ describe('selectReversalSet — row-keeping creates', () => {
     expect(ids(set.rows)).toEqual(['d_view', 'd_rel'])
   })
 
+  it('removes a kept create a removed row in the seed reaches, with the view that kept it', async () => {
+    await ctx.db.insert(entities).values(character('char_p'))
+    await ctx.db
+      .insert(characterRelationships)
+      .values({ ...relationship('rel_p', 'char_k', 'char_p'), kind: 'rival' })
+    const createdChar = delta('d_char', 1, { targetTable: 'entities', targetId: 'char_p' })
+    const createdRel = delta('d_rel', 2, {
+      targetTable: 'character_relationships',
+      targetId: 'rel_p',
+    })
+    await insertDeltas(
+      createdChar,
+      createdRel,
+      delta('d_view', 3, {
+        actionId: 'act_user',
+        source: 'user_edit',
+        op: 'update',
+        targetTable: 'character_relationships',
+        targetId: 'rel_p',
+        undoPayload: { kind: 'ally' },
+      }),
+    )
+
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target: [createdRel, createdChar] })
+
+    expect(ids(set.rows)).toEqual(['d_view', 'd_rel', 'd_char'])
+  })
+
+  it("never keeps a user's own create, whatever view the user set after it", async () => {
+    await ctx.db.insert(entities).values(character('char_p'))
+    await ctx.db
+      .insert(characterRelationships)
+      .values({ ...relationship('rel_u', 'char_k', 'char_p'), kind: 'rival' })
+    const created = delta('d_rel', 1, {
+      actionId: 'act_user0',
+      source: 'user_edit',
+      targetTable: 'character_relationships',
+      targetId: 'rel_u',
+    })
+    await insertDeltas(
+      created,
+      delta('d_view', 2, {
+        actionId: 'act_user',
+        source: 'user_edit',
+        op: 'update',
+        targetTable: 'character_relationships',
+        targetId: 'rel_u',
+        undoPayload: { kind: 'ally' },
+      }),
+    )
+
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target: [created] })
+
+    expect(ids(set.rows)).toEqual(['d_view', 'd_rel'])
+  })
+
   it('removes a create no user write kept, with its later writes and referrers', async () => {
     await ctx.db.insert(entities).values(character('char_p'))
     await ctx.db.insert(characterRelationships).values(relationship('rel_2', 'char_k', 'char_p'))

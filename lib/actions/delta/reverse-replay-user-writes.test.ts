@@ -525,7 +525,7 @@ describe('reversing a machine create of a relationship', () => {
     await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     expect(await pair(db)).toHaveLength(0)
-    expect(await actionIds(db)).toEqual(['act_u1', 'act_u2'])
+    expect(await relationshipCreates(db)).toEqual([])
   })
 
   it('deletes the pair when no user edit followed', async () => {
@@ -659,6 +659,30 @@ describe('a kept create goes to the user write that kept its row', () => {
     expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
     expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
 
+    expect(await pair(db)).toEqual([])
+    expect(await relationshipDeltas(db)).toEqual([])
+  })
+
+  // generation-pipeline.md → Reverse-replay: a relationship reached by reference goes whatever
+  // views the user set, even when its own create, in the same set, would have kept it.
+  it('removes a kept pair with the character the same pass created', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values(KAEL)
+    await apply(
+      ctx,
+      {
+        kind: 'createEntity',
+        source: 'periodic_classifier',
+        payload: { entry: { ...KAEL, id: 'char_mira', name: 'Mira' } },
+      },
+      'act_pass',
+    )
+    await apply(ctx, classifyView('ally'), 'act_pass')
+    await apply(ctx, userViews('ally', 'wary'), 'act_u')
+
+    expect(await reverseReplayDeltas('act_pass', ctx)).toBe(3)
+
+    expect(await db.select().from(entities).where(eq(entities.id, 'char_mira'))).toEqual([])
     expect(await pair(db)).toEqual([])
     expect(await relationshipDeltas(db)).toEqual([])
   })
