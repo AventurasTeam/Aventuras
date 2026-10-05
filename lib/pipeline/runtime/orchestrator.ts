@@ -136,7 +136,7 @@ async function handleEvent(event: PhaseEmittedEvent, run: RunState, ctx: RunCtx)
       )
       return
     }
-    // The first write takes the lock; later writes, and a parallel branch's, share it.
+    // The first write takes the lock exclusive; later ones, a parallel branch's too, reuse it.
     if (run.gateBehavior === 'no-gate') await holdWritePhase(run.branchId, run.actionId)
     let result: MutationResult
     try {
@@ -270,7 +270,7 @@ async function commitRun(
   run: RunState,
   ctx: RunCtx,
 ): Promise<{ tx: TxResult; successor?: RunState }> {
-  // The phases wrote the watermark last, so the write phase is over.
+  // Every phase, parallel branches included, has returned: no write of this run is still to come.
   endWritePhase(run)
   const pipeline = getPipeline(run.kind)
   const nextKind = pipeline.chainsTo?.(run) ?? null

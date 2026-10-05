@@ -26,7 +26,7 @@ const REPLY = 'E2E-RETRIEVAL-REPLY — the amulet answers, warm against the rib.
 const ACTION = 'Ask Mira what really happened during the alley ambush.'
 
 const AWARENESS_SUM_SQL = `SELECT COALESCE(SUM(retrieval_count), 0) FROM happening_awareness WHERE branch_id = ?`
-// Updates only: the seed logs the create of each awareness row it ships, and a bump is an update.
+// Updates only: the seed logs creates for hap_fire's awareness rows, and a bump is an update.
 const AWARENESS_DELTA_SQL = `SELECT count(*) FROM deltas WHERE branch_id = ? AND target_table = 'happening_awareness' AND op = 'update'`
 
 // The whole retrieval seam on one turn: the blocking sync stage embeds the

@@ -1,7 +1,7 @@
 // Per-branch write lock (generation-pipeline.md → No-gate write phase): delta writes hold it
-// shared, a no-gate run exclusive until it settles; FIFO, writer-preferring so edits can't starve.
-// Shared isn't reentrant: no applyDeltaAction nests; no-gate phases write only via delta_emitted
-// (their status writes take no lock).
+// shared, a no-gate run exclusive until it settles. FIFO, and writer-preferring so a stream of
+// edits can't starve a pass. Shared isn't reentrant: no applyDeltaAction nests; no-gate phases
+// write only via delta_emitted (their status writes take no lock).
 
 type Waiter =
   | { readonly mode: 'shared'; readonly grant: () => void }
