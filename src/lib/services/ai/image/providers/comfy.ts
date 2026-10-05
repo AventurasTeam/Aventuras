@@ -357,9 +357,14 @@ function getApi(baseUrl: string): ComfyApi {
     return tauriHttpFetch(internal.apiURL(path), options)
   }
 
+  // A failed init() never opens a socket, so a cached client would never see generation events.
+  api.on('connection_error', () => {
+    if (apis.get(baseUrl) === api) apis.delete(baseUrl)
+  })
+
+  apis.set(baseUrl, api)
   // init() issues its first request synchronously, so the patch above must already be in place.
   api.init()
-  apis.set(baseUrl, api)
   return api
 }
 
