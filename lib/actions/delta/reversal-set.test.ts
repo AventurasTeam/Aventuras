@@ -107,7 +107,7 @@ beforeEach(async () => {
 })
 
 describe('selectReversalSet — the closure', () => {
-  it('closes a user-created character over the links a later pass made to her (P1)', async () => {
+  it('closes a user-created character over the links a later pass made to her', async () => {
     await ctx.db.insert(entities).values(character('char_x'))
     const act = (actionId: string) => async (action: PipelineAction) => {
       const result = await applyDeltaAction({ action, actionId, branchId: 'b1' }, ctx)
@@ -233,7 +233,7 @@ describe('selectReversalSet — the closure', () => {
     expect(ids(set.rows)).toEqual(['d_rel', 'd_p'])
   })
 
-  it("takes the rows a removed row's own delete captured, not the delete (P5)", async () => {
+  it("takes the rows a removed row's own delete captured, not the delete", async () => {
     const involvement = { id: 'hinv_u', branchId: 'b1', happeningId: 'hap_p', entityId: 'char_k' }
     await insertDeltas(
       delta('d_h', 1, { targetTable: 'happenings', targetId: 'hap_p' }),
