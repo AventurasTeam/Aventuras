@@ -228,7 +228,7 @@ async function streamCompletion(res, model, content, cut) {
     res.write(chunk({ content: word }))
     if (cut && word.includes('sky')) {
       if (cut === 'connection') {
-        res.socket.destroy()
+        res.socket?.destroy()
         return
       }
       // As OpenRouter reports an upstream failure once the 200 and some text are already sent.
@@ -335,23 +335,34 @@ const models = () => ({
   })),
 })
 
+async function route(req, res) {
+  const path = new URL(req.url, 'http://localhost').pathname.replace(/^\/v1/, '')
+  let raw = ''
+  for await (const part of req) raw += part
+  let body = {}
+  try {
+    body = raw ? JSON.parse(raw) : {}
+  } catch {
+    /* not JSON */
+  }
+  console.log(
+    `${new Date().toISOString().slice(11, 19)} ${req.method} ${path} ${body.model ?? ''}${body.stream ? ' (stream)' : ''}`,
+  )
+  if (req.method === 'GET' && path === '/models') return sendJson(res, 200, models())
+  if (req.method === 'POST' && path === '/chat/completions') return await chat(req, res, body)
+  if (req.method === 'POST' && path === '/images/generations') return await image(req, res, body)
+  sendError(res, 404, { message: `No route for ${req.method} ${path}`, type: 'not_found' })
+}
+
 http
   .createServer(async (req, res) => {
-    const path = new URL(req.url, 'http://localhost').pathname.replace(/^\/v1/, '')
-    let raw = ''
-    for await (const part of req) raw += part
-    let body = {}
+    // A client that hangs up mid-request must not take the server down with it.
     try {
-      body = raw ? JSON.parse(raw) : {}
-    } catch {
-      /* not JSON */
+      await route(req, res)
+    } catch (error) {
+      console.error('request failed:', error)
+      if (res.headersSent || res.destroyed) res.destroy()
+      else sendError(res, 500, { message: String(error), type: 'server_error' })
     }
-    console.log(
-      `${new Date().toISOString().slice(11, 19)} ${req.method} ${path} ${body.model ?? ''}${body.stream ? ' (stream)' : ''}`,
-    )
-    if (req.method === 'GET' && path === '/models') return sendJson(res, 200, models())
-    if (req.method === 'POST' && path === '/chat/completions') return chat(req, res, body)
-    if (req.method === 'POST' && path === '/images/generations') return image(req, res, body)
-    sendError(res, 404, { message: `No route for ${req.method} ${path}`, type: 'not_found' })
   })
   .listen(PORT, () => console.log(`fake provider on http://localhost:${PORT}/v1`))
