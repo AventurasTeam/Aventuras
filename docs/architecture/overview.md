@@ -190,6 +190,11 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   loaded entries, as `getChapterEntries` does, and the tail begins where
   `getUnchapterizedEntries` says it does, so the two cannot disagree. A banner renders inside its
   entry's `data-entry-id` wrapper, so every jump to that entry lands on the banner above it.
+
+  The navigation panel lists the same chapter starts as landmarks whether or not banners are
+  shown; with them off, the jump lands on the chapter's first entry. A chapter row never
+  switches branch in "Switch to checkpoint branch" mode: its start can lie in an ancestor's
+  history while the chapter is in the current branch's view all the same.
 - **World state** (`Character`/`Location`/`Item`/`StoryBeat`) is rewritten by the classifier after
   every turn. A lorebook `Entry` carries no live state of its own: the type has `state` fields
   per entry type, but every creation path initialised them blank and nothing ever wrote one

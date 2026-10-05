@@ -9,6 +9,7 @@
     resolveEntryByNumber,
     type Landmark,
   } from '$lib/utils/storyNavigation'
+  import { buildChapterBanners } from '$lib/utils/chapterBanners'
   import { supportsHover } from '$lib/utils/platform'
   import { ask } from '@tauri-apps/plugin-dialog'
   import { Button } from '$lib/components/ui/button'
@@ -20,6 +21,7 @@
   import TimelinePanel from '$lib/components/world/TimelinePanel.svelte'
   import { swipe } from '$lib/utils/swipe'
   import {
+    BookOpen,
     Bookmark,
     Check,
     ChevronDown,
@@ -75,7 +77,13 @@
   })
 
   const landmarkList = $derived(
-    buildLandmarks(story.entries, story.checkpoints, story.branches, activeBranch),
+    buildLandmarks(
+      story.entries,
+      story.checkpoints,
+      story.branches,
+      activeBranch,
+      buildChapterBanners(story.entries, story.currentBranchChapters),
+    ),
   )
   const landmarks = $derived(landmarkList.landmarks)
   const orphaned = $derived(landmarkList.orphaned)
@@ -126,7 +134,13 @@
 
   async function goToLandmark(landmark: Landmark) {
     const currentBranchId = story.currentStory?.currentBranchId ?? null
-    if (landmarkNavigationMode === 'checkpoint-branch' && currentBranchId !== landmark.branchId) {
+    // A chapter start can lie in an ancestor branch's history, and the chapter is in this
+    // branch's view either way, so a chapter row never carries the reader to another branch.
+    if (
+      landmarkNavigationMode === 'checkpoint-branch' &&
+      landmark.kind !== 'chapter' &&
+      currentBranchId !== landmark.branchId
+    ) {
       // Refused before the landing is claimed, so a blocked switch leaves no claim to clean up.
       if (story.isGenerationLeaseHeld) {
         ui.showToast('Cannot switch branches while a generation is in progress', 'error')
@@ -282,12 +296,12 @@
             icon={Milestone}
             size="sm"
             title="No landmarks"
-            description="This branch has no starting point or checkpoints to jump to. Checkpoints are saved at chapter boundaries."
+            description="This branch has no starting point, chapters or checkpoints to jump to. Checkpoints are saved at chapter boundaries."
             class="py-6"
           />
         {:else}
           <div class="space-y-1">
-            {#each landmarks as landmark (landmark.checkpointId ?? `origin:${landmark.entryId}`)}
+            {#each landmarks as landmark (`${landmark.kind}:${landmark.chapterId ?? landmark.checkpointId ?? landmark.entryId}`)}
               <div
                 class="group hover:bg-surface-700/50 can-hover:min-h-0 relative min-h-[40px] rounded-lg transition-colors"
               >
@@ -337,6 +351,8 @@
                   >
                     {#if landmark.kind === 'origin'}
                       <GitBranch class="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+                    {:else if landmark.kind === 'chapter'}
+                      <BookOpen class="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
                     {:else}
                       <Bookmark class="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
                     {/if}

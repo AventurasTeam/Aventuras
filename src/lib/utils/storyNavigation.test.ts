@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import type { Branch, Checkpoint, StoryEntry } from '$lib/types'
+import type { Branch, Chapter, Checkpoint, StoryEntry } from '$lib/types'
+import { buildChapterBanners } from './chapterBanners'
 import {
   branchesUsingCheckpoint,
   buildLandmarks,
@@ -23,6 +24,34 @@ function entry(id: string, position: number, branchId: string | null = null): St
     createdAt: position,
     metadata: null,
     branchId,
+  }
+}
+
+function chapter(
+  id: string,
+  number: number,
+  startEntryId: string,
+  endEntryId: string,
+  title: string,
+): Chapter {
+  return {
+    id,
+    storyId: 's1',
+    number,
+    title,
+    startEntryId,
+    endEntryId,
+    entryCount: 0,
+    summary: '',
+    startTime: null,
+    endTime: null,
+    keywords: [],
+    characters: [],
+    locations: [],
+    plotThreads: [],
+    emotionalTone: null,
+    branchId: null,
+    createdAt: 0,
   }
 }
 
@@ -314,6 +343,42 @@ describe('buildLandmarks', () => {
     expect(row.checkpointId).toBe('cp')
     expect(row.branchId).toBe('br1')
     expect(row.branchName).toBe('Betrayal')
+  })
+
+  describe('chapters', () => {
+    const chapters = [chapter('c1', 1, 'm0', 'm1', 'Opening')]
+    const banners = buildChapterBanners(branchView, chapters)
+
+    it('adds a row for each chapter start and for the tail, without a checkpoint id', () => {
+      const { landmarks } = buildLandmarks(branchView, [], [br1], null, banners)
+      expect(
+        landmarks.map((l) => [l.kind, l.number, l.label, l.chapterId, l.checkpointId]),
+      ).toEqual([
+        ['chapter', 1, 'Chapter 1: Opening', 'c1', null],
+        ['chapter', 3, 'Chapter 2: The Story Continues', null, null],
+      ])
+    })
+
+    it('puts a chapter row ahead of an origin or checkpoint on the same entry', () => {
+      const { landmarks } = buildLandmarks(
+        branchView,
+        [checkpoint('cp', 'b2')],
+        [br1],
+        br1,
+        banners,
+      )
+      expect(landmarks.map((l) => [l.kind, l.number])).toEqual([
+        ['chapter', 1],
+        ['origin', 2],
+        ['chapter', 3],
+        ['checkpoint', 3],
+      ])
+    })
+
+    it('lists no chapter rows when none are passed', () => {
+      const { landmarks } = buildLandmarks(branchView, [checkpoint('cp', 'b2')], [br1], null)
+      expect(landmarks.map((l) => l.kind)).toEqual(['checkpoint'])
+    })
   })
 })
 
