@@ -23,7 +23,6 @@ import type {
   LocationBeforeState,
   ItemBeforeState,
   StoryBeatBeforeState,
-  ImageGenerationMode,
 } from '$lib/types'
 import { database } from '$lib/services/database'
 import { rollbackService } from '$lib/services/rollbackService'
@@ -99,6 +98,11 @@ import { clearImageMarkerCache } from '$lib/services/image'
 import { GenerationLease } from '$lib/utils/generationLease'
 import { findLiveCharacter, sameBranchScope, type BranchScope } from '$lib/utils/branchScope'
 import { checkpointDeletionBlocker } from '$lib/utils/storyNavigation'
+import {
+  buildChapterBanners,
+  lastResolvedChapterEnd,
+  type ChapterBanner,
+} from '$lib/utils/chapterBanners'
 
 const log = createLogger('StoryStore')
 
@@ -1563,6 +1567,10 @@ class StoryStore {
   )
 
   timeRanges = $derived<SelectableRange[]>(selectableRanges(this.entries, this.timeBoundaries))
+
+  chapterBanners = $derived<Map<string, ChapterBanner>>(
+    buildChapterBanners(this.entries, this.currentBranchChapters),
+  )
 
   /** Everything the review needs, and the fingerprint apply revalidates against. */
   previewReconciliation(
@@ -3623,19 +3631,12 @@ class StoryStore {
     }
 
     const chapters = this.currentBranchChapters
-    let lastChapterEnd = -1
-    let resolved = 0
-    for (const chapter of chapters) {
-      const endIdx = this._entryIdToIndex.get(chapter.endEntryId)
-      if (endIdx === undefined) continue
-      resolved++
-      if (endIdx > lastChapterEnd) lastChapterEnd = endIdx
-    }
+    const lastChapterEnd = lastResolvedChapterEnd(this._entryIdToIndex, chapters)
 
     // Chapters exist but none could be placed (broken endEntryId refs): returning
     // everything would label the whole story "not yet chapterized" and make grep count
     // it twice. Better to return nothing than to lie about what it is.
-    if (chapters.length > 0 && resolved === 0) return []
+    if (chapters.length > 0 && lastChapterEnd === -1) return []
 
     return this.entries.slice(lastChapterEnd + 1)
   }
@@ -4481,6 +4482,11 @@ class StoryStore {
 
   private generationLease = $state<GenerationLease | null>(null)
 
+  /** True from a branch switch or creation being requested until it has fully settled. */
+  get isSwitchingBranch(): boolean {
+    return this.pendingBranchSwitches > 0
+  }
+
   /** True while a generation holds the branch. Drives the switch affordances. */
   get isGenerationLeaseHeld(): boolean {
     return this.generationLease !== null
@@ -5246,16 +5252,7 @@ class StoryStore {
     genre: string
     description?: string
     mode: StoryMode
-    settings: {
-      pov: 'first' | 'second' | 'third'
-      tense: 'past' | 'present'
-      tone?: string
-      themes?: string[]
-      visualProseMode?: boolean
-      imageGenerationMode?: ImageGenerationMode
-      backgroundImagesEnabled?: boolean
-      referenceMode?: boolean
-    }
+    settings: StorySettings
     protagonist: Partial<Character>
     startingLocation: Partial<Location>
     initialItems: Partial<Item>[]
@@ -5305,16 +5302,7 @@ class StoryStore {
       genre: data.genre,
       templateId: 'wizard-generated',
       mode: data.mode,
-      settings: {
-        pov: data.settings.pov,
-        tense: data.settings.tense,
-        tone: data.settings.tone,
-        themes: data.settings.themes,
-        visualProseMode: data.settings.visualProseMode,
-        imageGenerationMode: data.settings.imageGenerationMode,
-        backgroundImagesEnabled: data.settings.backgroundImagesEnabled,
-        referenceMode: data.settings.referenceMode,
-      },
+      settings: data.settings,
       memoryConfig: DEFAULT_MEMORY_CONFIG,
       retryState: null,
       styleReviewState: null,
