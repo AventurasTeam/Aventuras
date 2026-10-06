@@ -277,6 +277,7 @@
     try {
       service = new InteractiveVaultService('interactiveVault')
 
+      const entityToUse = focused ?? focusedEntity
       const allLorebooks = lorebookVault.items
       await service.initialize(
         {
@@ -285,10 +286,9 @@
           totalEntryCount: allLorebooks.reduce((sum, lb) => sum + lb.entries.length, 0),
           scenarioCount: scenarioVault.items.length,
         },
-        focused ?? undefined,
+        entityToUse ?? undefined,
       )
 
-      const entityToUse = focused ?? focusedEntity
       const greetingContent = entityToUse
         ? `Hello! I can see you were editing the ${entityToUse.entityType} **${entityToUse.entityName}**. What would you like to work on?`
         : "Hello! I'm your Vault Assistant. I can help you manage characters, lorebooks, and scenarios in your vault.\n\nTry asking me to create a character, organize lorebook entries, or set up a new scenario."
