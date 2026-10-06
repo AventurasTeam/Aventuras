@@ -100,8 +100,7 @@ function refTarget({ canonical, branchEntities }: EntityMergeInput): string | nu
 
 /**
  * A canonical item with no position takes the loser's placement, so a merge never leaves the item
- * nowhere (developer decision, 2026-10-06). A held loser needs nothing here: its holders move to
- * the canonical through `refTarget`.
+ * nowhere. A held loser needs nothing here: its holders move to the canonical through `refTarget`.
  */
 function adoptedPlacement(
   input: EntityMergeInput,
@@ -158,7 +157,7 @@ function relationshipActions(
   return actions
 }
 
-/** The loser replaced by the canonical in place, keeping the canonical's first place only. */
+/** The loser replaced by the canonical in place, the canonical kept once. */
 function sceneWithCanonical(scene: readonly string[], loserId: string, canonicalId: string) {
   const out: string[] = []
   for (const id of scene) {

@@ -123,10 +123,18 @@ const deleteLoser = {
 
 describe('entityMergeActions — refusals', () => {
   it('throws for a pair it cannot merge', () => {
-    expect(() => merge({ loser: A })).toThrow()
-    expect(() => merge({ loser: entity('loc_b', 'location') })).toThrow()
-    expect(() => merge({ loser: entity('char_b', 'character', { branchId: 'b2' }) })).toThrow()
-    expect(() => merge({ branchEntities: [A] })).toThrow()
+    expect(() => merge({ loser: A })).toThrow(/char_a merged into itself/)
+    expect(() => merge({ loser: entity('loc_b', 'location') })).toThrow(
+      /location merged into character/,
+    )
+    expect(() => merge({ loser: entity('char_b', 'character', { branchId: 'b2' }) })).toThrow(
+      /not both on b1/,
+    )
+    expect(() => merge({ canonical: entity('char_a', 'character', { branchId: 'b2' }) })).toThrow(
+      /not both on b1/,
+    )
+    expect(() => merge({ branchEntities: [A] })).toThrow(/not among the branch entities/)
+    expect(() => merge({ branchEntities: [B] })).toThrow(/not among the branch entities/)
   })
 })
 
