@@ -31,6 +31,7 @@ export type {
   RelationshipLink,
   StackableDraft,
 } from './entity-draft'
+export { namesakeKey, orphanedFlags, withFlagClears } from './collision-flags'
 export { entityActions } from './entity-actions'
 export type { EntitySaveInput } from './entity-actions'
 export { entityDeleteActions } from './entity-delete'

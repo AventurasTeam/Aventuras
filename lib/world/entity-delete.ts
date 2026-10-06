@@ -1,6 +1,7 @@
 import type { PipelineAction } from '@/lib/actions'
 import type { Entity } from '@/lib/db'
 
+import { orphanedFlags, withFlagClears } from './collision-flags'
 import { heldItems, stateOf } from './entity-draft'
 import { stateWithRefRewritten, unheldItemsWithout } from './entity-refs'
 
@@ -63,7 +64,8 @@ function tailActions(branchId: string, tail: DeleteTail | null, id: string): Pip
 }
 
 /**
- * world.md → Delete. Handlers read pre-group state, so patch/tail/delete order doesn't matter.
+ * world.md → Delete, plus a flag clear on each flagged namesake the delete leaves without a partner.
+ * Handlers read pre-group state, so patch/tail/delete order doesn't matter.
  * Replaces the whole `state` from this snapshot, so a write landing in between is lost — safe only
  * while nothing else writes `state` alongside user edits (the periodic classifier doesn't).
  */
@@ -85,10 +87,10 @@ export function entityDeleteActions({
     })
   }
   const tailDrop = tailActions(branchId, tail, target.id)
+  const orphans = orphanedFlags({ entities: branchEntities, removed: new Set([target.id]) })
   return {
     actions: [
-      ...updates,
-      ...tailDrop,
+      ...withFlagClears([...updates, ...tailDrop], branchId, orphans),
       { kind: 'deleteEntity', source: 'user_edit', payload: { branchId, id: target.id } },
     ],
     references: updates.length,
