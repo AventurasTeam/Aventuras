@@ -42,7 +42,10 @@ function HistoryTabForTarget({ branchId, targetTable, targetId }: HistoryTabProp
       return ref == null ? null : formatEntryRef(ref.position)
     }
     return chunks.rows.map((delta) =>
-      humanizeDelta(delta, { targetTable, targetName: name, entryLabel, nowMs }),
+      humanizeDelta(
+        { delta, via: { kind: 'own' } },
+        { targetTable, targetName: name, otherName: () => null, entryLabel, nowMs },
+      ),
     )
   }, [chunks.rows, entryIndex.index, targetTable, name])
 

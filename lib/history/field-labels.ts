@@ -1,6 +1,8 @@
 import type { Delta } from '@/lib/db'
 import { t } from '@/lib/i18n'
 
+import { HISTORY_LINK_TABLES, type HistoryLinkTable, type LinkSide } from './link-rows'
+
 export const HISTORY_TABLES = ['entities', 'lore', 'threads', 'happenings'] as const
 export type HistoryTable = (typeof HISTORY_TABLES)[number]
 
@@ -74,11 +76,34 @@ const HAPPENING: Labels = {
   commonKnowledge: () => t('history:field.commonKnowledge'),
 }
 
-const LABELS: Record<HistoryTable, Labels> = {
+const yourView = () => t('history:field.yourView')
+const theirView = () => t('history:field.theirView')
+
+// `kind` is a's view of b (data-model.md), so the tab's own view is `kind` only on side a.
+const RELATIONSHIP_SIDE_A: Labels = { kind: yourView, inverseKind: theirView }
+const RELATIONSHIP_SIDE_B: Labels = { kind: theirView, inverseKind: yourView }
+
+const INVOLVEMENT: Labels = { role: () => t('history:field.role') }
+
+// No retrievalCount: the query leaves its bumps out.
+const AWARENESS: Labels = {
+  source: () => t('history:field.source'),
+  decayResistance: () => t('history:field.decayResistance'),
+  learnedAtEntryId: () => t('history:field.learnedAt'),
+}
+
+const LABELS: Record<HistoryTable | HistoryLinkTable, Labels> = {
   entities: ENTITY,
   lore: LORE,
   threads: THREAD,
   happenings: HAPPENING,
+  character_relationships: RELATIONSHIP_SIDE_A,
+  happening_involvements: INVOLVEMENT,
+  happening_awareness: AWARENESS,
+}
+
+function labelsFor(table: HistoryTable | HistoryLinkTable, side?: LinkSide): Labels {
+  return table === 'character_relationships' && side === 'b' ? RELATIONSHIP_SIDE_B : LABELS[table]
 }
 
 function parentPath(path: string): string {
@@ -86,9 +111,16 @@ function parentPath(path: string): string {
   return dot === -1 ? '' : path.slice(0, dot)
 }
 
-/** A field path's user-facing name: its nearest labelled ancestor, else the raw path. */
-export function fieldPathLabel(table: HistoryTable, path: string): string {
-  const labels = LABELS[table]
+/**
+ * A field path's user-facing name: its nearest labelled ancestor, else the raw path. `side` is the
+ * tab's end of a relationship row; side `a`'s labels apply when it is omitted.
+ */
+export function fieldPathLabel(
+  table: HistoryTable | HistoryLinkTable,
+  path: string,
+  side?: LinkSide,
+): string {
+  const labels = labelsFor(table, side)
   for (let current = path; current !== ''; current = parentPath(current)) {
     if (Object.hasOwn(labels, current)) return labels[current]()
   }
@@ -96,12 +128,34 @@ export function fieldPathLabel(table: HistoryTable, path: string): string {
 }
 
 /** Field paths whose label contains `term`, so searching the summary's wording finds its rows. */
-export function pathsMatchingLabel(table: HistoryTable, term: string): string[] {
+export function pathsMatchingLabel(
+  table: HistoryTable | HistoryLinkTable,
+  term: string,
+  side?: LinkSide,
+): string[] {
   const needle = term.trim().toLocaleLowerCase()
   if (needle === '') return []
-  return Object.entries(LABELS[table])
+  return Object.entries(labelsFor(table, side))
     .filter(([, label]) => label().toLocaleLowerCase().includes(needle))
     .map(([path]) => path)
+}
+
+const LINK_LABELS: Record<HistoryLinkTable, () => string> = {
+  character_relationships: () => t('history:linkLabel.character_relationships'),
+  happening_involvements: () => t('history:linkLabel.happening_involvements'),
+  happening_awareness: () => t('history:linkLabel.happening_awareness'),
+}
+
+/** A link row's name on its History target line ("Relationship"). */
+export function linkTableLabel(table: HistoryLinkTable): string {
+  return LINK_LABELS[table]()
+}
+
+/** Link tables whose label starts a word with `term`, for the target-line search. */
+export function linkLabelsMatching(term: string): HistoryLinkTable[] {
+  const needle = term.trim().toLocaleLowerCase()
+  if (needle === '') return []
+  return HISTORY_LINK_TABLES.filter((table) => startsWithWord(LINK_LABELS[table](), needle))
 }
 
 // Every rendered spelling of an op (name, filter label, summary) that a search must match.
@@ -142,28 +196,46 @@ export function opsMatchingLabel(term: string): Delta['op'][] {
 /** Joins an update summary's field labels ("Modified Traits, Drives"). */
 export const SUMMARY_FIELD_SEPARATOR = ', '
 
-const FIELDS_SLOT = '\u0000'
+// Stands in for an interpolated value, so a rendered summary splits around it.
+const SLOT = '\u0000'
 
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-// Split at the slot rather than hard-coding "Modified": a locale may put the fields first.
-function updateSummaryPattern(): RegExp | null {
-  const [lead, tail = ''] = t('history:summary.modified', { fields: FIELDS_SLOT })
-    .split(FIELDS_SLOT)
-    .map((part) => part.trim())
+// Split at the slot rather than hard-coding the wording: a locale may put the value first.
+function slotPattern(rendered: string): { pattern: RegExp; lead: string; tail: string } | null {
+  const [lead, tail = ''] = rendered.split(SLOT).map((part) => part.trim())
   if (lead === '' && tail === '') return null
   const before = lead === '' ? '' : `${escapeRegExp(lead)}\\s+`
   const after = tail === '' ? '' : `\\s+${escapeRegExp(tail)}`
-  return new RegExp(`^${before}(.+?)${after}$`, 'iu')
+  return { pattern: new RegExp(`^${before}(.+?)${after}$`, 'iu'), lead, tail }
 }
 
 /** The field labels a typed update summary names, or null when `term` isn't worded as one. */
 export function summaryFieldTerms(term: string): string[] | null {
-  const fields = updateSummaryPattern()?.exec(term.trim())?.[1]
+  const summary = slotPattern(t('history:summary.modified', { fields: SLOT }))
+  const fields = summary?.pattern.exec(term.trim())?.[1]
   if (fields == null) return null
   const labels = fields
     .split(SUMMARY_FIELD_SEPARATOR.trim())
     .map((label) => label.trim())
     .filter((label) => label !== '')
   return labels.length > 0 ? labels : null
+}
+
+export type RemovalSummaryTerm = { kind: 'any' } | { kind: 'named'; name: string }
+
+/**
+ * A term read against the removal summary ("Removed when Kael was deleted"): typed whole it names
+ * the other end; a word of the summary's own wording alone matches every removal.
+ */
+export function removalSummaryTerm(term: string): RemovalSummaryTerm | null {
+  const summary = slotPattern(t('history:summary.removedWith', { name: SLOT }))
+  if (summary == null) return null
+  const name = summary.pattern.exec(term.trim())?.[1]
+  if (name != null) return { kind: 'named', name }
+  const needle = term.trim().toLocaleLowerCase()
+  if (needle === '') return null
+  return startsWithWord(summary.lead, needle) || startsWithWord(summary.tail, needle)
+    ? { kind: 'any' }
+    : null
 }

@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest'
 import type { Delta } from '@/lib/db'
 
 import { fieldPathLabel, pathsMatchingLabel } from './field-labels'
-import { changedPaths, humanizeDelta } from './humanize'
+import { changedPaths, humanizeDelta, type HumanizeContext } from './humanize'
+import type { HistoryRow, HistoryVia } from './link-rows'
 
 const delta = (overrides: Partial<Delta>): Delta => ({
   id: 'delta_1',
@@ -20,6 +21,31 @@ const delta = (overrides: Partial<Delta>): Delta => ({
   createdAt: 0,
   ...overrides,
 })
+
+const own = (row: Delta): HistoryRow => ({ delta: row, via: { kind: 'own' } })
+const reaching = (row: Delta, via: HistoryVia): HistoryRow => ({ delta: row, via })
+
+// Aria (char_aria) < Kael (char_kael), so Aria is side a of their row and holds `kind`.
+const ON_ARIAS_TAB: HistoryVia = {
+  kind: 'link',
+  table: 'character_relationships',
+  linkId: 'rel_1',
+  otherId: 'char_kael',
+  side: 'a',
+}
+const ON_KAELS_TAB: HistoryVia = {
+  kind: 'link',
+  table: 'character_relationships',
+  linkId: 'rel_1',
+  otherId: 'char_aria',
+  side: 'b',
+}
+
+const NAMES: Readonly<Record<string, string>> = {
+  char_aria: 'Aria',
+  char_kael: 'Kael',
+  hap_fire: 'The keep burns',
+}
 
 describe('changedPaths', () => {
   it('reads top-level columns, one level into state, one more into state.visual, and skips meta keys', () => {
@@ -59,20 +85,23 @@ describe('field labels', () => {
 })
 
 describe('humanizeDelta', () => {
-  const context = {
-    targetTable: 'entities' as const,
+  const context: HumanizeContext = {
+    targetTable: 'entities',
     targetName: 'Kael',
+    otherName: (id) => NAMES[id] ?? null,
     entryLabel: (id: string) => (id === 'entry_47' ? 'entry #47' : null),
     nowMs: 7_200_000,
   }
 
   it('summarizes an update by its labels and carries source, entry and time', () => {
     const view = humanizeDelta(
-      delta({
-        source: 'periodic_classifier',
-        entryId: 'entry_47',
-        undoPayload: { state: { traits: [], drives: [] } },
-      }),
+      own(
+        delta({
+          source: 'periodic_classifier',
+          entryId: 'entry_47',
+          undoPayload: { state: { traits: [], drives: [] } },
+        }),
+      ),
       context,
     )
     expect(view).toMatchObject({
@@ -86,33 +115,33 @@ describe('humanizeDelta', () => {
   })
 
   it('renders a create and a delete as one-liners with no field path', () => {
-    expect(humanizeDelta(delta({ op: 'create' }), context)).toMatchObject({
+    expect(humanizeDelta(own(delta({ op: 'create' })), context)).toMatchObject({
       summary: 'Created',
       fieldPath: null,
     })
-    expect(humanizeDelta(delta({ op: 'delete', undoPayload: { id: 'x' } }), context)).toMatchObject(
-      { summary: 'Deleted', fieldPath: null },
-    )
+    expect(
+      humanizeDelta(own(delta({ op: 'delete', undoPayload: { id: 'x' } })), context),
+    ).toMatchObject({ summary: 'Deleted', fieldPath: null })
   })
 
   it('labels threads and happenings by their own vocabulary', () => {
     expect(
-      humanizeDelta(delta({ targetTable: 'threads', undoPayload: { status: 'active' } }), {
+      humanizeDelta(own(delta({ targetTable: 'threads', undoPayload: { status: 'active' } })), {
         ...context,
         targetTable: 'threads',
       }).summary,
     ).toBe('Modified Status')
     expect(
-      humanizeDelta(delta({ targetTable: 'happenings', undoPayload: { commonKnowledge: 0 } }), {
-        ...context,
-        targetTable: 'happenings',
-      }).summary,
+      humanizeDelta(
+        own(delta({ targetTable: 'happenings', undoPayload: { commonKnowledge: 0 } })),
+        { ...context, targetTable: 'happenings' },
+      ).summary,
     ).toBe('Modified Common knowledge')
   })
 
   it('lists a shared label once when two changed paths fall back to the same ancestor', () => {
     const view = humanizeDelta(
-      delta({ undoPayload: { state: { visual: { customA: 'x', customB: 'y' } } } }),
+      own(delta({ undoPayload: { state: { visual: { customA: 'x', customB: 'y' } } } })),
       context,
     )
     expect(view.fieldPath).toBe('state.visual.customA, state.visual.customB')
@@ -120,14 +149,151 @@ describe('humanizeDelta', () => {
   })
 
   it('labels a collision-flag clear', () => {
-    const view = humanizeDelta(delta({ undoPayload: { nameCollisionFlag: 1 } }), context)
+    const view = humanizeDelta(own(delta({ undoPayload: { nameCollisionFlag: 1 } })), context)
     expect(view.summary).toBe('Modified Collision flag')
     expect(view.fieldPath).toBe('nameCollisionFlag')
   })
 
   it('falls back to "Modified" with no field path when an update carries no readable columns', () => {
-    const view = humanizeDelta(delta({ undoPayload: {} }), context)
+    const view = humanizeDelta(own(delta({ undoPayload: {} })), context)
     expect(view.summary).toBe('Modified')
     expect(view.fieldPath).toBeNull()
+  })
+
+  it('names a link row by its link and its other end, and keeps its create and delete one-liners', () => {
+    const link = { targetTable: 'character_relationships', targetId: 'rel_1' }
+    expect(
+      humanizeDelta(reaching(delta({ ...link, op: 'create' }), ON_ARIAS_TAB), context),
+    ).toMatchObject({
+      targetTable: 'character_relationships',
+      targetDisplayName: 'Relationship · Kael',
+      summary: 'Created',
+      fieldPath: null,
+    })
+    expect(
+      humanizeDelta(
+        reaching(
+          delta({ ...link, op: 'delete', undoPayload: { id: 'rel_1', kind: 'ally' } }),
+          ON_ARIAS_TAB,
+        ),
+        context,
+      ),
+    ).toMatchObject({ summary: 'Deleted', fieldPath: null })
+  })
+
+  it("labels a relationship edit from the tab's side of the pair", () => {
+    const edit = delta({
+      targetTable: 'character_relationships',
+      targetId: 'rel_1',
+      undoPayload: { inverseKind: 'rival' },
+    })
+    expect(humanizeDelta(reaching(edit, ON_ARIAS_TAB), context)).toMatchObject({
+      summary: 'Modified Their view',
+      fieldPath: 'inverseKind',
+    })
+    expect(humanizeDelta(reaching(edit, ON_KAELS_TAB), context)).toMatchObject({
+      targetDisplayName: 'Relationship · Aria',
+      summary: 'Modified Your view',
+      fieldPath: 'inverseKind',
+    })
+  })
+
+  it('labels involvement and awareness edits, named by their happening', () => {
+    const involvement: HistoryVia = {
+      kind: 'link',
+      table: 'happening_involvements',
+      linkId: 'hinv_1',
+      otherId: 'hap_fire',
+      side: null,
+    }
+    expect(
+      humanizeDelta(
+        reaching(
+          delta({ targetTable: 'happening_involvements', undoPayload: { role: null } }),
+          involvement,
+        ),
+        context,
+      ),
+    ).toMatchObject({ targetDisplayName: 'Involvement · The keep burns', summary: 'Modified Role' })
+    const awareness: HistoryVia = {
+      kind: 'link',
+      table: 'happening_awareness',
+      linkId: 'haw_1',
+      otherId: 'hap_fire',
+      side: null,
+    }
+    expect(
+      humanizeDelta(
+        reaching(
+          delta({
+            targetTable: 'happening_awareness',
+            undoPayload: { source: null, decayResistance: 0.5, learnedAtEntryId: null },
+          }),
+          awareness,
+        ),
+        context,
+      ),
+    ).toMatchObject({
+      targetDisplayName: 'Awareness · The keep burns',
+      summary: 'Modified Source, Decay resistance, Learned at',
+    })
+  })
+
+  it("reads the other end's delete as a removal under the link label", () => {
+    const deleted = delta({
+      targetId: 'char_kael',
+      op: 'delete',
+      undoPayload: { id: 'char_kael', name: 'Kael' },
+    })
+    expect(
+      humanizeDelta(
+        reaching(deleted, {
+          kind: 'removed',
+          tables: ['character_relationships'],
+          otherId: 'char_kael',
+        }),
+        context,
+      ),
+    ).toMatchObject({
+      targetDisplayName: 'Relationship',
+      summary: 'Removed when Kael was deleted',
+      fieldPath: null,
+    })
+    expect(
+      humanizeDelta(
+        reaching(deleted, {
+          kind: 'removed',
+          tables: ['happening_involvements', 'happening_awareness'],
+          otherId: 'char_kael',
+        }),
+        context,
+      ).targetDisplayName,
+    ).toBe('Links')
+  })
+
+  it('names an other end it cannot resolve "Unknown row"', () => {
+    const gone: HistoryVia = {
+      kind: 'link',
+      table: 'happening_awareness',
+      linkId: 'haw_9',
+      otherId: 'hap_gone',
+      side: null,
+    }
+    expect(
+      humanizeDelta(
+        reaching(delta({ targetTable: 'happening_awareness', op: 'create' }), gone),
+        context,
+      ).targetDisplayName,
+    ).toBe('Awareness · Unknown row')
+    expect(
+      humanizeDelta(
+        reaching(delta({ targetId: 'char_gone', op: 'delete', undoPayload: {} }), {
+          kind: 'removed',
+          tables: ['character_relationships'],
+          otherId: 'char_gone',
+        }),
+        context,
+      ).summary,
+    ).toBe('Removed when Unknown row was deleted')
   })
 })

@@ -148,11 +148,12 @@ describe('loadHistoryChunk', () => {
     const context = {
       targetTable: base.targetTable,
       targetName: 'Kael',
+      otherName: () => null,
       entryLabel: () => null,
       nowMs: 0,
     }
     for (const row of rows) {
-      const { summary } = humanizeDelta(row, context)
+      const { summary } = humanizeDelta({ delta: row, via: { kind: 'own' } }, context)
       expect({ summary, found: await positions({ search: summary }) }).toEqual({
         summary,
         found: expect.arrayContaining([row.logPosition]),
