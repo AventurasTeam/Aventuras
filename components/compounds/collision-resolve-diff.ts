@@ -146,6 +146,28 @@ export function keywordUnion(
   return [...shared, ...partition.onlyInA, ...partition.onlyInB].sort()
 }
 
+/**
+ * What a merge submits for a term list: the canonical's own entries in their stored order, minus
+ * the deselected, then the other side's additions (`offered` order). A selection equal to the
+ * canonical's set therefore comes back as the canonical's list, which the planner doesn't write.
+ * `keyOf` is the identity a deselect is recorded under.
+ */
+export function selectedTerms({
+  own,
+  offered,
+  deselected,
+  keyOf,
+}: {
+  own: readonly string[]
+  offered: readonly string[]
+  deselected: readonly string[]
+  keyOf: (term: string) => string
+}): string[] {
+  const ownKeys = new Set(own.map(keyOf))
+  const kept = (term: string) => !deselected.includes(keyOf(term))
+  return [...own.filter(kept), ...offered.filter((term) => !ownKeys.has(keyOf(term)) && kept(term))]
+}
+
 export function computeDivergence(a: EntitySummary, b: EntitySummary): DiffPayload {
   return {
     divergentScalars: SCALAR_FIELDS.filter((f) => a[f] !== b[f]),

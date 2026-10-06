@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { computeDivergence, keywordUnion, type EntitySummary } from './collision-resolve-diff'
+import {
+  computeDivergence,
+  keywordUnion,
+  selectedTerms,
+  type EntitySummary,
+} from './collision-resolve-diff'
 
 function baseEntity(overrides: Partial<EntitySummary> = {}): EntitySummary {
   return {
@@ -316,5 +321,53 @@ describe('keywordUnion', () => {
 
   it('is empty when the two sides already agree', () => {
     expect(keywordUnion(null, ['anything'])).toEqual([])
+  })
+})
+
+describe('selectedTerms', () => {
+  const identity = (term: string) => term
+
+  it('returns the canonical list as stored when every addition is deselected', () => {
+    expect(
+      selectedTerms({
+        own: ['sword', 'hero'],
+        offered: ['guard', 'hero', 'sword'],
+        deselected: ['guard'],
+        keyOf: identity,
+      }),
+    ).toEqual(['sword', 'hero'])
+  })
+
+  it('puts the additions after the canonical entries, in offered order', () => {
+    expect(
+      selectedTerms({
+        own: ['sword', 'hero'],
+        offered: ['alpha', 'hero', 'sword', 'zeta'],
+        deselected: [],
+        keyOf: identity,
+      }),
+    ).toEqual(['sword', 'hero', 'alpha', 'zeta'])
+  })
+
+  it('drops a deselected canonical entry too', () => {
+    expect(
+      selectedTerms({
+        own: ['sword', 'hero'],
+        offered: ['guard', 'hero', 'sword'],
+        deselected: ['sword'],
+        keyOf: identity,
+      }),
+    ).toEqual(['hero', 'guard'])
+  })
+
+  it('matches by the key, so a differently spelled addition is not a second entry', () => {
+    expect(
+      selectedTerms({
+        own: ['The Swordsman'],
+        offered: ['the swordsman', 'the wanderer'],
+        deselected: ['the wanderer'],
+        keyOf: (term) => term.toLowerCase(),
+      }),
+    ).toEqual(['The Swordsman'])
   })
 })

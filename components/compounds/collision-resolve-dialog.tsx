@@ -16,13 +16,14 @@ import { Select, type SelectOption } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
 import { relativeTimeLabel, t } from '@/lib/i18n'
-import { normalizeTerm } from '@/lib/keyword-terms'
+import { dedupeTerms, normalizeTerm } from '@/lib/keyword-terms'
 import { cn } from '@/lib/utils'
 import { RENAME_ISSUE, renameIssue, type RenameIssue } from '@/lib/world'
 
 import {
   computeDivergence,
   keywordUnion,
+  selectedTerms,
   type DiffPayload,
   type EntitySummary,
   type Resolution,
@@ -35,12 +36,13 @@ type Mode = 'merge' | 'rename' | 'keep'
 
 type Side = 'A' | 'B'
 
-// world.md → Merge: on phone, prose values clamp and expand in place.
+// world.md → Merge: where choices stack (phone, and native at any tier), prose values clamp and
+// expand in place.
 const PROSE_FIELDS: ReadonlySet<ScalarField> = new Set<ScalarField>([
   'description',
   'retiredReason',
 ])
-const PHONE_CLAMP_LINES = 3
+const STACKED_CLAMP_LINES = 3
 
 const RENAME_ISSUE_TEXT: Record<RenameIssue, () => string> = {
   [RENAME_ISSUE.emptyName]: () => t('collisionDialog.renameIssue.emptyName'),
@@ -329,11 +331,21 @@ function MergeBody({
   const finalTags =
     diff.tags == null
       ? canonical.tags
-      : allTags.filter((tag) => !state.deselectedTags.includes(tag))
+      : selectedTerms({
+          own: canonical.tags,
+          offered: allTags,
+          deselected: state.deselectedTags,
+          keyOf: (tag) => tag,
+        })
   const finalKeywords =
     diff.keywords == null
       ? canonical.keywords
-      : allKeywords.filter((keyword) => !state.deselectedKeywords.includes(normalizeTerm(keyword)))
+      : selectedTerms({
+          own: dedupeTerms(canonical.keywords),
+          offered: allKeywords,
+          deselected: state.deselectedKeywords,
+          keyOf: normalizeTerm,
+        })
 
   function handleConfirm() {
     onSubmit({
@@ -410,7 +422,7 @@ function MergeBody({
               entityB={entityB}
               nowMs={nowMs}
               stacked={stacked}
-              pick={state.fieldChoices[field]}
+              pick={state.fieldChoices[field] ?? (canonical === entityA ? 'A' : 'B')}
               onPick={(side) => dispatch({ type: 'pick-field', field, side })}
               disabled={submitting}
             />
@@ -568,7 +580,7 @@ function FieldRow({
       </Text>
       {stacked ? (
         <View className="gap-1">
-          <PhoneChoice
+          <StackedChoice
             value={fieldValue(field, entityA)}
             caption={sideCaption('A', entityA, nowMs)}
             prose={PROSE_FIELDS.has(field)}
@@ -576,7 +588,7 @@ function FieldRow({
             onPick={() => onPick('A')}
             disabled={disabled}
           />
-          <PhoneChoice
+          <StackedChoice
             value={fieldValue(field, entityB)}
             caption={sideCaption('B', entityB, nowMs)}
             prose={PROSE_FIELDS.has(field)}
@@ -620,7 +632,7 @@ function RadioCard({ label, selected, onPress, disabled }: RadioCardProps) {
   )
 }
 
-type PhoneChoiceProps = {
+type StackedChoiceProps = {
   value: string
   caption: string
   prose: boolean
@@ -631,7 +643,7 @@ type PhoneChoiceProps = {
 
 // world.md → Merge on mobile: the radio and the prose are separate tap targets, and the caption
 // names the side because the column headers are gone.
-function PhoneChoice({ value, caption, prose, selected, onPick, disabled }: PhoneChoiceProps) {
+function StackedChoice({ value, caption, prose, selected, onPick, disabled }: StackedChoiceProps) {
   const [expanded, setExpanded] = useState(false)
   return (
     <View className="flex-row items-start gap-1">
@@ -661,7 +673,7 @@ function PhoneChoice({ value, caption, prose, selected, onPick, disabled }: Phon
             aria-expanded={expanded}
             onPress={() => setExpanded((open) => !open)}
           >
-            <Text size="sm" numberOfLines={expanded ? undefined : PHONE_CLAMP_LINES}>
+            <Text size="sm" numberOfLines={expanded ? undefined : STACKED_CLAMP_LINES}>
               {value}
             </Text>
           </Pressable>

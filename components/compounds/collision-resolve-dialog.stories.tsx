@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { View } from 'react-native'
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
 
@@ -360,10 +360,10 @@ export const MergeKeywordUnion: Story = {
     expect(resolution).not.toBeNull()
     expect(resolution).toMatchObject({
       mode: 'merge',
-      // The losing side's aliases survive and the deselected one is dropped; the case
-      // variant was one keyword all along, in the older side's spelling.
-      finalKeywords: ['the gate guard', 'the swordsman'],
-      finalTags: ['guard', 'hero', 'sword'],
+      // The canonical's own entries keep their order and the losing side's additions follow; the
+      // deselected one is dropped, and the case variant was one keyword all along.
+      finalKeywords: ['the swordsman', 'the gate guard'],
+      finalTags: ['hero', 'sword', 'guard'],
     })
   },
 }
@@ -425,7 +425,7 @@ export const MergeKeywordDeselectSurvivesFlip: Story = {
   render: () => (
     <ControlledDialog
       entityA={baseEntity({ keywords: ['The Swordsman', 'the wanderer'] })}
-      entityB={baseEntity({ id: 'ent_kael_2', keywords: ['the swordsman', 'the gate guard'] })}
+      entityB={baseEntity({ id: 'ent_kael_2', keywords: ['THE SWORDSMAN', 'the gate guard'] })}
       onResolve={resolveCapturing}
     />
   ),
@@ -433,11 +433,68 @@ export const MergeKeywordDeselectSurvivesFlip: Story = {
     lastResolution = null
     await userEvent.click(await screen.findByRole('button', { name: 'The Swordsman' }))
     await userEvent.click(screen.getAllByRole('radio', { name: /^Kael · / })[1])
+    // B spells it in capitals, so a raw-spelling compare would not see the deselect.
+    expect(await screen.findByRole('button', { name: 'THE SWORDSMAN' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
     await userEvent.click(await screen.findByRole('button', { name: /^Merge into / }))
 
     expect(lastResolution).toMatchObject({
       finalKeywords: ['the gate guard', 'the wanderer'],
     })
+  },
+}
+
+export const MergeDeselectedAdditionsKeepCanonicalLists: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={baseEntity({ tags: ['sword', 'hero'], keywords: ['the wanderer', 'the swordsman'] })}
+      entityB={baseEntity({
+        id: 'ent_kael_2',
+        tags: ['sword', 'guard'],
+        keywords: ['the swordsman', 'the gate guard'],
+      })}
+      onResolve={resolveCapturing}
+    />
+  ),
+  play: async () => {
+    lastResolution = null
+    await userEvent.click(await screen.findByRole('button', { name: 'guard' }))
+    await userEvent.click(screen.getByRole('button', { name: 'the gate guard' }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Merge into / }))
+
+    // The canonical's set came back unchanged, so it goes back in its stored order, not re-sorted.
+    expect(lastResolution).toMatchObject({
+      finalTags: ['sword', 'hero'],
+      finalKeywords: ['the wanderer', 'the swordsman'],
+    })
+  },
+}
+
+// A no-gate classifier write can make a field differ while the dialog is open.
+let divergeNow: (() => void) | null = null
+function DivergesWhileOpen() {
+  const [b, setB] = useState(baseEntity({ id: 'ent_kael_2' }))
+  useEffect(() => {
+    divergeNow = () => setB(baseEntity({ id: 'ent_kael_2', priority: 5 }))
+    return () => {
+      divergeNow = null
+    }
+  }, [])
+  return <ControlledDialog entityA={baseEntity()} entityB={b} onResolve={resolveOk} />
+}
+
+export const MergeFieldDivergesWhileOpen: Story = {
+  render: () => <DivergesWhileOpen />,
+  play: async () => {
+    await screen.findByRole('button', { name: /^Merge into / })
+    expect(screen.queryByRole('group', { name: 'Priority' })).toBeNull()
+    divergeNow?.()
+
+    const row = await screen.findByRole('group', { name: 'Priority' })
+    expect(within(row).getByRole('button', { name: '20' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(row).getByRole('button', { name: '5' })).toHaveAttribute('aria-pressed', 'false')
   },
 }
 
