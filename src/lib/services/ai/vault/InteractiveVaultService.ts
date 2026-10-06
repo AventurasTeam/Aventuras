@@ -289,7 +289,6 @@ export class InteractiveVaultService extends BaseAIService {
 
     // Track state for this message
     const pendingChanges: VaultPendingChange[] = []
-    const linkedChangeIds = new Set<string>() // Prevent re-linking old changes to new tool calls
     const toolCalls: ToolCallDisplay[] = []
     let responseContent = ''
     let reasoning: string | undefined
@@ -643,10 +642,7 @@ export class InteractiveVaultService extends BaseAIService {
 
               const changeId = resultChangeId(toolResult)
               const linked = changeId ? pendingChanges.find((pc) => pc.id === changeId) : undefined
-              if (linked && !linkedChangeIds.has(linked.id)) {
-                toolCallDisplay.pendingChange = linked
-                linkedChangeIds.add(linked.id)
-              }
+              if (linked) toolCallDisplay.pendingChange = linked
 
               // Attach generated image URL directly to the tool call display
               const imageIdStr =
@@ -686,6 +682,13 @@ export class InteractiveVaultService extends BaseAIService {
             yield { type: 'aborted' }
             return
         }
+      }
+
+      const unlinked = pendingChanges.filter(
+        (pc) => !toolCalls.some((tc) => tc.pendingChange?.id === pc.id),
+      )
+      if (unlinked.length > 0) {
+        log('Pending changes not linked to a tool result', { ids: unlinked.map((pc) => pc.id) })
       }
 
       // Add assistant response to conversation history
