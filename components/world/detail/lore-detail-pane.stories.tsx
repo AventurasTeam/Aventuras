@@ -145,7 +145,7 @@ const meta: Meta<typeof Harness> = {
   // overrides this with its own provider nested closer to the tree.
   decorators: [
     (Story) => (
-      <HistoryLoaderProvider value={async () => ({ rows: [], nextCursor: null })}>
+      <HistoryLoaderProvider value={async () => ({ rows: [], nextCursor: null, names: {} })}>
         <Story />
       </HistoryLoaderProvider>
     ),
@@ -297,7 +297,9 @@ export const CreateWithoutTitle: Story = {
   },
 }
 
-const loreHistoryLoader = fn(async (): Promise<HistoryChunk> => ({ rows: [], nextCursor: null }))
+const loreHistoryLoader = fn(
+  async (): Promise<HistoryChunk> => ({ rows: [], nextCursor: null, names: {} }),
+)
 
 /** History reads this lore row's deltas. */
 export const HistoryReadsTheRow: Story = {

@@ -208,7 +208,7 @@ const meta: Meta<typeof Harness> = {
   // overrides this with its own provider nested closer to the tree.
   decorators: [
     (Story) => (
-      <HistoryLoaderProvider value={async () => ({ rows: [], nextCursor: null })}>
+      <HistoryLoaderProvider value={async () => ({ rows: [], nextCursor: null, names: {} })}>
         <Story />
       </HistoryLoaderProvider>
     ),
@@ -589,7 +589,9 @@ export const Menu: Story = {
   },
 }
 
-const phoneHistoryLoader = fn(async (): Promise<HistoryChunk> => ({ rows: [], nextCursor: null }))
+const phoneHistoryLoader = fn(
+  async (): Promise<HistoryChunk> => ({ rows: [], nextCursor: null, names: {} }),
+)
 
 /** Phone: two tabs go to the Select's segment, not a tab strip; History targets this thread. */
 export const Phone: Story = {

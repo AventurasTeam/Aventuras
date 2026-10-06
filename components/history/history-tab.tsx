@@ -41,13 +41,11 @@ function HistoryTabForTarget({ branchId, targetTable, targetId }: HistoryTabProp
       const ref = entryIndex.index.get(entryId)
       return ref == null ? null : formatEntryRef(ref.position)
     }
-    return chunks.rows.map((delta) =>
-      humanizeDelta(
-        { delta, via: { kind: 'own' } },
-        { targetTable, targetName: name, otherName: () => null, entryLabel, nowMs },
-      ),
+    const otherName = (id: string) => chunks.names[id] ?? null
+    return chunks.rows.map((historyRow) =>
+      humanizeDelta(historyRow, { targetTable, targetName: name, otherName, entryLabel, nowMs }),
     )
-  }, [chunks.rows, entryIndex.index, targetTable, name])
+  }, [chunks.rows, chunks.names, entryIndex.index, targetTable, name])
 
   return (
     <HistoryTabView

@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import type { Delta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
-import { HISTORY_CHUNK_SIZE, type HistoryQuery } from '@/lib/history'
+import { HISTORY_CHUNK_SIZE, type HistoryQuery, type HistoryRow } from '@/lib/history'
 import { t } from '@/lib/i18n'
 import { toast } from '@/lib/toast'
 
@@ -10,9 +9,18 @@ import { useHistoryLoader, type HistoryLoader } from './history-loader'
 
 export type HistoryStatus = 'loading' | 'ready' | 'loading-more' | 'failed'
 
-type ChunkState = { rows: readonly Delta[]; nextCursor: number | null; status: HistoryStatus }
+type Names = Readonly<Record<string, string>>
 
-const LOADING: ChunkState = { rows: [], nextCursor: null, status: 'loading' }
+type ChunkState = {
+  rows: readonly HistoryRow[]
+  names: Names
+  nextCursor: number | null
+  status: HistoryStatus
+}
+
+const NO_NAMES: Names = {}
+
+const LOADING: ChunkState = { rows: [], names: NO_NAMES, nextCursor: null, status: 'loading' }
 
 type Request = {
   load: HistoryLoader
@@ -21,7 +29,9 @@ type Request = {
 }
 
 export type HistoryChunks = {
-  rows: readonly Delta[]
+  rows: readonly HistoryRow[]
+  /** Every loaded chunk's `names`, merged. */
+  names: Readonly<Record<string, string>>
   status: HistoryStatus
   hasMore: boolean
   loadMore: () => void
@@ -80,6 +90,7 @@ export function useHistoryChunks(
         setApplied({
           for: request,
           rows: chunk.rows,
+          names: chunk.names,
           nextCursor: chunk.nextCursor,
           status: 'ready',
         })
@@ -95,7 +106,7 @@ export function useHistoryChunks(
         setApplied(
           refreshing
             ? { ...kept, status: 'ready' }
-            : { for: request, rows: [], nextCursor: null, status: 'failed' },
+            : { for: request, rows: [], names: NO_NAMES, nextCursor: null, status: 'failed' },
         )
       },
     )
@@ -120,6 +131,7 @@ export function useHistoryChunks(
             current && {
               ...current,
               rows: [...current.rows, ...chunk.rows],
+              names: { ...current.names, ...chunk.names },
               nextCursor: chunk.nextCursor,
               status: 'ready',
             },
@@ -143,6 +155,7 @@ export function useHistoryChunks(
 
   return {
     rows: state.rows,
+    names: state.names,
     status: state.status,
     hasMore: state.nextCursor != null,
     loadMore,

@@ -6,7 +6,7 @@ import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import type { Delta, Happening, Thread } from '@/lib/db'
-import type { HistoryChunk, HistoryQuery, HistoryTable } from '@/lib/history'
+import type { HistoryChunk, HistoryQuery, HistoryRow, HistoryTable } from '@/lib/history'
 import { generationStore, happeningsStore, threadsStore } from '@/lib/stores'
 
 import { HistoryLoaderProvider } from './history-loader'
@@ -32,6 +32,8 @@ const delta = (
   createdAt: Date.now() - 60_000,
 })
 
+const own = (row: Delta): HistoryRow => ({ delta: row, via: { kind: 'own' } })
+
 const WAIT = { timeout: 3000 }
 
 const queries: HistoryQuery[] = []
@@ -39,14 +41,18 @@ const queries: HistoryQuery[] = []
 // A filtered query matches nothing, so the no-match state is reachable.
 const load = async (query: HistoryQuery): Promise<HistoryChunk> => {
   queries.push(query)
-  if (query.op != null || (query.search ?? '') !== '') return { rows: [], nextCursor: null }
+  if (query.op != null || (query.search ?? '') !== '')
+    return { rows: [], nextCursor: null, names: {} }
   return {
     rows: [
-      query.targetTable === 'threads'
-        ? delta('threads', 'thread_amulet', { status: 'pending' })
-        : delta('happenings', 'hap_fire', { commonKnowledge: 0 }),
+      own(
+        query.targetTable === 'threads'
+          ? delta('threads', 'thread_amulet', { status: 'pending' })
+          : delta('happenings', 'hap_fire', { commonKnowledge: 0 }),
+      ),
     ],
     nextCursor: null,
+    names: {},
   }
 }
 
@@ -216,8 +222,9 @@ export const SwitchingTargetsResetsFilters: Story = {
 
 const reloadSpy = fn(
   async (_query: HistoryQuery): Promise<HistoryChunk> => ({
-    rows: [delta('threads', 'thread_amulet', { status: 'pending' })],
+    rows: [own(delta('threads', 'thread_amulet', { status: 'pending' }))],
     nextCursor: null,
+    names: {},
   }),
 )
 
