@@ -160,8 +160,22 @@
         'lorebookName',
         'entriesJson',
         'entryCount',
-        'userMessage',
         'conversationHistory',
+      ],
+    },
+    {
+      name: 'Interactive Vault',
+      varNames: [
+        'characterCount',
+        'lorebookCount',
+        'totalEntryCount',
+        'scenarioCount',
+        'userMessage',
+        'focusedEntityType',
+        'focusedEntityId',
+        'focusedEntityName',
+        'focusedEntityRecord',
+        'focusedEntityRemoved',
       ],
     },
     {
