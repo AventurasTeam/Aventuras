@@ -511,6 +511,27 @@ function MergeBody({
             })}
           </Text>
         ) : null}
+        {counts.overlap.relationships > 0 ? (
+          <Text size="xs" variant="muted">
+            {t('collisionDialog.summary.overlapRelationships', {
+              count: counts.overlap.relationships,
+              name: canonical.name,
+            })}
+          </Text>
+        ) : null}
+        {counts.overlap.holdersLosingItem > 0 ? (
+          <Text size="xs" variant="muted">
+            {t('collisionDialog.summary.holdersLosingItem', {
+              count: counts.overlap.holdersLosingItem,
+              name: canonical.name,
+            })}
+          </Text>
+        ) : null}
+        {counts.joiningRelationship ? (
+          <Text size="xs" variant="muted">
+            {t('collisionDialog.summary.joiningRelationship')}
+          </Text>
+        ) : null}
       </View>
 
       <ErrorLine error={error} />

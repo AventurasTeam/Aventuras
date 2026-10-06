@@ -243,14 +243,18 @@ export const PhoneLongDescriptions: Story = {
 export const MergeOverlapFootnote: Story = {
   render: () => (
     <ControlledDialog
-      entityA={entityA}
+      entityA={{
+        ...entityA,
+        relationCounts: { ...entityA.relationCounts, joiningRelationship: true },
+      }}
       entityB={{
         ...entityB,
         // A case variant, so a footnote naming the wrong row is visible.
         name: 'KAEL',
         relationCounts: {
           ...entityB.relationCounts,
-          overlap: { awareness: 2, involvements: 1, relationships: 0, holdersLosingItem: 0 },
+          joiningRelationship: true,
+          overlap: { awareness: 2, involvements: 1, relationships: 3, holdersLosingItem: 0 },
         },
       }}
       onResolve={resolveOk}
@@ -275,12 +279,50 @@ export const MergeOverlapFootnote: Story = {
       ),
     ).toBeInTheDocument()
 
+    expect(
+      screen.getByText(
+        "Kael already relates to 3 of these characters: it keeps its own views and takes the duplicate's only where its own is blank.",
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByText('The relationship between the two is dropped.')).toBeInTheDocument()
+
     // With B canonical the summary shows A's counts, and A overlaps nothing.
     await userEvent.click(screen.getByRole('radio', { name: /^KAEL · / }))
     await waitFor(() => expect(screen.queryByText(/already has/)).toBeNull())
+    expect(screen.queryByText(/already takes part/)).toBeNull()
+    expect(screen.queryByText(/already relates/)).toBeNull()
+    // The joining relationship is dropped whichever side survives.
+    expect(screen.getByText('The relationship between the two is dropped.')).toBeInTheDocument()
     expect(screen.getByText('Moves on merge (Kael → KAEL)')).toBeInTheDocument()
     expect(screen.getByText(/^Newer · .+ · Canonical$/)).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /^KAEL · .+ · Canonical$/ })).toBeInTheDocument()
+  },
+}
+
+export const MergeHoldersFootnote: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={baseEntity({ id: 'ent_lamp_1', kind: 'item', name: 'Lantern' })}
+      entityB={baseEntity({
+        id: 'ent_lamp_2',
+        kind: 'item',
+        name: 'Lantern',
+        createdAt: new Date().toISOString(),
+        relationCounts: {
+          ...entityB.relationCounts,
+          overlap: { awareness: 0, involvements: 0, relationships: 0, holdersLosingItem: 2 },
+        },
+      })}
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    expect(
+      await screen.findByText('2 holders lose this item: Lantern already has a place.'),
+    ).toBeInTheDocument()
+    // With the newer item canonical the shown side is the older, whose holders keep theirs.
+    await userEvent.click(screen.getAllByRole('radio', { name: /^Lantern · / })[1])
+    await waitFor(() => expect(screen.queryByText(/holders? lose/)).toBeNull())
   },
 }
 
