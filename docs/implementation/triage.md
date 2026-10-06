@@ -143,3 +143,28 @@ slice-planning gate forces its resolution before that slice is planned.
   sets. Callers that map refusal codes (`resolveCollision`,
   `commitRowSave`) therefore report a vanished row as `failed` instead
   of `not-found`. Found in 4.2c's PR 1 final review (2026-10-06).
+- **The group runner commits an update and a delete of one row.**
+  `groupConflict` (`lib/actions/delta/apply-delta-action.ts`) refuses a
+  write to a row a delete in the same group cascades, but not an update
+  of the deleted row itself. Such a group commits, and its undo then
+  throws `ReversalIntegrityError` (`held-in-redo`), so the action can't
+  be reversed. No shipped planner emits it (4.2c's merge leaves the
+  loser out of its scene effects for this reason); any future planner
+  that does would commit an irreversible action. Found while fixing
+  4.2c's merge scene effects (2026-10-06).
+- **The group conflict check can't see refs inside entity `state`.**
+  `rowRefs` (`lib/actions/delta/live-refs.ts`) covers link-row columns
+  but not the ref fields inside an entity's `state` (`current_location_id`
+  and the rest), so `groupConflict` can't refuse a state write that names
+  a row the same group deletes. Planners avoid it by discipline (4.2c's
+  merge filters the loser out of every state it writes); nothing checks
+  it. Found in 4.2c's PR 1 review (2026-10-06).
+- **A tail scene edit re-anchors characters who left at the tail.** The
+  scene editor (`lib/actions/story-entries/scene-fields.ts`) runs
+  `sceneTrackingActions` over the previous, original and edited scenes
+  on every tail edit, so a character the tail's scene dropped is moved
+  back to the previous entry's location, overwriting a manual location
+  edit made since. Plausibly intended (the edit re-states the scene) but
+  undocumented as a consequence. Its live filter on the previous scene's
+  ids has no effect, since tracking iterates live entities only. Found
+  in 4.2c's PR 1 review (2026-10-06).
