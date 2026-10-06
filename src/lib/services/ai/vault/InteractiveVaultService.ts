@@ -7,7 +7,7 @@
  */
 
 import type { VaultCharacter, VaultLorebook, VaultLorebookEntry, VaultScenario } from '$lib/types'
-import { tool, type ModelMessage, type ToolSet } from 'ai'
+import { tool, type ModelMessage } from 'ai'
 import * as z from 'zod'
 import { settings, type ServiceId } from '$lib/stores/settings.svelte'
 import { BaseAIService } from '../BaseAIService'
@@ -87,18 +87,6 @@ const toolCategorySchema = z.enum(['characters', 'scenarios', 'lorebooks', 'imag
 
 export function getActiveToolNames(loaded: Set<ToolCategory>): string[] {
   return [...ALWAYS_ACTIVE_TOOLS, ...[...loaded].flatMap((c) => TOOL_CATEGORIES[c])]
-}
-
-// A tool that creates a pending change must return it (or its id as `changeId`), or the
-// change never reaches the UI.
-function resultChangeId(output: unknown): string | undefined {
-  if (!output || typeof output !== 'object') return undefined
-  const { pendingChange, changeId } = output as {
-    pendingChange?: { id?: unknown }
-    changeId?: unknown
-  }
-  const id = pendingChange?.id ?? changeId
-  return typeof id === 'string' ? id : undefined
 }
 
 // ============================================================================
@@ -515,7 +503,7 @@ export class InteractiveVaultService extends BaseAIService {
     }
 
     // Combine all tools (all registered, activeTools controls visibility)
-    const tools: Record<string, unknown> = {
+    const tools = {
       ...loadToolsetTool,
       ...characterTools,
       ...scenarioTools,
@@ -539,7 +527,7 @@ export class InteractiveVaultService extends BaseAIService {
         {
           presetId: this.presetId,
           instructions: this.systemPrompt,
-          tools: tools as ToolSet,
+          tools,
           stopWhen: stopWhenDone(50),
           signal,
           prepareStep: () => ({
@@ -631,7 +619,7 @@ export class InteractiveVaultService extends BaseAIService {
               (tc) => tc.id === event.toolCallId && !tc.claimed,
             )
             if (toolInfo) toolInfo.claimed = true
-            const toolResult = 'result' in event ? event.result : event.output
+            const toolResult = event.output
             if (toolInfo) {
               const toolCallDisplay: ToolCallDisplay = {
                 id: event.toolCallId,
@@ -640,7 +628,13 @@ export class InteractiveVaultService extends BaseAIService {
                 result: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult),
               }
 
-              const changeId = resultChangeId(toolResult)
+              // A tool that creates a pending change must return it (or its id as `changeId`),
+              // or the change never reaches the UI.
+              let changeId: string | undefined
+              if (!event.dynamic && typeof event.output === 'object' && event.output) {
+                if ('pendingChange' in event.output) changeId = event.output.pendingChange?.id
+                if (!changeId && 'changeId' in event.output) changeId = event.output.changeId
+              }
               const linked = changeId ? pendingChanges.find((pc) => pc.id === changeId) : undefined
               if (linked) toolCallDisplay.pendingChange = linked
 
