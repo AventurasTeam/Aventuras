@@ -1,119 +1,62 @@
 import type { CharacterState, Entity, EntityState } from '@/lib/db'
-import { dedupeSceneEntities, scenePromotionActions, sceneTrackingActions } from '@/lib/piggyback'
 import type { DeleteTail } from '@/lib/world'
 
 import type { PipelineAction } from '../types'
 
-/** The entry before the tail, as the scene editor's tracking anchors on it. */
-type PreviousScene = {
-  entryId: string
-  sceneEntities: string[]
-  currentLocationId: string | null
-  worldTime: number
-}
-
-export type MergeTail = DeleteTail & { previous: PreviousScene }
-
-type EntityPatch = Extract<PipelineAction, { kind: 'updateEntity' }>['payload']['patch']
-type MetadataRewrite = Extract<PipelineAction, { kind: 'updateStoryEntryMetadata' }>
-
-function rowPatches(actions: readonly PipelineAction[]): Map<string, EntityPatch> {
-  const patches = new Map<string, EntityPatch>()
-  for (const action of actions)
-    if (action.kind === 'updateEntity') patches.set(action.payload.id, action.payload.patch)
-  return patches
-}
+type CanonicalUpdate = Extract<PipelineAction, { kind: 'updateEntity' }>
 
 /**
- * The scene editor's promotion and tracking for a merge that rewrites the tail scene
- * (story-entries/scene-fields.ts), over the entities as the merge leaves them: the loser gone, the
- * canonical at its merged status. A row the plan already updates takes the column there instead,
- * since a group may write each column of a row once.
+ * A merge that seats the canonical in the tail promotes it if staged and, for a character in the
+ * scene, moves it to the tail's location: the next turn's structural floor seats only active rows.
+ * Columns the plan's canonical update already writes are folded into it (a group writes each once).
  */
 export function withMergeSceneEffects(input: {
   branchId: string
   actions: readonly PipelineAction[]
-  loserId: string
-  branchEntities: readonly Entity[]
-  tail: MergeTail | null
+  canonical: Entity
+  tail: DeleteTail | null
 }): PipelineAction[] {
-  const { branchId, actions, loserId, tail } = input
-  if (tail == null) return [...actions]
-  const rewrite = actions.find(
-    (a): a is MetadataRewrite => a.kind === 'updateStoryEntryMetadata' && a.payload.id === tail.id,
+  const { branchId, actions, canonical, tail } = input
+  const rewritesTail = actions.some(
+    (a) => a.kind === 'updateStoryEntryMetadata' && a.payload.id === tail?.id,
   )
-  if (rewrite == null) return [...actions]
-  const { metadata } = rewrite.payload
-  const before = {
-    sceneEntities: [...tail.sceneEntities],
-    currentLocationId: tail.currentLocationId,
-  }
-  const after = {
-    sceneEntities: dedupeSceneEntities(metadata.sceneEntities ?? before.sceneEntities),
-    currentLocationId:
-      metadata.currentLocationId === undefined
-        ? before.currentLocationId
-        : metadata.currentLocationId,
-  }
+  if (tail == null || !rewritesTail) return [...actions]
 
-  const patches = rowPatches(actions)
-  const entities = input.branchEntities
-    .filter((e) => e.id !== loserId)
-    .map((e) => ({ ...e, status: patches.get(e.id)?.status ?? e.status }))
-  const live = new Set(entities.map((e) => e.id))
-  const { previous } = tail
-  const anchor =
-    previous.currentLocationId != null && live.has(previous.currentLocationId)
-      ? previous.currentLocationId
-      : null
-
+  const update = actions.find(
+    (a): a is CanonicalUpdate => a.kind === 'updateEntity' && a.payload.id === canonical.id,
+  )
+  let patch = update?.payload.patch ?? {}
   const added: PipelineAction[] = []
-  for (const promote of scenePromotionActions({
-    branchId,
-    source: 'user_edit',
-    entities,
-    sceneEntities: after.sceneEntities,
-  })) {
-    if (promote.kind !== 'promoteStagedEntity') continue
-    const { id } = promote.payload
-    const patch = patches.get(id)
-    if (patch?.status === undefined) added.push(promote)
-    else patches.set(id, { ...patch, status: 'active' })
-  }
-  for (const track of sceneTrackingActions({
-    branchId,
-    source: 'user_edit',
-    entities,
-    previous: {
-      ...previous,
-      sceneEntities: previous.sceneEntities.filter((id) => live.has(id)),
-      currentLocationId: anchor,
-    },
-    before,
-    after,
-  })) {
-    if (track.kind !== 'updateEntityLocationTracking') continue
-    const { id, currentLocationId, lastSeenAt } = track.payload
-    const patch = patches.get(id)
-    if (patch?.state == null) {
-      added.push(track)
-      continue
-    }
-    const state = {
-      ...(patch.state as CharacterState),
-      ...(currentLocationId === undefined ? {} : { current_location_id: currentLocationId }),
-      ...(lastSeenAt === undefined ? {} : { lastSeenAt }),
-    }
-    patches.set(id, { ...patch, state: state as EntityState })
+
+  if ((patch.status ?? canonical.status) === 'staged') {
+    if (patch.status === undefined)
+      added.push({
+        kind: 'promoteStagedEntity',
+        source: 'user_edit',
+        payload: { branchId, id: canonical.id, proseEntryId: null },
+      })
+    else patch = { ...patch, status: 'active' }
   }
 
-  const folded = actions.map((action) =>
-    action.kind === 'updateEntity'
-      ? {
-          ...action,
-          payload: { ...action.payload, patch: patches.get(action.payload.id) ?? {} },
-        }
-      : action,
+  // A rewritten tail always seats a character canonical in its scene and never changes its
+  // location, so a null one is "never known", not a clear.
+  const location = tail.currentLocationId
+  if (canonical.kind === 'character' && location != null) {
+    if (patch.state == null)
+      added.push({
+        kind: 'updateEntityLocationTracking',
+        source: 'user_edit',
+        payload: { branchId, id: canonical.id, currentLocationId: location },
+      })
+    else
+      patch = {
+        ...patch,
+        state: { ...(patch.state as CharacterState), current_location_id: location } as EntityState,
+      }
+  }
+
+  const folded = actions.map((a) =>
+    a === update ? { ...update, payload: { ...update.payload, patch } } : a,
   )
   return [...folded, ...added]
 }

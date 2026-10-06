@@ -16,6 +16,7 @@ import {
   PARENT_CHAIN_BROKEN,
   PARENT_CYCLE,
   renameIssue,
+  type DeleteTail,
   type MergeScalar,
 } from '@/lib/world'
 
@@ -31,7 +32,7 @@ import { ROW_SAVE_REJECTION } from '../row-save/commit-row-save'
 import { withEntryMetadataLock } from '../story-entries/entry-metadata-lock'
 import { loadHeadTurn } from '../story-entries/head-turn'
 import type { DbCtx } from '../types'
-import { withMergeSceneEffects, type MergeTail } from './merge-scene'
+import { withMergeSceneEffects } from './merge-scene'
 
 export const COLLISION_REJECTION = {
   inFlight: ROW_SAVE_REJECTION.inFlight,
@@ -127,7 +128,7 @@ function gateRefusal(): Refusal | null {
 function buildMerge(
   branchId: string,
   resolution: MergeResolution,
-  tail: MergeTail | null,
+  tail: DeleteTail | null,
 ): BuiltGroup {
   const gated = gateRefusal()
   if (gated) return gated
@@ -151,7 +152,7 @@ function buildMerge(
   })
   return {
     status: 'ok',
-    actions: withMergeSceneEffects({ branchId, actions, loserId: loser.id, branchEntities, tail }),
+    actions: withMergeSceneEffects({ branchId, actions, canonical, tail }),
   }
 }
 
@@ -176,21 +177,15 @@ function commit(branchId: string, build: () => BuiltGroup, ctx: DbCtx): Promise<
   return applyDeltaActionGroupBuilt(build, { actionId: generateId('act'), branchId }, ctx)
 }
 
-function tailOf(head: Awaited<ReturnType<typeof loadHeadTurn>>): MergeTail | null {
+function tailOf(head: Awaited<ReturnType<typeof loadHeadTurn>>): DeleteTail | null {
   const metadata = head?.tail.metadata
-  if (head == null || metadata == null) return null
-  const previous = head.previous?.metadata
-  return {
-    id: head.tail.id,
-    sceneEntities: metadata.sceneEntities,
-    currentLocationId: metadata.currentLocationId,
-    previous: {
-      entryId: head.previous?.id ?? head.tail.id,
-      sceneEntities: previous?.sceneEntities ?? [],
-      currentLocationId: previous?.currentLocationId ?? null,
-      worldTime: previous?.worldTime ?? 0,
-    },
-  }
+  return head == null || metadata == null
+    ? null
+    : {
+        id: head.tail.id,
+        sceneEntities: metadata.sceneEntities,
+        currentLocationId: metadata.currentLocationId,
+      }
 }
 
 /** world.md → Delete: the merge rewrites the tail scene, so it holds the tail's metadata lock. */
