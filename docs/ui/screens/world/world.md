@@ -1122,10 +1122,11 @@ before the merge stay with the originals in the delete's payload.
 They are user creates, though: a prose edit's sweep that reverses
 the classifier pass which made the originals leaves the copies on
 the canonical, unless a copy names a row that pass created
-(rollback and regenerate sweep the merge group too and take them). CTRL-Z restores the non-canonical (still flagged), its
-original link rows and translations, the refs, the tail scene and
-the canonical's earlier status and location, and removes the rows
-the merge created on the canonical.
+(rollback and regenerate sweep the merge group too and take them).
+CTRL-Z restores the non-canonical (still flagged), its original link
+rows and translations, the refs, the tail scene and the canonical's
+earlier status and location, and removes the rows the merge created
+on the canonical.
 
 Embeddings are not delta-logged
 ([`data-model.md → embeddings`](../../../data-model.md#diagram)) —
