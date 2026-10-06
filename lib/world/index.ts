@@ -46,7 +46,6 @@ export type { DeleteTail, EntityDeleteInput, EntityDeletePlan } from './entity-d
 export {
   entityLinkRows,
   holdersLosingItem,
-  itemHasPosition,
   referencingEntities,
   stateWithRefRewritten,
   unheldItemsWithout,

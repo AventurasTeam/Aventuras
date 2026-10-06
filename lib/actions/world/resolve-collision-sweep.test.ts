@@ -31,8 +31,10 @@ import { selectReversalSet } from '../delta/row-closure'
 import { rollbackToEntry, updateStoryEntryContent } from '../story-entries/operational'
 import type { DbCtx, PipelineAction } from '../types'
 
-// generation-pipeline.md and world.md → Reversibility: the merge's link copies are user creates, so
-// a prose-edit sweep of the pass behind the originals keeps them, unless they name a row it created.
+// generation-pipeline.md and world.md → Reversibility: a prose-edit sweep of the pass behind the
+// originals keeps the merge's link copies because the merge group carries no entry anchor and the
+// copies are user-sourced, so neither route to the sweep reaches them (unless they name a row the
+// pass created).
 
 let ctx: DbCtx
 
