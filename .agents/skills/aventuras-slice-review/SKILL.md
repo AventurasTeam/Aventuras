@@ -38,6 +38,7 @@ A fresh reviewer reviews the whole slice at once, after its PRs exist. A later P
 3. **The digest:** the plan's Decisions, the worker ledger's decisions and deferrals, the triage entries the slice raised, and the declined CodeRabbit threads. Every review agent gets it, with the rule "re-raise these only with new evidence".
 4. **Re-check the budget after Step 3:** add the files the fixes will touch outside the top PR's diff. If the total would pass about 90 non-docs files, move the fixes to a new PR before Step 4. CodeRabbit rounds need headroom.
 5. **The chunks:** split the non-docs part of `git diff --stat <range>` into chunks of related files, a module with its tests, each up to about 2.5k added lines.
+6. **Concurrency:** agents run three at a time by default, the review agents in Step 2 and the fix agents in Step 4 alike. Attended, tell the developer the number of review agents from the Step 2 table and the concurrency before dispatching any, and let them change it. Dispatched, keep the default.
 
 ## Step 2 — Review
 
