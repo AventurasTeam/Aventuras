@@ -103,6 +103,7 @@ vi.mock('../sdk/agents/factory', () => ({
 
 const { InteractiveVaultService, getActiveToolNames, TOOL_CATEGORIES, ALWAYS_ACTIVE_TOOLS } =
   await import('./InteractiveVaultService')
+const { database } = await import('$lib/services/database')
 type VaultState = import('./InteractiveVaultService').VaultState
 type VaultSummary = import('./InteractiveVaultService').VaultSummary
 type ToolCategory = import('./InteractiveVaultService').ToolCategory
@@ -276,6 +277,23 @@ describe('focused entity context', () => {
     expect(messages[0]).toBe(first)
     expect(messages[1]).toContain('"tall"')
     expect(messages[1].endsWith('make her taller')).toBe(true)
+  })
+
+  it('keeps the record unsent when rendering the turn fails', async () => {
+    const service = new InteractiveVaultService('interactiveVault')
+    await service.initialize(emptySummary, focusOnAlice)
+    const state = stateWith({ characters: () => [alice as never] })
+
+    vi.mocked(database.getPackTemplate).mockRejectedValueOnce(new Error('db unavailable'))
+    const events: unknown[] = []
+    for await (const event of service.sendMessageStreaming(state, 'make her taller')) {
+      events.push(event)
+    }
+    expect(events).toEqual([{ type: 'error', error: 'db unavailable' }])
+    expect(userMessages(service)).toEqual([])
+
+    await send(service, state)
+    expect(userMessages(service)[0]).toContain('"name": "Alice"')
   })
 
   it('names the entity but sends no record when it is no longer in the vault', async () => {

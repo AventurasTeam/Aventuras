@@ -293,15 +293,21 @@ export class InteractiveVaultService extends BaseAIService {
   /**
    * Wrap the user's message in the `-user` half of the template. The focused entity's record
    * rides along only when it differs from the last one sent, so earlier turns stay untouched.
+   * Returns the record too: the caller marks it sent once the message is in the history.
    */
-  private async renderUserMessage(vaultState: VaultState, userMessage: string): Promise<string> {
+  private async renderUserMessage(
+    vaultState: VaultState,
+    userMessage: string,
+  ): Promise<{ content: string; record: string }> {
     const record = this.focusedEntityRecord(vaultState)
-    const changed = record !== this.lastSentRecord
-    this.lastSentRecord = record
 
     const ctx = await ContextBuilder.forPack(undefined)
-    ctx.add({ userMessage, focusedEntityRecord: changed ? record : '' })
-    return (await ctx.renderTemplate('interactive-lorebook-user')) || userMessage
+    ctx.add({
+      userMessage,
+      focusedEntityRecord: record !== this.lastSentRecord ? record : '',
+    })
+    const content = (await ctx.renderTemplate('interactive-lorebook-user')) || userMessage
+    return { content, record }
   }
 
   /**
@@ -564,15 +570,14 @@ export class InteractiveVaultService extends BaseAIService {
       ...imageTools,
     }
 
-    // Add user message to conversation history
-    if (userMessage) {
-      this.conversationHistory.push({
-        role: 'user',
-        content: await this.renderUserMessage(vaultState, userMessage),
-      })
-    }
-
     try {
+      // Add user message to conversation history
+      if (userMessage) {
+        const { content, record } = await this.renderUserMessage(vaultState, userMessage)
+        this.conversationHistory.push({ role: 'user', content })
+        this.lastSentRecord = record
+      }
+
       const agent = createStreamingAgenticAssistant(
         {
           presetId: this.presetId,
