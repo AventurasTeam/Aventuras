@@ -599,7 +599,7 @@ describe('collision flag clear', () => {
     expect(await db.select().from(deltas)).toHaveLength(1)
   })
 
-  // The patch type admits only 0; these are what an untyped caller could still send.
+  // The type admits 0 or undefined: a cast reaches 1, and an explicit undefined compiles but must be refused.
   it('refuses a flag value other than 0, so no user path can set it', async () => {
     const { db, ctx } = await setup()
     await seedChar(ctx, CHAR)
@@ -613,7 +613,7 @@ describe('collision flag clear', () => {
     expect((await rowFor(db, 'char_1')).nameCollisionFlag).toBe(0)
 
     // A present-but-undefined key would reach the store patch as an undefined flag.
-    const blank = { name: 'Kaelin', nameCollisionFlag: undefined } as unknown as EntityPatch
+    const blank = { name: 'Kaelin', nameCollisionFlag: undefined }
     expect(await applyDeltaAction(patchChar(blank, 'act_blank'), ctx)).toEqual(refusal)
     expect((await rowFor(db, 'char_1')).name).toBe('Kael')
     expect(await db.select().from(deltas)).toHaveLength(1)
