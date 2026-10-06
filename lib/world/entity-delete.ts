@@ -1,7 +1,8 @@
 import type { PipelineAction } from '@/lib/actions'
-import type { Entity, EntityState } from '@/lib/db'
+import type { Entity } from '@/lib/db'
 
 import { heldItems, stateOf } from './entity-draft'
+import { stateWithRefRewritten, unheldItemsWithout } from './entity-refs'
 
 export type DeleteTail = {
   id: string
@@ -28,67 +29,21 @@ export type EntityDeletePlan = {
   tailScene: boolean
 }
 
-function without(ids: readonly string[] | undefined, id: string): string[] | null {
-  return ids != null && ids.includes(id) ? ids.filter((other) => other !== id) : null
-}
-
-/**
- * Reads through `stateOf`, not raw `state`: a legacy row missing a key still produces a
- * schema-valid patch.
- */
-function stateWithout(entity: Entity, id: string): EntityState | null {
-  switch (entity.kind) {
-    case 'character': {
-      const current = stateOf(entity, 'character')
-      const next = { ...current }
-      let changed = false
-      if (current.current_location_id === id) {
-        next.current_location_id = null
-        changed = true
-      }
-      if (current.faction_id === id) {
-        next.faction_id = null
-        changed = true
-      }
-      const equipped = without(current.equipped_items, id)
-      if (equipped != null) {
-        next.equipped_items = equipped
-        changed = true
-      }
-      const inventory = without(current.inventory, id)
-      if (inventory != null) {
-        next.inventory = inventory
-        changed = true
-      }
-      return changed ? next : null
-    }
-    case 'location': {
-      const current = stateOf(entity, 'location')
-      return current.parent_location_id === id ? { ...current, parent_location_id: null } : null
-    }
-    case 'item': {
-      const current = stateOf(entity, 'item')
-      return current.at_location_id === id ? { ...current, at_location_id: null } : null
-    }
-    case 'faction':
-      return null
-  }
-}
-
 function heldBy(entity: Entity): string[] {
   return entity.kind === 'character' ? heldItems(stateOf(entity, 'character')) : []
 }
 
 function unplacedItems(target: Entity, branchEntities: readonly Entity[]): number {
-  const heldByTarget = new Set(heldBy(target))
   const heldElsewhere = new Set(
     branchEntities.filter((e) => e.id !== target.id).flatMap((e) => heldBy(e)),
   )
-  return branchEntities.filter((item) => {
-    if (item.kind !== 'item' || heldElsewhere.has(item.id)) return false
-    const at = stateOf(item, 'item').at_location_id
-    return (heldByTarget.has(item.id) && at == null) || at === target.id
-  }).length
+  const atTarget = branchEntities.filter(
+    (item) =>
+      item.kind === 'item' &&
+      !heldElsewhere.has(item.id) &&
+      stateOf(item, 'item').at_location_id === target.id,
+  ).length
+  return unheldItemsWithout(target.id, branchEntities) + atTarget
 }
 
 function tailActions(branchId: string, tail: DeleteTail | null, id: string): PipelineAction[] {
@@ -121,7 +76,7 @@ export function entityDeleteActions({
   const updates: PipelineAction[] = []
   for (const other of branchEntities) {
     if (other.id === target.id) continue
-    const state = stateWithout(other, target.id)
+    const state = stateWithRefRewritten(other, target.id, null)
     if (state == null) continue
     updates.push({
       kind: 'updateEntity',
