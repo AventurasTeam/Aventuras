@@ -89,6 +89,18 @@ export function getActiveToolNames(loaded: Set<ToolCategory>): string[] {
   return [...ALWAYS_ACTIVE_TOOLS, ...[...loaded].flatMap((c) => TOOL_CATEGORIES[c])]
 }
 
+// A tool that creates a pending change must return it (or its id as `changeId`), or the
+// change never reaches the UI.
+function resultChangeId(output: unknown): string | undefined {
+  if (!output || typeof output !== 'object') return undefined
+  const { pendingChange, changeId } = output as {
+    pendingChange?: { id?: unknown }
+    changeId?: unknown
+  }
+  const id = pendingChange?.id ?? changeId
+  return typeof id === 'string' ? id : undefined
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -629,15 +641,11 @@ export class InteractiveVaultService extends BaseAIService {
                 result: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult),
               }
 
-              // Check if this tool call created a pending change
-              const latestChange = pendingChanges[pendingChanges.length - 1]
-              if (
-                latestChange &&
-                latestChange.toolCallId.startsWith('iv-') &&
-                !linkedChangeIds.has(latestChange.id)
-              ) {
-                toolCallDisplay.pendingChange = latestChange
-                linkedChangeIds.add(latestChange.id)
+              const changeId = resultChangeId(toolResult)
+              const linked = changeId ? pendingChanges.find((pc) => pc.id === changeId) : undefined
+              if (linked && !linkedChangeIds.has(linked.id)) {
+                toolCallDisplay.pendingChange = linked
+                linkedChangeIds.add(linked.id)
               }
 
               // Attach generated image URL directly to the tool call display

@@ -60,8 +60,9 @@ vi.mock('$lib/services/database', () => ({
 
 // Each test sets these before calling sendMessageStreaming to script the fake
 // agent's fullStream. nextStreamError simulates the stream throwing instead of
-// completing normally (e.g. an aborted fetch).
-let nextStreamEvents: unknown[] = []
+// completing normally (e.g. an aborted fetch). A function is awaited once the
+// factory has captured the tools, so a test can run the real tool executes first.
+let nextStreamEvents: unknown[] | ((tools: Record<string, any>) => Promise<unknown[]>) = []
 let nextStreamError: Error | null = null
 // Captures the options (tools, prepareStep, ...) passed to the factory on the
 // most recent call, so tests can exercise the load_toolset tool and prepareStep
@@ -74,7 +75,9 @@ vi.mock('../sdk/agents/factory', () => ({
     return {
       stream: vi.fn(async () => ({
         fullStream: (async function* () {
-          for (const event of nextStreamEvents) yield event
+          const script = nextStreamEvents
+          const events = typeof script === 'function' ? await script(options.tools) : script
+          for (const event of events) yield event
           if (nextStreamError) throw nextStreamError
         })(),
         response: Promise.resolve({ messages: [] }),
@@ -433,5 +436,150 @@ describe('sendMessageStreaming', () => {
     for (const name of TOOL_CATEGORIES.characters) expect(activeTools).toContain(name)
     for (const name of TOOL_CATEGORIES.images) expect(activeTools).toContain(name)
     for (const name of TOOL_CATEGORIES.scenarios) expect(activeTools).not.toContain(name)
+  })
+})
+
+describe('sendMessageStreaming pending changes from parallel tool calls', () => {
+  type Call = { id: string; name: string; args: Record<string, unknown> }
+
+  // The SDK runs a step's tool calls together once the model call ends, so every
+  // change exists before the first tool-result is emitted. `order` is the order the
+  // results are emitted in.
+  function parallelStep(calls: Call[], order = calls.map((_, i) => i)) {
+    return async (tools: Record<string, any>) => {
+      const outputs = await Promise.all(calls.map((c) => tools[c.name].execute(c.args, {})))
+      return [
+        { type: 'start-step' },
+        ...calls.map((c) => ({
+          type: 'tool-call',
+          toolCallId: c.id,
+          toolName: c.name,
+          input: c.args,
+        })),
+        ...order.map((i) => ({
+          type: 'tool-result',
+          toolCallId: calls[i].id,
+          output: outputs[i],
+        })),
+        { type: 'finish-step' },
+      ]
+    }
+  }
+
+  const character = (id: string) =>
+    ({
+      id,
+      name: `Char ${id}`,
+      description: '',
+      traits: [],
+      visualDescriptors: [],
+      tags: [],
+      favorite: false,
+      portrait: null,
+    }) as never
+
+  const entry = (name: string) => ({
+    name,
+    type: 'character' as const,
+    description: `About ${name}`,
+    keywords: [name.toLowerCase()],
+    aliases: [],
+    injectionMode: 'keyword' as const,
+    priority: 50,
+  })
+
+  const lorebook = { id: 'lb1', name: 'Book', entries: [entry('Ann'), entry('Bob')] } as never
+
+  async function newService() {
+    const service = new InteractiveVaultService('interactiveVault')
+    await service.initialize(emptySummary)
+    return service
+  }
+
+  async function run(state: VaultState, service?: InstanceType<typeof InteractiveVaultService>) {
+    const events: any[] = []
+    for await (const event of (service ?? (await newService())).sendMessageStreaming(state, 'go')) {
+      events.push(event)
+    }
+    return events
+  }
+
+  const toolEnds = (events: any[]) => events.filter((e) => e.type === 'tool_end')
+  const stepMessage = (events: any[]) => events.find((e) => e.type === 'message').message
+
+  it('links each parallel lorebook entry update to its own change', async () => {
+    nextStreamEvents = parallelStep([
+      { id: 'call-1', name: 'update_entry', args: { index: 0, description: 'new Ann' } },
+      { id: 'call-2', name: 'update_entry', args: { index: 1, description: 'new Bob' } },
+    ])
+
+    const events = await run({
+      ...emptyVaultState(),
+      lorebooks: () => [lorebook],
+      activeLorebookId: 'lb1',
+      activeEntries: (lorebook as { entries: never[] }).entries,
+    })
+
+    const [first, second] = toolEnds(events).map((e) => e.toolCall.pendingChange)
+    expect(first).toMatchObject({ action: 'update', entryIndex: 0 })
+    expect(second).toMatchObject({ action: 'update', entryIndex: 1 })
+    expect(first.id).not.toBe(second.id)
+    expect(stepMessage(events).pendingChanges.map((c: { id: string }) => c.id)).toEqual([
+      first.id,
+      second.id,
+    ])
+  })
+
+  it('links each parallel character deletion to its own change', async () => {
+    nextStreamEvents = parallelStep([
+      { id: 'call-1', name: 'delete_character', args: { characterId: 'c1' } },
+      { id: 'call-2', name: 'delete_character', args: { characterId: 'c2' } },
+    ])
+
+    const events = await run({
+      ...emptyVaultState(),
+      characters: () => [character('c1'), character('c2')],
+    })
+
+    const [first, second] = toolEnds(events).map((e) => e.toolCall.pendingChange)
+    expect(first).toMatchObject({ action: 'delete', entityId: 'c1' })
+    expect(second).toMatchObject({ action: 'delete', entityId: 'c2' })
+    expect(stepMessage(events).pendingChanges).toHaveLength(2)
+  })
+
+  it('gives a failed call no change when a sibling call succeeded', async () => {
+    nextStreamEvents = parallelStep([
+      { id: 'call-1', name: 'update_entry', args: { index: 99, description: 'nope' } },
+      { id: 'call-2', name: 'update_entry', args: { index: 1, description: 'new Bob' } },
+    ])
+
+    const events = await run({
+      ...emptyVaultState(),
+      lorebooks: () => [lorebook],
+      activeLorebookId: 'lb1',
+      activeEntries: (lorebook as { entries: never[] }).entries,
+    })
+
+    const [failed, succeeded] = toolEnds(events).map((e) => e.toolCall.pendingChange)
+    expect(failed).toBeUndefined()
+    expect(succeeded).toMatchObject({ action: 'update', entryIndex: 1 })
+  })
+
+  it('links set_portrait, which returns only the id of its change', async () => {
+    const service = await newService()
+    service.generatedImages.set('img-1', 'data:image/png;base64,AAAA')
+    nextStreamEvents = parallelStep([
+      { id: 'call-1', name: 'set_portrait', args: { characterId: 'c1', imageId: 'img-1' } },
+      { id: 'call-2', name: 'delete_character', args: { characterId: 'c2' } },
+    ])
+
+    const events = await run(
+      { ...emptyVaultState(), characters: () => [character('c1'), character('c2')] },
+      service,
+    )
+
+    const [portrait, deletion] = toolEnds(events).map((e) => e.toolCall.pendingChange)
+    expect(portrait).toMatchObject({ action: 'update', entityId: 'c1' })
+    expect(deletion).toMatchObject({ action: 'delete', entityId: 'c2' })
   })
 })
