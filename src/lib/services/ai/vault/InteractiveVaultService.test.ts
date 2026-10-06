@@ -298,12 +298,14 @@ describe('focused entity context', () => {
       id: 'lb-1',
       name: 'Realm',
       description: 'A world',
+      tags: ['realm'],
       entries: [{ name: 'Secret Entry' }, { name: 'Another' }],
     }
     await send(service, stateWith({ lorebooks: () => [lorebook as never] }))
 
     const [first] = userMessages(service)
     expect(first).toContain('"entryCount": 2')
+    expect(first).toContain('"realm"')
     expect(first).not.toContain('Secret Entry')
   })
 

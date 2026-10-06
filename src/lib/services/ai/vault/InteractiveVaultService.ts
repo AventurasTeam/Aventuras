@@ -23,6 +23,7 @@ import {
   createScenarioTools,
   toCharacterDetails,
   toScenarioDetails,
+  toLorebookSummary,
   createInteractiveVaultLorebookTools,
   createVaultLinkingTools,
   createFandomTools,
@@ -281,30 +282,20 @@ export class InteractiveVaultService extends BaseAIService {
     const focus = this.focusedEntity
     if (!focus) return ''
 
-    let details: object | undefined
     switch (focus.entityType) {
       case 'character': {
         const character = vaultState.characters().find((c) => c.id === focus.entityId)
-        details = character && toCharacterDetails(character)
-        break
+        return character ? JSON.stringify(toCharacterDetails(character), null, 2) : ''
       }
       case 'scenario': {
         const scenario = vaultState.scenarios().find((s) => s.id === focus.entityId)
-        details = scenario && toScenarioDetails(scenario)
-        break
+        return scenario ? JSON.stringify(toScenarioDetails(scenario), null, 2) : ''
       }
       case 'lorebook': {
         const lorebook = vaultState.lorebooks().find((lb) => lb.id === focus.entityId)
-        details = lorebook && {
-          id: lorebook.id,
-          name: lorebook.name,
-          description: lorebook.description,
-          entryCount: lorebook.entries.length,
-        }
-        break
+        return lorebook ? JSON.stringify(toLorebookSummary(lorebook), null, 2) : ''
       }
     }
-    return details ? JSON.stringify(details, null, 2) : ''
   }
 
   /**

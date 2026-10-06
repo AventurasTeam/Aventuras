@@ -7,6 +7,7 @@
 export {
   createLoreManagementTools,
   createInteractiveVaultLorebookTools,
+  toLorebookSummary,
   type LorebookEntryToolContext,
   type StoryToolContext,
   type VaultLorebookToolContext,
