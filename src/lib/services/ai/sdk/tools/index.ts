@@ -18,8 +18,18 @@ export {
   type LoreManagementTools,
   type InteractiveVaultLorebookTools,
 } from './lorebook'
-export { createCharacterTools, type CharacterToolContext, type CharacterTools } from './character'
-export { createScenarioTools, type ScenarioToolContext, type ScenarioTools } from './scenario'
+export {
+  createCharacterTools,
+  toCharacterDetails,
+  type CharacterToolContext,
+  type CharacterTools,
+} from './character'
+export {
+  createScenarioTools,
+  toScenarioDetails,
+  type ScenarioToolContext,
+  type ScenarioTools,
+} from './scenario'
 export { createVaultLinkingTools, type VaultLinkingContext, type VaultLinkingTools } from './vault'
 export { createFandomTools, type FandomToolContext, type FandomTools } from './fandom'
 export {
