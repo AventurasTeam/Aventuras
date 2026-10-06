@@ -45,7 +45,8 @@
     "deleted": "Deleted",
     "modified": "Modified {{fields}}",
     "modifiedUnknown": "Modified",
-    "removedWith": "Removed when {{name}} was deleted"
+    "removedWith": "Removed when {{name}} was deleted",
+    "removedWithUnknown": "Removed when its other end was deleted"
   },
   "field": {
     "name": "Name",

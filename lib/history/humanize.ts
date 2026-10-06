@@ -5,10 +5,11 @@ import { relativeTimeLabel, t } from '@/lib/i18n'
 import {
   fieldPathLabel,
   linkTableLabel,
+  removalTargetLabel,
   SUMMARY_FIELD_SEPARATOR,
   type HistoryTable,
 } from './field-labels'
-import type { HistoryLinkTable, HistoryRow, HistoryVia, LinkSide } from './link-rows'
+import type { HistoryRow, HistoryVia } from './link-rows'
 
 /** DeltaLogRow's `delta` prop, pre-formatted (patterns/delta-log-row.md → Compound API). */
 export type HistoryRowView = {
@@ -60,10 +61,19 @@ export type HumanizeContext = {
   nowMs: number
 }
 
-function opSummary(delta: Delta, table: HistoryTable | HistoryLinkTable, side?: LinkSide): string {
+type LinkVia = Extract<HistoryVia, { kind: 'link' }>
+
+// A relationship's labels follow the tab's side; the other link tables have none.
+function linkPathLabel(via: LinkVia, path: string): string {
+  return via.table === 'character_relationships'
+    ? fieldPathLabel(via.table, path, via.side)
+    : fieldPathLabel(via.table, path)
+}
+
+function opSummary(delta: Delta, labelOf: (path: string) => string): string {
   if (delta.op === 'create') return t('history:summary.created')
   if (delta.op === 'delete') return t('history:summary.deleted')
-  const labels = [...new Set(changedPaths(delta).map((path) => fieldPathLabel(table, path, side)))]
+  const labels = [...new Set(changedPaths(delta).map(labelOf))]
   return labels.length === 0
     ? t('history:summary.modifiedUnknown')
     : t('history:summary.modified', { fields: labels.join(SUMMARY_FIELD_SEPARATOR) })
@@ -84,18 +94,25 @@ function targetDisplayName(via: HistoryVia, context: HumanizeContext): string {
         name: otherEndName(via.otherId, context),
       })
     case 'removed':
-      return via.tables.length === 1 ? linkTableLabel(via.tables[0]) : t('history:linkLabel.links')
+      return removalTargetLabel(via.tables)
   }
+}
+
+function removalSummary(otherId: string, context: HumanizeContext): string {
+  const name = context.otherName(otherId)
+  return name == null
+    ? t('history:summary.removedWithUnknown')
+    : t('history:summary.removedWith', { name })
 }
 
 function summary({ delta, via }: HistoryRow, context: HumanizeContext): string {
   switch (via.kind) {
     case 'own':
-      return opSummary(delta, context.targetTable)
+      return opSummary(delta, (path) => fieldPathLabel(context.targetTable, path))
     case 'link':
-      return opSummary(delta, via.table, via.side)
+      return opSummary(delta, (path) => linkPathLabel(via, path))
     case 'removed':
-      return t('history:summary.removedWith', { name: otherEndName(via.otherId, context) })
+      return removalSummary(via.otherId, context)
   }
 }
 

@@ -84,6 +84,17 @@ describe('field labels', () => {
   })
 })
 
+describe('HistoryVia', () => {
+  it('ties a relationship link to a side and every other link table to none', () => {
+    const rel = { kind: 'link', linkId: 'l', otherId: 'o' } as const
+    // @ts-expect-error a relationship link row names which end the tab's row is
+    const noSide: HistoryVia = { ...rel, table: 'character_relationships', side: null }
+    // @ts-expect-error only a relationship has a side
+    const sided: HistoryVia = { ...rel, table: 'happening_awareness', side: 'a' }
+    expect([noSide.kind, sided.kind]).toEqual(['link', 'link'])
+  })
+})
+
 describe('humanizeDelta', () => {
   const context: HumanizeContext = {
     targetTable: 'entities',
@@ -294,6 +305,6 @@ describe('humanizeDelta', () => {
         }),
         context,
       ).summary,
-    ).toBe('Removed when Unknown row was deleted')
+    ).toBe('Removed when its other end was deleted')
   })
 })

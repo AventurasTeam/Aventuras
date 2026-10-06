@@ -1,10 +1,16 @@
+import { getTableColumns } from 'drizzle-orm'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { UPDATABLE as ENTITY_UPDATABLE } from '@/lib/actions/entities/register'
 import { UPDATABLE as HAPPENING_UPDATABLE } from '@/lib/actions/happenings/register-happenings'
 import { UPDATABLE as LORE_UPDATABLE } from '@/lib/actions/lore/register'
 import { UPDATABLE as THREAD_UPDATABLE } from '@/lib/actions/threads/register'
-import { entityStateColumnSchema } from '@/lib/db'
+import {
+  characterRelationships,
+  entityStateColumnSchema,
+  happeningAwareness,
+  happeningInvolvements,
+} from '@/lib/db'
 import { i18n } from '@/lib/i18n'
 
 import {
@@ -14,9 +20,10 @@ import {
   opsMatchingLabel,
   pathsMatchingLabel,
   removalSummaryTerm,
+  removalTargetLabel,
   summaryFieldTerms,
 } from './field-labels'
-import { HISTORY_LINK_TABLES, type HistoryLinkTable } from './link-rows'
+import { HISTORY_LINK_TABLES } from './link-rows'
 
 const UPDATABLE_BY_TABLE: Record<(typeof HISTORY_TABLES)[number], readonly string[]> = {
   entities: ENTITY_UPDATABLE,
@@ -25,12 +32,26 @@ const UPDATABLE_BY_TABLE: Record<(typeof HISTORY_TABLES)[number], readonly strin
   happenings: HAPPENING_UPDATABLE,
 }
 
-// The columns each link arm's update writes (lib/actions/relationships, lib/actions/happenings).
-const LINK_COLUMNS: Record<HistoryLinkTable, readonly string[]> = {
-  character_relationships: ['kind', 'inverseKind'],
-  happening_involvements: ['role'],
-  happening_awareness: ['source', 'decayResistance', 'learnedAtEntryId'],
-}
+const LINK_TABLE_DEFS = {
+  character_relationships: characterRelationships,
+  happening_involvements: happeningInvolvements,
+  happening_awareness: happeningAwareness,
+} as const
+
+// Identity, branch and the two ends are structure, not edited values; the awareness counter is
+// bumped by the memory pipeline and its label is left out on purpose.
+const STRUCTURAL_COLUMNS = new Set([
+  'id',
+  'branchId',
+  'aId',
+  'bId',
+  'happeningId',
+  'entityId',
+  'characterId',
+  'createdAt',
+  'updatedAt',
+  'retrievalCount',
+])
 
 describe('field-labels vocabulary coverage', () => {
   it('labels every updatable column of every history table', () => {
@@ -52,11 +73,18 @@ describe('field-labels vocabulary coverage', () => {
     }
   })
 
-  it('labels every column a link arm updates, from either side of a relationship', () => {
+  it('labels every editable column of every link table, from either side of a relationship', () => {
     for (const table of HISTORY_LINK_TABLES) {
-      for (const column of LINK_COLUMNS[table]) {
-        for (const side of ['a', 'b', null] as const) {
-          expect(fieldPathLabel(table, column, side)).not.toBe(column)
+      const columns = Object.keys(getTableColumns(LINK_TABLE_DEFS[table])).filter(
+        (column) => !STRUCTURAL_COLUMNS.has(column),
+      )
+      expect(columns.length).toBeGreaterThan(0)
+      for (const column of columns) {
+        if (table === 'character_relationships') {
+          expect(fieldPathLabel(table, column, 'a')).not.toBe(column)
+          expect(fieldPathLabel(table, column, 'b')).not.toBe(column)
+        } else {
+          expect(fieldPathLabel(table, column)).not.toBe(column)
         }
       }
     }
@@ -73,6 +101,15 @@ describe('link-row labels', () => {
     expect(pathsMatchingLabel('character_relationships', 'your', 'b')).toEqual(['inverseKind'])
   })
 
+  it('refuses a relationship lookup that names no side, rather than guessing side a', () => {
+    // @ts-expect-error a relationship's labels depend on the tab's side
+    expect(() => fieldPathLabel('character_relationships', 'kind')).toThrow()
+    // @ts-expect-error a relationship's labels depend on the tab's side
+    expect(() => fieldPathLabel('character_relationships', 'kind', null)).toThrow()
+    // @ts-expect-error a relationship's labels depend on the tab's side
+    expect(() => pathsMatchingLabel('character_relationships', 'view')).toThrow()
+  })
+
   it('labels involvement and awareness columns, and leaves the retrieval counter raw', () => {
     expect(fieldPathLabel('happening_involvements', 'role')).toBe('Role')
     expect(
@@ -81,6 +118,14 @@ describe('link-row labels', () => {
       ),
     ).toEqual(['Source', 'Decay resistance', 'Learned at'])
     expect(fieldPathLabel('happening_awareness', 'retrievalCount')).toBe('retrievalCount')
+  })
+})
+
+describe('removalTargetLabel', () => {
+  it('names one table by its link label and several as "Links"', () => {
+    expect(removalTargetLabel(['character_relationships'])).toBe('Relationship')
+    expect(removalTargetLabel(['happening_awareness'])).toBe('Awareness')
+    expect(removalTargetLabel(['happening_involvements', 'happening_awareness'])).toBe('Links')
   })
 })
 
@@ -141,10 +186,37 @@ describe('removalSummaryTerm', () => {
     expect(removalSummaryTerm('Kael')).toBeNull()
   })
 
+  it('matches a word of the summary tail, and nothing for an empty term', () => {
+    expect(removalSummaryTerm('deleted')).toEqual({ kind: 'any' })
+    expect(removalSummaryTerm(' ')).toBeNull()
+  })
+
+  it('follows the sentence as it is typed, lead then name then tail', () => {
+    expect(removalSummaryTerm('Removed when')).toEqual({ kind: 'any' })
+    expect(removalSummaryTerm('was deleted')).toEqual({ kind: 'any' })
+    expect(removalSummaryTerm('Removed when Ka')).toEqual({ kind: 'named', name: 'Ka' })
+    expect(removalSummaryTerm('removed when old tom')).toEqual({ kind: 'named', name: 'old tom' })
+    expect(removalSummaryTerm('Removed when Kael w')).toEqual({ kind: 'named', name: 'Kael' })
+    expect(removalSummaryTerm('Removed when Kael was del')).toEqual({ kind: 'named', name: 'Kael' })
+    expect(removalSummaryTerm('Removed whenever')).toBeNull()
+  })
+
+  it('reads the unknown-other-end wording whole as any removal', () => {
+    expect(removalSummaryTerm('Removed when its other end was deleted')).toEqual({ kind: 'any' })
+  })
+
   it('follows a locale that puts the name first', async () => {
     i18n.addResourceBundle('xx', 'history', { summary: { removedWith: '{{name}} mit entfernt' } })
     await i18n.changeLanguage('xx')
     expect(removalSummaryTerm('Kael mit entfernt')).toEqual({ kind: 'named', name: 'Kael' })
     expect(removalSummaryTerm('Removed when Kael was deleted')).toBeNull()
+  })
+
+  it('matches a word of a name-first tail, and a name typed ahead of it', async () => {
+    i18n.addResourceBundle('xx', 'history', { summary: { removedWith: '{{name}} mit entfernt' } })
+    await i18n.changeLanguage('xx')
+    expect(removalSummaryTerm('entf')).toEqual({ kind: 'any' })
+    expect(removalSummaryTerm('Kael mi')).toEqual({ kind: 'named', name: 'Kael' })
+    expect(removalSummaryTerm('Kael')).toBeNull()
   })
 })

@@ -92,19 +92,24 @@ const AWARENESS: Labels = {
   learnedAtEntryId: () => t('history:field.learnedAt'),
 }
 
-const LABELS: Record<HistoryTable | HistoryLinkTable, Labels> = {
+const LABELS: Record<SidelessTable, Labels> = {
   entities: ENTITY,
   lore: LORE,
   threads: THREAD,
   happenings: HAPPENING,
-  character_relationships: RELATIONSHIP_SIDE_A,
   happening_involvements: INVOLVEMENT,
   happening_awareness: AWARENESS,
 }
 
+// A relationship's labels depend on the tab's side, so a lookup without one is a bug, not side a.
 function labelsFor(table: HistoryTable | HistoryLinkTable, side?: LinkSide): Labels {
-  return table === 'character_relationships' && side === 'b' ? RELATIONSHIP_SIDE_B : LABELS[table]
+  if (table !== 'character_relationships') return LABELS[table]
+  if (side === 'a') return RELATIONSHIP_SIDE_A
+  if (side === 'b') return RELATIONSHIP_SIDE_B
+  throw new Error('A relationship field label needs the tab side, a or b')
 }
+
+type SidelessTable = HistoryTable | Exclude<HistoryLinkTable, 'character_relationships'>
 
 function parentPath(path: string): string {
   const dot = path.lastIndexOf('.')
@@ -112,9 +117,15 @@ function parentPath(path: string): string {
 }
 
 /**
- * A field path's user-facing name: its nearest labelled ancestor, else the raw path. `side` is the
- * tab's end of a relationship row; side `a`'s labels apply when it is omitted.
+ * A field path's user-facing name: its nearest labelled ancestor, else the raw path. A
+ * relationship row takes the tab's end of the pair as `side`; no other table takes one.
  */
+export function fieldPathLabel(table: SidelessTable, path: string): string
+export function fieldPathLabel(
+  table: 'character_relationships',
+  path: string,
+  side: 'a' | 'b',
+): string
 export function fieldPathLabel(
   table: HistoryTable | HistoryLinkTable,
   path: string,
@@ -128,6 +139,12 @@ export function fieldPathLabel(
 }
 
 /** Field paths whose label contains `term`, so searching the summary's wording finds its rows. */
+export function pathsMatchingLabel(table: SidelessTable, term: string): string[]
+export function pathsMatchingLabel(
+  table: 'character_relationships',
+  term: string,
+  side: 'a' | 'b',
+): string[]
 export function pathsMatchingLabel(
   table: HistoryTable | HistoryLinkTable,
   term: string,
@@ -149,6 +166,13 @@ const LINK_LABELS: Record<HistoryLinkTable, () => string> = {
 /** A link row's name on its History target line ("Relationship"). */
 export function linkTableLabel(table: HistoryLinkTable): string {
   return LINK_LABELS[table]()
+}
+
+/** The target line of a removal row: its one link's label, or "Links" when the delete held several. */
+export function removalTargetLabel(
+  tables: readonly [HistoryLinkTable, ...HistoryLinkTable[]],
+): string {
+  return tables.length === 1 ? linkTableLabel(tables[0]) : t('history:linkLabel.links')
 }
 
 /** Link tables whose label starts a word with `term`, for the target-line search. */
@@ -224,18 +248,37 @@ export function summaryFieldTerms(term: string): string[] | null {
 
 export type RemovalSummaryTerm = { kind: 'any' } | { kind: 'named'; name: string }
 
+const collapse = (text: string) => text.trim().replace(/\s+/g, ' ').toLocaleLowerCase()
+
+// Whether `needle` begins at a word of `wording` ("when" and "removed when", not "moved").
+function startsWordRun(wording: string, needle: string): boolean {
+  return ` ${collapse(wording)}`.includes(` ${needle}`)
+}
+
+// The name typed between the lead and the tail, which may be partly typed or not yet started:
+// "Removed when Ka" names Ka, "Removed when Kael w" names Kael. Without a lead, only a started
+// tail makes a name, or any word typed would read as one.
+function typedName(lead: string, tail: string, term: string): string | null {
+  const before = lead === '' ? '' : `${escapeRegExp(lead)}\\s+`
+  const partials = Array.from({ length: tail.length }, (_, i) => escapeRegExp(tail.slice(0, i + 1)))
+  const started = tail === '' ? '' : `\\s+(?:${partials.reverse().join('|')})`
+  const after = lead === '' || started === '' ? started : `(?:${started})?`
+  return new RegExp(`^${before}(.+?)${after}$`, 'iu').exec(term.trim())?.[1] ?? null
+}
+
 /**
- * A term read against the removal summary ("Removed when Kael was deleted"): typed whole it names
- * the other end; a word of the summary's own wording alone matches every removal.
+ * A term read against the removal summary ("Removed when Kael was deleted"): typed through a name
+ * it names the other end, and a word run of the summary's own wording matches every removal.
  */
 export function removalSummaryTerm(term: string): RemovalSummaryTerm | null {
+  const needle = collapse(term)
+  if (needle === '') return null
+  if (needle === collapse(t('history:summary.removedWithUnknown'))) return { kind: 'any' }
   const summary = slotPattern(t('history:summary.removedWith', { name: SLOT }))
   if (summary == null) return null
-  const name = summary.pattern.exec(term.trim())?.[1]
+  const name = typedName(summary.lead, summary.tail, term)
   if (name != null) return { kind: 'named', name }
-  const needle = term.trim().toLocaleLowerCase()
-  if (needle === '') return null
-  return startsWithWord(summary.lead, needle) || startsWithWord(summary.tail, needle)
+  return startsWordRun(summary.lead, needle) || startsWordRun(summary.tail, needle)
     ? { kind: 'any' }
     : null
 }
