@@ -157,8 +157,8 @@ slice-planning gate forces its resolution before that slice is planned.
   but not the ref fields inside an entity's `state` (`current_location_id`
   and the rest), so `groupConflict` can't refuse a state write that names
   a row the same group deletes. Planners avoid it by discipline (4.2c's
-  merge filters the loser out of every state it writes); nothing checks
-  it. Found in 4.2c's PR 1 review (2026-10-06).
+  merge rewrites every ref to the loser before deleting it); nothing
+  checks it. Found in 4.2c's PR 1 review (2026-10-06).
 - **A tail scene edit re-anchors characters who left at the tail.** The
   scene editor (`lib/actions/story-entries/scene-fields.ts`) runs
   `sceneTrackingActions` over the previous, original and edited scenes
@@ -168,3 +168,10 @@ slice-planning gate forces its resolution before that slice is planned.
   undocumented as a consequence. Its live filter on the previous scene's
   ids has no effect, since tracking iterates live entities only. Found
   in 4.2c's PR 1 review (2026-10-06).
+- **Location tracking accepts an item target.**
+  `updateEntityLocationTracking`
+  (`lib/actions/entities/state-patch-actions.ts`) has no kind check, so
+  it writes `current_location_id` into an item's state, which the item
+  state schema doesn't refuse; `updateItemPosition` checks its kind.
+  4.2c's merge guards its own call; the arm doesn't. Found in 4.2c's
+  PR 1 review (2026-10-06).
