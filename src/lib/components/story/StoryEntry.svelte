@@ -2049,7 +2049,7 @@
             class="bg-primary/5 pointer-events-none absolute inset-0 z-10 flex items-center justify-center"
           >
             <div
-              class="bg-primary/90 animate-bounce rounded-full px-3 py-1.5 text-xs font-medium text-white"
+              class="bg-primary/90 text-primary-foreground animate-bounce rounded-full px-3 py-1.5 text-xs font-medium"
             >
               Tap a paragraph to link image
             </div>
@@ -2118,7 +2118,7 @@
                   <div
                     class="bg-primary absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full shadow-sm"
                   >
-                    <Check class="h-2.5 w-2.5 text-white" />
+                    <Check class="text-primary-foreground h-2.5 w-2.5" />
                   </div>
                 {/if}
               </div>

@@ -183,6 +183,21 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   in the prompt with a summary. Entries after the last chapter's end are the **un-chapterized
   tail** (`story.getUnchapterizedEntries()`) — the newest material, and the part chapter-oriented
   tools would otherwise be blind to.
+
+  The story view can mark them with banners (`showChapterBanners`, off by default).
+  `buildChapterBanners` (`utils/chapterBanners.ts`) places one before each chapter's first entry
+  and one before the tail, from `currentBranchChapters`. A chapter needs both its ends in the
+  loaded entries, as `getChapterEntries` does, and the tail begins where
+  `getUnchapterizedEntries` says it does (`lastResolvedChapterEnd`), so the two cannot disagree.
+  The tail banner and its navigation row are unnumbered — the tail is not a chapter yet — and read
+  "The Story Continues". Banners link to their neighbours in story order, not `number` order,
+  which can disagree after a branch switch. A banner renders inside its entry's `data-entry-id`
+  wrapper, so every jump to that entry lands on the banner above it.
+
+  The navigation panel lists the same chapter starts as landmarks whether or not banners are
+  shown; with them off, the jump lands on the chapter's first entry. A chapter or tail row
+  never switches branch in "Switch to checkpoint branch" mode: its start can lie in an ancestor's
+  history while the chapter is in the current branch's view all the same.
 - **World state** (`Character`/`Location`/`Item`/`StoryBeat`) is rewritten by the classifier after
   every turn. A lorebook `Entry` carries no live state of its own: the type has `state` fields
   per entry type, but every creation path initialised them blank and nothing ever wrote one

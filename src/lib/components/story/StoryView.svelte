@@ -6,6 +6,7 @@
   import { tick, untrack } from 'svelte'
   import { fade } from 'svelte/transition'
   import StoryEntry from './StoryEntry.svelte'
+  import ChapterBanner from './ChapterBanner.svelte'
   import TimeAnchorModal from '$lib/components/world/TimeAnchorModal.svelte'
   import EntryTimeModal from '$lib/components/world/EntryTimeModal.svelte'
   import StreamingEntry from './StreamingEntry.svelte'
@@ -14,6 +15,7 @@
   import { Button } from '$lib/components/ui/button'
   import EmptyState from '$lib/components/ui/empty-state/empty-state.svelte'
   import { eventBus, type BranchSwitchedEvent } from '$lib/services/events'
+  import { repinDecision, type PinSnapshot } from '$lib/utils/storyPin'
 
   const storyMaxWidthStyle = $derived.by(() => {
     const maxWidth =
@@ -50,6 +52,7 @@
   // Use requestAnimationFrame to batch scroll updates and avoid layout thrashing
   let scrollRAF: number | null = null
   let prevEntryCount = 0
+  let pinSnapshot: PinSnapshot | null = null
   let suppressScrollHandler = false
   // Identifies the scroll that currently owns suppressScrollHandler. Overlapping
   // programmatic scrolls would otherwise have the earlier one clear the flag while the
@@ -117,6 +120,10 @@
       startIndex: start,
     }
   })
+
+  const chapterBanners = $derived(
+    settings.uiSettings.showChapterBanners ? story.chapterBanners : null,
+  )
 
   // Load earlier entries above, compensate scroll, then trim the bottom if it's
   // safely off-screen (two-phase so each compensation is isolated and correct).
@@ -350,6 +357,17 @@
     isAtPhysicalBottom = nearBottom
   }
 
+  // Editing is a focused field inside the story: the entry is as tall as its text, so a
+  // re-pin would chase the caret.
+  function isEditingInStory(): boolean {
+    const active = document.activeElement
+    return (
+      !!active &&
+      !!storyContainer?.contains(active) &&
+      active.matches('textarea, input, [contenteditable]:not([contenteditable="false"])')
+    )
+  }
+
   // Disabled when truly at the very start/end of the entire story
   const atVeryTop = $derived(displayedEntries.hiddenAtTop === 0 && !userScrolledDown)
   const atVeryBottom = $derived(displayedEntries.hiddenAtBottom === 0 && isAtPhysicalBottom)
@@ -390,6 +408,24 @@
       }
     }
 
+    // Everything else the decision needs is read untracked: this effect writes the window
+    // itself, and the guards must not make it run again.
+    const pin = repinDecision(
+      pinSnapshot,
+      untrack(() => ({
+        height: innerHeight,
+        windowStart,
+        windowEnd,
+        entryCount: currentCount,
+        autoScroll: settings.uiSettings.autoScroll,
+        userScrolledUp: ui.userScrolledUp,
+        hiddenAtBottom: displayedEntries.hiddenAtBottom,
+        editing: isEditingInStory(),
+        switchingBranch: story.isSwitchingBranch,
+      })),
+    )
+    pinSnapshot = pin.snapshot
+
     // Initial story load: entries just went from 0 → N (loaded asynchronously
     // after the story switch). Always scroll to bottom here — autoScroll only
     // applies during generation, not when positioning on story open.
@@ -404,10 +440,12 @@
     // additionally override the userScrolledUp check (sending a message always
     // re-engages auto-scroll). Narration does NOT — if the user scrolled up
     // during streaming they stay where they are.
+    // A pinned reader stays pinned when the content resizes in place.
     const shouldScroll =
-      settings.uiSettings.autoScroll &&
-      (ui.isStreaming || wasAdded) &&
-      (!ui.userScrolledUp || (wasAdded && lastEntry?.type === 'user_action'))
+      pin.repin ||
+      (settings.uiSettings.autoScroll &&
+        (ui.isStreaming || wasAdded) &&
+        (!ui.userScrolledUp || (wasAdded && lastEntry?.type === 'user_action')))
 
     if (!shouldScroll) return
 
@@ -528,8 +566,15 @@
         {/if}
 
         {#each displayedEntries.entries as entry (entry.id)}
-          <!-- data-entry-id lets branch-switch landing locate a specific entry element -->
+          {@const banner = chapterBanners?.get(entry.id)}
+          <!-- data-entry-id lets branch-switch landing locate a specific entry element. The
+               banner sits inside it so a jump to the entry lands on the banner above it. -->
           <div data-entry-id={entry.id}>
+            {#if banner}
+              <div class="mb-2.5 sm:mb-3">
+                <ChapterBanner {banner} onNavigate={(id) => void landOnEntry(id)} />
+              </div>
+            {/if}
             <StoryEntry {entry} />
           </div>
         {/each}

@@ -19,6 +19,11 @@
   }
 }
 
+/* The story font: the reader's custom stack when set, otherwise the theme's. */
+@utility font-story {
+  font-family: var(--font-story-custom, var(--font-story));
+}
+
 @theme {
   /* Radius (for rounded-*) */
   --radius-sm: calc(var(--radius) - 4px);
@@ -146,9 +151,7 @@
    ============================================= */
 @layer utilities {
   .story-text {
-    /* Use custom font if set, otherwise fall back to theme default */
-    font-family: var(--font-story-custom, var(--font-story));
-    @apply text-lg leading-relaxed;
+    @apply font-story text-lg leading-relaxed;
     color: var(--text-secondary);
   }
 

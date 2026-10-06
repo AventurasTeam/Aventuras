@@ -1,4 +1,5 @@
 import type { Branch, Checkpoint, StoryEntry } from '$lib/types'
+import { chapterBannerLabel, type ChapterBanner } from './chapterBanners'
 
 /**
  * The number a reader sees for an entry: its stored position, one-based, so the last entry's
@@ -117,12 +118,14 @@ export function jumpToEntry(request: EntryJumpRequest): boolean {
   return willLand
 }
 
-export type LandmarkKind = 'origin' | 'checkpoint'
+export type LandmarkKind = 'origin' | 'checkpoint' | 'chapter' | 'tail'
 
 export interface Landmark {
   entryId: string
   checkpointId: string | null
   branchId: string | null
+  /** Whether "Switch to checkpoint branch" applies. A chapter's start may lie in an ancestor's history. */
+  switchesBranch: boolean
   number: number
   kind: LandmarkKind
   label: string
@@ -167,8 +170,11 @@ export interface Landmarks {
 }
 
 /**
- * The places in the branch being read that are worth returning to: where it began, and every
- * checkpoint along the lineage that produced its current state.
+ * The places in the branch being read that are worth returning to: where it began, every
+ * checkpoint along the lineage that produced its current state, and where each chapter starts.
+ *
+ * A chapter or tail row sorts ahead of any other row on the same entry, matching the story view, where
+ * its banner sits above that entry.
  *
  * A checkpoint missing from `entries` is two different things, and they are not shown alike: one
  * anchored elsewhere belongs to another branch and is left out, while one with no anchoring entry
@@ -179,6 +185,7 @@ export function buildLandmarks(
   checkpoints: Checkpoint[],
   branches: Branch[],
   activeBranch: Branch | null,
+  chapterBanners?: Map<string, ChapterBanner>,
 ): Landmarks {
   const byId = new Map(entries.map((entry) => [entry.id, entry]))
   const branchNames = new Map(branches.map((branch) => [branch.id, branch.name]))
@@ -205,6 +212,7 @@ export function buildLandmarks(
         entryId: forkEntry.id,
         checkpointId: origin?.id ?? null,
         branchId: forkEntry.branchId,
+        switchesBranch: true,
         number: entryNumber(forkEntry),
         kind: 'origin',
         label: origin?.name ?? 'Branch origin',
@@ -235,6 +243,7 @@ export function buildLandmarks(
       entryId: entry.id,
       checkpointId: checkpoint.id,
       branchId: entry.branchId,
+      switchesBranch: true,
       number: entryNumber(entry),
       kind: 'checkpoint',
       label: checkpoint.name,
@@ -242,8 +251,26 @@ export function buildLandmarks(
     })
   }
 
+  for (const [entryId, banner] of chapterBanners ?? []) {
+    const entry = byId.get(entryId)
+    if (!entry) continue
+    landmarks.push({
+      entryId: entry.id,
+      checkpointId: null,
+      branchId: entry.branchId,
+      switchesBranch: false,
+      number: entryNumber(entry),
+      kind: banner.number === null ? 'tail' : 'chapter',
+      label: chapterBannerLabel(banner),
+      branchName: getBranchName(entry.branchId),
+    })
+  }
+
+  const rank = (landmark: Landmark) =>
+    landmark.kind === 'chapter' || landmark.kind === 'tail' ? 0 : 1
+
   return {
-    landmarks: landmarks.sort((a, b) => a.number - b.number),
+    landmarks: landmarks.sort((a, b) => a.number - b.number || rank(a) - rank(b)),
     orphaned: orphaned
       .sort((a, b) => a.createdAt - b.createdAt)
       .map(({ checkpointId, label }) => ({ checkpointId, label })),
