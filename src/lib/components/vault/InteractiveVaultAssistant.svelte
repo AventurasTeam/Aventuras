@@ -480,11 +480,12 @@
     const myGenerationId = ++activeGenerationId
 
     try {
+      // The service's focus, not the prop: loading a saved conversation drops it.
+      const focus = service.getFocusedEntity()
+
       // Check for external lorebook edits before streaming
       const lorebookId =
-        focusedEntity?.entityType === 'lorebook'
-          ? focusedEntity.entityId
-          : vaultEditor.currentLorebookId
+        focus?.entityType === 'lorebook' ? focus.entityId : vaultEditor.currentLorebookId
       if (lorebookId) {
         service.injectLorebookChangeNote(lorebookId)
       }
@@ -494,21 +495,15 @@
         lorebooks: () => lorebookVault.items,
         scenarios: () => scenarioVault.items,
         get activeLorebookId() {
-          if (focusedEntity?.entityType === 'lorebook') return focusedEntity.entityId
+          if (focus?.entityType === 'lorebook') return focus.entityId
           return vaultEditor.currentLorebookId ?? undefined
         },
         get activeEntries() {
           const id =
-            focusedEntity?.entityType === 'lorebook'
-              ? focusedEntity.entityId
-              : vaultEditor.currentLorebookId
+            focus?.entityType === 'lorebook' ? focus.entityId : vaultEditor.currentLorebookId
           if (!id) return undefined
           return lorebookVault.getById(id)?.entries
         },
-        activeCharacterId:
-          focusedEntity?.entityType === 'character' ? focusedEntity.entityId : undefined,
-        activeScenarioId:
-          focusedEntity?.entityType === 'scenario' ? focusedEntity.entityId : undefined,
       }
 
       for await (const event of service.sendMessageStreaming(

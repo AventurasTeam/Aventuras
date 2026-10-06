@@ -319,8 +319,24 @@ describe('focused entity context', () => {
     await service.loadConversation(id)
     await send(service, stateWith({ characters: () => [alice as never] }))
 
+    expect(service.getFocusedEntity()).toBeNull()
     expect(lastCreateOptions!.instructions).not.toContain('Active Context')
     expect(userMessages(service).at(-1)).toBe('make her taller')
+  })
+
+  it('drops the toolset seeded from the focus when a saved conversation is loaded', async () => {
+    const writer = new InteractiveVaultService('interactiveVault')
+    const id = await writer.saveConversation(
+      [{ id: 'm1', role: 'user', content: 'hi', timestamp: 1 }],
+      [],
+    )
+
+    const service = new InteractiveVaultService('interactiveVault')
+    await service.initialize(emptySummary, focusOnAlice)
+    expect(service.loadedCategories.has('characters')).toBe(true)
+
+    await service.loadConversation(id)
+    expect(service.loadedCategories.size).toBe(0)
   })
 })
 

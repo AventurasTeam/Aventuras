@@ -104,10 +104,6 @@ export interface VaultState {
   /** Current lorebook entries for entry-level tools (optional, scoped to active lorebook) */
   activeLorebookId?: string
   activeEntries?: VaultLorebookEntry[]
-  /** ID of the character the user is actively editing (for focused assistant context) */
-  activeCharacterId?: string
-  /** ID of the scenario the user is actively editing (for focused assistant context) */
-  activeScenarioId?: string
 }
 
 /** Entity context passed when the assistant is opened from an edit interface */
@@ -1116,9 +1112,10 @@ export class InteractiveVaultService extends BaseAIService {
       this.conversationId = conversationId
 
       // The saved conversation may be about a different entity than the one the assistant
-      // was opened from.
+      // was opened from, so the focus and the toolset seeded from it go with it.
       this.focusedEntity = null
       this.lastSentRecord = null
+      this.loadedCategories.clear()
       await this.renderSystemPrompt()
 
       const chatMessages = JSON.parse(conversation.chatMessages) as ChatMessage[]
@@ -1162,6 +1159,14 @@ export class InteractiveVaultService extends BaseAIService {
    */
   getConversationId(): string | null {
     return this.conversationId
+  }
+
+  /**
+   * The entity the current conversation is about, or null once a saved conversation has
+   * replaced the one the assistant was opened with.
+   */
+  getFocusedEntity(): FocusedEntity | null {
+    return this.focusedEntity
   }
 
   /**
