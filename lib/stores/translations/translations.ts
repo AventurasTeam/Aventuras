@@ -23,6 +23,8 @@ function rebuildIndex(): void {
 
 export const translationsStore = {
   getLoadedBranch: base.getLoadedBranch,
+  useTranslations: base.useRows,
+  getTranslations: (): ReadonlyMap<string, Translation> => base.getRows(),
   getById: (id: string): Translation | undefined => base.getRows().get(id),
   getTranslation: (
     kind: Translation['targetKind'],

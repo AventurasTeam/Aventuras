@@ -1,11 +1,11 @@
-import { normalizeCollisionName } from '@/lib/classifier'
 import type { Entity } from '@/lib/db'
+import { namesakeKey } from '@/lib/world'
 
 export type CollisionTarget = { otherId: string; otherName: string }
 
-// Must reuse the flag writer's namesake rule, or the review surface could
-// disagree with what tripped the flag.
-const keyOf = (e: Entity) => `${e.kind}:${normalizeCollisionName(e.name)}`
+// namesakeKey is the flag writer's rule (lib/world pins it to the classifier's), so the review
+// surface can't disagree with what tripped the flag.
+const keyOf = namesakeKey
 
 /**
  * Flagged rows → the same-kind namesake they collide with. Ranked
