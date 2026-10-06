@@ -58,8 +58,11 @@ type CollisionResolveDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   entityA: EntitySummary // older by createdAt; default canonical
-  entityB: EntitySummary // newer; the flagged row in v1
+  entityB: EntitySummary // newer
+  /** Rejects with an Error whose message is user-facing text; the dialog shows it inline. */
   onResolve: (resolution: Resolution) => Promise<void>
+  /** Set while a write is gated (a turn in flight): every submit disables and shows it. */
+  blockedReason?: string
 }
 ```
 
@@ -72,11 +75,11 @@ internally — caller data is the source of truth.
 ```ts
 type EntitySummary = {
   id: string
-  kind: 'character' | 'location' | 'item' | 'faction'
+  kind: EntityKind // from lib/db, as are Entity and InjectionMode
   createdAt: string // ISO
   name: string
   description?: string
-  status: EntityStatus
+  status: Entity['status']
   retiredReason?: string
   injectionMode: InjectionMode
   priority: number
@@ -86,17 +89,41 @@ type EntitySummary = {
   relationCounts: {
     awarenessRows: number
     involvements: number
+    /** This side's relationship rows except the one joining the pair. */
+    relationships: number
+    /** A relationship row joins the two sides; the merge drops it. */
+    joiningRelationship: boolean
+    /** Holders that will drop the item count; the pair partner doesn't. */
     inverseRefs: number
     embeddings: 0 | 1
+    /** Dropped with the merge: the entity's translations and its relationships'. */
     translationRows: number
+    /** Items this side carries that nothing else holds or places. */
+    unheldItems: number
+    /** What gives way when this side loses: the other side already has it. */
+    overlap: {
+      awareness: number
+      involvements: number
+      relationships: number
+      holdersLosingItem: number
+    }
   }
 }
 ```
 
 Each side carries its own `relationCounts`. The merge body's
-relations-summary block shows the **non-canonical**'s counts (the
-ones that will move on merge), so toggling canonical flips the
-displayed counts to the other side.
+relations-summary block shows the **non-canonical**'s counts (what
+the merge carries over or drops), so toggling canonical flips the
+displayed counts to the other side. The World consumer builds both
+sides from the stores: link counts with the entity cascade's own
+predicates, inverse refs across the six ref fields without the
+pair partner (a ref between the two collapses rather than moves),
+`embeddings` as 1 when the row isn't `embedding_stale`, and
+`overlap` as the rows of this side the other side already has: its
+awareness rows and involvements in a happening the other side is
+in, its relationships with a character the other side relates to,
+and, for an item, its holders who lose it because the other item
+already has a position.
 
 `state` is opaque (`Record<string, unknown>`). The dialog only
 deep-equals it to decide whether to render the inline note
@@ -122,7 +149,13 @@ type Resolution =
     }
   | { mode: 'keep' }
 
-type ScalarField = 'name' | 'description' | 'status' | 'retiredReason' | 'injectionMode'
+type ScalarField =
+  | 'name'
+  | 'description'
+  | 'status'
+  | 'retiredReason'
+  | 'injectionMode'
+  | 'priority'
 ```
 
 `fieldChoices` only carries entries for fields that diverge.
@@ -130,13 +163,17 @@ Identical-on-both-sides fields stay implicit (caller writes
 canonical's value unconditionally). `finalKeywords` is the union of
 both sides' keywords, deduplicated under the normalization
 `matchTerms` uses so a case variant does not survive as a second
-entry. `finalTags` is the union after
-the user's deselects are applied — empty array is allowed (entity
-becomes untagged).
+entry, a shared one in the canonical's spelling. `finalTags` is the
+union after the user's deselects are applied — empty array is
+allowed (entity becomes untagged). When the two sides agree on a
+list (its partition is `null`), the dialog submits the canonical's
+own list as it is, so the merge never writes an unchanged list.
 
 The rename array is sparse: only entities whose name actually
-changed are included. Validation enforces that at least one entry
-is present.
+changed are included, trimmed. Validation: both trimmed names must be
+non-empty and must stop colliding under the namesake rule (same
+kind, same `normalizeTerm` name), so a case-only change still
+collides; the action refuses `invalid-rename` otherwise.
 
 ### Divergence computation
 
@@ -155,8 +192,14 @@ type DiffPayload = {
   whitespace-normalized. The right way to converge cosmetic
   whitespace differences is to edit one side in the detail pane,
   not paper over divergence at the dialog level.
-- **Keywords** — partitioned identically to tags, and unioned by the
-  same rule. They are retrieval-targeted rather than decorative, so
+- **Keywords** — partitioned like tags, but by `normalizeTerm`: a
+  case variant on the other side is the same keyword, shown in the
+  first spelling seen after trimming and de-duplicating (blanks
+  drop), and `null` when both sides hold the same keywords under
+  normalization. Shared keywords are shown and submitted in the
+  canonical's spelling; the deselect follows the keyword, not its
+  spelling. Unioned by the same rule. Tags still compare exactly.
+  They are retrieval-targeted rather than decorative, so
   taking the canonical side's set alone would silently narrow what the
   merged entity can be matched by — the losing side's aliases are
   exactly the references prose already used for this character. See
@@ -166,8 +209,8 @@ type DiffPayload = {
 - **State** — structural deep-equal: sort keys, compare leaves.
 
 `divergentScalars` preserves a fixed field order
-(name, description, status, retiredReason, injectionMode) for stable
-rendering — order isn't data-dependent.
+(name, description, status, retiredReason, injectionMode, priority)
+for stable rendering — order isn't data-dependent.
 
 ### Merge reducer
 
@@ -176,14 +219,21 @@ type MergeState = {
   canonicalId: string
   fieldChoices: Record<ScalarField, 'A' | 'B'>
   deselectedTags: string[]
+  /** `normalizeTerm` keys, so a deselect follows the keyword across spellings. */
   deselectedKeywords: string[]
 }
 
 type MergeAction =
-  | { type: 'pick-canonical'; id: string }
+  | { type: 'pick-canonical'; id: string; entityAId: string }
   | { type: 'pick-field'; field: ScalarField; side: 'A' | 'B' }
   | { type: 'toggle-tag'; tag: string }
-  | { type: 'reset'; diff: DiffPayload; defaultCanonicalId: string }
+  | { type: 'toggle-keyword'; keyword: string }
+  | {
+      type: 'reset'
+      diff: DiffPayload
+      defaultCanonicalId: string
+      entityAId: string
+    }
 ```
 
 Transition rules:
@@ -196,7 +246,8 @@ Transition rules:
 - **`pick-field`** — overrides a single scalar without touching the
   canonical or other choices.
 - **`toggle-keyword`** — same shape as `toggle-tag`, against
-  `deselectedKeywords`.
+  `deselectedKeywords`; the reducer normalizes the keyword to its
+  key.
 - **`toggle-tag`** — adds or removes a tag from `deselectedTags`.
   `finalTags` is derived in the view as `union - deselectedTags`
   (sorted).
@@ -204,19 +255,25 @@ Transition rules:
   in practice the dialog is keyed by entity ids so unmount handles
   most cases.
 
-Initial state: `canonicalId` = `defaultCanonicalId`, `fieldChoices`
-sets each field to whichever side matches the canonical, and
-`deselectedTags = []`.
+`pick-canonical` and `reset` carry `entityAId` so the reducer can
+tell which side the canonical is. Initial state: `canonicalId` =
+`defaultCanonicalId`, `fieldChoices` sets each field to whichever
+side matches the canonical, and `deselectedTags = []` and
+`deselectedKeywords = []`.
 
 ### Submit-enabled rules
 
 - **Merge** — always enabled once the canonical is picked. Init
   defaults canonical to A, so this is true from open. The user
   cannot get stuck in an un-submittable state.
-- **Rename** — enabled when at least one of the two name inputs
-  differs from its current value
-  (`a !== entityA.name || b !== entityB.name`).
+- **Rename** — enabled when both trimmed names are non-empty and
+  no longer collide under the namesake rule. A case-only change
+  still collides, so leaving both names as they are never enables
+  it.
 - **Keep** — always enabled.
+- **Blocked** — while `blockedReason` is set, every submit
+  disables and the reason shows under the footer. The caller's
+  action refuses a write in flight regardless.
 
 ### Bodies
 
@@ -224,13 +281,20 @@ sets each field to whichever side matches the canonical, and
 
 1. **Canonical picker** — segment toggle (Select primitive in
    segment mode) with two options:
-   `<A.name> · <ago(A.createdAt)>` /
-   `<B.name> · <ago(B.createdAt)>`. The `(canonical)` suffix
-   appears on the selected side.
+   `<A.name> · <relative time>` /
+   `<B.name> · <relative time>`, the wall-clock relative time
+   History renders (`relativeTimeLabel`). A `· Canonical` suffix
+   appears on the selected side. On phone the picker renders as
+   full-width radio rows, since a half-width segment label clips.
 2. **Divergent-field table** — one row per divergent scalar.
    Each row: field label · radio for A's value · radio for B's
    value. Identical fields are omitted entirely. Empty when no
-   scalars diverge.
+   scalars diverge. Where the choices sit side by side (web above
+   phone), a header row names the sides `Older · <relative time>` /
+   `Newer · <relative time>`, the canonical's with the `· Canonical`
+   suffix; on stacked tiers (phone, or any native tier) each choice
+   carries that caption itself instead, and each field is one
+   `radiogroup` named by the field label.
 3. **Keyword union** (when `diff.keywords != null`) — single row
    labeled "Keywords", identical in shape to the tag row below it and
    rendered directly above it.
@@ -242,22 +306,36 @@ sets each field to whichever side matches the canonical, and
    muted text: "`state` will follow the canonical row · edit on
    detail pane after merge."
 6. **Relations summary** — read-only block showing non-canonical's
-   counts: "Awareness rows: N · Involvements: N · Inverse refs: N ·
-   Embeddings: N · Translation rows: N." Counts re-derive when
-   canonical flips.
+   counts: awareness rows, involvements, relationships, inverse
+   refs, embeddings, items left unheld, and translation rows as
+   dropped. Footnotes, each shown only when its count is non-zero:
+   awareness rows and involvements the canonical already has (it
+   keeps its own, the duplicates drop), relationships with a
+   character the canonical already relates to (it keeps its own
+   views, taking the duplicate's only where blank), holders who lose
+   an item because the canonical item is already held or placed, and
+   the relationship between the two being dropped. Counts re-derive
+   when canonical flips.
 7. **Footer** — `[ Cancel ]` · `[ Merge into <canonical-name> ]`.
    The primary button echoes the canonical pick so the destructive
    direction is obvious.
 
-**Rename** — two stacked text inputs, one per entity, labeled with
-the entity id and age (`ent_kael_1 · 12 turns ago`). Each input
-initialized to the entity's current name. Inline help: "Change at
-least one name to clear the collision." Footer:
-`[ Cancel ]` · `[ Save renames ]`.
+**Rename** — two stacked text inputs, one per entity, labeled
+`Older · <relative time>` / `Newer · <relative time>`. Each input
+initialized to the entity's current name. Inline help states the
+rule, and names the failing one while Save is disabled; an
+untouched form shows the plain prompt to change a name instead.
+Footer: `[ Cancel ]` · `[ Save renames ]`.
 
 **Keep as distinct** — single muted paragraph (verbatim from
 [`world.md → Keep as distinct`](../screens/world/world.md#keep-as-distinct)),
 footer: `[ Cancel ]` · `[ Keep as distinct ]`.
+
+**Phone tier** — the dialog stays a Modal. In the merge table,
+prose values (`description`, `retiredReason`) clamp to 3 lines, and
+tapping the prose expands that value in place, apart from its
+radio's tap target. Each radio shows an inline age caption under
+its value.
 
 ## `CollisionListRow`
 
@@ -317,20 +395,8 @@ Not `region`: that would make each flagged row its own landmark.
   the caller's responsibility. The dialog handles 2-side merges
   only per
   [`world.md → Authorship and 3+ collisions`](../screens/world/world.md#authorship-and-3-collisions).
-- **Disabled-while-generating gating on the `Resolve →` button** —
-  the caller passes `collision.resolveDisabled` and its reason; the
-  dialog and strip are unaware of generation state itself. The
+- **Disabled-while-generating gating** — the caller passes the
+  strip `collision.resolveDisabledReason` and the dialog
+  `blockedReason`; neither is aware of generation state itself. The
   [edit-restrictions rule](../principles.md#edit-restrictions-during-in-flight-generation)
   is enforced at the World consumer.
-
-## Open items
-
-- **Real DB-write drivers per resolution path.** Merge / Rename /
-  Keep drivers writing entities + happening_awareness +
-  happening_involvements + translations deltas under a single
-  `action_id`. World consumer (`app/(story)/world/...` route) wires
-  these. Dialog ships with stub drivers in stories only.
-- **Phone-tier prose clamp on merge body.** 3-line clamp +
-  tap-to-expand on long descriptions per
-  [`world.md → Merge`](../screens/world/world.md#merge). Stories
-  cover desktop wrap; phone tier deferred to v1 mobile pass.

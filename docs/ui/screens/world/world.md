@@ -487,6 +487,9 @@ cascade covers:
     `currentLocationId`, so the next turn doesn't inherit it. Earlier
     entries keep the id and render it as an Unknown-entity chip
     ([`entry-card.md → World-state panel`](../../patterns/entry-card.md#world-state-panel)).
+  - **Orphaned collision flags.** A flagged row the delete leaves
+    with no same-kind namesake has its flag cleared in the same
+    action ([Surfacing](#surfacing)).
 - **Lore.** The row, its translations and its vectors in every dim
   family.
 - **A thread.** The row, its translations and its vectors in every
@@ -823,6 +826,18 @@ lands on: keyboard focus on web, the screen reader's on native.
 On web, a surface that takes focus before the jump lands (a menu
 opened in the meantime) keeps it.
 
+A row's namesakes are the other rows of its kind whose names match
+under the classifier's normalization (trimmed and case-folded),
+staged and retired rows included. A flagged row with no namesake
+left (an orphan) has nothing to pair with, so it gets no strip and
+counts toward no pill or badge. Writes keep orphans from forming: a
+rename (a detail-pane Save, or the dialog's [Rename](#rename)) or a
+[delete](#delete) that leaves a flagged row without a namesake
+clears that row's flag in the same action, delta-logged, so CTRL-Z
+re-flags it. A reversal can still leave one, such as undoing a
+namesake's create; it stays hidden until a later namesake pairs it
+again, and resolving that pair clears it.
+
 A "Needs review" filter chip was considered and rejected:
 filter chips are for browsing modes, and a collision is an
 attention signal. Filtering layered an extra tap between the
@@ -843,11 +858,23 @@ path collapses the dialog to a different body shape (below).
 All paths are dismissible without writes (`Cancel` in the footer
 or Esc).
 
+When the open row has unsaved edits, `Resolve →` routes through
+the pane's Save / Discard / Cancel guard first, as [Delete](#delete)
+does. While open, the dialog reads both rows live: it closes on its
+own once either row is gone or the two stop colliding (a rename on
+another surface), and when the screen loses focus. A refusal shows
+inline in the dialog, which stays open. After a resolution the list
+re-derives — the pill count drops and the strip goes; with 3+
+namesakes, another flagged row keeps its strip
+([Authorship and 3+ collisions](#authorship-and-3-collisions)).
+
 #### Merge
 
 The body renders the two rows side-by-side with a **canonical
 picker** at the top: a segment toggle picking which row's `id`
-survives. The non-canonical row is deleted at end-of-merge.
+survives, the selected side marked `· Canonical` (full-width radio
+rows on phone, where a half-width segment would clip). The
+non-canonical row is deleted at end-of-merge.
 Default selection is the older row by `created_at` — the older
 row tends to have more accumulated state (relations, lore
 links, history), so absorbing the newer one into it preserves
@@ -873,10 +900,13 @@ Field-level rules:
   `retired_reason`, `injection_mode`, `priority`) — radio per row
   when divergent.
 - **`keywords[]`** — union by default with a per-keyword deselect,
-  same shape as tags. Renders only when the two keyword sets
-  differ. Union rather than canonical-side because keywords drive
-  retrieval matching, so dropping the losing side's aliases would
-  narrow what the merged entity can be found by.
+  same shape as tags. Keywords compare by the classifier's term
+  normalization, so a case variant is the same keyword, shown in the
+  canonical's spelling when both rows hold it. Renders only when the
+  two keyword sets differ under that rule; otherwise the merge keeps
+  the canonical's own list as it is. Union rather than canonical-side
+  because keywords drive retrieval matching, so dropping the losing
+  side's aliases would narrow what the merged entity can be found by.
 - **`tags[]`** — union by default with a per-tag deselect.
   Renders only when the two tag sets differ.
 - **`state` JSON** — taken whole-side from canonical. Per-field
@@ -894,33 +924,58 @@ Field-level rules:
   independently — the tap zone splits between the radio circle
   and the prose body. Keeps comparison glance-able when prose
   diverges in length.
-- **Side identification.** Desktop column headers (`side A
-(canonical)` / `side B`) carry side identity. On mobile the
-  headers collapse out of view, so each radio's value carries an
-  inline meta caption (`12 turns ago` / `this turn`, same wording
-  as the canonical picker) underneath the prose. Each radio is
+- **Side identification.** On desktop web, a header row above the
+  columns names each side (`Older · 3 days ago`, `Newer · just now`),
+  the canonical's with a `· Canonical` suffix. Stacked tiers (phone,
+  and every native tier) have no header row, so each radio's
+  value carries an inline age caption underneath the prose — the
+  wall-clock relative time the canonical picker shows, since an
+  entity records when it was created, not the turn. Each stacked
+  field is one radio group named by the field. Each radio is
   self-describing without relying on column position.
 
 A **relations summary** below the field table tells the user
-what will move (read-only — relations always follow the
-canonical id):
+what the merge carries over and what it drops (read-only —
+relations always follow the canonical id). It shows the
+non-canonical's counts:
 
-- `Awareness rows: <N>` from non-canonical → canonical.
-- `Involvements: <N>` from non-canonical → canonical.
+- `Awareness rows: <N>` re-created on the canonical.
+- `Involvements: <N>` re-created on the canonical.
+- `Relationships: <N>` re-created on the canonical, one per other
+  character. A relationship between the two rows is dropped; one
+  the canonical already has with the same character keeps the
+  canonical's views, taking the duplicate's only where its own is
+  blank.
 - `Inverse refs: <N>` other entities point at non-canonical via
   `inventory[]`, `equipped_items[]`, `current_location_id`,
   `parent_location_id`, `at_location_id`, or `faction_id` —
-  rewritten to canonical.
-- `Embeddings: 1` vec0 row from non-canonical dropped (the
+  rewritten to canonical. A ref between the two rows doesn't
+  count: it collapses rather than moves. A holder of a
+  non-canonical item drops it instead when the canonical item
+  already has a position ([Reversibility](#reversibility)), and
+  still counts here.
+- `Embeddings: <0|1>` vec0 row from non-canonical dropped (the
   canonical re-embeds if any of its embedded fields changed).
-- `Translation rows: <N>` from non-canonical → canonical.
+- `Items left unheld: <N>` items the non-canonical carries that
+  nothing else holds or places. `state` follows the canonical, so
+  they lose their holder.
+- `Translation rows dropped: <N>` — the non-canonical's and its
+  relationships'. The canonical keeps its own.
 
-UNIQUE-constraint handling is deterministic and not
-user-facing: when an awareness row from non-canonical would
-collide on `(branch_id, character_id, happening_id)` with an
-existing canonical row, the canonical's row stays and the
-loser's row is dropped. Documented inline in the relations
-summary as a footnote when the case fires.
+Duplicate handling is deterministic and not user-facing: when an
+awareness row from non-canonical would collide on
+`(branch_id, character_id, happening_id)` with an existing
+canonical row, the canonical's row stays and the loser's row is
+dropped. An involvement in a happening the canonical already takes
+part in is dropped the same way: the table has no UNIQUE, but two
+involvements of one entity in one happening say nothing one row
+doesn't, and the canonical's `role` stays. A relationship the
+canonical already has with the same character is the UNIQUE
+`(branch_id, a_id, b_id)` case, handled as the list says. A
+footnote under the relations summary counts each of these when the
+case fires, and says when a holder loses an item because the
+canonical item is already held or placed, or that the relationship
+between the two is dropped.
 
 Footer:
 
@@ -931,24 +986,56 @@ Footer:
 The primary button echoes the canonical pick to keep the
 destructive direction obvious.
 
+The merge refuses, with the reason inline and nothing written, when
+the non-canonical is the story's lead (`lead-entity`: the lead
+can't be deleted, see [Delete](#delete) — pick it as the row that
+survives), and when the canonical location descends from the
+non-canonical through another location (`parent-cycle`: rewriting
+that location's parent to the canonical would make the canonical its
+own ancestor — picking the other row as canonical merges cleanly).
+A parent chain the merge touches that already loops or runs past
+the depth cap refuses as `parent-chain-broken`; fix that chain
+first.
+
+**The tail scene.** The tail entry's scene is the next turn's
+retrieval floor, and the newer row a default merge deletes is the one
+a later turn most likely put there. So when the non-canonical is in
+the tail's scene or is its location, the merge points the tail at the
+canonical: the id in `sceneEntities` becomes the canonical's (dropped
+when the canonical is already there), and a `currentLocationId`
+naming the non-canonical becomes the canonical's. The floor seats
+only active rows, so the canonical is also promoted when its merged
+status is `staged`, whatever its kind, even if the status choice was
+left on staged; and a character canonical in the scene takes the
+tail's location when that location is known. No other row is
+written: the scene isn't re-folded and bystanders aren't
+re-anchored. A location merge tracks no characters, since the ref
+rewrite already moves those at the loser. When the tail already
+held the canonical beside the non-canonical, the canonical is still
+tracked to the tail's location, overwriting a manual location edit.
+
 #### Rename
 
 Body is a single inline rename form, two rows stacked:
 
 ```
-char_a1b2c3… (older, 12 turns ago):  [ Kael                       ]
-char_d4e5f6… (newer, this turn):     [ Kael (the guardsman)       ]
+Older · 3 days ago:   [ Kael                       ]
+Newer · just now:     [ Kael (the guardsman)       ]
 ```
 
-Editing either field dirties the form. Save commits both rows
-under one delta `action_id`; the flag clears on the
-formerly-flagged row. No additional reconciliation — both rows
-continue to exist unchanged except for the one that got
-renamed.
+Editing either field dirties the form. Save commits under one
+delta `action_id`: an `updateEntity` per row whose name changed,
+and the flag cleared on each flagged row of the pair (folded into
+that row's rename when it has one). Any other flagged row the
+rename leaves with no namesake has its flag cleared too
+([Surfacing](#surfacing)). No other writes — both rows continue to
+exist. Names save trimmed.
 
-Validation: at least one of the two names must change
-(otherwise the collision is unresolved). Save disables until
-that holds.
+Validation: both trimmed names must be non-empty and must stop
+colliding under the namesake rule ([Surfacing](#surfacing)), so a
+change of letter case alone still collides. Save disables until
+that holds, and the help line says which rule fails (an untouched
+form shows the plain prompt to change a name).
 
 #### Keep as distinct
 
@@ -968,9 +1055,11 @@ Footer:
 [ Cancel ]                              [ Keep as distinct ]
 ```
 
-Confirming clears the flag on the newer row without writing
-anything else. The user is opting into the v1 limitation with
-eyes open.
+Confirming clears the flag on each flagged row of the pair, one
+delta per row, without writing anything else. Clearing only the
+newer row would leave an older flagged row, or a pair flagged on
+both sides, with no way to resolve it. The user is opting into the
+v1 limitation with eyes open.
 
 ### Reversibility
 
@@ -978,19 +1067,65 @@ All three paths write deltas under a single `action_id` so
 [CTRL-Z rollback](../../../data-model.md#entry-mutability--rollback)
 unwinds the resolution as one step.
 
-Merge writes:
+Merge writes, in order:
 
-- `entities` op=`update` on canonical (changed fields).
-- `entities` op=`delete` on non-canonical (full
-  `undo_payload` carries the row).
-- `happening_awareness` op=`update`/`delete` per affected row.
-- `happening_involvements` op=`update`/`delete` per affected
-  row.
-- `entities` op=`update` on every other entity that held an
-  inverse ref to non-canonical (state JSON paths rewritten).
-- `translations` op=`update` per affected row.
-- The loser is dropped from the tail scene, as the entity
-  [delete](#delete) arm does — not rewritten to the canonical.
+- `entities` op=`update` on canonical: the scalars taken from the
+  non-canonical, the tag and keyword unions, `state` when it held a
+  ref to the non-canonical (the ref collapses — a scalar nulls, an
+  array drops it — since a location can't parent itself), the
+  non-canonical's `at_location_id` when the canonical item has no
+  position of its own (no holder, no placement), so a merged item is
+  never left nowhere, and the flag clear when the canonical is
+  flagged.
+- `entities` op=`update` on every other entity that held a ref to
+  the non-canonical: its `state` paths rewritten to the canonical,
+  one patch per entity. An item has at most one position
+  ([`data-model.md → ItemState shape`](../../../data-model.md#itemstate-shape)),
+  so when the canonical item is already held or placed by
+  `at_location_id`, a character holding the non-canonical drops it
+  instead of pointing at the canonical; otherwise its holders point
+  at the canonical. Within one character, `equipped_items` and
+  `inventory` count as one list for that de-duplication, equipped
+  winning.
+- `happening_awareness` op=`create` per moved row, on the
+  canonical, carrying the row's `retrieval_count`. A row for a
+  happening the canonical already knows isn't moved.
+- `happening_involvements` op=`create` per moved row, on the
+  canonical. One in a happening the canonical already takes part in
+  isn't moved.
+- `character_relationships` op=`create` (op=`update` when the
+  canonical already has a row with that character) per character
+  the non-canonical relates to, the views merged with the
+  canonical's non-null view winning; no write when the canonical's
+  row already holds them. The row keeps `a_id < b_id`, so a view
+  changes column when the order flips. A relationship between the
+  two rows isn't moved.
+- `story_entries` metadata update on the tail entry when its scene
+  names the non-canonical, or it is the tail's location
+  ([Merge](#merge), the tail scene).
+- `entities` op=`delete` on non-canonical, through the entity
+  [delete](#delete) arm: its `undo_payload` carries the row and
+  holds its original link rows and translations (its own and its
+  relationships'), which the cascade removes. Translations are
+  dropped, not moved: a translation belongs to a value the
+  canonical may not take, and the canonical keeps its own.
+- When the tail was rewritten, the canonical's scene effects: a
+  promotion to `active` when its merged status is `staged` (folded
+  into the canonical's update above when that already writes
+  `status`, else its own `op=update`), and, for a character, the
+  tail's location as its `current_location_id` (folded into the
+  canonical's `state` patch when it has one, else its own
+  `op=update`).
+
+Moved link rows are new rows with new ids, so their edits from
+before the merge stay with the originals in the delete's payload.
+They are user creates, though: a prose edit's sweep that reverses
+the classifier pass which made the originals leaves the copies on
+the canonical (rollback and regenerate sweep the merge group too and
+take them). CTRL-Z restores the non-canonical (still flagged), its
+original link rows and translations, the refs, the tail scene and
+the canonical's earlier status and location, and removes the rows
+the merge created on the canonical.
 
 Embeddings are not delta-logged
 ([`data-model.md → embeddings`](../../../data-model.md#diagram)) —
@@ -1001,8 +1136,10 @@ re-embeds at the next pre-retrieval sync stage, per the
 The user-visible behavior is "merge is reversible" — the
 non-trivial wiring lives below the surface.
 
-Rename and keep-as-distinct are similarly grouped and unwind
-identically.
+Rename writes an `entities` op=`update` per renamed row, and one
+per flag it clears on a row it doesn't rename. Keep as distinct
+writes one `entities` op=`update` per flagged row of the pair. Both
+unwind as one step, like the merge.
 
 ### Edit restrictions during in-flight generation
 
@@ -1010,21 +1147,34 @@ The resolve dialog is a write surface; per
 [`principles.md → Edit restrictions during in-flight generation`](../../principles.md#edit-restrictions-during-in-flight-generation),
 the `Resolve →` button is disabled while narrative or
 chapter-close generation is running, with the same disabled-
-tooltip language as the entity save bar. The pill and filter
-chip stay visible — discovery isn't gated, only the write.
+tooltip language as the entity save bar. A dialog already open
+when generation starts stays open, with every submit disabled and
+that reason under its footer; the write refuses while generation
+is in flight regardless. The pill and strips stay visible —
+discovery isn't gated, only the write.
 
 ### Authorship and 3+ collisions
 
-Resolution writes deltas with `source = user_edit`. The flag
-itself is classifier-written
-([authorship contract](../../../data-model.md#authorship-contract)
-keeps `name_collision_flag` on the classifier side); resolution
-is always user-authored.
+Resolution writes deltas with `source = user_edit`. The classifier
+sets the flag at create
+([authorship contract](../../../data-model.md#authorship-contract));
+clearing it is always a user write, delta-logged, so CTRL-Z
+re-flags the row. What a resolution writes counts as the user's
+for [user precedence](../../../memory/cadence.md#user-edits-and-classifier-writes):
+a classifier fact from prose older than the resolution doesn't
+overwrite it. That includes a relationship view the merge carries
+over from the non-canonical, though the classifier first wrote it.
+Only what the resolution changes counts — an unchanged column isn't
+written.
 
 The dialog handles two-side merges only. When 3+ entities
 collide on the same name, the user iterates: resolve any pair,
-the remaining pair re-surfaces in the filter view on the next
-open. N-way merge UI is not v1.
+and a flagged row outside it keeps its strip, now paired with a
+remaining namesake. A strip names one partner per flagged row, an
+unflagged namesake first, and keep or rename clears the flag on each
+flagged row of the resolved pair even when that row has another
+namesake the strip never named. So a remainder re-surfaces only
+while it is itself flagged. N-way merge UI is not v1.
 
 ## Mobile expression
 
@@ -1136,19 +1286,17 @@ overflows.
   [responsive contract](../../foundations/mobile/responsive.md).
   2-pane (list ~340 px, detail ~360–560 px); cramped but usable.
   Tab-strip overflow rule applies per the tablet column.
-- **Resolve dialog reflows** to Sheet (tall ~95 %) on phone per
-  [`mobile/layout.md → Surface bindings`](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces).
-  The merge body's three-column field grid
-  ([Merge](#merge)) collapses to single column: each divergent
-  field renders as a section (field name as section header,
-  side A radio + value, side B radio + value, each with its own
-  meta caption to retain side identity). Column headers (`field`
-  / `side A` / `side B`) hide on mobile — the per-section
-  structure carries the layout. Canonical picker stacks
-  vertically (segments full-width). Long-prose values clamp to
-  3 lines with tap-to-expand. Relations summary stays
-  single-column; always vertical. Action footer pins to the
-  Sheet bottom.
+- **Resolve dialog stays a Modal** on phone, as a short Modal does
+  per
+  [`mobile/layout.md → Mapping — desktop to mobile`](../../foundations/mobile/layout.md#mapping--desktop-to-mobile);
+  it has no Sheet expression. Its body scrolls and its footer stays
+  put. The merge body's column grid ([Merge](#merge)) stacks: each
+  divergent field is a section (field name as header, then a radio
+  row per side), and with no column headers to read, each radio
+  carries an inline age caption under its value. The canonical
+  picker becomes full-width radio rows, and prose values clamp to 3
+  lines with tap-to-expand, the tap zone split from the radio's.
+  The relations summary stays single-column.
 - **Top-bar review pill** collapses on phone parallel to the
   [generation pill](../../principles.md#universal-in-story-chrome).
   The `need review` label drops; the warn glyph and the count
