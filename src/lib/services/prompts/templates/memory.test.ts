@@ -152,6 +152,22 @@ describe('interactive-lorebook', () => {
     expect(without).toBe('make her taller')
   })
 
+  it('points a focused lorebook at the entry tools rather than saying no read is needed', async () => {
+    const vars = { userMessage: 'add an entry', focusedEntityRecord: '{ "entryCount": 2 }' }
+    const character = await engine.parseAndRender(template.userContent!, {
+      ...vars,
+      focusedEntityType: 'character',
+    })
+    const lorebook = await engine.parseAndRender(template.userContent!, {
+      ...vars,
+      focusedEntityType: 'lorebook',
+    })
+
+    expect(character).toContain("so you don't need to read it first")
+    expect(lorebook).not.toContain("you don't need to read it")
+    expect(lorebook).toContain('`list_entries` and `read_entry`')
+  })
+
   it('tells the model the entity is gone, ahead of the message', async () => {
     const out = await engine.parseAndRender(template.userContent!, {
       userMessage: 'make her taller',
