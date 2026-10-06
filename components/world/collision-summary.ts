@@ -41,10 +41,7 @@ function linksOf(id: string, sources: CollisionSources) {
 const otherEnd = (row: CharacterRelationship, id: string) => (row.aId === id ? row.bId : row.aId)
 const joins = (row: CharacterRelationship, id: string) => row.aId === id || row.bId === id
 
-/**
- * `partner` is the pair's other row. The merge drops the relationship joining the two rather than
- * moving it, and collapses the partner's ref to this row instead of rewriting it.
- */
+/** The merge drops the relationship joining the pair and collapses `partner`'s ref to this row. */
 function summarize(entity: Entity, partner: Entity, sources: CollisionSources): EntitySummary {
   const links = linksOf(entity.id, sources)
   const partnerLinks = linksOf(partner.id, sources)

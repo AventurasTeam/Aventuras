@@ -36,8 +36,7 @@ type Mode = 'merge' | 'rename' | 'keep'
 
 type Side = 'A' | 'B'
 
-// world.md → Merge: where choices stack (phone, and native at any tier), prose values clamp and
-// expand in place.
+// world.md → Merge: stacked choices clamp prose values and expand them in place.
 const PROSE_FIELDS: ReadonlySet<ScalarField> = new Set<ScalarField>([
   'description',
   'retiredReason',
@@ -397,8 +396,7 @@ function MergeBody({
           <Text size="sm" variant="muted">
             {t('collisionDialog.divergentFields')}
           </Text>
-          {/* world.md → Merge, side identification: column headers name each side where the
-              choices sit side by side; stacked choices carry their own caption. */}
+          {/* world.md → Merge, side identification: stacked choices carry their own caption. */}
           {!stacked && (
             <View className="flex-row gap-2">
               {(['A', 'B'] as const).map((side) => {
@@ -641,8 +639,7 @@ type StackedChoiceProps = {
   disabled?: boolean
 }
 
-// world.md → Merge on mobile: the radio and the prose are separate tap targets, and the caption
-// names the side because the column headers are gone.
+// world.md → Merge on mobile: radio and prose are separate taps; the caption names the side.
 function StackedChoice({ value, caption, prose, selected, onPick, disabled }: StackedChoiceProps) {
   const [expanded, setExpanded] = useState(false)
   return (

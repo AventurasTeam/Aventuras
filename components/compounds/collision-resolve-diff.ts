@@ -38,10 +38,9 @@ export type EntitySummary = {
     /** Items this side carries that nothing else holds or places; a merge leaves them unheld. */
     unheldItems: number
     /**
-     * What gives way when this side loses, because the other side already has it: awareness and
-     * involvement rows dropped, relationships whose other end the partner already relates to
-     * (the partner keeps its own views), and, on an item, holders who lose it because the partner
-     * item already has a position (held or placed). Mirrors `EntityMergePlan.dropped`.
+     * What gives way when this side loses because the partner already has it: awareness and
+     * involvement rows, relationships to an end the partner already relates to, and item holders
+     * when the partner item has a position. Mirrors `EntityMergePlan.dropped`.
      */
     overlap: {
       awareness: number
@@ -147,10 +146,9 @@ export function keywordUnion(
 }
 
 /**
- * What a merge submits for a term list: the canonical's own entries in their stored order, minus
- * the deselected, then the other side's additions (`offered` order). A selection equal to the
- * canonical's set therefore comes back as the canonical's list, which the planner doesn't write.
- * `keyOf` is the identity a deselect is recorded under.
+ * What a merge submits for a term list: the canonical's own entries in stored order minus the
+ * deselected, then the other side's additions in `offered` order, so an unchanged selection is the
+ * canonical's list, which the planner doesn't write. `keyOf` is what a deselect is recorded under.
  */
 export function selectedTerms({
   own,

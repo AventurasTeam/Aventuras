@@ -331,10 +331,8 @@ export const MergeCanonicalFlip: Story = {
 }
 
 export const MergeLoading: Story = {
-  // Visual-only: the dialog gates close while submitting (`handleOpenChange`),
-  // so the never-resolving driver leaves
-  // body scroll-locked between tests. Skipped from vitest via
-  // `tags: { exclude: ['no-vitest'] }` in vitest.config.ts.
+  // Visual-only: `handleOpenChange` gates close while submitting, so the never-resolving driver
+  // leaves body scroll locked between tests; vitest.config.ts excludes the `no-vitest` tag.
   tags: ['no-vitest'],
   render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveLoading} />,
   play: async () => {

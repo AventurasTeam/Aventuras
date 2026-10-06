@@ -128,9 +128,8 @@ export function itemHasPosition(item: Entity, branchEntities: readonly Entity[])
 }
 
 /**
- * Holders of the `loser` item who end up without it when it merges into `canonical`: the canonical
- * already has a position, so they don't move to it, and they don't carry it themselves. A holder
- * of both copies keeps one.
+ * Holders of `loser` left without the item when it merges into `canonical`: `canonical` already has
+ * a position so they don't move to it, and they don't hold it (a holder of both copies keeps one).
  */
 export function holdersLosingItem(
   loser: Entity,
