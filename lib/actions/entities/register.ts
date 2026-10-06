@@ -46,6 +46,8 @@ type EntityUpdatePatch = Partial<{
   keywords: string[]
   priority: number
   state: EntityState
+  /** User paths only clear the flag; the classifier sets it at create. */
+  nameCollisionFlag: 0
 }>
 
 declare module '@/lib/actions/action-map' {
@@ -70,6 +72,7 @@ export const UPDATABLE = [
   'keywords',
   'priority',
   'state',
+  'nameCollisionFlag',
 ] as const
 
 function fullRow(entry: NewEntity): Entity {
@@ -167,6 +170,12 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   const scalars = entityWriteSchema.partial().safeParse(patch)
   if (!scalars.success)
     return { status: 'rejected', reason: `invalid entity patch: ${scalars.error.message}` }
+  // entityWriteSchema omits the flag, so the parse above strips it instead of checking it.
+  if ('nameCollisionFlag' in patch && patch.nameCollisionFlag !== 0)
+    return {
+      status: 'rejected',
+      reason: 'invalid entity patch: nameCollisionFlag can only be cleared',
+    }
 
   if (patch.state !== undefined) {
     const parsed = entityStateSchemaForKind(current.kind).safeParse(patch.state)

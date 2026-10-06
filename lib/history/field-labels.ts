@@ -18,6 +18,7 @@ const ENTITY: Labels = {
   tags: () => t('history:field.tags'),
   keywords: () => t('history:field.keywords'),
   priority: () => t('history:field.priority'),
+  nameCollisionFlag: () => t('history:field.nameCollisionFlag'),
   state: () => t('history:field.state'),
   'state.visual': () => t('history:field.visual'),
   'state.visual.physique': () => t('history:field.physique'),
