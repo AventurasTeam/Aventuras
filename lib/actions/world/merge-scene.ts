@@ -3,7 +3,6 @@ import type { DeleteTail } from '@/lib/world'
 
 import type { PipelineAction } from '../types'
 
-type MetadataRewrite = Extract<PipelineAction, { kind: 'updateStoryEntryMetadata' }>
 type CanonicalUpdate = Extract<PipelineAction, { kind: 'updateEntity' }>
 
 /**
@@ -18,15 +17,10 @@ export function withMergeSceneEffects(input: {
   tail: DeleteTail | null
 }): PipelineAction[] {
   const { branchId, actions, canonical, tail } = input
-  const rewrite = actions.find(
-    (a): a is MetadataRewrite => a.kind === 'updateStoryEntryMetadata' && a.payload.id === tail?.id,
+  const rewritesTail = actions.some(
+    (a) => a.kind === 'updateStoryEntryMetadata' && a.payload.id === tail?.id,
   )
-  if (tail == null || rewrite == null) return [...actions]
-  const { metadata } = rewrite.payload
-  const scene = metadata.sceneEntities ?? tail.sceneEntities
-  const location =
-    metadata.currentLocationId === undefined ? tail.currentLocationId : metadata.currentLocationId
-  const inScene = scene.includes(canonical.id)
+  if (tail == null || !rewritesTail) return [...actions]
 
   const update = actions.find(
     (a): a is CanonicalUpdate => a.kind === 'updateEntity' && a.payload.id === canonical.id,
@@ -44,8 +38,10 @@ export function withMergeSceneEffects(input: {
     else patch = { ...patch, status: 'active' }
   }
 
-  // A merge never changes a character's tail location, so a null one is "never known", not a clear.
-  if (canonical.kind === 'character' && inScene && location != null) {
+  // A rewritten tail always seats a character canonical in its scene, and never changes its location,
+  // so a null one is "never known", not a clear.
+  const location = tail.currentLocationId
+  if (canonical.kind === 'character' && location != null) {
     if (patch.state == null)
       added.push({
         kind: 'updateEntityLocationTracking',

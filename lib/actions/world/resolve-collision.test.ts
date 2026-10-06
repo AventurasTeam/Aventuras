@@ -711,6 +711,27 @@ describe('resolveCollision — merge seats the canonical in the tail scene', () 
     expect((await entityRow('char_a'))?.status).toBe('active')
   })
 
+  it("promotes a retired canonical given the loser's staged status; CTRL-Z re-retires it, redo is exact", async () => {
+    await setStatus('char_a', 'retired')
+    await setStatus('char_b', 'staged')
+    const before = await worldSnapshot()
+
+    const resolution = { ...MERGE_B_INTO_A, fromLoser: ['status'] as const }
+    expect(await resolveCollision('b1', resolution, ctx)).toEqual({ status: 'ok' })
+    const merged = await worldSnapshot()
+
+    expect((await entityRow('char_a'))?.status).toBe('active')
+
+    const group = await undoAll()
+
+    expect(await worldSnapshot()).toEqual(before)
+    expect((await entityRow('char_a'))?.status).toBe('retired')
+
+    await applyRedo(group, ctx)
+
+    expect(await worldSnapshot()).toEqual(merged)
+  })
+
   it("keeps the loser's retired status over a staged canonical: only staged is promoted", async () => {
     await setStatus('char_a', 'staged')
     await setStatus('char_b', 'retired')
