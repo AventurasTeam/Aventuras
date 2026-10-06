@@ -123,6 +123,17 @@ function keywordPartition(a: readonly string[], b: readonly string[]): TermParti
   return { onlyInA, onlyInB, both }
 }
 
+/** The keyword chips a merge offers, sorted; a shared keyword takes the canonical's spelling. */
+export function keywordUnion(
+  partition: TermPartition,
+  canonicalKeywords: readonly string[],
+): string[] {
+  if (partition == null) return []
+  const canonicalSpelling = firstSpellings(canonicalKeywords)
+  const shared = partition.both.map((term) => canonicalSpelling.get(normalizeTerm(term)) ?? term)
+  return [...shared, ...partition.onlyInA, ...partition.onlyInB].sort()
+}
+
 export function computeDivergence(a: EntitySummary, b: EntitySummary): DiffPayload {
   return {
     divergentScalars: SCALAR_FIELDS.filter((f) => a[f] !== b[f]),

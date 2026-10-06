@@ -147,6 +147,7 @@
     "canonicalHint": "Canonical (this row survives)",
     "canonicalLabel": "Canonical",
     "canonicalOption": "{{name}} · {{when}}",
+    "canonicalSuffix": "{{label}} · Canonical",
     "olderSide": "Older · {{when}}",
     "newerSide": "Newer · {{when}}",
     "divergentFields": "Divergent fields",

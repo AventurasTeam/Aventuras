@@ -16,11 +16,13 @@ import { Select, type SelectOption } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
 import { relativeTimeLabel, t } from '@/lib/i18n'
+import { normalizeTerm } from '@/lib/keyword-terms'
 import { cn } from '@/lib/utils'
 import { RENAME_ISSUE, renameIssue, type RenameIssue } from '@/lib/world'
 
 import {
   computeDivergence,
+  keywordUnion,
   type DiffPayload,
   type EntitySummary,
   type Resolution,
@@ -66,6 +68,10 @@ type BodyProps = {
 
 function ageOf(entity: EntitySummary, nowMs: number): string {
   return relativeTimeLabel(Date.parse(entity.createdAt), nowMs)
+}
+
+function markCanonical(label: string, canonical: boolean): string {
+  return canonical ? t('collisionDialog.canonicalSuffix', { label }) : label
 }
 
 function sideCaption(side: Side, entity: EntitySummary, nowMs: number): string {
@@ -272,7 +278,8 @@ function MergeBody({
   blockedReason,
   error,
 }: MergeBodyProps) {
-  const phone = useTier() === 'phone'
+  // Web tiers above phone lay the choices out in columns; native stacks them at every tier.
+  const stacked = useTier() === 'phone' || Platform.OS !== 'web'
   const [state, dispatch] = useReducer(mergeReducer, undefined, () =>
     initMergeState(diff, entityA.id, entityA.id),
   )
@@ -297,22 +304,25 @@ function MergeBody({
   const canonicalOptions: SelectOption[] = [
     {
       value: entityA.id,
-      label: t('collisionDialog.canonicalOption', {
-        name: entityA.name,
-        when: ageOf(entityA, nowMs),
-      }),
+      label: markCanonical(
+        t('collisionDialog.canonicalOption', { name: entityA.name, when: ageOf(entityA, nowMs) }),
+        canonical === entityA,
+      ),
     },
     {
       value: entityB.id,
-      label: t('collisionDialog.canonicalOption', {
-        name: entityB.name,
-        when: ageOf(entityB, nowMs),
-      }),
+      label: markCanonical(
+        t('collisionDialog.canonicalOption', { name: entityB.name, when: ageOf(entityB, nowMs) }),
+        canonical === entityB,
+      ),
     },
   ]
 
   const allTags = useMemo(() => termUnion(diff.tags), [diff.tags])
-  const allKeywords = useMemo(() => termUnion(diff.keywords), [diff.keywords])
+  const allKeywords = useMemo(
+    () => keywordUnion(diff.keywords, canonical.keywords),
+    [diff.keywords, canonical.keywords],
+  )
   // A null partition means the two sides already agree: submit the canonical's own list, so the
   // merge doesn't write a reordered or respelled copy of it.
   const finalTags =
@@ -322,7 +332,7 @@ function MergeBody({
   const finalKeywords =
     diff.keywords == null
       ? canonical.keywords
-      : allKeywords.filter((keyword) => !state.deselectedKeywords.includes(keyword))
+      : allKeywords.filter((keyword) => !state.deselectedKeywords.includes(normalizeTerm(keyword)))
 
   function handleConfirm() {
     onSubmit({
@@ -373,20 +383,21 @@ function MergeBody({
           <Text size="sm" variant="muted">
             {t('collisionDialog.divergentFields')}
           </Text>
-          {/* world.md → Merge, side identification: desktop column headers name each side; phone
-              drops them for the per-radio caption. Added at assembly (batch 4 report). */}
-          {!phone && (
+          {/* world.md → Merge, side identification: column headers name each side where the
+              choices sit side by side; stacked choices carry their own caption. */}
+          {!stacked && (
             <View className="flex-row gap-2">
-              {([entityA, entityB] as const).map((side) => (
-                <Text key={side.id} size="xs" variant="muted" className="flex-1">
-                  {`${t(
-                    side === entityA ? 'collisionDialog.olderSide' : 'collisionDialog.newerSide',
-                    {
-                      when: relativeTimeLabel(Date.parse(side.createdAt), nowMs),
-                    },
-                  )}${side.id === state.canonicalId ? ` · ${t('collisionDialog.canonicalLabel')}` : ''}`}
-                </Text>
-              ))}
+              {(['A', 'B'] as const).map((side) => {
+                const entity = side === 'A' ? entityA : entityB
+                return (
+                  <Text key={side} size="xs" variant="muted" className="flex-1">
+                    {markCanonical(
+                      sideCaption(side, entity, nowMs),
+                      entity.id === state.canonicalId,
+                    )}
+                  </Text>
+                )
+              })}
             </View>
           )}
           {diff.divergentScalars.map((field) => (
@@ -396,7 +407,7 @@ function MergeBody({
               entityA={entityA}
               entityB={entityB}
               nowMs={nowMs}
-              phone={phone}
+              stacked={stacked}
               pick={state.fieldChoices[field]}
               onPick={(side) => dispatch({ type: 'pick-field', field, side })}
               disabled={submitting}
@@ -412,12 +423,14 @@ function MergeBody({
           </Text>
           <View className="flex-row flex-wrap gap-2">
             {allKeywords.map((keyword) => {
-              const deselected = state.deselectedKeywords.includes(keyword)
+              const deselected = state.deselectedKeywords.includes(normalizeTerm(keyword))
               return (
                 <Chip
                   key={keyword}
                   selected={!deselected}
-                  onPress={() => dispatch({ type: 'toggle-keyword', keyword })}
+                  onPress={() =>
+                    dispatch({ type: 'toggle-keyword', keyword: normalizeTerm(keyword) })
+                  }
                   disabled={submitting}
                 >
                   <Text className={cn(deselected && 'line-through')}>{keyword}</Text>
@@ -510,7 +523,7 @@ type FieldRowProps = {
   entityA: EntitySummary
   entityB: EntitySummary
   nowMs: number
-  phone: boolean
+  stacked: boolean
   pick: Side
   onPick: (side: Side) => void
   disabled?: boolean
@@ -521,7 +534,7 @@ function FieldRow({
   entityA,
   entityB,
   nowMs,
-  phone,
+  stacked,
   pick,
   onPick,
   disabled,
@@ -532,8 +545,8 @@ function FieldRow({
       <Text size="sm" variant="muted">
         {label}
       </Text>
-      {phone ? (
-        <View className="gap-1">
+      {stacked ? (
+        <View role="radiogroup" accessibilityLabel={label} className="gap-1">
           <PhoneChoice
             value={fieldValue(field, entityA)}
             caption={sideCaption('A', entityA, nowMs)}
@@ -552,7 +565,7 @@ function FieldRow({
           />
         </View>
       ) : (
-        <View className={Platform.select({ web: 'flex-row gap-2', default: 'gap-2' }) ?? 'gap-2'}>
+        <View className="flex-row gap-2">
           <RadioCard
             label={fieldValue(field, entityA)}
             selected={pick === 'A'}
@@ -697,9 +710,7 @@ function RenameBody({
             onPress={handleConfirm}
             loading={submitting}
             disabled={blockedReason != null || issue != null}
-            disabledReason={
-              blockedReason ?? (issue == null ? undefined : RENAME_ISSUE_TEXT[issue]())
-            }
+            disabledReason={blockedReason ?? (issue == null ? undefined : help)}
           >
             <Text>{t('collisionDialog.renameConfirm')}</Text>
           </Button>

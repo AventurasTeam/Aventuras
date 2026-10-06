@@ -208,11 +208,18 @@ export const PhoneLongDescriptions: Story = {
     const older = screen.getByRole('radio', { name: /^Older · / })
     const newer = screen.getByRole('radio', { name: /^Newer · / })
     expect(older).toHaveAttribute('aria-checked', 'true')
+    expect(
+      within(screen.getByRole('radiogroup', { name: 'Description' })).getAllByRole('radio'),
+    ).toHaveLength(2)
 
-    await userEvent.click(screen.getByText(LONG_A))
+    // Stacked choices carry their own captions, so the column header row is absent.
+    expect(screen.queryByText(/^Older · .+ · Canonical$/)).toBeNull()
 
-    await waitFor(() => expect(lineClamp(screen.getByText(LONG_A))).toBe('none'))
-    expect(lineClamp(screen.getByText(LONG_B))).toBe('3')
+    // A is the picked side, so tapping B's prose is the only tap that could wrongly pick.
+    await userEvent.click(screen.getByText(LONG_B))
+
+    await waitFor(() => expect(lineClamp(screen.getByText(LONG_B))).toBe('none'))
+    expect(lineClamp(screen.getByText(LONG_A))).toBe('3')
     expect(older).toHaveAttribute('aria-checked', 'true')
     expect(newer).toHaveAttribute('aria-checked', 'false')
 
@@ -227,12 +234,21 @@ export const MergeOverlapFootnote: Story = {
       entityA={entityA}
       entityB={{
         ...entityB,
+        // A case variant, so a footnote naming the wrong row is visible.
+        name: 'KAEL',
         relationCounts: { ...entityB.relationCounts, overlap: { awareness: 2, involvements: 1 } },
       }}
       onResolve={resolveOk}
     />
   ),
   play: async () => {
+    // Side identification and the canonical marker: column headers and the picker agree.
+    expect(await screen.findByText(/^Older · .+ · Canonical$/)).toBeInTheDocument()
+    expect(screen.getByText(/^Newer · [^·]+$/)).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /^Kael · .+ · Canonical$/ })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /^KAEL · [^·]+$/ })).toBeInTheDocument()
+    expect(screen.getByText('Moves on merge (KAEL → Kael)')).toBeInTheDocument()
+
     expect(
       await screen.findByText(
         'Kael already has 2 of these awareness rows: it keeps its own, and the duplicates are dropped.',
@@ -245,8 +261,11 @@ export const MergeOverlapFootnote: Story = {
     ).toBeInTheDocument()
 
     // With B canonical the summary shows A's counts, and A overlaps nothing.
-    await userEvent.click(screen.getAllByRole('radio', { name: /^Kael · / })[1])
+    await userEvent.click(screen.getByRole('radio', { name: /^KAEL · / }))
     await waitFor(() => expect(screen.queryByText(/already has/)).toBeNull())
+    expect(screen.getByText('Moves on merge (Kael → KAEL)')).toBeInTheDocument()
+    expect(screen.getByText(/^Newer · .+ · Canonical$/)).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /^KAEL · .+ · Canonical$/ })).toBeInTheDocument()
   },
 }
 
@@ -255,8 +274,8 @@ export const MergeCanonicalFlip: Story = {
 }
 
 export const MergeLoading: Story = {
-  // Visual-only: the dialog gates close while submitting (collision-
-  // resolve-dialog.tsx line 74), so the never-resolving driver leaves
+  // Visual-only: the dialog gates close while submitting (`handleOpenChange`),
+  // so the never-resolving driver leaves
   // body scroll-locked between tests. Skipped from vitest via
   // `tags: { exclude: ['no-vitest'] }` in vitest.config.ts.
   tags: ['no-vitest'],
@@ -322,6 +341,49 @@ export const MergeAgreeingListsKeepCanonical: Story = {
   },
 }
 
+export const MergeKeywordsInCanonicalSpelling: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={baseEntity({ keywords: ['the swordsman', 'the wanderer'] })}
+      entityB={baseEntity({ id: 'ent_kael_2', keywords: ['The Swordsman', 'the gate guard'] })}
+      onResolve={resolveCapturing}
+    />
+  ),
+  play: async () => {
+    lastResolution = null
+    await userEvent.click((await screen.findAllByRole('radio', { name: /^Kael · / }))[1])
+    // The shared keyword shows, and is written, as the canonical spells it.
+    expect(await screen.findByRole('button', { name: 'The Swordsman' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'the swordsman' })).toBeNull()
+    await userEvent.click(await screen.findByRole('button', { name: /^Merge into / }))
+
+    expect(lastResolution).toMatchObject({
+      canonicalId: 'ent_kael_2',
+      finalKeywords: ['The Swordsman', 'the gate guard', 'the wanderer'],
+    })
+  },
+}
+
+export const MergeKeywordDeselectSurvivesFlip: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={baseEntity({ keywords: ['The Swordsman', 'the wanderer'] })}
+      entityB={baseEntity({ id: 'ent_kael_2', keywords: ['the swordsman', 'the gate guard'] })}
+      onResolve={resolveCapturing}
+    />
+  ),
+  play: async () => {
+    lastResolution = null
+    await userEvent.click(await screen.findByRole('button', { name: 'The Swordsman' }))
+    await userEvent.click(screen.getAllByRole('radio', { name: /^Kael · / })[1])
+    await userEvent.click(await screen.findByRole('button', { name: /^Merge into / }))
+
+    expect(lastResolution).toMatchObject({
+      finalKeywords: ['the gate guard', 'the wanderer'],
+    })
+  },
+}
+
 export const MergeError: Story = {
   render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveError} />,
 }
@@ -337,6 +399,11 @@ export const RenameCaseOnly: Story = {
     const save = () => screen.getByRole('button', { name: 'Save renames' })
     expect(save()).toBeDisabled()
     expect(screen.getByText('Change at least one name to clear the collision.')).toBeInTheDocument()
+    // Nothing edited yet: the disabled reason says what the help line says.
+    expect(save().closest('[title]')).toHaveAttribute(
+      'title',
+      'Change at least one name to clear the collision.',
+    )
 
     const inputs = await screen.findAllByRole('textbox')
     await userEvent.clear(inputs[1])
@@ -344,11 +411,36 @@ export const RenameCaseOnly: Story = {
 
     expect(await screen.findByText(/still collide/)).toBeInTheDocument()
     expect(save()).toBeDisabled()
+    expect(save().closest('[title]')).toHaveAttribute(
+      'title',
+      expect.stringContaining('still collide'),
+    )
 
     await userEvent.type(inputs[1], ' the Guard')
 
     await waitFor(() => expect(save()).not.toBeDisabled())
     expect(screen.getByText('Change at least one name to clear the collision.')).toBeInTheDocument()
+  },
+}
+
+export const RenameSubmitsTrimmedChanges: Story = {
+  render: () => (
+    <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveCapturing} />
+  ),
+  play: async () => {
+    lastResolution = null
+    await userEvent.click(await screen.findByRole('radio', { name: 'Rename one' }))
+    const inputs = await screen.findAllByRole('textbox')
+    // A gains only a trailing space, which trims back to its current name.
+    await userEvent.type(inputs[0], ' ')
+    await userEvent.type(inputs[1], ' the Guard  ')
+    await userEvent.click(screen.getByRole('button', { name: 'Save renames' }))
+
+    await waitFor(() => expect(lastResolution).not.toBeNull())
+    expect(lastResolution).toEqual({
+      mode: 'rename',
+      renames: [{ id: 'ent_kael_2', newName: 'Kael the Guard' }],
+    })
   },
 }
 
