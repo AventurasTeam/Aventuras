@@ -306,7 +306,7 @@ the handler, which is where the sweep must therefore live.
   the entity cascade's predicates against the stores** (only
   references / unplaced items / tail scene come straight from
   `entityDeleteActions`) — a future cascade table needs a matching
-  count in `delete-impact.ts`.
+  list in `entityLinkRows` (`lib/world/entity-refs.ts`).
 - **Known limits.** Regenerate or rollback after a delete resurrects
   the row, as expected for any World edit; a creative third-person
   story whose lead is its only character can never delete it

@@ -165,6 +165,18 @@ describe('stateWithRefRewritten', () => {
     })
   })
 
+  it('leaves other repeated ids alone when rewriting too', () => {
+    const holder = entity('char_1', 'character', { inventory: ['item_a', 'item_a', 'old'] })
+    expect(stateWithRefRewritten(holder, 'old', 'new')).toMatchObject({
+      inventory: ['item_a', 'item_a', 'new'],
+    })
+  })
+
+  it('returns null when the id is rewritten onto itself', () => {
+    const place = entity('loc_2', 'location', { parent_location_id: 'x' })
+    expect(stateWithRefRewritten(place, 'x', 'x')).toBeNull()
+  })
+
   it('returns null for an entity that never names the id, and for a faction', () => {
     const walker = entity('char_1', 'character', { current_location_id: 'loc_2' })
     expect(stateWithRefRewritten(walker, 'old', 'new')).toBeNull()
