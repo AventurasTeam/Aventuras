@@ -292,6 +292,36 @@ export const MergeKeywordUnion: Story = {
   },
 }
 
+export const MergeAgreeingListsKeepCanonical: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={baseEntity({ tags: ['hero', 'sword'], keywords: ['the swordsman', 'the wanderer'] })}
+      entityB={baseEntity({
+        id: 'ent_kael_2',
+        tags: ['sword', 'hero'],
+        keywords: ['The Wanderer', 'the swordsman'],
+      })}
+      onResolve={resolveCapturing}
+    />
+  ),
+  play: async () => {
+    lastResolution = null
+    // Both partitions are null, so no chips render: pick B canonical and submit.
+    await userEvent.click((await screen.findAllByRole('radio', { name: /^Kael · / }))[1])
+    await userEvent.click(await screen.findByRole('button', { name: /^Merge into / }))
+
+    const resolution = lastResolution as Resolution | null
+    expect(resolution).not.toBeNull()
+    // The canonical's own lists, in its own order and spelling; A's sorted copy would differ.
+    expect(resolution).toMatchObject({
+      mode: 'merge',
+      canonicalId: 'ent_kael_2',
+      finalTags: ['sword', 'hero'],
+      finalKeywords: ['The Wanderer', 'the swordsman'],
+    })
+  },
+}
+
 export const MergeError: Story = {
   render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveError} />,
 }
