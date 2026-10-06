@@ -116,8 +116,8 @@ function lookupPair(branchEntities: readonly Entity[], ids: readonly [string, st
   return { pair: [first, second] }
 }
 
-// The first check predates the tail-lock awaits; a hard-gate run started since has settled user
-// writes without this one. The store read and the plan follow it with no await between them.
+// For a merge, the first check predates the tail-lock awaits; a hard-gate run started since has
+// settled user writes without this one. The store read and the plan follow with no await between.
 function gateRefusal(): Refusal | null {
   return generationStore.isUserEditBlocked()
     ? refusal(COLLISION_REJECTION.inFlight, 'generation in flight')
@@ -252,7 +252,7 @@ export async function resolveCollision(
   }
   if (result.status !== 'ok') {
     const code = rejectionCode(result.code)
-    const raw = result.code === code ? {} : { rawCode: result.code }
+    const raw = result.code != null && result.code !== code ? { rawCode: result.code } : {}
     return rejected({ ...context, ...raw }, code, result.reason)
   }
   return { status: 'ok' }

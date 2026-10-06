@@ -764,15 +764,15 @@ describe('resolveCollision — refusals', () => {
       await held
 
       expect(await pending).toMatchObject({ status: 'rejected', code: 'in-flight' })
+      expect(await deltaRows()).toEqual([])
+      expect(warn).toHaveBeenCalledWith(
+        'action_layer.collision_resolve_rejected',
+        expect.objectContaining({ code: 'in-flight', rawCode: 'reversal-in-progress' }),
+      )
     } finally {
       generationStore.setReversalInProgress(false)
+      warn.mockRestore()
     }
-    expect(await deltaRows()).toEqual([])
-    expect(warn).toHaveBeenCalledWith(
-      'action_layer.collision_resolve_rejected',
-      expect.objectContaining({ code: 'in-flight', rawCode: 'reversal-in-progress' }),
-    )
-    warn.mockRestore()
   })
 
   it('refuses not-found when a row of the pair was deleted', async () => {
