@@ -316,6 +316,26 @@ DB-backed `openRegionTokens` resolves all of them.
   [lessons-learned → No "harmless" id leaks](./lessons-learned/no-harmless-id-leaks.md)
   records. Surfaced by the M3.4 whole-slice review (2026-08-03).
 
+- **M5.1 / M5.2 — A close reverses by its commit position, and leaves
+  its entries' `chapter_id` behind.** A chapter close logs with a null
+  anchor, and null-anchored deltas reverse whenever they sit at or above
+  the sweep's first position
+  ([`data-model.md → Survival anchor`](../data-model.md#survival-anchor)).
+  A close commits at the head, which can sit past the chapter's end
+  entry, since auto-close picks its boundary inside the open region; a
+  rollback or regenerate into that gap then takes the close back, with
+  its lore and metadata work, although every entry of the chapter
+  survives. Anchoring a close on its end entry is the obvious candidate
+  (M5.2 owns the close writer, M5.5 the deep-rollback surface). And
+  `story_entries.chapter_id` has no foreign key and no place in
+  `REF_COLUMNS` (`lib/actions/delta/live-refs.ts`), so a reversed close
+  leaves its entries naming a chapter that no longer exists unless M5.1
+  logs the assignments in the close's own action. The dev seed
+  (`lib/db/devtools/seed-dataset.ts`) sets `chapterId` directly and
+  shows exactly that once a close is taken back. Found while the
+  2026-10-05 triage pass re-placed the seed's chapter closes; verified
+  against canon and the schema, not reproduced in a real close.
+
 **Gates.** M4 (chapter-close compacts entities + lore the world
 panel renders; surfaces would be invisible without M4).
 
@@ -624,6 +644,29 @@ code before it moved; resolve with the slice it names.
   blocks at turn 5 and malformed ones at turn 80 would silently move a
   story onto the expensive path exactly as it gets long. Surfaced
   2026-09-06 designing the query stack.
+- **M7.1 — The fallback classifier can re-apply stackable transfers the
+  narrative fold already wrote.** The fold applies whatever the tagged
+  block parsed even when another field failed
+  (`lib/pipeline/definitions/per-turn.ts`), and any parse failure fires
+  the fallback, whose schema asks for transfers again. Item moves and
+  visual changes overwrite, so a repeat is harmless; stackable amounts
+  add, so a transfer both layers report lands twice. Verified by
+  reading in the 2026-10-05 triage pass, not reproduced: the fallback
+  reads the post-fold store (`per-turn-piggyback.ts`) and
+  `lib/piggyback/apply.ts` adds the amount to the current count, with
+  no dedupe; one made-up id in `<scene_entities>` beside a valid
+  `<transfers>` is enough, since `substitute.ts` fails a whole field on
+  an unknown placeholder. Unreachable until this slice: `piggybackMode`
+  defaults to `'off'` and only the dev seed turns it on. Canon decides
+  the fold half
+  ([`piggyback.md → Parse strategy and failure recovery`](../memory/piggyback.md#parse-strategy-and-failure-recovery))
+  and frames the fallback as a from-scratch, last-writer-wins
+  re-extraction, but never addresses fields that are deltas rather
+  than values. Options: the fallback drops transfers when the fold
+  applied them; it bases stackables on the pre-fold state, so last
+  writer wins does hold; or the fold applies nothing on a partial
+  parse, which contradicts canon. Raised by the post-4.2b triage pass
+  (2026-10-04), routed 2026-10-05.
 - **M7.1 — Every future model-removal path must evict the native session cache.**
   `lib/embedder/local/runtime.native.ts` holds a lazy `bundles`
   `Map<modelId, SessionBundle>`; a removed then re-downloaded model reuses
@@ -1129,17 +1172,35 @@ each names.
   finishing for a cancel to land in. Becomes real once the M8.1
   translation call replaces that no-op. Surfaced by M3.7a Task 7
   (2026-07-25).
-- **M8.1 — Translation writers take no row lock, and several delete
-  arms don't cascade translations at all.** No `translations` key
-  exists in `row-locks.ts`, so once a writer exists, a translation
-  written between a cascade's read of a row's translations and the
-  cascade's commit would orphan, and could collide with
-  `translations_natural_uniq` on undo. Latent until this slice ships
-  the first writer. Cascade coverage is also incomplete today:
-  `deleteCharacterRelationship`, the single-POV upsert that deletes a
-  relationship once nulling its last remaining view would leave both
-  views null, `deleteStoryEntry`, and reversing a create all leave the
-  rows' translations behind. Surfaced by 4.2b planning (2026-09-28).
+- **M8.1 — Translation writers take no key lock, and several delete
+  paths leave translations behind.** No `translations` key exists in
+  `row-locks.ts`, and `LOCK_KEY` is null for all three translation
+  actions (`lib/actions/delta/apply-delta-action.ts`), so once a writer
+  exists, a translation written between a cascade's read of a row's
+  translations and the cascade's commit would orphan, and could collide
+  with `translations_natural_uniq` on undo. `createTranslation`'s
+  live-target check (`missingRef` in
+  `lib/actions/translations/register.ts`) has the mirror race: it reads
+  the target, the write commits later, and a concurrent delete of the
+  target could land between them. One per-branch `translations` key
+  closes both, taken by the translation writers, by every delete of a
+  translatable target (lore, thread, chapter and story-entry deletes
+  take no key today; `register-happenings.ts` already notes translations
+  aren't locked), and by `deltaLockKeys` for those tables. Cascade
+  coverage is also incomplete: `deleteCharacterRelationship`, the
+  single-POV upsert that deletes a pair once nulling its last view
+  would leave both null, and `deleteStoryEntry` leave the rows'
+  translations behind. A reversal's closure takes a removed row's
+  translations, but a pair the planner deletes that the closure did not
+  remove keeps them: a kept create whose user view was later cleared
+  (`userKeptRows` in `lib/actions/delta/row-closure.ts` leaves the
+  planner's still-non-null check to the planner), or an update's undo
+  that leaves the pair no view. Latent until this slice ships the first
+  writer, and maybe after: canon's translation writers run hard-gate,
+  which blocks user deletes and reversals while they run, so check
+  whether M8.1 adds a writer outside one. Surfaced by 4.2b planning
+  (2026-09-28); the live-target race and the reversal half were raised
+  in the reversal-integrity PR's review (2026-10-05) and merged here.
 - **M8.3 — `getCalendar` consults only code builtins, never the
   `vault_calendars` table.** The registry holds only
   `earth-gregorian`, so a story configured with a `vault_calendars`
@@ -1469,6 +1530,28 @@ own.
   is the harness to port. Owner is whoever does Android bring-up;
   desktop is v1 prod alongside it. Re-derived from the M3.4 MMR entry
   (2026-08-08), whose desktop half is now canon.
+
+- **M9.5 — Reversal selection reads the whole branch log, and an
+  abort's lookup scans every branch.** `loadHeldRows` in
+  `lib/actions/delta/held-rows.ts` filters on `op = 'delete'` and
+  JSON-decodes every delete payload each time a reversal set is
+  selected: every CTRL-Z, redo, prose edit, rollback and its preview,
+  abort and boot recovery. CTRL-Z also loads the branch's whole log,
+  payloads included, to pick its target (`recentDeltaRows` in
+  `lib/actions/story-entries/undo.ts`), and `reverseReplayDeltas`'s
+  `WHERE action_id = ?` in `lib/actions/delta/reverse-replay.ts`
+  matches no index, so abort and boot recovery scan `deltas` across
+  every story. The only `deltas` indexes are `(branch_id, log_position)`
+  and `(branch_id, target_id, log_position)` (`lib/db/system/system.table.ts`,
+  migration `0001_striped_prism.sql`), and the log grows every turn
+  (awareness bumps add update deltas). Fine at today's lengths and not
+  measured. A fix is one migration (an `action_id` or
+  `(branch_id, action_id)` index, and a partial
+  `(branch_id, log_position) WHERE op = 'delete'`) plus a bounded head
+  read for CTRL-Z's target, measured on a bench beside
+  `bench/retrieval-cost.test.ts`. Raised in the reversal-integrity PR's
+  review (2026-10-05); the two wider scans were found when it was
+  routed.
 
 **Gates.** M8 (every user-facing surface must exist before the
 visual audit, and translation must round-trip cleanly through

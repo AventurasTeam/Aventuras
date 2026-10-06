@@ -3,7 +3,7 @@ import type { ZodType } from 'zod'
 
 import type { Delta, SqlOp } from '@/lib/db'
 import {
-  BIND_CHUNK,
+  chunked,
   deltas,
   embeddedFieldsForTable,
   isEmbeddedSourceTable,
@@ -244,16 +244,11 @@ async function refuseWriteBack(
   if (pruned.length === 0) return
   const settled = new Set([...set.rows, ...pruned, ...stranded].map((d) => d.id))
   const actionIds = [...new Set(pruned.map((d) => d.actionId))]
-  for (let i = 0; i < actionIds.length; i += BIND_CHUNK) {
+  for (const chunk of chunked(actionIds)) {
     const group = (await ctx.db
       .select()
       .from(deltas)
-      .where(
-        and(
-          eq(deltas.branchId, set.branchId),
-          inArray(deltas.actionId, actionIds.slice(i, i + BIND_CHUNK)),
-        ),
-      )) as Delta[]
+      .where(and(eq(deltas.branchId, set.branchId), inArray(deltas.actionId, chunk)))) as Delta[]
     for (const holder of pruned) {
       const hit = group.find(
         (d) =>

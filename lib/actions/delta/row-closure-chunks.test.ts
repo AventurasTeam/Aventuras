@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import {
   branches,
+  type chunked,
   deltas,
   entities,
   happeningInvolvements,
@@ -19,10 +20,10 @@ vi.hoisted(() => {
   vi.resetModules()
 })
 
-vi.mock('@/lib/db', async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
-  BIND_CHUNK: 2,
-}))
+vi.mock('@/lib/db', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown> & { chunked: typeof chunked }>()
+  return { ...actual, chunked: <T>(items: readonly T[]) => actual.chunked(items, 2) }
+})
 
 const CHARS = ['a', 'b', 'c']
 

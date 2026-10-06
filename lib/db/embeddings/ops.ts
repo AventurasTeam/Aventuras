@@ -1,4 +1,4 @@
-import { BIND_CHUNK } from '../bind-limit'
+import { chunked } from '../bind-limit'
 import type { SqlOp } from '../types'
 import type { SourceHash } from './source-hash'
 import { embeddedSourceGuard, SOURCE_TABLES } from './stale'
@@ -83,14 +83,9 @@ export function deleteVecIdsOps(
 ): SqlOp[] {
   if (ids.length === 0) return []
   return familyTablesFor(kind, tableNames).flatMap((table) => {
-    const ops: SqlOp[] = []
-    for (let i = 0; i < ids.length; i += BIND_CHUNK) {
-      const chunk = ids.slice(i, i + BIND_CHUNK)
-      ops.push({
-        sql: `DELETE FROM ${table} WHERE branch_id = ? AND id IN (${chunk.map(() => '?').join(', ')})`,
-        params: [branchId, ...chunk],
-      })
-    }
-    return ops
+    return chunked(ids).map((chunk) => ({
+      sql: `DELETE FROM ${table} WHERE branch_id = ? AND id IN (${chunk.map(() => '?').join(', ')})`,
+      params: [branchId, ...chunk],
+    }))
   })
 }

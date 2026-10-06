@@ -1,22 +1,18 @@
 import type { Delta, SqlOp } from '@/lib/db'
 import { deltas, isEmbeddedSourceTable } from '@/lib/db'
 
-import { isUserOriginatedSource, type DbCtx } from '../types'
+import type { DbCtx } from '../types'
 import { cascadePatches } from './delete-cascade'
-import { nextLogPosition } from './delta-row'
 import { heldKey } from './held-rows'
 import { withKeyLocks } from './key-lock'
 import { resolveByTable, whereForDelta } from './registry'
 import {
-  buildReverseAndPrunePlan,
   DeltaReplayError,
-  emitPatches,
   ReversalIntegrityError,
   reverseAndPruneDeltaRows,
 } from './reverse-replay'
-import { reversalLockKeys, type ReversalSet } from './row-closure'
+import type { ReversalSet } from './row-closure'
 import { deltaLockKeys } from './row-locks'
-import { FIRST_LOGGED_AT, firstLoggedAt } from './user-precedence'
 
 export type RedoSnapshot = {
   delta: Delta
@@ -26,18 +22,39 @@ export type RedoSnapshot = {
   rowBeforeUndo: Record<string, unknown> | null
 }
 
-/** A redoable CTRL-Z of a set: the redo snapshot, taken before `reverse` runs the reversal. */
+/**
+ * A CTRL-Z's redo snapshot, minted only by prepareUndo, as ReversalSet is by selectReversalSet:
+ * its held-row refusal and its taken-before-the-reversal timing hold for no other producer.
+ */
+class RedoGroup {
+  // A private field makes the type nominal: no literal or spread of a group satisfies it.
+  readonly #minted = true
+  readonly snapshots: readonly RedoSnapshot[]
+
+  constructor(snapshots: readonly RedoSnapshot[]) {
+    this.snapshots = snapshots
+  }
+}
+
+export type { RedoGroup }
+
+// Test-only: a group no undo took, for a test that needs one on the redo stack.
+export function __redoGroupForTest(snapshots: readonly RedoSnapshot[] = []): RedoGroup {
+  return new RedoGroup(snapshots)
+}
+
+/** A redoable CTRL-Z of a set: the redo group, taken before `reverse` runs the reversal. */
 export type PreparedUndo = {
-  readonly snapshot: readonly RedoSnapshot[]
+  readonly group: RedoGroup
   /** Reverses and prunes the set, refusing a prune the snapshot could not restore. */
   readonly reverse: (extraOps?: readonly SqlOp[]) => Promise<number>
 }
 
 // One call takes the snapshot and fixes keepRedoExact, so the two cannot disagree.
 export async function prepareUndo(set: ReversalSet, ctx: DbCtx): Promise<PreparedUndo> {
-  const snapshot = await snapshotForRedo(set, ctx)
+  const group = new RedoGroup(await snapshotForRedo(set, ctx))
   return {
-    snapshot,
+    group,
     reverse: (extraOps = []) =>
       reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: true }, extraOps),
   }
@@ -81,35 +98,24 @@ function redoRow(
 }
 
 /**
- * A closed set to reverse in the redo's own transaction, plus ops to settle with it. Stays
- * table-agnostic here: the caller decides what a restored row invalidates.
+ * Re-inserts the original delta rows so a subsequent CTRL-Z can undo the redo again.
+ * `extraOps` settle in the same transaction; the caller decides what a restored row
+ * invalidates.
  */
-export type RedoInvalidation = { set: ReversalSet; extraOps: readonly SqlOp[] }
-
-// Reversal precedence weighs a user write by where it first logged, not the head slot it
-// re-logs at, which sits above the machine writes it preceded.
-function relogPayload(delta: Delta): Delta['undoPayload'] {
-  if (!isUserOriginatedSource(delta.source)) return delta.undoPayload
-  return { ...delta.undoPayload, [FIRST_LOGGED_AT]: firstLoggedAt(delta) }
-}
-
-// Re-inserts the original delta row so a subsequent CTRL-Z can undo the redo again.
 export function applyRedo(
-  snapshots: readonly RedoSnapshot[],
+  group: RedoGroup,
   ctx: DbCtx,
-  invalidation?: RedoInvalidation,
+  extraOps: readonly SqlOp[] = [],
 ): Promise<void> {
-  const keys = [
-    ...deltaLockKeys(snapshots.map((s) => s.delta)),
-    ...(invalidation ? reversalLockKeys(invalidation.set) : []),
-  ]
-  return withKeyLocks(keys, () => applyRedoLocked(snapshots, ctx, invalidation))
+  const { snapshots } = group
+  const keys = deltaLockKeys(snapshots.map((s) => s.delta))
+  return withKeyLocks(keys, () => applyRedoLocked(snapshots, ctx, extraOps))
 }
 
 async function applyRedoLocked(
   snapshots: readonly RedoSnapshot[],
   ctx: DbCtx,
-  invalidation: RedoInvalidation | undefined,
+  extraOps: readonly SqlOp[],
 ): Promise<void> {
   const ops = []
   const restoredDeltas: Delta[] = []
@@ -142,6 +148,8 @@ async function applyRedoLocked(
       ops.push(ctx.db.delete(entry.descriptor.table).where(where).toSQL())
       restored = true
     } else if (row) {
+      // Re-logged on the snapshot, not a live-row read: the row is live at redo, or a create
+      // in this snapshot re-inserts it whole, and an undo that left it absent was refused.
       ops.push(ctx.db.update(entry.descriptor.table).set(row).where(where).toSQL())
       restored = true
     }
@@ -149,38 +157,11 @@ async function applyRedoLocked(
     // that never happened, leaving a later CTRL-Z to reverse a row redo never touched.
     if (restored) restoredDeltas.push(delta)
   }
-  // Fresh MAX+1, not the slot the undo freed: a pass may hold it, and (branch_id,
-  // log_position) is unique. Re-assigning also lands the restore at the log head, so a
-  // later CTRL-Z reaches it before anything written in the gap. Ascending because the
-  // subquery increments per row while snapshots arrive newest-first
+  // At its own position: every delta-logged write clears the redo stack, so nothing has
+  // logged into the slot the undo freed, and log order stays write order
   // (data-model.md -> Entry mutability & rollback).
-  restoredDeltas.sort((a, b) => a.logPosition - b.logPosition)
-  const deltaOps = restoredDeltas.map((delta) =>
-    ctx.db
-      .insert(deltas)
-      .values({
-        ...delta,
-        logPosition: nextLogPosition(delta.branchId),
-        undoPayload: relogPayload(delta),
-      })
-      .toSQL(),
-  )
-  // Reversal after the redo's own ops: a restore writes the whole row, so a targeted
-  // reversal of the same row would be clobbered the other way round. Ordered explicitly
-  // rather than left to chance -- the classifier targets no story_entries row today.
-  const plan =
-    invalidation && invalidation.set.rows.length > 0
-      ? await buildReverseAndPrunePlan(invalidation.set, ctx, { keepRedoExact: true })
-      : { ops: [], pruneOps: [], patches: [] }
-  // Prunes ahead of the re-inserts so the restored deltas take positions above what
-  // survives the reversal rather than above rows this transaction is deleting.
-  await ctx.runInTransaction([
-    ...plan.pruneOps,
-    ...ops,
-    ...deltaOps,
-    ...plan.ops,
-    ...(invalidation?.extraOps ?? []),
-  ])
+  const deltaOps = restoredDeltas.map((delta) => ctx.db.insert(deltas).values(delta).toSQL())
+  await ctx.runInTransaction([...ops, ...deltaOps, ...extraOps])
   // Past this point the redo is committed, so a patcher throw is a store-sync failure:
   // redoLastAction still pops the (now-applied) snapshot instead of leaving it for a doomed retry.
   try {
@@ -206,9 +187,6 @@ async function applyRedoLocked(
       // create/update with no rowBeforeUndo wrote nothing to the DB above; skip
       // the patcher too so the store never gains a phantom row.
     }
-    // Last, mirroring the transaction: the reversal ran after the restore, so its
-    // patches have to win in the store the same way.
-    emitPatches(plan.patches)
   } catch (e) {
     throw new DeltaReplayError('Post-commit redo patch sync failed', {
       cause: e,

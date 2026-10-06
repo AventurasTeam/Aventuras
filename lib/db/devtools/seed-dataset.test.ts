@@ -1,10 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { desc, eq } from 'drizzle-orm'
+import { afterEach, describe, expect, it } from 'vitest'
 
-import { getRollbackCounts } from '@/lib/actions'
+import { getRollbackCounts, undoLastAction } from '@/lib/actions'
 import { REF_COLUMNS, rowRefs } from '@/lib/actions/delta/live-refs'
+import { deltas, storyEntries, type Delta } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { ID_PATTERN, IdBiMap, SUBSTITUTABLE_PREFIXES } from '@/lib/ids'
 import { detectRichEntryHtml, parseMarkdownToHtml } from '@/lib/markdown'
+import { entriesStore, resetAllStores } from '@/lib/stores'
+import { selectUndoTarget } from '@/lib/undo'
 
 import { buildSeedSteps } from './seed-dataset'
 
@@ -203,6 +207,11 @@ describe('seed id substitution contract', () => {
 // `no-create` (generation-pipeline.md → Reverse-replay), so the seeded stories could not roll back.
 describe('seeded rollback', () => {
   const BATCH = 100
+  const HERO_MAIN = 'br_hero_main'
+
+  afterEach(() => {
+    resetAllStores()
+  })
 
   async function seededDb() {
     const handle = await createTestDb()
@@ -238,7 +247,8 @@ describe('seeded rollback', () => {
     }
   })
 
-  // CTRL-Z undoes the newest action, so a split action would be undone in two halves.
+  // A pass's writes land as one burst under the branch write lock (generation-pipeline.md →
+  // No-gate write phase), so nothing else commits between them.
   it('logs the hero happening fire as one contiguous action', () => {
     const fire = (rowsOf('deltas') as { branchId: string; actionId: string; logPosition: number }[])
       .filter((r) => r.branchId === 'br_hero_main' && r.actionId === 'act_class_1')
@@ -249,22 +259,23 @@ describe('seeded rollback', () => {
     expect(fire[fire.length - 1]! - fire[0]!).toBe(fire.length - 1)
   })
 
-  // CTRL-Z skips only periodic passes; a link create logged apart from its happening undoes alone.
-  it('logs each machine link create with its happening unless a periodic pass wrote it', () => {
+  // A link names its happening, so the writer that creates the happening creates the link with it,
+  // or a later pass adds one; a link logged first would name a row that did not exist yet.
+  it('logs each link create with its happening or after it', () => {
     type DeltaRow = {
       branchId: string
       actionId: string
-      source: string
       targetTable: string
       targetId: string
       op: string
+      logPosition: number
     }
     const rows = rowsOf('deltas') as DeltaRow[]
     const key = (branchId: unknown, id: unknown) => `${branchId as string}:${id as string}`
-    const happeningAction = new Map(
+    const happeningCreate = new Map(
       rows
         .filter((d) => d.targetTable === 'happenings' && d.op === 'create')
-        .map((d) => [key(d.branchId, d.targetId), d.actionId]),
+        .map((d) => [key(d.branchId, d.targetId), d]),
     )
     const linkHappening = new Map(
       ['happening_awareness', 'happening_involvements'].flatMap((table) =>
@@ -272,20 +283,24 @@ describe('seeded rollback', () => {
       ),
     )
 
-    const machineLinks = rows.filter(
-      (d) =>
-        d.op === 'create' &&
-        linkHappening.has(`${d.targetTable}:${key(d.branchId, d.targetId)}`) &&
-        d.source !== 'user_edit' &&
-        d.source !== 'periodic_classifier',
-    )
-    expect(machineLinks.length).toBeGreaterThan(0)
-    for (const d of machineLinks) {
+    let withHappening = 0
+    let later = 0
+    for (const d of rows) {
       const happeningId = linkHappening.get(`${d.targetTable}:${key(d.branchId, d.targetId)}`)
-      expect(d.actionId, `${d.targetTable} ${d.targetId}`).toBe(
-        happeningAction.get(key(d.branchId, happeningId)),
+      const parent = happeningCreate.get(key(d.branchId, happeningId))
+      if (d.op !== 'create' || parent == null) continue
+      if (d.actionId === parent.actionId) {
+        withHappening++
+        continue
+      }
+      const parentEnd = Math.max(
+        ...rows.filter((r) => r.actionId === parent.actionId).map((r) => r.logPosition),
       )
+      expect(d.logPosition, `${d.targetTable} ${d.targetId}`).toBeGreaterThan(parentEnd)
+      later++
     }
+    expect(withHappening).toBeGreaterThan(0)
+    expect(later).toBeGreaterThan(0)
   })
 
   // Every seeded branch, not just the hero's: hap_fire anchors at entry 22 and its links at 22 and
@@ -305,5 +320,56 @@ describe('seeded rollback', () => {
         worldStateChanges: expect.any(Number),
       })
     }
+  })
+
+  // A close has no entry anchor, so it reverses by its own log position: chapter 1's commits after
+  // entry 31 and chapter 2's after entry 59.
+  it('takes back only the chapter closes logged at or past the rollback target', async () => {
+    const ctx = await seededDb()
+    const expected: Record<string, number> = {
+      entry_hero_0002: 2,
+      entry_hero_0031: 2,
+      entry_hero_0032: 1,
+      entry_hero_0059: 1,
+      entry_hero_0060: 0,
+      entry_hero_0070: 0,
+    }
+    const actual: Record<string, unknown> = {}
+    for (const target of Object.keys(expected)) {
+      const counts = await getRollbackCounts(HERO_MAIN, target, ctx)
+      actual[target] = 'chapters' in counts ? counts.chapters : counts
+    }
+    expect(actual).toEqual(expected)
+  })
+
+  // CTRL-Z steps over periodic passes, so the fire's pass goes only with the turn it anchors to.
+  it('walks CTRL-Z from the hero head to the opening without selecting the periodic pass', async () => {
+    const ctx = await seededDb()
+    const branchEntries = await ctx.db
+      .select()
+      .from(storyEntries)
+      .where(eq(storyEntries.branchId, HERO_MAIN))
+      .orderBy(storyEntries.position)
+    entriesStore.hydrate(HERO_MAIN, branchEntries)
+    const nextTarget = async () =>
+      selectUndoTarget(
+        (await ctx.db
+          .select()
+          .from(deltas)
+          .where(eq(deltas.branchId, HERO_MAIN))
+          .orderBy(desc(deltas.logPosition))) as Delta[],
+      )
+
+    const selected: string[] = []
+    let target = await nextTarget()
+    for (let press = 0; target != null && press < 200; press++) {
+      selected.push(target.actionId)
+      expect(await undoLastAction(HERO_MAIN, ctx), target.actionId).toEqual({ status: 'ok' })
+      target = await nextTarget()
+    }
+
+    expect(target).toBeNull()
+    expect(selected).toContain('act_create_br_hero_main_entry_hero_0022')
+    expect(selected).not.toContain('act_class_1')
   })
 })

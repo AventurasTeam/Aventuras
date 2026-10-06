@@ -1,8 +1,9 @@
 import { and, eq, getTableColumns, inArray, ne } from 'drizzle-orm'
 
-import { BIND_CHUNK, deltas, type Delta } from '@/lib/db'
+import { chunked, deltas, type Delta } from '@/lib/db'
 
 import { isUserOriginatedSource, type DbCtx } from '../types'
+import { isPayloadMetaKey } from './delta-encoding'
 import {
   EMPTY_HELD_ROWS,
   heldKey,
@@ -14,7 +15,7 @@ import { isRefTable, referrersOf } from './live-refs'
 import { resolveByTable } from './registry'
 import { ReversalIntegrityError } from './replay-errors'
 import { deltaLockKeys, type RowLockKey } from './row-locks'
-import { firstLoggedAt, wroteColumn } from './user-precedence'
+import { wroteColumn } from './user-precedence'
 
 type ReversalSetFields = Pick<ReversalSet, 'branchId' | 'rows' | 'redoRows' | 'held'>
 
@@ -59,12 +60,6 @@ function idsByTable(rows: readonly RowRef[]): Map<string, string[]> {
     else byTable.set(table, [id])
   }
   return byTable
-}
-
-function chunked<T>(items: readonly T[]): T[][] {
-  const chunks: T[][] = []
-  for (let i = 0; i < items.length; i += BIND_CHUNK) chunks.push(items.slice(i, i + BIND_CHUNK))
-  return chunks
 }
 
 /** Every create and update of the rows, whatever its source; a delete of one never joins. */
@@ -127,14 +122,15 @@ async function liveReferrers(
 }
 
 /**
- * Seeded rows a later outside `user_edit` kept by writing a keeping column. Judged from `writes`:
- * a separate read lets a user Save landing between the two join the set and be reversed.
+ * Seeded rows a later outside `user_edit` kept by writing a keeping column, each with the keeping
+ * columns no such write set, which the planner nulls. Judged from `writes`: a separate read lets a
+ * user Save landing between the two join the set and be reversed.
  */
 function userKeptRows(
   seedCreates: ReadonlyMap<HeldKey, readonly Delta[]>,
   writes: readonly Delta[],
   seedIds: ReadonlySet<string>,
-): Set<HeldKey> {
+): Map<HeldKey, readonly string[]> {
   const userWrites = new Map<HeldKey, Delta[]>()
   for (const d of writes) {
     if (d.source !== 'user_edit' || seedIds.has(d.id)) continue
@@ -143,18 +139,33 @@ function userKeptRows(
     if (found) found.push(d)
     else userWrites.set(key, [d])
   }
-  const kept = new Set<HeldKey>()
+  const kept = new Map<HeldKey, readonly string[]>()
   for (const [key, creates] of seedCreates) {
     const edits = userWrites.get(key) ?? []
+    const keeping = resolveByTable(creates[0].targetTable)?.rowKeepingColumns ?? []
     const keptAll = creates.every((create) => {
       if (isUserOriginatedSource(create.source)) return false
-      const keeping = resolveByTable(create.targetTable)?.rowKeepingColumns
-      const later = edits.filter((e) => firstLoggedAt(e) > firstLoggedAt(create))
-      return keeping?.some((col) => wroteColumn(later, col)) ?? false
+      const later = edits.filter((e) => e.logPosition > create.logPosition)
+      return keeping.some((col) => wroteColumn(later, col))
     })
-    if (keptAll) kept.add(key)
+    if (!keptAll) continue
+    const first = Math.min(...creates.map((c) => c.logPosition))
+    const later = edits.filter((e) => e.logPosition > first)
+    kept.set(
+      key,
+      keeping.filter((col) => !wroteColumn(later, col)),
+    )
   }
   return kept
+}
+
+// A machine update that wrote only views a kept row's create had its view nulled in: it built on
+// the swept fact, so it goes with it, as a removed row's later writes do. Left in the log, its
+// undo would write the swept value back.
+function onlyNulledViews(delta: Delta, nulled: readonly string[]): boolean {
+  if (delta.op !== 'update' || isUserOriginatedSource(delta.source)) return false
+  const columns = Object.keys(delta.undoPayload ?? {}).filter((key) => !isPayloadMetaKey(key))
+  return columns.length > 0 && columns.every((col) => nulled.includes(col))
 }
 
 // Fixed point of generation-pipeline.md → Reverse-replay: removed rows, then every row naming one.
@@ -196,9 +207,12 @@ async function closeOver(
     const kept = userKeptRows(seedCreates, writes, seedIds)
     seedCreates = new Map()
     if (kept.size > 0) {
-      for (const key of kept) removed.delete(key)
+      for (const key of kept.keys()) removed.delete(key)
       round = round.filter(({ table, id }) => !kept.has(heldKey(table, id)))
-      writes = writes.filter((d) => !kept.has(heldKey(d.targetTable, d.targetId)))
+      writes = writes.filter((d) => {
+        const nulled = kept.get(heldKey(d.targetTable, d.targetId))
+        return nulled === undefined || onlyNulledViews(d, nulled)
+      })
     }
     for (const d of writes) if (!set.has(d.id)) set.set(d.id, d)
     const created = new Set(

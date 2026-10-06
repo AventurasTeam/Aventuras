@@ -102,10 +102,10 @@ async function undoBracketed(branchId: string, ctx: DbCtx): Promise<UndoResult> 
   } catch (e) {
     // Committed: the reversal + prune landed in SQLite, only the store sync failed. The change
     // is real, so keep redo available before surfacing the failure.
-    if (e instanceof DeltaReplayError && e.committed) undoRedoStore.pushRedoGroup(undo.snapshot)
+    if (e instanceof DeltaReplayError && e.committed) undoRedoStore.pushRedoGroup(undo.group)
     throw e
   }
-  undoRedoStore.pushRedoGroup(undo.snapshot)
+  undoRedoStore.pushRedoGroup(undo.group)
   return { status: 'ok' }
 }
 
@@ -115,11 +115,11 @@ export async function redoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
   if (entriesStore.getLoadedBranch() !== branchId)
     return { status: 'rejected', code: 'branch-not-loaded', reason: 'branch not loaded' }
 
-  const snapshot = undoRedoStore.peekRedoGroup()
-  if (!snapshot) return { status: 'rejected', code: 'nothing-to-apply', reason: 'nothing to redo' }
+  const group = undoRedoStore.peekRedoGroup()
+  if (!group) return { status: 'rejected', code: 'nothing-to-apply', reason: 'nothing to redo' }
   // The redo stack is a single global stack, not partitioned per branch. Guard
   // against applying another branch's snapshot to this context.
-  if (snapshot.some((s) => s.delta.branchId !== branchId))
+  if (group.snapshots.some((s) => s.delta.branchId !== branchId))
     return {
       status: 'rejected',
       code: 'integrity',
@@ -131,14 +131,13 @@ export async function redoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
   return bracketProseReversal(branchId, () =>
     refusingIntegrity(branchId, async () => {
       // A write committing during the drain clears the stack; its snapshot would restore over it.
-      if (undoRedoStore.peekRedoGroup() !== snapshot)
+      if (undoRedoStore.peekRedoGroup() !== group)
         return { status: 'rejected', code: 'nothing-to-apply', reason: 'nothing to redo' }
-      const invalidation = await resolveRedoInvalidation(branchId, snapshot, ctx)
+      const invalidation = await resolveRedoInvalidation(branchId, group.snapshots, ctx)
       if (invalidation.status === 'unreadable')
         return unreadableScopeRejection(invalidation.deltaId)
-      const set = await selectReversalSet(ctx, { branchId, target: [], sweep: invalidation.rows })
       try {
-        await applyRedo(snapshot, ctx, { set, extraOps: invalidation.clampOps })
+        await applyRedo(group, ctx, invalidation.clampOps)
       } catch (e) {
         // Committed: the redo's DB write landed, only the store sync failed. Pop regardless —
         // a retry would re-insert an already-inserted delta row and collide on its primary key.
@@ -152,10 +151,10 @@ export async function redoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
 }
 
 /**
- * Restoring prose re-opens the same question the forward edit answered: the facts a
- * pass derived from the text being replaced now describe text that is gone. Reachable
- * only through a retry timer firing between the undo and the redo, but the failure it
- * leaves is the one the clamp exists to prevent.
+ * Restoring prose re-opens the question the forward edit answered, so the redo re-clamps
+ * the watermark: a pass that found nothing advanced it without logging, which leaves the
+ * redo stack standing. Its `rows` go unused: a pass that logged a fact cleared the stack,
+ * and the undo already swept the rest.
  *
  * Skips a snapshot carrying no row because `isContentEditDelta` pins `op = 'update'`,
  * and `applyRedo` writes nothing for an update it has no row to restore. A delete

@@ -18,6 +18,7 @@ import {
 } from './__tests__/fixtures'
 import { submitTurn } from './submit-turn'
 import { expectRan, makeHarness, resetSingletons } from '../../pipeline/__tests__/harness'
+import { __redoGroupForTest } from '../delta/redo'
 
 // The retrieval phase's own coverage lives in per-turn-retrieval.test.ts; here
 // it only has to let the turn through, and its real pass would reach for a DB
@@ -475,7 +476,7 @@ describe('submitTurn', () => {
     await openStory(db, 's1', 'b1')
     entriesStore.hydrate('b1', [])
     await hydrateAppSettings(async () => WORKING_CONFIG)
-    undoRedoStore.pushRedoGroup([])
+    undoRedoStore.pushRedoGroup(__redoGroupForTest())
     expect(undoRedoStore.hasRedo()).toBe(true)
 
     await submitTurn({ storyId: 's1', branchId: 'b1' }, { content: 'x', composerMode: 'do' }, ctx)

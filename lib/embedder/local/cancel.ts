@@ -6,8 +6,8 @@ import { EmbedderCallError, EmbedderCancelledError } from '../types'
 /**
  * The error an aborted local embed raises, identically on both platforms.
  *
- * A user stop and a bounded-signal expiry abort identically, separable only from
- * the signal's reason — so neither runtime classifies for itself: misreading an
+ * A user stop and a bounded-signal expiry abort identically, separable only through
+ * `abortCauseOf` — so neither runtime classifies for itself: misreading an
  * expiry as a cancel demotes a 300s provider timeout to a debug entry.
  */
 export function abortedEmbedError(signal: AbortSignal): EmbedderCallError | EmbedderCancelledError {

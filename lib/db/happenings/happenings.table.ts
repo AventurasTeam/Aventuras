@@ -48,9 +48,9 @@ export const happeningInvolvements = sqliteTable(
     branchId: text('branch_id')
       .notNull()
       .references(() => branches.id),
-    // FK-less: happenings has a composite PK (branch_id, id); a single-column FK is impossible.
+    // FK-less ends: redo re-inserts a group newest-first, links before parents
+    // (data-model.md -> Branch model).
     happeningId: text('happening_id').notNull(),
-    // FK-less: entities has a composite PK (branch_id, id); a single-column FK is impossible.
     entityId: text('entity_id').notNull(),
     role: text('role'),
   },
@@ -64,9 +64,9 @@ export const happeningAwareness = sqliteTable(
     branchId: text('branch_id')
       .notNull()
       .references(() => branches.id),
-    // FK-less: happenings has a composite PK (branch_id, id); a single-column FK is impossible.
+    // FK-less ends: redo re-inserts a group newest-first, links before parents
+    // (data-model.md -> Branch model).
     happeningId: text('happening_id').notNull(),
-    // FK-less: entities has a composite PK (branch_id, id); a single-column FK is impossible.
     characterId: text('character_id').notNull(),
     learnedAtEntryId: text('learned_at_entry_id'),
     decayResistance: real('decay_resistance'),

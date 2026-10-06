@@ -47,7 +47,8 @@
   },
   "generationGate": {
     "inFlight": "Generation is in flight. Cancel to edit.",
-    "chapterClose": "Chapter close in progress. Cancel to edit."
+    "chapterClose": "Chapter close in progress. Cancel to edit.",
+    "suggestionRefresh": "Refreshing suggestions. Cancel to edit."
   },
   "deleteUndoHint": "You can undo this from the reader: {{action}} in its menu, or Cmd/Ctrl-Z.",
   "recovery": {

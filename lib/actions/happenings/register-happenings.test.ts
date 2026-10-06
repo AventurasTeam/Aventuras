@@ -508,7 +508,7 @@ describe('happenings CRUD arms', () => {
     // Undo the delete: capture snapshot first, then prune (remove) the delta
     const deleteDeltaRows = await db.select().from(deltas).where(eq(deltas.actionId, 'act_d'))
     const set = await selectReversalSet(ctx, { branchId: 'br_1', target: deleteDeltaRows })
-    const { snapshot: snapshots, reverse } = await prepareUndo(set, ctx)
+    const { group, reverse } = await prepareUndo(set, ctx)
     await reverse()
 
     // After undo: everything should be restored
@@ -520,7 +520,7 @@ describe('happenings CRUD arms', () => {
     expect(happeningAwarenessStore.getById('haw_1')).toBeDefined()
 
     // Redo the delete: cascade should delete children too, not just parent
-    await applyRedo(snapshots, ctx)
+    await applyRedo(group, ctx)
 
     // After redo: all three tables must be empty (tests the cascadeDeleteOps hook)
     expect(await rowFor(db, 'hap_1')).toBeUndefined()

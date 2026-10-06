@@ -32,6 +32,7 @@ import {
   holdBranchWriteExclusive,
   releaseBranchWriteExclusive,
 } from '../delta/branch-write-lock'
+import { __redoGroupForTest } from '../delta/redo'
 
 afterEach(() => {
   __resetBranchWriteLocks()
@@ -156,7 +157,7 @@ describe('updateStoryEntryContent', () => {
         createdAt: 1,
       },
     ])
-    undoRedoStore.pushRedoGroup([])
+    undoRedoStore.pushRedoGroup(__redoGroupForTest())
     expect(undoRedoStore.hasRedo()).toBe(true)
 
     await updateStoryEntryContent('b1', 'e1', 'new text', ctx)
@@ -179,7 +180,7 @@ describe('updateStoryEntryContent', () => {
         createdAt: 1,
       },
     ])
-    undoRedoStore.pushRedoGroup([])
+    undoRedoStore.pushRedoGroup(__redoGroupForTest())
     const patch = vi.spyOn(entriesStore, 'patch').mockImplementation(() => {
       throw new Error('store sync boom')
     })
@@ -212,6 +213,24 @@ describe('updateStoryEntryContent', () => {
     const result = await updateStoryEntryContent('b1', 'e1', 'x', ctx)
     expect(result.status).toBe('rejected')
     if (result.status === 'rejected') expect(result.code).toBe('in-flight-gated')
+  })
+
+  // A double Save: both calls pass the gate before either's read resolves, and the first
+  // raises the barrier before the second reaches the bracket.
+  it('rejects a second save that reaches the bracket while the first holds it', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+
+    const [first, second] = await Promise.all([
+      updateStoryEntryContent('b1', 'e1', 'first', ctx),
+      updateStoryEntryContent('b1', 'e1', 'second', ctx),
+    ])
+
+    expect(first).toEqual({ status: 'ok' })
+    expect(second).toMatchObject({ status: 'rejected', code: 'in-flight-gated' })
+    const [row] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'e1'))
+    expect(row.content).toBe('first')
   })
 })
 
@@ -470,7 +489,7 @@ describe('rollbackToEntry', () => {
     const ctx = { db, runInTransaction }
     await seedBranchWithTurns(db, ctx)
     entriesStore.hydrate('b1', [])
-    undoRedoStore.pushRedoGroup([])
+    undoRedoStore.pushRedoGroup(__redoGroupForTest())
     expect(undoRedoStore.hasRedo()).toBe(true)
 
     const result = await rollbackToEntry('b1', 't2', ctx)
@@ -483,7 +502,7 @@ describe('rollbackToEntry', () => {
     const ctx = { db, runInTransaction }
     await seedBranchWithTurns(db, ctx)
     entriesStore.hydrate('b1', [])
-    undoRedoStore.pushRedoGroup([])
+    undoRedoStore.pushRedoGroup(__redoGroupForTest())
     const patch = vi.spyOn(entriesStore, 'patch').mockImplementation(() => {
       throw new Error('store sync boom')
     })
@@ -691,7 +710,7 @@ describe('updateStoryEntryContent classifier invalidation', () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seedClassifiedTail(db)
-    undoRedoStore.pushRedoGroup([])
+    undoRedoStore.pushRedoGroup(__redoGroupForTest())
     const patch = vi.spyOn(happeningsStore, 'patch').mockImplementation(() => {
       throw new Error('store sync boom')
     })
@@ -941,7 +960,7 @@ describe('updateStoryEntryContent invalidation scope', () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seedClassifiedTail(db)
-    undoRedoStore.pushRedoGroup([])
+    undoRedoStore.pushRedoGroup(__redoGroupForTest())
 
     // e2 is the tail, so without the guard this would take the full in-scope path.
     expect((await updateStoryEntryContent('b1', 'e2', 'old', ctx)).status).toBe('ok')
@@ -1156,7 +1175,7 @@ describe('rollback over the closed set', () => {
     const ctx = { db, runInTransaction }
     await seedLateLink(db, ctx, false)
     entriesStore.hydrate('b1', [])
-    undoRedoStore.pushRedoGroup([])
+    undoRedoStore.pushRedoGroup(__redoGroupForTest())
     const before = await db.select().from(deltas)
 
     const result = await rollbackToEntry('b1', 't2', ctx)
@@ -1203,7 +1222,7 @@ describe('rollback over the closed set', () => {
         undoPayload: { state: { faction_id: 'ent_a' } },
       },
     ])
-    undoRedoStore.pushRedoGroup([])
+    undoRedoStore.pushRedoGroup(__redoGroupForTest())
     const before = await db.select().from(deltas)
 
     const result = await rollbackToEntry('b1', 't2', ctx)
@@ -1275,7 +1294,7 @@ describe('content edit refusals', () => {
         undoPayload: { state: { current_location_id: 'hap_2' } },
       },
     ])
-    undoRedoStore.pushRedoGroup([])
+    undoRedoStore.pushRedoGroup(__redoGroupForTest())
     const before = await db.select().from(deltas)
 
     const result = await updateStoryEntryContent('b1', 'e2', 'new', ctx)

@@ -1,16 +1,15 @@
-// Hermes lacks AbortSignal.timeout / .any, so this composes them from
-// AbortController + setTimeout, matching lib/embedder/download/model-card.ts.
-// The reason is how a consumer holding only the signal tells an expiry from a stop.
-export const BOUNDED_SIGNAL_EXPIRED = 'bounded-signal-expired'
+// React Native installs abort-controller@3 as the global AbortController (setUpXHR.js): it has
+// no AbortSignal.timeout / .any, and its abort() drops the reason. So this composes the bounded
+// signal by hand, and records the cause beside the signal rather than in `signal.reason`.
+const BOUNDED_SIGNAL_EXPIRED = 'bounded-signal-expired'
 
 export type AbortCause = 'stop' | 'timeout'
 
-/**
- * Which of the two reasons aborted `signal`. Centralised because
- * `AbortSignal.reason` is typed `any`: an inline compare typechecks against anything.
- */
+const causes = new WeakMap<AbortSignal, AbortCause>()
+
+/** Which of the two causes aborted `signal`, as recorded by `boundedSignal`. */
 export function abortCauseOf(signal: AbortSignal): AbortCause {
-  return signal.reason === BOUNDED_SIGNAL_EXPIRED ? 'timeout' : 'stop'
+  return causes.get(signal) ?? 'stop'
 }
 
 export function boundedSignal(
@@ -21,6 +20,7 @@ export function boundedSignal(
   let expired = false
   const timer = setTimeout(() => {
     expired = true
+    causes.set(controller.signal, 'timeout')
     controller.abort(BOUNDED_SIGNAL_EXPIRED)
   }, ms)
   // Clears the timer, not just relays: left armed it can still fire while the
@@ -28,6 +28,7 @@ export function boundedSignal(
   // timeout — a late fire would burn a retry on a clean cancellation.
   const relay = () => {
     clearTimeout(timer)
+    if (outer) causes.set(controller.signal, abortCauseOf(outer))
     controller.abort(outer?.reason)
   }
   if (outer?.aborted) relay()
@@ -35,8 +36,8 @@ export function boundedSignal(
   return {
     signal: controller.signal,
     /**
-     * Captured, not derived, so it stays readable after dispose. Always agrees
-     * with `abortCauseOf(signal)`: each path sets or clears before it aborts.
+     * Captured, not derived, so it stays readable after dispose. This signal's own timer
+     * only: `abortCauseOf` also reads an expiry relayed from `outer` as a timeout.
      */
     expired: () => expired,
     dispose: () => {

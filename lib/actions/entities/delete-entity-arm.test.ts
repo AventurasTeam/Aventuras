@@ -291,13 +291,13 @@ describe('deleteEntity', () => {
       .where(eq(deltas.actionId, 'act_del'))
       .orderBy(desc(deltas.logPosition))) as Delta[]
     const set = await selectReversalSet(ctx, { branchId: 'b1', target: rows })
-    const { snapshot, reverse } = await prepareUndo(set, ctx)
+    const { group, reverse } = await prepareUndo(set, ctx)
     await reverse()
     const [restored] = await ctx.db.select().from(entities).where(eq(entities.id, 'char_x'))
     expect(restored.embeddingStale).toBe(1)
 
     plantVectors()
-    await applyRedo(snapshot, ctx)
+    await applyRedo(group, ctx)
     expect(vectorCount()).toBe(0)
   })
 

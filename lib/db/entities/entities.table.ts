@@ -56,6 +56,8 @@ export const characterRelationships = sqliteTable(
     branchId: text('branch_id')
       .notNull()
       .references(() => branches.id),
+    // FK-less ends: redo re-inserts a group newest-first, links before parents
+    // (data-model.md -> Branch model).
     aId: text('a_id').notNull(),
     bId: text('b_id').notNull(),
     kind: text('kind'),

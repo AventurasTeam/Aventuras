@@ -1090,13 +1090,17 @@ const heroEntryAssets: NewEntryAsset[] = [
   },
 ]
 
-const heroDeltas: NewDelta[] = [
+// Each hand-written delta commits right after hero entry `after`'s create, where the write would
+// really have landed: the rollback window and CTRL-Z both read log positions.
+type SlottedDelta = Omit<NewDelta, 'logPosition'> & { after: number }
+
+const heroDeltas: SlottedDelta[] = [
   {
     id: 'delta_hero_1',
     branchId: MAIN,
     entryId: entryId('hero', 14),
     actionId: 'act_edit_1',
-    logPosition: 1,
+    after: 14,
     source: 'user_edit',
     targetTable: 'story_entries',
     targetId: entryId('hero', 14),
@@ -1105,13 +1109,14 @@ const heroDeltas: NewDelta[] = [
     encodingVersion: 1,
     createdAt: BASE + 14 * MIN,
   },
+  // A cadence-4 pass over entries 21-24 commits after 24, each fact anchored where it came from.
   {
     id: 'delta_hero_2',
     branchId: MAIN,
     entryId: entryId('hero', 22),
     actionId: 'act_class_1',
-    logPosition: 2,
-    source: 'ai_classifier',
+    after: 24,
+    source: 'periodic_classifier',
     targetTable: 'happenings',
     targetId: 'hap_fire',
     op: 'create',
@@ -1126,8 +1131,8 @@ const heroDeltas: NewDelta[] = [
     branchId: MAIN,
     entryId: entryId('hero', 22),
     actionId: 'act_class_1',
-    logPosition: 3,
-    source: 'ai_classifier',
+    after: 24,
+    source: 'periodic_classifier',
     targetTable: 'happening_involvements',
     targetId: 'hinv_fire_mira',
     op: 'create',
@@ -1140,8 +1145,8 @@ const heroDeltas: NewDelta[] = [
     branchId: MAIN,
     entryId: entryId('hero', 22),
     actionId: 'act_class_1',
-    logPosition: 4,
-    source: 'ai_classifier',
+    after: 24,
+    source: 'periodic_classifier',
     targetTable: 'happening_involvements',
     targetId: 'hinv_fire_watch',
     op: 'create',
@@ -1154,8 +1159,8 @@ const heroDeltas: NewDelta[] = [
     branchId: MAIN,
     entryId: entryId('hero', 22),
     actionId: 'act_class_1',
-    logPosition: 5,
-    source: 'ai_classifier',
+    after: 24,
+    source: 'periodic_classifier',
     targetTable: 'happening_awareness',
     targetId: 'haw_fire_mira',
     op: 'create',
@@ -1168,7 +1173,7 @@ const heroDeltas: NewDelta[] = [
     branchId: MAIN,
     entryId: entryId('hero', 25),
     actionId: 'act_class_3',
-    logPosition: 6,
+    after: 28,
     source: 'periodic_classifier',
     targetTable: 'happening_awareness',
     targetId: 'haw_fire_kael',
@@ -1177,12 +1182,13 @@ const heroDeltas: NewDelta[] = [
     encodingVersion: 1,
     createdAt: BASE + 25 * MIN,
   },
+  // A close commits with the head at or past its chapter's end entry; the seed puts it one past.
   {
     id: 'delta_hero_3',
     branchId: MAIN,
     entryId: null,
     actionId: 'act_chapter_1',
-    logPosition: 7,
+    after: CHAP1_END + 1,
     source: 'chapter_close',
     targetTable: 'chapters',
     targetId: 'chap_hero_1',
@@ -1191,14 +1197,28 @@ const heroDeltas: NewDelta[] = [
     encodingVersion: 1,
     createdAt: BASE + 6 * DAY,
   },
-  // Flagged row's create (periodic classifier): buildSeedSteps shifts it past every
-  // entry create, landing after the last reply's boundary so it renders `fresh` at boot.
+  {
+    id: 'delta_hero_9',
+    branchId: MAIN,
+    entryId: null,
+    actionId: 'act_chapter_2',
+    after: CHAP2_END + 1,
+    source: 'chapter_close',
+    targetTable: 'chapters',
+    targetId: 'chap_hero_2',
+    op: 'create',
+    undoPayload: null,
+    encodingVersion: 1,
+    createdAt: BASE + 12 * DAY,
+  },
+  // Flagged row's create (periodic classifier): slotted past every entry create, so it lands
+  // after the last reply's boundary and renders `fresh` at boot.
   {
     id: 'delta_hero_4',
     branchId: MAIN,
     entryId: entryId('hero', 71),
     actionId: 'act_class_2',
-    logPosition: 8,
+    after: N_HERO,
     source: 'periodic_classifier',
     targetTable: 'entities',
     targetId: ID.brannocFlagged,
@@ -1233,6 +1253,23 @@ function entryCreateDeltas(allEntries: NewStoryEntry[]): NewDelta[] {
         createdAt: e.createdAt,
       }
     })
+}
+
+// log_position is unique per branch, so MAIN's creates renumber around the slotted hero deltas.
+function interleaveHeroDeltas(createDeltaRows: NewDelta[]): NewDelta[] {
+  const mainCreates = createDeltaRows.filter((d) => d.branchId === MAIN)
+  const mainLog: Omit<NewDelta, 'logPosition'>[] = []
+  for (const create of mainCreates) {
+    mainLog.push(create)
+    for (const { after, ...delta } of heroDeltas)
+      if (create.targetId === entryId('hero', after)) mainLog.push(delta)
+  }
+  if (mainLog.length !== mainCreates.length + heroDeltas.length)
+    throw new Error('a hero delta is slotted after an entry with no create delta')
+  return [
+    ...createDeltaRows.filter((d) => d.branchId !== MAIN),
+    ...mainLog.map((d, i) => ({ ...d, logPosition: i + 1 })),
+  ]
 }
 
 // ---------------------------------------------------------------------------
@@ -1755,14 +1792,7 @@ export function buildSeedSteps(): SeedStep[] {
   const filler = fillerStoryRows()
   const rich = richStoryRows()
   const allEntries = [...heroEntries(), ...forkEntries(), ...rich.entries, ...filler.entries]
-  const createDeltaRows = entryCreateDeltas(allEntries)
-  // The hand-authored hero deltas keep their order but slot after MAIN's
-  // create block — log_position is unique per branch.
-  const mainCreateCount = createDeltaRows.filter((d) => d.branchId === MAIN).length
-  const shiftedHeroDeltas = heroDeltas.map((d, i) => ({
-    ...d,
-    logPosition: mainCreateCount + i + 1,
-  }))
+  const deltaRows = interleaveHeroDeltas(entryCreateDeltas(allEntries))
 
   const heroStory: NewStory = {
     id: HERO,
@@ -1831,7 +1861,7 @@ export function buildSeedSteps(): SeedStep[] {
     step('branch_era_flips', branchEraFlips, heroEraFlips),
     step('translations', translations, heroTranslations),
     step('entry_assets', entryAssets, heroEntryAssets),
-    step('deltas', deltas, [...createDeltaRows, ...shiftedHeroDeltas]),
+    step('deltas', deltas, deltaRows),
     step('pipeline_runs', pipelineRuns, pipelineRunRows),
     step('app_settings', appSettings, [appSettingsRow]),
   ]

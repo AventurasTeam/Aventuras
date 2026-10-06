@@ -182,7 +182,7 @@ describe.each(CASES)('delete $kind', ({ kind, translationKind, insert, remove, s
 
     const rows = await groupRows('act_del')
     const set = await selectReversalSet(ctx, { branchId: 'b1', target: rows })
-    const { snapshot, reverse } = await prepareUndo(set, ctx)
+    const { group, reverse } = await prepareUndo(set, ctx)
     await reverse()
     const [restored] = await select()
     expect(restored?.embeddingStale).toBe(1)
@@ -190,7 +190,7 @@ describe.each(CASES)('delete $kind', ({ kind, translationKind, insert, remove, s
 
     insertVectors(kind)
     expect(vectorCount(kind)).toBe(2)
-    await applyRedo(snapshot, ctx)
+    await applyRedo(group, ctx)
     expect(await select()).toEqual([])
     expect(vectorCount(kind)).toBe(0)
     expect(await ctx.db.select().from(translations)).toEqual([])

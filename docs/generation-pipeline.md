@@ -1323,10 +1323,10 @@ kind and still returns the rejection.
 from a pipeline source skips each top-level column that a later
 `user_edit` delta on the same row wrote, by creating the row or
 changing that column, unless that delta is in the set being reversed
-too. Later means by the position the user delta first logged at: a
-redo re-logs it at the head, above machine writes it preceded, and
-records the first position in `$firstLoggedAt`. A delta left with no
-column writes nothing and is still pruned.
+too. Later means by log position, which a redo restores rather than
+reassigns
+([`data-model.md → Entry mutability & rollback`](./data-model.md#entry-mutability--rollback)).
+A delta left with no column writes nothing and is still pruned.
 A `user_edit` inside the set restores as usual: a rollback or
 regenerate sweeps every null-anchored World edit after its target, so
 the row still returns to its prior value, and CTRL-Z of the user's own
@@ -1342,7 +1342,10 @@ with it, whatever its source (see the closure below), except in a
 table that registers
 `rowKeepingColumns`: a character relationship whose view a later user
 write set keeps its row, with the views the user did not write nulled,
-and is deleted only once both are null. Its `create` is then re-owned
+and is deleted only once both are null. A machine update that wrote
+only views the reversal nulls goes with the create, reversed and
+pruned, as a removed row's later writes do: left in the log, its undo
+would write the swept value back. Its `create` is then re-owned
 rather than pruned: it becomes the user's, with source `user_edit`, no
 entry, and the action of the oldest user write that kept the row. A
 later closure that reaches the row so finds its `create`, and CTRL-Z of
@@ -1378,7 +1381,7 @@ reference, never through the cascade hook.
 **Every reversal closes over the rows its creates delete, and the rows
 naming them.** Every path selects its set through one step that
 applies the closure, so no path can skip it: CTRL-Z of a group or a
-turn and the sweeps it runs, redo's sweep, regenerate, rollback, a
+turn and the sweeps it runs, regenerate, rollback, a
 branch fork's reverse-apply, abort, boot recovery, a turn refused at
 admission, and a prose edit's sweep. No selection scope guarantees the
 set holds every write to a removed row, or every row naming one. An
@@ -1454,12 +1457,10 @@ would restore (below): it would need a newer non-classifier delete
 still in the log, which CTRL-Z picks first. A row the closure reaches
 by reference with no `create` in the log, which only a writer outside
 the log could make: the wizard, a seed or an import. And a pair a
-CTRL-Z or a redo's sweep leaves absent whose other writes the prune
+CTRL-Z leaves absent whose other writes the prune
 above would take: redo restores only its snapshot, so an update whose
 undo deleted the pair redoes onto no row yet re-logs, its next CTRL-Z
-reporting an undo that changed nothing, and a redo would take writes
-no undo of it gives back. A refused redo stays on the stack, so each
-retry refuses again until a new action clears it. Only `write-back`
+reporting an undo that changed nothing. Only `write-back`
 is reachable today, and only at boot recovery of a `no-gate` run
 whose abort's own reversal failed: the
 [no-gate write phase](#no-gate-write-phase) ends the hold then, so
@@ -1905,6 +1906,13 @@ undoes it, or is refused. Without the settle, the undo would choose its
 target from a log the Save is still writing to, and restore over it
 once the Save frees its lock.
 
+The bracket then takes the branch write lock
+([No-gate write phase](#no-gate-write-phase)) exclusive around the
+sweep, so the sweep cannot commit between a rollback preview's closure
+reads, which hold it shared. The drain and the settle have already
+emptied the branch of other writers, so the hold waits on a preview at
+most.
+
 **`yieldsTo` stays unused in v1.** Modelling reversal as a `'reversal'`
 pipeline kind with `periodic-classifier` declaring
 `yieldsTo: ['reversal']` was considered and rejected: a reversal writes
@@ -1947,11 +1955,12 @@ the create as `write-back` on each boot
 ([Reverse-replay](#reverse-replay),
 [Recovery-failure policy](#recovery-failure-policy)). A write
 arriving meanwhile waits a few milliseconds; nothing is disabled
-or refused. Prose reversals need nothing more, since the barrier above
-already waits a burst out, and boot recovery runs before any branch
-loads. The rollback preview writes nothing but takes the lock shared
-around its set selection, so a pass's abort reversal cannot land
-between the closure's reads. The lock order holds because a burst
+or refused. A prose reversal takes the lock exclusive around its
+sweep, once the barrier above has waited a burst out, and boot recovery
+runs before any branch loads. The rollback preview writes nothing but
+takes the lock shared around its set selection, so neither a pass's
+abort reversal nor a prose reversal can land between the closure's
+reads. The lock order holds because a burst
 never asks for the metadata lock: only the scene-field, world-time and
 entity-delete actions take it, and the orchestrator commits a pass's
 writes through `applyDeltaAction` directly.

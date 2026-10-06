@@ -58,12 +58,7 @@ export async function updateStoryEntryContent(
   content: string,
   ctx: DbCtx,
 ): Promise<{ status: 'ok' } | StoryEntryRejection> {
-  if (generationStore.isUserEditBlocked())
-    return {
-      status: 'rejected',
-      reason: 'generation in flight',
-      code: STORY_ENTRY_REJECTION.inFlight,
-    }
+  if (generationStore.isUserEditBlocked()) return inFlightRejection()
   // Ahead of the bracket, which cancels the in-flight classifier before its body runs:
   // an unchanged save must not cost a pass. Safe outside the barrier because no other
   // writer touches this column, unlike the tail read the scope needs.
@@ -72,12 +67,21 @@ export async function updateStoryEntryContent(
     .from(storyEntries)
     .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, id)))
   if (existing?.content === content) return { status: 'ok' }
-  // No re-check inside the bracket, matching rollbackToEntry: the gate above and
-  // bracketProseReversal's own flag set are one synchronous block, and the flag
-  // itself reads as blocked, so a re-check would reject every call.
+  // Re-checked past the read, so this gate and the bracket's flag set are one synchronous
+  // block: a second Save that read alongside the first is refused, not thrown as re-entry.
+  // Not inside the bracket, where the flag itself reads as blocked.
+  if (generationStore.isUserEditBlocked()) return inFlightRejection()
   return bracketProseReversal(branchId, () =>
     updateStoryEntryContentBracketed(branchId, id, content, ctx),
   )
+}
+
+function inFlightRejection(): StoryEntryRejection {
+  return {
+    status: 'rejected',
+    reason: 'generation in flight',
+    code: STORY_ENTRY_REJECTION.inFlight,
+  }
 }
 
 /**
@@ -268,7 +272,8 @@ export async function getRollbackCounts(
 ): Promise<RollbackCounts | StoryEntryRejection> {
   // The closed set, not the window: a fact on a surviving turn naming a row the sweep
   // removes goes too (rollback-confirm.md → Counts).
-  // Held shared: a no-gate run's abort reversal landing between the closure's reads refuses it.
+  // Held shared: a no-gate run's abort reversal or a prose reversal landing between the
+  // closure's reads refuses it.
   const swept = await withBranchWriteShared(branchId, ROLLBACK_PREVIEW_LOCK_ID, () =>
     resolveSweep(branchId, targetId, ctx),
   )

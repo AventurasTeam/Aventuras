@@ -1,6 +1,6 @@
 import { and, eq, inArray } from 'drizzle-orm'
 
-import { BIND_CHUNK, type Delta } from '@/lib/db'
+import { chunked, type Delta } from '@/lib/db'
 
 import type { DbCtx } from '../types'
 import { capturedChildren, type CapturedChildren as Children } from './delete-cascade'
@@ -69,9 +69,7 @@ export async function liveLinkFilter(rows: readonly Delta[], ctx: DbCtx): Promis
     const entry = resolveByTable(name)
     if (!entry) throw new Error(`liveLinkFilter: ${name} is not a registered table`)
     const { table, idCol, branchCol } = entry.descriptor
-    const all = [...ids]
-    for (let i = 0; i < all.length; i += BIND_CHUNK) {
-      const chunk = all.slice(i, i + BIND_CHUNK)
+    for (const chunk of chunked([...ids])) {
       const found = await ctx.db
         .select({ id: idCol })
         .from(table)

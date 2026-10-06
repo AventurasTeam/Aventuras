@@ -140,16 +140,16 @@ erDiagram
     happening_involvements {
         text id PK "hinv_${uuid}; surrogate single ID — needed as delta target (same reason as character_relationships)"
         text branch_id FK "composite PK with id; forks with branches"
-        text happening_id FK
-        text entity_id FK "character | location | item | faction"
+        text happening_id "FK-less ref into happenings (see Branch model)"
+        text entity_id "FK-less ref; character | location | item | faction"
         text role "optional free-form — actor / target / site / etc."
     }
 
     happening_awareness {
         text id PK "haw_${uuid}; surrogate single ID — needed as delta target (same reason as character_relationships)"
         text branch_id FK "composite PK with id; forks with branches"
-        text happening_id FK
-        text character_id FK "entity where kind=character"
+        text happening_id "FK-less ref into happenings (see Branch model)"
+        text character_id "FK-less ref; entity where kind=character"
         text learned_at_entry_id "entry where this character learned it; FK-less ref into story_entries"
         real decay_resistance "0..1; scales recency decay (1=no decay, 0=normal). Set by classifier severity at extraction; tunable by user toggle and lore-mgmt at chapter close. See docs/memory/retrieval.md → Pinning"
         integer retrieval_count "incremented by ranker on injection (post budget-fill); per-chapter counter, reset at chapter close after lore-mgmt phase 3d. Delta-logged so rollback reverses retrieval-driven counts. See docs/memory/chapter-close.md → 3d awareness pin tuning"
@@ -160,8 +160,8 @@ erDiagram
     character_relationships {
         text id PK "rel_${uuid}; needed as delta + translation target"
         text branch_id FK "composite PK with id; relationships fork with branches"
-        text a_id FK "entity where kind=character; canonical-ordered (a_id < b_id)"
-        text b_id FK "entity where kind=character"
+        text a_id "FK-less ref; entity where kind=character; canonical-ordered (a_id < b_id)"
+        text b_id "FK-less ref; entity where kind=character"
         text kind "a's view of b — free-form LLM/user-authored; nullable until that POV is observed"
         text inverse_kind "b's view of a — free-form; nullable until that POV is observed"
         integer created_at
@@ -512,13 +512,22 @@ The `id` is a UUID generated once at row creation and never regenerated.
 On branch copy, `INSERT ... SELECT` flips branch_id and leaves everything
 else (including id and all internal references) verbatim. Cross-references
 — FK columns AND id-references buried inside `entities.state` JSON
-(`parent_location_id`, `current_location_id`, `equipped_by`, etc.) — stay
+(`parent_location_id`, `current_location_id`, `equipped_items`, etc.) — stay
 valid because they all resolve within the new branch's scope automatically.
 The alternative (single-column UUID PK + generate-fresh-on-copy) would
 require walking every reference site including state JSON to rewrite IDs
 during copy; that's where bugs would hide forever. Composite PK sidesteps
 the whole category. Tables at the global scope (`stories`, `assets`) keep
 single-column PKs since they aren't branched.
+
+**Link ends carry no foreign key.** `happening_involvements`,
+`happening_awareness` and `character_relationships` name their ends by
+id alone. A composite `(branch_id, …)` key is possible, but redo
+re-inserts a closed group newest-first, so a link's row lands before
+its parent's in one transaction, and the schema declares no deferred
+keys; an enforced end would fail that redo. The reversal closure keeps
+ends from dangling instead
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
 
 Text duplication across branches is acceptable (one data point: a 350k-word
 story exported as JSON is ~2.5MB — branches at 10x are still tiny). The
@@ -1064,20 +1073,20 @@ via dotted paths. The split:
 
 Per-field "who writes / when":
 
-| Field group                                 | First write                                  | Subsequent writes                                         |
-| ------------------------------------------- | -------------------------------------------- | --------------------------------------------------------- |
-| `description` (top-level)                   | Whoever spawns the entity                    | User-only in v1                                           |
-| `visual.*`                                  | Classifier from prose, or user via form      | Both — classifier evolves on observed prose change        |
-| `traits`, `drives`                          | Classifier from prose, or user via form      | Classifier (chapter-close lore-mgmt only) + user via form |
-| `voice`                                     | Classifier from prose, or user via form      | Both                                                      |
-| `current_location_id`                       | Classifier per-turn                          | Classifier per-turn primary; user can edit                |
-| `equipped_items`, `inventory`, `stackables` | Classifier per-turn                          | Classifier per-turn primary; user can edit                |
-| `faction_id`                                | Classifier or user                           | Both                                                      |
-| `lastSeenAt`                                | Classifier-only                              | Classifier-only                                           |
-| `parent_location_id`                        | User at creation, or classifier on discovery | Both — rare changes                                       |
-| `condition` (Location/Item)                 | Classifier or user                           | Both                                                      |
-| `standing`, `agenda` (Faction)              | Classifier or user                           | Classifier (chapter-close) + user                         |
-| `at_location_id` (Item)                     | Classifier per-turn                          | Classifier per-turn primary; user can edit                |
+| Field group                                 | First write                             | Subsequent writes                                         |
+| ------------------------------------------- | --------------------------------------- | --------------------------------------------------------- |
+| `description` (top-level)                   | Whoever spawns the entity               | User-only in v1                                           |
+| `visual.*`                                  | Classifier from prose, or user via form | Both — classifier evolves on observed prose change        |
+| `traits`, `drives`                          | Classifier from prose, or user via form | Classifier (chapter-close lore-mgmt only) + user via form |
+| `voice`                                     | Classifier from prose, or user via form | Both                                                      |
+| `current_location_id`                       | Classifier per-turn                     | Classifier per-turn primary; user can edit                |
+| `equipped_items`, `inventory`, `stackables` | Classifier per-turn                     | Classifier per-turn primary; user can edit                |
+| `faction_id`                                | Classifier or user                      | Both                                                      |
+| `lastSeenAt`                                | Classifier-only                         | Classifier-only                                           |
+| `parent_location_id`                        | User at creation                        | User-only in v1                                           |
+| `condition` (Location/Item)                 | Classifier or user                      | Both                                                      |
+| `standing`, `agenda` (Faction)              | Classifier or user                      | Classifier (chapter-close) + user                         |
+| `at_location_id` (Item)                     | Classifier per-turn                     | Classifier per-turn primary; user can edit                |
 
 Manual user edit vs classifier overwrite policy is parked as an
 architecture concern. v1 lean: classifier writes from prose-evidenced
@@ -2322,7 +2331,9 @@ arbitrary editing.
 - CTRL-Z reverses the edit itself. Its group carries no `story_entries`
   create, so it is a `group`-kind undo unit and never sweeps the turn
   beneath it — the pre-edit prose is the payload. Reversing it re-runs the
-  same invalidation the forward edit ran (below), and so does redoing it.
+  same invalidation the forward edit ran (below). Redoing it re-clamps the
+  watermark only: the undo already swept the facts, and a pass that logged
+  one since would have cleared the redo stack.
 - Keystroke-level undo inside the open editor is still the editor's job,
   not the log's: a delta is written per save, not per character.
 - When branching from entry N, the new branch copies entry N's _current_
@@ -2405,8 +2416,6 @@ arbitrary editing.
   be namespaced out of that walk or it reaches a `SET` clause and the store
   patch beside it. The prefix cannot collide with a column, because column
   keys are identifiers. `$invalidationScope` is the first such key.
-  `$firstLoggedAt` is the second: the position a redone `user_edit`
-  delta held before its first undo (see `log_position` assignment).
 - **The reversal set closes over the rows its creates delete, and the
   rows naming them**, not over the anchor alone. Undoing a `create` is a
   plain row delete with no cascade — only an explicit delete action
@@ -2484,21 +2493,24 @@ autoincrement primitive (`AUTOINCREMENT` is table-global, not
 partitioned), so the assignment lives in the delta-creating
 mutator, not as a column default.
 
-This holds for a **redo's** re-insert too: the restored delta takes a
-fresh `MAX+1` rather than the slot it held before the undo. The undo
-freed that slot, and a classifier pass firing between the undo and the
-redo can have taken it — replaying the old value would collide on the
-uniqueness backstop below and wedge the redo stack, since the snapshot
-is only popped on a post-commit failure. Re-assigning also keeps the
-restored delta at the log head, so a following CTRL-Z reaches it rather
-than whatever ran in the gap. A group re-inserts in ascending original
-order, which preserves its internal ordering. The head slot would also
-rank a restored user write above the machine writes it preceded, so a
-redo stamps a `user_edit` delta with `$firstLoggedAt`, and reversal
-precedence orders by that
-([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
+A **redo's** re-insert is the exception: the restored delta takes back
+the slot it held before the undo. Every delta-logged write clears the
+redo stack, and the redo's bracket keeps writers out while it runs, so
+nothing can have logged into that slot since the undo freed it. Log
+order so stays the order the writes were first made: a pass on an
+earlier turn that logged above a turn before the undo still sits above
+it after the redo, and reversal precedence, which reads a user write as
+later than a machine write by position
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)),
+judges a restored write exactly as it did before the undo. A following
+CTRL-Z still reaches the restored group first, since only
+periodic-classifier groups, which CTRL-Z steps over, can sit above it.
+A writer that bypassed the stack clear would collide on the uniqueness
+backstop below, failing the redo whole rather than misordering the log.
 
-Invariant: monotonically increasing within branch. Gaps are fine
+Invariant: increasing within branch in the order the writes were
+first made; a redo restores a position rather than taking a new one.
+Gaps are fine
 (rollback, fork copy, delete deltas — so gaps occur naturally; the
 `>=`, `<`, `MAX` operations all tolerate them), but duplicates
 within branch break chain-walk ordering. The

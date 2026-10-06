@@ -1,4 +1,4 @@
-import { BIND_CHUNK, SOURCE_TABLES, type VecTargetKind } from '@/lib/db'
+import { chunked, SOURCE_TABLES, type VecTargetKind } from '@/lib/db'
 
 import { parseKeywords } from './name-index'
 import type { EntityRow, LoreRow, ThreadRow } from './pools'
@@ -217,8 +217,7 @@ export async function loadHappeningRows(
     ])
   }
   // Chunked: a seated chapter's range grows with the chapter, under no pool-sized cap.
-  for (let i = 0; i < scope.entryIds.length; i += BIND_CHUNK) {
-    const entryIds = scope.entryIds.slice(i, i + BIND_CHUNK)
+  for (const entryIds of chunked(scope.entryIds)) {
     statements.push([
       `SELECT ${columns} FROM ${SOURCE_TABLES.happening} WHERE branch_id = ? AND occurred_at_entry_id IN (${entryIds.map(() => '?').join(', ')})`,
       [branchId, ...entryIds],

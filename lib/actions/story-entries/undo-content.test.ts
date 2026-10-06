@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   branches,
   deltas,
-  entities,
   happenings,
   stories,
   storyEntries,
@@ -19,6 +18,7 @@ import { isContentEditDelta } from './classifier-facts'
 import { rollbackToEntry, updateStoryEntryContent } from './operational'
 import { writeSystemEntry } from './system-entry'
 import { redoLastAction, undoLastAction } from './undo'
+import { __redoGroupForTest } from '../delta/redo'
 
 afterEach(() => {
   entriesStore.__reset()
@@ -291,9 +291,9 @@ describe('undo of a content edit', () => {
 
     // Replaying the fact would re-insert a row the next pass re-derives anyway, and
     // fight the redo arm's own invalidation.
-    const snapshot = undoRedoStore.peekRedoGroup()
-    expect(snapshot).toHaveLength(1)
-    expect(isContentEditDelta(snapshot![0].delta)).toBe(true)
+    const snapshots = undoRedoStore.peekRedoGroup()?.snapshots
+    expect(snapshots).toHaveLength(1)
+    expect(isContentEditDelta(snapshots![0].delta)).toBe(true)
   })
 
   it('redo restores the edited prose and re-inserts the delta', async () => {
@@ -312,16 +312,15 @@ describe('undo of a content edit', () => {
     expect(remaining.filter(isContentEditDelta)).toHaveLength(1)
   })
 
-  it('redo reverses the facts derived from the prose it replaces, and re-clamps', async () => {
+  it('redo re-clamps a watermark a pass advanced without logging', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seedTurn(db)
 
     await updateStoryEntryContent('b1', 'e_reply', 'the courier turned back', ctx)
     await undoLastAction('b1', ctx)
-    // A retry timer firing between the undo and the redo: this pass read the restored
-    // original, so its facts describe prose the redo is about to replace.
-    await seedFactFrom(db, 'e_reply', 5)
+    // A pass that read the restored original and found nothing logs no delta, so the redo
+    // stack stands while the watermark moves past the prose the redo replaces.
     await db
       .update(branches)
       .set({ classifierStatus: status(2) })
@@ -329,16 +328,10 @@ describe('undo of a content edit', () => {
 
     expect((await redoLastAction('b1', ctx)).status).toBe('ok')
 
-    expect(await db.select().from(happenings).where(eq(happenings.branchId, 'b1'))).toEqual([])
-    expect(happeningsStore.getHappenings().has('hap_derived')).toBe(false)
-    const [branch] = await db
-      .select({ s: branches.classifierStatus })
-      .from(branches)
-      .where(eq(branches.id, 'b1'))
-    expect(branch.s?.processedThrough).toBe(1)
+    expect(await processedThrough(db)).toBe(1)
   })
 
-  it('redoes over a fact delta holding the log position the undo freed', async () => {
+  it('redo restores the edit at the position it held, where the next CTRL-Z finds it', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seedTurn(db)
@@ -346,63 +339,13 @@ describe('undo of a content edit', () => {
     await updateStoryEntryContent('b1', 'e_reply', 'the courier turned back', ctx)
     const [edit] = await db.select().from(deltas).where(eq(deltas.source, 'user_edit'))
     await undoLastAction('b1', ctx)
-    // What a real pass does: MAX+1 lands on the position the prune just freed, so the
-    // redo's re-insert and the reversal of this row contend for one unique key.
-    await seedFactFrom(db, 'e_reply', edit.logPosition)
-    await db
-      .update(branches)
-      .set({ classifierStatus: status(2) })
-      .where(eq(branches.id, 'b1'))
 
     expect((await redoLastAction('b1', ctx)).status).toBe('ok')
 
-    expect(await db.select().from(happenings).where(eq(happenings.branchId, 'b1'))).toEqual([])
-    const remaining = await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))
-    expect(remaining.map((d) => d.id).sort()).toEqual(['d_turn', edit.id].sort())
-  })
-
-  it('redoes over a delta the invalidation set does not reverse', async () => {
-    const { db, runInTransaction } = await createTestDb()
-    const ctx = { db, runInTransaction }
-    await seedTurn(db)
-
-    await updateStoryEntryContent('b1', 'e_reply', 'the courier turned back', ctx)
-    const [edit] = await db.select().from(deltas).where(eq(deltas.source, 'user_edit'))
-    await undoLastAction('b1', ctx)
-    // A first-introduction entity, which `isReversible` keeps out of the invalidation
-    // set — so unlike the fact delta above, the prune cannot free the slot for it.
-    await db.insert(entities).values({
-      id: 'ent_new',
-      branchId: 'b1',
-      kind: 'character',
-      name: 'The Courier',
-      status: 'active',
-      injectionMode: 'auto',
-      createdAt: 3,
-      updatedAt: 3,
-    })
-    await db.insert(deltas).values({
-      id: 'd_ent',
-      branchId: 'b1',
-      actionId: 'act_classifier',
-      op: 'create',
-      targetTable: 'entities',
-      targetId: 'ent_new',
-      entryId: 'e_reply',
-      source: 'periodic_classifier',
-      undoPayload: null,
-      logPosition: edit.logPosition,
-      encodingVersion: 1,
-      createdAt: 3,
-    })
-
-    expect((await redoLastAction('b1', ctx)).status).toBe('ok')
-
-    // Above the entity that took the old slot, so the next CTRL-Z reaches the redo
-    // rather than the pass that ran in the gap.
     const [restored] = await db.select().from(deltas).where(eq(deltas.id, edit.id))
-    expect(restored.logPosition).toBeGreaterThan(edit.logPosition)
+    expect(restored.logPosition).toBe(edit.logPosition)
     expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+    expect(await db.select().from(deltas).where(eq(deltas.id, edit.id))).toEqual([])
   })
 
   it('reverses the scope the edit recorded, not the one its position later implies', async () => {
@@ -429,41 +372,46 @@ describe('undo of a content edit', () => {
     expect(await processedThrough(db)).toBe(1)
   })
 
-  it('a redo that restores nothing reverses no facts', async () => {
+  it('a redo that restores nothing clamps nothing', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seedTurn(db)
-    await seedFactFrom(db, 'e_reply', 5)
+    await db
+      .update(branches)
+      .set({ classifierStatus: status(2) })
+      .where(eq(branches.id, 'b1'))
 
-    // applyRedo writes nothing for a snapshot carrying no row, so reversing facts for
-    // it would be pure loss.
-    undoRedoStore.pushRedoGroup([
-      {
-        delta: {
-          id: 'd_phantom',
-          branchId: 'b1',
-          actionId: 'act_phantom',
-          op: 'update',
-          targetTable: 'story_entries',
-          targetId: 'e_reply',
-          entryId: 'e_reply',
-          source: 'user_edit',
-          // Carries a scope, so an empty reversal can only come from the rowBeforeUndo
-          // guard — without it the guard is unreachable and the assertion below is free.
-          undoPayload: {
-            content: 'gone',
-            $invalidationScope: { entryIds: ['e_reply'], editedPosition: 2 },
+    // applyRedo writes nothing for a snapshot carrying no row, so clamping for it would
+    // spend a pass re-reading prose that never changed.
+    undoRedoStore.pushRedoGroup(
+      __redoGroupForTest([
+        {
+          delta: {
+            id: 'd_phantom',
+            branchId: 'b1',
+            actionId: 'act_phantom',
+            op: 'update',
+            targetTable: 'story_entries',
+            targetId: 'e_reply',
+            entryId: 'e_reply',
+            source: 'user_edit',
+            // Carries a scope, so an untouched watermark can only come from the rowBeforeUndo
+            // guard — without it the guard is unreachable and the assertion below is free.
+            undoPayload: {
+              content: 'gone',
+              $invalidationScope: { entryIds: ['e_reply'], editedPosition: 2 },
+            },
+            logPosition: 9,
+            encodingVersion: 1,
+            createdAt: 9,
           },
-          logPosition: 9,
-          encodingVersion: 1,
-          createdAt: 9,
+          rowBeforeUndo: null,
         },
-        rowBeforeUndo: null,
-      },
-    ])
+      ]),
+    )
 
     expect((await redoLastAction('b1', ctx)).status).toBe('ok')
-    expect(await db.select().from(happenings).where(eq(happenings.branchId, 'b1'))).toHaveLength(1)
+    expect(await processedThrough(db)).toBe(2)
   })
 
   it('reverses nothing and clamps nothing below the head turn', async () => {

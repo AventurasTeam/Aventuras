@@ -61,7 +61,9 @@ export function generationGateReason(
   runKind: string | null,
 ): string | undefined {
   if (!editBlocked) return undefined
-  return t(runKind === 'chapter-close' ? 'generationGate.chapterClose' : 'generationGate.inFlight')
+  if (runKind === 'chapter-close') return t('generationGate.chapterClose')
+  if (runKind === SUGGESTION_REFRESH_KIND) return t('generationGate.suggestionRefresh')
+  return t('generationGate.inFlight')
 }
 
 /** Whether the story has an in-flight periodic-classifier run. */

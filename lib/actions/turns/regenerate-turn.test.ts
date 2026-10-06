@@ -29,6 +29,7 @@ import { regenerateTurn } from './regenerate-turn'
 import { submitTurn } from './submit-turn'
 import { expectRan, makeHarness, resetSingletons } from '../../pipeline/__tests__/harness'
 import { applyDeltaAction } from '../delta/apply-delta-action'
+import { __redoGroupForTest } from '../delta/redo'
 import {
   DeltaReplayError,
   ReversalIntegrityError,
@@ -485,7 +486,7 @@ describe('regenerateTurn', () => {
     await seedTwoTurnsWithCatchUp(ctx)
     await openStory(db, 's1', 'b1')
     await hydrateAppSettings(async () => WORKING_CONFIG)
-    undoRedoStore.pushRedoGroup([])
+    undoRedoStore.pushRedoGroup(__redoGroupForTest())
     expect(undoRedoStore.hasRedo()).toBe(true)
 
     await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
@@ -509,7 +510,7 @@ describe('regenerateTurn', () => {
     await seedTwoTurnsWithCatchUp(ctx)
     await openStory(db, 's1', 'b1')
     await hydrateAppSettings(async () => WORKING_CONFIG)
-    undoRedoStore.pushRedoGroup([])
+    undoRedoStore.pushRedoGroup(__redoGroupForTest())
 
     const regen = withSweepHook(
       () => {
@@ -540,7 +541,7 @@ describe('regenerateTurn', () => {
         throw new TypeError('Failed to fetch')
       }),
     )
-    undoRedoStore.pushRedoGroup([])
+    undoRedoStore.pushRedoGroup(__redoGroupForTest())
 
     const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
 
@@ -682,7 +683,7 @@ describe('regenerateTurn', () => {
       .values({ id: 'hinv_raw', branchId: 'b1', happeningId: 'h_b', entityId: 'char_k' })
     await openStory(db, 's1', 'b1')
     await hydrateAppSettings(async () => WORKING_CONFIG)
-    undoRedoStore.pushRedoGroup([])
+    undoRedoStore.pushRedoGroup(__redoGroupForTest())
     const before = await ctx.db.select().from(deltas)
 
     const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
@@ -702,7 +703,7 @@ describe('regenerateTurn', () => {
     await seedTwoTurnsWithCatchUp(ctx)
     await openStory(db, 's1', 'b1')
     await hydrateAppSettings(async () => WORKING_CONFIG)
-    undoRedoStore.pushRedoGroup([])
+    undoRedoStore.pushRedoGroup(__redoGroupForTest())
     const before = await ctx.db.select().from(deltas)
     const error = vi.spyOn(logger, 'error')
 

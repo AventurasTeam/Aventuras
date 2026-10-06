@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Separate from runtime.test.ts: eslint resolves `./runtime` and `./runtime.native`
 // to one module, so import/no-duplicates silently merges this into the web import.
-import { BOUNDED_SIGNAL_EXPIRED } from '@/lib/abort'
+import { boundedSignal } from '@/lib/abort'
 import { logger } from '@/lib/diagnostics'
 
 import { countTokensLocal, embedLocal } from './runtime.native'
@@ -195,10 +195,10 @@ describe('embedLocal (native)', () => {
   // Parity with the web runtime: expiry and cancel classify apart, not both as a cancel.
   it('reports a bounded-signal expiry as a timeout, not a cancel', async () => {
     const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => {})
-    const controller = new AbortController()
-    controller.abort(BOUNDED_SIGNAL_EXPIRED)
+    const bounded = boundedSignal(undefined, 0)
+    await new Promise((resolve) => setTimeout(resolve, 0))
 
-    const error = await rejectionOf(embedLocal('model-expired', ['a'], controller.signal))
+    const error = await rejectionOf(embedLocal('model-expired', ['a'], bounded.signal))
 
     expect((error as Error).message).toBe('embed timed out')
     expect(errorLog).toHaveBeenCalledWith('embedder.local_runtime_failed', {
