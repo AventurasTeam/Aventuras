@@ -17,6 +17,8 @@ type AwarenessUpsertPayload = {
   learnedAtEntryId?: string | null
   decayResistance?: number | null
   source?: string | null
+  /** Create only, user source only: a merge carries a moved row's count. */
+  retrievalCount?: number
 }
 
 declare module '@/lib/actions/action-map' {
@@ -40,9 +42,15 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
     learnedAtEntryId,
     decayResistance,
     source,
+    retrievalCount,
   } = action.payload
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
+  if (retrievalCount !== undefined && !(Number.isInteger(retrievalCount) && retrievalCount >= 0))
+    return {
+      status: 'rejected',
+      reason: 'invalid awareness: retrievalCount must be a non-negative integer',
+    }
 
   const parseInput = Object.fromEntries(
     Object.entries({ characterId, happeningId, learnedAtEntryId, decayResistance, source }).filter(
@@ -116,7 +124,8 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
     characterId,
     learnedAtEntryId: nullifyRef(learnedAtEntryId),
     decayResistance: decayResistance ?? null,
-    retrievalCount: 0,
+    // Only bumpAwarenessRetrieval counts retrievals; a user path may carry a moved row's count over.
+    retrievalCount: isUserOriginatedSource(action.source) ? (retrievalCount ?? 0) : 0,
     source: source ?? null,
   }
   return {
