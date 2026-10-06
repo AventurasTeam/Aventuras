@@ -972,6 +972,13 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
       "JSON of the focused entity's current state, set only on a turn where it changed since the last one sent",
     required: false,
   },
+  {
+    name: 'focusedEntityRemoved',
+    type: 'boolean',
+    category: 'runtime',
+    description: 'Whether the focused entity is gone from the vault as of this turn',
+    required: false,
+  },
 
   // === Runtime Variable Context ===
   {

@@ -78,7 +78,8 @@ The Vault assistant renders `interactive-lorebook` through `ContextBuilder.forPa
 Vault is global and has no story, so it resolves against `default-pack` by design. The system half
 is rendered once per conversation and carries the Active Context for the entity the assistant was
 opened from. The user half wraps each message and adds that entity's current record only on a turn
-where it changed, so the history the provider has cached is never rewritten.
+where it changed, or a note once it is gone from the vault, so the history the provider has cached is
+never rewritten.
 
 `PackService.initialize()` does two distinct things on startup, and they are not interchangeable:
 

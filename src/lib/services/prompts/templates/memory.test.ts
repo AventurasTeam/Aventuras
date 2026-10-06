@@ -151,6 +151,18 @@ describe('interactive-lorebook', () => {
     expect(withRecord.endsWith('make her taller')).toBe(true)
     expect(without).toBe('make her taller')
   })
+
+  it('tells the model the entity is gone, ahead of the message', async () => {
+    const out = await engine.parseAndRender(template.userContent!, {
+      userMessage: 'make her taller',
+      focusedEntityType: 'character',
+      focusedEntityRemoved: true,
+    })
+
+    expect(out).toBe(
+      'The character from the Active Context is no longer in the vault.\n\nmake her taller',
+    )
+  })
 })
 
 describe('lore-management user content', () => {

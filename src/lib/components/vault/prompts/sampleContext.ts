@@ -147,6 +147,7 @@ export const runtimeSamples: Record<string, string> = {
   focusedEntityId: 'char-1',
   focusedEntityName: 'Aria',
   focusedEntityRecord: '{ "id": "char-1", "name": "Aria", "traits": ["curious"] }',
+  focusedEntityRemoved: '',
 }
 
 /** All sample values combined (system + runtime) */

@@ -296,12 +296,37 @@ describe('focused entity context', () => {
     expect(userMessages(service)[0]).toContain('"name": "Alice"')
   })
 
-  it('names the entity but sends no record when it is no longer in the vault', async () => {
+  it('says so, without a record, when the entity is not in the vault on the first turn', async () => {
     const service = new InteractiveVaultService('interactiveVault')
     await service.initialize(emptySummary, focusOnAlice)
     await send(service, emptyVaultState())
 
     expect(lastCreateOptions!.instructions).toContain('## Active Context')
+    const [first] = userMessages(service)
+    expect(first).toContain('no longer in the vault')
+    expect(first).not.toContain('"name"')
+    expect(first.endsWith('make her taller')).toBe(true)
+  })
+
+  it('says once that the entity is gone after its record was sent', async () => {
+    const service = new InteractiveVaultService('interactiveVault')
+    await service.initialize(emptySummary, focusOnAlice)
+
+    await send(service, stateWith({ characters: () => [alice as never] }))
+    await send(service, emptyVaultState())
+    await send(service, emptyVaultState())
+
+    const [first, second, third] = userMessages(service)
+    expect(first).not.toContain('no longer in the vault')
+    expect(second).toContain('The character from the Active Context is no longer in the vault.')
+    expect(third).toBe('make her taller')
+  })
+
+  it('never says an entity is gone when there is no focus', async () => {
+    const service = new InteractiveVaultService('interactiveVault')
+    await service.initialize(emptySummary)
+    await send(service, emptyVaultState())
+
     expect(userMessages(service)).toEqual(['make her taller'])
   })
 

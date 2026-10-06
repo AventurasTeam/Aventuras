@@ -299,12 +299,16 @@ export class InteractiveVaultService extends BaseAIService {
     vaultState: VaultState,
     userMessage: string,
   ): Promise<{ content: string; record: string }> {
+    const focus = this.focusedEntity
     const record = this.focusedEntityRecord(vaultState)
+    const changed = record !== this.lastSentRecord
 
     const ctx = await ContextBuilder.forPack(undefined)
     ctx.add({
       userMessage,
-      focusedEntityRecord: record !== this.lastSentRecord ? record : '',
+      focusedEntityType: focus?.entityType,
+      focusedEntityRecord: changed ? record : '',
+      focusedEntityRemoved: changed && focus !== null && record === '',
     })
     const content = (await ctx.renderTemplate('interactive-lorebook-user')) || userMessage
     return { content, record }
