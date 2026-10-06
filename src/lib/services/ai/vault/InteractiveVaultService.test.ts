@@ -442,11 +442,23 @@ describe('sendMessageStreaming', () => {
 describe('sendMessageStreaming pending changes from parallel tool calls', () => {
   type Call = { id: string; name: string; args: Record<string, unknown> }
 
-  // The SDK runs a step's tool calls together once the model call ends, so every
-  // change exists before the first tool-result is emitted.
-  function parallelStep(calls: Call[]) {
+  // The SDK runs a step's tool calls together once the model call ends, so every change exists
+  // before the first tool-result is emitted. Both orders are indices into `calls`: the order the
+  // tools run in, and the order their results arrive in.
+  function parallelStep(
+    calls: Call[],
+    {
+      executeOrder = calls.map((_, i) => i),
+      resultOrder = calls.map((_, i) => i),
+    }: {
+      executeOrder?: number[]
+      resultOrder?: number[]
+    } = {},
+  ) {
     return async (tools: Record<string, any>) => {
-      const outputs = await Promise.all(calls.map((c) => tools[c.name].execute(c.args, {})))
+      const outputs: unknown[] = []
+      for (const i of executeOrder)
+        outputs[i] = await tools[calls[i].name].execute(calls[i].args, {})
       return [
         { type: 'start-step' },
         ...calls.map((c) => ({
@@ -455,9 +467,9 @@ describe('sendMessageStreaming pending changes from parallel tool calls', () => 
           toolName: c.name,
           input: c.args,
         })),
-        ...calls.map((c, i) => ({
+        ...resultOrder.map((i) => ({
           type: 'tool-result',
-          toolCallId: c.id,
+          toolCallId: calls[i].id,
           output: outputs[i],
         })),
         { type: 'finish-step' },
@@ -517,36 +529,31 @@ describe('sendMessageStreaming pending changes from parallel tool calls', () => 
     events.filter((e) => e.type === 'tool_end').map((e) => e.toolCall.pendingChange)
   const stepMessage = (events: any[]) => events.find((e) => e.type === 'message').message
 
-  it('links each parallel lorebook entry update to its own change', async () => {
-    nextStreamEvents = parallelStep([
-      { id: 'call-1', name: 'update_entry', args: { index: 0, description: 'new Ann' } },
-      { id: 'call-2', name: 'update_entry', args: { index: 1, description: 'new Bob' } },
-    ])
+  // Run order, creation order and result order all differ, and neither a queue (in order) nor a
+  // stack (reversed) reproduces the result order, so only linking by id passes.
+  it('links each call to its own change whatever order the calls run and report in', async () => {
+    const service = await newService()
+    service.generatedImages.set('img-1', 'data:image/png;base64,AAAA')
+    nextStreamEvents = parallelStep(
+      [
+        { id: 'call-1', name: 'update_entry', args: { index: 0, description: 'new Ann' } },
+        { id: 'call-2', name: 'update_entry', args: { index: 1, description: 'new Bob' } },
+        { id: 'call-3', name: 'set_portrait', args: { characterId: 'c1', imageId: 'img-1' } },
+      ],
+      { executeOrder: [1, 2, 0], resultOrder: [2, 0, 1] },
+    )
 
-    const events = await run(lorebookState())
+    const events = await run(fullState(), service)
 
-    const [first, second] = pendingChangesOf(events)
-    expect(first).toMatchObject({ action: 'update', entryIndex: 0 })
-    expect(second).toMatchObject({ action: 'update', entryIndex: 1 })
-    expect(first.id).not.toBe(second.id)
-    expect(stepMessage(events).pendingChanges.map((c: { id: string }) => c.id)).toEqual([
-      first.id,
-      second.id,
-    ])
-  })
-
-  it('links each parallel character deletion to its own change', async () => {
-    nextStreamEvents = parallelStep([
-      { id: 'call-1', name: 'delete_character', args: { characterId: 'c1' } },
-      { id: 'call-2', name: 'delete_character', args: { characterId: 'c2' } },
-    ])
-
-    const events = await run(characterState())
-
-    const [first, second] = pendingChangesOf(events)
-    expect(first).toMatchObject({ action: 'delete', entityId: 'c1' })
-    expect(second).toMatchObject({ action: 'delete', entityId: 'c2' })
-    expect(stepMessage(events).pendingChanges).toHaveLength(2)
+    const ended = events.filter((e) => e.type === 'tool_end').map((e) => e.toolCall)
+    expect(ended.map((t) => t.id)).toEqual(['call-3', 'call-1', 'call-2'])
+    expect(Object.fromEntries(ended.map((t) => [t.id, t.pendingChange]))).toEqual({
+      'call-1': expect.objectContaining({ action: 'update', entryIndex: 0 }),
+      'call-2': expect.objectContaining({ action: 'update', entryIndex: 1 }),
+      'call-3': expect.objectContaining({ action: 'update', entityId: 'c1' }),
+    })
+    expect(stepMessage(events).pendingChanges).toHaveLength(3)
+    expect(events.find((e) => e.type === 'done').result.unlinkedChangeIds).toEqual([])
   })
 
   it('gives a failed call no change when a sibling call succeeded', async () => {
@@ -560,21 +567,6 @@ describe('sendMessageStreaming pending changes from parallel tool calls', () => 
     const [failed, succeeded] = pendingChangesOf(events)
     expect(failed).toBeUndefined()
     expect(succeeded).toMatchObject({ action: 'update', entryIndex: 1 })
-  })
-
-  it('links set_portrait, which returns only the id of its change', async () => {
-    const service = await newService()
-    service.generatedImages.set('img-1', 'data:image/png;base64,AAAA')
-    nextStreamEvents = parallelStep([
-      { id: 'call-1', name: 'set_portrait', args: { characterId: 'c1', imageId: 'img-1' } },
-      { id: 'call-2', name: 'delete_character', args: { characterId: 'c2' } },
-    ])
-
-    const events = await run(characterState(), service)
-
-    const [portrait, deletion] = pendingChangesOf(events)
-    expect(portrait).toMatchObject({ action: 'update', entityId: 'c1' })
-    expect(deletion).toMatchObject({ action: 'delete', entityId: 'c2' })
   })
 
   const scenario = () =>
