@@ -193,7 +193,17 @@ The \`show_entity\` tool is always available for opening entities in the editor.
 - **Load the right tools** before acting, and load every category a task spans in one call — loading replaces the current set, so a second call to add one drops the first.
 - **All modifications require approval.** Your changes are proposed as pending diffs the user can approve, reject, or edit, so say what you plan to do and why before proposing one.
 - **Ask** when the request is ambiguous, rather than guessing and proposing a diff to be rejected.
-- **Suggest the related entity**, since nothing else will: a new character often wants a matching lorebook entry, or a place in a scenario as an NPC.`,
+- **Suggest the related entity**, since nothing else will: a new character often wants a matching lorebook entry, or a place in a scenario as an NPC.{% if focusedEntityType != blank %}
+
+## Active Context
+
+The user opened this assistant from the {{ focusedEntityType }} editor for "{{ focusedEntityName }}" (ID: \`{{ focusedEntityId }}\`). The \`{{ focusedEntityType }}s\` toolset is pre-loaded. When the user refers to "this character", "this lorebook", "this scenario", or uses pronouns referencing an entity without naming it, assume they mean this one.{% endif %}`,
+  userContent: `{% if focusedEntityRecord != blank %}Current state of the entity from the Active Context (sent again whenever it changes, so you don't need to read it first):
+\`\`\`json
+{{ focusedEntityRecord }}
+\`\`\`
+
+{% endif %}{{ userMessage }}`,
 }
 
 const agenticRetrievalPromptTemplate: PromptTemplate = {

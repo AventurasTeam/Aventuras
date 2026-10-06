@@ -16,10 +16,13 @@ import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
 import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
 import { createLogger } from '$lib/log'
 import { FandomService } from '../../fandom'
+import { ContextBuilder } from '$lib/services/context'
 import { stopWhenDone } from '../sdk/agents/stopConditions'
 import {
   createCharacterTools,
   createScenarioTools,
+  toCharacterDetails,
+  toScenarioDetails,
   createInteractiveVaultLorebookTools,
   createVaultLinkingTools,
   createFandomTools,
@@ -186,6 +189,10 @@ export class InteractiveVaultService extends BaseAIService {
   private fandomService: FandomService
   private conversationHistory: ModelMessage[] = []
   private systemPrompt: string = ''
+  private vaultSummary: VaultSummary | null = null
+  private focusedEntity: FocusedEntity | null = null
+  /** The focused entity's record as last sent, so an unchanged one isn't repeated each turn. */
+  private lastSentRecord: string | null = null
   private conversationId: string | null = null
   /** Per-lorebook known entry version at last interaction — used to detect external changes */
   private _knownEntryVersions = new Map<string, number>()
@@ -234,19 +241,10 @@ export class InteractiveVaultService extends BaseAIService {
       if (seeded) this.loadedCategories.add(seeded)
     }
 
-    const template = await database.getPackTemplate('default-pack', 'interactive-lorebook')
-
-    let content = template?.content ?? ''
-    content = content
-      .replace(/\{\{\s*characterCount\s*\}\}/g, String(vaultSummary.characterCount))
-      .replace(/\{\{\s*lorebookCount\s*\}\}/g, String(vaultSummary.lorebookCount))
-      .replace(/\{\{\s*totalEntryCount\s*\}\}/g, String(vaultSummary.totalEntryCount))
-      .replace(/\{\{\s*scenarioCount\s*\}\}/g, String(vaultSummary.scenarioCount))
-    this.systemPrompt = content
-
-    if (focusedEntity) {
-      this.systemPrompt += `\n\n## Active Context\nThe user opened this assistant from the ${focusedEntity.entityType} editor for "${focusedEntity.entityName}" (ID: \`${focusedEntity.entityId}\`). The \`${focusedEntity.entityType}s\` toolset is pre-loaded. When the user refers to "this character", "this lorebook", "this scenario", or uses pronouns referencing an entity without naming it, assume they mean this one.`
-    }
+    this.vaultSummary = vaultSummary
+    this.focusedEntity = focusedEntity ?? null
+    this.lastSentRecord = null
+    await this.renderSystemPrompt()
 
     this.initialized = true
     log('Initialized conversation', {
@@ -254,6 +252,74 @@ export class InteractiveVaultService extends BaseAIService {
       model: this.preset.model,
       loadedCategories: [...this.loadedCategories],
     })
+  }
+
+  /**
+   * Render the system prompt from the stored summary and focus. The Vault has no story, so it
+   * always resolves against the default pack.
+   */
+  private async renderSystemPrompt(): Promise<void> {
+    const summary = this.vaultSummary
+    const focus = this.focusedEntity
+    const ctx = await ContextBuilder.forPackId('default-pack')
+    ctx.add({
+      characterCount: summary?.characterCount ?? 0,
+      lorebookCount: summary?.lorebookCount ?? 0,
+      totalEntryCount: summary?.totalEntryCount ?? 0,
+      scenarioCount: summary?.scenarioCount ?? 0,
+      focusedEntityType: focus?.entityType ?? '',
+      focusedEntityId: focus?.entityId ?? '',
+      focusedEntityName: focus?.entityName ?? '',
+    })
+    this.systemPrompt = await ctx.renderTemplate('interactive-lorebook')
+  }
+
+  /**
+   * The focused entity as it stands in the vault now, or '' when there is none. Lorebooks are
+   * summarised only: `list_entries` / `read_entry` cover their entries.
+   */
+  private focusedEntityRecord(vaultState: VaultState): string {
+    const focus = this.focusedEntity
+    if (!focus) return ''
+
+    let details: object | undefined
+    switch (focus.entityType) {
+      case 'character': {
+        const character = vaultState.characters().find((c) => c.id === focus.entityId)
+        details = character && toCharacterDetails(character)
+        break
+      }
+      case 'scenario': {
+        const scenario = vaultState.scenarios().find((s) => s.id === focus.entityId)
+        details = scenario && toScenarioDetails(scenario)
+        break
+      }
+      case 'lorebook': {
+        const lorebook = vaultState.lorebooks().find((lb) => lb.id === focus.entityId)
+        details = lorebook && {
+          id: lorebook.id,
+          name: lorebook.name,
+          description: lorebook.description,
+          entryCount: lorebook.entries.length,
+        }
+        break
+      }
+    }
+    return details ? JSON.stringify(details, null, 2) : ''
+  }
+
+  /**
+   * Wrap the user's message in the `-user` half of the template. The focused entity's record
+   * rides along only when it differs from the last one sent, so earlier turns stay untouched.
+   */
+  private async renderUserMessage(vaultState: VaultState, userMessage: string): Promise<string> {
+    const record = this.focusedEntityRecord(vaultState)
+    const changed = record !== this.lastSentRecord
+    this.lastSentRecord = record
+
+    const ctx = await ContextBuilder.forPackId('default-pack')
+    ctx.add({ userMessage, focusedEntityRecord: changed ? record : '' })
+    return (await ctx.renderTemplate('interactive-lorebook-user')) || userMessage
   }
 
   /**
@@ -520,7 +586,7 @@ export class InteractiveVaultService extends BaseAIService {
     if (userMessage) {
       this.conversationHistory.push({
         role: 'user',
-        content: userMessage,
+        content: await this.renderUserMessage(vaultState, userMessage),
       })
     }
 
@@ -1046,6 +1112,12 @@ export class InteractiveVaultService extends BaseAIService {
       this.conversationHistory = JSON.parse(conversation.messages) as ModelMessage[]
       this.conversationId = conversationId
 
+      // The saved conversation may be about a different entity than the one the assistant
+      // was opened from.
+      this.focusedEntity = null
+      this.lastSentRecord = null
+      await this.renderSystemPrompt()
+
       const chatMessages = JSON.parse(conversation.chatMessages) as ChatMessage[]
       const pendingChanges = JSON.parse(conversation.pendingChanges) as VaultPendingChange[]
 
@@ -1117,6 +1189,9 @@ export class InteractiveVaultService extends BaseAIService {
   reset(): void {
     this.conversationHistory = []
     this.systemPrompt = ''
+    this.vaultSummary = null
+    this.focusedEntity = null
+    this.lastSentRecord = null
     this.initialized = false
     this.conversationId = null
     this.loadedCategories.clear()

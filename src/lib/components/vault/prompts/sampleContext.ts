@@ -143,6 +143,10 @@ export const runtimeSamples: Record<string, string> = {
   // Interactive Lorebook
   userMessage: 'Tell me about the Crystal Caverns.',
   conversationHistory: '[Conversation history for interactive lorebook...]',
+  focusedEntityType: 'character',
+  focusedEntityId: 'char-1',
+  focusedEntityName: 'Aria',
+  focusedEntityRecord: '{ "id": "char-1", "name": "Aria", "traits": ["curious"] }',
 }
 
 /** All sample values combined (system + runtime) */
