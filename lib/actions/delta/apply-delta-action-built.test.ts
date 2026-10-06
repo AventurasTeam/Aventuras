@@ -63,11 +63,13 @@ async function isSettled(promise: Promise<unknown>): Promise<boolean> {
   return settled
 }
 
-const describeAria = (description: string, source: DeltaSource): PipelineAction => ({
+const describeEntity = (id: string, description: string, source: DeltaSource): PipelineAction => ({
   kind: 'updateEntity',
   source,
-  payload: { branchId: 'b1', id: 'char_a', patch: { description } },
+  payload: { branchId: 'b1', id, patch: { description } },
 })
+const describeAria = (description: string, source: DeltaSource) =>
+  describeEntity('char_a', description, source)
 
 describe('applyDeltaActionGroupBuilt', () => {
   let ctx: DbCtx
@@ -218,6 +220,68 @@ describe('applyDeltaActionGroupBuilt', () => {
     const [delta] = await actionDeltas('act_user')
     expect(delta.undoPayload).toEqual({ description: 'from the other write' })
     expect(await ariaDescription()).toBe('from the group')
+  })
+
+  it("locks every action's row key, not only the first's", async () => {
+    const BRIA: Entity = { ...ARIA, id: 'char_b', name: 'Bria' }
+    await ctx.db.insert(entities).values(BRIA)
+    entitiesStore.hydrate('b1', [ARIA, BRIA])
+    const gate = deferred()
+    const gatedCtx: DbCtx = {
+      db: ctx.db,
+      runInTransaction: async (ops) => {
+        await gate.promise
+        await ctx.runInTransaction(ops)
+      },
+    }
+    const other = applyDeltaAction(
+      {
+        action: describeEntity('char_b', 'from the other write', 'user_edit'),
+        actionId: 'act_other',
+        branchId: 'b1',
+      },
+      gatedCtx,
+    )
+    const group = applyDeltaActionGroupBuilt(
+      () => ({
+        status: 'ok',
+        actions: [
+          describeEntity('char_a', 'a from the group', 'user_edit'),
+          describeEntity('char_b', 'b from the group', 'user_edit'),
+        ],
+      }),
+      { actionId: 'act_user', branchId: 'b1' },
+      ctx,
+    )
+    await flush()
+    expect(await actionDeltas('act_user')).toEqual([])
+
+    gate.resolve()
+    expect(await other).toMatchObject({ status: 'ok' })
+    expect(await group).toEqual({ status: 'ok' })
+    const groupDeltas = await actionDeltas('act_user')
+    expect(groupDeltas.find((d) => d.targetId === 'char_b')?.undoPayload).toEqual({
+      description: 'from the other write',
+    })
+  })
+
+  it('keeps the hold from the build through the commit, so a pass waits for both', async () => {
+    const planned = deferred()
+    const write = applyDeltaActionGroupBuilt(
+      async () => {
+        await planned.promise
+        return { status: 'ok', actions: [describeAria('from the group', 'user_edit')] }
+      },
+      { actionId: 'act_user', branchId: 'b1' },
+      ctx,
+    )
+    const pass = holdBranchWriteExclusive('b1', 'act_pass')
+    planned.resolve()
+
+    await pass
+    expect(await actionDeltas('act_user')).toHaveLength(1)
+    releaseBranchWriteExclusive('b1', 'act_pass')
+    expect(await write).toEqual({ status: 'ok' })
   })
 
   it('counts as a user write while it waits on the lock', async () => {

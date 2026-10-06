@@ -276,9 +276,9 @@ export type BuiltGroup =
   | { status: 'rejected'; reason: string; code: string }
 
 /**
- * applyDeltaActionGroup, but `build` runs under the branch lock's shared hold, so a plan read from
- * the DB or the stores can't predate a no-gate pass's writes. `build` must not write: the shared
- * hold isn't reentrant. Its refusal returns as is; a throw rejects the call. Tracked as a user write.
+ * applyDeltaActionGroup, but `build` runs under the branch lock's shared hold, so its plan can't
+ * predate a no-gate pass's writes. `build` takes no lock and should not await long: the hold isn't
+ * reentrant. Its refusal returns as is; a throw rejects the call. Tracked as a user write.
  */
 export function applyDeltaActionGroupBuilt(
   build: () => BuiltGroup | Promise<BuiltGroup>,
