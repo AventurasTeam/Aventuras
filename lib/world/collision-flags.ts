@@ -49,9 +49,8 @@ function isUserUpdateOf(action: PipelineAction, id: string): action is EntityUpd
 }
 
 /**
- * `actions` with each id's flag cleared: folded into that row's first user `updateEntity`, so a
- * row the action already updates stays one delta, else appended as a clear of its own. A repeated
- * id folds into the clear already there.
+ * `actions` with each id's flag cleared: folded into that row's first user `updateEntity` (one
+ * delta per row), else appended as its own update. A repeated id folds into its earlier clear.
  */
 export function withFlagClears(
   actions: readonly PipelineAction[],

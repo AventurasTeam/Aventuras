@@ -64,8 +64,7 @@ function tailActions(branchId: string, tail: DeleteTail | null, id: string): Pip
 }
 
 /**
- * world.md → Delete, plus a flag clear on each flagged namesake the delete leaves without a partner.
- * Handlers read pre-group state, so patch/tail/delete order doesn't matter.
+ * world.md → Delete, plus clears for orphaned flags. Handlers read pre-group state: order is free.
  * Replaces the whole `state` from this snapshot, so a write landing in between is lost — safe only
  * while nothing else writes `state` alongside user edits (the periodic classifier doesn't).
  */

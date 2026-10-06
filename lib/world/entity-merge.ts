@@ -32,7 +32,7 @@ export type EntityMergeInput = {
   fromLoser: readonly MergeScalar[]
   /** Final tags after the user's deselects. */
   tags: readonly string[]
-  /** Final keywords; normalized and de-duplicated here (C12). */
+  /** Final keywords; normalized and de-duplicated here. */
   keywords: readonly string[]
   /** The branch's entities, both rows among them. */
   branchEntities: readonly Entity[]
@@ -46,7 +46,7 @@ export type EntityMergeInput = {
 
 export type EntityMergePlan = {
   actions: PipelineAction[]
-  /** Loser rows the canonical already covers; the cascade removes them (the summary footnote). */
+  /** Loser rows the canonical already covers; the cascade removes them. */
   dropped: { awareness: number; involvements: number }
 }
 
@@ -86,8 +86,7 @@ function canonicalPatch(input: EntityMergeInput): EntityPatch {
 
 /**
  * Where other rows' refs to the loser go. An item has at most one position (data-model.md →
- * ItemState shape), so a canonical item already held or placed keeps its own and the loser's
- * holders drop it.
+ * ItemState shape): a held or placed canonical keeps its own; the loser's holders drop it.
  */
 function refTarget({ canonical, branchEntities }: EntityMergeInput): string | null {
   if (canonical.kind !== 'item') return canonical.id
@@ -198,9 +197,8 @@ function assertMergeable({ branchId, canonical, loser, branchEntities }: EntityM
 }
 
 /**
- * world.md → Merge. The loser's link rows are re-created on the canonical and the loser's
- * `deleteEntity` cascades the originals: no arm can re-key a link row, and the group runner refuses
- * a write to a row a delete in it cascades. Every handler reads pre-group state.
+ * world.md → Merge. The loser's link rows are re-created on the canonical and its `deleteEntity`
+ * cascades the originals: no arm re-keys a link row, and the group runner refuses writes to them.
  */
 export function entityMergeActions(input: EntityMergeInput): EntityMergePlan {
   assertMergeable(input)

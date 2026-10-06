@@ -35,9 +35,8 @@ function heldRewritten(state: Held, fromId: string, toId: string | null): Held |
 
 /**
  * Every ref field of `entity` naming `fromId` pointed at `toId`, or cleared when `toId` is null.
- * A ref on `toId` itself is cleared: a location can't parent itself. Reads through `stateOf`, so a
- * legacy row missing a key still yields a schema-valid state. Null when nothing changed. Keeps
- * `toId` once within this entity; the caller ensures `toId` holds no other position.
+ * A ref on `toId` itself is cleared: a location can't parent itself. Null when nothing changed.
+ * Keeps `toId` once within this entity; the caller ensures `toId` holds no other position.
  */
 export function stateWithRefRewritten(
   entity: Entity,
