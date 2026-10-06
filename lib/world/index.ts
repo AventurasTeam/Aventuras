@@ -32,6 +32,13 @@ export type {
   StackableDraft,
 } from './entity-draft'
 export { namesakeKey, orphanedFlags, withFlagClears } from './collision-flags'
+export {
+  entityKeepActions,
+  entityRenameActions,
+  RENAME_ISSUE,
+  renameIssue,
+} from './collision-resolve'
+export type { CollisionPair, RenameIssue } from './collision-resolve'
 export { entityActions } from './entity-actions'
 export type { EntitySaveInput } from './entity-actions'
 export { entityDeleteActions } from './entity-delete'
