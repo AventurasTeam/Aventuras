@@ -19,7 +19,7 @@ function baseEntity(overrides: Partial<EntitySummary> = {}): EntitySummary {
     description: 'A wandering swordsman drifting between cities.',
     status: 'active',
     retiredReason: undefined,
-    injectionMode: 'on-relevance',
+    injectionMode: 'auto',
     priority: 20,
     tags: ['hero', 'sword'],
     keywords: ['the wanderer', 'the swordsman'],
@@ -27,9 +27,12 @@ function baseEntity(overrides: Partial<EntitySummary> = {}): EntitySummary {
     relationCounts: {
       awarenessRows: 12,
       involvements: 4,
+      relationships: 2,
       inverseRefs: 2,
       embeddings: 1,
       translationRows: 3,
+      unheldItems: 1,
+      overlap: { awareness: 0, involvements: 0 },
     },
     ...overrides,
   }
@@ -42,15 +45,18 @@ const entityB = baseEntity({
   description: 'A city guardsman posted at the eastern gate.',
   status: 'staged',
   tags: ['guard', 'sword'],
-  // 'The Swordsman' is A's 'the swordsman' recased — only one survives the merge.
+  // 'The Swordsman' is A's 'the swordsman' recased: one keyword, in A's spelling.
   keywords: ['the gate guard', 'The Swordsman'],
   state: { hp: 90, post: 'east-gate' },
   relationCounts: {
     awarenessRows: 1,
     involvements: 0,
+    relationships: 0,
     inverseRefs: 0,
     embeddings: 1,
     translationRows: 0,
+    unheldItems: 0,
+    overlap: { awareness: 0, involvements: 0 },
   },
 })
 
@@ -198,9 +204,9 @@ export const MergeKeywordUnion: Story = {
     expect(resolution).not.toBeNull()
     expect(resolution).toMatchObject({
       mode: 'merge',
-      // The losing side's aliases survive; the deselected one is dropped, and the
-      // case variant collapses into the entry that sorted first.
-      finalKeywords: ['The Swordsman', 'the gate guard'],
+      // The losing side's aliases survive and the deselected one is dropped; the case
+      // variant was one keyword all along, in the older side's spelling.
+      finalKeywords: ['the gate guard', 'the swordsman'],
       finalTags: ['guard', 'hero', 'sword'],
     })
   },

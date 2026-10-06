@@ -1,20 +1,23 @@
-export type EntityKind = 'character' | 'location' | 'item' | 'faction'
+import type { Entity, EntityKind, InjectionMode } from '@/lib/db'
+import { normalizeTerm } from '@/lib/keyword-terms'
 
-export type EntityStatus = 'active' | 'staged' | 'retired'
-
-export type InjectionMode = 'always' | 'on-relevance' | 'never'
-
-export type ScalarField = 'name' | 'description' | 'status' | 'retiredReason' | 'injectionMode'
+export type ScalarField =
+  | 'name'
+  | 'description'
+  | 'status'
+  | 'retiredReason'
+  | 'injectionMode'
+  | 'priority'
 
 export type TermPartition = { onlyInA: string[]; onlyInB: string[]; both: string[] } | null
 
 export type EntitySummary = {
   id: string
   kind: EntityKind
-  createdAt: string
+  createdAt: string // ISO
   name: string
   description?: string
-  status: EntityStatus
+  status: Entity['status']
   retiredReason?: string
   injectionMode: InjectionMode
   priority: number
@@ -24,9 +27,15 @@ export type EntitySummary = {
   relationCounts: {
     awarenessRows: number
     involvements: number
+    relationships: number
     inverseRefs: number
     embeddings: 0 | 1
+    /** Dropped with the merge: the entity's translations and its relationships'. */
     translationRows: number
+    /** Items this side carries that nothing else holds or places; a merge leaves them unheld. */
+    unheldItems: number
+    /** Rows of this side the merge drops when this side loses: the other side already has them. */
+    overlap: { awareness: number; involvements: number }
   }
 }
 
@@ -59,6 +68,7 @@ export const SCALAR_FIELDS: ScalarField[] = [
   'status',
   'retiredReason',
   'injectionMode',
+  'priority',
 ]
 
 function deepEqual(a: unknown, b: unknown): boolean {
@@ -91,11 +101,37 @@ function partition(a: readonly string[], b: readonly string[]): TermPartition {
   return { onlyInA, onlyInB, both: a.filter((t) => bSet.has(t)).sort() }
 }
 
+/** `normalizeTerm` key → the first spelling seen; blanks dropped. */
+function firstSpellings(terms: readonly string[]): Map<string, string> {
+  const spellings = new Map<string, string>()
+  for (const term of terms) {
+    const key = normalizeTerm(term)
+    if (key !== '' && !spellings.has(key)) spellings.set(key, term)
+  }
+  return spellings
+}
+
+/** `partition` by `normalizeTerm`: a case variant is one keyword, in A's spelling when shared. */
+function keywordPartition(a: readonly string[], b: readonly string[]): TermPartition {
+  const inA = firstSpellings(a)
+  const inB = firstSpellings(b)
+  const only = (side: Map<string, string>, other: Map<string, string>) =>
+    [...side].filter(([key]) => !other.has(key)).map(([, term]) => term)
+  const onlyInA = only(inA, inB).sort()
+  const onlyInB = only(inB, inA).sort()
+  if (onlyInA.length === 0 && onlyInB.length === 0) return null
+  const both = [...inA]
+    .filter(([key]) => inB.has(key))
+    .map(([, term]) => term)
+    .sort()
+  return { onlyInA, onlyInB, both }
+}
+
 export function computeDivergence(a: EntitySummary, b: EntitySummary): DiffPayload {
   return {
     divergentScalars: SCALAR_FIELDS.filter((f) => a[f] !== b[f]),
     tags: partition(a.tags, b.tags),
-    keywords: partition(a.keywords, b.keywords),
+    keywords: keywordPartition(a.keywords, b.keywords),
     stateDivergent: !deepEqual(a.state, b.state),
   }
 }

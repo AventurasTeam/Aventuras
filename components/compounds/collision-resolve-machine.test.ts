@@ -12,7 +12,7 @@ function baseEntity(overrides: Partial<EntitySummary> = {}): EntitySummary {
     description: 'A wandering swordsman.',
     status: 'active',
     retiredReason: undefined,
-    injectionMode: 'on-relevance',
+    injectionMode: 'auto',
     priority: 0,
     tags: ['hero', 'sword'],
     keywords: [],
@@ -20,9 +20,12 @@ function baseEntity(overrides: Partial<EntitySummary> = {}): EntitySummary {
     relationCounts: {
       awarenessRows: 0,
       involvements: 0,
+      relationships: 0,
       inverseRefs: 0,
       embeddings: 1,
       translationRows: 0,
+      unheldItems: 0,
+      overlap: { awareness: 0, involvements: 0 },
     },
     ...overrides,
   }
@@ -126,6 +129,17 @@ describe('mergeReducer', () => {
         entityAId: a.id,
       })
       expect(next.deselectedTags).toEqual(['guard'])
+    })
+
+    it('rebases priority with the other divergent scalars', () => {
+      const a = baseEntity({ priority: 20, description: 'A desc' })
+      const b = baseEntity({ id: 'ent_b', priority: 5, description: 'B desc' })
+      const initial = initMergeState(computeDivergence(a, b), a.id, a.id)
+      expect(initial.fieldChoices).toEqual({ description: 'A', priority: 'A' })
+
+      const next = mergeReducer(initial, { type: 'pick-canonical', id: b.id, entityAId: a.id })
+
+      expect(next.fieldChoices).toEqual({ description: 'B', priority: 'B' })
     })
   })
 

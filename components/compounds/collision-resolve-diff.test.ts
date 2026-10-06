@@ -11,7 +11,7 @@ function baseEntity(overrides: Partial<EntitySummary> = {}): EntitySummary {
     description: 'A wandering swordsman.',
     status: 'active',
     retiredReason: undefined,
-    injectionMode: 'on-relevance',
+    injectionMode: 'auto',
     priority: 0,
     tags: ['hero', 'sword'],
     keywords: [],
@@ -19,9 +19,12 @@ function baseEntity(overrides: Partial<EntitySummary> = {}): EntitySummary {
     relationCounts: {
       awarenessRows: 0,
       involvements: 0,
+      relationships: 0,
       inverseRefs: 0,
       embeddings: 1,
       translationRows: 0,
+      unheldItems: 0,
+      overlap: { awareness: 0, involvements: 0 },
     },
     ...overrides,
   }
@@ -54,6 +57,13 @@ describe('computeDivergence', () => {
       const diff = computeDivergence(a, b)
       // Order matches SCALAR_FIELDS, not input order
       expect(diff.divergentScalars).toEqual(['name', 'description', 'status'])
+    })
+
+    it('places priority last in the fixed order', () => {
+      const a = baseEntity()
+      const b = baseEntity({ id: 'ent_b', name: 'Kael II', injectionMode: 'always', priority: 4 })
+      const diff = computeDivergence(a, b)
+      expect(diff.divergentScalars).toEqual(['name', 'injectionMode', 'priority'])
     })
 
     it('treats undefined description as divergent from a string', () => {
@@ -95,6 +105,13 @@ describe('computeDivergence', () => {
         onlyInB: ['guard'],
         both: ['sword'],
       })
+    })
+
+    it('keeps tags exact: a case variant tag diverges', () => {
+      const a = baseEntity({ tags: ['Hero'] })
+      const b = baseEntity({ id: 'ent_b', tags: ['hero'] })
+      const diff = computeDivergence(a, b)
+      expect(diff.tags).toEqual({ onlyInA: ['Hero'], onlyInB: ['hero'], both: [] })
     })
 
     it('sorts each partition alphabetically', () => {
@@ -215,13 +232,36 @@ describe('keywords', () => {
     expect(diff.tags).not.toBeNull()
   })
 
-  // Canon: priority rides the projection but is NOT a divergent scalar — the merge
-  // takes the canonical's value under the implicit-field rule.
-  it('does not treat priority as a divergent scalar', () => {
+  // world.md → Merge lists priority among the per-row radio scalars.
+  it('reports a priority-only divergence as exactly one divergent scalar', () => {
     const diff = computeDivergence(
       baseEntity({ priority: 0 }),
       baseEntity({ id: 'ent_b', priority: 9 }),
     )
-    expect(diff.divergentScalars).toEqual([])
+    expect(diff.divergentScalars).toEqual(['priority'])
+  })
+
+  it('treats a case or spacing variant as the same keyword', () => {
+    const diff = computeDivergence(
+      baseEntity({ keywords: ['The Wanderer'] }),
+      baseEntity({ id: 'ent_b', keywords: [' the wanderer'] }),
+    )
+    expect(diff.keywords).toBeNull()
+  })
+
+  it("shows a shared keyword in A's spelling and each side's own in its first spelling", () => {
+    const diff = computeDivergence(
+      baseEntity({ keywords: ['Sword', 'sword', 'gate'] }),
+      baseEntity({ id: 'ent_b', keywords: ['SWORD', 'inn', 'Inn'] }),
+    )
+    expect(diff.keywords).toEqual({ onlyInA: ['gate'], onlyInB: ['inn'], both: ['Sword'] })
+  })
+
+  it('ignores blank keywords', () => {
+    const diff = computeDivergence(
+      baseEntity({ keywords: ['a', '  '] }),
+      baseEntity({ id: 'ent_b', keywords: ['a'] }),
+    )
+    expect(diff.keywords).toBeNull()
   })
 })

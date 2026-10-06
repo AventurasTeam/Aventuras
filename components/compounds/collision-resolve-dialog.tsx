@@ -34,6 +34,7 @@ const SCALAR_LABELS: Record<ScalarField, string> = {
   status: 'Status',
   retiredReason: 'Retired reason',
   injectionMode: 'Injection mode',
+  priority: 'Priority',
 }
 
 type CollisionResolveDialogProps = {
