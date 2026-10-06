@@ -244,7 +244,7 @@ export class InteractiveVaultService extends BaseAIService {
     this.vaultSummary = vaultSummary
     this.focusedEntity = focusedEntity
     this.lastSentRecord = null
-    await this.renderSystemPrompt()
+    this.systemPrompt = await this.renderSystemPrompt(focusedEntity)
 
     this.initialized = true
     log('Initialized conversation', {
@@ -254,8 +254,7 @@ export class InteractiveVaultService extends BaseAIService {
     })
   }
 
-  private async renderSystemPrompt(): Promise<void> {
-    const focus = this.focusedEntity
+  private async renderSystemPrompt(focus: FocusedEntity | null): Promise<string> {
     const ctx = await ContextBuilder.forPack(undefined)
     ctx.add({
       ...this.vaultSummary,
@@ -263,7 +262,7 @@ export class InteractiveVaultService extends BaseAIService {
       focusedEntityId: focus?.entityId,
       focusedEntityName: focus?.entityName,
     })
-    this.systemPrompt = await ctx.renderTemplate('interactive-lorebook')
+    return ctx.renderTemplate('interactive-lorebook')
   }
 
   /**
@@ -1100,18 +1099,27 @@ export class InteractiveVaultService extends BaseAIService {
     }
 
     try {
-      this.conversationHistory = JSON.parse(conversation.messages) as ModelMessage[]
-      this.conversationId = conversationId
-
+      // Everything that can fail runs before any state is replaced, so a failure leaves the
+      // conversation on screen and the one that gets saved the same.
+      const history = JSON.parse(conversation.messages) as ModelMessage[]
+      const chatMessages = JSON.parse(conversation.chatMessages) as ChatMessage[]
+      const pendingChanges = JSON.parse(conversation.pendingChanges) as VaultPendingChange[]
+      const entryVersions = new Map(
+        conversation.entryVersions
+          ? (JSON.parse(conversation.entryVersions) as [string, number][])
+          : [],
+      )
       // The saved conversation may be about a different entity than the one the assistant
-      // was opened from, so the focus and the toolset seeded from it go with it.
+      // was opened from, so it loads without a focus.
+      const systemPrompt = await this.renderSystemPrompt(null)
+
+      this.conversationHistory = history
+      this.conversationId = conversationId
       this.focusedEntity = null
       this.lastSentRecord = null
       this.loadedCategories.clear()
-      await this.renderSystemPrompt()
-
-      const chatMessages = JSON.parse(conversation.chatMessages) as ChatMessage[]
-      const pendingChanges = JSON.parse(conversation.pendingChanges) as VaultPendingChange[]
+      this.systemPrompt = systemPrompt
+      this._knownEntryVersions = entryVersions
 
       // Restore generated images from chat messages so set_portrait still works
       // for images generated in a previous session
@@ -1125,13 +1133,6 @@ export class InteractiveVaultService extends BaseAIService {
           }
         }
       }
-
-      // Restore known entry versions for change detection across sessions
-      this._knownEntryVersions = new Map(
-        conversation.entryVersions
-          ? (JSON.parse(conversation.entryVersions) as [string, number][])
-          : [],
-      )
 
       log('Loaded conversation', {
         id: conversationId,

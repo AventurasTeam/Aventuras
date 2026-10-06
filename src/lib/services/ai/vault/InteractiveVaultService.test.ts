@@ -384,6 +384,39 @@ describe('focused entity context', () => {
     await service.loadConversation(id)
     expect(service.loadedCategories.size).toBe(0)
   })
+
+  it('keeps the current conversation when the prompt cannot be rendered on load', async () => {
+    const writer = new InteractiveVaultService('interactiveVault')
+    const id = await writer.saveConversation(
+      [{ id: 'm1', role: 'user', content: 'hi', timestamp: 1 }],
+      [],
+    )
+
+    const service = new InteractiveVaultService('interactiveVault')
+    await service.initialize(emptySummary, focusOnAlice)
+    vi.mocked(database.getPackTemplate).mockRejectedValueOnce(new Error('db unavailable'))
+
+    expect(await service.loadConversation(id)).toBeNull()
+    expect(service.getConversationId()).toBeNull()
+    expect(service.getFocusedEntity()).toEqual(focusOnAlice)
+    expect(service.loadedCategories.has('characters')).toBe(true)
+  })
+
+  it('keeps the current conversation when the saved one cannot be parsed', async () => {
+    const writer = new InteractiveVaultService('interactiveVault')
+    const id = await writer.saveConversation(
+      [{ id: 'm1', role: 'user', content: 'hi', timestamp: 1 }],
+      [],
+    )
+    conversationRows.get(id)!.chatMessages = '{not json'
+
+    const service = new InteractiveVaultService('interactiveVault')
+    await service.initialize(emptySummary, focusOnAlice)
+
+    expect(await service.loadConversation(id)).toBeNull()
+    expect(service.getConversationId()).toBeNull()
+    expect(service.getFocusedEntity()).toEqual(focusOnAlice)
+  })
 })
 
 describe('saveConversation / loadConversation', () => {
