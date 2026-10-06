@@ -104,6 +104,7 @@ vi.mock('../sdk/agents/factory', () => ({
 const { InteractiveVaultService, getActiveToolNames, TOOL_CATEGORIES, ALWAYS_ACTIVE_TOOLS } =
   await import('./InteractiveVaultService')
 const { database } = await import('$lib/services/database')
+type Service = import('./InteractiveVaultService').InteractiveVaultService
 type VaultState = import('./InteractiveVaultService').VaultState
 type VaultSummary = import('./InteractiveVaultService').VaultSummary
 type ToolCategory = import('./InteractiveVaultService').ToolCategory
@@ -211,13 +212,13 @@ describe('focused entity context', () => {
     return { ...emptyVaultState(), ...overrides }
   }
 
-  async function send(service: InstanceType<typeof InteractiveVaultService>, state: VaultState) {
+  async function send(service: Service, state: VaultState) {
     for await (const _ of service.sendMessageStreaming(state, 'make her taller')) {
       // drain
     }
   }
 
-  const userMessages = (service: InstanceType<typeof InteractiveVaultService>) =>
+  const userMessages = (service: Service) =>
     service
       .getConversationHistory()
       .filter((m) => m.role === 'user')
@@ -729,7 +730,7 @@ describe('sendMessageStreaming pending changes from parallel tool calls', () => 
     return service
   }
 
-  async function run(state: VaultState, service?: InstanceType<typeof InteractiveVaultService>) {
+  async function run(state: VaultState, service?: Service) {
     const events: any[] = []
     for await (const event of (service ?? (await newService())).sendMessageStreaming(state, 'go')) {
       events.push(event)
@@ -818,7 +819,7 @@ describe('sendMessageStreaming pending changes from parallel tool calls', () => 
     name: string
     state: () => VaultState
     args: Record<string, unknown>
-    seed?: (service: InstanceType<typeof InteractiveVaultService>) => void
+    seed?: (service: Service) => void
   }[] = [
     {
       name: 'create_character',
