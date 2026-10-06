@@ -7,7 +7,7 @@
  */
 
 import type { VaultCharacter, VaultLorebook, VaultLorebookEntry, VaultScenario } from '$lib/types'
-import { tool, type ModelMessage, type ToolSet } from 'ai'
+import { tool, type ModelMessage } from 'ai'
 import * as z from 'zod'
 import { settings, type ServiceId } from '$lib/stores/settings.svelte'
 import { BaseAIService } from '../BaseAIService'
@@ -168,6 +168,8 @@ export interface SendMessageResult {
   response: string
   pendingChanges: VaultPendingChange[]
   toolCalls: ToolCallDisplay[]
+  /** Ids of pending changes that no tool result carried, so the UI cannot show them */
+  unlinkedChangeIds: string[]
   reasoning?: string
 }
 
@@ -277,7 +279,6 @@ export class InteractiveVaultService extends BaseAIService {
 
     // Track state for this message
     const pendingChanges: VaultPendingChange[] = []
-    const linkedChangeIds = new Set<string>() // Prevent re-linking old changes to new tool calls
     const toolCalls: ToolCallDisplay[] = []
     let responseContent = ''
     let reasoning: string | undefined
@@ -504,7 +505,7 @@ export class InteractiveVaultService extends BaseAIService {
     }
 
     // Combine all tools (all registered, activeTools controls visibility)
-    const tools: Record<string, unknown> = {
+    const tools = {
       ...loadToolsetTool,
       ...characterTools,
       ...scenarioTools,
@@ -528,7 +529,7 @@ export class InteractiveVaultService extends BaseAIService {
         {
           presetId: this.presetId,
           instructions: this.systemPrompt,
-          tools: tools as ToolSet,
+          tools,
           stopWhen: stopWhenDone(50),
           signal,
           prepareStep: () => ({
@@ -620,7 +621,7 @@ export class InteractiveVaultService extends BaseAIService {
               (tc) => tc.id === event.toolCallId && !tc.claimed,
             )
             if (toolInfo) toolInfo.claimed = true
-            const toolResult = 'result' in event ? event.result : event.output
+            const toolResult = event.output
             if (toolInfo) {
               const toolCallDisplay: ToolCallDisplay = {
                 id: event.toolCallId,
@@ -629,16 +630,15 @@ export class InteractiveVaultService extends BaseAIService {
                 result: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult),
               }
 
-              // Check if this tool call created a pending change
-              const latestChange = pendingChanges[pendingChanges.length - 1]
-              if (
-                latestChange &&
-                latestChange.toolCallId.startsWith('iv-') &&
-                !linkedChangeIds.has(latestChange.id)
-              ) {
-                toolCallDisplay.pendingChange = latestChange
-                linkedChangeIds.add(latestChange.id)
+              // Every tool that creates a pending change must return it, or its id as `changeId`.
+              // The classification test in InteractiveVaultService.test.ts enforces this.
+              let changeId: string | undefined
+              if (!event.dynamic && typeof event.output === 'object' && event.output) {
+                if ('pendingChange' in event.output) changeId = event.output.pendingChange?.id
+                if (!changeId && 'changeId' in event.output) changeId = event.output.changeId
               }
+              const linked = changeId ? pendingChanges.find((pc) => pc.id === changeId) : undefined
+              if (linked) toolCallDisplay.pendingChange = linked
 
               // Attach generated image URL directly to the tool call display
               const imageIdStr =
@@ -680,6 +680,10 @@ export class InteractiveVaultService extends BaseAIService {
         }
       }
 
+      const unlinkedChangeIds = pendingChanges
+        .filter((pc) => !toolCalls.some((tc) => tc.pendingChange?.id === pc.id))
+        .map((pc) => pc.id)
+
       // Add assistant response to conversation history
       const responseMessages = await result.response
       this.conversationHistory.push(...responseMessages.messages)
@@ -690,6 +694,7 @@ export class InteractiveVaultService extends BaseAIService {
           response: responseContent,
           pendingChanges,
           toolCalls,
+          unlinkedChangeIds,
           reasoning,
         },
       }

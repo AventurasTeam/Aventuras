@@ -269,6 +269,7 @@ export function createImageTools(context: ImageToolContext) {
 
         return {
           success: true,
+          changeId,
           message: `Created pending portrait update for "${character.name}". Awaiting approval.`,
         }
       },

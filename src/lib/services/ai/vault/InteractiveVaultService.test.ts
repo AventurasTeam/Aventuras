@@ -68,8 +68,9 @@ vi.mock('$lib/services/database', () => ({
 
 // Each test sets these before calling sendMessageStreaming to script the fake
 // agent's fullStream. nextStreamError simulates the stream throwing instead of
-// completing normally (e.g. an aborted fetch).
-let nextStreamEvents: unknown[] = []
+// completing normally (e.g. an aborted fetch). A function is awaited once the
+// factory has captured the tools, so a test can run the real tool executes first.
+let nextStreamEvents: unknown[] | ((tools: Record<string, any>) => Promise<unknown[]>) = []
 let nextStreamError: Error | null = null
 // Captures the options (tools, prepareStep, ...) passed to the factory on the
 // most recent call, so tests can exercise the load_toolset tool and prepareStep
@@ -82,7 +83,9 @@ vi.mock('../sdk/agents/factory', () => ({
     return {
       stream: vi.fn(async () => ({
         fullStream: (async function* () {
-          for (const event of nextStreamEvents) yield event
+          const script = nextStreamEvents
+          const events = typeof script === 'function' ? await script(options.tools) : script
+          for (const event of events) yield event
           if (nextStreamError) throw nextStreamError
         })(),
         response: Promise.resolve({ messages: [] }),
@@ -441,5 +444,313 @@ describe('sendMessageStreaming', () => {
     for (const name of TOOL_CATEGORIES.characters) expect(activeTools).toContain(name)
     for (const name of TOOL_CATEGORIES.images) expect(activeTools).toContain(name)
     for (const name of TOOL_CATEGORIES.scenarios) expect(activeTools).not.toContain(name)
+  })
+})
+
+describe('sendMessageStreaming pending changes from parallel tool calls', () => {
+  type Call = { id: string; name: string; args: Record<string, unknown> }
+
+  // The SDK runs a step's tool calls together once the model call ends, so every change exists
+  // before the first tool-result is emitted. Both orders are indices into `calls`: the order the
+  // tools run in, and the order their results arrive in.
+  function parallelStep(
+    calls: Call[],
+    {
+      executeOrder = calls.map((_, i) => i),
+      resultOrder = calls.map((_, i) => i),
+    }: {
+      executeOrder?: number[]
+      resultOrder?: number[]
+    } = {},
+  ) {
+    return async (tools: Record<string, any>) => {
+      const outputs: unknown[] = []
+      for (const i of executeOrder)
+        outputs[i] = await tools[calls[i].name].execute(calls[i].args, {})
+      return [
+        { type: 'start-step' },
+        ...calls.map((c) => ({
+          type: 'tool-call',
+          toolCallId: c.id,
+          toolName: c.name,
+          input: c.args,
+        })),
+        ...resultOrder.map((i) => ({
+          type: 'tool-result',
+          toolCallId: calls[i].id,
+          output: outputs[i],
+        })),
+        { type: 'finish-step' },
+      ]
+    }
+  }
+
+  const character = (id: string) =>
+    ({
+      id,
+      name: `Char ${id}`,
+      description: '',
+      traits: [],
+      visualDescriptors: {},
+      tags: [],
+      favorite: false,
+      portrait: null,
+    }) as never
+
+  const entry = (name: string) => ({
+    name,
+    type: 'character' as const,
+    description: `About ${name}`,
+    keywords: [name.toLowerCase()],
+    aliases: [],
+    injectionMode: 'keyword' as const,
+    priority: 50,
+  })
+
+  const entries = [entry('Ann'), entry('Bob')] as never[]
+  const lorebookState = (): VaultState => ({
+    ...emptyVaultState(),
+    lorebooks: () => [{ id: 'lb1', name: 'Book', entries } as never],
+    activeLorebookId: 'lb1',
+    activeEntries: entries,
+  })
+  const characterState = (): VaultState => ({
+    ...emptyVaultState(),
+    characters: () => [character('c1'), character('c2')],
+  })
+
+  async function newService() {
+    const service = new InteractiveVaultService('interactiveVault')
+    await service.initialize(emptySummary)
+    return service
+  }
+
+  async function run(state: VaultState, service?: InstanceType<typeof InteractiveVaultService>) {
+    const events: any[] = []
+    for await (const event of (service ?? (await newService())).sendMessageStreaming(state, 'go')) {
+      events.push(event)
+    }
+    return events
+  }
+
+  const pendingChangesOf = (events: any[]) =>
+    events.filter((e) => e.type === 'tool_end').map((e) => e.toolCall.pendingChange)
+  const stepMessage = (events: any[]) => events.find((e) => e.type === 'message').message
+
+  // Run order, creation order and result order all differ, and neither a queue (in order) nor a
+  // stack (reversed) reproduces the result order, so only linking by id passes.
+  it('links each call to its own change whatever order the calls run and report in', async () => {
+    const service = await newService()
+    service.generatedImages.set('img-1', 'data:image/png;base64,AAAA')
+    nextStreamEvents = parallelStep(
+      [
+        { id: 'call-1', name: 'update_entry', args: { index: 0, description: 'new Ann' } },
+        { id: 'call-2', name: 'update_entry', args: { index: 1, description: 'new Bob' } },
+        { id: 'call-3', name: 'set_portrait', args: { characterId: 'c1', imageId: 'img-1' } },
+      ],
+      { executeOrder: [1, 2, 0], resultOrder: [2, 0, 1] },
+    )
+
+    const events = await run(fullState(), service)
+
+    const ended = events.filter((e) => e.type === 'tool_end').map((e) => e.toolCall)
+    expect(ended.map((t) => t.id)).toEqual(['call-3', 'call-1', 'call-2'])
+    expect(Object.fromEntries(ended.map((t) => [t.id, t.pendingChange]))).toEqual({
+      'call-1': expect.objectContaining({ action: 'update', entryIndex: 0 }),
+      'call-2': expect.objectContaining({ action: 'update', entryIndex: 1 }),
+      'call-3': expect.objectContaining({ action: 'update', entityId: 'c1' }),
+    })
+    expect(stepMessage(events).pendingChanges).toHaveLength(3)
+    expect(events.find((e) => e.type === 'done').result.unlinkedChangeIds).toEqual([])
+  })
+
+  it('gives a failed call no change when a sibling call succeeded', async () => {
+    nextStreamEvents = parallelStep([
+      { id: 'call-1', name: 'update_entry', args: { index: 99, description: 'nope' } },
+      { id: 'call-2', name: 'update_entry', args: { index: 1, description: 'new Bob' } },
+    ])
+
+    const events = await run(lorebookState())
+
+    const [failed, succeeded] = pendingChangesOf(events)
+    expect(failed).toBeUndefined()
+    expect(succeeded).toMatchObject({ action: 'update', entryIndex: 1 })
+  })
+
+  const scenario = () =>
+    ({
+      id: 's1',
+      name: 'Scenario',
+      description: null,
+      settingSeed: 'A seed',
+      npcs: [{ name: 'Npc', role: 'guard', description: '', relationship: '', traits: [] }],
+      primaryCharacterName: 'Hero',
+      firstMessage: null,
+      alternateGreetings: [],
+      tags: [],
+      favorite: false,
+    }) as never
+  const scenarioState = (): VaultState => ({
+    ...emptyVaultState(),
+    scenarios: () => [scenario()],
+  })
+  const fullState = (): VaultState => ({
+    ...lorebookState(),
+    characters: characterState().characters,
+    scenarios: scenarioState().scenarios,
+  })
+
+  const npc = {
+    name: 'Gate',
+    role: 'guard',
+    description: 'Watches',
+    relationship: 'foe',
+    traits: [],
+  }
+
+  // Every tool that creates a pending change, with a state and args that make it succeed.
+  // A tool that creates a change must carry it (or its id) on its result.
+  const CHANGE_TOOLS: {
+    name: string
+    state: () => VaultState
+    args: Record<string, unknown>
+    seed?: (service: InstanceType<typeof InteractiveVaultService>) => void
+  }[] = [
+    {
+      name: 'create_character',
+      state: characterState,
+      args: {
+        name: 'New',
+        description: null,
+        traits: [],
+        visualDescriptors: {},
+      },
+    },
+    {
+      name: 'update_character',
+      state: characterState,
+      args: { characterId: 'c1', name: 'Renamed' },
+    },
+    { name: 'delete_character', state: characterState, args: { characterId: 'c1' } },
+    {
+      name: 'create_scenario',
+      state: scenarioState,
+      args: {
+        name: 'New',
+        description: null,
+        settingSeed: 'Seed',
+        primaryCharacterName: 'Hero',
+      },
+    },
+    { name: 'update_scenario', state: scenarioState, args: { scenarioId: 's1', name: 'Renamed' } },
+    { name: 'delete_scenario', state: scenarioState, args: { scenarioId: 's1' } },
+    { name: 'add_scenario_npc', state: scenarioState, args: { scenarioId: 's1', npc } },
+    {
+      name: 'update_scenario_npc',
+      state: scenarioState,
+      args: { scenarioId: 's1', npcName: 'Npc', updates: { role: 'captain' } },
+    },
+    {
+      name: 'remove_scenario_npc',
+      state: scenarioState,
+      args: { scenarioId: 's1', npcName: 'Npc' },
+    },
+    { name: 'create_lorebook', state: lorebookState, args: { name: 'New book' } },
+    {
+      name: 'create_entry',
+      state: lorebookState,
+      args: {
+        name: 'Cy',
+        type: 'character',
+        description: 'About Cy',
+        keywords: ['cy'],
+      },
+    },
+    { name: 'update_entry', state: lorebookState, args: { index: 0, description: 'new Ann' } },
+    { name: 'delete_entry', state: lorebookState, args: { index: 0 } },
+    {
+      name: 'merge_entries',
+      state: lorebookState,
+      args: { indices: [0, 1], mergedEntry: entry('Merged') },
+    },
+    {
+      name: 'link_character_to_lorebook',
+      state: fullState,
+      args: { characterId: 'c1', lorebookId: 'lb1' },
+    },
+    {
+      name: 'create_lorebook_entry_from_character',
+      state: fullState,
+      args: { characterId: 'c1', lorebookId: 'lb1' },
+    },
+    {
+      name: 'set_portrait',
+      state: characterState,
+      args: { characterId: 'c1', imageId: 'img-1' },
+      seed: (service) => service.generatedImages.set('img-1', 'data:image/png;base64,AAAA'),
+    },
+  ]
+
+  const NO_CHANGE_TOOLS = [
+    'fetch_fandom_section',
+    'generate_portrait',
+    'generate_standard_image',
+    'get_fandom_article_info',
+    'list_characters',
+    'list_entries',
+    'list_lorebooks',
+    'list_scenarios',
+    'load_toolset',
+    'read_character',
+    'read_entry',
+    'read_lorebook_summary',
+    'read_scenario',
+    'search_fandom',
+    'show_entity',
+  ]
+
+  it('classifies every registered tool as creating a change or not', async () => {
+    await run(emptyVaultState())
+
+    expect(Object.keys(lastCreateOptions!.tools).sort()).toEqual(
+      [...CHANGE_TOOLS.map((t) => t.name), ...NO_CHANGE_TOOLS].sort(),
+    )
+  })
+
+  it.each(CHANGE_TOOLS)('$name carries its change on the tool result', async (row) => {
+    const service = await newService()
+    row.seed?.(service)
+    nextStreamEvents = parallelStep([{ id: 'call-1', name: row.name, args: row.args }])
+
+    const events = await run(row.state(), service)
+
+    expect(pendingChangesOf(events)).toEqual([expect.objectContaining({ id: expect.any(String) })])
+    expect(stepMessage(events).pendingChanges).toHaveLength(1)
+    expect(events.find((e) => e.type === 'done').result.unlinkedChangeIds).toEqual([])
+  })
+
+  it('reports a change that no tool result carried', async () => {
+    nextStreamEvents = async (tools) => {
+      const output = await tools.delete_character.execute({ characterId: 'c1' }, {})
+      const { pendingChange: _dropped, ...withoutChange } = output
+      return [
+        { type: 'start-step' },
+        {
+          type: 'tool-call',
+          toolCallId: 'call-1',
+          toolName: 'delete_character',
+          input: { characterId: 'c1' },
+        },
+        { type: 'tool-result', toolCallId: 'call-1', output: withoutChange },
+        { type: 'finish-step' },
+      ]
+    }
+
+    const events = await run(characterState())
+
+    const { result } = events.find((e) => e.type === 'done')
+    expect(result.pendingChanges).toHaveLength(1)
+    expect(result.unlinkedChangeIds).toEqual([result.pendingChanges[0].id])
+    expect(pendingChangesOf(events)).toEqual([undefined])
   })
 })
