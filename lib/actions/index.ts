@@ -31,6 +31,13 @@ export { saveHappening } from './plot/save-happening'
 export { saveThread } from './plot/save-thread'
 export { ENTITY_REJECTION, saveEntity, type EntitySaveResult } from './world/save-entity'
 export { saveLore, type LoreSaveResult } from './world/save-lore'
+export {
+  COLLISION_REJECTION,
+  resolveCollision,
+  type CollisionRejectionCode,
+  type CollisionResolution,
+  type CollisionResolveResult,
+} from './world/resolve-collision'
 export { deleteEntityRow } from './row-delete/delete-entity'
 export {
   deleteRow,
