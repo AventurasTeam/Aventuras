@@ -226,7 +226,10 @@ export class InteractiveVaultService extends BaseAIService {
    * Initialize the conversation with vault summary data.
    * Optionally pass a focusedEntity to inject context about which entity the user was editing.
    */
-  async initialize(vaultSummary: VaultSummary, focusedEntity?: FocusedEntity): Promise<void> {
+  async initialize(
+    vaultSummary: VaultSummary,
+    focusedEntity: FocusedEntity | null = null,
+  ): Promise<void> {
     this.conversationHistory = []
 
     // Seed loaded categories from focused entity context
@@ -242,7 +245,7 @@ export class InteractiveVaultService extends BaseAIService {
     }
 
     this.vaultSummary = vaultSummary
-    this.focusedEntity = focusedEntity ?? null
+    this.focusedEntity = focusedEntity
     this.lastSentRecord = null
     await this.renderSystemPrompt()
 
