@@ -142,6 +142,24 @@ describe('orphanedFlags', () => {
       orphanedFlags({ entities: [kael, twin, place], removed: new Set(['char_p']) }),
     ).toStrictEqual(['char_f'])
   })
+
+  it('returns a flagged row renamed out of a group that still pairs without it', () => {
+    const f = flagged('char_f', 'Kael')
+    const p = entity('char_p', 'Kael')
+    const q = entity('char_q', 'Kael')
+    expect(
+      orphanedFlags({ entities: [f, p, q], renamed: new Map([['char_f', 'Kael the guard']]) }),
+    ).toStrictEqual(['char_f'])
+  })
+
+  it('leaves a flagged row renamed onto another row’s name', () => {
+    const f = flagged('char_f', 'Kael')
+    const p = entity('char_p', 'Kael')
+    const m = entity('char_m', 'Mira')
+    expect(
+      orphanedFlags({ entities: [f, p, m], renamed: new Map([['char_f', 'Mira']]) }),
+    ).toStrictEqual([])
+  })
 })
 
 describe('withFlagClears', () => {
@@ -179,6 +197,16 @@ describe('withFlagClears', () => {
         kind: 'updateEntity',
         source: 'user_edit',
         payload: { branchId: 'b1', id: 'char_f', patch: { name: 'Kael the guard' } },
+      },
+    ])
+  })
+
+  it('appends one clear for a repeated id the actions do not update', () => {
+    expect(withFlagClears([], 'b1', ['x', 'x'])).toStrictEqual([
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: { branchId: 'b1', id: 'x', patch: { nameCollisionFlag: 0 } },
       },
     ])
   })
@@ -270,5 +298,28 @@ describe('orphan clears through the entity arm', () => {
     await (await prepareUndo(set, ctx)).reverse()
     expect(await flagOf(ctx, 'loc_b')).toBe(1)
     expect(await flagOf(ctx, 'loc_a')).toBe(0)
+  })
+
+  it('a delete clears an unreferencing partner, and undo re-flags it and restores the target', async () => {
+    const target = entity('char_x', 'Kael')
+    const partner = flagged('char_p', 'Kael')
+    const ctx = await setup([target, partner])
+    const { actions } = entityDeleteActions({
+      branchId: 'b1',
+      target,
+      branchEntities: [target, partner],
+      tail: null,
+    })
+
+    expect(
+      await applyDeltaActionGroup(actions, { actionId: 'act_1', branchId: 'b1' }, ctx),
+    ).toStrictEqual({ status: 'ok' })
+    expect(await flagOf(ctx, 'char_p')).toBe(0)
+    expect(await flagOf(ctx, 'char_x')).toBeUndefined()
+
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target: await deltaRows(ctx) })
+    await (await prepareUndo(set, ctx)).reverse()
+    expect(await flagOf(ctx, 'char_p')).toBe(1)
+    expect(await flagOf(ctx, 'char_x')).toBe(0)
   })
 })
