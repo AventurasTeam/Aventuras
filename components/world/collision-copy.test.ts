@@ -22,7 +22,7 @@ describe('collisionRejectionText', () => {
       'A parent chain this merge touches loops back or runs too deep. Fix that chain first.',
     )
     expect(collisionRejectionText(COLLISION_REJECTION.invalidRename)).toBe(
-      'Both rows need a name, and the names must differ by more than letter case.',
+      'Both rows need a name, and the names must differ by more than letter case or spaces at either end.',
     )
   })
 
