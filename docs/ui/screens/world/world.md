@@ -911,7 +911,9 @@ Field-level rules:
   because keywords drive retrieval matching, so dropping the losing
   side's aliases would narrow what the merged entity can be found by.
 - **`tags[]`** — union by default with a per-tag deselect.
-  Renders only when the two tag sets differ.
+  Renders only when the two tag sets differ. The merged list, here
+  and for keywords, keeps the canonical's entries in their order,
+  with the other row's additions after them.
 - **`state` JSON** — taken whole-side from canonical. Per-field
   diff inside `state` is out of scope for v1: schema shape
   varies per kind (character / location / item / faction),

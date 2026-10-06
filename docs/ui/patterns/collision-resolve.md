@@ -165,9 +165,14 @@ both sides' keywords, deduplicated under the normalization
 `matchTerms` uses so a case variant does not survive as a second
 entry, a shared one in the canonical's spelling. `finalTags` is the
 union after the user's deselects are applied — empty array is
-allowed (entity becomes untagged). When the two sides agree on a
-list (its partition is `null`), the dialog submits the canonical's
-own list as it is, so the merge never writes an unchanged list.
+allowed (entity becomes untagged). Both lists are ordered the same
+way: the canonical's own entries in their stored order (keywords
+trimmed and de-duplicated), minus the deselected, then the other
+side's remaining additions in the order the chips are offered
+(sorted). A selection equal to the canonical's set therefore submits
+its list exactly, and the merge writes no unchanged list. When the
+two sides agree on a list (its partition is `null`), the dialog
+submits the canonical's own list as it is.
 
 The rename array is sparse: only entities whose name actually
 changed are included, trimmed. Validation: both trimmed names must be
@@ -250,8 +255,10 @@ Transition rules:
   `deselectedKeywords`; the reducer normalizes the keyword to its
   key.
 - **`toggle-tag`** — adds or removes a tag from `deselectedTags`.
-  `finalTags` is derived in the view as `union - deselectedTags`
-  (sorted).
+  `finalTags` is derived in the view, not stored: the canonical's
+  own tags minus `deselectedTags`, then the other side's remaining
+  additions ([Resolution shape](#resolution-shape) gives the order);
+  `finalKeywords` likewise against `deselectedKeywords`.
 - **`reset`** — re-initializes on entity-input change. Defensive;
   in practice the dialog is keyed by entity ids so unmount handles
   most cases.
