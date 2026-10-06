@@ -751,7 +751,7 @@ describe('resolveCollision — merge seats the canonical in the tail scene', () 
 
     expect((await entityRow('loc_a'))?.status).toBe('active')
     expect((await tail()).currentLocationId).toBe('loc_a')
-    // The ref rewrite moves Vorne off the loser; nothing tracks char_b, in the scene at no location.
+    // The ref rewrite moves Vorne off the loser; nothing tracks char_b (in the scene, no location).
     expect((await characterStateOf('char_o')).current_location_id).toBe('loc_a')
     expect(await deltasOn('char_o')).toEqual(['update'])
     expect(await deltasOn('char_b')).toEqual([])

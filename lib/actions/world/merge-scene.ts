@@ -38,8 +38,8 @@ export function withMergeSceneEffects(input: {
     else patch = { ...patch, status: 'active' }
   }
 
-  // A rewritten tail always seats a character canonical in its scene, and never changes its location,
-  // so a null one is "never known", not a clear.
+  // A rewritten tail always seats a character canonical in its scene and never changes its
+  // location, so a null one is "never known", not a clear.
   const location = tail.currentLocationId
   if (canonical.kind === 'character' && location != null) {
     if (patch.state == null)
