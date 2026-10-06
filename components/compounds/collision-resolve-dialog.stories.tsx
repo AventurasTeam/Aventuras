@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
 import { View } from 'react-native'
-import { expect, screen, userEvent } from 'storybook/test'
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
@@ -60,6 +60,16 @@ const entityB = baseEntity({
   },
 })
 
+const LONG_A =
+  'A wandering swordsman drifting between cities, marked by old scars on his off-hand and the habit of speaking only when spoken to. Known to keep the company of stray dogs at every inn he passes through.'
+const LONG_B =
+  'A city guardsman posted at the eastern gate, terse and slow to anger; identified by the inverted phoenix sigil on his pauldron and the half-moon scar across his right eyebrow that the captain claims is from a tavern brawl, though Kael never confirms.'
+
+const GATE_REASON = 'Generation is in flight. Cancel to edit.'
+
+const lineClamp = (node: HTMLElement) =>
+  getComputedStyle(node).getPropertyValue('-webkit-line-clamp')
+
 const resolveOk = async (r: Resolution) => {
   console.log('[story] resolved:', r)
 }
@@ -77,11 +87,13 @@ function ControlledDialog({
   entityA: a,
   entityB: b,
   onResolve,
+  blockedReason,
 }: {
   initialOpen?: boolean
   entityA: EntitySummary
   entityB: EntitySummary
   onResolve: (r: Resolution) => Promise<void>
+  blockedReason?: string
 }) {
   const [open, setOpen] = useState(initialOpen)
   return (
@@ -95,6 +107,7 @@ function ControlledDialog({
         entityA={a}
         entityB={b}
         onResolve={onResolve}
+        blockedReason={blockedReason}
       />
     </View>
   )
@@ -156,18 +169,85 @@ export const MergeNoDivergence: Story = {
 export const MergeLongDescriptions: Story = {
   render: () => (
     <ControlledDialog
-      entityA={baseEntity({
-        description:
-          'A wandering swordsman drifting between cities, marked by old scars on his off-hand and the habit of speaking only when spoken to. Known to keep the company of stray dogs at every inn he passes through.',
-      })}
-      entityB={baseEntity({
-        id: 'ent_kael_2',
-        description:
-          'A city guardsman posted at the eastern gate, terse and slow to anger; identified by the inverted phoenix sigil on his pauldron and the half-moon scar across his right eyebrow that the captain claims is from a tavern brawl, though Kael never confirms.',
-      })}
+      entityA={baseEntity({ description: LONG_A })}
+      entityB={baseEntity({ id: 'ent_kael_2', description: LONG_B })}
       onResolve={resolveOk}
     />
   ),
+}
+
+export const MergePriorityOnly: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={baseEntity()}
+      entityB={baseEntity({ id: 'ent_kael_2', priority: 5 })}
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    const row = await screen.findByRole('group', { name: 'Priority' })
+    for (const label of ['Name', 'Description', 'Status', 'Retired reason', 'Injection mode'])
+      expect(screen.queryByRole('group', { name: label })).toBeNull()
+    expect(within(row).getByRole('button', { name: '20' })).toBeInTheDocument()
+    expect(within(row).getByRole('button', { name: '5' })).toBeInTheDocument()
+  },
+}
+
+export const PhoneLongDescriptions: Story = {
+  globals: { viewport: { value: 'mobile1' } },
+  render: () => (
+    <ControlledDialog
+      entityA={baseEntity({ description: LONG_A })}
+      entityB={baseEntity({ id: 'ent_kael_2', description: LONG_B })}
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    // useTier reads RN-Web's Dimensions, which updates a tick after the viewport global lands.
+    await waitFor(() => expect(lineClamp(screen.getByText(LONG_A))).toBe('3'))
+    const older = screen.getByRole('radio', { name: /^Older · / })
+    const newer = screen.getByRole('radio', { name: /^Newer · / })
+    expect(older).toHaveAttribute('aria-checked', 'true')
+
+    await userEvent.click(screen.getByText(LONG_A))
+
+    await waitFor(() => expect(lineClamp(screen.getByText(LONG_A))).toBe('none'))
+    expect(lineClamp(screen.getByText(LONG_B))).toBe('3')
+    expect(older).toHaveAttribute('aria-checked', 'true')
+    expect(newer).toHaveAttribute('aria-checked', 'false')
+
+    await userEvent.click(newer)
+    await waitFor(() => expect(newer).toHaveAttribute('aria-checked', 'true'))
+  },
+}
+
+export const MergeOverlapFootnote: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={entityA}
+      entityB={{
+        ...entityB,
+        relationCounts: { ...entityB.relationCounts, overlap: { awareness: 2, involvements: 1 } },
+      }}
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    expect(
+      await screen.findByText(
+        'Kael already has 2 of these awareness rows: it keeps its own, and the duplicates are dropped.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Kael already takes part in 1 of these happenings: it keeps its involvement, and the duplicate is dropped.',
+      ),
+    ).toBeInTheDocument()
+
+    // With B canonical the summary shows A's counts, and A overlaps nothing.
+    await userEvent.click(screen.getAllByRole('radio', { name: /^Kael · / })[1])
+    await waitFor(() => expect(screen.queryByText(/already has/)).toBeNull())
+  },
 }
 
 export const MergeCanonicalFlip: Story = {
@@ -218,6 +298,53 @@ export const MergeError: Story = {
 
 export const RenameMode: Story = {
   render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveOk} />,
+}
+
+export const RenameCaseOnly: Story = {
+  render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveOk} />,
+  play: async () => {
+    await userEvent.click(await screen.findByRole('radio', { name: 'Rename one' }))
+    const save = () => screen.getByRole('button', { name: 'Save renames' })
+    expect(save()).toBeDisabled()
+    expect(screen.getByText('Change at least one name to clear the collision.')).toBeInTheDocument()
+
+    const inputs = await screen.findAllByRole('textbox')
+    await userEvent.clear(inputs[1])
+    await userEvent.type(inputs[1], 'KAEL')
+
+    expect(await screen.findByText(/still collide/)).toBeInTheDocument()
+    expect(save()).toBeDisabled()
+
+    await userEvent.type(inputs[1], ' the Guard')
+
+    await waitFor(() => expect(save()).not.toBeDisabled())
+    expect(screen.getByText('Change at least one name to clear the collision.')).toBeInTheDocument()
+  },
+}
+
+export const Blocked: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={entityA}
+      entityB={entityB}
+      onResolve={resolveOk}
+      blockedReason={GATE_REASON}
+    />
+  ),
+  play: async () => {
+    expect(await screen.findByRole('button', { name: /^Merge into / })).toBeDisabled()
+    expect(screen.getByText(GATE_REASON)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cancel' })).not.toBeDisabled()
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Rename one' }))
+    const inputs = await screen.findAllByRole('textbox')
+    await userEvent.type(inputs[1], ' the Guard')
+    expect(screen.getByRole('button', { name: 'Save renames' })).toBeDisabled()
+    expect(screen.getByText(GATE_REASON)).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Keep as distinct' }))
+    expect(screen.getByRole('button', { name: 'Keep as distinct' })).toBeDisabled()
+  },
 }
 
 export const RenameLoading: Story = {

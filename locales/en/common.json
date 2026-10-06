@@ -130,6 +130,63 @@
     "resolve": "Resolve →",
     "warning": "Collision warning"
   },
+  "collisionDialog": {
+    "title": {
+      "character": "⚠ Two characters named \"{{name}}\"",
+      "location": "⚠ Two locations named \"{{name}}\"",
+      "item": "⚠ Two items named \"{{name}}\"",
+      "faction": "⚠ Two factions named \"{{name}}\""
+    },
+    "description": "Pick how to resolve this collision. Switching modes discards in-progress choices.",
+    "modeLabel": "Resolution path",
+    "mode": {
+      "merge": "Merge into one",
+      "rename": "Rename one",
+      "keep": "Keep as distinct"
+    },
+    "canonicalHint": "Canonical (this row survives)",
+    "canonicalLabel": "Canonical",
+    "canonicalOption": "{{name}} · {{when}}",
+    "olderSide": "Older · {{when}}",
+    "newerSide": "Newer · {{when}}",
+    "divergentFields": "Divergent fields",
+    "field": {
+      "name": "Name",
+      "description": "Description",
+      "status": "Status",
+      "retiredReason": "Retired reason",
+      "injectionMode": "Injection mode",
+      "priority": "Priority"
+    },
+    "emptyValue": "—",
+    "keywords": "Keywords (click to remove from merge)",
+    "tags": "Tags (click to remove from merge)",
+    "stateNote": "State JSON will follow the canonical row · edit on detail pane after merge.",
+    "summary": {
+      "heading": "Moves on merge ({{from}} → {{to}})",
+      "awareness": "Awareness rows: {{value}}",
+      "involvements": "Involvements: {{value}}",
+      "relationships": "Relationships: {{value}}",
+      "inverseRefs": "Inverse refs: {{value}}",
+      "embeddings": "Embeddings: {{value}}",
+      "unheldItems": "Items left unheld: {{value}}",
+      "translations": "Translation rows dropped: {{value}}",
+      "overlapAwareness_one": "{{name}} already has 1 of these awareness rows: it keeps its own, and the duplicate is dropped.",
+      "overlapAwareness_other": "{{name}} already has {{count}} of these awareness rows: it keeps its own, and the duplicates are dropped.",
+      "overlapInvolvements_one": "{{name}} already takes part in 1 of these happenings: it keeps its involvement, and the duplicate is dropped.",
+      "overlapInvolvements_other": "{{name}} already takes part in {{count}} of these happenings: it keeps its involvements, and the duplicates are dropped."
+    },
+    "mergeConfirm": "Merge into {{name}}",
+    "renameConfirm": "Save renames",
+    "renameHelp": "Change at least one name to clear the collision.",
+    "renameIssue": {
+      "emptyName": "A name can't be empty.",
+      "stillColliding": "These names still collide: letter case and spacing don't count as a difference."
+    },
+    "keepConfirm": "Keep as distinct",
+    "keepBody": "Both \"{{name}}\" entities will continue to exist with the same name. Retrieval treats them by id, but storyteller responses may conflate them in prose. Polymorphic naming is a documented v1 limitation — the schema doesn't enforce unique names. The flag clears; no other writes.",
+    "failed": "Resolution failed"
+  },
   "modelPicker": {
     "placeholder": "Pick a model",
     "searchPlaceholder": "Search models…",
