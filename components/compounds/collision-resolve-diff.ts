@@ -29,14 +29,26 @@ export type EntitySummary = {
     involvements: number
     /** This side's relationship rows except the one joining the pair, which the merge drops. */
     relationships: number
+    /** A relationship row joins the two rows; the merge drops it rather than moving it. */
+    joiningRelationship: boolean
     inverseRefs: number
     embeddings: 0 | 1
     /** Dropped with the merge: the entity's translations and its relationships'. */
     translationRows: number
     /** Items this side carries that nothing else holds or places; a merge leaves them unheld. */
     unheldItems: number
-    /** Rows of this side the merge drops when this side loses: the other side already has them. */
-    overlap: { awareness: number; involvements: number }
+    /**
+     * What gives way when this side loses, because the other side already has it: awareness and
+     * involvement rows dropped, relationships whose other end the partner already relates to
+     * (the partner keeps its own views), and, on an item, holders who lose it because the partner
+     * item already has a position (held or placed). Mirrors `EntityMergePlan.dropped`.
+     */
+    overlap: {
+      awareness: number
+      involvements: number
+      relationships: number
+      holdersLosingItem: number
+    }
   }
 }
 

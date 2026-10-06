@@ -28,11 +28,12 @@ function baseEntity(overrides: Partial<EntitySummary> = {}): EntitySummary {
       awarenessRows: 12,
       involvements: 4,
       relationships: 2,
+      joiningRelationship: false,
       inverseRefs: 2,
       embeddings: 1,
       translationRows: 3,
       unheldItems: 1,
-      overlap: { awareness: 0, involvements: 0 },
+      overlap: { awareness: 0, involvements: 0, relationships: 0, holdersLosingItem: 0 },
     },
     ...overrides,
   }
@@ -52,11 +53,12 @@ const entityB = baseEntity({
     awarenessRows: 1,
     involvements: 0,
     relationships: 0,
+    joiningRelationship: false,
     inverseRefs: 0,
     embeddings: 1,
     translationRows: 0,
     unheldItems: 0,
-    overlap: { awareness: 0, involvements: 0 },
+    overlap: { awareness: 0, involvements: 0, relationships: 0, holdersLosingItem: 0 },
   },
 })
 
@@ -246,7 +248,10 @@ export const MergeOverlapFootnote: Story = {
         ...entityB,
         // A case variant, so a footnote naming the wrong row is visible.
         name: 'KAEL',
-        relationCounts: { ...entityB.relationCounts, overlap: { awareness: 2, involvements: 1 } },
+        relationCounts: {
+          ...entityB.relationCounts,
+          overlap: { awareness: 2, involvements: 1, relationships: 0, holdersLosingItem: 0 },
+        },
       }}
       onResolve={resolveOk}
     />

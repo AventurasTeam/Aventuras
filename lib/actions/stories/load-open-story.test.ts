@@ -201,17 +201,31 @@ describe('loadOpenStory', () => {
       createdAt: 1,
       updatedAt: 1,
     })
-    await db.insert(translations).values({
-      id: 'tr_1',
-      branchId: 'br_1',
-      targetKind: 'entity',
-      targetId: 'char_1',
-      field: 'name',
-      language: 'de',
-      translatedText: 'Kael',
-      createdAt: 1,
-      updatedAt: 1,
-    })
+    await db.insert(translations).values([
+      {
+        id: 'tr_1',
+        branchId: 'br_1',
+        targetKind: 'entity',
+        targetId: 'char_1',
+        field: 'name',
+        language: 'de',
+        translatedText: 'Kael',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      // Another branch's row: the read must filter by branch.
+      {
+        id: 'tr_2',
+        branchId: 'br_2',
+        targetKind: 'entity',
+        targetId: 'char_1',
+        field: 'name',
+        language: 'de',
+        translatedText: 'Kael',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ])
 
     // Counts only loadOpenStory's own reads: join + entries + entities + lore + threads +
     // happenings + involvements + awareness + chapters + relationships + translations = 11; more

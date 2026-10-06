@@ -245,7 +245,7 @@ describe('entityMergeActions — inverse refs', () => {
       {},
       { equipped_items: ['item_b'], inventory: ['item_x', 'item_b'] },
     )
-    const { actions } = merge({
+    const { actions, ...plan } = merge({
       canonical: blade,
       loser: twin,
       branchEntities: [blade, twin, holder],
@@ -256,6 +256,7 @@ describe('entityMergeActions — inverse refs', () => {
       equipped_items: ['item_a'],
       inventory: ['item_x'],
     })
+    expect(plan.dropped.holdersLosingItem).toBe(0)
   })
 
   it('takes the loser off its holders when the canonical item is already held or placed', () => {
@@ -274,6 +275,7 @@ describe('entityMergeActions — inverse refs', () => {
     expect(
       ofKind(whileHeld.actions, 'updateEntity').map((a) => [a.payload.id, a.payload.patch]),
     ).toStrictEqual([['char_1', dropped]])
+    expect(whileHeld.dropped.holdersLosingItem).toBe(1)
 
     const whilePlaced = merge({
       canonical: placed,
@@ -283,6 +285,7 @@ describe('entityMergeActions — inverse refs', () => {
     expect(
       ofKind(whilePlaced.actions, 'updateEntity').map((a) => [a.payload.id, a.payload.patch]),
     ).toStrictEqual([['char_1', dropped]])
+    expect(whilePlaced.dropped.holdersLosingItem).toBe(1)
   })
 
   it('gives a canonical item with no position the loser’s placement', () => {
@@ -382,6 +385,7 @@ describe('entityMergeActions — link rows', () => {
   it('drops the relationship between the pair', () => {
     const plan = merge({ relationships: [rel('rel_1', 'char_a', 'char_b', 'twin', 'twin')] })
     expect(ofKind(plan.actions, 'upsertCharacterRelationship')).toStrictEqual([])
+    expect(plan.dropped.relationships).toBe(0)
   })
 
   it('carries each view to the right side when the a/b order flips', () => {
@@ -432,6 +436,7 @@ describe('entityMergeActions — link rows', () => {
         },
       ],
     )
+    expect(plan.dropped.relationships).toBe(1)
   })
 
   it('writes no relationship when the canonical’s views already cover the pair', () => {
@@ -442,6 +447,20 @@ describe('entityMergeActions — link rows', () => {
       ],
     })
     expect(ofKind(plan.actions, 'upsertCharacterRelationship')).toStrictEqual([])
+    expect(plan.dropped.relationships).toBe(1)
+  })
+
+  it('counts only the loser’s relationships whose other end the canonical already has', () => {
+    const plan = merge({
+      relationships: [
+        rel('rel_1', 'char_a', 'char_m', 'friend', null),
+        rel('rel_2', 'char_b', 'char_m', 'enemy', null),
+        rel('rel_3', 'char_b', 'char_n', 'mentor', null),
+        rel('rel_4', 'char_a', 'char_b', 'twin', 'twin'),
+      ],
+    })
+    expect(plan.dropped.relationships).toBe(1)
+    expect(ofKind(plan.actions, 'upsertCharacterRelationship')).toHaveLength(1)
   })
 })
 

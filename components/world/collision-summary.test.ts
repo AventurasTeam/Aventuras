@@ -87,6 +87,14 @@ const SQL = {
   // The pair's own relationship is dropped by the merge, not moved, so it isn't counted.
   relationships:
     'SELECT count(*) AS n FROM character_relationships WHERE branch_id = ?1 AND (a_id = ?2 OR b_id = ?2) AND NOT (a_id = ?3 OR b_id = ?3)',
+  // Rows of this side whose other end the partner already relates to (the joining row excluded).
+  overlapRelationships: `SELECT count(*) AS n FROM character_relationships r
+    WHERE r.branch_id = ?1 AND (r.a_id = ?2 OR r.b_id = ?2) AND NOT (r.a_id = ?3 OR r.b_id = ?3)
+      AND EXISTS (SELECT 1 FROM character_relationships p WHERE p.branch_id = ?1 AND (
+        (p.a_id = ?3 AND p.b_id = CASE WHEN r.a_id = ?2 THEN r.b_id ELSE r.a_id END)
+        OR (p.b_id = ?3 AND p.a_id = CASE WHEN r.a_id = ?2 THEN r.b_id ELSE r.a_id END)))`,
+  joiningRelationships: `SELECT count(*) AS n FROM character_relationships
+    WHERE branch_id = ?1 AND ((a_id = ?2 AND b_id = ?3) OR (a_id = ?3 AND b_id = ?2))`,
   inverseRefs: `SELECT count(*) AS n FROM entities e
     WHERE e.branch_id = ?1 AND e.id NOT IN (?2, ?3) AND (
       json_extract(e.state, '$.current_location_id') = ?2
@@ -154,6 +162,14 @@ beforeEach(async () => {
     entity('item_z', 'item', 'Key', 1),
     entity('fac_a', 'faction', 'Guild', 1),
     entity('fac_b', 'faction', 'Guild', 2),
+    entity('char_x', 'character', 'Xan', 1),
+    // A legacy row with no stored state, and its namesake carrying the empty defaults.
+    { ...entity('char_n1', 'character', 'Nilsen', 1), state: null } as unknown as NewEntity,
+    entity('char_n2', 'character', 'Nilsen', 2),
+    // item_q is held and item_p is nowhere: no position on either side of the pair to drop for.
+    entity('char_h', 'character', 'Holden', 1, { inventory: ['item_q'] }),
+    entity('item_p', 'item', 'Pebble', 1),
+    entity('item_q', 'item', 'Pebble', 2),
   ])
   await db.insert(happenings).values([
     { id: 'hap_1', branchId: 'b1', title: 'Fire', createdAt: 1, updatedAt: 1 },
@@ -178,6 +194,7 @@ beforeEach(async () => {
       relationship('rel_ab', 'char_a', 'char_b'),
       relationship('rel_ac', 'char_a', 'char_c'),
       relationship('rel_bc', 'char_b', 'char_c'),
+      relationship('rel_bx', 'char_b', 'char_x'),
     ])
   await db
     .insert(translations)
@@ -208,6 +225,11 @@ describe('collisionPair', () => {
     // rel_ac only: rel_ab joins the pair.
     expect(dbCount(SQL.relationships, 'char_a', 'char_b')).toBe(1)
     expect(dbCount(SQL.translationRows, 'char_a', 'char_b')).toBe(3)
+    // rel_ac and rel_bc both name char_c; rel_bx names char_x, which char_a has no view of.
+    expect(dbCount(SQL.overlapRelationships, 'char_a', 'char_b')).toBe(1)
+    expect(dbCount(SQL.overlapRelationships, 'char_b', 'char_a')).toBe(1)
+    expect(dbCount(SQL.relationships, 'char_b', 'char_a')).toBe(2)
+    expect(dbCount(SQL.joiningRelationships, 'char_a', 'char_b')).toBe(1)
   })
 
   it.each([
@@ -215,6 +237,7 @@ describe('collisionPair', () => {
     ['loc_a', 'loc_b'],
     ['fac_a', 'fac_b'],
     ['item_a', 'item_b'],
+    ['item_p', 'item_q'],
   ] as const)('%s and %s carry the DB counts on both sides', (x, y) => {
     const pair = collisionPair([x, y], sources())
     expect(pair).not.toBeNull()
@@ -229,6 +252,10 @@ describe('collisionPair', () => {
         relationships: dbCount(SQL.relationships, side.id, partner.id),
         inverseRefs: dbCount(SQL.inverseRefs, side.id, partner.id),
         translationRows: dbCount(SQL.translationRows, side.id, partner.id),
+        joiningRelationship: dbCount(SQL.joiningRelationships, side.id, partner.id) > 0,
+        overlap: {
+          relationships: dbCount(SQL.overlapRelationships, side.id, partner.id),
+        },
       })
     }
   })
@@ -238,20 +265,44 @@ describe('collisionPair', () => {
     expect(a.relationCounts).toMatchObject({
       embeddings: 1,
       unheldItems: 1,
-      overlap: { awareness: 1, involvements: 1 },
+      overlap: { awareness: 1, involvements: 1, relationships: 1 },
     })
     expect(b.relationCounts).toMatchObject({
       embeddings: 0,
       unheldItems: 2,
-      overlap: { awareness: 1, involvements: 2 },
+      overlap: { awareness: 1, involvements: 2, relationships: 1 },
+    })
+  })
+
+  it('counts the holders who lose an item only when the partner item already has a position', () => {
+    // item_b is placed at loc_a, so the three holders of item_a lose it; item_a is held, but
+    // nothing carries item_b.
+    const [a, b] = collisionPair(['item_a', 'item_b'], sources())!
+    expect(a.relationCounts.overlap.holdersLosingItem).toBe(3)
+    expect(b.relationCounts.overlap.holdersLosingItem).toBe(0)
+    // Neither Pebble has a position: char_h's hold on item_q moves to item_p, nobody loses it.
+    const [p, q] = collisionPair(['item_p', 'item_q'], sources())!
+    expect(q.relationCounts.inverseRefs).toBe(1)
+    expect(p.relationCounts.overlap.holdersLosingItem).toBe(0)
+    expect(q.relationCounts.overlap.holdersLosingItem).toBe(0)
+    // Only items have holders to lose.
+    expect(collisionPair(['loc_a', 'loc_b'], sources())![0].relationCounts.overlap).toMatchObject({
+      holdersLosingItem: 0,
     })
   })
 
   it.each([
     ['char_a', 'char_b'],
     ['char_b', 'char_a'],
+    ['loc_a', 'loc_b'],
+    ['loc_b', 'loc_a'],
+    ['fac_b', 'fac_a'],
+    ['item_b', 'item_a'],
+    ['item_a', 'item_b'],
+    ['item_p', 'item_q'],
+    ['item_q', 'item_p'],
   ] as const)(
-    'overlap and inverse refs on loser %s match what the merge planner does',
+    'overlap and inverse refs on the loser of %s <- %s match what the merge planner does',
     (canonicalId, loserId) => {
       const src = sources()
       const pair = collisionPair([canonicalId, loserId], src)!
@@ -313,7 +364,18 @@ describe('collisionPair', () => {
     ])
   })
 
-  it('returns null when a row of the pair is gone', () => {
+  it('returns null when a row of the pair is gone, whichever one', () => {
     expect(collisionPair(['char_a', 'char_gone'], sources())).toBeNull()
+    expect(collisionPair(['char_gone', 'char_a'], sources())).toBeNull()
+  })
+
+  it('returns null for a row paired with itself', () => {
+    expect(collisionPair(['char_a', 'char_a'], sources())).toBeNull()
+  })
+
+  it('reads a null stored state as the kind’s defaults, equal to a namesake carrying them', () => {
+    const [legacy, defaults] = collisionPair(['char_n1', 'char_n2'], sources())!
+    expect(legacy.state).toEqual(emptyEntityState('character'))
+    expect(legacy.state).toEqual(defaults.state)
   })
 })

@@ -6,11 +6,17 @@ import type {
   HappeningInvolvement,
   Translation,
 } from '@/lib/db'
-import { entityLinkRows, referencingEntities, stateOf, unheldItemsWithout } from '@/lib/world'
+import {
+  entityLinkRows,
+  itemHasPosition,
+  referencingEntities,
+  stateOf,
+  unheldItemsWithout,
+} from '@/lib/world'
 
 export type CollisionSources = {
   branchId: string
-  /** The branch's entities. */
+  /** The branch's rows: the entities, link rows and translations below aren't re-filtered. */
   entities: readonly Entity[]
   awareness: readonly HappeningAwareness[]
   involvements: readonly HappeningInvolvement[]
@@ -32,13 +38,26 @@ function linksOf(id: string, sources: CollisionSources) {
   })
 }
 
-/** `partner` is the pair's other row: what the merge drops, and whose ref collapses instead of moving. */
+const otherEnd = (row: CharacterRelationship, id: string) => (row.aId === id ? row.bId : row.aId)
+const joins = (row: CharacterRelationship, id: string) => row.aId === id || row.bId === id
+
+/**
+ * `partner` is the pair's other row. The merge drops the relationship joining the two rather than
+ * moving it, and collapses the partner's ref to this row instead of rewriting it.
+ */
 function summarize(entity: Entity, partner: Entity, sources: CollisionSources): EntitySummary {
   const links = linksOf(entity.id, sources)
   const partnerLinks = linksOf(partner.id, sources)
   const partnerKnows = new Set(partnerLinks.awareness.map((row) => row.happeningId))
   const partnerTakesPart = new Set(partnerLinks.involvements.map((row) => row.happeningId))
+  const partnerRelatesTo = new Set(
+    partnerLinks.relationships.map((row) => otherEnd(row, partner.id)),
+  )
   const relationshipIds = new Set(links.relationships.map((row) => row.id))
+  const carried = links.relationships.filter((row) => !joins(row, partner.id))
+  const inverseRefs = referencingEntities(entity.id, sources.entities).filter(
+    (other) => other.id !== partner.id,
+  ).length
   return {
     id: entity.id,
     kind: entity.kind,
@@ -55,37 +74,41 @@ function summarize(entity: Entity, partner: Entity, sources: CollisionSources): 
     relationCounts: {
       awarenessRows: links.awareness.length,
       involvements: links.involvements.length,
-      relationships: links.relationships.filter(
-        (row) => row.aId !== partner.id && row.bId !== partner.id,
-      ).length,
-      inverseRefs: referencingEntities(entity.id, sources.entities).filter(
-        (other) => other.id !== partner.id,
-      ).length,
+      relationships: carried.length,
+      joiningRelationship: links.relationships.some((row) => joins(row, partner.id)),
+      inverseRefs,
       embeddings: entity.embeddingStale === 0 ? 1 : 0,
       translationRows: sources.translations.filter(
         (row) =>
-          row.branchId === sources.branchId &&
-          ((row.targetKind === 'entity' && row.targetId === entity.id) ||
-            (row.targetKind === 'character_relationship' && relationshipIds.has(row.targetId))),
+          (row.targetKind === 'entity' && row.targetId === entity.id) ||
+          (row.targetKind === 'character_relationship' && relationshipIds.has(row.targetId)),
       ).length,
       unheldItems: unheldItemsWithout(entity.id, sources.entities),
       overlap: {
         awareness: links.awareness.filter((row) => partnerKnows.has(row.happeningId)).length,
         involvements: links.involvements.filter((row) => partnerTakesPart.has(row.happeningId))
           .length,
+        relationships: carried.filter((row) => partnerRelatesTo.has(otherEnd(row, entity.id)))
+          .length,
+        // Holders of this item drop it when the partner already has a position, instead of moving.
+        holdersLosingItem:
+          entity.kind === 'item' && itemHasPosition(partner, sources.entities) ? inverseRefs : 0,
       },
     },
   }
 }
 
-/** collision-resolve.md → Dialog props: older by `createdAt` first (id breaks a tie); null once a row is gone. */
+/**
+ * collision-resolve.md → Dialog props: older by `createdAt` first (id breaks a tie). Null when a
+ * row is gone or the two ids are the same row.
+ */
 export function collisionPair(
   ids: readonly [string, string],
   sources: CollisionSources,
 ): readonly [EntitySummary, EntitySummary] | null {
   const first = sources.entities.find((e) => e.id === ids[0])
   const second = sources.entities.find((e) => e.id === ids[1])
-  if (first == null || second == null) return null
+  if (first == null || second == null || first.id === second.id) return null
   const [older, newer]: readonly [Entity, Entity] = isOlder(first, second)
     ? [first, second]
     : [second, first]
