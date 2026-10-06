@@ -1,5 +1,5 @@
 import type { Entity, EntityKind, InjectionMode } from '@/lib/db'
-import { normalizeTerm } from '@/lib/keyword-terms'
+import { dedupeTerms, normalizeTerm } from '@/lib/keyword-terms'
 
 export type ScalarField =
   | 'name'
@@ -27,6 +27,7 @@ export type EntitySummary = {
   relationCounts: {
     awarenessRows: number
     involvements: number
+    /** This side's relationship rows except the one joining the pair, which the merge drops. */
     relationships: number
     inverseRefs: number
     embeddings: 0 | 1
@@ -101,14 +102,9 @@ function partition(a: readonly string[], b: readonly string[]): TermPartition {
   return { onlyInA, onlyInB, both: a.filter((t) => bSet.has(t)).sort() }
 }
 
-/** `normalizeTerm` key → the first spelling seen; blanks dropped. */
+/** `normalizeTerm` key → the spelling the merge writes: `dedupeTerms`' trimmed first spelling. */
 function firstSpellings(terms: readonly string[]): Map<string, string> {
-  const spellings = new Map<string, string>()
-  for (const term of terms) {
-    const key = normalizeTerm(term)
-    if (key !== '' && !spellings.has(key)) spellings.set(key, term)
-  }
-  return spellings
+  return new Map(dedupeTerms(terms).map((term) => [normalizeTerm(term), term]))
 }
 
 /** `partition` by `normalizeTerm`: a case variant is one keyword, in A's spelling when shared. */

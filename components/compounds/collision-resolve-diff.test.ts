@@ -66,6 +66,15 @@ describe('computeDivergence', () => {
       expect(diff.divergentScalars).toEqual(['name', 'injectionMode', 'priority'])
     })
 
+    // world.md → Merge lists priority among the per-row radio scalars.
+    it('reports a priority-only divergence as exactly one divergent scalar', () => {
+      const diff = computeDivergence(
+        baseEntity({ priority: 0 }),
+        baseEntity({ id: 'ent_b', priority: 9 }),
+      )
+      expect(diff.divergentScalars).toEqual(['priority'])
+    })
+
     it('treats undefined description as divergent from a string', () => {
       const a = baseEntity()
       const b = baseEntity({ id: 'ent_b', description: undefined })
@@ -232,15 +241,6 @@ describe('keywords', () => {
     expect(diff.tags).not.toBeNull()
   })
 
-  // world.md → Merge lists priority among the per-row radio scalars.
-  it('reports a priority-only divergence as exactly one divergent scalar', () => {
-    const diff = computeDivergence(
-      baseEntity({ priority: 0 }),
-      baseEntity({ id: 'ent_b', priority: 9 }),
-    )
-    expect(diff.divergentScalars).toEqual(['priority'])
-  })
-
   it('treats a case or spacing variant as the same keyword', () => {
     const diff = computeDivergence(
       baseEntity({ keywords: ['The Wanderer'] }),
@@ -263,5 +263,25 @@ describe('keywords', () => {
       baseEntity({ id: 'ent_b', keywords: ['a'] }),
     )
     expect(diff.keywords).toBeNull()
+  })
+
+  it('shows a stored keyword trimmed, as the merge writes it', () => {
+    const diff = computeDivergence(
+      baseEntity({ keywords: [' courier', 'Sword'] }),
+      baseEntity({ id: 'ent_b', keywords: ['alpha', 'sword'] }),
+    )
+    expect(diff.keywords).toEqual({ onlyInA: ['courier'], onlyInB: ['alpha'], both: ['Sword'] })
+  })
+
+  it('sorts each keyword partition alphabetically', () => {
+    const diff = computeDivergence(
+      baseEntity({ keywords: ['zebra', 'apple', 'Yak', 'Cat'] }),
+      baseEntity({ id: 'ent_b', keywords: ['mango', 'banana', 'yak', 'cat'] }),
+    )
+    expect(diff.keywords).toEqual({
+      onlyInA: ['apple', 'zebra'],
+      onlyInB: ['banana', 'mango'],
+      both: ['Cat', 'Yak'],
+    })
   })
 })
