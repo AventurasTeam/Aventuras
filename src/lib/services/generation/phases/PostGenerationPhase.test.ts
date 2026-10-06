@@ -3,6 +3,14 @@ import { describe, it, expect, vi } from 'vitest'
 // PostGenerationPhase imports TranslationService for its `shouldTranslate` gate, and that
 // class extends BaseAIService. Stubbing the two rune-based stores it reaches lets the real
 // gate run rather than a reimplementation of it.
+vi.mock('$lib/stores/activity.svelte', () => ({
+  activity: {
+    startStep: vi.fn(() => ''),
+    updateStep: vi.fn(),
+    endStep: vi.fn(),
+    recordStep: vi.fn(() => ''),
+  },
+}))
 vi.mock('$lib/stores/debug.svelte', () => ({
   debug: { addDebugRequest: vi.fn(), addDebugResponse: vi.fn() },
 }))
@@ -41,9 +49,9 @@ const italian = { enabled: true, targetLanguage: 'it' } as unknown as Translatio
 function makeDeps(overrides: Partial<PostGenerationDependencies> = {}): PostGenerationDependencies {
   return {
     generateSuggestions: async () => ({ suggestions }),
-    translateSuggestions: async () => [{ text: 'Scappa' }] as any[],
+    translateSuggestions: async () => ({ items: [{ text: 'Scappa' }] as any[] }),
     generateActionChoices: async () => ({ choices }),
-    translateActionChoices: async () => [{ text: 'Combatti' }] as any[],
+    translateActionChoices: async () => ({ items: [{ text: 'Combatti' }] as any[] }),
     ...overrides,
   }
 }
@@ -109,7 +117,7 @@ describe('PostGenerationPhase', () => {
 
     expect(generateSuggestions).not.toHaveBeenCalled()
     expect(generateActionChoices).not.toHaveBeenCalled()
-    expect(result).toEqual({ suggestions: null, actionChoices: null })
+    expect(result).toEqual({ suggestions: null, actionChoices: null, skippedReason: 'disabled' })
     expect(events.map((e) => e.type)).toEqual(['phase_start', 'phase_complete'])
   })
 
@@ -173,7 +181,7 @@ describe('PostGenerationPhase', () => {
     // dropped or reordered one is otherwise invisible until a user opens the output.
     it('hands the story to the action-choice generator and its translation', async () => {
       const generateActionChoices = vi.fn(async () => ({ choices }))
-      const translateActionChoices = vi.fn(async () => choices)
+      const translateActionChoices = vi.fn(async () => ({ items: choices }))
 
       await drain(
         new PostGenerationPhase(
@@ -189,13 +197,14 @@ describe('PostGenerationPhase', () => {
         expect.objectContaining({ mode: 'adventure' }),
         'second',
         'story-1',
+        '',
       )
-      expect(translateActionChoices).toHaveBeenCalledWith(choices, 'it', 'story-1')
+      expect(translateActionChoices).toHaveBeenCalledWith(choices, 'it', 'story-1', '')
     })
 
     it('hands the story to the suggestions generator and its translation', async () => {
       const generateSuggestions = vi.fn(async () => ({ suggestions }))
-      const translateSuggestions = vi.fn(async () => suggestions)
+      const translateSuggestions = vi.fn(async () => ({ items: suggestions }))
 
       await drain(
         new PostGenerationPhase(makeDeps({ generateSuggestions, translateSuggestions })).execute(
@@ -203,8 +212,15 @@ describe('PostGenerationPhase', () => {
         ),
       )
 
-      expect(generateSuggestions).toHaveBeenCalledWith([], [], [], 'The dragon fell.', 'story-1')
-      expect(translateSuggestions).toHaveBeenCalledWith(suggestions, 'it', 'story-1')
+      expect(generateSuggestions).toHaveBeenCalledWith(
+        [],
+        [],
+        [],
+        'The dragon fell.',
+        'story-1',
+        '',
+      )
+      expect(translateSuggestions).toHaveBeenCalledWith(suggestions, 'it', 'story-1', '')
     })
   })
 
@@ -327,5 +343,20 @@ describe('PostGenerationPhase activity reporting', () => {
     )
 
     expect(steps).toEqual([])
+  })
+})
+
+describe('PostGenerationPhase, a cancellation', () => {
+  it('reports a thrown abort as aborted, not as a failure', async () => {
+    const abort = Object.assign(new Error('aborted'), { name: 'AbortError' })
+    const deps = makeDeps({
+      generateActionChoices: async () => {
+        throw abort
+      },
+    })
+
+    const { events } = await drain(new PostGenerationPhase(deps).execute(makeInput()))
+
+    expect(events.map((e) => e.type)).toEqual(['phase_start', 'aborted'])
   })
 })

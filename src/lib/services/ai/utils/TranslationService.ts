@@ -11,6 +11,7 @@ import { BaseAIService } from '../BaseAIService'
 import { createLogger } from '$lib/log'
 import { generatePlainText } from '../sdk/generate'
 import { ContextBuilder } from '$lib/services/context'
+import { describeActivityError, isAbortError } from '$lib/services/activity'
 import {
   translatedUIResultSchema,
   translatedSuggestionsResultSchema,
@@ -67,9 +68,17 @@ const SUPPORTED_LANGUAGE_CODES = [
   'te',
 ]
 
+/** Translated items, or the originals with the reason the translation failed. */
+export interface Translated<T> {
+  items: T[]
+  failure?: string
+}
+
 export interface TranslationResult {
   translatedContent: string
   detectedLanguage?: string
+  /** Why the translation failed, when `translatedContent` is the untranslated original. */
+  failure?: string
 }
 
 export interface UITranslationItem {
@@ -107,6 +116,7 @@ export class TranslationService extends BaseAIService {
     targetLanguage: string,
     _isVisualProse: boolean,
     storyId: string | undefined,
+    activityParentId?: string,
   ): Promise<TranslationResult> {
     // Skip if target is English or content is empty
     if (targetLanguage === 'en' || !content.trim()) {
@@ -123,6 +133,7 @@ export class TranslationService extends BaseAIService {
           presetId: this.presetId,
           system,
           prompt,
+          activityParentId,
         },
         'translate-narration',
       )
@@ -131,7 +142,9 @@ export class TranslationService extends BaseAIService {
       return { translatedContent: translatedContent.trim() }
     } catch (error) {
       log('Translation failed:', error)
-      return { translatedContent: content } // Return original on failure
+      if (isAbortError(error)) throw error
+      // The original back, as before; the caller closes the step it opened with the reason.
+      return { translatedContent: content, failure: describeActivityError(error) }
     }
   }
 
@@ -166,7 +179,8 @@ export class TranslationService extends BaseAIService {
       return { translatedContent: translatedContent.trim(), detectedLanguage: sourceLanguage }
     } catch (error) {
       log('Input translation failed:', error)
-      return { translatedContent: content }
+      if (isAbortError(error)) throw error
+      return { translatedContent: content, failure: describeActivityError(error) }
     }
   }
 
@@ -215,9 +229,10 @@ export class TranslationService extends BaseAIService {
     suggestions: T[],
     targetLanguage: string,
     storyId: string | undefined,
-  ): Promise<T[]> {
-    if (suggestions.length === 0) return []
-    if (targetLanguage === 'en') return suggestions
+    activityParentId?: string,
+  ): Promise<Translated<T>> {
+    if (suggestions.length === 0) return { items: [] }
+    if (targetLanguage === 'en') return { items: suggestions }
 
     try {
       const suggestionsJson = JSON.stringify(
@@ -235,17 +250,21 @@ export class TranslationService extends BaseAIService {
         system,
         prompt,
         'translate-suggestions',
+        activityParentId,
       )
 
       // Merge translated text back into original objects (preserves extra fields)
       log('Translated', result.suggestions.length, 'suggestions to', targetLanguage)
-      return suggestions.map((original, index) => ({
-        ...original,
-        text: result.suggestions[index]?.text ?? original.text,
-      }))
+      return {
+        items: suggestions.map((original, index) => ({
+          ...original,
+          text: result.suggestions[index]?.text ?? original.text,
+        })),
+      }
     } catch (error) {
       log('Suggestions translation failed:', error)
-      return suggestions
+      if (isAbortError(error)) throw error
+      return { items: suggestions, failure: describeActivityError(error) }
     }
   }
 
@@ -257,9 +276,10 @@ export class TranslationService extends BaseAIService {
     choices: T[],
     targetLanguage: string,
     storyId: string | undefined,
-  ): Promise<T[]> {
-    if (choices.length === 0) return []
-    if (targetLanguage === 'en') return choices
+    activityParentId?: string,
+  ): Promise<Translated<T>> {
+    if (choices.length === 0) return { items: [] }
+    if (targetLanguage === 'en') return { items: choices }
 
     try {
       const choicesJson = JSON.stringify(
@@ -277,17 +297,21 @@ export class TranslationService extends BaseAIService {
         system,
         prompt,
         'translate-action-choices',
+        activityParentId,
       )
 
       // Merge translated text back into original objects (preserves extra fields)
       log('Translated', result.choices.length, 'action choices to', targetLanguage)
-      return choices.map((original, index) => ({
-        ...original,
-        text: result.choices[index]?.text ?? original.text,
-      }))
+      return {
+        items: choices.map((original, index) => ({
+          ...original,
+          text: result.choices[index]?.text ?? original.text,
+        })),
+      }
     } catch (error) {
       log('Action choices translation failed:', error)
-      return choices
+      if (isAbortError(error)) throw error
+      return { items: choices, failure: describeActivityError(error) }
     }
   }
 

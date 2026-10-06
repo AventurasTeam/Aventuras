@@ -8,7 +8,7 @@
 import type { ActivityTurn } from './types'
 
 /** Turns whose records are kept. Beyond this the oldest are discarded. */
-export const RETAINED_TURNS = 5
+export const RETAINED_TURNS = 20
 
 /** Drop the oldest turns until at most `bound` remain. Input order is oldest-first. */
 export function retainTurns(turns: ActivityTurn[], bound: number = RETAINED_TURNS): ActivityTurn[] {

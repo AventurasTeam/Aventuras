@@ -10,7 +10,7 @@
  */
 
 import { findTurnByEntryId, retainTurns, RETAINED_TURNS } from './retention'
-import type { ActivityStatus, ActivityStep, ActivityTurn } from './types'
+import type { ActivityStatus, ActivityStep, ActivityTurn, TurnOutcome } from './types'
 
 /** How much of a turn's activity the story view reports. See docs/architecture/overview.md. */
 export type ActivityReporting = 'off' | 'line' | 'tree'
@@ -20,8 +20,16 @@ export interface StartStepOptions {
   parentId?: string | null
   detail?: string
   isLLM?: boolean
+  /** See `ActivityStep.attempt`. */
+  attempt?: boolean
   /** Overrides the clock, for a step whose duration was measured elsewhere. */
   startedAt?: number
+}
+
+/** How `groupChildren` records the step it adds. */
+export type GroupOptions = Pick<StartStepOptions, 'detail' | 'attempt'> & {
+  status?: Exclude<ActivityStatus, 'running'>
+  error?: string | null
 }
 
 export class ActivityRecorder {
@@ -69,7 +77,7 @@ export class ActivityRecorder {
     this.onChange()
   }
 
-  endTurn(): void {
+  endTurn(outcome: TurnOutcome = 'finished', error?: string | null): void {
     if (!this.current) return
     const endedAt = this.now()
     // A turn can end with steps still open -- an abort unwinds past the `endStep` that would
@@ -82,6 +90,8 @@ export class ActivityRecorder {
       step.detail ??= 'interrupted'
     }
     this.current.endedAt = endedAt
+    this.current.outcome = outcome
+    if (error) this.current.error = error
     this.current = null
     this.onChange()
   }
@@ -89,12 +99,15 @@ export class ActivityRecorder {
   /** Returns the step id to close later, or `''` when nothing was recorded. */
   startStep(label: string, options: StartStepOptions = {}): string {
     if (!this.enabled || !this.current) return ''
+    // Work still unwinding from an ended turn must not land in the next one.
+    if (options.parentId && !this.current.steps.some((s) => s.id === options.parentId)) return ''
     const step: ActivityStep = {
       id: `step-${++this.counter}`,
       parentId: options.parentId ?? null,
       label,
       detail: options.detail,
       isLLM: options.isLLM ?? false,
+      ...(options.attempt ? { attempt: true } : {}),
       status: 'running',
       startedAt: options.startedAt ?? this.now(),
     }
@@ -112,13 +125,19 @@ export class ActivityRecorder {
     this.onChange()
   }
 
-  endStep(id: string, status: Exclude<ActivityStatus, 'running'> = 'done', detail?: string): void {
+  endStep(
+    id: string,
+    status: Exclude<ActivityStatus, 'running'> = 'done',
+    detail?: string,
+    error?: string | null,
+  ): void {
     if (!id || !this.current) return
     const step = this.current.steps.find((s) => s.id === id)
     if (!step || step.status !== 'running') return
     step.status = status
     step.endedAt = this.now()
     if (detail !== undefined) step.detail = detail
+    if (error) step.error = error
     this.onChange()
   }
 
@@ -131,6 +150,7 @@ export class ActivityRecorder {
     options: StartStepOptions & {
       status?: Exclude<ActivityStatus, 'running'>
       durationMs?: number
+      error?: string | null
     } = {},
   ): string {
     const id = this.startStep(label, options)
@@ -138,13 +158,63 @@ export class ActivityRecorder {
     const step = this.current.steps.find((s) => s.id === id)!
     step.status = options.status ?? 'done'
     step.endedAt = step.startedAt + (options.durationMs ?? 0)
+    if (options.durationMs === undefined) step.untimed = true
+    if (options.error) step.error = options.error
     this.onChange()
     return id
+  }
+
+  /**
+   * Move every child of `parentId` under a new finished step spanning them, for work that turns
+   * out only afterwards to be the first of several. Returns its id, or `''` with nothing to move.
+   */
+  groupChildren(parentId: string, label: string, options: GroupOptions = {}): string {
+    if (!parentId || !this.current) return ''
+    const children = this.current.steps.filter((s) => s.parentId === parentId)
+    if (children.length === 0) return ''
+    const startedAt = Math.min(...children.map((s) => s.startedAt))
+    const endedAt = Math.max(...children.map((s) => s.endedAt ?? this.now()))
+    const id = this.recordStep(label, {
+      ...options,
+      parentId,
+      startedAt,
+      durationMs: endedAt - startedAt,
+    })
+    for (const child of children) child.parentId = id
+    this.onChange()
+    return id
+  }
+
+  /** Remove a step of the turn in flight, and anything beneath it, as if never recorded. */
+  discardStep(id: string): void {
+    if (!id || !this.current) return
+    const steps = this.current.steps
+    // Until nothing new is found: a group from `groupChildren` comes after its children.
+    const doomed = new Set([id])
+    for (let size = 0; size !== doomed.size;) {
+      size = doomed.size
+      for (const step of steps) if (step.parentId && doomed.has(step.parentId)) doomed.add(step.id)
+    }
+    for (let i = steps.length - 1; i >= 0; i--) if (doomed.has(steps[i].id)) steps.splice(i, 1)
+    this.onChange()
+  }
+
+  /** Move a turn's record to another entry, for a turn whose narration became an error entry. */
+  rebindTurn(fromEntryId: string, toEntryId: string): void {
+    const turn = findTurnByEntryId(this.turns, fromEntryId)
+    if (!turn) return
+    turn.entryId = toEntryId
+    this.onChange()
   }
 
   /** The turn in flight, or null between turns. */
   get activeTurn(): ActivityTurn | null {
     return this.current
+  }
+
+  /** The most recently started turn, running or not, or null when none is retained. */
+  get latestTurn(): ActivityTurn | null {
+    return this.turns.at(-1) ?? null
   }
 
   /**

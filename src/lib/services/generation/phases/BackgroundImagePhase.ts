@@ -20,7 +20,8 @@ export interface BackgroundImageDependencies {
   analyzeBackgroundChangeAndGenerateImage: (
     storyId: string,
     visibleEntries: StoryEntry[],
-  ) => Promise<void>
+    activityParentId?: string,
+  ) => Promise<{ failure?: string }>
   isImageGenerationEnabled: (
     storySettings?: any,
     type?: 'standard' | 'background' | 'portrait' | 'reference',
@@ -39,6 +40,8 @@ export interface BackgroundImageInput {
   storyEntries: StoryEntry[]
   imageSettings: BackgroundImageSettings
   abortSignal?: AbortSignal
+  /** Step the requests nest under. */
+  activityParentId?: string
 }
 
 /** Result from image phase */
@@ -86,7 +89,12 @@ export class BackgroundImagePhase {
     }
 
     try {
-      await this.deps.analyzeBackgroundChangeAndGenerateImage(storyId, storyEntries)
+      // An absorbed failure is already on the step that met it, beneath this phase's.
+      await this.deps.analyzeBackgroundChangeAndGenerateImage(
+        storyId,
+        storyEntries,
+        input.activityParentId,
+      )
 
       const result: BackgroundImageResult = { started: true }
       yield { type: 'phase_complete', phase: 'image', result } satisfies PhaseCompleteEvent

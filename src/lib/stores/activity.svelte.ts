@@ -13,12 +13,15 @@ import {
   ActivityRecorder,
   buildTree,
   deepestRunningStep,
+  hasFailedStep,
   type ActivityNode,
   type ActivityReporting,
   type ActivityStatus,
   type ActivityStep,
   type ActivityTurn,
+  type GroupOptions,
   type StartStepOptions,
+  type TurnOutcome,
 } from '$lib/services/activity'
 
 class ActivityStore {
@@ -39,8 +42,9 @@ class ActivityStore {
    * one, which is what keeps the post-narrative steps on screen.
    *
    * Each map holds only what the reader has actually chosen. Absent means "whatever the
-   * default is here", which differs by context -- the report shows itself while a turn runs
-   * and hides once it is over, while the tree follows the reporting setting.
+   * default is here": the report shows itself, and the tree follows the reporting setting while
+   * it is the latest turn, and is the line once a newer turn has started -- unless a step in the
+   * turn failed, which keeps its tree open.
    */
   private reportVisible = new SvelteMap<string, boolean>()
   private treeExpanded = new SvelteMap<string, boolean>()
@@ -59,9 +63,9 @@ class ActivityStore {
     this.version++
   }
 
-  /** Whether the report shows at all. `whileRunning` is the default before the reader chooses. */
-  isReportVisible(entryId: string, whileRunning: boolean): boolean {
-    return this.reportVisible.get(entryId) ?? whileRunning
+  /** Whether the report shows at all. Shown until the reader hides it. */
+  isReportVisible(entryId: string): boolean {
+    return this.reportVisible.get(entryId) ?? true
   }
 
   setReportVisible(entryId: string, visible: boolean) {
@@ -69,8 +73,22 @@ class ActivityStore {
   }
 
   /** Whether the report is showing the full timeline rather than the line. */
-  isTreeExpanded(entryId: string): boolean {
-    return this.treeExpanded.get(entryId) ?? this.reporting === 'tree'
+  /** Open by default for the latest turn in tree mode, and for any turn in which a step failed. */
+  isTreeExpanded(turn: ActivityTurn): boolean {
+    return (
+      this.treeExpanded.get(turn.entryId) ??
+      ((this.isLatest(turn) && this.reporting === 'tree') || this.hasFailure(turn))
+    )
+  }
+
+  private hasFailure(turn: ActivityTurn): boolean {
+    if (turn.endedAt === undefined) void this.version
+    return hasFailedStep(turn.steps)
+  }
+
+  private isLatest(turn: ActivityTurn): boolean {
+    void this.version
+    return this.recorder.latestTurn === turn
   }
 
   setTreeExpanded(entryId: string, expanded: boolean) {
@@ -109,8 +127,19 @@ class ActivityStore {
     this.startClock()
   }
 
-  endTurn() {
-    this.guard(() => this.recorder.endTurn(), undefined)
+  rebindTurn(fromEntryId: string, toEntryId: string) {
+    this.guard(() => this.recorder.rebindTurn(fromEntryId, toEntryId), undefined)
+    // The reader's choices go with the record.
+    for (const choices of [this.reportVisible, this.treeExpanded]) {
+      const choice = choices.get(fromEntryId)
+      if (choice === undefined) continue
+      choices.set(toEntryId, choice)
+      choices.delete(fromEntryId)
+    }
+  }
+
+  endTurn(outcome?: TurnOutcome, error?: string | null) {
+    this.guard(() => this.recorder.endTurn(outcome, error), undefined)
     this.now = Date.now()
     this.stopClock()
   }
@@ -123,8 +152,13 @@ class ActivityStore {
     this.guard(() => this.recorder.updateStep(id, detail), undefined)
   }
 
-  endStep(id: string, status?: Exclude<ActivityStatus, 'running'>, detail?: string) {
-    this.guard(() => this.recorder.endStep(id, status, detail), undefined)
+  endStep(
+    id: string,
+    status?: Exclude<ActivityStatus, 'running'>,
+    detail?: string,
+    error?: string | null,
+  ) {
+    this.guard(() => this.recorder.endStep(id, status, detail, error), undefined)
   }
 
   recordStep(
@@ -132,9 +166,18 @@ class ActivityStore {
     options?: StartStepOptions & {
       status?: Exclude<ActivityStatus, 'running'>
       durationMs?: number
+      error?: string | null
     },
   ): string {
     return this.guard(() => this.recorder.recordStep(label, options), '')
+  }
+
+  discardStep(id: string) {
+    this.guard(() => this.recorder.discardStep(id), undefined)
+  }
+
+  groupChildren(parentId: string, label: string, options?: GroupOptions): string {
+    return this.guard(() => this.recorder.groupChildren(parentId, label, options), '')
   }
 
   /** The turn in flight. Touches `version` so callers re-read as it grows. */
@@ -154,13 +197,29 @@ class ActivityStore {
    * object whose `steps` array is mutated in place, so nothing about it changes identity as
    * the turn runs. Without the rune read, a `$derived` over these computes once -- against an
    * empty step list -- and never again.
+   *
+   * An ended turn no longer changes, so its reads skip `version`: with many records on screen,
+   * every change to the running turn would otherwise recompute all of them.
    */
   tree(turn: ActivityTurn): ActivityNode[] {
-    void this.version
+    if (turn.endedAt === undefined) void this.version
     return buildTree(turn.steps)
   }
 
+  /** Why the turn halted, or null when it did not. */
+  haltReason(turn: ActivityTurn): string | null {
+    if (turn.endedAt === undefined) void this.version
+    return turn.outcome === 'halted' ? (turn.error ?? '') : null
+  }
+
+  hasEnded(turn: ActivityTurn): boolean {
+    if (turn.endedAt !== undefined) return true
+    void this.version
+    return turn.endedAt !== undefined
+  }
+
   deepestRunning(turn: ActivityTurn): ActivityStep | null {
+    if (turn.endedAt !== undefined) return null
     void this.version
     return deepestRunningStep(turn.steps)
   }

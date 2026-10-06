@@ -1,6 +1,14 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { Chapter, TimeTracker } from '$lib/types'
 
+vi.mock('$lib/stores/activity.svelte', () => ({
+  activity: {
+    startStep: vi.fn(() => ''),
+    updateStep: vi.fn(),
+    endStep: vi.fn(),
+    recordStep: vi.fn(() => ''),
+  },
+}))
 vi.mock('$lib/stores/debug.svelte', () => ({
   debug: { addDebugRequest: vi.fn(), addDebugResponse: vi.fn() },
 }))
@@ -13,7 +21,9 @@ vi.mock('$lib/stores/settings.svelte', () => ({
   },
 }))
 
-import { buildChapterSummariesBlock, joinReinforcement } from './NarrativeService'
+import { buildChapterSummariesBlock, joinReinforcement, narrativeChunks } from './NarrativeService'
+import { APICallError } from 'ai'
+import { STREAM_FAILURE } from '../core/types'
 
 describe('joinReinforcement', () => {
   it('prefixes the turn message when the pack rendered reinforcement', () => {
@@ -105,5 +115,75 @@ describe('buildChapterSummariesBlock — chapter times', () => {
     const block = buildChapterSummariesBlock([chapter({ startTime: null, endTime: null })])
 
     expect(block).not.toContain('*Time:')
+  })
+})
+
+describe('narrativeChunks', () => {
+  async function collect(parts: { type: string; text?: string; error?: unknown }[]) {
+    const out = []
+    for await (const chunk of narrativeChunks(
+      (async function* () {
+        yield* parts
+      })(),
+    ))
+      out.push(chunk)
+    return out
+  }
+
+  it('marks the start of the response, then passes reasoning and text on', async () => {
+    expect(
+      await collect([
+        { type: 'start' },
+        { type: 'start-step' },
+        { type: 'reasoning-delta', text: 'hm' },
+        { type: 'text-delta', text: 'Hi.' },
+        { type: 'finish' },
+      ]),
+    ).toEqual([
+      { content: '', done: false, started: true },
+      { content: '', reasoning: 'hm', done: false },
+      { content: 'Hi.', done: false },
+    ])
+  })
+
+  it('throws a refused request as it is, instead of passing it on as an empty answer', async () => {
+    const failure = new APICallError({
+      message: 'Invalid API key provided.',
+      url: 'https://example.test',
+      requestBodyValues: {},
+      statusCode: 401,
+    })
+    await expect(collect([{ type: 'start' }, { type: 'error', error: failure }])).rejects.toBe(
+      failure,
+    )
+  })
+
+  it('names any other error the stream ends on a stream failure', async () => {
+    await expect(
+      collect([
+        { type: 'text-delta', text: 'The dragon ' },
+        { type: 'error', error: new Error('cut') },
+      ]),
+    ).rejects.toMatchObject({ name: STREAM_FAILURE, message: 'cut' })
+  })
+
+  it('ignores an error the stream goes on past', async () => {
+    expect(
+      await collect([
+        { type: 'text-delta', text: 'The dragon ' },
+        { type: 'error', error: new Error('bad chunk') },
+        { type: 'text-delta', text: 'fell.' },
+      ]),
+    ).toEqual([
+      { content: 'The dragon ', done: false },
+      { content: 'fell.', done: false },
+    ])
+  })
+
+  it("throws a provider's in-stream error object as an error with its message", async () => {
+    const error = { message: 'Upstream provider stopped responding', code: 502 }
+    await expect(collect([{ type: 'error', error }])).rejects.toThrow(
+      '502 · Upstream provider stopped responding',
+    )
   })
 })

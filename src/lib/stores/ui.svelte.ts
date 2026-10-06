@@ -152,6 +152,8 @@ class UIStore {
   streamingContentTokens = $state(0)
   generationStatus = $state('') // Status message during generation steps (e.g. "Retrieving memories...")
   isStreaming = $state(false)
+  /** The narration entry the stream becomes; the view swaps one for the other in one render. */
+  streamingNarrationEntryId = $state<string | null>(null)
   private htmlRenderer: StreamingHtmlRenderer | null = null
   private visualProseEntryId: string | null = null
   /**
@@ -502,6 +504,13 @@ class UIStore {
     this.pendingEntryScrollId = entryId
   }
 
+  /** Bumped to move the story view to its end, regardless of the auto-scroll setting. */
+  storyEndScrollRequest = $state(0)
+
+  requestStoryEndScroll() {
+    this.storyEndScrollRequest++
+  }
+
   /** Take the pending request, if any, and clear it. */
   consumeEntryScroll(): string | null {
     const entryId = this.pendingEntryScrollId
@@ -641,7 +650,12 @@ class UIStore {
     }
     this.isStreaming = false
     this.streamingContent = ''
+    this.streamingNarrationEntryId = null
     return finalContent
+  }
+
+  setStreamingNarrationEntry(entryId: string) {
+    this.streamingNarrationEntryId = entryId
   }
 
   /**

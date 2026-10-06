@@ -6,6 +6,7 @@ import { createLogger } from '$lib/log'
 import { backgroundImageAnalysisResultSchema, type BackgroundImageAnalysisResult } from '../sdk'
 import { BaseAIService } from '../BaseAIService'
 import { generateImage } from './providers/registry'
+import { describeActivityError, isAbortError } from '$lib/services/activity'
 
 const log = createLogger('BackgroundImageService')
 
@@ -23,7 +24,8 @@ export class BackgroundImageService extends BaseAIService {
   async analyzeResponsesForBackgroundImage(
     storyId: string | undefined,
     visibleEntries: StoryEntry[],
-  ): Promise<BackgroundImageAnalysisResult> {
+    activityParentId?: string,
+  ): Promise<BackgroundImageAnalysisResult & { failure?: string }> {
     log('analyzeResponsesForBackgroundImage called', {
       visibleEntriesCount: visibleEntries.length,
     })
@@ -51,20 +53,24 @@ export class BackgroundImageService extends BaseAIService {
         system,
         prompt,
         'background-image-prompt-analysis',
+        activityParentId,
       )
 
       return result
     } catch (error) {
       emitBackgroundImageAnalysisFailed()
       log('Query generation failed:', error)
+      if (isAbortError(error)) throw error
       return {
         changeNecessary: false,
         prompt: '',
+        failure: describeActivityError(error),
       }
     }
   }
 
-  async generateBackgroundImage(prompt: string): Promise<string> {
+  /** The image, or an empty one and why. */
+  async generateBackgroundImage(prompt: string): Promise<{ image: string; failure?: string }> {
     log('generateBackgroundImage called', { prompt })
     const profileId = this.imageSettings.backgroundProfileId
 
@@ -87,10 +93,11 @@ export class BackgroundImageService extends BaseAIService {
 
       log('Background image generated successfully')
 
-      return result.base64
+      return { image: result.base64 }
     } catch (error) {
       log('Background image generation failed:', error)
-      return ''
+      if (isAbortError(error)) throw error
+      return { image: '', failure: describeActivityError(error) }
     }
   }
 }

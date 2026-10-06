@@ -22,7 +22,7 @@ import type { TranslationResult } from '$lib/services/ai/utils/TranslationServic
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
 
 /** Dependencies for translation phase - injected to avoid tight coupling */
-import { NO_ACTIVITY, type ActivityReporter } from '$lib/services/activity'
+import { NO_ACTIVITY, failStep, type ActivityReporter } from '$lib/services/activity'
 
 export interface TranslationDependencies {
   translateNarration: (
@@ -30,6 +30,7 @@ export interface TranslationDependencies {
     targetLanguage: string,
     isVisualProse: boolean,
     storyId: string | undefined,
+    activityParentId?: string,
   ) => Promise<TranslationResult>
 }
 
@@ -52,6 +53,8 @@ export interface TranslationResult2 {
   translated: boolean
   translatedContent: string | null
   targetLanguage: string | null
+  /** Narration translation is off in settings. */
+  skippedReason?: 'disabled'
 }
 
 /**
@@ -74,6 +77,7 @@ export class TranslationPhase {
         translated: false,
         translatedContent: null,
         targetLanguage: null,
+        skippedReason: 'disabled',
       }
 
       yield {
@@ -108,7 +112,19 @@ export class TranslationPhase {
         targetLanguage,
         isVisualProse,
         storyId,
+        callId,
       )
+      // Absorbed by the service, which hands the original back: there is nothing to save.
+      if (translationResult.failure) {
+        activity.endStep(callId, 'failed', undefined, translationResult.failure)
+        const result: TranslationResult2 = {
+          translated: false,
+          translatedContent: null,
+          targetLanguage: null,
+        }
+        yield { type: 'phase_complete', phase: 'translation', result } satisfies PhaseCompleteEvent
+        return result
+      }
       activity.endStep(callId)
 
       if (abortSignal?.aborted) {
@@ -130,14 +146,12 @@ export class TranslationPhase {
         type: 'phase_complete',
         phase: 'translation',
         result,
+        activityParentId: input.activityParentId ?? undefined,
       } satisfies PhaseCompleteEvent
 
       return result
     } catch (error) {
-      activity.endStep(
-        callId,
-        error instanceof Error && error.name === 'AbortError' ? 'skipped' : 'failed',
-      )
+      failStep(activity, callId, error)
       if (error instanceof Error && error.name === 'AbortError') {
         yield { type: 'aborted', phase: 'translation' } satisfies AbortedEvent
         return {

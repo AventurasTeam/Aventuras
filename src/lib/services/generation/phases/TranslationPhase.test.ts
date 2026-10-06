@@ -4,6 +4,14 @@ import { describe, it, expect, vi } from 'vitest'
 // That class extends BaseAIService, so loading it reaches the debug and settings stores --
 // rune-based modules the test runner cannot evaluate. Both are stubbed so the *real* gate
 // runs: reimplementing the predicate here would leave the thing under test untested.
+vi.mock('$lib/stores/activity.svelte', () => ({
+  activity: {
+    startStep: vi.fn(() => ''),
+    updateStep: vi.fn(),
+    endStep: vi.fn(),
+    recordStep: vi.fn(() => ''),
+  },
+}))
 vi.mock('$lib/stores/debug.svelte', () => ({
   debug: { addDebugRequest: vi.fn(), addDebugResponse: vi.fn() },
 }))
@@ -17,6 +25,7 @@ vi.mock('$lib/stores/settings.svelte', () => ({
 }))
 
 import { TranslationPhase, type TranslationInput } from './TranslationPhase'
+import { ActivityRecorder } from '$lib/services/activity'
 import type { GenerationEvent } from '../types'
 import type { TranslationSettings } from '$lib/types'
 
@@ -71,7 +80,7 @@ describe('TranslationPhase', () => {
       new TranslationPhase({ translateNarration }).execute(makeInput({ isVisualProse: true })),
     )
 
-    expect(translateNarration).toHaveBeenCalledWith('The dragon fell.', 'it', true, 'story-1')
+    expect(translateNarration).toHaveBeenCalledWith('The dragon fell.', 'it', true, 'story-1', '')
   })
 
   it('skips without calling the translator when translation is off', async () => {
@@ -147,5 +156,42 @@ describe('TranslationPhase', () => {
 
       expect(events.map((e) => e.type)).toEqual(['phase_start', 'aborted'])
     })
+  })
+})
+
+describe('TranslationPhase activity reporting', () => {
+  it('hands the consumer the parent to report saving the translation under', async () => {
+    const translateNarration = vi.fn().mockResolvedValue({ translatedContent: 'Il drago cadde.' })
+    const gen = new TranslationPhase({ translateNarration }).execute(
+      makeInput({ activityParentId: 'phase' }),
+    )
+
+    let next = await gen.next()
+    while (!next.done && next.value.type !== 'phase_complete') next = await gen.next()
+
+    expect(next.value).toMatchObject({
+      activityParentId: 'phase',
+      result: { translated: true, translatedContent: 'Il drago cadde.' },
+    })
+  })
+
+  it('fails its step and saves nothing when the service hands the original back', async () => {
+    const activity = new ActivityRecorder()
+    activity.setReporting('tree')
+    activity.startTurn('entry')
+    const translateNarration = vi
+      .fn()
+      .mockResolvedValue({ translatedContent: 'The dragon fell.', failure: '429 · rate limited' })
+
+    const { result } = await drain(
+      new TranslationPhase({ translateNarration }).execute(makeInput({ activity })),
+    )
+
+    expect(activity.activeTurn!.steps[0]).toMatchObject({
+      label: 'Translating to it',
+      status: 'failed',
+      error: '429 · rate limited',
+    })
+    expect(result).toMatchObject({ translated: false, translatedContent: null })
   })
 })

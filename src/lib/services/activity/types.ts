@@ -17,11 +17,20 @@ export interface ActivityStep {
   detail?: string
   /** True when the step's work is an LLM request. */
   isLLM: boolean
+  /** One of several tries at the same request. A failed one the request got past is recovered. */
+  attempt?: boolean
+  /** Recorded after the fact without a duration: its span is not a measurement. */
+  untimed?: boolean
   status: ActivityStatus
   startedAt: number
   /** Absent while the step is running. */
   endedAt?: number
+  /** Why a failed step failed, as the reader is shown it. */
+  error?: string
 }
+
+/** How a turn ended. `halted`: a failure stopped it before its narration was produced. */
+export type TurnOutcome = 'finished' | 'halted' | 'stopped'
 
 export interface ActivityTurn {
   id: string
@@ -29,6 +38,10 @@ export interface ActivityTurn {
   entryId: string
   startedAt: number
   endedAt?: number
+  /** Set when the turn ends. */
+  outcome?: TurnOutcome
+  /** Why a halted turn halted. */
+  error?: string
   steps: ActivityStep[]
 }
 

@@ -1,5 +1,13 @@
 import type { StoryEntry } from '$lib/types'
 
+/** `metadata.source` of the system entry a failed generation leaves in place of its narration. */
+export const GENERATION_ERROR_SOURCE = 'generation-error'
+
+/** Whether a system entry records a failed generation, which offers Retry and Dismiss. */
+export function isGenerationErrorEntry(entry: StoryEntry): boolean {
+  return entry.type === 'system' && entry.metadata?.source === GENERATION_ERROR_SOURCE
+}
+
 /**
  * Walks backward from the entry with the given ID and returns the nearest
  * preceding `user_action` entry, or null if none is found (or the entry

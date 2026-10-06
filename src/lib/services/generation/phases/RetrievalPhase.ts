@@ -28,7 +28,7 @@ import {
   type ContextEntity,
 } from '$lib/services/ai/retrieval/alreadyInContext'
 import { joinPromptBlocks } from '$lib/utils/promptBlocks'
-import { NO_ACTIVITY, type ActivityReporter } from '$lib/services/activity'
+import { NO_ACTIVITY, failStep, type ActivityReporter } from '$lib/services/activity'
 
 /** Dependencies injected from AIService - phase calls these methods rather than duplicating logic */
 export interface RetrievalDependencies {
@@ -148,10 +148,7 @@ export class RetrievalPhase {
           () => activity.endStep(worldStateStepId),
           (err) => {
             contextInventoryComplete = false
-            activity.endStep(
-              worldStateStepId,
-              err instanceof Error && err.name === 'AbortError' ? 'skipped' : 'failed',
-            )
+            failStep(activity, worldStateStepId, err)
             if (err instanceof Error && err.name === 'AbortError') return
             console.warn('[RetrievalPhase] World state injection failed (non-fatal):', err)
           },
@@ -202,10 +199,7 @@ export class RetrievalPhase {
             () => activity.endStep(lorebookStepId),
             (err) => {
               contextInventoryComplete = false
-              activity.endStep(
-                lorebookStepId,
-                err instanceof Error && err.name === 'AbortError' ? 'skipped' : 'failed',
-              )
+              failStep(activity, lorebookStepId, err)
               if (err instanceof Error && err.name === 'AbortError') return
               console.warn('[RetrievalPhase] Lorebook retrieval failed (non-fatal):', err)
             },
@@ -267,7 +261,7 @@ export class RetrievalPhase {
         activity.endStep(memoryStepId)
       } catch (err) {
         const aborted = err instanceof Error && err.name === 'AbortError'
-        activity.endStep(memoryStepId, aborted ? 'skipped' : 'failed')
+        failStep(activity, memoryStepId, err)
         if (!aborted) {
           console.warn('[RetrievalPhase] Memory retrieval failed (non-fatal):', err)
         }

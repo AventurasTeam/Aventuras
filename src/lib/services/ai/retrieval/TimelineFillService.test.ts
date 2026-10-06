@@ -101,7 +101,7 @@ describe('TimelineFillService', () => {
       mockEntries,
       [],
     )
-    expect(queries).toEqual([])
+    expect(queries).toEqual({ queries: [] })
   })
 })
 
@@ -332,7 +332,7 @@ describe('runTimelineFill activity reporting', () => {
       isLLM: true,
     })
     // Not left running for the turn to sweep up as 'interrupted': it failed.
-    expect(activity.endStep).toHaveBeenCalledWith('step-1', 'failed')
+    expect(activity.endStep).toHaveBeenCalledWith('step-1', 'failed', undefined, 'no such template')
   })
 
   it('closes the planning step as skipped when the turn was aborted', async () => {

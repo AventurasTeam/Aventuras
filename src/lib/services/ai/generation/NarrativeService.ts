@@ -11,6 +11,8 @@
  * Uses ContextBuilder for prompt generation through the unified Liquid template pipeline.
  */
 
+import { describeActivityError } from '$lib/services/activity'
+import { APICallError, RetryError } from 'ai'
 import { streamNarrative, generateNarrative } from '../sdk/generate'
 import { ContextBuilder } from '$lib/services/context'
 import { StyleReviewerService } from './StyleReviewerService'
@@ -19,7 +21,7 @@ import { createLogger } from '$lib/log'
 import { stripPicTags } from '$lib/utils/inlineImageParser'
 import { formatTimeSpan } from '$lib/utils/storyTime'
 import { storyImageMode } from '$lib/utils/image'
-import type { StreamChunk } from '../core/types'
+import { STREAM_FAILURE, type StreamChunk } from '../core/types'
 import type {
   Story,
   StoryEntry,
@@ -264,6 +266,54 @@ export interface NarrativeOptions {
   signal?: AbortSignal
   /** Timeline fill result for Q&A injection */
   timelineFillResult?: TimelineFillResult | null
+  /** The step this request serves; its attempts and waits are reported beneath it. */
+  activityParentId?: string
+}
+
+/**
+ * The narrator's stream parts, as the chunks the narrative phase reads. Reasoning and text are
+ * passed on, the start of the response is marked, and everything else is dropped.
+ */
+export async function* narrativeChunks(
+  parts: AsyncIterable<{ type: string; text?: string; error?: unknown }>,
+): AsyncIterable<StreamChunk> {
+  // `streamText` reports a failure as a part rather than by throwing, and some providers report
+  // one bad chunk and stream on. Only an error the stream ends on is thrown.
+  let pending: Error | null = null
+  for await (const part of parts) {
+    if (part.type === 'start-step') {
+      // The first piece of the response is in, text or not: an empty answer is still one.
+      yield { content: '', done: false, started: true }
+    } else if (part.type === 'error') {
+      pending = streamError(part.error)
+    } else if (part.type === 'reasoning-delta') {
+      pending = null
+      // Native reasoning providers, or reasoning extracted from <think> tags.
+      yield { content: '', reasoning: part.text, done: false }
+    } else if (part.type === 'text-delta') {
+      pending = null
+      yield { content: part.text || '', done: false }
+    }
+  }
+  if (pending) throw pending
+}
+
+/**
+ * A refused request is passed on as it is. Anything else the stream reported -- a cut, or a
+ * provider's JSON `error` object -- becomes an error named `STREAM_FAILURE`.
+ */
+function streamError(error: unknown): Error {
+  if (APICallError.isInstance(error) || RetryError.isInstance(error)) return error
+  const failure = new Error(describeActivityError(streamErrorReason(error)), { cause: error })
+  failure.name = STREAM_FAILURE
+  return failure
+}
+
+function streamErrorReason(error: unknown): unknown {
+  if (error instanceof Error || error === null || typeof error !== 'object') return error
+  const { message, code } = error as { message?: unknown; code?: unknown }
+  if (typeof message !== 'string') return error
+  return code ? `${code} · ${message}` : message
 }
 
 /**
@@ -296,8 +346,14 @@ export class NarrativeService {
     story?: Story | null,
     options: NarrativeOptions = {},
   ): AsyncIterable<StreamChunk> {
-    const { tieredContextBlock, styleReview, retrievedChapterContext, signal, timelineFillResult } =
-      options
+    const {
+      tieredContextBlock,
+      styleReview,
+      retrievedChapterContext,
+      signal,
+      timelineFillResult,
+      activityParentId,
+    } = options
 
     log('stream', {
       entriesCount: entries.length,
@@ -328,21 +384,13 @@ export class NarrativeService {
         system: systemPrompt,
         prompt: joinReinforcement(reinforcement, userPrompt),
         signal,
+        activityParentId,
       })
 
       // Use fullStream to capture both text and reasoning
       // - Native reasoning providers (Anthropic, OpenAI) emit reasoning-delta parts
       // - Models using <think> tags have reasoning extracted by extractReasoningMiddleware
-      for await (const part of stream.fullStream) {
-        if (part.type === 'reasoning-delta') {
-          // Reasoning delta from native providers or extracted from <think> tags
-          yield { content: '', reasoning: (part as { text?: string }).text, done: false }
-        } else if (part.type === 'text-delta') {
-          // Regular text content
-          yield { content: (part as { text?: string }).text || '', done: false }
-        }
-        // Ignore other part types (reasoning-start, reasoning-end, tool calls, finish, etc.)
-      }
+      yield* narrativeChunks(stream.fullStream)
 
       yield { content: '', done: true }
     } catch (error) {

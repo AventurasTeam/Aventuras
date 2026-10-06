@@ -14,7 +14,7 @@ async function drain<R>(gen: AsyncGenerator<GenerationEvent, R>) {
 
 function makeDeps(overrides: Partial<ImageDependencies> = {}): ImageDependencies {
   return {
-    generateImagesForNarrative: async () => {},
+    generateImagesForNarrative: async () => ({ queued: 0 }),
     isImageGenerationEnabled: () => true,
     ...overrides,
   }
@@ -35,7 +35,7 @@ function makeInput(overrides: Partial<ImageInput> = {}): ImageInput {
 
 describe('ImagePhase', () => {
   it('builds the generation context from the turn', async () => {
-    const generateImagesForNarrative = vi.fn().mockResolvedValue(undefined)
+    const generateImagesForNarrative = vi.fn().mockResolvedValue({ queued: 0 })
 
     const { result } = await drain(
       new ImagePhase(makeDeps({ generateImagesForNarrative })).execute(
@@ -58,7 +58,7 @@ describe('ImagePhase', () => {
   })
 
   it('defaults referenceMode to false rather than leaving it undefined', async () => {
-    const generateImagesForNarrative = vi.fn().mockResolvedValue(undefined)
+    const generateImagesForNarrative = vi.fn().mockResolvedValue({ queued: 0 })
 
     await drain(new ImagePhase(makeDeps({ generateImagesForNarrative })).execute(makeInput()))
 
@@ -160,5 +160,62 @@ describe('ImagePhase', () => {
       expect(result.skippedReason).toBe('aborted')
       expect(events.map((e) => e.type)).toEqual(['phase_start', 'aborted'])
     })
+  })
+})
+
+describe('ImagePhase activity reporting', () => {
+  function reporter() {
+    const updates: [string, string, string | undefined][] = []
+    const activity = {
+      startStep: () => '',
+      endStep: () => {},
+      recordStep: (label: string, options: { parentId?: string; detail?: string } = {}) => {
+        updates.push([options.parentId ?? '', label, options.detail])
+        return ''
+      },
+    }
+    return { activity, updates }
+  }
+
+  it('notes how many images it handed off', async () => {
+    const { activity, updates } = reporter()
+    const generate = vi.fn().mockResolvedValue({ queued: 3 })
+
+    const { events } = await drain(
+      new ImagePhase(makeDeps({ generateImagesForNarrative: generate })).execute(
+        makeInput({ activity, activityParentId: 'images' }),
+      ),
+    )
+
+    expect(generate.mock.calls[0][0].activityParentId).toBe('images')
+    expect(updates).toEqual([['images', 'Handed off', '3 images queued']])
+    expect(events.some((e) => e.type === 'error')).toBe(false)
+  })
+
+  it('notes none queued when the analysis found no scenes', async () => {
+    const { activity, updates } = reporter()
+
+    await drain(
+      new ImagePhase(
+        makeDeps({ generateImagesForNarrative: vi.fn().mockResolvedValue({ queued: 0 }) }),
+      ).execute(makeInput({ activity, activityParentId: 'images' })),
+    )
+
+    expect(updates).toEqual([['images', 'Handed off', 'no images queued']])
+  })
+
+  it('leaves a failed analysis to its own step, and notes no hand-off', async () => {
+    const { activity, updates } = reporter()
+    const generate = vi.fn().mockResolvedValue({ queued: 0, failure: '401 · invalid API key' })
+
+    const { events, result } = await drain(
+      new ImagePhase(makeDeps({ generateImagesForNarrative: generate })).execute(
+        makeInput({ activity, activityParentId: 'images' }),
+      ),
+    )
+
+    expect(events.some((e) => e.type === 'error')).toBe(false)
+    expect(updates).toEqual([])
+    expect(result).toEqual({ started: true })
   })
 })

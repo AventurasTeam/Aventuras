@@ -259,3 +259,146 @@ describe('recording', () => {
     expect(onChange).toHaveBeenCalledTimes(4)
   })
 })
+
+describe('latestTurn', () => {
+  it('is the most recently started turn, still after it ends, until a newer one starts', () => {
+    const { recorder } = recorderAt()
+    recorder.setReporting('line')
+    expect(recorder.latestTurn).toBeNull()
+
+    recorder.startTurn('entry-1')
+    recorder.endTurn()
+    expect(recorder.latestTurn?.entryId).toBe('entry-1')
+
+    recorder.startTurn('entry-2')
+    expect(recorder.latestTurn?.entryId).toBe('entry-2')
+  })
+})
+
+describe('error reasons', () => {
+  it('keeps the reason a failed step was closed with, and a snapshot carries it', () => {
+    const { recorder } = recorderAt()
+    recorder.setReporting('line')
+    recorder.startTurn('entry-1')
+
+    const id = recorder.startStep('Classifying')
+    recorder.endStep(id, 'failed', undefined, '401 · invalid API key')
+    recorder.recordStep('Tier 3 selection', { status: 'failed', error: 'timed out' })
+
+    const steps = recorder.snapshot()[0].steps
+    expect(steps.map((s) => s.error)).toEqual(['401 · invalid API key', 'timed out'])
+  })
+
+  it('records no reason when none is given', () => {
+    const { recorder } = recorderAt()
+    recorder.setReporting('line')
+    recorder.startTurn('entry-1')
+
+    recorder.endStep(recorder.startStep('Classifying'), 'failed')
+
+    expect(recorder.snapshot()[0].steps[0].error).toBeUndefined()
+  })
+})
+
+describe('rebindTurn', () => {
+  it('moves a turn to the entry that took the place of its narration', () => {
+    const { recorder } = recorderAt()
+    recorder.setReporting('line')
+    recorder.startTurn('narration-1')
+    recorder.startStep('Narrative')
+
+    recorder.rebindTurn('narration-1', 'error-1')
+
+    expect(recorder.find('narration-1')).toBeNull()
+    expect(recorder.find('error-1')?.steps.map((s) => s.label)).toEqual(['Narrative'])
+  })
+})
+
+describe('groupChildren', () => {
+  it('moves the children of a step under a new step spanning them', () => {
+    const { recorder } = recorderAt([10, 10, 20, 30, 40])
+    recorder.setReporting('tree')
+    recorder.startTurn('entry')
+    const parent = recorder.startStep('Narrative')
+    const wait = recorder.startStep('Waiting for model', { parentId: parent })
+    recorder.endStep(wait)
+
+    const group = recorder.groupChildren(parent, 'Pass 1', { status: 'failed', error: 'Empty' })
+
+    const steps = recorder.snapshot()[0].steps
+    expect(steps.find((s) => s.id === wait)?.parentId).toBe(group)
+    expect(steps.find((s) => s.id === group)).toMatchObject({
+      parentId: parent,
+      status: 'failed',
+      error: 'Empty',
+      startedAt: 20,
+      endedAt: 30,
+    })
+  })
+
+  it('adds nothing when the step has no children', () => {
+    const { recorder } = recorderAt()
+    recorder.setReporting('tree')
+    recorder.startTurn('entry')
+    const parent = recorder.startStep('Narrative')
+
+    expect(recorder.groupChildren(parent, 'Pass 1')).toBe('')
+    expect(recorder.snapshot()[0].steps).toHaveLength(1)
+  })
+})
+
+describe('untimed steps', () => {
+  it('marks a step recorded without a duration as untimed, and one with a duration as timed', () => {
+    const { recorder } = recorderAt()
+    recorder.setReporting('tree')
+    recorder.startTurn('entry')
+
+    recorder.recordStep('grep')
+    recorder.recordStep('query ch.1', { durationMs: 1200 })
+
+    const [grep, query] = recorder.snapshot()[0].steps
+    expect(grep.untimed).toBe(true)
+    expect(query.untimed).toBeUndefined()
+  })
+})
+
+describe('steps outside the turn in flight', () => {
+  it('records nothing under a parent that belongs to an ended turn', () => {
+    const { recorder } = recorderAt()
+    recorder.setReporting('tree')
+    recorder.startTurn('entry-1')
+    const parentId = recorder.startStep('Background image')
+    recorder.endTurn()
+    recorder.startTurn('entry-2')
+
+    expect(recorder.startStep('Waiting to retry', { parentId })).toBe('')
+    expect(recorder.activeTurn?.steps).toEqual([])
+  })
+
+  it('discards a step and everything beneath it', () => {
+    const { recorder } = recorderAt()
+    recorder.setReporting('tree')
+    recorder.startTurn('entry')
+    const keep = recorder.startStep('Narrative')
+    const drop = recorder.startStep('Translation')
+    recorder.startStep('Translating', { parentId: drop })
+
+    recorder.discardStep(drop)
+
+    expect(recorder.activeTurn?.steps.map((s) => s.id)).toEqual([keep])
+  })
+
+  it('discards a group together with the children it was created after', () => {
+    const { recorder } = recorderAt()
+    recorder.setReporting('tree')
+    recorder.startTurn('entry')
+    const keep = recorder.startStep('Retrieval')
+    const narrative = recorder.startStep('Narrative')
+    recorder.recordStep('Waiting for model', { parentId: narrative })
+    const group = recorder.groupChildren(narrative, 'Pass 1')
+
+    recorder.discardStep(group)
+
+    expect(recorder.activeTurn?.steps.map((s) => s.id)).toEqual([keep, narrative])
+  })
+})

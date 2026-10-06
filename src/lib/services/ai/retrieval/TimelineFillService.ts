@@ -24,13 +24,24 @@ import { countTokens } from '$lib/services/tokenizer'
 import { chapterReadBudget } from '../core/defaults'
 
 import { activity } from '$lib/stores/activity.svelte'
+import { closeStep, describeActivityError, isAbortError, failStep } from '$lib/services/activity'
+
+/** Close a step by how many of its questions were actually answered. */
+function closeAnswerStep(id: string, answers: TimelineAnswer[]): void {
+  const answered = answers.filter((a) => a.confidence > 0).length
+  // The step failed only when no question got an answer; one failure among answers is a partial read.
+  const failure = answered === 0 ? answers.find((a) => a.failure !== undefined)?.failure : undefined
+  closeStep(
+    activity,
+    id,
+    failure,
+    answered === answers.length
+      ? `${answered} answered`
+      : `${answered} of ${answers.length} answered`,
+  )
+}
 
 const log = createLogger('TimelineFill')
-
-/** How a step that threw is closed: an abort was not a failure of the work itself. */
-function abortedStatus(error: unknown): 'skipped' | 'failed' {
-  return error instanceof Error && error.name === 'AbortError' ? 'skipped' : 'failed'
-}
 
 /**
  * Text `answerQuestion` returns when the call failed, so `runTimelineFill` can drop it.
@@ -45,6 +56,8 @@ const UNANSWERED = 'Unable to answer the question.'
 // Type definitions
 export interface TimelineAnswer {
   answer: string
+  /** Why the call failed, when `answer` is the give-up string because it did. */
+  failure?: string
   /**
    * 0 when the answer is a give-up string rather than retrieved information -- a failed
    * call, or no chapters resolved. `runTimelineFill` drops those instead of forwarding them
@@ -83,7 +96,8 @@ export class TimelineFillService extends BaseAIService {
     visibleEntries: StoryEntry[],
     chapters: Chapter[],
     alreadyInContext?: string,
-  ): Promise<TimelineQuery[]> {
+    activityParentId?: string,
+  ): Promise<{ queries: TimelineQuery[]; failure?: string }> {
     log('generateQueries called', {
       visibleEntriesCount: visibleEntries.length,
       chaptersCount: chapters.length,
@@ -91,7 +105,7 @@ export class TimelineFillService extends BaseAIService {
 
     if (chapters.length === 0) {
       log('No chapters available, skipping query generation')
-      return []
+      return { queries: [] }
     }
 
     // Build chapter history from visible entries
@@ -117,13 +131,15 @@ export class TimelineFillService extends BaseAIService {
         system,
         prompt,
         'timeline-fill',
+        activityParentId,
       )
 
       log('Generated queries:', result.queries.length)
-      return result.queries.slice(0, this.maxQueries)
+      return { queries: result.queries.slice(0, this.maxQueries) }
     } catch (error) {
       log('Query generation failed:', error)
-      return []
+      if (isAbortError(error)) throw error
+      return { queries: [], failure: describeActivityError(error) }
     }
   }
 
@@ -264,6 +280,7 @@ export class TimelineFillService extends BaseAIService {
     storyId: string | undefined,
     query: string,
     chapterContent: string,
+    activityParentId?: string,
   ): Promise<TimelineAnswer> {
     const ctx = await ContextBuilder.forPack(storyId)
     ctx.add({ chapterContent, query })
@@ -275,6 +292,7 @@ export class TimelineFillService extends BaseAIService {
           presetId: this.presetId,
           system,
           prompt,
+          activityParentId,
         },
         'timeline-fill-answer',
       )
@@ -282,7 +300,9 @@ export class TimelineFillService extends BaseAIService {
       return { answer: answer.trim(), confidence: 0.8 }
     } catch (error) {
       log('Answer generation failed:', error)
-      return { answer: UNANSWERED, confidence: 0 }
+      if (isAbortError(error)) throw error
+      // The caller closes the step it opened: several of these can share one.
+      return { answer: UNANSWERED, confidence: 0, failure: describeActivityError(error) }
     }
   }
 
@@ -301,6 +321,7 @@ export class TimelineFillService extends BaseAIService {
     storyId: string | undefined,
     queries: string[],
     chapterContent: string,
+    activityParentId?: string,
   ): Promise<{ answers: TimelineAnswer[]; llmCalls: number }> {
     const questionsList = queries.map((q, index) => `${index}. ${q}`).join('\n')
 
@@ -315,6 +336,7 @@ export class TimelineFillService extends BaseAIService {
         system,
         prompt,
         'timeline-fill-batch-answer',
+        activityParentId,
       )
       batched = result.answers
     } catch (error) {
@@ -339,10 +361,22 @@ export class TimelineFillService extends BaseAIService {
         missing: missing.length,
         of: queries.length,
       })
+      // Each re-ask is its own request, so its attempts and outcome are not mixed with its siblings'.
       const retried = await Promise.all(
-        missing.map((index) =>
-          this.answerQuestionWithContent(storyId, queries[index], chapterContent),
-        ),
+        missing.map(async (index) => {
+          const askId = activity.startStep(`Re-asking question ${index + 1}`, {
+            parentId: activityParentId,
+            isLLM: true,
+          })
+          const answer = await this.answerQuestionWithContent(
+            storyId,
+            queries[index],
+            chapterContent,
+            askId,
+          )
+          closeAnswerStep(askId, [answer])
+          return answer
+        }),
       )
       missing.forEach((index, i) => {
         answers[index] = retried[i]
@@ -383,16 +417,23 @@ export class TimelineFillService extends BaseAIService {
       parentId: activityParentId,
       isLLM: true,
     })
-    let queries: TimelineQuery[]
+    let planned: Awaited<ReturnType<typeof this.generateQueries>>
     try {
-      queries = await this.generateQueries(storyId, visibleEntries, chapters, alreadyInContext)
+      planned = await this.generateQueries(
+        storyId,
+        visibleEntries,
+        chapters,
+        alreadyInContext,
+        planStepId,
+      )
     } catch (error) {
       // `generateQueries` swallows a failed model call, but renders its prompt outside that
       // guard -- a template lookup rejects straight past the close below.
-      activity.endStep(planStepId, abortedStatus(error))
+      failStep(activity, planStepId, error)
       throw error
     }
-    activity.endStep(planStepId, 'done', `${queries.length} questions`)
+    const { queries, failure } = planned
+    closeStep(activity, planStepId, failure, `${queries.length} questions`)
     if (queries.length === 0) {
       return { queries: [], responses: [] }
     }
@@ -452,7 +493,12 @@ export class TimelineFillService extends BaseAIService {
             group.items.length === 1
               ? {
                   answers: [
-                    await this.answerQuestionWithContent(storyId, group.items[0].query, content),
+                    await this.answerQuestionWithContent(
+                      storyId,
+                      group.items[0].query,
+                      content,
+                      readStepId,
+                    ),
                   ],
                   llmCalls: 1,
                 }
@@ -460,13 +506,14 @@ export class TimelineFillService extends BaseAIService {
                   storyId,
                   group.items.map((i) => i.query),
                   content,
+                  readStepId,
                 ))
         } catch (error) {
-          activity.endStep(readStepId, abortedStatus(error))
+          failStep(activity, readStepId, error)
           throw error
         }
 
-        activity.endStep(readStepId, 'done', `${group.items.length} answered`)
+        closeAnswerStep(readStepId, answers)
 
         group.items.forEach((item, i) => {
           // `confidence: 0` is what every give-up path sets. None of it is retrieved

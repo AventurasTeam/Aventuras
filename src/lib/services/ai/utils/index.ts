@@ -8,6 +8,7 @@
 
 export {
   TranslationService,
+  type Translated,
   type TranslationResult,
   type UITranslationItem,
 } from './TranslationService'

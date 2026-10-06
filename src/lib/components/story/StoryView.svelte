@@ -357,6 +357,13 @@
     isAtPhysicalBottom = nearBottom
   }
 
+  // Hidden once its entry exists, so scroll anchoring can't strand the view below it.
+  const showStreamingEntry = $derived.by(() => {
+    if (!ui.isStreaming) return false
+    const id = ui.streamingNarrationEntryId
+    return !id || !story.entries.some((e) => e.id === id)
+  })
+
   // Editing is a focused field inside the story: the entry is as tall as its text, so a
   // re-pin would chase the caret.
   function isEditingInStory(): boolean {
@@ -485,7 +492,20 @@
     }
   })
 
-  // The same request, arriving while the story panel is already up — the effect above
+  // A regenerate starts where the discarded narration was; follow it there even with
+  // auto-scroll off, or the removal leaves the view part-way up the entry before it.
+  let lastEndScrollRequest = ui.storyEndScrollRequest
+  $effect(() => {
+    const request = ui.storyEndScrollRequest
+    if (request === lastEndScrollRequest || ui.activePanel !== 'story' || !storyContainer) return
+    lastEndScrollRequest = request
+    untrack(() => {
+      anchorToBottom(story.entries.length)
+      tick().then(() => performScroll())
+    })
+  })
+
+  // The same request, arriving while the story panel is already up — the panel-landing effect
   // won't re-run, since neither activePanel nor storyContainer changed. Declared after
   // it so that on a remount the panel effect takes the request first and this one finds
   // nothing; consumeEntryScroll is atomic, so exactly one of the two ever lands it.
@@ -580,7 +600,7 @@
         {/each}
 
         <!-- Show streaming entry while generating -->
-        {#if ui.isStreaming}
+        {#if showStreamingEntry}
           <StreamingEntry />
         {/if}
 

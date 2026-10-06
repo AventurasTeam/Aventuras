@@ -1,7 +1,12 @@
 import { describe, it, expect, vi } from 'vitest'
+import { APICallError } from 'ai'
 import { NarrativePhase, type NarrativeInput } from './NarrativePhase'
 import type { GenerationEvent, RetrievalResult } from '../types'
-import type { StreamChunk } from '$lib/services/ai/core/types'
+import { STREAM_FAILURE, type StreamChunk } from '$lib/services/ai/core/types'
+
+const streamFailure = (message: string) =>
+  Object.assign(new Error(message), { name: STREAM_FAILURE })
+import { ActivityRecorder } from '$lib/services/activity'
 
 async function drain<R>(gen: AsyncGenerator<GenerationEvent, R>) {
   const events: GenerationEvent[] = []
@@ -64,7 +69,6 @@ describe('NarrativePhase', () => {
     expect(result).toEqual({
       content: 'The dragon fell.',
       reasoning: 'setting up the fall',
-      chunkCount: 3,
     })
     expect(events.filter((e) => e.type === 'narrative_chunk')).toHaveLength(2)
     expect(events.at(-1)?.type).toBe('phase_complete')
@@ -130,16 +134,79 @@ describe('NarrativePhase', () => {
     })
   })
 
-  it('treats a stream failure as fatal, unlike the other phases', async () => {
-    // There is no turn without a narration, so this one cannot degrade gracefully.
-    const streamNarrative = async function* (): AsyncGenerator<StreamChunk> {
-      throw new Error('provider down')
-    }
+  it('re-sends a stream that fails before any text, as it does an empty one', async () => {
+    let call = 0
+    const streamNarrative = vi.fn(async function* (): AsyncGenerator<StreamChunk> {
+      if (++call === 1) throw streamFailure('stream cut')
+      yield chunk({ content: 'The dragon fell.' })
+    })
 
     const { events, result } = await drain(phaseWith(streamNarrative).execute(makeInput()))
 
+    expect(streamNarrative).toHaveBeenCalledTimes(2)
+    expect(result?.content).toBe('The dragon fell.')
+    expect(events.some((e) => e.type === 'error')).toBe(false)
+  })
+
+  it('gives up fatally when every pass fails, naming the last reason', async () => {
+    // There is no turn without a narration, so this one cannot degrade gracefully.
+    const streamNarrative = vi.fn(async function* (): AsyncGenerator<StreamChunk> {
+      throw streamFailure('provider down')
+    })
+
+    const { events, result } = await drain(phaseWith(streamNarrative).execute(makeInput()))
+
+    expect(streamNarrative).toHaveBeenCalledTimes(3)
     expect(result).toBeNull()
-    expect(events.find((e) => e.type === 'error')).toMatchObject({ fatal: true })
+    expect(events.find((e) => e.type === 'error')).toMatchObject({
+      fatal: true,
+      error: new Error('Failed after 3 passes: provider down'),
+    })
+  })
+
+  it('does not re-send a fault from before any request was sent', async () => {
+    const streamNarrative = vi.fn(async function* (): AsyncGenerator<StreamChunk> {
+      throw new Error('Main narrative profile not configured')
+    })
+
+    const { events } = await drain(phaseWith(streamNarrative).execute(makeInput()))
+
+    expect(streamNarrative).toHaveBeenCalledTimes(1)
+    expect(events.find((e) => e.type === 'error')).toMatchObject({
+      fatal: true,
+      error: new Error('Main narrative profile not configured'),
+    })
+  })
+
+  it('does not re-send a request that failed outright: its retries are already spent', async () => {
+    const refused = new APICallError({
+      message: 'Unauthorized',
+      url: 'https://example.test',
+      requestBodyValues: {},
+      statusCode: 401,
+    })
+    const streamNarrative = vi.fn(async function* (): AsyncGenerator<StreamChunk> {
+      throw refused
+    })
+
+    const { events } = await drain(phaseWith(streamNarrative).execute(makeInput()))
+
+    expect(streamNarrative).toHaveBeenCalledTimes(1)
+    expect(events.find((e) => e.type === 'error')).toMatchObject({ fatal: true, error: refused })
+  })
+
+  it('keeps the text streamed before a failure, reporting the failure non-fatally', async () => {
+    const streamNarrative = vi.fn(async function* (): AsyncGenerator<StreamChunk> {
+      yield chunk({ content: 'The dragon ' })
+      throw new Error('connection reset')
+    })
+
+    const { events, result } = await drain(phaseWith(streamNarrative).execute(makeInput()))
+
+    expect(streamNarrative).toHaveBeenCalledTimes(1)
+    expect(result?.content).toBe('The dragon ')
+    expect(events.find((e) => e.type === 'error')).toMatchObject({ fatal: false })
+    expect(events.at(-1)?.type).toBe('phase_complete')
   })
 
   describe('abort', () => {
@@ -189,27 +256,12 @@ describe('NarrativePhase', () => {
 })
 
 describe('NarrativePhase activity reporting', () => {
-  /** Records what the phase reported, in order, as `label` + final status. */
+  /** The real recorder, with a turn open for the phase to report into. */
   function recordingReporter() {
-    const steps: { id: string; label: string; status?: string; detail?: string }[] = []
-    let n = 0
-    return {
-      steps,
-      reporter: {
-        startStep: (label: string, options: any = {}) => {
-          const id = `s${++n}`
-          steps.push({ id, label, detail: options.detail })
-          return id
-        },
-        endStep: (id: string, status = 'done', detail?: string) => {
-          const step = steps.find((s) => s.id === id)
-          if (!step || step.status) return
-          step.status = status
-          if (detail !== undefined) step.detail = detail
-        },
-        recordStep: () => '',
-      },
-    }
+    const reporter = new ActivityRecorder()
+    reporter.setReporting('tree')
+    reporter.startTurn('entry')
+    return { steps: reporter.activeTurn!.steps, reporter }
   }
 
   const phaseReporting = (streamNarrative: any, activity: any) =>
@@ -225,54 +277,78 @@ describe('NarrativePhase activity reporting', () => {
 
     await drain(phaseReporting(stream, reporter).execute(makeInput()))
 
-    expect(steps.map((s) => s.label)).toEqual(['Narrative', 'Generating', 'Waiting for model'])
+    // In the order they happen: the wait, then the streaming it gives way to.
+    expect(steps.map((s) => s.label)).toEqual(['Narrative', 'Waiting for model', 'Generating'])
     const wait = steps.find((s) => s.label === 'Waiting for model')!
     expect(wait.status).toBe('done')
     // Ended by the reasoning chunk, so it is not still open when content arrives.
     expect(wait.detail).toBeUndefined()
   })
 
-  it('marks the wait as having produced no tokens when the stream is empty', async () => {
+  it('opens no streaming step when the model never produces anything', async () => {
     const { steps, reporter } = recordingReporter()
 
     await drain(phaseReporting(streamOf(chunk({ done: true })), reporter).execute(makeInput()))
 
-    expect(steps.find((s) => s.label === 'Waiting for model')?.detail).toBe('no tokens')
+    expect(steps.some((s) => s.label === 'Generating')).toBe(false)
   })
 
-  it('reports the generating attempt as an LLM step with its chunk count', async () => {
+  it('marks the wait as having had no response when the stream ends without one', async () => {
+    const { steps, reporter } = recordingReporter()
+
+    await drain(phaseReporting(streamOf(chunk({ done: true })), reporter).execute(makeInput()))
+
+    expect(steps.find((s) => s.label === 'Waiting for model')?.detail).toBe('no response')
+  })
+
+  it('reports the streaming as the LLM step, with the chunk count', async () => {
     const { steps, reporter } = recordingReporter()
     const stream = streamOf(chunk({ content: 'Hi.' }), chunk({ done: true }))
 
     await drain(phaseReporting(stream, reporter).execute(makeInput()))
 
-    const attempt = steps.find((s) => s.label === 'Generating')!
-    expect(attempt.status).toBe('done')
-    expect(attempt.detail).toBe('2 chunks')
+    // A single pass gets no container of its own.
+    expect(steps.some((s) => s.label.startsWith('Pass'))).toBe(false)
+    expect(steps.find((s) => s.label === 'Generating')).toMatchObject({
+      status: 'done',
+      detail: '1 chunk',
+      isLLM: true,
+    })
   })
 
-  it('reports each empty attempt separately without changing the retry loop', async () => {
-    const { steps, reporter } = recordingReporter()
+  it('reports each empty pass as failed, grouping the first once a second follows', async () => {
+    const recorder = new ActivityRecorder()
+    recorder.setReporting('tree')
+    recorder.startTurn('entry')
     const streamNarrative = vi.fn(streamOf(chunk({ content: '' }), chunk({ done: true })))
 
     const { events, result } = await drain(
-      phaseReporting(streamNarrative, reporter).execute(makeInput()),
+      phaseReporting(streamNarrative, recorder).execute(makeInput()),
     )
 
-    // Unchanged behaviour: still three attempts, still a fatal error, still no result.
+    // Unchanged behaviour: still three passes, still a fatal error, still no result.
     expect(streamNarrative).toHaveBeenCalledTimes(3)
     expect(result).toBeNull()
-    expect(events.at(-1)).toMatchObject({ type: 'error', phase: 'narrative', fatal: true })
-
-    const attempts = steps.filter(
-      (s) => s.label.startsWith('Generating') || s.label.startsWith('Attempt'),
-    )
-    expect(attempts.map((s) => s.label)).toEqual(['Generating', 'Attempt 2', 'Attempt 3'])
-    expect(attempts.every((s) => s.detail === 'empty response')).toBe(true)
-    expect(steps.find((s) => s.label === 'Narrative')).toMatchObject({
-      status: 'failed',
-      detail: 'empty after 3 attempts',
+    expect(events.at(-1)).toMatchObject({
+      type: 'error',
+      phase: 'narrative',
+      fatal: true,
+      error: new Error('Empty response after 3 passes'),
     })
+
+    const steps = recorder.snapshot()[0].steps
+    const narrative = steps.find((s) => s.label === 'Narrative')!
+    expect(narrative).toMatchObject({ status: 'failed', error: 'Empty response after 3 passes' })
+    const passes = steps.filter((s) => s.parentId === narrative.id)
+    expect(passes.map((s) => [s.label, s.status, s.error, s.attempt])).toEqual([
+      ['Pass 1', 'failed', 'Empty response', true],
+      ['Pass 2', 'failed', 'Empty response', true],
+      ['Pass 3', 'failed', 'Empty response', true],
+    ])
+    const pass1 = passes.find((s) => s.label === 'Pass 1')!
+    expect(steps.filter((s) => s.parentId === pass1.id).map((s) => s.label)).toEqual([
+      'Waiting for model',
+    ])
   })
 
   it('leaves no step running when the stream throws', async () => {
@@ -283,8 +359,25 @@ describe('NarrativePhase activity reporting', () => {
 
     await drain(phaseReporting(streamNarrative, reporter).execute(makeInput()))
 
-    expect(steps.every((s) => s.status !== undefined)).toBe(true)
+    expect(steps.every((s) => s.status !== 'running')).toBe(true)
     expect(steps.find((s) => s.label === 'Narrative')?.status).toBe('failed')
+  })
+
+  it('marks a narration kept after a failure as failed', async () => {
+    const { steps, reporter } = recordingReporter()
+    const streamNarrative = async function* (): AsyncGenerator<StreamChunk> {
+      yield chunk({ content: 'The dragon ' })
+      throw new Error('connection reset')
+    }
+
+    await drain(phaseReporting(streamNarrative, reporter).execute(makeInput()))
+
+    expect(
+      steps.filter((s) => s.label !== 'Waiting for model').map((s) => [s.label, s.status]),
+    ).toEqual([
+      ['Narrative', 'failed'],
+      ['Generating', 'failed'],
+    ])
   })
 
   it('records nothing when no reporter is injected', async () => {
@@ -292,6 +385,49 @@ describe('NarrativePhase activity reporting', () => {
 
     const { result } = await drain(phaseWith(stream).execute(makeInput()))
 
+    expect(result?.content).toBe('Hi.')
+  })
+})
+
+describe('NarrativePhase response steps', () => {
+  function recordingReporter() {
+    const reporter = new ActivityRecorder()
+    reporter.setReporting('tree')
+    reporter.startTurn('entry')
+    return { steps: reporter.activeTurn!.steps, reporter }
+  }
+
+  it('shows an empty answer as a response with no content, after its wait', async () => {
+    const { steps, reporter } = recordingReporter()
+    const stream = streamOf({ content: '', done: false, started: true }, chunk({ done: true }))
+
+    await drain(
+      new NarrativePhase({ streamNarrative: stream, activity: reporter } as any).execute(
+        makeInput(),
+      ),
+    )
+
+    expect(steps.slice(1, 3).map((s) => [s.label, s.detail])).toEqual([
+      ['Waiting for model', undefined],
+      ['Generating', 'no content'],
+    ])
+  })
+
+  it('does not count the start of the response as a chunk', async () => {
+    const { steps, reporter } = recordingReporter()
+    const stream = streamOf(
+      { content: '', done: false, started: true },
+      chunk({ content: 'Hi.' }),
+      chunk({ done: true }),
+    )
+
+    const { result } = await drain(
+      new NarrativePhase({ streamNarrative: stream, activity: reporter } as any).execute(
+        makeInput(),
+      ),
+    )
+
+    expect(steps.find((s) => s.label === 'Generating')?.detail).toBe('1 chunk')
     expect(result?.content).toBe('Hi.')
   })
 })

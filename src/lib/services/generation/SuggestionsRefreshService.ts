@@ -32,7 +32,7 @@ export interface SuggestionsRefreshDependencies {
     suggestions: Suggestion[],
     targetLanguage: string,
     storyId: string | undefined,
-  ) => Promise<Suggestion[]>
+  ) => Promise<{ items: Suggestion[]; failure?: string }>
 }
 
 export interface SuggestionsRefreshResult {
@@ -84,12 +84,13 @@ export class SuggestionsRefreshService {
 
     if (TranslationService.shouldTranslate(translationSettings)) {
       try {
-        finalSuggestions = await this.deps.translateSuggestions(
+        const translation = await this.deps.translateSuggestions(
           result.suggestions,
           translationSettings.targetLanguage,
           storyId,
         )
-        translated = true
+        finalSuggestions = translation.items
+        translated = !translation.failure
         log('Suggestions translated')
       } catch (error) {
         log('Suggestion translation failed (non-fatal):', error)

@@ -20,6 +20,7 @@ import { recentContent, AS_PROSE } from '$lib/utils/recentContent'
 import { TIER3_SELECTION_CACHE_POSITIONS } from '../core/defaults'
 
 import { activity } from '$lib/stores/activity.svelte'
+import { failStep } from '$lib/services/activity'
 
 const log = createLogger('Tier3Selection')
 
@@ -231,7 +232,7 @@ export async function runTier3Selection({
 
   try {
     const result = await generateStructured(
-      { presetId, schema: entitySelectionSchema, system, prompt, signal },
+      { presetId, schema: entitySelectionSchema, system, prompt, signal, activityParentId: stepId },
       serviceLabel,
     )
     const selection = {
@@ -250,10 +251,7 @@ export async function runTier3Selection({
   } catch (error) {
     // Not cached: a failure says nothing about which candidates matter, and storing it
     // would suppress the retry that might succeed.
-    activity.endStep(
-      stepId,
-      error instanceof Error && error.name === 'AbortError' ? 'skipped' : 'failed',
-    )
+    failStep(activity, stepId, error)
     log('Tier 3 LLM selection failed', error)
     return null
   }

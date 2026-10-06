@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { buildTree, deepestRunningStep, flattenTree, rootStep } from './tree'
+import {
+  buildTree,
+  deepestRunningStep,
+  failuresShownBelow,
+  failureMarks,
+  stepsHoldingAttempts,
+  hasFailedStep,
+  flattenTree,
+  rootStep,
+} from './tree'
 import type { ActivityStep } from './types'
 
 function step(partial: Partial<ActivityStep> & { id: string }): ActivityStep {
@@ -178,5 +187,140 @@ describe('rootStep', () => {
     const cyclic = [step({ id: 'a', parentId: 'b' }), step({ id: 'b', parentId: 'a' })]
 
     expect(rootStep(cyclic, cyclic[0])).toBeDefined()
+  })
+})
+
+describe('failuresShownBelow', () => {
+  const failed = (id: string, parentId: string | null, error?: string) =>
+    step({ id, parentId, status: 'failed', error })
+
+  it('marks a parent that failed with the same reason as its child', () => {
+    const nodes = buildTree([failed('p', null, '401 · bad key'), failed('c', 'p', '401 · bad key')])
+    expect([...failuresShownBelow(nodes)]).toEqual(['p'])
+  })
+
+  it('marks a failed parent with no reason of its own', () => {
+    const nodes = buildTree([failed('p', null), failed('c', 'p', 'boom')])
+    expect([...failuresShownBelow(nodes)]).toEqual(['p'])
+  })
+
+  it('keeps a parent whose reason says more than its children', () => {
+    const nodes = buildTree([
+      failed('req', null, '429 · limited (after 3 attempts)'),
+      failed('a1', 'req', '429 · limited'),
+    ])
+    expect(failuresShownBelow(nodes).size).toBe(0)
+  })
+
+  it('reaches through a finished middle step to a failure deeper down', () => {
+    const nodes = buildTree([
+      failed('p', null, 'boom'),
+      step({ id: 'm', parentId: 'p' }),
+      failed('c', 'm', 'boom'),
+    ])
+    expect([...failuresShownBelow(nodes)]).toEqual(['p'])
+  })
+
+  it('leaves a failed step with no failed descendants alone', () => {
+    const nodes = buildTree([failed('p', null, 'boom'), step({ id: 'c', parentId: 'p' })])
+    expect(failuresShownBelow(nodes).size).toBe(0)
+  })
+})
+
+describe('failureMarks', () => {
+  const failed = (id: string, parentId: string | null, extra: Partial<ActivityStep> = {}) =>
+    step({ id, parentId, status: 'failed', ...extra })
+
+  it('marks every ancestor of a failure as failed, finished or not', () => {
+    const nodes = buildTree([
+      step({ id: 'retrieval' }),
+      step({ id: 'world', parentId: 'retrieval' }),
+      failed('tier3', 'world'),
+    ])
+    expect(Object.fromEntries(failureMarks(nodes))).toEqual({
+      retrieval: 'failed',
+      world: 'failed',
+    })
+  })
+
+  it('marks the ancestors of an attempt its request got past as recovered', () => {
+    const nodes = buildTree([
+      step({ id: 'memory' }),
+      step({ id: 'request', parentId: 'memory' }),
+      failed('a1', 'request', { attempt: true }),
+      step({ id: 'a2', parentId: 'request', attempt: true }),
+    ])
+    expect(Object.fromEntries(failureMarks(nodes))).toEqual({
+      memory: 'recovered',
+      request: 'recovered',
+    })
+  })
+
+  it('counts a failed attempt as a failure once its request failed too', () => {
+    const nodes = buildTree([
+      step({ id: 'phase' }),
+      failed('request', 'phase'),
+      failed('a1', 'request', { attempt: true }),
+    ])
+    expect(failureMarks(nodes).get('request')).toBe('failed')
+    expect(failureMarks(nodes).get('phase')).toBe('failed')
+  })
+
+  it('prefers failed over recovered when both lie beneath', () => {
+    const nodes = buildTree([
+      step({ id: 'retrieval' }),
+      step({ id: 'req', parentId: 'retrieval' }),
+      failed('a1', 'req', { attempt: true }),
+      failed('tier3', 'retrieval'),
+    ])
+    expect(failureMarks(nodes).get('retrieval')).toBe('failed')
+    expect(failureMarks(nodes).get('req')).toBe('recovered')
+  })
+
+  it('marks nothing when nothing failed', () => {
+    expect(
+      failureMarks(buildTree([step({ id: 'a' }), step({ id: 'b', parentId: 'a' })])).size,
+    ).toBe(0)
+  })
+})
+
+describe('stepsHoldingAttempts', () => {
+  it('marks a request that holds attempts, so the marker moves down to them', () => {
+    const nodes = buildTree([
+      step({ id: 'req', isLLM: true }),
+      step({ id: 'a1', parentId: 'req', isLLM: true, attempt: true }),
+      step({ id: 'wait', parentId: 'req' }),
+    ])
+    expect([...stepsHoldingAttempts(nodes)]).toEqual(['req'])
+  })
+
+  it('leaves a model call alone when the calls beneath it are its own, not attempts', () => {
+    const nodes = buildTree([
+      step({ id: 'call', isLLM: true }),
+      step({ id: 'query', parentId: 'call', isLLM: true }),
+    ])
+    expect(stepsHoldingAttempts(nodes).size).toBe(0)
+  })
+})
+
+describe('failureMarks, attempts inside a failed attempt', () => {
+  it('counts a failed attempt as recovered when a later attempt beside it finished', () => {
+    const nodes = buildTree([
+      step({ id: 'narrative' }),
+      step({ id: 'pass1', parentId: 'narrative', status: 'failed', attempt: true }),
+      step({ id: 'a1', parentId: 'pass1', status: 'failed', attempt: true }),
+      step({ id: 'a2', parentId: 'pass1', status: 'done', attempt: true }),
+      step({ id: 'pass2', parentId: 'narrative', status: 'done', attempt: true }),
+    ])
+    expect(failureMarks(nodes).get('narrative')).toBe('recovered')
+  })
+})
+
+describe('hasFailedStep', () => {
+  it('finds a failed step anywhere, a recovered attempt included', () => {
+    expect(
+      hasFailedStep([step({ id: 'a' }), step({ id: 'b', status: 'failed', attempt: true })]),
+    ).toBe(true)
+    expect(hasFailedStep([step({ id: 'a' }), step({ id: 'b', status: 'skipped' })])).toBe(false)
   })
 })

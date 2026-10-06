@@ -13,6 +13,7 @@ import type {
 } from '../types'
 import type { ImageGenerationContext } from '$lib/services/ai'
 import type { Character, ImageGenerationMode } from '$lib/types'
+import type { ActivityReporter } from '$lib/services/activity'
 
 type PhaseImageContext = Omit<
   ImageGenerationContext,
@@ -21,7 +22,9 @@ type PhaseImageContext = Omit<
 
 /** Dependencies for image phase - injected to avoid tight coupling */
 export interface ImageDependencies {
-  generateImagesForNarrative: (context: PhaseImageContext) => Promise<void>
+  generateImagesForNarrative: (
+    context: PhaseImageContext,
+  ) => Promise<{ queued: number; failure?: string }>
   isImageGenerationEnabled: (
     storySettings?: any,
     type?: 'standard' | 'background' | 'portrait' | 'reference',
@@ -48,6 +51,9 @@ export interface ImageInput {
   translationLanguage?: string
   imageSettings: ImageSettings
   abortSignal?: AbortSignal
+  activity?: ActivityReporter
+  /** Step the image work nests under. */
+  activityParentId?: string
 }
 
 /** Result from image phase */
@@ -55,6 +61,9 @@ export interface ImageResult {
   started: boolean
   skippedReason?: 'disabled' | 'not_configured' | 'aborted' | 'inline_mode'
 }
+
+const queuedImages = (count: number) =>
+  count === 0 ? 'no images queued' : `${count} image${count === 1 ? '' : 's'} queued`
 
 /** Coordinates image generation. Errors are non-fatal. */
 export class ImagePhase {
@@ -123,13 +132,22 @@ export class ImagePhase {
       translationLanguage,
       referenceMode: imageSettings.referenceMode || false,
       imageGenerationMode: imageSettings.imageGenerationMode,
+      activityParentId: input.activityParentId,
     }
 
     try {
       // Start image generation (runs in background via AIService)
       // Note: This is intentionally fire-and-forget within the pipeline
       // The AIService handles its own error logging
-      await this.deps.generateImagesForNarrative(imageGenContext)
+      const outcome = await this.deps.generateImagesForNarrative(imageGenContext)
+      // An absorbed failure is already on the step that met it; what did queue is still noted.
+      if ((outcome.queued > 0 || !outcome.failure) && input.activityParentId) {
+        // The images finish after the turn; the record notes the hand-off, not their progress.
+        input.activity?.recordStep('Handed off', {
+          parentId: input.activityParentId,
+          detail: queuedImages(outcome.queued),
+        })
+      }
 
       const result: ImageResult = { started: true }
       yield { type: 'phase_complete', phase: 'image', result } satisfies PhaseCompleteEvent

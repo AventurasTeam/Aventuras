@@ -85,6 +85,19 @@ export interface PipelineResult {
   fatalError: Error | null
 }
 
+/** How a phase that is switched on but cannot run for want of a profile is noted. */
+const notConfigured = (profile: string) => (result: { skippedReason?: string }) =>
+  result.skippedReason === 'not_configured' ? `no ${profile} profile` : null
+
+/**
+ * A phase switched off in settings, by its own account, is not reported at all. Inline images are
+ * made as the narration streams, so the image phases count Inline Mode as off.
+ */
+const switchedOff = (result: unknown) => {
+  const reason = (result as { skippedReason?: string } | null)?.skippedReason
+  return reason === 'disabled' || reason === 'inline_mode'
+}
+
 export class GenerationPipeline {
   private prePhase = new PreGenerationPhase()
   private retrievalPhase = new RetrievalPhase()
@@ -108,9 +121,10 @@ export class GenerationPipeline {
   private tracked<R>(
     label: string,
     build: (parentId: string) => AsyncGenerator<GenerationEvent, R>,
+    offBy?: (result: R) => string | null,
   ): AsyncGenerator<GenerationEvent, R> {
     const id = this.activity.startStep(label)
-    return trackPhase(this.activity, id, build(id))
+    return trackPhase(this.activity, id, build(id), { offBy, hiddenBy: switchedOff })
   }
 
   constructor(private deps: PipelineDependencies) {
@@ -194,13 +208,17 @@ export class GenerationPipeline {
           r.preGeneration?.visualProseMode ?? false,
         ),
         // Independent phases
-        background: this.tracked('Background image', () =>
-          this.backgroundPhase.execute({
-            storyId: ctx.story.id,
-            storyEntries: ctx.visibleEntries,
-            imageSettings: cfg.imageSettings,
-            abortSignal: ctx.abortSignal,
-          }),
+        background: this.tracked(
+          'Background image',
+          (parentId) =>
+            this.backgroundPhase.execute({
+              activityParentId: parentId,
+              storyId: ctx.story.id,
+              storyEntries: ctx.visibleEntries,
+              imageSettings: cfg.imageSettings,
+              abortSignal: ctx.abortSignal,
+            }),
+          notConfigured('background image'),
         ),
         postGeneration: this.tracked(
           cfg.storyMode === 'creative-writing' ? 'Suggestions' : 'Action choices',
@@ -300,7 +318,16 @@ export class GenerationPipeline {
       imageDeps.classification,
       imageDeps.translation,
     )
-    const image = yield* this.tracked('Images', () => this.imagePhase.execute(imageInput))
+    const image = yield* this.tracked(
+      'Images',
+      (parentId) =>
+        this.imagePhase.execute({
+          ...imageInput,
+          activity: this.activity,
+          activityParentId: parentId,
+        }),
+      notConfigured('image'),
+    )
 
     return {
       classification: imageDeps.classification,

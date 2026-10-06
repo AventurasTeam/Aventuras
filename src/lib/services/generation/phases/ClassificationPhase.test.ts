@@ -1,3 +1,4 @@
+import { ActivityRecorder } from '$lib/services/activity'
 import { describe, it, expect, vi } from 'vitest'
 import { ClassificationPhase, type ClassificationInput } from './ClassificationPhase'
 import type { GenerationEvent } from '../types'
@@ -128,5 +129,71 @@ describe('ClassificationPhase', () => {
 
       expect(events.map((e) => e.type)).toEqual(['phase_start', 'aborted'])
     })
+  })
+})
+
+describe('ClassificationPhase activity reporting', () => {
+  it('hands the consumer the parent to report its world update under', async () => {
+    const gen = new ClassificationPhase({ classifyResponse: async () => classification }).execute(
+      makeInput({ activityParentId: 'phase' }),
+    )
+
+    let next = await gen.next()
+    while (!next.done && next.value.type !== 'classification_complete') next = await gen.next()
+
+    expect((next.value as any).activityParentId).toBe('phase')
+  })
+})
+
+describe('ClassificationPhase failure reporting', () => {
+  function recorder() {
+    const activity = new ActivityRecorder()
+    activity.setReporting('tree')
+    activity.startTurn('entry')
+    return { steps: activity.activeTurn!.steps, activity }
+  }
+  const empty = {
+    entryUpdates: {
+      characterUpdates: [],
+      locationUpdates: [],
+      itemUpdates: [],
+      storyBeatUpdates: [],
+      newCharacters: [],
+      newLocations: [],
+      newItems: [],
+      newStoryBeats: [],
+    },
+    scene: { currentLocationName: null, presentCharacterNames: [], timeProgression: 'none' },
+  }
+
+  it('fails Classifying with the reason when nothing was recovered', async () => {
+    const { steps, activity } = recorder()
+    const phase = new ClassificationPhase({
+      classifyResponse: async () => ({ ...empty, _error: '401 · invalid API key' }) as any,
+    })
+
+    const { events } = await drain(phase.execute(makeInput({ activity })))
+
+    expect(steps[0]).toMatchObject({
+      label: 'Classifying',
+      status: 'failed',
+      error: '401 · invalid API key',
+    })
+    // Told once, on Classifying: the phase raises no error of its own.
+    expect(events.some((e) => e.type === 'error')).toBe(false)
+    // Still handed on: the consumer shows its warning and applies the empty update.
+    expect(events.some((e) => e.type === 'classification_complete')).toBe(true)
+  })
+
+  it('finishes Classifying with the reason when the result was salvaged', async () => {
+    const { steps, activity } = recorder()
+    const phase = new ClassificationPhase({
+      classifyResponse: async () => ({ ...empty, _error: 'bad field', _salvaged: true }) as any,
+    })
+
+    const { events } = await drain(phase.execute(makeInput({ activity })))
+
+    expect(steps[0]).toMatchObject({ status: 'done', detail: undefined, error: 'bad field' })
+    expect(events.some((e) => e.type === 'error')).toBe(false)
   })
 })

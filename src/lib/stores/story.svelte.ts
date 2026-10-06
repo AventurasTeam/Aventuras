@@ -5466,11 +5466,14 @@ class StoryStore {
 
     // Generate background image from opening scene
     if (data.openingScene && openingEntry && storyData.settings?.backgroundImagesEnabled) {
-      aiService.analyzeBackgroundChangeAndGenerateImage(
-        storyId,
-        [openingEntry],
-        this.updateCurrentBackgroundImage.bind(this),
-      )
+      // Not awaited, so a rejection (a cancellation, the only one it lets through) is caught here.
+      aiService
+        .analyzeBackgroundChangeAndGenerateImage(
+          storyId,
+          [openingEntry],
+          this.updateCurrentBackgroundImage.bind(this),
+        )
+        .catch((error) => log('Opening background image not generated', error))
       log('Generated background image')
     }
 

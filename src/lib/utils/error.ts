@@ -13,7 +13,8 @@ export function errMessage(e: unknown): string {
     return String((e as { message: unknown }).message)
   }
   try {
-    return JSON.stringify(e)
+    // `undefined` and functions stringify to undefined, not to a string.
+    return JSON.stringify(e) ?? String(e)
   } catch {
     return String(e)
   }

@@ -39,6 +39,11 @@ export function buildTree(steps: ActivityStep[]): ActivityNode[] {
  *
  * A step whose parent is missing counts as a root, matching `buildTree`.
  */
+/** Whether any step failed, a recovered attempt included. */
+export function hasFailedStep(steps: ActivityStep[]): boolean {
+  return steps.some((step) => step.status === 'failed')
+}
+
 export function deepestRunningStep(steps: ActivityStep[]): ActivityStep | null {
   const byId = new Map(steps.map((s) => [s.id, s]))
 
@@ -102,4 +107,71 @@ export function flattenTree(nodes: ActivityNode[], level = 0): ActivityRow[] {
     rows.push(...flattenTree(node.children, level + 1))
   }
   return rows
+}
+
+/**
+ * Failed steps whose failure a failed descendant already shows: a parent that failed because its
+ * child did, carrying the child's reason or none of its own. Displaying both repeats one failure.
+ * A parent with a reason of its own -- a request's "after 3 attempts" over its attempts -- is kept.
+ */
+export function failuresShownBelow(nodes: ActivityNode[]): Set<string> {
+  const shown = new Set<string>()
+  // The reasons of the failed steps beneath `node`, and of `node` itself when failed.
+  const visit = (node: ActivityNode): (string | undefined)[] => {
+    const below = node.children.flatMap(visit)
+    const { step } = node
+    if (step.status === 'failed' && below.length > 0) {
+      if (!step.error || below.includes(step.error)) shown.add(step.id)
+    }
+    return step.status === 'failed' ? [...below, step.error] : below
+  }
+  nodes.forEach(visit)
+  return shown
+}
+
+/** What lies beneath a step: a failure, or only failed attempts its request got past. */
+export type FailureMark = 'failed' | 'recovered'
+
+/**
+ * Steps with a failed step somewhere beneath them, and which kind. A failed attempt is recovered
+ * when its request has not failed -- it is retrying, or got there on a later attempt -- or when a
+ * later attempt beside it finished; any other failure is a failure. A step with both beneath it
+ * is marked failed.
+ */
+export function failureMarks(nodes: ActivityNode[]): Map<string, FailureMark> {
+  const marks = new Map<string, FailureMark>()
+  const worse = (a: FailureMark | null, b: FailureMark | null): FailureMark | null =>
+    a === 'failed' || b === 'failed' ? 'failed' : (a ?? b)
+  const visit = (node: ActivityNode): FailureMark | null => {
+    let below: FailureMark | null = null
+    for (const [i, child] of node.children.entries()) {
+      const recovered =
+        child.step.attempt &&
+        (node.step.status !== 'failed' ||
+          node.children
+            .slice(i + 1)
+            .some((later) => later.step.attempt && later.step.status === 'done'))
+      const own: FailureMark | null =
+        child.step.status !== 'failed' ? null : recovered ? 'recovered' : 'failed'
+      below = worse(below, worse(own, visit(child)))
+    }
+    if (below) marks.set(node.step.id, below)
+    return below
+  }
+  nodes.forEach(visit)
+  return marks
+}
+
+/**
+ * Steps holding attempts. The marker belongs on the calls themselves, so a request that needed
+ * several attempts is a container and shows no marker of its own.
+ */
+export function stepsHoldingAttempts(nodes: ActivityNode[]): Set<string> {
+  const holding = new Set<string>()
+  const visit = (node: ActivityNode): void => {
+    if (node.children.some((child) => child.step.attempt)) holding.add(node.step.id)
+    node.children.forEach(visit)
+  }
+  nodes.forEach(visit)
+  return holding
 }

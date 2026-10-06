@@ -79,6 +79,8 @@ export interface PhaseCompleteEvent {
   type: 'phase_complete'
   phase: GenerationPhase
   result?: unknown
+  /** Where the consumer reports its handling of this result, as a step of its own. */
+  activityParentId?: string
 }
 
 export interface NarrativeChunkEvent {
@@ -97,6 +99,8 @@ export interface NarrativeCompleteEvent {
 export interface ClassificationCompleteEvent {
   type: 'classification_complete'
   result: ClassificationResult
+  /** Where the consumer reports its handling of this result, as a step of its own. */
+  activityParentId?: string
 }
 
 export interface ErrorEvent {

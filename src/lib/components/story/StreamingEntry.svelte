@@ -9,7 +9,9 @@
   import { storyImageMode } from '$lib/utils/image'
   import { activity } from '$lib/stores/activity.svelte'
   import { formatDuration, turnDuration } from '$lib/services/activity'
-  import ActivityStatus from './ActivityStatus.svelte'
+  import ActivitySummary from './ActivitySummary.svelte'
+  import ActivityTimeline from './ActivityTimeline.svelte'
+  import { reportRenderError } from '$lib/utils/activityDisplay'
 
   // Reactive binding to streaming content
   let content = $derived(ui.streamingContent)
@@ -51,9 +53,9 @@
   // starts arriving -- below the text, so it never displaces what is being written.
   let reportingEnabled = $derived(settings.uiSettings.activityReporting !== 'off')
   let activeTurn = $derived(activity.activeTurn)
-  // Shown by default while the turn runs; the header badge hides it.
+  // Shown by default; the header badge hides it.
   let showActivity = $derived(
-    reportingEnabled && activeTurn !== null && activity.isReportVisible(activeTurn.entryId, true),
+    reportingEnabled && activeTurn !== null && activity.isReportVisible(activeTurn.entryId),
   )
 </script>
 
@@ -132,10 +134,13 @@
        A bystander to the entry -- a fault rendering it must not take the narration with it. -->
   <!-- `onerror` is what makes this catch: a boundary with neither it nor a `failed`
        snippet rethrows. No fallback, so a report that cannot render leaves nothing behind. -->
-  <svelte:boundary onerror={(error) => console.warn('[activity] Report failed to render:', error)}>
+  <svelte:boundary onerror={reportRenderError}>
     {#if showActivity && activeTurn}
-      <div class="mb-2">
-        <ActivityStatus turn={activeTurn} />
+      <div class="animate-fade-in mb-2">
+        <ActivitySummary turn={activeTurn} />
+        {#if activity.isTreeExpanded(activeTurn)}
+          <ActivityTimeline turn={activeTurn} now={activity.now} />
+        {/if}
       </div>
     {/if}
   </svelte:boundary>

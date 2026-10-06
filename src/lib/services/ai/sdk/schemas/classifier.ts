@@ -245,4 +245,6 @@ export type ClassificationResult = z.infer<typeof classificationResultSchema> & 
    * missing location three turns later.
    */
   _error?: string
+  /** Set with `_error` when part of a rejected response was recovered and applied. */
+  _salvaged?: boolean
 }

@@ -20,7 +20,7 @@ import type { Story, StoryEntry, TimeTracker } from '$lib/types'
 import type { ClassificationResult } from '$lib/services/ai/sdk/schemas/classifier'
 
 /** Dependencies for classification phase - injected to avoid tight coupling */
-import { NO_ACTIVITY, type ActivityReporter } from '$lib/services/activity'
+import { NO_ACTIVITY, failStep, type ActivityReporter } from '$lib/services/activity'
 
 export interface ClassificationDependencies {
   classifyResponse: (
@@ -30,6 +30,7 @@ export interface ClassificationDependencies {
     story: Story | null | undefined,
     chatHistoryEntries: StoryEntry[],
     timeTracker: TimeTracker | null | undefined,
+    activityParentId?: string,
   ) => Promise<ClassificationResult>
 }
 
@@ -100,25 +101,28 @@ export class ClassificationPhase {
           story,
           chatHistoryEntries,
           story?.timeTracker,
-        )
-        activity.endStep(callId)
-      } catch (error) {
-        activity.endStep(
           callId,
-          error instanceof Error && error.name === 'AbortError' ? 'skipped' : 'failed',
         )
+      } catch (error) {
+        failStep(activity, callId, error)
         throw error
       }
+
+      // The classifier absorbs its failures into `_error`. A salvaged result is still applied.
+      const failure = classificationResult._error
+      if (!failure) activity.endStep(callId)
+      else if (classificationResult._salvaged) activity.endStep(callId, 'done', undefined, failure)
+      else activity.endStep(callId, 'failed', undefined, failure)
 
       if (abortSignal?.aborted) {
         yield { type: 'aborted', phase: 'classification' } satisfies AbortedEvent
         return null
       }
 
-      // Emit classification complete event
       yield {
         type: 'classification_complete',
         result: classificationResult,
+        activityParentId: input.activityParentId ?? undefined,
       } satisfies ClassificationCompleteEvent
 
       const result: ClassificationPhaseResult = {

@@ -355,7 +355,9 @@ still the open one. Stop registers
 its rewind on the lease and waits for it rather than releasing — aborting the request to the model
 is not the completion of the generation's writes, and an `applyClassificationResult` already entered
 keeps going regardless. One release owner throughout, so the rewind cannot race the writes it
-exists to reverse.
+exists to reverse. Once the narration is saved, Stop is refused outright — the button dims and a tap
+explains — since nothing after the narration observes the abort. "Generate a different response"
+refuses it throughout, as its own rewind of the previous turn is already running.
 
 **Why the switch is refused rather than the writes redirected.** `applyClassificationResult` reads
 the active branch and mutates the in-memory `characters`/`locations`/`items`/`storyBeats` arrays,
@@ -397,6 +399,33 @@ into steps as `AgenticRetrievalService` records them, and chapter queries carry 
 budget already measured. Phases with several completion paths are wrapped by `trackPhase` rather than
 instrumented one exit at a time.
 
+Each request is its own step, opened by the caller that knows what it is for and passed down as
+`activityParentId`. Below that, `sdk/generate.ts` puts `activityMiddleware` directly inside
+`retryOn429Middleware`: a request that needs a second attempt gets one step per attempt (the first
+backfilled) and one per wait the retry middleware schedules. The SDK's own retries re-enter the
+chain and show as attempts; the waits between them are the library's and are not reported. The
+retrieval agent builds its model elsewhere (`sdk/agents/factory.ts`) and has no attempt rows.
+
+A failed step carries its reason, worded once by `describeActivityError` (status and provider
+message for an API error). Services that absorb a failure into a fallback — translation,
+suggestions, action choices, timeline fill, scene analysis, the background image, the classifier's
+`_error` — return the fallback as before, with the reason as `failure`. Whoever opened the step
+closes it: `trackStep` fails a step on a returned `failure` as on a throw. A service closes only
+the steps it opened itself. A cancellation is never absorbed: the `AbortError` is rethrown
+(`isAbortError`), and whoever catches it closes the step as skipped.
+A turn ends with an outcome (`turnOutcome`): only `halted` puts "Failed" on the collapsed line, and
+a turn halts only when it produced no narration. A narrator stream that fails after text has arrived
+keeps that text as the narration and reports the failure; one that fails before any text is passed
+again, like an empty answer, unless the request itself was refused.
+
+The narrator's empty-answer loop reports _passes_, kept apart from the transport _attempts_ inside
+them: a single pass has no container, and is grouped into `Pass 1` (`groupChildren`) only once a
+second follows. An empty pass is a failure. The work the consumer does with a phase's result —
+`Updating world`, `Saving translation` — is a step the consumer opens around that work. A phase
+switched off in settings is not reported at all; one switched on but missing its profile is struck
+through with that reason. A step recorded after the fact without a duration (`untimed`) shows no
+time rather than `0s`.
+
 Reporting never alters a turn. Every write is guarded, the display sits inside a boundary, and the
 narrative retry loop is reported but unchanged. Records are session-only, bounded by `RETAINED_TURNS`,
 and never persisted or exported.
@@ -405,6 +434,9 @@ and never persisted or exported.
 running step rather than the ellipsis. `activity_reporting` is written only by `setActivityReporting`
 and the interface reset, so a stored `off` is a choice and is read back as one — the default reaches
 absent keys only.
+
+A turn's timeline opens by default while it is the latest turn in `tree` mode, and in either
+mode for any turn in which a step failed, a recovered attempt included. A reader's own choice wins.
 
 ## Images
 
