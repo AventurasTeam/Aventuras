@@ -83,3 +83,34 @@ slice-planning gate forces its resolution before that slice is planned.
   namesake the classifier actually compared rather than guessing by
   name. Both need a schema column. Found during 4.2c planning
   (2026-10-06).
+- **The entity update arm accepts a present-but-`undefined` column.**
+  `updateHandler` (`lib/actions/entities/register.ts`) treats a key as
+  written whenever `col in patch`, so `{ name: undefined, priority: 7 }`
+  returns `ok`: the DB keeps the old name, the store row's `name` becomes
+  `undefined`, and the undo payload records `name`, so History shows
+  "Modified Name" for a change that never landed and user precedence
+  treats `name` as user-written. 4.2c closed the hole for
+  `nameCollisionFlag` only (its own refusal). A general rule — refuse or
+  skip any updatable key whose value is `undefined` — would cover every
+  column. Found in 4.2c's Task 1 review (2026-10-06).
+- **The entity operational seam's flag arm can bypass the delta log.**
+  `lib/actions/entities/operational.ts` still calls itself the non-delta
+  seam for the compute-lifecycle columns, flag included, but 4.2c made
+  the flag clear a delta-logged user write. Its flag arm is unused; a
+  future classifier path calling it would write a column the user path
+  delta-logs, and a rollback couldn't revert it. Either drop the arm or
+  narrow the header. Found in 4.2c's Task 1 review (2026-10-06).
+- **Plot's awareness upsert type duplicates the arm's payload.**
+  `lib/plot/happening-draft.ts` declares a local `AwarenessUpsert` type
+  instead of deriving it from the `upsertHappeningAwareness` payload in
+  `PipelineActionMap`. It is compatible today and can drift silently
+  (4.2c added `retrievalCount` to the arm). Found in 4.2c's Task 3
+  review (2026-10-06).
+- **Undo and redo of a story entry's metadata skip its metadata lock.**
+  `withEntryMetadataLock` has four callers (scene fields, world time,
+  entity delete, 4.2c's merge); the undo and redo paths for an
+  `updateStoryEntryMetadata` delta (`lib/actions/story-entries/undo.ts`,
+  `lib/actions/delta/redo.ts`) take no lock. A CTRL-Z landing while a
+  scene edit, delete or merge sits between its tail read and its commit
+  could have its restore overwritten. Unverified: it needs two user
+  actions at once. Found in 4.2c's Task 8 review (2026-10-06).
