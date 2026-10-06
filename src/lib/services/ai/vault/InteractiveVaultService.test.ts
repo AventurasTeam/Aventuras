@@ -443,9 +443,8 @@ describe('sendMessageStreaming pending changes from parallel tool calls', () => 
   type Call = { id: string; name: string; args: Record<string, unknown> }
 
   // The SDK runs a step's tool calls together once the model call ends, so every
-  // change exists before the first tool-result is emitted. `order` is the order the
-  // results are emitted in.
-  function parallelStep(calls: Call[], order = calls.map((_, i) => i)) {
+  // change exists before the first tool-result is emitted.
+  function parallelStep(calls: Call[]) {
     return async (tools: Record<string, any>) => {
       const outputs = await Promise.all(calls.map((c) => tools[c.name].execute(c.args, {})))
       return [
@@ -456,9 +455,9 @@ describe('sendMessageStreaming pending changes from parallel tool calls', () => 
           toolName: c.name,
           input: c.args,
         })),
-        ...order.map((i) => ({
+        ...calls.map((c, i) => ({
           type: 'tool-result',
-          toolCallId: calls[i].id,
+          toolCallId: c.id,
           output: outputs[i],
         })),
         { type: 'finish-step' },
@@ -472,7 +471,7 @@ describe('sendMessageStreaming pending changes from parallel tool calls', () => 
       name: `Char ${id}`,
       description: '',
       traits: [],
-      visualDescriptors: [],
+      visualDescriptors: {},
       tags: [],
       favorite: false,
       portrait: null,
@@ -488,7 +487,17 @@ describe('sendMessageStreaming pending changes from parallel tool calls', () => 
     priority: 50,
   })
 
-  const lorebook = { id: 'lb1', name: 'Book', entries: [entry('Ann'), entry('Bob')] } as never
+  const entries = [entry('Ann'), entry('Bob')] as never[]
+  const lorebookState = (): VaultState => ({
+    ...emptyVaultState(),
+    lorebooks: () => [{ id: 'lb1', name: 'Book', entries } as never],
+    activeLorebookId: 'lb1',
+    activeEntries: entries,
+  })
+  const characterState = (): VaultState => ({
+    ...emptyVaultState(),
+    characters: () => [character('c1'), character('c2')],
+  })
 
   async function newService() {
     const service = new InteractiveVaultService('interactiveVault')
@@ -504,7 +513,8 @@ describe('sendMessageStreaming pending changes from parallel tool calls', () => 
     return events
   }
 
-  const toolEnds = (events: any[]) => events.filter((e) => e.type === 'tool_end')
+  const pendingChangesOf = (events: any[]) =>
+    events.filter((e) => e.type === 'tool_end').map((e) => e.toolCall.pendingChange)
   const stepMessage = (events: any[]) => events.find((e) => e.type === 'message').message
 
   it('links each parallel lorebook entry update to its own change', async () => {
@@ -513,14 +523,9 @@ describe('sendMessageStreaming pending changes from parallel tool calls', () => 
       { id: 'call-2', name: 'update_entry', args: { index: 1, description: 'new Bob' } },
     ])
 
-    const events = await run({
-      ...emptyVaultState(),
-      lorebooks: () => [lorebook],
-      activeLorebookId: 'lb1',
-      activeEntries: (lorebook as { entries: never[] }).entries,
-    })
+    const events = await run(lorebookState())
 
-    const [first, second] = toolEnds(events).map((e) => e.toolCall.pendingChange)
+    const [first, second] = pendingChangesOf(events)
     expect(first).toMatchObject({ action: 'update', entryIndex: 0 })
     expect(second).toMatchObject({ action: 'update', entryIndex: 1 })
     expect(first.id).not.toBe(second.id)
@@ -536,12 +541,9 @@ describe('sendMessageStreaming pending changes from parallel tool calls', () => 
       { id: 'call-2', name: 'delete_character', args: { characterId: 'c2' } },
     ])
 
-    const events = await run({
-      ...emptyVaultState(),
-      characters: () => [character('c1'), character('c2')],
-    })
+    const events = await run(characterState())
 
-    const [first, second] = toolEnds(events).map((e) => e.toolCall.pendingChange)
+    const [first, second] = pendingChangesOf(events)
     expect(first).toMatchObject({ action: 'delete', entityId: 'c1' })
     expect(second).toMatchObject({ action: 'delete', entityId: 'c2' })
     expect(stepMessage(events).pendingChanges).toHaveLength(2)
@@ -553,14 +555,9 @@ describe('sendMessageStreaming pending changes from parallel tool calls', () => 
       { id: 'call-2', name: 'update_entry', args: { index: 1, description: 'new Bob' } },
     ])
 
-    const events = await run({
-      ...emptyVaultState(),
-      lorebooks: () => [lorebook],
-      activeLorebookId: 'lb1',
-      activeEntries: (lorebook as { entries: never[] }).entries,
-    })
+    const events = await run(lorebookState())
 
-    const [failed, succeeded] = toolEnds(events).map((e) => e.toolCall.pendingChange)
+    const [failed, succeeded] = pendingChangesOf(events)
     expect(failed).toBeUndefined()
     expect(succeeded).toMatchObject({ action: 'update', entryIndex: 1 })
   })
@@ -573,12 +570,9 @@ describe('sendMessageStreaming pending changes from parallel tool calls', () => 
       { id: 'call-2', name: 'delete_character', args: { characterId: 'c2' } },
     ])
 
-    const events = await run(
-      { ...emptyVaultState(), characters: () => [character('c1'), character('c2')] },
-      service,
-    )
+    const events = await run(characterState(), service)
 
-    const [portrait, deletion] = toolEnds(events).map((e) => e.toolCall.pendingChange)
+    const [portrait, deletion] = pendingChangesOf(events)
     expect(portrait).toMatchObject({ action: 'update', entityId: 'c1' })
     expect(deletion).toMatchObject({ action: 'delete', entityId: 'c2' })
   })
