@@ -44,6 +44,7 @@ describe('renameIssue', () => {
   it('refuses a blank name on either side', () => {
     expect(renameIssue('character', ['  ', 'Kael'])).toBe(RENAME_ISSUE.emptyName)
     expect(renameIssue('character', ['Kael', ''])).toBe(RENAME_ISSUE.emptyName)
+    expect(renameIssue('character', ['', ' '])).toBe(RENAME_ISSUE.emptyName)
   })
 
   it('refuses names the namesake rule still pairs, a case-only change included', () => {

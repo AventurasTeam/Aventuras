@@ -32,6 +32,7 @@ export function entityRenameActions(input: {
   pair: CollisionPair
   /** The pair's names after the rename, in pair order; an unchanged one is its current name. */
   names: readonly [string, string]
+  /** The branch's entities before the write, the pair among them: namesakes are counted from it. */
   branchEntities: readonly Entity[]
 }): PipelineAction[] {
   const { branchId, pair, names } = input
