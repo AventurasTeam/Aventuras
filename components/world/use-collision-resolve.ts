@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   SCALAR_FIELDS,
@@ -72,11 +72,14 @@ function toCollisionResolution(resolution: Resolution, [a, b]: Pair): CollisionR
   }
 }
 
-function resolvedText(resolution: Resolution, pair: Pair): string {
+function resolvedText(resolution: CollisionResolution, pair: Pair): string {
   switch (resolution.mode) {
     case 'merge': {
-      const canonical = pair.find((side) => side.id === resolution.canonicalId) ?? pair[0]
-      return t('world:collision.resolved.merge', { name: canonical.name })
+      const nameFrom = resolution.fromLoser.includes('name')
+        ? resolution.loserId
+        : resolution.canonicalId
+      const name = pair.find((side) => side.id === nameFrom)?.name ?? pair[0].name
+      return t('world:collision.resolved.merge', { name })
     }
     case 'rename':
       return t('world:collision.resolved.rename')
@@ -99,7 +102,13 @@ export function useCollisionResolve(
   close: () => void
   resolve: (resolution: Resolution) => Promise<void>
 } {
-  const [requested, setRequested] = useState<readonly [string, string] | null>(null)
+  const [requested, setRequestedState] = useState<readonly [string, string] | null>(null)
+  // Read after the action settles: a request closed meanwhile has no dialog left to show an error.
+  const requestedRef = useRef(requested)
+  const setRequested = useCallback((next: readonly [string, string] | null) => {
+    requestedRef.current = next
+    setRequestedState(next)
+  }, [])
   const open = requested != null
   // Subscribed only while open, so a closed dialog doesn't re-render the route on every link patch.
   const entityRows = entitiesStore.useEntities((rows) => (open ? rows : null))
@@ -141,20 +150,26 @@ export function useCollisionResolve(
 
   useEffect(() => {
     if (requested != null && pair == null) setRequested(null)
-  }, [requested, pair])
+  }, [requested, pair, setRequested])
 
   const request = useCallback(
     (flaggedId: string, otherId: string) => guard(() => setRequested([flaggedId, otherId])),
-    [guard],
+    [guard, setRequested],
   )
-  const close = useCallback(() => setRequested(null), [])
+  const close = useCallback(() => setRequested(null), [setRequested])
 
   const resolve = useCallback(
     async (resolution: Resolution): Promise<void> => {
       if (pair == null) throw new Error(collisionRejectionText(COLLISION_REJECTION.notFound))
+      const asked = requestedRef.current
+      const refuse = (text: string): never => {
+        if (requestedRef.current !== asked) toast.error(text)
+        throw new Error(text)
+      }
+      const action = toCollisionResolution(resolution, pair)
       let result: CollisionResolveResult
       try {
-        result = await resolveCollision(branchId, toCollisionResolution(resolution, pair), ctx)
+        result = await resolveCollision(branchId, action, ctx)
       } catch (error) {
         logger.error('app.world_collision_resolve_failed', {
           branchId,
@@ -162,10 +177,10 @@ export function useCollisionResolve(
           ids: pair.map((side) => side.id),
           error: error instanceof Error ? error.message : String(error),
         })
-        throw new Error(t('world:collision.failed'))
+        return refuse(t('world:collision.failed'))
       }
-      if (result.status === 'rejected') throw new Error(collisionRejectionText(result.code))
-      toast.success(resolvedText(resolution, pair))
+      if (result.status === 'rejected') return refuse(collisionRejectionText(result.code))
+      toast.success(resolvedText(action, pair))
     },
     [pair, branchId, ctx],
   )

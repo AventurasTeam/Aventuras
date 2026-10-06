@@ -10,7 +10,10 @@ const BASE = { otherName: 'Kael', onJumpToOther: () => {} }
 describe('CollisionListRowProps', () => {
   it('makes Resolve either act or say why it cannot', () => {
     assertType<Collision>({ ...BASE, onResolve: () => {} })
-    assertType<Collision>({ ...BASE, resolveDisabledReason: 'Lands in Slice 4.2c' })
+    assertType<Collision>({
+      ...BASE,
+      resolveDisabledReason: 'Generation is in flight. Cancel to edit.',
+    })
     // @ts-expect-error — an inert Resolve that never says why.
     assertType<Collision>({ ...BASE, onResolve: () => {}, resolveDisabled: true })
     // @ts-expect-error — Resolve can't both act and be inert.

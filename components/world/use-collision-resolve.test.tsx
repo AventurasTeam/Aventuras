@@ -10,7 +10,13 @@ import {
 } from '@/components/compounds/collision-resolve-diff'
 import { initMergeState, mergeReducer } from '@/components/compounds/collision-resolve-machine'
 import { COLLISION_REJECTION, type DbCtx } from '@/lib/actions'
-import { emptyEntityState, type HappeningAwareness, type Translation } from '@/lib/db'
+import {
+  emptyEntityState,
+  type CharacterRelationship,
+  type HappeningAwareness,
+  type HappeningInvolvement,
+  type Translation,
+} from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
 import {
@@ -82,6 +88,23 @@ function awareness(id: string, characterId: string): HappeningAwareness {
   }
 }
 
+function involvement(id: string, entityId: string): HappeningInvolvement {
+  return { id, branchId: BRANCH, happeningId: 'hap_1', entityId, role: null }
+}
+
+function relationship(id: string, aId: string, bId: string): CharacterRelationship {
+  return {
+    id,
+    branchId: BRANCH,
+    aId,
+    bId,
+    kind: 'rival',
+    inverseKind: null,
+    createdAt: 1,
+    updatedAt: 1,
+  }
+}
+
 function translation(id: string, targetId: string): Translation {
   return {
     id,
@@ -129,6 +152,7 @@ beforeEach(() => {
   translationsStore.hydrate(BRANCH, [])
   resolveCollision.mockReset()
   vi.mocked(toast.success).mockClear()
+  vi.mocked(toast.error).mockClear()
   vi.spyOn(logger, 'error').mockImplementation(() => {})
 })
 
@@ -165,6 +189,9 @@ describe('useCollisionResolve → opening', () => {
 
     act(() => {
       happeningAwarenessStore.hydrate(BRANCH, [awareness('haw_1', NEWER.id)])
+      happeningInvolvementsStore.hydrate(BRANCH, [involvement('hin_1', NEWER.id)])
+      characterRelationshipsStore.hydrate(BRANCH, [relationship('rel_1', OLDER.id, NEWER.id)])
+      translationsStore.hydrate(BRANCH, [translation('tr_1', NEWER.id)])
       entitiesStore.hydrate(BRANCH, [OLDER, { ...NEWER, description: 'Edited.' }])
     })
 
@@ -249,6 +276,7 @@ describe('useCollisionResolve → what resolve sends', () => {
   })
 
   it('maps a merge into the newer row: the older row loses, and its side is A', async () => {
+    entitiesStore.hydrate(BRANCH, [OLDER, { ...NEWER, name: 'BRANNOC' }])
     const result = openPair()
     const pair = openedPair(result)
 
@@ -272,6 +300,28 @@ describe('useCollisionResolve → what resolve sends', () => {
       },
       ctx,
     )
+    expect(toast.success).toHaveBeenCalledWith('Merged into BRANNOC.')
+  })
+
+  it("names the merged row by the loser's name when the merge takes it", async () => {
+    entitiesStore.hydrate(BRANCH, [OLDER, { ...NEWER, name: 'BRANNOC' }])
+    const result = openPair()
+    const pair = openedPair(result)
+
+    await result.current.resolve({
+      mode: 'merge',
+      canonicalId: NEWER.id,
+      fieldChoices: fieldChoices(pair, NEWER.id, [['name', 'A']]),
+      finalTags: TAGS,
+      finalKeywords: KEYWORDS,
+    })
+
+    expect(resolveCollision).toHaveBeenCalledWith(
+      BRANCH,
+      expect.objectContaining({ fromLoser: ['name'] }),
+      ctx,
+    )
+    expect(toast.success).toHaveBeenCalledWith('Merged into Brannoc.')
   })
 
   it('maps a rename to both names in pair order, an untouched one as its current name', async () => {
@@ -360,9 +410,52 @@ describe('useCollisionResolve → outcomes', () => {
       expect.objectContaining({
         branchId: BRANCH,
         mode: 'keep',
+        ids: [OLDER.id, NEWER.id],
         error: 'SQLITE_BUSY: database is locked',
       }),
     )
+  })
+
+  it('toasts a refusal that lands after the dialog was closed, since no dialog is left to show it', async () => {
+    let settle: (result: unknown) => void = () => {}
+    resolveCollision.mockReturnValue(new Promise((resolve) => (settle = resolve)))
+    const result = openPair()
+
+    const pending = result.current.resolve({ mode: 'keep' })
+    act(() => result.current.close())
+    settle({
+      status: 'rejected',
+      reason: 'generation in flight',
+      code: COLLISION_REJECTION.inFlight,
+    })
+
+    await expect(pending).rejects.toThrow(IN_FLIGHT_TEXT)
+    expect(toast.error).toHaveBeenCalledWith(IN_FLIGHT_TEXT)
+  })
+
+  it('toasts a failure that lands after the dialog was closed', async () => {
+    let fail: (error: Error) => void = () => {}
+    resolveCollision.mockReturnValue(new Promise((_, reject) => (fail = reject)))
+    const result = openPair()
+
+    const pending = result.current.resolve({ mode: 'keep' })
+    act(() => result.current.close())
+    fail(new Error('SQLITE_BUSY: database is locked'))
+
+    await expect(pending).rejects.toThrow(FAILED_TEXT)
+    expect(toast.error).toHaveBeenCalledWith(FAILED_TEXT)
+  })
+
+  it('leaves a refusal to the open dialog, without a toast', async () => {
+    resolveCollision.mockResolvedValue({
+      status: 'rejected',
+      reason: 'generation in flight',
+      code: COLLISION_REJECTION.inFlight,
+    })
+    const result = openPair()
+
+    await expect(result.current.resolve({ mode: 'keep' })).rejects.toThrow(IN_FLIGHT_TEXT)
+    expect(toast.error).not.toHaveBeenCalled()
   })
 
   it('refuses without calling the action once the pair is gone', async () => {
