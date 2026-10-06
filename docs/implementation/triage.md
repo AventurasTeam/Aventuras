@@ -175,3 +175,36 @@ slice-planning gate forces its resolution before that slice is planned.
   state schema doesn't refuse; `updateItemPosition` checks its kind.
   4.2c's merge guards its own call; the arm doesn't. Found in 4.2c's
   PR 1 review (2026-10-06).
+- **Segment Select clips a label that wraps past two lines.**
+  `SegmentBranch` (`components/ui/select.tsx`) gives each option a fixed
+  `h-control-md` height with `overflow-hidden` and no line limit, so a
+  segment whose labels carry user data clips once a label wraps. 4.2c's
+  collision dialog moved its phone picker to radio rows to avoid it; the
+  component itself still needs a line limit or a growing row. Found in
+  4.2c's PR 2 review (2026-10-06).
+- **`Dialog` doesn't register as a blocking overlay.**
+  `components/ui/dialog.tsx` never calls `useRegisteredOverlay`, while
+  `alert-dialog.tsx`, `sheet.tsx` and `select.tsx` do, and
+  `lib/stores/ui/blocking-overlays.ts` says modal dialogs should. So
+  every `Dialog`-based modal (collision resolve, import, embedder) leaves
+  the actions menu and its shortcuts armed underneath it. Found in 4.2c's
+  PR 2 review (2026-10-06).
+- **The collision dialog's tag partition compares raw strings.**
+  `components/compounds/collision-resolve-diff.ts` partitions tags
+  exactly, while the merge planner cleans them (trim, drop blanks, drop
+  duplicates). So `'hero'` and `'hero '` render as two chips, a blank tag
+  renders as an empty chip, and a side's internal duplicates give
+  duplicate chip keys and a duplicated tag in the submitted list; the
+  merge writes the cleaned list. The plan kept tags exact for case only.
+  Found in 4.2c's PR 2 review (2026-10-06).
+- **The collision dialog's merge error can scroll out of view.** The
+  inline error line sits at the end of the merge body's scroll content,
+  so with many tags a refusal can land below the fold. Found in 4.2c's
+  PR 2 review (2026-10-06).
+- **An E2E failure with a dirty pane hangs teardown.** When a test fails
+  while a pane is dirty, the main process's armed close guard blocks
+  `app.close()` (`e2e/harness/launch.ts`), so each spec's `afterAll`
+  waits out the 90 s hook timeout per attempt and leaks its temporary
+  `userData` directory. The harness needs a fallback that exits the app
+  from main or kills it after a timeout. Found in 4.2c's PR 2 review
+  (2026-10-06).
