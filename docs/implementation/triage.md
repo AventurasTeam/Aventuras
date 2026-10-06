@@ -53,3 +53,33 @@ slice-planning gate forces its resolution before that slice is planned.
   to get. Held rather than routed in the 2026-09-09 triage pass, which
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
+
+- **Name-collision detection misses partial-name duplicates.** Layer B
+  reconciliation (`lib/classifier/reconcile.ts`) gates on an exact
+  `normalizeTerm` name match against existing characters, so "Kael" and
+  "Kael Stormborn" never reach the embedding comparison: the classifier
+  creates a second row with no flag, and no surface offers a merge.
+  Keywords and aliases are not consulted either. Only characters are
+  reconciled at all, though canon gives the flag to all four kinds.
+  Scene presence is unused too: the classifier's window carries each
+  turn's prose but not the `sceneEntities` saved in its metadata, and
+  Layer B compares names and descriptions only, so a "new" character in
+  a turn whose scene already names the existing row (strong evidence of
+  a classifier miss) still lands as a flagged duplicate. Revisit
+  together, developer-requested: feed each window turn its saved
+  metadata state, resolve or promote such a character to the existing
+  row, and consider correcting past entries' scene presence once a
+  duplicate is resolved — a merge rewrites only the tail scene, so
+  earlier entries keep naming the deleted loser and render it as
+  "Entity no longer exists". Found during 4.2c planning (2026-10-06);
+  the classifier is M3.3's substrate, outside 4.2c's scope.
+- **The classifier drops why it flagged a row.** `reconcileNewCharacter`
+  returns a `FlagReason` (`distinct`, `ambiguous`, `no-signal`), the
+  similarity and the best-matching namesake, and its type comment says
+  the reason is "carried explicitly for the collision-review surface",
+  but `lib/classifier/plan.ts` persists only the 0/1 flag. The resolve
+  dialog could say "descriptions differ" or "couldn't compare", and a
+  stored partner id would let World pair the flagged row with the
+  namesake the classifier actually compared rather than guessing by
+  name. Both need a schema column. Found during 4.2c planning
+  (2026-10-06).
