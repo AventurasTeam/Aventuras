@@ -446,6 +446,20 @@ describe('useCollisionResolve → outcomes', () => {
     expect(toast.error).toHaveBeenCalledWith(FAILED_TEXT)
   })
 
+  it('toasts a refusal that lands after the pair went away, which unmounts the dialog', async () => {
+    let settle: (result: unknown) => void = () => {}
+    resolveCollision.mockReturnValue(new Promise((resolve) => (settle = resolve)))
+    const result = openPair()
+
+    const pending = result.current.resolve({ mode: 'keep' })
+    act(() => entitiesStore.hydrate(BRANCH, [OLDER]))
+    expect(result.current.pair).toBeNull()
+    settle({ status: 'rejected', reason: 'not found', code: COLLISION_REJECTION.notFound })
+
+    await expect(pending).rejects.toThrow(NOT_FOUND_TEXT)
+    expect(toast.error).toHaveBeenCalledWith(NOT_FOUND_TEXT)
+  })
+
   it('leaves a refusal to the open dialog, without a toast', async () => {
     resolveCollision.mockResolvedValue({
       status: 'rejected',
