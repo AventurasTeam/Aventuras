@@ -775,6 +775,59 @@ describe('resolveCollision — refusals', () => {
     }
   })
 
+  it('refuses a merge in-flight before it reads the tail while a hard-gate run is active', async () => {
+    startHardGateRun()
+    expect(await resolveCollision('b1', MERGE_B_INTO_A, ctx)).toMatchObject({
+      status: 'rejected',
+      code: 'in-flight',
+    })
+    expect(headTurnHook.calls).toBe(0)
+    expect(await deltaRows()).toEqual([])
+  })
+
+  it('reports a refusal with no collision code as failed', async () => {
+    const warn = vi.spyOn(logger, 'warn')
+    try {
+      // The store still holds Vorne, so the plan rewrites a holder the update arm can't find.
+      sqlite.exec(`DELETE FROM entities WHERE id = 'char_o'`)
+
+      expect(await resolveCollision('b1', mergeInto('item_a', 'item_b'), ctx)).toMatchObject({
+        status: 'rejected',
+        code: 'failed',
+      })
+      expect(await deltaRows()).toEqual([])
+      expect(warn).toHaveBeenCalledWith(
+        'action_layer.collision_resolve_rejected',
+        expect.objectContaining({
+          code: 'failed',
+          reason: 'update target entities b1:char_o not found',
+        }),
+      )
+      expect(warn.mock.calls[0][1]).not.toHaveProperty('rawCode')
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('logs and rethrows a failed transaction', async () => {
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const failing: DbCtx = {
+      ...ctx,
+      runInTransaction: async () => {
+        throw new Error('disk full')
+      },
+    }
+    try {
+      await expect(resolveCollision('b1', KEEP_A_B, failing)).rejects.toThrow('disk full')
+      expect(error).toHaveBeenCalledWith(
+        'action_layer.collision_resolve_failed',
+        expect.objectContaining({ error: 'disk full' }),
+      )
+    } finally {
+      error.mockRestore()
+    }
+  })
+
   it('refuses not-found when a row of the pair was deleted', async () => {
     await deleteEntityRow('b1', 'char_b', ctx)
     const before = (await deltaRows()).length

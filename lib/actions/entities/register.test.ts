@@ -599,7 +599,8 @@ describe('collision flag clear', () => {
     expect(await db.select().from(deltas)).toHaveLength(1)
   })
 
-  // The type admits 0 or undefined: a cast reaches 1, and an explicit undefined compiles but must be refused.
+  // The type admits 0 or undefined: a cast reaches 1, and an explicit undefined compiles but must
+  // be refused.
   it('refuses a flag value other than 0, so no user path can set it', async () => {
     const { db, ctx } = await setup()
     await seedChar(ctx, CHAR)

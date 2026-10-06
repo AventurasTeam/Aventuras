@@ -46,7 +46,10 @@ type EntityUpdatePatch = Partial<{
   keywords: string[]
   priority: number
   state: EntityState
-  /** User paths only clear the flag; the classifier sets it at create. Omit the key to leave it: an explicit undefined is refused. */
+  /**
+   * User paths only clear the flag; the classifier sets it at create. Omit the key to leave it: an
+   * explicit undefined is refused.
+   */
   nameCollisionFlag: 0
 }>
 
