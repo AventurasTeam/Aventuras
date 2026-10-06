@@ -197,7 +197,7 @@ The \`show_entity\` tool is always available for opening entities in the editor.
 
 ## Active Context
 
-The user opened this assistant from the {{ focusedEntityType }} editor for "{{ focusedEntityName }}" (ID: \`{{ focusedEntityId }}\`). The \`{{ focusedEntityType }}s\` toolset is pre-loaded. When the user refers to "this character", "this lorebook", "this scenario", or uses pronouns referencing an entity without naming it, assume they mean this one.{% endif %}`,
+The user opened this assistant from the {{ focusedEntityType }} editor for {{ focusedEntityName | json }} (ID: \`{{ focusedEntityId }}\`). The \`{{ focusedEntityType }}s\` toolset is pre-loaded. When the user refers to "this character", "this lorebook", "this scenario", or uses pronouns referencing an entity without naming it, assume they mean this one.{% endif %}`,
   userContent: `{% if focusedEntityRemoved %}The {{ focusedEntityType }} from the Active Context is no longer in the vault.
 
 {% endif %}{% if focusedEntityRecord != blank %}Current state of the entity from the Active Context (sent again whenever it changes{% if focusedEntityType == 'lorebook' %}; its entries are not included, so use \`list_entries\` and \`read_entry\` for those{% else %}, so you don't need to read it first{% endif %}):
