@@ -75,7 +75,7 @@ export type Resolution =
 
 // Fixed scalar order for stable rendering. Matches the spec's
 // table column order in world.md → Merge.
-export const SCALAR_FIELDS: ScalarField[] = [
+export const SCALAR_FIELDS: readonly ScalarField[] = [
   'name',
   'description',
   'status',

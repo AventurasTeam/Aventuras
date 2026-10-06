@@ -81,7 +81,20 @@
   "collision": {
     "needReview_one": "{{count}} needs review",
     "needReview_other": "{{count}} need review",
-    "resolveReason": "Lands in Slice 4.2c"
+    "resolved": {
+      "merge": "Merged into {{name}}.",
+      "rename": "Names saved.",
+      "keep": "Kept as distinct."
+    },
+    "failed": "Couldn't resolve the collision.",
+    "rejection": {
+      "inFlight": "Couldn't resolve while generation is in flight.",
+      "notFound": "These rows changed or no longer collide. Close this and check the list again.",
+      "leadEntity": "The story's lead can't be the row a merge removes. Pick it as the row that survives, or use Set as lead on another character first.",
+      "parentCycle": "Merging these would make a location part of itself. Pick the other row to survive.",
+      "parentChainBroken": "A parent chain this merge touches loops back or runs too deep. Fix that chain first.",
+      "invalidRename": "Both rows need a name, and the names must differ by more than letter case."
+    }
   },
   "detail": {
     "selectRow": "Select a row",
