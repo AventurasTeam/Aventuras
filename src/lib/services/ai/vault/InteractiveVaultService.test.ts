@@ -576,4 +576,155 @@ describe('sendMessageStreaming pending changes from parallel tool calls', () => 
     expect(portrait).toMatchObject({ action: 'update', entityId: 'c1' })
     expect(deletion).toMatchObject({ action: 'delete', entityId: 'c2' })
   })
+
+  const scenario = () =>
+    ({
+      id: 's1',
+      name: 'Scenario',
+      description: null,
+      settingSeed: 'A seed',
+      npcs: [{ name: 'Npc', role: 'guard', description: '', relationship: '', traits: [] }],
+      primaryCharacterName: 'Hero',
+      firstMessage: null,
+      alternateGreetings: [],
+      tags: [],
+      favorite: false,
+    }) as never
+  const scenarioState = (): VaultState => ({
+    ...emptyVaultState(),
+    scenarios: () => [scenario()],
+  })
+  const fullState = (): VaultState => ({
+    ...lorebookState(),
+    characters: characterState().characters,
+    scenarios: scenarioState().scenarios,
+  })
+
+  const npc = {
+    name: 'Gate',
+    role: 'guard',
+    description: 'Watches',
+    relationship: 'foe',
+    traits: [],
+  }
+
+  // Every tool that creates a pending change, with a state and args that make it succeed.
+  // A tool that creates a change must carry it (or its id) on its result.
+  const CHANGE_TOOLS: {
+    name: string
+    state: () => VaultState
+    args: Record<string, unknown>
+    seed?: (service: InstanceType<typeof InteractiveVaultService>) => void
+  }[] = [
+    {
+      name: 'create_character',
+      state: characterState,
+      args: {
+        name: 'New',
+        description: null,
+        traits: [],
+        visualDescriptors: {},
+      },
+    },
+    {
+      name: 'update_character',
+      state: characterState,
+      args: { characterId: 'c1', name: 'Renamed' },
+    },
+    { name: 'delete_character', state: characterState, args: { characterId: 'c1' } },
+    {
+      name: 'create_scenario',
+      state: scenarioState,
+      args: {
+        name: 'New',
+        description: null,
+        settingSeed: 'Seed',
+        primaryCharacterName: 'Hero',
+      },
+    },
+    { name: 'update_scenario', state: scenarioState, args: { scenarioId: 's1', name: 'Renamed' } },
+    { name: 'delete_scenario', state: scenarioState, args: { scenarioId: 's1' } },
+    { name: 'add_scenario_npc', state: scenarioState, args: { scenarioId: 's1', npc } },
+    {
+      name: 'update_scenario_npc',
+      state: scenarioState,
+      args: { scenarioId: 's1', npcName: 'Npc', updates: { role: 'captain' } },
+    },
+    {
+      name: 'remove_scenario_npc',
+      state: scenarioState,
+      args: { scenarioId: 's1', npcName: 'Npc' },
+    },
+    { name: 'create_lorebook', state: lorebookState, args: { name: 'New book' } },
+    {
+      name: 'create_entry',
+      state: lorebookState,
+      args: {
+        name: 'Cy',
+        type: 'character',
+        description: 'About Cy',
+        keywords: ['cy'],
+      },
+    },
+    { name: 'update_entry', state: lorebookState, args: { index: 0, description: 'new Ann' } },
+    { name: 'delete_entry', state: lorebookState, args: { index: 0 } },
+    {
+      name: 'merge_entries',
+      state: lorebookState,
+      args: { indices: [0, 1], mergedEntry: entry('Merged') },
+    },
+    {
+      name: 'link_character_to_lorebook',
+      state: fullState,
+      args: { characterId: 'c1', lorebookId: 'lb1' },
+    },
+    {
+      name: 'create_lorebook_entry_from_character',
+      state: fullState,
+      args: { characterId: 'c1', lorebookId: 'lb1' },
+    },
+    {
+      name: 'set_portrait',
+      state: characterState,
+      args: { characterId: 'c1', imageId: 'img-1' },
+      seed: (service) => service.generatedImages.set('img-1', 'data:image/png;base64,AAAA'),
+    },
+  ]
+
+  const NO_CHANGE_TOOLS = [
+    'fetch_fandom_section',
+    'generate_portrait',
+    'generate_standard_image',
+    'get_fandom_article_info',
+    'list_characters',
+    'list_entries',
+    'list_lorebooks',
+    'list_scenarios',
+    'load_toolset',
+    'read_character',
+    'read_entry',
+    'read_lorebook_summary',
+    'read_scenario',
+    'search_fandom',
+    'show_entity',
+  ]
+
+  it('classifies every registered tool as creating a change or not', async () => {
+    await run(emptyVaultState())
+
+    expect(Object.keys(lastCreateOptions!.tools).sort()).toEqual(
+      [...CHANGE_TOOLS.map((t) => t.name), ...NO_CHANGE_TOOLS].sort(),
+    )
+  })
+
+  it.each(CHANGE_TOOLS)('$name carries its change on the tool result', async (row) => {
+    const service = await newService()
+    row.seed?.(service)
+    nextStreamEvents = parallelStep([{ id: 'call-1', name: row.name, args: row.args }])
+
+    const events = await run(row.state(), service)
+
+    expect(pendingChangesOf(events)).toEqual([expect.objectContaining({ id: expect.any(String) })])
+    expect(stepMessage(events).pendingChanges).toHaveLength(1)
+  })
 })
