@@ -28,6 +28,7 @@ import {
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { plantVec } from '@/lib/db/__tests__/vec-fixtures'
+import { logger } from '@/lib/diagnostics'
 import {
   characterRelationshipsStore,
   entitiesStore,
@@ -44,10 +45,13 @@ import {
   holdBranchWriteExclusive,
   releaseBranchWriteExclusive,
 } from '../delta/branch-write-lock'
+import { withKeyLock } from '../delta/key-lock'
 import { applyRedo, prepareUndo } from '../delta/redo'
 import { selectReversalSet } from '../delta/row-closure'
+import { rowLock } from '../delta/row-locks'
 import { deleteEntityRow } from '../row-delete/delete-entity'
 import type { loadHeadTurn as LoadHeadTurn } from '../story-entries/head-turn'
+import { updateEntrySceneFields } from '../story-entries/scene-fields'
 import type { DbCtx } from '../types'
 
 // Fires `onSecond` inside the SECOND `loadHeadTurn` call — the in-lock re-read — so a test can
@@ -177,6 +181,27 @@ async function relationshipRows() {
   return (await ctx.db.select().from(characterRelationships)).sort((x, y) =>
     x.id.localeCompare(y.id),
   )
+}
+
+function byId<T extends { id: string }>(rows: readonly T[]): T[] {
+  return [...rows].sort((x, y) => x.id.localeCompare(y.id))
+}
+
+// Every table a resolution writes; entities without the columns undo re-derives (stale, touched).
+async function worldSnapshot() {
+  const db = ctx.db
+  return {
+    entities: byId((await db.select().from(entities)) as Entity[]).map(
+      ({ embeddingStale: _stale, updatedAt: _touched, ...rest }) => rest,
+    ),
+    awareness: byId(await db.select().from(happeningAwareness)),
+    involvements: byId(await db.select().from(happeningInvolvements)),
+    relationships: byId(await db.select().from(characterRelationships)),
+    translations: byId(await db.select().from(translations)),
+    entries: byId(
+      await db.select({ id: storyEntries.id, metadata: storyEntries.metadata }).from(storyEntries),
+    ),
+  }
 }
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
@@ -383,9 +408,13 @@ describe('resolveCollision — merge', () => {
 
   it('CTRL-Z restores B with every row it held, re-flagged and stale; redo merges again', async () => {
     await setFlag('char_a', 1)
+    const before = await worldSnapshot()
     await resolveCollision('b1', MERGE_B_INTO_A, ctx)
+    const merged = await worldSnapshot()
 
     const group = await undoAll()
+
+    expect(await worldSnapshot()).toEqual(before)
 
     expect(await entityRow('char_b')).toMatchObject({ nameCollisionFlag: 1, embeddingStale: 1 })
     expect((await entityRow('char_a'))?.nameCollisionFlag).toBe(1)
@@ -403,6 +432,7 @@ describe('resolveCollision — merge', () => {
     plantVectors('char_b')
     await applyRedo(group, ctx)
 
+    expect(await worldSnapshot()).toEqual(merged)
     expect(await entityRow('char_b')).toBeUndefined()
     expect(vectorCount('char_b')).toBe(0)
     expect((await ctx.db.select().from(happeningAwareness)).map((r) => r.characterId)).toEqual([
@@ -411,6 +441,69 @@ describe('resolveCollision — merge', () => {
     ])
     expect(await relationshipRows()).toMatchObject([{ id: 'rel_ao', kind: 'rival' }])
     expect((await tail()).sceneEntities).toEqual(['char_a', 'char_o'])
+  })
+
+  it("waits out a scene edit holding the tail's lock, then plans from the edited scene", async () => {
+    let release = () => {}
+    const commitGate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let parked = false
+    const gated: DbCtx = {
+      ...ctx,
+      runInTransaction: async (ops) => {
+        if (!parked) {
+          parked = true
+          await commitGate
+        }
+        return ctx.runInTransaction(ops)
+      },
+    }
+
+    const sceneEdit = updateEntrySceneFields(
+      'b1',
+      'entry_2',
+      { sceneEntities: ['char_b', 'char_o', 'char_lead'] },
+      gated,
+    )
+    await flush()
+    expect(parked).toBe(true)
+    let settled = false
+    const merging = resolveCollision('b1', MERGE_B_INTO_A, gated).finally(() => {
+      settled = true
+    })
+    await flush()
+    expect(settled).toBe(false)
+    release()
+
+    expect(await sceneEdit).toEqual({ status: 'ok' })
+    expect(await merging).toEqual({ status: 'ok' })
+    expect([...(await tail()).sceneEntities].sort()).toEqual(['char_a', 'char_lead', 'char_o'])
+  })
+
+  it('refuses parent-chain-broken when a rewritten parent leads into a stored loop', async () => {
+    await ctx.db.insert(entities).values([
+      row('loc_x', 'location', 'Cove', 1, {
+        state: { parent_location_id: 'loc_y' } satisfies LocationState,
+      }),
+      row('loc_y', 'location', 'Reef', 1, {
+        state: { parent_location_id: 'loc_x' } satisfies LocationState,
+      }),
+      row('loc_c', 'location', 'Pier', 1, {
+        state: { parent_location_id: 'loc_b' } satisfies LocationState,
+      }),
+    ])
+    await ctx.db
+      .update(entities)
+      .set({ state: { parent_location_id: 'loc_x' } satisfies LocationState })
+      .where(eq(entities.id, 'loc_a'))
+    await hydrateStores()
+
+    expect(await resolveCollision('b1', mergeInto('loc_a', 'loc_b'), ctx)).toMatchObject({
+      status: 'rejected',
+      code: 'parent-chain-broken',
+    })
+    expect(await deltaRows()).toEqual([])
   })
 
   it("deletes exactly B's link rows through the cascade, the rows the plan moved", async () => {
@@ -581,6 +674,32 @@ describe('resolveCollision — rename', () => {
     })
   })
 
+  it('CTRL-Z restores both names and flags; redo renames and clears again', async () => {
+    await setFlag('char_a', 1)
+    const before = await worldSnapshot()
+    await resolveCollision(
+      'b1',
+      { mode: 'rename', ids: ['char_a', 'char_b'], names: ['Brannoc', 'Brannoc the Younger'] },
+      ctx,
+    )
+    const renamed = await worldSnapshot()
+    expect(await entityRow('char_a')).toMatchObject({ name: 'Brannoc', nameCollisionFlag: 0 })
+    expect(await entityRow('char_b')).toMatchObject({
+      name: 'Brannoc the Younger',
+      nameCollisionFlag: 0,
+    })
+
+    const group = await undoAll()
+
+    expect(await worldSnapshot()).toEqual(before)
+    expect(await entityRow('char_b')).toMatchObject({ name: 'Brannoc', nameCollisionFlag: 1 })
+    expect((await entityRow('char_a'))?.nameCollisionFlag).toBe(1)
+
+    await applyRedo(group, ctx)
+
+    expect(await worldSnapshot()).toEqual(renamed)
+  })
+
   it.each([
     ['a case-only rename', 'BRANNOC'],
     ['an empty name', '   '],
@@ -628,6 +747,32 @@ describe('resolveCollision — refusals', () => {
       code: 'in-flight',
     })
     expect(await deltaRows()).toEqual([])
+  })
+
+  it('reports a prose reversal that starts while it waits on a row lock as in-flight', async () => {
+    const warn = vi.spyOn(logger, 'warn')
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const held = withKeyLock(rowLock('entities')({ branchId: 'b1', id: 'char_b' }), () => gate)
+    const pending = resolveCollision('b1', KEEP_A_B, ctx)
+    await flush()
+    generationStore.setReversalInProgress(true)
+    try {
+      release()
+      await held
+
+      expect(await pending).toMatchObject({ status: 'rejected', code: 'in-flight' })
+    } finally {
+      generationStore.setReversalInProgress(false)
+    }
+    expect(await deltaRows()).toEqual([])
+    expect(warn).toHaveBeenCalledWith(
+      'action_layer.collision_resolve_rejected',
+      expect.objectContaining({ code: 'in-flight', rawCode: 'reversal-in-progress' }),
+    )
+    warn.mockRestore()
   })
 
   it('refuses not-found when a row of the pair was deleted', async () => {

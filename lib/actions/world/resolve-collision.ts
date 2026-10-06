@@ -116,8 +116,8 @@ function lookupPair(branchEntities: readonly Entity[], ids: readonly [string, st
   return { pair: [first, second] }
 }
 
-// The gate, the store read and the plan run with no await between them: a hard-gate run starting
-// in such a gap would commit over the plan's snapshot (the same rule as deleteEntityRow).
+// The first check predates the tail-lock awaits; a hard-gate run started since has settled user
+// writes without this one. The store read and the plan follow it with no await between them.
 function gateRefusal(): Refusal | null {
   return generationStore.isUserEditBlocked()
     ? refusal(COLLISION_REJECTION.inFlight, 'generation in flight')
@@ -250,6 +250,10 @@ export async function resolveCollision(
     })
     throw error
   }
-  if (result.status !== 'ok') return rejected(context, rejectionCode(result.code), result.reason)
+  if (result.status !== 'ok') {
+    const code = rejectionCode(result.code)
+    const raw = result.code === code ? {} : { rawCode: result.code }
+    return rejected({ ...context, ...raw }, code, result.reason)
+  }
   return { status: 'ok' }
 }
