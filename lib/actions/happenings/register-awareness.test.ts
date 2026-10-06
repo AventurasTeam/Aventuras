@@ -593,6 +593,32 @@ describe('upsertHappeningAwareness retrievalCount', () => {
     branchId: BRANCH,
   })
 
+  it('refuses invalid retrievalCount on the update path', async () => {
+    const { db, ctx } = await setup([
+      {
+        id: 'haw_1',
+        branchId: BRANCH,
+        happeningId: 'hap_1',
+        characterId: 'char_a',
+        learnedAtEntryId: null,
+        decayResistance: null,
+        retrievalCount: 4,
+        source: 'told',
+      },
+    ])
+
+    expect(
+      await applyDeltaAction(upsert('user_edit', { retrievalCount: -1, source: 'x' }), ctx),
+    ).toEqual({
+      status: 'rejected',
+      reason: 'invalid awareness: retrievalCount must be a non-negative integer',
+    })
+
+    const [row] = await awarenessRows(db, 'char_a', 'hap_1')
+    expect(row.source).toBe('told')
+    expect(await db.select().from(deltas)).toEqual([])
+  })
+
   it('keeps the count a user create carries', async () => {
     const { db, ctx } = await setup()
 
@@ -646,6 +672,15 @@ describe('upsertHappeningAwareness retrievalCount', () => {
     const { db, ctx } = await setup()
 
     expect(await applyDeltaAction(upsert('user_edit', { retrievalCount: 0 }), ctx)).toMatchObject({
+      status: 'ok',
+    })
+    expect((await awarenessRows(db, 'char_a', 'hap_1'))[0].retrievalCount).toBe(0)
+  })
+
+  it('a user create without a count starts at zero', async () => {
+    const { db, ctx } = await setup()
+
+    expect(await applyDeltaAction(upsert('user_edit', {}), ctx)).toMatchObject({
       status: 'ok',
     })
     expect((await awarenessRows(db, 'char_a', 'hap_1'))[0].retrievalCount).toBe(0)
