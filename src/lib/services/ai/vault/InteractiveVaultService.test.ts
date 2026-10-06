@@ -726,5 +726,31 @@ describe('sendMessageStreaming pending changes from parallel tool calls', () => 
 
     expect(pendingChangesOf(events)).toEqual([expect.objectContaining({ id: expect.any(String) })])
     expect(stepMessage(events).pendingChanges).toHaveLength(1)
+    expect(events.find((e) => e.type === 'done').result.unlinkedChangeIds).toEqual([])
+  })
+
+  it('reports a change that no tool result carried', async () => {
+    nextStreamEvents = async (tools) => {
+      const output = await tools.delete_character.execute({ characterId: 'c1' }, {})
+      const { pendingChange: _dropped, ...withoutChange } = output
+      return [
+        { type: 'start-step' },
+        {
+          type: 'tool-call',
+          toolCallId: 'call-1',
+          toolName: 'delete_character',
+          input: { characterId: 'c1' },
+        },
+        { type: 'tool-result', toolCallId: 'call-1', output: withoutChange },
+        { type: 'finish-step' },
+      ]
+    }
+
+    const events = await run(characterState())
+
+    const { result } = events.find((e) => e.type === 'done')
+    expect(result.pendingChanges).toHaveLength(1)
+    expect(result.unlinkedChangeIds).toEqual([result.pendingChanges[0].id])
+    expect(pendingChangesOf(events)).toEqual([undefined])
   })
 })

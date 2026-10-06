@@ -14,6 +14,7 @@
   import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
   import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
   import { vaultEditor } from '$lib/stores/vaultEditorStore.svelte'
+  import { ui } from '$lib/stores/ui.svelte'
   import {
     ChevronLeft,
     Bot,
@@ -650,8 +651,16 @@
             }
             break
 
-          case 'done':
+          case 'done': {
+            const dropped = event.result.unlinkedChangeIds.length
+            if (dropped > 0) {
+              ui.showToast(
+                `The assistant made ${dropped} ${dropped === 1 ? 'change' : 'changes'} that couldn't be shown for approval, so ${dropped === 1 ? 'it was' : 'they were'} dropped.`,
+                'error',
+              )
+            }
             break
+          }
 
           case 'aborted':
             // User-initiated stop (button or Escape) — handleAbort() already reset

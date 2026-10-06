@@ -168,6 +168,8 @@ export interface SendMessageResult {
   response: string
   pendingChanges: VaultPendingChange[]
   toolCalls: ToolCallDisplay[]
+  /** Ids of pending changes that no tool result carried, so the UI cannot show them */
+  unlinkedChangeIds: string[]
   reasoning?: string
 }
 
@@ -628,8 +630,8 @@ export class InteractiveVaultService extends BaseAIService {
                 result: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult),
               }
 
-              // A tool that creates a pending change must return it (or its id as `changeId`),
-              // or the change never reaches the UI.
+              // Every tool that creates a pending change must return it, or its id as `changeId`.
+              // The classification test in InteractiveVaultService.test.ts enforces this.
               let changeId: string | undefined
               if (!event.dynamic && typeof event.output === 'object' && event.output) {
                 if ('pendingChange' in event.output) changeId = event.output.pendingChange?.id
@@ -678,12 +680,9 @@ export class InteractiveVaultService extends BaseAIService {
         }
       }
 
-      const unlinked = pendingChanges.filter(
-        (pc) => !toolCalls.some((tc) => tc.pendingChange?.id === pc.id),
-      )
-      if (unlinked.length > 0) {
-        log('Pending changes not linked to a tool result', { ids: unlinked.map((pc) => pc.id) })
-      }
+      const unlinkedChangeIds = pendingChanges
+        .filter((pc) => !toolCalls.some((tc) => tc.pendingChange?.id === pc.id))
+        .map((pc) => pc.id)
 
       // Add assistant response to conversation history
       const responseMessages = await result.response
@@ -695,6 +694,7 @@ export class InteractiveVaultService extends BaseAIService {
           response: responseContent,
           pendingChanges,
           toolCalls,
+          unlinkedChangeIds,
           reasoning,
         },
       }
