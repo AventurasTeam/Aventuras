@@ -193,12 +193,13 @@ type DiffPayload = {
   whitespace differences is to edit one side in the detail pane,
   not paper over divergence at the dialog level.
 - **Keywords** — partitioned like tags, but by `normalizeTerm`: a
-  case variant on the other side is the same keyword, shown in the
-  first spelling seen after trimming and de-duplicating (blanks
-  drop), and `null` when both sides hold the same keywords under
-  normalization. Shared keywords are shown and submitted in the
-  canonical's spelling; the deselect follows the keyword, not its
-  spelling. Unioned by the same rule. Tags still compare exactly.
+  case variant on the other side is the same keyword, and the
+  partition is `null` when both sides hold the same keywords under
+  normalization. Blanks drop. A keyword only one side holds shows in
+  that side's first trimmed spelling; a shared one shows and is
+  submitted in the canonical's spelling. The deselect follows the
+  keyword, not its spelling. Unioned by the same rule. Tags still
+  compare exactly.
   They are retrieval-targeted rather than decorative, so
   taking the canonical side's set alone would silently narrow what the
   merged entity can be matched by — the losing side's aliases are
@@ -323,16 +324,18 @@ side matches the canonical, and `deselectedTags = []` and
 **Rename** — two stacked text inputs, one per entity, labeled
 `Older · <relative time>` / `Newer · <relative time>`. Each input
 initialized to the entity's current name. Inline help states the
-rule, and names the failing one while Save is disabled; an
-untouched form shows the plain prompt to change a name instead.
+rule: it names the failing rule only once a name was touched and
+fails it, and otherwise (untouched, or valid) shows the plain
+prompt to change a name.
 Footer: `[ Cancel ]` · `[ Save renames ]`.
 
 **Keep as distinct** — single muted paragraph (verbatim from
 [`world.md → Keep as distinct`](../screens/world/world.md#keep-as-distinct)),
 footer: `[ Cancel ]` · `[ Keep as distinct ]`.
 
-**Phone tier** — the dialog stays a Modal. In the merge table,
-prose values (`description`, `retiredReason`) clamp to 3 lines, and
+**Phone tier and native tiers** — the dialog stays a Modal on
+phone. In the merge table, which stacks on these tiers, prose
+values (`description`, `retiredReason`) clamp to 3 lines, and
 tapping the prose expands that value in place, apart from its
 radio's tap target. Each radio shows an inline age caption under
 its value.

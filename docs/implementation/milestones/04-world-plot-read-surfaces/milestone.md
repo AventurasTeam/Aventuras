@@ -317,9 +317,10 @@ mechanism where the shipped runner forces it:
   translation set mirrors the merge path canon gives in
   [`world.md → Reversibility`](../../../ui/screens/world/world.md#reversibility)
   minus the rewrite-to-canonical half. The tail-metadata drop is this
-  milestone's **default assumption** — canon is silent on it for both
-  delete and merge — routed as an [open question](#open-questions) for
-  a `world.md` amendment.
+  milestone's **default assumption**, since recorded in
+  [`world.md → Delete`](../../../ui/screens/world/world.md#delete)
+  and, for the merge, [`world.md → Merge`](../../../ui/screens/world/world.md#merge)
+  (see the [open question](#open-questions)).
 - Deleting the **lead character** is refused with a named rejection
   (`lead-entity`) rather than nulling `definition.leadEntityId`, which
   the schema's `needsLead` refine forbids in adventure or first- and

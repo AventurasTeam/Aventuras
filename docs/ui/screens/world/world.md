@@ -863,9 +863,12 @@ the pane's Save / Discard / Cancel guard first, as [Delete](#delete)
 does. While open, the dialog reads both rows live: it closes on its
 own once either row is gone or the two stop colliding (a rename on
 another surface), and when the screen loses focus. A refusal shows
-inline in the dialog, which stays open. After a resolution the list
-re-derives — the pill count drops and the strip goes; with 3+
-namesakes, another flagged row keeps its strip
+inline in the dialog, which stays open. A resolution that lands
+closes it and toasts the result ("Merged into <name>.", "Names
+saved.", "Kept as distinct."); a refusal that arrives after the
+dialog has closed shows as an error toast instead. After a
+resolution the list re-derives — the pill count drops and the strip
+goes; with 3+ namesakes, another flagged row keeps its strip
 ([Authorship and 3+ collisions](#authorship-and-3-collisions)).
 
 #### Merge
@@ -918,29 +921,32 @@ Field-level rules:
   then editing top-level scalars from the loser is a clean
   two-step path. Surfaced as an inline note.
 - **Long-text values.** Description and other prose-shaped
-  fields wrap freely on desktop (modal scrolls). On mobile, a
+  fields wrap freely where the choices sit in columns (modal
+  scrolls). On stacked tiers (phone, and every native tier), a
   3-line clamp applies with a "..." trailing truncation; tap
   the prose body to expand the row in place. Radios stay tappable
   independently — the tap zone splits between the radio circle
   and the prose body. Keeps comparison glance-able when prose
   diverges in length.
-- **Side identification.** On desktop web, a header row above the
-  columns names each side (`Older · 3 days ago`, `Newer · just now`),
-  the canonical's with a `· Canonical` suffix. Stacked tiers (phone,
-  and every native tier) have no header row, so each radio's
-  value carries an inline age caption underneath the prose — the
-  wall-clock relative time the canonical picker shows, since an
-  entity records when it was created, not the turn. Each stacked
-  field is one radio group named by the field. Each radio is
-  self-describing without relying on column position.
+- **Side identification.** On web above phone, a header row above
+  the columns names each side (`Older · 3 days ago`,
+  `Newer · just now`), the canonical's with a `· Canonical` suffix.
+  Stacked tiers (phone, and every native tier) have no header row,
+  so each radio's value carries an inline age caption underneath
+  the prose — the wall-clock relative time the canonical picker
+  shows, since an entity records when it was created, not the turn.
+  Each stacked field is one radio group named by the field. Each
+  radio is self-describing without relying on column position.
 
 A **relations summary** below the field table tells the user
 what the merge carries over and what it drops (read-only —
 relations always follow the canonical id). It shows the
 non-canonical's counts:
 
-- `Awareness rows: <N>` re-created on the canonical.
-- `Involvements: <N>` re-created on the canonical.
+- `Awareness rows: <N>` — the non-canonical's; re-created on the
+  canonical except those the footnote counts as duplicates.
+- `Involvements: <N>` — the non-canonical's; re-created on the
+  canonical except those the footnote counts as duplicates.
 - `Relationships: <N>` re-created on the canonical, one per other
   character. A relationship between the two rows is dropped; one
   the canonical already has with the same character keeps the
@@ -1123,10 +1129,11 @@ They are user creates, though: a prose edit's sweep that reverses
 the classifier pass which made the originals leaves the copies on
 the canonical, unless a copy names a row that pass created
 (rollback and regenerate sweep the merge group too and take them).
-CTRL-Z restores the non-canonical (still flagged), its original link
-rows and translations, the refs, the tail scene and the canonical's
-earlier status and location, and removes the rows the merge created
-on the canonical.
+CTRL-Z restores the non-canonical as it was, with its original link
+rows and translations, the refs and the tail scene; puts the
+canonical's earlier columns back (scalars, tags, keywords, flag,
+status and location); and removes the rows the merge created on the
+canonical.
 
 Embeddings are not delta-logged
 ([`data-model.md → embeddings`](../../../data-model.md#diagram)) —
