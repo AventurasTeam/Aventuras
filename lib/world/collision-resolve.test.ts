@@ -55,6 +55,10 @@ describe('renameIssue', () => {
   it('accepts names that stop colliding', () => {
     expect(renameIssue('character', ['Kael', 'Kael the guard'])).toBeNull()
   })
+
+  it('counts interior spacing as a difference, unlike spaces at either end', () => {
+    expect(renameIssue('character', ['Kael the', 'Kael  the'])).toBeNull()
+  })
 })
 
 describe('entityRenameActions', () => {
